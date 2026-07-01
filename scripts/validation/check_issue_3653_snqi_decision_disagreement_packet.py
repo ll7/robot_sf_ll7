@@ -18,10 +18,22 @@ DEFAULT_PACKET = Path("configs/benchmarks/issue_3653_snqi_decision_disagreement_
 SCHEMA_VERSION = "issue-3653-snqi-decision-disagreement-application-packet.v1"
 EXPECTED_STATUS = "blocked_missing_valid_campaign_episodes"
 EXPECTED_INPUT_STATUS = "blocked_until_episode_jsonl_promoted_or_hydratable"
+EXPECTED_RAW_EPISODE_STATUS = "blocked_until_durable_episode_jsonl_promoted_or_hydratable"
+EXPECTED_PENDING_RAW_EPISODE_HASH = "pending_durable_source"
 EXPECTED_WEIGHT_HASH = "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2"
 EXPECTED_BASELINE_HASH = "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a"
 EXPECTED_EVIDENCE_PACKET_HASH = "7da1d5607536bc35d82d482029e150c3cf6442f586ac05e06c925fa9d9e2850c"
 EXPECTED_ARTIFACT_ROOT = "output/issue1554-s20-h500-l40s-mem180/13175"
+ALLOWED_RAW_EPISODE_SOURCES = {
+    "durable_artifact_pointer",
+    "canonical_result_store",
+    "submit_host_hydration_from_recorded_job_13175",
+}
+FORBIDDEN_RAW_EPISODE_SOURCES = {
+    "synthesized_fixture",
+    "worktree_local_output_without_manifest",
+    "benchmark_rerun_without_authorization",
+}
 REQUIRED_ARTIFACTS = {
     "snqi_scalarization_sensitivity.json",
     "snqi_scalarization_sensitivity_planner_rows.csv",
@@ -192,6 +204,11 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path | None = None)
     _require((repo_root / baseline).is_file(), "baseline_path must exist")
     _require(_sha256(repo_root / weights) == EXPECTED_WEIGHT_HASH, "weights file hash mismatch")
     _require(_sha256(repo_root / baseline) == EXPECTED_BASELINE_HASH, "baseline file hash mismatch")
+    raw_episode_artifact = _validate_raw_episode_artifact_contract(
+        packet,
+        episodes=episodes,
+        expected_episode_count=int(campaign["expected_episode_count"]),
+    )
 
     export = _require_mapping(packet, "export")
     _require(
@@ -232,8 +249,69 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path | None = None)
         "evidence_packet": str(evidence_packet_path),
         "evidence_packet_sha256": campaign["evidence_packet_sha256"],
         "episodes_jsonl": str(episodes),
+        "raw_episode_artifact_status": raw_episode_artifact["current_status"],
+        "raw_episode_artifact_sha256": raw_episode_artifact["expected_sha256"],
         "artifact_count": len(artifacts),
     }
+
+
+def _validate_raw_episode_artifact_contract(
+    packet: Mapping[str, Any],
+    *,
+    episodes: Path,
+    expected_episode_count: int,
+) -> Mapping[str, Any]:
+    """Validate the blocked raw episode acquisition contract for job 13175."""
+
+    contract = _require_mapping(packet, "raw_episode_artifact")
+    _require(contract.get("required") is True, "raw_episode_artifact.required must be true")
+    _require(
+        contract.get("artifact_class") == "raw_campaign_episode_jsonl",
+        "raw_episode_artifact.artifact_class mismatch",
+    )
+    _require(
+        contract.get("expected_path") == str(episodes),
+        "raw_episode_artifact.expected_path must match inputs.episodes_jsonl",
+    )
+    _require(
+        int(contract.get("expected_rows", 0)) == expected_episode_count,
+        "raw_episode_artifact.expected_rows mismatch",
+    )
+    _require(
+        contract.get("expected_sha256") == EXPECTED_PENDING_RAW_EPISODE_HASH,
+        "raw_episode_artifact.expected_sha256 must stay pending until durable source is recorded",
+    )
+    _require(
+        contract.get("current_status") == EXPECTED_RAW_EPISODE_STATUS,
+        "raw_episode_artifact.current_status mismatch",
+    )
+    _require(
+        contract.get("durable_source_required_before_ready") is True,
+        "raw_episode_artifact must require durable source before ready",
+    )
+
+    ready_precondition = str(contract.get("ready_precondition", "")).lower()
+    for phrase in ("inputs.episodes_jsonl", "durable source", "sha256", "preflight"):
+        _require(
+            phrase in ready_precondition,
+            f"raw_episode_artifact.ready_precondition must mention {phrase}",
+        )
+
+    allowed_sources = {str(item) for item in _require_sequence(contract, "allowed_sources")}
+    _require(
+        allowed_sources == ALLOWED_RAW_EPISODE_SOURCES,
+        "raw_episode_artifact.allowed_sources mismatch",
+    )
+    forbidden_sources = {str(item) for item in _require_sequence(contract, "forbidden_sources")}
+    _require(
+        forbidden_sources == FORBIDDEN_RAW_EPISODE_SOURCES,
+        "raw_episode_artifact.forbidden_sources mismatch",
+    )
+    _require(
+        not (allowed_sources & forbidden_sources),
+        "raw_episode_artifact cannot allow forbidden sources",
+    )
+    return contract
 
 
 def _command_template_value(export: Mapping[str, Any], flag: str) -> str | None:

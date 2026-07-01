@@ -35,6 +35,26 @@ inputs:
   weights_path: configs/benchmarks/snqi_weights_camera_ready_v3.json
   weights_sha256: 71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2
   input_status: blocked_until_episode_jsonl_promoted_or_hydratable
+raw_episode_artifact:
+  required: true
+  artifact_class: raw_campaign_episode_jsonl
+  expected_path: output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl
+  expected_rows: 8640
+  expected_sha256: pending_durable_source
+  current_status: blocked_until_durable_episode_jsonl_promoted_or_hydratable
+  durable_source_required_before_ready: true
+  ready_precondition: >
+    Before current_status can become ready, inputs.episodes_jsonl must be hydrated from
+    a durable source or canonical result store, its sha256 must be recorded here, and
+    the export-if-ready preflight must pass against that exact file.
+  allowed_sources:
+    - durable_artifact_pointer
+    - canonical_result_store
+    - submit_host_hydration_from_recorded_job_13175
+  forbidden_sources:
+    - synthesized_fixture
+    - worktree_local_output_without_manifest
+    - benchmark_rerun_without_authorization
 export:
   script: scripts/benchmark/snqi_scalarization_sensitivity_export.py
   command_template:

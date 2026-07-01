@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.scenario_certification.sustained_flow import (
+    SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
     generate_expected_sustained_flow_scenarios,
 )
 from robot_sf.training.scenario_loader import load_scenarios
@@ -16,7 +17,7 @@ from robot_sf.training.scenario_loader import load_scenarios
 PREFLIGHT_SCHEMA_VERSION = "sustained_flow_preflight.v1"
 SUSTAINED_FLOW_ARCHETYPE = "sustained_flow_t_intersection"
 SUPPORTED_SPAWN_PROCESS = "poisson_respawn"
-RUNTIME_SUPPORTED_VALUE = "runtime_continuous_spawn"
+RUNTIME_SUPPORTED_VALUE = SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE
 
 
 @dataclass(frozen=True, slots=True)

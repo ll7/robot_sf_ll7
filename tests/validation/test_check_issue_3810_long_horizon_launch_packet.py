@@ -36,13 +36,14 @@ def test_issue_3810_packet_passes_fail_closed_contract() -> None:
     assert summary["compute_submit_authorized"] is False
     assert summary["slurm_job_id"] == "not_submitted"
     assert summary["target_host"] == "imech036"
-    assert summary["blocking_jobs"] == [13175]
-    assert summary["job_13175_state"] == "requires_submit_host_refresh"
-    assert summary["issue_3810_duplicate_status"] == "requires_submit_host_refresh"
+    assert summary["blocking_jobs"] == [13251]
+    assert summary["job_13175_state"] == "superseded_by_submitted_job_13251"
+    assert summary["issue_3810_duplicate_status"] == "no_duplicate_reported_in_submission_comment"
     assert summary["live_issue_state"] == "state:running"
-    assert summary["go_no_go"] == "blocked_pending_submit_host_route_and_reconciliation"
-    assert summary["private_ops_dry_run"] == "route_unverified"
+    assert summary["go_no_go"] == "blocked_pending_job_13251_retention_and_analysis"
+    assert summary["private_ops_dry_run"] == "superseded_by_live_submission"
     assert summary["interpretation_gate"] == "blocked_pending_active_run_retention_reconciliation"
+    assert summary["active_slurm_job_id"] == 13251
 
 
 def test_issue_3810_packet_rejects_authorized_submit() -> None:
@@ -58,7 +59,7 @@ def test_issue_3810_packet_rejects_authorized_submit() -> None:
         raise AssertionError("packet should reject compute submission authorization")
 
 
-def test_issue_3810_packet_rejects_missing_job_13175_blocker() -> None:
+def test_issue_3810_packet_rejects_missing_job_13251_blocker() -> None:
     """Job 13175 stays a blocker until submit-host reconciliation is recorded."""
     packet = _load_packet()
     packet["launch_packet"]["blocking_jobs"] = []
@@ -66,9 +67,9 @@ def test_issue_3810_packet_rejects_missing_job_13175_blocker() -> None:
     try:
         _MODULE.validate_packet(packet)
     except _MODULE.PacketError as exc:
-        assert "job 13175 must block submit" in str(exc)
+        assert "job 13251 must block interpretation" in str(exc)
     else:
-        raise AssertionError("packet should reject missing job 13175 blocker")
+        raise AssertionError("packet should reject missing job 13251 blocker")
 
 
 def test_issue_3810_packet_rejects_stale_readiness_refresh_date() -> None:
@@ -128,14 +129,27 @@ def test_issue_3810_packet_rejects_non_null_current_pr_before_publication() -> N
 def test_issue_3810_packet_rejects_stale_job_13175_reconciliation() -> None:
     """Stale analyzed state cannot unlock the public launch packet."""
     packet = _load_packet()
-    packet["launch_packet"]["ledger_reconciliation"]["job_13175_state"] = "analyzed"
+    packet["launch_packet"]["ledger_reconciliation"]["job_13175_state"] = "requires_submit_host_refresh"
 
     try:
         _MODULE.validate_packet(packet)
     except _MODULE.PacketError as exc:
-        assert "job 13175 reconciliation must require submit-host refresh" in str(exc)
+        assert "job 13175 reconciliation must be superseded" in str(exc)
     else:
         raise AssertionError("packet should reject stale job 13175 reconciliation")
+
+
+def test_issue_3810_packet_rejects_missing_active_submission() -> None:
+    """Live job 13251 metadata must be retained in the public packet."""
+    packet = _load_packet()
+    packet["launch_packet"].pop("active_slurm_submission")
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "active_slurm_submission must be a mapping" in str(exc)
+    else:
+        raise AssertionError("packet should reject missing active submission")
 
 
 def test_issue_3810_packet_rejects_nonblocking_live_issue_state() -> None:
@@ -187,7 +201,7 @@ def test_issue_3810_packet_rejects_decision_policy_without_target_host_gate() ->
     try:
         _MODULE.validate_packet(packet)
     except _MODULE.PacketError as exc:
-        assert "private-ops dry run must gate imech036 support" in str(exc)
+        assert "private-ops dry run must forbid additional submission" in str(exc)
     else:
         raise AssertionError("packet should reject a decision policy missing the host gate")
 

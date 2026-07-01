@@ -178,6 +178,7 @@ def test_blocked_mapping_classifies_worktree_local_output_artifact(tmp_path):
     candidate = ckpt["mapping"]["candidates"][0]
     assert report["status"] == "blocked"
     assert ckpt["mapping"]["blocked_by_status"] == {"missing_local_path": 1}
+    assert ckpt["mapping"]["blocked_by_artifact_scope"] == {"worktree_local_output": 1}
     assert candidate["status"] == "missing_local_path"
     assert candidate["artifact_scope"] == "worktree_local_output"
     assert candidate["resolved_path"].endswith("output/tmp/predictive/run/checkpoint.pt")

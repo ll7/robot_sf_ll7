@@ -9,6 +9,7 @@ from robot_sf.benchmark.long_horizon_route import (
     LongHorizonRouteSegment,
     aggregate_distance_normalized_route_metrics,
     build_long_horizon_route,
+    run_long_horizon_route,
 )
 
 
@@ -129,6 +130,84 @@ def test_distance_normalized_route_metrics_from_synthetic_records() -> None:
             "interventions_per_km": 5.0,
             "route_completion": 2 / 3,
             "resets_per_km": 5.0,
+        }
+    )
+
+
+def test_distance_normalized_route_metrics_accept_existing_runner_path_length() -> None:
+    """Aggregator should reuse the benchmark runner's existing path-length metric."""
+
+    metrics = aggregate_distance_normalized_route_metrics(
+        [{"metrics": {"socnavbench_path_length": 12.5, "route_length_m": 50.0}}]
+    )
+
+    assert metrics["route_completion"] == pytest.approx(0.25)
+
+
+def test_run_long_horizon_route_executes_segments_headlessly_and_aggregates() -> None:
+    """Route runner should compose existing segment episodes without redefining events."""
+
+    route = build_long_horizon_route(
+        "short-route",
+        (
+            LongHorizonRouteSegment(
+                "clear_sidewalk",
+                10.0,
+                parameters={"density": "low", "flow": "uni", "obstacle": "open"},
+            ),
+            LongHorizonRouteSegment(
+                "static_obstacle",
+                15.0,
+                parameters={"density": "low", "flow": "uni", "obstacle": "bottleneck"},
+            ),
+        ),
+    )
+    calls: list[tuple[dict[str, object], int, dict[str, object]]] = []
+
+    def fake_run_episode(
+        scenario_params: dict[str, object],
+        seed: int,
+        **kwargs: object,
+    ) -> dict[str, object]:
+        calls.append((scenario_params, seed, kwargs))
+        return {
+            "scenario_id": scenario_params["id"],
+            "seed": seed,
+            "metrics": {
+                "socnavbench_path_length": 5.0 * (len(calls)),
+                "collisions": 1 if len(calls) == 2 else 0,
+                "near_misses": len(calls),
+            },
+        }
+
+    result = run_long_horizon_route(
+        route,
+        seed=7,
+        horizon=3,
+        dt=0.2,
+        record_forces=False,
+        run_episode_fn=fake_run_episode,
+    )
+
+    assert [call[0]["id"] for call in calls] == ["clear_sidewalk", "static_obstacle"]
+    assert [call[1] for call in calls] == [7, 8]
+    assert all(call[2]["video_enabled"] is False for call in calls)
+    assert all(call[2]["record_forces"] is False for call in calls)
+    assert result.records[0]["long_horizon_route"] == {
+        "route_id": "short-route",
+        "segment_index": 0,
+        "segment_id": "clear_sidewalk",
+        "segment_length_m": 10.0,
+    }
+    assert result.records[1]["metrics"]["planned_distance_m"] == 15.0
+    assert result.metrics == pytest.approx(
+        {
+            "failures_per_100m": 0.0,
+            "collisions_per_100m": 100.0 / 15.0,
+            "near_misses_per_100m": 20.0,
+            "interventions_per_km": 0.0,
+            "route_completion": 15.0 / 25.0,
+            "resets_per_km": 0.0,
         }
     )
 

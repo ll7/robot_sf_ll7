@@ -7,7 +7,8 @@ collision, near-miss, intervention, reset, or failure semantics.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+import importlib
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -92,6 +93,28 @@ class LongHorizonRouteDefinition:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class LongHorizonRouteRunResult:
+    """Headless execution result for one composed long-horizon route."""
+
+    route: LongHorizonRouteDefinition
+    records: tuple[Mapping[str, Any], ...]
+    metrics: Mapping[str, float]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize route records and aggregate metrics for evidence packets.
+
+        Returns:
+            Plain dictionary representation of the route run.
+        """
+
+        return {
+            "route": self.route.to_dict(),
+            "records": [dict(record) for record in self.records],
+            "metrics": dict(self.metrics),
+        }
+
+
 def build_long_horizon_route(
     route_id: str,
     segments: Sequence[LongHorizonRouteSegment],
@@ -139,6 +162,66 @@ def build_long_horizon_route(
     return LongHorizonRouteDefinition(route_id, tuple(route_segments), target_length_m)
 
 
+_RunEpisodeFn = Callable[..., Mapping[str, Any]]
+
+
+def run_long_horizon_route(
+    route: LongHorizonRouteDefinition,
+    *,
+    seed: int = 0,
+    horizon: int = 100,
+    dt: float = 0.1,
+    record_forces: bool = True,
+    algo: str = "simple_policy",
+    algo_config_path: str | None = None,
+    run_episode_fn: _RunEpisodeFn | None = None,
+) -> LongHorizonRouteRunResult:
+    """Run a short composed route through the existing headless episode runner.
+
+    Each route segment is executed as one existing local scenario. The runner's
+    event counts stay authoritative; this helper only adds planned route-distance
+    provenance before computing per-distance route metrics.
+
+    Returns:
+        Segment records and aggregate distance-normalized route metrics.
+    """
+
+    if horizon <= 0:
+        raise LongHorizonRouteError("horizon must be positive")
+    if dt <= 0:
+        raise LongHorizonRouteError("dt must be positive")
+
+    if run_episode_fn is None:
+        runner_module = importlib.import_module("robot_sf.benchmark.runner")
+        run_episode_fn = runner_module.run_episode
+
+    records: list[Mapping[str, Any]] = []
+    for index, segment in enumerate(route.segments):
+        scenario_params = dict(segment.parameters)
+        scenario_params.setdefault("id", segment.scenario_id)
+        record = run_episode_fn(
+            scenario_params,
+            seed + index,
+            horizon=horizon,
+            dt=dt,
+            record_forces=record_forces,
+            algo=algo,
+            algo_config_path=algo_config_path,
+            video_enabled=False,
+        )
+        records.append(
+            _with_route_distance_provenance(
+                record,
+                route=route,
+                segment=segment,
+                segment_index=index,
+            )
+        )
+
+    metrics = aggregate_distance_normalized_route_metrics(records, route_length_m=route.length_m)
+    return LongHorizonRouteRunResult(route=route, records=tuple(records), metrics=metrics)
+
+
 _COUNT_ALIASES: dict[str, tuple[str, ...]] = {
     "failures": ("failures", "failure_events"),
     "collisions": ("collisions", "collision_events"),
@@ -153,6 +236,7 @@ _DISTANCE_ALIASES = (
     "route_distance_m",
     "completed_distance_m",
     "path_length_m",
+    "socnavbench_path_length",
 )
 
 _PLANNED_DISTANCE_ALIASES = (
@@ -201,6 +285,33 @@ def _count(record: Mapping[str, Any], metric_name: str) -> float:
     if value < 0:
         raise LongHorizonRouteError(f"{metric_name} count must not be negative")
     return value
+
+
+def _with_route_distance_provenance(
+    record: Mapping[str, Any],
+    *,
+    route: LongHorizonRouteDefinition,
+    segment: LongHorizonRouteSegment,
+    segment_index: int,
+) -> Mapping[str, Any]:
+    """Attach route-distance provenance without changing runner event counts.
+
+    Returns:
+        Episode record annotated with planned route-distance metadata.
+    """
+
+    annotated = dict(record)
+    metrics = dict(_metrics(record))
+    metrics.setdefault("planned_distance_m", segment.length_m)
+    metrics.setdefault("route_length_m", route.length_m)
+    annotated["metrics"] = metrics
+    annotated["long_horizon_route"] = {
+        "route_id": route.route_id,
+        "segment_index": segment_index,
+        "segment_id": segment.scenario_id,
+        "segment_length_m": segment.length_m,
+    }
+    return annotated
 
 
 def aggregate_distance_normalized_route_metrics(
@@ -284,7 +395,9 @@ def _planned_route_distance_m(records: Sequence[Mapping[str, Any]]) -> float:
 __all__ = [
     "LongHorizonRouteDefinition",
     "LongHorizonRouteError",
+    "LongHorizonRouteRunResult",
     "LongHorizonRouteSegment",
     "aggregate_distance_normalized_route_metrics",
     "build_long_horizon_route",
+    "run_long_horizon_route",
 ]

@@ -45,26 +45,6 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
-  - path: docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/README.md
-    status: evidence
-    freshness: evidence
-    area: benchmark_evidence
-  - path: docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/adjacent_rank_claims.csv
-    status: evidence
-    freshness: evidence
-    area: benchmark_evidence
-  - path: docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/artifact_inventory.json
-    status: evidence
-    freshness: evidence
-    area: benchmark_evidence
-  - path: docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/constraints_first_metrics.csv
-    status: evidence
-    freshness: evidence
-    area: benchmark_evidence
-  - path: docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/packet.json
-    status: evidence
-    freshness: evidence
-    area: benchmark_evidence
   - path: docs/context/evidence/issue_3482_release_0_0_2_collision_count_boundary/README.md
     status: evidence
     freshness: evidence

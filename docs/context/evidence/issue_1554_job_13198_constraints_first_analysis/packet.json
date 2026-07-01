@@ -1,0 +1,110 @@
+{
+  "accepted_packet_id": "issue1554-job13198-constraints-artifact-20260701",
+  "adjacent_rank_classifications": [
+    {
+      "claim_id": "snqi_adjacent_rank_statements",
+      "classification": "fail_closed_snqi_contract_warning",
+      "claim_promoted": false,
+      "rank_metric": "snqi"
+    },
+    {
+      "claim_id": "constraints_first_success_adjacent_ranks",
+      "classification": "blocked_missing_private_retained_metrics",
+      "claim_promoted": false,
+      "rank_metric": "success"
+    },
+    {
+      "claim_id": "constraints_first_collision_adjacent_ranks",
+      "classification": "blocked_missing_private_retained_metrics",
+      "claim_promoted": false,
+      "rank_metric": "collisions"
+    },
+    {
+      "claim_id": "constraints_first_near_miss_adjacent_ranks",
+      "classification": "blocked_missing_private_retained_metrics",
+      "claim_promoted": false,
+      "rank_metric": "near_misses"
+    }
+  ],
+  "artifact_files": [
+    "README.md",
+    "packet.json",
+    "constraints_first_metrics.csv",
+    "adjacent_rank_claims.csv",
+    "artifact_inventory.json"
+  ],
+  "campaign": "2026-06-issue1554-s20-h500-split-mem180-run",
+  "claim_boundary": {
+    "claim_promoted": false,
+    "evidence_status": "diagnostic-only evidence-boundary artifact",
+    "paper_grade": false,
+    "statement": "This bundle records completed-job constraints metadata and blocked/fail-closed rank boundaries only. It is not paper-grade, dissertation-facing, or benchmark-strength rank evidence."
+  },
+  "constraints_first_metrics": {
+    "available_completed_job_metadata": {
+      "episodes_per_planner": 960,
+      "exit_code": "0:0",
+      "matrix_rows": 9,
+      "ok_planner_rows": 9,
+      "planner_rows": 9,
+      "slurm_state": "COMPLETED"
+    },
+    "blocked_metrics": [
+      "success",
+      "collisions",
+      "near_misses"
+    ],
+    "blocked_reason": "The packet-named private retained metrics JSON was absent on this worker, so constraints-first aggregate values and adjacent ranks were not inferred."
+  },
+  "diagnostic_only_snqi_observation": {
+    "claim_promoted": false,
+    "observation": "Job 13198 completed, but the public packet records SNQI contract status=fail with snqi_contract.enforcement=warn.",
+    "rank_use": "fail_closed"
+  },
+  "expected_provenance_anchor": {
+    "job_id": 13198,
+    "public_commit": "12a188de7246aad3b9088ea76e6a25a20029f976"
+  },
+  "forbidden_actions_confirmed": {
+    "artifact_deletion": false,
+    "compute_submit": false,
+    "paper_or_dissertation_claim_edits": false
+  },
+  "input_sources": [
+    {
+      "path": "docs/context/evidence/issue_1554_slurm_evidence_2026-06-30/README.md",
+      "status": "present",
+      "use": "public packet narrative"
+    },
+    {
+      "path": "docs/context/evidence/issue_1554_slurm_evidence_2026-06-30/packet.json",
+      "status": "present",
+      "use": "public packet metadata and warnings"
+    },
+    {
+      "path": "tests/benchmark/fixtures/issue1554_slurm_evidence/jobs_13192_13198_13203.json",
+      "status": "present",
+      "use": "public test fixture matching packet metadata"
+    },
+    {
+      "path": "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/campaigns/2026-06-issue1554-s20-h500.yaml",
+      "status": "present",
+      "use": "private campaign registration context"
+    },
+    {
+      "path": "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/metrics/13198.json",
+      "status": "missing_on_worker",
+      "use": "would provide retained constraints metrics"
+    },
+    {
+      "path": "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/decision_packets/2026-06-30_slurm_ready_scout_issue1554-job13198-constraints-first-analysis-20260630.md",
+      "status": "missing_on_worker",
+      "use": "would provide private decision packet"
+    }
+  ],
+  "issue": 1554,
+  "job_id": 13198,
+  "more_seed_budget_compute_justified": false,
+  "next_packet_dependency_for_3216": "Recover or regenerate the missing retained job 13198 constraints metrics and adjacent-rank table; only then decide whether a targeted #3216 follow-up compute packet is justified.",
+  "schema_version": "issue1554-job13198-constraints-first-artifact.v1"
+}

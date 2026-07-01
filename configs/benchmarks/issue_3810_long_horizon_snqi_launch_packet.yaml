@@ -241,9 +241,10 @@ launch_packet:
     latest_merged_packet_pr: 4040
     decision: >-
       Public readiness refresh found no open PR covering issue #3810 before
-      this branch. Current origin/main includes merged packet PR #4040 with
-      imech156-u submit-host alignment. This refresh is not submit-host queue,
-      duplicate, worktree, or private-ops route proof.
+      this branch. Current origin/main includes merged packet PR #4040 as
+      the latest packet lineage; this refresh retargets the packet guard to
+      imech156-u. This refresh is not submit-host queue, duplicate, worktree,
+      or private-ops route proof.
   live_issue_state:
     checked_date: "2026-07-01"
     source: gh_issue_view_3810_labels

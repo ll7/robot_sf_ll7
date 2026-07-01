@@ -441,7 +441,13 @@ def test_export_cli_summary_reports_decision_disagreement_csv(tmp_path: Path) ->
 
     assert completed.returncode == 0, completed.stderr
     payload = json.loads(completed.stdout)
-    assert set(payload["artifacts"]) == {"json", "csv", "decision_disagreement_csv", "markdown", "svg"}
+    assert set(payload["artifacts"]) == {
+        "json",
+        "csv",
+        "decision_disagreement_csv",
+        "markdown",
+        "svg",
+    }
     decision_csv = Path(payload["artifacts"]["decision_disagreement_csv"])
     assert payload["status"] == "exported"
     assert decision_csv.name == "snqi_scalarization_sensitivity_decision_disagreement.csv"

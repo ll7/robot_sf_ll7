@@ -128,9 +128,10 @@ def test_scenario_family_and_seed_overlap_is_reported_as_blockers(tmp_path: Path
 
 
 def test_missing_overlap_metadata_blocks_readiness(tmp_path: Path) -> None:
-    """Missing scenario-family or seed metadata must fail closed."""
+    """Missing archive-id, scenario-family, or seed metadata must fail closed."""
 
     source_entry = _entry("source_0000", family="family_a", seed=1)
+    source_entry.pop("archive_id")
     source_entry.pop("cluster_key")
     source_entry.pop("failure_attribution")
     rerun_entry = _entry("rerun_0000", family="family_b", seed=101)
@@ -143,7 +144,7 @@ def test_missing_overlap_metadata_blocks_readiness(tmp_path: Path) -> None:
 
     assert readiness.status == BLOCKED
     assert readiness.missing_overlap_metadata_archive_ids == [
-        "source:source_0000:scenario_family",
+        "source:source:<entry:0>:archive_id,scenario_family",
         "rerun:rerun_0000:scenario_seed",
     ]
     assert "missing_overlap_metadata:2" in readiness.blockers

@@ -291,8 +291,11 @@ def _overlap_metadata_gaps(
     gaps: list[str] = []
     for side, entries in (("source", source_entries), ("rerun", rerun_entries)):
         for index, entry in enumerate(entries):
-            archive_id = str(entry.get("archive_id") or f"{side}:<entry:{index}>")
+            raw_archive_id = entry.get("archive_id")
+            archive_id = str(raw_archive_id or f"{side}:<entry:{index}>")
             entry_gaps: list[str] = []
+            if raw_archive_id is None:
+                entry_gaps.append("archive_id")
             if scenario_family_key(entry) == "unknown_family":
                 entry_gaps.append("scenario_family")
             candidate = entry.get("candidate")

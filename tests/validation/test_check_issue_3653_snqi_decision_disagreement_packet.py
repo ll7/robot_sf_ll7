@@ -263,6 +263,43 @@ def test_issue_3653_export_report_contract_rejects_invalid_decision_rate() -> No
         raise AssertionError("invalid decision-disagreement rate should fail closed")
 
 
+def test_issue_3653_export_report_contract_rejects_fractional_reversal_count() -> None:
+    """Decision-disagreement reversal counts must be whole counts."""
+
+    packet = _load_packet()
+    report = {
+        "decision_disagreement": {
+            "snqi_winner": "planner_a",
+            "constraints_first_winner": "planner_b",
+            "winner_disagreement": True,
+            "pairwise_disagreement_rate": 0.5,
+            "pairwise_reversal_count": 1.5,
+        },
+        "pareto_front": {
+            "x": "constraints_first_score",
+            "y": "snqi_mean",
+            "points": [
+                {
+                    "planner": "planner_a",
+                    "constraints_first_score": 0.4,
+                    "snqi_mean": 0.2,
+                }
+            ],
+        },
+        "planner_rows": [{"planner": "planner_a"}],
+        "weight_zero_ablation": {"w_success": {}},
+        "weight_sweep": {"w_success": []},
+        "term_dominance": [{"component": "success"}],
+    }
+
+    try:
+        _MODULE._require_export_report_fields(packet, report)
+    except _MODULE.PacketError as exc:
+        assert "reversal count must be finite integer" in str(exc)
+    else:
+        raise AssertionError("fractional reversal count should fail closed")
+
+
 def test_issue_3653_export_if_ready_writes_required_artifacts(tmp_path: Path) -> None:
     """Ready campaign-shaped inputs run through preflight and emit the packet artifact set."""
 

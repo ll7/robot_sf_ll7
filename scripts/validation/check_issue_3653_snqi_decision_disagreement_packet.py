@@ -310,7 +310,7 @@ def _require_populated_pareto_front(report: Mapping[str, Any]) -> None:
 
 
 def _require_populated_decision_disagreement(report: Mapping[str, Any]) -> None:
-    """Require finite decision-disagreement summary values."""
+    """Require usable decision-disagreement summary values."""
 
     disagreement = _require_mapping(report, "decision_disagreement")
     for field in (
@@ -322,13 +322,27 @@ def _require_populated_decision_disagreement(report: Mapping[str, Any]) -> None:
     ):
         if field not in disagreement:
             raise PacketError(f"export report decision_disagreement missing field {field!r}")
+    for field in ("snqi_winner", "constraints_first_winner"):
+        if not isinstance(disagreement[field], str) or not disagreement[field].strip():
+            raise PacketError(
+                f"export report decision_disagreement field {field!r} must be non-empty string"
+            )
+    if not isinstance(disagreement["winner_disagreement"], bool):
+        raise PacketError(
+            "export report decision_disagreement field 'winner_disagreement' must be boolean"
+        )
     try:
         disagreement_rate = float(disagreement["pairwise_disagreement_rate"])
-        reversal_count = int(disagreement["pairwise_reversal_count"])
+        reversal_count_raw = float(disagreement["pairwise_reversal_count"])
     except (TypeError, ValueError) as exc:
         raise PacketError("export report decision_disagreement numeric fields are invalid") from exc
     if not math.isfinite(disagreement_rate) or not 0.0 <= disagreement_rate <= 1.0:
         raise PacketError("export report decision_disagreement rate must be finite in [0, 1]")
+    if not math.isfinite(reversal_count_raw) or not reversal_count_raw.is_integer():
+        raise PacketError(
+            "export report decision_disagreement reversal count must be finite integer"
+        )
+    reversal_count = int(reversal_count_raw)
     if reversal_count < 0:
         raise PacketError("export report decision_disagreement reversal count must be non-negative")
 

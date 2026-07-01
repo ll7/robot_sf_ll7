@@ -221,12 +221,32 @@ validation:
   dry_run: required
 
 launch_packet:
-  decision: blocked_pending_submit_host_route_and_reconciliation
+  decision: blocked_pending_job_13251_retention_and_analysis
   compute_submit_authorized: false
   slurm_job_id: not_submitted
   target_host: imech036
   blocking_jobs:
-    - 13175
+    - 13251
+  active_slurm_submission:
+    status: submitted_not_benchmark_evidence
+    slurm_job_id: 13251
+    cluster_route: imech192:l40s
+    job_name: rsf3810-h600-l40s
+    public_worktree: /home/luttkule/git/robot_sf_ll7.worktrees/issue-3810-h600-submit-20260701 # allow-abs-path: submitted job provenance path (machine-local, non-portable)
+    public_commit: c49a78e6622eb305a3438d9a6f11a43edb385ff4
+    private_ops_ledger_commit: 24a9b1a
+    config_used: output/benchmarks/issue_3810_comprehensive_h600_snqi/config/issue_3810_comprehensive_h600_snqi.yaml
+    campaign_id: issue_3810_comprehensive_h600_snqi
+    remote_slurm_result_path: /home/luttkule/git/robot_sf_ll7.worktrees/issue-3810-h600-submit-20260701/output/slurm/issue3810-h600-job-13251 # allow-abs-path: submitted job provenance path (machine-local, non-portable)
+    local_retrieval_target: /home/luttkule/git/robot_sf_ll7/output/issue3810-h600-snqi/13251 # allow-abs-path: submitted job retrieval target (machine-local, non-portable)
+    initial_health_check: RUNNING on auxme-imech093, l40s, 12h wall cap
+    boundary: >-
+      Submission evidence only, not benchmark or dissertation evidence.
+      Interpretation remains blocked until job finishes, artifacts are
+      retrieved or promoted, Social Navigation Quality Index recalibration
+      inputs and bundle are produced, horizon-sensitivity and
+      interaction-exposure reports exist, and the durable evidence bundle is
+      reviewed.
   readiness_refresh:
     checked_date: "2026-07-01"
     target_host: imech036
@@ -240,32 +260,32 @@ launch_packet:
     current_pr: null
     open_pr_matches: []
     blocking_open_pr_matches: []
-    latest_merged_packet_pr: 4065
+    latest_merged_packet_pr: 4072
     decision: >-
       Public readiness refresh found no open PR covering issue #3810 before
-      this branch. Current origin/main includes merged packet PR #4065 as
-      the latest packet lineage; this refresh keeps the packet guard on
-      imech036 per the current ready-queue target host. This refresh is not submit-host queue, duplicate, worktree,
-      or private-ops route proof.
+      this branch. Current origin/main includes merged packet PR #4072 as latest
+      packet lineage and the live issue now records Slurm job 13251 as submitted.
+      This refresh is not a local submit action and is not benchmark evidence.
   live_issue_state:
     checked_date: "2026-07-01"
     source: gh_issue_view_3810_labels
     required_label: "state:running"
     submit_blocker: true
     resolution_required_before_submit: >
-      Issue #3810 is still marked "state:running", so a submit-host go
-      decision must first prove the active run is reconciled or no longer
-      relevant. Public packet checks must keep this as a blocker until the
-      live issue state changes and the packet is refreshed.
+      Issue #3810 is still marked "state:running"; live issue comment 4854625320
+      records submitted Slurm job 13251. Public packet checks must keep
+      interpretation blocked until the job finishes and retained evidence is
+      reconciled.
   ledger_reconciliation:
-    checked_date: "2026-06-29"
-    source: private_ops_jobs_and_queue_read_only_needs_submit_host_refresh
-    job_13175_state: requires_submit_host_refresh
+    checked_date: "2026-07-01"
+    source: live_issue_comment_4854625320_submission_evidence
+    job_13175_state: superseded_by_submitted_job_13251
     job_13175_campaign: 2026-06-issue1554-s20-h500-l40s-mem180
     job_13175_relevance: >
-      Older #1554 lane that must be rechecked from the Slurm-capable submit host
-      before any #3810 submission. A stale public packet must not treat it as
-      reconciled without fresh private-ops evidence.
+      Older #1554 lane is no longer the public packet active blocker after
+      the live issue recorded accepted #3810 Slurm job 13251. Retain the
+      lineage so stale pre-submit packets that still block only on job 13175
+      fail validation.
     running_related_jobs:
       - job_id: 13198
         state: running
@@ -274,24 +294,22 @@ launch_packet:
           Separate #1554 evidence-yield lane, not a #3810 duplicate. A
           Slurm-capable submit host must still refresh live queue pressure
           before any #3810 submission.
-    issue_3810_duplicate_status: requires_submit_host_refresh
+    issue_3810_duplicate_status: no_duplicate_reported_in_submission_comment
   go_no_go:
-    recommendation: blocked_pending_submit_host_route_and_reconciliation
+    recommendation: blocked_pending_job_13251_retention_and_analysis
     local_submission_status: no_submit_current_machine
     exact_local_decision_command: >-
       uv run python scripts/validation/check_issue_3810_long_horizon_launch_packet.py
       --packet configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml
       --json
     slurm_command_status: >
-      Not safe to freeze in this public packet without live submit-host queue
-      pressure, duplicate check, clean-worktree proof, job 13175 reconciliation,
-      target-host route support, and private route selection. Do not use the
-      private submit wrapper named below until those checks return go.
+      Live issue records externally submitted job 13251. This file does not
+      authorize Codex or local tooling to submit or queue additional Slurm work.
     private_ops_dry_run:
-      required_before_submit: true
+      required_before_submit: false
       target_host: imech036
       evidence_path: output/benchmarks/issue_3810_comprehensive_h600_snqi/preflight/private_ops_route_dry_run.json
-      current_public_status: route_unverified
+      current_public_status: superseded_by_live_submission
       required_fields:
         - target_host
         - queue_summary_timestamp
@@ -304,17 +322,16 @@ launch_packet:
         - owning_worktree_clean
         - decision
       decision_policy: >
-        The dry run must record decision=go before submission. If job 13175 is
-        not terminal/reconciled, if an issue #3810 duplicate exists, if the
-        owning worktree is dirty, or if the private submit wrapper lacks
-        imech036 support, the decision remains blocked.
+        No additional submission is allowed by this public packet. Future
+        reruns require a fresh dry run and duplicate check; the current packet
+        only tracks job 13251 retention and analysis blockers.
   interpretation_gate:
     status: blocked_pending_active_run_retention_reconciliation
     required_before_claim: true
     required_before_report_publication: true
     active_run_state: state:running
     blockers:
-      - active_run_state
+      - slurm_job_13251_running
       - retention_paths_missing
       - route_config_provenance_incomplete
       - snqi_recalibration_inputs_missing
@@ -327,9 +344,9 @@ launch_packet:
       - horizon_sensitivity_report
       - interaction_exposure_diagnostics
     decision_policy: >
-      The comprehensive h600 report remains analysis-blocked while issue #3810
-      is state:running or any retention, route/config provenance, Social
-      Navigation Quality Index recalibration, or interaction-exposure diagnostic
+      The comprehensive h600 report remains analysis-blocked while Slurm job
+      13251 is running or any retention, route/config provenance, Social
+      Navigation Quality Index recalibration, interaction-exposure diagnostic
       evidence is absent. Passing this public packet validator is not permission
       to interpret, publish, or promote benchmark claims.
   route:
@@ -442,8 +459,21 @@ analysis_and_retention_packet:
     route_preflight_required: true
     local_submission_allowed: false
     decision_gate:
-      status: blocked_pending_submit_host_route_and_reconciliation
-      reason: "Issue remains open and job 13175 must be reconciled on Slurm host before campaign claim."
+      status: blocked_pending_job_13251_retention_and_analysis
+      reason: "Issue remains open and Slurm job 13251 must finish with retained artifacts, Social Navigation Quality Index recalibration, horizon report, and interaction-exposure diagnostics before any campaign claim."
+  active_slurm_submission:
+    status: submitted_not_benchmark_evidence
+    slurm_job_id: 13251
+    cluster_route: imech192:l40s
+    remote_slurm_result_path: /home/luttkule/git/robot_sf_ll7.worktrees/issue-3810-h600-submit-20260701/output/slurm/issue3810-h600-job-13251 # allow-abs-path: submitted job provenance path (machine-local, non-portable)
+    local_retrieval_target: /home/luttkule/git/robot_sf_ll7/output/issue3810-h600-snqi/13251 # allow-abs-path: submitted job retrieval target (machine-local, non-portable)
+    required_before_interpretation:
+      - job_finished
+      - artifacts_retrieved_or_promoted
+      - snqi_recalibration_bundle
+      - horizon_sensitivity_report
+      - interaction_exposure_diagnostics
+      - durable_evidence_bundle_reviewed
   route:
     private_ops_repo: "/home/luttkule/git/robot_sf_ll7-private-ops"  # allow-abs-path: private-ops routing (machine-local, non-portable)
     queue_summary_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)

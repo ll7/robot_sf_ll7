@@ -188,6 +188,37 @@ def test_missing_overlap_metadata_blocks_readiness(tmp_path: Path) -> None:
     )
 
 
+def test_blank_overlap_metadata_blocks_readiness(tmp_path: Path) -> None:
+    """Blank overlap metadata must fail closed like absent metadata."""
+
+    source_entry = _entry("source_0000", family="family_a", seed=1)
+    source_entry["archive_id"] = "   "
+    source_entry["cluster_key"] = {
+        "policy": "",
+        "scenario_template": " ",
+        "primary_failure": "",
+        "termination_reason": "",
+    }
+    source_entry.pop("failure_attribution")
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+    )
+    source = _archive(tmp_path / "source.json", [source_entry])
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=_null_test_prerequisites(),
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.missing_overlap_metadata_archive_ids == [
+        "source:source:<entry:0>:archive_id,scenario_family",
+    ]
+    assert "missing_overlap_metadata:1" in readiness.blockers
+
+
 def test_missing_archive_payload_blocks_ready_path(tmp_path: Path) -> None:
     """Missing archive file paths must fail closed for both source and rerun."""
 

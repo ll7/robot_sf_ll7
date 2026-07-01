@@ -510,6 +510,35 @@ def test_invalid_null_test_p_values_block_readiness(tmp_path: Path) -> None:
     assert "invalid_null_test_prerequisites:2" in readiness.blockers
 
 
+def test_incomplete_null_test_status_does_not_validate_p_value(tmp_path: Path) -> None:
+    """Incomplete null tests report status without duplicate p-value blockers."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [_entry("source_0000", family="family_a", seed=1)],
+    )
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+    )
+    prerequisites = {
+        "null_tests_reject_null": True,
+        "shuffled_outcome_null_test": {"status": "failed"},
+        "ranking_permutation_test": {"status": "complete", "p_value": 0.05},
+    }
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=prerequisites,
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.invalid_null_test_prerequisites == [
+        "shuffled_outcome_null_test_status_not_complete",
+    ]
+
+
 def test_null_test_p_value_probability_bounds_are_allowed(tmp_path: Path) -> None:
     """Boundary p-values are valid probabilities."""
 

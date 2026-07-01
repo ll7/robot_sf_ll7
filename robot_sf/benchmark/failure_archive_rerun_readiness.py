@@ -415,7 +415,7 @@ def _null_test_prerequisite_gaps(
             continue
         if value.get("status") != "complete":
             invalid.append(f"{key}_status_not_complete")
-        if "p_value" not in value:
+        elif "p_value" not in value:
             invalid.append(f"{key}_missing_p_value")
         elif not _valid_probability(value["p_value"]):
             invalid.append(f"{key}_invalid_p_value")

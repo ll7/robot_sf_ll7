@@ -11,6 +11,10 @@ scenarios:
     simulation_config:
       max_episode_steps: 600
       ped_density: 0.02
+      peds_reset_follow_route_at_start: true
+      route_spawn_distribution: spread
+      route_spawn_jitter_frac: 0.0
+      max_peds_per_group: 1
       robot_config: {}
     metadata:
       archetype: sustained_flow_t_intersection
@@ -60,6 +64,10 @@ scenarios:
     simulation_config:
       max_episode_steps: 600
       ped_density: 0.05
+      peds_reset_follow_route_at_start: true
+      route_spawn_distribution: spread
+      route_spawn_jitter_frac: 0.0
+      max_peds_per_group: 1
       robot_config: {}
     metadata:
       archetype: sustained_flow_t_intersection
@@ -109,6 +117,10 @@ scenarios:
     simulation_config:
       max_episode_steps: 600
       ped_density: 0.08
+      peds_reset_follow_route_at_start: true
+      route_spawn_distribution: spread
+      route_spawn_jitter_frac: 0.0
+      max_peds_per_group: 1
       robot_config: {}
     metadata:
       archetype: sustained_flow_t_intersection

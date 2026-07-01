@@ -63,6 +63,7 @@ def test_sustained_flow_scenario_set_is_runner_loadable(capsys) -> None:
 
     for scenario in scenarios:
         metadata = scenario["metadata"]
+        spawn_definition = metadata["continuous_spawn"]["definition"]
         assert scenario["simulation_config"]["max_episode_steps"] == 600
         assert metadata["pack_id"] == "issue_3813_sustained_flow_scaffold_v0"
         assert metadata["status"] == "pre_benchmark_scaffold"
@@ -70,6 +71,11 @@ def test_sustained_flow_scenario_set_is_runner_loadable(capsys) -> None:
         assert metadata["benchmark_evidence"] is False
         assert metadata["continuous_spawn"]["required_before_benchmark_use"] is True
         assert metadata["continuous_spawn"]["current_runtime_support"] == "metadata_only"
+        assert spawn_definition["demand_model"] == "non_clearing_poisson_flow"
+        assert spawn_definition["respawn_trigger"] == "pedestrian_exits_route_corridor"
+        assert spawn_definition["spawn_budget"] == "time_bounded_episode"
+        assert spawn_definition["minimum_active_pedestrians"] == 1
+        assert spawn_definition["clearing_policy"] == "disallow_empty_scene_wait_success"
         assert metadata["success_metric"]["id"] == "sustained_progress_rate_m_per_s"
         assert metadata["termination"]["mode"] == "time_bounded"
         assert metadata["termination"]["goal_reach_is_not_primary_success"] is True
@@ -192,7 +198,28 @@ def test_sustained_flow_preflight_rejects_wrong_spawn_definition(tmp_path: Path)
     assert payload["benchmark_eligible"] is False
     assert payload["variant_count"] == 0
     assert any(
-        "continuous_spawn.definition must match non-clearing demand contract" in reason
+        "continuous_spawn.definition.clearing_policy must be "
+        "'disallow_empty_scene_wait_success'" in reason
+        for reason in payload["blocking_reasons"]
+    )
+
+
+def test_sustained_flow_preflight_rejects_waitable_spawn_budget(tmp_path: Path) -> None:
+    """Continuous-spawn variants must not allow finite-batch waiting."""
+    matrix = _load_yaml(SCENARIO_SET)
+    matrix["scenarios"][0]["metadata"]["continuous_spawn"]["definition"]["spawn_budget"] = (
+        "finite_batch"
+    )
+
+    wrong_budget_matrix = tmp_path / "wrong_spawn_budget_sustained_flow.yaml"
+    wrong_budget_matrix.write_text(yaml.safe_dump(matrix, sort_keys=False), encoding="utf-8")
+    payload = preflight_sustained_flow_matrix(wrong_budget_matrix).to_payload()
+
+    assert payload["status"] == "not_available"
+    assert payload["benchmark_eligible"] is False
+    assert payload["variant_count"] == 0
+    assert any(
+        "continuous_spawn.definition.spawn_budget must be 'time_bounded_episode'" in reason
         for reason in payload["blocking_reasons"]
     )
 

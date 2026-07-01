@@ -163,10 +163,10 @@ def _variant_from_scenario(scenario: Mapping[str, Any]) -> SustainedFlowVariant:
         raise SustainedFlowPreflightError(
             f"{name}: continuous_spawn.intended_process must be {SUPPORTED_SPAWN_PROCESS!r}"
         )
-    if continuous_spawn.get("definition") != EXPECTED_CONTINUOUS_SPAWN_DEFINITION:
-        raise SustainedFlowPreflightError(
-            f"{name}: continuous_spawn.definition must match non-clearing demand contract"
-        )
+    _validate_continuous_spawn_definition(
+        continuous_spawn.get("definition"),
+        scenario_name=name,
+    )
 
     seeds = scenario.get("seeds", [])
     if not isinstance(seeds, list) or not all(isinstance(seed, int) for seed in seeds):
@@ -201,6 +201,25 @@ def _variant_blockers(variants: tuple[SustainedFlowVariant, ...]) -> tuple[str, 
         if not variant.seeds:
             blockers.append(f"{variant.name}: at least one seed is required")
     return tuple(blockers)
+
+
+def _validate_continuous_spawn_definition(value: Any, *, scenario_name: str) -> None:
+    if not isinstance(value, Mapping):
+        raise SustainedFlowPreflightError(
+            f"{scenario_name}: continuous_spawn.definition must be a mapping"
+        )
+    missing_or_extra_keys = set(value) ^ set(EXPECTED_CONTINUOUS_SPAWN_DEFINITION)
+    if missing_or_extra_keys:
+        raise SustainedFlowPreflightError(
+            f"{scenario_name}: continuous_spawn.definition keys must match "
+            "non-clearing demand contract "
+            f"(mismatched keys: {sorted(missing_or_extra_keys)})"
+        )
+    for key, expected in EXPECTED_CONTINUOUS_SPAWN_DEFINITION.items():
+        if value.get(key) != expected:
+            raise SustainedFlowPreflightError(
+                f"{scenario_name}: continuous_spawn.definition.{key} must be {expected!r}"
+            )
 
 
 def _generator_drift_blockers(variants: tuple[SustainedFlowVariant, ...]) -> tuple[str, ...]:

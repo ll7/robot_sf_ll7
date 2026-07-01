@@ -34,6 +34,8 @@ REQUIRED_BLOCKERS_BEFORE_BENCHMARK_USE: tuple[str, ...] = (
 _SUSTAINED_FLOW_FAMILY = "sustained_flow_t_intersection"
 _SUSTAINED_FLOW_MAP_FILE = "../../../maps/svg_maps/classic_t_intersection.svg"
 _SUSTAINED_FLOW_MAX_EPISODE_STEPS = 600
+SUSTAINED_FLOW_METADATA_ONLY_RUNTIME_SUPPORT = "metadata_only"
+SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE = "runtime_continuous_spawn"
 
 
 @dataclass(frozen=True)
@@ -73,8 +75,11 @@ def iter_expected_sustained_flow_variant_specs() -> tuple[SustainedFlowVariantSp
     )
 
 
-def generate_expected_sustained_flow_scenarios() -> list[dict[str, Any]]:
-    """Generate full metadata-only scenario rows for the sustained-flow scaffold.
+def generate_expected_sustained_flow_scenarios(
+    *,
+    current_runtime_support: str = SUSTAINED_FLOW_METADATA_ONLY_RUNTIME_SUPPORT,
+) -> list[dict[str, Any]]:
+    """Generate full scenario rows for the sustained-flow scaffold.
 
     This helper deliberately materializes only the pre-benchmark scenario-matrix
     rows. It does not implement continuous pedestrian respawn or promote the
@@ -113,7 +118,7 @@ def generate_expected_sustained_flow_scenarios() -> list[dict[str, Any]]:
                         "intended_process": "poisson_respawn",
                         "spawn_rate_per_min": spec.spawn_rate_per_min,
                         "target_density_tier": spec.density_tier,
-                        "current_runtime_support": "metadata_only",
+                        "current_runtime_support": current_runtime_support,
                     },
                     "success_metric": {
                         "id": "sustained_progress_rate_m_per_s",
@@ -134,6 +139,22 @@ def generate_expected_sustained_flow_scenarios() -> list[dict[str, Any]]:
             }
         )
     return scenarios
+
+
+def generate_runtime_supported_sustained_flow_scenarios() -> list[dict[str, Any]]:
+    """Generate sustained-flow rows that advertise continuous-spawn runtime support.
+
+    This is preflight/checker input, not benchmark evidence. It separates
+    generator drift checks from the later runner proof that continuous pedestrian
+    respawn is actually implemented.
+
+    Returns:
+        Scenario-matrix rows in deterministic light, medium, heavy order.
+    """
+
+    return generate_expected_sustained_flow_scenarios(
+        current_runtime_support=SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE
+    )
 
 
 @dataclass(frozen=True)

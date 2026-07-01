@@ -16,6 +16,9 @@ from robot_sf.benchmark.sustained_flow_preflight import (
     RUNTIME_SUPPORTED_VALUE,
     preflight_sustained_flow_matrix,
 )
+from robot_sf.scenario_certification.sustained_flow import (
+    generate_runtime_supported_sustained_flow_scenarios,
+)
 from robot_sf.training.scenario_loader import load_scenarios
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -112,10 +115,7 @@ def test_sustained_flow_preflight_accepts_runtime_supported_matrix(tmp_path: Pat
     """Runtime-supported rows become eligible only when every variant opts in."""
 
     matrix = _load_yaml(SCENARIO_SET)
-    for scenario in matrix["scenarios"]:
-        scenario["metadata"]["continuous_spawn"]["current_runtime_support"] = (
-            RUNTIME_SUPPORTED_VALUE
-        )
+    matrix["scenarios"] = generate_runtime_supported_sustained_flow_scenarios()
 
     supported_matrix = tmp_path / "runtime_supported_sustained_flow.yaml"
     supported_matrix.write_text(yaml.safe_dump(matrix, sort_keys=False), encoding="utf-8")

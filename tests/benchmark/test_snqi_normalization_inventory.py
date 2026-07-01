@@ -265,6 +265,35 @@ def test_snqi_v1_contribution_diagnostics_are_comparable() -> None:
             assert abs(term["signed_contribution"]) <= abs(term["weight"])
 
 
+def test_snqi_v1_contribution_diagnostics_fail_closed_on_missing_baseline() -> None:
+    """SNQI-v1 diagnostics reject inputs the scorer would reject."""
+    metrics = {
+        "success": 1.0,
+        "time_to_goal_norm": 3.0,
+        "collisions": 9.0,
+        "near_misses": 9.0,
+        "comfort_exposure": 2.0,
+        "force_exceed_events": 9.0,
+        "jerk_mean": 9.0,
+    }
+    weights = {term.weight_name: 1.0 for term in SNQI_V1_TERM_SCALING}
+    incomplete_baseline_stats = {
+        "collisions": {"med": 0.0, "p95": 1.0},
+        "near_misses": {"med": 0.0, "p95": 1.0},
+        "comfort_exposure": {"med": 0.0, "p95": 1.0},
+        "force_exceed_events": {"med": 0.0, "p95": 1.0},
+        "jerk_mean": {"med": 0.0, "p95": 1.0},
+    }
+
+    with pytest.raises(ValueError, match="SNQI-v1 baseline_stats missing med/p95"):
+        build_snqi_contribution_diagnostics(
+            metrics,
+            weights,
+            incomplete_baseline_stats,
+            score_version="SNQI-v1",
+        )
+
+
 def test_snqi_v1_compute_path_is_covered_in_optional_lane() -> None:
     """Optional benchmark lane covers the versioned compute path."""
     metrics = {
@@ -304,6 +333,16 @@ def test_format_report_is_human_readable():
     assert "baseline-relative median/p95 clamped value" in text
     for term in SNQI_TERM_SCALING:
         assert term.term in text
+
+
+def test_format_report_uses_inventory_score_version_contract() -> None:
+    """V1 inventory text reports the v1 contract, not the default v0 contract."""
+    inv = build_snqi_normalization_inventory(_BASELINE_STATS, score_version="SNQI-v1")
+
+    text = format_normalization_report(inv)
+
+    assert "SNQI-v1 (bounded_baseline_relative_diagnostic_only)" in text
+    assert "SNQI-v0 (legacy_mixed_basis_diagnostic_only)" not in text
 
 
 def test_contribution_diagnostics_reconstruct_snqi_and_flag_raw_dominance():

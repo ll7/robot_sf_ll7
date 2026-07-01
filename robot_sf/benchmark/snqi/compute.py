@@ -131,7 +131,7 @@ def compute_snqi_v0(metrics: Metrics, weights: Weights, baseline_stats: Baseline
     return float(score)
 
 
-def _normalize_metric_required(
+def normalize_metric_required(
     name: str,
     value: float | int | bool,
     baseline_stats: BaselineStats,
@@ -158,32 +158,32 @@ def compute_snqi_v1(metrics: Metrics, weights: Weights, baseline_stats: Baseline
     success_raw = metrics.get("success", 0.0)
     success = 1.0 if isinstance(success_raw, bool) and success_raw else float(success_raw)
 
-    time_norm = _normalize_metric_required(
+    time_norm = normalize_metric_required(
         "time_to_goal_norm",
         metrics.get("time_to_goal_norm", 1.0),
         baseline_stats,
     )
-    coll_norm = _normalize_metric_required(
+    coll_norm = normalize_metric_required(
         "collisions",
         metrics.get("collisions", 0.0),
         baseline_stats,
     )
-    near_norm = _normalize_metric_required(
+    near_norm = normalize_metric_required(
         "near_misses",
         metrics.get("near_misses", 0.0),
         baseline_stats,
     )
-    comfort_norm = _normalize_metric_required(
+    comfort_norm = normalize_metric_required(
         "comfort_exposure",
         metrics.get("comfort_exposure", 0.0),
         baseline_stats,
     )
-    force_exceed_norm = _normalize_metric_required(
+    force_exceed_norm = normalize_metric_required(
         "force_exceed_events",
         metrics.get("force_exceed_events", 0.0),
         baseline_stats,
     )
-    jerk_norm = _normalize_metric_required(
+    jerk_norm = normalize_metric_required(
         "jerk_mean",
         metrics.get("jerk_mean", 0.0),
         baseline_stats,
@@ -355,5 +355,6 @@ __all__ = [
     "compute_snqi_v0",
     "compute_snqi_v1",
     "normalize_metric",
+    "normalize_metric_required",
     "recompute_snqi_weights",
 ]

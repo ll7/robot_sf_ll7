@@ -27,6 +27,7 @@ from robot_sf.benchmark.snqi.exit_codes import (
 from robot_sf.benchmark.snqi.normalization_inventory import (
     build_snqi_contribution_diagnostics,
     build_snqi_normalization_inventory,
+    build_snqi_version_contract,
 )
 from robot_sf.benchmark.snqi.weights_inventory import build_inventory_report
 
@@ -102,12 +103,48 @@ def build_governance_report(
         CONTRIBUTION_DIAGNOSTIC_BASELINE_STATS,
         score_version="SNQI-v0",
     )
-    contribution_diagnostics = build_snqi_contribution_diagnostics(
-        CONTRIBUTION_DIAGNOSTIC_METRICS,
-        CONTRIBUTION_DIAGNOSTIC_WEIGHTS,
-        active_baseline_stats,
-        score_version="SNQI-v1",
-    )
+    missing_v1_baseline = baseline_stats is not None and normalization.missing_baseline_coverage
+    if missing_v1_baseline:
+        missing_metrics = [term.metric_key for term in normalization.missing_baseline_coverage]
+        contribution_diagnostics = {
+            "schema_version": "snqi_normalization_contributions.v1",
+            "diagnostic_only": True,
+            "mixed_basis": False,
+            "absolute_contribution_total": 0.0,
+            "raw_penalty_absolute_share": 0.0,
+            "baseline_normalized_penalty_absolute_share": 0.0,
+            "raw_penalty_terms_dominate": False,
+            "weight_bound_exceedances": [],
+            "has_weight_bound_exceedance": False,
+            "normalization_contract": {
+                "schema_version": "snqi_normalization_contract.v1",
+                "diagnostic_only": True,
+                "status": "invalid_missing_baseline_coverage",
+                "weights_comparable": False,
+                "raw_unbounded_penalty_terms": [],
+                "baseline_normalized_penalty_terms": [
+                    term.term for term in normalization.normalized_penalty_terms
+                ],
+                "raw_penalty_absolute_share": 0.0,
+                "baseline_normalized_penalty_absolute_share": 0.0,
+                "weight_bound_exceedance_terms": [],
+                "decision_issue": 3978,
+                "successor_issue": None,
+                "reasons": [
+                    "SNQI-v1 contribution diagnostics require med/p95 baseline coverage "
+                    f"for every penalty term; missing metrics: {', '.join(missing_metrics)}."
+                ],
+            },
+            "score_version_contract": build_snqi_version_contract("SNQI-v1"),
+            "terms": [],
+        }
+    else:
+        contribution_diagnostics = build_snqi_contribution_diagnostics(
+            CONTRIBUTION_DIAGNOSTIC_METRICS,
+            CONTRIBUTION_DIAGNOSTIC_WEIGHTS,
+            active_baseline_stats,
+            score_version="SNQI-v1",
+        )
 
     blockers: list[dict[str, Any]] = []
     if weights.has_blocking_conflict:
@@ -198,7 +235,7 @@ def build_governance_report(
                 },
             }
         )
-    if baseline_stats is not None and normalization.missing_baseline_coverage:
+    if missing_v1_baseline:
         blockers.append(
             {
                 "issue": 3978,
@@ -207,7 +244,7 @@ def build_governance_report(
                     "At least one SNQI-v1 baseline-normalized penalty term lacks "
                     "median/p95 coverage and cannot support bounded scoring."
                 ),
-                "metrics": [t.metric_key for t in normalization.missing_baseline_coverage],
+                "metrics": missing_metrics,
             }
         )
 

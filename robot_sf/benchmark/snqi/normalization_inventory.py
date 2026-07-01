@@ -30,6 +30,7 @@ from robot_sf.benchmark.snqi.compute import (
     SNQI_SCORE_VERSION_V0,
     SNQI_SCORE_VERSION_V1,
     normalize_metric,
+    normalize_metric_required,
 )
 
 # Scaling regimes. Kept as plain strings so inventory payloads are trivially
@@ -301,6 +302,20 @@ def scaled_term_value(
     return float(raw)
 
 
+def _scaled_term_value_for_version(
+    term: TermScaling,
+    metrics: dict[str, float | int | bool],
+    baseline_stats: dict[str, dict[str, float]],
+    *,
+    score_version: str,
+) -> float:
+    """Return post-scaling value with versioned fail-closed semantics."""
+    raw = metrics.get(term.metric_key, term.default)
+    if score_version == SNQI_SCORE_VERSION_V1 and term.is_penalty:
+        return normalize_metric_required(term.metric_key, raw, baseline_stats)
+    return scaled_term_value(term, metrics, baseline_stats)
+
+
 @dataclass(frozen=True)
 class TermContribution:
     """Weighted SNQI component contribution for one metric row.
@@ -419,7 +434,12 @@ def build_snqi_contribution_diagnostics(
     terms = _term_scaling_for_version(score_version)
     for term in terms:
         raw_value = metrics.get(term.metric_key, term.default)
-        scaled_value = scaled_term_value(term, metrics, baseline_stats)
+        scaled_value = _scaled_term_value_for_version(
+            term,
+            metrics,
+            baseline_stats,
+            score_version=score_version,
+        )
         weight = float(weights.get(term.weight_name, 1.0))
         signed_contribution = term.sign * weight * scaled_value
         absolute_total += abs(signed_contribution)
@@ -605,7 +625,7 @@ def format_normalization_report(inventory: NormalizationInventory) -> str:
             f"{term.metric_key:<24}{term.measurement_basis}"
         )
     lines.append(f"  mixed_scale            : {inventory.mixed_scale}")
-    contract = build_snqi_version_contract()
+    contract = build_snqi_version_contract(inventory.score_version)
     lines.append(f"  score version          : {contract['score_version']} ({contract['status']})")
     lines.append(
         "  raw penalty terms      : "

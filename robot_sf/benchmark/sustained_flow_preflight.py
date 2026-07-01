@@ -212,7 +212,8 @@ def _validate_continuous_spawn_definition(value: Any, *, scenario_name: str) -> 
     if missing_or_extra_keys:
         raise SustainedFlowPreflightError(
             f"{scenario_name}: continuous_spawn.definition keys must match "
-            "non-clearing demand contract"
+            "non-clearing demand contract "
+            f"(mismatched keys: {sorted(missing_or_extra_keys)})"
         )
     for key, expected in EXPECTED_CONTINUOUS_SPAWN_DEFINITION.items():
         if value.get(key) != expected:

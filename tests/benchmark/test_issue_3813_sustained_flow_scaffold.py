@@ -72,6 +72,7 @@ def test_sustained_flow_scenario_set_is_runner_loadable(capsys) -> None:
         assert metadata["continuous_spawn"]["required_before_benchmark_use"] is True
         assert metadata["continuous_spawn"]["current_runtime_support"] == "metadata_only"
         assert spawn_definition["demand_model"] == "non_clearing_poisson_flow"
+        assert spawn_definition["respawn_trigger"] == "pedestrian_exits_route_corridor"
         assert spawn_definition["spawn_budget"] == "time_bounded_episode"
         assert spawn_definition["minimum_active_pedestrians"] == 1
         assert spawn_definition["clearing_policy"] == "disallow_empty_scene_wait_success"

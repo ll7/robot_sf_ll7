@@ -151,6 +151,57 @@ def test_packet_surfaces_blocked_s30_decision_status(tmp_path: Path) -> None:
     )
 
 
+def test_packet_normalizes_scalar_s30_reasons(tmp_path: Path) -> None:
+    """Scalar S30 reasons stay whole instead of being split into characters."""
+    root = tmp_path / "outputs"
+    _write_present_outputs(
+        root,
+        generated_at="2026-06-29T10:00:00+00:00",
+        decision_packet={
+            "manuscript_table_status": "ready_for_table_review_no_claim_promotion",
+            "s30_decision_status": "blocked",
+            "s30_reasons": "missing_expected_headline_cells",
+            "adjacent_overlap_count": 0,
+            "invalid_metric_claim_count": 0,
+            "manuscript_blockers": [],
+        },
+    )
+
+    packet = mod.build_packet([root], now=mod._parse_datetime("2026-06-29T11:00:00+00:00"))
+
+    blocker = next(
+        item
+        for item in packet["cannot_claim"]
+        if item["claim"] == "s30_not_required_by_local_preflight"
+    )
+    assert blocker["reason"] == "missing_expected_headline_cells"
+
+
+def test_packet_falls_back_for_invalid_s30_reasons(tmp_path: Path) -> None:
+    """Malformed S30 reasons keep the fail-closed status explicit."""
+    root = tmp_path / "outputs"
+    _write_present_outputs(
+        root,
+        generated_at="2026-06-29T10:00:00+00:00",
+        decision_packet={
+            "manuscript_table_status": "ready_for_table_review_no_claim_promotion",
+            "s30_decision_status": "blocked",
+            "s30_reasons": {"unexpected": "shape"},
+            "adjacent_overlap_count": 0,
+            "invalid_metric_claim_count": 0,
+            "manuscript_blockers": [],
+        },
+    )
+
+    packet = mod.build_packet([root], now=mod._parse_datetime("2026-06-29T11:00:00+00:00"))
+
+    assert any(
+        item["claim"] == "s30_not_required_by_local_preflight"
+        and item["reason"] == "decision packet s30_decision_status is 'blocked'"
+        for item in packet["cannot_claim"]
+    )
+
+
 def test_packet_records_clear_local_preflight_status_without_promotion(tmp_path: Path) -> None:
     """Clear S20 local decision packet is visible but remains read-only."""
     root = tmp_path / "outputs"

@@ -375,7 +375,13 @@ def _decision_packet_blockers(claim_inputs: dict[str, Any]) -> list[dict[str, st
 
     s30_status = claim_inputs.get("s30_decision_status")
     if s30_status in {"needs_review", "blocked"}:
-        reasons = claim_inputs.get("s30_reasons") or []
+        raw_reasons = claim_inputs.get("s30_reasons")
+        if isinstance(raw_reasons, str):
+            reasons = [raw_reasons]
+        elif isinstance(raw_reasons, list | tuple):
+            reasons = raw_reasons
+        else:
+            reasons = []
         reason_text = (
             ", ".join(str(reason) for reason in reasons)
             or f"decision packet s30_decision_status is {s30_status!r}"

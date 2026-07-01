@@ -100,6 +100,28 @@ def test_runtime_supported_generated_variants_pass_generator_preflight() -> None
     assert payload["errors"] == []
 
 
+def test_runtime_supported_invalid_report_has_distinct_readiness_status() -> None:
+    """Invalid runtime-supported rows must not look like metadata-only rows."""
+    report = sustained_flow.SustainedFlowPreflightReport(
+        schema_version=sustained_flow.SUSTAINED_FLOW_PREFLIGHT_SCHEMA_VERSION,
+        scenario_set="generated:invalid-runtime-supported",
+        conforms=False,
+        variants=(),
+        errors=("runtime-supported definition failed validation",),
+        runtime_support=sustained_flow.SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
+    )
+
+    payload = sustained_flow.sustained_flow_preflight_to_dict(report)
+
+    assert payload["runtime_definition_readiness"] == {
+        "status": sustained_flow.RUNTIME_DEFINITION_INVALID_STATUS,
+        "ready": False,
+        "expected_runtime_support": sustained_flow.SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
+        "observed_runtime_support": sustained_flow.SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
+        "benchmark_evidence": False,
+    }
+
+
 def test_preflight_conforms_for_commit_scaffold() -> None:
     """Current scaffold set satisfies fail-closed sustained-flow preflight."""
     report = sustained_flow.preflight_sustained_flow_scenario_set(SCENARIO_SET)

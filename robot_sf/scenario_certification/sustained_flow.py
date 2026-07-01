@@ -22,6 +22,7 @@ DEFAULT_SUSTAINED_FLOW_SCENARIO_SET = (
 )
 RUNTIME_DEFINITION_READY_STATUS = "definition_ready_for_runtime_preflight"
 RUNTIME_DEFINITION_METADATA_ONLY_STATUS = "metadata_only_not_runtime_ready"
+RUNTIME_DEFINITION_INVALID_STATUS = "definition_invalid_not_ready"
 EXPECTED_SUSTAINED_FLOW_TIERS: tuple[tuple[str, float, float, tuple[int, ...]], ...] = (
     ("light", 0.02, 6.0, (381301, 381302, 381303)),
     ("medium", 0.05, 12.0, (381311, 381312, 381313)),
@@ -587,6 +588,12 @@ def sustained_flow_preflight_to_dict(report: SustainedFlowPreflightReport) -> di
     runtime_definition_ready = (
         report.conforms and report.runtime_support == SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE
     )
+    runtime_definition_status = RUNTIME_DEFINITION_METADATA_ONLY_STATUS
+    if runtime_definition_ready:
+        runtime_definition_status = RUNTIME_DEFINITION_READY_STATUS
+    elif report.runtime_support == SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE:
+        runtime_definition_status = RUNTIME_DEFINITION_INVALID_STATUS
+
     return {
         "schema_version": report.schema_version,
         "scenario_set": report.scenario_set,
@@ -594,11 +601,7 @@ def sustained_flow_preflight_to_dict(report: SustainedFlowPreflightReport) -> di
         "benchmark_evidence": report.benchmark_evidence,
         "runtime_support": report.runtime_support,
         "runtime_definition_readiness": {
-            "status": (
-                RUNTIME_DEFINITION_READY_STATUS
-                if runtime_definition_ready
-                else RUNTIME_DEFINITION_METADATA_ONLY_STATUS
-            ),
+            "status": runtime_definition_status,
             "ready": runtime_definition_ready,
             "expected_runtime_support": SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
             "observed_runtime_support": report.runtime_support,

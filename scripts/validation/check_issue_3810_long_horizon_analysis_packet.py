@@ -12,7 +12,7 @@ from typing import Any
 import yaml
 
 DEFAULT_PACKET = Path("configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml")
-EXPECTED_TARGET_HOST = "imech039"
+EXPECTED_TARGET_HOST = "imech156-u"
 
 REQUIRED_PRE_FLIGHT_MARKERS = {
     "ROBOT_SF_PRIVATE_OPS",

@@ -97,6 +97,14 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3482_release_0_0_2_provenance_recovery_2026_07_01/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3482_release_0_0_2_provenance_recovery_2026_07_01/recovery_manifest.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/README.md
     status: evidence
     freshness: evidence

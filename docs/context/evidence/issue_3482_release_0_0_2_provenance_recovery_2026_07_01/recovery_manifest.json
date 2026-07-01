@@ -1,0 +1,103 @@
+{
+  "schema_version": "issue_3482_provenance_recovery_attempt.v1",
+  "issue": 3482,
+  "date": "2026-07-01",
+  "result": "blocked_no_exact_event_provenance_found",
+  "tracked_issue_state_after_recovery": {
+    "label_removed": "state:running",
+    "label_added": "state:blocked",
+    "comment_url": "https://github.com/ll7/robot_sf_ll7/issues/3482#issuecomment-4855373479"
+  },
+  "searched_artifacts": [
+    "backfill_summary.json",
+    "frozen_reconciliation_report.json",
+    "reconciliation_tables_0_0_2.jsonl"
+  ],
+  "searched_local_roots": [
+    "/home/luttkule",
+    "/scratch",
+    "/data",
+    "/mnt",
+    "/tmp",
+    "/var/tmp"
+  ],
+  "searched_remote_hosts": [
+    {
+      "host": "imech192",
+      "status": "reachable",
+      "searched": true,
+      "result": "no_target_artifacts_found"
+    },
+    {
+      "host": "licca",
+      "status": "reachable",
+      "searched": true,
+      "result": "no_target_artifacts_or_exact_event_raw_inputs_found"
+    },
+    {
+      "host": "imech156-u",
+      "status": "not_resolved_or_not_safely_accessible",
+      "searched": false,
+      "reason": "hostname did not resolve from the recovery environment"
+    },
+    {
+      "host": "imech156",
+      "status": "host_key_verification_blocked",
+      "searched": false,
+      "reason": "host resolved but no trusted known-host entry was available"
+    },
+    {
+      "host": "imech036",
+      "status": "route_checked",
+      "searched": false,
+      "reason": "host-key trust was not established in the recovery environment"
+    }
+  ],
+  "searched_logs": [
+    "local Codex logs",
+    "orchestrator logs",
+    "private-ops ledgers"
+  ],
+  "found_valid_exact_event_provenance": false,
+  "acceptable_regeneration_input_found": false,
+  "public_release_bundle_policy": {
+    "can_verify_published_total_collision_count_zero": true,
+    "can_verify_exact_collision_outcomes_241": false,
+    "may_be_used_to_close_3482": false
+  },
+  "known_diagnostic_summary_from_issue_comment": {
+    "release_tag": "0.0.2",
+    "release_target_commit": "f7ebdcae2375d085e925213197a75a386e26a79c",
+    "episode_rows": 987,
+    "exact_collision_outcomes": 241,
+    "derived_total_collision_count_positive_rows": 0,
+    "reconciliation_violations": 241,
+    "source": "https://github.com/ll7/robot_sf_ll7/issues/3482#issuecomment-4835303925",
+    "claim_boundary": "diagnostic issue-comment summary only; not a durable promoted reconciliation bundle"
+  },
+  "remaining_resolution_paths": [
+    "recover original three artifacts",
+    "recover raw episode-level records with exact-event fields",
+    "explicitly downgrade or withdraw release 0.0.2 collision-count claims"
+  ],
+  "recommended_next_actions": [
+    "verify imech156 or imech156-u host identity and scratch retention through an authoritative source",
+    "audit paper-facing and dissertation-facing release 0.0.2 tables that rely on total_collision_count or collision-count-derived claims",
+    "avoid additional broad storage searches unless a new host, archive, or artifact pointer is identified"
+  ],
+  "defensible_close_paths": [
+    {
+      "close_mode": "completed",
+      "condition": "original artifacts or raw exact-event records are recovered, promoted, hash-validated, and used to annotate affected table claims"
+    },
+    {
+      "close_mode": "not_planned_or_not_recoverable",
+      "condition": "exact-event provenance is judged permanently unavailable and release 0.0.2 collision-count claims are explicitly downgraded or withdrawn"
+    }
+  ],
+  "must_not_claim": [
+    "release 0.0.2 total_collision_count is paper-ready",
+    "the public release bundle alone proves 241 exact collision outcomes",
+    "issue 3482 is completed by this negative recovery record"
+  ]
+}

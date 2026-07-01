@@ -429,6 +429,55 @@ def _validate_variant(
     )
 
 
+def _validate_loaded_sustained_flow_variants(
+    loaded: list[dict[str, Any]],
+    *,
+    scenario_set: Path,
+) -> tuple[list[SustainedFlowVariant], list[str]]:
+    """Validate loaded sustained-flow rows from YAML or generated definitions.
+
+    Returns:
+        Variant summaries and validation errors.
+    """
+
+    errors: list[str] = []
+    if len(loaded) != len(EXPECTED_SUSTAINED_FLOW_TIERS):
+        errors.append(
+            f"expected {len(EXPECTED_SUSTAINED_FLOW_TIERS)} sustained-flow variants, "
+            f"found {len(loaded)}"
+        )
+
+    variants: list[SustainedFlowVariant] = []
+    seen_seeds: set[int] = set()
+    expected_by_tier = {
+        tier: (ped_density, spawn_rate, seeds)
+        for tier, ped_density, spawn_rate, seeds in EXPECTED_SUSTAINED_FLOW_TIERS
+    }
+    expected_order = [tier for tier, *_ in EXPECTED_SUSTAINED_FLOW_TIERS]
+    observed_order: list[str] = []
+    for scenario in loaded:
+        metadata = scenario.get("metadata", {})
+        tier = str(metadata.get("density", ""))
+        observed_order.append(tier)
+        variant, variant_errors = _validate_variant(
+            scenario,
+            scenario_set=scenario_set,
+            expected_by_tier=expected_by_tier,
+            seen_seeds=seen_seeds,
+        )
+        errors.extend(variant_errors)
+        if variant is not None:
+            variants.append(variant)
+
+    if observed_order != expected_order:
+        errors.append(
+            "density tiers must enumerate light, medium, heavy in deterministic order; "
+            f"observed {observed_order}"
+        )
+
+    return variants, errors
+
+
 def preflight_sustained_flow_scenario_set(
     path: str | Path = DEFAULT_SUSTAINED_FLOW_SCENARIO_SET,
 ) -> SustainedFlowPreflightReport:
@@ -453,41 +502,11 @@ def preflight_sustained_flow_scenario_set(
     if raw.get("schema_version") != "robot_sf.scenario_matrix.v1":
         errors.append("schema_version must be robot_sf.scenario_matrix.v1")
 
-    loaded = load_scenarios(scenario_set)
-    if len(loaded) != len(EXPECTED_SUSTAINED_FLOW_TIERS):
-        errors.append(
-            f"expected {len(EXPECTED_SUSTAINED_FLOW_TIERS)} sustained-flow variants, "
-            f"found {len(loaded)}"
-        )
-
-    variants: list[SustainedFlowVariant] = []
-    seen_seeds: set[int] = set()
-    expected_by_tier = {
-        tier: (ped_density, spawn_rate, seeds)
-        for tier, ped_density, spawn_rate, seeds in EXPECTED_SUSTAINED_FLOW_TIERS
-    }
-    expected_order = [tier for tier, *_ in EXPECTED_SUSTAINED_FLOW_TIERS]
-    observed_order: list[str] = []
-
-    for scenario in loaded:
-        metadata = scenario.get("metadata", {})
-        tier = str(metadata.get("density", ""))
-        observed_order.append(tier)
-        variant, variant_errors = _validate_variant(
-            scenario,
-            scenario_set=scenario_set,
-            expected_by_tier=expected_by_tier,
-            seen_seeds=seen_seeds,
-        )
-        errors.extend(variant_errors)
-        if variant is not None:
-            variants.append(variant)
-
-    if observed_order != expected_order:
-        errors.append(
-            "density tiers must enumerate light, medium, heavy in deterministic order; "
-            f"observed {observed_order}"
-        )
+    variants, variant_errors = _validate_loaded_sustained_flow_variants(
+        load_scenarios(scenario_set),
+        scenario_set=scenario_set,
+    )
+    errors.extend(variant_errors)
 
     return SustainedFlowPreflightReport(
         schema_version=SUSTAINED_FLOW_PREFLIGHT_SCHEMA_VERSION,
@@ -509,41 +528,10 @@ def preflight_generated_sustained_flow_scenarios() -> SustainedFlowPreflightRepo
     """
 
     scenario_set = DEFAULT_SUSTAINED_FLOW_SCENARIO_SET.resolve()
-    loaded = generate_expected_sustained_flow_scenarios()
-    errors: list[str] = []
-    if len(loaded) != len(EXPECTED_SUSTAINED_FLOW_TIERS):
-        errors.append(
-            f"expected {len(EXPECTED_SUSTAINED_FLOW_TIERS)} sustained-flow variants, "
-            f"found {len(loaded)}"
-        )
-
-    variants: list[SustainedFlowVariant] = []
-    seen_seeds: set[int] = set()
-    expected_by_tier = {
-        tier: (ped_density, spawn_rate, seeds)
-        for tier, ped_density, spawn_rate, seeds in EXPECTED_SUSTAINED_FLOW_TIERS
-    }
-    expected_order = [tier for tier, *_ in EXPECTED_SUSTAINED_FLOW_TIERS]
-    observed_order: list[str] = []
-    for scenario in loaded:
-        metadata = scenario.get("metadata", {})
-        tier = str(metadata.get("density", ""))
-        observed_order.append(tier)
-        variant, variant_errors = _validate_variant(
-            scenario,
-            scenario_set=scenario_set,
-            expected_by_tier=expected_by_tier,
-            seen_seeds=seen_seeds,
-        )
-        errors.extend(variant_errors)
-        if variant is not None:
-            variants.append(variant)
-
-    if observed_order != expected_order:
-        errors.append(
-            "density tiers must enumerate light, medium, heavy in deterministic order; "
-            f"observed {observed_order}"
-        )
+    variants, errors = _validate_loaded_sustained_flow_variants(
+        generate_expected_sustained_flow_scenarios(),
+        scenario_set=scenario_set,
+    )
 
     return SustainedFlowPreflightReport(
         schema_version=SUSTAINED_FLOW_PREFLIGHT_SCHEMA_VERSION,

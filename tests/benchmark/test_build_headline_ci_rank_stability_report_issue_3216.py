@@ -301,6 +301,56 @@ def test_cli_dry_run_writes_decision_packet_and_can_fail_on_blocker(tmp_path: Pa
     assert (output_dir / "report.md").is_file()
 
 
+def test_cli_expected_planners_from_config_blocks_missing_planner(tmp_path: Path) -> None:
+    """Config-derived headline planners become fail-closed expected rows."""
+    rows_path = tmp_path / "rows.json"
+    config_path = tmp_path / "benchmark.yaml"
+    output_dir = tmp_path / "configured_planners"
+    rows_path.write_text(
+        json.dumps(
+            [
+                _row("headline", "hybrid", [0.90] * 20),
+                _row("headline", "ppo", [0.70] * 20),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    config_path.write_text(
+        """
+name: issue3216-test
+planners:
+  - key: hybrid
+  - key: ppo
+  - key: orca
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "--rows",
+            str(rows_path),
+            "--expected-planners-from-config",
+            str(config_path),
+            "--output-dir",
+            str(output_dir),
+            "--bootstrap-samples",
+            "32",
+            "--rank-resamples",
+            "16",
+            "--fail-on-decision-blocker",
+        ]
+    )
+
+    assert exit_code == 4
+    payload = json.loads((output_dir / "result.json").read_text(encoding="utf-8"))
+    grid = payload["decision_packet"]["grid_completeness"]
+    assert grid["expected_planners"] == ["hybrid", "ppo", "orca"]
+    assert grid["missing_cells"] == [{"scenario_id": "*", "planner_key": "orca"}]
+    assert "headline_grid_incomplete" in payload["decision_packet"]["manuscript_blockers"]
+
+
 def test_campaign_wrapper_preflight_only_never_launches_campaign(tmp_path: Path) -> None:
     """The public #3216 wrapper has a local no-submit preflight path."""
     repo_root = Path(__file__).resolve().parents[2]
@@ -329,3 +379,7 @@ def test_campaign_wrapper_preflight_only_never_launches_campaign(tmp_path: Path)
     assert payload["decision_packet"]["claim_boundary"] == (
         "Decision packet is local preflight only; no manuscript or paper claim is promoted."
     )
+    grid = payload["decision_packet"]["grid_completeness"]
+    assert "prediction_planner" in grid["expected_planners"]
+    assert grid["expected_cell_count"] == 9
+    assert grid["missing_cell_count"] > 0

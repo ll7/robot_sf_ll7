@@ -72,7 +72,10 @@ def _finite_positive(value: float, field_name: str) -> float:
 def _control_pair(control: Sequence[float], model_name: str) -> tuple[float, float]:
     if len(control) != 2:
         raise ValueError(f"{model_name} control must contain exactly two values.")
-    return float(control[0]), float(control[1])
+    first, second = float(control[0]), float(control[1])
+    if not isfinite(first) or not isfinite(second):
+        raise ValueError(f"{model_name} control values must be finite.")
+    return first, second
 
 
 @dataclass(frozen=True)

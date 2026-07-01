@@ -117,6 +117,24 @@ def test_dynamics_reject_invalid_dt(name: str, dt: float) -> None:
 
 
 @pytest.mark.parametrize(
+    ("name", "control"),
+    [
+        ("holonomic_disc", (nan, 0.0)),
+        ("differential_drive", (0.0, inf)),
+        ("unicycle", (inf, 0.0)),
+        ("kinematic_bicycle", (0.0, nan)),
+    ],
+)
+def test_dynamics_reject_non_finite_control(name: str, control: tuple[float, float]) -> None:
+    """Dynamics models reject non-finite control values before integration."""
+
+    model = build_robot_dynamics(name)
+
+    with pytest.raises(ValueError, match="control values must be finite"):
+        model.step(RobotDynamicsState(), control, dt=1.0)
+
+
+@pytest.mark.parametrize(
     "name",
     ["holonomic_disc", "differential_drive", "unicycle", "kinematic_bicycle"],
 )

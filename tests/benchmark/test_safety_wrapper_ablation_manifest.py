@@ -9,6 +9,9 @@ import pytest
 
 from robot_sf.benchmark.safety_wrapper_ablation_manifest import (
     SAFETY_WRAPPER_ABLATION_SCHEMA,
+    SAFETY_WRAPPER_MODE_DISABLED,
+    SAFETY_WRAPPER_MODE_ENABLED,
+    SAFETY_WRAPPER_MODE_FIELD,
     WRAPPER_OFF_ARM,
     WRAPPER_ON_ARM,
     ManifestOptions,
@@ -55,6 +58,11 @@ def test_manifest_factorizes_planners_over_wrapper_off_on() -> None:
     # Paired seeds are applied identically to every cell.
     for cell in manifest["cells"]:
         assert cell["seeds"] == manifest["seeds"]
+        assert cell[SAFETY_WRAPPER_MODE_FIELD] == (
+            SAFETY_WRAPPER_MODE_ENABLED
+            if cell["wrapper_arm"] == WRAPPER_ON_ARM
+            else SAFETY_WRAPPER_MODE_DISABLED
+        )
 
     check = manifest["factorial_check"]
     assert check["complete"] is True
@@ -75,6 +83,7 @@ def test_manifest_echoes_predeclared_wrapper_thresholds_as_provenance() -> None:
     assert off_arm["enabled"] is False
     assert off_arm["baseline"] is True
     assert off_arm["wrapper_config"] is None
+    assert off_arm[SAFETY_WRAPPER_MODE_FIELD] == SAFETY_WRAPPER_MODE_DISABLED
 
     assert on_arm["enabled"] is True
     assert on_arm["baseline"] is False
@@ -85,6 +94,7 @@ def test_manifest_echoes_predeclared_wrapper_thresholds_as_provenance() -> None:
         "ttc_veto_threshold_s": 1.0,
         "clearance_veto_m": 0.3,
     }
+    assert on_arm[SAFETY_WRAPPER_MODE_FIELD] == SAFETY_WRAPPER_MODE_ENABLED
     assert on_arm["runtime_binding_status"] == "unresolved_runtime_binding"
     assert manifest["event_ledger_target"] == 3482
 
@@ -168,10 +178,16 @@ def test_manifest_json_output_is_deterministic(tmp_path: Path) -> None:
 
 
 def _ablation_row(wrapper_arm: str, seed: int = 111) -> dict[str, object]:
+    wrapper_mode = (
+        SAFETY_WRAPPER_MODE_ENABLED
+        if wrapper_arm == WRAPPER_ON_ARM
+        else SAFETY_WRAPPER_MODE_DISABLED
+    )
     return {
         "study_id": "issue_3501_safety_wrapper_ablation_v1",
         "planner": "orca",
         "wrapper_arm": wrapper_arm,
+        SAFETY_WRAPPER_MODE_FIELD: wrapper_mode,
         "scenario_id": "crossing_basic",
         "seed": seed,
         "software_commit": "abc1234",
@@ -205,6 +221,20 @@ def test_check_factorial_ablation_rows_accepts_exact_paired_rows() -> None:
     assert report["invalid_provenance_fields"] == []
     assert report["incomplete_pairs"] == []
     assert report["pair_provenance_mismatches"] == []
+
+
+def test_check_factorial_ablation_rows_rejects_arm_mode_mismatch() -> None:
+    """Wrapper arm and opt-in mode provenance must agree before comparison."""
+    off_row = _ablation_row(WRAPPER_OFF_ARM)
+    on_row = _ablation_row(WRAPPER_ON_ARM)
+    on_row[SAFETY_WRAPPER_MODE_FIELD] = SAFETY_WRAPPER_MODE_DISABLED
+
+    report = check_factorial_ablation_rows([off_row, on_row])
+
+    assert report["complete"] is False
+    assert report["invalid_provenance_fields"] == [
+        {"row_index": 1, "fields": [SAFETY_WRAPPER_MODE_FIELD]}
+    ]
 
 
 def test_check_factorial_ablation_rows_rejects_mixed_pair_provenance() -> None:

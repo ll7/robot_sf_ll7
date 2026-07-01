@@ -34,11 +34,19 @@ CONFIG_SCHEMA_VERSION = "safety-wrapper-ablation.v1"
 WRAPPER_OFF_ARM = "wrapper_off"
 WRAPPER_ON_ARM = "wrapper_on"
 EXPECTED_WRAPPER_ARMS = (WRAPPER_OFF_ARM, WRAPPER_ON_ARM)
+SAFETY_WRAPPER_MODE_FIELD = "safety_wrapper_mode"
+SAFETY_WRAPPER_MODE_DISABLED = "disabled"
+SAFETY_WRAPPER_MODE_ENABLED = "enabled"
+EXPECTED_SAFETY_WRAPPER_MODE_BY_ARM = {
+    WRAPPER_OFF_ARM: SAFETY_WRAPPER_MODE_DISABLED,
+    WRAPPER_ON_ARM: SAFETY_WRAPPER_MODE_ENABLED,
+}
 PAIRING_KEY_FIELDS = ("planner", "scenario_id", "seed")
 REQUIRED_ROW_FIELDS = (
     "study_id",
     "planner",
     "wrapper_arm",
+    SAFETY_WRAPPER_MODE_FIELD,
     "scenario_id",
     "seed",
     "software_commit",
@@ -264,6 +272,7 @@ def _arm_manifest(arm: Mapping[str, Any]) -> dict[str, Any]:
         "key": str(arm["key"]),
         "baseline": bool(arm.get("baseline", False)),
         "enabled": enabled,
+        SAFETY_WRAPPER_MODE_FIELD: _safety_wrapper_mode(enabled),
         "wrapper_config": wrapper_config,
         "thresholds_source": "predeclared_fixed_no_per_planner_tuning",
         "runtime_binding_status": "unresolved_runtime_binding",
@@ -292,6 +301,7 @@ def _enumerate_cells(
                     "planner": str(planner),
                     "wrapper_arm": str(arm["key"]),
                     "wrapper_enabled": bool(arm["enabled"]),
+                    SAFETY_WRAPPER_MODE_FIELD: str(arm[SAFETY_WRAPPER_MODE_FIELD]),
                     "baseline": bool(arm["baseline"]),
                     "seeds": list(seeds),
                 }
@@ -446,6 +456,11 @@ def _row_provenance_errors(row: Mapping[str, Any]) -> list[str]:
         if not isinstance(value, str) or not value.strip():
             invalid.append(field)
 
+    arm = str(row.get("wrapper_arm", ""))
+    mode = row.get(SAFETY_WRAPPER_MODE_FIELD)
+    if not isinstance(mode, str) or mode != EXPECTED_SAFETY_WRAPPER_MODE_BY_ARM.get(arm):
+        invalid.append(SAFETY_WRAPPER_MODE_FIELD)
+
     seed = row.get("seed")
     if not isinstance(seed, int) or isinstance(seed, bool):
         invalid.append("seed")
@@ -471,6 +486,11 @@ def _row_provenance_errors(row: Mapping[str, Any]) -> list[str]:
         invalid.append("wrapper_intervention_rate")
 
     return invalid
+
+
+def _safety_wrapper_mode(enabled: bool) -> str:
+    """Return the stable row-level provenance mode for opt-in wrapper state."""
+    return SAFETY_WRAPPER_MODE_ENABLED if enabled else SAFETY_WRAPPER_MODE_DISABLED
 
 
 def load_safety_wrapper_ablation_rows(path: str | Path) -> list[dict[str, Any]]:
@@ -528,6 +548,9 @@ __all__ = [
     "CONFIG_SCHEMA_VERSION",
     "DRY_RUN_CLAIM_BOUNDARY",
     "SAFETY_WRAPPER_ABLATION_SCHEMA",
+    "SAFETY_WRAPPER_MODE_DISABLED",
+    "SAFETY_WRAPPER_MODE_ENABLED",
+    "SAFETY_WRAPPER_MODE_FIELD",
     "WRAPPER_OFF_ARM",
     "WRAPPER_ON_ARM",
     "ManifestOptions",

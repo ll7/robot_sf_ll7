@@ -135,9 +135,11 @@ knowledge, not every transient iteration detail.
 * Issue #1167 predictive obstacle-feature pipeline:
   [issue_1167_predictive_obstacle_pipeline.md](issue_1167_predictive_obstacle_pipeline.md)
 * Issue #1550 predictive same-seed row summary schema:
-  [issue_1550_predictive_same_seed_row_summary_schema.md](issue_1550_predictive_same_seed_row_summary_schema.md)
+[issue_1550_predictive_same_seed_row_summary_schema.md](issue_1550_predictive_same_seed_row_summary_schema.md)
+* Issue #1554 S20/S30 seed-budget and job 13198 constraints-first decision:
+[issue_1554_s20_s30_seed_budget.md](issue_1554_s20_s30_seed_budget.md)
 * Issue #1508 CARLA native/aligned eligibility audit:
-  [issue_1508_carla_native_aligned_eligibility.md](issue_1508_carla_native_aligned_eligibility.md)
+[issue_1508_carla_native_aligned_eligibility.md](issue_1508_carla_native_aligned_eligibility.md)
 * Issue #1509 CARLA native fixture certification:
   [issue_1509_carla_native_fixture_certification.md](issue_1509_carla_native_fixture_certification.md)
 * Issue #2276 CARLA parity lane decision:

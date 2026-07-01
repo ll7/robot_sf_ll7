@@ -11,9 +11,13 @@ import yaml
 from loguru import logger
 
 from robot_sf.benchmark.scenario_generator import (
+    PARAMETERIZED_SCENARIO_PARAMS_SCHEMA_VERSION,
     SCENARIO_GENERATION_PARAMS_SCHEMA_VERSION,
+    derive_generation_parameters_from_physical_slice,
     estimate_initial_difficulty,
     normalize_generation_parameters,
+    normalize_parameterized_scenario_parameters,
+    select_map_id_for_parameterized_scenario,
 )
 
 if TYPE_CHECKING:
@@ -58,7 +62,7 @@ class ValidationReport:
 def available_templates() -> tuple[str, ...]:
     """Return supported deterministic draft template names."""
 
-    return ("bottleneck",)
+    return ("bottleneck", "parameterized")
 
 
 def configure_authoring_tool_logging(*, verbose: bool = False) -> None:
@@ -76,6 +80,7 @@ def build_scenario_payload(
     seeds: tuple[int, ...] = DEFAULT_SEEDS,
     source_issue: str = DEFAULT_SOURCE_ISSUE,
     generation_profile: dict[str, Any] | None = None,
+    parameterized_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a deterministic, reviewable scenario YAML payload.
 
@@ -84,16 +89,34 @@ def build_scenario_payload(
     """
 
     normalized_template = template.strip().lower()
-    if normalized_template != "bottleneck":
+    if normalized_template not in available_templates():
         raise ValueError(
             f"Unknown scenario template '{template}'. "
             f"Available templates: {', '.join(available_templates())}."
         )
     scenario_name = _validate_output_name(name)
     seed_values = _validate_seed_tuple(seeds)
-    generation = normalize_generation_parameters(
-        {**(generation_profile or {}), "id": scenario_name, "repeats": 1}
-    )
+    effective_source_issue = source_issue
+    physical_params = None
+    if normalized_template == "parameterized":
+        if source_issue == DEFAULT_SOURCE_ISSUE:
+            effective_source_issue = "#3970"
+        physical_params = normalize_parameterized_scenario_parameters(parameterized_profile or {})
+        generation = derive_generation_parameters_from_physical_slice(physical_params)
+        generation = normalize_generation_parameters(
+            {**generation, "id": scenario_name, "repeats": 1}
+        )
+        map_id = select_map_id_for_parameterized_scenario(physical_params)
+        purpose = (
+            "Draft parameterized scenario review local smoke validation for sidewalk width, "
+            "density, bottleneck, crossing angle, and occlusion knobs."
+        )
+    else:
+        generation = normalize_generation_parameters(
+            {**(generation_profile or {}), "id": scenario_name, "repeats": 1}
+        )
+        map_id = "classic_bottleneck"
+        purpose = "Draft bottleneck scenario for review local smoke validation."
     initial_difficulty = estimate_initial_difficulty(generation)
     seed_signature = ",".join(str(seed) for seed in seed_values)
     return {
@@ -102,7 +125,7 @@ def build_scenario_payload(
         "scenarios": [
             {
                 "name": scenario_name,
-                "map_id": "classic_bottleneck",
+                "map_id": map_id,
                 "id": scenario_name,
                 "density": generation["density"],
                 "flow": generation["flow"],
@@ -114,25 +137,40 @@ def build_scenario_payload(
                 "repeats": generation["repeats"],
                 "simulation_config": {
                     "max_episode_steps": 300,
-                    "ped_density": 0.0,
+                    "ped_density": (
+                        physical_params["pedestrian_density"]
+                        if physical_params is not None
+                        else 0.0
+                    ),
                 },
                 "robot_config": {},
                 "metadata": {
-                    "archetype": "bottleneck",
+                    "archetype": normalized_template,
                     "generation_profile": {
                         "schema_version": SCENARIO_GENERATION_PARAMS_SCHEMA_VERSION,
                         "seed_signature": seed_signature,
                         "parameters": dict(generation),
                     },
+                    **(
+                        {
+                            "parameterized_profile": {
+                                "schema_version": PARAMETERIZED_SCENARIO_PARAMS_SCHEMA_VERSION,
+                                "seed_signature": seed_signature,
+                                "parameters": physical_params,
+                            }
+                        }
+                        if physical_params is not None
+                        else {}
+                    ),
                     "initial_difficulty": initial_difficulty,
                     "density": "draft_low",
                     "flow": "bi",
-                    "purpose": "Draft bottleneck scenario for review and local smoke validation.",
+                    "purpose": purpose,
                     "authoring": {
                         "status": "draft",
-                        "template": "bottleneck",
+                        "template": normalized_template,
                         "template_version": AUTHORING_SCHEMA_VERSION,
-                        "source_issue": source_issue,
+                        "source_issue": effective_source_issue,
                         "generated_by": "scripts/tools/create_scenario.py",
                         "benchmark_evidence": False,
                         "promotion_note": (

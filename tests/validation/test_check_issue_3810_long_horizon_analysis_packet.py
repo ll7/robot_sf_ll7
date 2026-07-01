@@ -28,7 +28,8 @@ def test_issue_3810_analysis_packet_passes() -> None:
     summary = _MODULE.validate_packet(_load_packet())
     assert summary["ok"] is True
     assert summary["issue"] == 3810
-    assert summary["route_contract"] == "blocked_pending_submit_host_route_and_reconciliation"
+    assert summary["route_contract"] == "blocked_pending_job_13251_retention_and_analysis"
+    assert summary["slurm_job_id"] == 13251
 
 
 def test_issue_3810_analysis_packet_rejects_bad_target_host() -> None:
@@ -91,7 +92,7 @@ def test_issue_3810_analysis_packet_rejects_missing_job_reconciliation_reason() 
     packet["analysis_and_retention_packet"]["execution_contract"]["decision_gate"]["reason"] = (
         "Issue remains open."
     )
-    with pytest.raises(_MODULE.PacketError, match="decision gate must require job 13175"):
+    with pytest.raises(_MODULE.PacketError, match="decision gate must require job 13251"):
         _MODULE.validate_packet(packet)
 
 

@@ -181,12 +181,38 @@ def validate_packet(packet: Mapping[str, Any], *, issue: int = 3810) -> dict[str
     )
     _require(
         execution_contract.get("decision_gate", {}).get("status")
-        == "blocked_pending_submit_host_route_and_reconciliation",
-        "execution contract must stay blocked until host/route reconciliation",
+        == "blocked_pending_job_13251_retention_and_analysis",
+        "execution contract must stay blocked until job 13251 retention and analysis",
     )
     decision_reason = str(execution_contract.get("decision_gate", {}).get("reason", ""))
     _require("Issue remains open" in decision_reason, "decision gate must keep issue open")
-    _require("job 13175" in decision_reason, "decision gate must require job 13175 reconciliation")
+    _require("job 13251" in decision_reason, "decision gate must require job 13251 retention")
+
+    active_submission = _require_mapping(analysis, "active_slurm_submission")
+    _require(
+        active_submission.get("status") == "submitted_not_benchmark_evidence",
+        "active submission must be submitted_not_benchmark_evidence",
+    )
+    _require(active_submission.get("slurm_job_id") == 13251, "active Slurm job must be 13251")
+    _require(
+        active_submission.get("cluster_route") == "imech192:l40s",
+        "active Slurm route must be imech192:l40s",
+    )
+    required_before_interpretation = set(
+        active_submission.get("required_before_interpretation") or []
+    )
+    _require(
+        {
+            "job_finished",
+            "artifacts_retrieved_or_promoted",
+            "snqi_recalibration_bundle",
+            "horizon_sensitivity_report",
+            "interaction_exposure_diagnostics",
+            "durable_evidence_bundle_reviewed",
+        }
+        <= required_before_interpretation,
+        "active submission interpretation prerequisites missing",
+    )
 
     snqi = _require_mapping(analysis, "snqi_recalibration_inputs")
     for field in (
@@ -234,6 +260,7 @@ def validate_packet(packet: Mapping[str, Any], *, issue: int = 3810) -> dict[str
         "issue": issue,
         "target_host": route["target_host"],
         "route_contract": execution_contract.get("decision_gate", {}).get("status"),
+        "slurm_job_id": active_submission.get("slurm_job_id"),
         "retention_bundle": compact_review_bundle,
     }
 

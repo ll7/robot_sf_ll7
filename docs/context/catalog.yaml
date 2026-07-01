@@ -17,6 +17,26 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+  - path: docs/context/evidence/issue_3978_snqi_v1_recalibration/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3978_snqi_v1_recalibration/snqi_v0_v1_decomposition.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3978_snqi_v1_recalibration/fixture_metrics.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3978_snqi_v1_recalibration/fixture_weights_unity.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3978_snqi_v1_recalibration/fixture_baseline_stats_v1.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/README.md
     status: evidence
     freshness: evidence

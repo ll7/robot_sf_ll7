@@ -43,12 +43,20 @@ The code default (collision-dominant) and `model/snqi_canonical_weights_v1.json`
 both claim or imply "canonical" yet can yield different rankings. The raw-vs-normalized scale split
 overlaps issue #3699.
 
-## Mixed Normalization Basis (Issue #3699)
+## Mixed Normalization Basis (Issues #3699 and #3978)
 
-> **Status:** unresolved, `decision-required`. SNQI currently mixes raw, unbounded penalty terms
-> (`time`, `comfort`) with baseline-normalized penalty terms (`collisions`, `near`, `force_exceed`,
-> `jerk`). The diagnostic checks make that visible and fail closed, but they do not choose between
-> normalizing the raw terms and documenting a bounded raw-term asymmetry.
+> **Current status:** versioned and bounded for new diagnostic use. `SNQI-v0` remains the default
+> legacy score for historical comparability and still preserves the mixed raw/baseline-normalized
+> basis from issue #3699. `SNQI-v1`, introduced by issue #3978, is an opt-in bounded
+> baseline-relative diagnostic that normalizes all penalty terms through the same median/p95 clamp.
+
+Do not compare `SNQI-v0` and `SNQI-v1` values numerically: their normalization semantics differ.
+`SNQI-v1` does not retune weights, repair the unresolved canonical-weight decision from issue
+#3723, implement time-to-collision or closing-speed exposure from issue #3700, or make SNQI a
+primary safety ranking. Constraints-first benchmark evidence remains primary.
+
+The compact diagnostic fixture for this transition is tracked at
+`docs/context/evidence/issue_3978_snqi_v1_recalibration/`.
 
 ## Diagnostics
 
@@ -79,11 +87,13 @@ Implementation: `robot_sf/benchmark/snqi/weights_inventory.py`; guard tests in
 
 ### Normalization Inventory
 
-The normalization inventory reports which SNQI terms are raw, which are baseline-normalized, and
-which terms are unbounded. It can fail closed while the mixed basis remains unresolved.
+The normalization inventory reports which SNQI terms are raw, which are baseline-normalized, which
+terms are bounded, and which score-version contract is active. By default it reports legacy
+`SNQI-v0`; pass `--score-version SNQI-v1` to inspect the bounded diagnostic contract.
 
 ```bash
 uv run python scripts/benchmark/snqi_normalization_inventory_report.py --fail-on-mixed-scale
+uv run python scripts/benchmark/snqi_normalization_inventory_report.py --score-version SNQI-v1
 ```
 
 Implementation: `robot_sf/benchmark/snqi/normalization_inventory.py`; guard tests in
@@ -92,9 +102,10 @@ Implementation: `robot_sf/benchmark/snqi/normalization_inventory.py`; guard test
 ### Combined Governance Preflight
 
 Use this check when a workflow needs one fail-closed gate for the current SNQI governance state. It
-combines the weight-provenance inventory (#3723) with the normalization-basis inventory (#3699).
-It is secondary diagnostic evidence only: it does not choose canonical weights, change
-`compute_snqi`, or make SNQI a primary safety ranking.
+combines weight-provenance inventory (#3723), legacy normalization context (#3699), and the active
+`SNQI-v1` bounded diagnostic contract (#3978). It is secondary diagnostic evidence only: it does
+not choose canonical weights, make SNQI a primary safety ranking, or treat `SNQI-v1` as numerically
+comparable to `SNQI-v0`.
 
 ```bash
 # Exits non-zero while the current governance blockers remain unresolved.
@@ -121,6 +132,8 @@ benchmark comparability impact.
 
 - If a workflow fails on issue #3723, inspect the weight-provenance inventory and decide whether the
   workflow needs inspection mode or a maintainer-approved canonical-weight decision.
-- If a workflow fails on issue #3699, inspect the normalization inventory and decide whether the
-  workflow needs inspection mode or a maintainer-approved normalization remedy.
-- Do not use either unresolved diagnostic as proof of a primary safety ranking.
+- If a workflow depends on historical `SNQI-v0` values, inspect the legacy normalization inventory
+  and keep the mixed-basis caveat attached.
+- If a workflow depends on active bounded diagnostics, use `SNQI-v1` with complete baseline median
+  and p95 coverage for every penalty term.
+- Do not use either unresolved diagnostic as proof for a primary safety ranking.

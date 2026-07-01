@@ -44,6 +44,17 @@ WEIGHT_NAMES = [
     "w_jerk",
 ]
 
+SNQI_SCORE_VERSION_V0 = "SNQI-v0"
+SNQI_SCORE_VERSION_V1 = "SNQI-v1"
+SNQI_V1_PENALTY_METRICS = (
+    "time_to_goal_norm",
+    "collisions",
+    "near_misses",
+    "comfort_exposure",
+    "force_exceed_events",
+    "jerk_mean",
+)
+
 MetricName = str
 BaselineStats = Mapping[MetricName, Mapping[str, float]]
 Weights = Mapping[str, float]
@@ -82,7 +93,7 @@ def normalize_metric(name: str, value: float | int | bool, baseline_stats: Basel
     return norm
 
 
-def compute_snqi(metrics: Metrics, weights: Weights, baseline_stats: BaselineStats) -> float:
+def compute_snqi_v0(metrics: Metrics, weights: Weights, baseline_stats: BaselineStats) -> float:
     """Compute the SNQI score for a single episode.
 
     Args:
@@ -118,6 +129,96 @@ def compute_snqi(metrics: Metrics, weights: Weights, baseline_stats: BaselineSta
         - weights.get("w_jerk", 1.0) * jerk_norm
     )
     return float(score)
+
+
+def _normalize_metric_required(
+    name: str,
+    value: float | int | bool,
+    baseline_stats: BaselineStats,
+) -> float:
+    """Normalize an ``SNQI-v1`` metric and fail closed on missing baseline coverage.
+
+    Returns:
+        Baseline-normalized metric value clamped to ``[0, 1]``.
+    """
+    entry = baseline_stats.get(name)
+    if not isinstance(entry, Mapping) or "med" not in entry or "p95" not in entry:
+        raise ValueError(f"SNQI-v1 baseline_stats missing med/p95 for {name!r}")
+    if float(entry["p95"]) <= float(entry["med"]):
+        raise ValueError(f"SNQI-v1 baseline_stats has non-positive spread for {name!r}")
+    return normalize_metric(name, value, baseline_stats)
+
+
+def compute_snqi_v1(metrics: Metrics, weights: Weights, baseline_stats: BaselineStats) -> float:
+    """Compute opt-in ``SNQI-v1`` with bounded baseline-relative penalty terms.
+
+    Returns:
+        Versioned SNQI score where every penalty term is baseline-normalized.
+    """
+    success_raw = metrics.get("success", 0.0)
+    success = 1.0 if isinstance(success_raw, bool) and success_raw else float(success_raw)
+
+    time_norm = _normalize_metric_required(
+        "time_to_goal_norm",
+        metrics.get("time_to_goal_norm", 1.0),
+        baseline_stats,
+    )
+    coll_norm = _normalize_metric_required(
+        "collisions",
+        metrics.get("collisions", 0.0),
+        baseline_stats,
+    )
+    near_norm = _normalize_metric_required(
+        "near_misses",
+        metrics.get("near_misses", 0.0),
+        baseline_stats,
+    )
+    comfort_norm = _normalize_metric_required(
+        "comfort_exposure",
+        metrics.get("comfort_exposure", 0.0),
+        baseline_stats,
+    )
+    force_exceed_norm = _normalize_metric_required(
+        "force_exceed_events",
+        metrics.get("force_exceed_events", 0.0),
+        baseline_stats,
+    )
+    jerk_norm = _normalize_metric_required(
+        "jerk_mean",
+        metrics.get("jerk_mean", 0.0),
+        baseline_stats,
+    )
+
+    score = (
+        weights.get("w_success", 1.0) * success
+        - weights.get("w_time", 1.0) * time_norm
+        - weights.get("w_collisions", 1.0) * coll_norm
+        - weights.get("w_near", 1.0) * near_norm
+        - weights.get("w_comfort", 1.0) * comfort_norm
+        - weights.get("w_force_exceed", 1.0) * force_exceed_norm
+        - weights.get("w_jerk", 1.0) * jerk_norm
+    )
+
+    return float(score)
+
+
+def compute_snqi(
+    metrics: Metrics,
+    weights: Weights,
+    baseline_stats: BaselineStats,
+    *,
+    score_version: str = SNQI_SCORE_VERSION_V0,
+) -> float:
+    """Compute a versioned SNQI score for a single episode.
+
+    Returns:
+        SNQI score for the requested score version.
+    """
+    if score_version == SNQI_SCORE_VERSION_V0:
+        return compute_snqi_v0(metrics, weights, baseline_stats)
+    if score_version == SNQI_SCORE_VERSION_V1:
+        return compute_snqi_v1(metrics, weights, baseline_stats)
+    raise ValueError(f"unknown SNQI score version: {score_version}")
 
 
 def recompute_snqi_weights(
@@ -245,9 +346,14 @@ def compute_snqi_ablation(
 
 
 __all__ = [
+    "SNQI_SCORE_VERSION_V0",
+    "SNQI_SCORE_VERSION_V1",
+    "SNQI_V1_PENALTY_METRICS",
     "WEIGHT_NAMES",
     "compute_snqi",
     "compute_snqi_ablation",
+    "compute_snqi_v0",
+    "compute_snqi_v1",
     "normalize_metric",
     "recompute_snqi_weights",
 ]

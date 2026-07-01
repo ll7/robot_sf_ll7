@@ -32,9 +32,9 @@ from robot_sf.benchmark.snqi.weights_inventory import build_inventory_report
 
 CLAIM_BOUNDARY = (
     "secondary_diagnostic_only: this preflight reports unresolved SNQI governance "
-    "blockers from issues #3723 and #3699. It does not choose canonical weights, "
-    "change normalization, change compute_snqi output, or make SNQI a primary "
-    "safety ranking."
+    "blockers, preserves legacy SNQI-v0 normalization context, and exposes "
+    "SNQI-v1 bounded diagnostic normalization. It does not choose canonical "
+    "weights or make SNQI a primary safety ranking."
 )
 
 CONTRIBUTION_DIAGNOSTIC_METRICS = {
@@ -56,8 +56,10 @@ CONTRIBUTION_DIAGNOSTIC_WEIGHTS = {
     "w_jerk": 1.0,
 }
 CONTRIBUTION_DIAGNOSTIC_BASELINE_STATS = {
+    "time_to_goal_norm": {"med": 0.0, "p95": 1.0},
     "collisions": {"med": 0.0, "p95": 1.0},
     "near_misses": {"med": 0.0, "p95": 1.0},
+    "comfort_exposure": {"med": 0.0, "p95": 1.0},
     "force_exceed_events": {"med": 0.0, "p95": 1.0},
     "jerk_mean": {"med": 0.0, "p95": 1.0},
 }
@@ -85,11 +87,26 @@ def build_governance_report(
 ) -> dict[str, Any]:
     """Build a structured SNQI governance diagnostic report."""
     weights = build_inventory_report(repo_root)
-    normalization = build_snqi_normalization_inventory(baseline_stats)
-    contribution_diagnostics = build_snqi_contribution_diagnostics(
+    legacy_normalization = build_snqi_normalization_inventory(
+        baseline_stats,
+        score_version="SNQI-v0",
+    )
+    active_baseline_stats = baseline_stats or CONTRIBUTION_DIAGNOSTIC_BASELINE_STATS
+    normalization = build_snqi_normalization_inventory(
+        active_baseline_stats,
+        score_version="SNQI-v1",
+    )
+    legacy_contribution_diagnostics = build_snqi_contribution_diagnostics(
         CONTRIBUTION_DIAGNOSTIC_METRICS,
         CONTRIBUTION_DIAGNOSTIC_WEIGHTS,
         CONTRIBUTION_DIAGNOSTIC_BASELINE_STATS,
+        score_version="SNQI-v0",
+    )
+    contribution_diagnostics = build_snqi_contribution_diagnostics(
+        CONTRIBUTION_DIAGNOSTIC_METRICS,
+        CONTRIBUTION_DIAGNOSTIC_WEIGHTS,
+        active_baseline_stats,
+        score_version="SNQI-v1",
     )
 
     blockers: list[dict[str, Any]] = []
@@ -184,11 +201,11 @@ def build_governance_report(
     if baseline_stats is not None and normalization.missing_baseline_coverage:
         blockers.append(
             {
-                "issue": 3699,
-                "kind": "missing_baseline_coverage",
+                "issue": 3978,
+                "kind": "missing_snqi_v1_baseline_coverage",
                 "detail": (
-                    "At least one baseline-normalized SNQI term lacks median/p95 "
-                    "coverage and would be silently zeroed by normalize_metric."
+                    "At least one SNQI-v1 baseline-normalized penalty term lacks "
+                    "median/p95 coverage and cannot support bounded scoring."
                 ),
                 "metrics": [t.metric_key for t in normalization.missing_baseline_coverage],
             }
@@ -196,17 +213,17 @@ def build_governance_report(
 
     score_version_contract = normalization.score_version_contract
     normalization_checker = {
-        "issue": 3699,
-        "successor_issue": score_version_contract["successor_issue"],
+        "issue": 3978,
+        "legacy_issue": 3699,
         "score_version": score_version_contract["score_version"],
         "status": score_version_contract["status"],
         "diagnostic_only": score_version_contract["diagnostic_only"],
         "decision_recorded": True,
         "score_semantics_changed": score_version_contract["score_semantics_changed"],
         "assumption": (
-            "No score semantics changed; SNQI-v0 intentionally preserves the "
-            "mixed-basis diagnostic contract while SNQI-v1 redesign is tracked "
-            "by issue #3978."
+            "SNQI-v1 is an opt-in bounded baseline-relative diagnostic. "
+            "SNQI-v0 remains available for historical comparability and is "
+            "not numerically comparable to SNQI-v1."
         ),
         "mixed_scale": normalization.mixed_scale,
         "weights_comparable": contribution_diagnostics["normalization_contract"][
@@ -232,6 +249,8 @@ def build_governance_report(
         "status": "failed" if blockers else "passed",
         "blockers": blockers,
         "weights": weights.to_dict(),
+        "legacy_normalization": legacy_normalization.to_dict(),
+        "legacy_normalization_contributions": legacy_contribution_diagnostics,
         "normalization": normalization.to_dict(),
         "normalization_contributions": contribution_diagnostics,
         "normalization_checker": normalization_checker,
@@ -290,9 +309,17 @@ def _print_text_report(report: dict[str, Any]) -> None:
             sources = ", ".join(conflict["sources"])
             print(f"  - {conflict['severity']} {conflict['kind']} ({sources})")
 
+    legacy_normalization = report["legacy_normalization"]
+    print(
+        "Legacy normalization basis: "
+        f"score_version={legacy_normalization['score_version']}; "
+        f"mixed_scale={legacy_normalization['mixed_scale']}; "
+        f"raw_penalty_terms={', '.join(legacy_normalization['raw_penalty_terms']) or 'none'}"
+    )
     normalization = report["normalization"]
     print(
         "Normalization basis: "
+        f"score_version={normalization['score_version']}; "
         f"mixed_scale={normalization['mixed_scale']}; "
         f"raw_penalty_terms={', '.join(normalization['raw_penalty_terms']) or 'none'}; "
         f"unbounded_terms={', '.join(normalization['unbounded_terms']) or 'none'}"
@@ -326,7 +353,7 @@ def _print_text_report(report: dict[str, Any]) -> None:
     checker = report["normalization_checker"]
     print(
         "Normalization checker: "
-        f"issue={checker['issue']} successor_issue={checker['successor_issue']} "
+        f"issue={checker['issue']} legacy_issue={checker['legacy_issue']} "
         f"score_version={checker['score_version']} diagnostic_only={checker['diagnostic_only']} "
         f"decision_recorded={checker['decision_recorded']} "
         f"weights_comparable={checker['weights_comparable']} mixed_scale={checker['mixed_scale']} "

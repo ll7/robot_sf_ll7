@@ -88,7 +88,7 @@ def test_issue_3810_packet_rejects_stale_readiness_refresh_date() -> None:
 def test_issue_3810_packet_rejects_stale_latest_merged_packet_pr() -> None:
     """The public readiness refresh must track the latest merged packet guard."""
     packet = _load_packet()
-    packet["launch_packet"]["readiness_refresh"]["latest_merged_packet_pr"] = 4085
+    packet["launch_packet"]["readiness_refresh"]["latest_merged_packet_pr"] = 4087
 
     try:
         _MODULE.validate_packet(packet)

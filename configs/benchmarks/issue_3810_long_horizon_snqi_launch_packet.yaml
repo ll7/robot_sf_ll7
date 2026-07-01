@@ -260,10 +260,10 @@ launch_packet:
     current_pr: null
     open_pr_matches: []
     blocking_open_pr_matches: []
-    latest_merged_packet_pr: 4087
+    latest_merged_packet_pr: 4097
     decision: >-
       Public readiness refresh found no open PR covering issue #3810 before
-      this branch. Current origin/main includes merged packet PR #4087 as latest
+      this branch. Current origin/main includes merged packet PR #4097 as latest
       packet lineage and the live issue now records Slurm job 13251 as submitted.
       This refresh is not a local submit action and is not benchmark evidence.
   live_issue_state:

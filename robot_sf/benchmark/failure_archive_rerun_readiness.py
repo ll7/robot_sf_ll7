@@ -539,19 +539,25 @@ def _certification_has_lineage(value: Any) -> bool:
     if not isinstance(value, dict):
         return False
     for key in _CERTIFICATION_LINEAGE_KEYS:
-        raw_value = value.get(key)
-        if raw_value is None:
-            continue
-        if isinstance(raw_value, str):
-            if raw_value.strip():
-                return True
-            continue
-        if isinstance(raw_value, list | tuple | set | dict):
-            if raw_value:
-                return True
-            continue
-        return True
+        if _lineage_value_present(value.get(key)):
+            return True
     return False
+
+
+def _lineage_value_present(raw_value: Any) -> bool:
+    """Return whether one certification lineage field carries non-placeholder data."""
+
+    if raw_value is None:
+        return False
+    if isinstance(raw_value, str):
+        return bool(raw_value.strip())
+    if isinstance(raw_value, list | tuple | set | dict):
+        return bool(raw_value)
+    if isinstance(raw_value, bool):
+        return raw_value
+    if isinstance(raw_value, int | float):
+        return bool(raw_value)
+    return True
 
 
 def _null_test_prerequisite_gaps(

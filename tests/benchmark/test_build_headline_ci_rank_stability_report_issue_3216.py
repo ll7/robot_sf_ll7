@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pytest
+
 if TYPE_CHECKING:
     from types import ModuleType
 
@@ -33,6 +35,7 @@ issue3216 = _load_module()
 ReportConfig = issue3216.ReportConfig
 build_report = issue3216.build_report
 main = issue3216.main
+_planner_keys_from_benchmark_config = issue3216._planner_keys_from_benchmark_config
 
 
 def _row(
@@ -349,6 +352,15 @@ planners:
     assert grid["expected_planners"] == ["hybrid", "ppo", "orca"]
     assert grid["missing_cells"] == [{"scenario_id": "*", "planner_key": "orca"}]
     assert "headline_grid_incomplete" in payload["decision_packet"]["manuscript_blockers"]
+
+
+def test_cli_expected_planners_from_config_rejects_non_mapping_yaml(tmp_path: Path) -> None:
+    """Malformed benchmark YAML fails closed with a controlled error."""
+    config_path = tmp_path / "benchmark.yaml"
+    config_path.write_text("- not-a-mapping\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="must be a YAML mapping"):
+        _planner_keys_from_benchmark_config(config_path)
 
 
 def test_campaign_wrapper_preflight_only_never_launches_campaign(tmp_path: Path) -> None:

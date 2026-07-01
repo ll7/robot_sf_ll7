@@ -308,7 +308,9 @@ def _planner_keys_from_benchmark_config(path: Path) -> tuple[str, ...]:
     missing before any manuscript-table or S30 decision packet is treated as
     reviewable.
     """
-    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, Mapping):
+        raise ValueError(f"Benchmark config {path} must be a YAML mapping")
     planners = payload.get("planners")
     if not isinstance(planners, Sequence) or isinstance(planners, (str, bytes)):
         raise ValueError(f"Benchmark config {path} must contain a planners list")

@@ -53,12 +53,14 @@ from robot_sf.benchmark.canonical_table_export import load_rows_json as _load_ca
 from robot_sf.benchmark.distributions import collect_grouped_values as _dist_collect
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
 from robot_sf.benchmark.doctor import collect_doctor_report, doctor_exit_code
+from robot_sf.benchmark.errors import EpisodeRecordInputError
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
 from robot_sf.benchmark.failure_mechanism_classifier import (
     classify_failure_mechanisms_from_jsonl,
 )
 from robot_sf.benchmark.fallback_policy import availability_payload, benchmark_run_exit_code
 from robot_sf.benchmark.grouping import DEFAULT_REPORT_FALLBACK_GROUP_BY, DEFAULT_REPORT_GROUP_BY
+from robot_sf.benchmark.metric_layers import build_metric_layer_summary
 from robot_sf.benchmark.observation_levels import OBSERVATION_LEVEL_KEYS
 from robot_sf.benchmark.observation_noise import load_observation_noise_spec
 from robot_sf.benchmark.parquet_export import export_episodes_jsonl_to_parquet
@@ -522,6 +524,29 @@ def _handle_aggregate(args) -> int:
         return 0
     except Exception as exc:  # pragma: no cover - error path
         logging.exception("Aggregation failed: %s", exc)
+        return 2
+
+
+def _handle_metric_layers(args) -> int:
+    """Build canonical metric-layer summary from episode JSONL records.
+
+    Returns:
+        Exit code ``0`` on success, ``2`` on failure.
+    """
+    try:
+        records = _agg_read_jsonl(args.episodes)
+        summary = build_metric_layer_summary(
+            records,
+            group_by=args.group_by,
+            fallback_group_by=args.fallback_group_by,
+        )
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with output_path.open("w", encoding="utf-8") as f:
+            json.dump(summary, f, indent=2, allow_nan=False)
+        return 0
+    except (EpisodeRecordInputError, OSError, TypeError, ValueError) as exc:
+        logging.exception("Metric-layer summary failed: %s", exc)
         return 2
 
 
@@ -1866,6 +1891,29 @@ def _add_aggregate_subparser(
     p.set_defaults(cmd="aggregate")
 
 
+def _add_metric_layers_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register metric-layers subcommand parser."""
+    p = subparsers.add_parser(
+        "metric-layers",
+        help="Build canonical metric-layer summary from episode JSONL records.",
+    )
+    p.add_argument("--episodes", required=True, help="Input episodes JSONL path")
+    p.add_argument("--output", required=True, help="Output metric-layer JSON path")
+    p.add_argument(
+        "--group-by",
+        default="scenario_params.algo",
+        help="Grouping key (dotted path). Default: scenario_params.algo",
+    )
+    p.add_argument(
+        "--fallback-group-by",
+        default="algo",
+        help="Fallback grouping key when --group-by is missing. Default: algo",
+    )
+    p.set_defaults(cmd="metric-layers")
+
+
 def _add_stress_coverage_report_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -2531,6 +2579,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_run_subparser(subparsers)
     _add_summary_subparser(subparsers)
     _add_aggregate_subparser(subparsers)
+    _add_metric_layers_subparser(subparsers)
     _add_stress_coverage_report_subparser(subparsers)
     _add_classify_failure_mechanisms_subparser(subparsers)
     _add_claim_subparser(subparsers)
@@ -3036,6 +3085,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         "run": _handle_run,
         "summary": _handle_summary,
         "aggregate": _handle_aggregate,
+        "metric-layers": _handle_metric_layers,
         "stress-coverage-report": _handle_stress_coverage_report,
         "classify-failure-mechanisms": _handle_classify_failure_mechanisms,
         "claim": _handle_claim,

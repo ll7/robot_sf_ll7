@@ -17,6 +17,34 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+  - path: docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/preflight.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/snqi_scalarization_sensitivity.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/snqi_scalarization_sensitivity_planner_rows.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/snqi_scalarization_sensitivity_decision_disagreement.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/snqi_scalarization_sensitivity.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/snqi_scalarization_sensitivity_pareto.svg
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/README.md
     status: evidence
     freshness: evidence

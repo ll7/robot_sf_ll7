@@ -1,14 +1,12 @@
 schema_version: issue-3653-snqi-decision-disagreement-application-packet.v1
 name: issue_3653_snqi_decision_disagreement_application_packet
 issue: 3653
-purpose: >
-  Prepare a fail-closed application packet for running the existing SNQI
-  scalarization-sensitivity Pareto-front export on the valid S20/h500 campaign
-  evidence surface once the campaign episode JSONL is available.
-claim_boundary: >
-  Diagnostic application packet only. This slice does not run a full benchmark
-  campaign, does not submit Slurm/GPU work, does not edit paper/dissertation
-  claims, and does not establish SNQI as a primary safety ranking.
+purpose: 'Prepare a fail-closed application packet for running the existing SNQI scalarization-sensitivity Pareto-front export on the valid S20/h500 campaign evidence surface once the campaign episode JSONL is available.
+
+  '
+claim_boundary: 'Diagnostic application packet only. This slice does not run a full benchmark campaign, does not submit Slurm/GPU work, does not edit paper/dissertation claims, and does not establish SNQI as a primary safety ranking.
+
+  '
 execution_boundary:
   run_benchmark: false
   compute_submit_authorized: false
@@ -40,14 +38,12 @@ raw_episode_artifact:
   artifact_class: raw_campaign_episode_jsonl
   expected_path: output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl
   expected_rows: 8640
-  expected_sha256: 9e11420d8bd4ed8749700cdfd2a8b16f1cc8dbca0766d0a273adfd624e10101a
+  expected_sha256: fd15480d6892dd634e374fb9f79e1e3600d24c88604d9ff05f33d8227b4e6460
   current_status: hydrated_from_submit_host_recorded_job_13175
   durable_source_required_before_ready: true
-  ready_precondition: >
-    Satisfied on auxme-imech036 by hydrating recorded job 13175 outputs from the
-    imech192 submit-host result root, materializing reports/episodes.jsonl from the
-    nine recorded runs/*/episodes.jsonl streams with planner_key restored from the
-    run directory, recording the sha256 here, and passing export-if-ready preflight.
+  ready_precondition: 'Satisfied on auxme-imech036 by hydrating recorded job 13175 outputs from the imech192 submit-host result root, materializing reports/episodes.jsonl from the nine recorded runs/*/episodes.jsonl streams with planner_key restored from the run directory, recording the sha256 here, and passing export-if-ready preflight.
+
+    '
   materialization:
     source_host: imech192
     retrieved_on_host: auxme-imech036
@@ -56,59 +52,56 @@ raw_episode_artifact:
     planner_key_source: runs directory stem before __differential_drive
     materialized_rows: 8640
     materialized_planners: 9
-    materialization_note: >
-      Original episode rows omit planner_key and fallback scenario_params.algo merges
-      the scenario_adaptive_hybrid_orca_v1 lane into its selected low-level algorithms.
-      The aggregate JSONL restores planner_key from the recorded per-planner run
-      directories so the diagnostic export covers the intended nine planner lanes.
+    materialization_note: 'Original episode rows omit planner_key and fallback scenario_params.algo merges the scenario_adaptive_hybrid_orca_v1 lane into its selected low-level algorithms. The aggregate JSONL restores planner_key from the recorded per-planner run directories so the diagnostic export covers the intended nine planner lanes.
+
+      '
   allowed_sources:
-    - durable_artifact_pointer
-    - canonical_result_store
-    - submit_host_hydration_from_recorded_job_13175
+  - durable_artifact_pointer
+  - canonical_result_store
+  - submit_host_hydration_from_recorded_job_13175
   forbidden_sources:
-    - synthesized_fixture
-    - worktree_local_output_without_manifest
-    - benchmark_rerun_without_authorization
+  - synthesized_fixture
+  - worktree_local_output_without_manifest
+  - benchmark_rerun_without_authorization
 export:
   script: scripts/benchmark/snqi_scalarization_sensitivity_export.py
   command_template:
-    - uv
-    - run
-    - python
-    - scripts/benchmark/snqi_scalarization_sensitivity_export.py
-    - --episodes
-    - output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl
-    - --baseline
-    - configs/benchmarks/snqi_baseline_camera_ready_v3.json
-    - --weights
-    - configs/benchmarks/snqi_weights_camera_ready_v3.json
-    - --output-dir
-    - output/benchmarks/issue_3653_snqi_decision_disagreement
-    - --preflight-out
-    - output/benchmarks/issue_3653_snqi_decision_disagreement/preflight.json
+  - uv
+  - run
+  - python
+  - scripts/benchmark/snqi_scalarization_sensitivity_export.py
+  - --episodes
+  - output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl
+  - --baseline
+  - configs/benchmarks/snqi_baseline_camera_ready_v3.json
+  - --weights
+  - configs/benchmarks/snqi_weights_camera_ready_v3.json
+  - --output-dir
+  - output/benchmarks/issue_3653_snqi_decision_disagreement
+  - --preflight-out
+  - output/benchmarks/issue_3653_snqi_decision_disagreement/preflight.json
   required_artifacts:
-    - snqi_scalarization_sensitivity.json
-    - snqi_scalarization_sensitivity_planner_rows.csv
-    - snqi_scalarization_sensitivity_decision_disagreement.csv
-    - snqi_scalarization_sensitivity.md
-    - snqi_scalarization_sensitivity_pareto.svg
+  - snqi_scalarization_sensitivity.json
+  - snqi_scalarization_sensitivity_planner_rows.csv
+  - snqi_scalarization_sensitivity_decision_disagreement.csv
+  - snqi_scalarization_sensitivity.md
+  - snqi_scalarization_sensitivity_pareto.svg
 success_criteria:
   preflight_status: ready
   min_planners: 9
   required_report_fields:
-    - decision_disagreement
-    - planner_rows
-    - term_dominance
-    - weight_zero_ablation
-    - weight_sweep
-    - pareto_front
+  - decision_disagreement
+  - planner_rows
+  - term_dominance
+  - weight_zero_ablation
+  - weight_sweep
+  - pareto_front
   blocked_status_when_inputs_missing: blocked_missing_valid_campaign_episodes
 evidence_artifacts:
-  artifact_root: docs/context/evidence/issue_3653_job_13175_snqi_scalarization
-  claim_boundary: >
-    Diagnostic SNQI scalarization-sensitivity application on retrieved job 13175
-    only; not benchmark evidence, not an SNQI primary-index claim, and not a
-    paper/dissertation claim edit.
+  artifact_root: docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175
+  claim_boundary: 'Diagnostic SNQI scalarization-sensitivity application on retrieved job 13175 only; not benchmark evidence, not an SNQI primary-index claim, and not a paper/dissertation claim edit.
+
+    '
   exported_at_host: auxme-imech036
   exported_from_commit: 7ab9c5e03
   preflight_status: ready
@@ -123,15 +116,15 @@ evidence_artifacts:
     pareto_front_points: 2
     top_term_by_mean_abs_contribution: w_time
   files:
-    - path: preflight.json
-      sha256: 71b30e61c2ce360d330a1fcf33fad8fd2f2ae3554b9345fb872ffbf13d9605ab
-    - path: snqi_scalarization_sensitivity.json
-      sha256: 779461491c342e744554255190509b37e338d510dafd4ada5cb660020cd5cb30
-    - path: snqi_scalarization_sensitivity_planner_rows.csv
-      sha256: 198c31da9878317e056afbc54034c9f0caeeeb7cf4a3fc24bfd40d2ccc2e449c
-    - path: snqi_scalarization_sensitivity_decision_disagreement.csv
-      sha256: 534c0bd09af1550d5b7cb9a7ebbb3ef89c6e361e843d7542020ae69d5a219f2d
-    - path: snqi_scalarization_sensitivity.md
-      sha256: 77e426f8dc121131c5cf6d940789ba8591a7755445516c19c7a64f604e5cb0d1
-    - path: snqi_scalarization_sensitivity_pareto.svg
-      sha256: 45596a65dca42f94a17481abd1ff077a71d8e6ae48ace5e89a59b961ac93ccb1
+  - path: preflight.json
+    sha256: 8509d07a05decaac3beda46bed7d504d383aa83ea200994739b372c0e8f4b8eb
+  - path: snqi_scalarization_sensitivity.json
+    sha256: 29487caf05208b1bebd4ef59b8da9c64e7cbcb1410b8fc4e0d0fb1da7efa612f
+  - path: snqi_scalarization_sensitivity_planner_rows.csv
+    sha256: 198c31da9878317e056afbc54034c9f0caeeeb7cf4a3fc24bfd40d2ccc2e449c
+  - path: snqi_scalarization_sensitivity_decision_disagreement.csv
+    sha256: 534c0bd09af1550d5b7cb9a7ebbb3ef89c6e361e843d7542020ae69d5a219f2d
+  - path: snqi_scalarization_sensitivity.md
+    sha256: 77e426f8dc121131c5cf6d940789ba8591a7755445516c19c7a64f604e5cb0d1
+  - path: snqi_scalarization_sensitivity_pareto.svg
+    sha256: 45596a65dca42f94a17481abd1ff077a71d8e6ae48ace5e89a59b961ac93ccb1

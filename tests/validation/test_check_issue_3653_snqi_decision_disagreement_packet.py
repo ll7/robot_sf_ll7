@@ -100,13 +100,13 @@ def test_issue_3653_packet_passes_fail_closed_contract() -> None:
     assert summary["decision_disagreement_rate"] == 0.1388888888888889
     assert (
         summary["evidence_artifact_root"]
-        == "docs/context/evidence/issue_3653_job_13175_snqi_scalarization"
+        == "docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175"
     )
     assert (
         summary["raw_episode_artifact_status"]
         == "hydrated_from_submit_host_recorded_job_13175"
     )
-    assert summary["raw_episode_artifact_sha256"] == "9e11420d8bd4ed8749700cdfd2a8b16f1cc8dbca0766d0a273adfd624e10101a"
+    assert summary["raw_episode_artifact_sha256"] == "fd15480d6892dd634e374fb9f79e1e3600d24c88604d9ff05f33d8227b4e6460"
     assert (
         summary["evidence_packet"]
         == "docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.json"
@@ -209,6 +209,20 @@ def test_issue_3653_packet_rejects_missing_decision_disagreement_artifact() -> N
         assert "required_artifacts mismatch" in str(exc)
     else:
         raise AssertionError("packet should reject missing decision-disagreement export")
+
+
+def test_issue_3653_packet_rejects_malformed_evidence_file_entry() -> None:
+    """Evidence artifact file entries fail closed when malformed."""
+
+    packet = _load_packet()
+    packet["evidence_artifacts"]["files"].append("not-a-file-entry")
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "each evidence file entry must be a mapping" in str(exc)
+    else:
+        raise AssertionError("packet should reject malformed evidence file entries")
 
 
 def test_issue_3653_check_cli_json() -> None:

@@ -20,15 +20,15 @@ EXPECTED_STATUS = "diagnostic_application_exported"
 BLOCKED_MISSING_EPISODES_STATUS = "blocked_missing_valid_campaign_episodes"
 EXPECTED_INPUT_STATUS = "ready_hydrated_from_submit_host"
 EXPECTED_RAW_EPISODE_STATUS = "hydrated_from_submit_host_recorded_job_13175"
-EXPECTED_RAW_EPISODE_HASH = "9e11420d8bd4ed8749700cdfd2a8b16f1cc8dbca0766d0a273adfd624e10101a"
+EXPECTED_RAW_EPISODE_HASH = "fd15480d6892dd634e374fb9f79e1e3600d24c88604d9ff05f33d8227b4e6460"
 EXPECTED_WEIGHT_HASH = "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2"
 EXPECTED_BASELINE_HASH = "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a"
 EXPECTED_EVIDENCE_PACKET_HASH = "7da1d5607536bc35d82d482029e150c3cf6442f586ac05e06c925fa9d9e2850c"
 EXPECTED_ARTIFACT_ROOT = "output/issue1554-s20-h500-l40s-mem180/13175"
-EXPECTED_EVIDENCE_ARTIFACT_ROOT = "docs/context/evidence/issue_3653_job_13175_snqi_scalarization"
+EXPECTED_EVIDENCE_ARTIFACT_ROOT = "docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175"
 EXPECTED_EXPORT_ARTIFACT_HASHES = {
-    "preflight.json": "71b30e61c2ce360d330a1fcf33fad8fd2f2ae3554b9345fb872ffbf13d9605ab",
-    "snqi_scalarization_sensitivity.json": "779461491c342e744554255190509b37e338d510dafd4ada5cb660020cd5cb30",
+    "preflight.json": "8509d07a05decaac3beda46bed7d504d383aa83ea200994739b372c0e8f4b8eb",
+    "snqi_scalarization_sensitivity.json": "29487caf05208b1bebd4ef59b8da9c64e7cbcb1410b8fc4e0d0fb1da7efa612f",
     "snqi_scalarization_sensitivity_planner_rows.csv": "198c31da9878317e056afbc54034c9f0caeeeb7cf4a3fc24bfd40d2ccc2e449c",
     "snqi_scalarization_sensitivity_decision_disagreement.csv": "534c0bd09af1550d5b7cb9a7ebbb3ef89c6e361e843d7542020ae69d5a219f2d",
     "snqi_scalarization_sensitivity.md": "77e426f8dc121131c5cf6d940789ba8591a7755445516c19c7a64f604e5cb0d1",
@@ -301,7 +301,10 @@ def _validate_evidence_artifacts(packet: Mapping[str, Any], *, repo_root: Path) 
     )
 
     files = _require_sequence(evidence, "files")
-    recorded = {str(item.get("path")): str(item.get("sha256")) for item in files if isinstance(item, Mapping)}
+    recorded: dict[str, str] = {}
+    for item in files:
+        _require(isinstance(item, Mapping), "each evidence file entry must be a mapping")
+        recorded[str(item.get("path"))] = str(item.get("sha256"))
     _require(recorded == EXPECTED_EXPORT_ARTIFACT_HASHES, "evidence artifact hash map mismatch")
     for rel_path, expected_hash in EXPECTED_EXPORT_ARTIFACT_HASHES.items():
         artifact = repo_root / artifact_root / rel_path
@@ -517,6 +520,7 @@ def export_if_ready(
         SENSITIVITY_PREFLIGHT_READY,
         build_scalarization_sensitivity_report,
         classify_scalarization_sensitivity_inputs,
+        input_file_provenance,
         load_baseline_mapping,
         load_jsonl,
         load_weight_mapping,
@@ -533,12 +537,10 @@ def export_if_ready(
             f"episodes_jsonl missing: {episodes_rel} (status: {BLOCKED_MISSING_EPISODES_STATUS})"
         )
 
-    weights = load_weight_mapping(
-        repo_root / _repo_relative_path(inputs.get("weights_path"), "inputs.weights_path")
-    )
-    baseline = load_baseline_mapping(
-        repo_root / _repo_relative_path(inputs.get("baseline_path"), "inputs.baseline_path")
-    )
+    weights_path = repo_root / _repo_relative_path(inputs.get("weights_path"), "inputs.weights_path")
+    baseline_path = repo_root / _repo_relative_path(inputs.get("baseline_path"), "inputs.baseline_path")
+    weights = load_weight_mapping(weights_path)
+    baseline = load_baseline_mapping(baseline_path)
     records = load_jsonl(episodes)
     if len(records) != int(summary["expected_episode_count"]):
         raise PacketError(
@@ -570,7 +572,17 @@ def export_if_ready(
         preflight_output.parent.mkdir(parents=True, exist_ok=True)
         preflight_output.write_text(json.dumps(preflight, indent=2, sort_keys=True) + "\n")
 
-    report = build_scalarization_sensitivity_report(records, weights=weights, baseline=baseline)
+    provenance = {
+        "episodes": input_file_provenance(episodes),
+        "baseline": input_file_provenance(baseline_path),
+        "weights": input_file_provenance(weights_path),
+    }
+    report = build_scalarization_sensitivity_report(
+        records,
+        weights=weights,
+        baseline=baseline,
+        input_provenance=provenance,
+    )
     _require_export_report_fields(packet, report)
     artifacts = write_diagnostic_artifacts(report, resolved_output_dir)
     artifact_paths = {

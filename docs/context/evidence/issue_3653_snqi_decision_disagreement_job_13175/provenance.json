@@ -1,0 +1,76 @@
+{
+  "canonical_export_command": [
+    "uv",
+    "run",
+    "python",
+    "scripts/benchmark/snqi_scalarization_sensitivity_export.py",
+    "--episodes",
+    "output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl",
+    "--baseline",
+    "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+    "--weights",
+    "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+    "--application-packet",
+    "configs/benchmarks/issue_3653_snqi_decision_disagreement_packet.yaml",
+    "--output-dir",
+    "docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175",
+    "--preflight-out",
+    "docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/preflight.json"
+  ],
+  "claim_boundary": "Diagnostic SNQI scalarization-sensitivity application on retrieved job 13175 only; not benchmark evidence, not an SNQI primary-index claim, and not a paper/dissertation claim edit.",
+  "decision_disagreement": {
+    "constraints_first_winner": "hybrid_rule_v3_fast_progress_static_escape",
+    "kendall_tau": 0.7222222222222222,
+    "pairwise_disagreement_rate": 0.1388888888888889,
+    "pairwise_reversal_count": 5,
+    "snqi_winner": "ppo",
+    "spearman_rho": 0.8833333333333332,
+    "winner_disagreement": true
+  },
+  "forbidden_actions": {
+    "benchmark_claim_promoted": false,
+    "compute_submit": false,
+    "dissertation_claim_promoted": false,
+    "new_slurm_run": false,
+    "paper_claim_promoted": false,
+    "raw_output_committed": false,
+    "safety_ranking_claim_promoted": false,
+    "scenario_horizon_claim_promoted": false
+  },
+  "hydrated_file": "output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl",
+  "hydrated_rows": 8640,
+  "hydrated_sha256": "fd15480d6892dd634e374fb9f79e1e3600d24c88604d9ff05f33d8227b4e6460",
+  "materialization": {
+    "materialization_note": "Original episode rows omit planner_key and fallback scenario_params.algo merges the scenario_adaptive_hybrid_orca_v1 lane into its selected low-level algorithms. The aggregate JSONL restores planner_key from the recorded per-planner run directories so the diagnostic export covers the intended nine planner lanes.\n",
+    "materialized_planners": 9,
+    "materialized_rows": 8640,
+    "planner_key_source": "runs directory stem before __differential_drive",
+    "retrieved_on_host": "auxme-imech036",
+    "source_glob": "runs/*/episodes.jsonl",
+    "source_host": "imech192",
+    "source_results_root": "/home/luttkule/git/robot_sf_ll7.worktrees/slurm-issue-1554-s20-h500-l40s-mem180-20260628/output/benchmarks/camera_ready/issue1554_s20_h500_l40s_mem180_20260628"
+  },
+  "post_export_note": "The packet records final artifact hashes after canonical export. The report application_packet hash records the packet file as it existed when the export command ran.",
+  "preflight_status": "ready",
+  "report_input_provenance": {
+    "application_packet": {
+      "path": "configs/benchmarks/issue_3653_snqi_decision_disagreement_packet.yaml",
+      "sha256": "e9470d8992df6136272116fb7ee8ae9717180b6aaec47cc5bc67dfae0c0cdea5"
+    },
+    "baseline": {
+      "path": "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+      "sha256": "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a"
+    },
+    "episodes": {
+      "path": "output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl",
+      "sha256": "fd15480d6892dd634e374fb9f79e1e3600d24c88604d9ff05f33d8227b4e6460"
+    },
+    "weights": {
+      "path": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+      "sha256": "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2"
+    }
+  },
+  "schema_version": "issue-3653-snqi-decision-disagreement-provenance.v1",
+  "source": "submit_host_hydration_from_recorded_job_13175",
+  "source_job_id": 13175
+}

@@ -30,7 +30,7 @@ EXPECTED_EVIDENCE_ARTIFACT_ROOT = (
 )
 EXPECTED_EXPORT_ARTIFACT_HASHES = {
     "preflight.json": "8509d07a05decaac3beda46bed7d504d383aa83ea200994739b372c0e8f4b8eb",
-    "snqi_scalarization_sensitivity.json": "29487caf05208b1bebd4ef59b8da9c64e7cbcb1410b8fc4e0d0fb1da7efa612f",
+    "snqi_scalarization_sensitivity.json": "d76089e21b17d7b8bf5c5912ec1f1ac0019d1f7ce045276af8157d6c450a1667",
     "snqi_scalarization_sensitivity_planner_rows.csv": "198c31da9878317e056afbc54034c9f0caeeeb7cf4a3fc24bfd40d2ccc2e449c",
     "snqi_scalarization_sensitivity_decision_disagreement.csv": "534c0bd09af1550d5b7cb9a7ebbb3ef89c6e361e843d7542020ae69d5a219f2d",
     "snqi_scalarization_sensitivity.md": "77e426f8dc121131c5cf6d940789ba8591a7755445516c19c7a64f604e5cb0d1",

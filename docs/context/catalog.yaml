@@ -863,6 +863,42 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-07-01/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-07-01/checksums.sha256
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-07-01/campaign_manifest.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-07-01/run_meta.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-07-01/reports/campaign_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-07-01/reports/campaign_table.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-07-01/reports/scenario_family_breakdown.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-07-01/reports/snqi_diagnostics.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-07-01/reports/snqi_diagnostics.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2686_release_0_0_2_table_bundle.md
     status: current
     freshness: evidence

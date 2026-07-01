@@ -1,0 +1,70 @@
+{
+  "repo": {
+    "remote": "https://github.com/ll7/robot_sf_ll7",
+    "branch": "issue-3203-valid-scenario-horizon-reexport",
+    "commit": "9cfb5d7df248ca3417d801148a1989d3fd8445f5"
+  },
+  "matrix_path": "configs/scenarios/classic_interactions_francis2023.yaml",
+  "scenario_matrix_hash": "f862d5639bd9",
+  "latency_stress_profile": null,
+  "seed_policy": {
+    "mode": "seed-set",
+    "seed_set": "eval",
+    "seeds": [],
+    "resolved_seeds": [
+      111,
+      112,
+      113
+    ],
+    "seed_sets_path": "configs/benchmarks/seed_sets_v1.yaml"
+  },
+  "preflight_artifacts": {
+    "validate_config": "<disposable-artifact-root>/benchmarks/issue_3203/issue3203_scenario_horizons_h500_reexport_valid_2026-07-01/preflight/validate_config.json",
+    "preview_scenarios": "<disposable-artifact-root>/benchmarks/issue_3203/issue3203_scenario_horizons_h500_reexport_valid_2026-07-01/preflight/preview_scenarios.json",
+    "amv_coverage_json": "<disposable-artifact-root>/benchmarks/issue_3203/issue3203_scenario_horizons_h500_reexport_valid_2026-07-01/reports/amv_coverage_summary.json",
+    "amv_coverage_md": "<disposable-artifact-root>/benchmarks/issue_3203/issue3203_scenario_horizons_h500_reexport_valid_2026-07-01/reports/amv_coverage_summary.md",
+    "comparability_json": "<disposable-artifact-root>/benchmarks/issue_3203/issue3203_scenario_horizons_h500_reexport_valid_2026-07-01/reports/comparability_matrix.json",
+    "comparability_md": "<disposable-artifact-root>/benchmarks/issue_3203/issue3203_scenario_horizons_h500_reexport_valid_2026-07-01/reports/comparability_matrix.md",
+    "seed_variability_json": "<disposable-artifact-root>/benchmarks/issue_3203/issue3203_scenario_horizons_h500_reexport_valid_2026-07-01/reports/seed_variability_by_scenario.json",
+    "seed_variability_csv": "<disposable-artifact-root>/benchmarks/issue_3203/issue3203_scenario_horizons_h500_reexport_valid_2026-07-01/reports/seed_variability_by_scenario.csv",
+    "seed_episode_rows_csv": "<disposable-artifact-root>/benchmarks/issue_3203/issue3203_scenario_horizons_h500_reexport_valid_2026-07-01/reports/seed_episode_rows.csv",
+    "statistical_sufficiency_json": "<disposable-artifact-root>/benchmarks/issue_3203/issue3203_scenario_horizons_h500_reexport_valid_2026-07-01/reports/statistical_sufficiency.json",
+    "actuation_envelope_json": null,
+    "actuation_envelope_md": null
+  },
+  "synthetic_actuation_artifacts": {
+    "json": null,
+    "md": null
+  },
+  "snqi_artifacts": {
+    "diagnostics_json": "<disposable-artifact-root>/benchmarks/issue_3203/issue3203_scenario_horizons_h500_reexport_valid_2026-07-01/reports/snqi_diagnostics.json",
+    "diagnostics_md": "<disposable-artifact-root>/benchmarks/issue_3203/issue3203_scenario_horizons_h500_reexport_valid_2026-07-01/reports/snqi_diagnostics.md",
+    "sensitivity_csv": "<disposable-artifact-root>/benchmarks/issue_3203/issue3203_scenario_horizons_h500_reexport_valid_2026-07-01/reports/snqi_sensitivity.csv"
+  },
+  "seed_variability_artifacts": {
+    "json": "<disposable-artifact-root>/benchmarks/issue_3203/issue3203_scenario_horizons_h500_reexport_valid_2026-07-01/reports/seed_variability_by_scenario.json",
+    "csv": "<disposable-artifact-root>/benchmarks/issue_3203/issue3203_scenario_horizons_h500_reexport_valid_2026-07-01/reports/seed_variability_by_scenario.csv",
+    "seed_episode_rows_csv": "<disposable-artifact-root>/benchmarks/issue_3203/issue3203_scenario_horizons_h500_reexport_valid_2026-07-01/reports/seed_episode_rows.csv",
+    "statistical_sufficiency_json": "<disposable-artifact-root>/benchmarks/issue_3203/issue3203_scenario_horizons_h500_reexport_valid_2026-07-01/reports/statistical_sufficiency.json"
+  },
+  "seed_variability": {
+    "metrics": [
+      "success",
+      "collisions",
+      "near_misses",
+      "time_to_goal_norm",
+      "snqi"
+    ],
+    "row_count": 432,
+    "bootstrap_method": "bootstrap_mean_over_seed_means",
+    "bootstrap_level": 0.95,
+    "bootstrap_samples": 300,
+    "seed": 123
+  },
+  "campaign_id": "issue3203_scenario_horizons_h500_reexport_valid_2026-07-01",
+  "started_at_utc": "2026-07-01T13:39:32.540262Z",
+  "finished_at_utc": "2026-07-01T15:18:03.477316Z",
+  "invoked_command": "<worktree>/.venv/bin/python3 <worktree>/scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/issue_3203_scenario_horizons_h500_reexport_valid.yaml --output-root <disposable-artifact-root>/benchmarks/issue_3203 --campaign-id issue3203_scenario_horizons_h500_reexport_valid_2026-07-01 --mode run --skip-publication-bundle --log-level INFO",
+  "runtime_sec": 5910.937571171,
+  "episodes_per_second": 0.21925455723316883
+}

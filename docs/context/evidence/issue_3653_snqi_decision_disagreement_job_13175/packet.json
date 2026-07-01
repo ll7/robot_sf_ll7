@@ -21,7 +21,7 @@
     {
       "kind": "snqi_report",
       "path": "snqi_scalarization_sensitivity.json",
-      "sha256": "29487caf05208b1bebd4ef59b8da9c64e7cbcb1410b8fc4e0d0fb1da7efa612f",
+      "sha256": "d76089e21b17d7b8bf5c5912ec1f1ac0019d1f7ce045276af8157d6c450a1667",
       "size_bytes": 37270
     },
     {
@@ -63,7 +63,7 @@
       },
       {
         "path": "snqi_scalarization_sensitivity.json",
-        "sha256": "29487caf05208b1bebd4ef59b8da9c64e7cbcb1410b8fc4e0d0fb1da7efa612f"
+        "sha256": "d76089e21b17d7b8bf5c5912ec1f1ac0019d1f7ce045276af8157d6c450a1667"
       },
       {
         "path": "snqi_scalarization_sensitivity_planner_rows.csv",
@@ -106,7 +106,7 @@
   "inputs": {
     "baseline_path": "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
     "baseline_sha256": "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a",
-    "episodes_jsonl": "output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl",
+    "episodes_jsonl": "<hydrated-local-artifact-root>/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl",
     "input_status": "ready_hydrated_from_submit_host",
     "weights_path": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
     "weights_sha256": "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2"
@@ -121,7 +121,7 @@
     "artifact_class": "raw_campaign_episode_jsonl",
     "current_status": "hydrated_from_submit_host_recorded_job_13175",
     "durable_source_required_before_ready": true,
-    "expected_path": "output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl",
+    "expected_path": "<hydrated-local-artifact-root>/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl",
     "expected_rows": 8640,
     "expected_sha256": "fd15480d6892dd634e374fb9f79e1e3600d24c88604d9ff05f33d8227b4e6460",
     "forbidden_sources": [
@@ -137,7 +137,7 @@
       "retrieved_on_host": "auxme-imech036",
       "source_glob": "runs/*/episodes.jsonl",
       "source_host": "imech192",
-      "source_results_root": "/home/luttkule/git/robot_sf_ll7.worktrees/slurm-issue-1554-s20-h500-l40s-mem180-20260628/output/benchmarks/camera_ready/issue1554_s20_h500_l40s_mem180_20260628"
+      "source_results_root": "<submit-host-worktree-artifact-root>/benchmarks/camera_ready/issue1554_s20_h500_l40s_mem180_20260628"
     },
     "ready_precondition": "Satisfied on auxme-imech036 by hydrating recorded job 13175 outputs from the imech192 submit-host result root, materializing reports/episodes.jsonl from the nine recorded runs/*/episodes.jsonl streams with planner_key restored from the run directory, recording the sha256 here, and passing export-if-ready preflight.\n",
     "required": true
@@ -145,7 +145,7 @@
   "schema_version": "issue-3653-snqi-decision-disagreement-application-packet.v1",
   "self_path": "packet.json",
   "source_campaign": {
-    "artifact_root": "output/issue1554-s20-h500-l40s-mem180/13175",
+    "artifact_root": "<disposable-artifact-root>/issue1554-s20-h500-l40s-mem180/13175",
     "campaign_id": "issue1554_s20_h500_l40s_mem180_20260628",
     "evidence_packet": "docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.json",
     "evidence_packet_sha256": "7da1d5607536bc35d82d482029e150c3cf6442f586ac05e06c925fa9d9e2850c",

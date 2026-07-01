@@ -40,6 +40,13 @@ def test_generated_variants_pass_generator_preflight() -> None:
     assert payload["conforms"] is True
     assert payload["benchmark_evidence"] is False
     assert payload["runtime_support"] == "metadata_only"
+    assert payload["runtime_definition_readiness"] == {
+        "status": sustained_flow.RUNTIME_DEFINITION_METADATA_ONLY_STATUS,
+        "ready": False,
+        "expected_runtime_support": sustained_flow.SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
+        "observed_runtime_support": "metadata_only",
+        "benchmark_evidence": False,
+    }
     assert payload["variant_count"] == 3
     assert [variant["density_tier"] for variant in payload["variants"]] == [
         "light",
@@ -77,6 +84,13 @@ def test_runtime_supported_generated_variants_pass_generator_preflight() -> None
     assert payload["conforms"] is True
     assert payload["benchmark_evidence"] is False
     assert payload["runtime_support"] == sustained_flow.SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE
+    assert payload["runtime_definition_readiness"] == {
+        "status": sustained_flow.RUNTIME_DEFINITION_READY_STATUS,
+        "ready": True,
+        "expected_runtime_support": sustained_flow.SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
+        "observed_runtime_support": sustained_flow.SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
+        "benchmark_evidence": False,
+    }
     assert payload["variant_count"] == 3
     assert [variant["density_tier"] for variant in payload["variants"]] == [
         "light",

@@ -20,6 +20,8 @@ DEFAULT_SUSTAINED_FLOW_SCENARIO_SET = (
     Path(__file__).resolve().parents[2]
     / "configs/scenarios/sets/issue_3813_sustained_flow_scaffold_v0.yaml"
 )
+RUNTIME_DEFINITION_READY_STATUS = "definition_ready_for_runtime_preflight"
+RUNTIME_DEFINITION_METADATA_ONLY_STATUS = "metadata_only_not_runtime_ready"
 EXPECTED_SUSTAINED_FLOW_TIERS: tuple[tuple[str, float, float, tuple[int, ...]], ...] = (
     ("light", 0.02, 6.0, (381301, 381302, 381303)),
     ("medium", 0.05, 12.0, (381311, 381312, 381313)),
@@ -582,12 +584,26 @@ def sustained_flow_preflight_to_dict(report: SustainedFlowPreflightReport) -> di
         JSON-serializable sustained-flow preflight payload.
     """
 
+    runtime_definition_ready = (
+        report.conforms and report.runtime_support == SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE
+    )
     return {
         "schema_version": report.schema_version,
         "scenario_set": report.scenario_set,
         "conforms": report.conforms,
         "benchmark_evidence": report.benchmark_evidence,
         "runtime_support": report.runtime_support,
+        "runtime_definition_readiness": {
+            "status": (
+                RUNTIME_DEFINITION_READY_STATUS
+                if runtime_definition_ready
+                else RUNTIME_DEFINITION_METADATA_ONLY_STATUS
+            ),
+            "ready": runtime_definition_ready,
+            "expected_runtime_support": SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
+            "observed_runtime_support": report.runtime_support,
+            "benchmark_evidence": False,
+        },
         "variant_count": len(report.variants),
         "variants": [
             {

@@ -67,6 +67,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional baseline-stats JSON (metric -> {med, p95}) to check coverage.",
     )
     parser.add_argument(
+        "--score-version",
+        choices=("SNQI-v0", "SNQI-v1"),
+        default="SNQI-v0",
+        help="SNQI score-version contract to inspect.",
+    )
+    parser.add_argument(
         "--json-out",
         type=pathlib.Path,
         default=None,
@@ -147,13 +153,17 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     if input_exit_code:
         return input_exit_code
 
-    inventory = build_snqi_normalization_inventory(baseline_stats)
+    inventory = build_snqi_normalization_inventory(
+        baseline_stats,
+        score_version=args.score_version,
+    )
     contribution_payload = None
     if metrics is not None and weights is not None:
         contribution_payload = build_snqi_contribution_diagnostics(
             metrics,
             weights,
             baseline_stats or {},
+            score_version=args.score_version,
         )
 
     print(CLAIM_BOUNDARY)

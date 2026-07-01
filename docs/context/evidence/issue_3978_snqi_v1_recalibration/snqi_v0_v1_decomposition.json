@@ -1,0 +1,64 @@
+{
+  "schema_version": "snqi_v0_v1_decomposition.issue_3978.v1",
+  "issue": 3978,
+  "artifact_type": "synthetic_diagnostic_fixture",
+  "claim_boundary": "SNQI-v1 is a secondary diagnostic only; constraints-first benchmark evidence remains primary.",
+  "not_benchmark_evidence": true,
+  "weights_retuned": false,
+  "benchmark_campaign_submitted": false,
+  "scores": {
+    "SNQI-v0": -8.0,
+    "SNQI-v1": -5.0
+  },
+  "comparability_note": "SNQI-v1 scores are not numerically comparable to SNQI-v0 scores because the normalization semantics changed.",
+  "normalization_summary": {
+    "SNQI-v0": {
+      "status": "legacy_mixed_basis_diagnostic_only",
+      "mixed_basis": true,
+      "raw_unbounded_penalty_terms": [
+        "time",
+        "comfort"
+      ],
+      "baseline_normalized_penalty_terms": [
+        "collisions",
+        "near",
+        "force_exceed",
+        "jerk"
+      ],
+      "raw_penalty_absolute_share": 0.5,
+      "baseline_normalized_penalty_absolute_share": 0.4,
+      "has_weight_bound_exceedance": true,
+      "weight_bound_exceedance_terms": [
+        "time",
+        "comfort"
+      ]
+    },
+    "SNQI-v1": {
+      "status": "bounded_baseline_relative_diagnostic_only",
+      "mixed_basis": false,
+      "raw_unbounded_penalty_terms": [],
+      "baseline_normalized_penalty_terms": [
+        "time",
+        "collisions",
+        "near",
+        "comfort",
+        "force_exceed",
+        "jerk"
+      ],
+      "raw_penalty_absolute_share": 0.0,
+      "baseline_normalized_penalty_absolute_share": 0.8571428571428571,
+      "has_weight_bound_exceedance": false,
+      "weight_bound_exceedance_terms": []
+    }
+  },
+  "fixture_files": {
+    "metrics": "fixture_metrics.json",
+    "weights": "fixture_weights_unity.json",
+    "baseline_stats": "fixture_baseline_stats_v1.json"
+  },
+  "reproduction_tests": [
+    "tests/test_snqi_normalization_comparison.py::test_compute_snqi_default_preserves_v0_score",
+    "tests/test_snqi_normalization_comparison.py::test_compute_snqi_v1_uses_bounded_comparable_penalty_terms",
+    "tests/benchmark/test_snqi_normalization_inventory.py::test_snqi_v1_contribution_diagnostics_are_comparable"
+  ]
+}

@@ -24,9 +24,14 @@ cannot silently drift away from the scoring code it describes.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from robot_sf.benchmark.snqi.compute import normalize_metric
+from robot_sf.benchmark.snqi.compute import (
+    SNQI_SCORE_VERSION_V0,
+    SNQI_SCORE_VERSION_V1,
+    normalize_metric,
+    normalize_metric_required,
+)
 
 # Scaling regimes. Kept as plain strings so inventory payloads are trivially
 # JSON-serializable for preflight reports.
@@ -38,14 +43,15 @@ SCALING_BASELINE_NORMALIZED = "baseline_normalized"
 NORMALIZED_LOWER = 0.0
 NORMALIZED_UPPER = 1.0
 
-SNQI_LEGACY_SCORE_VERSION = "SNQI-v0"
+SNQI_LEGACY_SCORE_VERSION = SNQI_SCORE_VERSION_V0
 SNQI_LEGACY_SCORE_STATUS = "legacy_mixed_basis_diagnostic_only"
+SNQI_V1_SCORE_STATUS = "bounded_baseline_relative_diagnostic_only"
 
 # Static SNQI score-version contract. All values are immutable scalars, so a
 # shallow copy is sufficient to isolate callers from mutating the shared source.
 _SNQI_VERSION_CONTRACT: dict[str, object] = {
     "schema_version": "snqi_score_version_contract.v1",
-    "score_version": SNQI_LEGACY_SCORE_VERSION,
+    "score_version": SNQI_SCORE_VERSION_V0,
     "status": SNQI_LEGACY_SCORE_STATUS,
     "diagnostic_only": True,
     "mixed_basis_preserved": True,
@@ -59,8 +65,25 @@ _SNQI_VERSION_CONTRACT: dict[str, object] = {
     ),
 }
 
+_SNQI_V1_VERSION_CONTRACT: dict[str, object] = {
+    "schema_version": "snqi_score_version_contract.v1",
+    "score_version": SNQI_SCORE_VERSION_V1,
+    "status": SNQI_V1_SCORE_STATUS,
+    "diagnostic_only": True,
+    "mixed_basis_preserved": False,
+    "score_semantics_changed": True,
+    "supersedes": SNQI_SCORE_VERSION_V0,
+    "decision_issue": 3978,
+    "legacy_decision_issue": 3699,
+    "policy": (
+        "SNQI-v1 is a bounded secondary diagnostic; constraints-first evidence remains primary."
+    ),
+}
 
-def build_snqi_version_contract() -> dict[str, object]:
+
+def build_snqi_version_contract(
+    score_version: str = SNQI_SCORE_VERSION_V0,
+) -> dict[str, object]:
     """Return the current versioned SNQI normalization contract.
 
     Issue #3699's current product decision preserves historical SNQI as a
@@ -70,7 +93,11 @@ def build_snqi_version_contract() -> dict[str, object]:
     Returns a fresh shallow copy so callers cannot mutate the shared constant.
     """
 
-    return _SNQI_VERSION_CONTRACT.copy()
+    if score_version == SNQI_SCORE_VERSION_V0:
+        return _SNQI_VERSION_CONTRACT.copy()
+    if score_version == SNQI_SCORE_VERSION_V1:
+        return _SNQI_V1_VERSION_CONTRACT.copy()
+    raise ValueError(f"unknown SNQI score version: {score_version}")
 
 
 @dataclass(frozen=True)
@@ -219,6 +246,32 @@ SNQI_TERM_SCALING: tuple[TermScaling, ...] = (
     ),
 )
 
+SNQI_V1_TERM_SCALING: tuple[TermScaling, ...] = tuple(
+    replace(
+        term,
+        scaling=SCALING_BASELINE_NORMALIZED,
+        measurement_basis="baseline-relative median/p95 clamped value",
+        bounded=True,
+        note="SNQI-v1 baseline-normalized (median/p95) clamped to [0, 1].",
+    )
+    if term.is_penalty
+    else term
+    for term in SNQI_TERM_SCALING
+)
+
+SNQI_TERM_SCALING_BY_VERSION: dict[str, tuple[TermScaling, ...]] = {
+    SNQI_SCORE_VERSION_V0: SNQI_TERM_SCALING,
+    SNQI_SCORE_VERSION_V1: SNQI_V1_TERM_SCALING,
+}
+
+
+def _term_scaling_for_version(score_version: str) -> tuple[TermScaling, ...]:
+    """Return the term scaling table for a known SNQI score version."""
+    try:
+        return SNQI_TERM_SCALING_BY_VERSION[score_version]
+    except KeyError as exc:
+        raise ValueError(f"unknown SNQI score version: {score_version}") from exc
+
 
 def scaled_term_value(
     term: TermScaling,
@@ -247,6 +300,20 @@ def scaled_term_value(
     if term.term == "success":
         return 1.0 if isinstance(raw, bool) and raw else float(raw)
     return float(raw)
+
+
+def _scaled_term_value_for_version(
+    term: TermScaling,
+    metrics: dict[str, float | int | bool],
+    baseline_stats: dict[str, dict[str, float]],
+    *,
+    score_version: str,
+) -> float:
+    """Return post-scaling value with versioned fail-closed semantics."""
+    raw = metrics.get(term.metric_key, term.default)
+    if score_version == SNQI_SCORE_VERSION_V1 and term.is_penalty:
+        return normalize_metric_required(term.metric_key, raw, baseline_stats)
+    return scaled_term_value(term, metrics, baseline_stats)
 
 
 @dataclass(frozen=True)
@@ -348,6 +415,8 @@ def build_snqi_contribution_diagnostics(
     metrics: dict[str, float | int | bool],
     weights: dict[str, float],
     baseline_stats: dict[str, dict[str, float]],
+    *,
+    score_version: str = SNQI_SCORE_VERSION_V0,
 ) -> dict[str, object]:
     """Build read-only weighted contribution diagnostics for one SNQI row.
 
@@ -362,9 +431,15 @@ def build_snqi_contribution_diagnostics(
     """
     preliminary: list[tuple[TermScaling, float | int | bool, float, float, float]] = []
     absolute_total = 0.0
-    for term in SNQI_TERM_SCALING:
+    terms = _term_scaling_for_version(score_version)
+    for term in terms:
         raw_value = metrics.get(term.metric_key, term.default)
-        scaled_value = scaled_term_value(term, metrics, baseline_stats)
+        scaled_value = _scaled_term_value_for_version(
+            term,
+            metrics,
+            baseline_stats,
+            score_version=score_version,
+        )
         weight = float(weights.get(term.weight_name, 1.0))
         signed_contribution = term.sign * weight * scaled_value
         absolute_total += abs(signed_contribution)
@@ -415,7 +490,7 @@ def build_snqi_contribution_diagnostics(
         "weight_bound_exceedances": weight_bound_exceedances,
         "has_weight_bound_exceedance": bool(weight_bound_exceedances),
         "normalization_contract": normalization_contract,
-        "score_version_contract": build_snqi_version_contract(),
+        "score_version_contract": build_snqi_version_contract(score_version),
         "terms": [contribution.to_dict() for contribution in contributions],
     }
 
@@ -433,6 +508,7 @@ class NormalizationInventory:
 
     terms: tuple[TermScaling, ...]
     baseline_covered: dict[str, bool]
+    score_version: str = SNQI_SCORE_VERSION_V0
 
     @property
     def penalty_terms(self) -> list[TermScaling]:
@@ -484,11 +560,12 @@ class NormalizationInventory:
     @property
     def score_version_contract(self) -> dict[str, object]:
         """Current versioned SNQI normalization contract."""
-        return build_snqi_version_contract()
+        return build_snqi_version_contract(self.score_version)
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-serializable view for preflight reporting."""
         return {
+            "score_version": self.score_version,
             "terms": [t.to_dict() for t in self.terms],
             "baseline_covered": dict(self.baseline_covered),
             "mixed_scale": self.mixed_scale,
@@ -503,6 +580,8 @@ class NormalizationInventory:
 
 def build_snqi_normalization_inventory(
     baseline_stats: dict[str, dict[str, float]] | None = None,
+    *,
+    score_version: str = SNQI_SCORE_VERSION_V0,
 ) -> NormalizationInventory:
     """Inventory the per-term scaling status of the SNQI composite.
 
@@ -511,17 +590,23 @@ def build_snqi_normalization_inventory(
             each baseline-normalized term is checked for median/p95 coverage so
             silently-zeroed terms can be surfaced. When ``None``, coverage is
             reported as unknown (``False``) for every normalized term.
+        score_version: SNQI score-version contract to inventory.
 
     Returns:
         A :class:`NormalizationInventory` describing the scaling of every term.
     """
     stats = baseline_stats or {}
+    terms = _term_scaling_for_version(score_version)
     covered: dict[str, bool] = {}
-    for term in SNQI_TERM_SCALING:
+    for term in terms:
         if term.scaling == SCALING_BASELINE_NORMALIZED:
             entry = stats.get(term.metric_key)
             covered[term.metric_key] = isinstance(entry, dict) and "med" in entry and "p95" in entry
-    return NormalizationInventory(terms=SNQI_TERM_SCALING, baseline_covered=covered)
+    return NormalizationInventory(
+        terms=terms,
+        baseline_covered=covered,
+        score_version=score_version,
+    )
 
 
 def format_normalization_report(inventory: NormalizationInventory) -> str:
@@ -540,7 +625,7 @@ def format_normalization_report(inventory: NormalizationInventory) -> str:
             f"{term.metric_key:<24}{term.measurement_basis}"
         )
     lines.append(f"  mixed_scale            : {inventory.mixed_scale}")
-    contract = build_snqi_version_contract()
+    contract = build_snqi_version_contract(inventory.score_version)
     lines.append(f"  score version          : {contract['score_version']} ({contract['status']})")
     lines.append(
         "  raw penalty terms      : "
@@ -566,6 +651,9 @@ __all__ = [
     "SNQI_LEGACY_SCORE_STATUS",
     "SNQI_LEGACY_SCORE_VERSION",
     "SNQI_TERM_SCALING",
+    "SNQI_TERM_SCALING_BY_VERSION",
+    "SNQI_V1_SCORE_STATUS",
+    "SNQI_V1_TERM_SCALING",
     "NormalizationInventory",
     "TermContribution",
     "TermScaling",

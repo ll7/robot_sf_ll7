@@ -19,6 +19,8 @@ from robot_sf.benchmark.snqi.normalization_inventory import (
     SNQI_LEGACY_SCORE_STATUS,
     SNQI_LEGACY_SCORE_VERSION,
     SNQI_TERM_SCALING,
+    SNQI_V1_SCORE_STATUS,
+    SNQI_V1_TERM_SCALING,
     build_snqi_contribution_diagnostics,
     build_snqi_normalization_inventory,
     build_snqi_version_contract,
@@ -29,8 +31,10 @@ from robot_sf.benchmark.snqi.normalization_inventory import (
 # Baseline stats covering exactly the four count-type penalty terms that
 # ``compute_snqi`` routes through ``normalize_metric``.
 _BASELINE_STATS = {
+    "time_to_goal_norm": {"med": 0.0, "p95": 1.0},
     "collisions": {"med": 1.0, "p95": 5.0},
     "near_misses": {"med": 2.0, "p95": 8.0},
+    "comfort_exposure": {"med": 0.0, "p95": 1.0},
     "force_exceed_events": {"med": 0.0, "p95": 4.0},
     "jerk_mean": {"med": 0.1, "p95": 1.0},
 }
@@ -186,6 +190,138 @@ def test_score_version_contract_preserves_legacy_snqi_v0_as_diagnostic_only():
     assert contract["successor_issue"] == 3978
 
 
+def test_score_version_contract_exposes_snqi_v1_bounded_diagnostic() -> None:
+    """SNQI-v1 is an opt-in bounded diagnostic, not a v0 reinterpretation."""
+    contract = build_snqi_version_contract("SNQI-v1")
+
+    assert contract["score_version"] == "SNQI-v1"
+    assert contract["status"] == SNQI_V1_SCORE_STATUS
+    assert contract["diagnostic_only"] is True
+    assert contract["mixed_basis_preserved"] is False
+    assert contract["score_semantics_changed"] is True
+    assert contract["supersedes"] == "SNQI-v0"
+    assert contract["decision_issue"] == 3978
+    assert contract["legacy_decision_issue"] == 3699
+
+
+def test_snqi_v1_inventory_penalties_are_bounded_baseline_normalized() -> None:
+    """Every SNQI-v1 penalty term uses the comparable baseline-normalized basis."""
+    inv = build_snqi_normalization_inventory(_BASELINE_STATS, score_version="SNQI-v1")
+
+    assert inv.score_version == "SNQI-v1"
+    assert inv.mixed_scale is False
+    assert inv.is_consistent is True
+    assert inv.unbounded_terms == []
+    assert {t.metric_key for t in inv.normalized_penalty_terms} == {
+        "time_to_goal_norm",
+        "collisions",
+        "near_misses",
+        "comfort_exposure",
+        "force_exceed_events",
+        "jerk_mean",
+    }
+    assert all(t.scaling == SCALING_BASELINE_NORMALIZED for t in inv.penalty_terms)
+    assert all(t.bounded for t in inv.penalty_terms)
+
+
+def test_snqi_v1_contribution_diagnostics_are_comparable() -> None:
+    """SNQI-v1 scaled values and signed penalties stay within weight bounds."""
+    metrics = {
+        "success": 1.0,
+        "time_to_goal_norm": 3.0,
+        "collisions": 9.0,
+        "near_misses": 9.0,
+        "comfort_exposure": 2.0,
+        "force_exceed_events": 9.0,
+        "jerk_mean": 9.0,
+    }
+    weights = {term.weight_name: 1.0 for term in SNQI_V1_TERM_SCALING}
+    baseline_stats = {
+        "time_to_goal_norm": {"med": 0.0, "p95": 1.0},
+        "collisions": {"med": 0.0, "p95": 1.0},
+        "near_misses": {"med": 0.0, "p95": 1.0},
+        "comfort_exposure": {"med": 0.0, "p95": 1.0},
+        "force_exceed_events": {"med": 0.0, "p95": 1.0},
+        "jerk_mean": {"med": 0.0, "p95": 1.0},
+    }
+
+    diagnostics = build_snqi_contribution_diagnostics(
+        metrics,
+        weights,
+        baseline_stats,
+        score_version="SNQI-v1",
+    )
+
+    assert diagnostics["mixed_basis"] is False
+    assert diagnostics["has_weight_bound_exceedance"] is False
+    assert diagnostics["normalization_contract"]["status"] == "comparable_weight_basis"
+    assert diagnostics["normalization_contract"]["weights_comparable"] is True
+    assert diagnostics["normalization_contract"]["weight_bound_exceedance_terms"] == []
+    terms = diagnostics["terms"]
+    for term in terms:
+        if term["signed_contribution"] < 0:
+            assert term["scaling"] == SCALING_BASELINE_NORMALIZED
+            assert 0.0 <= term["scaled_value"] <= 1.0
+            assert abs(term["signed_contribution"]) <= abs(term["weight"])
+
+
+def test_snqi_v1_contribution_diagnostics_fail_closed_on_missing_baseline() -> None:
+    """SNQI-v1 diagnostics reject inputs the scorer would reject."""
+    metrics = {
+        "success": 1.0,
+        "time_to_goal_norm": 3.0,
+        "collisions": 9.0,
+        "near_misses": 9.0,
+        "comfort_exposure": 2.0,
+        "force_exceed_events": 9.0,
+        "jerk_mean": 9.0,
+    }
+    weights = {term.weight_name: 1.0 for term in SNQI_V1_TERM_SCALING}
+    incomplete_baseline_stats = {
+        "collisions": {"med": 0.0, "p95": 1.0},
+        "near_misses": {"med": 0.0, "p95": 1.0},
+        "comfort_exposure": {"med": 0.0, "p95": 1.0},
+        "force_exceed_events": {"med": 0.0, "p95": 1.0},
+        "jerk_mean": {"med": 0.0, "p95": 1.0},
+    }
+
+    with pytest.raises(ValueError, match="SNQI-v1 baseline_stats missing med/p95"):
+        build_snqi_contribution_diagnostics(
+            metrics,
+            weights,
+            incomplete_baseline_stats,
+            score_version="SNQI-v1",
+        )
+
+
+def test_snqi_v1_compute_path_is_covered_in_optional_lane() -> None:
+    """Optional benchmark lane covers the versioned compute path."""
+    metrics = {
+        "success": 1.0,
+        "time_to_goal_norm": 3.0,
+        "collisions": 9.0,
+        "near_misses": 9.0,
+        "comfort_exposure": 2.0,
+        "force_exceed_events": 9.0,
+        "jerk_mean": 9.0,
+    }
+    weights = {term.weight_name: 1.0 for term in SNQI_V1_TERM_SCALING}
+    baseline_stats = {
+        "time_to_goal_norm": {"med": 0.0, "p95": 1.0},
+        "collisions": {"med": 0.0, "p95": 1.0},
+        "near_misses": {"med": 0.0, "p95": 1.0},
+        "comfort_exposure": {"med": 0.0, "p95": 1.0},
+        "force_exceed_events": {"med": 0.0, "p95": 1.0},
+        "jerk_mean": {"med": 0.0, "p95": 1.0},
+    }
+
+    assert compute_snqi(metrics, weights, baseline_stats, score_version="SNQI-v1") == pytest.approx(
+        -5.0
+    )
+    with pytest.raises(ValueError, match="unknown SNQI score version"):
+        compute_snqi(metrics, weights, baseline_stats, score_version="SNQI-vunknown")
+
+
 def test_format_report_is_human_readable():
     """The text report names the issue and every term."""
     inv = build_snqi_normalization_inventory(_BASELINE_STATS)
@@ -197,6 +333,16 @@ def test_format_report_is_human_readable():
     assert "baseline-relative median/p95 clamped value" in text
     for term in SNQI_TERM_SCALING:
         assert term.term in text
+
+
+def test_format_report_uses_inventory_score_version_contract() -> None:
+    """V1 inventory text reports the v1 contract, not the default v0 contract."""
+    inv = build_snqi_normalization_inventory(_BASELINE_STATS, score_version="SNQI-v1")
+
+    text = format_normalization_report(inv)
+
+    assert "SNQI-v1 (bounded_baseline_relative_diagnostic_only)" in text
+    assert "SNQI-v0 (legacy_mixed_basis_diagnostic_only)" not in text
 
 
 def test_contribution_diagnostics_reconstruct_snqi_and_flag_raw_dominance():

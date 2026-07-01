@@ -8,9 +8,40 @@ Validates that when comparing normalization strategies:
 
 from __future__ import annotations
 
-import numpy as np
+import copy
 
+import numpy as np
+import pytest
+
+from robot_sf.benchmark.snqi.compute import compute_snqi
 from scripts.recompute_snqi_weights import SNQIWeightRecomputer
+
+_METRICS = {
+    "success": 1.0,
+    "time_to_goal_norm": 3.0,
+    "collisions": 9.0,
+    "near_misses": 9.0,
+    "comfort_exposure": 2.0,
+    "force_exceed_events": 9.0,
+    "jerk_mean": 9.0,
+}
+_BASELINE_STATS_V1 = {
+    "time_to_goal_norm": {"med": 0.0, "p95": 1.0},
+    "collisions": {"med": 0.0, "p95": 1.0},
+    "near_misses": {"med": 0.0, "p95": 1.0},
+    "comfort_exposure": {"med": 0.0, "p95": 1.0},
+    "force_exceed_events": {"med": 0.0, "p95": 1.0},
+    "jerk_mean": {"med": 0.0, "p95": 1.0},
+}
+_WEIGHTS = {
+    "w_success": 1.0,
+    "w_time": 1.0,
+    "w_collisions": 1.0,
+    "w_near": 1.0,
+    "w_comfort": 1.0,
+    "w_force_exceed": 1.0,
+    "w_jerk": 1.0,
+}
 
 
 def _episodes():
@@ -69,3 +100,42 @@ def test_normalization_comparison_correlations_range():
         corr = data["correlation_with_base"]
         assert np.isfinite(corr), f"Correlation not finite for {name}"
         assert -1.0 <= corr <= 1.0, f"Correlation out of range for {name}: {corr}"
+
+
+def test_compute_snqi_default_preserves_v0_score() -> None:
+    """Default score version preserves legacy raw time/comfort behavior."""
+    assert compute_snqi(_METRICS, _WEIGHTS, _BASELINE_STATS_V1) == pytest.approx(-8.0)
+
+
+def test_compute_snqi_v1_uses_bounded_comparable_penalty_terms() -> None:
+    """SNQI-v1 clamps all penalty terms onto the same baseline-relative basis."""
+    assert compute_snqi(
+        _METRICS,
+        _WEIGHTS,
+        _BASELINE_STATS_V1,
+        score_version="SNQI-v1",
+    ) == pytest.approx(-5.0)
+
+
+def test_snqi_v1_missing_baseline_stats_fail_closed() -> None:
+    """SNQI-v1 must not silently zero missing normalized terms."""
+    missing_time = copy.deepcopy(_BASELINE_STATS_V1)
+    missing_time.pop("time_to_goal_norm")
+
+    with pytest.raises(ValueError, match="missing med/p95"):
+        compute_snqi(_METRICS, _WEIGHTS, missing_time, score_version="SNQI-v1")
+
+
+def test_snqi_v1_invalid_baseline_spread_fails_closed() -> None:
+    """SNQI-v1 requires positive median/p95 spread for each penalty metric."""
+    invalid_time = copy.deepcopy(_BASELINE_STATS_V1)
+    invalid_time["time_to_goal_norm"] = {"med": 1.0, "p95": 1.0}
+
+    with pytest.raises(ValueError, match="non-positive spread"):
+        compute_snqi(_METRICS, _WEIGHTS, invalid_time, score_version="SNQI-v1")
+
+
+def test_compute_snqi_unknown_score_version_fails_closed() -> None:
+    """Unknown score versions should fail closed instead of falling back."""
+    with pytest.raises(ValueError, match="unknown SNQI score version"):
+        compute_snqi(_METRICS, _WEIGHTS, _BASELINE_STATS_V1, score_version="SNQI-v2")

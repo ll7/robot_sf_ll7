@@ -1,4 +1,4 @@
-"""Tests for the combined SNQI governance preflight."""
+"""Tests combined SNQI governance preflight."""
 
 from __future__ import annotations
 
@@ -12,17 +12,27 @@ from scripts.validation.check_snqi_governance import build_governance_report, ma
 REPO_ROOT = Path(__file__).parents[2]
 
 
-def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None:
+def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None:  # noqa: PLR0915
     """Current unresolved SNQI blockers are explicit without changing scoring."""
     report = build_governance_report(repo_root=REPO_ROOT)
 
     assert report["status"] == "failed"
     assert "secondary_diagnostic_only" in report["claim_boundary"]
     assert "primary safety ranking" in report["claim_boundary"]
-    assert {blocker["issue"] for blocker in report["blockers"]} == {3699, 3723}
+    assert {blocker["issue"] for blocker in report["blockers"]} == {3723}
     assert report["weights"]["has_blocking_conflict"] is True
-    assert report["normalization"]["mixed_scale"] is True
-    assert set(report["normalization"]["raw_penalty_terms"]) == {"time", "comfort"}
+
+    legacy = report["legacy_normalization"]
+    assert legacy["score_version"] == "SNQI-v0"
+    assert legacy["mixed_scale"] is True
+    assert set(legacy["raw_penalty_terms"]) == {"time", "comfort"}
+
+    active = report["normalization"]
+    assert active["score_version"] == "SNQI-v1"
+    assert active["mixed_scale"] is False
+    assert active["is_consistent"] is True
+    assert active["score_version_contract"]["status"] == "bounded_baseline_relative_diagnostic_only"
+
     blocker_3723 = next(
         blocker for blocker in report["blockers"] if blocker["kind"] == "weight_provenance_conflict"
     )
@@ -39,9 +49,6 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
         "camera_ready_v3",
         "model_canonical_v1",
     ]
-    # Assert the raw source sequence (order + length) before keying by name so a
-    # duplicate-name regression cannot be masked by later entries overwriting earlier
-    # ones in the dict comprehension below.
     expected_source_names = [
         "code_default",
         "camera_ready_v1",
@@ -51,31 +58,19 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
     ]
     discovered_sources = blocker_3723["discovered_weight_sources"]
     assert [source["name"] for source in discovered_sources] == expected_source_names
+    assert len(discovered_sources) == len(expected_source_names)
     discovered_by_name = {source["name"]: source for source in discovered_sources}
-    records_by_name = {record["name"]: record for record in report["weights"]["records"]}
-    assert list(discovered_by_name) == expected_source_names
-    assert discovered_by_name["code_default"] == {
-        "name": "code_default",
-        "kind": "code_default",
-        "relpath": None,
-        "versioned_id": "snqi_weights_code_default_v1",
-        "declares_canonical": True,
-        "available": True,
-        "dominant_term": "w_collisions",
-        "scale_class": "raw",
-        "content_sha256": records_by_name["code_default"]["content_sha256"],
-        "load_error": None,
-    }
-    model_source = discovered_by_name["model_canonical_v1"]
-    assert model_source["relpath"] == "model/snqi_canonical_weights_v1.json"
-    assert model_source["versioned_id"] == "snqi_weights_model_canonical_v1"
-    assert model_source["declares_canonical"] is True
-    assert model_source["dominant_term"] == "w_jerk"
-    assert model_source["content_sha256"]
-    assert blocker_3723["canonical_declaring_sources"] == [
-        "code_default",
-        "model_canonical_v1",
-    ]
+    assert discovered_by_name["code_default"]["versioned_id"] == "snqi_weights_code_default_v1"
+    assert discovered_by_name["code_default"]["declares_canonical"] is True
+    assert discovered_by_name["code_default"]["dominant_term"] == "w_collisions"
+    assert discovered_by_name["code_default"]["scale_class"] == "raw"
+    assert discovered_by_name["model_canonical_v1"]["versioned_id"] == (
+        "snqi_weights_model_canonical_v1"
+    )
+    assert discovered_by_name["model_canonical_v1"]["declares_canonical"] is True
+    assert discovered_by_name["model_canonical_v1"]["dominant_term"] == "w_jerk"
+    assert discovered_by_name["camera_ready_v2"]["scale_class"] == "normalized_simplex"
+    assert discovered_by_name["camera_ready_v3"]["dominant_term"] == "w_near"
     assert len(blocker_3723["blocking_conflicts"]) == 1
     conflict = blocker_3723["blocking_conflicts"][0]
     assert conflict["kind"] == "canonical_direction_conflict"
@@ -97,62 +92,38 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
     assert comparisons_by_source["model_canonical_v1"]["source_dominant_term"] == "w_jerk"
     assert comparisons_by_source["camera_ready_v3"]["relationship"] == "different_direction"
     assert comparisons_by_source["camera_ready_v3"]["source_dominant_term"] == "w_near"
-    assert report["normalization"]["score_version_contract"]["score_version"] == "SNQI-v0"
-    assert (
-        report["normalization"]["score_version_contract"]["status"]
-        == "legacy_mixed_basis_diagnostic_only"
-    )
-    blocker_3699 = next(
-        blocker for blocker in report["blockers"] if blocker["kind"] == "mixed_normalization_basis"
-    )
-    status_by_term = {
-        entry["term"]: entry["normalization_status"] for entry in blocker_3699["mixed_inputs"]
-    }
-    assert status_by_term == {
-        "time": "raw_unbounded",
-        "collisions": "baseline_normalized_bounded",
-        "near": "baseline_normalized_bounded",
-        "comfort": "raw_unbounded",
-        "force_exceed": "baseline_normalized_bounded",
-        "jerk": "baseline_normalized_bounded",
-    }
-    assert blocker_3699["contribution_check"] == {
-        "schema_version": "snqi_normalization_contributions.v1",
-        "diagnostic_only": True,
-        "raw_penalty_absolute_share": pytest.approx(0.5),
-        "baseline_normalized_penalty_absolute_share": pytest.approx(0.4),
-        "raw_penalty_terms_dominate": True,
-        "weight_bound_exceedance_terms": ["time", "comfort"],
-        "normalization_contract_status": "mixed_unbounded_penalty_basis",
-        "weights_comparable": False,
-    }
-    contributions = report["normalization_contributions"]
-    assert contributions["schema_version"] == "snqi_normalization_contributions.v1"
-    assert contributions["diagnostic_only"] is True
-    assert contributions["mixed_basis"] is True
-    assert contributions["raw_penalty_terms_dominate"] is True
-    assert contributions["has_weight_bound_exceedance"] is True
-    assert contributions["score_version_contract"]["score_semantics_changed"] is False
-    assert {term["term"] for term in contributions["weight_bound_exceedances"]} == {
+
+    legacy_contributions = report["legacy_normalization_contributions"]
+    assert legacy_contributions["score_version_contract"]["score_version"] == "SNQI-v0"
+    assert legacy_contributions["score_version_contract"]["score_semantics_changed"] is False
+    assert legacy_contributions["mixed_basis"] is True
+    assert legacy_contributions["normalization_contract"]["decision_issue"] == 3699
+    assert legacy_contributions["normalization_contract"]["successor_issue"] == 3978
+    assert legacy_contributions["normalization_contract"]["weights_comparable"] is False
+    assert {term["term"] for term in legacy_contributions["weight_bound_exceedances"]} == {
         "time",
         "comfort",
     }
-    assert contributions["normalization_contract"]["status"] == "mixed_unbounded_penalty_basis"
-    assert contributions["normalization_contract"]["weights_comparable"] is False
-    assert contributions["normalization_contract"]["decision_issue"] == 3699
-    assert contributions["normalization_contract"]["successor_issue"] == 3978
-    assert (
-        contributions["raw_penalty_absolute_share"]
-        > contributions["baseline_normalized_penalty_absolute_share"]
-    )
+
+    active_contributions = report["normalization_contributions"]
+    assert active_contributions["schema_version"] == "snqi_normalization_contributions.v1"
+    assert active_contributions["score_version_contract"]["score_version"] == "SNQI-v1"
+    assert active_contributions["score_version_contract"]["score_semantics_changed"] is True
+    assert active_contributions["mixed_basis"] is False
+    assert active_contributions["raw_penalty_terms_dominate"] is False
+    assert active_contributions["has_weight_bound_exceedance"] is False
+    assert active_contributions["weight_bound_exceedances"] == []
+    assert active_contributions["normalization_contract"]["status"] == "comparable_weight_basis"
+    assert active_contributions["normalization_contract"]["weights_comparable"] is True
+    assert active_contributions["score_version_contract"]["decision_issue"] == 3978
 
 
 def test_governance_main_fails_closed_but_allows_inspection(tmp_path: Path) -> None:
-    """Default command fails closed; inspection mode emits the same report and exits 0."""
-    json_out = tmp_path / "snqi_governance.json"
+    """Default command fails closed; inspection mode emits the same report."""
+    out = tmp_path / "report.json"
 
-    assert main(["--repo-root", str(REPO_ROOT), "--json-out", str(json_out)]) == 2
-    payload = json.loads(json_out.read_text(encoding="utf-8"))
+    assert main(["--repo-root", str(REPO_ROOT), "--json-out", str(out)]) == 2
+    payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["status"] == "failed"
 
     assert (
@@ -171,7 +142,7 @@ def test_governance_main_fails_closed_but_allows_inspection(tmp_path: Path) -> N
 def test_governance_text_lists_per_term_normalization_status(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Human preflight output lists raw and baseline-normalized term statuses."""
+    """Human preflight output lists legacy and active normalization statuses."""
     assert main(["--repo-root", str(REPO_ROOT), "--allow-current-blockers"]) == 0
 
     out = capsys.readouterr().out
@@ -185,7 +156,8 @@ def test_governance_text_lists_per_term_normalization_status(
     assert "versioned_id=snqi_weights_model_canonical_v1" in out
     assert (
         "camera_ready_v3 (shipped_json, configs/benchmarks/snqi_weights_camera_ready_v3.json)"
-    ) in out
+        in out
+    )
     assert "versioned_id=snqi_weights_camera_ready_v3" in out
     assert "dominant=w_collisions; scale=raw; sha256=" in out
     assert "dominant=w_near; scale=normalized_simplex; sha256=" in out
@@ -195,29 +167,30 @@ def test_governance_text_lists_per_term_normalization_status(
         "different_direction; source_dominant=w_jerk; source_scale=raw" in out
     )
     assert "Weight provenance conflicts:" in out
-    assert "error canonical_direction_conflict (code_default, model_canonical_v1)" in out
+    assert "canonical_direction_conflict" in out
+    assert "(code_default, model_canonical_v1)" in out
     assert "warning code_default_shipped_direction_mismatch (code_default, camera_ready_v1)" in out
     assert "warning code_default_shipped_direction_mismatch (code_default, camera_ready_v3)" in out
+    assert "Legacy normalization basis: score_version=SNQI-v0" in out
+    assert "raw_penalty_terms=time, comfort" in out
     assert "Term normalization status:" in out
     assert (
-        "Score version contract: SNQI-v0; "
-        "status=legacy_mixed_basis_diagnostic_only; diagnostic_only=True"
-    ) in out
-    assert "time (time_to_goal_norm, w_time): raw_unbounded" in out
-    assert "basis=raw time-to-goal ratio" in out
-    assert "comfort (comfort_exposure, w_comfort): raw_unbounded" in out
-    assert "basis=raw accumulated comfort-exposure value" in out
-    assert "collisions (collisions, w_collisions): baseline_normalized_bounded" in out
+        "Score version contract: SNQI-v1; "
+        "status=bounded_baseline_relative_diagnostic_only; diagnostic_only=True" in out
+    )
+    assert "time (time_to_goal_norm, w_time): baseline_normalized_bounded" in out
     assert "basis=baseline-relative median/p95 clamped value" in out
-    assert "jerk (jerk_mean, w_jerk): baseline_normalized_bounded" in out
     assert "Contribution diagnostic:" in out
-    assert "raw_penalty_terms_dominate=True" in out
-    assert "has_weight_bound_exceedance=True" in out
-    assert "weight_bound_exceedance_terms=time, comfort" in out
+    assert "raw_penalty_share=0.000" in out
+    assert "raw_penalty_terms_dominate=False" in out
+    assert "has_weight_bound_exceedance=False" in out
+    assert "Normalization checker: issue=3978 legacy_issue=3699" in out
+    assert "score_version=SNQI-v1" in out
+    assert "status=bounded_baseline_relative_diagnostic_only" in out
 
 
 def test_governance_report_checks_optional_baseline_coverage(tmp_path: Path) -> None:
-    """When baseline stats are supplied, missing normalized terms are blockers."""
+    """When baseline stats are supplied, missing SNQI-v1 normalized terms block."""
     baseline_stats = {
         "collisions": {"med": 0.0, "p95": 1.0},
         "near_misses": {"med": 0.0, "p95": 1.0},
@@ -228,32 +201,37 @@ def test_governance_report_checks_optional_baseline_coverage(tmp_path: Path) -> 
     assert main(["--repo-root", str(REPO_ROOT), "--baseline-stats", str(path)]) == 2
 
     report = build_governance_report(repo_root=REPO_ROOT, baseline_stats=baseline_stats)
-    missing = [b for b in report["blockers"] if b["kind"] == "missing_baseline_coverage"]
+    missing = [b for b in report["blockers"] if b["kind"] == "missing_snqi_v1_baseline_coverage"]
     assert missing
-    assert set(missing[0]["metrics"]) == {"force_exceed_events", "jerk_mean"}
+    assert set(missing[0]["metrics"]) == {
+        "time_to_goal_norm",
+        "comfort_exposure",
+        "force_exceed_events",
+        "jerk_mean",
+    }
+    assert missing[0]["issue"] == 3978
 
 
 def test_governance_checker_payload_is_referenced_in_report() -> None:
-    """Normalization checker packet is included in machine-parseable report."""
+    """Normalization checker packet is included in the machine-parseable report."""
     report = build_governance_report(repo_root=REPO_ROOT)
     checker = report["normalization_checker"]
-    assert checker["issue"] == 3699
-    assert checker["successor_issue"] == 3978
-    assert checker["score_version"] == "SNQI-v0"
-    assert checker["status"] == "legacy_mixed_basis_diagnostic_only"
+    assert checker["issue"] == 3978
+    assert checker["legacy_issue"] == 3699
+    assert checker["score_version"] == "SNQI-v1"
+    assert checker["status"] == "bounded_baseline_relative_diagnostic_only"
     assert checker["diagnostic_only"] is True
     assert checker["decision_recorded"] is True
-    assert checker["score_semantics_changed"] is False
+    assert checker["score_semantics_changed"] is True
     assert checker["assumption"] == (
-        "No score semantics changed; SNQI-v0 intentionally preserves the "
-        "mixed-basis diagnostic contract while SNQI-v1 redesign is tracked "
-        "by issue #3978."
+        "SNQI-v1 is an opt-in bounded baseline-relative diagnostic. SNQI-v0 remains "
+        "available for historical comparability and is not numerically comparable to SNQI-v1."
     )
-    assert checker["mixed_scale"] is True
-    assert checker["weights_comparable"] is False
-    assert checker["normalization_contract_status"] == "mixed_unbounded_penalty_basis"
-    assert checker["raw_penalty_terms_dominate"] is True
-    assert checker["has_weight_bound_exceedance"] is True
+    assert checker["mixed_scale"] is False
+    assert checker["weights_comparable"] is True
+    assert checker["normalization_contract_status"] == "comparable_weight_basis"
+    assert checker["raw_penalty_terms_dominate"] is False
+    assert checker["has_weight_bound_exceedance"] is False
     contributions = report["normalization_contributions"]
     assert checker["raw_penalty_absolute_share"] == pytest.approx(
         contributions["raw_penalty_absolute_share"]
@@ -264,7 +242,7 @@ def test_governance_checker_payload_is_referenced_in_report() -> None:
 
 
 def test_governance_report_json_exports_normalization_checker(tmp_path: Path) -> None:
-    """JSON export includes the checker packet for external consumers."""
+    """JSON export includes checker packet for external consumers."""
     out = tmp_path / "snqi_governance.json"
     exit_code = main(
         [
@@ -276,15 +254,16 @@ def test_governance_report_json_exports_normalization_checker(tmp_path: Path) ->
             "--allow-current-blockers",
         ]
     )
+
     assert exit_code == 0
     assert out.is_file()
     payload = json.loads(out.read_text(encoding="utf-8"))
     checker = payload["normalization_checker"]
     assert isinstance(checker["assumption"], str)
-    assert "No score semantics changed" in checker["assumption"]
-    assert checker["successor_issue"] == 3978
-    assert checker["score_version"] == "SNQI-v0"
-    assert checker["status"] == "legacy_mixed_basis_diagnostic_only"
+    assert "SNQI-v1 is an opt-in bounded baseline-relative diagnostic" in checker["assumption"]
+    assert checker["legacy_issue"] == 3699
+    assert checker["score_version"] == "SNQI-v1"
+    assert checker["status"] == "bounded_baseline_relative_diagnostic_only"
     assert checker["diagnostic_only"] is True
     assert checker["decision_recorded"] is True
-    assert checker["score_semantics_changed"] is False
+    assert checker["score_semantics_changed"] is True

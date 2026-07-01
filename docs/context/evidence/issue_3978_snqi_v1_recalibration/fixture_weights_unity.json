@@ -1,0 +1,9 @@
+{
+  "w_success": 1.0,
+  "w_time": 1.0,
+  "w_collisions": 1.0,
+  "w_near": 1.0,
+  "w_comfort": 1.0,
+  "w_force_exceed": 1.0,
+  "w_jerk": 1.0
+}

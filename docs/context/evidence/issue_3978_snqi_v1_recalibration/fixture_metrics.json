@@ -1,0 +1,9 @@
+{
+  "success": 1.0,
+  "time_to_goal_norm": 3.0,
+  "collisions": 9.0,
+  "near_misses": 9.0,
+  "comfort_exposure": 2.0,
+  "force_exceed_events": 9.0,
+  "jerk_mean": 9.0
+}

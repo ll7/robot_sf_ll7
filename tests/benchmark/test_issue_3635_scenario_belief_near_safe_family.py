@@ -94,6 +94,7 @@ def test_issue_3635_campaign_manifest_distinguishes_three_belief_arms(tmp_path: 
 
     assert payload["scenario_family"] == SCENARIO_SET.relative_to(REPO_ROOT).as_posix()
     assert payload["seed_set"] == "issue_3635_s3_contract_only"
+    assert payload["seed_sets"][payload["seed_set"]]["seeds"] == [363501, 363502, 363503]
     assert payload["no_benchmark_result_claim"] is True
     assert set(payload["belief_modes"]) == set(campaign.MODES)
 
@@ -114,18 +115,20 @@ def test_issue_3635_campaign_manifest_distinguishes_three_belief_arms(tmp_path: 
 
 
 def test_issue_3635_runner_default_targets_new_family_and_applies_seed_matrix() -> None:
-    """The #3556 runner default resolves the #3635 family and caller-provided seed set."""
+    """The #3556 runner default resolves the #3635 family and bounded seed fixture."""
     payload = _load_yaml(BENCHMARK_CONFIG)
     expected_family = SCENARIO_SET.relative_to(REPO_ROOT).as_posix()
     assert campaign.DEFAULT_SCENARIO_SET == expected_family
     assert payload["scenario_family"] == expected_family
+    assert campaign.DEFAULT_SEED_SET == payload["seed_set"]
+    assert campaign.DEFAULT_SEEDS == payload["seed_sets"][payload["seed_set"]]["seeds"]
 
-    scenarios = campaign.load_campaign_scenarios(SCENARIO_SET, [101, 102])
+    scenarios = campaign.load_campaign_scenarios(SCENARIO_SET, campaign.DEFAULT_SEEDS)
     assert len(scenarios) == 1
     scenario = scenarios[0]
 
     assert scenario["name"] == "issue_3635_near_safe_occlusion_bearing_crossing"
-    assert scenario["seeds"] == [101, 102]
+    assert scenario["seeds"] == [363501, 363502, 363503]
     assert Path(scenario["map_file"]).is_absolute()
 
 

@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any
 
-EXPECTED_CURRENT_PR = 4030
-EXPECTED_HEAD_REF = "issue-3810-long-horizon-imech156u-packet-refresh-20260701"
-EXPECTED_LATEST_MERGED_PACKET_PR = 4029
+EXPECTED_CURRENT_PR = None
+EXPECTED_HEAD_REF = None
+EXPECTED_LATEST_MERGED_PACKET_PR = 4030
 EXPECTED_READINESS_DATE = "2026-07-01"
 
 Require = Callable[[bool, str], None]
@@ -44,24 +44,13 @@ def validate_readiness_refresh(
         )
 
     require(
-        readiness_refresh.get("current_pr") == EXPECTED_CURRENT_PR,
-        f"readiness refresh must record current review PR {EXPECTED_CURRENT_PR}",
+        readiness_refresh.get("current_pr") is EXPECTED_CURRENT_PR,
+        "readiness refresh must record no current review PR before branch publication",
     )
     open_pr_matches = readiness_refresh.get("open_pr_matches")
-    current_pr_matches = (
-        isinstance(open_pr_matches, list)
-        and len(open_pr_matches) == 1
-        and isinstance(open_pr_matches[0], Mapping)
-        and open_pr_matches[0].get("number") == EXPECTED_CURRENT_PR
-        and open_pr_matches[0].get("isDraft") is False
-    )
-    if require_head_ref:
-        current_pr_matches = (
-            current_pr_matches and open_pr_matches[0].get("headRefName") == EXPECTED_HEAD_REF
-        )
     require(
-        current_pr_matches,
-        f"readiness refresh must record exactly current non-draft PR {EXPECTED_CURRENT_PR}",
+        open_pr_matches == [],
+        "readiness refresh open_pr_matches must be empty before branch publication",
     )
     require(
         readiness_refresh.get("blocking_open_pr_matches") == [],

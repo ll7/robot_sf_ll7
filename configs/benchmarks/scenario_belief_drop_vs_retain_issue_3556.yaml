@@ -96,6 +96,15 @@ belief_uncertainty_source:
 # unsafe-to-ignore). Fill with the canonical scenario set + seed_sets_v1 tier before submit.
 scenario_family: configs/scenarios/sets/issue_3635_near_safe_occlusion_bearing_crossing.yaml
 seed_set: issue_3635_s3_contract_only
+seed_sets:
+  issue_3635_s3_contract_only:
+    purpose: >-
+      Bounded paired-seed preflight fixture for issue #3635 arm-contract checks.
+      Not a seed-sufficiency claim or full campaign matrix.
+    seeds:
+    - 363501
+    - 363502
+    - 363503
 
 metric_surface:
   # Episode-level safety metrics (mirrors the #3471 harness): collisions, near misses, minimum

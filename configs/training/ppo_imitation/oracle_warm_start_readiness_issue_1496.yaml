@@ -32,3 +32,11 @@ finetuning_config: configs/training/ppo/expert_ppo_issue_576_br06_v4_overnight_s
 
 # Dataset split/leakage contract that the comparison must preserve.
 split_contract: docs/context/policy_search/contracts/oracle_imitation_dataset_split.md
+
+# Durable locations that a future authorized warm-start lane must populate before
+# any result can be treated as benchmark evidence. This preflight only checks that
+# the manifest contract is named and durable; it does not create these files.
+expected_outputs:
+  training_manifest: docs/context/evidence/issue_1496_oracle_warm_start_training_manifest.json
+  checkpoint_manifest: docs/context/evidence/issue_1496_oracle_warm_start_checkpoint_manifest.json
+  benchmark_report: docs/context/evidence/issue_1496_oracle_warm_start_benchmark_report.json

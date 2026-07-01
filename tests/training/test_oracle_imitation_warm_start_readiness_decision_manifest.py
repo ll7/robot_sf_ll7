@@ -129,6 +129,10 @@ def test_cli_writes_blocked_decision_manifest_when_file_missing(tmp_path: Path) 
     assert payload["report"]["status"] == "blocked"
     assert payload["report"]["readiness_decision"] == "artifact_retrieval_blocked"
     assert payload["report"]["blockers"]
+    assert payload["report"]["expected_outputs"]["checkpoint_manifest"] == {
+        "path": "docs/context/evidence/unit_checkpoint_manifest.json",
+        "ready": True,
+    }
     assert payload["report"]["out_of_scope_actions"] == {
         "benchmark_campaign_run": False,
         "claim_edits": False,

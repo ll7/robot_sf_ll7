@@ -67,6 +67,12 @@ _REQUIRED_CONFIG_KEYS: tuple[str, ...] = (
     "split_contract",
 )
 _OPTIONAL_CONFIG_KEYS: tuple[str, ...] = ("finetuning_config",)
+_REQUIRED_OUTPUT_MANIFESTS: tuple[str, ...] = (
+    "training_manifest",
+    "checkpoint_manifest",
+    "benchmark_report",
+)
+_LOCAL_OUTPUT_PREFIXES: tuple[str, ...] = ("output/", "results/")
 
 
 class WarmStartReadinessError(ValueError):
@@ -168,6 +174,7 @@ def check_warm_start_readiness(
         result = _check_optional_file(manifest, key, root, blockers)
         if result is not None:
             prerequisites[key] = result
+    output_manifests = _check_expected_outputs(manifest, blockers)
 
     status = "ready" if not blockers else "blocked"
     readiness_decision = _READY_DECISION if not blockers else _BLOCKED_DECISION
@@ -177,6 +184,7 @@ def check_warm_start_readiness(
         "schema_version": _SCHEMA_VERSION,
         "experiment_id": experiment_id.strip(),
         "prerequisites": prerequisites,
+        "expected_outputs": output_manifests,
         "blockers": blockers,
         "out_of_scope_actions": dict(_OUT_OF_SCOPE_ACTIONS),
     }
@@ -350,6 +358,51 @@ def _check_optional_file(
         blockers.append(f"{key} must be a non-empty path string when provided")
         return {"path": None, "ready": False, "detail": f"blank {key} reference"}
     return _check_file_path(key, raw_path.strip(), repo_root, blockers)
+
+
+def _check_expected_outputs(manifest: dict[str, Any], blockers: list[str]) -> dict[str, Any]:
+    """Validate the output manifest contract without creating any output files.
+
+    Returns:
+        Per-output manifest detail keyed by required output name.
+    """
+    raw_outputs = manifest.get("expected_outputs")
+    if not isinstance(raw_outputs, dict):
+        blockers.append("expected_outputs must be a mapping")
+        return {
+            key: {"path": None, "ready": False, "detail": "missing expected_outputs mapping"}
+            for key in _REQUIRED_OUTPUT_MANIFESTS
+        }
+
+    checked: dict[str, Any] = {}
+    for key in _REQUIRED_OUTPUT_MANIFESTS:
+        raw_path = raw_outputs.get(key)
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            blockers.append(f"expected_outputs.{key} must be non-empty path string")
+            checked[key] = {"path": None, "ready": False, "detail": f"missing {key} path"}
+            continue
+
+        path_text = raw_path.strip()
+        if _is_local_output_path(path_text):
+            blockers.append(
+                f"expected_outputs.{key} must be durable manifest path, not local output: "
+                f"{path_text}"
+            )
+            checked[key] = {
+                "path": path_text,
+                "ready": False,
+                "detail": "local output paths are not durable evidence",
+            }
+            continue
+
+        checked[key] = {"path": path_text, "ready": True}
+    return checked
+
+
+def _is_local_output_path(path_text: str) -> bool:
+    """Return true when an output manifest path points at disposable local output."""
+    normalized = path_text.replace("\\", "/").lstrip("./")
+    return normalized.startswith(_LOCAL_OUTPUT_PREFIXES)
 
 
 def _check_file_path(

@@ -50,6 +50,11 @@ def _ready_manifest(tmp_path: Path) -> dict[str, object]:
         "warm_start_config": str(warm_start),
         "baseline_config": str(baseline),
         "split_contract": str(contract),
+        "expected_outputs": {
+            "training_manifest": "docs/context/evidence/unit_training_manifest.json",
+            "checkpoint_manifest": "docs/context/evidence/unit_checkpoint_manifest.json",
+            "benchmark_report": "docs/context/evidence/unit_benchmark_report.json",
+        },
     }
 
 
@@ -150,6 +155,10 @@ def test_real_issue_1496_manifest_is_blocked_on_dataset() -> None:
     assert report["prerequisites"]["baseline_config"]["ready"] is True
     assert report["prerequisites"]["finetuning_config"]["ready"] is True
     assert report["prerequisites"]["split_contract"]["ready"] is True
+    assert report["expected_outputs"]["training_manifest"] == {
+        "path": "docs/context/evidence/issue_1496_oracle_warm_start_training_manifest.json",
+        "ready": True,
+    }
 
 
 def test_ready_manifest_reports_ready(tmp_path: Path) -> None:
@@ -162,6 +171,7 @@ def test_ready_manifest_reports_ready(tmp_path: Path) -> None:
     assert report["blockers"] == []
     assert report["prerequisites"]["dataset_launch_packet"]["training_ready"] is True
     assert report["prerequisites"]["trace_uri_registry"]["training_ready"] is True
+    assert report["expected_outputs"]["benchmark_report"]["ready"] is True
 
 
 def test_missing_config_is_a_blocker_not_an_error(tmp_path: Path) -> None:
@@ -174,6 +184,37 @@ def test_missing_config_is_a_blocker_not_an_error(tmp_path: Path) -> None:
 
     assert report["status"] == "blocked"
     assert any(b.startswith("baseline_config is not an existing file") for b in report["blockers"])
+
+
+def test_missing_expected_outputs_mapping_is_a_blocker(tmp_path: Path) -> None:
+    """The readiness manifest must name durable future output manifests."""
+    manifest_dict = _ready_manifest(tmp_path)
+    manifest_dict.pop("expected_outputs")
+    manifest = _write_manifest(tmp_path, manifest_dict)
+
+    report = check_warm_start_readiness(manifest)
+
+    assert report["status"] == "blocked"
+    assert "expected_outputs must be a mapping" in report["blockers"]
+    assert report["expected_outputs"]["training_manifest"]["ready"] is False
+
+
+def test_local_expected_output_paths_are_blockers(tmp_path: Path) -> None:
+    """Future output manifests may not be declared under disposable output roots."""
+    manifest_dict = _ready_manifest(tmp_path)
+    expected_outputs = manifest_dict["expected_outputs"]
+    assert isinstance(expected_outputs, dict)
+    expected_outputs["training_manifest"] = "output/issue_1496/training_manifest.json"
+    manifest = _write_manifest(tmp_path, manifest_dict)
+
+    report = check_warm_start_readiness(manifest)
+
+    assert report["status"] == "blocked"
+    assert any(
+        blocker.startswith("expected_outputs.training_manifest must be durable manifest path")
+        for blocker in report["blockers"]
+    )
+    assert report["expected_outputs"]["training_manifest"]["ready"] is False
 
 
 def test_require_ready_fails_closed_when_blocked(tmp_path: Path) -> None:

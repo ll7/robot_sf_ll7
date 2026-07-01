@@ -102,11 +102,11 @@ def test_issue_3653_packet_passes_fail_closed_contract() -> None:
         summary["evidence_artifact_root"]
         == "docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175"
     )
+    assert summary["raw_episode_artifact_status"] == "hydrated_from_submit_host_recorded_job_13175"
     assert (
-        summary["raw_episode_artifact_status"]
-        == "hydrated_from_submit_host_recorded_job_13175"
+        summary["raw_episode_artifact_sha256"]
+        == "fd15480d6892dd634e374fb9f79e1e3600d24c88604d9ff05f33d8227b4e6460"
     )
-    assert summary["raw_episode_artifact_sha256"] == "fd15480d6892dd634e374fb9f79e1e3600d24c88604d9ff05f33d8227b4e6460"
     assert (
         summary["evidence_packet"]
         == "docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.json"
@@ -185,7 +185,9 @@ def test_issue_3653_packet_rejects_obsolete_blocked_raw_episode_status() -> None
     """The exported packet must not regress to the pre-hydration blocked status."""
 
     packet = _load_packet()
-    packet["raw_episode_artifact"]["current_status"] = "blocked_until_durable_episode_jsonl_promoted_or_hydratable"
+    packet["raw_episode_artifact"]["current_status"] = (
+        "blocked_until_durable_episode_jsonl_promoted_or_hydratable"
+    )
 
     try:
         _MODULE.validate_packet(packet)
@@ -256,6 +258,7 @@ def test_issue_3653_export_if_ready_blocks_missing_campaign_input(tmp_path: Path
         assert "blocked_missing_valid_campaign_episodes" in str(exc)
     else:
         raise AssertionError("export_if_ready should block missing raw campaign episodes")
+
 
 def test_issue_3653_export_report_contract_rejects_missing_required_field() -> None:
     """Application export success requires configured decision/Pareto report sections."""

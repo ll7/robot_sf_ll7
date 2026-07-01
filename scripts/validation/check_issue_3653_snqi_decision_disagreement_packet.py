@@ -25,7 +25,9 @@ EXPECTED_WEIGHT_HASH = "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c449382998852
 EXPECTED_BASELINE_HASH = "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a"
 EXPECTED_EVIDENCE_PACKET_HASH = "7da1d5607536bc35d82d482029e150c3cf6442f586ac05e06c925fa9d9e2850c"
 EXPECTED_ARTIFACT_ROOT = "output/issue1554-s20-h500-l40s-mem180/13175"
-EXPECTED_EVIDENCE_ARTIFACT_ROOT = "docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175"
+EXPECTED_EVIDENCE_ARTIFACT_ROOT = (
+    "docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175"
+)
 EXPECTED_EXPORT_ARTIFACT_HASHES = {
     "preflight.json": "8509d07a05decaac3beda46bed7d504d383aa83ea200994739b372c0e8f4b8eb",
     "snqi_scalarization_sensitivity.json": "29487caf05208b1bebd4ef59b8da9c64e7cbcb1410b8fc4e0d0fb1da7efa612f",
@@ -271,8 +273,12 @@ def _validate_evidence_artifacts(packet: Mapping[str, Any], *, repo_root: Path) 
     """Validate promoted diagnostic export artifacts and summary fields."""
 
     evidence = _require_mapping(packet, "evidence_artifacts")
-    artifact_root = _repo_relative_path(evidence.get("artifact_root"), "evidence_artifacts.artifact_root")
-    _require(str(artifact_root) == EXPECTED_EVIDENCE_ARTIFACT_ROOT, "evidence artifact_root mismatch")
+    artifact_root = _repo_relative_path(
+        evidence.get("artifact_root"), "evidence_artifacts.artifact_root"
+    )
+    _require(
+        str(artifact_root) == EXPECTED_EVIDENCE_ARTIFACT_ROOT, "evidence artifact_root mismatch"
+    )
     claim_boundary = str(evidence.get("claim_boundary", "")).lower()
     for phrase in ("diagnostic", "not benchmark evidence", "primary-index", "paper/dissertation"):
         _require(phrase in claim_boundary, f"evidence claim_boundary must mention {phrase}")
@@ -361,7 +367,9 @@ def _validate_raw_episode_artifact_contract(
         )
 
     materialization = _require_mapping(contract, "materialization")
-    _require(materialization.get("source_host") == "imech192", "materialization source_host mismatch")
+    _require(
+        materialization.get("source_host") == "imech192", "materialization source_host mismatch"
+    )
     _require(
         materialization.get("retrieved_on_host") == "auxme-imech036",
         "materialization retrieved_on_host mismatch",
@@ -374,10 +382,13 @@ def _validate_raw_episode_artifact_contract(
     )
     _require(materialization.get("source_glob") == "runs/*/episodes.jsonl", "source_glob mismatch")
     _require(
-        materialization.get("planner_key_source") == "runs directory stem before __differential_drive",
+        materialization.get("planner_key_source")
+        == "runs directory stem before __differential_drive",
         "planner_key_source mismatch",
     )
-    _require(int(materialization.get("materialized_rows", 0)) == expected_episode_count, "row mismatch")
+    _require(
+        int(materialization.get("materialized_rows", 0)) == expected_episode_count, "row mismatch"
+    )
     _require(int(materialization.get("materialized_planners", 0)) == 9, "planner count mismatch")
 
     allowed_sources = {str(item) for item in _require_sequence(contract, "allowed_sources")}
@@ -537,8 +548,12 @@ def export_if_ready(
             f"episodes_jsonl missing: {episodes_rel} (status: {BLOCKED_MISSING_EPISODES_STATUS})"
         )
 
-    weights_path = repo_root / _repo_relative_path(inputs.get("weights_path"), "inputs.weights_path")
-    baseline_path = repo_root / _repo_relative_path(inputs.get("baseline_path"), "inputs.baseline_path")
+    weights_path = repo_root / _repo_relative_path(
+        inputs.get("weights_path"), "inputs.weights_path"
+    )
+    baseline_path = repo_root / _repo_relative_path(
+        inputs.get("baseline_path"), "inputs.baseline_path"
+    )
     weights = load_weight_mapping(weights_path)
     baseline = load_baseline_mapping(baseline_path)
     records = load_jsonl(episodes)

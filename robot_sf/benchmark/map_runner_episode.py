@@ -1253,6 +1253,25 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         record["benchmark_track"] = benchmark_track
     if track_schema_version is not None:
         record["track_schema_version"] = track_schema_version
+
+    record["result_provenance"] = {
+        "schema_version": "benchmark_row_provenance.v1",
+        "scenario_id": scenario_id,
+        "seed": int(seed),
+        "config_hash": _config_hash(scenario_params),
+        "repo_commit": _git_hash_fallback(),
+        "simulator_settings": {
+            "horizon": horizon_val,
+            "dt": float(config.sim_config.time_per_step_in_secs),
+            "record_forces": bool(record_forces),
+            "observation_mode": active_observation_mode,
+            "observation_level": active_observation_level,
+        },
+        "postprocessing": [
+            {"step": "compute_all_metrics", "status": "completed"},
+            {"step": "post_process_metrics", "status": "completed"},
+        ],
+    }
     ensure_metric_parameters(record)
     return record
 

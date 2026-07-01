@@ -569,6 +569,114 @@ def test_failed_source_certification_status_is_invalid(tmp_path: Path) -> None:
     assert payload["source_invalid_certification_archive_ids"] == ["source_0000"]
 
 
+def test_missing_source_certification_lineage_blocks_readiness(tmp_path: Path) -> None:
+    """Passed source certification still needs provenance before disjoint rerun."""
+
+    source_entry = _entry("source_0000", family="family_a", seed=1)
+    source_entry["certification_metadata"] = {"status": "passed"}
+    source = _archive(tmp_path / "source.json", [source_entry])
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+    )
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=_null_test_prerequisites(),
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.source_missing_certification_lineage_archive_ids == ["source_0000"]
+    assert "source_missing_certification_lineage:1" in readiness.blockers
+    payload = readiness.to_payload()
+    assert payload["source_missing_certification_lineage_archive_ids"] == ["source_0000"]
+
+
+def test_missing_rerun_certification_lineage_blocks_readiness(tmp_path: Path) -> None:
+    """Passed rerun certification still needs provenance before held-out use."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [_entry("source_0000", family="family_a", seed=1)],
+    )
+    rerun_entry = _entry("rerun_0000", family="family_b", seed=101)
+    rerun_entry["certification_metadata"] = {"status": "passed"}
+    rerun = _archive(tmp_path / "rerun.json", [rerun_entry])
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=_null_test_prerequisites(),
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.missing_certification_lineage_archive_ids == ["rerun_0000"]
+    assert "missing_certification_lineage:1" in readiness.blockers
+    payload = readiness.to_payload()
+    assert payload["missing_certification_lineage_archive_ids"] == ["rerun_0000"]
+
+
+def test_structured_certification_lineage_satisfies_readiness(tmp_path: Path) -> None:
+    """Certification lineage can be a structured provenance object or scalar artifact ID."""
+
+    source_entry = _entry("source_0000", family="family_a", seed=1)
+    source_entry["certification_metadata"] = {
+        "status": "passed",
+        "source": " ",
+        "provenance": {"certifier": "unit-test"},
+    }
+    rerun_entry = _entry("rerun_0000", family="family_b", seed=101)
+    rerun_entry["certification_metadata"] = {
+        "status": "passed",
+        "source": " ",
+        "provenance": [],
+        "artifact": 7,
+    }
+    source = _archive(tmp_path / "source.json", [source_entry])
+    rerun = _archive(tmp_path / "rerun.json", [rerun_entry])
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=_null_test_prerequisites(),
+    )
+
+    assert readiness.status == READY
+    assert readiness.source_missing_certification_lineage_archive_ids == []
+    assert readiness.missing_certification_lineage_archive_ids == []
+
+
+def test_falsy_certification_lineage_values_block_readiness(tmp_path: Path) -> None:
+    """Falsy lineage fields are placeholders, not source/provenance evidence."""
+
+    source_entry = _entry("source_0000", family="family_a", seed=1)
+    source_entry["certification_metadata"] = {
+        "status": "passed",
+        "source": False,
+    }
+    rerun_entry = _entry("rerun_0000", family="family_b", seed=101)
+    rerun_entry["certification_metadata"] = {
+        "status": "passed",
+        "provenance": {},
+        "artifact": 0,
+    }
+    source = _archive(tmp_path / "source.json", [source_entry])
+    rerun = _archive(tmp_path / "rerun.json", [rerun_entry])
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=_null_test_prerequisites(),
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.source_missing_certification_lineage_archive_ids == ["source_0000"]
+    assert readiness.missing_certification_lineage_archive_ids == ["rerun_0000"]
+    assert "source_missing_certification_lineage:1" in readiness.blockers
+    assert "missing_certification_lineage:1" in readiness.blockers
+
+
 def test_diagnostic_only_output_caps_otherwise_ready_inputs(tmp_path: Path) -> None:
     """Diagnostic-only rerun outputs cannot be promoted to benchmark evidence."""
 

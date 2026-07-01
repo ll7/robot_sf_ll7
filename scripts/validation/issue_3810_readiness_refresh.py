@@ -7,8 +7,8 @@ from typing import Any
 
 EXPECTED_CURRENT_PR = None
 EXPECTED_HEAD_REF = None
-EXPECTED_LATEST_MERGED_PACKET_PR = 4114
-EXPECTED_READINESS_DATE = "2026-07-01"
+EXPECTED_LATEST_MERGED_PACKET_PR = 4118
+EXPECTED_READINESS_DATE = "2026-07-02"
 
 Require = Callable[[bool, str], None]
 RequireMapping = Callable[[Mapping[str, Any], str], Mapping[str, Any]]

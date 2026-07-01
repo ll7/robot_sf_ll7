@@ -42,6 +42,10 @@ from robot_sf.training.oracle_imitation_launch_packet import (
     LaunchPacketError,
     validate_launch_packet,
 )
+from robot_sf.training.oracle_trace_uri_registry import (
+    OracleTraceUriRegistryError,
+    validate_trace_uri_registry,
+)
 
 _SCHEMA_VERSION = "oracle-imitation-warm-start-readiness.v1"
 
@@ -148,6 +152,7 @@ def check_warm_start_readiness(
     blockers: list[str] = []
     prerequisites: dict[str, Any] = {}
     prerequisites["dataset_launch_packet"] = _check_dataset_packet(manifest, root, blockers)
+    prerequisites["trace_uri_registry"] = _check_trace_uri_registry(manifest, root, blockers)
     for key in _REQUIRED_CONFIG_KEYS:
         prerequisites[key] = _check_required_file(manifest, key, root, blockers)
     for key in _OPTIONAL_CONFIG_KEYS:
@@ -221,6 +226,54 @@ def _check_dataset_packet(
         "dataset_id": packet_report["dataset_id"],
         "training_ready": packet_report["training_ready"],
     }
+
+
+def _check_trace_uri_registry(
+    manifest: dict[str, Any],
+    repo_root: Path,
+    blockers: list[str],
+) -> dict[str, Any]:
+    """Validate the referenced durable trace-URI registry with the canonical checker.
+
+    Returns:
+        Per-prerequisite detail with path, readiness, and registry identity when ready.
+    """
+    raw_path = manifest.get("trace_uri_registry")
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        blockers.append("trace_uri_registry must be non-empty path string")
+        return {"path": None, "ready": False, "detail": "missing trace_uri_registry reference"}
+
+    path_text = raw_path.strip()
+    try:
+        registry_report = validate_trace_uri_registry(
+            Path(path_text),
+            repo_root=repo_root,
+            require_training_ready=True,
+        )
+    except OracleTraceUriRegistryError as exc:
+        reason = _first_trace_registry_error(exc)
+        blockers.append(f"trace_uri_registry not training-ready: {reason}")
+        return {"path": path_text, "ready": False, "detail": str(exc)}
+
+    return {
+        "path": path_text,
+        "ready": True,
+        "dataset_id": registry_report["dataset_id"],
+        "trace_count": registry_report["trace_count"],
+        "training_ready": registry_report["training_ready"],
+    }
+
+
+def _first_trace_registry_error(exc: OracleTraceUriRegistryError) -> str:
+    """Return first actionable trace-URI registry validator error line."""
+    for line in str(exc).splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("oracle-imitation") and stripped.endswith("failed validation:"):
+            continue
+        return stripped.removeprefix("- ").strip()
+    return str(exc)
 
 
 def _first_launch_packet_error(exc: LaunchPacketError) -> str:

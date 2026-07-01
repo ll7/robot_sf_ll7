@@ -236,12 +236,15 @@ def _validate_blocked_artifact_schema(blocked_artifacts: Any) -> list[str]:
                 f"blocked_artifacts[{index}] status must be one of "
                 f"{sorted(_KNOWN_BLOCKER_STATUSES)}"
             )
-        metadata = artifact.get("required_metadata", [])
-        if metadata is not None and (
+        metadata = artifact.get("required_metadata")
+        if (
             not isinstance(metadata, list)
+            or not metadata
             or any(not isinstance(item, str) or not item for item in metadata)
         ):
-            errors.append(f"blocked_artifacts[{index}] required_metadata must be a list of strings")
+            errors.append(
+                f"blocked_artifacts[{index}] required_metadata must be a non-empty list of strings"
+            )
     return errors
 
 

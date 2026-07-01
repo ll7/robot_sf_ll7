@@ -400,6 +400,38 @@ def check_factorial_ablation_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str
     }
 
 
+def load_safety_wrapper_ablation_rows(path: str | Path) -> list[dict[str, Any]]:
+    """Load emitted ablation rows for the opt-in result checker.
+
+    JSONL is the expected format for benchmark rows. A JSON list is accepted for
+    compact fixtures and hand-authored decision packets.
+
+    Returns:
+        List of row mappings suitable for ``check_factorial_ablation_rows``.
+    """
+    row_path = Path(path)
+    if row_path.suffix == ".jsonl":
+        rows: list[dict[str, Any]] = []
+        for line_number, raw_line in enumerate(
+            row_path.read_text(encoding="utf-8").splitlines(),
+            start=1,
+        ):
+            if not raw_line.strip():
+                continue
+            row = json.loads(raw_line)
+            if not isinstance(row, dict):
+                raise ValueError(f"{row_path}:{line_number} must contain a JSON object row")
+            rows.append(row)
+        return rows
+
+    payload = json.loads(row_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise ValueError(f"{row_path} must contain a JSON list or JSONL object rows")
+    if not all(isinstance(row, dict) for row in payload):
+        raise ValueError(f"{row_path} must contain only JSON object rows")
+    return list(payload)
+
+
 def write_safety_wrapper_ablation_manifest(
     manifest: Mapping[str, Any],
     output_dir: str | Path,
@@ -428,7 +460,9 @@ __all__ = [
     "ManifestOptions",
     "build_safety_wrapper_ablation_manifest",
     "check_factorial_ablation",
+    "check_factorial_ablation_rows",
     "load_safety_wrapper_ablation_config",
+    "load_safety_wrapper_ablation_rows",
     "validate_safety_wrapper_ablation_config",
     "write_safety_wrapper_ablation_manifest",
 ]

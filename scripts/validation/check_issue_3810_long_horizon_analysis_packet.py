@@ -12,6 +12,7 @@ from typing import Any
 import yaml
 
 DEFAULT_PACKET = Path("configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml")
+EXPECTED_TARGET_HOST = "imech039"
 
 REQUIRED_PRE_FLIGHT_MARKERS = {
     "ROBOT_SF_PRIVATE_OPS",
@@ -96,13 +97,32 @@ def validate_packet(packet: Mapping[str, Any], *, issue: int = 3810) -> dict[str
 
     route = _require_mapping(analysis, "route")
     _require(REQUIRED_ROUTE_FIELDS <= set(route), "route field set incomplete")
-    _require(route.get("target_host") == "imech156-u", "target host must be imech156-u")
+    _require(
+        route.get("target_host") == EXPECTED_TARGET_HOST,
+        f"target host must be {EXPECTED_TARGET_HOST}",
+    )
 
     preflight = _require_mapping(analysis, "preflight")
     _require(preflight.get("required") is True, "preflight.required must be true")
     preflight_blob = "\n".join(str(v) for v in preflight.values())
     for marker in REQUIRED_PRE_FLIGHT_MARKERS:
         _require(marker in preflight_blob, f"preflight missing marker: {marker}")
+    queue_command = str(preflight.get("queue_and_duplicate_check_command", ""))
+    duplicate_command = str(preflight.get("duplicate_check_command", ""))
+    _require(
+        "queue_summary.sh" in queue_command and "--limit" in queue_command,
+        "queue duplicate check must use current queue_summary interface",
+    )
+    _require(
+        "queue_summary.sh" in duplicate_command and "--limit" in duplicate_command,
+        "duplicate check must use current queue_summary interface",
+    )
+    stale_flags = {"--json", "--target-host", "--issue"}
+    stale_command_blob = f"{queue_command}\n{duplicate_command}"
+    _require(
+        not any(flag in stale_command_blob for flag in stale_flags),
+        "preflight queue commands must not use stale private-ops flags",
+    )
 
     expected = _require_mapping(analysis, "expected_outputs")
     _require(

@@ -35,8 +35,20 @@ def test_issue_3810_analysis_packet_rejects_bad_target_host() -> None:
     """The packet must keep the reconciled submit-host target."""
 
     packet = _load_packet()
-    packet["analysis_and_retention_packet"]["route"]["target_host"] = "imech036"
-    with pytest.raises(_MODULE.PacketError, match="target host must be imech156-u"):
+    packet["analysis_and_retention_packet"]["route"]["target_host"] = "imech156-u"
+    with pytest.raises(_MODULE.PacketError, match="target host must be imech039"):
+        _MODULE.validate_packet(packet)
+
+
+def test_issue_3810_analysis_packet_rejects_stale_private_ops_flags() -> None:
+    """The packet must not advertise unsupported private-ops queue flags."""
+
+    packet = _load_packet()
+    packet["analysis_and_retention_packet"]["preflight"]["duplicate_check_command"] = (
+        "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh "
+        "--json --target-host imech039 --issue 3810"
+    )
+    with pytest.raises(_MODULE.PacketError, match="current queue_summary interface"):
         _MODULE.validate_packet(packet)
 
 

@@ -48,6 +48,15 @@ from robot_sf.training.oracle_trace_uri_registry import (
 )
 
 _SCHEMA_VERSION = "oracle-imitation-warm-start-readiness.v1"
+_READY_DECISION = "ready"
+_BLOCKED_DECISION = "artifact_retrieval_blocked"
+_OUT_OF_SCOPE_ACTIONS = {
+    "benchmark_campaign_run": False,
+    "claim_edits": False,
+    "data_collection": False,
+    "slurm_or_gpu_submission": False,
+    "training": False,
+}
 
 # Required prerequisite path keys and whether the path must resolve to a regular file.
 # The dataset launch packet is validated separately (it has its own fail-closed schema),
@@ -161,12 +170,15 @@ def check_warm_start_readiness(
             prerequisites[key] = result
 
     status = "ready" if not blockers else "blocked"
+    readiness_decision = _READY_DECISION if not blockers else _BLOCKED_DECISION
     report = {
         "status": status,
+        "readiness_decision": readiness_decision,
         "schema_version": _SCHEMA_VERSION,
         "experiment_id": experiment_id.strip(),
         "prerequisites": prerequisites,
         "blockers": blockers,
+        "out_of_scope_actions": dict(_OUT_OF_SCOPE_ACTIONS),
     }
 
     if require_ready and blockers:

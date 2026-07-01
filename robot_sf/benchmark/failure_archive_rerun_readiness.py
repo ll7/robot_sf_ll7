@@ -387,19 +387,20 @@ def _overlap_metadata_gaps(
 
 
 def _duplicate_archive_ids(entries: list[dict[str, Any]], *, side: str) -> list[str]:
-    """Return duplicate nonblank archive IDs within one archive."""
+    """Return duplicate nonblank archive IDs within one archive with entry indexes."""
 
-    seen: set[str] = set()
-    duplicates: set[str] = set()
+    entry_indexes_by_archive_id: dict[str, list[int]] = {}
     for index, entry in enumerate(entries):
         raw_archive_id = entry.get("archive_id")
         if _metadata_archive_id_missing(raw_archive_id):
             continue
         archive_id = _metadata_archive_id(raw_archive_id, side=side, index=index)
-        if archive_id in seen:
-            duplicates.add(f"{side}:{archive_id}")
-        seen.add(archive_id)
-    return sorted(duplicates)
+        entry_indexes_by_archive_id.setdefault(archive_id, []).append(index)
+    return [
+        f"{side}:{archive_id}:entries={','.join(str(index) for index in indexes)}"
+        for archive_id, indexes in sorted(entry_indexes_by_archive_id.items())
+        if len(indexes) > 1
+    ]
 
 
 def _metadata_archive_id(raw_archive_id: Any, *, side: str, index: int) -> str:

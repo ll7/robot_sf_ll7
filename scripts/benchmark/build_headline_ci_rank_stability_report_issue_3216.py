@@ -930,19 +930,19 @@ def build_decision_packet(
         manuscript_table_status = "ready_for_table_review_no_claim_promotion"
 
     if (
-        min_seed_count < PAPER_GRADE_MIN_SEEDS
-        or unstable_rank_scenarios
-        or overlap_claims
-        or invalid_rank_metric
-    ):
-        s30_decision_status = "needs_review"
-    elif (
         not counted
         or excluded
         or not identifiable
         or (grid_completeness is not None and not grid_completeness.complete)
     ):
         s30_decision_status = "blocked"
+    elif (
+        min_seed_count < PAPER_GRADE_MIN_SEEDS
+        or unstable_rank_scenarios
+        or overlap_claims
+        or invalid_rank_metric
+    ):
+        s30_decision_status = "needs_review"
     else:
         s30_decision_status = "not_required_by_local_preflight"
 

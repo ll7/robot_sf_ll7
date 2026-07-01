@@ -59,6 +59,7 @@ class SustainedFlowVariant:
     density_tier: str
     ped_density: float
     spawn_rate_per_min: float
+    target_density_tier: str
     spawn_definition: dict[str, object]
     current_runtime_support: str
     runtime_definition_status: str
@@ -205,6 +206,9 @@ def _variant_from_scenario(scenario: Mapping[str, Any]) -> SustainedFlowVariant:
         spawn_rate_per_min=_required_float(
             continuous_spawn, "spawn_rate_per_min", scenario_name=name
         ),
+        target_density_tier=_required_str(
+            continuous_spawn, "target_density_tier", scenario_name=name
+        ),
         spawn_definition=dict(EXPECTED_CONTINUOUS_SPAWN_DEFINITION),
         current_runtime_support=_required_str(
             continuous_spawn, "current_runtime_support", scenario_name=name
@@ -228,6 +232,11 @@ def _variant_from_scenario(scenario: Mapping[str, Any]) -> SustainedFlowVariant:
 def _variant_blockers(variants: tuple[SustainedFlowVariant, ...]) -> tuple[str, ...]:
     blockers: list[str] = []
     for variant in variants:
+        if variant.target_density_tier != variant.density_tier:
+            blockers.append(
+                f"{variant.name}: continuous_spawn.target_density_tier "
+                f"{variant.target_density_tier!r}, expected {variant.density_tier!r}"
+            )
         expected_definition_status, expected_definition_ready = (
             runtime_definition_status_for_support(variant.current_runtime_support)
         )
@@ -327,6 +336,7 @@ def _variant_generator_profile(variant: SustainedFlowVariant) -> tuple[object, .
         variant.density_tier,
         variant.ped_density,
         variant.spawn_rate_per_min,
+        variant.target_density_tier,
         tuple(sorted(variant.spawn_definition.items())),
         variant.current_runtime_support,
         variant.runtime_definition_status,

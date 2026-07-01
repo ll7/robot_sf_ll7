@@ -224,6 +224,59 @@ def test_malformed_archive_payload_fails_closed(tmp_path: Path) -> None:
     )
 
 
+def test_non_object_archive_entries_fail_closed(tmp_path: Path) -> None:
+    """Archive entries must be objects before readiness metadata can be trusted."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [_entry("source_0000", family="family_a", seed=1)],
+    )
+    rerun_payload = {
+        "schema_version": "adversarial_failure_archive.v1",
+        "entries": ["not-an-entry"],
+    }
+    rerun = tmp_path / "rerun.json"
+    rerun.write_text(json.dumps(rerun_payload), encoding="utf-8")
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=_null_test_prerequisites(),
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.rerun_entry_count == 0
+    assert "rerun_archive_blocked:archive_entries_not_objects:0" in readiness.blockers
+
+
+def test_mixed_archive_entry_shapes_fail_closed_with_index(tmp_path: Path) -> None:
+    """Malformed source entry indexes are reported instead of silently dropped."""
+
+    source_payload = {
+        "schema_version": "adversarial_failure_archive.v1",
+        "entries": [
+            _entry("source_0000", family="family_a", seed=1),
+            ["not-an-entry"],
+        ],
+    }
+    source = tmp_path / "source.json"
+    source.write_text(json.dumps(source_payload), encoding="utf-8")
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+    )
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=_null_test_prerequisites(),
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.source_entry_count == 1
+    assert "source_archive_blocked:archive_entries_not_objects:1" in readiness.blockers
+
+
 def test_missing_certification_metadata_blocks_rerun_archive(tmp_path: Path) -> None:
     """Every rerun archive entry must carry certification metadata."""
 

@@ -505,6 +505,57 @@ def test_blocked_when_artifact_inventory_has_blocked_state(tmp_path):
     assert any("blocked artifact" in message for message in artifacts["messages"])
 
 
+def test_failed_when_blocked_artifact_missing_required_metadata(tmp_path):
+    """Blocked-artifact entries must name the metadata needed to unblock readiness."""
+    config = _write_config(tmp_path, min_resolvable=2, min_epochs=2)
+    data = yaml.safe_load(config.read_text(encoding="utf-8"))
+    data["blocked_artifacts"] = [
+        {
+            "id": "missing_durable_predictive_checkpoints",
+            "artifact_type": "checkpoint_set",
+            "status": "blocked",
+            "storage_scope": "worktree_local_output",
+            "path_pattern": "output/tmp/predictive/**/*.pt",
+            "revival_condition": "provide durable predictive checkpoints",
+        }
+    ]
+    config.write_text(yaml.safe_dump(data), encoding="utf-8")
+    registry = _write_registry(tmp_path, present_count=2, absent_count=0)
+
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+
+    config_check = report["prerequisites"]["readiness_config"]
+    assert report["status"] == "blocked"
+    assert config_check["status"] == "failed"
+    assert any("required_metadata" in message for message in config_check["messages"])
+
+
+def test_failed_when_blocked_artifact_required_metadata_empty(tmp_path):
+    """Empty blocked-artifact metadata checklists are not actionable decision packets."""
+    config = _write_config(tmp_path, min_resolvable=2, min_epochs=2)
+    data = yaml.safe_load(config.read_text(encoding="utf-8"))
+    data["blocked_artifacts"] = [
+        {
+            "id": "degenerate_hardcase_proxy_probe_v1",
+            "artifact_type": "proxy_training_summary",
+            "status": "blocked",
+            "storage_scope": "worktree_local_output",
+            "path_pattern": "output/tmp/**/training_summary.json",
+            "required_metadata": [],
+            "revival_condition": "provide a non-degenerate proxy summary",
+        }
+    ]
+    config.write_text(yaml.safe_dump(data), encoding="utf-8")
+    registry = _write_registry(tmp_path, present_count=2, absent_count=0)
+
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+
+    config_check = report["prerequisites"]["readiness_config"]
+    assert report["status"] == "blocked"
+    assert config_check["status"] == "failed"
+    assert any("non-empty list" in message for message in config_check["messages"])
+
+
 def test_blocked_artifact_summary_treats_none_as_unknown_and_preserves_falsy_values():
     """Summary buckets only substitute unknown for absent/null optional fields."""
     summary = mod._summarize_blocked_artifacts(

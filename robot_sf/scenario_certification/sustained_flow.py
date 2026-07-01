@@ -197,6 +197,7 @@ class SustainedFlowVariant:
     density_tier: str
     ped_density: float
     spawn_rate_per_min: float
+    target_density_tier: str
     spawn_definition: dict[str, object]
     seeds: tuple[int, ...]
     map_file: str
@@ -459,6 +460,12 @@ def _validate_variant(
     if tier not in expected_by_tier:
         return None, [f"{name}: unexpected sustained-flow density tier {tier!r}"]
 
+    continuous_spawn = metadata.get("continuous_spawn", {})
+    target_density_tier = (
+        str(continuous_spawn.get("target_density_tier", ""))
+        if isinstance(continuous_spawn, dict)
+        else ""
+    )
     expected_ped_density, expected_spawn_rate, expected_seeds = expected_by_tier[tier]
     simulation_config = scenario.get("simulation_config", {})
     ped_density = float(simulation_config.get("ped_density", -1.0))
@@ -491,6 +498,7 @@ def _validate_variant(
             density_tier=tier,
             ped_density=ped_density,
             spawn_rate_per_min=expected_spawn_rate,
+            target_density_tier=target_density_tier,
             spawn_definition=dict(EXPECTED_CONTINUOUS_SPAWN_DEFINITION),
             seeds=seeds,
             map_file=map_file,
@@ -673,6 +681,7 @@ def sustained_flow_preflight_to_dict(report: SustainedFlowPreflightReport) -> di
                 "density_tier": variant.density_tier,
                 "ped_density": variant.ped_density,
                 "spawn_rate_per_min": variant.spawn_rate_per_min,
+                "target_density_tier": variant.target_density_tier,
                 "spawn_definition": dict(variant.spawn_definition),
                 "seeds": list(variant.seeds),
                 "map_file": variant.map_file,

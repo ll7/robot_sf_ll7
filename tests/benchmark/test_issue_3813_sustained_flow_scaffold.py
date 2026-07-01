@@ -256,6 +256,26 @@ def test_sustained_flow_preflight_rejects_reordered_density_tiers(tmp_path: Path
     )
 
 
+def test_sustained_flow_preflight_rejects_target_density_tier_drift(tmp_path: Path) -> None:
+    """Continuous-spawn targets must stay aligned with the enumerated density tier."""
+
+    matrix = _load_yaml(SCENARIO_SET)
+    matrix["scenarios"][0]["metadata"]["continuous_spawn"]["target_density_tier"] = "heavy"
+
+    drifted_target_matrix = tmp_path / "wrong_target_density_tier_sustained_flow.yaml"
+    drifted_target_matrix.write_text(yaml.safe_dump(matrix, sort_keys=False), encoding="utf-8")
+
+    payload = preflight_sustained_flow_matrix(drifted_target_matrix).to_payload()
+
+    assert payload["status"] == "not_available"
+    assert payload["benchmark_eligible"] is False
+    assert payload["variant_count"] == 3
+    assert any(
+        "continuous_spawn.target_density_tier 'heavy', expected 'light'" in reason
+        for reason in payload["blocking_reasons"]
+    )
+
+
 def test_sustained_flow_preflight_rejects_wrong_spawn_process(tmp_path: Path) -> None:
     """Continuous-spawn variants must name the supported respawn process."""
 

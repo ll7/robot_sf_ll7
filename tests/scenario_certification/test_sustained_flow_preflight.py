@@ -24,6 +24,9 @@ def test_expected_variants_enumerate_deterministically() -> None:
 
     tiers = [scenario["metadata"]["density"] for scenario in generated]
     assert tiers == ["light", "medium", "heavy"]
+    assert [
+        scenario["metadata"]["continuous_spawn"]["target_density_tier"] for scenario in generated
+    ] == tiers
 
     spawn_rates = [
         scenario["metadata"]["continuous_spawn"]["spawn_rate_per_min"] for scenario in generated
@@ -68,6 +71,11 @@ def test_generated_variants_pass_generator_preflight() -> None:
     }
     assert payload["variant_count"] == 3
     assert [variant["density_tier"] for variant in payload["variants"]] == [
+        "light",
+        "medium",
+        "heavy",
+    ]
+    assert [variant["target_density_tier"] for variant in payload["variants"]] == [
         "light",
         "medium",
         "heavy",
@@ -188,6 +196,21 @@ def test_preflight_rejects_runtime_definition_readiness_drift(tmp_path: Path) ->
 
     assert not report.conforms
     assert any("continuous_spawn.runtime_definition_status" in error for error in report.errors)
+
+
+def test_preflight_rejects_target_density_tier_drift(tmp_path: Path) -> None:
+    """Scenario YAML target density tier must match enumerated density tier."""
+
+    payload = yaml.safe_load(SCENARIO_SET.read_text(encoding="utf-8"))
+    payload["scenarios"][0]["metadata"]["continuous_spawn"]["target_density_tier"] = "heavy"
+
+    drifted = tmp_path / "issue_3813_sustained_flow_target_density_tier_drift.yaml"
+    drifted.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    report = sustained_flow.preflight_sustained_flow_scenario_set(drifted)
+
+    assert not report.conforms
+    assert any("continuous_spawn.target_density_tier" in error for error in report.errors)
 
 
 def test_preflight_rejects_route_respawn_runtime_config_drift(tmp_path: Path) -> None:

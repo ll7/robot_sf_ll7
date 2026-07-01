@@ -209,9 +209,9 @@ def _check_dataset_packet(
             require_training_ready=True,
         )
     except LaunchPacketError as exc:
-        # Fold the multi-line validator message into the blocker list as a single, compact
-        # reason so the readiness report stays scannable.
-        reason = str(exc).splitlines()[0]
+        # Preserve the first actionable field-level launch-packet error instead
+        # of only echoing the validator's generic header.
+        reason = _first_launch_packet_error(exc)
         blockers.append(f"dataset_launch_packet not training-ready: {reason}")
         return {"path": path_text, "ready": False, "detail": str(exc)}
 
@@ -221,6 +221,29 @@ def _check_dataset_packet(
         "dataset_id": packet_report["dataset_id"],
         "training_ready": packet_report["training_ready"],
     }
+
+
+def _first_launch_packet_error(exc: LaunchPacketError) -> str:
+    """Return the first actionable launch-packet validator error line."""
+
+    for line in str(exc).splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if _is_launch_packet_error_header(stripped):
+            continue
+        return stripped.removeprefix("- ").strip()
+    return str(exc)
+
+
+def _is_launch_packet_error_header(line: str) -> bool:
+    """Return true for launch-packet validator summary header lines."""
+
+    return (
+        line.startswith("oracle-imitation")
+        and "packet" in line
+        and line.endswith("failed validation:")
+    )
 
 
 def _check_required_file(

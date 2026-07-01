@@ -4,12 +4,55 @@ Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1554>
 
 ## Scope
 
-This note records the **local archival/uncertainty tooling and SLURM launch packet** for an
-S20/S30 (20/30-seed) seed-budget comparison bundle on the h500 social-navigation surface. It does
-**not** run the S20/S30 campaign (that is the SLURM half), and it does **not** assert any S20/S30
-result, ranking, significance, or safety claim. The repository currently has durable **S10** h500
-comparison evidence (issue #1454), not durable S20 or S30 comparison evidence, so the bundle status
-is **`blocked_until_run`** until the SLURM S20/S30 campaign produces valid rows.
+This note started as a local archival/uncertainty tooling SLURM launch packet for an
+S20/S30 (20/30-seed) seed-budget comparison bundle on the h500 social-navigation surface.
+It now also records the completed job `13198` S20 constraints-first decision below. The
+job `13198` result replaces the old `blocked_until_run` state for the S20 H500
+planner-family run, but it still does **not** assert a blanket S20/S30 ranking,
+significance, safety, or paper-grade strict-ordering claim.
+
+## Job 13198 Constraints-First Decision
+
+Related evidence:
+[evidence/issue_1554_job_13198_constraints_first_analysis/](evidence/issue_1554_job_13198_constraints_first_analysis/).
+
+Job `13198` completed the S20 H500 split planner-family campaign with nine successful
+planner rows, 8,640 episode rows, S20 per planner, and 960 episodes per planner. All nine
+planner rows count as `successful_evidence` under the fail-closed benchmark-row policy
+(`status=ok`, `benchmark_success=true`).
+
+The launch-packet scope above remains historical context. The current evidence
+does **not** support a blanket paper-grade strict planner ordering. It supports only the
+adjacent statements named in the job `13198` packet, with explicit confidence-interval
+downgrades for budget-limited adjacent pairs. SNQI remains explanatory-only for this packet
+because the SNQI contract failed under warn enforcement.
+
+Constraints-first `ci_separable` adjacent statements:
+
+- `ppo` over `orca`
+- `orca` over `prediction_planner`
+- `prediction_planner` over `socnav_sampling`
+- `socnav_sampling` over `sacadrl`
+- `goal` over `social_force`
+
+Constraints-first `not_statistically_distinguishable_budget` adjacent statements:
+
+- `hybrid_rule_v3_fast_progress_static_escape` over `scenario_adaptive_hybrid_orca_v1`
+- `scenario_adaptive_hybrid_orca_v1` over `ppo`
+- `sacadrl` over `goal`
+
+`diagnostic_only` statements:
+
+- All SNQI adjacent-rank statements in
+  [adjacent_rank_claims.csv](evidence/issue_1554_job_13198_constraints_first_analysis/adjacent_rank_claims.csv).
+- Any statement that uses SNQI to reorder planners. SNQI changes the nominal order but
+  does not change the constraints-first decision because `snqi_diagnostics.json` reports
+  `contract_status=fail` with enforcement `warn`.
+
+More seed-budget compute is conditionally justified only if a manuscript claim needs
+strict adjacent ordering for the three `not_statistically_distinguishable_budget` pairs
+above. It is not justified for already `ci_separable` adjacent statements, and more SNQI
+compute alone is not justified until the SNQI contract issue is resolved.
 
 ## Deliverables
 
@@ -61,17 +104,16 @@ All inputs below are **to be confirmed by maintainer**; this note asserts no pap
 
 ## Status
 
-`blocked_until_run` pending the SLURM S20/S30 h500 social-navigation campaign. Run the campaign per
-the launch packet, write a canonical campaign result store, then run the fail-closed
-archive-readiness check:
+`job_13198_constraints_first_analyzed` for the completed S20 H500 planner-family run. The
+historical S20/S30 bundle builder remains useful for archive/readiness checks and any future S30
+escalation. For a fresh bundle/checker pass, run:
 
 ```bash
 uv run python scripts/validation/check_s20_s30_archive_readiness.py --json
 ```
 
 The checker validates target claim metadata, planner rows, seed tier, required metrics, output
-locations, and missing-artifact diagnostics. A blocked result is expected until the canonical S20/S30
-result store exists.
+locations, and missing-artifact diagnostics.
 
 After readiness passes, build the reviewable bundle:
 

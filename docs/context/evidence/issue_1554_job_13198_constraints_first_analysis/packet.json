@@ -1,0 +1,126 @@
+{
+  "artifact_outputs": {
+    "README.md": "/home/luttkule/git/robot_sf_ll7/docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/README.md",
+    "adjacent_rank_claims.csv": "/home/luttkule/git/robot_sf_ll7/docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/adjacent_rank_claims.csv",
+    "claim_decision.md": "/home/luttkule/git/robot_sf_ll7/docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/claim_decision.md",
+    "constraints_first_metrics.csv": "/home/luttkule/git/robot_sf_ll7/docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/constraints_first_metrics.csv",
+    "packet.json": "/home/luttkule/git/robot_sf_ll7/docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/packet.json"
+  },
+  "campaign": "2026-06-issue1554-s20-h500-split-mem180-run",
+  "campaign_id": "issue1554_s20_h500_split_mem180_run_20260629",
+  "checksums_sha256": {
+    "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/metrics/13198.json": "531af5b9816e77e9d5f2dd16b8046006aadb02c8757e151c9baa9b264ca7e8ef",
+    "/home/luttkule/git/robot_sf_ll7/docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/adjacent_rank_claims.csv": "dc0fc8d8a4f7c74004a2d14b5e92e6dd254dfed415fd6603d27aa5c38daa85d0",
+    "/home/luttkule/git/robot_sf_ll7/docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/constraints_first_metrics.csv": "5f2d5e4ff7de8f9798d6e54dbe3b98fbb83a20d96756a967cf997fbb94434fad",
+    "/home/luttkule/git/robot_sf_ll7/output/issue1554-s20-h500-split-mem180-run/13198/reports/campaign_summary.json": "cb2def4edfdc5a9db1dd5766afb5dedd91d26ef90caa7de2683c7f90dba5d17c",
+    "/home/luttkule/git/robot_sf_ll7/output/issue1554-s20-h500-split-mem180-run/13198/reports/seed_episode_rows.csv": "0457d1333619ea52f8050b7f6aa2e711be39d1b2c62740912613ca1608ec1edb",
+    "/home/luttkule/git/robot_sf_ll7/output/issue1554-s20-h500-split-mem180-run/13198/reports/snqi_diagnostics.json": "b2b2459aa56ac8fdc009bab41e38da18a4683ba3c621c3f1a7aa11a9a4a92173"
+  },
+  "claim_counts": {
+    "ci_separable": 5,
+    "diagnostic_only": 8,
+    "not_statistically_distinguishable_budget": 3
+  },
+  "config": "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml",
+  "constraints_first": {
+    "ci_separable_statements": [
+      "ppo over orca",
+      "orca over prediction_planner",
+      "prediction_planner over socnav_sampling",
+      "socnav_sampling over sacadrl",
+      "goal over social_force"
+    ],
+    "not_statistically_distinguishable_budget_statements": [
+      "hybrid_rule_v3_fast_progress_static_escape over scenario_adaptive_hybrid_orca_v1",
+      "scenario_adaptive_hybrid_orca_v1 over ppo",
+      "sacadrl over goal"
+    ],
+    "top_planner_by_success": "hybrid_rule_v3_fast_progress_static_escape"
+  },
+  "decision": {
+    "claim_boundary": "S20 constraints-first success adjacent claims are separable only where CIs do not overlap. SNQI is diagnostic/explanatory because its contract failed under warn enforcement.",
+    "more_seed_budget_compute": "conditional",
+    "more_seed_budget_rationale": "Justified only if a paper-facing claim needs strict ordering for the three budget-limited adjacent success statements; not justified to rerun already separable adjacent statements or to promote SNQI until the SNQI contract is resolved."
+  },
+  "generated_at_utc": "2026-07-01T11:22:27.067245Z",
+  "issue": 1554,
+  "job_id": 13198,
+  "methodology": {
+    "adjacent_decision_rule": "ci_separable when adjacent 95% bootstrap CIs do not overlap; otherwise not_statistically_distinguishable_budget",
+    "bootstrap_samples": 2000,
+    "bootstrap_seed": 123,
+    "bootstrap_unit": "per-planner per-seed means across all scenarios",
+    "confidence": 0.95,
+    "rank_metric": "success",
+    "rank_profile": "constraints_first",
+    "safety_metrics_required": [
+      "collision",
+      "near_miss"
+    ]
+  },
+  "public_commit": "12a188de7246aad3b9088ea76e6a25a20029f976",
+  "row_status": {
+    "benchmark_row_status": "successful_evidence",
+    "campaign_warnings": [
+      "SNQI contract status=fail with snqi_contract.enforcement=warn; campaign marked with soft contract warning."
+    ],
+    "episode_rows": 8640,
+    "planner_rows": 9,
+    "seed_count_per_planner": [
+      20
+    ]
+  },
+  "schema_version": "issue1554-job13198-constraints-first-analysis.v1",
+  "snqi": {
+    "changes_nominal_order": true,
+    "contract_enforcement": "warn",
+    "contract_status": "fail",
+    "decision_role": "explanatory_only",
+    "dominant_component": "time_penalty",
+    "order_changes": [
+      {
+        "constraints_first_success_rank": 1,
+        "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+        "snqi_nominal_rank": 2
+      },
+      {
+        "constraints_first_success_rank": 2,
+        "planner_key": "scenario_adaptive_hybrid_orca_v1",
+        "snqi_nominal_rank": 1
+      },
+      {
+        "constraints_first_success_rank": 4,
+        "planner_key": "orca",
+        "snqi_nominal_rank": 7
+      },
+      {
+        "constraints_first_success_rank": 5,
+        "planner_key": "prediction_planner",
+        "snqi_nominal_rank": 4
+      },
+      {
+        "constraints_first_success_rank": 6,
+        "planner_key": "socnav_sampling",
+        "snqi_nominal_rank": 5
+      },
+      {
+        "constraints_first_success_rank": 7,
+        "planner_key": "sacadrl",
+        "snqi_nominal_rank": 8
+      },
+      {
+        "constraints_first_success_rank": 8,
+        "planner_key": "goal",
+        "snqi_nominal_rank": 6
+      }
+    ],
+    "rank_alignment_spearman": -0.19999999999999998
+  },
+  "source_artifacts": {
+    "campaign_summary": "/home/luttkule/git/robot_sf_ll7/output/issue1554-s20-h500-split-mem180-run/13198/reports/campaign_summary.json",
+    "private_ops_metrics": "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/metrics/13198.json",
+    "public_local_results": "/home/luttkule/git/robot_sf_ll7/output/issue1554-s20-h500-split-mem180-run/13198",
+    "seed_episode_rows": "/home/luttkule/git/robot_sf_ll7/output/issue1554-s20-h500-split-mem180-run/13198/reports/seed_episode_rows.csv",
+    "snqi_diagnostics": "/home/luttkule/git/robot_sf_ll7/output/issue1554-s20-h500-split-mem180-run/13198/reports/snqi_diagnostics.json"
+  }
+}

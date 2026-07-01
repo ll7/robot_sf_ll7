@@ -94,6 +94,10 @@ class FailureArchiveRerunReadiness:
     rerun_entry_count: int = 0
     source_archive_sha256: str | None = None
     rerun_archive_sha256: str | None = None
+    source_manifest_sources: list[str] = field(default_factory=list)
+    rerun_manifest_sources: list[str] = field(default_factory=list)
+    source_manifest_overlap: list[str] = field(default_factory=list)
+    missing_archive_lineage: list[str] = field(default_factory=list)
     overlap_provenance: dict[str, Any] = field(default_factory=dict)
     archive_id_overlap: list[str] = field(default_factory=list)
     missing_overlap_metadata_archive_ids: list[str] = field(default_factory=list)
@@ -129,6 +133,10 @@ class FailureArchiveRerunReadiness:
             "rerun_entry_count": self.rerun_entry_count,
             "source_archive_sha256": self.source_archive_sha256,
             "rerun_archive_sha256": self.rerun_archive_sha256,
+            "source_manifest_sources": list(self.source_manifest_sources),
+            "rerun_manifest_sources": list(self.rerun_manifest_sources),
+            "source_manifest_overlap": list(self.source_manifest_overlap),
+            "missing_archive_lineage": list(self.missing_archive_lineage),
             "overlap_provenance": dict(self.overlap_provenance),
             "archive_id_overlap": list(self.archive_id_overlap),
             "missing_overlap_metadata_archive_ids": list(self.missing_overlap_metadata_archive_ids),
@@ -189,6 +197,13 @@ def classify_failure_archive_rerun_readiness(
     source_hash = archive_sha256(source_payload) if isinstance(source_payload, dict) else None
     rerun_hash = archive_sha256(rerun_payload) if isinstance(rerun_payload, dict) else None
 
+    source_manifests, missing_source_lineage = _archive_lineage_gaps(source_payload, side="source")
+    rerun_manifests, missing_rerun_lineage = _archive_lineage_gaps(rerun_payload, side="rerun")
+    source_manifest_overlap = sorted(set(source_manifests).intersection(rerun_manifests))
+    missing_archive_lineage = missing_source_lineage + missing_rerun_lineage
+    blockers.extend(_count_blockers("missing_archive_lineage", missing_archive_lineage))
+    blockers.extend(_count_blockers("source_manifest_overlap", source_manifest_overlap))
+
     overlap = compute_overlap_provenance(source_entries, rerun_entries)
     archive_id_overlap = list(overlap.get("archive_id_overlap", []))
     blockers.extend(_overlap_blockers(overlap))
@@ -224,6 +239,10 @@ def classify_failure_archive_rerun_readiness(
         rerun_entry_count=len(rerun_entries),
         source_archive_sha256=source_hash,
         rerun_archive_sha256=rerun_hash,
+        source_manifest_sources=source_manifests,
+        rerun_manifest_sources=rerun_manifests,
+        source_manifest_overlap=source_manifest_overlap,
+        missing_archive_lineage=missing_archive_lineage,
         overlap_provenance=overlap,
         archive_id_overlap=archive_id_overlap,
         missing_overlap_metadata_archive_ids=missing_overlap_metadata,
@@ -303,6 +322,34 @@ def _count_blockers(blocker: str, values: list[str]) -> list[str]:
     """Return a single count blocker when values are present."""
 
     return [f"{blocker}:{len(values)}"] if values else []
+
+
+def _archive_lineage_gaps(
+    payload: dict[str, Any] | None,
+    *,
+    side: str,
+) -> tuple[list[str], list[str]]:
+    """Return top-level source manifest lineage and fail-closed gap tokens."""
+
+    if not isinstance(payload, dict):
+        return [], []
+    config = payload.get("config")
+    if not isinstance(config, dict):
+        return [], [f"{side}:config.source_manifests"]
+    raw_manifests = config.get("source_manifests")
+    if not isinstance(raw_manifests, list) or not raw_manifests:
+        return [], [f"{side}:config.source_manifests"]
+
+    manifests: list[str] = []
+    invalid_indexes: list[str] = []
+    for index, raw_manifest in enumerate(raw_manifests):
+        if isinstance(raw_manifest, str) and raw_manifest.strip():
+            manifests.append(raw_manifest.strip())
+        else:
+            invalid_indexes.append(str(index))
+    if invalid_indexes:
+        return manifests, [f"{side}:config.source_manifests[{','.join(invalid_indexes)}]"]
+    return sorted(set(manifests)), []
 
 
 def _overlap_metadata_gaps(

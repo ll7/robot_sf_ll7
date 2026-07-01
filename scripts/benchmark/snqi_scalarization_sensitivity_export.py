@@ -23,6 +23,7 @@ from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     load_baseline_mapping,
     load_jsonl,
     load_weight_mapping,
+    missing_input_preflight,
     write_diagnostic_artifacts,
 )
 
@@ -48,6 +49,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--stem", default="snqi_scalarization_sensitivity")
     parser.add_argument(
+        "--application-packet",
+        type=Path,
+        help="Optional tracked packet proving the campaign application surface being gated.",
+    )
+    parser.add_argument(
         "--preflight-out",
         type=Path,
         help="Optional JSON path for the readiness preflight payload.",
@@ -60,6 +66,18 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = _build_parser().parse_args(argv)
 
+    if not args.episodes.exists():
+        preflight = missing_input_preflight(
+            args.episodes,
+            input_kind="episodes",
+            application_packet=args.application_packet,
+        )
+        if args.preflight_out is not None:
+            args.preflight_out.parent.mkdir(parents=True, exist_ok=True)
+            args.preflight_out.write_text(json.dumps(preflight, indent=2), encoding="utf-8")
+        print(json.dumps(preflight, indent=2), file=sys.stderr)
+        return 2
+
     records = load_jsonl(args.episodes)
     baseline = load_baseline_mapping(args.baseline)
     weights = load_weight_mapping(args.weights)
@@ -68,6 +86,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "baseline": input_file_provenance(args.baseline),
         "weights": input_file_provenance(args.weights),
     }
+    if args.application_packet is not None:
+        provenance["application_packet"] = input_file_provenance(args.application_packet)
 
     preflight = classify_scalarization_sensitivity_inputs(
         records,

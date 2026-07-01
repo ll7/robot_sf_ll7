@@ -559,6 +559,56 @@ def test_cli_export_blocks_invalid_inputs_before_artifacts(tmp_path: Path, capsy
     assert not output_dir.exists()
 
 
+def test_cli_application_packet_blocks_missing_campaign_episodes(tmp_path: Path, capsys) -> None:
+    """Application-packet gate fails closed while campaign episode JSONL is absent."""
+    missing_episodes = tmp_path / "output" / "13175" / "reports" / "episodes.jsonl"
+    weights_path = tmp_path / "weights.json"
+    weights_path.write_text(json.dumps(_weights()), encoding="utf-8")
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(json.dumps(_baseline()), encoding="utf-8")
+    packet_path = tmp_path / "issue_3653_application_packet.json"
+    packet_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "snqi_scalarization_application_packet.v1",
+                "job_id": "13175",
+                "required_input": str(missing_episodes),
+            }
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "artifacts"
+    preflight_out = tmp_path / "preflight.json"
+
+    exit_code = scalarization_cli_main(
+        [
+            "--episodes",
+            str(missing_episodes),
+            "--weights",
+            str(weights_path),
+            "--baseline",
+            str(baseline_path),
+            "--output-dir",
+            str(output_dir),
+            "--application-packet",
+            str(packet_path),
+            "--preflight-out",
+            str(preflight_out),
+        ]
+    )
+
+    assert exit_code == 2
+    stderr = json.loads(capsys.readouterr().err)
+    written = json.loads(preflight_out.read_text(encoding="utf-8"))
+    assert stderr == written
+    assert stderr["status"] == SENSITIVITY_PREFLIGHT_BLOCKED
+    assert stderr["issues"][0]["code"] == "missing_episodes_file"
+    assert stderr["inputs"]["provenance"]["episodes"]["exists"] is False
+    assert stderr["inputs"]["provenance"]["application_packet"]["path"] == str(packet_path)
+    assert len(stderr["inputs"]["provenance"]["application_packet"]["sha256"]) == 64
+    assert not output_dir.exists()
+
+
 def test_baseline_loader_refuses_missing_normalized_fixture_input(tmp_path: Path) -> None:
     """Baseline fixture loader fails closed before export on missing normalized stats."""
     baseline = _baseline()

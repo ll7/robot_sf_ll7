@@ -659,6 +659,57 @@ def input_file_provenance(path: Path | None) -> dict[str, str | None]:
     return {"path": str(path), "sha256": hashlib.sha256(data).hexdigest()}
 
 
+def missing_input_preflight(
+    path: Path,
+    *,
+    input_kind: str,
+    application_packet: Path | None = None,
+) -> dict[str, Any]:
+    """Build a blocked SNQI sensitivity preflight for a missing input artifact.
+
+    This is for application-packet gates where the next valid step is to
+    hydrate or promote the referenced input, not to emit diagnostic artifacts
+    from an incomplete campaign surface.
+
+    Returns:
+        JSON-ready blocked preflight payload with missing-input provenance.
+    """
+    provenance: dict[str, Any] = {input_kind: {"path": str(path), "sha256": None, "exists": False}}
+    if application_packet is not None:
+        if application_packet.exists():
+            provenance["application_packet"] = {
+                **input_file_provenance(application_packet),
+                "exists": True,
+            }
+        else:
+            provenance["application_packet"] = {
+                "path": str(application_packet),
+                "sha256": None,
+                "exists": False,
+            }
+    return {
+        "schema_version": SCALARIZATION_SENSITIVITY_PREFLIGHT_SCHEMA,
+        "ready": False,
+        "status": SENSITIVITY_PREFLIGHT_BLOCKED,
+        "record_count": 0,
+        "planner_count": 0,
+        "scenario_horizon_count": 0,
+        "missing_scenario_horizon_cells": {},
+        "inputs": {"provenance": provenance},
+        "issues": [
+            {
+                "code": f"missing_{input_kind}_file",
+                "severity": SENSITIVITY_PREFLIGHT_BLOCKED,
+                "message": (
+                    f"missing {input_kind} input file {path}; hydrate or promote the "
+                    "referenced campaign artifact before exporting SNQI scalarization "
+                    "sensitivity diagnostics"
+                ),
+            }
+        ],
+    }
+
+
 def format_markdown(report: Mapping[str, Any]) -> str:
     """Render the report as Markdown.
 
@@ -1228,5 +1279,6 @@ __all__ = [
     "load_baseline_mapping",
     "load_jsonl",
     "load_weight_mapping",
+    "missing_input_preflight",
     "write_diagnostic_artifacts",
 ]

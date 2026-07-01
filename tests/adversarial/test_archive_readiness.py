@@ -190,6 +190,19 @@ def test_missing_failure_attribution_breaks_null_test_prereq() -> None:
     assert "entries_missing_failure_attribution:1" in report.blocking_reasons
 
 
+def test_empty_failure_attribution_breaks_null_test_prereq() -> None:
+    """Empty failure_attribution is not enough to support null tests."""
+    entries = [_entry("A", "a0", 1), _entry("B", "b0", 2)]
+    entries[1]["failure_attribution"] = {}
+
+    report = assess_archive_readiness(_archive(entries))
+
+    assert report.entries_missing_failure_attribution == 1
+    assert report.null_test_prerequisites_ready is False
+    assert report.ready is False
+    assert "entries_missing_failure_attribution:1" in report.blocking_reasons
+
+
 def test_unknown_family_entries_are_counted_and_block() -> None:
     """Entries with no derivable family fall into the unknown-family bucket."""
     # Second entry has no cluster_key / failure key / manifest -> unknown_family.

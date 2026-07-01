@@ -568,7 +568,8 @@ def build_adjacent_rank_claims(
 
     Adjacent planners with overlapping confidence intervals are downgraded to
     ``not_statistically_distinguishable_budget`` so the packet cannot be read
-    as support for a strict paper-facing ordering.
+    as support for a strict paper-facing ordering. Adjacent planner statements
+    below the paper-grade seed threshold are classified ``diagnostic_only``.
     """
 
     cell_by_key = {
@@ -590,10 +591,18 @@ def build_adjacent_rank_claims(
             lower_stats = _metric_stats(lower_cell, rank_metric)
             if higher_stats is None or lower_stats is None:
                 continue
+            min_pair_seeds = min(higher_cell.seed_count, lower_cell.seed_count)
             if invalid_rank_metric_reason:
                 decision = "blocked_invalid_metric"
                 rationale = (
                     f"rank metric {rank_metric!r} is contract-invalid: {invalid_rank_metric_reason}"
+                )
+            elif min_pair_seeds < PAPER_GRADE_MIN_SEEDS:
+                decision = "diagnostic_only"
+                rationale = (
+                    "Adjacent-rank statement is diagnostic only because the paired cells "
+                    f"have min_seeds={min_pair_seeds}, below the paper-grade threshold "
+                    f"{PAPER_GRADE_MIN_SEEDS}."
                 )
             elif _ci_overlap(higher_stats, lower_stats):
                 decision = "not_statistically_distinguishable_budget"
@@ -750,6 +759,7 @@ def _append_packet_reasons(
     s30_reasons: list[str],
     *,
     overlap_claims: Sequence[AdjacentRankClaim],
+    diagnostic_only_claims: Sequence[AdjacentRankClaim],
     invalid_rank_metric: bool,
     metric_gaps: Sequence[str],
     snqi_contract_warning: bool,
@@ -759,6 +769,8 @@ def _append_packet_reasons(
 
     if overlap_claims:
         s30_reasons.append("adjacent_rank_ci_overlap_requires_claim_downgrade_or_more_data")
+    if diagnostic_only_claims:
+        s30_reasons.append("seed_budget_below_paper_grade_diagnostic_only")
     if invalid_rank_metric:
         manuscript_blockers.append("invalid_rank_metric_contract")
         s30_reasons.append("rank_metric_contract_invalid")
@@ -795,6 +807,9 @@ def build_decision_packet(
         for claim in adjacent_rank_claims
         if claim.decision == "not_statistically_distinguishable_budget"
     ]
+    diagnostic_only_claims = [
+        claim for claim in adjacent_rank_claims if claim.decision == "diagnostic_only"
+    ]
     invalid_metric_claims = [
         claim for claim in adjacent_rank_claims if claim.decision == "blocked_invalid_metric"
     ]
@@ -824,6 +839,7 @@ def build_decision_packet(
         manuscript_blockers,
         s30_reasons,
         overlap_claims=overlap_claims,
+        diagnostic_only_claims=diagnostic_only_claims,
         invalid_rank_metric=invalid_rank_metric,
         metric_gaps=metric_gaps,
         snqi_contract_warning=snqi_contract_warning,
@@ -858,6 +874,7 @@ def build_decision_packet(
         "identifiable_scenario_count": len(identifiable),
         "unstable_rank_scenarios": unstable_rank_scenarios,
         "adjacent_overlap_count": len(overlap_claims),
+        "diagnostic_only_claim_count": len(diagnostic_only_claims),
         "invalid_metric_claim_count": len(invalid_metric_claims),
         "invalid_rank_metric_reason": invalid_rank_metric_reason,
         "rank_profile": rank_profile,
@@ -1099,6 +1116,9 @@ def _append_decision_packet_markdown(lines: list[str], decision_packet: Mapping[
     lines.append(f"- **Minimum seed count**: {decision_packet['min_seed_count']}")
     lines.append(
         f"- **Adjacent CI-overlap downgrades**: {decision_packet['adjacent_overlap_count']}"
+    )
+    lines.append(
+        f"- **Diagnostic-only adjacent claims**: {decision_packet['diagnostic_only_claim_count']}"
     )
     if decision_packet["manuscript_blockers"]:
         blockers = ", ".join(decision_packet["manuscript_blockers"])

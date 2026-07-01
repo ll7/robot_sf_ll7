@@ -108,6 +108,23 @@ def test_adjacent_ci_overlap_downgrades_strict_rank_claim() -> None:
     )
 
 
+def test_underpowered_adjacent_rank_statement_is_diagnostic_only() -> None:
+    """Sub-S20 local rows never emit strict adjacent-rank separability claims."""
+    rows = [
+        _row("crossing", "hybrid", [0.90] * 10),
+        _row("crossing", "ppo", [0.50] * 10),
+    ]
+
+    report = build_report(rows, ReportConfig(bootstrap_samples=32, resamples=16))
+
+    assert report["adjacent_rank_claims"][0]["decision"] == "diagnostic_only"
+    assert report["decision_packet"]["diagnostic_only_claim_count"] == 1
+    assert (
+        "seed_budget_below_paper_grade_diagnostic_only"
+        in (report["decision_packet"]["s30_reasons"])
+    )
+
+
 def test_invalid_rank_metric_blocks_metric_claims() -> None:
     """SNQI or other rank-metric contract warnings fail closed for rank statements."""
     report = build_report(

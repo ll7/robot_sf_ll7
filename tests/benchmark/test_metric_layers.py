@@ -193,6 +193,29 @@ def test_metric_layer_summary_includes_grouped_views() -> None:
     )
 
 
+def test_non_finite_metric_values_are_ignored_with_alias_fallback() -> None:
+    """NaN/Inf values are unavailable and do not mask later valid aliases."""
+
+    record = {
+        **_minimal_episode(),
+        "metrics": {
+            "collision_rate": float("nan"),
+            "collisions": 1,
+            "time_to_goal": float("inf"),
+        },
+    }
+
+    summary = build_metric_layer_summary([record])
+    collision = summary["layers"]["safety_gate"]["metrics"]["collision_rate"]
+    time_to_goal = summary["layers"]["efficiency"]["metrics"]["time_to_goal"]
+
+    assert collision["status"] == "available"
+    assert collision["value"] == pytest.approx(1.0)
+    assert collision["selected_source_keys"] == ["metrics.collisions"]
+    assert time_to_goal["status"] == "unavailable"
+    assert time_to_goal["support_count"] == 0
+
+
 def test_constraints_first_report_advertises_metric_layer_contract() -> None:
     """Constraints-first reports name the shared layer contract without reranking changes."""
 
@@ -239,3 +262,46 @@ def test_metric_layers_cli_writes_summary(tmp_path) -> None:
     assert payload["layers"]["safety_gate"]["metrics"]["collision_rate"]["value"] == pytest.approx(
         0.5
     )
+
+
+def test_metric_layers_cli_filters_non_finite_values_before_json_output(tmp_path) -> None:
+    """Metric-layer CLI output remains strict JSON when inputs contain NaN/Inf."""
+
+    episodes = tmp_path / "episodes.jsonl"
+    output = tmp_path / "metric_layers.json"
+    episodes.write_text(
+        json.dumps(
+            {
+                **_minimal_episode(),
+                "metrics": {
+                    "collision_rate": float("nan"),
+                    "collisions": 0,
+                    "time_to_goal": float("inf"),
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert (
+        benchmark_cli_main(
+            [
+                "metric-layers",
+                "--episodes",
+                str(episodes),
+                "--output",
+                str(output),
+            ]
+        )
+        == 0
+    )
+
+    output_text = output.read_text(encoding="utf-8")
+    assert "NaN" not in output_text
+    assert "Infinity" not in output_text
+    payload = json.loads(output_text)
+    assert payload["layers"]["safety_gate"]["metrics"]["collision_rate"]["value"] == pytest.approx(
+        0.0
+    )
+    assert payload["layers"]["efficiency"]["metrics"]["time_to_goal"]["status"] == "unavailable"

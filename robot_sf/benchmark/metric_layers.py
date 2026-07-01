@@ -7,6 +7,7 @@ reported as unavailable rather than imputed as zero.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -360,7 +361,9 @@ def _as_float(value: Any) -> float | None:
     if isinstance(value, bool):
         return 1.0 if value else 0.0
     if isinstance(value, int | float):
-        return float(value)
+        numeric_value = float(value)
+        if math.isfinite(numeric_value):
+            return numeric_value
     return None
 
 
@@ -392,8 +395,11 @@ def _resolve_collision_rate(
             continue
         value = view[key]
         if key == "metrics.collision_rate":
-            return _as_float(value), key
-        return _as_flag(value), key
+            numeric_value = _as_float(value)
+        else:
+            numeric_value = _as_flag(value)
+        if numeric_value is not None:
+            return numeric_value, key
     return None, None
 
 
@@ -405,7 +411,9 @@ def _resolve_timeout_rate(view: Mapping[str, Any]) -> tuple[float | None, str | 
     """
 
     if "outcome.timeout_event" in view:
-        return _as_flag(view["outcome.timeout_event"]), "outcome.timeout_event"
+        timeout_value = _as_flag(view["outcome.timeout_event"])
+        if timeout_value is not None:
+            return timeout_value, "outcome.timeout_event"
     if view.get("termination_reason") in {"truncated", "max_steps"}:
         return 1.0, "termination_reason"
     return None, None
@@ -424,7 +432,10 @@ def _resolve_failure_to_progress_rate(
         return None, None
     if view.get("outcome.collision_event") is True or view.get("outcome.timeout_event") is True:
         return 0.0, "outcome.route_complete"
-    return (0.0 if bool(view["outcome.route_complete"]) else 1.0), "outcome.route_complete"
+    route_complete = _as_flag(view["outcome.route_complete"])
+    if route_complete is None:
+        return None, None
+    return (0.0 if route_complete > 0.0 else 1.0), "outcome.route_complete"
 
 
 def _resolve_intervention_required(
@@ -439,7 +450,9 @@ def _resolve_intervention_required(
 
     for key in definition.source_keys:
         if key in view:
-            return _as_flag(view[key]), key
+            intervention_value = _as_flag(view[key])
+            if intervention_value is not None:
+                return intervention_value, key
     return None, None
 
 
@@ -470,8 +483,11 @@ def _resolve_metric_value(
             continue
         value = view[key]
         if definition.reduction in {"episode_rate", "any_rate"}:
-            return _as_flag(value), key
-        return _as_float(value), key
+            numeric_value = _as_flag(value)
+        else:
+            numeric_value = _as_float(value)
+        if numeric_value is not None:
+            return numeric_value, key
     return None, None
 
 

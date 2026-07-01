@@ -71,6 +71,47 @@ def test_issue_3810_packet_rejects_missing_job_13175_blocker() -> None:
         raise AssertionError("packet should reject missing job 13175 blocker")
 
 
+def test_issue_3810_packet_rejects_stale_readiness_refresh_date() -> None:
+    """The public readiness refresh must not silently reuse stale issue state."""
+    packet = _load_packet()
+    packet["launch_packet"]["readiness_refresh"]["checked_date"] = "2026-06-30"
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "readiness refresh date" in str(exc)
+    else:
+        raise AssertionError("packet should reject stale readiness refresh date")
+
+
+def test_issue_3810_packet_rejects_open_pr_dedupe_matches() -> None:
+    """A matching PR beyond the current review PR must stop duplicate packet PRs."""
+    packet = _load_packet()
+    packet["launch_packet"]["readiness_refresh"]["blocking_open_pr_matches"] = [
+        {"number": 9999, "title": "Issue #3810 duplicate packet"}
+    ]
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "no blocking open PR matches" in str(exc)
+    else:
+        raise AssertionError("packet should reject open PR dedupe matches")
+
+
+def test_issue_3810_packet_rejects_missing_current_review_pr() -> None:
+    """The readiness snapshot must account for this review PR instead of hiding it."""
+    packet = _load_packet()
+    packet["launch_packet"]["readiness_refresh"]["open_pr_matches"] = []
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "exactly current non-draft PR 4030" in str(exc)
+    else:
+        raise AssertionError("packet should reject missing current PR snapshot")
+
+
 def test_issue_3810_packet_rejects_stale_job_13175_reconciliation() -> None:
     """Stale analyzed state cannot unlock the public launch packet."""
     packet = _load_packet()

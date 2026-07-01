@@ -40,6 +40,15 @@ def test_issue_3810_analysis_packet_rejects_bad_target_host() -> None:
         _MODULE.validate_packet(packet)
 
 
+def test_issue_3810_analysis_packet_rejects_stale_readiness_refresh_date() -> None:
+    """Analysis retention checks also depend on fresh public dedupe state."""
+    packet = _load_packet()
+    packet["launch_packet"]["readiness_refresh"]["checked_date"] = "2026-06-30"
+
+    with pytest.raises(_MODULE.PacketError, match="readiness refresh date"):
+        _MODULE.validate_packet(packet)
+
+
 def test_issue_3810_analysis_packet_rejects_stale_private_ops_flags() -> None:
     """The packet must not advertise unsupported private-ops queue flags."""
 

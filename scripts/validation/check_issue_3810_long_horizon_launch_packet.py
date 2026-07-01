@@ -11,6 +11,12 @@ from typing import Any
 
 import yaml
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from issue_3810_readiness_refresh import validate_readiness_refresh  # noqa: E402
+
 DEFAULT_PACKET = Path("configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml")
 EXPECTED_TARGET_HOST = "imech156-u"
 REQUIRED_OUTPUTS = {
@@ -227,7 +233,22 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     _require(isinstance(blocking_jobs, list), "blocking_jobs must be a list")
     _require(13175 in blocking_jobs, "job 13175 must block submit until reconciled")
 
+    readiness_refresh = validate_readiness_refresh(
+        launch_packet,
+        EXPECTED_TARGET_HOST,
+        require=_require,
+        require_mapping=_require_mapping,
+        require_commands=True,
+        require_head_ref=True,
+    )
+    readiness_decision = str(readiness_refresh.get("decision", ""))
+    _require("not submit-host" in readiness_decision, "readiness refresh must stay no-submit")
+
     live_issue_state = _require_mapping(launch_packet, "live_issue_state")
+    _require(
+        live_issue_state.get("checked_date") == "2026-07-01",
+        "live issue state date must be 2026-07-01",
+    )
     _require(
         live_issue_state.get("required_label") == "state:running",
         "live issue state must record state:running blocker",

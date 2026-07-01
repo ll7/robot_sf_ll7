@@ -56,6 +56,16 @@ def _archive(path: Path, entries: list[dict]) -> Path:
     return path
 
 
+def _null_test_prerequisites() -> dict:
+    """Return complete null-test prerequisite metadata."""
+
+    return {
+        "null_tests_reject_null": True,
+        "shuffled_outcome_null_test": {"status": "complete", "p_value": 0.01},
+        "ranking_permutation_test": {"status": "complete", "p_value": 0.02},
+    }
+
+
 def test_disjoint_certified_archives_are_ready(tmp_path: Path) -> None:
     """Disjoint archive IDs and certified rerun rows pass the metadata gate."""
 
@@ -74,13 +84,38 @@ def test_disjoint_certified_archives_are_ready(tmp_path: Path) -> None:
         ],
     )
 
-    readiness = classify_failure_archive_rerun_readiness(source, rerun)
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=_null_test_prerequisites(),
+    )
 
     assert readiness.status == READY
     assert readiness.ready is True
     assert readiness.archive_id_overlap == []
     assert readiness.missing_certification_archive_ids == []
     assert readiness.to_payload()["claim_boundary"].startswith("readiness/leakage check only")
+
+
+def test_missing_null_test_prerequisite_input_blocks_readiness(tmp_path: Path) -> None:
+    """Absent null-test prerequisite metadata fails closed."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [_entry("source_0000", family="family_a", seed=1)],
+    )
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+    )
+
+    readiness = classify_failure_archive_rerun_readiness(source, rerun)
+
+    assert readiness.status == BLOCKED
+    assert readiness.ready is False
+    assert readiness.null_test_prerequisite_status == BLOCKED
+    assert readiness.missing_null_test_prerequisites == ["null_test_prerequisites"]
+    assert "missing_null_test_prerequisites:1" in readiness.blockers
 
 
 def test_overlapping_archive_ids_block_leakage(tmp_path: Path) -> None:
@@ -304,6 +339,7 @@ def test_diagnostic_only_output_caps_otherwise_ready_inputs(tmp_path: Path) -> N
         source,
         rerun,
         rerun_output=rerun_output,
+        null_test_prerequisites=_null_test_prerequisites(),
     )
 
     assert readiness.status == DIAGNOSTIC_ONLY

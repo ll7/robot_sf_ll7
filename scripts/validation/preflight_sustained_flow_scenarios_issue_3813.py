@@ -15,6 +15,7 @@ from pathlib import Path
 
 from robot_sf.scenario_certification.sustained_flow import (
     DEFAULT_SUSTAINED_FLOW_SCENARIO_SET,
+    preflight_generated_sustained_flow_scenarios,
     preflight_sustained_flow_scenario_set,
     sustained_flow_preflight_to_dict,
 )
@@ -28,6 +29,11 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         default=DEFAULT_SUSTAINED_FLOW_SCENARIO_SET,
         help="Scenario matrix to validate.",
     )
+    parser.add_argument(
+        "--generated",
+        action="store_true",
+        help="Validate canonical generator output instead of a YAML scenario set.",
+    )
     parser.add_argument("--json", action="store_true", help="Emit the full JSON report.")
     return parser.parse_args(argv)
 
@@ -40,7 +46,11 @@ def main(argv: list[str] | None = None) -> int:
     """
 
     args = _parse_args(sys.argv[1:] if argv is None else argv)
-    report = preflight_sustained_flow_scenario_set(args.scenario_set)
+    report = (
+        preflight_generated_sustained_flow_scenarios()
+        if args.generated
+        else preflight_sustained_flow_scenario_set(args.scenario_set)
+    )
     payload = sustained_flow_preflight_to_dict(report)
 
     if args.json:

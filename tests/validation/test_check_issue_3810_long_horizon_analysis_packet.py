@@ -36,8 +36,8 @@ def test_issue_3810_analysis_packet_rejects_bad_target_host() -> None:
     """The packet must keep the reconciled submit-host target."""
 
     packet = _load_packet()
-    packet["analysis_and_retention_packet"]["route"]["target_host"] = "imech036"
-    with pytest.raises(_MODULE.PacketError, match="target host must be imech039"):
+    packet["analysis_and_retention_packet"]["route"]["target_host"] = "imech039"
+    with pytest.raises(_MODULE.PacketError, match="target host must be imech036"):
         _MODULE.validate_packet(packet)
 
 

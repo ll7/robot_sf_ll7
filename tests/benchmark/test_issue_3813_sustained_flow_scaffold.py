@@ -17,6 +17,7 @@ from robot_sf.benchmark.sustained_flow_preflight import (
     preflight_sustained_flow_matrix,
 )
 from robot_sf.scenario_certification.sustained_flow import (
+    EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG,
     generate_runtime_supported_sustained_flow_scenarios,
 )
 from robot_sf.training.scenario_loader import load_scenarios
@@ -65,6 +66,10 @@ def test_sustained_flow_scenario_set_is_runner_loadable(capsys) -> None:
         metadata = scenario["metadata"]
         spawn_definition = metadata["continuous_spawn"]["definition"]
         assert scenario["simulation_config"]["max_episode_steps"] == 600
+        assert {
+            field: scenario["simulation_config"][field]
+            for field in EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG
+        } == EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG
         assert metadata["pack_id"] == "issue_3813_sustained_flow_scaffold_v0"
         assert metadata["status"] == "pre_benchmark_scaffold"
         assert metadata["enabled_by_default"] is False
@@ -112,6 +117,10 @@ def test_sustained_flow_preflight_enumerates_variants_and_fails_closed() -> None
         0.05,
         0.08,
     ]
+    assert {
+        tuple(sorted(variant["route_respawn_runtime_config"].items()))
+        for variant in payload["variants"]
+    } == {tuple(sorted(EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG.items()))}
     assert all(
         f"expected {RUNTIME_SUPPORTED_VALUE!r}" in reason for reason in payload["blocking_reasons"]
     )
@@ -155,6 +164,24 @@ def test_sustained_flow_preflight_rejects_runtime_definition_readiness_drift(
     assert payload["status"] == "not_available"
     assert payload["benchmark_eligible"] is False
     assert any("runtime definition readiness" in reason for reason in payload["blocking_reasons"])
+
+
+def test_sustained_flow_preflight_rejects_route_respawn_runtime_config_drift(
+    tmp_path: Path,
+) -> None:
+    """Runtime-supported matrices keep route-respawn settings in simulation_config."""
+    matrix = _load_yaml(SCENARIO_SET)
+    matrix["scenarios"] = generate_runtime_supported_sustained_flow_scenarios()
+    del matrix["scenarios"][0]["simulation_config"]["peds_reset_follow_route_at_start"]
+
+    drifted_matrix = tmp_path / "route_respawn_runtime_config_drift.yaml"
+    drifted_matrix.write_text(yaml.safe_dump(matrix, sort_keys=False), encoding="utf-8")
+
+    payload = preflight_sustained_flow_matrix(drifted_matrix).to_payload()
+
+    assert payload["status"] == "not_available"
+    assert payload["benchmark_eligible"] is False
+    assert any("route-respawn runtime config" in reason for reason in payload["blocking_reasons"])
 
 
 def test_sustained_flow_preflight_rejects_generator_drift(tmp_path: Path) -> None:

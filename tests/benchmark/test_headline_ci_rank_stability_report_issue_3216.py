@@ -475,7 +475,7 @@ def test_cli_decision_blocker_gate_fails_after_writing_report(tmp_path) -> None:
     assert exit_code == 4
     result = json.loads((out_dir / "result.json").read_text(encoding="utf-8"))
     assert mod.decision_packet_has_blocker(result["decision_packet"]) is True
-    assert result["decision_packet"]["s30_decision_status"] == "needs_review"
+    assert result["decision_packet"]["s30_decision_status"] == "blocked"
     assert (out_dir / "report.md").is_file()
 
 

@@ -127,6 +127,33 @@ def test_expected_headline_grid_missing_cell_blocks_packet() -> None:
     ]
 
 
+def test_underpowered_missing_grid_remains_blocked_not_reviewable() -> None:
+    """Hard coverage blockers outrank softer seed-budget review downgrades."""
+    rows = [
+        _row("crossing", "hybrid", [0.90] * 5),
+        _row("crossing", "ppo", [0.70] * 5),
+        _row("doorway", "hybrid", [0.88] * 5),
+    ]
+
+    report = build_report(
+        rows,
+        ReportConfig(
+            bootstrap_samples=32,
+            resamples=16,
+            expected_scenarios=("crossing", "doorway"),
+            expected_planners=("hybrid", "ppo"),
+        ),
+    )
+
+    packet = report["decision_packet"]
+    assert packet["manuscript_table_status"] == "blocked"
+    assert packet["s30_decision_status"] == "blocked"
+    assert "headline_grid_incomplete" in packet["manuscript_blockers"]
+    assert "missing_increased_seed_budget" in packet["manuscript_blockers"]
+    assert "missing_expected_headline_cells" in packet["s30_reasons"]
+    assert "minimum_seed_count_below_s20" in packet["s30_reasons"]
+
+
 def test_adjacent_ci_overlap_downgrades_strict_rank_claim() -> None:
     """Overlapping adjacent confidence intervals require a budget downgrade label."""
     rows = [

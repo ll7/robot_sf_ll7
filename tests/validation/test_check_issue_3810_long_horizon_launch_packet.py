@@ -35,7 +35,7 @@ def test_issue_3810_packet_passes_fail_closed_contract() -> None:
     assert summary["planner_count"] >= 10
     assert summary["compute_submit_authorized"] is False
     assert summary["slurm_job_id"] == "not_submitted"
-    assert summary["target_host"] == "imech039"
+    assert summary["target_host"] == "imech156-u"
     assert summary["blocking_jobs"] == [13251]
     assert summary["job_13175_state"] == "superseded_by_submitted_job_13251"
     assert summary["issue_3810_duplicate_status"] == "no_duplicate_reported_in_submission_comment"
@@ -88,7 +88,7 @@ def test_issue_3810_packet_rejects_stale_readiness_refresh_date() -> None:
 def test_issue_3810_packet_rejects_stale_latest_merged_packet_pr() -> None:
     """The public readiness refresh must track the latest merged packet guard."""
     packet = _load_packet()
-    packet["launch_packet"]["readiness_refresh"]["latest_merged_packet_pr"] = 4099
+    packet["launch_packet"]["readiness_refresh"]["latest_merged_packet_pr"] = 4101
 
     try:
         _MODULE.validate_packet(packet)
@@ -175,7 +175,7 @@ def test_issue_3810_packet_rejects_stale_target_host() -> None:
     try:
         _MODULE.validate_packet(packet)
     except _MODULE.PacketError as exc:
-        assert "target host must be imech039" in str(exc)
+        assert "target host must be imech156-u" in str(exc)
     else:
         raise AssertionError("packet should reject stale target host")
 

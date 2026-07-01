@@ -44,6 +44,9 @@ def test_expected_variants_enumerate_deterministically() -> None:
         scenario["metadata"]["continuous_spawn"]["runtime_definition_ready"]
         for scenario in generated
     } == {False}
+    assert {
+        tuple(sorted(scenario["metadata"]["success_metric"].items())) for scenario in generated
+    } == {tuple(sorted(sustained_flow.EXPECTED_SUSTAINED_PROGRESS_METRIC.items()))}
 
 
 def test_generated_variants_pass_generator_preflight() -> None:
@@ -201,6 +204,22 @@ def test_preflight_rejects_route_respawn_runtime_config_drift(tmp_path: Path) ->
     assert any(
         "simulation_config.peds_reset_follow_route_at_start" in error for error in report.errors
     )
+
+
+def test_preflight_rejects_sustained_progress_metric_drift(tmp_path: Path) -> None:
+    """Scenario YAML progress metric must preserve wait-policy semantics."""
+
+    payload = yaml.safe_load(SCENARIO_SET.read_text(encoding="utf-8"))
+    payload["scenarios"][0]["metadata"]["success_metric"]["wait_policy_expectation"] = (
+        "goal_reach_success"
+    )
+    drifted = tmp_path / "issue_3813_sustained_flow_success_metric_drift.yaml"
+    drifted.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    report = sustained_flow.preflight_sustained_flow_scenario_set(drifted)
+
+    assert not report.conforms
+    assert any("metadata.success_metric" in error for error in report.errors)
 
 
 def test_preflight_cli_outputs_json_payload() -> None:

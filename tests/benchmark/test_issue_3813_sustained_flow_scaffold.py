@@ -18,6 +18,7 @@ from robot_sf.benchmark.sustained_flow_preflight import (
 )
 from robot_sf.scenario_certification.sustained_flow import (
     EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG,
+    EXPECTED_SUSTAINED_PROGRESS_METRIC,
     generate_runtime_supported_sustained_flow_scenarios,
 )
 from robot_sf.training.scenario_loader import load_scenarios
@@ -81,7 +82,7 @@ def test_sustained_flow_scenario_set_is_runner_loadable(capsys) -> None:
         assert spawn_definition["spawn_budget"] == "time_bounded_episode"
         assert spawn_definition["minimum_active_pedestrians"] == 1
         assert spawn_definition["clearing_policy"] == "disallow_empty_scene_wait_success"
-        assert metadata["success_metric"]["id"] == "sustained_progress_rate_m_per_s"
+        assert metadata["success_metric"] == EXPECTED_SUSTAINED_PROGRESS_METRIC
         assert metadata["termination"]["mode"] == "time_bounded"
         assert metadata["termination"]["goal_reach_is_not_primary_success"] is True
 
@@ -267,6 +268,24 @@ def test_sustained_flow_preflight_rejects_waitable_spawn_budget(tmp_path: Path) 
         "continuous_spawn.definition.spawn_budget must be 'time_bounded_episode'" in reason
         for reason in payload["blocking_reasons"]
     )
+
+
+def test_sustained_flow_preflight_rejects_progress_metric_drift(tmp_path: Path) -> None:
+    """Benchmark preflight keeps sustained-progress wait-policy semantics pinned."""
+
+    matrix = _load_yaml(SCENARIO_SET)
+    matrix["scenarios"][0]["metadata"]["success_metric"]["wait_policy_expectation"] = (
+        "goal_reach_success"
+    )
+
+    drifted_matrix = tmp_path / "wrong_success_metric_sustained_flow.yaml"
+    drifted_matrix.write_text(yaml.safe_dump(matrix, sort_keys=False), encoding="utf-8")
+    payload = preflight_sustained_flow_matrix(drifted_matrix).to_payload()
+
+    assert payload["status"] == "not_available"
+    assert payload["benchmark_eligible"] is False
+    assert payload["variant_count"] == 0
+    assert any("metadata.success_metric" in reason for reason in payload["blocking_reasons"])
 
 
 def test_sustained_flow_contract_defines_progress_metric_and_reference() -> None:

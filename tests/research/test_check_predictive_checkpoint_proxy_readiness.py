@@ -579,8 +579,8 @@ def test_blocked_artifact_path_pattern_required(tmp_path):
     assert any("missing path_pattern" in message for message in config_check["messages"])
 
 
-def test_checkpoint_mapping_surfaces_incomplete_public_metadata(tmp_path):
-    """Missing public release metadata stays visible in checkpoint mapping output."""
+def test_incomplete_public_metadata_blocks_checkpoint_readiness(tmp_path):
+    """Declared public release metadata must be complete before readiness."""
     config = _write_config(tmp_path, min_resolvable=1)
     data = yaml.safe_load(config.read_text(encoding="utf-8"))
     data["known_blockers"] = [
@@ -620,9 +620,11 @@ def test_checkpoint_mapping_surfaces_incomplete_public_metadata(tmp_path):
     candidate = ckpt["mapping"]["candidates"][0]
     public_artifact = candidate["public_artifact"]
 
-    assert ckpt["status"] == "passed"
+    assert report["status"] == "blocked"
+    assert ckpt["status"] == "blocked"
     assert public_artifact["status"] == "incomplete"
     assert "sha256" in public_artifact["missing_fields"]
+    assert any("public artifact metadata is incomplete" in message for message in ckpt["messages"])
 
 
 def test_blocked_artifact_summary_is_reported_for_decision_packet(tmp_path: Path):

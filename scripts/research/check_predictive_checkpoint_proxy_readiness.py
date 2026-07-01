@@ -515,6 +515,28 @@ def _check_checkpoint_artifacts(
             mapping,
         )
 
+    incomplete_public_artifacts = [
+        (
+            str(candidate["model_id"]),
+            candidate["public_artifact"].get("missing_fields") or [],
+        )
+        for candidate in candidates
+        if candidate["public_artifact"]["status"] == "incomplete"
+    ]
+    if incomplete_public_artifacts:
+        missing = [
+            f"{model_id} missing {', '.join(fields)}"
+            for model_id, fields in incomplete_public_artifacts
+        ]
+        return (
+            STATUS_BLOCKED,
+            [
+                "declared public artifact metadata is incomplete; "
+                f"blocked release metadata entries: {'; '.join(missing)}"
+            ],
+            mapping,
+        )
+
     group_messages = _training_run_group_blocker(
         mapping, registry_tag=registry_tag, min_resolvable=min_resolvable
     )

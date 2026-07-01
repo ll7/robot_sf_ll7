@@ -82,6 +82,12 @@ def test_sustained_flow_preflight_enumerates_variants_and_fails_closed() -> None
     assert payload["status"] == "not_available"
     assert payload["benchmark_eligible"] is False
     assert payload["variant_count"] == 3
+    assert payload["runtime_readiness"] == {
+        "status": "not_supported",
+        "supported": False,
+        "expected_runtime_support": RUNTIME_SUPPORTED_VALUE,
+        "observed_runtime_support": ["metadata_only"],
+    }
     assert [variant["density_tier"] for variant in payload["variants"]] == [
         "light",
         "medium",
@@ -100,6 +106,31 @@ def test_sustained_flow_preflight_enumerates_variants_and_fails_closed() -> None
     assert all(
         f"expected {RUNTIME_SUPPORTED_VALUE!r}" in reason for reason in payload["blocking_reasons"]
     )
+
+
+def test_sustained_flow_preflight_accepts_runtime_supported_matrix(tmp_path: Path) -> None:
+    """Runtime-supported rows become eligible only when every variant opts in."""
+
+    matrix = _load_yaml(SCENARIO_SET)
+    for scenario in matrix["scenarios"]:
+        scenario["metadata"]["continuous_spawn"]["current_runtime_support"] = (
+            RUNTIME_SUPPORTED_VALUE
+        )
+
+    supported_matrix = tmp_path / "runtime_supported_sustained_flow.yaml"
+    supported_matrix.write_text(yaml.safe_dump(matrix, sort_keys=False), encoding="utf-8")
+
+    payload = preflight_sustained_flow_matrix(supported_matrix).to_payload()
+
+    assert payload["status"] == "available"
+    assert payload["benchmark_eligible"] is True
+    assert payload["runtime_readiness"] == {
+        "status": "supported",
+        "supported": True,
+        "expected_runtime_support": RUNTIME_SUPPORTED_VALUE,
+        "observed_runtime_support": [RUNTIME_SUPPORTED_VALUE],
+    }
+    assert payload["blocking_reasons"] == []
 
 
 def test_sustained_flow_contract_defines_progress_metric_and_reference() -> None:

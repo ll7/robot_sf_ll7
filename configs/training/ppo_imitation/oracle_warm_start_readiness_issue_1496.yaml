@@ -15,6 +15,10 @@ experiment_id: issue_1496_oracle_imitation_warm_start_v1
 # require_training_ready=True (must carry concrete durable trace artifact URIs).
 dataset_launch_packet: configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml
 
+# Durable trace URI registry #1470/#2655; strict gate requires concrete trace
+# artifact URIs and checksums for train, validation, and evaluation.
+trace_uri_registry: configs/training/ppo_imitation/oracle_trace_uri_registry_issue_1470.yaml
+
 # Behaviour-cloning warm-start training config (consumed by
 # scripts/training/pretrain_from_expert.py).
 warm_start_config: configs/training/ppo_imitation/bc_pretrain.yaml

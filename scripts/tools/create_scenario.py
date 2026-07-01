@@ -76,6 +76,42 @@ def _build_parser() -> argparse.ArgumentParser:
         default="embedded",
         help="Scenario-generation robot context.",
     )
+    parser.add_argument(
+        "--sidewalk-width",
+        type=float,
+        default=4.0,
+        help="Parameterized template sidewalk width in meters.",
+    )
+    parser.add_argument(
+        "--obstacle-density",
+        type=float,
+        default=0.0,
+        help="Parameterized template obstacle density [0.0,1.0].",
+    )
+    parser.add_argument(
+        "--pedestrian-density",
+        type=float,
+        default=0.06,
+        help="Parameterized template pedestrian density.",
+    )
+    parser.add_argument(
+        "--bottleneck-width",
+        type=float,
+        default=2.0,
+        help="Parameterized template bottleneck width in meters.",
+    )
+    parser.add_argument(
+        "--crossing-angle",
+        type=float,
+        default=90.0,
+        help="Parameterized template crossing angle in degrees.",
+    )
+    parser.add_argument(
+        "--occlusion-probability",
+        type=float,
+        default=0.0,
+        help="Parameterized template occlusion probability [0.0,1.0].",
+    )
     add_common_seed_argument(parser)
     parser.add_argument(
         "--overwrite",
@@ -113,6 +149,14 @@ def main(argv: list[str] | None = None) -> int:
             "speed_var": args.speed_var,
             "goal_topology": args.goal_topology,
             "robot_context": args.robot_context,
+        },
+        parameterized_profile={
+            "sidewalk_width": args.sidewalk_width,
+            "obstacle_density": args.obstacle_density,
+            "pedestrian_density": args.pedestrian_density,
+            "bottleneck_width": args.bottleneck_width,
+            "crossing_angle": args.crossing_angle,
+            "occlusion_probability": args.occlusion_probability,
         },
     )
     write_scenario_yaml(args.output, payload, overwrite=args.overwrite)

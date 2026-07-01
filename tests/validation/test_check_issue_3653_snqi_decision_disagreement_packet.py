@@ -28,7 +28,20 @@ def _load_packet() -> dict:
     return payload
 
 
-def _write_ready_episode_fixture(path: Path) -> None:
+def _point_packet_at_episodes(packet: dict, episodes: Path) -> None:
+    episodes_rel = os.path.relpath(episodes, REPO_ROOT)
+    packet["inputs"]["episodes_jsonl"] = episodes_rel
+    packet["raw_episode_artifact"]["expected_path"] = episodes_rel
+    command_template = packet["export"]["command_template"]
+    command_template[command_template.index("--episodes") + 1] = episodes_rel
+
+
+def _write_ready_episode_fixture(
+    path: Path,
+    *,
+    missing_metric: str | None = None,
+    malformed_metric: tuple[str, float] | None = None,
+) -> None:
     planners = [
         "goal",
         "hybrid_rule_v3_fast_progress_static_escape",
@@ -60,6 +73,13 @@ def _write_ready_episode_fixture(path: Path) -> None:
                     "episode_index": episode_index,
                 }
             )
+    if missing_metric is not None:
+        rows[0]["metrics"].pop(missing_metric)
+    if malformed_metric is not None:
+        metric, value = malformed_metric
+        if metric not in rows[0]["metrics"]:
+            raise KeyError(f"fixture metric not found: {metric}")
+        rows[0]["metrics"][metric] = value
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
 
@@ -335,6 +355,47 @@ def test_issue_3653_export_report_contract_rejects_fractional_reversal_count() -
         raise AssertionError("fractional reversal count should fail closed")
 
 
+def test_issue_3653_export_if_ready_blocks_missing_normalized_metric(tmp_path: Path) -> None:
+    """Application export refuses campaign-shaped rows missing normalized SNQI terms."""
+
+    packet = _load_packet()
+    episodes = tmp_path / "episodes.jsonl"
+    output_dir = tmp_path / "export"
+    _write_ready_episode_fixture(episodes, missing_metric="time_to_goal_norm")
+    _point_packet_at_episodes(packet, episodes)
+
+    try:
+        _MODULE.export_if_ready(packet, output_dir=output_dir)
+    except _MODULE.PacketError as exc:
+        assert "SNQI scalarization-sensitivity preflight not ready: blocked" in str(exc)
+    else:
+        raise AssertionError("missing normalized metric should fail closed before export")
+
+    assert not output_dir.exists()
+
+
+def test_issue_3653_export_if_ready_blocks_malformed_normalized_metric(tmp_path: Path) -> None:
+    """Application export refuses out-of-range bounded normalized SNQI terms."""
+
+    packet = _load_packet()
+    episodes = tmp_path / "episodes.jsonl"
+    output_dir = tmp_path / "export"
+    _write_ready_episode_fixture(
+        episodes,
+        malformed_metric=("time_to_goal_norm", 1.8),
+    )
+    _point_packet_at_episodes(packet, episodes)
+
+    try:
+        _MODULE.export_if_ready(packet, output_dir=output_dir)
+    except _MODULE.PacketError as exc:
+        assert "SNQI scalarization-sensitivity preflight not ready: malformed" in str(exc)
+    else:
+        raise AssertionError("malformed normalized metric should fail closed before export")
+
+    assert not output_dir.exists()
+
+
 def test_issue_3653_export_if_ready_writes_required_artifacts(tmp_path: Path) -> None:
     """Ready campaign-shaped inputs run through preflight and emit the packet artifact set."""
 
@@ -342,10 +403,7 @@ def test_issue_3653_export_if_ready_writes_required_artifacts(tmp_path: Path) ->
     episodes = tmp_path / "episodes.jsonl"
     output_dir = tmp_path / "export"
     _write_ready_episode_fixture(episodes)
-    packet["inputs"]["episodes_jsonl"] = os.path.relpath(episodes, REPO_ROOT)
-    packet["raw_episode_artifact"]["expected_path"] = packet["inputs"]["episodes_jsonl"]
-    command_template = packet["export"]["command_template"]
-    command_template[command_template.index("--episodes") + 1] = packet["inputs"]["episodes_jsonl"]
+    _point_packet_at_episodes(packet, episodes)
 
     summary = _MODULE.export_if_ready(packet, output_dir=output_dir)
 

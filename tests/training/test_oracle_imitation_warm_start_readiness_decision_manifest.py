@@ -45,6 +45,54 @@ def test_missing_trace_manifest_provenance_blocks_readiness(tmp_path: Path) -> N
     )
 
 
+def test_missing_dataset_provenance_field_is_actionable_blocker(tmp_path: Path) -> None:
+    """Missing packet provenance reports the field-level blocker."""
+
+    manifest_dict = _ready_manifest(tmp_path)
+    packet = _write_training_ready_packet(tmp_path)
+    payload = yaml.safe_load(packet.read_text(encoding="utf-8"))
+    payload.pop("generating_commit")
+    packet.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    manifest_dict["dataset_launch_packet"] = str(packet)
+    manifest = _write_manifest(tmp_path, manifest_dict)
+
+    report = check_warm_start_readiness(manifest)
+
+    assert report["status"] == "blocked"
+    assert any(
+        blocker
+        == (
+            "dataset_launch_packet not training-ready: "
+            "generating_commit must be a 40-character git SHA"
+        )
+        for blocker in report["blockers"]
+    )
+
+
+def test_missing_collection_manifest_destination_is_actionable_blocker(tmp_path: Path) -> None:
+    """Missing collection output-manifest destination reports the field-level blocker."""
+
+    manifest_dict = _ready_manifest(tmp_path)
+    packet = _write_training_ready_packet(tmp_path)
+    payload = yaml.safe_load(packet.read_text(encoding="utf-8"))
+    payload["collection_roots"].pop("manifest_destination")
+    packet.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    manifest_dict["dataset_launch_packet"] = str(packet)
+    manifest = _write_manifest(tmp_path, manifest_dict)
+
+    report = check_warm_start_readiness(manifest)
+
+    assert report["status"] == "blocked"
+    assert any(
+        blocker
+        == (
+            "dataset_launch_packet not training-ready: "
+            "collection_roots.manifest_destination must be a non-empty string"
+        )
+        for blocker in report["blockers"]
+    )
+
+
 def test_cli_writes_blocked_decision_manifest_when_file_missing(tmp_path: Path) -> None:
     """The CLI writes a stable blocked decision manifest for unmet prerequisites."""
     manifest = _write_ready_manifest(tmp_path, missing_file=True)

@@ -48,10 +48,23 @@ def _entry(
     return entry
 
 
-def _archive(path: Path, entries: list[dict]) -> Path:
+def _archive(
+    path: Path,
+    entries: list[dict],
+    *,
+    source_manifests: list[str] | None = None,
+) -> Path:
     """Write an adversarial failure archive fixture."""
 
-    payload = {"schema_version": "adversarial_failure_archive.v1", "entries": entries}
+    payload = {
+        "schema_version": "adversarial_failure_archive.v1",
+        "config": {
+            "source_manifests": source_manifests
+            if source_manifests is not None
+            else [f"search-manifests/{path.stem}.json"],
+        },
+        "entries": entries,
+    }
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
 
@@ -95,6 +108,55 @@ def test_disjoint_certified_archives_are_ready(tmp_path: Path) -> None:
     assert readiness.archive_id_overlap == []
     assert readiness.missing_certification_archive_ids == []
     assert readiness.to_payload()["claim_boundary"].startswith("readiness/leakage check only")
+
+
+def test_missing_archive_source_lineage_blocks_readiness(tmp_path: Path) -> None:
+    """Archive-level source manifests are required before disjointness is trusted."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [_entry("source_0000", family="family_a", seed=1)],
+        source_manifests=[],
+    )
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+    )
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=_null_test_prerequisites(),
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.missing_archive_lineage == ["source:config.source_manifests"]
+    assert "missing_archive_lineage:1" in readiness.blockers
+
+
+def test_shared_archive_source_lineage_blocks_readiness(tmp_path: Path) -> None:
+    """Different entries still fail closed when archives come from one manifest."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [_entry("source_0000", family="family_a", seed=1)],
+        source_manifests=["search-manifests/shared.json"],
+    )
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+        source_manifests=["search-manifests/shared.json"],
+    )
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=_null_test_prerequisites(),
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.source_manifest_overlap == ["search-manifests/shared.json"]
+    assert "source_manifest_overlap:1" in readiness.blockers
 
 
 def test_missing_null_test_prerequisite_input_blocks_readiness(tmp_path: Path) -> None:

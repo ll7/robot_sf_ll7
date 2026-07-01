@@ -241,3 +241,95 @@ def test_check_factorial_ablation_rows_rejects_duplicate_or_unknown_arm() -> Non
             "count": 2,
         }
     ]
+
+
+def test_load_safety_wrapper_ablation_rows_reads_jsonl_and_json_list(tmp_path: Path) -> None:
+    """The public checker accepts benchmark-style JSONL and compact JSON fixtures."""
+    from robot_sf.benchmark.safety_wrapper_ablation_manifest import (
+        load_safety_wrapper_ablation_rows,
+    )
+
+    off_row = _ablation_row(WRAPPER_OFF_ARM)
+    on_row = _ablation_row(WRAPPER_ON_ARM)
+    jsonl_path = tmp_path / "rows.jsonl"
+    jsonl_path.write_text(
+        "\n".join(json.dumps(row, sort_keys=True) for row in [off_row, on_row]) + "\n",
+        encoding="utf-8",
+    )
+    json_path = tmp_path / "rows.json"
+    json_path.write_text(json.dumps([off_row, on_row], sort_keys=True), encoding="utf-8")
+
+    assert load_safety_wrapper_ablation_rows(jsonl_path) == [off_row, on_row]
+    assert load_safety_wrapper_ablation_rows(json_path) == [off_row, on_row]
+
+
+def test_check_safety_wrapper_ablation_rows_cli_passes_and_writes_report(
+    tmp_path: Path,
+) -> None:
+    """CLI returns success only for rows with exact off/on pairs."""
+    import subprocess
+    import sys
+
+    rows_path = tmp_path / "paired_rows.jsonl"
+    rows_path.write_text(
+        "\n".join(
+            json.dumps(row, sort_keys=True)
+            for row in [_ablation_row(WRAPPER_OFF_ARM), _ablation_row(WRAPPER_ON_ARM)]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    report_path = tmp_path / "report.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/benchmark/check_safety_wrapper_ablation_rows.py",
+            "--rows",
+            str(rows_path),
+            "--out",
+            str(report_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["complete"] is True
+    assert report["pair_count"] == 1
+
+
+def test_check_safety_wrapper_ablation_rows_cli_fails_unpaired_rows(tmp_path: Path) -> None:
+    """CLI fails closed before any one-arm row can be compared."""
+    import subprocess
+    import sys
+
+    rows_path = tmp_path / "unpaired_rows.jsonl"
+    rows_path.write_text(
+        json.dumps(_ablation_row(WRAPPER_ON_ARM), sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/benchmark/check_safety_wrapper_ablation_rows.py",
+            "--rows",
+            str(rows_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    report = json.loads(result.stdout)
+    assert report["complete"] is False
+    assert report["incomplete_pairs"] == [
+        {
+            "pairing_key": {"planner": "orca", "scenario_id": "crossing_basic", "seed": 111},
+            "wrapper_arms": [WRAPPER_ON_ARM],
+        }
+    ]

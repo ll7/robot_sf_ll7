@@ -74,6 +74,7 @@ def _null_test_prerequisites(source_archive: Path, rerun_archive: Path) -> dict:
     """Return complete null-test prerequisite metadata."""
 
     return {
+        "split_policy": "scenario-family-disjoint",
         "source_archive_sha256": _archive_hash(source_archive),
         "rerun_archive_sha256": _archive_hash(rerun_archive),
         "null_tests_reject_null": True,
@@ -762,6 +763,7 @@ def test_null_test_prerequisites_can_be_checked_from_report(tmp_path: Path) -> N
             {
                 "schema_version": "adversarial_proposal_comparison.v1",
                 "null_tests": {
+                    "split_policy": "disjoint_scenario_family",
                     "source_archive_sha256": _archive_hash(source),
                     "rerun_archive_sha256": _archive_hash(rerun),
                     "null_tests_reject_null": True,
@@ -802,6 +804,7 @@ def test_missing_null_test_prerequisites_block_readiness(tmp_path: Path) -> None
         json.dumps(
             {
                 "null_tests": {
+                    "split_policy": "scenario-family-disjoint",
                     "source_archive_sha256": _archive_hash(source),
                     "rerun_archive_sha256": _archive_hash(rerun),
                     "null_tests_reject_null": False,
@@ -851,10 +854,39 @@ def test_missing_null_test_archive_hashes_block_readiness(tmp_path: Path) -> Non
 
     assert readiness.status == BLOCKED
     assert readiness.missing_null_test_prerequisites == [
+        "split_policy",
         "source_archive_sha256",
         "rerun_archive_sha256",
     ]
-    assert "missing_null_test_prerequisites:2" in readiness.blockers
+    assert "missing_null_test_prerequisites:3" in readiness.blockers
+
+
+def test_null_test_prerequisites_require_disjoint_split_policy(tmp_path: Path) -> None:
+    """Null-test prerequisites must identify a disjoint scenario-family split."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [_entry("source_0000", family="family_a", seed=1)],
+    )
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+    )
+    prerequisites = _null_test_prerequisites(source, rerun)
+    prerequisites["split_policy"] = "random-row-split"
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=prerequisites,
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.null_test_prerequisite_status == BLOCKED
+    assert readiness.invalid_null_test_prerequisites == [
+        "split_policy_not_disjoint_scenario_family"
+    ]
+    assert "invalid_null_test_prerequisites:1" in readiness.blockers
 
 
 def test_mismatched_null_test_archive_hash_blocks_readiness(tmp_path: Path) -> None:
@@ -898,6 +930,7 @@ def test_null_test_archive_hashes_can_use_archive_pair_container(tmp_path: Path)
             "source_archive_sha256": _archive_hash(source),
             "rerun_archive_sha256": _archive_hash(rerun),
         },
+        "split_policy": "scenario-family-disjoint",
         "null_tests_reject_null": True,
         "shuffled_outcome_null_test": {"status": "complete", "p_value": 0.01},
         "ranking_permutation_test": {"status": "complete", "p_value": 0.02},
@@ -926,6 +959,7 @@ def test_invalid_null_test_p_values_block_readiness(tmp_path: Path) -> None:
         [_entry("rerun_0000", family="family_b", seed=101)],
     )
     prerequisites = {
+        "split_policy": "scenario-family-disjoint",
         "source_archive_sha256": _archive_hash(source),
         "rerun_archive_sha256": _archive_hash(rerun),
         "null_tests_reject_null": True,
@@ -960,6 +994,7 @@ def test_incomplete_null_test_status_does_not_validate_p_value(tmp_path: Path) -
         [_entry("rerun_0000", family="family_b", seed=101)],
     )
     prerequisites = {
+        "split_policy": "scenario-family-disjoint",
         "source_archive_sha256": _archive_hash(source),
         "rerun_archive_sha256": _archive_hash(rerun),
         "null_tests_reject_null": True,
@@ -991,6 +1026,7 @@ def test_null_test_p_value_probability_bounds_are_allowed(tmp_path: Path) -> Non
         [_entry("rerun_0000", family="family_b", seed=101)],
     )
     prerequisites = {
+        "split_policy": "scenario-family-disjoint",
         "source_archive_sha256": _archive_hash(source),
         "rerun_archive_sha256": _archive_hash(rerun),
         "null_tests_reject_null": True,
@@ -1024,6 +1060,7 @@ def test_cli_exit_codes_and_writes_report(tmp_path: Path, capsys) -> None:
     prerequisites.write_text(
         json.dumps(
             {
+                "split_policy": "scenario-family-disjoint",
                 "source_archive_sha256": _archive_hash(source),
                 "rerun_archive_sha256": _archive_hash(rerun),
                 "null_tests_reject_null": True,

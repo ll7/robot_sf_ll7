@@ -81,10 +81,15 @@ _DIAGNOSTIC_STATUS_KEYS = (
     "status",
 )
 _NULL_TEST_REQUIRED_KEYS = (
+    "split_policy",
     "null_tests_reject_null",
     "shuffled_outcome_null_test",
     "ranking_permutation_test",
 )
+_NULL_TEST_ALLOWED_SPLIT_POLICIES = {
+    "disjoint_scenario_family",
+    "scenario-family-disjoint",
+}
 _NULL_TEST_CONTAINER_KEYS = (
     "independent_evaluation",
     "null_test_prerequisites",
@@ -604,8 +609,19 @@ def _null_test_prerequisite_gaps(
         missing=missing,
         invalid=invalid,
     )
+    if _split_policy_invalid(prerequisites.get("split_policy")):
+        invalid.append("split_policy_not_disjoint_scenario_family")
     if prerequisites.get("null_tests_reject_null") is not True:
         invalid.append("null_tests_reject_null_not_true")
+    invalid.extend(_null_test_packet_gaps(prerequisites))
+    status = "ready" if not missing and not invalid else "blocked"
+    return source, status, missing, invalid
+
+
+def _null_test_packet_gaps(prerequisites: dict[str, Any]) -> list[str]:
+    """Return invalid markers for complete null-test packet fields."""
+
+    invalid: list[str] = []
     for key in ("shuffled_outcome_null_test", "ranking_permutation_test"):
         value = prerequisites.get(key)
         if not isinstance(value, dict):
@@ -616,8 +632,18 @@ def _null_test_prerequisite_gaps(
             invalid.append(f"{key}_missing_p_value")
         elif not _valid_probability(value["p_value"]):
             invalid.append(f"{key}_invalid_p_value")
-    status = "ready" if not missing and not invalid else "blocked"
-    return source, status, missing, invalid
+    return invalid
+
+
+def _split_policy_invalid(split_policy: Any) -> bool:
+    """Return whether a present split policy is incompatible with issue #3275."""
+
+    if not isinstance(split_policy, str):
+        return False
+    normalized_split_policy = split_policy.strip()
+    return bool(
+        normalized_split_policy and normalized_split_policy not in _NULL_TEST_ALLOWED_SPLIT_POLICIES
+    )
 
 
 def _check_expected_archive_hash(

@@ -19,6 +19,7 @@ from robot_sf.benchmark.sustained_flow_preflight import (
 from robot_sf.scenario_certification.sustained_flow import (
     EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG,
     EXPECTED_SUSTAINED_PROGRESS_METRIC,
+    REQUIRED_BLOCKERS_BEFORE_BENCHMARK_USE,
     generate_runtime_supported_sustained_flow_scenarios,
 )
 from robot_sf.training.scenario_loader import load_scenarios
@@ -122,6 +123,9 @@ def test_sustained_flow_preflight_enumerates_variants_and_fails_closed() -> None
         tuple(sorted(variant["route_respawn_runtime_config"].items()))
         for variant in payload["variants"]
     } == {tuple(sorted(EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG.items()))}
+    assert {tuple(variant["required_before_benchmark_use"]) for variant in payload["variants"]} == {
+        REQUIRED_BLOCKERS_BEFORE_BENCHMARK_USE
+    }
     assert all(
         f"expected {RUNTIME_SUPPORTED_VALUE!r}" in reason for reason in payload["blocking_reasons"]
     )
@@ -286,6 +290,27 @@ def test_sustained_flow_preflight_rejects_progress_metric_drift(tmp_path: Path) 
     assert payload["benchmark_eligible"] is False
     assert payload["variant_count"] == 0
     assert any("metadata.success_metric" in reason for reason in payload["blocking_reasons"])
+
+
+def test_sustained_flow_preflight_rejects_required_blocker_drift(tmp_path: Path) -> None:
+    """Benchmark preflight keeps benchmark-use blockers explicit even for runtime markers."""
+
+    matrix = _load_yaml(SCENARIO_SET)
+    matrix["scenarios"] = generate_runtime_supported_sustained_flow_scenarios()
+    matrix["scenarios"][0]["metadata"]["requires_before_benchmark_use"] = [
+        "continuous pedestrian respawn runtime support"
+    ]
+
+    drifted_matrix = tmp_path / "wrong_required_blockers_sustained_flow.yaml"
+    drifted_matrix.write_text(yaml.safe_dump(matrix, sort_keys=False), encoding="utf-8")
+    payload = preflight_sustained_flow_matrix(drifted_matrix).to_payload()
+
+    assert payload["status"] == "not_available"
+    assert payload["benchmark_eligible"] is False
+    assert payload["variant_count"] == 0
+    assert any(
+        "metadata.requires_before_benchmark_use" in reason for reason in payload["blocking_reasons"]
+    )
 
 
 def test_sustained_flow_contract_defines_progress_metric_and_reference() -> None:

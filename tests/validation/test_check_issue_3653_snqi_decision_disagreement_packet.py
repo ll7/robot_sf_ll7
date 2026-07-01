@@ -77,6 +77,11 @@ def test_issue_3653_packet_passes_fail_closed_contract() -> None:
     assert summary["expected_episode_count"] == 8640
     assert summary["artifact_count"] == 5
     assert (
+        summary["raw_episode_artifact_status"]
+        == "blocked_until_durable_episode_jsonl_promoted_or_hydratable"
+    )
+    assert summary["raw_episode_artifact_sha256"] == "pending_durable_source"
+    assert (
         summary["evidence_packet"]
         == "docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.json"
     )
@@ -132,6 +137,36 @@ def test_issue_3653_packet_rejects_compute_submission() -> None:
         assert "compute_submit_authorized must be false" in str(exc)
     else:
         raise AssertionError("packet should reject compute submission authorization")
+
+
+def test_issue_3653_packet_rejects_synthetic_raw_episode_source() -> None:
+    """Raw campaign episodes must come from a durable job source, not a fixture shortcut."""
+
+    packet = _load_packet()
+    artifact = packet["raw_episode_artifact"]
+    artifact["allowed_sources"].append("synthesized_fixture")
+    artifact["forbidden_sources"].remove("synthesized_fixture")
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "allowed_sources mismatch" in str(exc)
+    else:
+        raise AssertionError("packet should reject synthetic raw episode acquisition")
+
+
+def test_issue_3653_packet_rejects_ready_raw_episode_without_sha256() -> None:
+    """A hydrated campaign input cannot be marked ready without durable provenance."""
+
+    packet = _load_packet()
+    packet["raw_episode_artifact"]["current_status"] = "ready"
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "raw_episode_artifact.current_status mismatch" in str(exc)
+    else:
+        raise AssertionError("packet should reject raw episode ready state without provenance")
 
 
 def test_issue_3653_packet_rejects_missing_decision_disagreement_artifact() -> None:
@@ -308,6 +343,7 @@ def test_issue_3653_export_if_ready_writes_required_artifacts(tmp_path: Path) ->
     output_dir = tmp_path / "export"
     _write_ready_episode_fixture(episodes)
     packet["inputs"]["episodes_jsonl"] = os.path.relpath(episodes, REPO_ROOT)
+    packet["raw_episode_artifact"]["expected_path"] = packet["inputs"]["episodes_jsonl"]
     command_template = packet["export"]["command_template"]
     command_template[command_template.index("--episodes") + 1] = packet["inputs"]["episodes_jsonl"]
 

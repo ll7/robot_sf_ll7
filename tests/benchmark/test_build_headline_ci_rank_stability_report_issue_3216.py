@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -180,3 +182,33 @@ def test_cli_dry_run_writes_decision_packet_and_can_fail_on_blocker(tmp_path: Pa
         "Decision packet is local preflight only; no manuscript or paper claim is promoted."
     )
     assert (output_dir / "report.md").is_file()
+
+
+def test_campaign_wrapper_preflight_only_never_launches_campaign(tmp_path: Path) -> None:
+    """The public #3216 wrapper has a local no-submit preflight path."""
+    repo_root = Path(__file__).resolve().parents[2]
+    report_dir = tmp_path / "wrapper_preflight"
+    env = {**os.environ, "REPORT_DIR": str(report_dir)}
+
+    result = subprocess.run(
+        [
+            "bash",
+            "scripts/benchmark/run_issue3216_headline_campaign.sh",
+            "--preflight-only",
+        ],
+        cwd=repo_root,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "local preflight only" in result.stdout
+    assert "campaign: increased-seed-budget" not in result.stdout
+    payload = json.loads((report_dir / "result.json").read_text(encoding="utf-8"))
+    assert payload["inputs"]["rows_path"] == "builtin://issue3216-dry-run"
+    assert payload["decision_packet"]["claim_boundary"] == (
+        "Decision packet is local preflight only; no manuscript or paper claim is promoted."
+    )

@@ -50,6 +50,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import yaml
 
 from robot_sf.benchmark.canonical_table_export import load_rows_json
 from robot_sf.benchmark.fidelity_rank_stability import (
@@ -284,6 +285,47 @@ def _git_head() -> str | None:
         ).strip()
     except (OSError, subprocess.CalledProcessError):  # pragma: no cover - env defensive
         return None
+
+
+def _merge_unique(*groups: Sequence[str]) -> tuple[str, ...]:
+    """Return non-empty strings in first-seen order across groups."""
+    merged: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        for value in group:
+            normalized = str(value).strip()
+            if normalized and normalized not in seen:
+                merged.append(normalized)
+                seen.add(normalized)
+    return tuple(merged)
+
+
+def _planner_keys_from_benchmark_config(path: Path) -> tuple[str, ...]:
+    """Read expected planner keys from a benchmark YAML config.
+
+    The wrapper uses this as a local preflight guard: rows can be absent or
+    diagnostic, but they must disclose which configured headline planners are
+    missing before any manuscript-table or S30 decision packet is treated as
+    reviewable.
+    """
+    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, Mapping):
+        raise ValueError(f"Benchmark config {path} must be a YAML mapping")
+    planners = payload.get("planners")
+    if not isinstance(planners, Sequence) or isinstance(planners, (str, bytes)):
+        raise ValueError(f"Benchmark config {path} must contain a planners list")
+
+    keys: list[str] = []
+    for index, planner in enumerate(planners):
+        if isinstance(planner, Mapping):
+            key = planner.get("key") or planner.get("planner_key") or planner.get("algo")
+        else:
+            key = planner
+        normalized = str(key or "").strip()
+        if not normalized:
+            raise ValueError(f"Planner entry {index} in {path} does not define a key")
+        keys.append(normalized)
+    return _merge_unique(keys)
 
 
 def _scenario_of(row: Mapping[str, Any]) -> str:
@@ -1415,6 +1457,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Expected planner key in the headline grid. Repeat for every required planner.",
     )
     parser.add_argument(
+        "--expected-planners-from-config",
+        type=str,
+        default=None,
+        help=(
+            "Benchmark YAML config whose planners list defines expected "
+            "headline planner rows. Explicit --expected-planner values are "
+            "merged after config-derived values."
+        ),
+    )
+    parser.add_argument(
         "--lower-is-better",
         action="store_true",
         help="Treat the rank metric as lower-is-better (default higher-is-better).",
@@ -1503,6 +1555,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         and job_evidence.get("snqi_contract_warning")
     ):
         invalid_rank_metric_reason = "SNQI contract warning in bound job evidence packet"
+    expected_planners = tuple(args.expected_planner)
+    if args.expected_planners_from_config:
+        config_planners = _planner_keys_from_benchmark_config(
+            Path(args.expected_planners_from_config)
+        )
+        expected_planners = _merge_unique(config_planners, expected_planners)
     config = ReportConfig(
         metrics=tuple(args.metrics),
         rank_metric=rank_metric,
@@ -1515,7 +1573,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         rank_seed=args.rank_seed,
         invalid_rank_metric_reason=invalid_rank_metric_reason,
         expected_scenarios=tuple(args.expected_scenario),
-        expected_planners=tuple(args.expected_planner),
+        expected_planners=expected_planners,
     )
     campaign = "dry-run" if args.dry_run else args.campaign
     report = build_report(

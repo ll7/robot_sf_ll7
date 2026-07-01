@@ -25,6 +25,7 @@
 # OUTPUT_ROOT campaign output base dir (default: output/benchmarks/camera_ready)
 # REPORT_DIR durable report dir (default: docs/context/evidence/issue_3216_headline_ci_rank_stability)
 # RANK_METRIC rank metric (default: snqi)
+# CONFIG benchmark config used for planner-row coverage preflight
 
 set -euo pipefail
 
@@ -36,7 +37,7 @@ OUTPUT_ROOT="${OUTPUT_ROOT:-output/benchmarks/camera_ready}"
 REPORT_DIR="${REPORT_DIR:-docs/context/evidence/issue_3216_headline_ci_rank_stability}"
 RANK_METRIC="${RANK_METRIC:-snqi}"
 PREFLIGHT_ONLY=0
-CONFIG="configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml"
+CONFIG="${CONFIG:-configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml}"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -121,6 +122,7 @@ if [ "$PREFLIGHT_ONLY" -eq 1 ]; then
   uv run python scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py \
     --dry-run \
     --rank-metric "$RANK_METRIC" \
+    --expected-planners-from-config "$CONFIG" \
     --output-dir "$REPORT_DIR" \
     --fail-on-decision-blocker || status=$?
   if [ "$status" -ne 0 ] && [ "$status" -ne 4 ]; then
@@ -154,6 +156,7 @@ mkdir -p "$REPORT_DIR"
 uv run python scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py \
   --rows "$ROWS" \
   --rank-metric "$RANK_METRIC" \
+  --expected-planners-from-config "$CONFIG" \
   --output-dir "$REPORT_DIR"
 
 echo "== [#3216] done =="

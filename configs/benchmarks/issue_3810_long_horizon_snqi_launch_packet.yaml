@@ -238,12 +238,12 @@ launch_packet:
     current_pr: null
     open_pr_matches: []
     blocking_open_pr_matches: []
-    latest_merged_packet_pr: 4030
+    latest_merged_packet_pr: 4036
     decision: >-
       Public readiness refresh found no open PR covering issue #3810 before
-      this branch. Current origin/main includes merged packet PR #4030, but
-      the packet needs imech039 submit-host alignment. This refresh is not submit-host
-      queue, duplicate, worktree, or private-ops route proof.
+      this branch. Current origin/main includes merged packet PR #4036 with
+      imech039 submit-host alignment. This refresh is not submit-host queue,
+      duplicate, worktree, or private-ops route proof.
   live_issue_state:
     checked_date: "2026-07-01"
     source: gh_issue_view_3810_labels

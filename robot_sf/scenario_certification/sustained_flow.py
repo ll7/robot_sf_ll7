@@ -498,6 +498,62 @@ def preflight_sustained_flow_scenario_set(
     )
 
 
+def preflight_generated_sustained_flow_scenarios() -> SustainedFlowPreflightReport:
+    """Validate the canonical generator before rows are materialized to YAML.
+
+    This is a generator preflight only: it proves the deterministic
+    light/medium/heavy continuous-spawn definitions remain internally
+    enumerable and fail-closed, without promoting them to benchmark evidence.
+    Returns:
+        Sustained-flow preflight report for canonical generated rows.
+    """
+
+    scenario_set = DEFAULT_SUSTAINED_FLOW_SCENARIO_SET.resolve()
+    loaded = generate_expected_sustained_flow_scenarios()
+    errors: list[str] = []
+    if len(loaded) != len(EXPECTED_SUSTAINED_FLOW_TIERS):
+        errors.append(
+            f"expected {len(EXPECTED_SUSTAINED_FLOW_TIERS)} sustained-flow variants, "
+            f"found {len(loaded)}"
+        )
+
+    variants: list[SustainedFlowVariant] = []
+    seen_seeds: set[int] = set()
+    expected_by_tier = {
+        tier: (ped_density, spawn_rate, seeds)
+        for tier, ped_density, spawn_rate, seeds in EXPECTED_SUSTAINED_FLOW_TIERS
+    }
+    expected_order = [tier for tier, *_ in EXPECTED_SUSTAINED_FLOW_TIERS]
+    observed_order: list[str] = []
+    for scenario in loaded:
+        metadata = scenario.get("metadata", {})
+        tier = str(metadata.get("density", ""))
+        observed_order.append(tier)
+        variant, variant_errors = _validate_variant(
+            scenario,
+            scenario_set=scenario_set,
+            expected_by_tier=expected_by_tier,
+            seen_seeds=seen_seeds,
+        )
+        errors.extend(variant_errors)
+        if variant is not None:
+            variants.append(variant)
+
+    if observed_order != expected_order:
+        errors.append(
+            "density tiers must enumerate light, medium, heavy in deterministic order; "
+            f"observed {observed_order}"
+        )
+
+    return SustainedFlowPreflightReport(
+        schema_version=SUSTAINED_FLOW_PREFLIGHT_SCHEMA_VERSION,
+        scenario_set="generated:issue_3813_sustained_flow_scaffold_v0",
+        conforms=not errors,
+        variants=tuple(variants),
+        errors=tuple(errors),
+    )
+
+
 def sustained_flow_preflight_to_dict(report: SustainedFlowPreflightReport) -> dict[str, Any]:
     """Serialize a sustained-flow preflight report.
 

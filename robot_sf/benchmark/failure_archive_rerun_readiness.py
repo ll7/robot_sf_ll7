@@ -96,6 +96,8 @@ class FailureArchiveRerunReadiness:
     overlap_provenance: dict[str, Any] = field(default_factory=dict)
     archive_id_overlap: list[str] = field(default_factory=list)
     missing_overlap_metadata_archive_ids: list[str] = field(default_factory=list)
+    source_missing_certification_archive_ids: list[str] = field(default_factory=list)
+    source_invalid_certification_archive_ids: list[str] = field(default_factory=list)
     missing_certification_archive_ids: list[str] = field(default_factory=list)
     invalid_certification_archive_ids: list[str] = field(default_factory=list)
     diagnostic_only_outputs: list[str] = field(default_factory=list)
@@ -129,6 +131,12 @@ class FailureArchiveRerunReadiness:
             "overlap_provenance": dict(self.overlap_provenance),
             "archive_id_overlap": list(self.archive_id_overlap),
             "missing_overlap_metadata_archive_ids": list(self.missing_overlap_metadata_archive_ids),
+            "source_missing_certification_archive_ids": list(
+                self.source_missing_certification_archive_ids
+            ),
+            "source_invalid_certification_archive_ids": list(
+                self.source_invalid_certification_archive_ids
+            ),
             "missing_certification_archive_ids": list(self.missing_certification_archive_ids),
             "invalid_certification_archive_ids": list(self.invalid_certification_archive_ids),
             "diagnostic_only_outputs": list(self.diagnostic_only_outputs),
@@ -186,6 +194,13 @@ def classify_failure_archive_rerun_readiness(
     missing_overlap_metadata = _overlap_metadata_gaps(source_entries, rerun_entries)
     blockers.extend(_count_blockers("missing_overlap_metadata", missing_overlap_metadata))
 
+    source_missing_certification, source_invalid_certification = _certification_gaps(source_entries)
+    blockers.extend(
+        _count_blockers("source_missing_certification_metadata", source_missing_certification)
+    )
+    blockers.extend(
+        _count_blockers("source_invalid_certification_status", source_invalid_certification)
+    )
     missing_certification, invalid_certification = _certification_gaps(rerun_entries)
     blockers.extend(_count_blockers("missing_certification_metadata", missing_certification))
     blockers.extend(_count_blockers("invalid_certification_status", invalid_certification))
@@ -211,6 +226,8 @@ def classify_failure_archive_rerun_readiness(
         overlap_provenance=overlap,
         archive_id_overlap=archive_id_overlap,
         missing_overlap_metadata_archive_ids=missing_overlap_metadata,
+        source_missing_certification_archive_ids=source_missing_certification,
+        source_invalid_certification_archive_ids=source_invalid_certification,
         missing_certification_archive_ids=missing_certification,
         invalid_certification_archive_ids=invalid_certification,
         diagnostic_only_outputs=diagnostic_outputs,

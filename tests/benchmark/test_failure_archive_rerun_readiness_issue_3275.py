@@ -208,6 +208,27 @@ def test_missing_certification_metadata_blocks_rerun_archive(tmp_path: Path) -> 
     assert "missing_certification_metadata:1" in readiness.blockers
 
 
+def test_missing_source_certification_metadata_blocks_readiness(tmp_path: Path) -> None:
+    """The source archive must also carry certification metadata."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [_entry("source_0000", family="family_a", seed=1, certified=False)],
+    )
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+    )
+
+    readiness = classify_failure_archive_rerun_readiness(source, rerun)
+
+    assert readiness.status == BLOCKED
+    assert readiness.source_missing_certification_archive_ids == ["source_0000"]
+    assert "source_missing_certification_metadata:1" in readiness.blockers
+    payload = readiness.to_payload()
+    assert payload["source_missing_certification_archive_ids"] == ["source_0000"]
+
+
 def test_failed_or_falsy_certification_status_is_invalid(tmp_path: Path) -> None:
     """Explicitly failed or falsy certification status must fail closed, not pass."""
 
@@ -234,6 +255,26 @@ def test_failed_or_falsy_certification_status_is_invalid(tmp_path: Path) -> None
         assert readiness.invalid_certification_archive_ids == [f"rerun_{index:04d}"], certification
         assert readiness.missing_certification_archive_ids == [], certification
         assert "invalid_certification_status:1" in readiness.blockers, certification
+
+
+def test_failed_source_certification_status_is_invalid(tmp_path: Path) -> None:
+    """Explicit source certification failures must fail closed, not pass."""
+
+    source_entry = _entry("source_0000", family="family_a", seed=1)
+    source_entry["certification_metadata"] = {"status": "failed", "source": "unit-test"}
+    source = _archive(tmp_path / "source.json", [source_entry])
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+    )
+
+    readiness = classify_failure_archive_rerun_readiness(source, rerun)
+
+    assert readiness.status == BLOCKED
+    assert readiness.source_invalid_certification_archive_ids == ["source_0000"]
+    assert "source_invalid_certification_status:1" in readiness.blockers
+    payload = readiness.to_payload()
+    assert payload["source_invalid_certification_archive_ids"] == ["source_0000"]
 
 
 def test_diagnostic_only_output_caps_otherwise_ready_inputs(tmp_path: Path) -> None:

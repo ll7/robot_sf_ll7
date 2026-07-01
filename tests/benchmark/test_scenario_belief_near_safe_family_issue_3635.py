@@ -88,4 +88,5 @@ def test_launch_packet_remains_proposal_not_benchmark_evidence() -> None:
     assert packet["no_benchmark_result_claim"] is True
     assert packet["claim_gate"]["no_claim_until_run"] is True
     assert {"issue": 3635} in packet["follows"]
+    assert packet["seed_sets"][packet["seed_set"]]["seeds"] == [363501, 363502, 363503]
     assert "fallback/degraded rows never count as success" in " ".join(packet["validation"])

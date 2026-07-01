@@ -227,8 +227,28 @@ launch_packet:
   target_host: imech036
   blocking_jobs:
     - 13175
+  readiness_refresh:
+    checked_date: "2026-07-01"
+    target_host: imech036
+    live_issue_command: >-
+      gh issue view 3810 --repo ll7/robot_sf_ll7
+      --json number,title,state,url,body,comments,labels
+    open_pr_dedupe_command: >-
+      gh pr list --repo ll7/robot_sf_ll7 --state open
+      --search '3810 OR "long-horizon" OR "SNQI" OR "wait-it-out"'
+      --json number,title,headRefName,url,isDraft
+    current_pr: null
+    open_pr_matches: []
+    blocking_open_pr_matches: []
+    latest_merged_packet_pr: 4065
+    decision: >-
+      Public readiness refresh found no open PR covering issue #3810 before
+      this branch. Current origin/main includes merged packet PR #4065 as
+      the latest packet lineage; this refresh keeps the packet guard on
+      imech036 per the current ready-queue target host. This refresh is not submit-host queue, duplicate, worktree,
+      or private-ops route proof.
   live_issue_state:
-    checked_date: "2026-06-30"
+    checked_date: "2026-07-01"
     source: gh_issue_view_3810_labels
     required_label: "state:running"
     submit_blocker: true
@@ -425,17 +445,17 @@ analysis_and_retention_packet:
       status: blocked_pending_submit_host_route_and_reconciliation
       reason: "Issue remains open and job 13175 must be reconciled on Slurm host before campaign claim."
   route:
-    private_ops_repo: "/home/luttkule/git/robot_sf_ll7-private-ops"
-    queue_summary_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh"
-    route_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh"
-    submit_wrapper: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/submit_and_record.sh"
+    private_ops_repo: "/home/luttkule/git/robot_sf_ll7-private-ops"  # allow-abs-path: private-ops routing (machine-local, non-portable)
+    queue_summary_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)
+    route_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)
+    submit_wrapper: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/submit_and_record.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)
     target_host: "imech036"
   preflight:
     required: true
     route_refresh_command: >-
       ROBOT_SF_PRIVATE_OPS="$HOME/git/robot_sf_ll7-private-ops" "$HOME/git/robot_sf_ll7-private-ops/ops/preflight/run_preflight.sh"
-    queue_and_duplicate_check_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh --json --reason issue_3810"
-    duplicate_check_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh --json --target-host imech036 --issue 3810"
+    queue_and_duplicate_check_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh --limit 100"  # allow-abs-path: private-ops routing (machine-local, non-portable)
+    duplicate_check_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh --limit 100"  # allow-abs-path: private-ops routing (machine-local, non-portable); read-only queue/ledger duplicate review for issue_3810
     manifest_validation_command: "uv run python scripts/validation/run_research_campaign_manifest.py configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml --output-dir output/research_campaign_packets/issue_3810_long_horizon_snqi"
     packet_validation_command: "uv run python scripts/validation/check_issue_3810_long_horizon_launch_packet.py --packet configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml --json"
   expected_outputs:

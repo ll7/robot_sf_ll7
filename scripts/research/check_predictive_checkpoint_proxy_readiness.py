@@ -41,6 +41,43 @@ STATUS_FAILED = "failed"
 STATUS_BLOCKED = "blocked"
 _KNOWN_BLOCKER_STATUSES = frozenset({STATUS_BLOCKED, "resolved", "diagnostic"})
 
+
+def _summarize_blocked_artifacts(
+    artifacts: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build compact counts for blocked-artifact decision telemetry."""
+    if not artifacts:
+        return {
+            "total": 0,
+            "by_artifact_type": {},
+            "by_status": {},
+            "by_storage_scope": {},
+        }
+
+    by_artifact_type: dict[str, int] = {}
+    by_status: dict[str, int] = {}
+    by_storage_scope: dict[str, int] = {}
+    for artifact in artifacts:
+        artifact_type = _summary_bucket(artifact.get("artifact_type"))
+        status = _summary_bucket(artifact.get("status"))
+        scope = _summary_bucket(artifact.get("storage_scope"))
+        by_artifact_type[artifact_type] = by_artifact_type.get(artifact_type, 0) + 1
+        by_status[status] = by_status.get(status, 0) + 1
+        by_storage_scope[scope] = by_storage_scope.get(scope, 0) + 1
+
+    return {
+        "total": len(artifacts),
+        "by_artifact_type": by_artifact_type,
+        "by_status": by_status,
+        "by_storage_scope": by_storage_scope,
+    }
+
+
+def _summary_bucket(value: Any) -> str:
+    """Normalize absent optional summary fields without rewriting valid falsy values."""
+    return str(value) if value is not None else "unknown"
+
+
 DEFAULT_CONFIG = Path("configs/research/predictive_checkpoint_proxy_v1.yaml")
 DEFAULT_REGISTRY = Path("model/registry.yaml")
 
@@ -488,6 +525,28 @@ def _check_checkpoint_artifacts(
             mapping,
         )
 
+    incomplete_public_artifacts = [
+        (
+            str(candidate["model_id"]),
+            candidate["public_artifact"].get("missing_fields") or [],
+        )
+        for candidate in candidates
+        if candidate["public_artifact"]["status"] == "incomplete"
+    ]
+    if incomplete_public_artifacts:
+        missing = [
+            f"{model_id} missing {', '.join(fields)}"
+            for model_id, fields in incomplete_public_artifacts
+        ]
+        return (
+            STATUS_BLOCKED,
+            [
+                "declared public artifact metadata is incomplete; "
+                f"blocked release metadata entries: {'; '.join(missing)}"
+            ],
+            mapping,
+        )
+
     group_messages = _training_run_group_blocker(
         mapping, registry_tag=registry_tag, min_resolvable=min_resolvable
     )
@@ -496,7 +555,7 @@ def _check_checkpoint_artifacts(
     return STATUS_PASSED, [], mapping
 
 
-def _check_proxy_summary(
+def _check_proxy_summary(  # noqa: C901
     summary_path: Path,
     *,
     analyzer: Any,
@@ -521,6 +580,10 @@ def _check_proxy_summary(
         return STATUS_FAILED, [f"training summary unreadable: {exc}"], {}
     if not isinstance(summary, dict):
         return STATUS_FAILED, ["training summary must be a JSON object/mapping"], {}
+
+    metadata_errors = _validate_proxy_summary_metadata(summary, require_enabled=require_enabled)
+    if metadata_errors:
+        return _blocked_proxy_metadata_result(metadata_errors)
 
     report = analyzer.analyze_summary(summary)
     verdict = report.get("verdict")
@@ -559,6 +622,39 @@ def _check_proxy_summary(
     if errors:
         return STATUS_BLOCKED, errors, payload
     return STATUS_PASSED, [], payload
+
+
+def _blocked_proxy_metadata_result(
+    metadata_errors: list[str],
+) -> tuple[str, list[str], dict[str, Any]]:
+    """Return a compact fail-closed payload for missing proxy metadata."""
+    return (
+        STATUS_BLOCKED,
+        metadata_errors,
+        {
+            "proxy_enabled": False,
+            "n_proxy_epochs": 0,
+            "schema_status": "missing_proxy_metadata",
+        },
+    )
+
+
+def _validate_proxy_summary_metadata(
+    summary: dict[str, Any], *, require_enabled: bool
+) -> list[str]:
+    """Validate proxy-summary schema before analyzer normalizes missing fields."""
+    proxy = summary.get("proxy")
+    if not isinstance(proxy, dict):
+        return ["training summary missing proxy mapping"]
+
+    errors: list[str] = []
+    if require_enabled and proxy.get("enabled") is not True:
+        errors.append("training summary proxy.enabled must be true")
+
+    history = proxy.get("history")
+    if not isinstance(history, list):
+        errors.append("training summary proxy.history must be a list")
+    return errors
 
 
 def _gate_checkpoint_selector(
@@ -671,6 +767,7 @@ def check_readiness(
             "status": artifact_status,
             "messages": artifact_messages,
             "artifacts": artifact_payload,
+            "summary": _summarize_blocked_artifacts(artifact_payload),
         }
 
         blocker_status, blocker_messages, blocker_payload = _check_known_blockers(cfg)

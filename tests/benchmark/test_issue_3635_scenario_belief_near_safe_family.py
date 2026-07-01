@@ -94,6 +94,7 @@ def test_issue_3635_campaign_manifest_distinguishes_three_belief_arms(tmp_path: 
 
     assert payload["scenario_family"] == SCENARIO_SET.relative_to(REPO_ROOT).as_posix()
     assert payload["seed_set"] == "issue_3635_s3_contract_only"
+    assert payload["seed_sets"][payload["seed_set"]]["seeds"] == [363501, 363502, 363503]
     assert payload["no_benchmark_result_claim"] is True
     assert set(payload["belief_modes"]) == set(campaign.MODES)
 
@@ -114,18 +115,20 @@ def test_issue_3635_campaign_manifest_distinguishes_three_belief_arms(tmp_path: 
 
 
 def test_issue_3635_runner_default_targets_new_family_and_applies_seed_matrix() -> None:
-    """The #3556 runner default resolves the #3635 family and caller-provided seed set."""
+    """The #3556 runner default resolves the #3635 family and bounded seed fixture."""
     payload = _load_yaml(BENCHMARK_CONFIG)
     expected_family = SCENARIO_SET.relative_to(REPO_ROOT).as_posix()
     assert campaign.DEFAULT_SCENARIO_SET == expected_family
     assert payload["scenario_family"] == expected_family
+    assert campaign.DEFAULT_SEED_SET == payload["seed_set"]
+    assert campaign.DEFAULT_SEEDS == payload["seed_sets"][payload["seed_set"]]["seeds"]
 
-    scenarios = campaign.load_campaign_scenarios(SCENARIO_SET, [101, 102])
+    scenarios = campaign.load_campaign_scenarios(SCENARIO_SET, campaign.DEFAULT_SEEDS)
     assert len(scenarios) == 1
     scenario = scenarios[0]
 
     assert scenario["name"] == "issue_3635_near_safe_occlusion_bearing_crossing"
-    assert scenario["seeds"] == [101, 102]
+    assert scenario["seeds"] == [363501, 363502, 363503]
     assert Path(scenario["map_file"]).is_absolute()
 
 
@@ -151,3 +154,48 @@ def test_issue_3635_synthetic_near_safe_discriminating_classification() -> None:
     assert decision["screening_status"] == "near_safe_discriminating"
     assert decision["oracle_near_safe"] is True
     assert decision["mode_is_discriminating"] is True
+
+
+def test_issue_3635_launch_packet_arm_contract_is_preflight_checked() -> None:
+    """Committed packet arms stay aligned with #3635 scenario and seed contract."""
+    ok, detail = campaign.check_launch_packet_arm_contract(
+        BENCHMARK_CONFIG,
+        set_path=SCENARIO_SET,
+        seeds=campaign.DEFAULT_SEEDS,
+        fov_degrees=120.0,
+    )
+
+    assert ok, detail
+    readiness = campaign.check_campaign_readiness(
+        SCENARIO_SET,
+        campaign.DEFAULT_SEEDS,
+        fov_degrees=120.0,
+        horizon=300,
+        dt=0.1,
+        workers=1,
+        launch_packet=BENCHMARK_CONFIG,
+    )
+
+    arm_check = next(
+        check for check in readiness["checks"] if check["name"] == "launch_packet_arm_contract"
+    )
+    assert arm_check["passed"] is True
+    assert "runner arms" in arm_check["detail"]
+
+
+def test_issue_3635_launch_packet_arm_contract_fails_closed_on_drift(tmp_path: Path) -> None:
+    """Preflight rejects retained/dropped arm drift before any campaign episodes run."""
+    payload = _load_yaml(BENCHMARK_CONFIG)
+    payload["runner_arms"][2]["expected_gate_enabled"] = False
+    drifted_packet = tmp_path / "drifted_launch_packet.yaml"
+    drifted_packet.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    ok, detail = campaign.check_launch_packet_arm_contract(
+        drifted_packet,
+        set_path=SCENARIO_SET,
+        seeds=campaign.DEFAULT_SEEDS,
+        fov_degrees=120.0,
+    )
+
+    assert ok is False
+    assert "uncertain_dropped arm expected_gate_enabled drifted" in detail

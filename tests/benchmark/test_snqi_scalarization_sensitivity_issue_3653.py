@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import shutil
 import subprocess
@@ -457,3 +458,22 @@ def test_cli_exports_report_ready_artifacts(tmp_path: Path) -> None:
     payload = json.loads((out_dir / "issue_3653.json").read_text(encoding="utf-8"))
     assert payload["schema_version"] == "snqi_scalarization_sensitivity.v1"
     assert payload["pareto_front"]["points"]
+
+    with (out_dir / "issue_3653_decision_disagreement.csv").open(
+        encoding="utf-8", newline=""
+    ) as handle:
+        disagreement_rows = list(csv.DictReader(handle))
+    assert disagreement_rows == [
+        {
+            "comparison": "base_snqi_vs_constraints_first",
+            "left_order": " > ".join(payload["base_snqi_order"]),
+            "right_order": " > ".join(payload["constraints_first_order"]),
+            "pairwise_reversal_count": str(
+                payload["decision_disagreement"]["pairwise_reversal_count"]
+            ),
+            "pairwise_disagreement_rate": str(
+                payload["decision_disagreement"]["pairwise_disagreement_rate"]
+            ),
+            "claim_boundary": payload["claim_boundary"],
+        }
+    ]

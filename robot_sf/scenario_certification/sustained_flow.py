@@ -31,9 +31,19 @@ REQUIRED_BLOCKERS_BEFORE_BENCHMARK_USE: tuple[str, ...] = (
     "interaction-exposure diagnostic sanity check",
     "scenario_cert.v1 eligibility review",
 )
+EXPECTED_CONTINUOUS_SPAWN_DEFINITION: dict[str, object] = {
+    "demand_model": "non_clearing_poisson_flow",
+    "respawn_trigger": "pedestrian_exits_route_corridor",
+    "spawn_budget": "time_bounded_episode",
+    "minimum_active_pedestrians": 1,
+    "clearing_policy": "disallow_empty_scene_wait_success",
+}
 _SUSTAINED_FLOW_FAMILY = "sustained_flow_t_intersection"
 _SUSTAINED_FLOW_MAP_FILE = "../../../maps/svg_maps/classic_t_intersection.svg"
 _SUSTAINED_FLOW_MAX_EPISODE_STEPS = 600
+SUSTAINED_FLOW_METADATA_ONLY_RUNTIME_SUPPORT = "metadata_only"
+SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE = "runtime_continuous_spawn"
+SUSTAINED_FLOW_GENERATED_SCENARIO_SET_ID = "generated:issue_3813_sustained_flow_scaffold_v0"
 
 
 @dataclass(frozen=True)
@@ -73,8 +83,11 @@ def iter_expected_sustained_flow_variant_specs() -> tuple[SustainedFlowVariantSp
     )
 
 
-def generate_expected_sustained_flow_scenarios() -> list[dict[str, Any]]:
-    """Generate full metadata-only scenario rows for the sustained-flow scaffold.
+def generate_expected_sustained_flow_scenarios(
+    *,
+    current_runtime_support: str = SUSTAINED_FLOW_METADATA_ONLY_RUNTIME_SUPPORT,
+) -> list[dict[str, Any]]:
+    """Generate full scenario rows for the sustained-flow scaffold.
 
     This helper deliberately materializes only the pre-benchmark scenario-matrix
     rows. It does not implement continuous pedestrian respawn or promote the
@@ -111,9 +124,10 @@ def generate_expected_sustained_flow_scenarios() -> list[dict[str, Any]]:
                     "continuous_spawn": {
                         "required_before_benchmark_use": True,
                         "intended_process": "poisson_respawn",
+                        "definition": dict(EXPECTED_CONTINUOUS_SPAWN_DEFINITION),
                         "spawn_rate_per_min": spec.spawn_rate_per_min,
                         "target_density_tier": spec.density_tier,
-                        "current_runtime_support": "metadata_only",
+                        "current_runtime_support": current_runtime_support,
                     },
                     "success_metric": {
                         "id": "sustained_progress_rate_m_per_s",
@@ -136,6 +150,22 @@ def generate_expected_sustained_flow_scenarios() -> list[dict[str, Any]]:
     return scenarios
 
 
+def generate_runtime_supported_sustained_flow_scenarios() -> list[dict[str, Any]]:
+    """Generate sustained-flow rows that advertise continuous-spawn runtime support.
+
+    This is preflight/checker input, not benchmark evidence. It separates
+    generator drift checks from the later runner proof that continuous pedestrian
+    respawn is actually implemented.
+
+    Returns:
+        Scenario-matrix rows in deterministic light, medium, heavy order.
+    """
+
+    return generate_expected_sustained_flow_scenarios(
+        current_runtime_support=SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE
+    )
+
+
 @dataclass(frozen=True)
 class SustainedFlowVariant:
     """Validated sustained-flow scaffold variant summary."""
@@ -144,6 +174,7 @@ class SustainedFlowVariant:
     density_tier: str
     ped_density: float
     spawn_rate_per_min: float
+    spawn_definition: dict[str, object]
     seeds: tuple[int, ...]
     map_file: str
 
@@ -218,6 +249,7 @@ def _check_continuous_spawn(
     name: str,
     expected_tier: str,
     expected_spawn_rate: float,
+    expected_runtime_support: str,
 ) -> list[str]:
     continuous_spawn = metadata.get("continuous_spawn")
     if not isinstance(continuous_spawn, dict):
@@ -241,9 +273,16 @@ def _check_continuous_spawn(
     _require_equal(
         errors,
         name,
+        "continuous_spawn.definition",
+        continuous_spawn.get("definition"),
+        EXPECTED_CONTINUOUS_SPAWN_DEFINITION,
+    )
+    _require_equal(
+        errors,
+        name,
         "continuous_spawn.current_runtime_support",
         continuous_spawn.get("current_runtime_support"),
-        "metadata_only",
+        expected_runtime_support,
     )
     _require_equal(
         errors,
@@ -313,6 +352,7 @@ def _check_metadata_fail_closed(
     *,
     expected_tier: str,
     expected_spawn_rate: float,
+    expected_runtime_support: str,
 ) -> list[str]:
     name = str(scenario.get("name", "<unnamed>"))
     metadata = scenario.get("metadata")
@@ -327,6 +367,7 @@ def _check_metadata_fail_closed(
             name=name,
             expected_tier=expected_tier,
             expected_spawn_rate=expected_spawn_rate,
+            expected_runtime_support=expected_runtime_support,
         )
     )
     errors.extend(_check_termination_and_metric(scenario, metadata, name=name))
@@ -339,6 +380,7 @@ def _validate_variant(
     scenario_set: Path,
     expected_by_tier: dict[str, tuple[float, float, tuple[int, ...]]],
     seen_seeds: set[int],
+    expected_runtime_support: str,
 ) -> tuple[SustainedFlowVariant | None, list[str]]:
     """Validate one scenario variant against the sustained-flow scaffold contract.
 
@@ -376,6 +418,7 @@ def _validate_variant(
             scenario,
             expected_tier=tier,
             expected_spawn_rate=expected_spawn_rate,
+            expected_runtime_support=expected_runtime_support,
         )
     )
     return (
@@ -384,11 +427,63 @@ def _validate_variant(
             density_tier=tier,
             ped_density=ped_density,
             spawn_rate_per_min=expected_spawn_rate,
+            spawn_definition=dict(EXPECTED_CONTINUOUS_SPAWN_DEFINITION),
             seeds=seeds,
             map_file=map_file,
         ),
         errors,
     )
+
+
+def _validate_loaded_sustained_flow_variants(
+    loaded: list[dict[str, Any]],
+    *,
+    scenario_set: Path,
+    expected_runtime_support: str = SUSTAINED_FLOW_METADATA_ONLY_RUNTIME_SUPPORT,
+) -> tuple[list[SustainedFlowVariant], list[str]]:
+    """Validate loaded sustained-flow rows from YAML or generated definitions.
+
+    Returns:
+        Variant summaries and validation errors.
+    """
+
+    errors: list[str] = []
+    if len(loaded) != len(EXPECTED_SUSTAINED_FLOW_TIERS):
+        errors.append(
+            f"expected {len(EXPECTED_SUSTAINED_FLOW_TIERS)} sustained-flow variants, "
+            f"found {len(loaded)}"
+        )
+
+    variants: list[SustainedFlowVariant] = []
+    seen_seeds: set[int] = set()
+    expected_by_tier = {
+        tier: (ped_density, spawn_rate, seeds)
+        for tier, ped_density, spawn_rate, seeds in EXPECTED_SUSTAINED_FLOW_TIERS
+    }
+    expected_order = [tier for tier, *_ in EXPECTED_SUSTAINED_FLOW_TIERS]
+    observed_order: list[str] = []
+    for scenario in loaded:
+        metadata = scenario.get("metadata", {})
+        tier = str(metadata.get("density", ""))
+        observed_order.append(tier)
+        variant, variant_errors = _validate_variant(
+            scenario,
+            scenario_set=scenario_set,
+            expected_by_tier=expected_by_tier,
+            seen_seeds=seen_seeds,
+            expected_runtime_support=expected_runtime_support,
+        )
+        errors.extend(variant_errors)
+        if variant is not None:
+            variants.append(variant)
+
+    if observed_order != expected_order:
+        errors.append(
+            "density tiers must enumerate light, medium, heavy in deterministic order; "
+            f"observed {observed_order}"
+        )
+
+    return variants, errors
 
 
 def preflight_sustained_flow_scenario_set(
@@ -415,41 +510,11 @@ def preflight_sustained_flow_scenario_set(
     if raw.get("schema_version") != "robot_sf.scenario_matrix.v1":
         errors.append("schema_version must be robot_sf.scenario_matrix.v1")
 
-    loaded = load_scenarios(scenario_set)
-    if len(loaded) != len(EXPECTED_SUSTAINED_FLOW_TIERS):
-        errors.append(
-            f"expected {len(EXPECTED_SUSTAINED_FLOW_TIERS)} sustained-flow variants, "
-            f"found {len(loaded)}"
-        )
-
-    variants: list[SustainedFlowVariant] = []
-    seen_seeds: set[int] = set()
-    expected_by_tier = {
-        tier: (ped_density, spawn_rate, seeds)
-        for tier, ped_density, spawn_rate, seeds in EXPECTED_SUSTAINED_FLOW_TIERS
-    }
-    expected_order = [tier for tier, *_ in EXPECTED_SUSTAINED_FLOW_TIERS]
-    observed_order: list[str] = []
-
-    for scenario in loaded:
-        metadata = scenario.get("metadata", {})
-        tier = str(metadata.get("density", ""))
-        observed_order.append(tier)
-        variant, variant_errors = _validate_variant(
-            scenario,
-            scenario_set=scenario_set,
-            expected_by_tier=expected_by_tier,
-            seen_seeds=seen_seeds,
-        )
-        errors.extend(variant_errors)
-        if variant is not None:
-            variants.append(variant)
-
-    if observed_order != expected_order:
-        errors.append(
-            "density tiers must enumerate light, medium, heavy in deterministic order; "
-            f"observed {observed_order}"
-        )
+    variants, variant_errors = _validate_loaded_sustained_flow_variants(
+        load_scenarios(scenario_set),
+        scenario_set=scenario_set,
+    )
+    errors.extend(variant_errors)
 
     return SustainedFlowPreflightReport(
         schema_version=SUSTAINED_FLOW_PREFLIGHT_SCHEMA_VERSION,
@@ -457,6 +522,56 @@ def preflight_sustained_flow_scenario_set(
         conforms=not errors,
         variants=tuple(variants),
         errors=tuple(errors),
+    )
+
+
+def preflight_generated_sustained_flow_scenarios(
+    *,
+    current_runtime_support: str = SUSTAINED_FLOW_METADATA_ONLY_RUNTIME_SUPPORT,
+    scenario_set_id: str = SUSTAINED_FLOW_GENERATED_SCENARIO_SET_ID,
+) -> SustainedFlowPreflightReport:
+    """Validate the canonical generator before rows are materialized to YAML.
+
+    This is a generator preflight only: it proves the deterministic
+    light/medium/heavy continuous-spawn definitions remain internally
+    enumerable and fail-closed, without promoting them to benchmark evidence.
+    Returns:
+        Sustained-flow preflight report for canonical generated rows.
+    """
+
+    scenario_set = DEFAULT_SUSTAINED_FLOW_SCENARIO_SET.resolve()
+    variants, errors = _validate_loaded_sustained_flow_variants(
+        generate_expected_sustained_flow_scenarios(current_runtime_support=current_runtime_support),
+        scenario_set=scenario_set,
+        expected_runtime_support=current_runtime_support,
+    )
+
+    return SustainedFlowPreflightReport(
+        schema_version=SUSTAINED_FLOW_PREFLIGHT_SCHEMA_VERSION,
+        scenario_set=scenario_set_id,
+        conforms=not errors,
+        variants=tuple(variants),
+        errors=tuple(errors),
+        runtime_support=current_runtime_support,
+    )
+
+
+def preflight_runtime_supported_generated_sustained_flow_scenarios() -> (
+    SustainedFlowPreflightReport
+):
+    """Validate generated rows for the future continuous-spawn runtime-support gate.
+
+    This is still a static generator/checker preflight. It proves the same light/medium/heavy
+    scenario definitions can carry the runtime-support marker once runtime support exists; it does
+    not run a benchmark campaign or promote the rows to benchmark evidence.
+
+    Returns:
+        Sustained-flow preflight report for generated runtime-supported rows.
+    """
+
+    return preflight_generated_sustained_flow_scenarios(
+        current_runtime_support=SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
+        scenario_set_id=f"{SUSTAINED_FLOW_GENERATED_SCENARIO_SET_ID}:runtime_supported",
     )
 
 
@@ -480,6 +595,7 @@ def sustained_flow_preflight_to_dict(report: SustainedFlowPreflightReport) -> di
                 "density_tier": variant.density_tier,
                 "ped_density": variant.ped_density,
                 "spawn_rate_per_min": variant.spawn_rate_per_min,
+                "spawn_definition": dict(variant.spawn_definition),
                 "seeds": list(variant.seeds),
                 "map_file": variant.map_file,
             }

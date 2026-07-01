@@ -16,6 +16,9 @@ from robot_sf.benchmark.sustained_flow_preflight import (
     RUNTIME_SUPPORTED_VALUE,
     preflight_sustained_flow_matrix,
 )
+from robot_sf.scenario_certification.sustained_flow import (
+    generate_runtime_supported_sustained_flow_scenarios,
+)
 from robot_sf.training.scenario_loader import load_scenarios
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -82,6 +85,12 @@ def test_sustained_flow_preflight_enumerates_variants_and_fails_closed() -> None
     assert payload["status"] == "not_available"
     assert payload["benchmark_eligible"] is False
     assert payload["variant_count"] == 3
+    assert payload["runtime_readiness"] == {
+        "status": "not_supported",
+        "supported": False,
+        "expected_runtime_support": RUNTIME_SUPPORTED_VALUE,
+        "observed_runtime_support": ["metadata_only"],
+    }
     assert [variant["density_tier"] for variant in payload["variants"]] == [
         "light",
         "medium",
@@ -99,6 +108,92 @@ def test_sustained_flow_preflight_enumerates_variants_and_fails_closed() -> None
     ]
     assert all(
         f"expected {RUNTIME_SUPPORTED_VALUE!r}" in reason for reason in payload["blocking_reasons"]
+    )
+
+
+def test_sustained_flow_preflight_accepts_runtime_supported_matrix(tmp_path: Path) -> None:
+    """Runtime-supported rows become eligible only when every variant opts in."""
+
+    matrix = _load_yaml(SCENARIO_SET)
+    matrix["scenarios"] = generate_runtime_supported_sustained_flow_scenarios()
+
+    supported_matrix = tmp_path / "runtime_supported_sustained_flow.yaml"
+    supported_matrix.write_text(yaml.safe_dump(matrix, sort_keys=False), encoding="utf-8")
+
+    payload = preflight_sustained_flow_matrix(supported_matrix).to_payload()
+
+    assert payload["status"] == "available"
+    assert payload["benchmark_eligible"] is True
+    assert payload["runtime_readiness"] == {
+        "status": "supported",
+        "supported": True,
+        "expected_runtime_support": RUNTIME_SUPPORTED_VALUE,
+        "observed_runtime_support": [RUNTIME_SUPPORTED_VALUE],
+    }
+    assert payload["blocking_reasons"] == []
+
+
+def test_sustained_flow_preflight_rejects_generator_drift(tmp_path: Path) -> None:
+    """Preflight fails closed if YAML rows stop matching the generator."""
+
+    matrix = _load_yaml(SCENARIO_SET)
+    for scenario in matrix["scenarios"]:
+        scenario["metadata"]["continuous_spawn"]["current_runtime_support"] = (
+            RUNTIME_SUPPORTED_VALUE
+        )
+    matrix["scenarios"][1]["metadata"]["continuous_spawn"]["spawn_rate_per_min"] = 13.0
+
+    drifted_matrix = tmp_path / "drifted_sustained_flow.yaml"
+    drifted_matrix.write_text(yaml.safe_dump(matrix, sort_keys=False), encoding="utf-8")
+
+    payload = preflight_sustained_flow_matrix(drifted_matrix).to_payload()
+
+    assert payload["status"] == "not_available"
+    assert payload["benchmark_eligible"] is False
+    assert payload["variant_count"] == 3
+    assert (
+        "sustained-flow matrix must match canonical generated variant definitions"
+        in payload["blocking_reasons"]
+    )
+
+
+def test_sustained_flow_preflight_rejects_wrong_spawn_process(tmp_path: Path) -> None:
+    """Continuous-spawn variants must name the supported respawn process."""
+
+    matrix = _load_yaml(SCENARIO_SET)
+    matrix["scenarios"][0]["metadata"]["continuous_spawn"]["intended_process"] = "finite_batch"
+
+    wrong_process_matrix = tmp_path / "wrong_spawn_process_sustained_flow.yaml"
+    wrong_process_matrix.write_text(yaml.safe_dump(matrix, sort_keys=False), encoding="utf-8")
+
+    payload = preflight_sustained_flow_matrix(wrong_process_matrix).to_payload()
+
+    assert payload["status"] == "not_available"
+    assert payload["benchmark_eligible"] is False
+    assert payload["variant_count"] == 0
+    assert any(
+        "continuous_spawn.intended_process must be 'poisson_respawn'" in reason
+        for reason in payload["blocking_reasons"]
+    )
+
+
+def test_sustained_flow_preflight_rejects_wrong_spawn_definition(tmp_path: Path) -> None:
+    """Continuous-spawn variants must keep the non-clearing demand definition."""
+    matrix = _load_yaml(SCENARIO_SET)
+    matrix["scenarios"][0]["metadata"]["continuous_spawn"]["definition"]["clearing_policy"] = (
+        "allow_empty_scene_wait_success"
+    )
+
+    wrong_definition_matrix = tmp_path / "wrong_spawn_definition_sustained_flow.yaml"
+    wrong_definition_matrix.write_text(yaml.safe_dump(matrix, sort_keys=False), encoding="utf-8")
+    payload = preflight_sustained_flow_matrix(wrong_definition_matrix).to_payload()
+
+    assert payload["status"] == "not_available"
+    assert payload["benchmark_eligible"] is False
+    assert payload["variant_count"] == 0
+    assert any(
+        "continuous_spawn.definition must match non-clearing demand contract" in reason
+        for reason in payload["blocking_reasons"]
     )
 
 

@@ -239,10 +239,19 @@ def _parse_datetime(value: Any) -> datetime | None:
 
 def _claim_fields(json_kind: str | None, payload: dict[str, Any]) -> dict[str, Any]:
     if json_kind == "headline_report":
+        decision_packet = payload.get("decision_packet")
+        if not isinstance(decision_packet, dict):
+            decision_packet = {}
         return {
             "schema_version": payload.get("schema_version"),
             "classification": payload.get("classification"),
             "classification_rationale": payload.get("classification_rationale"),
+            "manuscript_table_status": decision_packet.get("manuscript_table_status"),
+            "s30_decision_status": decision_packet.get("s30_decision_status"),
+            "s30_reasons": decision_packet.get("s30_reasons"),
+            "adjacent_overlap_count": decision_packet.get("adjacent_overlap_count"),
+            "invalid_metric_claim_count": decision_packet.get("invalid_metric_claim_count"),
+            "manuscript_blockers": decision_packet.get("manuscript_blockers"),
         }
     if json_kind == "headline_contract":
         return {
@@ -271,6 +280,12 @@ def _collect_claim_inputs(artifacts: list[dict[str, Any]]) -> dict[str, Any]:
     seed_analysis = _first_json_artifact(artifacts, "seed_sufficiency_json")
     return {
         "headline_report_classification": report.get("classification"),
+        "manuscript_table_status": report.get("manuscript_table_status"),
+        "s30_decision_status": report.get("s30_decision_status"),
+        "s30_reasons": report.get("s30_reasons"),
+        "adjacent_overlap_count": report.get("adjacent_overlap_count"),
+        "invalid_metric_claim_count": report.get("invalid_metric_claim_count"),
+        "manuscript_blockers": report.get("manuscript_blockers"),
         "headline_contract_claim_status": contract.get("claim_status"),
         "headline_contract_label": contract.get("label"),
         "headline_contract_promotion_allowed": contract.get("promotion_allowed"),
@@ -315,6 +330,94 @@ def _cannot_claim(
             {
                 "claim": "paper_grade_headline_planner_ranking",
                 "reason": f"headline report classification is {classification!r}, not 'paper_grade'",
+            }
+        )
+
+    blocked.extend(_decision_packet_blockers(claim_inputs))
+
+    claim_status = claim_inputs.get("headline_contract_claim_status")
+    promotion_allowed = claim_inputs.get("headline_contract_promotion_allowed")
+    if claim_status and claim_status != "paper_grade":
+        blocked.append(
+            {
+                "claim": "dissertation_ready_rank_stability_claim",
+                "reason": f"headline contract claim_status is {claim_status!r}",
+            }
+        )
+    if promotion_allowed is False:
+        blocked.append(
+            {
+                "claim": "promote_headline_rank_stability_outputs",
+                "reason": "headline contract promotion_allowed false",
+            }
+        )
+
+    blocked.append(
+        {
+            "claim": "new_paper_or_dissertation_text",
+            "reason": "this packet is read-only reconciliation and does not edit claims",
+        }
+    )
+    return blocked
+
+
+def _decision_packet_blockers(claim_inputs: dict[str, Any]) -> list[dict[str, str]]:
+    """Return claim blockers derived from the #3216 local decision packet."""
+    blocked: list[dict[str, str]] = []
+    manuscript_status = claim_inputs.get("manuscript_table_status")
+    if manuscript_status and manuscript_status != "ready_for_table_review_no_claim_promotion":
+        blocked.append(
+            {
+                "claim": "manuscript_headline_table_ready",
+                "reason": f"decision packet manuscript_table_status is {manuscript_status!r}",
+            }
+        )
+
+    s30_status = claim_inputs.get("s30_decision_status")
+    if s30_status in {"needs_review", "blocked"}:
+        raw_reasons = claim_inputs.get("s30_reasons")
+        if isinstance(raw_reasons, str):
+            reasons = [raw_reasons]
+        elif isinstance(raw_reasons, list | tuple):
+            reasons = raw_reasons
+        else:
+            reasons = []
+        reason_text = (
+            ", ".join(str(reason) for reason in reasons)
+            or f"decision packet s30_decision_status is {s30_status!r}"
+        )
+        blocked.append(
+            {
+                "claim": "s30_not_required_by_local_preflight",
+                "reason": reason_text,
+            }
+        )
+
+    adjacent_overlap_count = claim_inputs.get("adjacent_overlap_count")
+    if isinstance(adjacent_overlap_count, int) and adjacent_overlap_count > 0:
+        blocked.append(
+            {
+                "claim": "strict_adjacent_planner_ordering",
+                "reason": f"{adjacent_overlap_count} adjacent rank confidence interval(s) overlap",
+            }
+        )
+
+    invalid_metric_claim_count = claim_inputs.get("invalid_metric_claim_count")
+    if isinstance(invalid_metric_claim_count, int) and invalid_metric_claim_count > 0:
+        blocked.append(
+            {
+                "claim": "rank_metric_contract_valid",
+                "reason": f"{invalid_metric_claim_count} adjacent claim(s) use an invalid metric contract",
+            }
+        )
+
+    manuscript_blockers = claim_inputs.get("manuscript_blockers")
+    if isinstance(manuscript_blockers, list) and manuscript_blockers:
+        blocked.append(
+            {
+                "claim": "manuscript_headline_claim_ready",
+                "reason": "decision packet blockers: "
+                + ", ".join(str(blocker) for blocker in manuscript_blockers),
             }
         )
 

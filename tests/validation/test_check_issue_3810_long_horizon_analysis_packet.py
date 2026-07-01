@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -22,6 +23,8 @@ def _load_packet() -> dict:
 
 
 def test_issue_3810_analysis_packet_passes() -> None:
+    """The checked-in packet satisfies the analysis and retention contract."""
+
     summary = _MODULE.validate_packet(_load_packet())
     assert summary["ok"] is True
     assert summary["issue"] == 3810
@@ -29,22 +32,77 @@ def test_issue_3810_analysis_packet_passes() -> None:
 
 
 def test_issue_3810_analysis_packet_rejects_bad_target_host() -> None:
+    """The packet must keep the reconciled submit-host target."""
+
     packet = _load_packet()
-    packet["analysis_and_retention_packet"]["route"]["target_host"] = "imech156-u"
-    try:
+    packet["analysis_and_retention_packet"]["route"]["target_host"] = "imech039"
+    with pytest.raises(_MODULE.PacketError, match="target host must be imech036"):
         _MODULE.validate_packet(packet)
-    except _MODULE.PacketError as exc:
-        assert "target host must be imech036" in str(exc)
-    else:
-        raise AssertionError("packet should reject non-imech036 route")
+
+
+def test_issue_3810_analysis_packet_rejects_stale_readiness_refresh_date() -> None:
+    """Analysis retention checks also depend on fresh public dedupe state."""
+    packet = _load_packet()
+    packet["launch_packet"]["readiness_refresh"]["checked_date"] = "2026-06-30"
+
+    with pytest.raises(_MODULE.PacketError, match="readiness refresh date"):
+        _MODULE.validate_packet(packet)
+
+
+def test_issue_3810_analysis_packet_rejects_stale_private_ops_flags() -> None:
+    """The packet must not advertise unsupported private-ops queue flags."""
+
+    packet = _load_packet()
+    packet["analysis_and_retention_packet"]["preflight"]["duplicate_check_command"] = (
+        "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh "
+        "--limit 100 --json --target-host imech036 --issue 3810"
+    )
+    with pytest.raises(_MODULE.PacketError, match="stale private-ops flags"):
+        _MODULE.validate_packet(packet)
 
 
 def test_issue_3810_analysis_packet_rejects_missing_scope_caveat() -> None:
+    """The horizon report must retain the multi-factor comparison caveat."""
+
     packet = _load_packet()
-    packet["analysis_and_retention_packet"]["horizon_sensitivity_report"]["required_scope_caveat"] = "missing"
-    try:
+    packet["analysis_and_retention_packet"]["horizon_sensitivity_report"][
+        "required_scope_caveat"
+    ] = "missing"
+    with pytest.raises(_MODULE.PacketError, match="horizon scope caveat mismatch"):
         _MODULE.validate_packet(packet)
-    except _MODULE.PacketError as exc:
-        assert "horizon scope caveat mismatch" in str(exc)
-    else:
-        raise AssertionError("packet should reject wrong scope caveat")
+
+
+def test_issue_3810_analysis_packet_rejects_local_submission() -> None:
+    """The analysis packet must remain no-submit on the local machine."""
+
+    packet = _load_packet()
+    packet["analysis_and_retention_packet"]["execution_contract"]["local_submission_allowed"] = True
+    with pytest.raises(
+        _MODULE.PacketError,
+        match="execution_contract.local_submission_allowed must be false",
+    ):
+        _MODULE.validate_packet(packet)
+
+
+def test_issue_3810_analysis_packet_rejects_missing_job_reconciliation_reason() -> None:
+    """The decision gate must retain the active job reconciliation blocker."""
+
+    packet = _load_packet()
+    packet["analysis_and_retention_packet"]["execution_contract"]["decision_gate"]["reason"] = (
+        "Issue remains open."
+    )
+    with pytest.raises(_MODULE.PacketError, match="decision gate must require job 13175"):
+        _MODULE.validate_packet(packet)
+
+
+def test_issue_3810_analysis_packet_rejects_incomplete_retention_manifest() -> None:
+    """The retention manifest must preserve reviewable report and metadata paths."""
+
+    packet = _load_packet()
+    packet["analysis_and_retention_packet"]["retention"]["durable_manifests"] = [
+        "docs/context/evidence/issue_3810_long_horizon_snqi/"
+    ]
+    with pytest.raises(
+        _MODULE.PacketError, match="durable manifests must include reports directory"
+    ):
+        _MODULE.validate_packet(packet)

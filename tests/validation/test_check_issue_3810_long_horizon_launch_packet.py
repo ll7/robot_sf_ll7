@@ -71,6 +71,60 @@ def test_issue_3810_packet_rejects_missing_job_13175_blocker() -> None:
         raise AssertionError("packet should reject missing job 13175 blocker")
 
 
+def test_issue_3810_packet_rejects_stale_readiness_refresh_date() -> None:
+    """The public readiness refresh must not silently reuse stale issue state."""
+    packet = _load_packet()
+    packet["launch_packet"]["readiness_refresh"]["checked_date"] = "2026-06-30"
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "readiness refresh date" in str(exc)
+    else:
+        raise AssertionError("packet should reject stale readiness refresh date")
+
+
+def test_issue_3810_packet_rejects_stale_latest_merged_packet_pr() -> None:
+    """The public readiness refresh must track the latest merged packet guard."""
+    packet = _load_packet()
+    packet["launch_packet"]["readiness_refresh"]["latest_merged_packet_pr"] = 4061
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "latest merged packet PR" in str(exc)
+    else:
+        raise AssertionError("packet should reject stale merged packet pointer")
+
+
+def test_issue_3810_packet_rejects_open_pr_dedupe_matches() -> None:
+    """A matching PR must stop duplicate packet PRs."""
+    packet = _load_packet()
+    packet["launch_packet"]["readiness_refresh"]["blocking_open_pr_matches"] = [
+        {"number": 9999, "title": "Issue #3810 duplicate packet"}
+    ]
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "no blocking open PR matches" in str(exc)
+    else:
+        raise AssertionError("packet should reject open PR dedupe matches")
+
+
+def test_issue_3810_packet_rejects_non_null_current_pr_before_publication() -> None:
+    """The readiness snapshot must not pretend a branch PR already exists."""
+    packet = _load_packet()
+    packet["launch_packet"]["readiness_refresh"]["current_pr"] = 9999
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "no current review PR before branch publication" in str(exc)
+    else:
+        raise AssertionError("packet should reject pre-populated current PR snapshot")
+
+
 def test_issue_3810_packet_rejects_stale_job_13175_reconciliation() -> None:
     """Stale analyzed state cannot unlock the public launch packet."""
     packet = _load_packet()

@@ -15,6 +15,7 @@ and never promoted to benchmark evidence.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,7 @@ from robot_sf.adversarial.disjoint_evaluation import (
     ARCHIVE_SCHEMA_VERSION,
     archive_sha256,
     compute_overlap_provenance,
+    scenario_family_key,
 )
 
 READY = "ready"
@@ -94,6 +96,9 @@ class FailureArchiveRerunReadiness:
     rerun_archive_sha256: str | None = None
     overlap_provenance: dict[str, Any] = field(default_factory=dict)
     archive_id_overlap: list[str] = field(default_factory=list)
+    missing_overlap_metadata_archive_ids: list[str] = field(default_factory=list)
+    source_missing_certification_archive_ids: list[str] = field(default_factory=list)
+    source_invalid_certification_archive_ids: list[str] = field(default_factory=list)
     missing_certification_archive_ids: list[str] = field(default_factory=list)
     invalid_certification_archive_ids: list[str] = field(default_factory=list)
     diagnostic_only_outputs: list[str] = field(default_factory=list)
@@ -126,6 +131,13 @@ class FailureArchiveRerunReadiness:
             "rerun_archive_sha256": self.rerun_archive_sha256,
             "overlap_provenance": dict(self.overlap_provenance),
             "archive_id_overlap": list(self.archive_id_overlap),
+            "missing_overlap_metadata_archive_ids": list(self.missing_overlap_metadata_archive_ids),
+            "source_missing_certification_archive_ids": list(
+                self.source_missing_certification_archive_ids
+            ),
+            "source_invalid_certification_archive_ids": list(
+                self.source_invalid_certification_archive_ids
+            ),
             "missing_certification_archive_ids": list(self.missing_certification_archive_ids),
             "invalid_certification_archive_ids": list(self.invalid_certification_archive_ids),
             "diagnostic_only_outputs": list(self.diagnostic_only_outputs),
@@ -180,7 +192,16 @@ def classify_failure_archive_rerun_readiness(
     overlap = compute_overlap_provenance(source_entries, rerun_entries)
     archive_id_overlap = list(overlap.get("archive_id_overlap", []))
     blockers.extend(_overlap_blockers(overlap))
+    missing_overlap_metadata = _overlap_metadata_gaps(source_entries, rerun_entries)
+    blockers.extend(_count_blockers("missing_overlap_metadata", missing_overlap_metadata))
 
+    source_missing_certification, source_invalid_certification = _certification_gaps(source_entries)
+    blockers.extend(
+        _count_blockers("source_missing_certification_metadata", source_missing_certification)
+    )
+    blockers.extend(
+        _count_blockers("source_invalid_certification_status", source_invalid_certification)
+    )
     missing_certification, invalid_certification = _certification_gaps(rerun_entries)
     blockers.extend(_count_blockers("missing_certification_metadata", missing_certification))
     blockers.extend(_count_blockers("invalid_certification_status", invalid_certification))
@@ -205,6 +226,9 @@ def classify_failure_archive_rerun_readiness(
         rerun_archive_sha256=rerun_hash,
         overlap_provenance=overlap,
         archive_id_overlap=archive_id_overlap,
+        missing_overlap_metadata_archive_ids=missing_overlap_metadata,
+        source_missing_certification_archive_ids=source_missing_certification,
+        source_invalid_certification_archive_ids=source_invalid_certification,
         missing_certification_archive_ids=missing_certification,
         invalid_certification_archive_ids=invalid_certification,
         diagnostic_only_outputs=diagnostic_outputs,
@@ -241,6 +265,11 @@ def _load_archive(path: Path) -> tuple[str, dict[str, Any] | None, str]:
     entries = payload.get("entries")
     if not isinstance(entries, list) or not entries:
         return BLOCKED, payload, "archive_has_no_entries"
+    non_object_indexes = [
+        str(index) for index, entry in enumerate(entries) if not isinstance(entry, dict)
+    ]
+    if non_object_indexes:
+        return BLOCKED, payload, f"archive_entries_not_objects:{','.join(non_object_indexes)}"
     return READY, payload, "ok"
 
 
@@ -274,6 +303,71 @@ def _count_blockers(blocker: str, values: list[str]) -> list[str]:
     """Return a single count blocker when values are present."""
 
     return [f"{blocker}:{len(values)}"] if values else []
+
+
+def _overlap_metadata_gaps(
+    source_entries: list[dict[str, Any]],
+    rerun_entries: list[dict[str, Any]],
+) -> list[str]:
+    """Return archive IDs whose metadata cannot prove disjointness."""
+
+    gaps: list[str] = []
+    for side, entries in (("source", source_entries), ("rerun", rerun_entries)):
+        for index, entry in enumerate(entries):
+            raw_archive_id = entry.get("archive_id")
+            archive_id = _metadata_archive_id(raw_archive_id, side=side, index=index)
+            entry_gaps: list[str] = []
+            if _metadata_archive_id_missing(raw_archive_id):
+                entry_gaps.append("archive_id")
+            if _scenario_family_missing(entry):
+                entry_gaps.append("scenario_family")
+            candidate = entry.get("candidate")
+            if not isinstance(candidate, dict) or candidate.get("scenario_seed") is None:
+                entry_gaps.append("scenario_seed")
+            if entry_gaps:
+                gaps.append(f"{side}:{archive_id}:{','.join(entry_gaps)}")
+    return gaps
+
+
+def _metadata_archive_id(raw_archive_id: Any, *, side: str, index: int) -> str:
+    """Return a stable entry identifier for metadata-gap reports."""
+
+    if isinstance(raw_archive_id, str):
+        normalized = raw_archive_id.strip()
+        if normalized:
+            return normalized
+    elif raw_archive_id is not None:
+        return str(raw_archive_id)
+    return f"{side}:<entry:{index}>"
+
+
+def _metadata_archive_id_missing(raw_archive_id: Any) -> bool:
+    """Return whether archive ID metadata is absent or blank."""
+
+    return raw_archive_id is None or (
+        isinstance(raw_archive_id, str) and not raw_archive_id.strip()
+    )
+
+
+def _scenario_family_missing(entry: dict[str, Any]) -> bool:
+    """Return whether scenario-family metadata is absent or placeholder-only."""
+
+    family = scenario_family_key(entry)
+    if family == "unknown_family":
+        return True
+    if not isinstance(family, str) or not family.strip():
+        return True
+    if family.startswith("{"):
+        try:
+            decoded = json.loads(family)
+        except ValueError:
+            return False
+        if isinstance(decoded, dict) and not any(
+            value is not None and (not isinstance(value, str) or bool(value.strip()))
+            for value in decoded.values()
+        ):
+            return True
+    return False
 
 
 def _certification_gaps(entries: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
@@ -335,7 +429,7 @@ def _null_test_prerequisite_gaps(
     """Return fail-closed gaps for optional null-test prerequisite metadata."""
 
     if payload_or_path is None:
-        return None, "not_checked", [], []
+        return None, "blocked", ["null_test_prerequisites"], []
     if isinstance(payload_or_path, dict):
         source = "inline_payload"
         payload: dict[str, Any] | None = payload_or_path
@@ -362,10 +456,23 @@ def _null_test_prerequisite_gaps(
             continue
         if value.get("status") != "complete":
             invalid.append(f"{key}_status_not_complete")
-        if "p_value" not in value:
+        elif "p_value" not in value:
             invalid.append(f"{key}_missing_p_value")
+        elif not _valid_probability(value["p_value"]):
+            invalid.append(f"{key}_invalid_p_value")
     status = "ready" if not missing and not invalid else "blocked"
     return source, status, missing, invalid
+
+
+def _valid_probability(value: Any) -> bool:
+    """Return whether ``value`` is a finite probability scalar."""
+
+    return (
+        isinstance(value, int | float)
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and 0.0 <= value <= 1.0
+    )
 
 
 def _load_json_object(path: Path) -> tuple[dict[str, Any] | None, str | None]:

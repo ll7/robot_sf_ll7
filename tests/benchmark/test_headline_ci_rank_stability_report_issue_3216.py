@@ -133,8 +133,8 @@ def test_stable_ordering_has_high_tau_and_no_flips():
 def test_overlapping_ordering_shows_rank_instability():
     """Two planners with heavily overlapping per-seed values flip under resamples."""
     rows = [
-        _cell_row("bottleneck", "a", {"snqi": [0.50, 0.55, 0.45, 0.52, 0.48]}),
-        _cell_row("bottleneck", "b", {"snqi": [0.51, 0.46, 0.54, 0.49, 0.53]}),
+        _cell_row("bottleneck", "a", {"snqi": [0.50, 0.55, 0.45, 0.52, 0.48] * 4}),
+        _cell_row("bottleneck", "b", {"snqi": [0.51, 0.46, 0.54, 0.49, 0.53] * 4}),
     ]
     cells = mod.build_cell_results(
         rows, metrics=["snqi"], bootstrap_samples=0, confidence=0.95, bootstrap_seed=1
@@ -262,8 +262,8 @@ def test_adjacent_rank_claims_downgrade_overlapping_ci() -> None:
     """Adjacent planners with overlapping CIs are not strict headline claims."""
 
     rows = [
-        _cell_row("bottleneck", "a", {"snqi": [0.50, 0.55, 0.45, 0.52, 0.48]}),
-        _cell_row("bottleneck", "b", {"snqi": [0.51, 0.46, 0.54, 0.49, 0.53]}),
+        _cell_row("bottleneck", "a", {"snqi": [0.50, 0.55, 0.45, 0.52, 0.48] * 4}),
+        _cell_row("bottleneck", "b", {"snqi": [0.51, 0.46, 0.54, 0.49, 0.53] * 4}),
     ]
 
     report = _report(rows)
@@ -278,8 +278,8 @@ def test_adjacent_rank_claims_mark_ci_separable() -> None:
     """Well-separated adjacent planner CIs are labeled separable."""
 
     rows = [
-        _cell_row("merging", "best", {"snqi": [0.90, 0.91, 0.92, 0.93, 0.94]}),
-        _cell_row("merging", "worst", {"snqi": [0.10, 0.11, 0.09, 0.12, 0.10]}),
+        _cell_row("merging", "best", {"snqi": [0.90, 0.91, 0.92, 0.93, 0.94] * 4}),
+        _cell_row("merging", "worst", {"snqi": [0.10, 0.11, 0.09, 0.12, 0.10] * 4}),
     ]
 
     report = _report(rows)
@@ -397,10 +397,7 @@ def test_dry_run_fixture_stays_diagnostic_and_fail_closed() -> None:
     assert degraded["counted"] is False
     assert "degraded" in degraded["exclusion_reason"]
     assert len(report["rank_stability"]) == 2
-    assert any(
-        claim["decision"] == "not_statistically_distinguishable_budget"
-        for claim in report["adjacent_rank_claims"]
-    )
+    assert any(claim["decision"] == "diagnostic_only" for claim in report["adjacent_rank_claims"])
 
 
 def test_dry_run_cli_writes_report_without_rows_file(tmp_path) -> None:
@@ -478,7 +475,7 @@ def test_cli_decision_blocker_gate_fails_after_writing_report(tmp_path) -> None:
     assert exit_code == 4
     result = json.loads((out_dir / "result.json").read_text(encoding="utf-8"))
     assert mod.decision_packet_has_blocker(result["decision_packet"]) is True
-    assert result["decision_packet"]["s30_decision_status"] == "needs_review"
+    assert result["decision_packet"]["s30_decision_status"] == "blocked"
     assert (out_dir / "report.md").is_file()
 
 

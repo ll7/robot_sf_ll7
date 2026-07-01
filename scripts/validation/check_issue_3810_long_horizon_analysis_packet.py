@@ -5,14 +5,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import yaml
 
-DEFAULT_PACKET = Path(
-    "configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml"
-)
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from issue_3810_readiness_refresh import validate_readiness_refresh  # noqa: E402
+
+DEFAULT_PACKET = Path("configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml")
+EXPECTED_TARGET_HOST = "imech036"
 
 REQUIRED_PRE_FLIGHT_MARKERS = {
     "ROBOT_SF_PRIVATE_OPS",
@@ -23,10 +30,19 @@ REQUIRED_PRE_FLIGHT_MARKERS = {
 
 REQUIRED_OUTPUTS = {
     "preflight/private_ops_route_dry_run.json",
+    "preflight/validate_config.json",
+    "preflight/preview_scenarios.json",
+    "preflight/planner_availability.json",
+    "reports/campaign_summary.json",
+    "reports/campaign_table.csv",
+    "reports/campaign_table.md",
     "reports/snqi_recalibration_inputs.json",
     "reports/snqi_recalibration_bundle.json",
     "reports/horizon_sensitivity_report.json",
+    "reports/horizon_sensitivity_report.md",
     "reports/interaction_exposure_diagnostics.json",
+    "reports/interaction_exposure_diagnostics.md",
+    "episodes/",
 }
 
 REQUIRED_ROUTE_FIELDS = {
@@ -55,6 +71,8 @@ REQUIRED_WAIT_FIELDS = {
 
 
 class PacketError(ValueError):
+    """Raised when the issue #3810 analysis packet violates the contract."""
+
     pass
 
 
@@ -76,21 +94,50 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 
 def validate_packet(packet: Mapping[str, Any], *, issue: int = 3810) -> dict[str, Any]:
+    """Validate the issue #3810 analysis, retention, and no-submit guard contract."""
+
     campaign = _require_mapping(packet, "campaign")
     _require(campaign.get("parent_issue") == issue, "packet parent issue mismatch")
+
+    launch_packet = _require_mapping(packet, "launch_packet")
+    validate_readiness_refresh(
+        launch_packet,
+        EXPECTED_TARGET_HOST,
+        require=_require,
+        require_mapping=_require_mapping,
+    )
 
     analysis = _require_mapping(packet, "analysis_and_retention_packet")
     _require(analysis.get("enabled") is True, "analysis_and_retention_packet.enabled must be true")
 
     route = _require_mapping(analysis, "route")
     _require(REQUIRED_ROUTE_FIELDS <= set(route), "route field set incomplete")
-    _require(route.get("target_host") == "imech036", "target host must be imech036")
+    _require(
+        route.get("target_host") == EXPECTED_TARGET_HOST,
+        f"target host must be {EXPECTED_TARGET_HOST}",
+    )
 
     preflight = _require_mapping(analysis, "preflight")
     _require(preflight.get("required") is True, "preflight.required must be true")
     preflight_blob = "\n".join(str(v) for v in preflight.values())
     for marker in REQUIRED_PRE_FLIGHT_MARKERS:
         _require(marker in preflight_blob, f"preflight missing marker: {marker}")
+    queue_command = str(preflight.get("queue_and_duplicate_check_command", ""))
+    duplicate_command = str(preflight.get("duplicate_check_command", ""))
+    _require(
+        "queue_summary.sh" in queue_command and "--limit" in queue_command,
+        "queue duplicate check must use current queue_summary interface",
+    )
+    _require(
+        "queue_summary.sh" in duplicate_command and "--limit" in duplicate_command,
+        "duplicate check must use current queue_summary interface",
+    )
+    stale_flags = {"--json", "--target-host", "--issue"}
+    stale_command_blob = f"{queue_command}\n{duplicate_command}"
+    _require(
+        not any(flag in stale_command_blob for flag in stale_flags),
+        "preflight queue commands must not use stale private-ops flags",
+    )
 
     expected = _require_mapping(analysis, "expected_outputs")
     _require(
@@ -102,7 +149,22 @@ def validate_packet(packet: Mapping[str, Any], *, issue: int = 3810) -> dict[str
 
     retention = _require_mapping(analysis, "retention")
     compact_review_bundle = str(retention.get("compact_review_bundle", ""))
-    _require(compact_review_bundle.startswith("docs/context/evidence/"), "compact review path must be durable")
+    _require(
+        compact_review_bundle.startswith("docs/context/evidence/"),
+        "compact review path must be durable",
+    )
+    durable_manifests = set(retention.get("durable_manifests") or [])
+    _require(
+        compact_review_bundle in durable_manifests, "durable manifests must include compact bundle"
+    )
+    _require(
+        f"{compact_review_bundle.rstrip('/')}/reports" in durable_manifests,
+        "durable manifests must include reports directory",
+    )
+    _require(
+        f"{compact_review_bundle.rstrip('/')}/metadata.json" in durable_manifests,
+        "durable manifests must include metadata.json",
+    )
 
     execution_contract = _require_mapping(analysis, "execution_contract")
     _require(
@@ -114,10 +176,17 @@ def validate_packet(packet: Mapping[str, Any], *, issue: int = 3810) -> dict[str
         "execution_contract.launch_only must be false",
     )
     _require(
+        execution_contract.get("local_submission_allowed") is False,
+        "execution_contract.local_submission_allowed must be false",
+    )
+    _require(
         execution_contract.get("decision_gate", {}).get("status")
         == "blocked_pending_submit_host_route_and_reconciliation",
         "execution contract must stay blocked until host/route reconciliation",
     )
+    decision_reason = str(execution_contract.get("decision_gate", {}).get("reason", ""))
+    _require("Issue remains open" in decision_reason, "decision gate must keep issue open")
+    _require("job 13175" in decision_reason, "decision gate must require job 13175 reconciliation")
 
     snqi = _require_mapping(analysis, "snqi_recalibration_inputs")
     for field in (
@@ -170,6 +239,8 @@ def validate_packet(packet: Mapping[str, Any], *, issue: int = 3810) -> dict[str
 
 
 def main() -> int:
+    """Run the issue #3810 analysis packet validator CLI."""
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--packet", type=Path, default=DEFAULT_PACKET)
     parser.add_argument("--json", action="store_true")

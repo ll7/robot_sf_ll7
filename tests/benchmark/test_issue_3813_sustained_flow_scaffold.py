@@ -139,6 +139,24 @@ def test_sustained_flow_preflight_accepts_runtime_supported_matrix(tmp_path: Pat
     assert payload["blocking_reasons"] == []
 
 
+def test_sustained_flow_preflight_rejects_runtime_definition_readiness_drift(
+    tmp_path: Path,
+) -> None:
+    """Runtime-supported matrices must keep definition-readiness metadata aligned."""
+    matrix = _load_yaml(SCENARIO_SET)
+    matrix["scenarios"] = generate_runtime_supported_sustained_flow_scenarios()
+    matrix["scenarios"][0]["metadata"]["continuous_spawn"]["runtime_definition_ready"] = False
+
+    drifted_matrix = tmp_path / "runtime_definition_readiness_drift.yaml"
+    drifted_matrix.write_text(yaml.safe_dump(matrix, sort_keys=False), encoding="utf-8")
+
+    payload = preflight_sustained_flow_matrix(drifted_matrix).to_payload()
+
+    assert payload["status"] == "not_available"
+    assert payload["benchmark_eligible"] is False
+    assert any("runtime definition readiness" in reason for reason in payload["blocking_reasons"])
+
+
 def test_sustained_flow_preflight_rejects_generator_drift(tmp_path: Path) -> None:
     """Preflight fails closed if YAML rows stop matching the generator."""
 

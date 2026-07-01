@@ -35,7 +35,7 @@ def test_issue_3810_packet_passes_fail_closed_contract() -> None:
     assert summary["planner_count"] >= 10
     assert summary["compute_submit_authorized"] is False
     assert summary["slurm_job_id"] == "not_submitted"
-    assert summary["target_host"] == "imech036"
+    assert summary["target_host"] == "imech039"
     assert summary["blocking_jobs"] == [13175]
     assert summary["job_13175_state"] == "requires_submit_host_refresh"
     assert summary["issue_3810_duplicate_status"] == "requires_submit_host_refresh"
@@ -87,7 +87,7 @@ def test_issue_3810_packet_rejects_stale_readiness_refresh_date() -> None:
 def test_issue_3810_packet_rejects_stale_latest_merged_packet_pr() -> None:
     """The public readiness refresh must track the latest merged packet guard."""
     packet = _load_packet()
-    packet["launch_packet"]["readiness_refresh"]["latest_merged_packet_pr"] = 4059
+    packet["launch_packet"]["readiness_refresh"]["latest_merged_packet_pr"] = 4061
 
     try:
         _MODULE.validate_packet(packet)
@@ -159,7 +159,7 @@ def test_issue_3810_packet_rejects_stale_target_host() -> None:
     try:
         _MODULE.validate_packet(packet)
     except _MODULE.PacketError as exc:
-        assert "target host must be imech036" in str(exc)
+        assert "target host must be imech039" in str(exc)
     else:
         raise AssertionError("packet should reject stale target host")
 
@@ -187,7 +187,7 @@ def test_issue_3810_packet_rejects_decision_policy_without_target_host_gate() ->
     try:
         _MODULE.validate_packet(packet)
     except _MODULE.PacketError as exc:
-        assert "private-ops dry run must gate imech036 support" in str(exc)
+        assert "private-ops dry run must gate imech039 support" in str(exc)
     else:
         raise AssertionError("packet should reject a decision policy missing the host gate")
 

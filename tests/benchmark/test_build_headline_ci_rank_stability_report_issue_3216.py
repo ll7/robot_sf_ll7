@@ -127,6 +127,61 @@ def test_expected_headline_grid_missing_cell_blocks_packet() -> None:
     ]
 
 
+def test_expected_headline_planner_rows_block_missing_planner() -> None:
+    """Expected planner-only coverage fails closed for aggregate headline rows."""
+    rows = [
+        _row("headline", "hybrid", [0.90] * 20),
+        _row("headline", "orca", [0.70] * 20),
+    ]
+
+    report = build_report(
+        rows,
+        ReportConfig(
+            bootstrap_samples=32,
+            resamples=16,
+            expected_planners=("hybrid", "orca", "ppo"),
+        ),
+    )
+
+    packet = report["decision_packet"]
+    assert packet["manuscript_table_status"] == "blocked"
+    assert packet["s30_decision_status"] == "blocked"
+    assert "headline_grid_incomplete" in packet["manuscript_blockers"]
+    assert packet["grid_completeness"]["expected_scenarios"] == []
+    assert packet["grid_completeness"]["expected_cell_count"] == 3
+    assert packet["grid_completeness"]["observed_expected_cell_count"] == 2
+    assert packet["grid_completeness"]["missing_cells"] == [
+        {"scenario_id": "*", "planner_key": "ppo"}
+    ]
+
+
+def test_expected_headline_scenario_rows_block_missing_scenario() -> None:
+    """Expected scenario-only coverage fails closed without planner labels."""
+    rows = [
+        _row("crossing", "headline", [0.90] * 20),
+        _row("doorway", "headline", [0.70] * 20),
+    ]
+
+    report = build_report(
+        rows,
+        ReportConfig(
+            bootstrap_samples=32,
+            resamples=16,
+            expected_scenarios=("crossing", "doorway", "bottleneck"),
+        ),
+    )
+
+    packet = report["decision_packet"]
+    assert packet["manuscript_table_status"] == "blocked"
+    assert packet["s30_decision_status"] == "blocked"
+    assert packet["grid_completeness"]["expected_planners"] == []
+    assert packet["grid_completeness"]["expected_cell_count"] == 3
+    assert packet["grid_completeness"]["observed_expected_cell_count"] == 2
+    assert packet["grid_completeness"]["missing_cells"] == [
+        {"scenario_id": "bottleneck", "planner_key": "*"}
+    ]
+
+
 def test_underpowered_missing_grid_remains_blocked_not_reviewable() -> None:
     """Hard coverage blockers outrank softer seed-budget review downgrades."""
     rows = [

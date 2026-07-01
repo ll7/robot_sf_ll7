@@ -461,14 +461,58 @@ def build_grid_completeness(
     expected_scenarios: Sequence[str],
     expected_planners: Sequence[str],
 ) -> GridCompleteness | None:
-    """Check expected headline scenario/planner grid coverage."""
+    """Check expected headline scenario/planner coverage."""
 
     scenarios = tuple(dict.fromkeys(str(value) for value in expected_scenarios if str(value)))
     planners = tuple(dict.fromkeys(str(value) for value in expected_planners if str(value)))
-    if not scenarios or not planners:
+    if not scenarios and not planners:
         return None
 
     observed = {(cell.scenario_id, cell.planner_key) for cell in cells}
+    if not scenarios:
+        expected_planner_set = set(planners)
+        observed_planners = {planner for _, planner in observed}
+        missing = tuple(("*", planner) for planner in planners if planner not in observed_planners)
+        unexpected = tuple(
+            sorted(
+                (scenario, planner)
+                for scenario, planner in observed
+                if planner not in expected_planner_set
+            )
+        )
+        return GridCompleteness(
+            expected_scenarios=scenarios,
+            expected_planners=planners,
+            expected_cell_count=len(planners),
+            observed_cell_count=len(observed),
+            observed_expected_cell_count=len(observed_planners & expected_planner_set),
+            missing_cells=missing,
+            unexpected_cells=unexpected,
+        )
+
+    if not planners:
+        expected_scenario_set = set(scenarios)
+        observed_scenarios = {scenario for scenario, _ in observed}
+        missing = tuple(
+            (scenario, "*") for scenario in scenarios if scenario not in observed_scenarios
+        )
+        unexpected = tuple(
+            sorted(
+                (scenario, planner)
+                for scenario, planner in observed
+                if scenario not in expected_scenario_set
+            )
+        )
+        return GridCompleteness(
+            expected_scenarios=scenarios,
+            expected_planners=planners,
+            expected_cell_count=len(scenarios),
+            observed_cell_count=len(observed),
+            observed_expected_cell_count=len(observed_scenarios & expected_scenario_set),
+            missing_cells=missing,
+            unexpected_cells=unexpected,
+        )
+
     expected = tuple((scenario, planner) for scenario in scenarios for planner in planners)
     expected_set = set(expected)
     missing = tuple(

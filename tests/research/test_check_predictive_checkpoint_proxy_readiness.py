@@ -709,5 +709,6 @@ def test_blocked_artifact_summary_is_reported_for_decision_packet(tmp_path: Path
     assert "summary" in blocked
     summary = blocked["summary"]
     assert summary["total"] >= 1
+    assert summary["by_artifact_type"].get("checkpoint_set", 0) >= 1
     assert summary["by_status"].get("blocked", 0) >= 1
     assert summary["by_storage_scope"].get("worktree_local_output", 0) >= 1

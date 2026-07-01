@@ -73,7 +73,9 @@ def test_cli_checker_fails_closed_on_invalid_manifest(
 ) -> None:
     """The validation CLI exits 2 when required provenance fields are missing."""
     manifest_path = _write_valid_manifest(tmp_path)
-    manifest_path.write_text('{"schema_version":"benchmark_result_provenance.v1"}\n', encoding="utf-8")
+    manifest_path.write_text(
+        '{"schema_version":"benchmark_result_provenance.v1"}\n', encoding="utf-8"
+    )
     monkeypatch.setattr(
         "sys.argv",
         ["check_benchmark_result_provenance.py", "--manifest", str(manifest_path)],

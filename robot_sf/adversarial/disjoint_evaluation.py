@@ -509,7 +509,9 @@ def _collect_entry_stats(
         missing_archive_id=sum(1 for e in dict_entries if not e.get("archive_id")),
         missing_seed=sum(1 for e in dict_entries if _entry_scenario_seed(e) is None),
         missing_attribution=sum(
-            1 for e in dict_entries if not isinstance(e.get("failure_attribution"), dict)
+            1
+            for e in dict_entries
+            if not isinstance(e.get("failure_attribution"), dict) or not e["failure_attribution"]
         ),
         unknown_family=sum(1 for e in dict_entries if scenario_family_key(e) == "unknown_family"),
         distinct_family_count=len(distinct_families),

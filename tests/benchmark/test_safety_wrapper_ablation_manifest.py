@@ -9,6 +9,7 @@ import pytest
 
 from robot_sf.benchmark.safety_wrapper_ablation_manifest import (
     SAFETY_WRAPPER_ABLATION_SCHEMA,
+    SAFETY_WRAPPER_CONFIG_FIELD,
     SAFETY_WRAPPER_MODE_DISABLED,
     SAFETY_WRAPPER_MODE_ENABLED,
     SAFETY_WRAPPER_MODE_FIELD,
@@ -183,11 +184,22 @@ def _ablation_row(wrapper_arm: str, seed: int = 111) -> dict[str, object]:
         if wrapper_arm == WRAPPER_ON_ARM
         else SAFETY_WRAPPER_MODE_DISABLED
     )
+    wrapper_config = (
+        {
+            "pedestrian_caution_radius_m": 2.0,
+            "capped_speed_m_s": 0.5,
+            "ttc_veto_threshold_s": 1.0,
+            "clearance_veto_m": 0.3,
+        }
+        if wrapper_arm == WRAPPER_ON_ARM
+        else None
+    )
     return {
         "study_id": "issue_3501_safety_wrapper_ablation_v1",
         "planner": "orca",
         "wrapper_arm": wrapper_arm,
         SAFETY_WRAPPER_MODE_FIELD: wrapper_mode,
+        SAFETY_WRAPPER_CONFIG_FIELD: wrapper_config,
         "scenario_id": "crossing_basic",
         "seed": seed,
         "software_commit": "abc1234",
@@ -234,6 +246,25 @@ def test_check_factorial_ablation_rows_rejects_arm_mode_mismatch() -> None:
     assert report["complete"] is False
     assert report["invalid_provenance_fields"] == [
         {"row_index": 1, "fields": [SAFETY_WRAPPER_MODE_FIELD]}
+    ]
+
+
+def test_check_factorial_ablation_rows_rejects_wrapper_config_mismatch() -> None:
+    """Wrapper-on rows must carry the fixed predeclared threshold config."""
+    off_row = _ablation_row(WRAPPER_OFF_ARM)
+    on_row = _ablation_row(WRAPPER_ON_ARM)
+    on_row[SAFETY_WRAPPER_CONFIG_FIELD] = {
+        "pedestrian_caution_radius_m": 2.0,
+        "capped_speed_m_s": 0.25,
+        "ttc_veto_threshold_s": 1.0,
+        "clearance_veto_m": 0.3,
+    }
+
+    report = check_factorial_ablation_rows([off_row, on_row])
+
+    assert report["complete"] is False
+    assert report["invalid_provenance_fields"] == [
+        {"row_index": 1, "fields": [SAFETY_WRAPPER_CONFIG_FIELD]}
     ]
 
 

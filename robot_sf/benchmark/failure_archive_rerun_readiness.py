@@ -531,7 +531,7 @@ def _certification_status(value: Any) -> str | None:
                 return raw_status.strip().lower()
             if raw_status is None or (isinstance(raw_status, str) and not raw_status.strip()):
                 return "failed"
-        return "certified" if value else None
+        return None
     return None
 
 

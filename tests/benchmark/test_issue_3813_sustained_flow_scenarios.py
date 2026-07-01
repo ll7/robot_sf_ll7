@@ -13,6 +13,7 @@ from robot_sf.scenario_certification.sustained_flow import (
     EXPECTED_CONTINUOUS_SPAWN_DEFINITION,
     EXPECTED_SUSTAINED_FLOW_TIERS,
     REQUIRED_BLOCKERS_BEFORE_BENCHMARK_USE,
+    RUNTIME_DEFINITION_METADATA_ONLY_STATUS,
     generate_expected_sustained_flow_scenarios,
     preflight_sustained_flow_scenario_set,
     sustained_flow_preflight_to_dict,
@@ -75,6 +76,8 @@ def test_issue_3813_sustained_flow_scenarios_fail_closed_for_benchmark_use() -> 
             "spawn_rate_per_min": metadata["continuous_spawn"]["spawn_rate_per_min"],
             "target_density_tier": metadata["density"],
             "current_runtime_support": "metadata_only",
+            "runtime_definition_status": RUNTIME_DEFINITION_METADATA_ONLY_STATUS,
+            "runtime_definition_ready": False,
         }
         assert metadata["termination"]["mode"] == "time_bounded"
         assert metadata["termination"]["goal_reach_is_not_primary_success"] is True

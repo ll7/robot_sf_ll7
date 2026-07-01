@@ -12,6 +12,7 @@ from robot_sf.scenario_certification.sustained_flow import (
     EXPECTED_CONTINUOUS_SPAWN_DEFINITION,
     SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
     generate_expected_sustained_flow_scenarios,
+    runtime_definition_status_for_support,
 )
 from robot_sf.training.scenario_loader import load_scenarios
 
@@ -56,6 +57,8 @@ class SustainedFlowVariant:
     spawn_rate_per_min: float
     spawn_definition: dict[str, object]
     current_runtime_support: str
+    runtime_definition_status: str
+    runtime_definition_ready: bool
     max_episode_steps: int
     seeds: tuple[int, ...]
 
@@ -183,6 +186,12 @@ def _variant_from_scenario(scenario: Mapping[str, Any]) -> SustainedFlowVariant:
         current_runtime_support=_required_str(
             continuous_spawn, "current_runtime_support", scenario_name=name
         ),
+        runtime_definition_status=_required_str(
+            continuous_spawn, "runtime_definition_status", scenario_name=name
+        ),
+        runtime_definition_ready=_required_bool(
+            continuous_spawn, "runtime_definition_ready", scenario_name=name
+        ),
         max_episode_steps=_required_int(simulation_config, "max_episode_steps", scenario_name=name),
         seeds=tuple(seeds),
     )
@@ -191,6 +200,21 @@ def _variant_from_scenario(scenario: Mapping[str, Any]) -> SustainedFlowVariant:
 def _variant_blockers(variants: tuple[SustainedFlowVariant, ...]) -> tuple[str, ...]:
     blockers: list[str] = []
     for variant in variants:
+        expected_definition_status, expected_definition_ready = (
+            runtime_definition_status_for_support(variant.current_runtime_support)
+        )
+        if variant.runtime_definition_status != expected_definition_status:
+            blockers.append(
+                f"{variant.name}: continuous-spawn runtime definition status "
+                f"{variant.runtime_definition_status!r}, expected "
+                f"{expected_definition_status!r}"
+            )
+        if variant.runtime_definition_ready is not expected_definition_ready:
+            blockers.append(
+                f"{variant.name}: continuous-spawn runtime definition readiness "
+                f"{variant.runtime_definition_ready!r}, expected "
+                f"{expected_definition_ready!r}"
+            )
         if variant.current_runtime_support != RUNTIME_SUPPORTED_VALUE:
             blockers.append(
                 f"{variant.name}: continuous-spawn runtime support is "
@@ -228,8 +252,19 @@ def _generator_drift_blockers(variants: tuple[SustainedFlowVariant, ...]) -> tup
     Returns:
         Blocking reasons when generator-owned variant fields drift.
     """
+    observed_runtime_support = tuple(
+        dict.fromkeys(variant.current_runtime_support for variant in variants)
+    )
+    expected_runtime_support = (
+        observed_runtime_support[0]
+        if len(observed_runtime_support) == 1
+        else RUNTIME_SUPPORTED_VALUE
+    )
     generated_variants = tuple(
-        _variant_from_scenario(row) for row in generate_expected_sustained_flow_scenarios()
+        _variant_from_scenario(row)
+        for row in generate_expected_sustained_flow_scenarios(
+            current_runtime_support=expected_runtime_support
+        )
     )
     observed_profile = tuple(_variant_generator_profile(variant) for variant in variants)
     expected_profile = tuple(_variant_generator_profile(variant) for variant in generated_variants)
@@ -245,6 +280,9 @@ def _variant_generator_profile(variant: SustainedFlowVariant) -> tuple[object, .
         variant.ped_density,
         variant.spawn_rate_per_min,
         tuple(sorted(variant.spawn_definition.items())),
+        variant.current_runtime_support,
+        variant.runtime_definition_status,
+        variant.runtime_definition_ready,
         variant.max_episode_steps,
         variant.seeds,
     )
@@ -299,6 +337,13 @@ def _required_int(payload: Mapping[str, Any], key: str, *, scenario_name: str) -
     value = payload.get(key)
     if not isinstance(value, int) or isinstance(value, bool):
         raise SustainedFlowPreflightError(f"{scenario_name}: {key} must be an integer")
+    return value
+
+
+def _required_bool(payload: Mapping[str, Any], key: str, *, scenario_name: str) -> bool:
+    value = payload.get(key)
+    if not isinstance(value, bool):
+        raise SustainedFlowPreflightError(f"{scenario_name}: {key} must be a boolean")
     return value
 
 

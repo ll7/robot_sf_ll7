@@ -36,6 +36,8 @@ scenarios:
         spawn_rate_per_min: 6.0
         target_density_tier: light
         current_runtime_support: metadata_only
+        runtime_definition_status: metadata_only_not_runtime_ready
+        runtime_definition_ready: false
       success_metric:
         id: sustained_progress_rate_m_per_s
         definition: >-
@@ -83,6 +85,8 @@ scenarios:
         spawn_rate_per_min: 12.0
         target_density_tier: medium
         current_runtime_support: metadata_only
+        runtime_definition_status: metadata_only_not_runtime_ready
+        runtime_definition_ready: false
       success_metric:
         id: sustained_progress_rate_m_per_s
         definition: >-
@@ -130,6 +134,8 @@ scenarios:
         spawn_rate_per_min: 18.0
         target_density_tier: heavy
         current_runtime_support: metadata_only
+        runtime_definition_status: metadata_only_not_runtime_ready
+        runtime_definition_ready: false
       success_metric:
         id: sustained_progress_rate_m_per_s
         definition: >-

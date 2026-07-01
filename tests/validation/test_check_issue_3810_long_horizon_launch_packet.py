@@ -60,7 +60,7 @@ def test_issue_3810_packet_rejects_authorized_submit() -> None:
 
 
 def test_issue_3810_packet_rejects_missing_job_13251_blocker() -> None:
-    """Job 13175 stays a blocker until submit-host reconciliation is recorded."""
+    """Job 13251 stays a blocker until retention and analysis are recorded."""
     packet = _load_packet()
     packet["launch_packet"]["blocking_jobs"] = []
 
@@ -129,7 +129,9 @@ def test_issue_3810_packet_rejects_non_null_current_pr_before_publication() -> N
 def test_issue_3810_packet_rejects_stale_job_13175_reconciliation() -> None:
     """Stale analyzed state cannot unlock the public launch packet."""
     packet = _load_packet()
-    packet["launch_packet"]["ledger_reconciliation"]["job_13175_state"] = "requires_submit_host_refresh"
+    packet["launch_packet"]["ledger_reconciliation"]["job_13175_state"] = (
+        "requires_submit_host_refresh"
+    )
 
     try:
         _MODULE.validate_packet(packet)
@@ -191,8 +193,8 @@ def test_issue_3810_packet_rejects_stale_dry_run_target_host() -> None:
         raise AssertionError("packet should reject a stale dry-run target host")
 
 
-def test_issue_3810_packet_rejects_decision_policy_without_target_host_gate() -> None:
-    """The dry-run decision policy must still gate on the requested host support."""
+def test_issue_3810_packet_rejects_decision_policy_allowing_additional_submission() -> None:
+    """The dry-run decision policy must forbid additional submission."""
     packet = _load_packet()
     packet["launch_packet"]["go_no_go"]["private_ops_dry_run"]["decision_policy"] = (
         "submission remains blocked until route support is proven."

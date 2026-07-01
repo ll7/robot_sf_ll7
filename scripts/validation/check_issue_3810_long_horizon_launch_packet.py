@@ -246,8 +246,11 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
         active_submission.get("public_commit") == "c49a78e6622eb305a3438d9a6f11a43edb385ff4",
         "active submission public commit mismatch",
     )
+    active_submission_boundary = active_submission.get("boundary")
     _require(
-        str(active_submission.get("boundary", "")).startswith("Submission evidence only"),
+        (
+            str(active_submission_boundary) if active_submission_boundary is not None else ""
+        ).startswith("Submission evidence only"),
         "active submission boundary must forbid benchmark evidence",
     )
 
@@ -260,7 +263,9 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
         require_head_ref=True,
     )
     readiness_decision = str(readiness_refresh.get("decision", ""))
-    _require("not a local submit action" in readiness_decision, "readiness refresh must stay no-submit")
+    _require(
+        "not a local submit action" in readiness_decision, "readiness refresh must stay no-submit"
+    )
 
     live_issue_state = _require_mapping(launch_packet, "live_issue_state")
     _require(
@@ -320,7 +325,10 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
         "go/no-go must mention job 13251",
     )
     dry_run = _require_mapping(go_no_go, "private_ops_dry_run")
-    _require(dry_run.get("required_before_submit") is False, "private-ops dry run must be superseded by live submission")
+    _require(
+        dry_run.get("required_before_submit") is False,
+        "private-ops dry run must be superseded by live submission",
+    )
     _require(
         dry_run.get("target_host") == EXPECTED_TARGET_HOST,
         "private-ops dry run host mismatch",

@@ -2,13 +2,14 @@
   "schema_version": "issue_3482_release_0_0_2_collision_count_boundary.v1",
   "issue": 3482,
   "release_tag": "0.0.2",
-  "generated_on": "2026-06-30",
-  "purpose": "Machine-readable claim boundary for release 0.0.2 collision-count metrics after EpisodeEventLedger.v1 exact/derived reconciliation surfaced a discrepancy.",
+  "generated_on": "2026-07-01",
+  "purpose": "Machine-readable claim boundary for release 0.0.2 collision-count metrics after EpisodeEventLedger.v1 exact/derived reconciliation surfaced a discrepancy and exact-event provenance recovery did not find the source artifacts.",
   "source": {
-    "type": "issue_comment_summary",
+    "type": "issue_comment_summary_plus_negative_recovery_disposition",
     "url": "https://github.com/ll7/robot_sf_ll7/issues/3482#issuecomment-4835303925",
     "artifact_status": "diagnostic_summary_only_not_committed_release_bundle",
-    "release_bundle": "https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.2"
+    "release_bundle": "https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.2",
+    "claim_disposition": "docs/context/evidence/issue_3482_release_0_0_2_claim_disposition_2026_07_01/manifest.json"
   },
   "diagnostic_summary": {
     "total_episodes": 987,
@@ -18,22 +19,20 @@
     "violation": "exact collision event requires collision metric > 0"
   },
   "claim_boundaries": {
-    "exact_collision_outcome_status": "usable_with_event_ledger_boundary",
-    "collision_count_metric_status": "blocked_pending_artifact_promotion_and_table_annotation",
-    "open_gates": [
-      "committed_0_0_2_reconciliation_bundle",
-      "paper_table_collision_count_annotation"
-    ]
+    "exact_collision_outcome_status": "bounded_diagnostic_only",
+    "collision_count_metric_status": "withdrawn_exact_event_provenance_unavailable",
+    "open_gates": []
   },
   "forbidden_claims_until_gates_close": [
     "Do not use release 0.0.2 total_collision_count or collision-count-derived tables as paper-ready evidence.",
     "Do not treat zero positive derived collision counts as evidence that release 0.0.2 had zero collisions.",
-    "Do not close issue #3482 solely from this manifest; it records a boundary, not the durable 0.0.2 reconciliation bundle."
+    "Do not cite the 241 exact collision outcomes as release-bundle evidence unless exact-event provenance is later recovered and promoted.",
+    "Do not auto-close issue #3482 with a completed merge keyword; the defensible closure path is not_planned because the collision-count claim is withdrawn, not validated."
   ],
   "allowed_uses": [
     "Preserve the exact-vs-derived discrepancy as a fail-closed evidence boundary.",
-    "Use exact collision outcomes through EpisodeEventLedger.v1 with the documented boundary.",
-    "Route remaining work to artifact promotion and table annotation without rerunning benchmarks from this checker."
+    "Use non-collision release table fields only with an explicit collision-count withdrawal caveat.",
+    "Use this manifest with the claim-disposition packet to explain why release 0.0.2 collision-count claims are withdrawn rather than reconciled."
   ],
   "validator": "scripts/validation/check_release_0_0_2_collision_count_boundary.py"
 }

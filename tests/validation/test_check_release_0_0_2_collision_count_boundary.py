@@ -31,8 +31,8 @@ def _manifest() -> dict:
     return json.loads(DEFAULT_MANIFEST.read_text(encoding="utf-8"))
 
 
-def test_tracked_manifest_keeps_collision_count_metric_blocked() -> None:
-    """The checked-in boundary must not promote release 0.0.2 collision-count metrics."""
+def test_tracked_manifest_keeps_collision_count_metric_withdrawn() -> None:
+    """The checked-in boundary withdraws release 0.0.2 collision-count metrics."""
     report = build_report(DEFAULT_MANIFEST)
 
     assert report["status"] == "pass"
@@ -53,10 +53,12 @@ def test_manifest_fails_if_collision_count_metric_marked_claim_ready() -> None:
     )
 
 
-def test_manifest_fails_if_required_open_gate_is_removed() -> None:
-    """Artifact-promotion and table-annotation gates must remain explicit."""
+def test_manifest_fails_if_withdrawn_status_keeps_promotion_gates() -> None:
+    """Withdrawn collision-count claims must not retain open promotion gates."""
     payload = _manifest()
-    payload["claim_boundaries"]["open_gates"] = ["committed_0_0_2_reconciliation_bundle"]
+    payload["claim_boundaries"]["open_gates"] = [
+        "committed_0_0_2_reconciliation_bundle",
+    ]
 
     violations = validate_manifest(payload)
 

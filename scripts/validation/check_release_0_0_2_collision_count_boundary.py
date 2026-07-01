@@ -17,12 +17,9 @@ DEFAULT_MANIFEST = (
 )
 SCHEMA_VERSION = "issue_3482_release_0_0_2_collision_count_boundary.v1"
 EXPECTED_RELEASE = "0.0.2"
-EXPECTED_COLLISION_COUNT_STATUS = "blocked_pending_artifact_promotion_and_table_annotation"
-EXPECTED_EXACT_OUTCOME_STATUS = "usable_with_event_ledger_boundary"
-REQUIRED_OPEN_GATES = {
-    "committed_0_0_2_reconciliation_bundle",
-    "paper_table_collision_count_annotation",
-}
+EXPECTED_COLLISION_COUNT_STATUS = "withdrawn_exact_event_provenance_unavailable"
+EXPECTED_EXACT_OUTCOME_STATUS = "bounded_diagnostic_only"
+REQUIRED_OPEN_GATES: set[str] = set()
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,7 +93,7 @@ def _validate_diagnostic_summary(payload: dict[str, Any]) -> list[BoundaryViolat
 
 
 def _validate_claim_boundaries(payload: dict[str, Any]) -> list[BoundaryViolation]:
-    """Validate claim boundary and open-gate fields."""
+    """Validate terminal claim boundary and open-gate fields."""
     violations: list[BoundaryViolation] = []
     boundaries = payload.get("claim_boundaries")
     if not isinstance(boundaries, dict):
@@ -118,12 +115,11 @@ def _validate_claim_boundaries(payload: dict[str, Any]) -> list[BoundaryViolatio
         )
 
     open_gates = set(boundaries.get("open_gates") or ())
-    if not REQUIRED_OPEN_GATES.issubset(open_gates):
-        missing = sorted(REQUIRED_OPEN_GATES - open_gates)
+    if open_gates != REQUIRED_OPEN_GATES:
         violations.append(
             BoundaryViolation(
                 "claim_boundaries.open_gates",
-                f"missing required gates: {', '.join(missing)}",
+                "withdrawn collision-count claims must not advertise open promotion gates",
             )
         )
     return violations

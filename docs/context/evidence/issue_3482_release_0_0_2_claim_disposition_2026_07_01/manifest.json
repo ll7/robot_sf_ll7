@@ -1,0 +1,86 @@
+{
+  "schema_version": "issue_3482_release_0_0_2_claim_disposition.v1",
+  "issue": 3482,
+  "date": "2026-07-01",
+  "host": "imech156-u",
+  "release_tag": "0.0.2",
+  "release_target_commit": "f7ebdcae2375d085e925213197a75a386e26a79c",
+  "repository_commit": "2e9cbdb7bf275c56fa41160ee7d6ed628fd4e31f",
+  "recovery_inputs": {
+    "searched_artifacts": [
+      "backfill_summary.json",
+      "frozen_reconciliation_report.json",
+      "reconciliation_tables_0_0_2.jsonl"
+    ],
+    "searched_roots": [
+      "home:luttkule",
+      "scratch",
+      "data",
+      "mnt",
+      "tmp",
+      "var_tmp"
+    ],
+    "exact_artifact_candidates_found": 0,
+    "raw_exact_event_release_inputs_found": 0,
+    "ssh_alias_check": {
+      "command": "ssh -o StrictHostKeyChecking=yes imech156 'hostname -f; date -u'",
+      "status": "host_key_verification_failed",
+      "bypass_used": false
+    },
+    "local_host_check": {
+      "hostname_f": "imech156-u",
+      "date_utc": "Wed Jul  1 15:23:46 UTC 2026"
+    },
+    "search_root_note": "Root labels intentionally avoid absolute local filesystem paths in tracked evidence."
+  },
+  "diagnostic_summary_from_prior_issue_comment": {
+    "source": "https://github.com/ll7/robot_sf_ll7/issues/3482#issuecomment-4835303925",
+    "status": "diagnostic_issue_comment_only_not_promoted_reconciliation_bundle",
+    "release_rows": 987,
+    "exact_collision_outcomes": 241,
+    "derived_total_collision_count_positive_rows": 0,
+    "reconciliation_violations": 241
+  },
+  "claim_disposition": {
+    "exact_collision_incidence": {
+      "status": "bounded_diagnostic_only",
+      "allowed_use": "May be referenced only as the diagnostic issue-comment boundary unless exact-event provenance is later recovered and promoted."
+    },
+    "release_0_0_2_total_collision_count": {
+      "status": "withdrawn_exact_event_provenance_unavailable",
+      "allowed_use": "Do not use as paper/dissertation collision-count evidence."
+    },
+    "non_collision_release_fields": {
+      "status": "unchanged_with_collision_count_caveat",
+      "allowed_use": "May remain release-table provenance when the surrounding text does not rely on collision-count-derived claims."
+    }
+  },
+  "affected_artifacts": [
+    {
+      "artifact_id": "tab_release_failure_count_slices",
+      "table_label": "tab:release_failure_count_slices",
+      "source_path": "reports/scenario_family_breakdown.md",
+      "collision_count_disposition": "withdrawn",
+      "non_collision_disposition": "unchanged_with_caveat"
+    },
+    {
+      "artifact_id": "tab_results_overview",
+      "table_label": "tab:results-overview",
+      "source_path": "reports/campaign_table_core.md",
+      "collision_count_disposition": "withdrawn",
+      "non_collision_disposition": "unchanged_with_caveat"
+    },
+    {
+      "artifact_id": "tab_robot_sf_release_planner_results",
+      "table_label": "tab:robot_sf_release_planner_results",
+      "source_path": "reports/campaign_table.md",
+      "collision_count_disposition": "withdrawn",
+      "non_collision_disposition": "unchanged_with_caveat"
+    }
+  ],
+  "closure_path": {
+    "github_closure_reason": "not_planned",
+    "auto_close_pr_keyword_allowed": false,
+    "rationale": "Exact-event provenance was not recovered; release 0.0.2 collision-count claims are withdrawn rather than validated."
+  }
+}

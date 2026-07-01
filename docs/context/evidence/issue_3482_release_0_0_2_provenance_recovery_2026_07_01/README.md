@@ -22,7 +22,7 @@ Those exact-event counts require either the original reconciliation artifacts or
 raw episode-level records with fields such as `outcome.collision_event`,
 `termination_reason="collision"`, or an equivalent exact-event field.
 
-#3482 remains blocked unless one of the following is recovered:
+Issue #3482 remains blocked unless one of the following is recovered:
 
 - `backfill_summary.json`
 - `frozen_reconciliation_report.json`

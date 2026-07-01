@@ -120,6 +120,11 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_1554_job_13198_constraints_first_analysis/`: diagnostic-only constraints-first artifact
+  bundle for completed job 13198. Preserves public completed-job metadata, records missing retained
+  private metrics/decision-packet inputs as blockers, fails closed SNQI adjacent-rank statements,
+  confirms no Slurm submission and no paper/dissertation claim promotion.
+
 - `issue_1554_slurm_evidence_2026-06-30/`: queue-decision packet over completed #1554
 Slurm jobs 13192, 13198, and 13203. Classifies job 13198 as the completed S20/H500
 result matrix to analyze before any duplicate rerun, preserves its soft SNQI contract

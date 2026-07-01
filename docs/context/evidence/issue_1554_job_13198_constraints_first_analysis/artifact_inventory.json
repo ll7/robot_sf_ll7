@@ -1,0 +1,37 @@
+{
+  "accepted_packet_id": "issue1554-job13198-constraints-artifact-20260701",
+  "bundle_dir": "docs/context/evidence/issue_1554_job_13198_constraints_first_analysis",
+  "claim_boundary": "diagnostic-only evidence-boundary artifact; no paper-grade, dissertation-facing, or benchmark-strength claim promoted",
+  "files": [
+    {
+      "kind": "narrative_boundary",
+      "path": "README.md",
+      "sha256": "e1cca1f419d725475597a2574d72f03dc0e837b53839a0e547f707d045aa7f0e",
+      "size_bytes": 4412
+    },
+    {
+      "kind": "machine_packet",
+      "path": "packet.json",
+      "sha256": "ca55b747ab022e168f5478f2f7c13c0dd1cddb719b616fdf92ccf7288686342a",
+      "size_bytes": 4155
+    },
+    {
+      "kind": "constraints_first_metrics",
+      "path": "constraints_first_metrics.csv",
+      "sha256": "924af4a5a083d0195dd34c60480b8248daf55b540fecc2c1fbab2db5e7db48ff",
+      "size_bytes": 3491
+    },
+    {
+      "kind": "adjacent_rank_classifications",
+      "path": "adjacent_rank_claims.csv",
+      "sha256": "5f551ffa9d6bc840339d3dc316d471158e8aadcca5439ec5cb930f4276bdcf6e",
+      "size_bytes": 2245
+    }
+  ],
+  "forbidden_actions_confirmed": {
+    "artifact_deletion": false,
+    "compute_submit": false,
+    "paper_or_dissertation_claim_edits": false
+  },
+  "schema_version": "artifact_inventory.v1"
+}

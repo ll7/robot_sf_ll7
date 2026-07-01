@@ -111,8 +111,14 @@ def preflight_sustained_flow_matrix(matrix_path: str | Path) -> SustainedFlowPre
 
     path = Path(matrix_path)
     scenarios = load_scenarios(path)
-    variants = tuple(_variant_from_scenario(scenario) for scenario in scenarios)
-    blocking_reasons = list(_variant_blockers(variants))
+    blocking_reasons: list[str] = []
+    try:
+        variants = tuple(_variant_from_scenario(scenario) for scenario in scenarios)
+    except SustainedFlowPreflightError as exc:
+        variants = ()
+        blocking_reasons.append(str(exc))
+    else:
+        blocking_reasons.extend(_variant_blockers(variants))
 
     if not variants:
         blocking_reasons.append("no sustained-flow variants were enumerated")

@@ -156,6 +156,42 @@ def test_socnav_observation_visibility_filters_fov_without_mutating_ground_truth
     assert simulator.ped_pos.shape == (2, 2)
 
 
+def test_socnav_observation_visibility_filters_range() -> None:
+    """Planner-facing pedestrian observations should honor opt-in range settings."""
+    env_config = RobotSimulationConfig()
+    env_config.observation_visibility = ObservationVisibilitySettings(
+        enabled=True,
+        max_range_m=2.5,
+    )
+    simulator = SimpleNamespace(
+        ped_pos=np.array([[2.0, 0.0], [3.0, 0.0]], dtype=np.float32),
+        ped_vel=np.zeros((2, 2), dtype=np.float32),
+        robots=[
+            SimpleNamespace(
+                pose=((0.0, 0.0), 0.0),
+                current_speed=np.array([0.0, 0.0], dtype=np.float32),
+                config=SimpleNamespace(radius=1.0),
+            )
+        ],
+        goal_pos=[np.array([5.0, 0.0], dtype=np.float32)],
+        next_goal_pos=[None],
+        map_def=SimpleNamespace(width=10.0, height=10.0, obstacles=[]),
+        config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+
+    obs = SocNavObservationFusion(
+        simulator=simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    ).next_obs()
+
+    assert obs["pedestrians"]["count"][0] == pytest.approx(1.0)
+    np.testing.assert_allclose(
+        obs["pedestrians"]["positions"][0],
+        np.array([2.0, 0.0], dtype=np.float32),
+    )
+
+
 def test_socnav_observation_visibility_360_keeps_current_pedestrian_contract() -> None:
     """Full-FOV visibility should reproduce the unfiltered pedestrian observation."""
     env_config = RobotSimulationConfig()

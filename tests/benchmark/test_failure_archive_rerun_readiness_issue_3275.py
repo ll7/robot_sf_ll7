@@ -349,7 +349,7 @@ def test_missing_archive_payload_blocks_ready_path(tmp_path: Path) -> None:
     assert any(
         blocker.startswith("rerun_archive_blocked:path_missing") for blocker in readiness.blockers
     )
-    assert readiness.missing_archive_lineage == ["rerun:archive_payload"]
+    assert readiness.missing_archive_lineage == []
     assert not any(blocker.startswith("source_archive_blocked") for blocker in readiness.blockers)
 
 
@@ -369,6 +369,7 @@ def test_malformed_archive_payload_fails_closed(tmp_path: Path) -> None:
     assert any(
         blocker.startswith("rerun_archive_blocked:unreadable") for blocker in readiness.blockers
     )
+    assert readiness.missing_archive_lineage == []
 
 
 def test_non_object_archive_entries_fail_closed(tmp_path: Path) -> None:

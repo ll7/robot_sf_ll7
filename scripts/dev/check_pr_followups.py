@@ -540,6 +540,8 @@ def analyze_domain_approval(body: str, *, source: str) -> DomainApprovalReport:
         )
 
     required = _value_after_label(section, "Required for this PR")
+    if not required:
+        required = _value_after_label(section, "Required for PR")
     domains = _value_after_label(section, "Domains reviewed")
     approval_status = _value_after_label(section, "Status")
     approval_note = _value_after_label(section, "Approver/review source or waiver")

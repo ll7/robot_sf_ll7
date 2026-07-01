@@ -287,6 +287,20 @@ def test_domain_approval_accepts_approved_review_source() -> None:
     assert "maintainer review" in report.approval_note
 
 
+def test_domain_approval_accepts_required_for_pr_label() -> None:
+    """Domain approval accepts the PR template's alternate required label."""
+    report = analyze_domain_approval(
+        _domain_body(
+            domain_section=_approved_domain_section().replace(
+                "- Required PR:", "- Required for PR:"
+            )
+        ),
+        source="fixture",
+    )
+
+    assert report.status == "ok"
+
+
 def test_domain_approval_accepts_none_in_validity_checklist_field() -> None:
     """A checklist answer can honestly say no exclusion or claim applies."""
     report = analyze_domain_approval(

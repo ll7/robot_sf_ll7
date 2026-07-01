@@ -1,31 +1,37 @@
 {
-  "accepted_packet_id": "issue1554-job13198-constraints-artifact-20260701",
+  "accepted_packet_id": "issue1554-job13198-constraints-first-analysis-20260701",
   "bundle_dir": "docs/context/evidence/issue_1554_job_13198_constraints_first_analysis",
-  "claim_boundary": "diagnostic-only evidence-boundary artifact; no paper-grade, dissertation-facing, or benchmark-strength claim promoted",
+  "claim_boundary": "S20 constraints-first adjacent-rank evidence with explicit CI downgrade boundaries; SNQI diagnostic-only because contract failed under warn enforcement",
   "files": [
     {
       "kind": "narrative_boundary",
       "path": "README.md",
-      "sha256": "e1cca1f419d725475597a2574d72f03dc0e837b53839a0e547f707d045aa7f0e",
-      "size_bytes": 4412
+      "sha256": "50dbc42395c5e1fb9639f9392251a42a92f6d4fbfa6aee62fd78be0f80e4b084",
+      "size_bytes": 2419
     },
     {
       "kind": "machine_packet",
       "path": "packet.json",
-      "sha256": "ca55b747ab022e168f5478f2f7c13c0dd1cddb719b616fdf92ccf7288686342a",
-      "size_bytes": 4155
+      "sha256": "4ac471252f2505c8c41dc5d2a6455370bb4d48964ee1b53cb2df6e380ddf7786",
+      "size_bytes": 5768
     },
     {
       "kind": "constraints_first_metrics",
       "path": "constraints_first_metrics.csv",
-      "sha256": "924af4a5a083d0195dd34c60480b8248daf55b540fecc2c1fbab2db5e7db48ff",
-      "size_bytes": 3491
+      "sha256": "5f2d5e4ff7de8f9798d6e54dbe3b98fbb83a20d96756a967cf997fbb94434fad",
+      "size_bytes": 4610
     },
     {
       "kind": "adjacent_rank_classifications",
       "path": "adjacent_rank_claims.csv",
-      "sha256": "5f551ffa9d6bc840339d3dc316d471158e8aadcca5439ec5cb930f4276bdcf6e",
-      "size_bytes": 2245
+      "sha256": "dc0fc8d8a4f7c74004a2d14b5e92e6dd254dfed415fd6603d27aa5c38daa85d0",
+      "size_bytes": 5708
+    },
+    {
+      "kind": "claim_decision",
+      "path": "claim_decision.md",
+      "sha256": "9936a5db8c58a6c37794ec27ffcf5e34559d360f2837d9bfd965b2516eb7f2f4",
+      "size_bytes": 2132
     }
   ],
   "forbidden_actions_confirmed": {

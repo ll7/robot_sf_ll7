@@ -1,110 +1,125 @@
 {
-  "accepted_packet_id": "issue1554-job13198-constraints-artifact-20260701",
-  "adjacent_rank_classifications": [
-    {
-      "claim_id": "snqi_adjacent_rank_statements",
-      "classification": "fail_closed_snqi_contract_warning",
-      "claim_promoted": false,
-      "rank_metric": "snqi"
-    },
-    {
-      "claim_id": "constraints_first_success_adjacent_ranks",
-      "classification": "blocked_missing_private_retained_metrics",
-      "claim_promoted": false,
-      "rank_metric": "success"
-    },
-    {
-      "claim_id": "constraints_first_collision_adjacent_ranks",
-      "classification": "blocked_missing_private_retained_metrics",
-      "claim_promoted": false,
-      "rank_metric": "collisions"
-    },
-    {
-      "claim_id": "constraints_first_near_miss_adjacent_ranks",
-      "classification": "blocked_missing_private_retained_metrics",
-      "claim_promoted": false,
-      "rank_metric": "near_misses"
-    }
-  ],
-  "artifact_files": [
-    "README.md",
-    "packet.json",
-    "constraints_first_metrics.csv",
-    "adjacent_rank_claims.csv",
-    "artifact_inventory.json"
-  ],
+  "artifact_outputs": {
+    "README.md": "docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/README.md",
+    "adjacent_rank_claims.csv": "docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/adjacent_rank_claims.csv",
+    "artifact_inventory.json": "docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/artifact_inventory.json",
+    "claim_decision.md": "docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/claim_decision.md",
+    "constraints_first_metrics.csv": "docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/constraints_first_metrics.csv",
+    "packet.json": "docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/packet.json"
+  },
   "campaign": "2026-06-issue1554-s20-h500-split-mem180-run",
-  "claim_boundary": {
-    "claim_promoted": false,
-    "evidence_status": "diagnostic-only evidence-boundary artifact",
-    "paper_grade": false,
-    "statement": "This bundle records completed-job constraints metadata and blocked/fail-closed rank boundaries only. It is not paper-grade, dissertation-facing, or benchmark-strength rank evidence."
+  "campaign_id": "issue1554_s20_h500_split_mem180_run_20260629",
+  "checksums_sha256": {
+    "docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/README.md": "384f623dc9dabde49b2ce28ca23ef7979947cbdf4b072ee2461287b00670547f",
+    "docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/adjacent_rank_claims.csv": "dc0fc8d8a4f7c74004a2d14b5e92e6dd254dfed415fd6603d27aa5c38daa85d0",
+    "docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/claim_decision.md": "9936a5db8c58a6c37794ec27ffcf5e34559d360f2837d9bfd965b2516eb7f2f4",
+    "docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/constraints_first_metrics.csv": "5f2d5e4ff7de8f9798d6e54dbe3b98fbb83a20d96756a967cf997fbb94434fad"
   },
-  "constraints_first_metrics": {
-    "available_completed_job_metadata": {
-      "episodes_per_planner": 960,
-      "exit_code": "0:0",
-      "matrix_rows": 9,
-      "ok_planner_rows": 9,
-      "planner_rows": 9,
-      "slurm_state": "COMPLETED"
-    },
-    "blocked_metrics": [
-      "success",
-      "collisions",
-      "near_misses"
+  "claim_counts": {
+    "ci_separable": 5,
+    "diagnostic_only": 8,
+    "not_statistically_distinguishable_budget": 3
+  },
+  "config": "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml",
+  "constraints_first": {
+    "ci_separable_statements": [
+      "ppo over orca",
+      "orca over prediction_planner",
+      "prediction_planner over socnav_sampling",
+      "socnav_sampling over sacadrl",
+      "goal over social_force"
     ],
-    "blocked_reason": "The packet-named private retained metrics JSON was absent on this worker, so constraints-first aggregate values and adjacent ranks were not inferred."
+    "not_statistically_distinguishable_budget_statements": [
+      "hybrid_rule_v3_fast_progress_static_escape over scenario_adaptive_hybrid_orca_v1",
+      "scenario_adaptive_hybrid_orca_v1 over ppo",
+      "sacadrl over goal"
+    ],
+    "top_planner_by_success": "hybrid_rule_v3_fast_progress_static_escape"
   },
-  "diagnostic_only_snqi_observation": {
-    "claim_promoted": false,
-    "observation": "Job 13198 completed, but the public packet records SNQI contract status=fail with snqi_contract.enforcement=warn.",
-    "rank_use": "fail_closed"
+  "decision": {
+    "claim_boundary": "S20 constraints-first success adjacent claims are separable only where CIs do not overlap. SNQI is diagnostic/explanatory because its contract failed under warn enforcement.",
+    "more_seed_budget_compute": "conditional",
+    "more_seed_budget_rationale": "Justified only if a paper-facing claim needs strict ordering for the three budget-limited adjacent success statements; not justified to rerun already separable adjacent statements or to promote SNQI until the SNQI contract is resolved."
   },
-  "expected_provenance_anchor": {
-    "job_id": 13198,
-    "public_commit": "12a188de7246aad3b9088ea76e6a25a20029f976"
-  },
-  "forbidden_actions_confirmed": {
-    "artifact_deletion": false,
-    "compute_submit": false,
-    "paper_or_dissertation_claim_edits": false
-  },
-  "input_sources": [
-    {
-      "path": "docs/context/evidence/issue_1554_slurm_evidence_2026-06-30/README.md",
-      "status": "present",
-      "use": "public packet narrative"
-    },
-    {
-      "path": "docs/context/evidence/issue_1554_slurm_evidence_2026-06-30/packet.json",
-      "status": "present",
-      "use": "public packet metadata and warnings"
-    },
-    {
-      "path": "tests/benchmark/fixtures/issue1554_slurm_evidence/jobs_13192_13198_13203.json",
-      "status": "present",
-      "use": "public test fixture matching packet metadata"
-    },
-    {
-      "path": "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/campaigns/2026-06-issue1554-s20-h500.yaml",
-      "status": "present",
-      "use": "private campaign registration context"
-    },
-    {
-      "path": "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/metrics/13198.json",
-      "status": "missing_on_worker",
-      "use": "would provide retained constraints metrics"
-    },
-    {
-      "path": "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/decision_packets/2026-06-30_slurm_ready_scout_issue1554-job13198-constraints-first-analysis-20260630.md",
-      "status": "missing_on_worker",
-      "use": "would provide private decision packet"
-    }
-  ],
+  "generated_at_utc": "2026-07-01T11:22:27.067245Z",
   "issue": 1554,
   "job_id": 13198,
-  "more_seed_budget_compute_justified": false,
-  "next_packet_dependency_for_3216": "Recover or regenerate the missing retained job 13198 constraints metrics and adjacent-rank table; only then decide whether a targeted #3216 follow-up compute packet is justified.",
-  "schema_version": "issue1554-job13198-constraints-first-artifact.v1"
+  "methodology": {
+    "adjacent_decision_rule": "ci_separable when adjacent 95% bootstrap CIs do not overlap; otherwise not_statistically_distinguishable_budget",
+    "bootstrap_samples": 2000,
+    "bootstrap_seed": 123,
+    "bootstrap_unit": "per-planner per-seed means across all scenarios",
+    "confidence": 0.95,
+    "rank_metric": "success",
+    "rank_profile": "constraints_first",
+    "safety_metrics_required": [
+      "collision",
+      "near_miss"
+    ]
+  },
+  "public_commit": "12a188de7246aad3b9088ea76e6a25a20029f976",
+  "row_status": {
+    "benchmark_row_status": "successful_evidence",
+    "campaign_warnings": [
+      "SNQI contract status=fail with snqi_contract.enforcement=warn; campaign marked with soft contract warning."
+    ],
+    "episode_rows": 8640,
+    "planner_rows": 9,
+    "seed_count_per_planner": [
+      20
+    ]
+  },
+  "schema_version": "issue1554-job13198-constraints-first-analysis.v1",
+  "snqi": {
+    "changes_nominal_order": true,
+    "contract_enforcement": "warn",
+    "contract_status": "fail",
+    "decision_role": "explanatory_only",
+    "dominant_component": "time_penalty",
+    "order_changes": [
+      {
+        "constraints_first_success_rank": 1,
+        "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+        "snqi_nominal_rank": 2
+      },
+      {
+        "constraints_first_success_rank": 2,
+        "planner_key": "scenario_adaptive_hybrid_orca_v1",
+        "snqi_nominal_rank": 1
+      },
+      {
+        "constraints_first_success_rank": 4,
+        "planner_key": "orca",
+        "snqi_nominal_rank": 7
+      },
+      {
+        "constraints_first_success_rank": 5,
+        "planner_key": "prediction_planner",
+        "snqi_nominal_rank": 4
+      },
+      {
+        "constraints_first_success_rank": 6,
+        "planner_key": "socnav_sampling",
+        "snqi_nominal_rank": 5
+      },
+      {
+        "constraints_first_success_rank": 7,
+        "planner_key": "sacadrl",
+        "snqi_nominal_rank": 8
+      },
+      {
+        "constraints_first_success_rank": 8,
+        "planner_key": "goal",
+        "snqi_nominal_rank": 6
+      }
+    ],
+    "rank_alignment_spearman": -0.19999999999999998
+  },
+  "source_artifacts": {
+    "campaign_summary": "retained job 13198 campaign_summary.json; compact values copied into this packet",
+    "durability_note": "raw retained job outputs are local/non-durable; this directory is the tracked compact evidence surface",
+    "job_metrics_summary": "private-ops job metrics 13198; summarized into this packet without storing private paths",
+    "seed_episode_rows": "retained job 13198 seed_episode_rows.csv; derived aggregate rows copied into constraints_first_metrics.csv",
+    "snqi_diagnostics": "retained job 13198 snqi_diagnostics.json; contract fields copied into this packet"
+  }
 }

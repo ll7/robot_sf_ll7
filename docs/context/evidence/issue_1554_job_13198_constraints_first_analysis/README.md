@@ -1,81 +1,48 @@
 # Issue #1554 Job 13198 Constraints-First Analysis
 
-This bundle records retained job 13198 packet context without rerunning compute or
-promoting any paper-facing claim.
+This packet analyzes completed Slurm job `13198` before any duplicate S20/H500
+planner-family compute. It uses retained job `13198` summaries and private-ops job metadata only to derive
+tracked compact evidence. Raw retained job outputs remain local/non-durable and are
+not required to read this packet.
 
-- evidence status: `diagnostic-only evidence-boundary artifact`
-- accepted packet: `issue1554-job13198-constraints-artifact-20260701`
-- issue: `ll7/robot_sf_ll7#1554`
-- adjacent dependency: `ll7/robot_sf_ll7#3216`
-- job id: `13198`
-- campaign: `2026-06-issue1554-s20-h500-split-mem180-run`
-- config: `configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml`
-- public evidence commit: `12a188de7246aad3b9088ea76e6a25a20029f976`
-- Slurm result: `COMPLETED` / `0:0`
-- new Slurm submission: `none`
-- paper or dissertation claim edits: `none`
+## Inputs
 
-## Claim Boundary
+- Job: `13198` (`2026-06-issue1554-s20-h500-split-mem180-run`), Slurm status
+  `completed`, evidence status `valid`.
+- Config: `configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml`.
+- Public commit: `12a188de7246aad3b9088ea76e6a25a20029f976`.
+- Episode rows: `8640` total, `9` planners, S20 per planner, 960 episodes per planner.
+- Campaign warning: `SNQI contract status=fail with snqi_contract.enforcement=warn;
+  campaign marked soft contract warning.`.
 
-This is not a paper-grade, dissertation-facing, or benchmark-strength ranking claim. The
-compact artifact bundle separates completed-job constraints metadata, blocked
-constraints-first metric extraction, adjacent-rank classifications, diagnostic-only
-Social Navigation Quality Index (SNQI) observations, and follow-up blockers.
+## Method
 
-The public packet says job 13198 completed in `01:42:35` and produced nine `ok` planner
-rows with 960 episodes per planner. The same packet records the soft SNQI contract
-warning: `SNQI contract status=fail snqi_contract.enforcement=warn; campaign marked soft
-contract warning.` That warning blocks SNQI-backed rank interpretation.
+The constraints-first profile follows the canonical headline harness convention:
+rank by `success` while requiring safety metrics (`collision`, `near_miss`) to be
+present. Confidence intervals are 95% bootstrap intervals over per-seed means
+(`2000` samples, seed `123`). Adjacent planner statements are `ci_separable`
+only when adjacent confidence intervals do not overlap; overlapping intervals
+are `not_statistically_distinguishable_budget`.
 
-## Inputs Checked
+## Outputs
 
-- present: `docs/context/evidence/issue_1554_slurm_evidence_2026-06-30/README.md`
-- present: `docs/context/evidence/issue_1554_slurm_evidence_2026-06-30/packet.json`
-- present: `tests/benchmark/fixtures/issue1554_slurm_evidence/jobs_13192_13198_13203.json`
-- present: `/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/campaigns/2026-06-issue1554-s20-h500.yaml`
-- missing on this worker: `/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/metrics/13198.json`
-- missing on this worker: `/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/decision_packets/2026-06-30_slurm_ready_scout_issue1554-job13198-constraints-first-analysis-20260630.md`
+- `packet.json` records provenance, methodology, claim counts, the SNQI role, and the seed-budget decision.
+- `constraints_first_metrics.csv` gives per-planner constraints-first metrics and confidence intervals.
+- `adjacent_rank_claims.csv` lists constraints-first adjacent statements plus SNQI diagnostic adjacent statements.
+- `claim_decision.md` states the decision boundary and seed-budget recommendation.
 
-Because the packet-named private metrics and decision packet were not available on this
-worker, this bundle does not reconstruct per-scenario success, collision, near-miss, or
-adjacent-rank values. Those rows are recorded as blocked in the CSV files instead of
-being inferred.
+## Headline Answer
 
-## Constraints-First Metrics
+Constraints-first `ci_separable` adjacent statements: ppo over orca, orca over
+prediction_planner, prediction_planner over socnav_sampling, socnav_sampling
+over sacadrl, goal over social_force.
 
-`constraints_first_metrics.csv` preserves the completed-job constraints metadata available
-from the public evidence packet:
+Constraints-first `not_statistically_distinguishable_budget` adjacent
+statements: hybrid_rule_v3_fast_progress_static_escape over
+scenario_adaptive_hybrid_orca_v1, scenario_adaptive_hybrid_orca_v1 over ppo,
+sacadrl over goal.
 
-- nine matrix/planner rows were reported `ok`;
-- 960 episodes per planner were reported;
-- no compute submission, artifact deletion, or claim edit was performed in this packet;
-- success, collision, and near-miss aggregate values are marked `blocked_missing_private_retained_metrics` because the retained job metrics JSON was absent from this worker.
-
-## Adjacent Rank Classifications
-
-`adjacent_rank_claims.csv` classifies adjacent-rank statements without promoting any rank:
-
-- SNQI adjacent-rank statements fail closed because the job 13198 packet carries the soft SNQI contract warning;
-- constraints-first adjacent-rank statements remain blocked until the retained per-scenario constraints metrics and rank table are available;
-- no manuscript table, dissertation table, or planner-family ordering claim is promoted.
-
-## Diagnostic-Only SNQI Observation
-
-The only SNQI observation preserved here is diagnostic: job 13198 completed, but the
-SNQI contract warning prevents using SNQI as a rank metric for promoted claims. This
-supports analysis-before-rerun routing; it does not establish rank.
-
-## Seed-Budget Compute Decision
-
-More seed-budget compute is not justified by this packet alone. The immediate next
-dependency is recovery or regeneration of the missing retained metrics/decision-packet
-evidence for job 13198, then a targeted #3216 constraints-first closeout only if the
-recovered analysis exposes a specific gap. A duplicate S20/H500 run should not be
-scheduled from this artifact alone.
-
-## Files
-
-- `packet.json`: machine-readable provenance, input availability, claim boundary, and follow-up decision.
-- `constraints_first_metrics.csv`: completed-job constraints metadata plus blocked constraints metric rows.
-- `adjacent_rank_claims.csv`: fail-closed or blocked adjacent-rank classifications.
-- `artifact_inventory.json`: checksums and file inventory for this compact bundle.
+SNQI changes the nominal order, but it does not change any decision in this
+packet. It is explanatory only because `snqi_diagnostics.json` reports
+`contract_status=fail` with enforcement `warn` and rank-alignment Spearman
+`-0.19999999999999998`.

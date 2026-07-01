@@ -33,6 +33,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/claim_decision.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/artifact_inventory.json
     status: evidence
     freshness: evidence

@@ -30,6 +30,25 @@ def test_expected_variants_enumerate_deterministically() -> None:
     assert spawn_rates == [6.0, 12.0, 18.0]
 
 
+def test_generated_variants_pass_generator_preflight() -> None:
+    """Canonical generator rows validate before YAML materialization."""
+
+    report = sustained_flow.preflight_generated_sustained_flow_scenarios()
+    payload = sustained_flow.sustained_flow_preflight_to_dict(report)
+
+    assert payload["scenario_set"] == "generated:issue_3813_sustained_flow_scaffold_v0"
+    assert payload["conforms"] is True
+    assert payload["benchmark_evidence"] is False
+    assert payload["runtime_support"] == "metadata_only"
+    assert payload["variant_count"] == 3
+    assert [variant["density_tier"] for variant in payload["variants"]] == [
+        "light",
+        "medium",
+        "heavy",
+    ]
+    assert payload["errors"] == []
+
+
 def test_runtime_supported_variants_enumerate_deterministically() -> None:
     """Runtime-supported generator preserves deterministic sustained-flow tiers."""
 
@@ -91,3 +110,23 @@ def test_preflight_cli_outputs_json_payload() -> None:
         payload["scenario_set"]
         == "configs/scenarios/sets/issue_3813_sustained_flow_scaffold_v0.yaml"
     )
+
+
+def test_preflight_cli_outputs_generated_json_payload() -> None:
+    """Validation script can preflight generator rows directly."""
+
+    command = [
+        sys.executable,
+        str(PREFLIGHT_SCRIPT),
+        "--generated",
+        "--json",
+    ]
+
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["schema_version"] == sustained_flow.SUSTAINED_FLOW_PREFLIGHT_SCHEMA_VERSION
+    assert payload["conforms"] is True
+    assert payload["variant_count"] == 3
+    assert payload["scenario_set"] == "generated:issue_3813_sustained_flow_scaffold_v0"

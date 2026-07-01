@@ -40,6 +40,7 @@ from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.planner.scenario_belief_adapter import SUPPORTED_UNCERTAINTY_PLANNER_KEYS
 from robot_sf.training.scenario_loader import load_scenarios
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_VERSION = "belief-mode-safety-campaign.v1"
 ISSUE = 3556
 SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
@@ -55,6 +56,7 @@ _UNSUPPORTED_PROBE_KEY = "campaign_preflight_unsupported_probe"
 DEFAULT_SCENARIO_SET = "configs/scenarios/sets/issue_3635_near_safe_occlusion_bearing_crossing.yaml"
 DEFAULT_SEED_SET = "issue_3635_s3_contract_only"
 DEFAULT_SEEDS = [363501, 363502, 363503]
+DEFAULT_LAUNCH_PACKET = "configs/benchmarks/scenario_belief_drop_vs_retain_issue_3556.yaml"
 DEFAULT_FOV = 120.0
 NEAR_MISS_NOTE = (
     "real benchmark near_misses + collisions + min_clearance (no scripted unsafe-commit)"
@@ -255,6 +257,118 @@ def classify_screened_decision(by_mode: dict[str, dict[str, Any]]) -> dict[str, 
     }
 
 
+def _relative_repo_path(path: Path) -> str:
+    """Return a stable repo-relative path when the path is inside this checkout."""
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(REPO_ROOT.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def check_launch_packet_arm_contract(  # noqa: C901, PLR0912, PLR0915
+    packet_path: Path,
+    *,
+    set_path: Path,
+    seeds: list[int],
+    fov_degrees: float,
+) -> tuple[bool, str]:
+    """Validate the committed #3635 launch packet arm matrix without rolling episodes."""
+    if not packet_path.exists():
+        return False, f"launch packet not found: {packet_path}"
+
+    with packet_path.open(encoding="utf-8") as handle:
+        packet = yaml.safe_load(handle)
+    if not isinstance(packet, dict):
+        return False, "launch packet must be a mapping"
+
+    expected_family = _relative_repo_path(set_path)
+    expected_modes = set(REQUIRED_MODES)
+    failures: list[str] = []
+
+    if packet.get("scenario_family") != expected_family:
+        failures.append(
+            f"top-level scenario_family must be {expected_family!r} "
+            f"(got {packet.get('scenario_family')!r})"
+        )
+
+    seed_set_name = packet.get("seed_set")
+    seed_sets = packet.get("seed_sets")
+    if not isinstance(seed_set_name, str):
+        failures.append("top-level seed_set must name the pinned #3635 seed set")
+    if not isinstance(seed_sets, dict) or seed_set_name not in seed_sets:
+        failures.append(f"seed_sets must define {seed_set_name!r}")
+    else:
+        seed_entry = seed_sets[seed_set_name]
+        if not isinstance(seed_entry, dict) or seed_entry.get("seeds") != seeds:
+            failures.append(f"seed set {seed_set_name!r} must pin seeds {seeds!r}")
+
+    belief_modes = packet.get("belief_modes")
+    if not isinstance(belief_modes, dict):
+        failures.append("belief_modes must be a mapping keyed by required mode")
+    else:
+        mode_keys = set(belief_modes)
+        if mode_keys != expected_modes:
+            failures.append(
+                f"belief_modes must equal {sorted(expected_modes)} (got {sorted(mode_keys)})"
+            )
+
+    arms = packet.get("runner_arms")
+    if not isinstance(arms, list):
+        failures.append("runner_arms must be a list")
+        arms = []
+
+    arm_ids = {arm.get("arm_id") for arm in arms if isinstance(arm, dict)}
+    if arm_ids != expected_modes:
+        failures.append(
+            f"runner_arms must contain exactly {sorted(expected_modes)} "
+            f"(got {sorted(str(arm_id) for arm_id in arm_ids)})"
+        )
+
+    expected_gate = {
+        "oracle": False,
+        "uncertain_retained": False,
+        "uncertain_dropped": True,
+    }
+    expected_visibility = {
+        "oracle": "all_agents_retained",
+        "uncertain_retained": "low_confidence_agents_retained",
+        "uncertain_dropped": "low_confidence_agents_dropped",
+    }
+    for arm in arms:
+        if not isinstance(arm, dict):
+            failures.append("each runner_arms entry must be a mapping")
+            continue
+        arm_id = arm.get("arm_id")
+        if arm_id not in expected_modes:
+            continue
+        if arm.get("scenario_family") != expected_family:
+            failures.append(f"{arm_id} arm scenario_family must be {expected_family!r}")
+        if arm.get("seed_set") != seed_set_name:
+            failures.append(f"{arm_id} arm seed_set must be {seed_set_name!r}")
+        if arm.get("algo") != CAMPAIGN_ALGO:
+            failures.append(f"{arm_id} arm algo must be {CAMPAIGN_ALGO!r}")
+        algo_config = arm.get("algo_config")
+        if not isinstance(algo_config, dict):
+            failures.append(f"{arm_id} arm algo_config must be a mapping")
+            continue
+        if algo_config.get("belief_mode") != arm_id:
+            failures.append(f"{arm_id} arm belief_mode must match arm_id")
+        if algo_config.get("belief_fov_degrees") != fov_degrees:
+            failures.append(f"{arm_id} arm belief_fov_degrees must be {fov_degrees}")
+        if arm.get("expected_gate_enabled") is not expected_gate[arm_id]:
+            failures.append(f"{arm_id} arm expected_gate_enabled drifted")
+        if arm.get("expected_planner_visibility") != expected_visibility[arm_id]:
+            failures.append(f"{arm_id} arm expected_planner_visibility drifted")
+
+    if failures:
+        return False, "; ".join(failures)
+    return True, (
+        f"launch packet pins {len(expected_modes)} runner arms to {expected_family} "
+        f"with seed set {seed_set_name!r}"
+    )
+
+
 def check_campaign_readiness(
     set_path: Path,
     seeds: list[int],
@@ -263,6 +377,7 @@ def check_campaign_readiness(
     horizon: int,
     dt: float,
     workers: int,
+    launch_packet: Path | None = None,
 ) -> dict[str, Any]:
     """Fail-closed CPU-only readiness gate for the REAL belief-mode campaign inputs.
 
@@ -327,7 +442,23 @@ def check_campaign_readiness(
         else f"scenario set not found: {set_path}",
     )
 
-    # 4. Controlled run geometry strictly positive.
+    # 4. Committed launch packet arms stay aligned with runtime preflight knobs.
+    if launch_packet is None:
+        add(
+            "launch_packet_arm_contract",
+            True,
+            "launch packet arm contract not requested for direct readiness call",
+        )
+    else:
+        arm_contract_ok, arm_contract_detail = check_launch_packet_arm_contract(
+            launch_packet,
+            set_path=set_path,
+            seeds=seeds,
+            fov_degrees=fov_degrees,
+        )
+        add("launch_packet_arm_contract", arm_contract_ok, arm_contract_detail)
+
+    # 5. Controlled run geometry strictly positive.
     geometry = {"fov_degrees": fov_degrees, "horizon": horizon, "dt": dt, "workers": workers}
     bad_geometry = [f"{k}={v} must be > 0" for k, v in geometry.items() if not v > 0]
     add(
@@ -460,6 +591,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--scenario-set", type=Path, default=Path(DEFAULT_SCENARIO_SET))
     parser.add_argument("--seeds", type=int, nargs="+", default=DEFAULT_SEEDS)
     parser.add_argument(
+        "--launch-packet",
+        type=Path,
+        default=None,
+        help=(
+            "Optional launch packet to validate against runtime scenario/seed knobs. "
+            "Defaults to the committed #3635 packet only for the default scenario set and seeds."
+        ),
+    )
+    parser.add_argument(
         "--out-dir", type=Path, default=Path("output/issue_3556_belief_mode_campaign")
     )
     parser.add_argument("--fov-degrees", type=float, default=DEFAULT_FOV)
@@ -485,6 +625,12 @@ def main(argv: list[str] | None = None) -> int:
     ``0`` after the campaign report is emitted. ``--preflight-only`` stops after the gate.
     """
     args = parse_args(argv)
+    launch_packet = args.launch_packet
+    if launch_packet is None and (
+        _relative_repo_path(args.scenario_set) == DEFAULT_SCENARIO_SET
+        and args.seeds == DEFAULT_SEEDS
+    ):
+        launch_packet = Path(DEFAULT_LAUNCH_PACKET)
     readiness = check_campaign_readiness(
         args.scenario_set,
         args.seeds,
@@ -492,6 +638,7 @@ def main(argv: list[str] | None = None) -> int:
         horizon=args.horizon,
         dt=args.dt,
         workers=args.workers,
+        launch_packet=launch_packet,
     )
     if args.preflight_only or not readiness["ready"]:
         print(json.dumps(readiness, indent=2, sort_keys=True))

@@ -154,3 +154,48 @@ def test_issue_3635_synthetic_near_safe_discriminating_classification() -> None:
     assert decision["screening_status"] == "near_safe_discriminating"
     assert decision["oracle_near_safe"] is True
     assert decision["mode_is_discriminating"] is True
+
+
+def test_issue_3635_launch_packet_arm_contract_is_preflight_checked() -> None:
+    """Committed packet arms stay aligned with #3635 scenario and seed contract."""
+    ok, detail = campaign.check_launch_packet_arm_contract(
+        BENCHMARK_CONFIG,
+        set_path=SCENARIO_SET,
+        seeds=campaign.DEFAULT_SEEDS,
+        fov_degrees=120.0,
+    )
+
+    assert ok, detail
+    readiness = campaign.check_campaign_readiness(
+        SCENARIO_SET,
+        campaign.DEFAULT_SEEDS,
+        fov_degrees=120.0,
+        horizon=300,
+        dt=0.1,
+        workers=1,
+        launch_packet=BENCHMARK_CONFIG,
+    )
+
+    arm_check = next(
+        check for check in readiness["checks"] if check["name"] == "launch_packet_arm_contract"
+    )
+    assert arm_check["passed"] is True
+    assert "runner arms" in arm_check["detail"]
+
+
+def test_issue_3635_launch_packet_arm_contract_fails_closed_on_drift(tmp_path: Path) -> None:
+    """Preflight rejects retained/dropped arm drift before any campaign episodes run."""
+    payload = _load_yaml(BENCHMARK_CONFIG)
+    payload["runner_arms"][2]["expected_gate_enabled"] = False
+    drifted_packet = tmp_path / "drifted_launch_packet.yaml"
+    drifted_packet.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    ok, detail = campaign.check_launch_packet_arm_contract(
+        drifted_packet,
+        set_path=SCENARIO_SET,
+        seeds=campaign.DEFAULT_SEEDS,
+        fov_degrees=120.0,
+    )
+
+    assert ok is False
+    assert "uncertain_dropped arm expected_gate_enabled drifted" in detail

@@ -382,7 +382,7 @@ def _null_test_prerequisite_gaps(
     """Return fail-closed gaps for optional null-test prerequisite metadata."""
 
     if payload_or_path is None:
-        return None, "not_checked", [], []
+        return None, "blocked", ["null_test_prerequisites"], []
     if isinstance(payload_or_path, dict):
         source = "inline_payload"
         payload: dict[str, Any] | None = payload_or_path

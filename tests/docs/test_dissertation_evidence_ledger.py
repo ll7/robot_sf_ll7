@@ -190,10 +190,10 @@ class TestDissertationEvidenceLedger:
                 assert row["evidence_promotion_path"] is not None, (
                     f"Row {i} ({row['area']}) should keep a promotion path for invalid evidence"
                 )
-                assert "invalid campaign repair" in row["evidence_promotion_path"].lower(), (
-                    f"Row {i} ({row['area']}) promotion path must mention invalid campaign repair"
+                assert "snqi contract" in row["evidence_promotion_path"].lower(), (
+                    f"Row {i} ({row['area']}) promotion path must mention SNQI repair"
                 )
-                assert "ppo" in row["caveat"].lower(), (
+                assert "diagnostic_only" in row["caveat"].lower(), (
                     f"Row {i} ({row['area']}) caveat must preserve the PPO failure"
                 )
                 assert row["evidence_tier"] == "diagnostic", (

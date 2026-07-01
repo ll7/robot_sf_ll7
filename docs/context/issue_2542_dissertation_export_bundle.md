@@ -1,82 +1,56 @@
-# Issue #2542 Dissertation Figure/Table Export Bundle (updated 2026-06-20)
+# Issue #2542 Dissertation Figure/Table Export Bundle
 
 Related issues: [#2542](https://github.com/ll7/robot_sf_ll7/issues/2542),
-[#3203](https://github.com/ll7/robot_sf_ll7/issues/3203)
+[#3203](https://github.com/ll7/robot_sf_ll7/issues/3203),
+[#3266](https://github.com/ll7/robot_sf_ll7/issues/3266)
 
 ## Status
 
-Current as of 2026-06-20 for payload presence and checksum integrity. The dissertation bundle
-exporter is implemented in `scripts/tools/benchmark_publication_bundle.py dissertation-bundle`
-with reusable manifest logic in `robot_sf/benchmark/artifact_publication.py`.
+Current as of 2026-07-01: the dissertation export bundle remains a payload-complete
+discussion/provenance artifact, not paper-facing Results evidence.
 
-The current payloads come from the bounded Issue #3203 rerun of the original Issue #1023
-scenario-horizon campaign config/seeds. That campaign is **not benchmark-success evidence**:
-it exited `2` with `evidence_status=invalid`, preserved a PPO partial-failure row, and recorded
-`snqi_contract_status=fail` under warn enforcement.
+The tracked bundle under `docs/context/evidence/issue_2542_dissertation_export_bundle/` still uses
+the historical 2026-06-20 #3203 source snapshots. Those payloads are retained because they prove the
+bundle mechanics, manifest, checksums, and selected table files, but they are not benchmark-success
+evidence.
 
-## Pilot Input
+Issue #3203 was rerun on 2026-07-01 after the #3266 PPO/SNQI smoke repair. That fresh bounded
+campaign fixed the stale PPO blocker:
 
-The current bundle uses compact table reports from the fresh local Issue #3203 campaign output:
+- campaign exit code: `0`
+- campaign status: `benchmark_success`
+- evidence status: `valid`
+- PPO row status: `ok`
+- PPO execution mode: `native`
+- PPO learned-policy contract: `pass`
+- unexpected failed rows: `0`
+- fallback/degraded rows counted as success: `0`
 
-- `campaign_table.md`
-- `scenario_family_breakdown.md`
-
-The source campaign command reconstructed the original Issue #1023 config and eval seeds from:
-
-- `configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml`
-- `configs/scenarios/classic_interactions_francis2023.yaml`
-- `configs/policy_search/scenario_horizons_h500.yaml`
-- eval seeds `[111, 112, 113]`
-
-The tracked payload files are durable compact evidence for dissertation packaging only. They do not
-create a new benchmark, ranking, or Results-chapter claim.
-
-## Pilot Command
-
-```bash
-uv run python scripts/tools/run_camera_ready_benchmark.py \
-  --config configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml \
-  --output-root output/benchmarks/issue_3203 \
-  --campaign-id issue3203_scenario_horizons_h500_reexport_2026-06-20 \
-  --mode run \
-  --log-level INFO
-```
+The fresh rerun was not promoted into this dissertation bundle because the SNQI contract still
+failed. The readiness checker classifies the 2026-07-01 packet as `diagnostic_only` because
+`snqi_contract_status=fail`, with rank-alignment Spearman
+`-0.19999999999999998` below the `0.3` fail threshold.
 
 ## Durable Proof
 
-Small, reviewable proof copies are tracked under
-`docs/context/evidence/issue_2542_dissertation_export_bundle/`:
+- Historical bundle payloads:
+  `docs/context/evidence/issue_2542_dissertation_export_bundle/`
+- Historical #3203 source snapshots:
+  `docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-06-20/reports/`
+- Fresh diagnostic #3203 rerun packet:
+  `docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-07-01/`
 
-- `artifact_spec.json`: selected source rows and claim-boundary metadata.
-- `artifact_manifest.json`: generated manifest for the Issue #3203 table payloads.
-- `checksums.sha256`: generated checksums for the tracked payload artifacts.
-- `payload/artifacts/tab_issue_1023_campaign_table.md`: campaign table payload.
-- `payload/artifacts/tab_issue_1023_scenario_family_breakdown.md`: scenario-family table payload.
-- `docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-06-20/reports/`: tracked
-  compact source snapshots used as the manifest `source_root`.
-
-The raw campaign output remains disposable under `output/benchmarks/issue_3203/...` and is not
-tracked wholesale. Future dissertation-side registries should consume the manifest and compact
-payloads, not the local output tree.
-
-## Validation
-
-- `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/tools/test_benchmark_publication_bundle.py`
-- `scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check robot_sf/benchmark/artifact_publication.py scripts/tools/benchmark_publication_bundle.py tests/tools/test_benchmark_publication_bundle.py`
-- `scripts/dev/run_worktree_shared_venv.sh -- uv run ruff format --check robot_sf/benchmark/artifact_publication.py scripts/tools/benchmark_publication_bundle.py tests/tools/test_benchmark_publication_bundle.py`
-- `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/benchmark_publication_bundle.py dissertation-bundle ...`
-- `uv run python scripts/tools/benchmark_publication_bundle.py validate-dissertation-bundle --bundle-dir docs/context/evidence/issue_2542_dissertation_export_bundle --source-root docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-06-20/reports --expected-source-command "uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml --output-root <disposable-output-root>/benchmarks/issue_3203 --campaign-id issue3203_scenario_horizons_h500_reexport_2026-06-20 --mode run --log-level INFO" --expected-source-commit 76d84347a40c669fb878b55489a2614917399bda`
-- `uv run python scripts/tools/stale_artifact_detector.py docs/context/evidence/issue_2542_dissertation_export_bundle/artifact_manifest.json --json-out output/issue-3203/stale_artifact_report.json`
-- `uv run python scripts/tools/reexport_readiness_preflight.py docs/context/evidence/issue_2542_dissertation_export_bundle/artifact_manifest.json --repo-root .` —
-  read-only re-export readiness preflight (Issue #3203). Reports `fresh` / `stale` / `blocked` and
-  the required re-export inputs (campaign config, generation script, source-commit provenance) so a
-  stale bundle is never silently cited as current without checking that a bounded campaign can be
-  reproduced here. It does not run the campaign or edit dissertation claims.
-- `BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh`
+Raw campaign output remains disposable under `output/benchmarks/issue_3203/...` and is not tracked
+wholesale.
 
 ## Boundary
 
-This work creates a provenance and packaging workflow for selected figure/table artifacts. It does
-not alter benchmark metrics, promote raw local `output/` trees as durable evidence, or claim that
-the selected scenario-horizon tables are benchmark-success evidence. The Issue #3203 PPO
-partial-failure and SNQI contract failure remain blocking caveats for any Results-style use.
+Do not cite the scenario-horizon table bundle as benchmark-success, ranking, or Results-chapter
+evidence. It is suitable only for discussion/provenance wording unless a future bounded rerun either
+passes the SNQI contract or predeclares a narrower claim boundary that explicitly scopes SNQI out.
+
+## Validation
+
+- `uv run python scripts/validation/check_scenario_horizon_results_readiness.py docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-07-01/reports/campaign_summary.json --json`
+- `uv run pytest tests/benchmark/test_scenario_horizon_readiness_issue_3203.py`
+- `uv run pytest tests/docs/test_dissertation_evidence_ledger.py tests/docs/test_dissertation_gap_report.py`

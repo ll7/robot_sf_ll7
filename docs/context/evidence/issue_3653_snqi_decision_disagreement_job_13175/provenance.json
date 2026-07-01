@@ -5,7 +5,7 @@
     "python",
     "scripts/benchmark/snqi_scalarization_sensitivity_export.py",
     "--episodes",
-    "output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl",
+    "<hydrated-local-artifact-root>/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl",
     "--baseline",
     "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
     "--weights",
@@ -37,7 +37,7 @@
     "safety_ranking_claim_promoted": false,
     "scenario_horizon_claim_promoted": false
   },
-  "hydrated_file": "output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl",
+  "hydrated_file": "<hydrated-local-artifact-root>/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl",
   "hydrated_rows": 8640,
   "hydrated_sha256": "fd15480d6892dd634e374fb9f79e1e3600d24c88604d9ff05f33d8227b4e6460",
   "materialization": {
@@ -48,7 +48,7 @@
     "retrieved_on_host": "auxme-imech036",
     "source_glob": "runs/*/episodes.jsonl",
     "source_host": "imech192",
-    "source_results_root": "/home/luttkule/git/robot_sf_ll7.worktrees/slurm-issue-1554-s20-h500-l40s-mem180-20260628/output/benchmarks/camera_ready/issue1554_s20_h500_l40s_mem180_20260628"
+    "source_results_root": "<submit-host-worktree-artifact-root>/benchmarks/camera_ready/issue1554_s20_h500_l40s_mem180_20260628"
   },
   "post_export_note": "The packet records final artifact hashes after canonical export. The report application_packet hash records the packet file as it existed when the export command ran.",
   "preflight_status": "ready",
@@ -62,7 +62,7 @@
       "sha256": "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a"
     },
     "episodes": {
-      "path": "output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl",
+      "path": "<hydrated-local-artifact-root>/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl",
       "sha256": "fd15480d6892dd634e374fb9f79e1e3600d24c88604d9ff05f33d8227b4e6460"
     },
     "weights": {

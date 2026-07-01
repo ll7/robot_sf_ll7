@@ -6,8 +6,8 @@ This bundle applies the existing Social Navigation Quality Index (SNQI) scalariz
 
 - Source job: `13175`
 - Source campaign: `issue1554_s20_h500_l40s_mem180_20260628`
-- Submit-host source: `imech192:/home/luttkule/git/robot_sf_ll7.worktrees/slurm-issue-1554-s20-h500-l40s-mem180-20260628/output/benchmarks/camera_ready/issue1554_s20_h500_l40s_mem180_20260628`
-- Hydrated aggregate: `output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl`
+- Submit-host source: `imech192:<submit-host-worktree-artifact-root>/benchmarks/camera_ready/issue1554_s20_h500_l40s_mem180_20260628`
+- Hydrated aggregate: `<hydrated-local-artifact-root>/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl`
 - Aggregate SHA-256: `fd15480d6892dd634e374fb9f79e1e3600d24c88604d9ff05f33d8227b4e6460`
 - Episode rows: `8640`
 

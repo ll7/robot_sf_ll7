@@ -51,12 +51,11 @@ Sources: ledger #2760 (7 rows), register #2762 (5 entries)
 - **Claim gap / reason**: Requires transfer-aware transferability campaigns with false-positive accounting, non-regression on success/progress, and statistical uncertainty before any safety/progress claim.
 
 ### exported_tables [ledger]
-
 - **Tier/Classification**: diagnostic
-- **Promotion step or reason**: invalid campaign repair: fix or intentionally scope the PPO observation-contract failure and SNQI contract caveat, then rerun a fresh bounded campaign before any benchmark or Results wording.
-- **Allowed wording / boundary**: Payload-complete scenario-horizon dissertation table exports exist for discussion/provenance only; the fresh campaign preserved the PPO partial-failure row and does not establish benchmark-success, ranking, or Results-chapter evidence.
-- **Caveat**: The Issue #3203 campaign exited 2 with evidence_status invalid: 8 successful evidence rows, 1 unexpected failed PPO row (144/144 serial-worker jobs failed from missing dict observation keys), and SNQI contract status fail under warn enforcement. Preserve the PPO row as failed/degraded evidence, not benchmark success.
-- **Claim gap / reason**: Payload absence is resolved, but the tables remain diagnostic/provenance artifacts until the PPO observation contract and SNQI contract caveats are repaired or explicitly scoped out by a new issue contract.
+- **Promotion step or reason**: SNQI contract repair or scoped claim boundary: fix SNQI rank-alignment failure, or predeclare a narrower boundary that does not use SNQI for Results promotion, then rerun a fresh bounded campaign before any benchmark or Results wording.
+- **Allowed wording / boundary**: Payload-complete scenario-horizon dissertation table exports exist for discussion/provenance only; the 2026-07-01 rerun repaired the PPO row but failed the SNQI contract, so it does not establish benchmark-success ranking or Results-chapter evidence.
+- **Caveat**: The 2026-07-01 Issue #3203 rerun exited 0 with benchmark_success and evidence_status valid for campaign row execution: 9 successful rows, 0 unexpected failed rows, 0 fallback/degraded rows counted as success, and PPO native with learned-policy contract pass. The readiness checker still returned diagnostic_only because SNQI contract status was fail from rank-alignment Spearman -0.19999999999999998 below the 0.3 fail threshold.
+- **Claim gap / reason**: Payload absence and the stale PPO observation-contract failure are resolved for the 2026-07-01 rerun, but the tables remain diagnostic/provenance artifacts until the SNQI contract failure is repaired or explicitly scoped out by a new issue contract.
 
 ## Negative / Revise-Only
 

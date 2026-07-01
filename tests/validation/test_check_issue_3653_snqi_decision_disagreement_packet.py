@@ -227,6 +227,20 @@ def test_issue_3653_packet_rejects_malformed_evidence_file_entry() -> None:
         raise AssertionError("packet should reject malformed evidence file entries")
 
 
+def test_issue_3653_packet_rejects_duplicate_evidence_file_path() -> None:
+    """Evidence artifact file entries fail closed when paths repeat."""
+
+    packet = _load_packet()
+    packet["evidence_artifacts"]["files"].append(packet["evidence_artifacts"]["files"][0].copy())
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "duplicate evidence file path" in str(exc)
+    else:
+        raise AssertionError("packet should reject duplicate evidence file paths")
+
+
 def test_issue_3653_check_cli_json() -> None:
     """The checker CLI returns a machine-readable success summary."""
 

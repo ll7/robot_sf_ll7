@@ -310,7 +310,9 @@ def _validate_evidence_artifacts(packet: Mapping[str, Any], *, repo_root: Path) 
     recorded: dict[str, str] = {}
     for item in files:
         _require(isinstance(item, Mapping), "each evidence file entry must be a mapping")
-        recorded[str(item.get("path"))] = str(item.get("sha256"))
+        path = str(item.get("path"))
+        _require(path not in recorded, f"duplicate evidence file path: {path}")
+        recorded[path] = str(item.get("sha256"))
     _require(recorded == EXPECTED_EXPORT_ARTIFACT_HASHES, "evidence artifact hash map mismatch")
     for rel_path, expected_hash in EXPECTED_EXPORT_ARTIFACT_HASHES.items():
         artifact = repo_root / artifact_root / rel_path

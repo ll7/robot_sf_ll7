@@ -11,8 +11,8 @@
     {
       "kind": "machine_packet",
       "path": "packet.json",
-      "sha256": "8bda21d9c3f3c52e13190791b5a03c886335e357730b5298b053d41107b7f862",
-      "size_bytes": 5447
+      "sha256": "7f6891953f0baada49de30f3af35bad4cb12471f83f9eacb13a8e709e2f2da76",
+      "size_bytes": 7169
     },
     {
       "kind": "provenance",

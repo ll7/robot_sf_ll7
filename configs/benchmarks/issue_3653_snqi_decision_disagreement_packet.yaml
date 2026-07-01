@@ -47,7 +47,7 @@ raw_episode_artifact:
   materialization:
     source_host: imech192
     retrieved_on_host: auxme-imech036
-    source_results_root: /home/luttkule/git/robot_sf_ll7.worktrees/slurm-issue-1554-s20-h500-l40s-mem180-20260628/output/benchmarks/camera_ready/issue1554_s20_h500_l40s_mem180_20260628  # allow-abs-path: submit-host job 13175 provenance
+    source_results_root: /home/luttkule/git/robot_sf_ll7.worktrees/slurm-issue-1554-s20-h500-l40s-mem180-20260628/output/benchmarks/camera_ready/issue1554_s20_h500_l40s_mem180_20260628  # allow-abs-path: machine-local non-portable submit-host job 13175 provenance
     source_glob: runs/*/episodes.jsonl
     planner_key_source: runs directory stem before __differential_drive
     materialized_rows: 8640

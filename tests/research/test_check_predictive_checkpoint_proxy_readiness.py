@@ -504,6 +504,20 @@ def test_blocked_when_artifact_inventory_has_blocked_state(tmp_path):
     assert any("blocked artifact" in message for message in artifacts["messages"])
 
 
+def test_blocked_artifact_summary_treats_none_as_unknown_and_preserves_falsy_values():
+    """Summary buckets only substitute unknown for absent/null optional fields."""
+    summary = mod._summarize_blocked_artifacts(
+        [
+            {"artifact_type": None, "status": None, "storage_scope": None},
+            {"artifact_type": "", "status": "", "storage_scope": ""},
+        ]
+    )
+
+    assert summary["by_artifact_type"] == {"unknown": 1, "": 1}
+    assert summary["by_status"] == {"unknown": 1, "": 1}
+    assert summary["by_storage_scope"] == {"unknown": 1, "": 1}
+
+
 def test_failed_when_blocked_artifact_metadata_malformed(tmp_path):
     """Artifact inventory missing required metadata fails closed before readiness claims."""
     config = _write_config(tmp_path, min_resolvable=2, min_epochs=2)
@@ -709,5 +723,6 @@ def test_blocked_artifact_summary_is_reported_for_decision_packet(tmp_path: Path
     assert "summary" in blocked
     summary = blocked["summary"]
     assert summary["total"] >= 1
+    assert summary["by_artifact_type"].get("checkpoint_set", 0) >= 1
     assert summary["by_status"].get("blocked", 0) >= 1
     assert summary["by_storage_scope"].get("worktree_local_output", 0) >= 1

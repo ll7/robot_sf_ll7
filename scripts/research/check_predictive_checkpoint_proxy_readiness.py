@@ -58,12 +58,12 @@ def _summarize_blocked_artifacts(
     by_status: dict[str, int] = {}
     by_storage_scope: dict[str, int] = {}
     for artifact in artifacts:
-        artifact_type = artifact.get("artifact_type", "unknown")
-        status = artifact.get("status", "unknown")
-        scope = artifact.get("storage_scope", "unknown")
-        by_artifact_type[str(artifact_type)] = by_artifact_type.get(str(artifact_type), 0) + 1
-        by_status[str(status)] = by_status.get(str(status), 0) + 1
-        by_storage_scope[str(scope)] = by_storage_scope.get(str(scope), 0) + 1
+        artifact_type = _summary_bucket(artifact.get("artifact_type"))
+        status = _summary_bucket(artifact.get("status"))
+        scope = _summary_bucket(artifact.get("storage_scope"))
+        by_artifact_type[artifact_type] = by_artifact_type.get(artifact_type, 0) + 1
+        by_status[status] = by_status.get(status, 0) + 1
+        by_storage_scope[scope] = by_storage_scope.get(scope, 0) + 1
 
     return {
         "total": len(artifacts),
@@ -71,6 +71,11 @@ def _summarize_blocked_artifacts(
         "by_status": by_status,
         "by_storage_scope": by_storage_scope,
     }
+
+
+def _summary_bucket(value: Any) -> str:
+    """Normalize absent optional summary fields without rewriting valid falsy values."""
+    return str(value) if value is not None else "unknown"
 
 
 DEFAULT_CONFIG = Path("configs/research/predictive_checkpoint_proxy_v1.yaml")

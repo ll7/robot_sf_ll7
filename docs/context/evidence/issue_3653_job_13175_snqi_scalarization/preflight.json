@@ -1,0 +1,23 @@
+{
+  "claim_boundary": "Readiness preflight only; no SNQI weight changes, no scalarization export, no benchmark campaign run, and no decision-reversal claim.",
+  "issue": 3653,
+  "issues": [],
+  "missing_planner_cells": {},
+  "planner_count": 9,
+  "planners": [
+    "goal",
+    "hybrid_rule_v3_fast_progress_static_escape",
+    "orca",
+    "ppo",
+    "prediction_planner",
+    "sacadrl",
+    "scenario_adaptive_hybrid_orca_v1",
+    "social_force",
+    "socnav_sampling"
+  ],
+  "ready": true,
+  "record_count": 8640,
+  "scenario_horizon_count": 48,
+  "schema_version": "snqi_scalarization_sensitivity_preflight.v1",
+  "status": "ready"
+}

@@ -16,14 +16,24 @@ import yaml
 
 DEFAULT_PACKET = Path("configs/benchmarks/issue_3653_snqi_decision_disagreement_packet.yaml")
 SCHEMA_VERSION = "issue-3653-snqi-decision-disagreement-application-packet.v1"
-EXPECTED_STATUS = "blocked_missing_valid_campaign_episodes"
-EXPECTED_INPUT_STATUS = "blocked_until_episode_jsonl_promoted_or_hydratable"
-EXPECTED_RAW_EPISODE_STATUS = "blocked_until_durable_episode_jsonl_promoted_or_hydratable"
-EXPECTED_PENDING_RAW_EPISODE_HASH = "pending_durable_source"
+EXPECTED_STATUS = "diagnostic_application_exported"
+BLOCKED_MISSING_EPISODES_STATUS = "blocked_missing_valid_campaign_episodes"
+EXPECTED_INPUT_STATUS = "ready_hydrated_from_submit_host"
+EXPECTED_RAW_EPISODE_STATUS = "hydrated_from_submit_host_recorded_job_13175"
+EXPECTED_RAW_EPISODE_HASH = "9e11420d8bd4ed8749700cdfd2a8b16f1cc8dbca0766d0a273adfd624e10101a"
 EXPECTED_WEIGHT_HASH = "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2"
 EXPECTED_BASELINE_HASH = "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a"
 EXPECTED_EVIDENCE_PACKET_HASH = "7da1d5607536bc35d82d482029e150c3cf6442f586ac05e06c925fa9d9e2850c"
 EXPECTED_ARTIFACT_ROOT = "output/issue1554-s20-h500-l40s-mem180/13175"
+EXPECTED_EVIDENCE_ARTIFACT_ROOT = "docs/context/evidence/issue_3653_job_13175_snqi_scalarization"
+EXPECTED_EXPORT_ARTIFACT_HASHES = {
+    "preflight.json": "71b30e61c2ce360d330a1fcf33fad8fd2f2ae3554b9345fb872ffbf13d9605ab",
+    "snqi_scalarization_sensitivity.json": "779461491c342e744554255190509b37e338d510dafd4ada5cb660020cd5cb30",
+    "snqi_scalarization_sensitivity_planner_rows.csv": "198c31da9878317e056afbc54034c9f0caeeeb7cf4a3fc24bfd40d2ccc2e449c",
+    "snqi_scalarization_sensitivity_decision_disagreement.csv": "534c0bd09af1550d5b7cb9a7ebbb3ef89c6e361e843d7542020ae69d5a219f2d",
+    "snqi_scalarization_sensitivity.md": "77e426f8dc121131c5cf6d940789ba8591a7755445516c19c7a64f604e5cb0d1",
+    "snqi_scalarization_sensitivity_pareto.svg": "45596a65dca42f94a17481abd1ff077a71d8e6ae48ace5e89a59b961ac93ccb1",
+}
 ALLOWED_RAW_EPISODE_SOURCES = {
     "durable_artifact_pointer",
     "canonical_result_store",
@@ -171,8 +181,8 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path | None = None)
         "execution_boundary.local_submission_allowed must be false",
     )
     _require(execution.get("slurm_job_id") == "not_submitted", "slurm_job_id must be not_submitted")
-    _require(execution.get("target_host") == "imech039", "target_host must be imech039")
-    _require(execution.get("current_status") == EXPECTED_STATUS, "current_status must stay blocked")
+    _require(execution.get("target_host") == "imech036", "target_host must be imech036")
+    _require(execution.get("current_status") == EXPECTED_STATUS, "current_status mismatch")
 
     campaign = _require_mapping(packet, "source_campaign")
     _require(campaign.get("parent_issue") == 1554, "source campaign must reference issue #1554")
@@ -185,8 +195,8 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path | None = None)
         "expected_episode_count must be 8640",
     )
     _require(
-        campaign.get("provenance_status") == "needs_raw_episode_artifact",
-        "source campaign must remain raw-episode-artifact-blocked",
+        campaign.get("provenance_status") == "hydrated_from_submit_host_recorded_job_13175",
+        "source campaign provenance_status mismatch",
     )
     _require(campaign.get("artifact_root") == EXPECTED_ARTIFACT_ROOT, "artifact_root mismatch")
     evidence_packet_path = _validate_evidence_packet(campaign, repo_root=repo_root)
@@ -195,9 +205,7 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path | None = None)
     episodes = _repo_relative_path(inputs.get("episodes_jsonl"), "inputs.episodes_jsonl")
     baseline = _repo_relative_path(inputs.get("baseline_path"), "inputs.baseline_path")
     weights = _repo_relative_path(inputs.get("weights_path"), "inputs.weights_path")
-    _require(
-        inputs.get("input_status") == EXPECTED_INPUT_STATUS, "inputs.input_status must be blocked"
-    )
+    _require(inputs.get("input_status") == EXPECTED_INPUT_STATUS, "inputs.input_status mismatch")
     _require(inputs.get("weights_sha256") == EXPECTED_WEIGHT_HASH, "weights_sha256 mismatch")
     _require(inputs.get("baseline_sha256") == EXPECTED_BASELINE_HASH, "baseline_sha256 mismatch")
     _require((repo_root / weights).is_file(), "weights_path must exist")
@@ -226,17 +234,18 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path | None = None)
 
     success = _require_mapping(packet, "success_criteria")
     _require(success.get("preflight_status") == "ready", "success preflight_status must be ready")
-    _require(int(success.get("min_planners", 0)) >= 2, "success min_planners must be at least 2")
+    _require(int(success.get("min_planners", 0)) >= 9, "success min_planners must be at least 9")
     _require(
         {str(item) for item in _require_sequence(success, "required_report_fields")}
         == REQUIRED_REPORT_FIELDS,
         "required_report_fields mismatch",
     )
     _require(
-        success.get("blocked_status_when_inputs_missing") == EXPECTED_STATUS,
-        "blocked status must match execution current_status",
+        success.get("blocked_status_when_inputs_missing") == BLOCKED_MISSING_EPISODES_STATUS,
+        "blocked status must preserve missing-input failure state",
     )
 
+    evidence_artifacts = _validate_evidence_artifacts(packet, repo_root=repo_root)
     return {
         "status": "ok",
         "issue": 3653,
@@ -252,6 +261,57 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path | None = None)
         "raw_episode_artifact_status": raw_episode_artifact["current_status"],
         "raw_episode_artifact_sha256": raw_episode_artifact["expected_sha256"],
         "artifact_count": len(artifacts),
+        "evidence_artifact_root": evidence_artifacts["artifact_root"],
+        "evidence_artifact_count": evidence_artifacts["file_count"],
+        "decision_disagreement_rate": evidence_artifacts["decision_disagreement_rate"],
+    }
+
+
+def _validate_evidence_artifacts(packet: Mapping[str, Any], *, repo_root: Path) -> dict[str, Any]:
+    """Validate promoted diagnostic export artifacts and summary fields."""
+
+    evidence = _require_mapping(packet, "evidence_artifacts")
+    artifact_root = _repo_relative_path(evidence.get("artifact_root"), "evidence_artifacts.artifact_root")
+    _require(str(artifact_root) == EXPECTED_EVIDENCE_ARTIFACT_ROOT, "evidence artifact_root mismatch")
+    claim_boundary = str(evidence.get("claim_boundary", "")).lower()
+    for phrase in ("diagnostic", "not benchmark evidence", "primary-index", "paper/dissertation"):
+        _require(phrase in claim_boundary, f"evidence claim_boundary must mention {phrase}")
+    _require(evidence.get("exported_at_host") == "auxme-imech036", "export host mismatch")
+    _require(evidence.get("preflight_status") == "ready", "evidence preflight_status mismatch")
+
+    summary = _require_mapping(evidence, "summary")
+    _require(int(summary.get("planners", 0)) == 9, "evidence summary planner count mismatch")
+    _require(int(summary.get("episodes", 0)) == 8640, "evidence summary episode count mismatch")
+    _require(summary.get("snqi_winner") == "ppo", "evidence summary SNQI winner mismatch")
+    _require(
+        summary.get("constraints_first_winner") == "hybrid_rule_v3_fast_progress_static_escape",
+        "evidence summary constraints-first winner mismatch",
+    )
+    _require(summary.get("winner_disagreement") is True, "winner_disagreement must be true")
+    _require(int(summary.get("pairwise_reversal_count", -1)) == 5, "reversal count mismatch")
+    disagreement_rate = float(summary.get("pairwise_disagreement_rate", -1.0))
+    _require(
+        math.isclose(disagreement_rate, 0.1388888888888889, rel_tol=0.0, abs_tol=1e-12),
+        "decision disagreement rate mismatch",
+    )
+    _require(int(summary.get("pareto_front_points", 0)) == 2, "Pareto-front point count mismatch")
+    _require(
+        summary.get("top_term_by_mean_abs_contribution") == "w_time",
+        "top term dominance mismatch",
+    )
+
+    files = _require_sequence(evidence, "files")
+    recorded = {str(item.get("path")): str(item.get("sha256")) for item in files if isinstance(item, Mapping)}
+    _require(recorded == EXPECTED_EXPORT_ARTIFACT_HASHES, "evidence artifact hash map mismatch")
+    for rel_path, expected_hash in EXPECTED_EXPORT_ARTIFACT_HASHES.items():
+        artifact = repo_root / artifact_root / rel_path
+        _require(artifact.is_file(), f"evidence artifact missing: {rel_path}")
+        _require(_sha256(artifact) == expected_hash, f"evidence artifact hash mismatch: {rel_path}")
+
+    return {
+        "artifact_root": str(artifact_root),
+        "file_count": len(files),
+        "decision_disagreement_rate": disagreement_rate,
     }
 
 
@@ -278,8 +338,8 @@ def _validate_raw_episode_artifact_contract(
         "raw_episode_artifact.expected_rows mismatch",
     )
     _require(
-        contract.get("expected_sha256") == EXPECTED_PENDING_RAW_EPISODE_HASH,
-        "raw_episode_artifact.expected_sha256 must stay pending until durable source is recorded",
+        contract.get("expected_sha256") == EXPECTED_RAW_EPISODE_HASH,
+        "raw_episode_artifact.expected_sha256 mismatch",
     )
     _require(
         contract.get("current_status") == EXPECTED_RAW_EPISODE_STATUS,
@@ -287,15 +347,35 @@ def _validate_raw_episode_artifact_contract(
     )
     _require(
         contract.get("durable_source_required_before_ready") is True,
-        "raw_episode_artifact must require durable source before ready",
+        "raw_episode_artifact must keep durable-source requirement",
     )
 
     ready_precondition = str(contract.get("ready_precondition", "")).lower()
-    for phrase in ("inputs.episodes_jsonl", "durable source", "sha256", "preflight"):
+    for phrase in ("auxme-imech036", "imech192", "planner_key", "sha256", "preflight"):
         _require(
             phrase in ready_precondition,
             f"raw_episode_artifact.ready_precondition must mention {phrase}",
         )
+
+    materialization = _require_mapping(contract, "materialization")
+    _require(materialization.get("source_host") == "imech192", "materialization source_host mismatch")
+    _require(
+        materialization.get("retrieved_on_host") == "auxme-imech036",
+        "materialization retrieved_on_host mismatch",
+    )
+    _require(
+        str(materialization.get("source_results_root", "")).endswith(
+            "issue1554_s20_h500_l40s_mem180_20260628"
+        ),
+        "materialization source_results_root mismatch",
+    )
+    _require(materialization.get("source_glob") == "runs/*/episodes.jsonl", "source_glob mismatch")
+    _require(
+        materialization.get("planner_key_source") == "runs directory stem before __differential_drive",
+        "planner_key_source mismatch",
+    )
+    _require(int(materialization.get("materialized_rows", 0)) == expected_episode_count, "row mismatch")
+    _require(int(materialization.get("materialized_planners", 0)) == 9, "planner count mismatch")
 
     allowed_sources = {str(item) for item in _require_sequence(contract, "allowed_sources")}
     _require(
@@ -449,7 +529,9 @@ def export_if_ready(
     episodes_rel = _repo_relative_path(inputs.get("episodes_jsonl"), "inputs.episodes_jsonl")
     episodes = repo_root / episodes_rel
     if not episodes.is_file():
-        raise PacketError(f"episodes_jsonl missing: {episodes_rel} (status: {EXPECTED_STATUS})")
+        raise PacketError(
+            f"episodes_jsonl missing: {episodes_rel} (status: {BLOCKED_MISSING_EPISODES_STATUS})"
+        )
 
     weights = load_weight_mapping(
         repo_root / _repo_relative_path(inputs.get("weights_path"), "inputs.weights_path")

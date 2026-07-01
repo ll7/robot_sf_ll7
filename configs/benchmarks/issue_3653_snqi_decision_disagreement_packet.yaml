@@ -14,8 +14,8 @@ execution_boundary:
   compute_submit_authorized: false
   local_submission_allowed: false
   slurm_job_id: not_submitted
-  target_host: imech039
-  current_status: blocked_missing_valid_campaign_episodes
+  target_host: imech036
+  current_status: diagnostic_application_exported
 source_campaign:
   parent_issue: 1554
   campaign_id: issue1554_s20_h500_l40s_mem180_20260628
@@ -27,26 +27,40 @@ source_campaign:
   evidence_packet: docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.json
   evidence_packet_sha256: 7da1d5607536bc35d82d482029e150c3cf6442f586ac05e06c925fa9d9e2850c
   artifact_root: output/issue1554-s20-h500-l40s-mem180/13175
-  provenance_status: needs_raw_episode_artifact
+  provenance_status: hydrated_from_submit_host_recorded_job_13175
 inputs:
   episodes_jsonl: output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl
   baseline_path: configs/benchmarks/snqi_baseline_camera_ready_v3.json
   baseline_sha256: 329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a
   weights_path: configs/benchmarks/snqi_weights_camera_ready_v3.json
   weights_sha256: 71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2
-  input_status: blocked_until_episode_jsonl_promoted_or_hydratable
+  input_status: ready_hydrated_from_submit_host
 raw_episode_artifact:
   required: true
   artifact_class: raw_campaign_episode_jsonl
   expected_path: output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl
   expected_rows: 8640
-  expected_sha256: pending_durable_source
-  current_status: blocked_until_durable_episode_jsonl_promoted_or_hydratable
+  expected_sha256: 9e11420d8bd4ed8749700cdfd2a8b16f1cc8dbca0766d0a273adfd624e10101a
+  current_status: hydrated_from_submit_host_recorded_job_13175
   durable_source_required_before_ready: true
   ready_precondition: >
-    Before current_status can become ready, inputs.episodes_jsonl must be hydrated from
-    a durable source or canonical result store, its sha256 must be recorded here, and
-    the export-if-ready preflight must pass against that exact file.
+    Satisfied on auxme-imech036 by hydrating recorded job 13175 outputs from the
+    imech192 submit-host result root, materializing reports/episodes.jsonl from the
+    nine recorded runs/*/episodes.jsonl streams with planner_key restored from the
+    run directory, recording the sha256 here, and passing export-if-ready preflight.
+  materialization:
+    source_host: imech192
+    retrieved_on_host: auxme-imech036
+    source_results_root: /home/luttkule/git/robot_sf_ll7.worktrees/slurm-issue-1554-s20-h500-l40s-mem180-20260628/output/benchmarks/camera_ready/issue1554_s20_h500_l40s_mem180_20260628
+    source_glob: runs/*/episodes.jsonl
+    planner_key_source: runs directory stem before __differential_drive
+    materialized_rows: 8640
+    materialized_planners: 9
+    materialization_note: >
+      Original episode rows omit planner_key and fallback scenario_params.algo merges
+      the scenario_adaptive_hybrid_orca_v1 lane into its selected low-level algorithms.
+      The aggregate JSONL restores planner_key from the recorded per-planner run
+      directories so the diagnostic export covers the intended nine planner lanes.
   allowed_sources:
     - durable_artifact_pointer
     - canonical_result_store
@@ -80,7 +94,7 @@ export:
     - snqi_scalarization_sensitivity_pareto.svg
 success_criteria:
   preflight_status: ready
-  min_planners: 2
+  min_planners: 9
   required_report_fields:
     - decision_disagreement
     - planner_rows
@@ -89,3 +103,35 @@ success_criteria:
     - weight_sweep
     - pareto_front
   blocked_status_when_inputs_missing: blocked_missing_valid_campaign_episodes
+evidence_artifacts:
+  artifact_root: docs/context/evidence/issue_3653_job_13175_snqi_scalarization
+  claim_boundary: >
+    Diagnostic SNQI scalarization-sensitivity application on retrieved job 13175
+    only; not benchmark evidence, not an SNQI primary-index claim, and not a
+    paper/dissertation claim edit.
+  exported_at_host: auxme-imech036
+  exported_from_commit: 7ab9c5e03
+  preflight_status: ready
+  summary:
+    planners: 9
+    episodes: 8640
+    snqi_winner: ppo
+    constraints_first_winner: hybrid_rule_v3_fast_progress_static_escape
+    winner_disagreement: true
+    pairwise_reversal_count: 5
+    pairwise_disagreement_rate: 0.1388888888888889
+    pareto_front_points: 2
+    top_term_by_mean_abs_contribution: w_time
+  files:
+    - path: preflight.json
+      sha256: 71b30e61c2ce360d330a1fcf33fad8fd2f2ae3554b9345fb872ffbf13d9605ab
+    - path: snqi_scalarization_sensitivity.json
+      sha256: 779461491c342e744554255190509b37e338d510dafd4ada5cb660020cd5cb30
+    - path: snqi_scalarization_sensitivity_planner_rows.csv
+      sha256: 198c31da9878317e056afbc54034c9f0caeeeb7cf4a3fc24bfd40d2ccc2e449c
+    - path: snqi_scalarization_sensitivity_decision_disagreement.csv
+      sha256: 534c0bd09af1550d5b7cb9a7ebbb3ef89c6e361e843d7542020ae69d5a219f2d
+    - path: snqi_scalarization_sensitivity.md
+      sha256: 77e426f8dc121131c5cf6d940789ba8591a7755445516c19c7a64f604e5cb0d1
+    - path: snqi_scalarization_sensitivity_pareto.svg
+      sha256: 45596a65dca42f94a17481abd1ff077a71d8e6ae48ace5e89a59b961ac93ccb1

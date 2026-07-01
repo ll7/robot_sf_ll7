@@ -19,6 +19,8 @@ EXPECTED_STATUS = "blocked_missing_valid_campaign_episodes"
 EXPECTED_INPUT_STATUS = "blocked_until_episode_jsonl_promoted_or_hydratable"
 EXPECTED_WEIGHT_HASH = "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2"
 EXPECTED_BASELINE_HASH = "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a"
+EXPECTED_EVIDENCE_PACKET_HASH = "7da1d5607536bc35d82d482029e150c3cf6442f586ac05e06c925fa9d9e2850c"
+EXPECTED_ARTIFACT_ROOT = "output/issue1554-s20-h500-l40s-mem180/13175"
 REQUIRED_ARTIFACTS = {
     "snqi_scalarization_sensitivity.json",
     "snqi_scalarization_sensitivity_planner_rows.csv",
@@ -79,6 +81,45 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _validate_evidence_packet(campaign: Mapping[str, Any], *, repo_root: Path) -> Path:
+    evidence_packet_path = _repo_relative_path(
+        campaign.get("evidence_packet"), "source_campaign.evidence_packet"
+    )
+    _require(
+        campaign.get("evidence_packet_sha256") == EXPECTED_EVIDENCE_PACKET_HASH,
+        "evidence_packet_sha256 mismatch",
+    )
+    evidence_packet_file = repo_root / evidence_packet_path
+    _require(evidence_packet_file.is_file(), "evidence_packet must exist")
+    _require(
+        _sha256(evidence_packet_file) == EXPECTED_EVIDENCE_PACKET_HASH,
+        "evidence packet hash mismatch",
+    )
+
+    evidence_packet = json.loads(evidence_packet_file.read_text(encoding="utf-8"))
+    _require(evidence_packet.get("job_id") == "13175", "evidence packet job_id mismatch")
+    _require(evidence_packet.get("status") == "diagnostic_only", "evidence packet status mismatch")
+    _require(
+        evidence_packet.get("artifact_root") == EXPECTED_ARTIFACT_ROOT,
+        "evidence packet artifact_root mismatch",
+    )
+
+    coverage = _require_mapping(evidence_packet, "coverage_snapshot")
+    packet_campaign = _require_mapping(evidence_packet, "campaign")
+    _require(
+        packet_campaign.get("scenario_matrix")
+        == "configs/scenarios/classic_interactions_francis2023.yaml",
+        "evidence packet scenario_matrix mismatch",
+    )
+    _require(
+        packet_campaign.get("seed_set") == "paper_eval_s20",
+        "evidence packet seed_set mismatch",
+    )
+    _require(int(coverage.get("planner_count", 0)) == 9, "evidence packet planner_count mismatch")
+    _require(int(coverage.get("episode_rows", 0)) == 8640, "evidence packet episode_rows mismatch")
+    return evidence_packet_path
+
+
 def load_packet(path: Path) -> dict[str, Any]:
     """Load a YAML packet and require a top-level mapping."""
 
@@ -131,9 +172,11 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path | None = None)
         "expected_episode_count must be 8640",
     )
     _require(
-        campaign.get("provenance_status") == "needs_valid_campaign_artifact",
-        "source campaign must remain artifact-blocked",
+        campaign.get("provenance_status") == "needs_raw_episode_artifact",
+        "source campaign must remain raw-episode-artifact-blocked",
     )
+    _require(campaign.get("artifact_root") == EXPECTED_ARTIFACT_ROOT, "artifact_root mismatch")
+    evidence_packet_path = _validate_evidence_packet(campaign, repo_root=repo_root)
 
     inputs = _require_mapping(packet, "inputs")
     episodes = _repo_relative_path(inputs.get("episodes_jsonl"), "inputs.episodes_jsonl")
@@ -185,6 +228,8 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path | None = None)
         "expected_episode_count": campaign["expected_episode_count"],
         "weights_sha256": inputs["weights_sha256"],
         "baseline_sha256": inputs["baseline_sha256"],
+        "evidence_packet": str(evidence_packet_path),
+        "evidence_packet_sha256": campaign["evidence_packet_sha256"],
         "episodes_jsonl": str(episodes),
         "artifact_count": len(artifacts),
     }

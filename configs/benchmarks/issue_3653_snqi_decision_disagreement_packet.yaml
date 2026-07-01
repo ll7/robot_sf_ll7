@@ -18,15 +18,18 @@ execution_boundary:
   current_status: blocked_missing_valid_campaign_episodes
 source_campaign:
   parent_issue: 1554
-  campaign_id: issue_1554_s20_h500_social_navigation_v1
+  campaign_id: issue1554_s20_h500_l40s_mem180_20260628
   source_job_id: 13175
   scenario_horizon: h500
   seed_budget: S20
   planner_count: 9
   expected_episode_count: 8640
-  provenance_status: needs_valid_campaign_artifact
+  evidence_packet: docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.json
+  evidence_packet_sha256: 7da1d5607536bc35d82d482029e150c3cf6442f586ac05e06c925fa9d9e2850c
+  artifact_root: output/issue1554-s20-h500-l40s-mem180/13175
+  provenance_status: needs_raw_episode_artifact
 inputs:
-  episodes_jsonl: output/benchmarks/issue_1554_s20_h500_social_navigation_v1/reports/episodes.jsonl
+  episodes_jsonl: output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl
   baseline_path: configs/benchmarks/snqi_baseline_camera_ready_v3.json
   baseline_sha256: 329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a
   weights_path: configs/benchmarks/snqi_weights_camera_ready_v3.json
@@ -40,7 +43,7 @@ export:
     - python
     - scripts/benchmark/snqi_scalarization_sensitivity_export.py
     - --episodes
-    - output/benchmarks/issue_1554_s20_h500_social_navigation_v1/reports/episodes.jsonl
+    - output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl
     - --baseline
     - configs/benchmarks/snqi_baseline_camera_ready_v3.json
     - --weights

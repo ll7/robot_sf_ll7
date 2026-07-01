@@ -39,6 +39,30 @@ def test_issue_3653_packet_passes_fail_closed_contract() -> None:
     assert summary["source_job_id"] == 13175
     assert summary["expected_episode_count"] == 8640
     assert summary["artifact_count"] == 5
+    assert (
+        summary["evidence_packet"]
+        == "docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.json"
+    )
+    assert (
+        summary["episodes_jsonl"]
+        == "output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl"
+    )
+
+
+def test_issue_3653_packet_rejects_untracked_evidence_packet() -> None:
+    """The packet must point at the tracked 13175 diagnostic metadata."""
+
+    packet = _load_packet()
+    packet["source_campaign"]["evidence_packet"] = (
+        "docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.md"
+    )
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "evidence packet hash mismatch" in str(exc)
+    else:
+        raise AssertionError("packet should reject untracked or mismatched evidence metadata")
 
 
 def test_issue_3653_packet_rejects_claim_boundary_without_paper_guard() -> None:

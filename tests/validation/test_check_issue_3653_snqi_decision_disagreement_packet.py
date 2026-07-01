@@ -91,16 +91,22 @@ def test_issue_3653_packet_passes_fail_closed_contract() -> None:
 
     assert summary["status"] == "ok"
     assert summary["issue"] == 3653
-    assert summary["current_status"] == "blocked_missing_valid_campaign_episodes"
-    assert summary["target_host"] == "imech039"
+    assert summary["current_status"] == "diagnostic_application_exported"
+    assert summary["target_host"] == "imech036"
     assert summary["source_job_id"] == 13175
     assert summary["expected_episode_count"] == 8640
     assert summary["artifact_count"] == 5
+    assert summary["evidence_artifact_count"] == 6
+    assert summary["decision_disagreement_rate"] == 0.1388888888888889
     assert (
-        summary["raw_episode_artifact_status"]
-        == "blocked_until_durable_episode_jsonl_promoted_or_hydratable"
+        summary["evidence_artifact_root"]
+        == "docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175"
     )
-    assert summary["raw_episode_artifact_sha256"] == "pending_durable_source"
+    assert summary["raw_episode_artifact_status"] == "hydrated_from_submit_host_recorded_job_13175"
+    assert (
+        summary["raw_episode_artifact_sha256"]
+        == "fd15480d6892dd634e374fb9f79e1e3600d24c88604d9ff05f33d8227b4e6460"
+    )
     assert (
         summary["evidence_packet"]
         == "docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.json"
@@ -175,18 +181,20 @@ def test_issue_3653_packet_rejects_synthetic_raw_episode_source() -> None:
         raise AssertionError("packet should reject synthetic raw episode acquisition")
 
 
-def test_issue_3653_packet_rejects_ready_raw_episode_without_sha256() -> None:
-    """A hydrated campaign input cannot be marked ready without durable provenance."""
+def test_issue_3653_packet_rejects_obsolete_blocked_raw_episode_status() -> None:
+    """The exported packet must not regress to the pre-hydration blocked status."""
 
     packet = _load_packet()
-    packet["raw_episode_artifact"]["current_status"] = "ready"
+    packet["raw_episode_artifact"]["current_status"] = (
+        "blocked_until_durable_episode_jsonl_promoted_or_hydratable"
+    )
 
     try:
         _MODULE.validate_packet(packet)
     except _MODULE.PacketError as exc:
         assert "raw_episode_artifact.current_status mismatch" in str(exc)
     else:
-        raise AssertionError("packet should reject raw episode ready state without provenance")
+        raise AssertionError("packet should reject obsolete raw episode blocked status")
 
 
 def test_issue_3653_packet_rejects_missing_decision_disagreement_artifact() -> None:
@@ -205,6 +213,34 @@ def test_issue_3653_packet_rejects_missing_decision_disagreement_artifact() -> N
         raise AssertionError("packet should reject missing decision-disagreement export")
 
 
+def test_issue_3653_packet_rejects_malformed_evidence_file_entry() -> None:
+    """Evidence artifact file entries fail closed when malformed."""
+
+    packet = _load_packet()
+    packet["evidence_artifacts"]["files"].append("not-a-file-entry")
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "each evidence file entry must be a mapping" in str(exc)
+    else:
+        raise AssertionError("packet should reject malformed evidence file entries")
+
+
+def test_issue_3653_packet_rejects_duplicate_evidence_file_path() -> None:
+    """Evidence artifact file entries fail closed when paths repeat."""
+
+    packet = _load_packet()
+    packet["evidence_artifacts"]["files"].append(packet["evidence_artifacts"]["files"][0].copy())
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "duplicate evidence file path" in str(exc)
+    else:
+        raise AssertionError("packet should reject duplicate evidence file paths")
+
+
 def test_issue_3653_check_cli_json() -> None:
     """The checker CLI returns a machine-readable success summary."""
 
@@ -220,14 +256,17 @@ def test_issue_3653_check_cli_json() -> None:
     payload = json.loads(completed.stdout)
     assert payload["status"] == "ok"
     assert payload["issue"] == 3653
-    assert payload["current_status"] == "blocked_missing_valid_campaign_episodes"
+    assert payload["current_status"] == "diagnostic_application_exported"
 
 
-def test_issue_3653_export_if_ready_blocks_missing_campaign_input() -> None:
-    """The executable handoff refuses to export when job 13175 JSONL is absent."""
+def test_issue_3653_export_if_ready_blocks_missing_campaign_input(tmp_path: Path) -> None:
+    """The executable handoff refuses export when job 13175 JSONL is absent."""
+
+    packet = _load_packet()
+    _point_packet_at_episodes(packet, tmp_path / "missing" / "episodes.jsonl")
 
     try:
-        _MODULE.export_if_ready(_load_packet())
+        _MODULE.export_if_ready(packet)
     except _MODULE.PacketError as exc:
         assert "episodes_jsonl missing" in str(exc)
         assert "blocked_missing_valid_campaign_episodes" in str(exc)

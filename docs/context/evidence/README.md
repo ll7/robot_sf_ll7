@@ -136,6 +136,10 @@ retrieved job 13175 S20/H500 artifacts for the post-#1554 evidence gap. Names th
 reviewable metadata files, records that S30 remains an unexecuted escalation path, and preserves
 the no-submit/no-claim boundary for paper or dissertation use.
 
+- `issue_3653_snqi_decision_disagreement_job_13175/`: diagnostic-only SNQI scalarization-sensitivity
+application on hydrated job 13175 S20/H500 episode evidence. Includes report JSON, planner rows,
+decision-disagreement CSV, Markdown, Pareto SVG, and provenance; raw episode JSONL stays ignored.
+
 - `issue_3207_simulator_dependence_validity_boundary_packet_2026-06-29/`: checker packet over
   the merged #3207 bounded actual fidelity-sensitivity slice. Classifies the current evidence as
   `no_claim` / `not_benchmark_evidence` because the slice is not full fixed scope and rank evidence

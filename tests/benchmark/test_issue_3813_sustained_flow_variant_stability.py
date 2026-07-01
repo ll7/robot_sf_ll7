@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from robot_sf.scenario_certification.sustained_flow import (
+    EXPECTED_CONTINUOUS_SPAWN_DEFINITION,
     EXPECTED_SUSTAINED_FLOW_TIERS,
     REQUIRED_BLOCKERS_BEFORE_BENCHMARK_USE,
     generate_expected_sustained_flow_scenarios,
@@ -10,7 +11,7 @@ from robot_sf.scenario_certification.sustained_flow import (
 
 
 def test_issue_3813_sustained_flow_variants_are_stable_and_ordered() -> None:
-    """Generator output has deterministic variant naming ordered density tiers."""
+    """Generator output has deterministic variant naming and ordered density tiers."""
     generated = generate_expected_sustained_flow_scenarios()
     expected_tiers = tuple(tier for tier, *_ in EXPECTED_SUSTAINED_FLOW_TIERS)
     expected_spawn_rates = tuple(
@@ -27,6 +28,9 @@ def test_issue_3813_sustained_flow_variants_are_stable_and_ordered() -> None:
         )
         == expected_spawn_rates
     )
+    assert tuple(
+        scenario["metadata"]["continuous_spawn"]["definition"] for scenario in generated
+    ) == tuple(EXPECTED_CONTINUOUS_SPAWN_DEFINITION for _ in expected_tiers)
     assert tuple(
         tuple(scenario["metadata"]["requires_before_benchmark_use"]) for scenario in generated
     ) == tuple(REQUIRED_BLOCKERS_BEFORE_BENCHMARK_USE for _ in expected_tiers)

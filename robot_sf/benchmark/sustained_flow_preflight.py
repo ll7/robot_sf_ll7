@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.scenario_certification.sustained_flow import (
+    EXPECTED_CONTINUOUS_SPAWN_DEFINITION,
     SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
     generate_expected_sustained_flow_scenarios,
 )
@@ -53,6 +54,7 @@ class SustainedFlowVariant:
     density_tier: str
     ped_density: float
     spawn_rate_per_min: float
+    spawn_definition: dict[str, object]
     current_runtime_support: str
     max_episode_steps: int
     seeds: tuple[int, ...]
@@ -161,6 +163,10 @@ def _variant_from_scenario(scenario: Mapping[str, Any]) -> SustainedFlowVariant:
         raise SustainedFlowPreflightError(
             f"{name}: continuous_spawn.intended_process must be {SUPPORTED_SPAWN_PROCESS!r}"
         )
+    if continuous_spawn.get("definition") != EXPECTED_CONTINUOUS_SPAWN_DEFINITION:
+        raise SustainedFlowPreflightError(
+            f"{name}: continuous_spawn.definition must match non-clearing demand contract"
+        )
 
     seeds = scenario.get("seeds", [])
     if not isinstance(seeds, list) or not all(isinstance(seed, int) for seed in seeds):
@@ -173,6 +179,7 @@ def _variant_from_scenario(scenario: Mapping[str, Any]) -> SustainedFlowVariant:
         spawn_rate_per_min=_required_float(
             continuous_spawn, "spawn_rate_per_min", scenario_name=name
         ),
+        spawn_definition=dict(EXPECTED_CONTINUOUS_SPAWN_DEFINITION),
         current_runtime_support=_required_str(
             continuous_spawn, "current_runtime_support", scenario_name=name
         ),
@@ -218,6 +225,7 @@ def _variant_generator_profile(variant: SustainedFlowVariant) -> tuple[object, .
         variant.density_tier,
         variant.ped_density,
         variant.spawn_rate_per_min,
+        tuple(sorted(variant.spawn_definition.items())),
         variant.max_episode_steps,
         variant.seeds,
     )

@@ -15,6 +15,7 @@ and never promoted to benchmark evidence.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -414,10 +415,23 @@ def _null_test_prerequisite_gaps(
             continue
         if value.get("status") != "complete":
             invalid.append(f"{key}_status_not_complete")
-        if "p_value" not in value:
+        elif "p_value" not in value:
             invalid.append(f"{key}_missing_p_value")
+        elif not _valid_probability(value["p_value"]):
+            invalid.append(f"{key}_invalid_p_value")
     status = "ready" if not missing and not invalid else "blocked"
     return source, status, missing, invalid
+
+
+def _valid_probability(value: Any) -> bool:
+    """Return whether ``value`` is a finite probability scalar."""
+
+    return (
+        isinstance(value, int | float)
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and 0.0 <= value <= 1.0
+    )
 
 
 def _load_json_object(path: Path) -> tuple[dict[str, Any] | None, str | None]:

@@ -98,6 +98,7 @@ def test_expected_headline_grid_missing_cell_blocks_packet() -> None:
         _row("crossing", "hybrid", [0.90] * 20),
         _row("crossing", "ppo", [0.70] * 20),
         _row("doorway", "hybrid", [0.88] * 20),
+        _row("extra_family", "hybrid", [0.89] * 20),
     ]
 
     report = build_report(
@@ -117,6 +118,12 @@ def test_expected_headline_grid_missing_cell_blocks_packet() -> None:
     assert "missing_expected_headline_cells" in packet["s30_reasons"]
     assert packet["grid_completeness"]["missing_cells"] == [
         {"scenario_id": "doorway", "planner_key": "ppo"}
+    ]
+    assert packet["grid_completeness"]["expected_cell_count"] == 4
+    assert packet["grid_completeness"]["observed_cell_count"] == 4
+    assert packet["grid_completeness"]["observed_expected_cell_count"] == 3
+    assert packet["grid_completeness"]["unexpected_cells"] == [
+        {"scenario_id": "extra_family", "planner_key": "hybrid"}
     ]
 
 

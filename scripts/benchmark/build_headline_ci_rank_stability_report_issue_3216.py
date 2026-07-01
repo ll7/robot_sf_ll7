@@ -163,7 +163,9 @@ class GridCompleteness:
     expected_planners: tuple[str, ...]
     expected_cell_count: int
     observed_cell_count: int
+    observed_expected_cell_count: int
     missing_cells: tuple[tuple[str, str], ...]
+    unexpected_cells: tuple[tuple[str, str], ...]
 
     @property
     def complete(self) -> bool:
@@ -179,10 +181,16 @@ class GridCompleteness:
             "expected_planners": list(self.expected_planners),
             "expected_cell_count": self.expected_cell_count,
             "observed_cell_count": self.observed_cell_count,
+            "observed_expected_cell_count": self.observed_expected_cell_count,
             "missing_cell_count": len(self.missing_cells),
             "missing_cells": [
                 {"scenario_id": scenario, "planner_key": planner}
                 for scenario, planner in self.missing_cells
+            ],
+            "unexpected_cell_count": len(self.unexpected_cells),
+            "unexpected_cells": [
+                {"scenario_id": scenario, "planner_key": planner}
+                for scenario, planner in self.unexpected_cells
             ],
             "complete": self.complete,
         }
@@ -461,16 +469,20 @@ def build_grid_completeness(
         return None
 
     observed = {(cell.scenario_id, cell.planner_key) for cell in cells}
-    expected = [(scenario, planner) for scenario in scenarios for planner in planners]
+    expected = tuple((scenario, planner) for scenario in scenarios for planner in planners)
+    expected_set = set(expected)
     missing = tuple(
         (scenario, planner) for scenario, planner in expected if (scenario, planner) not in observed
     )
+    unexpected = tuple(sorted(observed - expected_set))
     return GridCompleteness(
         expected_scenarios=scenarios,
         expected_planners=planners,
         expected_cell_count=len(expected),
         observed_cell_count=len(observed),
+        observed_expected_cell_count=len(observed & expected_set),
         missing_cells=missing,
+        unexpected_cells=unexpected,
     )
 
 
@@ -1099,9 +1111,10 @@ def _append_grid_completeness_markdown(lines: list[str], report: Mapping[str, An
     if not grid:
         return
     lines.append(
-        f"- **Expected grid**: {grid['observed_cell_count']} observed / "
+        f"- **Expected grid**: {grid['observed_expected_cell_count']} observed / "
         f"{grid['expected_cell_count']} expected; "
-        f"{grid['missing_cell_count']} missing"
+        f"{grid['missing_cell_count']} missing; "
+        f"{grid['unexpected_cell_count']} unexpected"
     )
 
 

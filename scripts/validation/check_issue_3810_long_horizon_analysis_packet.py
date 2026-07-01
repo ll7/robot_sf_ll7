@@ -19,7 +19,7 @@ if str(SCRIPT_DIR) not in sys.path:
 from issue_3810_readiness_refresh import validate_readiness_refresh  # noqa: E402
 
 DEFAULT_PACKET = Path("configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml")
-EXPECTED_TARGET_HOST = "imech156-u"
+EXPECTED_TARGET_HOST = "imech036"
 
 REQUIRED_PRE_FLIGHT_MARKERS = {
     "ROBOT_SF_PRIVATE_OPS",

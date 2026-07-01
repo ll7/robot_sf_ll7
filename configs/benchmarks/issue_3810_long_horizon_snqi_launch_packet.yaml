@@ -240,11 +240,11 @@ launch_packet:
     current_pr: null
     open_pr_matches: []
     blocking_open_pr_matches: []
-    latest_merged_packet_pr: 4053
+    latest_merged_packet_pr: 4056
     decision: >-
       Public readiness refresh found no open PR covering issue #3810 before
-      this branch. Current origin/main includes merged packet PR #4053 as
-      the latest packet lineage; this refresh retargets the packet guard to
+      this branch. Current origin/main includes merged packet PR #4056 as
+      the latest packet lineage; this refresh keeps the packet guard on
       imech036. This refresh is not submit-host queue, duplicate, worktree,
       or private-ops route proof.
   live_issue_state:

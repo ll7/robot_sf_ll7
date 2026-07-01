@@ -45,10 +45,10 @@ def test_issue_3810_analysis_packet_rejects_stale_private_ops_flags() -> None:
 
     packet = _load_packet()
     packet["analysis_and_retention_packet"]["preflight"]["duplicate_check_command"] = (
-        "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh "
-        "--json --target-host imech039 --issue 3810"
+        "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh "
+        "--limit 100 --json --target-host imech039 --issue 3810"
     )
-    with pytest.raises(_MODULE.PacketError, match="current queue_summary interface"):
+    with pytest.raises(_MODULE.PacketError, match="stale private-ops flags"):
         _MODULE.validate_packet(packet)
 
 

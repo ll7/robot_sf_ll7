@@ -317,7 +317,7 @@ def _overlap_metadata_gaps(
             raw_archive_id = entry.get("archive_id")
             archive_id = _metadata_archive_id(raw_archive_id, side=side, index=index)
             entry_gaps: list[str] = []
-            if archive_id.startswith(f"{side}:<entry:"):
+            if _metadata_archive_id_missing(raw_archive_id):
                 entry_gaps.append("archive_id")
             if _scenario_family_missing(entry):
                 entry_gaps.append("scenario_family")
@@ -341,6 +341,14 @@ def _metadata_archive_id(raw_archive_id: Any, *, side: str, index: int) -> str:
     return f"{side}:<entry:{index}>"
 
 
+def _metadata_archive_id_missing(raw_archive_id: Any) -> bool:
+    """Return whether archive ID metadata is absent or blank."""
+
+    return raw_archive_id is None or (
+        isinstance(raw_archive_id, str) and not raw_archive_id.strip()
+    )
+
+
 def _scenario_family_missing(entry: dict[str, Any]) -> bool:
     """Return whether scenario-family metadata is absent or placeholder-only."""
 
@@ -355,7 +363,8 @@ def _scenario_family_missing(entry: dict[str, Any]) -> bool:
         except ValueError:
             return False
         if isinstance(decoded, dict) and not any(
-            isinstance(value, str) and value.strip() for value in decoded.values()
+            value is not None and (not isinstance(value, str) or bool(value.strip()))
+            for value in decoded.values()
         ):
             return True
     return False

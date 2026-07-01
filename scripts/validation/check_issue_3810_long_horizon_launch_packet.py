@@ -15,10 +15,13 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from issue_3810_readiness_refresh import validate_readiness_refresh  # noqa: E402
+from issue_3810_readiness_refresh import (  # noqa: E402
+    EXPECTED_READINESS_DATE,
+    validate_readiness_refresh,
+)
 
 DEFAULT_PACKET = Path("configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml")
-EXPECTED_TARGET_HOST = "imech036"
+EXPECTED_TARGET_HOST = "imech156-u"
 REQUIRED_OUTPUTS = {
     "preflight/private_ops_route_dry_run.json",
     "reports/snqi_recalibration_inputs.json",
@@ -272,8 +275,8 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
 
     live_issue_state = _require_mapping(launch_packet, "live_issue_state")
     _require(
-        live_issue_state.get("checked_date") == "2026-07-01",
-        "live issue state date must be 2026-07-01",
+        live_issue_state.get("checked_date") == EXPECTED_READINESS_DATE,
+        f"live issue state date must be {EXPECTED_READINESS_DATE}",
     )
     _require(
         live_issue_state.get("required_label") == "state:running",

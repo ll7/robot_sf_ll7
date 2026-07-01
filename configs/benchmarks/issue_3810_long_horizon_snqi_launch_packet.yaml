@@ -224,7 +224,7 @@ launch_packet:
   decision: blocked_pending_job_13251_retention_and_analysis
   compute_submit_authorized: false
   slurm_job_id: not_submitted
-  target_host: imech036
+  target_host: imech156-u
   blocking_jobs:
     - 13251
   active_slurm_submission:
@@ -248,8 +248,8 @@ launch_packet:
       interaction-exposure reports exist, and the durable evidence bundle is
       reviewed.
   readiness_refresh:
-    checked_date: "2026-07-01"
-    target_host: imech036
+    checked_date: "2026-07-02"
+    target_host: imech156-u
     live_issue_command: >-
       gh issue view 3810 --repo ll7/robot_sf_ll7
       --json number,title,state,url,body,comments,labels
@@ -260,15 +260,15 @@ launch_packet:
     current_pr: null
     open_pr_matches: []
     blocking_open_pr_matches: []
-    latest_merged_packet_pr: 4114
+    latest_merged_packet_pr: 4118
     decision: >-
       Public readiness refresh found no open PR covering issue #3810 before
-      this branch. Current origin/main includes merged packet PR #4114
-      at head a509f8ea and merge abd48e79 as latest packet lineage and
+      this branch. Current origin/main includes merged packet PR #4118
+      at head e279f941 and merge d9ec7e0 as latest packet lineage and
       the live issue records Slurm job 13251 as submitted.
       This refresh is not a local submit action and is not benchmark evidence.
   live_issue_state:
-    checked_date: "2026-07-01"
+    checked_date: "2026-07-02"
     source: gh_issue_view_3810_labels
     required_label: "state:running"
     submit_blocker: true
@@ -278,7 +278,7 @@ launch_packet:
       interpretation blocked until the job finishes and retained evidence is
       reconciled.
   ledger_reconciliation:
-    checked_date: "2026-07-01"
+    checked_date: "2026-07-02"
     source: live_issue_comment_4854625320_submission_evidence
     job_13175_state: superseded_by_submitted_job_13251
     job_13175_campaign: 2026-06-issue1554-s20-h500-l40s-mem180
@@ -308,7 +308,7 @@ launch_packet:
       authorize Codex or local tooling to submit or queue additional Slurm work.
     private_ops_dry_run:
       required_before_submit: false
-      target_host: imech036
+      target_host: imech156-u
       evidence_path: output/benchmarks/issue_3810_comprehensive_h600_snqi/preflight/private_ops_route_dry_run.json
       current_public_status: superseded_by_live_submission
       required_fields:
@@ -480,7 +480,7 @@ analysis_and_retention_packet:
     queue_summary_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)
     route_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)
     submit_wrapper: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/submit_and_record.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)
-    target_host: "imech036"
+    target_host: "imech156-u"
   preflight:
     required: true
     route_refresh_command: >-

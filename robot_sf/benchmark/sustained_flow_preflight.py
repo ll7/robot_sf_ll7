@@ -11,6 +11,7 @@ from typing import Any
 from robot_sf.scenario_certification.sustained_flow import (
     EXPECTED_CONTINUOUS_SPAWN_DEFINITION,
     EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG,
+    EXPECTED_SUSTAINED_PROGRESS_METRIC,
     SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
     generate_expected_sustained_flow_scenarios,
     runtime_definition_status_for_support,
@@ -61,6 +62,7 @@ class SustainedFlowVariant:
     runtime_definition_status: str
     runtime_definition_ready: bool
     route_respawn_runtime_config: dict[str, object]
+    success_metric: dict[str, object]
     max_episode_steps: int
     seeds: tuple[int, ...]
 
@@ -173,6 +175,12 @@ def _variant_from_scenario(scenario: Mapping[str, Any]) -> SustainedFlowVariant:
         scenario_name=name,
     )
 
+    success_metric = _required_mapping(metadata, "success_metric", scenario_name=name)
+    if success_metric != EXPECTED_SUSTAINED_PROGRESS_METRIC:
+        raise SustainedFlowPreflightError(
+            f"{name}: metadata.success_metric must match sustained progress-rate contract"
+        )
+
     seeds = scenario.get("seeds", [])
     if not isinstance(seeds, list) or not all(isinstance(seed, int) for seed in seeds):
         raise SustainedFlowPreflightError(f"{name}: seeds must be a list of integers")
@@ -197,6 +205,7 @@ def _variant_from_scenario(scenario: Mapping[str, Any]) -> SustainedFlowVariant:
         route_respawn_runtime_config={
             field: simulation_config.get(field) for field in EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG
         },
+        success_metric=dict(success_metric),
         max_episode_steps=_required_int(simulation_config, "max_episode_steps", scenario_name=name),
         seeds=tuple(seeds),
     )
@@ -295,6 +304,7 @@ def _variant_generator_profile(variant: SustainedFlowVariant) -> tuple[object, .
         variant.runtime_definition_status,
         variant.runtime_definition_ready,
         tuple(sorted(variant.route_respawn_runtime_config.items())),
+        tuple(sorted(variant.success_metric.items())),
         variant.max_episode_steps,
         variant.seeds,
     )

@@ -383,3 +383,43 @@ def test_campaign_wrapper_preflight_only_never_launches_campaign(tmp_path: Path)
     assert "prediction_planner" in grid["expected_planners"]
     assert grid["expected_cell_count"] == 9
     assert grid["missing_cell_count"] > 0
+
+
+def test_campaign_wrapper_preflight_honors_config_env_override(tmp_path: Path) -> None:
+    """The documented CONFIG env override defines expected planner coverage."""
+    repo_root = Path(__file__).resolve().parents[2]
+    report_dir = tmp_path / "wrapper_preflight"
+    config_path = tmp_path / "custom_benchmark.yaml"
+    config_path.write_text(
+        """
+name: issue3216-custom-preflight
+planners:
+  - key: custom_config_only
+""".lstrip(),
+        encoding="utf-8",
+    )
+    env = {
+        **os.environ,
+        "CONFIG": str(config_path),
+        "REPORT_DIR": str(report_dir),
+    }
+
+    result = subprocess.run(
+        [
+            "bash",
+            "scripts/benchmark/run_issue3216_headline_campaign.sh",
+            "--preflight-only",
+        ],
+        cwd=repo_root,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads((report_dir / "result.json").read_text(encoding="utf-8"))
+    grid = payload["decision_packet"]["grid_completeness"]
+    assert grid["expected_planners"] == ["custom_config_only"]
+    assert grid["missing_cells"] == [{"scenario_id": "*", "planner_key": "custom_config_only"}]

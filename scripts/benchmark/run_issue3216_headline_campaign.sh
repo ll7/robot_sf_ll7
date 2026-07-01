@@ -37,7 +37,7 @@ OUTPUT_ROOT="${OUTPUT_ROOT:-output/benchmarks/camera_ready}"
 REPORT_DIR="${REPORT_DIR:-docs/context/evidence/issue_3216_headline_ci_rank_stability}"
 RANK_METRIC="${RANK_METRIC:-snqi}"
 PREFLIGHT_ONLY=0
-CONFIG="configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml"
+CONFIG="${CONFIG:-configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml}"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in

@@ -14,6 +14,7 @@ from robot_sf.benchmark.safety_wrapper_ablation_manifest import (
     ManifestOptions,
     build_safety_wrapper_ablation_manifest,
     check_factorial_ablation,
+    check_factorial_ablation_rows,
     load_safety_wrapper_ablation_config,
     write_safety_wrapper_ablation_manifest,
 )
@@ -164,3 +165,79 @@ def test_manifest_json_output_is_deterministic(tmp_path: Path) -> None:
     second_path = write_safety_wrapper_ablation_manifest(second, tmp_path / "second")
 
     assert first_path.read_text(encoding="utf-8") == second_path.read_text(encoding="utf-8")
+
+
+def _ablation_row(wrapper_arm: str, seed: int = 111) -> dict[str, object]:
+    return {
+        "study_id": "issue_3501_safety_wrapper_ablation_v1",
+        "planner": "orca",
+        "wrapper_arm": wrapper_arm,
+        "scenario_id": "crossing_basic",
+        "seed": seed,
+        "software_commit": "abc1234",
+        "event_ledger": {"schema_version": "EpisodeEventLedger.v1"},
+        "metric_values": {"exact_collision_probability": 0.0},
+        "wrapper_intervention_rate": 0.0,
+    }
+
+
+def test_manifest_declares_row_contract_for_later_result_checker() -> None:
+    """Manifest publishes fields required before any wrapper on/off comparison."""
+    manifest = build_safety_wrapper_ablation_manifest(_repo_config(), options=_options())
+    row_contract = manifest["row_contract"]
+
+    assert row_contract["required_fields"] == manifest["result_contract"]["required_outputs"]
+    assert row_contract["pairing_key_fields"] == ["planner", "scenario_id", "seed"]
+    assert row_contract["expected_wrapper_arms"] == [WRAPPER_OFF_ARM, WRAPPER_ON_ARM]
+    assert "exactly one wrapper_off row and one wrapper_on row" in row_contract["pairing_rule"]
+
+
+def test_check_factorial_ablation_rows_accepts_exact_paired_rows() -> None:
+    """Result rows are complete only with one off/on arm per planner/scenario/seed."""
+    rows = [_ablation_row(WRAPPER_OFF_ARM), _ablation_row(WRAPPER_ON_ARM)]
+
+    report = check_factorial_ablation_rows(rows)
+
+    assert report["complete"] is True
+    assert report["row_count"] == 2
+    assert report["pair_count"] == 1
+    assert report["missing_required_fields"] == []
+    assert report["incomplete_pairs"] == []
+
+
+def test_check_factorial_ablation_rows_rejects_missing_provenance_and_unpaired_arm() -> None:
+    """Missing provenance fields or one-arm rows fail closed before comparison."""
+    row = _ablation_row(WRAPPER_ON_ARM)
+    del row["software_commit"]
+
+    report = check_factorial_ablation_rows([row])
+
+    assert report["complete"] is False
+    assert report["missing_required_fields"] == [{"row_index": 0, "fields": ["software_commit"]}]
+    assert report["incomplete_pairs"] == [
+        {
+            "pairing_key": {"planner": "orca", "scenario_id": "crossing_basic", "seed": 111},
+            "wrapper_arms": [WRAPPER_ON_ARM],
+        }
+    ]
+
+
+def test_check_factorial_ablation_rows_rejects_duplicate_or_unknown_arm() -> None:
+    """Duplicate or non-contract wrapper arms cannot be compared."""
+    rows = [
+        _ablation_row(WRAPPER_OFF_ARM),
+        _ablation_row(WRAPPER_OFF_ARM),
+        _ablation_row("wrapper_auto"),
+    ]
+
+    report = check_factorial_ablation_rows(rows)
+
+    assert report["complete"] is False
+    assert report["unexpected_wrapper_arms"] == ["wrapper_auto"]
+    assert report["duplicate_pair_rows"] == [
+        {
+            "pairing_key": {"planner": "orca", "scenario_id": "crossing_basic", "seed": 111},
+            "wrapper_arm": WRAPPER_OFF_ARM,
+            "count": 2,
+        }
+    ]

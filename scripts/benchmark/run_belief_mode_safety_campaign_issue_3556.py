@@ -53,7 +53,8 @@ REQUIRED_MODES = ("oracle", "uncertain_retained", "uncertain_dropped")
 #: A planner key guaranteed not to consume the uncertainty sidecar, used to prove fail-closed.
 _UNSUPPORTED_PROBE_KEY = "campaign_preflight_unsupported_probe"
 DEFAULT_SCENARIO_SET = "configs/scenarios/sets/issue_3635_near_safe_occlusion_bearing_crossing.yaml"
-DEFAULT_SEEDS = list(range(101, 113))
+DEFAULT_SEED_SET = "issue_3635_s3_contract_only"
+DEFAULT_SEEDS = [363501, 363502, 363503]
 DEFAULT_FOV = 120.0
 NEAR_MISS_NOTE = (
     "real benchmark near_misses + collisions + min_clearance (no scripted unsafe-commit)"

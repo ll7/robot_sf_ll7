@@ -36,7 +36,7 @@ def test_issue_3810_analysis_packet_rejects_bad_target_host() -> None:
 
     packet = _load_packet()
     packet["analysis_and_retention_packet"]["route"]["target_host"] = "imech039"
-    with pytest.raises(_MODULE.PacketError, match="target host must be imech036"):
+    with pytest.raises(_MODULE.PacketError, match="target host must be imech156-u"):
         _MODULE.validate_packet(packet)
 
 
@@ -55,7 +55,7 @@ def test_issue_3810_analysis_packet_rejects_stale_private_ops_flags() -> None:
     packet = _load_packet()
     packet["analysis_and_retention_packet"]["preflight"]["duplicate_check_command"] = (
         "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh "
-        "--limit 100 --json --target-host imech036 --issue 3810"
+        "--limit 100 --json --target-host imech156-u --issue 3810"
     )
     with pytest.raises(_MODULE.PacketError, match="stale private-ops flags"):
         _MODULE.validate_packet(packet)

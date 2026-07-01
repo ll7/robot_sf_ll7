@@ -202,6 +202,7 @@ def test_check_factorial_ablation_rows_accepts_exact_paired_rows() -> None:
     assert report["row_count"] == 2
     assert report["pair_count"] == 1
     assert report["missing_required_fields"] == []
+    assert report["invalid_provenance_fields"] == []
     assert report["incomplete_pairs"] == []
 
 
@@ -219,6 +220,75 @@ def test_check_factorial_ablation_rows_rejects_missing_provenance_and_unpaired_a
             "pairing_key": {"planner": "orca", "scenario_id": "crossing_basic", "seed": 111},
             "wrapper_arms": [WRAPPER_ON_ARM],
         }
+    ]
+
+
+def test_check_safety_wrapper_ablation_rows_cli_fails_malformed_provenance(
+    tmp_path: Path,
+) -> None:
+    """CLI rejects pair-complete rows missing usable evidence fields."""
+    import subprocess
+    import sys
+
+    rows = [_ablation_row(WRAPPER_OFF_ARM), _ablation_row(WRAPPER_ON_ARM)]
+    rows[0]["event_ledger"] = {"schema_version": "WrongLedger.v1"}
+    rows[1]["wrapper_intervention_rate"] = -0.1
+    rows_path = tmp_path / "malformed_rows.jsonl"
+    rows_path.write_text(
+        "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/benchmark/check_safety_wrapper_ablation_rows.py",
+            "--rows",
+            str(rows_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    report = json.loads(result.stdout)
+    assert report["complete"] is False
+    assert report["incomplete_pairs"] == []
+    assert report["invalid_provenance_fields"] == [
+        {"row_index": 0, "fields": ["event_ledger"]},
+        {"row_index": 1, "fields": ["wrapper_intervention_rate"]},
+    ]
+
+
+def test_check_factorial_ablation_rows_rejects_malformed_provenance_values() -> None:
+    """Pair-complete rows still fail closed when provenance values are unusable."""
+    off_row = _ablation_row(WRAPPER_OFF_ARM)
+    off_row.update(
+        {
+            "software_commit": "",
+            "event_ledger": {"schema_version": "WrongLedger.v1"},
+            "metric_values": {},
+            "wrapper_intervention_rate": 1.25,
+        }
+    )
+    on_row = _ablation_row(WRAPPER_ON_ARM)
+    on_row["seed"] = True
+
+    report = check_factorial_ablation_rows([off_row, on_row])
+
+    assert report["complete"] is False
+    assert report["invalid_provenance_fields"] == [
+        {
+            "row_index": 0,
+            "fields": [
+                "software_commit",
+                "event_ledger",
+                "metric_values",
+                "wrapper_intervention_rate",
+            ],
+        },
+        {"row_index": 1, "fields": ["seed"]},
     ]
 
 

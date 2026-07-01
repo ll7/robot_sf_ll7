@@ -47,6 +47,7 @@ REQUIRED_ROW_FIELDS = (
     "wrapper_intervention_rate",
 )
 
+REQUIRED_EVENT_LEDGER_SCHEMA = "EpisodeEventLedger.v1"
 DRY_RUN_CLAIM_BOUNDARY = (
     "dry-run factorial-ablation manifest only: enumerates the fixed issue #3501 "
     "planner x {wrapper off, wrapper on} cells and paired seeds; not benchmark evidence, "
@@ -348,6 +349,7 @@ def check_factorial_ablation_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str
         and incomplete off/on pairs.
     """
     missing_required_fields: list[dict[str, Any]] = []
+    invalid_provenance_fields: list[dict[str, Any]] = []
     duplicate_pair_rows: list[dict[str, Any]] = []
     unexpected_wrapper_arms: list[str] = []
     groups: dict[tuple[Any, ...], dict[str, int]] = {}
@@ -356,6 +358,9 @@ def check_factorial_ablation_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str
         missing = [field for field in REQUIRED_ROW_FIELDS if field not in row]
         if missing:
             missing_required_fields.append({"row_index": index, "fields": missing})
+        invalid = _row_provenance_errors(row)
+        if invalid:
+            invalid_provenance_fields.append({"row_index": index, "fields": invalid})
         arm = str(row.get("wrapper_arm", ""))
         if arm not in EXPECTED_WRAPPER_ARMS:
             unexpected_wrapper_arms.append(arm)
@@ -382,6 +387,7 @@ def check_factorial_ablation_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str
     complete = (
         len(rows) > 0
         and not missing_required_fields
+        and not invalid_provenance_fields
         and not unexpected_wrapper_arms
         and not duplicate_pair_rows
         and not incomplete_pairs
@@ -394,10 +400,46 @@ def check_factorial_ablation_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str
         "pairing_key_fields": list(PAIRING_KEY_FIELDS),
         "expected_wrapper_arms": list(EXPECTED_WRAPPER_ARMS),
         "missing_required_fields": missing_required_fields,
+        "invalid_provenance_fields": invalid_provenance_fields,
         "unexpected_wrapper_arms": sorted(set(unexpected_wrapper_arms)),
         "duplicate_pair_rows": duplicate_pair_rows,
         "incomplete_pairs": incomplete_pairs,
     }
+
+
+def _row_provenance_errors(row: Mapping[str, Any]) -> list[str]:
+    """Return row fields whose values are unusable for a paired ablation packet."""
+    invalid: list[str] = []
+    for field in ("study_id", "planner", "scenario_id", "software_commit"):
+        value = row.get(field)
+        if not isinstance(value, str) or not value.strip():
+            invalid.append(field)
+
+    seed = row.get("seed")
+    if not isinstance(seed, int) or isinstance(seed, bool):
+        invalid.append("seed")
+
+    event_ledger = row.get("event_ledger")
+    if (
+        not isinstance(event_ledger, Mapping)
+        or event_ledger.get("schema_version") != REQUIRED_EVENT_LEDGER_SCHEMA
+    ):
+        invalid.append("event_ledger")
+
+    metric_values = row.get("metric_values")
+    if not isinstance(metric_values, Mapping) or not metric_values:
+        invalid.append("metric_values")
+
+    intervention_rate = row.get("wrapper_intervention_rate")
+    if (
+        not isinstance(intervention_rate, int | float)
+        or isinstance(intervention_rate, bool)
+        or intervention_rate < 0.0
+        or intervention_rate > 1.0
+    ):
+        invalid.append("wrapper_intervention_rate")
+
+    return invalid
 
 
 def load_safety_wrapper_ablation_rows(path: str | Path) -> list[dict[str, Any]]:

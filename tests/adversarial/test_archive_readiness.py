@@ -82,6 +82,70 @@ def test_ready_archive_passes_all_prerequisites() -> None:
     assert json.loads(json.dumps(report.to_dict()))["ready"] is True
 
 
+def test_matching_summary_metadata_stays_ready() -> None:
+    """Optional archive summary counts may be present when they match entries."""
+    payload = _ready_archive()
+    payload["clusters"] = [{"cluster_id": "cluster_a"}, {"cluster_id": "cluster_b"}]
+    payload["summary"] = {
+        "archived_failure_count": 4,
+        "cluster_count": 2,
+    }
+
+    report = assess_archive_readiness(payload)
+
+    assert report.ready is True
+    assert report.blocking_reasons == []
+
+
+def test_summary_archived_failure_count_mismatch_fails_closed() -> None:
+    """Stale entry counts block readiness before provenance is trusted."""
+    payload = _ready_archive()
+    payload["summary"] = {"archived_failure_count": 3}
+
+    report = assess_archive_readiness(payload)
+
+    assert report.ready is False
+    assert "summary_archived_failure_count_mismatch:declared=3:actual=4" in report.blocking_reasons
+
+
+def test_summary_cluster_count_mismatch_fails_closed() -> None:
+    """Stale cluster counts block certified-archive readiness."""
+    payload = _ready_archive()
+    payload["clusters"] = [{"cluster_id": "cluster_a"}]
+    payload["summary"] = {
+        "archived_failure_count": 4,
+        "cluster_count": 2,
+    }
+
+    report = assess_archive_readiness(payload)
+
+    assert report.ready is False
+    assert "summary_cluster_count_mismatch:declared=2:actual=1" in report.blocking_reasons
+
+
+def test_summary_cluster_count_without_cluster_rows_fails_closed() -> None:
+    """A declared cluster count without cluster rows is not trusted."""
+    payload = _ready_archive()
+    payload["summary"] = {"cluster_count": 2}
+
+    report = assess_archive_readiness(payload)
+
+    assert report.ready is False
+    assert "summary_cluster_count_without_clusters" in report.blocking_reasons
+
+
+def test_malformed_summary_metadata_fails_closed() -> None:
+    """Malformed summary metadata is reported rather than ignored."""
+    payload = _ready_archive()
+    payload["summary"] = {"archived_failure_count": True, "cluster_count": "2"}
+
+    report = assess_archive_readiness(payload)
+
+    assert report.ready is False
+    assert "summary_archived_failure_count_not_int" in report.blocking_reasons
+    assert "summary_cluster_count_not_int" in report.blocking_reasons
+
+
 def test_non_object_payload_fails_closed() -> None:
     """A non-dict payload is not ready and never raises."""
     report = assess_archive_readiness([1, 2, 3])

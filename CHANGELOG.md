@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+* Tightened the certified adversarial failure-archive readiness checker (#3275) so optional archive
+  summary counts fail closed when they disagree with the actual `entries` or `clusters` payload.
 * Tightened the proxy checkpoint-selection readiness preflight (#3204) so registry entries with
   declared-but-incomplete public release metadata fail closed before they can be treated as ready
   checkpoint inputs.

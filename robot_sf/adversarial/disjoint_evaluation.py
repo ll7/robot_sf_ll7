@@ -553,6 +553,60 @@ def _readiness_blocking_reasons(
     return reasons
 
 
+def _optional_summary_int(summary: dict[str, Any], key: str) -> tuple[int | None, str | None]:
+    """Return optional integer summary value, rejecting bools and non-ints."""
+    value = summary.get(key)
+    if value is None:
+        return None, None
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None, f"summary_{key}_not_int"
+    return value, None
+
+
+def _summary_consistency_blockers(archive_data: dict[str, Any], entries: list[Any]) -> list[str]:
+    """Return blockers for stale optional archive summary metadata.
+
+    The curator writes a compact top-level ``summary`` next to ``entries`` and
+    ``clusters``. If a later packet edits entries without regenerating that
+    metadata, downstream provenance can look cleaner than the archive input is.
+    Missing summary metadata remains allowed for minimal fixtures, but present
+    counts must agree with the payload they describe.
+    """
+    summary = archive_data.get("summary")
+    if summary is None:
+        return []
+    if not isinstance(summary, dict):
+        return ["summary_metadata_not_object"]
+
+    blockers: list[str] = []
+    archived_failure_count, count_blocker = _optional_summary_int(summary, "archived_failure_count")
+    if count_blocker is not None:
+        blockers.append(count_blocker)
+    elif archived_failure_count is not None and archived_failure_count != len(entries):
+        blockers.append(
+            "summary_archived_failure_count_mismatch:"
+            f"declared={archived_failure_count}:actual={len(entries)}"
+        )
+
+    cluster_count, count_blocker = _optional_summary_int(summary, "cluster_count")
+    if count_blocker is not None:
+        blockers.append(count_blocker)
+        return blockers
+    if cluster_count is None:
+        return blockers
+
+    clusters = archive_data.get("clusters")
+    if clusters is None:
+        blockers.append("summary_cluster_count_without_clusters")
+    elif not isinstance(clusters, list):
+        blockers.append("archive_clusters_not_list")
+    elif cluster_count != len(clusters):
+        blockers.append(
+            f"summary_cluster_count_mismatch:declared={cluster_count}:actual={len(clusters)}"
+        )
+    return blockers
+
+
 def assess_archive_readiness(
     archive_data: Any,
     *,
@@ -598,6 +652,7 @@ def assess_archive_readiness(
     reasons = _readiness_blocking_reasons(
         stats, schema_ok=schema_ok, schema_version=schema_version, min_entries=min_entries
     )
+    reasons.extend(_summary_consistency_blockers(archive_data, entries))
 
     # Overlap provenance needs disjoint families, unique archive ids, and seeds
     # to compare. Null tests additionally need a non-empty eval side, which the

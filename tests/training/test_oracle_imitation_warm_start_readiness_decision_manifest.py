@@ -7,7 +7,11 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from robot_sf.training.oracle_imitation_warm_start_readiness import check_warm_start_readiness
+from robot_sf.training.oracle_imitation_launch_packet import LaunchPacketError
+from robot_sf.training.oracle_imitation_warm_start_readiness import (
+    _first_launch_packet_error,
+    check_warm_start_readiness,
+)
 from scripts.validation.check_oracle_imitation_warm_start_readiness import main as check_cli_main
 from tests.training.test_oracle_imitation_warm_start_readiness import (
     _ready_manifest,
@@ -90,6 +94,24 @@ def test_missing_collection_manifest_destination_is_actionable_blocker(tmp_path:
             "collection_roots.manifest_destination must be a non-empty string"
         )
         for blocker in report["blockers"]
+    )
+
+
+def test_launch_packet_error_header_filter_is_not_exact_string_coupled() -> None:
+    """Readiness reports field-level launch-packet errors despite header wording."""
+
+    error = LaunchPacketError(
+        "\n".join(
+            [
+                "oracle-imitation dataset launch packet failed validation:",
+                "- collection_roots.manifest_destination must be non-empty string",
+            ]
+        )
+    )
+
+    assert (
+        _first_launch_packet_error(error)
+        == "collection_roots.manifest_destination must be non-empty string"
     )
 
 

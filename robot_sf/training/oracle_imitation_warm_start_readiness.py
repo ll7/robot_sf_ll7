@@ -230,10 +230,20 @@ def _first_launch_packet_error(exc: LaunchPacketError) -> str:
         stripped = line.strip()
         if not stripped:
             continue
-        if stripped == "oracle-imitation launch packet failed validation:":
+        if _is_launch_packet_error_header(stripped):
             continue
         return stripped.removeprefix("- ").strip()
     return str(exc)
+
+
+def _is_launch_packet_error_header(line: str) -> bool:
+    """Return true for launch-packet validator summary header lines."""
+
+    return (
+        line.startswith("oracle-imitation")
+        and "packet" in line
+        and line.endswith("failed validation:")
+    )
 
 
 def _check_required_file(

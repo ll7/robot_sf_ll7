@@ -368,17 +368,19 @@ or weakly paired evidence bases.
 
 For threshold studies, run `scripts/benchmark_threshold_sensitivity.py` to quantify
 distance/comfort threshold impacts across scenario families and to compare speed-aware
+near-miss alternatives (relative-speed weighting and TTC-gating).
 
 ## AMMV Benchmark Protocol Manifest
 
-The AMMV benchmark protocol is versioned as a checked-in manifest:
+The Assured Multi-Metric Validation (AMMV) benchmark protocol is versioned as a checked-in
+manifest:
 
 ```text
 benchmarks/ammv_benchmark_v0.yaml
 ```
 
-A benchmark run that claims compliance with this protocol should record the
-protocol reference in its run metadata, report, or claim artifact as:
+A benchmark run that claims compliance with this protocol should record the protocol reference in
+run metadata, reports, and claim artifacts as:
 
 ```yaml
 benchmark_protocol:
@@ -386,8 +388,6 @@ benchmark_protocol:
   path: benchmarks/ammv_benchmark_v0.yaml
 ```
 
-The manifest declares the scenario classes, planner panel, metric layers, and
-claim rules required for an AMMV benchmark comparison.  It is descriptive in
-this slice: loading the manifest validates the protocol shape, but it does not
-execute scenarios, instantiate planners, or enforce a CI/release gate.
-near-miss alternatives (relative-speed weighting and TTC-gating).
+The manifest declares scenario classes, planner panel, metric layers, and claim rules required for
+AMMV benchmark comparison. This slice is descriptive: loading the manifest validates protocol shape,
+but does not execute scenarios, instantiate planners, or enforce CI/release gates.

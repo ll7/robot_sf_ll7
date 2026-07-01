@@ -605,7 +605,7 @@ def sustained_flow_preflight_to_dict(report: SustainedFlowPreflightReport) -> di
             "ready": runtime_definition_ready,
             "expected_runtime_support": SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
             "observed_runtime_support": report.runtime_support,
-            "benchmark_evidence": False,
+            "benchmark_evidence": report.benchmark_evidence,
         },
         "variant_count": len(report.variants),
         "variants": [

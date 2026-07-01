@@ -53,6 +53,7 @@ AREA_HEIGHT = 6.0
 
 SCENARIO_GENERATION_PARAMS_SCHEMA_VERSION = "scenario_generation_params.v1"
 SCENARIO_INITIAL_DIFFICULTY_SCHEMA_VERSION = "scenario_initial_difficulty.v1"
+PARAMETERIZED_SCENARIO_PARAMS_SCHEMA_VERSION = "parameterized_scenario_params.v1"
 
 GENERATION_PARAMETER_DEFAULTS = {
     "density": "med",
@@ -95,6 +96,15 @@ _SPEED_VARIATION_OPTIONS = ("low", "high")
 _SPEED_VARIATION_ALIASES = {"med": "high", "medium": "high"}
 _GOAL_TOPOLOGY_OPTIONS = ("point", "swap", "circulate")
 _ROBOT_CONTEXT_OPTIONS = ("ahead", "behind", "embedded")
+
+PARAMETERIZED_SCENARIO_PARAMETER_DEFAULTS = {
+    "sidewalk_width": 4.0,
+    "obstacle_density": 0.0,
+    "pedestrian_density": 0.06,
+    "bottleneck_width": 2.0,
+    "crossing_angle": 90.0,
+    "occlusion_probability": 0.0,
+}
 
 _DIFFICULTY_WEIGHT = {
     "density": {"low": 0.18, "med": 0.42, "high": 0.72},
@@ -209,6 +219,145 @@ def normalize_generation_parameters(  # noqa: C901, PLR0912
         "repeats": repeats,
         **({"preset": str(preset).strip()} if isinstance(preset, str) else {}),
     }
+
+
+def normalize_parameterized_scenario_parameters(  # noqa: C901
+    raw: Mapping[str, Any] | None = None,
+) -> dict[str, float]:
+    """Normalize the physical parameter slice used by draft scenario authoring.
+
+    Returns:
+        Validated parameter mapping with all values coerced to floats.
+    """
+
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, Mapping):
+        raise ValueError("Parameterized scenario parameters must be provided as a mapping.")
+
+    profile = raw.get("parameterized_profile")
+    if isinstance(profile, Mapping) and "parameters" in profile:
+        schema_version = profile.get("schema_version")
+        if schema_version != PARAMETERIZED_SCENARIO_PARAMS_SCHEMA_VERSION:
+            raise ValueError(
+                "parameterized_profile.schema_version must equal "
+                f"{PARAMETERIZED_SCENARIO_PARAMS_SCHEMA_VERSION}"
+            )
+        parameters = profile.get("parameters")
+        if not isinstance(parameters, Mapping):
+            raise ValueError("parameterized_profile.parameters must be a mapping.")
+        source = parameters
+    else:
+        source = profile if isinstance(profile, Mapping) else raw
+
+    unknown = set(source) - set(PARAMETERIZED_SCENARIO_PARAMETER_DEFAULTS)
+    if unknown:
+        keys = ", ".join(sorted(unknown))
+        raise ValueError(f"Unknown parameterized scenario keys: {keys}")
+
+    values = dict(PARAMETERIZED_SCENARIO_PARAMETER_DEFAULTS)
+    for key, value in source.items():
+        if value is not None:
+            values[key] = float(value)
+
+    sidewalk_width = values["sidewalk_width"]
+    obstacle_density = values["obstacle_density"]
+    pedestrian_density = values["pedestrian_density"]
+    bottleneck_width = values["bottleneck_width"]
+    crossing_angle = values["crossing_angle"]
+    occlusion_probability = values["occlusion_probability"]
+
+    if sidewalk_width <= 0.0:
+        raise ValueError(f"sidewalk_width must be > 0: {sidewalk_width}")
+    if not 0.0 <= obstacle_density <= 1.0:
+        raise ValueError(f"obstacle_density must be in [0, 1]: {obstacle_density}")
+    if not 0.0 <= pedestrian_density <= 1.0:
+        raise ValueError(f"pedestrian_density must be in [0, 1]: {pedestrian_density}")
+    if bottleneck_width <= 0.0 or bottleneck_width > sidewalk_width:
+        raise ValueError(
+            "bottleneck_width must be > 0 and <= sidewalk_width: "
+            f"{bottleneck_width} > {sidewalk_width}"
+        )
+    if not 0.0 <= crossing_angle <= 180.0:
+        raise ValueError(f"crossing_angle must be in [0, 180]: {crossing_angle}")
+    if not 0.0 <= occlusion_probability <= 1.0:
+        raise ValueError(f"occlusion_probability must be in [0, 1]: {occlusion_probability}")
+
+    return values
+
+
+def _density_tier_from_pedestrian_density(pedestrian_density: float) -> str:
+    if pedestrian_density < 0.04:
+        return "low"
+    if pedestrian_density < 0.12:
+        return "med"
+    return "high"
+
+
+def _flow_from_crossing_angle(crossing_angle: float) -> str:
+    if crossing_angle < 30.0:
+        return "uni"
+    if crossing_angle < 75.0:
+        return "merge"
+    if crossing_angle <= 120.0:
+        return "cross"
+    return "bi"
+
+
+def _obstacle_profile_from_parameters(params: Mapping[str, float]) -> str:
+    if params["obstacle_density"] >= 0.35:
+        return "maze"
+    if params["bottleneck_width"] < params["sidewalk_width"] * 0.75:
+        return "bottleneck"
+    return "open"
+
+
+def select_map_id_for_parameterized_scenario(params: Mapping[str, Any] | None = None) -> str:
+    """Choose a registered map id for the normalized physical parameter slice.
+
+    Returns:
+        Map id from ``maps/registry.yaml`` suitable for scenario loader smoke checks.
+    """
+
+    normalized = normalize_parameterized_scenario_parameters(params)
+    obstacle_profile = _obstacle_profile_from_parameters(normalized)
+    if obstacle_profile == "maze":
+        return "classic_cross_trap"
+    if obstacle_profile == "bottleneck":
+        ratio = normalized["bottleneck_width"] / normalized["sidewalk_width"]
+        if ratio < 0.40:
+            return "classic_bottleneck_high"
+        if ratio < 0.65:
+            return "classic_bottleneck_medium"
+        return "classic_bottleneck"
+    if 30.0 <= normalized["crossing_angle"] <= 150.0:
+        return "classic_crossing"
+    return "classic_head_on_corridor"
+
+
+def derive_generation_parameters_from_physical_slice(
+    params: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Map physical scenario knobs onto existing benchmark generation parameters.
+
+    Returns:
+        Existing generator profile fields derived from the physical issue #3970 knobs.
+    """
+
+    normalized = normalize_parameterized_scenario_parameters(params)
+    obstacle = _obstacle_profile_from_parameters(normalized)
+    return normalize_generation_parameters(
+        {
+            "density": _density_tier_from_pedestrian_density(normalized["pedestrian_density"]),
+            "flow": _flow_from_crossing_angle(normalized["crossing_angle"]),
+            "obstacle": obstacle,
+            "groups": min(1.0, normalized["pedestrian_density"] * 4.0),
+            "speed_var": "high" if normalized["occlusion_probability"] >= 0.5 else "low",
+            "goal_topology": "swap" if normalized["crossing_angle"] >= 120.0 else "point",
+            "robot_context": "ahead" if normalized["occlusion_probability"] >= 0.5 else "embedded",
+            "repeats": 1,
+        }
+    )
 
 
 def resolve_agent_count(params: Mapping[str, Any] | None = None) -> int:
@@ -511,11 +660,15 @@ def generate_scenario(params: dict[str, Any], seed: int) -> GeneratedScenario:
 
 
 __all__ = [
+    "PARAMETERIZED_SCENARIO_PARAMS_SCHEMA_VERSION",
     "SCENARIO_GENERATION_PARAMS_SCHEMA_VERSION",
     "SCENARIO_INITIAL_DIFFICULTY_SCHEMA_VERSION",
     "GeneratedScenario",
+    "derive_generation_parameters_from_physical_slice",
     "estimate_initial_difficulty",
     "generate_scenario",
     "normalize_generation_parameters",
+    "normalize_parameterized_scenario_parameters",
     "resolve_agent_count",
+    "select_map_id_for_parameterized_scenario",
 ]

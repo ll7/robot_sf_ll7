@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from robot_sf.benchmark import map_runner
 from robot_sf.benchmark.manifest import manifest_path_for, save_manifest
 from robot_sf.benchmark.map_runner import _map_result_provenance, run_map_batch
 from robot_sf.benchmark.runner import _finalize_batch
@@ -58,6 +59,33 @@ def test_run_map_batch_empty_summary_has_result_provenance(
     assert seed_identity["suite_key"] == "default"
     assert seed_identity["total_jobs"] == 0
     assert seed_identity["written"] == 0
+
+
+def test_run_map_batch_records_result_manifest_write_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sidecar write failure must not discard an otherwise valid batch summary."""
+    monkeypatch.setattr(
+        map_runner,
+        "_write_result_provenance_manifest",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("read-only output")),
+    )
+
+    summary = run_map_batch(
+        [],
+        tmp_path / "empty.jsonl",
+        Path("robot_sf/benchmark/schemas/episode.schema.v1.json"),
+        algo="goal",
+        benchmark_profile="experimental",
+        workers=1,
+        resume=False,
+    )
+
+    assert summary["total_jobs"] == 0
+    assert summary["written"] == 0
+    assert summary["provenance"]["result_manifest_status"] == "error"
+    assert "read-only output" in summary["provenance"]["result_manifest_error"]
 
 
 def test_map_result_provenance_preserves_planned_skipped_job_count() -> None:

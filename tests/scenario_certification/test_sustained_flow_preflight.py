@@ -65,6 +65,27 @@ def test_runtime_supported_variants_enumerate_deterministically() -> None:
     } == {sustained_flow.SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE}
 
 
+def test_runtime_supported_generated_variants_pass_generator_preflight() -> None:
+    """Runtime-supported generated rows validate without becoming benchmark evidence."""
+
+    report = sustained_flow.preflight_runtime_supported_generated_sustained_flow_scenarios()
+    payload = sustained_flow.sustained_flow_preflight_to_dict(report)
+
+    assert payload["scenario_set"] == (
+        "generated:issue_3813_sustained_flow_scaffold_v0:runtime_supported"
+    )
+    assert payload["conforms"] is True
+    assert payload["benchmark_evidence"] is False
+    assert payload["runtime_support"] == sustained_flow.SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE
+    assert payload["variant_count"] == 3
+    assert [variant["density_tier"] for variant in payload["variants"]] == [
+        "light",
+        "medium",
+        "heavy",
+    ]
+    assert payload["errors"] == []
+
+
 def test_preflight_conforms_for_commit_scaffold() -> None:
     """Current scaffold set satisfies fail-closed sustained-flow preflight."""
     report = sustained_flow.preflight_sustained_flow_scenario_set(SCENARIO_SET)
@@ -130,3 +151,27 @@ def test_preflight_cli_outputs_generated_json_payload() -> None:
     assert payload["conforms"] is True
     assert payload["variant_count"] == 3
     assert payload["scenario_set"] == "generated:issue_3813_sustained_flow_scaffold_v0"
+
+
+def test_preflight_cli_outputs_runtime_supported_generated_json_payload() -> None:
+    """Validation script can preflight runtime-supported generator rows directly."""
+
+    command = [
+        sys.executable,
+        str(PREFLIGHT_SCRIPT),
+        "--runtime-supported-generated",
+        "--json",
+    ]
+
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["schema_version"] == sustained_flow.SUSTAINED_FLOW_PREFLIGHT_SCHEMA_VERSION
+    assert payload["conforms"] is True
+    assert payload["benchmark_evidence"] is False
+    assert payload["runtime_support"] == sustained_flow.SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE
+    assert payload["variant_count"] == 3
+    assert payload["scenario_set"] == (
+        "generated:issue_3813_sustained_flow_scaffold_v0:runtime_supported"
+    )

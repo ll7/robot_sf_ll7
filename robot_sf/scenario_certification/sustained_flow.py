@@ -43,6 +43,7 @@ _SUSTAINED_FLOW_MAP_FILE = "../../../maps/svg_maps/classic_t_intersection.svg"
 _SUSTAINED_FLOW_MAX_EPISODE_STEPS = 600
 SUSTAINED_FLOW_METADATA_ONLY_RUNTIME_SUPPORT = "metadata_only"
 SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE = "runtime_continuous_spawn"
+SUSTAINED_FLOW_GENERATED_SCENARIO_SET_ID = "generated:issue_3813_sustained_flow_scaffold_v0"
 
 
 @dataclass(frozen=True)
@@ -248,6 +249,7 @@ def _check_continuous_spawn(
     name: str,
     expected_tier: str,
     expected_spawn_rate: float,
+    expected_runtime_support: str,
 ) -> list[str]:
     continuous_spawn = metadata.get("continuous_spawn")
     if not isinstance(continuous_spawn, dict):
@@ -280,7 +282,7 @@ def _check_continuous_spawn(
         name,
         "continuous_spawn.current_runtime_support",
         continuous_spawn.get("current_runtime_support"),
-        "metadata_only",
+        expected_runtime_support,
     )
     _require_equal(
         errors,
@@ -350,6 +352,7 @@ def _check_metadata_fail_closed(
     *,
     expected_tier: str,
     expected_spawn_rate: float,
+    expected_runtime_support: str,
 ) -> list[str]:
     name = str(scenario.get("name", "<unnamed>"))
     metadata = scenario.get("metadata")
@@ -364,6 +367,7 @@ def _check_metadata_fail_closed(
             name=name,
             expected_tier=expected_tier,
             expected_spawn_rate=expected_spawn_rate,
+            expected_runtime_support=expected_runtime_support,
         )
     )
     errors.extend(_check_termination_and_metric(scenario, metadata, name=name))
@@ -376,6 +380,7 @@ def _validate_variant(
     scenario_set: Path,
     expected_by_tier: dict[str, tuple[float, float, tuple[int, ...]]],
     seen_seeds: set[int],
+    expected_runtime_support: str,
 ) -> tuple[SustainedFlowVariant | None, list[str]]:
     """Validate one scenario variant against the sustained-flow scaffold contract.
 
@@ -413,6 +418,7 @@ def _validate_variant(
             scenario,
             expected_tier=tier,
             expected_spawn_rate=expected_spawn_rate,
+            expected_runtime_support=expected_runtime_support,
         )
     )
     return (
@@ -433,6 +439,7 @@ def _validate_loaded_sustained_flow_variants(
     loaded: list[dict[str, Any]],
     *,
     scenario_set: Path,
+    expected_runtime_support: str = SUSTAINED_FLOW_METADATA_ONLY_RUNTIME_SUPPORT,
 ) -> tuple[list[SustainedFlowVariant], list[str]]:
     """Validate loaded sustained-flow rows from YAML or generated definitions.
 
@@ -464,6 +471,7 @@ def _validate_loaded_sustained_flow_variants(
             scenario_set=scenario_set,
             expected_by_tier=expected_by_tier,
             seen_seeds=seen_seeds,
+            expected_runtime_support=expected_runtime_support,
         )
         errors.extend(variant_errors)
         if variant is not None:
@@ -517,7 +525,11 @@ def preflight_sustained_flow_scenario_set(
     )
 
 
-def preflight_generated_sustained_flow_scenarios() -> SustainedFlowPreflightReport:
+def preflight_generated_sustained_flow_scenarios(
+    *,
+    current_runtime_support: str = SUSTAINED_FLOW_METADATA_ONLY_RUNTIME_SUPPORT,
+    scenario_set_id: str = SUSTAINED_FLOW_GENERATED_SCENARIO_SET_ID,
+) -> SustainedFlowPreflightReport:
     """Validate the canonical generator before rows are materialized to YAML.
 
     This is a generator preflight only: it proves the deterministic
@@ -529,16 +541,37 @@ def preflight_generated_sustained_flow_scenarios() -> SustainedFlowPreflightRepo
 
     scenario_set = DEFAULT_SUSTAINED_FLOW_SCENARIO_SET.resolve()
     variants, errors = _validate_loaded_sustained_flow_variants(
-        generate_expected_sustained_flow_scenarios(),
+        generate_expected_sustained_flow_scenarios(current_runtime_support=current_runtime_support),
         scenario_set=scenario_set,
+        expected_runtime_support=current_runtime_support,
     )
 
     return SustainedFlowPreflightReport(
         schema_version=SUSTAINED_FLOW_PREFLIGHT_SCHEMA_VERSION,
-        scenario_set="generated:issue_3813_sustained_flow_scaffold_v0",
+        scenario_set=scenario_set_id,
         conforms=not errors,
         variants=tuple(variants),
         errors=tuple(errors),
+        runtime_support=current_runtime_support,
+    )
+
+
+def preflight_runtime_supported_generated_sustained_flow_scenarios() -> (
+    SustainedFlowPreflightReport
+):
+    """Validate generated rows for the future continuous-spawn runtime-support gate.
+
+    This is still a static generator/checker preflight. It proves the same light/medium/heavy
+    scenario definitions can carry the runtime-support marker once runtime support exists; it does
+    not run a benchmark campaign or promote the rows to benchmark evidence.
+
+    Returns:
+        Sustained-flow preflight report for generated runtime-supported rows.
+    """
+
+    return preflight_generated_sustained_flow_scenarios(
+        current_runtime_support=SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
+        scenario_set_id=f"{SUSTAINED_FLOW_GENERATED_SCENARIO_SET_ID}:runtime_supported",
     )
 
 

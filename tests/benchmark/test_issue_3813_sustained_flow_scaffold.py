@@ -213,6 +213,26 @@ def test_sustained_flow_preflight_rejects_generator_drift(tmp_path: Path) -> Non
     )
 
 
+def test_sustained_flow_preflight_rejects_duplicate_density_tier(tmp_path: Path) -> None:
+    """Benchmark preflight requires one light, medium, and heavy variant."""
+
+    matrix = _load_yaml(SCENARIO_SET)
+    matrix["scenarios"][1] = yaml.safe_load(yaml.safe_dump(matrix["scenarios"][0]))
+    matrix["scenarios"][1]["name"] = "issue_3813_sustained_flow_t_intersection_light_duplicate"
+
+    duplicated_tier_matrix = tmp_path / "duplicate_density_tier_sustained_flow.yaml"
+    duplicated_tier_matrix.write_text(yaml.safe_dump(matrix, sort_keys=False), encoding="utf-8")
+
+    payload = preflight_sustained_flow_matrix(duplicated_tier_matrix).to_payload()
+
+    assert payload["status"] == "not_available"
+    assert payload["benchmark_eligible"] is False
+    assert (
+        "density tiers must enumerate light, medium, heavy exactly once"
+        in payload["blocking_reasons"]
+    )
+
+
 def test_sustained_flow_preflight_rejects_wrong_spawn_process(tmp_path: Path) -> None:
     """Continuous-spawn variants must name the supported respawn process."""
 

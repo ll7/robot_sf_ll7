@@ -11,6 +11,7 @@ from typing import Any
 from robot_sf.scenario_certification.sustained_flow import (
     EXPECTED_CONTINUOUS_SPAWN_DEFINITION,
     EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG,
+    EXPECTED_SUSTAINED_FLOW_TIERS,
     EXPECTED_SUSTAINED_PROGRESS_METRIC,
     REQUIRED_BLOCKERS_BEFORE_BENCHMARK_USE,
     SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
@@ -135,6 +136,7 @@ def preflight_sustained_flow_matrix(matrix_path: str | Path) -> SustainedFlowPre
         blocking_reasons.append(str(exc))
     else:
         blocking_reasons.extend(_variant_blockers(variants))
+        blocking_reasons.extend(_variant_tier_order_blockers(variants))
         blocking_reasons.extend(_generator_drift_blockers(variants))
 
     if not variants:
@@ -257,6 +259,20 @@ def _variant_blockers(variants: tuple[SustainedFlowVariant, ...]) -> tuple[str, 
         if not variant.seeds:
             blockers.append(f"{variant.name}: at least one seed is required")
     return tuple(blockers)
+
+
+def _variant_tier_order_blockers(variants: tuple[SustainedFlowVariant, ...]) -> tuple[str, ...]:
+    """Fail closed unless the matrix enumerates exactly light, medium, heavy.
+
+    Returns:
+        Blocking reason when density-tier enumeration drifts.
+    """
+
+    expected_tiers = tuple(tier for tier, *_ in EXPECTED_SUSTAINED_FLOW_TIERS)
+    observed_tiers = tuple(variant.density_tier for variant in variants)
+    if observed_tiers == expected_tiers:
+        return ()
+    return ("density tiers must enumerate light, medium, heavy exactly once",)
 
 
 def _validate_continuous_spawn_definition(value: Any, *, scenario_name: str) -> None:

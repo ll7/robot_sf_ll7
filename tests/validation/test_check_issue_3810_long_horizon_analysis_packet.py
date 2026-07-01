@@ -37,7 +37,7 @@ def test_issue_3810_analysis_packet_rejects_bad_target_host() -> None:
 
     packet = _load_packet()
     packet["analysis_and_retention_packet"]["route"]["target_host"] = "imech036"
-    with pytest.raises(_MODULE.PacketError, match="target host must be imech039"):
+    with pytest.raises(_MODULE.PacketError, match="target host must be imech156-u"):
         _MODULE.validate_packet(packet)
 
 

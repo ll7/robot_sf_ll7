@@ -47,6 +47,14 @@ EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG: dict[str, object] = {
     "route_spawn_jitter_frac": 0.0,
     "max_peds_per_group": 1,
 }
+EXPECTED_SUSTAINED_PROGRESS_METRIC: dict[str, object] = {
+    "id": "sustained_progress_rate_m_per_s",
+    "definition": (
+        "Net robot path progress toward the route goal divided by simulated "
+        "episode seconds under non-clearing pedestrian demand."
+    ),
+    "wait_policy_expectation": "zero_or_near_zero_progress",
+}
 _SUSTAINED_FLOW_FAMILY = "sustained_flow_t_intersection"
 _SUSTAINED_FLOW_MAP_FILE = "../../../maps/svg_maps/classic_t_intersection.svg"
 _SUSTAINED_FLOW_MAX_EPISODE_STEPS = 600
@@ -151,14 +159,7 @@ def generate_expected_sustained_flow_scenarios(
                         "runtime_definition_status": runtime_definition_status,
                         "runtime_definition_ready": runtime_definition_ready,
                     },
-                    "success_metric": {
-                        "id": "sustained_progress_rate_m_per_s",
-                        "definition": (
-                            "Net robot path progress toward the route goal divided by simulated "
-                            "episode seconds under non-clearing pedestrian demand."
-                        ),
-                        "wait_policy_expectation": "zero_or_near_zero_progress",
-                    },
+                    "success_metric": dict(EXPECTED_SUSTAINED_PROGRESS_METRIC),
                     "termination": {
                         "mode": "time_bounded",
                         "max_episode_steps": spec.max_episode_steps,
@@ -375,9 +376,9 @@ def _check_termination_and_metric(
         _require_equal(
             errors,
             name,
-            "success_metric.id",
-            success_metric.get("id"),
-            "sustained_progress_rate_m_per_s",
+            "metadata.success_metric",
+            success_metric,
+            EXPECTED_SUSTAINED_PROGRESS_METRIC,
         )
 
     blockers = tuple(metadata.get("requires_before_benchmark_use", ()))

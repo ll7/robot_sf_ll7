@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -401,6 +403,55 @@ def test_artifact_writer_creates_report_ready_files(tmp_path: Path) -> None:
     svg = artifacts.svg_path.read_text(encoding="utf-8")
     assert svg.startswith("<svg")
     assert "safe-slow" in svg
+
+
+def test_export_cli_summary_reports_decision_disagreement_csv(tmp_path: Path) -> None:
+    """Export CLI success payload names every report-ready artifact."""
+
+    episodes_path = tmp_path / "episodes.jsonl"
+    baseline_path = tmp_path / "baseline.json"
+    weights_path = tmp_path / "weights.json"
+    output_dir = tmp_path / "artifacts"
+    episodes_path.write_text(
+        "\n".join(json.dumps(record) for record in _preflight_episodes()) + "\n",
+        encoding="utf-8",
+    )
+    baseline_path.write_text(json.dumps(_baseline()), encoding="utf-8")
+    weights_path.write_text(json.dumps(_weights()), encoding="utf-8")
+
+    repo_root = Path(__file__).resolve().parents[2]
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(repo_root / "scripts/benchmark/snqi_scalarization_sensitivity_export.py"),
+            "--episodes",
+            str(episodes_path),
+            "--baseline",
+            str(baseline_path),
+            "--weights",
+            str(weights_path),
+            "--output-dir",
+            str(output_dir),
+        ],
+        cwd=repo_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout)
+    assert set(payload["artifacts"]) == {
+        "json",
+        "csv",
+        "decision_disagreement_csv",
+        "markdown",
+        "svg",
+    }
+    decision_csv = Path(payload["artifacts"]["decision_disagreement_csv"])
+    assert payload["status"] == "exported"
+    assert decision_csv.name == "snqi_scalarization_sensitivity_decision_disagreement.csv"
+    assert decision_csv.is_file()
 
 
 def test_report_records_input_provenance_for_auditable_weight_sweeps(tmp_path: Path) -> None:

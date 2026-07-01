@@ -121,6 +121,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "artifacts": {
                     "json": str(artifacts.json_path),
                     "csv": str(artifacts.csv_path),
+                    "decision_disagreement_csv": str(artifacts.decision_disagreement_csv_path),
                     "markdown": str(artifacts.markdown_path),
                     "svg": str(artifacts.svg_path),
                 },

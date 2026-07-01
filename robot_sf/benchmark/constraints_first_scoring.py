@@ -30,6 +30,8 @@ from typing import TYPE_CHECKING, Any
 
 from scipy.stats import beta
 
+from robot_sf.benchmark.metric_layers import LAYER_ORDER, METRIC_LAYER_SCHEMA_VERSION
+
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
@@ -281,6 +283,8 @@ def build_constraints_first_report(
     }
     report: dict[str, Any] = {
         "schema_version": CONSTRAINTS_FIRST_SCHEMA,
+        "metric_layer_schema_version": METRIC_LAYER_SCHEMA_VERSION,
+        "metric_layer_order": list(LAYER_ORDER),
         "evidence_kind": "diagnostic_proxy",
         "per_planner": per_planner,
     }

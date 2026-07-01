@@ -146,13 +146,30 @@ def test_timeout_and_failure_to_progress_derivations_are_conservative() -> None:
             },
             "termination_reason": "stalled_without_progress",
         },
+        {
+            **_minimal_episode(algo="planner_a"),
+            "metrics": {"collisions": 1},
+            "outcome": {
+                "route_complete": False,
+                "collision_event": False,
+                "timeout_event": False,
+            },
+        },
+        {
+            **_minimal_episode(algo="planner_a"),
+            "outcome": {
+                "route_complete": False,
+                "collision_event": False,
+            },
+            "termination_reason": "truncated",
+        },
     ]
 
     summary = build_metric_layer_summary(records)
     liveness = summary["layers"]["liveness"]["metrics"]
 
-    assert liveness["timeout_rate"]["value"] == pytest.approx(1 / 3)
-    assert liveness["failure_to_progress_rate"]["value"] == pytest.approx(1 / 3)
+    assert liveness["timeout_rate"]["value"] == pytest.approx(2 / 5)
+    assert liveness["failure_to_progress_rate"]["value"] == pytest.approx(1 / 5)
 
 
 def test_proxy_social_metrics_are_marked_as_simulation_proxy() -> None:

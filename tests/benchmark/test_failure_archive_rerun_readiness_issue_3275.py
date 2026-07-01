@@ -889,6 +889,32 @@ def test_null_test_prerequisites_require_disjoint_split_policy(tmp_path: Path) -
     assert "invalid_null_test_prerequisites:1" in readiness.blockers
 
 
+def test_non_string_null_test_split_policy_blocks_readiness(tmp_path: Path) -> None:
+    """Structured split policy metadata must fail closed until normalized."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [_entry("source_0000", family="family_a", seed=1)],
+    )
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+    )
+    prerequisites = _null_test_prerequisites(source, rerun)
+    prerequisites["split_policy"] = {"policy": "scenario-family-disjoint"}
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=prerequisites,
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.null_test_prerequisite_status == BLOCKED
+    assert "split_policy_not_disjoint_scenario_family" in readiness.invalid_null_test_prerequisites
+    assert "invalid_null_test_prerequisites:1" in readiness.blockers
+
+
 def test_mismatched_null_test_archive_hash_blocks_readiness(tmp_path: Path) -> None:
     """Stale null-test reports for another archive pair fail closed."""
 

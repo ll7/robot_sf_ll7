@@ -639,7 +639,7 @@ def _split_policy_invalid(split_policy: Any) -> bool:
     """Return whether a present split policy is incompatible with issue #3275."""
 
     if not isinstance(split_policy, str):
-        return False
+        return True
     normalized_split_policy = split_policy.strip()
     return bool(
         normalized_split_policy and normalized_split_policy not in _NULL_TEST_ALLOWED_SPLIT_POLICIES

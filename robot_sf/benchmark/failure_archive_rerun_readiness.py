@@ -101,6 +101,8 @@ class FailureArchiveRerunReadiness:
     overlap_provenance: dict[str, Any] = field(default_factory=dict)
     archive_id_overlap: list[str] = field(default_factory=list)
     missing_overlap_metadata_archive_ids: list[str] = field(default_factory=list)
+    source_duplicate_archive_ids: list[str] = field(default_factory=list)
+    rerun_duplicate_archive_ids: list[str] = field(default_factory=list)
     source_missing_certification_archive_ids: list[str] = field(default_factory=list)
     source_invalid_certification_archive_ids: list[str] = field(default_factory=list)
     missing_certification_archive_ids: list[str] = field(default_factory=list)
@@ -140,6 +142,8 @@ class FailureArchiveRerunReadiness:
             "overlap_provenance": dict(self.overlap_provenance),
             "archive_id_overlap": list(self.archive_id_overlap),
             "missing_overlap_metadata_archive_ids": list(self.missing_overlap_metadata_archive_ids),
+            "source_duplicate_archive_ids": list(self.source_duplicate_archive_ids),
+            "rerun_duplicate_archive_ids": list(self.rerun_duplicate_archive_ids),
             "source_missing_certification_archive_ids": list(
                 self.source_missing_certification_archive_ids
             ),
@@ -209,6 +213,10 @@ def classify_failure_archive_rerun_readiness(
     blockers.extend(_overlap_blockers(overlap))
     missing_overlap_metadata = _overlap_metadata_gaps(source_entries, rerun_entries)
     blockers.extend(_count_blockers("missing_overlap_metadata", missing_overlap_metadata))
+    source_duplicate_archive_ids = _duplicate_archive_ids(source_entries, side="source")
+    rerun_duplicate_archive_ids = _duplicate_archive_ids(rerun_entries, side="rerun")
+    blockers.extend(_count_blockers("source_duplicate_archive_ids", source_duplicate_archive_ids))
+    blockers.extend(_count_blockers("rerun_duplicate_archive_ids", rerun_duplicate_archive_ids))
 
     source_missing_certification, source_invalid_certification = _certification_gaps(source_entries)
     blockers.extend(
@@ -246,6 +254,8 @@ def classify_failure_archive_rerun_readiness(
         overlap_provenance=overlap,
         archive_id_overlap=archive_id_overlap,
         missing_overlap_metadata_archive_ids=missing_overlap_metadata,
+        source_duplicate_archive_ids=source_duplicate_archive_ids,
+        rerun_duplicate_archive_ids=rerun_duplicate_archive_ids,
         source_missing_certification_archive_ids=source_missing_certification,
         source_invalid_certification_archive_ids=source_invalid_certification,
         missing_certification_archive_ids=missing_certification,
@@ -374,6 +384,22 @@ def _overlap_metadata_gaps(
             if entry_gaps:
                 gaps.append(f"{side}:{archive_id}:{','.join(entry_gaps)}")
     return gaps
+
+
+def _duplicate_archive_ids(entries: list[dict[str, Any]], *, side: str) -> list[str]:
+    """Return duplicate nonblank archive IDs within one archive."""
+
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for index, entry in enumerate(entries):
+        raw_archive_id = entry.get("archive_id")
+        if _metadata_archive_id_missing(raw_archive_id):
+            continue
+        archive_id = _metadata_archive_id(raw_archive_id, side=side, index=index)
+        if archive_id in seen:
+            duplicates.add(f"{side}:{archive_id}")
+        seen.add(archive_id)
+    return sorted(duplicates)
 
 
 def _metadata_archive_id(raw_archive_id: Any, *, side: str, index: int) -> str:

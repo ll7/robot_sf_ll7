@@ -199,6 +199,62 @@ def test_overlapping_archive_ids_block_leakage(tmp_path: Path) -> None:
     assert "archive_id_overlap:1" in readiness.blockers
 
 
+def test_duplicate_source_archive_ids_block_readiness(tmp_path: Path) -> None:
+    """Duplicate source archive IDs make the selected archive ambiguous."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [
+            _entry("source_duplicate", family="family_a", seed=1),
+            _entry("source_duplicate", family="family_b", seed=2),
+        ],
+    )
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_c", seed=101)],
+    )
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=_null_test_prerequisites(),
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.source_duplicate_archive_ids == ["source:source_duplicate"]
+    assert readiness.rerun_duplicate_archive_ids == []
+    assert "source_duplicate_archive_ids:1" in readiness.blockers
+    assert readiness.to_payload()["source_duplicate_archive_ids"] == ["source:source_duplicate"]
+
+
+def test_duplicate_rerun_archive_ids_block_readiness(tmp_path: Path) -> None:
+    """Duplicate rerun archive IDs make held-out archive provenance ambiguous."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [_entry("source_0000", family="family_a", seed=1)],
+    )
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [
+            _entry("rerun_duplicate", family="family_b", seed=101),
+            _entry("rerun_duplicate", family="family_c", seed=102),
+        ],
+    )
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=_null_test_prerequisites(),
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.source_duplicate_archive_ids == []
+    assert readiness.rerun_duplicate_archive_ids == ["rerun:rerun_duplicate"]
+    assert "rerun_duplicate_archive_ids:1" in readiness.blockers
+    assert readiness.to_payload()["rerun_duplicate_archive_ids"] == ["rerun:rerun_duplicate"]
+
+
 def test_scenario_family_and_seed_overlap_is_reported_as_blockers(tmp_path: Path) -> None:
     """Family and seed overlap metadata must be treated as leakage blockers."""
 

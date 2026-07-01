@@ -66,12 +66,22 @@ event_ledger_target: 3482
 
 result_contract:
   required_outputs:
+    - study_id
     - planner
     - wrapper_arm
-    - seed
     - scenario_id
+    - seed
+    - software_commit
+    - event_ledger
     - metric_values
     - wrapper_intervention_rate
+  pairing_key_fields:
+    - planner
+    - scenario_id
+    - seed
+  expected_wrapper_arms:
+    - wrapper_off
+    - wrapper_on
   caveat_rule: >
     Report both positive and negative/transfer-poorly effects. Any effect must be
     reported as diagnostic until durable, paired-seed evidence over the full scenario

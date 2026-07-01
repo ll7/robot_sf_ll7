@@ -33,6 +33,19 @@ CONFIG_SCHEMA_VERSION = "safety-wrapper-ablation.v1"
 
 WRAPPER_OFF_ARM = "wrapper_off"
 WRAPPER_ON_ARM = "wrapper_on"
+EXPECTED_WRAPPER_ARMS = (WRAPPER_OFF_ARM, WRAPPER_ON_ARM)
+PAIRING_KEY_FIELDS = ("planner", "scenario_id", "seed")
+REQUIRED_ROW_FIELDS = (
+    "study_id",
+    "planner",
+    "wrapper_arm",
+    "scenario_id",
+    "seed",
+    "software_commit",
+    "event_ledger",
+    "metric_values",
+    "wrapper_intervention_rate",
+)
 
 DRY_RUN_CLAIM_BOUNDARY = (
     "dry-run factorial-ablation manifest only: enumerates the fixed issue #3501 "
@@ -79,6 +92,7 @@ def validate_safety_wrapper_ablation_config(config: Mapping[str, Any]) -> dict[s
         raise ValueError(f"schema_version must be {CONFIG_SCHEMA_VERSION!r}")
     _validate_fixed_scope(normalized.get("fixed_scope"))
     _validate_wrapper_arms(normalized.get("wrapper_arms"))
+    _validate_result_contract(normalized.get("result_contract"))
     return normalized
 
 
@@ -102,6 +116,26 @@ def _validate_fixed_scope(fixed_scope: Any) -> None:
         raise ValueError("fixed_scope.planner_groups must be a non-empty list")
     if len(set(planner_groups)) != len(planner_groups):
         raise ValueError("fixed_scope.planner_groups must be unique")
+
+
+def _validate_result_contract(result_contract: Any) -> None:
+    """Require row-level provenance and pairing fields for later ablation checks."""
+    if not isinstance(result_contract, Mapping):
+        raise ValueError("result_contract must be mapping")
+    required_outputs = result_contract.get("required_outputs")
+    if not isinstance(required_outputs, Sequence) or isinstance(required_outputs, (str, bytes)):
+        raise ValueError("result_contract.required_outputs must be list")
+    missing = [field for field in REQUIRED_ROW_FIELDS if field not in required_outputs]
+    if missing:
+        raise ValueError(f"result_contract.required_outputs missing fields: {missing}")
+    pairing_fields = result_contract.get("pairing_key_fields")
+    if tuple(pairing_fields or ()) != PAIRING_KEY_FIELDS:
+        raise ValueError(f"result_contract.pairing_key_fields must be {list(PAIRING_KEY_FIELDS)!r}")
+    expected_arms = result_contract.get("expected_wrapper_arms")
+    if tuple(expected_arms or ()) != EXPECTED_WRAPPER_ARMS:
+        raise ValueError(
+            f"result_contract.expected_wrapper_arms must be {list(EXPECTED_WRAPPER_ARMS)!r}"
+        )
 
 
 def _validate_wrapper_arms(arms: Any) -> None:
@@ -194,6 +228,15 @@ def build_safety_wrapper_ablation_manifest(
         "primary_outcomes": copy.deepcopy(validated.get("primary_outcomes", [])),
         "event_ledger_target": validated.get("event_ledger_target"),
         "result_contract": copy.deepcopy(validated.get("result_contract")),
+        "row_contract": {
+            "required_fields": list(REQUIRED_ROW_FIELDS),
+            "pairing_key_fields": list(PAIRING_KEY_FIELDS),
+            "expected_wrapper_arms": list(EXPECTED_WRAPPER_ARMS),
+            "pairing_rule": (
+                "Every (planner, scenario_id, seed) group must contain exactly one "
+                "wrapper_off row and one wrapper_on row before comparison."
+            ),
+        },
         "cell_count": len(cells),
         "cells": cells,
         "factorial_check": check_factorial_ablation(planner_groups, arms, seeds),
@@ -291,6 +334,69 @@ def check_factorial_ablation(
         "planner_count": len(planner_groups),
         "expected_cell_count": expected_cells,
         "seeds_per_cell": len(seeds),
+    }
+
+
+def check_factorial_ablation_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Check emitted ablation rows are pairable before any with/without comparison.
+
+    The checker is deliberately pure and fail-closed: it does not infer missing
+    provenance, silently drop duplicate arms, or compare unpaired rows.
+
+    Returns:
+        Structured completeness report with missing fields, duplicate pair rows,
+        and incomplete off/on pairs.
+    """
+    missing_required_fields: list[dict[str, Any]] = []
+    duplicate_pair_rows: list[dict[str, Any]] = []
+    unexpected_wrapper_arms: list[str] = []
+    groups: dict[tuple[Any, ...], dict[str, int]] = {}
+
+    for index, row in enumerate(rows):
+        missing = [field for field in REQUIRED_ROW_FIELDS if field not in row]
+        if missing:
+            missing_required_fields.append({"row_index": index, "fields": missing})
+        arm = str(row.get("wrapper_arm", ""))
+        if arm not in EXPECTED_WRAPPER_ARMS:
+            unexpected_wrapper_arms.append(arm)
+        key = tuple(row.get(field) for field in PAIRING_KEY_FIELDS)
+        by_arm = groups.setdefault(key, {})
+        by_arm[arm] = by_arm.get(arm, 0) + 1
+        if by_arm[arm] > 1:
+            duplicate_pair_rows.append(
+                {
+                    "pairing_key": dict(zip(PAIRING_KEY_FIELDS, key, strict=True)),
+                    "wrapper_arm": arm,
+                    "count": by_arm[arm],
+                }
+            )
+
+    incomplete_pairs = [
+        {
+            "pairing_key": dict(zip(PAIRING_KEY_FIELDS, key, strict=True)),
+            "wrapper_arms": sorted(by_arm),
+        }
+        for key, by_arm in groups.items()
+        if set(by_arm) != set(EXPECTED_WRAPPER_ARMS) or any(count != 1 for count in by_arm.values())
+    ]
+    complete = (
+        len(rows) > 0
+        and not missing_required_fields
+        and not unexpected_wrapper_arms
+        and not duplicate_pair_rows
+        and not incomplete_pairs
+    )
+    return {
+        "complete": bool(complete),
+        "row_count": len(rows),
+        "pair_count": len(groups),
+        "required_fields": list(REQUIRED_ROW_FIELDS),
+        "pairing_key_fields": list(PAIRING_KEY_FIELDS),
+        "expected_wrapper_arms": list(EXPECTED_WRAPPER_ARMS),
+        "missing_required_fields": missing_required_fields,
+        "unexpected_wrapper_arms": sorted(set(unexpected_wrapper_arms)),
+        "duplicate_pair_rows": duplicate_pair_rows,
+        "incomplete_pairs": incomplete_pairs,
     }
 
 

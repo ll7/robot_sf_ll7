@@ -23,6 +23,7 @@ from robot_sf.adversarial.disjoint_evaluation import (
     ARCHIVE_SCHEMA_VERSION,
     archive_sha256,
     compute_overlap_provenance,
+    scenario_family_key,
 )
 
 READY = "ready"
@@ -94,6 +95,7 @@ class FailureArchiveRerunReadiness:
     rerun_archive_sha256: str | None = None
     overlap_provenance: dict[str, Any] = field(default_factory=dict)
     archive_id_overlap: list[str] = field(default_factory=list)
+    missing_overlap_metadata_archive_ids: list[str] = field(default_factory=list)
     missing_certification_archive_ids: list[str] = field(default_factory=list)
     invalid_certification_archive_ids: list[str] = field(default_factory=list)
     diagnostic_only_outputs: list[str] = field(default_factory=list)
@@ -126,6 +128,7 @@ class FailureArchiveRerunReadiness:
             "rerun_archive_sha256": self.rerun_archive_sha256,
             "overlap_provenance": dict(self.overlap_provenance),
             "archive_id_overlap": list(self.archive_id_overlap),
+            "missing_overlap_metadata_archive_ids": list(self.missing_overlap_metadata_archive_ids),
             "missing_certification_archive_ids": list(self.missing_certification_archive_ids),
             "invalid_certification_archive_ids": list(self.invalid_certification_archive_ids),
             "diagnostic_only_outputs": list(self.diagnostic_only_outputs),
@@ -180,6 +183,8 @@ def classify_failure_archive_rerun_readiness(
     overlap = compute_overlap_provenance(source_entries, rerun_entries)
     archive_id_overlap = list(overlap.get("archive_id_overlap", []))
     blockers.extend(_overlap_blockers(overlap))
+    missing_overlap_metadata = _overlap_metadata_gaps(source_entries, rerun_entries)
+    blockers.extend(_count_blockers("missing_overlap_metadata", missing_overlap_metadata))
 
     missing_certification, invalid_certification = _certification_gaps(rerun_entries)
     blockers.extend(_count_blockers("missing_certification_metadata", missing_certification))
@@ -205,6 +210,7 @@ def classify_failure_archive_rerun_readiness(
         rerun_archive_sha256=rerun_hash,
         overlap_provenance=overlap,
         archive_id_overlap=archive_id_overlap,
+        missing_overlap_metadata_archive_ids=missing_overlap_metadata,
         missing_certification_archive_ids=missing_certification,
         invalid_certification_archive_ids=invalid_certification,
         diagnostic_only_outputs=diagnostic_outputs,
@@ -274,6 +280,27 @@ def _count_blockers(blocker: str, values: list[str]) -> list[str]:
     """Return a single count blocker when values are present."""
 
     return [f"{blocker}:{len(values)}"] if values else []
+
+
+def _overlap_metadata_gaps(
+    source_entries: list[dict[str, Any]],
+    rerun_entries: list[dict[str, Any]],
+) -> list[str]:
+    """Return archive IDs whose metadata cannot prove disjointness."""
+
+    gaps: list[str] = []
+    for side, entries in (("source", source_entries), ("rerun", rerun_entries)):
+        for index, entry in enumerate(entries):
+            archive_id = str(entry.get("archive_id") or f"{side}:<entry:{index}>")
+            entry_gaps: list[str] = []
+            if scenario_family_key(entry) == "unknown_family":
+                entry_gaps.append("scenario_family")
+            candidate = entry.get("candidate")
+            if not isinstance(candidate, dict) or candidate.get("scenario_seed") is None:
+                entry_gaps.append("scenario_seed")
+            if entry_gaps:
+                gaps.append(f"{side}:{archive_id}:{','.join(entry_gaps)}")
+    return gaps
 
 
 def _certification_gaps(entries: list[dict[str, Any]]) -> tuple[list[str], list[str]]:

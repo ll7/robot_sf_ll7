@@ -127,7 +127,15 @@ def test_cli_writes_blocked_decision_manifest_when_file_missing(tmp_path: Path) 
     assert payload["issue"] == 1496
     assert payload["schema"] == "oracle-imitation-warm-start-readiness-decision.v1"
     assert payload["report"]["status"] == "blocked"
+    assert payload["report"]["readiness_decision"] == "artifact_retrieval_blocked"
     assert payload["report"]["blockers"]
+    assert payload["report"]["out_of_scope_actions"] == {
+        "benchmark_campaign_run": False,
+        "claim_edits": False,
+        "data_collection": False,
+        "slurm_or_gpu_submission": False,
+        "training": False,
+    }
 
 
 def test_cli_require_ready_keeps_structured_blockers_in_output(tmp_path: Path) -> None:
@@ -160,7 +168,9 @@ def test_cli_writes_ready_decision_manifest(tmp_path: Path) -> None:
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["schema"] == "oracle-imitation-warm-start-readiness-decision.v1"
     assert payload["report"]["status"] == "ready"
+    assert payload["report"]["readiness_decision"] == "ready"
     assert payload["report"]["blockers"] == []
+    assert payload["report"]["out_of_scope_actions"]["slurm_or_gpu_submission"] is False
 
 
 def test_cli_writes_invalid_decision_manifest_for_malformed_input(tmp_path: Path) -> None:

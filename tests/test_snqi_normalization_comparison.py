@@ -8,6 +8,8 @@ Validates that when comparing normalization strategies:
 
 from __future__ import annotations
 
+import copy
+
 import numpy as np
 import pytest
 
@@ -117,7 +119,7 @@ def test_compute_snqi_v1_uses_bounded_comparable_penalty_terms() -> None:
 
 def test_snqi_v1_missing_baseline_stats_fail_closed() -> None:
     """SNQI-v1 must not silently zero missing normalized terms."""
-    missing_time = dict(_BASELINE_STATS_V1)
+    missing_time = copy.deepcopy(_BASELINE_STATS_V1)
     missing_time.pop("time_to_goal_norm")
 
     with pytest.raises(ValueError, match="missing med/p95"):
@@ -126,7 +128,7 @@ def test_snqi_v1_missing_baseline_stats_fail_closed() -> None:
 
 def test_snqi_v1_invalid_baseline_spread_fails_closed() -> None:
     """SNQI-v1 requires positive median/p95 spread for each penalty metric."""
-    invalid_time = dict(_BASELINE_STATS_V1)
+    invalid_time = copy.deepcopy(_BASELINE_STATS_V1)
     invalid_time["time_to_goal_norm"] = {"med": 1.0, "p95": 1.0}
 
     with pytest.raises(ValueError, match="non-positive spread"):

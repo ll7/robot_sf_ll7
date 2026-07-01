@@ -545,7 +545,7 @@ def _check_checkpoint_artifacts(
     return STATUS_PASSED, [], mapping
 
 
-def _check_proxy_summary(
+def _check_proxy_summary(  # noqa: C901
     summary_path: Path,
     *,
     analyzer: Any,
@@ -570,6 +570,10 @@ def _check_proxy_summary(
         return STATUS_FAILED, [f"training summary unreadable: {exc}"], {}
     if not isinstance(summary, dict):
         return STATUS_FAILED, ["training summary must be a JSON object/mapping"], {}
+
+    metadata_errors = _validate_proxy_summary_metadata(summary, require_enabled=require_enabled)
+    if metadata_errors:
+        return _blocked_proxy_metadata_result(metadata_errors)
 
     report = analyzer.analyze_summary(summary)
     verdict = report.get("verdict")
@@ -608,6 +612,39 @@ def _check_proxy_summary(
     if errors:
         return STATUS_BLOCKED, errors, payload
     return STATUS_PASSED, [], payload
+
+
+def _blocked_proxy_metadata_result(
+    metadata_errors: list[str],
+) -> tuple[str, list[str], dict[str, Any]]:
+    """Return a compact fail-closed payload for missing proxy metadata."""
+    return (
+        STATUS_BLOCKED,
+        metadata_errors,
+        {
+            "proxy_enabled": False,
+            "n_proxy_epochs": 0,
+            "schema_status": "missing_proxy_metadata",
+        },
+    )
+
+
+def _validate_proxy_summary_metadata(
+    summary: dict[str, Any], *, require_enabled: bool
+) -> list[str]:
+    """Validate proxy-summary schema before analyzer normalizes missing fields."""
+    proxy = summary.get("proxy")
+    if not isinstance(proxy, dict):
+        return ["training summary missing proxy mapping"]
+
+    errors: list[str] = []
+    if require_enabled and proxy.get("enabled") is not True:
+        errors.append("training summary proxy.enabled must be true")
+
+    history = proxy.get("history")
+    if not isinstance(history, list):
+        errors.append("training summary proxy.history must be a list")
+    return errors
 
 
 def _gate_checkpoint_selector(

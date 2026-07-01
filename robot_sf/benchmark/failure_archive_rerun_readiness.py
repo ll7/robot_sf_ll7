@@ -54,6 +54,15 @@ _PASSING_CERTIFICATION_STATUSES = {
     "ready",
     "valid",
 }
+_CERTIFICATION_LINEAGE_KEYS = (
+    "artifact",
+    "artifact_path",
+    "certificate_path",
+    "evidence_path",
+    "provenance",
+    "source",
+    "source_manifest",
+)
 _DIAGNOSTIC_ONLY_VALUES = {
     "diagnostic",
     "diagnostic-only",
@@ -105,8 +114,10 @@ class FailureArchiveRerunReadiness:
     rerun_duplicate_archive_ids: list[str] = field(default_factory=list)
     source_missing_certification_archive_ids: list[str] = field(default_factory=list)
     source_invalid_certification_archive_ids: list[str] = field(default_factory=list)
+    source_missing_certification_lineage_archive_ids: list[str] = field(default_factory=list)
     missing_certification_archive_ids: list[str] = field(default_factory=list)
     invalid_certification_archive_ids: list[str] = field(default_factory=list)
+    missing_certification_lineage_archive_ids: list[str] = field(default_factory=list)
     diagnostic_only_outputs: list[str] = field(default_factory=list)
     null_test_prerequisite_source: str | None = None
     null_test_prerequisite_status: str = "not_checked"
@@ -150,8 +161,14 @@ class FailureArchiveRerunReadiness:
             "source_invalid_certification_archive_ids": list(
                 self.source_invalid_certification_archive_ids
             ),
+            "source_missing_certification_lineage_archive_ids": list(
+                self.source_missing_certification_lineage_archive_ids
+            ),
             "missing_certification_archive_ids": list(self.missing_certification_archive_ids),
             "invalid_certification_archive_ids": list(self.invalid_certification_archive_ids),
+            "missing_certification_lineage_archive_ids": list(
+                self.missing_certification_lineage_archive_ids
+            ),
             "diagnostic_only_outputs": list(self.diagnostic_only_outputs),
             "null_test_prerequisite_source": self.null_test_prerequisite_source,
             "null_test_prerequisite_status": self.null_test_prerequisite_status,
@@ -218,16 +235,30 @@ def classify_failure_archive_rerun_readiness(
     blockers.extend(_count_blockers("source_duplicate_archive_ids", source_duplicate_archive_ids))
     blockers.extend(_count_blockers("rerun_duplicate_archive_ids", rerun_duplicate_archive_ids))
 
-    source_missing_certification, source_invalid_certification = _certification_gaps(source_entries)
+    (
+        source_missing_certification,
+        source_invalid_certification,
+        source_missing_certification_lineage,
+    ) = _certification_gaps(source_entries)
     blockers.extend(
         _count_blockers("source_missing_certification_metadata", source_missing_certification)
     )
     blockers.extend(
         _count_blockers("source_invalid_certification_status", source_invalid_certification)
     )
-    missing_certification, invalid_certification = _certification_gaps(rerun_entries)
+    blockers.extend(
+        _count_blockers(
+            "source_missing_certification_lineage", source_missing_certification_lineage
+        )
+    )
+    (
+        missing_certification,
+        invalid_certification,
+        missing_certification_lineage,
+    ) = _certification_gaps(rerun_entries)
     blockers.extend(_count_blockers("missing_certification_metadata", missing_certification))
     blockers.extend(_count_blockers("invalid_certification_status", invalid_certification))
+    blockers.extend(_count_blockers("missing_certification_lineage", missing_certification_lineage))
 
     diagnostic_outputs = _diagnostic_only_outputs(Path(rerun_output) if rerun_output else None)
     null_source, null_status, missing_nulls, invalid_nulls = _null_test_prerequisite_gaps(
@@ -258,8 +289,10 @@ def classify_failure_archive_rerun_readiness(
         rerun_duplicate_archive_ids=rerun_duplicate_archive_ids,
         source_missing_certification_archive_ids=source_missing_certification,
         source_invalid_certification_archive_ids=source_invalid_certification,
+        source_missing_certification_lineage_archive_ids=source_missing_certification_lineage,
         missing_certification_archive_ids=missing_certification,
         invalid_certification_archive_ids=invalid_certification,
+        missing_certification_lineage_archive_ids=missing_certification_lineage,
         diagnostic_only_outputs=diagnostic_outputs,
         null_test_prerequisite_source=null_source,
         null_test_prerequisite_status=null_status,
@@ -443,11 +476,12 @@ def _scenario_family_missing(entry: dict[str, Any]) -> bool:
     return False
 
 
-def _certification_gaps(entries: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
-    """Return archive IDs missing or failing rerun certification metadata."""
+def _certification_gaps(entries: list[dict[str, Any]]) -> tuple[list[str], list[str], list[str]]:
+    """Return archive IDs with missing, failing, or lineage-free certification metadata."""
 
     missing: list[str] = []
     invalid: list[str] = []
+    missing_lineage: list[str] = []
     for index, entry in enumerate(entries):
         archive_id = str(entry.get("archive_id") or f"<entry:{index}>")
         certification = _first_certification_value(entry)
@@ -457,7 +491,10 @@ def _certification_gaps(entries: list[dict[str, Any]]) -> tuple[list[str], list[
         status = _certification_status(certification)
         if status is None or status not in _PASSING_CERTIFICATION_STATUSES:
             invalid.append(archive_id)
-    return missing, invalid
+            continue
+        if not _certification_has_lineage(certification):
+            missing_lineage.append(archive_id)
+    return missing, invalid, missing_lineage
 
 
 def _first_certification_value(entry: dict[str, Any]) -> Any:
@@ -494,6 +531,33 @@ def _certification_status(value: Any) -> str | None:
                 return "failed"
         return "certified" if value else None
     return None
+
+
+def _certification_has_lineage(value: Any) -> bool:
+    """Return whether certification metadata names its source or provenance artifact."""
+
+    if not isinstance(value, dict):
+        return False
+    for key in _CERTIFICATION_LINEAGE_KEYS:
+        if _lineage_value_present(value.get(key)):
+            return True
+    return False
+
+
+def _lineage_value_present(raw_value: Any) -> bool:
+    """Return whether one certification lineage field carries non-placeholder data."""
+
+    if raw_value is None:
+        return False
+    if isinstance(raw_value, str):
+        return bool(raw_value.strip())
+    if isinstance(raw_value, list | tuple | set | dict):
+        return bool(raw_value)
+    if isinstance(raw_value, bool):
+        return raw_value
+    if isinstance(raw_value, int | float):
+        return bool(raw_value)
+    return True
 
 
 def _null_test_prerequisite_gaps(

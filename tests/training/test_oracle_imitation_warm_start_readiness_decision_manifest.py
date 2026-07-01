@@ -7,7 +7,11 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from robot_sf.training.oracle_imitation_warm_start_readiness import check_warm_start_readiness
+from robot_sf.training.oracle_imitation_launch_packet import LaunchPacketError
+from robot_sf.training.oracle_imitation_warm_start_readiness import (
+    _first_launch_packet_error,
+    check_warm_start_readiness,
+)
 from scripts.validation.check_oracle_imitation_warm_start_readiness import main as check_cli_main
 from tests.training.test_oracle_imitation_warm_start_readiness import (
     _ready_manifest,
@@ -42,6 +46,72 @@ def test_missing_trace_manifest_provenance_blocks_readiness(tmp_path: Path) -> N
     assert any(
         blocker.startswith("dataset_launch_packet not training-ready")
         for blocker in report["blockers"]
+    )
+
+
+def test_missing_dataset_provenance_field_is_actionable_blocker(tmp_path: Path) -> None:
+    """Missing packet provenance reports the field-level blocker."""
+
+    manifest_dict = _ready_manifest(tmp_path)
+    packet = _write_training_ready_packet(tmp_path)
+    payload = yaml.safe_load(packet.read_text(encoding="utf-8"))
+    payload.pop("generating_commit")
+    packet.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    manifest_dict["dataset_launch_packet"] = str(packet)
+    manifest = _write_manifest(tmp_path, manifest_dict)
+
+    report = check_warm_start_readiness(manifest)
+
+    assert report["status"] == "blocked"
+    assert any(
+        blocker
+        == (
+            "dataset_launch_packet not training-ready: "
+            "generating_commit must be a 40-character git SHA"
+        )
+        for blocker in report["blockers"]
+    )
+
+
+def test_missing_collection_manifest_destination_is_actionable_blocker(tmp_path: Path) -> None:
+    """Missing collection output-manifest destination reports the field-level blocker."""
+
+    manifest_dict = _ready_manifest(tmp_path)
+    packet = _write_training_ready_packet(tmp_path)
+    payload = yaml.safe_load(packet.read_text(encoding="utf-8"))
+    payload["collection_roots"].pop("manifest_destination")
+    packet.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    manifest_dict["dataset_launch_packet"] = str(packet)
+    manifest = _write_manifest(tmp_path, manifest_dict)
+
+    report = check_warm_start_readiness(manifest)
+
+    assert report["status"] == "blocked"
+    assert any(
+        blocker
+        == (
+            "dataset_launch_packet not training-ready: "
+            "collection_roots.manifest_destination must be a non-empty string"
+        )
+        for blocker in report["blockers"]
+    )
+
+
+def test_launch_packet_error_header_filter_is_not_exact_string_coupled() -> None:
+    """Readiness reports field-level launch-packet errors despite header wording."""
+
+    error = LaunchPacketError(
+        "\n".join(
+            [
+                "oracle-imitation dataset launch packet failed validation:",
+                "- collection_roots.manifest_destination must be non-empty string",
+            ]
+        )
+    )
+
+    assert (
+        _first_launch_packet_error(error)
+        == "collection_roots.manifest_destination must be non-empty string"
     )
 
 

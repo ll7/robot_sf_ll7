@@ -76,6 +76,7 @@ core_test_paths=(
   tests/test_planner.py
   tests/test_range_sensor.py
   tests/test_seed_utils.py
+  tests/test_socnav_observation.py
   tests/test_types.py
   tests/test_ci_script_contract.py
   tests/map_test.py

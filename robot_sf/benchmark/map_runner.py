@@ -2363,6 +2363,63 @@ def _emit_provenance_manifest(  # noqa: PLR0913
     return manifest_path
 
 
+def _record_result_provenance_manifest(  # noqa: PLR0913
+    *,
+    summary: dict[str, Any],
+    out_path: Path,
+    episode_records: list[dict[str, Any]],
+    schema_path: str | Path,
+    scenario_path: Path,
+    scenarios: list[dict[str, Any]],
+    algo: str,
+    algo_config_path: str | None,
+    benchmark_profile: str,
+    suite_key: str,
+    total_jobs: int,
+    written: int,
+    horizon: int | None,
+    dt: float | None,
+    record_forces: bool,
+    active_observation_mode: str | None,
+    active_observation_level: str | None,
+    noise_hash: str | None = None,
+    tracking_precision_hash: str | None = None,
+) -> None:
+    """Write result provenance sidecar without discarding a completed JSONL artifact."""
+    try:
+        result_manifest_path = _emit_provenance_manifest(
+            out_path=out_path,
+            episode_records=episode_records,
+            schema_path=schema_path,
+            scenario_path=scenario_path,
+            scenarios=scenarios,
+            algo=algo,
+            algo_config_path=algo_config_path,
+            benchmark_profile=benchmark_profile,
+            suite_key=suite_key,
+            total_jobs=total_jobs,
+            written=written,
+            horizon=horizon,
+            dt=dt,
+            record_forces=record_forces,
+            active_observation_mode=active_observation_mode,
+            active_observation_level=active_observation_level,
+            noise_hash=noise_hash,
+            tracking_precision_hash=tracking_precision_hash,
+        )
+    except OSError as exc:
+        logger.warning("Failed to write result provenance manifest for {}: {}", out_path, exc)
+        provenance = summary.setdefault("provenance", {})
+        provenance["result_manifest_path"] = str(_provenance_manifest_path(out_path))
+        provenance["result_manifest_status"] = "error"
+        provenance["result_manifest_error"] = str(exc)
+        return
+
+    provenance = summary.setdefault("provenance", {})
+    provenance["result_manifest_path"] = str(result_manifest_path)
+    provenance["result_manifest_status"] = "available"
+
+
 def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     scenarios_or_path: list[dict[str, Any]] | str | Path,
     out_path: str | Path,
@@ -2657,7 +2714,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         )
         summary["benchmark_availability"] = availability_payload(summary)
         # Write not_applicable provenance manifest for skipped preflight path.
-        _emit_provenance_manifest(
+        _record_result_provenance_manifest(
+            summary=summary,
             out_path=out_path,
             episode_records=[],
             schema_path=schema_path,
@@ -2850,7 +2908,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         metric_affecting_config=metric_affecting_config,
     )
     # Emit provenance manifest alongside the JSONL output.
-    result_manifest_path = _emit_provenance_manifest(
+    _record_result_provenance_manifest(
+        summary=summary,
         out_path=out_path,
         episode_records=episode_records,
         schema_path=schema_path,
@@ -2870,8 +2929,6 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         noise_hash=noise_hash,
         tracking_precision_hash=tracking_precision_spec_hash,
     )
-    summary.setdefault("provenance", {})["result_manifest_path"] = str(result_manifest_path)
-    summary["provenance"]["result_manifest_status"] = "available"
     return summary
 
 

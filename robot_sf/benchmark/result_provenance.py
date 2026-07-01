@@ -68,7 +68,7 @@ def _sha256_of_file(path: str | Path) -> str | None:
         return None
 
 
-def _simulator_settings(
+def build_simulator_settings_provenance(
     *,
     horizon: int | None,
     dt: float | None,
@@ -100,7 +100,7 @@ def _simulator_settings(
     return settings
 
 
-def _row_provenance(  # noqa: PLR0913
+def build_row_result_provenance(  # noqa: PLR0913
     *,
     episode_id: str,
     scenario_id: str,
@@ -131,7 +131,7 @@ def _row_provenance(  # noqa: PLR0913
         "repo_commit": repo_commit,
         "raw_artifact": str(raw_artifact_path),
         "jsonl_line": int(jsonl_line),
-        "simulator_settings": _simulator_settings(
+        "simulator_settings": build_simulator_settings_provenance(
             horizon=horizon,
             dt=dt,
             record_forces=record_forces,
@@ -140,10 +140,14 @@ def _row_provenance(  # noqa: PLR0913
             noise_hash=noise_hash,
             tracking_precision_hash=tracking_precision_hash,
         ),
-        "postprocessing": [
-            {"step": "compute_all_metrics", "status": "completed"},
-            {"step": "post_process_metrics", "status": "completed"},
-        ],
+        "postprocessing": (
+            list(postprocessing_steps)
+            if postprocessing_steps is not None
+            else [
+                {"step": "compute_all_metrics", "status": "completed"},
+                {"step": "post_process_metrics", "status": "completed"},
+            ]
+        ),
     }
     return row
 
@@ -182,7 +186,7 @@ def _algo_config_entry(algo_config_path: str | Path | None) -> dict[str, Any]:
             "artifact_status": "not_provided",
         }
     resolved = Path(str(algo_config_path))
-    if resolved.exists():
+    if resolved.is_file():
         return {
             "path": str(resolved),
             "sha256": _sha256_of_file(resolved),
@@ -242,8 +246,8 @@ def build_result_provenance_manifest(  # noqa: PLR0913
     scenario_matrix_path = str(scenario_path)
     scenario_matrix_entry: dict[str, Any] = {
         "path": scenario_matrix_path,
-        "sha256": _sha256_of_file(scenario_path) if Path(scenario_path).exists() else None,
-        "artifact_status": "available" if Path(scenario_path).exists() else "not_applicable",
+        "sha256": _sha256_of_file(scenario_path) if Path(scenario_path).is_file() else None,
+        "artifact_status": "available" if Path(scenario_path).is_file() else "not_applicable",
     }
     algo_config_entry = _algo_config_entry(algo_config_path)
 
@@ -265,7 +269,7 @@ def build_result_provenance_manifest(  # noqa: PLR0913
     rows: list[dict[str, Any]] = []
     for line_idx, rec in enumerate(episode_records):
         rows.append(
-            _row_provenance(
+            build_row_result_provenance(
                 episode_id=str(rec.get("episode_id", "")),
                 scenario_id=str(rec.get("scenario_id", "")),
                 seed=int(rec.get("seed", 0)),
@@ -284,7 +288,7 @@ def build_result_provenance_manifest(  # noqa: PLR0913
         )
 
     # Completeness.
-    is_complete = written > 0
+    is_complete = written > 0 and written >= total_jobs
     completeness: dict[str, Any]
     if is_complete:
         completeness = {
@@ -293,8 +297,8 @@ def build_result_provenance_manifest(  # noqa: PLR0913
         }
     else:
         completeness = {
-            "status": "not_applicable",
-            "reason": "preflight_skipped",
+            "status": "partial" if written > 0 else "not_applicable",
+            "reason": "partial_batch_failure" if written > 0 else "preflight_skipped",
         }
 
     manifest: dict[str, Any] = {
@@ -386,6 +390,7 @@ def validate_result_provenance_manifest(payload: Mapping[str, Any]) -> None:
 
     rows = payload.get("rows", [])
     for row_idx, row in enumerate(rows):
+        _require(isinstance(row, dict), f"rows[{row_idx}] must be a dict")
         for field in _REQUIRED_ROW:
             if field == "seed":
                 _require(
@@ -462,6 +467,8 @@ __all__ = [
     "ProvenanceRowLinkError",
     "ProvenanceValidationError",
     "build_result_provenance_manifest",
+    "build_row_result_provenance",
+    "build_simulator_settings_provenance",
     "load_result_provenance_manifest",
     "manifest_path_for_result_jsonl",
     "validate_result_provenance_manifest",

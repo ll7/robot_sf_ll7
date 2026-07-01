@@ -98,6 +98,7 @@ from robot_sf.benchmark.pedestrian_control_trace import (
 from robot_sf.benchmark.planner_command_contract import (
     validate_planner_contract as _validate_planner_contract,
 )
+from robot_sf.benchmark.result_provenance import build_simulator_settings_provenance
 from robot_sf.benchmark.safety_predicates import (
     late_evasive_predicate,
     occlusion_near_miss_predicate,
@@ -1260,13 +1261,15 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "seed": int(seed),
         "config_hash": _config_hash(scenario_params),
         "repo_commit": _git_hash_fallback(),
-        "simulator_settings": {
-            "horizon": horizon_val,
-            "dt": float(config.sim_config.time_per_step_in_secs),
-            "record_forces": bool(record_forces),
-            "observation_mode": active_observation_mode,
-            "observation_level": active_observation_level,
-        },
+        "simulator_settings": build_simulator_settings_provenance(
+            horizon=horizon_val,
+            dt=float(config.sim_config.time_per_step_in_secs),
+            record_forces=bool(record_forces),
+            active_observation_mode=active_observation_mode,
+            active_observation_level=active_observation_level,
+            noise_hash=observation_noise_hash(noise_spec),
+            tracking_precision_hash=tracking_precision_hash(tracking_precision_spec),
+        ),
         "postprocessing": [
             {"step": "compute_all_metrics", "status": "completed"},
             {"step": "post_process_metrics", "status": "completed"},

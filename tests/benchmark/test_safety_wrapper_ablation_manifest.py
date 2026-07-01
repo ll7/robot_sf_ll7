@@ -204,6 +204,25 @@ def test_check_factorial_ablation_rows_accepts_exact_paired_rows() -> None:
     assert report["missing_required_fields"] == []
     assert report["invalid_provenance_fields"] == []
     assert report["incomplete_pairs"] == []
+    assert report["pair_provenance_mismatches"] == []
+
+
+def test_check_factorial_ablation_rows_rejects_mixed_pair_provenance() -> None:
+    """Paired off/on rows must come from the same study and software commit."""
+    off_row = _ablation_row(WRAPPER_OFF_ARM)
+    on_row = _ablation_row(WRAPPER_ON_ARM)
+    on_row["study_id"] = "different_study"
+    on_row["software_commit"] = "def5678"
+
+    report = check_factorial_ablation_rows([off_row, on_row])
+
+    assert report["complete"] is False
+    assert report["pair_provenance_mismatches"] == [
+        {
+            "pairing_key": {"planner": "orca", "scenario_id": "crossing_basic", "seed": 111},
+            "fields": ["study_id", "software_commit"],
+        }
+    ]
 
 
 def test_check_factorial_ablation_rows_rejects_missing_provenance_and_unpaired_arm() -> None:

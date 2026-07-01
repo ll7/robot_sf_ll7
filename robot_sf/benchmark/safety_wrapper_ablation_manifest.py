@@ -352,7 +352,7 @@ def check_factorial_ablation_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str
     invalid_provenance_fields: list[dict[str, Any]] = []
     duplicate_pair_rows: list[dict[str, Any]] = []
     unexpected_wrapper_arms: list[str] = []
-    groups: dict[tuple[Any, ...], dict[str, int]] = {}
+    groups: dict[tuple[Any, ...], dict[str, list[Mapping[str, Any]]]] = {}
 
     for index, row in enumerate(rows):
         missing = [field for field in REQUIRED_ROW_FIELDS if field not in row]
@@ -366,13 +366,13 @@ def check_factorial_ablation_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str
             unexpected_wrapper_arms.append(arm)
         key = tuple(row.get(field) for field in PAIRING_KEY_FIELDS)
         by_arm = groups.setdefault(key, {})
-        by_arm[arm] = by_arm.get(arm, 0) + 1
-        if by_arm[arm] > 1:
+        by_arm.setdefault(arm, []).append(row)
+        if len(by_arm[arm]) > 1:
             duplicate_pair_rows.append(
                 {
                     "pairing_key": dict(zip(PAIRING_KEY_FIELDS, key, strict=True)),
                     "wrapper_arm": arm,
-                    "count": by_arm[arm],
+                    "count": len(by_arm[arm]),
                 }
             )
 
@@ -382,8 +382,10 @@ def check_factorial_ablation_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str
             "wrapper_arms": sorted(by_arm),
         }
         for key, by_arm in groups.items()
-        if set(by_arm) != set(EXPECTED_WRAPPER_ARMS) or any(count != 1 for count in by_arm.values())
+        if set(by_arm) != set(EXPECTED_WRAPPER_ARMS)
+        or any(len(rows_for_arm) != 1 for rows_for_arm in by_arm.values())
     ]
+    pair_provenance_mismatches = _pair_provenance_mismatches(groups)
     complete = (
         len(rows) > 0
         and not missing_required_fields
@@ -391,6 +393,7 @@ def check_factorial_ablation_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str
         and not unexpected_wrapper_arms
         and not duplicate_pair_rows
         and not incomplete_pairs
+        and not pair_provenance_mismatches
     )
     return {
         "complete": bool(complete),
@@ -404,7 +407,35 @@ def check_factorial_ablation_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str
         "unexpected_wrapper_arms": sorted(set(unexpected_wrapper_arms)),
         "duplicate_pair_rows": duplicate_pair_rows,
         "incomplete_pairs": incomplete_pairs,
+        "pair_provenance_mismatches": pair_provenance_mismatches,
     }
+
+
+def _pair_provenance_mismatches(
+    groups: Mapping[tuple[Any, ...], Mapping[str, Sequence[Mapping[str, Any]]]],
+) -> list[dict[str, Any]]:
+    """Return paired-row provenance fields that disagree within an off/on contrast."""
+    mismatches: list[dict[str, Any]] = []
+    for key, by_arm in groups.items():
+        if set(by_arm) != set(EXPECTED_WRAPPER_ARMS) or any(
+            len(rows_for_arm) != 1 for rows_for_arm in by_arm.values()
+        ):
+            continue
+        off_row = by_arm[WRAPPER_OFF_ARM][0]
+        on_row = by_arm[WRAPPER_ON_ARM][0]
+        fields = [
+            field
+            for field in ("study_id", "software_commit")
+            if off_row.get(field) != on_row.get(field)
+        ]
+        if fields:
+            mismatches.append(
+                {
+                    "pairing_key": dict(zip(PAIRING_KEY_FIELDS, key, strict=True)),
+                    "fields": fields,
+                }
+            )
+    return mismatches
 
 
 def _row_provenance_errors(row: Mapping[str, Any]) -> list[str]:

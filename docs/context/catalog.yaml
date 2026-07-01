@@ -2511,6 +2511,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3294_release_claim_matrix/release_claim_matrix.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3471_scenario_belief_episode_safety_2026-06-24/report.json
     status: evidence
     freshness: evidence

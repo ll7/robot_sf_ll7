@@ -232,13 +232,13 @@ launch_packet:
     slurm_job_id: 13251
     cluster_route: imech192:l40s
     job_name: rsf3810-h600-l40s
-    public_worktree: /home/luttkule/git/robot_sf_ll7.worktrees/issue-3810-h600-submit-20260701
+    public_worktree: /home/luttkule/git/robot_sf_ll7.worktrees/issue-3810-h600-submit-20260701 # allow-abs-path: submitted job provenance path (machine-local, non-portable)
     public_commit: c49a78e6622eb305a3438d9a6f11a43edb385ff4
     private_ops_ledger_commit: 24a9b1a
     config_used: output/benchmarks/issue_3810_comprehensive_h600_snqi/config/issue_3810_comprehensive_h600_snqi.yaml
     campaign_id: issue_3810_comprehensive_h600_snqi
-    remote_slurm_result_path: /home/luttkule/git/robot_sf_ll7.worktrees/issue-3810-h600-submit-20260701/output/slurm/issue3810-h600-job-13251
-    local_retrieval_target: /home/luttkule/git/robot_sf_ll7/output/issue3810-h600-snqi/13251
+    remote_slurm_result_path: /home/luttkule/git/robot_sf_ll7.worktrees/issue-3810-h600-submit-20260701/output/slurm/issue3810-h600-job-13251 # allow-abs-path: submitted job provenance path (machine-local, non-portable)
+    local_retrieval_target: /home/luttkule/git/robot_sf_ll7/output/issue3810-h600-snqi/13251 # allow-abs-path: submitted job retrieval target (machine-local, non-portable)
     initial_health_check: RUNNING on auxme-imech093, l40s, 12h wall cap
     boundary: >-
       Submission evidence only, not benchmark or dissertation evidence.
@@ -465,8 +465,8 @@ analysis_and_retention_packet:
     status: submitted_not_benchmark_evidence
     slurm_job_id: 13251
     cluster_route: imech192:l40s
-    remote_slurm_result_path: /home/luttkule/git/robot_sf_ll7.worktrees/issue-3810-h600-submit-20260701/output/slurm/issue3810-h600-job-13251
-    local_retrieval_target: /home/luttkule/git/robot_sf_ll7/output/issue3810-h600-snqi/13251
+    remote_slurm_result_path: /home/luttkule/git/robot_sf_ll7.worktrees/issue-3810-h600-submit-20260701/output/slurm/issue3810-h600-job-13251 # allow-abs-path: submitted job provenance path (machine-local, non-portable)
+    local_retrieval_target: /home/luttkule/git/robot_sf_ll7/output/issue3810-h600-snqi/13251 # allow-abs-path: submitted job retrieval target (machine-local, non-portable)
     required_before_interpretation:
       - job_finished
       - artifacts_retrieved_or_promoted

@@ -264,6 +264,11 @@ def _load_archive(path: Path) -> tuple[str, dict[str, Any] | None, str]:
     entries = payload.get("entries")
     if not isinstance(entries, list) or not entries:
         return BLOCKED, payload, "archive_has_no_entries"
+    non_object_indexes = [
+        str(index) for index, entry in enumerate(entries) if not isinstance(entry, dict)
+    ]
+    if non_object_indexes:
+        return BLOCKED, payload, f"archive_entries_not_objects:{','.join(non_object_indexes)}"
     return READY, payload, "ok"
 
 

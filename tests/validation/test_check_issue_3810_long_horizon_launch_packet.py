@@ -84,6 +84,19 @@ def test_issue_3810_packet_rejects_stale_readiness_refresh_date() -> None:
         raise AssertionError("packet should reject stale readiness refresh date")
 
 
+def test_issue_3810_packet_rejects_stale_latest_merged_packet_pr() -> None:
+    """The public readiness refresh must track the latest merged packet guard."""
+    packet = _load_packet()
+    packet["launch_packet"]["readiness_refresh"]["latest_merged_packet_pr"] = 4030
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "latest merged packet PR" in str(exc)
+    else:
+        raise AssertionError("packet should reject stale merged packet pointer")
+
+
 def test_issue_3810_packet_rejects_open_pr_dedupe_matches() -> None:
     """A matching PR must stop duplicate packet PRs."""
     packet = _load_packet()

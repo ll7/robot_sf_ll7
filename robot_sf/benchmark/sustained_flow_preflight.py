@@ -12,6 +12,7 @@ from robot_sf.scenario_certification.sustained_flow import (
     EXPECTED_CONTINUOUS_SPAWN_DEFINITION,
     EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG,
     EXPECTED_SUSTAINED_PROGRESS_METRIC,
+    REQUIRED_BLOCKERS_BEFORE_BENCHMARK_USE,
     SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
     generate_expected_sustained_flow_scenarios,
     runtime_definition_status_for_support,
@@ -63,6 +64,7 @@ class SustainedFlowVariant:
     runtime_definition_ready: bool
     route_respawn_runtime_config: dict[str, object]
     success_metric: dict[str, object]
+    required_before_benchmark_use: tuple[str, ...]
     max_episode_steps: int
     seeds: tuple[int, ...]
 
@@ -70,6 +72,7 @@ class SustainedFlowVariant:
         """Return a JSON/YAML friendly representation."""
 
         payload = asdict(self)
+        payload["required_before_benchmark_use"] = list(self.required_before_benchmark_use)
         payload["seeds"] = list(self.seeds)
         return payload
 
@@ -180,6 +183,14 @@ def _variant_from_scenario(scenario: Mapping[str, Any]) -> SustainedFlowVariant:
         raise SustainedFlowPreflightError(
             f"{name}: metadata.success_metric must match sustained progress-rate contract"
         )
+    required_before_benchmark_use = metadata.get("requires_before_benchmark_use")
+    if not isinstance(required_before_benchmark_use, list) or required_before_benchmark_use != list(
+        REQUIRED_BLOCKERS_BEFORE_BENCHMARK_USE
+    ):
+        raise SustainedFlowPreflightError(
+            f"{name}: metadata.requires_before_benchmark_use must match sustained-flow "
+            "fail-closed blockers"
+        )
 
     seeds = scenario.get("seeds", [])
     if not isinstance(seeds, list) or not all(isinstance(seed, int) for seed in seeds):
@@ -206,6 +217,7 @@ def _variant_from_scenario(scenario: Mapping[str, Any]) -> SustainedFlowVariant:
             field: simulation_config.get(field) for field in EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG
         },
         success_metric=dict(success_metric),
+        required_before_benchmark_use=tuple(required_before_benchmark_use),
         max_episode_steps=_required_int(simulation_config, "max_episode_steps", scenario_name=name),
         seeds=tuple(seeds),
     )
@@ -305,6 +317,7 @@ def _variant_generator_profile(variant: SustainedFlowVariant) -> tuple[object, .
         variant.runtime_definition_ready,
         tuple(sorted(variant.route_respawn_runtime_config.items())),
         tuple(sorted(variant.success_metric.items())),
+        variant.required_before_benchmark_use,
         variant.max_episode_steps,
         variant.seeds,
     )

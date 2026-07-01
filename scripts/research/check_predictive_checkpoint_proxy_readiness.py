@@ -486,6 +486,7 @@ def _check_checkpoint_artifacts(
         resolvable, training_run_group_field
     )
     blocked_by_status: dict[str, int] = {}
+    blocked_by_artifact_scope: dict[str, int] = {}
     public_artifacts_by_status: dict[str, int] = {}
     for candidate in candidates:
         artifact_status = str(candidate["public_artifact"]["status"])
@@ -495,6 +496,10 @@ def _check_checkpoint_artifacts(
         if candidate["present"]:
             continue
         blocked_by_status[candidate["status"]] = blocked_by_status.get(candidate["status"], 0) + 1
+        artifact_scope = str(candidate["artifact_scope"])
+        blocked_by_artifact_scope[artifact_scope] = (
+            blocked_by_artifact_scope.get(artifact_scope, 0) + 1
+        )
 
     mapping = {
         "registry_tag": registry_tag,
@@ -506,6 +511,7 @@ def _check_checkpoint_artifacts(
         "resolvable_by_training_run_group": grouped_resolvable,
         "missing_training_run_group_metadata": missing_group_metadata,
         "blocked_by_status": blocked_by_status,
+        "blocked_by_artifact_scope": blocked_by_artifact_scope,
         "public_artifacts_by_status": public_artifacts_by_status,
         "candidates": candidates,
     }

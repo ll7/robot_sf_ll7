@@ -332,7 +332,7 @@ def _archive_lineage_gaps(
     """Return top-level source manifest lineage and fail-closed gap tokens."""
 
     if not isinstance(payload, dict):
-        return [], [side]
+        return [], [f"{side}:archive_payload"]
     config = payload.get("config")
     if not isinstance(config, dict):
         return [], [f"{side}:config.source_manifests"]

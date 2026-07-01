@@ -349,6 +349,7 @@ def test_missing_archive_payload_blocks_ready_path(tmp_path: Path) -> None:
     assert any(
         blocker.startswith("rerun_archive_blocked:path_missing") for blocker in readiness.blockers
     )
+    assert readiness.missing_archive_lineage == ["rerun:archive_payload"]
     assert not any(blocker.startswith("source_archive_blocked") for blocker in readiness.blockers)
 
 

@@ -4,6 +4,14 @@ This module provides tools for running benchmarks, collecting metrics,
 and analyzing robot navigation performance in social environments.
 """
 
+from robot_sf.benchmark.benchmark_protocol import (
+    AMMV_BENCHMARK_PROTOCOL_PATH,
+    BenchmarkProtocolError,
+    BenchmarkProtocolManifest,
+    ClaimRules,
+    load_benchmark_protocol,
+    validate_benchmark_protocol_payload,
+)
 from robot_sf.benchmark.errors import AggregationMetadataError
 from robot_sf.benchmark.forecast_batch import (
     FORECAST_BATCH_SCHEMA_VERSION,
@@ -82,6 +90,7 @@ from robot_sf.benchmark.scenario_failure_cause import (
 )
 
 __all__ = [
+    "AMMV_BENCHMARK_PROTOCOL_PATH",
     "DEFAULT_FORECAST_DATASET_ID",
     "DEFAULT_TRANSFER_DIMENSIONS",
     "FORECAST_BATCH_SCHEMA_VERSION",
@@ -99,6 +108,9 @@ __all__ = [
     "VERDICT_VEHICLE_INFEASIBLE",
     "ActorForecast",
     "AggregationMetadataError",
+    "BenchmarkProtocolError",
+    "BenchmarkProtocolManifest",
+    "ClaimRules",
     "CoordinateFrame",
     "ExampleOrchestrator",
     "ForecastActorObservation",
@@ -127,12 +139,14 @@ __all__ = [
     "format_forecast_conformal_pilot_markdown",
     "format_forecast_metrics_markdown",
     "format_forecast_transferability_stress_markdown",
+    "load_benchmark_protocol",
     "load_forecast_batch",
     "load_trained_policy",
     "prepare_classic_env",
     "record_forecast_dataset_from_trace_exports",
     "run_episodes_with_recording",
     "save_forecast_batch",
+    "validate_benchmark_protocol_payload",
     "validate_forecast_batch",
     "validate_forecast_dataset_manifest",
     "write_forecast_calibration_report",

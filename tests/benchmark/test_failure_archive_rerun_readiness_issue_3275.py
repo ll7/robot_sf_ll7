@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+from robot_sf.adversarial.disjoint_evaluation import archive_sha256
 from robot_sf.benchmark.failure_archive_rerun_readiness import (
     BLOCKED,
     DIAGNOSTIC_ONLY,
@@ -69,14 +70,22 @@ def _archive(
     return path
 
 
-def _null_test_prerequisites() -> dict:
+def _null_test_prerequisites(source_archive: Path, rerun_archive: Path) -> dict:
     """Return complete null-test prerequisite metadata."""
 
     return {
+        "source_archive_sha256": _archive_hash(source_archive),
+        "rerun_archive_sha256": _archive_hash(rerun_archive),
         "null_tests_reject_null": True,
         "shuffled_outcome_null_test": {"status": "complete", "p_value": 0.01},
         "ranking_permutation_test": {"status": "complete", "p_value": 0.02},
     }
+
+
+def _archive_hash(path: Path) -> str:
+    """Return canonical archive hash for a JSON fixture path."""
+
+    return archive_sha256(json.loads(path.read_text(encoding="utf-8")))
 
 
 def test_disjoint_certified_archives_are_ready(tmp_path: Path) -> None:
@@ -100,7 +109,7 @@ def test_disjoint_certified_archives_are_ready(tmp_path: Path) -> None:
     readiness = classify_failure_archive_rerun_readiness(
         source,
         rerun,
-        null_test_prerequisites=_null_test_prerequisites(),
+        null_test_prerequisites=_null_test_prerequisites(source, rerun),
     )
 
     assert readiness.status == READY
@@ -126,7 +135,7 @@ def test_missing_archive_source_lineage_blocks_readiness(tmp_path: Path) -> None
     readiness = classify_failure_archive_rerun_readiness(
         source,
         rerun,
-        null_test_prerequisites=_null_test_prerequisites(),
+        null_test_prerequisites=_null_test_prerequisites(source, rerun),
     )
 
     assert readiness.status == BLOCKED
@@ -151,7 +160,7 @@ def test_shared_archive_source_lineage_blocks_readiness(tmp_path: Path) -> None:
     readiness = classify_failure_archive_rerun_readiness(
         source,
         rerun,
-        null_test_prerequisites=_null_test_prerequisites(),
+        null_test_prerequisites=_null_test_prerequisites(source, rerun),
     )
 
     assert readiness.status == BLOCKED
@@ -217,7 +226,7 @@ def test_duplicate_source_archive_ids_block_readiness(tmp_path: Path) -> None:
     readiness = classify_failure_archive_rerun_readiness(
         source,
         rerun,
-        null_test_prerequisites=_null_test_prerequisites(),
+        null_test_prerequisites=_null_test_prerequisites(source, rerun),
     )
 
     assert readiness.status == BLOCKED
@@ -245,7 +254,7 @@ def test_duplicate_rerun_archive_ids_block_readiness(tmp_path: Path) -> None:
     readiness = classify_failure_archive_rerun_readiness(
         source,
         rerun,
-        null_test_prerequisites=_null_test_prerequisites(),
+        null_test_prerequisites=_null_test_prerequisites(source, rerun),
     )
 
     assert readiness.status == BLOCKED
@@ -327,7 +336,7 @@ def test_blank_overlap_metadata_blocks_readiness(tmp_path: Path) -> None:
     readiness = classify_failure_archive_rerun_readiness(
         source,
         rerun,
-        null_test_prerequisites=_null_test_prerequisites(),
+        null_test_prerequisites=_null_test_prerequisites(source, rerun),
     )
 
     assert readiness.status == BLOCKED
@@ -352,7 +361,7 @@ def test_user_archive_id_matching_fallback_prefix_is_not_missing(tmp_path: Path)
     readiness = classify_failure_archive_rerun_readiness(
         source,
         rerun,
-        null_test_prerequisites=_null_test_prerequisites(),
+        null_test_prerequisites=_null_test_prerequisites(source, rerun),
     )
 
     assert readiness.status == BLOCKED
@@ -382,7 +391,7 @@ def test_non_string_cluster_key_value_is_not_placeholder_only(tmp_path: Path) ->
     readiness = classify_failure_archive_rerun_readiness(
         source,
         rerun,
-        null_test_prerequisites=_null_test_prerequisites(),
+        null_test_prerequisites=_null_test_prerequisites(source, rerun),
     )
 
     assert readiness.status == READY
@@ -445,7 +454,7 @@ def test_non_object_archive_entries_fail_closed(tmp_path: Path) -> None:
     readiness = classify_failure_archive_rerun_readiness(
         source,
         rerun,
-        null_test_prerequisites=_null_test_prerequisites(),
+        null_test_prerequisites=_null_test_prerequisites(source, rerun),
     )
 
     assert readiness.status == BLOCKED
@@ -473,7 +482,7 @@ def test_mixed_archive_entry_shapes_fail_closed_with_index(tmp_path: Path) -> No
     readiness = classify_failure_archive_rerun_readiness(
         source,
         rerun,
-        null_test_prerequisites=_null_test_prerequisites(),
+        null_test_prerequisites=_null_test_prerequisites(source, rerun),
     )
 
     assert readiness.status == BLOCKED
@@ -583,7 +592,7 @@ def test_missing_source_certification_lineage_blocks_readiness(tmp_path: Path) -
     readiness = classify_failure_archive_rerun_readiness(
         source,
         rerun,
-        null_test_prerequisites=_null_test_prerequisites(),
+        null_test_prerequisites=_null_test_prerequisites(source, rerun),
     )
 
     assert readiness.status == BLOCKED
@@ -607,7 +616,7 @@ def test_missing_rerun_certification_lineage_blocks_readiness(tmp_path: Path) ->
     readiness = classify_failure_archive_rerun_readiness(
         source,
         rerun,
-        null_test_prerequisites=_null_test_prerequisites(),
+        null_test_prerequisites=_null_test_prerequisites(source, rerun),
     )
 
     assert readiness.status == BLOCKED
@@ -639,7 +648,7 @@ def test_structured_certification_lineage_satisfies_readiness(tmp_path: Path) ->
     readiness = classify_failure_archive_rerun_readiness(
         source,
         rerun,
-        null_test_prerequisites=_null_test_prerequisites(),
+        null_test_prerequisites=_null_test_prerequisites(source, rerun),
     )
 
     assert readiness.status == READY
@@ -667,7 +676,7 @@ def test_falsy_certification_lineage_values_block_readiness(tmp_path: Path) -> N
     readiness = classify_failure_archive_rerun_readiness(
         source,
         rerun,
-        null_test_prerequisites=_null_test_prerequisites(),
+        null_test_prerequisites=_null_test_prerequisites(source, rerun),
     )
 
     assert readiness.status == BLOCKED
@@ -704,7 +713,7 @@ def test_diagnostic_only_output_caps_otherwise_ready_inputs(tmp_path: Path) -> N
         source,
         rerun,
         rerun_output=rerun_output,
-        null_test_prerequisites=_null_test_prerequisites(),
+        null_test_prerequisites=_null_test_prerequisites(source, rerun),
     )
 
     assert readiness.status == DIAGNOSTIC_ONLY
@@ -730,6 +739,8 @@ def test_null_test_prerequisites_can_be_checked_from_report(tmp_path: Path) -> N
             {
                 "schema_version": "adversarial_proposal_comparison.v1",
                 "null_tests": {
+                    "source_archive_sha256": _archive_hash(source),
+                    "rerun_archive_sha256": _archive_hash(rerun),
                     "null_tests_reject_null": True,
                     "shuffled_outcome_null_test": {"status": "complete", "p_value": 0.01},
                     "ranking_permutation_test": {"status": "complete", "p_value": 0.02},
@@ -768,6 +779,8 @@ def test_missing_null_test_prerequisites_block_readiness(tmp_path: Path) -> None
         json.dumps(
             {
                 "null_tests": {
+                    "source_archive_sha256": _archive_hash(source),
+                    "rerun_archive_sha256": _archive_hash(rerun),
                     "null_tests_reject_null": False,
                     "shuffled_outcome_null_test": {"status": "complete", "p_value": 0.5},
                 }
@@ -790,6 +803,94 @@ def test_missing_null_test_prerequisites_block_readiness(tmp_path: Path) -> None
     assert "invalid_null_test_prerequisites:1" in readiness.blockers
 
 
+def test_missing_null_test_archive_hashes_block_readiness(tmp_path: Path) -> None:
+    """Null-test reports must name the archive pair they apply to."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [_entry("source_0000", family="family_a", seed=1)],
+    )
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+    )
+    prerequisites = {
+        "null_tests_reject_null": True,
+        "shuffled_outcome_null_test": {"status": "complete", "p_value": 0.01},
+        "ranking_permutation_test": {"status": "complete", "p_value": 0.02},
+    }
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=prerequisites,
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.missing_null_test_prerequisites == [
+        "source_archive_sha256",
+        "rerun_archive_sha256",
+    ]
+    assert "missing_null_test_prerequisites:2" in readiness.blockers
+
+
+def test_mismatched_null_test_archive_hash_blocks_readiness(tmp_path: Path) -> None:
+    """Stale null-test reports for another archive pair fail closed."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [_entry("source_0000", family="family_a", seed=1)],
+    )
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+    )
+    prerequisites = _null_test_prerequisites(source, rerun)
+    prerequisites["rerun_archive_sha256"] = "0" * 64
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=prerequisites,
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.invalid_null_test_prerequisites == ["rerun_archive_sha256_mismatch"]
+    assert "invalid_null_test_prerequisites:1" in readiness.blockers
+
+
+def test_null_test_archive_hashes_can_use_archive_pair_container(tmp_path: Path) -> None:
+    """Null-test archive hashes may be grouped under archive_pair metadata."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [_entry("source_0000", family="family_a", seed=1)],
+    )
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+    )
+    prerequisites = {
+        "archive_pair": {
+            "source_archive_sha256": _archive_hash(source),
+            "rerun_archive_sha256": _archive_hash(rerun),
+        },
+        "null_tests_reject_null": True,
+        "shuffled_outcome_null_test": {"status": "complete", "p_value": 0.01},
+        "ranking_permutation_test": {"status": "complete", "p_value": 0.02},
+    }
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=prerequisites,
+    )
+
+    assert readiness.status == READY
+    assert readiness.missing_null_test_prerequisites == []
+    assert readiness.invalid_null_test_prerequisites == []
+
+
 def test_invalid_null_test_p_values_block_readiness(tmp_path: Path) -> None:
     """Malformed null-test p-values block readiness."""
 
@@ -802,6 +903,8 @@ def test_invalid_null_test_p_values_block_readiness(tmp_path: Path) -> None:
         [_entry("rerun_0000", family="family_b", seed=101)],
     )
     prerequisites = {
+        "source_archive_sha256": _archive_hash(source),
+        "rerun_archive_sha256": _archive_hash(rerun),
         "null_tests_reject_null": True,
         "shuffled_outcome_null_test": {"status": "complete", "p_value": "0.01"},
         "ranking_permutation_test": {"status": "complete", "p_value": 1.5},
@@ -834,6 +937,8 @@ def test_incomplete_null_test_status_does_not_validate_p_value(tmp_path: Path) -
         [_entry("rerun_0000", family="family_b", seed=101)],
     )
     prerequisites = {
+        "source_archive_sha256": _archive_hash(source),
+        "rerun_archive_sha256": _archive_hash(rerun),
         "null_tests_reject_null": True,
         "shuffled_outcome_null_test": {"status": "failed"},
         "ranking_permutation_test": {"status": "complete", "p_value": 0.05},
@@ -863,6 +968,8 @@ def test_null_test_p_value_probability_bounds_are_allowed(tmp_path: Path) -> Non
         [_entry("rerun_0000", family="family_b", seed=101)],
     )
     prerequisites = {
+        "source_archive_sha256": _archive_hash(source),
+        "rerun_archive_sha256": _archive_hash(rerun),
         "null_tests_reject_null": True,
         "shuffled_outcome_null_test": {"status": "complete", "p_value": 0.0},
         "ranking_permutation_test": {"status": "complete", "p_value": 1.0},
@@ -894,6 +1001,8 @@ def test_cli_exit_codes_and_writes_report(tmp_path: Path, capsys) -> None:
     prerequisites.write_text(
         json.dumps(
             {
+                "source_archive_sha256": _archive_hash(source),
+                "rerun_archive_sha256": _archive_hash(rerun),
                 "null_tests_reject_null": True,
                 "shuffled_outcome_null_test": {"status": "complete", "p_value": 0.01},
                 "ranking_permutation_test": {"status": "complete", "p_value": 0.02},

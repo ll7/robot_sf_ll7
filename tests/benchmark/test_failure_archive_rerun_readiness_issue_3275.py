@@ -222,7 +222,7 @@ def test_duplicate_source_archive_ids_block_readiness(tmp_path: Path) -> None:
 
     assert readiness.status == BLOCKED
     assert readiness.source_duplicate_archive_ids == ["source_duplicate"]
-    assert readiness.rerun_duplicate_archive_ids == []
+    assert not readiness.rerun_duplicate_archive_ids
     assert "source_duplicate_archive_ids:1" in readiness.blockers
     assert readiness.to_payload()["source_duplicate_archive_ids"] == ["source_duplicate"]
 
@@ -249,7 +249,7 @@ def test_duplicate_rerun_archive_ids_block_readiness(tmp_path: Path) -> None:
     )
 
     assert readiness.status == BLOCKED
-    assert readiness.source_duplicate_archive_ids == []
+    assert not readiness.source_duplicate_archive_ids
     assert readiness.rerun_duplicate_archive_ids == ["rerun_duplicate"]
     assert "rerun_duplicate_archive_ids:1" in readiness.blockers
     assert readiness.to_payload()["rerun_duplicate_archive_ids"] == ["rerun_duplicate"]

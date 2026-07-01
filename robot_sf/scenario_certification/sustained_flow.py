@@ -49,6 +49,13 @@ SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE = "runtime_continuous_spawn"
 SUSTAINED_FLOW_GENERATED_SCENARIO_SET_ID = "generated:issue_3813_sustained_flow_scaffold_v0"
 
 
+def runtime_definition_status_for_support(runtime_support: str) -> tuple[str, bool]:
+    """Return the sustained-flow definition readiness marker for runtime support."""
+    if runtime_support == SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE:
+        return RUNTIME_DEFINITION_READY_STATUS, True
+    return RUNTIME_DEFINITION_METADATA_ONLY_STATUS, False
+
+
 @dataclass(frozen=True)
 class SustainedFlowVariantSpec:
     """Generated expected sustained-flow scenario variant definition."""
@@ -101,6 +108,9 @@ def generate_expected_sustained_flow_scenarios(
     """
 
     scenarios: list[dict[str, Any]] = []
+    runtime_definition_status, runtime_definition_ready = runtime_definition_status_for_support(
+        current_runtime_support
+    )
     for spec in iter_expected_sustained_flow_variant_specs():
         scenarios.append(
             {
@@ -131,6 +141,8 @@ def generate_expected_sustained_flow_scenarios(
                         "spawn_rate_per_min": spec.spawn_rate_per_min,
                         "target_density_tier": spec.density_tier,
                         "current_runtime_support": current_runtime_support,
+                        "runtime_definition_status": runtime_definition_status,
+                        "runtime_definition_ready": runtime_definition_ready,
                     },
                     "success_metric": {
                         "id": "sustained_progress_rate_m_per_s",
@@ -286,6 +298,23 @@ def _check_continuous_spawn(
         "continuous_spawn.current_runtime_support",
         continuous_spawn.get("current_runtime_support"),
         expected_runtime_support,
+    )
+    expected_definition_status, expected_definition_ready = runtime_definition_status_for_support(
+        expected_runtime_support
+    )
+    _require_equal(
+        errors,
+        name,
+        "continuous_spawn.runtime_definition_status",
+        continuous_spawn.get("runtime_definition_status"),
+        expected_definition_status,
+    )
+    _require_equal(
+        errors,
+        name,
+        "continuous_spawn.runtime_definition_ready",
+        continuous_spawn.get("runtime_definition_ready"),
+        expected_definition_ready,
     )
     _require_equal(
         errors,
@@ -585,13 +614,11 @@ def sustained_flow_preflight_to_dict(report: SustainedFlowPreflightReport) -> di
         JSON-serializable sustained-flow preflight payload.
     """
 
-    runtime_definition_ready = (
-        report.conforms and report.runtime_support == SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE
+    runtime_definition_status, support_is_definition_ready = runtime_definition_status_for_support(
+        report.runtime_support
     )
-    runtime_definition_status = RUNTIME_DEFINITION_METADATA_ONLY_STATUS
-    if runtime_definition_ready:
-        runtime_definition_status = RUNTIME_DEFINITION_READY_STATUS
-    elif report.runtime_support == SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE:
+    runtime_definition_ready = report.conforms and support_is_definition_ready
+    if report.runtime_support == SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE and not report.conforms:
         runtime_definition_status = RUNTIME_DEFINITION_INVALID_STATUS
 
     return {

@@ -29,6 +29,14 @@ def test_expected_variants_enumerate_deterministically() -> None:
         scenario["metadata"]["continuous_spawn"]["spawn_rate_per_min"] for scenario in generated
     ]
     assert spawn_rates == [6.0, 12.0, 18.0]
+    assert {
+        scenario["metadata"]["continuous_spawn"]["runtime_definition_status"]
+        for scenario in generated
+    } == {sustained_flow.RUNTIME_DEFINITION_METADATA_ONLY_STATUS}
+    assert {
+        scenario["metadata"]["continuous_spawn"]["runtime_definition_ready"]
+        for scenario in generated
+    } == {False}
 
 
 def test_generated_variants_pass_generator_preflight() -> None:
@@ -71,6 +79,14 @@ def test_runtime_supported_variants_enumerate_deterministically() -> None:
         scenario["metadata"]["continuous_spawn"]["current_runtime_support"]
         for scenario in generated
     } == {sustained_flow.SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE}
+    assert {
+        scenario["metadata"]["continuous_spawn"]["runtime_definition_status"]
+        for scenario in generated
+    } == {sustained_flow.RUNTIME_DEFINITION_READY_STATUS}
+    assert {
+        scenario["metadata"]["continuous_spawn"]["runtime_definition_ready"]
+        for scenario in generated
+    } == {True}
 
 
 def test_runtime_supported_generated_variants_pass_generator_preflight() -> None:
@@ -147,6 +163,21 @@ def test_preflight_rejects_truncated_variant_set(tmp_path: Path) -> None:
     report = sustained_flow.preflight_sustained_flow_scenario_set(truncated)
     assert not report.conforms
     assert any("expected 3 sustained-flow variants" in error for error in report.errors)
+
+
+def test_preflight_rejects_runtime_definition_readiness_drift(tmp_path: Path) -> None:
+    """Scenario YAML readiness markers must match advertised runtime support."""
+    payload = yaml.safe_load(SCENARIO_SET.read_text(encoding="utf-8"))
+    payload["scenarios"][0]["metadata"]["continuous_spawn"]["runtime_definition_status"] = (
+        sustained_flow.RUNTIME_DEFINITION_READY_STATUS
+    )
+    drifted = tmp_path / "issue_3813_sustained_flow_scaffold_readiness_drift.yaml"
+    drifted.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    report = sustained_flow.preflight_sustained_flow_scenario_set(drifted)
+
+    assert not report.conforms
+    assert any("continuous_spawn.runtime_definition_status" in error for error in report.errors)
 
 
 def test_preflight_cli_outputs_json_payload() -> None:

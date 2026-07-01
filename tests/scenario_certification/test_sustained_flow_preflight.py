@@ -30,6 +30,22 @@ def test_expected_variants_enumerate_deterministically() -> None:
     assert spawn_rates == [6.0, 12.0, 18.0]
 
 
+def test_runtime_supported_variants_enumerate_deterministically() -> None:
+    """Runtime-supported generator preserves deterministic sustained-flow tiers."""
+
+    generated = sustained_flow.generate_runtime_supported_sustained_flow_scenarios()
+
+    assert [scenario["metadata"]["density"] for scenario in generated] == [
+        "light",
+        "medium",
+        "heavy",
+    ]
+    assert {
+        scenario["metadata"]["continuous_spawn"]["current_runtime_support"]
+        for scenario in generated
+    } == {sustained_flow.SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE}
+
+
 def test_preflight_conforms_for_commit_scaffold() -> None:
     """Current scaffold set satisfies fail-closed sustained-flow preflight."""
     report = sustained_flow.preflight_sustained_flow_scenario_set(SCENARIO_SET)

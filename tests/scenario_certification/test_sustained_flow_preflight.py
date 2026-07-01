@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import yaml
@@ -100,19 +101,20 @@ def test_runtime_supported_generated_variants_pass_generator_preflight() -> None
     assert payload["errors"] == []
 
 
-def test_runtime_supported_invalid_report_has_distinct_readiness_status() -> None:
-    """Invalid runtime-supported rows must not look like metadata-only rows."""
-    report = sustained_flow.SustainedFlowPreflightReport(
-        schema_version=sustained_flow.SUSTAINED_FLOW_PREFLIGHT_SCHEMA_VERSION,
-        scenario_set="generated:invalid-runtime-supported",
+def test_runtime_supported_invalid_definition_reports_invalid_status() -> None:
+    """Runtime-supported rows that fail validation are invalid, not metadata-only."""
+
+    report = sustained_flow.preflight_runtime_supported_generated_sustained_flow_scenarios()
+    invalid_report = replace(
+        report,
         conforms=False,
-        variants=(),
-        errors=("runtime-supported definition failed validation",),
-        runtime_support=sustained_flow.SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
+        errors=("runtime-supported definition failed scenario_cert.v1 validation",),
     )
 
-    payload = sustained_flow.sustained_flow_preflight_to_dict(report)
+    payload = sustained_flow.sustained_flow_preflight_to_dict(invalid_report)
 
+    assert payload["conforms"] is False
+    assert payload["runtime_support"] == sustained_flow.SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE
     assert payload["runtime_definition_readiness"] == {
         "status": sustained_flow.RUNTIME_DEFINITION_INVALID_STATUS,
         "ready": False,

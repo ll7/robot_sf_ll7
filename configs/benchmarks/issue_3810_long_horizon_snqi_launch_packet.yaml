@@ -224,13 +224,15 @@ launch_packet:
   decision: blocked_pending_submit_host_route_and_reconciliation
   compute_submit_authorized: false
   slurm_job_id: not_submitted
-  target_host: imech156-u
+  target_host: imech036
   blocking_jobs:
     - 13175
   readiness_refresh:
     checked_date: "2026-07-01"
-    target_host: imech156-u
-    live_issue_command: gh issue view 3810 --repo ll7/robot_sf_ll7 --comments
+    target_host: imech036
+    live_issue_command: >-
+      gh issue view 3810 --repo ll7/robot_sf_ll7
+      --json number,title,state,url,body,comments,labels
     open_pr_dedupe_command: >-
       gh pr list --repo ll7/robot_sf_ll7 --state open
       --search '3810 OR "long-horizon" OR "SNQI" OR "wait-it-out"'
@@ -238,12 +240,12 @@ launch_packet:
     current_pr: null
     open_pr_matches: []
     blocking_open_pr_matches: []
-    latest_merged_packet_pr: 4043
+    latest_merged_packet_pr: 4046
     decision: >-
       Public readiness refresh found no open PR covering issue #3810 before
-      this branch. Current origin/main includes merged packet PR #4043 as
+      this branch. Current origin/main includes merged packet PR #4046 as
       the latest packet lineage; this refresh retargets the packet guard to
-      imech156-u. This refresh is not submit-host queue, duplicate, worktree,
+      imech036. This refresh is not submit-host queue, duplicate, worktree,
       or private-ops route proof.
   live_issue_state:
     checked_date: "2026-07-01"
@@ -287,7 +289,7 @@ launch_packet:
       private submit wrapper named below until those checks return go.
     private_ops_dry_run:
       required_before_submit: true
-      target_host: imech156-u
+      target_host: imech036
       evidence_path: output/benchmarks/issue_3810_comprehensive_h600_snqi/preflight/private_ops_route_dry_run.json
       current_public_status: route_unverified
       required_fields:
@@ -305,7 +307,7 @@ launch_packet:
         The dry run must record decision=go before submission. If job 13175 is
         not terminal/reconciled, if an issue #3810 duplicate exists, if the
         owning worktree is dirty, or if the private submit wrapper lacks
-        imech156-u support, the decision remains blocked.
+        imech036 support, the decision remains blocked.
   interpretation_gate:
     status: blocked_pending_active_run_retention_reconciliation
     required_before_claim: true
@@ -447,7 +449,7 @@ analysis_and_retention_packet:
     queue_summary_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)
     route_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)
     submit_wrapper: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/submit_and_record.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)
-    target_host: "imech156-u"
+    target_host: "imech036"
   preflight:
     required: true
     route_refresh_command: >-

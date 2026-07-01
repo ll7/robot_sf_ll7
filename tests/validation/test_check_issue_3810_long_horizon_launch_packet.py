@@ -35,7 +35,7 @@ def test_issue_3810_packet_passes_fail_closed_contract() -> None:
     assert summary["planner_count"] >= 10
     assert summary["compute_submit_authorized"] is False
     assert summary["slurm_job_id"] == "not_submitted"
-    assert summary["target_host"] == "imech156-u"
+    assert summary["target_host"] == "imech039"
     assert summary["blocking_jobs"] == [13175]
     assert summary["job_13175_state"] == "requires_submit_host_refresh"
     assert summary["issue_3810_duplicate_status"] == "requires_submit_host_refresh"
@@ -85,7 +85,7 @@ def test_issue_3810_packet_rejects_stale_readiness_refresh_date() -> None:
 
 
 def test_issue_3810_packet_rejects_open_pr_dedupe_matches() -> None:
-    """A matching PR beyond the current review PR must stop duplicate packet PRs."""
+    """A matching PR must stop duplicate packet PRs."""
     packet = _load_packet()
     packet["launch_packet"]["readiness_refresh"]["blocking_open_pr_matches"] = [
         {"number": 9999, "title": "Issue #3810 duplicate packet"}
@@ -99,17 +99,17 @@ def test_issue_3810_packet_rejects_open_pr_dedupe_matches() -> None:
         raise AssertionError("packet should reject open PR dedupe matches")
 
 
-def test_issue_3810_packet_rejects_missing_current_review_pr() -> None:
-    """The readiness snapshot must account for this review PR instead of hiding it."""
+def test_issue_3810_packet_rejects_non_null_current_pr_before_publication() -> None:
+    """The readiness snapshot must not pretend a branch PR already exists."""
     packet = _load_packet()
-    packet["launch_packet"]["readiness_refresh"]["open_pr_matches"] = []
+    packet["launch_packet"]["readiness_refresh"]["current_pr"] = 9999
 
     try:
         _MODULE.validate_packet(packet)
     except _MODULE.PacketError as exc:
-        assert "exactly current non-draft PR 4030" in str(exc)
+        assert "no current review PR before branch publication" in str(exc)
     else:
-        raise AssertionError("packet should reject missing current PR snapshot")
+        raise AssertionError("packet should reject pre-populated current PR snapshot")
 
 
 def test_issue_3810_packet_rejects_stale_job_13175_reconciliation() -> None:
@@ -141,12 +141,12 @@ def test_issue_3810_packet_rejects_nonblocking_live_issue_state() -> None:
 def test_issue_3810_packet_rejects_stale_target_host() -> None:
     """The launch-packet target host must match the requested Slurm decision host."""
     packet = _load_packet()
-    packet["launch_packet"]["target_host"] = "imech039"
+    packet["launch_packet"]["target_host"] = "imech156-u"
 
     try:
         _MODULE.validate_packet(packet)
     except _MODULE.PacketError as exc:
-        assert "target host must be imech156-u" in str(exc)
+        assert "target host must be imech039" in str(exc)
     else:
         raise AssertionError("packet should reject stale target host")
 
@@ -154,7 +154,7 @@ def test_issue_3810_packet_rejects_stale_target_host() -> None:
 def test_issue_3810_packet_rejects_stale_dry_run_target_host() -> None:
     """The private-ops dry-run target host is guarded independently of the packet host."""
     packet = _load_packet()
-    packet["launch_packet"]["go_no_go"]["private_ops_dry_run"]["target_host"] = "imech039"
+    packet["launch_packet"]["go_no_go"]["private_ops_dry_run"]["target_host"] = "imech156-u"
 
     try:
         _MODULE.validate_packet(packet)
@@ -174,7 +174,7 @@ def test_issue_3810_packet_rejects_decision_policy_without_target_host_gate() ->
     try:
         _MODULE.validate_packet(packet)
     except _MODULE.PacketError as exc:
-        assert "private-ops dry run must gate imech156-u support" in str(exc)
+        assert "private-ops dry run must gate imech039 support" in str(exc)
     else:
         raise AssertionError("packet should reject a decision policy missing the host gate")
 

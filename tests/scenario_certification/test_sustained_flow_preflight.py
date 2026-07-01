@@ -175,3 +175,24 @@ def test_preflight_cli_outputs_runtime_supported_generated_json_payload() -> Non
     assert payload["scenario_set"] == (
         "generated:issue_3813_sustained_flow_scaffold_v0:runtime_supported"
     )
+
+
+def test_runtime_supported_generated_cli_ignores_scenario_set_argument(tmp_path: Path) -> None:
+    """Runtime-supported generator mode does not validate an overridden scenario-set path."""
+
+    command = [
+        sys.executable,
+        str(PREFLIGHT_SCRIPT),
+        "--scenario-set",
+        str(tmp_path / "missing.yaml"),
+        "--runtime-supported-generated",
+        "--json",
+    ]
+
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["conforms"] is True
+    assert payload["errors"] == []
+    assert payload["runtime_support"] == sustained_flow.SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE

@@ -41,6 +41,12 @@ EXPECTED_CONTINUOUS_SPAWN_DEFINITION: dict[str, object] = {
     "minimum_active_pedestrians": 1,
     "clearing_policy": "disallow_empty_scene_wait_success",
 }
+EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG: dict[str, object] = {
+    "peds_reset_follow_route_at_start": True,
+    "route_spawn_distribution": "spread",
+    "route_spawn_jitter_frac": 0.0,
+    "max_peds_per_group": 1,
+}
 _SUSTAINED_FLOW_FAMILY = "sustained_flow_t_intersection"
 _SUSTAINED_FLOW_MAP_FILE = "../../../maps/svg_maps/classic_t_intersection.svg"
 _SUSTAINED_FLOW_MAX_EPISODE_STEPS = 600
@@ -119,6 +125,7 @@ def generate_expected_sustained_flow_scenarios(
                 "simulation_config": {
                     "max_episode_steps": spec.max_episode_steps,
                     "ped_density": spec.ped_density,
+                    **EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG,
                     "robot_config": {},
                 },
                 "metadata": {
@@ -379,6 +386,29 @@ def _check_termination_and_metric(
     return errors
 
 
+def _check_route_respawn_runtime_config(scenario: dict[str, Any], *, name: str) -> list[str]:
+    """Validate deterministic route-respawn settings required before runtime proof.
+
+    Returns:
+        Fail-closed error messages for missing or drifted runtime-preflight settings.
+    """
+
+    simulation_config = scenario.get("simulation_config")
+    if not isinstance(simulation_config, dict):
+        return [f"{name}: simulation_config block required"]
+
+    errors: list[str] = []
+    for field, expected in EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG.items():
+        _require_equal(
+            errors,
+            name,
+            f"simulation_config.{field}",
+            simulation_config.get(field),
+            expected,
+        )
+    return errors
+
+
 def _check_metadata_fail_closed(
     scenario: dict[str, Any],
     *,
@@ -403,6 +433,7 @@ def _check_metadata_fail_closed(
         )
     )
     errors.extend(_check_termination_and_metric(scenario, metadata, name=name))
+    errors.extend(_check_route_respawn_runtime_config(scenario, name=name))
     return errors
 
 

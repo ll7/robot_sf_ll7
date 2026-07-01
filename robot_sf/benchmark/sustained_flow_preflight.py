@@ -10,6 +10,7 @@ from typing import Any
 
 from robot_sf.scenario_certification.sustained_flow import (
     EXPECTED_CONTINUOUS_SPAWN_DEFINITION,
+    EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG,
     SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,
     generate_expected_sustained_flow_scenarios,
     runtime_definition_status_for_support,
@@ -59,6 +60,7 @@ class SustainedFlowVariant:
     current_runtime_support: str
     runtime_definition_status: str
     runtime_definition_ready: bool
+    route_respawn_runtime_config: dict[str, object]
     max_episode_steps: int
     seeds: tuple[int, ...]
 
@@ -192,6 +194,9 @@ def _variant_from_scenario(scenario: Mapping[str, Any]) -> SustainedFlowVariant:
         runtime_definition_ready=_required_bool(
             continuous_spawn, "runtime_definition_ready", scenario_name=name
         ),
+        route_respawn_runtime_config={
+            field: simulation_config.get(field) for field in EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG
+        },
         max_episode_steps=_required_int(simulation_config, "max_episode_steps", scenario_name=name),
         seeds=tuple(seeds),
     )
@@ -219,6 +224,12 @@ def _variant_blockers(variants: tuple[SustainedFlowVariant, ...]) -> tuple[str, 
             blockers.append(
                 f"{variant.name}: continuous-spawn runtime support is "
                 f"{variant.current_runtime_support!r}, expected {RUNTIME_SUPPORTED_VALUE!r}"
+            )
+        if variant.route_respawn_runtime_config != EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG:
+            blockers.append(
+                f"{variant.name}: route-respawn runtime config "
+                f"{variant.route_respawn_runtime_config!r}, expected "
+                f"{EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG!r}"
             )
         if variant.max_episode_steps <= 0:
             blockers.append(f"{variant.name}: max_episode_steps must be positive")
@@ -283,6 +294,7 @@ def _variant_generator_profile(variant: SustainedFlowVariant) -> tuple[object, .
         variant.current_runtime_support,
         variant.runtime_definition_status,
         variant.runtime_definition_ready,
+        tuple(sorted(variant.route_respawn_runtime_config.items())),
         variant.max_episode_steps,
         variant.seeds,
     )

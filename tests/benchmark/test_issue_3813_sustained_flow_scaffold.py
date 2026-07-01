@@ -133,6 +133,26 @@ def test_sustained_flow_preflight_accepts_runtime_supported_matrix(tmp_path: Pat
     assert payload["blocking_reasons"] == []
 
 
+def test_sustained_flow_preflight_rejects_wrong_spawn_process(tmp_path: Path) -> None:
+    """Continuous-spawn variants must name the supported respawn process."""
+
+    matrix = _load_yaml(SCENARIO_SET)
+    matrix["scenarios"][0]["metadata"]["continuous_spawn"]["intended_process"] = "finite_batch"
+
+    wrong_process_matrix = tmp_path / "wrong_spawn_process_sustained_flow.yaml"
+    wrong_process_matrix.write_text(yaml.safe_dump(matrix, sort_keys=False), encoding="utf-8")
+
+    payload = preflight_sustained_flow_matrix(wrong_process_matrix).to_payload()
+
+    assert payload["status"] == "not_available"
+    assert payload["benchmark_eligible"] is False
+    assert payload["variant_count"] == 0
+    assert any(
+        "continuous_spawn.intended_process must be 'poisson_respawn'" in reason
+        for reason in payload["blocking_reasons"]
+    )
+
+
 def test_sustained_flow_contract_defines_progress_metric_and_reference() -> None:
     """The scenario contract points at the scaffold and keeps evidence boundaries explicit."""
 

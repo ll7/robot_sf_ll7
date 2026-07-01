@@ -122,6 +122,8 @@ class ReportConfig:
     resamples: int = DEFAULT_RANK_RESAMPLES
     rank_seed: int = DEFAULT_BOOTSTRAP_SEED
     invalid_rank_metric_reason: str | None = None
+    expected_scenarios: tuple[str, ...] = ()
+    expected_planners: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -150,6 +152,47 @@ class CellResult:
             "exclusion_reason": self.exclusion_reason,
             "seed_count": self.seed_count,
             "metrics": self.metrics,
+        }
+
+
+@dataclass(frozen=True)
+class GridCompleteness:
+    """Expected headline-grid coverage check for already-measured rows."""
+
+    expected_scenarios: tuple[str, ...]
+    expected_planners: tuple[str, ...]
+    expected_cell_count: int
+    observed_cell_count: int
+    observed_expected_cell_count: int
+    missing_cells: tuple[tuple[str, str], ...]
+    unexpected_cells: tuple[tuple[str, str], ...]
+
+    @property
+    def complete(self) -> bool:
+        """Return whether all expected scenario/planner cells were present."""
+
+        return not self.missing_cells
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return JSON-safe completeness payload."""
+
+        return {
+            "expected_scenarios": list(self.expected_scenarios),
+            "expected_planners": list(self.expected_planners),
+            "expected_cell_count": self.expected_cell_count,
+            "observed_cell_count": self.observed_cell_count,
+            "observed_expected_cell_count": self.observed_expected_cell_count,
+            "missing_cell_count": len(self.missing_cells),
+            "missing_cells": [
+                {"scenario_id": scenario, "planner_key": planner}
+                for scenario, planner in self.missing_cells
+            ],
+            "unexpected_cell_count": len(self.unexpected_cells),
+            "unexpected_cells": [
+                {"scenario_id": scenario, "planner_key": planner}
+                for scenario, planner in self.unexpected_cells
+            ],
+            "complete": self.complete,
         }
 
 
@@ -410,6 +453,37 @@ def _counted_cells_by_scenario(
         if cell.counted:
             grouped[cell.scenario_id].append(cell)
     return dict(grouped)
+
+
+def build_grid_completeness(
+    cells: Sequence[CellResult],
+    *,
+    expected_scenarios: Sequence[str],
+    expected_planners: Sequence[str],
+) -> GridCompleteness | None:
+    """Check expected headline scenario/planner grid coverage."""
+
+    scenarios = tuple(dict.fromkeys(str(value) for value in expected_scenarios if str(value)))
+    planners = tuple(dict.fromkeys(str(value) for value in expected_planners if str(value)))
+    if not scenarios or not planners:
+        return None
+
+    observed = {(cell.scenario_id, cell.planner_key) for cell in cells}
+    expected = tuple((scenario, planner) for scenario in scenarios for planner in planners)
+    expected_set = set(expected)
+    missing = tuple(
+        (scenario, planner) for scenario, planner in expected if (scenario, planner) not in observed
+    )
+    unexpected = tuple(sorted(observed - expected_set))
+    return GridCompleteness(
+        expected_scenarios=scenarios,
+        expected_planners=planners,
+        expected_cell_count=len(expected),
+        observed_cell_count=len(observed),
+        observed_expected_cell_count=len(observed & expected_set),
+        missing_cells=missing,
+        unexpected_cells=unexpected,
+    )
 
 
 def _resample_per_seed_means(rows: Sequence[Mapping[str, Any]], cell: CellResult, metric: str):
@@ -791,6 +865,7 @@ def build_decision_packet(
     rank_profile: str = "snqi_diagnostic",
     invalid_rank_metric_reason: str | None = None,
     job_evidence: Mapping[str, Any] | None = None,
+    grid_completeness: GridCompleteness | None = None,
 ) -> dict[str, Any]:
     """Build a conservative manuscript/S30 decision packet."""
     counted = [cell for cell in cells if cell.counted]
@@ -826,6 +901,9 @@ def build_decision_packet(
     if not counted:
         manuscript_blockers.append("no_counted_cells")
         s30_reasons.append("missing_counted_headline_rows")
+    if grid_completeness is not None and not grid_completeness.complete:
+        manuscript_blockers.append("headline_grid_incomplete")
+        s30_reasons.append("missing_expected_headline_cells")
     if excluded:
         manuscript_blockers.append("non_promotable_cells_present")
         s30_reasons.append("resolve_or_disclose_excluded_cells")
@@ -858,7 +936,12 @@ def build_decision_packet(
         or invalid_rank_metric
     ):
         s30_decision_status = "needs_review"
-    elif not counted or excluded or not identifiable:
+    elif (
+        not counted
+        or excluded
+        or not identifiable
+        or (grid_completeness is not None and not grid_completeness.complete)
+    ):
         s30_decision_status = "blocked"
     else:
         s30_decision_status = "not_required_by_local_preflight"
@@ -880,6 +963,9 @@ def build_decision_packet(
         "rank_profile": rank_profile,
         "constraints_first_required_metrics": list(CONSTRAINTS_FIRST_REQUIRED_METRICS),
         "constraints_first_metric_gaps": metric_gaps,
+        "grid_completeness": (
+            grid_completeness.to_dict() if grid_completeness is not None else None
+        ),
         "job_evidence_status": (job_evidence or {}).get("status"),
         "job_id": (job_evidence or {}).get("job"),
         "snqi_contract_warning": snqi_contract_warning,
@@ -914,6 +1000,11 @@ def build_report(
         confidence=config.confidence,
         bootstrap_seed=config.bootstrap_seed,
     )
+    grid_completeness = build_grid_completeness(
+        cells,
+        expected_scenarios=config.expected_scenarios,
+        expected_planners=config.expected_planners,
+    )
     rank_stability = build_rank_stability(
         rows,
         cells,
@@ -936,6 +1027,7 @@ def build_report(
         rank_profile=config.rank_profile,
         invalid_rank_metric_reason=config.invalid_rank_metric_reason,
         job_evidence=job_evidence,
+        grid_completeness=grid_completeness,
     )
     classification, rationale = classify(cells, rank_stability)
     counted = [cell for cell in cells if cell.counted]
@@ -970,8 +1062,11 @@ def build_report(
             "invalid_rank_metric_reason": config.invalid_rank_metric_reason,
             "paper_grade_min_seeds": PAPER_GRADE_MIN_SEEDS,
             "nominal_min_seeds": NOMINAL_MIN_SEEDS,
+            "expected_scenarios": list(config.expected_scenarios),
+            "expected_planners": list(config.expected_planners),
         },
         "job_evidence": dict(job_evidence or {}),
+        "grid_completeness": grid_completeness.to_dict() if grid_completeness else None,
         "canonical_owners_reused": [
             "robot_sf.benchmark.seed_variance._stats_for_vals",
             "robot_sf.benchmark.seed_variance._bootstrap_mean_ci",
@@ -1009,6 +1104,20 @@ def _append_job_evidence_markdown(lines: list[str], job_evidence: Mapping[str, A
         lines.append("- **SNQI evidence status**: `diagnostic_only_contract_warning`")
 
 
+def _append_grid_completeness_markdown(lines: list[str], report: Mapping[str, Any]) -> None:
+    """Append expected-grid coverage line when the report checked one."""
+
+    grid = report.get("grid_completeness")
+    if not grid:
+        return
+    lines.append(
+        f"- **Expected grid**: {grid['observed_expected_cell_count']} observed / "
+        f"{grid['expected_cell_count']} expected; "
+        f"{grid['missing_cell_count']} missing; "
+        f"{grid['unexpected_cell_count']} unexpected"
+    )
+
+
 def render_markdown(report: Mapping[str, Any]) -> str:
     """Render a markdown summary of the report.
 
@@ -1027,6 +1136,7 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         f"- **Cells**: {inputs['counted_cells']} counted / "
         f"{inputs['excluded_cells']} excluded (of {inputs['row_count']} rows)"
     )
+    _append_grid_completeness_markdown(lines, report)
     lines.append(f"- **Rank metric**: `{inputs['rank_metric']}`")
     lines.append(f"- **Rank profile**: `{inputs['rank_profile']}`")
     if inputs.get("invalid_rank_metric_reason"):
@@ -1246,6 +1356,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--expected-scenario",
+        action="append",
+        default=[],
+        help=(
+            "Expected scenario-family key in the headline grid. Repeat for every "
+            "required row family."
+        ),
+    )
+    parser.add_argument(
+        "--expected-planner",
+        action="append",
+        default=[],
+        help="Expected planner key in the headline grid. Repeat for every required planner.",
+    )
+    parser.add_argument(
         "--lower-is-better",
         action="store_true",
         help="Treat the rank metric as lower-is-better (default higher-is-better).",
@@ -1345,6 +1470,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         resamples=args.rank_resamples,
         rank_seed=args.rank_seed,
         invalid_rank_metric_reason=invalid_rank_metric_reason,
+        expected_scenarios=tuple(args.expected_scenario),
+        expected_planners=tuple(args.expected_planner),
     )
     campaign = "dry-run" if args.dry_run else args.campaign
     report = build_report(

@@ -188,6 +188,90 @@ def test_missing_overlap_metadata_blocks_readiness(tmp_path: Path) -> None:
     )
 
 
+def test_blank_overlap_metadata_blocks_readiness(tmp_path: Path) -> None:
+    """Blank overlap metadata must fail closed like absent metadata."""
+
+    source_entry = _entry("source_0000", family="family_a", seed=1)
+    source_entry["archive_id"] = "   "
+    source_entry["cluster_key"] = {
+        "policy": "",
+        "scenario_template": " ",
+        "primary_failure": "",
+        "termination_reason": "",
+    }
+    source_entry.pop("failure_attribution")
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+    )
+    source = _archive(tmp_path / "source.json", [source_entry])
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=_null_test_prerequisites(),
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.missing_overlap_metadata_archive_ids == [
+        "source:source:<entry:0>:archive_id,scenario_family",
+    ]
+    assert "missing_overlap_metadata:1" in readiness.blockers
+
+
+def test_user_archive_id_matching_fallback_prefix_is_not_missing(tmp_path: Path) -> None:
+    """User-provided archive IDs may look like synthetic fallback IDs."""
+
+    source_entry = _entry("source:<entry:0>:custom", family="family_a", seed=1)
+    source_entry.pop("cluster_key")
+    source_entry.pop("failure_attribution")
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+    )
+    source = _archive(tmp_path / "source.json", [source_entry])
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=_null_test_prerequisites(),
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.missing_overlap_metadata_archive_ids == [
+        "source:source:<entry:0>:custom:scenario_family",
+    ]
+    assert "missing_overlap_metadata:1" in readiness.blockers
+
+
+def test_non_string_cluster_key_value_is_not_placeholder_only(tmp_path: Path) -> None:
+    """Non-null JSON cluster-key values can identify a scenario family."""
+
+    source_entry = _entry("source_0000", family="family_a", seed=1)
+    source_entry["cluster_key"] = {
+        "policy": None,
+        "scenario_template": 1,
+        "primary_failure": "",
+        "termination_reason": " ",
+    }
+    source_entry.pop("failure_attribution")
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+    )
+    source = _archive(tmp_path / "source.json", [source_entry])
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=_null_test_prerequisites(),
+    )
+
+    assert readiness.status == READY
+    assert readiness.missing_overlap_metadata_archive_ids == []
+    assert not any(blocker.startswith("missing_overlap_metadata") for blocker in readiness.blockers)
+
+
 def test_missing_archive_payload_blocks_ready_path(tmp_path: Path) -> None:
     """Missing archive file paths must fail closed for both source and rerun."""
 

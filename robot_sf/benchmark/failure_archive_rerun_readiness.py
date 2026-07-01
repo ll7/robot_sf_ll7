@@ -315,11 +315,11 @@ def _overlap_metadata_gaps(
     for side, entries in (("source", source_entries), ("rerun", rerun_entries)):
         for index, entry in enumerate(entries):
             raw_archive_id = entry.get("archive_id")
-            archive_id = str(raw_archive_id or f"{side}:<entry:{index}>")
+            archive_id = _metadata_archive_id(raw_archive_id, side=side, index=index)
             entry_gaps: list[str] = []
-            if raw_archive_id is None:
+            if _metadata_archive_id_missing(raw_archive_id):
                 entry_gaps.append("archive_id")
-            if scenario_family_key(entry) == "unknown_family":
+            if _scenario_family_missing(entry):
                 entry_gaps.append("scenario_family")
             candidate = entry.get("candidate")
             if not isinstance(candidate, dict) or candidate.get("scenario_seed") is None:
@@ -327,6 +327,47 @@ def _overlap_metadata_gaps(
             if entry_gaps:
                 gaps.append(f"{side}:{archive_id}:{','.join(entry_gaps)}")
     return gaps
+
+
+def _metadata_archive_id(raw_archive_id: Any, *, side: str, index: int) -> str:
+    """Return a stable entry identifier for metadata-gap reports."""
+
+    if isinstance(raw_archive_id, str):
+        normalized = raw_archive_id.strip()
+        if normalized:
+            return normalized
+    elif raw_archive_id is not None:
+        return str(raw_archive_id)
+    return f"{side}:<entry:{index}>"
+
+
+def _metadata_archive_id_missing(raw_archive_id: Any) -> bool:
+    """Return whether archive ID metadata is absent or blank."""
+
+    return raw_archive_id is None or (
+        isinstance(raw_archive_id, str) and not raw_archive_id.strip()
+    )
+
+
+def _scenario_family_missing(entry: dict[str, Any]) -> bool:
+    """Return whether scenario-family metadata is absent or placeholder-only."""
+
+    family = scenario_family_key(entry)
+    if family == "unknown_family":
+        return True
+    if not isinstance(family, str) or not family.strip():
+        return True
+    if family.startswith("{"):
+        try:
+            decoded = json.loads(family)
+        except ValueError:
+            return False
+        if isinstance(decoded, dict) and not any(
+            value is not None and (not isinstance(value, str) or bool(value.strip()))
+            for value in decoded.values()
+        ):
+            return True
+    return False
 
 
 def _certification_gaps(entries: list[dict[str, Any]]) -> tuple[list[str], list[str]]:

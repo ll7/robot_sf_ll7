@@ -67,6 +67,15 @@ from robot_sf.benchmark.helper_registry import (
     OrchestratorUsage,
     RegressionCheck,
 )
+from robot_sf.benchmark.metric_layers import (
+    CANONICAL_METRIC_LAYERS,
+    CANONICAL_METRICS,
+    LAYER_ORDER,
+    METRIC_LAYER_SCHEMA_VERSION,
+    MetricDefinition,
+    MetricLayerDefinition,
+    build_metric_layer_summary,
+)
 from robot_sf.benchmark.scenario_failure_cause import (
     SCENARIO_FAILURE_CAUSE_SCHEMA_VERSION,
     VERDICT_DYNAMIC_BLOCKING_OR_DEADLOCK,
@@ -82,6 +91,8 @@ from robot_sf.benchmark.scenario_failure_cause import (
 )
 
 __all__ = [
+    "CANONICAL_METRICS",
+    "CANONICAL_METRIC_LAYERS",
     "DEFAULT_FORECAST_DATASET_ID",
     "DEFAULT_TRANSFER_DIMENSIONS",
     "FORECAST_BATCH_SCHEMA_VERSION",
@@ -90,6 +101,8 @@ __all__ = [
     "FORECAST_DATASET_SCHEMA_VERSION",
     "FORECAST_METRICS_SCHEMA_VERSION",
     "FORECAST_TRANSFERABILITY_STRESS_MATRIX_SCHEMA_VERSION",
+    "LAYER_ORDER",
+    "METRIC_LAYER_SCHEMA_VERSION",
     "SCENARIO_FAILURE_CAUSE_SCHEMA_VERSION",
     "VERDICT_DYNAMIC_BLOCKING_OR_DEADLOCK",
     "VERDICT_INDETERMINATE",
@@ -110,6 +123,8 @@ __all__ = [
     "ForecastObservationBatch",
     "HelperCapability",
     "HelperCategory",
+    "MetricDefinition",
+    "MetricLayerDefinition",
     "OracleFullStateForecastAdapter",
     "OrchestratorUsage",
     "RegressionCheck",
@@ -120,6 +135,7 @@ __all__ = [
     "build_forecast_calibration_report",
     "build_forecast_conformal_pilot_report",
     "build_forecast_transferability_stress_matrix",
+    "build_metric_layer_summary",
     "classify_scenario_failure_cause",
     "diagnostics_from_mapping",
     "evaluate_forecast_batch",

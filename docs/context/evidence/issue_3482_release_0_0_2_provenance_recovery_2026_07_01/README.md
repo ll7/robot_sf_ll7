@@ -46,3 +46,16 @@ Recommended next actions:
 - keep #3482 blocked unless exact-event provenance is recovered, or close it only
   as not recoverable after the affected release `0.0.2` collision-count claims
   are explicitly downgraded or withdrawn.
+
+## Recovery Gate Check
+
+The tracked recovery gate is machine-checkable:
+
+```bash
+uv run python scripts/validation/check_issue_3482_recovery_gate.py --json
+```
+
+That command reports `status: blocked` while the negative recovery record is structurally valid.
+Use `--require-close-ready` when a workflow wants fail-closed proof before closing #3482; it must
+exit non-zero until exact-event provenance is recovered and promoted, or the affected release
+`0.0.2` collision-count claims are explicitly downgraded or withdrawn.

@@ -22,6 +22,7 @@ DEFAULT_SUSTAINED_FLOW_SCENARIO_SET = (
 )
 RUNTIME_DEFINITION_READY_STATUS = "definition_ready_for_runtime_preflight"
 RUNTIME_DEFINITION_METADATA_ONLY_STATUS = "metadata_only_not_runtime_ready"
+RUNTIME_DEFINITION_INVALID_STATUS = "definition_invalid_not_ready"
 EXPECTED_SUSTAINED_FLOW_TIERS: tuple[tuple[str, float, float, tuple[int, ...]], ...] = (
     ("light", 0.02, 6.0, (381301, 381302, 381303)),
     ("medium", 0.05, 12.0, (381311, 381312, 381313)),
@@ -597,7 +598,11 @@ def sustained_flow_preflight_to_dict(report: SustainedFlowPreflightReport) -> di
             "status": (
                 RUNTIME_DEFINITION_READY_STATUS
                 if runtime_definition_ready
-                else RUNTIME_DEFINITION_METADATA_ONLY_STATUS
+                else (
+                    RUNTIME_DEFINITION_INVALID_STATUS
+                    if report.runtime_support == SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE
+                    else RUNTIME_DEFINITION_METADATA_ONLY_STATUS
+                )
             ),
             "ready": runtime_definition_ready,
             "expected_runtime_support": SUSTAINED_FLOW_RUNTIME_SUPPORTED_VALUE,

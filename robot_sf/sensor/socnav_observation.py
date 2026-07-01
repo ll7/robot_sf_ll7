@@ -292,6 +292,7 @@ class SocNavObservationFusion:
         self._cache_position_cap_value: np.ndarray | None = None
         self._cache_position_cap_width: float | None = None
         self._cache_position_cap_height: float | None = None
+        self._lost_pedestrian_memory: dict[int, tuple[np.ndarray, np.ndarray, float]] = {}
 
     def reset_cache(self) -> None:
         """Reset internal caches to match the SensorFusion interface."""
@@ -303,6 +304,7 @@ class SocNavObservationFusion:
         self._cache_position_cap_value = None
         self._cache_position_cap_width = None
         self._cache_position_cap_height = None
+        self._lost_pedestrian_memory.clear()
 
     def _position_cap(self) -> np.ndarray:
         """Return cached map position cap, refreshing when map_def identity or dimensions change.
@@ -416,6 +418,69 @@ class SocNavObservationFusion:
             )
         return visible
 
+    def _pedestrians_with_lost_memory(
+        self,
+        *,
+        ped_positions: np.ndarray,
+        ped_velocities: np.ndarray,
+        visibility_mask: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Return visible pedestrians plus short-horizon constant-velocity memories."""
+        settings = getattr(self.env_config, "observation_visibility", None)
+        memory_enabled = bool(getattr(settings, "memory_for_lost_pedestrians", False))
+        horizon_s = float(getattr(settings, "lost_pedestrian_memory_horizon_s", 0.0) or 0.0)
+        if not memory_enabled or horizon_s <= 0.0:
+            self._lost_pedestrian_memory.clear()
+            return ped_positions[visibility_mask], ped_velocities[visibility_mask]
+
+        dt = float(getattr(self.simulator.config, "time_per_step_in_secs", 0.0) or 0.0)
+        step_s = max(dt, 0.0)
+        keep_positions: list[np.ndarray] = []
+        keep_velocities: list[np.ndarray] = []
+        live_ids = set(range(ped_positions.shape[0]))
+
+        for ped_idx, (position, velocity, visible) in enumerate(
+            zip(ped_positions, ped_velocities, visibility_mask, strict=True)
+        ):
+            if bool(visible):
+                position_copy = np.asarray(position, dtype=np.float32).copy()
+                velocity_copy = np.asarray(velocity, dtype=np.float32).copy()
+                self._lost_pedestrian_memory[ped_idx] = (position_copy, velocity_copy, 0.0)
+                keep_positions.append(position_copy)
+                keep_velocities.append(velocity_copy)
+                continue
+
+            remembered = self._lost_pedestrian_memory.get(ped_idx)
+            if remembered is None:
+                continue
+            last_position, last_velocity, age_s = remembered
+            next_age_s = age_s + step_s
+            if next_age_s > horizon_s:
+                self._lost_pedestrian_memory.pop(ped_idx, None)
+                continue
+            predicted_position = (last_position + last_velocity * step_s).astype(np.float32)
+            velocity_copy = last_velocity.astype(np.float32, copy=True)
+            self._lost_pedestrian_memory[ped_idx] = (
+                predicted_position,
+                velocity_copy,
+                next_age_s,
+            )
+            keep_positions.append(predicted_position)
+            keep_velocities.append(velocity_copy)
+
+        for stale_idx in set(self._lost_pedestrian_memory) - live_ids:
+            self._lost_pedestrian_memory.pop(stale_idx, None)
+
+        if not keep_positions:
+            return (
+                np.zeros((0, 2), dtype=np.float32),
+                np.zeros((0, 2), dtype=np.float32),
+            )
+        return (
+            np.stack(keep_positions).astype(np.float32, copy=False),
+            np.stack(keep_velocities).astype(np.float32, copy=False),
+        )
+
     def _rebuild_static_occlusion_cache(self) -> None:
         """Build prepared-geometry cache from current simulator obstacle polygons."""
         map_def = getattr(self.simulator, "map_def", None)
@@ -501,8 +566,13 @@ class SocNavObservationFusion:
             robot_heading=heading,
         )
         if visibility_mask.size > 0:
-            ped_positions = ped_positions[visibility_mask]
-            ped_velocities = ped_velocities[visibility_mask]
+            ped_positions, ped_velocities = self._pedestrians_with_lost_memory(
+                ped_positions=ped_positions,
+                ped_velocities=ped_velocities,
+                visibility_mask=visibility_mask,
+            )
+        else:
+            self._lost_pedestrian_memory.clear()
 
         # Order pedestrians by distance to robot (closest-first)
         if ped_positions.size > 0:

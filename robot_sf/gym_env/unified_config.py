@@ -90,6 +90,8 @@ class ObservationVisibilitySettings:
     static_occlusion: bool = False
     dynamic_occlusion: bool = False
     tracking_noise_std_m: float = 0.0
+    memory_for_lost_pedestrians: bool = False
+    lost_pedestrian_memory_horizon_s: float = 0.0
 
     def to_metadata(self) -> dict[str, bool | float | None]:
         """Return JSON-safe visibility settings metadata."""
@@ -100,6 +102,8 @@ class ObservationVisibilitySettings:
             "static_occlusion": bool(self.static_occlusion),
             "dynamic_occlusion": bool(self.dynamic_occlusion),
             "tracking_noise_std_m": float(self.tracking_noise_std_m),
+            "memory_for_lost_pedestrians": bool(self.memory_for_lost_pedestrians),
+            "lost_pedestrian_memory_horizon_s": float(self.lost_pedestrian_memory_horizon_s),
         }
 
 

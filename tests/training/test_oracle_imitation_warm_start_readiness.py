@@ -211,10 +211,49 @@ def test_local_expected_output_paths_are_blockers(tmp_path: Path) -> None:
 
     assert report["status"] == "blocked"
     assert any(
-        blocker.startswith("expected_outputs.training_manifest must be durable manifest path")
+        "expected_outputs.training_manifest must be durable evidence manifest path" in blocker
+        and "local output paths are not durable evidence" in blocker
         for blocker in report["blockers"]
     )
     assert report["expected_outputs"]["training_manifest"]["ready"] is False
+
+
+def test_absolute_expected_output_paths_are_blockers(tmp_path: Path) -> None:
+    """Future output manifests must be repository-relative durable evidence paths."""
+    manifest_dict = _ready_manifest(tmp_path)
+    expected_outputs = manifest_dict["expected_outputs"]
+    assert isinstance(expected_outputs, dict)
+    expected_outputs["checkpoint_manifest"] = str(tmp_path / "checkpoint_manifest.json")
+    manifest = _write_manifest(tmp_path, manifest_dict)
+
+    report = check_warm_start_readiness(manifest)
+
+    assert report["status"] == "blocked"
+    assert any(
+        "expected_outputs.checkpoint_manifest must be durable evidence manifest path" in blocker
+        and "path must be repository-relative" in blocker
+        for blocker in report["blockers"]
+    )
+    assert report["expected_outputs"]["checkpoint_manifest"]["ready"] is False
+
+
+def test_expected_output_paths_must_be_manifest_files(tmp_path: Path) -> None:
+    """Future output manifests must point at small reviewable manifest files."""
+    manifest_dict = _ready_manifest(tmp_path)
+    expected_outputs = manifest_dict["expected_outputs"]
+    assert isinstance(expected_outputs, dict)
+    expected_outputs["benchmark_report"] = "docs/context/evidence/benchmark_report.txt"
+    manifest = _write_manifest(tmp_path, manifest_dict)
+
+    report = check_warm_start_readiness(manifest)
+
+    assert report["status"] == "blocked"
+    assert any(
+        "expected_outputs.benchmark_report must be durable evidence manifest path" in blocker
+        and "manifest must use .json, .yaml, or .yml" in blocker
+        for blocker in report["blockers"]
+    )
+    assert report["expected_outputs"]["benchmark_report"]["ready"] is False
 
 
 def test_require_ready_fails_closed_when_blocked(tmp_path: Path) -> None:

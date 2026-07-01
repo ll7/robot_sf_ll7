@@ -73,6 +73,8 @@ _REQUIRED_OUTPUT_MANIFESTS: tuple[str, ...] = (
     "benchmark_report",
 )
 _LOCAL_OUTPUT_PREFIXES: tuple[str, ...] = ("output/", "results/")
+_DURABLE_OUTPUT_MANIFEST_PREFIX = "docs/context/evidence/"
+_DURABLE_OUTPUT_MANIFEST_SUFFIXES: tuple[str, ...] = (".json", ".yaml", ".yml")
 
 
 class WarmStartReadinessError(ValueError):
@@ -383,20 +385,35 @@ def _check_expected_outputs(manifest: dict[str, Any], blockers: list[str]) -> di
             continue
 
         path_text = raw_path.strip()
-        if _is_local_output_path(path_text):
+        durability_error = _output_manifest_durability_error(path_text)
+        if durability_error is not None:
             blockers.append(
-                f"expected_outputs.{key} must be durable manifest path, not local output: "
-                f"{path_text}"
+                f"expected_outputs.{key} must be durable evidence manifest path: "
+                f"{durability_error}: {path_text}"
             )
             checked[key] = {
                 "path": path_text,
                 "ready": False,
-                "detail": "local output paths are not durable evidence",
+                "detail": durability_error,
             }
             continue
 
         checked[key] = {"path": path_text, "ready": True}
     return checked
+
+
+def _output_manifest_durability_error(path_text: str) -> str | None:
+    """Return why an output manifest path is not a durable repo evidence manifest."""
+    normalized = path_text.replace("\\", "/").lstrip("./")
+    if _is_local_output_path(path_text):
+        return "local output paths are not durable evidence"
+    if Path(path_text).is_absolute() or normalized.startswith("../"):
+        return "path must be repository-relative"
+    if not normalized.startswith(_DURABLE_OUTPUT_MANIFEST_PREFIX):
+        return f"path must be under {_DURABLE_OUTPUT_MANIFEST_PREFIX}"
+    if not normalized.endswith(_DURABLE_OUTPUT_MANIFEST_SUFFIXES):
+        return "manifest must use .json, .yaml, or .yml"
+    return None
 
 
 def _is_local_output_path(path_text: str) -> bool:

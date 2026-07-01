@@ -25,16 +25,25 @@
       "source_commit": "f7ebdcae2375d085e925213197a75a386e26a79c",
       "generation_command": "gh release download 0.0.2 --pattern paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz; sha256sum verified 64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90; uv run python scripts/tools/benchmark_publication_bundle.py dissertation-bundle --source-root <extracted-release>/payload/reports --out-dir <disposable-output-root>/dissertation_export --bundle-name issue_2686_release_0_0_2_tables --artifact-spec docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_spec.json --commit f7ebdcae2375d085e925213197a75a386e26a79c",
       "caption_draft": "Scenario-family outcome slices from release 0.0.2 for inspecting success, collision, near-miss, and SNQI patterns.",
-      "claim_boundary": "Republishes existing release 0.0.2 scenario-family table evidence for downstream table drafting; it is not a new failure taxonomy or benchmark rerun.",
+      "claim_boundary": "Republishes existing release 0.0.2 scenario-family table provenance for non-collision context only; collision-count/failure-count interpretations are withdrawn by issue #3482 because exact-event provenance was not recovered.",
       "recommended_manuscript_use": "discussion",
-      "fallback_degraded_summary": "Use with the release 0.0.2 scoped-planner caveat and preserve unavailable/excluded planner limitations in surrounding prose.",
+      "fallback_degraded_summary": "Use with the release 0.0.2 scoped-planner caveat and preserve unavailable/excluded planner limitations in surrounding prose. Do not use collision-count-derived rows as paper/dissertation evidence.",
       "metadata": {
         "table_label": "tab:release_failure_count_slices",
         "source_release_tag": "0.0.2",
         "source_release_url": "https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.2",
         "source_archive_name": "paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz",
         "source_archive_sha256": "64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90",
-        "source_archive_path": "paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle/payload/reports/scenario_family_breakdown.md"
+        "source_archive_path": "paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle/payload/reports/scenario_family_breakdown.md",
+        "issue_3482_collision_count_disposition": {
+          "status": "withdrawn_exact_event_provenance_unavailable",
+          "manifest": "docs/context/evidence/issue_3482_release_0_0_2_claim_disposition_2026_07_01/manifest.json",
+          "affected_fields": [
+            "total_collision_count",
+            "collision-count-derived rows"
+          ],
+          "non_collision_fields": "unchanged_with_collision_count_caveat"
+        }
       }
     },
     {
@@ -47,16 +56,25 @@
       "source_commit": "f7ebdcae2375d085e925213197a75a386e26a79c",
       "generation_command": "gh release download 0.0.2 --pattern paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz; sha256sum verified 64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90; uv run python scripts/tools/benchmark_publication_bundle.py dissertation-bundle --source-root <extracted-release>/payload/reports --out-dir <disposable-output-root>/dissertation_export --bundle-name issue_2686_release_0_0_2_tables --artifact-spec docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_spec.json --commit f7ebdcae2375d085e925213197a75a386e26a79c",
       "caption_draft": "Core planner overview from release 0.0.2, preserving readiness and fallback/degraded caveats from the release bundle.",
-      "claim_boundary": "Packaging existing release-backed table evidence only; this does not create new benchmark evidence or expand the scoped 0.0.2 claim boundary.",
+      "claim_boundary": "Packaging existing release-backed table evidence for non-collision fields only; release 0.0.2 collision-count columns are withdrawn by issue #3482 because exact-event provenance was not recovered.",
       "recommended_manuscript_use": "results",
-      "fallback_degraded_summary": "Release 0.0.2 is scoped to seven planners and excludes socnav_bench because licensed SocNavBench assets were not staged; fallback/degraded status must remain visible.",
+      "fallback_degraded_summary": "Release 0.0.2 is scoped to seven planners and excludes socnav_bench because licensed SocNavBench assets were not staged; fallback/degraded status must remain visible. Collision-count-derived claims are withdrawn by #3482.",
       "metadata": {
         "table_label": "tab:results-overview",
         "source_release_tag": "0.0.2",
         "source_release_url": "https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.2",
         "source_archive_name": "paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz",
         "source_archive_sha256": "64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90",
-        "source_archive_path": "paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle/payload/reports/campaign_table_core.md"
+        "source_archive_path": "paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle/payload/reports/campaign_table_core.md",
+        "issue_3482_collision_count_disposition": {
+          "status": "withdrawn_exact_event_provenance_unavailable",
+          "manifest": "docs/context/evidence/issue_3482_release_0_0_2_claim_disposition_2026_07_01/manifest.json",
+          "affected_fields": [
+            "total_collision_count",
+            "collision-count-derived rows"
+          ],
+          "non_collision_fields": "unchanged_with_collision_count_caveat"
+        }
       }
     },
     {
@@ -69,16 +87,25 @@
       "source_commit": "f7ebdcae2375d085e925213197a75a386e26a79c",
       "generation_command": "gh release download 0.0.2 --pattern paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz; sha256sum verified 64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90; uv run python scripts/tools/benchmark_publication_bundle.py dissertation-bundle --source-root <extracted-release>/payload/reports --out-dir <disposable-output-root>/dissertation_export --bundle-name issue_2686_release_0_0_2_tables --artifact-spec docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_spec.json --commit f7ebdcae2375d085e925213197a75a386e26a79c",
       "caption_draft": "Planner-level release 0.0.2 results table for the scoped seven-planner benchmark release.",
-      "claim_boundary": "Republishes existing release 0.0.2 table evidence with provenance; it does not rerun the benchmark or establish new planner-ranking claims.",
+      "claim_boundary": "Republishes existing release 0.0.2 table evidence for non-collision fields only; release 0.0.2 collision-count columns are withdrawn by issue #3482 and this does not establish new planner-ranking claims.",
       "recommended_manuscript_use": "results",
-      "fallback_degraded_summary": "The scoped release excludes socnav_bench and records ORCA/SACADRL prerequisite policy as fallback while preserving readiness fields in the table.",
+      "fallback_degraded_summary": "The scoped release excludes socnav_bench and records ORCA/SACADRL prerequisite policy as fallback while preserving readiness fields in the table. Collision-count-derived claims are withdrawn by #3482.",
       "metadata": {
         "table_label": "tab:robot_sf_release_planner_results",
         "source_release_tag": "0.0.2",
         "source_release_url": "https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.2",
         "source_archive_name": "paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz",
         "source_archive_sha256": "64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90",
-        "source_archive_path": "paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle/payload/reports/campaign_table.md"
+        "source_archive_path": "paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle/payload/reports/campaign_table.md",
+        "issue_3482_collision_count_disposition": {
+          "status": "withdrawn_exact_event_provenance_unavailable",
+          "manifest": "docs/context/evidence/issue_3482_release_0_0_2_claim_disposition_2026_07_01/manifest.json",
+          "affected_fields": [
+            "total_collision_count",
+            "collision-count-derived rows"
+          ],
+          "non_collision_fields": "unchanged_with_collision_count_caveat"
+        }
       }
     }
   ]

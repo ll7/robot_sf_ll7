@@ -1,6 +1,6 @@
 {
   "claim_boundary": "Issue #3294 assembles a review matrix from existing tracked metadata and release artifacts. It does not run a new benchmark campaign, create scenario certification, or establish deployment-safety, real-world AMV, fallback, degraded, or unavailable rows as successful benchmark evidence.",
-  "generated_at_utc": "2026-06-21T04:59:44.508781Z",
+  "generated_at_utc": "2026-07-01T15:34:43.886030Z",
   "issue": 3294,
   "rows": [
     {
@@ -9,10 +9,10 @@
       "artifact_uri": "docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json",
       "availability_status": "available",
       "benchmark_success": null,
-      "claim_boundary": "Republishes existing release 0.0.2 scenario-family table evidence for downstream table drafting; it is not a new failure taxonomy or benchmark rerun.",
+      "claim_boundary": "Republishes existing release 0.0.2 scenario-family table provenance for non-collision context only; collision-count/failure-count interpretations are withdrawn by issue #3482 because exact-event provenance was not recovered.",
       "classification": "benchmark evidence",
       "exclusions": [
-        "Use with the release 0.0.2 scoped-planner caveat and preserve unavailable/excluded planner limitations in surrounding prose."
+        "Use with the release 0.0.2 scoped-planner caveat and preserve unavailable/excluded planner limitations in surrounding prose. Do not use collision-count-derived rows as paper/dissertation evidence."
       ],
       "hazard_class": "mixed_release_table",
       "missing_prerequisites": [],
@@ -53,10 +53,10 @@
       "artifact_uri": "docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json",
       "availability_status": "available",
       "benchmark_success": null,
-      "claim_boundary": "Packaging existing release-backed table evidence only; this does not create new benchmark evidence or expand the scoped 0.0.2 claim boundary.",
+      "claim_boundary": "Packaging existing release-backed table evidence for non-collision fields only; release 0.0.2 collision-count columns are withdrawn by issue #3482 because exact-event provenance was not recovered.",
       "classification": "benchmark evidence",
       "exclusions": [
-        "Release 0.0.2 is scoped to seven planners and excludes socnav_bench because licensed SocNavBench assets were not staged; fallback/degraded status must remain visible."
+        "Release 0.0.2 is scoped to seven planners and excludes socnav_bench because licensed SocNavBench assets were not staged; fallback/degraded status must remain visible. Collision-count-derived claims are withdrawn by #3482."
       ],
       "hazard_class": "mixed_release_table",
       "missing_prerequisites": [],
@@ -97,10 +97,10 @@
       "artifact_uri": "docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json",
       "availability_status": "available",
       "benchmark_success": null,
-      "claim_boundary": "Republishes existing release 0.0.2 table evidence with provenance; it does not rerun the benchmark or establish new planner-ranking claims.",
+      "claim_boundary": "Republishes existing release 0.0.2 table evidence for non-collision fields only; release 0.0.2 collision-count columns are withdrawn by issue #3482 and this does not establish new planner-ranking claims.",
       "classification": "benchmark evidence",
       "exclusions": [
-        "The scoped release excludes socnav_bench and records ORCA/SACADRL prerequisite policy as fallback while preserving readiness fields in the table."
+        "The scoped release excludes socnav_bench and records ORCA/SACADRL prerequisite policy as fallback while preserving readiness fields in the table. Collision-count-derived claims are withdrawn by #3482."
       ],
       "hazard_class": "mixed_release_table",
       "missing_prerequisites": [],

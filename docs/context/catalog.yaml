@@ -41,14 +41,17 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+    legacy_dirty_evidence: true
   - path: docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/packet.json
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+    legacy_dirty_evidence: true
   - path: docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/provenance.json
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+    legacy_dirty_evidence: true
   - path: docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/artifact_inventory.json
     status: evidence
     freshness: evidence
@@ -61,6 +64,7 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+    legacy_dirty_evidence: true
   - path: docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/snqi_scalarization_sensitivity_planner_rows.csv
     status: evidence
     freshness: evidence
@@ -122,6 +126,15 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_3482_release_0_0_2_provenance_recovery_2026_07_01/recovery_manifest.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+    legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_3482_release_0_0_2_claim_disposition_2026_07_01/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3482_release_0_0_2_claim_disposition_2026_07_01/manifest.json
     status: evidence
     freshness: evidence
     area: benchmark_evidence
@@ -2495,6 +2508,10 @@ entries:
     freshness: evidence
     area: predictive_planner
   - path: docs/context/evidence/issue_3294_release_claim_matrix/release_claim_matrix.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3294_release_claim_matrix/release_claim_matrix.md
     status: evidence
     freshness: evidence
     area: benchmark_evidence

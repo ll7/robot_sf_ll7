@@ -26,6 +26,11 @@ RECOVERY_SCHEMA = "issue_3482_provenance_recovery_attempt.v1"
 REPORT_SCHEMA = "issue_3482_recovery_gate_report.v1"
 BLOCKED_RESULT = "blocked_no_exact_event_provenance_found"
 BLOCKED_COLLISION_COUNT_STATUS = "blocked_pending_artifact_promotion_and_table_annotation"
+WITHDRAWN_COLLISION_COUNT_STATUS = "withdrawn_exact_event_provenance_unavailable"
+VALID_COLLISION_COUNT_STATUSES = {
+    BLOCKED_COLLISION_COUNT_STATUS,
+    WITHDRAWN_COLLISION_COUNT_STATUS,
+}
 REQUIRED_SEARCHED_ARTIFACTS = {
     "backfill_summary.json",
     "frozen_reconciliation_report.json",
@@ -72,11 +77,12 @@ def _validate_boundary(boundary: dict[str, Any]) -> list[GateViolation]:  # noqa
     if not isinstance(boundaries, dict):
         violations.append(GateViolation("boundary.claim_boundaries", "expected object"))
         boundaries = {}
-    if boundaries.get("collision_count_metric_status") != BLOCKED_COLLISION_COUNT_STATUS:
+    collision_count_status = boundaries.get("collision_count_metric_status")
+    if collision_count_status not in VALID_COLLISION_COUNT_STATUSES:
         violations.append(
             GateViolation(
                 "boundary.claim_boundaries.collision_count_metric_status",
-                f"expected {BLOCKED_COLLISION_COUNT_STATUS}",
+                "expected blocked pending promotion or withdrawn exact-event provenance status",
             )
         )
 
@@ -216,15 +222,23 @@ def build_report(boundary_manifest: Path, recovery_manifest: Path) -> dict[str, 
     boundary = _load_json_object(boundary_manifest)
     recovery = _load_json_object(recovery_manifest)
     violations = validate_gate(boundary, recovery)
+    collision_count_status = (boundary.get("claim_boundaries") or {}).get(
+        "collision_count_metric_status"
+    )
+    close_ready = not violations and collision_count_status == WITHDRAWN_COLLISION_COUNT_STATUS
     return {
         "schema_version": REPORT_SCHEMA,
         "issue": 3482,
-        "status": "invalid" if violations else "blocked",
-        "close_ready": False,
+        "status": "invalid" if violations else ("close_ready" if close_ready else "blocked"),
+        "close_ready": close_ready,
         "decision": (
             "invalid_recovery_gate"
             if violations
-            else "blocked_pending_exact_event_provenance_or_claim_downgrade"
+            else (
+                "close_ready_claims_withdrawn_exact_event_provenance_unavailable"
+                if close_ready
+                else "blocked_pending_exact_event_provenance_or_claim_downgrade"
+            )
         ),
         "boundary_manifest": str(boundary_manifest),
         "recovery_manifest": str(recovery_manifest),
@@ -260,13 +274,15 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write("\n")
     elif report["status"] == "blocked":
         print(f"issue #3482 recovery gate valid but blocked: {report['decision']}")
+    elif report["status"] == "close_ready":
+        print(f"issue #3482 recovery gate close-ready: {report['decision']}")
     else:
         print("issue #3482 recovery gate invalid", file=sys.stderr)
 
     for violation in report["violations"]:
         print(f"{violation['field']}: {violation['message']}", file=sys.stderr)
 
-    if report["status"] != "blocked":
+    if report["status"] == "invalid":
         return 1
     if args.require_close_ready and not report["close_ready"]:
         print(report["decision"], file=sys.stderr)

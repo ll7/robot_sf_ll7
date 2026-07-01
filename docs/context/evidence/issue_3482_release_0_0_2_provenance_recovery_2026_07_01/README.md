@@ -1,14 +1,14 @@
 # Issue #3482 Release 0.0.2 Provenance Recovery Attempt
 
-This directory records the 2026-07-01 negative provenance recovery attempt for
-issue #3482. No valid exact-event provenance artifacts or raw exact-event inputs
-were found.
+This directory records the 2026-07-01 negative provenance recovery attempt for issue #3482. No
+valid exact-event provenance artifacts or raw exact-event inputs were found. The missing original
+artifacts are:
 
-This evidence record does not close #3482. It preserves the blocked boundary so
-future recovery work does not regenerate from the public release `0.0.2`
-publication bundle alone or repeat the same broad storage searches.
+- `backfill_summary.json`
+- `frozen_reconciliation_report.json`
+- `reconciliation_tables_0_0_2.jsonl`
 
-The public release bundle can support only the derived side of the mismatch:
+The public release bundle supports only the published derived side of the mismatch:
 
 - release `0.0.2` rows: `987`
 - published or derived `total_collision_count > 0` rows: `0`
@@ -18,44 +18,38 @@ The public release bundle cannot support the exact-event side:
 - exact collision outcomes: `241`
 - reconciliation violations: `241`
 
-Those exact-event counts require either the original reconciliation artifacts or
-raw episode-level records with fields such as `outcome.collision_event`,
-`termination_reason="collision"`, or an equivalent exact-event field.
+Those exact-event counts require either the original reconciliation artifacts, raw episode-level
+records with exact-event fields such as `outcome.collision_event` or
+`termination_reason="collision"`, or an equivalent exact-event ledger field.
 
-Issue #3482 remains blocked unless one of the following is recovered:
+## Current Disposition
 
-- `backfill_summary.json`
-- `frozen_reconciliation_report.json`
-- `reconciliation_tables_0_0_2.jsonl`
-- raw episode-level records containing exact-event fields
+The follow-up disposition packet is
+`docs/context/evidence/issue_3482_release_0_0_2_claim_disposition_2026_07_01/`. It explicitly
+withdraws release `0.0.2` collision-count-derived claims from paper/dissertation use rather than
+validating them. Non-collision release table fields remain available as release-table provenance
+with the collision-count caveat.
 
-Valid follow-up paths are:
+This supports a `not_planned` / not-recoverable issue closure path after review, not a `completed`
+closure path. The empirical collision-count claim was removed from the usable boundary because
+source provenance was not recovered.
+
+Valid future supersession paths are:
 
 - recover and promote the original three artifacts with hashes and provenance;
-- recover raw exact-event episode records and regenerate deterministically with
+- recover raw exact-event episode records and regenerate the reconciliation deterministically with
   input/output hashes and commands;
-- explicitly downgrade or withdraw release `0.0.2` collision-count claims if the
-  exact-event provenance is permanently unavailable.
+- replace this withdrawal with a new reviewed disposition that explicitly documents the promoted
+  exact-event provenance.
 
-Recommended next actions:
+## Recovery Gate
 
-- verify the host identity and scratch retention status for `imech156` /
-  `imech156-u` through an authoritative source before attempting SSH recovery;
-- audit paper-facing and dissertation-facing release `0.0.2` result tables that
-  rely on `total_collision_count` or collision-count-derived claims;
-- keep #3482 blocked unless exact-event provenance is recovered, or close it only
-  as not recoverable after the affected release `0.0.2` collision-count claims
-  are explicitly downgraded or withdrawn.
-
-## Recovery Gate Check
-
-The tracked recovery gate is machine-checkable:
+The recovery gate is:
 
 ```bash
 uv run python scripts/validation/check_issue_3482_recovery_gate.py --json
 ```
 
-That command reports `status: blocked` while the negative recovery record is structurally valid.
-Use `--require-close-ready` when a workflow wants fail-closed proof before closing #3482; it must
-exit non-zero until exact-event provenance is recovered and promoted, or the affected release
-`0.0.2` collision-count claims are explicitly downgraded or withdrawn.
+`--require-close-ready` must fail closed until exact-event provenance is recovered and promoted, or
+affected release `0.0.2` collision-count claims are explicitly downgraded or withdrawn. This branch
+implements the explicit withdrawal path through the claim disposition packet above.

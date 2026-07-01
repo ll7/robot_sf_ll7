@@ -7,7 +7,7 @@ and lean dynamics are deferred to a higher-fidelity model family.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from math import atan2, cos, sin, tan
+from math import atan2, cos, isfinite, pi, sin, tan
 from typing import TYPE_CHECKING, Protocol
 
 from robot_sf.common.math_utils import clip_scalar, wrap_angle_pi
@@ -57,9 +57,16 @@ class RobotDynamicsModel(Protocol):
 
 def _positive_dt(dt: float) -> float:
     value = float(dt)
-    if value <= 0:
-        raise ValueError("dt must be positive.")
+    if not isfinite(value) or value <= 0:
+        raise ValueError("dt must be finite and positive.")
     return value
+
+
+def _finite_positive(value: float, field_name: str) -> float:
+    normalized = float(value)
+    if not isfinite(normalized) or normalized <= 0:
+        raise ValueError(f"{field_name} must be finite and positive.")
+    return normalized
 
 
 def _control_pair(control: Sequence[float], model_name: str) -> tuple[float, float]:
@@ -78,8 +85,7 @@ class HolonomicDiscDynamics:
     def __post_init__(self) -> None:
         """Validate holonomic-disc velocity bounds."""
 
-        if self.max_speed <= 0:
-            raise ValueError("max_speed must be positive.")
+        _finite_positive(self.max_speed, "max_speed")
 
     def step(
         self,
@@ -125,12 +131,9 @@ class DifferentialDriveDynamics:
     def __post_init__(self) -> None:
         """Validate differential-drive geometry and wheel-speed bounds."""
 
-        if self.wheel_radius <= 0:
-            raise ValueError("wheel_radius must be positive.")
-        if self.track_width <= 0:
-            raise ValueError("track_width must be positive.")
-        if self.max_wheel_angular_speed <= 0:
-            raise ValueError("max_wheel_angular_speed must be positive.")
+        _finite_positive(self.wheel_radius, "wheel_radius")
+        _finite_positive(self.track_width, "track_width")
+        _finite_positive(self.max_wheel_angular_speed, "max_wheel_angular_speed")
 
     def step(
         self,
@@ -173,10 +176,8 @@ class UnicycleDynamics:
     def __post_init__(self) -> None:
         """Validate unicycle velocity bounds."""
 
-        if self.max_linear_speed <= 0:
-            raise ValueError("max_linear_speed must be positive.")
-        if self.max_angular_speed <= 0:
-            raise ValueError("max_angular_speed must be positive.")
+        _finite_positive(self.max_linear_speed, "max_linear_speed")
+        _finite_positive(self.max_angular_speed, "max_angular_speed")
 
     def step(
         self,
@@ -218,12 +219,11 @@ class KinematicBicycleDynamics:
     def __post_init__(self) -> None:
         """Validate kinematic-bicycle geometry and command bounds."""
 
-        if self.wheelbase <= 0:
-            raise ValueError("wheelbase must be positive.")
-        if self.max_linear_speed <= 0:
-            raise ValueError("max_linear_speed must be positive.")
-        if self.max_steering_angle <= 0:
-            raise ValueError("max_steering_angle must be positive.")
+        _finite_positive(self.wheelbase, "wheelbase")
+        _finite_positive(self.max_linear_speed, "max_linear_speed")
+        _finite_positive(self.max_steering_angle, "max_steering_angle")
+        if self.max_steering_angle >= pi / 2.0:
+            raise ValueError("max_steering_angle must be strictly less than pi / 2.")
 
     def step(
         self,
@@ -246,10 +246,11 @@ class KinematicBicycleDynamics:
             self.max_steering_angle,
         )
         angular_speed = linear_speed * tan(steering_angle) / self.wheelbase
+        midpoint_heading = state.heading + angular_speed * dt / 2.0
         return replace(
             state,
-            x=state.x + linear_speed * cos(state.heading) * dt,
-            y=state.y + linear_speed * sin(state.heading) * dt,
+            x=state.x + linear_speed * cos(midpoint_heading) * dt,
+            y=state.y + linear_speed * sin(midpoint_heading) * dt,
             heading=wrap_angle_pi(state.heading + angular_speed * dt),
             linear_speed=linear_speed,
             angular_speed=angular_speed,

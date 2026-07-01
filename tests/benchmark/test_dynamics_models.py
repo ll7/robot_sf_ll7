@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from math import pi
+from math import inf, nan, pi
 
 import pytest
 
@@ -75,8 +75,8 @@ def test_kinematic_bicycle_heading_depends_on_steering_angle() -> None:
 
     next_state = model.step(RobotDynamicsState(), (2.0, 0.5), dt=1.0)
 
-    assert next_state.x == pytest.approx(2.0)
-    assert next_state.y == pytest.approx(0.0)
+    assert next_state.x == pytest.approx(1.925851153)
+    assert next_state.y == pytest.approx(0.539534371)
     assert next_state.heading == pytest.approx(0.5463024898)
     assert next_state.steering_angle == pytest.approx(0.5)
 
@@ -97,16 +97,23 @@ def test_state_pose_matches_repository_pose_shape() -> None:
 
 
 @pytest.mark.parametrize(
-    "name",
-    ["holonomic_disc", "differential_drive", "unicycle", "kinematic_bicycle"],
+    ("name", "dt"),
+    [
+        ("holonomic_disc", 0.0),
+        ("differential_drive", 0.0),
+        ("unicycle", 0.0),
+        ("kinematic_bicycle", 0.0),
+        ("holonomic_disc", nan),
+        ("unicycle", inf),
+    ],
 )
-def test_dynamics_reject_non_positive_dt(name: str) -> None:
-    """All dynamics models reject zero or negative timesteps."""
+def test_dynamics_reject_invalid_dt(name: str, dt: float) -> None:
+    """Dynamics models reject non-positive and non-finite timesteps."""
 
     model = build_robot_dynamics(name)
 
-    with pytest.raises(ValueError, match="dt must be positive"):
-        model.step(RobotDynamicsState(), (0.0, 0.0), dt=0.0)
+    with pytest.raises(ValueError, match="dt must be finite and positive"):
+        model.step(RobotDynamicsState(), (0.0, 0.0), dt=dt)
 
 
 @pytest.mark.parametrize(
@@ -183,7 +190,7 @@ def test_kinematic_bicycle_clips_speed_and_steering() -> None:
 
     next_state = model.step(RobotDynamicsState(), (5.0, 1.0), dt=1.0)
 
-    assert next_state.x == pytest.approx(1.0)
+    assert next_state.x == pytest.approx(0.997963)
     assert next_state.steering_angle == pytest.approx(0.25)
 
 
@@ -191,14 +198,25 @@ def test_kinematic_bicycle_clips_speed_and_steering() -> None:
     ("name", "kwargs", "match"),
     [
         ("holonomic_disc", {"max_speed": 0.0}, "max_speed"),
+        ("holonomic_disc", {"max_speed": nan}, "max_speed"),
         ("differential_drive", {"wheel_radius": 0.0}, "wheel_radius"),
+        ("differential_drive", {"wheel_radius": inf}, "wheel_radius"),
         ("differential_drive", {"track_width": 0.0}, "track_width"),
+        ("differential_drive", {"track_width": nan}, "track_width"),
         ("differential_drive", {"max_wheel_angular_speed": 0.0}, "max_wheel"),
+        ("differential_drive", {"max_wheel_angular_speed": inf}, "max_wheel"),
         ("unicycle", {"max_linear_speed": 0.0}, "max_linear_speed"),
+        ("unicycle", {"max_linear_speed": nan}, "max_linear_speed"),
         ("unicycle", {"max_angular_speed": 0.0}, "max_angular_speed"),
+        ("unicycle", {"max_angular_speed": inf}, "max_angular_speed"),
         ("kinematic_bicycle", {"wheelbase": 0.0}, "wheelbase"),
+        ("kinematic_bicycle", {"wheelbase": nan}, "wheelbase"),
         ("kinematic_bicycle", {"max_linear_speed": 0.0}, "max_linear_speed"),
+        ("kinematic_bicycle", {"max_linear_speed": inf}, "max_linear_speed"),
         ("kinematic_bicycle", {"max_steering_angle": 0.0}, "max_steering_angle"),
+        ("kinematic_bicycle", {"max_steering_angle": 1.6}, "max_steering_angle"),
+        ("kinematic_bicycle", {"max_steering_angle": nan}, "max_steering_angle"),
+        ("kinematic_bicycle", {"max_steering_angle": inf}, "max_steering_angle"),
     ],
 )
 def test_dynamics_constructor_validation(

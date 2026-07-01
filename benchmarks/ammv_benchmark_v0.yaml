@@ -1,0 +1,37 @@
+# AMMV Benchmark Protocol v0
+#
+# Versioned manifest declaring the scenario classes, planner panel, metric
+# layers, and claim rules required for an AMMV benchmark comparison.
+#
+# This is a declarative contract, not a CI gate.  Implementations should
+# reference the protocol id in run metadata, reports, or claim artifacts.
+
+scenario_classes:
+  - crossing
+  - bidirectional_sidewalk
+  - bottleneck
+  - blind_corner
+  - group_navigation
+  - dense_plaza
+  - static_obstacle
+  - long_horizon_route
+
+planner_panel:
+  - goal
+  - social_force
+  - orca
+  - ppo
+  - random
+  - fast_pysf_planner
+
+metric_layers:
+  - safety_gate
+  - liveness
+  - social_compliance
+  - efficiency
+  - comfort
+
+claim_rules:
+  global_superiority_forbidden: true
+  report_tradeoffs: true
+  safety_gate_precedes_efficiency: true

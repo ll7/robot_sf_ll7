@@ -116,12 +116,13 @@ packages = [
     { include = "examples" },
     { include = "third_party" },
 ]
-include = ["examples/**"]
+include = ["examples/**", "benchmarks/**"]
 
 [tool.hatchling.build.targets.wheel.shared-data]
 "robot_sf/maps" = "robot_sf/maps"
 
 [tool.hatch.build.targets.wheel.force-include]
+"benchmarks" = "benchmarks"
 "fast-pysf/pysocialforce" = "pysocialforce"
 
 [tool.hatchling.build.targets.sdist]
@@ -130,6 +131,7 @@ include = [
     "/robot_sf_carla_bridge",
     "/fast-pysf/pysocialforce",
     "/examples",
+    "/benchmarks",
     "/third_party",
     "/README.md",
     "/LICENSE",

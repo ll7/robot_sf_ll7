@@ -224,12 +224,12 @@ launch_packet:
   decision: blocked_pending_submit_host_route_and_reconciliation
   compute_submit_authorized: false
   slurm_job_id: not_submitted
-  target_host: imech039
+  target_host: imech036
   blocking_jobs:
     - 13175
   readiness_refresh:
     checked_date: "2026-07-01"
-    target_host: imech039
+    target_host: imech036
     live_issue_command: >-
       gh issue view 3810 --repo ll7/robot_sf_ll7
       --json number,title,state,url,body,comments,labels
@@ -245,7 +245,7 @@ launch_packet:
       Public readiness refresh found no open PR covering issue #3810 before
       this branch. Current origin/main includes merged packet PR #4065 as
       the latest packet lineage; this refresh keeps the packet guard on
-      imech039. This refresh is not submit-host queue, duplicate, worktree,
+      imech036 per the current ready-queue target host. This refresh is not submit-host queue, duplicate, worktree,
       or private-ops route proof.
   live_issue_state:
     checked_date: "2026-07-01"
@@ -289,7 +289,7 @@ launch_packet:
       private submit wrapper named below until those checks return go.
     private_ops_dry_run:
       required_before_submit: true
-      target_host: imech039
+      target_host: imech036
       evidence_path: output/benchmarks/issue_3810_comprehensive_h600_snqi/preflight/private_ops_route_dry_run.json
       current_public_status: route_unverified
       required_fields:
@@ -307,7 +307,7 @@ launch_packet:
         The dry run must record decision=go before submission. If job 13175 is
         not terminal/reconciled, if an issue #3810 duplicate exists, if the
         owning worktree is dirty, or if the private submit wrapper lacks
-        imech039 support, the decision remains blocked.
+        imech036 support, the decision remains blocked.
   interpretation_gate:
     status: blocked_pending_active_run_retention_reconciliation
     required_before_claim: true
@@ -449,7 +449,7 @@ analysis_and_retention_packet:
     queue_summary_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)
     route_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)
     submit_wrapper: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/submit_and_record.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)
-    target_host: "imech039"
+    target_host: "imech036"
   preflight:
     required: true
     route_refresh_command: >-

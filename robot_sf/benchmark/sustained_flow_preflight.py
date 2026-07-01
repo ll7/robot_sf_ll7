@@ -8,6 +8,9 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
+from robot_sf.scenario_certification.sustained_flow import (
+    generate_expected_sustained_flow_scenarios,
+)
 from robot_sf.training.scenario_loader import load_scenarios
 
 PREFLIGHT_SCHEMA_VERSION = "sustained_flow_preflight.v1"
@@ -119,6 +122,7 @@ def preflight_sustained_flow_matrix(matrix_path: str | Path) -> SustainedFlowPre
         blocking_reasons.append(str(exc))
     else:
         blocking_reasons.extend(_variant_blockers(variants))
+        blocking_reasons.extend(_generator_drift_blockers(variants))
 
     if not variants:
         blocking_reasons.append("no sustained-flow variants were enumerated")
@@ -189,6 +193,33 @@ def _variant_blockers(variants: tuple[SustainedFlowVariant, ...]) -> tuple[str, 
         if not variant.seeds:
             blockers.append(f"{variant.name}: at least one seed is required")
     return tuple(blockers)
+
+
+def _generator_drift_blockers(variants: tuple[SustainedFlowVariant, ...]) -> tuple[str, ...]:
+    """Fail closed when the checked-in matrix drifts from the canonical generator.
+
+    Returns:
+        Blocking reasons when generator-owned variant fields drift.
+    """
+    generated_variants = tuple(
+        _variant_from_scenario(row) for row in generate_expected_sustained_flow_scenarios()
+    )
+    observed_profile = tuple(_variant_generator_profile(variant) for variant in variants)
+    expected_profile = tuple(_variant_generator_profile(variant) for variant in generated_variants)
+    if observed_profile == expected_profile:
+        return ()
+    return ("sustained-flow matrix must match canonical generated variant definitions",)
+
+
+def _variant_generator_profile(variant: SustainedFlowVariant) -> tuple[object, ...]:
+    return (
+        variant.name,
+        variant.density_tier,
+        variant.ped_density,
+        variant.spawn_rate_per_min,
+        variant.max_episode_steps,
+        variant.seeds,
+    )
 
 
 def _runtime_readiness(

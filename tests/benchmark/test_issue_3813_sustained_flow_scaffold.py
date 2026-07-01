@@ -133,6 +133,30 @@ def test_sustained_flow_preflight_accepts_runtime_supported_matrix(tmp_path: Pat
     assert payload["blocking_reasons"] == []
 
 
+def test_sustained_flow_preflight_rejects_generator_drift(tmp_path: Path) -> None:
+    """Preflight fails closed if YAML rows stop matching the generator."""
+
+    matrix = _load_yaml(SCENARIO_SET)
+    for scenario in matrix["scenarios"]:
+        scenario["metadata"]["continuous_spawn"]["current_runtime_support"] = (
+            RUNTIME_SUPPORTED_VALUE
+        )
+    matrix["scenarios"][1]["metadata"]["continuous_spawn"]["spawn_rate_per_min"] = 13.0
+
+    drifted_matrix = tmp_path / "drifted_sustained_flow.yaml"
+    drifted_matrix.write_text(yaml.safe_dump(matrix, sort_keys=False), encoding="utf-8")
+
+    payload = preflight_sustained_flow_matrix(drifted_matrix).to_payload()
+
+    assert payload["status"] == "not_available"
+    assert payload["benchmark_eligible"] is False
+    assert payload["variant_count"] == 3
+    assert (
+        "sustained-flow matrix must match canonical generated variant definitions"
+        in payload["blocking_reasons"]
+    )
+
+
 def test_sustained_flow_preflight_rejects_wrong_spawn_process(tmp_path: Path) -> None:
     """Continuous-spawn variants must name the supported respawn process."""
 

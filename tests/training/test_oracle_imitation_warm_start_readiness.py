@@ -35,6 +35,7 @@ def _ready_manifest(tmp_path: Path) -> dict[str, object]:
     intentionally-pending #1397 packet.
     """
     packet_path = _write_training_ready_packet(tmp_path)
+    trace_registry_path = _write_training_ready_trace_registry(tmp_path)
     warm_start = tmp_path / "bc.yaml"
     warm_start.write_text("policy_id: bc\n", encoding="utf-8")
     baseline = tmp_path / "rl_only.yaml"
@@ -45,6 +46,7 @@ def _ready_manifest(tmp_path: Path) -> dict[str, object]:
         "schema_version": "oracle-imitation-warm-start-readiness.v1",
         "experiment_id": "unit_test_warm_start",
         "dataset_launch_packet": str(packet_path),
+        "trace_uri_registry": str(trace_registry_path),
         "warm_start_config": str(warm_start),
         "baseline_config": str(baseline),
         "split_contract": str(contract),
@@ -98,16 +100,52 @@ def _write_training_ready_packet(tmp_path: Path) -> Path:
     return path
 
 
+def _write_training_ready_trace_registry(tmp_path: Path) -> Path:
+    """Write trace-URI registry that passes the canonical validator with training_ready=True."""
+    registry = {
+        "schema_version": "oracle-trace-uri-registry.v1",
+        "dataset_id": "unit_test_oracle_imitation",
+        "traces": [
+            {
+                "split": "train",
+                "trace_id": "train__unit_test",
+                "uri": "wandb-artifact://robot-sf/oracle-imitation/train:v1",
+                "sha256": "a" * 64,
+                "retrieval_status": "resolvable",
+            },
+            {
+                "split": "validation",
+                "trace_id": "validation__unit_test",
+                "uri": "wandb-artifact://robot-sf/oracle-imitation/validation:v1",
+                "sha256": "b" * 64,
+                "retrieval_status": "resolvable",
+            },
+            {
+                "split": "evaluation",
+                "trace_id": "evaluation__unit_test",
+                "uri": "wandb-artifact://robot-sf/oracle-imitation/evaluation:v1",
+                "sha256": "c" * 64,
+                "retrieval_status": "resolvable",
+            },
+        ],
+    }
+    path = tmp_path / "trace_registry.yaml"
+    path.write_text(yaml.safe_dump(registry, sort_keys=False), encoding="utf-8")
+    return path
+
+
 def test_real_issue_1496_manifest_is_blocked_on_dataset() -> None:
     """The checked-in #1496 manifest is blocked because #1397 is not training-ready yet."""
     report = check_warm_start_readiness(Path(_REAL_MANIFEST))
 
     assert report["status"] == "blocked"
     assert report["experiment_id"] == "issue_1496_oracle_imitation_warm_start_v1"
-    # The only blocker is the durable dataset gate; configs/contract are present.
-    assert len(report["blockers"]) == 1
+    # Durable dataset launch packet and trace registry are blocked; configs/contract are present.
+    assert len(report["blockers"]) == 2
     assert report["blockers"][0].startswith("dataset_launch_packet not training-ready")
+    assert report["blockers"][1].startswith("trace_uri_registry not training-ready")
     assert report["prerequisites"]["dataset_launch_packet"]["ready"] is False
+    assert report["prerequisites"]["trace_uri_registry"]["ready"] is False
     assert report["prerequisites"]["warm_start_config"]["ready"] is True
     assert report["prerequisites"]["baseline_config"]["ready"] is True
     assert report["prerequisites"]["finetuning_config"]["ready"] is True
@@ -123,6 +161,7 @@ def test_ready_manifest_reports_ready(tmp_path: Path) -> None:
     assert report["status"] == "ready"
     assert report["blockers"] == []
     assert report["prerequisites"]["dataset_launch_packet"]["training_ready"] is True
+    assert report["prerequisites"]["trace_uri_registry"]["training_ready"] is True
 
 
 def test_missing_config_is_a_blocker_not_an_error(tmp_path: Path) -> None:
@@ -165,6 +204,19 @@ def test_blank_dataset_reference_is_a_blocker(tmp_path: Path) -> None:
 
     assert report["status"] == "blocked"
     assert any("dataset_launch_packet must be a non-empty" in b for b in report["blockers"])
+
+
+def test_missing_trace_uri_registry_is_a_blocker(tmp_path: Path) -> None:
+    """A missing durable trace registry blocks readiness before warm-start training."""
+    manifest_dict = _ready_manifest(tmp_path)
+    manifest_dict.pop("trace_uri_registry")
+    manifest = _write_manifest(tmp_path, manifest_dict)
+
+    report = check_warm_start_readiness(manifest)
+
+    assert report["status"] == "blocked"
+    assert any("trace_uri_registry must be non-empty" in b for b in report["blockers"])
+    assert report["prerequisites"]["trace_uri_registry"]["ready"] is False
 
 
 def test_optional_finetuning_config_omitted_is_ok(tmp_path: Path) -> None:

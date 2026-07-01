@@ -227,8 +227,30 @@ launch_packet:
   target_host: imech156-u
   blocking_jobs:
     - 13175
+  readiness_refresh:
+    checked_date: "2026-07-01"
+    target_host: imech156-u
+    live_issue_command: gh issue view 3810 --repo ll7/robot_sf_ll7 --comments
+    open_pr_dedupe_command: >-
+      gh pr list --repo ll7/robot_sf_ll7 --state open
+      --search '3810 OR "long-horizon" OR "SNQI" OR "wait-it-out"'
+      --json number,title,headRefName,url,isDraft
+    current_pr: 4030
+    open_pr_matches:
+    - number: 4030
+      title: "Issue #3810: refresh long-horizon packet readiness guard"
+      headRefName: issue-3810-long-horizon-imech156u-packet-refresh-20260701
+      url: https://github.com/ll7/robot_sf_ll7/pull/4030
+      isDraft: false
+    blocking_open_pr_matches: []
+    latest_merged_packet_pr: 4029
+    decision: >-
+      Public readiness refresh found only current review PR #4030 and no
+      additional open PR covering issue #3810. Current origin/main already
+      includes the imech156-u packet retarget. This refresh is not submit-host
+      queue, duplicate, worktree, or private-ops route proof.
   live_issue_state:
-    checked_date: "2026-06-30"
+    checked_date: "2026-07-01"
     source: gh_issue_view_3810_labels
     required_label: "state:running"
     submit_blocker: true

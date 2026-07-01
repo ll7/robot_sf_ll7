@@ -5,11 +5,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from issue_3810_readiness_refresh import validate_readiness_refresh  # noqa: E402
 
 DEFAULT_PACKET = Path("configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml")
 EXPECTED_TARGET_HOST = "imech156-u"
@@ -91,6 +98,14 @@ def validate_packet(packet: Mapping[str, Any], *, issue: int = 3810) -> dict[str
 
     campaign = _require_mapping(packet, "campaign")
     _require(campaign.get("parent_issue") == issue, "packet parent issue mismatch")
+
+    launch_packet = _require_mapping(packet, "launch_packet")
+    validate_readiness_refresh(
+        launch_packet,
+        EXPECTED_TARGET_HOST,
+        require=_require,
+        require_mapping=_require_mapping,
+    )
 
     analysis = _require_mapping(packet, "analysis_and_retention_packet")
     _require(analysis.get("enabled") is True, "analysis_and_retention_packet.enabled must be true")

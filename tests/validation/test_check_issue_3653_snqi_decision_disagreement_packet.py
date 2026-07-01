@@ -181,8 +181,8 @@ def test_issue_3653_packet_rejects_synthetic_raw_episode_source() -> None:
         raise AssertionError("packet should reject synthetic raw episode acquisition")
 
 
-def test_issue_3653_packet_rejects_ready_raw_episode_without_sha256() -> None:
-    """A hydrated campaign input cannot be marked ready without durable provenance."""
+def test_issue_3653_packet_rejects_obsolete_blocked_raw_episode_status() -> None:
+    """The exported packet must not regress to the pre-hydration blocked status."""
 
     packet = _load_packet()
     packet["raw_episode_artifact"]["current_status"] = "blocked_until_durable_episode_jsonl_promoted_or_hydratable"
@@ -192,7 +192,7 @@ def test_issue_3653_packet_rejects_ready_raw_episode_without_sha256() -> None:
     except _MODULE.PacketError as exc:
         assert "raw_episode_artifact.current_status mismatch" in str(exc)
     else:
-        raise AssertionError("packet should reject raw episode ready state without provenance")
+        raise AssertionError("packet should reject obsolete raw episode blocked status")
 
 
 def test_issue_3653_packet_rejects_missing_decision_disagreement_artifact() -> None:

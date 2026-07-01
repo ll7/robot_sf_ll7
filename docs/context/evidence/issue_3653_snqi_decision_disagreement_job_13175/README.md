@@ -1,4 +1,4 @@
-# Issue #3653 SNQI Decision-Disagreement Diagnostic
+# Issue #3653 Job 13175 SNQI Decision-Disagreement Diagnostic
 
 This bundle applies the existing Social Navigation Quality Index (SNQI) scalarization-sensitivity, Pareto-front, and decision-disagreement export to the hydrated completed job `13175` S20/h500 diagnostic campaign surface. It is diagnostic-only evidence on a checksum-pinned surface; it does not promote a benchmark, safety-ranking, scenario-horizon, dissertation, or paper claim.
 

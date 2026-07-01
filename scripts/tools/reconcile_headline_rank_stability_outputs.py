@@ -374,9 +374,12 @@ def _decision_packet_blockers(claim_inputs: dict[str, Any]) -> list[dict[str, st
         )
 
     s30_status = claim_inputs.get("s30_decision_status")
-    if s30_status == "needs_review":
+    if s30_status in {"needs_review", "blocked"}:
         reasons = claim_inputs.get("s30_reasons") or []
-        reason_text = ", ".join(str(reason) for reason in reasons) or "decision packet needs review"
+        reason_text = (
+            ", ".join(str(reason) for reason in reasons)
+            or f"decision packet s30_decision_status is {s30_status!r}"
+        )
         blocked.append(
             {
                 "claim": "s30_not_required_by_local_preflight",

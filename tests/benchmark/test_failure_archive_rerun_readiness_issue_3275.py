@@ -578,6 +578,29 @@ def test_failed_source_certification_status_is_invalid(tmp_path: Path) -> None:
     assert payload["source_invalid_certification_archive_ids"] == ["source_0000"]
 
 
+def test_certification_without_explicit_status_is_invalid(tmp_path: Path) -> None:
+    """Certification provenance alone is not an explicit pass verdict."""
+    source_entry = _entry("source_0000", family="family_a", seed=1)
+    source_entry["certification_metadata"] = {"source": "unit-test"}
+    source = _archive(tmp_path / "source.json", [source_entry])
+
+    rerun_entry = _entry("rerun_0000", family="family_b", seed=101)
+    rerun_entry["certification_metadata"] = {"source": "unit-test"}
+    rerun = _archive(tmp_path / "rerun.json", [rerun_entry])
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=_null_test_prerequisites(source, rerun),
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.source_invalid_certification_archive_ids == ["source_0000"]
+    assert readiness.invalid_certification_archive_ids == ["rerun_0000"]
+    assert "source_invalid_certification_status:1" in readiness.blockers
+    assert "invalid_certification_status:1" in readiness.blockers
+
+
 def test_missing_source_certification_lineage_blocks_readiness(tmp_path: Path) -> None:
     """Passed source certification still needs provenance before disjoint rerun."""
 

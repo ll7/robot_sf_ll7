@@ -127,6 +127,32 @@ def test_scenario_family_and_seed_overlap_is_reported_as_blockers(tmp_path: Path
     assert readiness.overlap_provenance["seed_overlap"] == [42]
 
 
+def test_missing_overlap_metadata_blocks_readiness(tmp_path: Path) -> None:
+    """Missing archive-id, scenario-family, or seed metadata must fail closed."""
+
+    source_entry = _entry("source_0000", family="family_a", seed=1)
+    source_entry.pop("archive_id")
+    source_entry.pop("cluster_key")
+    source_entry.pop("failure_attribution")
+    rerun_entry = _entry("rerun_0000", family="family_b", seed=101)
+    rerun_entry["candidate"].pop("scenario_seed")
+    source = _archive(tmp_path / "source.json", [source_entry])
+    rerun = _archive(tmp_path / "rerun.json", [rerun_entry])
+
+    readiness = classify_failure_archive_rerun_readiness(source, rerun)
+    payload = readiness.to_payload()
+
+    assert readiness.status == BLOCKED
+    assert readiness.missing_overlap_metadata_archive_ids == [
+        "source:source:<entry:0>:archive_id,scenario_family",
+        "rerun:rerun_0000:scenario_seed",
+    ]
+    assert "missing_overlap_metadata:2" in readiness.blockers
+    assert payload["missing_overlap_metadata_archive_ids"] == (
+        readiness.missing_overlap_metadata_archive_ids
+    )
+
+
 def test_missing_archive_payload_blocks_ready_path(tmp_path: Path) -> None:
     """Missing archive file paths must fail closed for both source and rerun."""
 

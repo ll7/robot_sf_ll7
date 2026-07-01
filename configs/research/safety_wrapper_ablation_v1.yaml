@@ -69,6 +69,7 @@ result_contract:
     - study_id
     - planner
     - wrapper_arm
+    - safety_wrapper_mode
     - scenario_id
     - seed
     - software_commit

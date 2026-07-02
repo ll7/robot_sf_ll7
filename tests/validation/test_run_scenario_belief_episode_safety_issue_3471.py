@@ -7,6 +7,7 @@ import numpy as np
 from robot_sf.planner.scenario_belief_adapter import project_scenario_belief_for_planner
 from scripts.validation.run_scenario_belief_episode_safety_issue_3471 import (
     MODES,
+    UNCERTAINTY_REPRESENTATIONS,
     EpisodeParams,
     _is_commit,
     build_belief_for_mode,
@@ -45,6 +46,46 @@ def test_episode_is_deterministic():
     a.pop("runtime_sec")
     b.pop("runtime_sec")
     assert a == b
+
+
+def test_default_representation_preserves_known_issue_3471_contrast():
+    """Default ``belief_drop`` keeps the known #3471 fixture contract."""
+    implicit = run_matrix([101, 102], _FAST)
+    explicit = run_matrix([101, 102], _FAST, uncertainty_representation="belief_drop")
+    implicit.pop("episodes")
+    explicit.pop("episodes")
+    assert implicit == explicit
+
+
+def test_each_uncertainty_representation_runs_and_is_reported():
+    """Issue #3557 harness parameterizes representation without promoting a claim."""
+    for representation in UNCERTAINTY_REPRESENTATIONS:
+        row = run_episode(
+            "uncertain_dropped",
+            seed=101,
+            params=_FAST,
+            uncertainty_representation=representation,
+        )
+        assert row["uncertainty_representation"] == representation
+
+        report = run_matrix([101], _FAST, uncertainty_representation=representation)
+        assert report["followup_issue"] == 3557
+        assert report["uncertainty_representation"] == representation
+        assert (
+            "not a cross-representation generalization claim"
+            in (report["uncertainty_representation_contract"]["claim_boundary"])
+        )
+        assert set(report["by_mode"]) == set(MODES)
+
+
+def test_unknown_uncertainty_representation_fails_closed():
+    """Unknown representation names fail closed instead of silently reusing belief_drop."""
+    try:
+        run_matrix([101], _FAST, uncertainty_representation="unknown")
+    except ValueError as exc:
+        assert "unknown uncertainty representation" in str(exc)
+    else:
+        raise AssertionError("unknown uncertainty representation was accepted")
 
 
 def test_retained_matches_oracle():

@@ -6,6 +6,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+import numpy as np
 import pytest
 
 from robot_sf.planner.hybrid_global_rl import (
@@ -63,6 +64,37 @@ def test_route_waypoint_is_injected_into_nested_goal_current() -> None:
     assert local_policy.seen[0]["goal"]["current"] == [1.5, 0.25]
     assert local_policy.seen[0]["hybrid_global_rl_final_goal"] == (9.0, 0.0)
     assert adapter.diagnostics()["waypoint"] == [1.5, 0.25]
+
+
+def test_route_waypoint_handles_array_goal_without_ambiguous_truth_value() -> None:
+    local_policy = _LocalPolicy()
+    adapter = HybridGlobalRLLocalAdapter(
+        waypoint_provider=_WaypointProvider((1.5, 0.25)),
+        local_policy=local_policy,
+    )
+
+    adapter.plan(
+        {
+            "goal": {"current": np.asarray([9.0, 0.0], dtype=float)},
+            "robot": {"heading": 0.0},
+        }
+    )
+
+    assert local_policy.seen[0]["goal"]["current"] == [1.5, 0.25]
+    assert local_policy.seen[0]["hybrid_global_rl_final_goal"] == (9.0, 0.0)
+
+
+def test_route_waypoint_initializes_missing_goal_dict() -> None:
+    local_policy = _LocalPolicy()
+    adapter = HybridGlobalRLLocalAdapter(
+        waypoint_provider=_WaypointProvider((1.5, 0.25)),
+        local_policy=local_policy,
+    )
+
+    adapter.plan({"goal": None, "robot": {"heading": 0.0}})
+
+    assert local_policy.seen[0]["goal"]["current"] == [1.5, 0.25]
+    assert "goal_current" not in local_policy.seen[0]
 
 
 def test_route_waypoint_is_injected_into_flat_goal_current() -> None:

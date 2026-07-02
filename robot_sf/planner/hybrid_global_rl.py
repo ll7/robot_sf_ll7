@@ -234,11 +234,14 @@ class HybridGlobalRLLocalAdapter:
             )
 
         goal = conditioned.get("goal")
-        if isinstance(goal, dict) and "current" in goal:
+        if goal is None:
+            goal = {}
+            conditioned["goal"] = goal
+        if isinstance(goal, dict):
             goal["current"] = list(waypoint_list)
         if "goal_current" in conditioned:
             conditioned["goal_current"] = list(waypoint_list)
-        if not (isinstance(goal, dict) and "current" in goal) and "goal_current" not in conditioned:
+        if not isinstance(goal, dict) and "goal_current" not in conditioned:
             conditioned["goal_current"] = list(waypoint_list)
         return conditioned
 
@@ -253,7 +256,9 @@ class HybridGlobalRLLocalAdapter:
         goal = observation.get("goal")
         candidate: Any | None = None
         if isinstance(goal, dict):
-            candidate = goal.get("current") or goal.get("next")
+            candidate = goal.get("current")
+            if candidate is None:
+                candidate = goal.get("next")
         if candidate is None:
             candidate = observation.get("goal_current")
         if candidate is None:

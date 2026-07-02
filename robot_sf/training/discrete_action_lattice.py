@@ -5,10 +5,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from math import isfinite
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
+from typing import Any
 
 
 def _require_finite_bounded_values(
@@ -86,6 +84,15 @@ class DiscreteUnicycleActionLattice:
             max_abs_value=self.max_angular_speed,
             max_field_name="max_angular_speed",
         )
+        object.__setattr__(
+            self,
+            "_commands",
+            tuple(
+                UnicycleCommand(linear_velocity=linear, angular_velocity=angular)
+                for linear in linear_values
+                for angular in angular_values
+            ),
+        )
 
     @property
     def action_count(self) -> int:
@@ -108,11 +115,7 @@ class DiscreteUnicycleActionLattice:
 
         if index < 0 or index >= self.action_count:
             raise IndexError(f"action index {index} outside [0, {self.action_count})")
-        linear_index, angular_index = divmod(index, len(self.angular_values))
-        return UnicycleCommand(
-            linear_velocity=self.linear_values[linear_index],
-            angular_velocity=self.angular_values[angular_index],
-        )
+        return self._commands[index]
 
     def commands(self) -> tuple[UnicycleCommand, ...]:
         """Return all commands in stable index order.
@@ -121,7 +124,7 @@ class DiscreteUnicycleActionLattice:
             Tuple of all configured commands in action-index order.
         """
 
-        return tuple(self.command_at(index) for index in range(self.action_count))
+        return self._commands
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable lattice contract.
@@ -146,6 +149,9 @@ class DiscreteUnicycleActionLattice:
             Validated action lattice.
         """
 
+        if not isinstance(payload, dict):
+            raise ValueError("lattice payload must be a dictionary")
+
         unknown = set(payload) - {
             "linear_values",
             "angular_values",
@@ -165,19 +171,22 @@ class DiscreteUnicycleActionLattice:
             max_angular_speed=payload["max_angular_speed"],
         )
 
-    def to_json_file(self, path: Path) -> None:
+    def to_json_file(self, path: Path | str) -> None:
         """Write the lattice contract to ``path``."""
 
-        path.write_text(
+        Path(path).write_text(
             json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
 
     @classmethod
-    def from_json_file(cls, path: Path) -> DiscreteUnicycleActionLattice:
+    def from_json_file(cls, path: Path | str) -> DiscreteUnicycleActionLattice:
         """Read a lattice contract from ``path``.
 
         Returns:
             Validated action lattice loaded from JSON.
         """
 
-        return cls.from_dict(json.loads(path.read_text(encoding="utf-8")))
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("lattice JSON root must be a dictionary")
+        return cls.from_dict(data)

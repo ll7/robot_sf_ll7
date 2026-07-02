@@ -100,3 +100,31 @@ def test_lattice_rejects_unknown_json_keys() -> None:
                 "extra": True,
             }
         )
+
+
+def test_lattice_rejects_non_dictionary_json_roots(tmp_path) -> None:
+    """JSON lattice contracts must have an object root."""
+    path = tmp_path / "lattice.json"
+    path.write_text("[]\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="JSON root must be a dictionary"):
+        DiscreteUnicycleActionLattice.from_json_file(path)
+
+    with pytest.raises(ValueError, match="payload must be a dictionary"):
+        DiscreteUnicycleActionLattice.from_dict([])
+
+
+def test_lattice_json_helpers_accept_string_paths(tmp_path) -> None:
+    """Path-like API accepts string paths without changing contracts."""
+    lattice = DiscreteUnicycleActionLattice(
+        linear_values=(0.0,),
+        angular_values=(0.0,),
+        max_linear_speed=1.0,
+        max_angular_speed=1.0,
+    )
+    path = tmp_path / "lattice.json"
+
+    lattice.to_json_file(str(path))
+    loaded = DiscreteUnicycleActionLattice.from_json_file(str(path))
+
+    assert loaded.commands() == lattice.commands()

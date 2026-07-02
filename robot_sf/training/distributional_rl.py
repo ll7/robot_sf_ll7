@@ -161,6 +161,8 @@ def select_action_quantiles(quantiles: torch.Tensor, action_indices: torch.Tenso
         raise ValueError("quantiles must have shape [batch, action_count, num_quantiles]")
     if action_indices.ndim != 1 or action_indices.shape[0] != quantiles.shape[0]:
         raise ValueError("action_indices must have shape [batch]")
+    if (action_indices < 0).any() or (action_indices >= quantiles.shape[1]).any():
+        raise ValueError(f"action_indices must be in range [0, {quantiles.shape[1]})")
     gather_index = action_indices.to(device=quantiles.device, dtype=torch.long).view(-1, 1, 1)
     gather_index = gather_index.expand(-1, 1, quantiles.shape[-1])
     return quantiles.gather(dim=1, index=gather_index).squeeze(dim=1)
@@ -227,7 +229,7 @@ def load_quantile_checkpoint_metadata(path: Path) -> dict[str, Any]:
         Checkpoint metadata and action-lattice contract.
     """
 
-    checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+    checkpoint = torch.load(path, map_location="cpu", weights_only=True)
     return {
         "model_metadata": checkpoint["model_metadata"],
         "action_lattice": checkpoint["action_lattice"],

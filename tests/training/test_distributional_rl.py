@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 import torch
 
 from robot_sf.training.discrete_action_lattice import DiscreteUnicycleActionLattice
@@ -55,6 +56,17 @@ def test_select_action_quantiles_gathers_per_batch_distribution() -> None:
     selected = select_action_quantiles(quantiles, torch.tensor([2, 1]))
 
     assert torch.equal(selected, torch.stack([quantiles[0, 2], quantiles[1, 1]]))
+
+
+def test_select_action_quantiles_rejects_out_of_range_indices() -> None:
+    """Action indices fail closed before low-level gather assertions."""
+    quantiles = torch.arange(24, dtype=torch.float32).view(2, 3, 4)
+
+    with pytest.raises(ValueError, match=r"action_indices must be in range"):
+        select_action_quantiles(quantiles, torch.tensor([3, 1]))
+
+    with pytest.raises(ValueError, match=r"action_indices must be in range"):
+        select_action_quantiles(quantiles, torch.tensor([0, -1]))
 
 
 def test_double_q_target_construction_has_expected_shape() -> None:

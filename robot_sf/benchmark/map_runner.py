@@ -124,6 +124,12 @@ from robot_sf.benchmark.map_runner_policies import adaptive_proxemic as _adaptiv
 from robot_sf.benchmark.map_runner_policies import goal as _goal_policy_builder
 from robot_sf.benchmark.map_runner_policies import registry as _policy_builder_registry
 from robot_sf.benchmark.map_runner_policies import safety_barrier as _safety_barrier_builder
+from robot_sf.benchmark.map_runner_policy_actions import (
+    ppo_action_to_unicycle as _ppo_action_to_unicycle_impl,
+)
+from robot_sf.benchmark.map_runner_policy_actions import (
+    update_adapter_impact_metrics as _update_adapter_impact_metrics,
+)
 from robot_sf.benchmark.map_runner_policy_common import (
     build_adapter_policy as _build_adapter_policy,
 )
@@ -229,10 +235,7 @@ from robot_sf.planner.hybrid_rule_local_planner import (
     HybridRuleLocalPlannerAdapter,
     build_hybrid_rule_local_planner_config,
 )
-from robot_sf.planner.kinematics_model import (
-    KinematicsModel,
-    resolve_benchmark_kinematics_model,
-)
+from robot_sf.planner.kinematics_model import resolve_benchmark_kinematics_model
 from robot_sf.planner.lidar_occupancy import (  # noqa: F401
     LidarOccupancyPlannerAdapter,
     build_lidar_occupancy_config,
@@ -942,71 +945,27 @@ def _ppo_action_to_unicycle(
     cfg: dict[str, Any],
     *,
     robot_kinematics: str | None = None,
-    kinematics_model: KinematicsModel | None = None,
+    kinematics_model: Any | None = None,
     project_command: bool = True,
 ) -> tuple[float, float, str]:
-    """Convert PPO action dict into the unicycle command used by map environments.
+    """Compatibility wrapper for the neutral learned-policy action helper.
 
     Returns:
-        Tuple of ``(linear_velocity, angular_velocity, conversion_mode)`` where
-        conversion_mode is ``"native"`` or ``"adapter"``.
+        Tuple ``(linear_velocity, angular_velocity, conversion_mode)``.
     """
-    model = kinematics_model or resolve_benchmark_kinematics_model(
+    if kinematics_model is None:
+        kinematics_model = resolve_benchmark_kinematics_model(
+            robot_kinematics=robot_kinematics,
+            command_limits=cfg,
+        )
+    return _ppo_action_to_unicycle_impl(
+        action,
+        obs,
+        cfg,
         robot_kinematics=robot_kinematics,
-        command_limits=cfg,
+        kinematics_model=kinematics_model,
+        project_command=project_command,
     )
-    if "v" in action and "omega" in action:
-        if project_command:
-            v, omega = model.project((float(action["v"]), float(action["omega"])))
-        else:
-            v, omega = float(action["v"]), float(action["omega"])
-        return v, omega, "native"
-
-    if "vx" not in action or "vy" not in action:
-        raise ValueError(f"Unsupported PPO action payload: {action}")
-
-    vx = float(action["vx"])
-    vy = float(action["vy"])
-    speed = float(np.hypot(vx, vy))
-    if speed < 1e-9:
-        if project_command:
-            v, omega = model.project((0.0, 0.0))
-        else:
-            v, omega = 0.0, 0.0
-        return v, omega, "adapter"
-
-    robot = obs.get("robot", {}) if isinstance(obs.get("robot"), dict) else {}
-    heading = float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
-    desired_heading = float(np.arctan2(vy, vx))
-    heading_error = _normalize_heading(desired_heading - heading)
-    omega_max = float(cfg.get("omega_max", cfg.get("max_angular_speed", 1.0)))
-    omega_kp = float(cfg.get("omega_kp", cfg.get("heading_error_gain", 1.0)))
-    angular_velocity = float(np.clip(omega_kp * heading_error, -omega_max, omega_max))
-
-    if project_command:
-        v, omega = model.project((float(speed), angular_velocity))
-    else:
-        v, omega = float(speed), angular_velocity
-    return v, omega, "adapter"
-
-
-def _update_adapter_impact_metrics(
-    meta: dict[str, Any],
-    conversion_mode: str,
-    *,
-    count_native: bool | None = None,
-) -> None:
-    """Update native-vs-adapted step counters when adapter-impact probing is enabled."""
-    impact = meta.get("adapter_impact")
-    if not isinstance(impact, dict) or not bool(impact.get("requested", False)):
-        return
-    if count_native is None:
-        count_native = conversion_mode == "native"
-    if count_native:
-        impact["native_steps"] = int(impact.get("native_steps", 0)) + 1
-    else:
-        impact["adapted_steps"] = int(impact.get("adapted_steps", 0)) + 1
-    impact["status"] = "collecting"
 
 
 # Registry of migrated per-algorithm policy builders (#3384). Consulted before the
@@ -1060,6 +1019,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         builders=_POLICY_BUILDERS,
         robot_kinematics=robot_kinematics,
         robot_command_mode=robot_command_mode,
+        adapter_impact_eval=adapter_impact_eval,
     )
     if registered_policy is not None:
         return registered_policy

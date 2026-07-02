@@ -39,12 +39,14 @@ def build_risk_surface_dwa(
     *,
     robot_kinematics: str | None = None,
     robot_command_mode: str | None = None,
+    adapter_impact_eval: bool = False,
 ) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
     """Build the deterministic risk-surface DWA adapter policy.
 
     Returns:
         Policy callable and enriched metadata dictionary.
     """
+    del adapter_impact_eval
     normalized_robot_command_mode = (
         str(robot_command_mode).strip().lower() if robot_command_mode is not None else None
     )
@@ -84,12 +86,14 @@ def build_lidar_social_force(
     *,
     robot_kinematics: str | None = None,
     robot_command_mode: str | None = None,
+    adapter_impact_eval: bool = False,
 ) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
     """Build the lidar endpoint-tracked social-force adapter policy.
 
     Returns:
         Policy callable and enriched metadata dictionary.
     """
+    del adapter_impact_eval
     normalized_robot_command_mode = (
         str(robot_command_mode).strip().lower() if robot_command_mode is not None else None
     )

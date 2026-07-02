@@ -22,6 +22,7 @@ class PolicyBuilder(Protocol):
         *,
         robot_kinematics: str | None = None,
         robot_command_mode: str | None = None,
+        adapter_impact_eval: bool = False,
     ) -> PolicyBuildResult:
         """Build a policy callable and metadata for ``algo_key``."""
 
@@ -33,6 +34,7 @@ def build_registered_policy(
     builders: Mapping[str, PolicyBuilder],
     robot_kinematics: str | None = None,
     robot_command_mode: str | None = None,
+    adapter_impact_eval: bool = False,
 ) -> PolicyBuildResult | None:
     """Build a policy from the migrated registry, or return ``None``.
 
@@ -53,4 +55,5 @@ def build_registered_policy(
         algo_config,
         robot_kinematics=robot_kinematics,
         robot_command_mode=robot_command_mode,
+        adapter_impact_eval=adapter_impact_eval,
     )

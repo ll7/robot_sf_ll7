@@ -48,7 +48,7 @@ def test_social_mini_game_metadata_contract() -> None:
     cases: set[str] = set()
     assert len(scenarios) == len(EXPECTED_CASES)
     for scenario in scenarios:
-        smg = scenario.get("metadata", {}).get("smg")
+        smg = (scenario.get("metadata") or {}).get("smg")
         assert isinstance(smg, dict), scenario.get("name")
         assert REQUIRED_SMG_FIELDS <= set(smg), scenario.get("name")
         assert smg["schema_version"] == "robot_sf.social_mini_game.v1"
@@ -72,7 +72,11 @@ def test_social_mini_game_scenarios_construct_and_step_headlessly() -> None:
             config=config,
             seed=3968,
             suite_name="social_mini_games_v0",
-            scenario_name=str(scenario["name"]),
+            scenario_name=str(
+                scenario.get("name")
+                if scenario.get("name") is not None
+                else scenario.get("scenario_id")
+            ),
             algorithm_name="headless_smoke",
         )
         try:

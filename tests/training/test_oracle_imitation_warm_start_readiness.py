@@ -256,6 +256,45 @@ def test_expected_output_paths_must_be_manifest_files(tmp_path: Path) -> None:
     assert report["expected_outputs"]["benchmark_report"]["ready"] is False
 
 
+def test_unknown_expected_output_keys_are_blockers(tmp_path: Path) -> None:
+    """Output manifest keys must stay bounded to the warm-start readiness contract."""
+    manifest_dict = _ready_manifest(tmp_path)
+    expected_outputs = manifest_dict["expected_outputs"]
+    assert isinstance(expected_outputs, dict)
+    expected_outputs["raw_training_traces"] = "docs/context/evidence/raw_training_traces.json"
+    manifest = _write_manifest(tmp_path, manifest_dict)
+
+    report = check_warm_start_readiness(manifest)
+
+    assert report["status"] == "blocked"
+    assert any(
+        "expected_outputs contains unsupported keys: raw_training_traces" in blocker
+        for blocker in report["blockers"]
+    )
+
+
+def test_duplicate_expected_output_paths_are_blockers(tmp_path: Path) -> None:
+    """Each future output type must have its own durable evidence manifest path."""
+    manifest_dict = _ready_manifest(tmp_path)
+    expected_outputs = manifest_dict["expected_outputs"]
+    assert isinstance(expected_outputs, dict)
+    expected_outputs["checkpoint_manifest"] = expected_outputs["training_manifest"]
+    manifest = _write_manifest(tmp_path, manifest_dict)
+
+    report = check_warm_start_readiness(manifest)
+
+    assert report["status"] == "blocked"
+    assert any(
+        "expected_outputs.checkpoint_manifest duplicates training_manifest path" in blocker
+        for blocker in report["blockers"]
+    )
+    assert report["expected_outputs"]["checkpoint_manifest"] == {
+        "path": "docs/context/evidence/unit_training_manifest.json",
+        "ready": False,
+        "detail": "duplicates training_manifest",
+    }
+
+
 def test_require_ready_fails_closed_when_blocked(tmp_path: Path) -> None:
     """require_ready turns a blocked manifest into a fail-closed PrerequisitesNotReadyError.
 

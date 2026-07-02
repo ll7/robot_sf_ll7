@@ -20,7 +20,7 @@ from robot_sf.benchmark.map_runner_policy_metadata import (
 )
 from robot_sf.benchmark.utils import _config_hash
 from robot_sf.planner.cbf_safety_filter import (
-    CollisionConeCbfSafetyFilter,
+    build_cbf_safety_filter,
     build_cbf_safety_filter_config,
 )
 from robot_sf.planner.kinematics_model import resolve_benchmark_kinematics_model
@@ -84,9 +84,9 @@ def build_adapter_policy(  # noqa: C901
         command_limits=algo_config,
     )
     cbf_config = build_cbf_safety_filter_config(algo_config.get("cbf_safety_filter"))
-    cbf_filter: CollisionConeCbfSafetyFilter | None = None
+    cbf_filter: Any | None = None
     if cbf_config.enabled:
-        cbf_filter = CollisionConeCbfSafetyFilter(cbf_config)
+        cbf_filter = build_cbf_safety_filter(cbf_config)
         meta["cbf_safety_filter"] = {
             "status": "enabled",
             "variant": cbf_config.variant,
@@ -95,7 +95,7 @@ def build_adapter_policy(  # noqa: C901
             "claim_boundary": "planner-comparison baseline only; not a formal safety certificate",
         }
         meta["safety_shield_contract"] = shield_contract_metadata(
-            shield_name="CollisionConeCbfSafetyFilter",
+            shield_name=type(cbf_filter).__name__,
             prediction_source="current_state",
             fallback_policy="qp_projection_best_effort",
         )

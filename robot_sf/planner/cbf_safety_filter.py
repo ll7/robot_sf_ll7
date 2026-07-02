@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from dataclasses import replace as dataclass_replace
 from typing import Any
 
 import numpy as np
@@ -22,7 +23,7 @@ ActionCommand = tuple[float, float]
 
 @dataclass(frozen=True)
 class CbfSafetyFilterConfig:
-    """Configuration for the collision-cone CBF command filter."""
+    """Configuration for collision-cone or DPCBF command filters."""
 
     enabled: bool = False
     variant: str = "collision_cone"
@@ -35,6 +36,23 @@ class CbfSafetyFilterConfig:
     turn_gain: float = 2.0
     max_projection_passes: int = 3
     min_clearance_h: float = 1e-6
+    dpcbf_lambda_gain: float = 1.0
+    dpcbf_mu_gain: float = 1.0
+    relative_speed_epsilon: float = 1e-6
+    dpcbf_grid_samples: int = 161
+
+
+def _validate_dpcbf_config_bounds(cfg: CbfSafetyFilterConfig) -> None:
+    """Fail closed for malformed Dynamic Parabolic CBF tuning values."""
+
+    if cfg.dpcbf_lambda_gain < 0.0:
+        raise ValueError("CBF safety filter dpcbf_lambda_gain must be non-negative")
+    if cfg.dpcbf_mu_gain < 0.0:
+        raise ValueError("CBF safety filter dpcbf_mu_gain must be non-negative")
+    if cfg.relative_speed_epsilon <= 0.0:
+        raise ValueError("CBF safety filter relative_speed_epsilon must be positive")
+    if cfg.dpcbf_grid_samples < 3:
+        raise ValueError("CBF safety filter dpcbf_grid_samples must be >= 3")
 
 
 def build_cbf_safety_filter_config(config: dict[str, Any] | None) -> CbfSafetyFilterConfig:
@@ -53,16 +71,20 @@ def build_cbf_safety_filter_config(config: dict[str, Any] | None) -> CbfSafetyFi
         raise ValueError(f"Unknown CBF safety filter config keys: {unknown}")
     cfg = CbfSafetyFilterConfig(**raw)
     variant = str(cfg.variant).strip().lower()
-    if variant != "collision_cone":
-        raise ValueError(
-            "Only the collision_cone CBF safety-filter variant is implemented in this slice"
-        )
+    if variant not in {
+        "collision_cone",
+        "collision_cone_cbf_v1",
+        "dynamic_parabolic",
+        "dynamic_parabolic_cbf_v1",
+    }:
+        raise ValueError("CBF safety-filter variant must be collision_cone or dynamic_parabolic")
     if cfg.alpha < 0.0:
         raise ValueError("CBF safety filter alpha must be non-negative")
     if cfg.safety_margin < 0.0:
         raise ValueError("CBF safety filter safety_margin must be non-negative")
     if cfg.max_projection_passes < 1:
         raise ValueError("CBF safety filter max_projection_passes must be >= 1")
+    _validate_dpcbf_config_bounds(cfg)
     return cfg
 
 
@@ -347,14 +369,124 @@ class CollisionConeCbfSafetyFilter:
         self._stats["last_decision"] = decision.to_metadata()
 
 
+class DynamicParabolicCbfSafetyFilter(CollisionConeCbfSafetyFilter):
+    """Apply the versioned Dynamic Parabolic CBF scalar-speed projection."""
+
+    def filter_command(
+        self, observation: dict[str, Any], proposed_command: ActionCommand
+    ) -> ShieldDecision:
+        """Return DPCBF shield decision for ``proposed_command`` in ``observation``."""
+
+        if not self.config.enabled:
+            return ShieldDecision(
+                proposed_action=proposed_command,
+                filtered_action=proposed_command,
+                decision_label="cbf_disabled",
+                intervention_reason="cbf_safety_filter_disabled",
+                prediction_source="current_state",
+            )
+
+        robot_pos, _robot_vel, heading, robot_radius = _robot_state(observation, self.config)
+        obstacles = _obstacles(observation, self.config)
+        max_linear = (
+            float(self.config.max_linear_speed)
+            if self.config.max_linear_speed is not None
+            else max(2.0, abs(float(proposed_command[0])))
+        )
+        context = CBFFilterContext(
+            robot_position_m=(float(robot_pos[0]), float(robot_pos[1])),
+            robot_heading_rad=float(heading),
+            robot_radius_m=float(robot_radius),
+            obstacles=tuple(
+                CBFObstacleState(
+                    position_m=(float(obstacle.position[0]), float(obstacle.position[1])),
+                    velocity_mps=(float(obstacle.velocity[0]), float(obstacle.velocity[1])),
+                    radius_m=float(obstacle.radius),
+                )
+                for obstacle in obstacles
+            ),
+        )
+        public_config = CBFSafetyFilterConfig(
+            enabled=True,
+            variant=CBF_VARIANT_DYNAMIC_PARABOLIC,
+            alpha=float(self.config.alpha),
+            safety_radius_margin_m=float(self.config.safety_margin),
+            min_linear_velocity_m_s=0.0,
+            max_linear_velocity_m_s=max_linear,
+            fallback_mode="stop_keep_turn",
+            dpcbf_lambda_gain=float(self.config.dpcbf_lambda_gain),
+            dpcbf_mu_gain=float(self.config.dpcbf_mu_gain),
+            relative_speed_epsilon=float(self.config.relative_speed_epsilon),
+            dpcbf_grid_samples=int(self.config.dpcbf_grid_samples),
+        )
+        result = apply_cbf_safety_filter(
+            float(proposed_command[0]),
+            float(proposed_command[1]),
+            context,
+            public_config,
+        )
+        fallback = bool(result["fallback_applied"])
+        label = (
+            "cbf_best_effort"
+            if fallback
+            else "cbf_projected"
+            if bool(result["intervened"])
+            else "cbf_feasible"
+        )
+        filtered = (
+            float(result["filtered_linear_velocity"]),
+            float(result["filtered_angular_velocity"]),
+        )
+        violated = (
+            ("dynamic_parabolic_cbf",)
+            if result["min_barrier_before"] is not None and result["min_barrier_before"] < 0.0
+            else ()
+        )
+        decision = ShieldDecision(
+            proposed_action=(float(proposed_command[0]), float(proposed_command[1])),
+            filtered_action=filtered,
+            decision_label=label,
+            intervention_reason=(
+                "dynamic_parabolic_cbf_projection"
+                if bool(result["intervened"])
+                else "proposed_command_satisfies_dynamic_parabolic_cbf"
+            ),
+            violated_constraints=violated,
+            prediction_source="current_state",
+            fallback_controller_state={
+                "filter": "DynamicParabolicCbfSafetyFilter",
+                "variant": CBF_VARIANT_DYNAMIC_PARABOLIC,
+                "fallback": fallback,
+                "projection_method": result.get("projection_method"),
+            },
+            proposed_evaluation={"min_cbf_margin": result["min_barrier_before"]},
+            selected_evaluation={"min_cbf_margin": result["min_barrier_after"]},
+        )
+        self._record_decision(decision, fallback=fallback)
+        return decision
+
+
+def build_cbf_safety_filter(config: CbfSafetyFilterConfig) -> CollisionConeCbfSafetyFilter:
+    """Return the concrete CBF filter implementation for ``config.variant``."""
+
+    variant = str(config.variant).strip().lower()
+    if variant in {"collision_cone", CBF_VARIANT_COLLISION_CONE}:
+        return CollisionConeCbfSafetyFilter(config)
+    if variant in {"dynamic_parabolic", CBF_VARIANT_DYNAMIC_PARABOLIC}:
+        return DynamicParabolicCbfSafetyFilter(
+            dataclass_replace(config, variant=CBF_VARIANT_DYNAMIC_PARABOLIC)
+        )
+    raise ValueError("CBF safety-filter variant must be collision_cone or dynamic_parabolic")
+
+
 class CbfSafetyFilterPlannerWrapper:
-    """Planner wrapper that applies :class:`CollisionConeCbfSafetyFilter` after ``plan``."""
+    """Planner wrapper applies a versioned CBF safety filter after ``plan``."""
 
     def __init__(self, planner: Any, config: CbfSafetyFilterConfig | None = None) -> None:
         """Wrap a planner exposing ``plan(observation) -> (linear, angular)``."""
 
         self.planner = planner
-        self.filter = CollisionConeCbfSafetyFilter(config)
+        self.filter = build_cbf_safety_filter(config or CbfSafetyFilterConfig())
         self.last_decision: ShieldDecision | None = None
 
     def plan(self, observation: dict[str, Any]) -> ActionCommand:
@@ -416,6 +548,10 @@ class CBFSafetyFilterConfig:
     max_linear_velocity_m_s: float = 2.0
     fallback_mode: str = "stop_keep_turn"
     angular_weight: float = 0.05
+    dpcbf_lambda_gain: float = 1.0
+    dpcbf_mu_gain: float = 1.0
+    relative_speed_epsilon: float = 1e-6
+    dpcbf_grid_samples: int = 161
 
 
 @dataclass(frozen=True, slots=True)
@@ -465,6 +601,209 @@ def _validate_public_context(context: CBFFilterContext) -> None:
             raise ValueError("obstacle.radius_m must be finite and non-negative")
 
 
+def _dynamic_parabolic_barrier(
+    *,
+    linear_velocity: float,
+    robot_position: np.ndarray,
+    robot_heading: float,
+    robot_radius: float,
+    obstacle: CBFObstacleState,
+    config: CBFSafetyFilterConfig,
+) -> float:
+    """Evaluate the DPCBF relative-velocity parabola for one scalar speed.
+
+    Returns:
+        Barrier value where non-negative means the scalar speed is feasible.
+    """
+
+    p_rel = np.asarray(obstacle.position_m, dtype=float) - robot_position
+    v_robot = float(linear_velocity) * np.asarray(
+        [math.cos(robot_heading), math.sin(robot_heading)], dtype=float
+    )
+    v_rel = np.asarray(obstacle.velocity_mps, dtype=float) - v_robot
+    alpha = math.atan2(float(p_rel[1]), float(p_rel[0]))
+    cos_a = math.cos(alpha)
+    sin_a = math.sin(alpha)
+    v_tilde_x = float(cos_a * v_rel[0] + sin_a * v_rel[1])
+    v_tilde_y = float(-sin_a * v_rel[0] + cos_a * v_rel[1])
+    radius = float(robot_radius) + float(obstacle.radius_m) + float(config.safety_radius_margin_m)
+    clearance_sq = max(float(np.dot(p_rel, p_rel)) - radius * radius, 0.0)
+    clearance = math.sqrt(clearance_sq)
+    relative_speed = max(float(np.linalg.norm(v_rel)), float(config.relative_speed_epsilon))
+    lambda_term = float(config.dpcbf_lambda_gain) * clearance / relative_speed
+    mu_term = float(config.dpcbf_mu_gain) * clearance
+    return float(v_tilde_x + lambda_term * v_tilde_y * v_tilde_y + mu_term)
+
+
+def _precompute_dynamic_parabolic_obstacles(
+    *,
+    robot_position: np.ndarray,
+    robot_radius: float,
+    obstacles: tuple[CBFObstacleState, ...],
+    config: CBFSafetyFilterConfig,
+) -> list[tuple[np.ndarray, float, float, float, float]]:
+    """Precompute obstacle constants reused across DPCBF scalar-speed candidates.
+
+    Returns:
+        list[tuple[np.ndarray, float, float, float, float]]: Per-obstacle velocity,
+        line-of-sight trigonometry, clearance, and static DPCBF offset.
+    """
+
+    constants: list[tuple[np.ndarray, float, float, float, float]] = []
+    for obstacle in obstacles:
+        p_rel = np.asarray(obstacle.position_m, dtype=float) - robot_position
+        alpha = math.atan2(float(p_rel[1]), float(p_rel[0]))
+        radius = (
+            float(robot_radius) + float(obstacle.radius_m) + float(config.safety_radius_margin_m)
+        )
+        clearance_sq = max(float(np.dot(p_rel, p_rel)) - radius * radius, 0.0)
+        clearance = math.sqrt(clearance_sq)
+        constants.append(
+            (
+                np.asarray(obstacle.velocity_mps, dtype=float),
+                math.cos(alpha),
+                math.sin(alpha),
+                clearance,
+                float(config.dpcbf_mu_gain) * clearance,
+            )
+        )
+    return constants
+
+
+def _dynamic_parabolic_barrier_from_constants(
+    *,
+    linear_velocity: float,
+    heading_unit: np.ndarray,
+    obstacle_constants: tuple[np.ndarray, float, float, float, float],
+    config: CBFSafetyFilterConfig,
+) -> float:
+    """Evaluate DPCBF barrier using obstacle constants shared across grid candidates.
+
+    Returns:
+        float: Barrier value where non-negative means scalar speed is feasible.
+    """
+
+    obstacle_velocity, cos_a, sin_a, clearance, mu_term = obstacle_constants
+    v_robot = float(linear_velocity) * heading_unit
+    v_rel = obstacle_velocity - v_robot
+    v_tilde_x = float(cos_a * v_rel[0] + sin_a * v_rel[1])
+    v_tilde_y = float(-sin_a * v_rel[0] + cos_a * v_rel[1])
+    relative_speed = max(float(np.linalg.norm(v_rel)), float(config.relative_speed_epsilon))
+    lambda_term = float(config.dpcbf_lambda_gain) * clearance / relative_speed
+    return float(v_tilde_x + lambda_term * v_tilde_y * v_tilde_y + mu_term)
+
+
+def _apply_dynamic_parabolic_cbf(
+    linear_velocity: float,
+    angular_velocity: float,
+    context: CBFFilterContext,
+    config: CBFSafetyFilterConfig,
+) -> dict[str, Any]:
+    """Project scalar speed by deterministic bounded DPCBF grid/refine search.
+
+    Returns:
+        Schema-tagged CBF filter result with projection diagnostics.
+    """
+
+    lower = float(config.min_linear_velocity_m_s)
+    upper = float(config.max_linear_velocity_m_s)
+    if lower > upper:
+        raise ValueError("min_linear_velocity_m_s must be <= max_linear_velocity_m_s")
+    if config.fallback_mode != "stop_keep_turn":
+        raise ValueError("Only fallback_mode='stop_keep_turn' is implemented")
+    if config.dpcbf_lambda_gain < 0.0:
+        raise ValueError("dpcbf_lambda_gain must be non-negative")
+    if config.dpcbf_mu_gain < 0.0:
+        raise ValueError("dpcbf_mu_gain must be non-negative")
+    if config.relative_speed_epsilon <= 0.0:
+        raise ValueError("relative_speed_epsilon must be positive")
+    if config.dpcbf_grid_samples < 3:
+        raise ValueError("dpcbf_grid_samples must be >= 3")
+
+    robot_position = np.asarray(context.robot_position_m, dtype=float)
+    robot_heading = float(context.robot_heading_rad)
+    heading_unit = np.asarray([math.cos(robot_heading), math.sin(robot_heading)], dtype=float)
+    obstacle_constants = _precompute_dynamic_parabolic_obstacles(
+        robot_position=robot_position,
+        robot_radius=float(context.robot_radius_m),
+        obstacles=context.obstacles,
+        config=config,
+    )
+    nominal = float(np.clip(float(linear_velocity), lower, upper))
+    barriers_before = [
+        _dynamic_parabolic_barrier_from_constants(
+            linear_velocity=nominal,
+            heading_unit=heading_unit,
+            obstacle_constants=constants,
+            config=config,
+        )
+        for constants in obstacle_constants
+    ]
+    if not context.obstacles:
+        selected = nominal
+        feasible = True
+    elif all(barrier >= 0.0 for barrier in barriers_before):
+        selected = nominal
+        feasible = True
+    else:
+        grid = np.linspace(lower, upper, int(config.dpcbf_grid_samples), dtype=float)
+        feasible_values = [
+            float(candidate)
+            for candidate in grid
+            if all(
+                _dynamic_parabolic_barrier_from_constants(
+                    linear_velocity=float(candidate),
+                    heading_unit=heading_unit,
+                    obstacle_constants=constants,
+                    config=config,
+                )
+                >= 0.0
+                for constants in obstacle_constants
+            )
+        ]
+        if feasible_values:
+            selected = min(feasible_values, key=lambda value: abs(value - nominal))
+            feasible = True
+        else:
+            selected = float(np.clip(0.0, lower, upper))
+            feasible = False
+
+    barriers_after = [
+        _dynamic_parabolic_barrier_from_constants(
+            linear_velocity=selected,
+            heading_unit=heading_unit,
+            obstacle_constants=constants,
+            config=config,
+        )
+        for constants in obstacle_constants
+    ]
+    min_before = min(barriers_before) if barriers_before else None
+    min_after = min(barriers_after) if barriers_after else None
+    intervened = not math.isclose(selected, float(linear_velocity), rel_tol=1.0e-9, abs_tol=1.0e-9)
+    fallback_applied = not feasible
+    qp_status = (
+        "fallback_infeasible" if fallback_applied else "filtered" if intervened else "pass_through"
+    )
+    return {
+        "schema_version": CBF_SAFETY_FILTER_SCHEMA,
+        "variant": CBF_VARIANT_DYNAMIC_PARABOLIC,
+        "enabled": True,
+        "qp_status": qp_status,
+        "qp_feasible": bool(feasible),
+        "fallback_applied": bool(fallback_applied),
+        "intervened": bool(intervened),
+        "nominal_linear_velocity": float(linear_velocity),
+        "nominal_angular_velocity": float(angular_velocity),
+        "filtered_linear_velocity": float(selected),
+        "filtered_angular_velocity": float(angular_velocity),
+        "active_constraint_count": len(context.obstacles),
+        "min_barrier_before": min_before,
+        "min_barrier_after": min_after,
+        "hard_constraint_violation": bool(min_after is not None and min_after < -1.0e-9),
+        "projection_method": "bounded_scalar_dpcbf_grid_refine_v1",
+    }
+
+
 def apply_cbf_safety_filter(  # noqa: C901
     linear_velocity: float,
     angular_velocity: float,
@@ -482,9 +821,25 @@ def apply_cbf_safety_filter(  # noqa: C901
     if not math.isfinite(float(linear_velocity)) or not math.isfinite(float(angular_velocity)):
         raise ValueError("nominal command velocities must be finite")
     if config.variant == CBF_VARIANT_DYNAMIC_PARABOLIC:
-        raise NotImplementedError(
-            "dynamic_parabolic_cbf_v1 scaffolded but out of scope for #3948 first slice"
-        )
+        if not config.enabled:
+            return {
+                "schema_version": CBF_SAFETY_FILTER_SCHEMA,
+                "variant": config.variant,
+                "enabled": False,
+                "qp_status": "disabled",
+                "qp_feasible": True,
+                "fallback_applied": False,
+                "intervened": False,
+                "nominal_linear_velocity": float(linear_velocity),
+                "nominal_angular_velocity": float(angular_velocity),
+                "filtered_linear_velocity": float(linear_velocity),
+                "filtered_angular_velocity": float(angular_velocity),
+                "active_constraint_count": 0,
+                "min_barrier_before": None,
+                "min_barrier_after": None,
+                "hard_constraint_violation": False,
+            }
+        return _apply_dynamic_parabolic_cbf(linear_velocity, angular_velocity, context, config)
     if config.variant != CBF_VARIANT_COLLISION_CONE:
         raise ValueError("CBF variant must be collision_cone_cbf_v1")
     if not config.enabled:
@@ -618,6 +973,8 @@ __all__ = [
     "CbfSafetyFilterConfig",
     "CbfSafetyFilterPlannerWrapper",
     "CollisionConeCbfSafetyFilter",
+    "DynamicParabolicCbfSafetyFilter",
     "apply_cbf_safety_filter",
+    "build_cbf_safety_filter",
     "build_cbf_safety_filter_config",
 ]

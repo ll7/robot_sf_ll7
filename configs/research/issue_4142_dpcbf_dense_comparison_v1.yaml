@@ -1,0 +1,29 @@
+# Issue #4142 dense Dynamic Parabolic Control Barrier Function comparison packet.
+#
+# Claim boundary: predeclared diagnostic comparison inputs only. Running the
+# full dense dynamic-obstacle campaign, Slurm/GPU submission, and any
+# paper-facing safety-performance claim are out of scope for this PR.
+# Canonical invocation: use this packet as the stable experiment config,
+# for example with `--config configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml`.
+schema_version: robot_sf.issue_4142_dpcbf_dense_comparison.v1
+scenario_manifest: configs/scenarios/sets/issue_4142_dense_dynamic_cbf_v1.yaml
+algorithm: prediction_mpc_cv
+algorithm_configs:
+  cbf_off: configs/algos/prediction_mpc_cv.yaml
+  cbf_collision_cone_on: configs/algos/prediction_mpc_cv_cbf_collision_cone.yaml
+  cbf_dynamic_parabolic_v1_on: configs/algos/prediction_mpc_cv_cbf_dynamic_parabolic_v1.yaml
+runtime_cbf_arms:
+  - enabled: false
+    arm_key: cbf_off
+  - enabled: true
+    arm_key: cbf_collision_cone_on
+  - enabled: true
+    arm_key: cbf_dynamic_parabolic_v1_on
+    variant: dynamic_parabolic_cbf_v1
+summary_contract:
+  evidence_tier: bounded_runtime_comparison
+  fallback_rows_are_success_evidence: false
+  required_arms:
+    - cbf_off
+    - cbf_collision_cone_on
+    - cbf_dynamic_parabolic_v1_on

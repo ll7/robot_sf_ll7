@@ -12,20 +12,33 @@ import numpy as np
 
 from robot_sf.planner.cbf_safety_filter import (
     CbfSafetyFilterConfig,
-    CollisionConeCbfSafetyFilter,
+    build_cbf_safety_filter,
 )
 
 CBF_SAFETY_FILTER_RUNTIME_STEP_SCHEMA = "cbf_safety_filter_runtime_step.v1"
 CBF_SAFETY_FILTER_EPISODE_SUMMARY_SCHEMA = "cbf_safety_filter_episode_summary.v1"
 CBF_OFF_ARM = "cbf_off"
 CBF_COLLISION_CONE_ARM = "cbf_collision_cone_on"
+CBF_DYNAMIC_PARABOLIC_V1_ARM = "cbf_dynamic_parabolic_v1_on"
 CBF_VARIANT_COLLISION_CONE = "collision_cone"
-CBF_VARIANT_DYNAMIC_PARABOLIC = "dynamic_parabolic"
+CBF_VARIANT_DYNAMIC_PARABOLIC_V1 = "dynamic_parabolic_cbf_v1"
+CBF_KNOWN_VARIANTS = {
+    CBF_VARIANT_COLLISION_CONE,
+    "collision_cone_cbf_v1",
+    "dynamic_parabolic",
+    CBF_VARIANT_DYNAMIC_PARABOLIC_V1,
+}
 
-_PREDECLARED_CBF_CONFIG = CbfSafetyFilterConfig(
-    enabled=True,
-    variant=CBF_VARIANT_COLLISION_CONE,
-)
+_PREDECLARED_CBF_CONFIG_BY_ARM = {
+    CBF_COLLISION_CONE_ARM: CbfSafetyFilterConfig(
+        enabled=True,
+        variant=CBF_VARIANT_COLLISION_CONE,
+    ),
+    CBF_DYNAMIC_PARABOLIC_V1_ARM: CbfSafetyFilterConfig(
+        enabled=True,
+        variant=CBF_VARIANT_DYNAMIC_PARABOLIC_V1,
+    ),
+}
 _PREDECLARED_THRESHOLD_FIELDS = (
     "variant",
     "alpha",
@@ -37,6 +50,10 @@ _PREDECLARED_THRESHOLD_FIELDS = (
     "turn_gain",
     "max_projection_passes",
     "min_clearance_h",
+    "dpcbf_lambda_gain",
+    "dpcbf_mu_gain",
+    "relative_speed_epsilon",
+    "dpcbf_grid_samples",
 )
 
 
@@ -56,6 +73,10 @@ class CBFSafetyFilterRuntimeConfig:
     turn_gain: float = 2.0
     max_projection_passes: int = 3
     min_clearance_h: float = 1.0e-6
+    dpcbf_lambda_gain: float = 1.0
+    dpcbf_mu_gain: float = 1.0
+    relative_speed_epsilon: float = 1.0e-6
+    dpcbf_grid_samples: int = 161
     fallback_mode: str = "stop_keep_turn"
     fail_on_native_action: bool = True
     fail_on_unsupported_command: bool = True
@@ -94,44 +115,45 @@ def validate_runtime_config(  # noqa: C901
     """
 
     arm_key = str(runtime.arm_key)
-    if arm_key not in {CBF_OFF_ARM, CBF_COLLISION_CONE_ARM}:
+    enabled_arms = {CBF_COLLISION_CONE_ARM, CBF_DYNAMIC_PARABOLIC_V1_ARM}
+    if arm_key not in {CBF_OFF_ARM, *enabled_arms}:
         raise ValueError(
-            "cbf_safety_filter.arm_key must be cbf_off or cbf_collision_cone_on; "
+            "cbf_safety_filter.arm_key must be cbf_off, cbf_collision_cone_on, "
+            "or cbf_dynamic_parabolic_v1_on; "
             "threshold changes require a versioned experimental arm"
         )
-    if bool(runtime.enabled) and arm_key != CBF_COLLISION_CONE_ARM:
-        raise ValueError("cbf_safety_filter.enabled=True requires arm_key='cbf_collision_cone_on'")
+    if bool(runtime.enabled) and arm_key not in enabled_arms:
+        raise ValueError("cbf_safety_filter.enabled=True requires a predeclared enabled arm_key")
     if not bool(runtime.enabled) and arm_key != CBF_OFF_ARM:
         raise ValueError("cbf_safety_filter.enabled=False requires arm_key='cbf_off'")
-    if runtime.variant == CBF_VARIANT_DYNAMIC_PARABOLIC:
-        raise NotImplementedError(
-            "dynamic_parabolic CBF scaffolded but out of scope for #3948 first slice"
-        )
-    if runtime.variant != CBF_VARIANT_COLLISION_CONE:
-        raise ValueError("cbf_safety_filter.variant must be collision_cone")
+    expected_config = _PREDECLARED_CBF_CONFIG_BY_ARM.get(arm_key)
+    if bool(runtime.enabled) and expected_config is None:
+        raise ValueError("cbf_safety_filter enabled arm must have predeclared config")
+    if arm_key == CBF_OFF_ARM and runtime.variant not in CBF_KNOWN_VARIANTS:
+        raise ValueError("cbf_safety_filter.variant must be a known CBF variant")
     if runtime.fallback_mode != "stop_keep_turn":
         raise ValueError("cbf_safety_filter.fallback_mode must be stop_keep_turn")
     if bool(runtime.enabled):
         for field_name in _PREDECLARED_THRESHOLD_FIELDS:
             observed = getattr(runtime, field_name)
-            expected = getattr(_PREDECLARED_CBF_CONFIG, field_name)
+            expected = getattr(expected_config, field_name)
             if observed is None or expected is None:
                 if observed != expected:
                     raise ValueError(
-                        "cbf_safety_filter.cbf_collision_cone_on thresholds must match "
+                        f"cbf_safety_filter.{arm_key} thresholds must match "
                         f"predeclared ablation config: {field_name}={expected}"
                     )
                 continue
             if isinstance(expected, str):
                 if str(observed) != expected:
                     raise ValueError(
-                        "cbf_safety_filter.cbf_collision_cone_on thresholds must match "
+                        f"cbf_safety_filter.{arm_key} thresholds must match "
                         f"predeclared ablation config: {field_name}={expected}"
                     )
                 continue
             if not math.isclose(float(observed), float(expected), rel_tol=0.0, abs_tol=1.0e-12):
                 raise ValueError(
-                    "cbf_safety_filter.cbf_collision_cone_on thresholds must match "
+                    f"cbf_safety_filter.{arm_key} thresholds must match "
                     f"predeclared ablation config: {field_name}={expected}"
                 )
     return runtime
@@ -152,6 +174,10 @@ def cbf_filter_config(runtime: CBFSafetyFilterRuntimeConfig) -> CbfSafetyFilterC
         turn_gain=float(runtime.turn_gain),
         max_projection_passes=int(runtime.max_projection_passes),
         min_clearance_h=float(runtime.min_clearance_h),
+        dpcbf_lambda_gain=float(runtime.dpcbf_lambda_gain),
+        dpcbf_mu_gain=float(runtime.dpcbf_mu_gain),
+        relative_speed_epsilon=float(runtime.relative_speed_epsilon),
+        dpcbf_grid_samples=int(runtime.dpcbf_grid_samples),
     )
 
 
@@ -310,7 +336,7 @@ def apply_runtime_cbf_safety_filter(
         previous_ped_positions=previous_ped_positions,
         dt=float(config.sim_config.time_per_step_in_secs),
     )
-    filter_ = CollisionConeCbfSafetyFilter(cbf_filter_config(runtime))
+    filter_ = build_cbf_safety_filter(cbf_filter_config(runtime))
     decision = filter_.filter_command(observation, (float(command[0]), float(command[1])))
     decision_meta = decision.to_metadata()
     qp_status = _status_from_decision_label(
@@ -336,6 +362,7 @@ def apply_runtime_cbf_safety_filter(
         "min_barrier_before": decision.proposed_evaluation.get("min_cbf_margin"),
         "min_barrier_after": decision.selected_evaluation.get("min_cbf_margin"),
         "hard_constraint_violation": bool(decision.final_constraint_violation),
+        "projection_method": decision.fallback_controller_state.get("projection_method"),
         **provenance,
     }
     if runtime.record_step_trace:
@@ -394,6 +421,12 @@ def summarize_cbf_safety_filter_trace(
     intervened_step_count = sum(1 for record in trace if bool(record.get("intervened", False)))
     infeasible_count = sum(1 for record in trace if not bool(record.get("qp_feasible", True)))
     fallback_count = sum(1 for record in trace if bool(record.get("fallback_applied", False)))
+    claim_boundary = (
+        "diagnostic opt-in Dynamic Parabolic CBF runtime arm; bounded comparison evidence "
+        "only; not a formal safety certificate"
+        if runtime.arm_key == CBF_DYNAMIC_PARABOLIC_V1_ARM
+        else "diagnostic opt-in collision-cone CBF baseline; not a safety certificate"
+    )
     summary = {
         "schema_version": CBF_SAFETY_FILTER_EPISODE_SUMMARY_SCHEMA,
         "enabled": bool(runtime.enabled),
@@ -411,7 +444,9 @@ def summarize_cbf_safety_filter_trace(
         "qp_infeasible_rate": infeasible_count / step_count if step_count else 0.0,
         "fallback_rate": fallback_count / step_count if step_count else 0.0,
         "status_counts": dict(status_counts),
-        "claim_boundary": "diagnostic opt-in collision-cone CBF baseline; not a safety certificate",
+        "claim_boundary": claim_boundary,
+        "evidence_tier": "bounded_runtime_comparison",
+        "fallback_rows_are_success_evidence": False,
         "context_source": "simulator_state_pre_step",
     }
     if runtime.record_step_trace:
@@ -421,6 +456,7 @@ def summarize_cbf_safety_filter_trace(
 
 __all__ = [
     "CBF_COLLISION_CONE_ARM",
+    "CBF_DYNAMIC_PARABOLIC_V1_ARM",
     "CBF_OFF_ARM",
     "CBF_SAFETY_FILTER_EPISODE_SUMMARY_SCHEMA",
     "CBF_SAFETY_FILTER_RUNTIME_STEP_SCHEMA",

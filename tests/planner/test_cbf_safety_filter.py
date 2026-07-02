@@ -12,7 +12,9 @@ from robot_sf.planner.cbf_safety_filter import (
     CbfSafetyFilterConfig,
     CbfSafetyFilterPlannerWrapper,
     CollisionConeCbfSafetyFilter,
+    DynamicParabolicCbfSafetyFilter,
     apply_cbf_safety_filter,
+    build_cbf_safety_filter,
     build_cbf_safety_filter_config,
 )
 
@@ -95,16 +97,63 @@ def test_public_apply_cbf_filter_projects_head_on_command() -> None:
     assert result["intervened"] is True
 
 
-def test_public_apply_cbf_filter_dynamic_parabolic_scaffold_fails_closed() -> None:
-    """DPCBF is scaffolded but intentionally unavailable in first slice."""
+def test_public_apply_cbf_filter_dynamic_parabolic_no_obstacles_passes_through() -> None:
+    """DPCBF keeps a finite command unchanged when no obstacles constrain it."""
 
-    with pytest.raises(NotImplementedError, match="dynamic_parabolic_cbf_v1"):
-        apply_cbf_safety_filter(
-            0.8,
-            0.1,
-            _public_context(),
-            CBFSafetyFilterConfig(enabled=True, variant=CBF_VARIANT_DYNAMIC_PARABOLIC),
-        )
+    context = CBFFilterContext(
+        robot_position_m=(0.0, 0.0),
+        robot_heading_rad=0.0,
+        robot_radius_m=0.3,
+        obstacles=(),
+    )
+    result = apply_cbf_safety_filter(
+        0.8,
+        0.1,
+        context,
+        CBFSafetyFilterConfig(enabled=True, variant=CBF_VARIANT_DYNAMIC_PARABOLIC),
+    )
+
+    assert result["qp_status"] == "pass_through"
+    assert result["projection_method"] == "bounded_scalar_dpcbf_grid_refine_v1"
+    assert result["filtered_linear_velocity"] == pytest.approx(0.8)
+
+
+def test_public_apply_cbf_filter_dynamic_parabolic_feasible_nominal_passes_through() -> None:
+    """DPCBF should not snap feasible nominal commands to the search grid."""
+
+    context = CBFFilterContext(
+        robot_position_m=(0.0, 0.0),
+        robot_heading_rad=0.0,
+        robot_radius_m=0.3,
+        obstacles=(
+            CBFObstacleState(position_m=(10.0, 5.0), velocity_mps=(0.0, 0.0), radius_m=0.3),
+        ),
+    )
+    result = apply_cbf_safety_filter(
+        0.817,
+        0.1,
+        context,
+        CBFSafetyFilterConfig(enabled=True, variant=CBF_VARIANT_DYNAMIC_PARABOLIC),
+    )
+
+    assert result["qp_status"] == "pass_through"
+    assert result["intervened"] is False
+    assert result["filtered_linear_velocity"] == pytest.approx(0.817)
+
+
+def test_public_apply_cbf_filter_dynamic_parabolic_projects_closing_command() -> None:
+    """DPCBF projects a head-on closing command to a lower scalar speed."""
+
+    result = apply_cbf_safety_filter(
+        0.8,
+        0.1,
+        _public_context(),
+        CBFSafetyFilterConfig(enabled=True, variant=CBF_VARIANT_DYNAMIC_PARABOLIC),
+    )
+
+    assert result["qp_status"] in {"filtered", "fallback_infeasible"}
+    assert result["filtered_linear_velocity"] < 0.8
+    assert result["projection_method"] == "bounded_scalar_dpcbf_grid_refine_v1"
 
 
 def test_public_apply_cbf_filter_rejects_malformed_state() -> None:
@@ -171,11 +220,14 @@ def test_wrapper_disabled_returns_nominal_command_unchanged() -> None:
     assert wrapper.last_decision is None
 
 
-def test_build_cbf_config_rejects_unimplemented_dynamic_parabolic_variant() -> None:
-    """Dynamic-parabolic CBF is deliberately out of this first bounded slice."""
+def test_build_cbf_config_accepts_dynamic_parabolic_variant() -> None:
+    """Dynamic-parabolic CBF config builds the versioned DPCBF filter."""
 
-    with pytest.raises(ValueError, match="collision_cone"):
-        build_cbf_safety_filter_config({"enabled": True, "variant": "dynamic_parabolic"})
+    cfg = build_cbf_safety_filter_config({"enabled": True, "variant": "dynamic_parabolic"})
+    filter_ = build_cbf_safety_filter(cfg)
+
+    assert isinstance(filter_, DynamicParabolicCbfSafetyFilter)
+    assert filter_.config.variant == CBF_VARIANT_DYNAMIC_PARABOLIC
 
 
 def test_build_cbf_config_validates_nested_mapping_and_bounds() -> None:
@@ -193,6 +245,14 @@ def test_build_cbf_config_validates_nested_mapping_and_bounds() -> None:
         build_cbf_safety_filter_config({"safety_margin": -0.1})
     with pytest.raises(ValueError, match="max_projection_passes"):
         build_cbf_safety_filter_config({"max_projection_passes": 0})
+    with pytest.raises(ValueError, match="dpcbf_lambda_gain"):
+        build_cbf_safety_filter_config({"dpcbf_lambda_gain": -0.1})
+    with pytest.raises(ValueError, match="dpcbf_mu_gain"):
+        build_cbf_safety_filter_config({"dpcbf_mu_gain": -0.1})
+    with pytest.raises(ValueError, match="relative_speed_epsilon"):
+        build_cbf_safety_filter_config({"relative_speed_epsilon": 0.0})
+    with pytest.raises(ValueError, match="dpcbf_grid_samples"):
+        build_cbf_safety_filter_config({"dpcbf_grid_samples": 2})
 
 
 def test_cbf_filter_supports_pedestrian_dict_payload() -> None:

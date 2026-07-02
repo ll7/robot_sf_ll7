@@ -1,0 +1,16 @@
+# Diagnostic-only route-conditioned SAC local planner config for issue #4015.
+algo: hybrid_global_rl
+local_policy_algo: sac
+local_policy_config:
+  fallback_to_goal: false
+  obs_mode: dict
+  action_space: unicycle
+waypoint_provider: grid_route
+allow_goal_fallback: false
+fail_closed_on_missing_waypoint: true
+max_linear_speed: 1.0
+max_angular_speed: 1.0
+grid_route:
+  max_linear_speed: 0.9
+  max_angular_speed: 1.2
+  waypoint_lookahead_cells: 5

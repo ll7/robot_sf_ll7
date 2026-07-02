@@ -117,7 +117,9 @@ def run_mode(
         try:
             episodes.append(json.loads(line))
         except json.JSONDecodeError as exc:
-            raise ValueError(f"Error parsing JSONL on line {line_number} in {episodes_path}: {exc}") from exc
+            raise ValueError(
+                f"Error parsing JSONL on line {line_number} in {episodes_path}: {exc}"
+            ) from exc
     return episodes
 
 

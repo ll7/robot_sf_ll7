@@ -1,0 +1,63 @@
+{
+  "created_at_utc": "2026-07-02T08:42:48+00:00",
+  "dataset_id": "issue_4011_smoke",
+  "dataset_path": "issue_4011_smoke.preview.jsonl",
+  "dataset_schema_version": "RLTrajectoryDataset.v1",
+  "dataset_sha256": "5c4c1df69354e1de7e6c1167d69f742e393bdfcef9be781ba6571539e13637fa",
+  "episode_count": 1,
+  "format": "jsonl",
+  "provenance": {
+    "artifact_durability": "worktree_local_until_promoted",
+    "command": "record_rl_trajectory_dataset --source-jsonl output/issue_4011_rl_trajectory_source/source_episodes.jsonl",
+    "git_commit": "2434364a24b37f5930d9928b63077b6be8caacb2",
+    "return_convention": "undiscounted_future_return_to_go",
+    "reward_convention": "environment_step_reward",
+    "source_jsonl": "output/issue_4011_rl_trajectory_source/source_episodes.jsonl",
+    "source_sha256": "b787a24e116c22870d398620f3599d0937b6fcc67a8c2ffd8b112db21b337b31"
+  },
+  "return_convention": "undiscounted_future_return_to_go",
+  "reward_convention": "environment_step_reward",
+  "schema_version": "rl_trajectory_dataset_manifest.v1",
+  "split_policy": {
+    "leakage_prevention": [
+      "scenario_ids",
+      "scenario_seed_keys"
+    ],
+    "split_names": [
+      "train",
+      "validation",
+      "test"
+    ],
+    "strategy": "deterministic_scenario_seed_hash"
+  },
+  "splits": {
+    "test": {
+      "episode_count": 0,
+      "episode_ids": [],
+      "scenario_ids": [],
+      "scenario_seed_keys": [],
+      "step_count": 0
+    },
+    "train": {
+      "episode_count": 1,
+      "episode_ids": [
+        "classic_cross_trap_low:seed101:goal:000000"
+      ],
+      "scenario_ids": [
+        "classic_cross_trap_low"
+      ],
+      "scenario_seed_keys": [
+        "classic_cross_trap_low:101"
+      ],
+      "step_count": 2
+    },
+    "validation": {
+      "episode_count": 0,
+      "episode_ids": [],
+      "scenario_ids": [],
+      "scenario_seed_keys": [],
+      "step_count": 0
+    }
+  },
+  "step_count": 2
+}

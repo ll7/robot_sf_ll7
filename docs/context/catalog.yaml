@@ -17,6 +17,22 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+  - path: docs/context/issue_4011_rl_trajectory_dataset_pipeline.md
+    status: current
+    freshness: maintained
+    area: benchmark_workflow
+  - path: docs/context/evidence/issue_4011_rl_trajectory_dataset_smoke_2026-07-02/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4011_rl_trajectory_dataset_smoke_2026-07-02/issue_4011_smoke.manifest.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4011_rl_trajectory_dataset_smoke_2026-07-02/issue_4011_smoke.preview.jsonl
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3978_snqi_v1_recalibration/README.md
     status: evidence
     freshness: evidence

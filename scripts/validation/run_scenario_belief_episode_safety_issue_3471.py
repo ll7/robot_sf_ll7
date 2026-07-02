@@ -38,7 +38,7 @@ import numpy as np
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.planner.scenario_belief_adapter import project_scenario_belief_for_planner
 from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, StreamGapPlannerConfig
-from robot_sf.representation import scenario_belief_from_simulator_oracle
+from robot_sf.representation import Estimate2D, scenario_belief_from_simulator_oracle
 
 SCHEMA_VERSION = "scenario-belief-episode-safety.v1"
 ISSUE = 3471
@@ -54,6 +54,30 @@ MODES: dict[str, dict[str, bool]] = {
 
 #: Existence confidence assigned to the degraded corridor agent (below the 0.5 gate threshold).
 _DEGRADED_EXISTENCE = 0.2
+
+#: Position confidence assigned to the conformal-radius proxy (below the 0.5 gate threshold).
+_DEGRADED_POSITION_CONFIDENCE = 0.2
+
+#: Position variance assigned to the inflated-envelope proxy (above the 1.0 gate threshold).
+_INFLATED_POSITION_VARIANCE = 4.0
+
+UNCERTAINTY_REPRESENTATIONS: dict[str, dict[str, str]] = {
+    "belief_drop": {
+        "gate_field": "uncertainty_min_existence_probability",
+        "description": "lower corridor-agent existence probability below the stream_gap gate",
+    },
+    "conformal_radius": {
+        "gate_field": "uncertainty_min_position_confidence",
+        "description": (
+            "lower corridor-agent position confidence as a controlled episode-level "
+            "conformal-radius proxy"
+        ),
+    },
+    "envelope_inflation": {
+        "gate_field": "uncertainty_max_position_variance",
+        "description": "inflate corridor-agent position variance above the stream_gap envelope gate",
+    },
+}
 
 #: The four stream_gap uncertainty-gate thresholds the #3558 sweep is allowed to override.
 GATE_THRESHOLD_FIELDS = (
@@ -140,12 +164,43 @@ def _make_simulator(state: ScenarioState, params: EpisodeParams) -> SimpleNamesp
     )
 
 
-def build_belief_for_mode(state: ScenarioState, mode: str, params: EpisodeParams) -> Any:
+def _degrade_agent_for_representation(agent: Any, uncertainty_representation: str) -> Any:
+    """Apply one issue #3557 uncertainty representation to an agent belief."""
+    if uncertainty_representation == "belief_drop":
+        return replace(agent, existence_probability=_DEGRADED_EXISTENCE)
+    if uncertainty_representation == "conformal_radius":
+        return replace(
+            agent,
+            position=replace(agent.position, confidence=_DEGRADED_POSITION_CONFIDENCE),
+        )
+    if uncertainty_representation == "envelope_inflation":
+        return replace(
+            agent,
+            position=Estimate2D.point(
+                agent.position.mean_xy,
+                confidence=agent.position.confidence,
+                variance=_INFLATED_POSITION_VARIANCE,
+                frame_id=agent.position.frame_id,
+                units=agent.position.units,
+                covariance_units=agent.position.covariance_units,
+            ),
+        )
+    raise ValueError(f"unknown uncertainty representation: {uncertainty_representation}")
+
+
+def build_belief_for_mode(
+    state: ScenarioState,
+    mode: str,
+    params: EpisodeParams,
+    uncertainty_representation: str = "belief_drop",
+) -> Any:
     """Build the ScenarioBelief for ``mode`` from the current ground-truth state.
 
-    The dropped/retained modes degrade the corridor agent's existence confidence below the gate
-    threshold; oracle leaves it certain.
+    The dropped/retained modes degrade the corridor agent through the selected uncertainty
+    representation; oracle leaves it certain.
     """
+    if uncertainty_representation not in UNCERTAINTY_REPRESENTATIONS:
+        raise ValueError(f"unknown uncertainty representation: {uncertainty_representation}")
     simulator = _make_simulator(state, params)
     belief = scenario_belief_from_simulator_oracle(
         simulator, env_config=RobotSimulationConfig(), max_pedestrians=4
@@ -163,7 +218,7 @@ def build_belief_for_mode(state: ScenarioState, mode: str, params: EpisodeParams
             np.linalg.norm(np.asarray(agents[i].position.mean_xy, dtype=float) - corridor_true)
         ),
     )
-    agents[idx] = replace(agents[idx], existence_probability=_DEGRADED_EXISTENCE)
+    agents[idx] = _degrade_agent_for_representation(agents[idx], uncertainty_representation)
     return replace(belief, agents=tuple(agents))
 
 
@@ -219,6 +274,7 @@ def run_episode(
     seed: int,
     params: EpisodeParams,
     gate_thresholds: dict[str, float] | None = None,
+    uncertainty_representation: str = "belief_drop",
 ) -> dict[str, Any]:
     """Roll one controlled episode under ``mode`` and return episode-level safety metrics.
 
@@ -243,7 +299,7 @@ def run_episode(
     fail_closed = False
 
     for step in range(params.max_steps):
-        belief = build_belief_for_mode(state, mode, params)
+        belief = build_belief_for_mode(state, mode, params, uncertainty_representation)
         projection = project_scenario_belief_for_planner(belief, planner_key=PLANNER_KEY)
         status = projection.compatibility.get("status")
         if status == "fail_closed":
@@ -281,6 +337,7 @@ def run_episode(
     progress = max(0.0, (initial_goal_dist - final_goal_dist) / initial_goal_dist)
     return {
         "mode": mode,
+        "uncertainty_representation": uncertainty_representation,
         "seed": seed,
         "collision": collision,
         "min_separation": round(min_sep, 4),
@@ -347,18 +404,43 @@ def classify_decision(by_mode: dict[str, dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def run_matrix(seeds: list[int], params: EpisodeParams) -> dict[str, Any]:
+def run_matrix(
+    seeds: list[int],
+    params: EpisodeParams,
+    uncertainty_representation: str = "belief_drop",
+) -> dict[str, Any]:
     """Run all modes across the seed matrix and assemble the classified report."""
+    if uncertainty_representation not in UNCERTAINTY_REPRESENTATIONS:
+        raise ValueError(f"unknown uncertainty representation: {uncertainty_representation}")
     episodes: dict[str, list[dict[str, Any]]] = {}
     by_mode: dict[str, dict[str, Any]] = {}
     for mode in MODES:
-        rows = [run_episode(mode, seed, params) for seed in seeds]
+        rows = [
+            run_episode(
+                mode,
+                seed,
+                params,
+                uncertainty_representation=uncertainty_representation,
+            )
+            for seed in seeds
+        ]
         episodes[mode] = rows
         by_mode[mode] = _aggregate(rows)
     return {
         "schema_version": SCHEMA_VERSION,
         "issue": ISSUE,
+        "followup_issue": 3557,
         "evidence_tier": "diagnostic",
+        "uncertainty_representation": uncertainty_representation,
+        "uncertainty_representation_contract": {
+            "available_representations": sorted(UNCERTAINTY_REPRESENTATIONS),
+            "selected": UNCERTAINTY_REPRESENTATIONS[uncertainty_representation],
+            "claim_boundary": (
+                "Harness-level representation parameterization only; each run remains a "
+                "controlled #3471 episode contrast and is not a cross-representation "
+                "generalization claim."
+            ),
+        },
         "claim_boundary": (
             "Controlled crossing scenario with the real stream_gap planner + ScenarioBelief "
             "uncertainty gate; not the full benchmark environment, not paper-grade, no trained "
@@ -392,6 +474,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--seeds", type=int, nargs="+", default=None)
     parser.add_argument("--max-steps", type=int, default=None)
+    parser.add_argument(
+        "--uncertainty-representation",
+        choices=sorted(UNCERTAINTY_REPRESENTATIONS),
+        default="belief_drop",
+        help=(
+            "Issue #3557 harness parameter. Selects the ScenarioBelief uncertainty "
+            "representation applied to the corridor agent."
+        ),
+    )
     parser.add_argument("--output-json", type=Path, default=None)
     return parser.parse_args(argv)
 
@@ -407,7 +498,11 @@ def main(argv: list[str] | None = None) -> int:
         seeds = args.seeds
     if args.max_steps is not None:
         params = replace(params, max_steps=args.max_steps)
-    report = run_matrix(seeds, params)
+    report = run_matrix(
+        seeds,
+        params,
+        uncertainty_representation=args.uncertainty_representation,
+    )
     report["generated_at_utc"] = datetime.now(UTC).isoformat()
 
     compact = {k: v for k, v in report.items() if k != "episodes"}

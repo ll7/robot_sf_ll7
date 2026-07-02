@@ -11,6 +11,7 @@ from robot_sf.planner.diffusion_policy import (  # noqa: E402
     CLAIM_BOUNDARY,
     DiffusionGuidanceSelector,
     DiffusionPolicyAdapter,
+    RobotPedestrianGraphEncoder,
     build_diffusion_policy_config,
 )
 
@@ -51,6 +52,12 @@ def test_missing_checkpoint_fails_closed_without_smoke_flag() -> None:
         DiffusionPolicyAdapter({"checkpoint_path": "/tmp/missing-issue-4010.pt"})
 
 
+def test_checkpoint_path_must_be_file(tmp_path) -> None:
+    """Directory-valued checkpoint paths fail closed."""
+    with pytest.raises(FileNotFoundError):
+        DiffusionPolicyAdapter({"checkpoint_path": str(tmp_path)})
+
+
 def test_encoder_returns_finite_masked_tensors() -> None:
     """The graph encoder pads visible pedestrians and marks valid nodes."""
     adapter = DiffusionPolicyAdapter(
@@ -59,6 +66,41 @@ def test_encoder_returns_finite_masked_tensors() -> None:
     node_features, mask = adapter.encoder.encode_observation(_observation())
     assert node_features.shape == (4, 8)
     assert mask.tolist() == [True, True, True, False]
+    assert torch.isfinite(node_features).all()
+
+
+def test_encoder_forward_supports_unbatched_and_batched_inputs() -> None:
+    """The graph encoder supports individual and batched observations."""
+    encoder = RobotPedestrianGraphEncoder(max_pedestrians=3)
+    unbatched_features = torch.randn(4, 8)
+    unbatched_mask = torch.tensor([True, True, True, False])
+
+    unbatched = encoder(unbatched_features, unbatched_mask)
+    batched = encoder(unbatched_features.unsqueeze(0), unbatched_mask.unsqueeze(0))
+
+    assert unbatched.shape == (encoder.output_dim,)
+    assert batched.shape == (1, encoder.output_dim)
+
+
+def test_non_finite_observation_values_fall_back_to_defaults() -> None:
+    """Non-finite observation fields cannot propagate NaN or Inf into encoder features."""
+    adapter = DiffusionPolicyAdapter(
+        {"allow_untrained_smoke": True, "seed": 1, "max_pedestrians": 2}
+    )
+    observation = _observation()
+    observation["robot"] = {
+        "position": [float("nan"), 0.0],
+        "velocity": [0.0, float("inf")],
+        "goal": [2.0, 0.0],
+        "heading": float("nan"),
+        "radius": float("inf"),
+    }
+    observation["agents"] = [
+        {"position": [1.0, float("inf")], "velocity": [float("nan"), 0.0], "radius": 0.25}
+    ]
+
+    node_features, _mask = adapter.encoder.encode_observation(observation)
+
     assert torch.isfinite(node_features).all()
 
 

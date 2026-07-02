@@ -194,12 +194,12 @@ class RobotPedestrianGraphEncoder(nn.Module if nn is not None else object):  # t
             Any: Encoded condition tensor.
         """
         encoded = self.node_mlp(node_features)
-        robot = encoded[0:1].expand_as(encoded)
+        robot = encoded[..., 0:1, :].expand_as(encoded)
         messages = self.message_mlp(torch.cat([robot, encoded], dim=-1))
         masked_messages = messages * mask.to(dtype=messages.dtype).unsqueeze(-1)
-        denom = mask.to(dtype=messages.dtype).sum().clamp(min=1.0)
-        pooled = masked_messages.sum(dim=0) / denom
-        return self.out_mlp(torch.cat([encoded[0], pooled], dim=-1))
+        denom = mask.to(dtype=messages.dtype).sum(dim=-1, keepdim=True).clamp(min=1.0)
+        pooled = masked_messages.sum(dim=-2) / denom
+        return self.out_mlp(torch.cat([encoded[..., 0, :], pooled], dim=-1))
 
 
 class DiffusionActionSampler(nn.Module if nn is not None else object):  # type: ignore[misc]
@@ -423,7 +423,7 @@ class DiffusionPolicyAdapter:
         """Fail closed unless a checkpoint exists or smoke mode is explicit."""
         if self.config.checkpoint_path:
             checkpoint = Path(self.config.checkpoint_path).expanduser()
-            if not checkpoint.exists():
+            if not checkpoint.is_file():
                 raise FileNotFoundError(f"Diffusion policy checkpoint not found: {checkpoint}")
             return
         if not self.config.allow_untrained_smoke:
@@ -461,7 +461,7 @@ def _as_xy(value: Any, *, default: tuple[float, float]) -> np.ndarray:
     if value is None:
         return np.asarray(default, dtype=float)
     arr = np.asarray(value, dtype=float).reshape(-1)
-    if arr.size < 2:
+    if arr.size < 2 or not np.isfinite(arr[:2]).all():
         return np.asarray(default, dtype=float)
     return arr[:2].astype(float)
 
@@ -475,7 +475,7 @@ def _as_float(value: Any, *, default: float) -> float:
     if value is None:
         return float(default)
     arr = np.asarray(value, dtype=float).reshape(-1)
-    if arr.size == 0:
+    if arr.size == 0 or not np.isfinite(arr[0]):
         return float(default)
     return float(arr[0])
 

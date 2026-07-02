@@ -653,7 +653,9 @@ def _precompute_dynamic_parabolic_obstacles(
     for obstacle in obstacles:
         p_rel = np.asarray(obstacle.position_m, dtype=float) - robot_position
         alpha = math.atan2(float(p_rel[1]), float(p_rel[0]))
-        radius = float(robot_radius) + float(obstacle.radius_m) + float(config.safety_radius_margin_m)
+        radius = (
+            float(robot_radius) + float(obstacle.radius_m) + float(config.safety_radius_margin_m)
+        )
         clearance_sq = max(float(np.dot(p_rel, p_rel)) - radius * radius, 0.0)
         clearance = math.sqrt(clearance_sq)
         constants.append(

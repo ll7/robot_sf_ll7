@@ -72,6 +72,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "teb": "classical",
     "nmpc_social": "classical",
     "prediction_mpc": "classical",
+    "learned_prediction_mpc": "learning",
 }
 
 _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
@@ -129,6 +130,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "teb": "corridor_commitment_local_planner",
     "nmpc_social": "nonlinear_model_predictive_local_planner",
     "prediction_mpc": "prediction_aware_model_predictive_local_planner",
+    "learned_prediction_mpc": "learned_short_horizon_prediction_mpc_local_planner",
 }
 
 _DEFAULT_OBSERVATION_SPEC: dict[str, Any] = {
@@ -215,6 +217,15 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
             "Consumes structured SocNav state. The constant-velocity backend derives "
             "time-varying pedestrian futures from tracked pedestrian positions and "
             "ego-frame pedestrian velocities rotated into world coordinates."
+        ),
+    },
+    "learned_prediction_mpc": {
+        "default_mode": "socnav_state",
+        "supported_modes": ("socnav_state",),
+        "inputs": ("robot_state", "goal", "pedestrians", "learned_pedestrian_futures"),
+        "notes": (
+            "Consumes deployable SocNav state with a small short-horizon pedestrian predictor; "
+            "diagnostic-only until a trained checkpoint and comparison evidence exist."
         ),
     },
     "ppo": {
@@ -1036,6 +1047,16 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "default_adapter_name": "PredictionMPCPlannerAdapter",
         "benchmark_command_space": "unicycle_vw",
         "projection_policy": "constant_velocity_time_varying_pedestrian_constraints",
+        "projection_documented": True,
+    },
+    "learned_prediction_mpc": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "PredictionMPCPlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "learned_short_horizon_time_varying_pedestrian_constraints",
         "projection_documented": True,
     },
 }

@@ -422,6 +422,21 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         ),
         requires_explicit_opt_in=True,
     ),
+    AlgorithmReadiness(
+        canonical_name="learned_prediction_mpc",
+        tier="experimental",
+        aliases=(
+            "learned_prediction_mpc",
+            "learned_short_horizon_mpc",
+            "model_based_local_planner",
+            "learned_prediction_planner",
+        ),
+        note=(
+            "Diagnostic learned short-horizon pedestrian prediction MPC lane; not a full "
+            "navigation world model and not benchmark evidence without a trained checkpoint."
+        ),
+        requires_explicit_opt_in=True,
+    ),
 )
 
 _ALIAS_INDEX: dict[str, AlgorithmReadiness] = {

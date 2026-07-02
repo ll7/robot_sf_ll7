@@ -20,6 +20,17 @@ def test_offline_only_sampling_works_before_online_data_exists() -> None:
     assert sample["sources"] == ("offline", "offline", "offline")
 
 
+def test_offline_only_sampling_with_replacement_keeps_requested_batch_size() -> None:
+    """Replacement sampling should not cap batches at available offline rows."""
+
+    buffer = HybridReplayBuffer(offline_batch=_batch(1), offline_sample_fraction=1.0, seed=7)
+
+    sample = buffer.sample(4)
+
+    assert sample["actions"].shape == (4, 2)
+    assert sample["sources"] == ("offline", "offline", "offline", "offline")
+
+
 def test_mixed_sampling_respects_offline_fraction() -> None:
     """Sampler draws from both partitions under a mixed fraction."""
 

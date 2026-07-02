@@ -83,15 +83,15 @@ class HybridReplayBuffer:
         if offline_available + online_available == 0:
             raise ValueError("cannot sample from empty hybrid replay buffer")
 
-        offline_target = round(batch_size * self._offline_sample_fraction)
-        offline_count = min(offline_target, offline_available)
-        online_count = min(batch_size - offline_count, online_available)
-        if offline_count + online_count < batch_size:
-            remaining = batch_size - offline_count - online_count
-            offline_count += min(remaining, offline_available - offline_count)
-        if offline_count + online_count < batch_size:
-            remaining = batch_size - offline_count - online_count
-            online_count += min(remaining, online_available - online_count)
+        if offline_available > 0 and online_available > 0:
+            offline_count = round(batch_size * self._offline_sample_fraction)
+            online_count = batch_size - offline_count
+        elif offline_available > 0:
+            offline_count = batch_size
+            online_count = 0
+        else:
+            offline_count = 0
+            online_count = batch_size
 
         observations: list[object] = []
         next_observations: list[object] = []

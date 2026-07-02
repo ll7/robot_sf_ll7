@@ -11,6 +11,7 @@ import pytest
 from robot_sf.benchmark import cbf_safety_filter_runtime, map_runner_episode
 from robot_sf.benchmark.cbf_safety_filter_runtime import (
     CBF_COLLISION_CONE_ARM,
+    CBF_DYNAMIC_PARABOLIC_V1_ARM,
     CBF_OFF_ARM,
     CBF_SAFETY_FILTER_EPISODE_SUMMARY_SCHEMA,
     CBF_SAFETY_FILTER_RUNTIME_STEP_SCHEMA,
@@ -140,14 +141,7 @@ def test_runtime_config_disabled_by_default_preserves_off_state() -> None:
         ({"enabled": True, "arm_key": CBF_OFF_ARM}, "enabled=True"),
         ({"enabled": False, "arm_key": CBF_COLLISION_CONE_ARM}, "enabled=False"),
         ({"enabled": True, "arm_key": CBF_COLLISION_CONE_ARM, "alpha": 2.0}, "predeclared"),
-        (
-            {
-                "enabled": True,
-                "arm_key": CBF_COLLISION_CONE_ARM,
-                "variant": "dynamic_parabolic",
-            },
-            "dynamic_parabolic",
-        ),
+        ({"enabled": True, "arm_key": CBF_DYNAMIC_PARABOLIC_V1_ARM, "alpha": 2.0}, "predeclared"),
     ],
 )
 def test_runtime_config_fails_closed_for_arm_or_threshold_drift(
@@ -168,6 +162,22 @@ def test_runtime_config_rejects_malformed_mapping() -> None:
         runtime_config_from_mapping({"unexpected": True})
     with pytest.raises(ValueError, match="arm_key"):
         runtime_config_from_mapping({"enabled": True, "arm_key": "cbf_custom_on"})
+
+
+def test_runtime_config_accepts_dynamic_parabolic_versioned_arm() -> None:
+    """DPCBF uses its own versioned arm and variant in runtime identity."""
+
+    runtime = runtime_config_from_mapping(
+        {
+            "enabled": True,
+            "arm_key": CBF_DYNAMIC_PARABOLIC_V1_ARM,
+            "variant": "dynamic_parabolic_cbf_v1",
+        }
+    )
+
+    assert runtime.enabled is True
+    assert runtime.arm_key == CBF_DYNAMIC_PARABOLIC_V1_ARM
+    assert runtime.variant == "dynamic_parabolic_cbf_v1"
 
 
 def test_cbf_on_emits_schema_tagged_intervention_record_and_summary() -> None:
@@ -200,6 +210,37 @@ def test_cbf_on_emits_schema_tagged_intervention_record_and_summary() -> None:
     assert summary["intervened_step_count"] == 1
     assert summary["intervention_rate"] == 1.0
     assert summary["status_counts"][record["qp_status"]] == 1
+    assert summary["fallback_rows_are_success_evidence"] is False
+
+
+def test_dynamic_parabolic_arm_emits_runtime_record_and_summary() -> None:
+    """DPCBF runtime arm emits distinct arm metadata and projection method."""
+
+    runtime = runtime_config_from_mapping(
+        {
+            "enabled": True,
+            "arm_key": CBF_DYNAMIC_PARABOLIC_V1_ARM,
+            "variant": "dynamic_parabolic_cbf_v1",
+        }
+    )
+    corrected, record = apply_runtime_cbf_safety_filter(
+        command=(1.0, 0.25),
+        env=_Env(),
+        config=_config(),
+        runtime=runtime,
+        previous_ped_positions=np.array([[0.3, 0.0]], dtype=float),
+        step_idx=3,
+    )
+    summary = summarize_cbf_safety_filter_trace([record], runtime=runtime)
+
+    assert corrected[0] <= 1.0
+    assert record["arm_key"] == CBF_DYNAMIC_PARABOLIC_V1_ARM
+    assert record["variant"] == "dynamic_parabolic_cbf_v1"
+    assert record["projection_method"] == "bounded_scalar_dpcbf_grid_refine_v1"
+    assert summary["arm_key"] == CBF_DYNAMIC_PARABOLIC_V1_ARM
+    assert summary["variant"] == "dynamic_parabolic_cbf_v1"
+    assert summary["fallback_rows_are_success_evidence"] is False
+    assert "Dynamic Parabolic CBF" in summary["claim_boundary"]
 
 
 def test_apply_runtime_cbf_rejects_short_command() -> None:
@@ -481,6 +522,22 @@ def test_scenario_identity_includes_only_enabled_cbf_filter() -> None:
         record_forces=False,
         cbf_safety_filter={"enabled": True, "arm_key": CBF_COLLISION_CONE_ARM},
     )
+    dpcbf_payload = _scenario_identity_payload(
+        base,
+        algo="goal",
+        algo_config={},
+        horizon=1,
+        dt=0.1,
+        record_forces=False,
+        cbf_safety_filter={
+            "enabled": True,
+            "arm_key": CBF_DYNAMIC_PARABOLIC_V1_ARM,
+            "variant": "dynamic_parabolic_cbf_v1",
+        },
+    )
 
     assert "cbf_safety_filter" not in off_payload
     assert on_payload["cbf_safety_filter"]["arm_key"] == CBF_COLLISION_CONE_ARM
+    assert dpcbf_payload["cbf_safety_filter"]["arm_key"] == CBF_DYNAMIC_PARABOLIC_V1_ARM
+    assert dpcbf_payload["cbf_safety_filter"]["variant"] == "dynamic_parabolic_cbf_v1"
+    assert dpcbf_payload["cbf_safety_filter"] != on_payload["cbf_safety_filter"]

@@ -1,0 +1,16 @@
+## Issue #4142 bounded dense dynamic-obstacle diagnostic set.
+#
+# Claim boundary: this manifest predeclares CPU/SLURM comparison inputs only.
+# It is not benchmark-strength or paper-facing collision-reduction evidence.
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - ../archetypes/classic_bottleneck.yaml
+  - ../archetypes/classic_cross_trap.yaml
+  - ../archetypes/classic_group_crossing.yaml
+  - ../archetypes/classic_head_on_corridor.yaml
+map_search_paths:
+  - ../../../maps/svg_maps
+select_scenarios:
+  - classic_bottleneck_high
+  - classic_cross_trap_high
+  - classic_group_crossing_high

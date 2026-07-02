@@ -75,6 +75,32 @@ def test_observation_noise_applies_lidar_pedestrian_and_pose_noise() -> None:
     assert stats["steps_with_noise"] == 1
 
 
+def test_observation_noise_applies_map_runner_top_level_pose_keys() -> None:
+    """Map-runner SOCNAV observations expose top-level robot pose fields."""
+    spec = normalize_observation_noise_spec(
+        {
+            "profile": "top_level_pose",
+            "pose_noise_std_m": 0.1,
+            "heading_noise_std_rad": 0.1,
+            "seed": 7,
+        }
+    )
+    obs = {
+        "robot_position": np.array([1.0, 2.0], dtype=np.float32),
+        "robot_heading": np.array([0.0], dtype=np.float32),
+    }
+    rng = make_observation_noise_rng(spec, seed=1, scenario_id="s1")
+
+    noisy, stats = apply_observation_noise(obs, spec, rng)
+
+    assert noisy is not obs
+    assert noisy["robot_position"] != [1.0, 2.0]
+    assert noisy["robot_heading"] != [0.0]
+    assert stats["pose_noise_applied"] == 1
+    assert stats["heading_noise_applied"] == 1
+    assert stats["steps_with_noise"] == 1
+
+
 def test_observation_noise_validates_probability_ranges() -> None:
     """Probability-like noise fields should reject invalid values."""
     with pytest.raises(ValueError, match="lidar_dropout_prob"):

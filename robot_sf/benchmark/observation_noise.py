@@ -196,25 +196,37 @@ def _apply_pose_noise(
     robot = obs.get("robot") if isinstance(obs.get("robot"), dict) else None
     if pose_std > 0.0:
         delta = rng.normal(0.0, pose_std, size=2)
+        pose_mutated = False
         if robot is not None and "position" in robot:
             base = _as_xy_array(robot["position"])
             if base is not None:
                 robot["position"] = (base + delta).tolist()
-                stats["pose_noise_applied"] += 1
+                pose_mutated = True
         if "robot_position" in obs:
             base = _as_xy_array(obs["robot_position"])
             if base is not None:
                 obs["robot_position"] = (base + delta).tolist()
-    if heading_std > 0.0 and robot is not None and "heading" in robot:
-        heading = np.asarray(robot["heading"], dtype=float)
-        delta_heading = float(rng.normal(0.0, heading_std))
-        if heading.shape == ():
-            robot["heading"] = float(heading + delta_heading)
-        else:
-            adjusted = heading.astype(float, copy=True)
-            adjusted.flat[0] += delta_heading
-            robot["heading"] = adjusted.tolist()
+                pose_mutated = True
+        if pose_mutated:
+            stats["pose_noise_applied"] += 1
+    if heading_std <= 0.0:
+        return
+    delta_heading = float(rng.normal(0.0, heading_std))
+    if robot is not None and "heading" in robot:
+        robot["heading"] = _with_heading_delta(robot["heading"], delta_heading)
         stats["heading_noise_applied"] += 1
+    elif "robot_heading" in obs:
+        obs["robot_heading"] = _with_heading_delta(obs["robot_heading"], delta_heading)
+        stats["heading_noise_applied"] += 1
+
+
+def _with_heading_delta(value: Any, delta_heading: float) -> float | list[float]:
+    heading = np.asarray(value, dtype=float)
+    if heading.shape == ():
+        return float(heading + delta_heading)
+    adjusted = heading.astype(float, copy=True)
+    adjusted.flat[0] += delta_heading
+    return adjusted.tolist()
 
 
 def _apply_lidar_dropout(

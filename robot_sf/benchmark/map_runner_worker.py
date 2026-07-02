@@ -70,5 +70,6 @@ def execute_map_job(
         tracking_precision=params.get("tracking_precision"),
         synthetic_actuation_profile=params.get("synthetic_actuation_profile"),
         latency_stress_profile=params.get("latency_stress_profile"),
+        safety_wrapper=params.get("safety_wrapper"),
         record_simulation_step_trace=bool(params.get("record_simulation_step_trace", False)),
     )

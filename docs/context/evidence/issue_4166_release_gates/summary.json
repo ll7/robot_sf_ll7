@@ -1,0 +1,843 @@
+{
+  "claim_boundary": "Release gates are evaluated over existing benchmark rows only. Provisional thresholds are not certification or paper-grade approval.",
+  "gate_spec": {
+    "gates": [
+      {
+        "category": "safety",
+        "direction": "max",
+        "id": "collision_rate_zero",
+        "metric": "collision_rate",
+        "provenance": "provisional_not_certification_issue_4166",
+        "required": true,
+        "scope": {},
+        "threshold": 0.0
+      },
+      {
+        "category": "safety",
+        "direction": "max",
+        "id": "near_miss_rate_limit",
+        "metric": "near_miss_rate",
+        "provenance": "provisional_not_certification_issue_4166",
+        "required": true,
+        "scope": {},
+        "threshold": 0.05
+      },
+      {
+        "category": "safety",
+        "direction": "min",
+        "id": "min_clearance_floor",
+        "metric": "min_clearance_m",
+        "provenance": "provisional_not_certification_issue_4166",
+        "required": true,
+        "scope": {},
+        "threshold": 0.25
+      },
+      {
+        "category": "comfort",
+        "direction": "max",
+        "id": "proxemic_intrusion_rate_limit",
+        "metric": "proxemic_intrusion_rate",
+        "provenance": "provisional_not_certification_issue_4166",
+        "required": true,
+        "scope": {},
+        "threshold": 0.1
+      },
+      {
+        "category": "comfort",
+        "direction": "max",
+        "id": "jerk_mean_limit",
+        "metric": "jerk_mean",
+        "provenance": "provisional_not_certification_issue_4166",
+        "required": true,
+        "scope": {},
+        "threshold": 2.0
+      }
+    ],
+    "schema_version": "benchmark_release_gate_spec.v1"
+  },
+  "generated_at_utc": "2026-07-02T00:00:00+00:00",
+  "matrix_rows": [
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": "",
+      "not_evaluable_gate_ids": "",
+      "overall_status": "pass",
+      "planner_key": "goal",
+      "safety_status": "pass",
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": "collision_rate_zero",
+      "not_evaluable_gate_ids": "",
+      "overall_status": "fail",
+      "planner_key": "orca",
+      "safety_status": "fail",
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "comfort_status": "fail",
+      "failed_gate_ids": "proxemic_intrusion_rate_limit;jerk_mean_limit",
+      "not_evaluable_gate_ids": "",
+      "overall_status": "fail",
+      "planner_key": "ppo",
+      "safety_status": "pass",
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": "near_miss_rate_limit;min_clearance_floor",
+      "not_evaluable_gate_ids": "",
+      "overall_status": "fail",
+      "planner_key": "prediction_planner",
+      "safety_status": "fail",
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": "",
+      "not_evaluable_gate_ids": "",
+      "overall_status": "pass",
+      "planner_key": "sacadrl",
+      "safety_status": "pass",
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": "",
+      "not_evaluable_gate_ids": "",
+      "overall_status": "pass",
+      "planner_key": "social_force",
+      "safety_status": "pass",
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "comfort_status": "not_evaluable",
+      "failed_gate_ids": "",
+      "not_evaluable_gate_ids": "collision_rate_zero;near_miss_rate_limit;min_clearance_floor;proxemic_intrusion_rate_limit;jerk_mean_limit",
+      "overall_status": "not_evaluable",
+      "planner_key": "socnav_bench",
+      "safety_status": "not_evaluable",
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "comfort_status": "not_evaluable",
+      "failed_gate_ids": "",
+      "not_evaluable_gate_ids": "proxemic_intrusion_rate_limit;jerk_mean_limit",
+      "overall_status": "not_evaluable",
+      "planner_key": "socnav_sampling",
+      "safety_status": "pass",
+      "scenario_family": "classic_crossing"
+    }
+  ],
+  "provenance": {
+    "command": "scripts/benchmark/build_release_gate_report.py --input-json docs/context/evidence/issue_4166_release_gates/fixture_metric_rows.json --gate-spec configs/benchmarks/release_gates/default_safety_comfort_gates.yaml --output-json docs/context/evidence/issue_4166_release_gates/summary.json --output-csv docs/context/evidence/issue_4166_release_gates/gate_matrix.csv --output-md docs/context/evidence/issue_4166_release_gates/README.md --generated-at-utc 2026-07-02T00:00:00+00:00",
+    "gate_spec": {
+      "path": "configs/benchmarks/release_gates/default_safety_comfort_gates.yaml",
+      "sha256": "5abed9ba523bc5cd1a1fd556089c1e7a8cfe1657fcdde9b6b6b55c3b1edc53a0"
+    },
+    "input": {
+      "path": "docs/context/evidence/issue_4166_release_gates/fixture_metric_rows.json",
+      "sha256": "743eb3ef55d013ee7c760e0853be2e73dc1102ffa4ed5882b751df164b226dce"
+    }
+  },
+  "results": [
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": [],
+      "gate_results": [
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "collision_rate_zero",
+          "metric": "collision_rate",
+          "observed_values": [
+            0.0
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.0
+        },
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "near_miss_rate_limit",
+          "metric": "near_miss_rate",
+          "observed_values": [
+            0.02
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.05
+        },
+        {
+          "category": "safety",
+          "direction": "min",
+          "gate_id": "min_clearance_floor",
+          "metric": "min_clearance_m",
+          "observed_values": [
+            0.4
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.25
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "proxemic_intrusion_rate_limit",
+          "metric": "proxemic_intrusion_rate",
+          "observed_values": [
+            0.03
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.1
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "observed_values": [
+            1.2
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 2.0
+        }
+      ],
+      "not_evaluable_gate_ids": [],
+      "overall_status": "pass",
+      "planner_key": "goal",
+      "safety_status": "pass",
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": [
+        "collision_rate_zero"
+      ],
+      "gate_results": [
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "collision_rate_zero",
+          "metric": "collision_rate",
+          "observed_values": [
+            0.1
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "fail",
+          "threshold": 0.0
+        },
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "near_miss_rate_limit",
+          "metric": "near_miss_rate",
+          "observed_values": [
+            0.03
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.05
+        },
+        {
+          "category": "safety",
+          "direction": "min",
+          "gate_id": "min_clearance_floor",
+          "metric": "min_clearance_m",
+          "observed_values": [
+            0.35
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.25
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "proxemic_intrusion_rate_limit",
+          "metric": "proxemic_intrusion_rate",
+          "observed_values": [
+            0.05
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.1
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "observed_values": [
+            1.0
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 2.0
+        }
+      ],
+      "not_evaluable_gate_ids": [],
+      "overall_status": "fail",
+      "planner_key": "orca",
+      "safety_status": "fail",
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "comfort_status": "fail",
+      "failed_gate_ids": [
+        "proxemic_intrusion_rate_limit",
+        "jerk_mean_limit"
+      ],
+      "gate_results": [
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "collision_rate_zero",
+          "metric": "collision_rate",
+          "observed_values": [
+            0.0
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.0
+        },
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "near_miss_rate_limit",
+          "metric": "near_miss_rate",
+          "observed_values": [
+            0.01
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.05
+        },
+        {
+          "category": "safety",
+          "direction": "min",
+          "gate_id": "min_clearance_floor",
+          "metric": "min_clearance_m",
+          "observed_values": [
+            0.28
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.25
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "proxemic_intrusion_rate_limit",
+          "metric": "proxemic_intrusion_rate",
+          "observed_values": [
+            0.13
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "fail",
+          "threshold": 0.1
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "observed_values": [
+            2.4
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "fail",
+          "threshold": 2.0
+        }
+      ],
+      "not_evaluable_gate_ids": [],
+      "overall_status": "fail",
+      "planner_key": "ppo",
+      "safety_status": "pass",
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": [
+        "near_miss_rate_limit",
+        "min_clearance_floor"
+      ],
+      "gate_results": [
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "collision_rate_zero",
+          "metric": "collision_rate",
+          "observed_values": [
+            0.0
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.0
+        },
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "near_miss_rate_limit",
+          "metric": "near_miss_rate",
+          "observed_values": [
+            0.07
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "fail",
+          "threshold": 0.05
+        },
+        {
+          "category": "safety",
+          "direction": "min",
+          "gate_id": "min_clearance_floor",
+          "metric": "min_clearance_m",
+          "observed_values": [
+            0.2
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "fail",
+          "threshold": 0.25
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "proxemic_intrusion_rate_limit",
+          "metric": "proxemic_intrusion_rate",
+          "observed_values": [
+            0.08
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.1
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "observed_values": [
+            1.8
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 2.0
+        }
+      ],
+      "not_evaluable_gate_ids": [],
+      "overall_status": "fail",
+      "planner_key": "prediction_planner",
+      "safety_status": "fail",
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": [],
+      "gate_results": [
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "collision_rate_zero",
+          "metric": "collision_rate",
+          "observed_values": [
+            0.0
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.0
+        },
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "near_miss_rate_limit",
+          "metric": "near_miss_rate",
+          "observed_values": [
+            0.01
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.05
+        },
+        {
+          "category": "safety",
+          "direction": "min",
+          "gate_id": "min_clearance_floor",
+          "metric": "min_clearance_m",
+          "observed_values": [
+            0.34
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.25
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "proxemic_intrusion_rate_limit",
+          "metric": "proxemic_intrusion_rate",
+          "observed_values": [
+            0.04
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.1
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "observed_values": [
+            1.4
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 2.0
+        }
+      ],
+      "not_evaluable_gate_ids": [],
+      "overall_status": "pass",
+      "planner_key": "sacadrl",
+      "safety_status": "pass",
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": [],
+      "gate_results": [
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "collision_rate_zero",
+          "metric": "collision_rate",
+          "observed_values": [
+            0.0
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.0
+        },
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "near_miss_rate_limit",
+          "metric": "near_miss_rate",
+          "observed_values": [
+            0.04
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.05
+        },
+        {
+          "category": "safety",
+          "direction": "min",
+          "gate_id": "min_clearance_floor",
+          "metric": "min_clearance_m",
+          "observed_values": [
+            0.32
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.25
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "proxemic_intrusion_rate_limit",
+          "metric": "proxemic_intrusion_rate",
+          "observed_values": [
+            0.09
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.1
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "observed_values": [
+            1.6
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 2.0
+        }
+      ],
+      "not_evaluable_gate_ids": [],
+      "overall_status": "pass",
+      "planner_key": "social_force",
+      "safety_status": "pass",
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "comfort_status": "not_evaluable",
+      "failed_gate_ids": [],
+      "gate_results": [
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "collision_rate_zero",
+          "metric": "collision_rate",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.0
+        },
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "near_miss_rate_limit",
+          "metric": "near_miss_rate",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.05
+        },
+        {
+          "category": "safety",
+          "direction": "min",
+          "gate_id": "min_clearance_floor",
+          "metric": "min_clearance_m",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.25
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "proxemic_intrusion_rate_limit",
+          "metric": "proxemic_intrusion_rate",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.1
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 2.0
+        }
+      ],
+      "not_evaluable_gate_ids": [
+        "collision_rate_zero",
+        "near_miss_rate_limit",
+        "min_clearance_floor",
+        "proxemic_intrusion_rate_limit",
+        "jerk_mean_limit"
+      ],
+      "overall_status": "not_evaluable",
+      "planner_key": "socnav_bench",
+      "safety_status": "not_evaluable",
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "comfort_status": "not_evaluable",
+      "failed_gate_ids": [],
+      "gate_results": [
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "collision_rate_zero",
+          "metric": "collision_rate",
+          "observed_values": [
+            0.0
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.0
+        },
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "near_miss_rate_limit",
+          "metric": "near_miss_rate",
+          "observed_values": [
+            0.02
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.05
+        },
+        {
+          "category": "safety",
+          "direction": "min",
+          "gate_id": "min_clearance_floor",
+          "metric": "min_clearance_m",
+          "observed_values": [
+            0.31
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.25
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "proxemic_intrusion_rate_limit",
+          "metric": "proxemic_intrusion_rate",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.1
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "classic_crossing",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 2.0
+        }
+      ],
+      "not_evaluable_gate_ids": [
+        "proxemic_intrusion_rate_limit",
+        "jerk_mean_limit"
+      ],
+      "overall_status": "not_evaluable",
+      "planner_key": "socnav_sampling",
+      "safety_status": "pass",
+      "scenario_family": "classic_crossing"
+    }
+  ],
+  "schema_version": "benchmark_release_gate_report.v1",
+  "status_counts": {
+    "fail": 3,
+    "not_evaluable": 2,
+    "pass": 3
+  }
+}

@@ -105,7 +105,7 @@ def probe_annotation_file(
     report["selection_satisfiable"] = len(usable_tracks) >= 1
     if not report["selection_satisfiable"]:
         report["blockers"].append(
-            f"no track has >= {min_track_points} usable '{label}' points after lost-filtering "
+            f"no track has >= {min_track_points} usable '{normalized_label}' points after lost-filtering "
             f"(found {len(usable_tracks)} qualifying tracks)"
         )
     return report

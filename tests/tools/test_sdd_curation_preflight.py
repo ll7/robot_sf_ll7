@@ -71,6 +71,13 @@ def test_probe_accepts_user_facing_label_for_quoted_sdd_rows(tmp_path: Path) -> 
 
     assert probe["label"] == "Pedestrian"
     assert probe["usable_label_points"] == 8
+    blocked = sdd_curation_preflight.probe_annotation_file(
+        annotations,
+        label='"Pedestrian"',
+        min_track_points=99,
+        max_pedestrians=4,
+    )
+    assert "usable 'Pedestrian' points" in blocked["blockers"][0]
     assert probe["usable_track_count"] == 2
     assert probe["selection_satisfiable"] is True
     assert probe["blockers"] == []

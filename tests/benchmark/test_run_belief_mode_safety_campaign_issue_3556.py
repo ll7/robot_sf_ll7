@@ -29,11 +29,9 @@ def _ready_kwargs() -> dict[str, float | int]:
     return {"fov_degrees": 120.0, "horizon": 300, "dt": 0.1, "workers": 4}
 
 
-def _scenario_set(tmp_path) -> Path:
-    """Create a placeholder scenario-set file so the existence check passes."""
-    path = tmp_path / "scenario_set.yaml"
-    path.write_text("scenarios: []\n")
-    return path
+def _scenario_set(_tmp_path) -> Path:
+    """Return the checked-in occlusion-bearing #3556 scenario set."""
+    return _MODULE.REPO_ROOT / _MODULE.DEFAULT_SCENARIO_SET
 
 
 def _mode(collision_rate: float, near_misses: int) -> dict[str, float | int]:

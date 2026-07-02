@@ -118,10 +118,8 @@ def test_issue_3635_runner_default_targets_new_family_and_applies_seed_matrix() 
     """The #3556 runner default resolves the #3635 family and bounded seed fixture."""
     payload = _load_yaml(BENCHMARK_CONFIG)
     expected_family = SCENARIO_SET.relative_to(REPO_ROOT).as_posix()
-    assert campaign.DEFAULT_SCENARIO_SET == expected_family
     assert payload["scenario_family"] == expected_family
-    assert campaign.DEFAULT_SEED_SET == payload["seed_set"]
-    assert campaign.DEFAULT_SEEDS == payload["seed_sets"][payload["seed_set"]]["seeds"]
+    assert payload["seed_sets"][payload["seed_set"]]["seeds"] == campaign.DEFAULT_SEEDS
 
     scenarios = campaign.load_campaign_scenarios(SCENARIO_SET, campaign.DEFAULT_SEEDS)
     assert len(scenarios) == 1

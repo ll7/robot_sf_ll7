@@ -291,7 +291,8 @@ def _smoke_conditions(smoke_report: Mapping[str, Any]) -> Mapping[str, Any]:
     condition_payloads = {
         name: value
         for name, value in smoke_report.items()
-        if isinstance(value, Mapping) and name != "delta_mixed_minus_homogeneous"
+        if isinstance(value, Mapping)
+        and name not in {"delta_mixed_minus_homogeneous", "metadata", "config", "environment"}
     }
     if len(condition_payloads) != 2:
         raise ValueError("smoke_report must contain exactly two condition arms")
@@ -310,7 +311,7 @@ def _normalize_composition(composition: Mapping[str, float]) -> dict[str, float]
     total = sum(normalized.values())
     if not math.isclose(total, 1.0, rel_tol=0.0, abs_tol=1e-6):
         raise ValueError(f"composition fractions must sum to 1.0 (got {total})")
-    return normalized
+    return {name: value / total for name, value in normalized.items()}
 
 
 def _coerce_archetype_spec(
@@ -320,9 +321,14 @@ def _coerce_archetype_spec(
     if isinstance(value, ArchetypePopulationSpec):
         spec = value
     elif isinstance(value, Mapping):
+        try:
+            desired_speed_factor = float(value["desired_speed_factor"])
+            radius_m = float(value["radius_m"])
+        except KeyError as exc:
+            raise ValueError(f"archetype spec {name!r} missing key: {exc.args[0]}") from exc
         spec = ArchetypePopulationSpec(
-            desired_speed_factor=float(value["desired_speed_factor"]),
-            radius_m=float(value["radius_m"]),
+            desired_speed_factor=desired_speed_factor,
+            radius_m=radius_m,
             response_law=(
                 None if value.get("response_law") is None else str(value.get("response_law"))
             ),

@@ -84,6 +84,30 @@ def test_mean_matched_population_pair_rejects_unknown_archetype() -> None:
         )
 
 
+def test_mean_matched_population_pair_reports_missing_archetype_spec_key() -> None:
+    """Mapping specs fail with a descriptive missing-key error."""
+
+    with pytest.raises(ValueError, match="missing key: radius_m"):
+        build_mean_matched_population_pair(
+            population_size=4,
+            composition={"cautious": 1.0},
+            archetypes={"cautious": {"desired_speed_factor": 0.7}},
+        )
+
+
+def test_mean_matched_population_pair_normalizes_tolerance_slop() -> None:
+    """Tiny composition roundoff is normalized before mean calculations."""
+
+    report = build_mean_matched_population_pair(
+        population_size=10,
+        composition={"cautious": 0.1, "standard": 0.2, "hurried": 0.7000001},
+        archetypes=_archetypes(),
+    )
+
+    expected = (0.1 * 0.7 + 0.2 * 1.0 + 0.7000001 * 1.4) / 1.0000001
+    assert report["mean_matched_parameters"]["desired_speed_factor"] == pytest.approx(expected)
+
+
 def test_per_archetype_ablation_report_blocks_missing_control_trace() -> None:
     """Missing traces stay blocked diagnostics, not claim-supporting metrics."""
 
@@ -114,6 +138,23 @@ def test_per_archetype_ablation_report_uses_trace_metrics_when_ready() -> None:
     assert metrics["worst_archetype_by_mean"] == "hurried"
     assert metrics["per_archetype"]["cautious"]["mean"] == pytest.approx(0.9)
     assert metrics["per_archetype"]["hurried"]["mean"] == pytest.approx(0.4)
+
+
+def test_smoke_mean_match_fallback_ignores_metadata_mappings() -> None:
+    """Fallback smoke parsing should not confuse metadata maps for condition arms."""
+
+    audit = audit_smoke_mean_match(
+        {
+            "schema_version": "smoke.v1",
+            "metadata": {"run": "ignored"},
+            "config": {"also": "ignored"},
+            "homogeneous_standard": {"mean_min_clearance": {"mean": 1.0}},
+            "heterogeneous_mixed": {"mean_min_clearance": {"mean": 1.0}},
+        },
+        metric_key="mean_min_clearance",
+    )
+
+    assert audit["status"] == "ready"
 
 
 def test_issue_3206_three_seed_smoke_audits_as_mean_matched_but_not_per_archetype_ready() -> None:

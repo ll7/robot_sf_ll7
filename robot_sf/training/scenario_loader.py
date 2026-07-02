@@ -25,6 +25,7 @@ from robot_sf.nav.map_config import (
     MapDefinitionPool,
     PedestrianWaitRule,
     SinglePedestrianDefinition,
+    parse_social_group_definitions,
     serialize_map,
 )
 from robot_sf.nav.svg_map_parser import convert_map
@@ -1224,6 +1225,7 @@ def build_robot_config_from_scenario(
         scenario.get("single_pedestrians"),
         default_hold_ref_point=_scenario_conflict_point(scenario),
     )
+    _apply_social_group_overrides(config, scenario.get("social_groups"))
     return config
 
 
@@ -1562,6 +1564,25 @@ def _apply_single_pedestrian_overrides(
         overrides,
         default_hold_ref_point=default_hold_ref_point,
     )
+
+
+def _apply_social_group_overrides(
+    config: RobotSimulationConfig,
+    overrides: list[Mapping[str, Any]] | None,
+) -> None:
+    """Apply scenario-level social group overrides to cloned map definitions."""
+    if not overrides:
+        return
+    if config.map_pool is None:
+        raise ValueError("social_groups overrides provided but config has no map pool")
+
+    cloned_maps = dict(config.map_pool.map_defs)
+    for map_id, map_def in cloned_maps.items():
+        updated = deepcopy(map_def)
+        updated.social_groups = parse_social_group_definitions(overrides)
+        updated._validate_social_groups()
+        cloned_maps[map_id] = updated
+    config.map_pool = MapDefinitionPool(map_defs=cloned_maps)
 
 
 def _scenario_conflict_point(scenario: Mapping[str, Any]) -> tuple[float, float] | None:
@@ -2280,6 +2301,7 @@ def map_cache_info() -> dict[str, int]:
 
 
 __all__ = [
+    "_apply_social_group_overrides",
     "apply_route_overrides",
     "apply_single_pedestrian_overrides",
     "build_robot_config_from_scenario",

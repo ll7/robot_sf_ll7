@@ -29,8 +29,10 @@ campaign so under-powered or mislabeled runs are caught **before** any compute i
 - `scripts/benchmark/preflight_reactivity_replay_rank_study_issue_3637.py` — thin CPU-only CLI over
   the checker. Exit `0` ready / `1` blocked / `2` usage error.
 - `configs/benchmarks/reactivity_replay_rank_study_issue_3637_launch_packet.yaml` — the proposed run
-  plan (planners, paired S20 seeds, scenario set + sha256, horizon, replay limitation) + the
-  out-of-scope run/post-run commands.
+  plan (planners, paired S20 seeds, scenario set + sha256, horizon, replay limitation), frozen
+  rank-stability thresholds (`schedule: s20`, `bootstrap_resamples: 5000`,
+  `target_ci_half_width: 0.10`, `rank_effect_stability_threshold: 0.95`), and the out-of-scope
+  run/post-run commands.
 
 ## Replay limitation (canonical, must travel with every artifact)
 
@@ -47,6 +49,11 @@ campaign so under-powered or mislabeled runs are caught **before** any compute i
 The preflight checks the **plan**, not sufficiency. Actual seed *sufficiency* (CI half-width /
 rank-flip) is decided **post-run** by `scripts/tools/seed_sufficiency_gate.py`; no reactivity-rank
 claim may be promoted until that gate plus claim-card review classify the executed bundle.
+
+The numeric rank-stability thresholds are frozen in the launch packet before campaign execution.
+They are pre-run decision inputs, not result interpretation: the checker blocks packets that omit or
+alter them so the post-run `frozen_gate_input.json` cannot be selected after seeing benchmark
+output.
 
 ## Tests
 

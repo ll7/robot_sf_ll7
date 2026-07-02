@@ -59,6 +59,19 @@ DIAGNOSTIC_SEED_COUNT = 4
 #: Metrics that must be preserved for the post-run rank-stability gate.
 REQUIRED_RANK_STABILITY_METRICS = ("collision_rate", "near_miss_rate", "min_separation_m")
 
+#: Frozen pre-run analysis schedule. This must match the declared seed floor so post-run gate
+#: inputs are not chosen after seeing results.
+REQUIRED_RANK_STABILITY_SCHEDULE = "s20"
+
+#: Frozen confidence-interval half-width target for the post-run seed gate.
+REQUIRED_TARGET_CI_HALF_WIDTH = 0.10
+
+#: Frozen rank-effect stability threshold used by post-run analysis summaries.
+REQUIRED_RANK_EFFECT_STABILITY_THRESHOLD = 0.95
+
+#: Frozen bootstrap resample count for rank-stability analysis.
+REQUIRED_BOOTSTRAP_RESAMPLES = 5000
+
 #: Canonical post-run gate command family. Packets may add arguments but must route here.
 RANK_STABILITY_GATE_COMMAND = "scripts/tools/seed_sufficiency_gate.py"
 
@@ -272,6 +285,32 @@ def _check_scenario_set_digest(plan: ReactivityReplayRunPlan) -> CheckResult:
     )
 
 
+def _rank_stability_threshold_failures(analysis: dict[str, Any]) -> list[str]:
+    """Return fail-closed blockers for frozen pre-run rank-stability thresholds."""
+    schedule = str(analysis.get("schedule") or "").lower()
+    bootstrap_resamples = analysis.get("bootstrap_resamples")
+    target_ci_half_width = analysis.get("target_ci_half_width")
+    rank_effect_stability_threshold = analysis.get("rank_effect_stability_threshold")
+
+    failures: list[str] = []
+    if schedule != REQUIRED_RANK_STABILITY_SCHEDULE:
+        failures.append(f"schedule must be {REQUIRED_RANK_STABILITY_SCHEDULE}")
+    if (
+        not isinstance(bootstrap_resamples, int)
+        or isinstance(bootstrap_resamples, bool)
+        or bootstrap_resamples != REQUIRED_BOOTSTRAP_RESAMPLES
+    ):
+        failures.append(f"bootstrap_resamples must be integer {REQUIRED_BOOTSTRAP_RESAMPLES}")
+    if target_ci_half_width != REQUIRED_TARGET_CI_HALF_WIDTH:
+        failures.append(f"target_ci_half_width must be {REQUIRED_TARGET_CI_HALF_WIDTH:.2f}")
+    if rank_effect_stability_threshold != REQUIRED_RANK_EFFECT_STABILITY_THRESHOLD:
+        failures.append(
+            "rank_effect_stability_threshold must be "
+            f"{REQUIRED_RANK_EFFECT_STABILITY_THRESHOLD:.2f}"
+        )
+    return failures
+
+
 def _check_rank_stability_analysis(plan: ReactivityReplayRunPlan) -> CheckResult:
     """Validate the declared post-run rank-stability analysis contract.
 
@@ -302,6 +341,7 @@ def _check_rank_stability_analysis(plan: ReactivityReplayRunPlan) -> CheckResult
         failures.append("rank_metric must be one of required_metrics")
     if not paired_resampling:
         failures.append("paired_seed_resampling must be true")
+    failures.extend(_rank_stability_threshold_failures(analysis))
     if RANK_STABILITY_GATE_COMMAND not in gate_command:
         failures.append(
             f"seed_sufficiency_gate_command must route through {RANK_STABILITY_GATE_COMMAND}"
@@ -315,7 +355,8 @@ def _check_rank_stability_analysis(plan: ReactivityReplayRunPlan) -> CheckResult
         name="rank_stability_analysis",
         passed=not failures,
         detail=(
-            "post-run rank-stability contract declared: paired seed resampling, required metrics, "
+            "post-run rank-stability contract declared: S20 schedule, bootstrap resamples, "
+            "CI target, stability threshold, paired seed resampling, required metrics, "
             "seed-sufficiency gate, replay caveat, and no-paper-claim boundary"
             if not failures
             else "; ".join(failures)

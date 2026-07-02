@@ -89,6 +89,10 @@ rank_stability_analysis:
     - near_miss_rate
     - min_separation_m
   rank_metric: collision_rate
+  bootstrap_resamples: 5000
+  schedule: s20
+  target_ci_half_width: 0.10
+  rank_effect_stability_threshold: 0.95
   seed_sufficiency_gate_command: >-
     uv run python scripts/tools/seed_sufficiency_gate.py --input-json <frozen_gate_input.json>
   replay_limitation_required: true

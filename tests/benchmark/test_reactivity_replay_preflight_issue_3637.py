@@ -20,8 +20,12 @@ from robot_sf.benchmark.reactivity_replay_preflight import (
     MIN_RANK_STABILITY_SEEDS,
     PREFLIGHT_SCHEMA,
     RANK_STABILITY_GATE_COMMAND,
+    REQUIRED_BOOTSTRAP_RESAMPLES,
     REQUIRED_OUT_OF_SCOPE,
+    REQUIRED_RANK_EFFECT_STABILITY_THRESHOLD,
     REQUIRED_RANK_STABILITY_METRICS,
+    REQUIRED_RANK_STABILITY_SCHEDULE,
+    REQUIRED_TARGET_CI_HALF_WIDTH,
     ReactivityReplayRunPlan,
     build_preflight_manifest,
     check_run_plan,
@@ -55,6 +59,10 @@ def _rank_stability_analysis() -> dict[str, object]:
         "paired_seed_resampling": True,
         "required_metrics": list(REQUIRED_RANK_STABILITY_METRICS),
         "rank_metric": REQUIRED_RANK_STABILITY_METRICS[0],
+        "bootstrap_resamples": REQUIRED_BOOTSTRAP_RESAMPLES,
+        "schedule": REQUIRED_RANK_STABILITY_SCHEDULE,
+        "target_ci_half_width": REQUIRED_TARGET_CI_HALF_WIDTH,
+        "rank_effect_stability_threshold": REQUIRED_RANK_EFFECT_STABILITY_THRESHOLD,
         "seed_sufficiency_gate_command": (
             f"uv run python {RANK_STABILITY_GATE_COMMAND} --input-json <frozen_gate_input.json>"
         ),
@@ -107,6 +115,9 @@ def test_manifest_always_carries_replay_limitation():
     assert "not pre-recorded trajectory playback" in limitation["note"].lower()
     assert "rank stability" in manifest["claim_boundary"].lower()
     assert manifest["plan"]["rank_stability_analysis"]["paired_seed_resampling"] is True
+    assert manifest["plan"]["rank_stability_analysis"]["schedule"] == "s20"
+    assert manifest["plan"]["rank_stability_analysis"]["target_ci_half_width"] == 0.10
+    assert manifest["plan"]["rank_stability_analysis"]["bootstrap_resamples"] == 5000
     assert manifest["out_of_scope"] == list(REQUIRED_OUT_OF_SCOPE)
     assert manifest["plan"]["out_of_scope"] == list(REQUIRED_OUT_OF_SCOPE)
 
@@ -193,6 +204,11 @@ def test_incomplete_rank_stability_analysis_blocks():
         ("required_metrics", ["collision_rate"]),
         ("rank_metric", "unlisted_metric"),
         ("paired_seed_resampling", False),
+        ("schedule", "s10"),
+        ("target_ci_half_width", 0.25),
+        ("rank_effect_stability_threshold", 0.50),
+        ("bootstrap_resamples", 100),
+        ("bootstrap_resamples", 5000.0),
         ("seed_sufficiency_gate_command", "uv run python scripts/tools/some_other_gate.py"),
         ("replay_limitation_required", False),
         ("claim_boundary", "rank stability looks good"),

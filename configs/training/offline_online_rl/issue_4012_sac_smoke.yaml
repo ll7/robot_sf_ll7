@@ -1,0 +1,14 @@
+# Diagnostic-only smoke orchestrator for issue #4012.
+#
+# This config prepares the local offline-to-online SAC lane. It is intentionally not
+# a Slurm campaign and does not make benchmark or paper-facing claims.
+schema_version: offline_online_rl_experiment.v1
+output_dir: ../../../output/issue_4012_offline_online_rl_smoke
+summary_json: issue_4012_offline_online_summary.json
+summary_markdown: issue_4012_offline_online_report.md
+
+offline_online_arm:
+  config: ./issue_4012_sac_offline_online_arm.yaml
+
+scratch_arm:
+  config: ./issue_4012_sac_scratch_arm.yaml

@@ -1,0 +1,18 @@
+policy_id: issue_4012_sac_scratch
+scenario_config: ../../scenarios/classic_interactions.yaml
+total_timesteps: 256
+seed: 4012
+output_dir: ../../../output/issue_4012_offline_online_rl_smoke/scratch
+device: cpu
+action_semantics: delta
+sac_hyperparams:
+  buffer_size: 2048
+  learning_starts: 0
+  batch_size: 16
+  gradient_steps: 1
+env_factory_kwargs:
+  reward_name: route_completion_v3
+tracking:
+  enabled: false
+offline_online:
+  enabled: false

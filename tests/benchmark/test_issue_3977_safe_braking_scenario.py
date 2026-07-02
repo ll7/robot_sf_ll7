@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from robot_sf.gym_env.robot_env import RobotEnv
+from robot_sf.ped_npc.ped_behavior import SinglePedestrianBehavior
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -45,7 +46,22 @@ def test_safe_braking_scenario_manifest_loads_with_public_requirement_contract()
         "pedestrian_id": "h1",
         "conflict_point": [14.0, 14.0],
         "trigger_radius_m": 0.75,
+        "trigger": "runtime_robot_proximity_release",
+        "hold_release_radius_m": 5.5,
     }
+
+
+def test_safe_braking_pedestrian_declares_proximity_hold() -> None:
+    """The crossing is gated on runtime robot proximity, not a fixed timer."""
+    scenario = _load_safe_braking_scenario()
+    config = build_robot_config_from_scenario(scenario, scenario_path=SINGLE_SCENARIO)
+    ped = _single_pedestrian(config)
+
+    assert ped.hold_until_robot_within_m == pytest.approx(5.5)
+    assert ped.hold_ref_point == (14.0, 14.0)
+    assert ped.hold_timeout_s == pytest.approx(6.0)
+    # The hold reference point is the conflict point and lies on the crossing trajectory.
+    assert ped.hold_ref_point in (ped.trajectory or [])
 
 
 def test_safe_braking_scenario_generation_is_deterministic() -> None:
@@ -72,7 +88,9 @@ def test_safe_braking_scenario_generation_is_deterministic() -> None:
         ]
     )
     assert ped_a.speed_m_s == ped_b.speed_m_s == pytest.approx(2.0)
-    assert ped_a.start_delay_s == ped_b.start_delay_s == pytest.approx(0.2)
+    # No start delay: the proximity hold provides the wait-at-curb semantics, and a non-zero spawn
+    # velocity is required for a non-zero runtime desired speed.
+    assert ped_a.start_delay_s == ped_b.start_delay_s == pytest.approx(0.0)
 
     map_a = next(iter(config_a.map_pool.map_defs.values()))
     robot_route = map_a.robot_routes[0]
@@ -105,3 +123,62 @@ def test_safe_braking_short_headless_smoke_episode(monkeypatch) -> None:
     ped = _single_pedestrian(config)
     assert tuple(conflict_point.tolist()) in (ped.trajectory or [])
     assert trigger_radius == pytest.approx(0.75)
+
+
+def _run_episode_with_robot(monkeypatch, robot_xy, *, steps, probe_step=None):
+    """Run the safe-braking scenario with a robot pinned at ``robot_xy``.
+
+    Returns:
+        tuple: (behavior runtime, pedestrian y at ``probe_step`` or None, final pedestrian y).
+    """
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    scenario = _load_safe_braking_scenario()
+    config = build_robot_config_from_scenario(scenario, scenario_path=SINGLE_SCENARIO)
+    env = RobotEnv(config, debug=False)
+    try:
+        env.reset(seed=3977)
+        behavior = next(
+            b for b in env.simulator.peds_behaviors if isinstance(b, SinglePedestrianBehavior)
+        )
+        runtime = behavior._runtimes[0]
+        behavior.set_robot_pose_provider(lambda: [((float(robot_xy[0]), float(robot_xy[1])), 0.0)])
+        action = np.zeros(env.action_space.shape, dtype=env.action_space.dtype)
+        probe_y = None
+        for step in range(steps):
+            env.step(action)
+            if probe_step is not None and step == probe_step:
+                probe_y = float(env.simulator.ped_pos[0][1])
+        final_y = float(env.simulator.ped_pos[0][1])
+    finally:
+        env.close()
+    return runtime, probe_y, final_y
+
+
+def test_safe_braking_pedestrian_crosses_when_robot_approaches(monkeypatch) -> None:
+    """Runtime proof: the pedestrian holds at the curb, then steps in front once a robot nears.
+
+    This is the core semantic fix — the "steps in front" event is released by real robot
+    proximity to the conflict point, not by a fixed open-loop timer.
+    """
+    runtime, _probe_y, final_y = _run_episode_with_robot(monkeypatch, (14.0, 14.0), steps=100)
+    assert runtime.hold_released_by == "robot_proximity"
+    # The pedestrian has crossed the robot corridor (y=14) down toward its far goal.
+    assert final_y < 14.0
+
+
+def test_safe_braking_hold_fails_open_when_robot_never_approaches(monkeypatch) -> None:
+    """Runtime proof: an absent/distant robot cannot deadlock the pedestrian (fail-open timeout).
+
+    The pedestrian first holds near the curb (does not immediately cross), then the timeout
+    releases it so the episode never wedges.
+    """
+    # Probe at step 60 (~6 s): the pedestrian has reached the curb and is still holding there,
+    # since the fail-open timeout (~6 s after engaging) has not fired yet.
+    runtime, probe_y, final_y = _run_episode_with_robot(
+        monkeypatch, (0.0, 0.0), steps=160, probe_step=60
+    )
+    assert runtime.hold_released_by == "timeout"
+    # It genuinely held near the curb (~y=17.5) mid-episode rather than crossing on contact.
+    assert probe_y is not None and probe_y > 16.0
+    # After the fail-open release it still completes the crossing.
+    assert final_y < 14.0

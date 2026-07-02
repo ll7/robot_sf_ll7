@@ -16,6 +16,11 @@ from robot_sf.ped_npc.ped_zone import sample_zone
 if TYPE_CHECKING:
     from shapely.prepared import PreparedGeometry
 
+#: Fail-open release time (seconds) for a proximity hold when no ``hold_timeout_s`` is configured.
+#: The pedestrian releases after this dwell even if no robot ever approaches, so a stalled or
+#: absent robot can never deadlock the scenario.
+DEFAULT_HOLD_TIMEOUT_S = 6.0
+
 
 class PedestrianBehavior(Protocol):
     """Protocol implemented by pedestrian behavior controllers."""
@@ -229,6 +234,11 @@ class SinglePedestrianRuntime:
     waiting_for_advance: bool = False
     joined_group_id: int | None = None
     left_group: bool = False
+    hold_waypoint_index: int | None = None
+    proximity_hold_engaged: bool = False
+    proximity_hold_released: bool = False
+    proximity_hold_elapsed_s: float = 0.0
+    hold_released_by: str | None = None
 
 
 @dataclass
@@ -261,6 +271,7 @@ class SinglePedestrianBehavior:
                     trajectory=ped.trajectory or [],
                     pending_waits=waits,
                     start_delay_remaining_s=float(ped.start_delay_s),
+                    hold_waypoint_index=self._resolve_hold_waypoint_index(ped),
                 )
             )
 
@@ -296,6 +307,10 @@ class SinglePedestrianBehavior:
             runtime.waiting_for_advance = False
             runtime.joined_group_id = None
             runtime.left_group = False
+            runtime.proximity_hold_engaged = False
+            runtime.proximity_hold_released = False
+            runtime.proximity_hold_elapsed_s = 0.0
+            runtime.hold_released_by = None
 
     def _advance_trajectory(self, runtime: SinglePedestrianRuntime) -> None:
         """Advance trajectory waypoints and honor wait rules."""
@@ -303,6 +318,9 @@ class SinglePedestrianBehavior:
             return
 
         if self._tick_wait(runtime):
+            return
+
+        if self._tick_proximity_hold(runtime):
             return
 
         current_target = runtime.trajectory[runtime.waypoint_index]
@@ -366,6 +384,124 @@ class SinglePedestrianBehavior:
             runtime.waiting_for_advance = False
             self._advance_waypoint(runtime)
         return runtime.wait_remaining_s > 0
+
+    @staticmethod
+    def _resolve_hold_waypoint_index(ped: SinglePedestrianDefinition) -> int | None:
+        """Resolve the trajectory index where a proximity hold should engage.
+
+        The pedestrian holds at the waypoint immediately preceding ``hold_ref_point`` (the curb
+        before the conflict point), so a release triggers a genuine short crossing into the
+        reference point.
+
+        Returns:
+            int | None: Trajectory index to hold at, or ``None`` when no proximity hold applies
+            or the reference point is not on the trajectory (hold disabled, fail-open).
+        """
+        if (
+            ped.hold_until_robot_within_m is None
+            or not ped.trajectory
+            or ped.hold_ref_point is None
+        ):
+            return None
+        for k, waypoint in enumerate(ped.trajectory):
+            if dist(waypoint, ped.hold_ref_point) <= 1e-6:
+                return max(0, k - 1)
+        logger.warning(
+            "Single pedestrian '{}' hold_ref_point {} is not on its trajectory; "
+            "proximity hold disabled (fail-open).",
+            ped.id,
+            ped.hold_ref_point,
+        )
+        return None
+
+    def _tick_proximity_hold(self, runtime: SinglePedestrianRuntime) -> bool:
+        """Hold the pedestrian at the curb until a robot approaches or the timeout elapses.
+
+        The hold latches once the pedestrian first arrives at its designated hold waypoint and
+        then keeps holding every step (independent of small physics drift away from the exact
+        waypoint) until it releases. It releases when any robot is within
+        ``hold_until_robot_within_m`` of ``hold_ref_point`` or, fail-open, once ``hold_timeout_s``
+        (default :data:`DEFAULT_HOLD_TIMEOUT_S`) has elapsed.
+
+        Returns:
+            bool: ``True`` while the pedestrian should keep holding at the curb.
+        """
+        if runtime.hold_waypoint_index is None or runtime.proximity_hold_released:
+            return False
+        if runtime.waypoint_index != runtime.hold_waypoint_index:
+            return False
+
+        if not runtime.proximity_hold_engaged:
+            pos = self.states.pos_of(runtime.ped_id)
+            hold_waypoint = runtime.trajectory[runtime.hold_waypoint_index]
+            if dist(pos, hold_waypoint) > self.goal_proximity_threshold:
+                return False  # still walking to the curb; let normal trajectory logic run.
+            runtime.proximity_hold_engaged = True
+
+        timeout = runtime.definition.hold_timeout_s
+        if timeout is None:
+            timeout = DEFAULT_HOLD_TIMEOUT_S
+        if runtime.proximity_hold_elapsed_s >= timeout:
+            self._release_proximity_hold(runtime, "timeout")
+            return False
+        if self._robot_within_hold_radius(runtime):
+            self._release_proximity_hold(runtime, "robot_proximity")
+            return False
+
+        runtime.proximity_hold_elapsed_s += self.time_step_s
+        self._hold_position(runtime)
+        return True
+
+    def _release_proximity_hold(self, runtime: SinglePedestrianRuntime, reason: str) -> None:
+        """Release the proximity hold and step the pedestrian off the curb into the crossing.
+
+        Advancing the waypoint here (rather than waiting for the normal arrival check) makes the
+        release the explicit "cross now" signal, so the pedestrian steps off even after physics
+        drift has nudged it a little away from the exact curb waypoint during a long hold.
+        """
+        runtime.proximity_hold_released = True
+        runtime.hold_released_by = reason
+        self._advance_waypoint(runtime)
+        logger.info(
+            "Single pedestrian '{}' proximity hold released by {}.",
+            runtime.definition.id,
+            reason,
+        )
+
+    def _robot_within_hold_radius(self, runtime: SinglePedestrianRuntime) -> bool:
+        """Return whether any robot is within the hold radius of the reference point.
+
+        Returns:
+            bool: ``True`` when a robot pose is within ``hold_until_robot_within_m`` of
+            ``hold_ref_point``. Missing pose provider or empty poses read as "not yet"
+            (the timeout still guarantees release).
+        """
+        ref_point = runtime.definition.hold_ref_point
+        radius = runtime.definition.hold_until_robot_within_m
+        if ref_point is None or radius is None:
+            return False
+        if self.robot_pose_provider is None:
+            return False
+        poses = self.robot_pose_provider()
+        if not poses:
+            return False
+        return any(
+            dist((position[0], position[1]), ref_point) <= radius for (position, _heading) in poses
+        )
+
+    def hold_release_reasons(self) -> dict[str, str | None]:
+        """Report how each proximity-holding pedestrian was released, for episode metadata.
+
+        Returns:
+            dict[str, str | None]: Maps pedestrian id to ``robot_proximity``/``timeout`` once
+            released, or ``None`` while still holding. Only includes pedestrians with a
+            configured proximity hold.
+        """
+        return {
+            runtime.definition.id: runtime.hold_released_by
+            for runtime in self._runtimes
+            if runtime.hold_waypoint_index is not None
+        }
 
     def _hold_position(self, runtime: SinglePedestrianRuntime) -> None:
         """Hold the pedestrian in place by zeroing velocity and goal."""

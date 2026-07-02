@@ -232,7 +232,6 @@ def _to_nmpc_config(config: PredictionMPCConfig) -> NMPCSocialConfig:
         pedestrian_clearance_weight=0.0,
         obstacle_clearance_weight=config.static_obstacle_soft_weight,
         occupancy_cost_weight=config.static_obstacle_soft_weight,
-        hard_pedestrian_constraints_enabled=False,
         pedestrian_margin=config.pedestrian_safety_margin,
         solver_ftol=config.solver_ftol,
         solver_max_iterations=config.solver_max_iterations,

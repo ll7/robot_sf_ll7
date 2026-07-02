@@ -286,25 +286,8 @@ def test_nmpc_social_hard_obstacle_guard_is_opt_in(monkeypatch) -> None:
     assert planner.diagnostics()["hard_obstacle_guard_count"] == 0
 
 
-def test_build_nmpc_social_config_parses_prediction_constraint_fields() -> None:
-    """Prediction-aware MPC fields should be configurable from algo YAML mappings."""
-    cfg = build_nmpc_social_config(
-        {
-            "prediction_backend": "stationary",
-            "hard_pedestrian_constraints_enabled": "true",
-            "hard_pedestrian_clearance": "0.7",
-            "invalid_constraint_cost": "1234",
-        }
-    )
-
-    assert cfg.prediction_backend == "stationary"
-    assert cfg.hard_pedestrian_constraints_enabled is True
-    assert cfg.hard_pedestrian_clearance == 0.7
-    assert cfg.invalid_constraint_cost == 1234.0
-
-
 def test_nmpc_social_constant_velocity_prediction_advances_future_position() -> None:
-    """The first prediction backend should produce time-indexed pedestrian futures."""
+    """The NMPC soft-cost predictor should produce time-indexed pedestrian futures."""
     planner = NMPCSocialPlannerAdapter(NMPCSocialConfig(rollout_dt=0.2))
 
     predicted = planner._predict_pedestrians(
@@ -314,38 +297,6 @@ def test_nmpc_social_constant_velocity_prediction_advances_future_position() -> 
     )
 
     np.testing.assert_allclose(predicted, np.asarray([[1.3, -0.15]], dtype=float))
-
-
-def test_nmpc_social_hard_predicted_pedestrian_constraint_rejects_rollout() -> None:
-    """Opt-in hard constraints should reject unsafe predicted pedestrian futures."""
-    planner = NMPCSocialPlannerAdapter(
-        NMPCSocialConfig(
-            horizon_steps=1,
-            hard_pedestrian_constraints_enabled=True,
-            hard_pedestrian_clearance=0.4,
-            invalid_constraint_cost=1000.0,
-        )
-    )
-    context = _RolloutContext(
-        robot_pos=np.asarray([0.0, 0.0], dtype=float),
-        heading=0.0,
-        current_speed=0.0,
-        goal=np.asarray([2.0, 0.0], dtype=float),
-        ped_positions=np.asarray([[0.2, 0.0]], dtype=float),
-        ped_velocities=np.asarray([[0.0, 0.0]], dtype=float),
-        robot_radius=0.25,
-        ped_radius=0.25,
-        observation=_obs(),
-        speed_cap=0.9,
-    )
-
-    cost = planner._rollout_cost(
-        controls_flat=np.asarray([0.0, 0.0], dtype=float),
-        context=context,
-    )
-
-    assert cost > planner.config.invalid_constraint_cost
-    assert planner.diagnostics()["hard_pedestrian_constraint_violations"] == 1
 
 
 def test_nmpc_social_clips_solver_action_to_control_bounds(monkeypatch) -> None:

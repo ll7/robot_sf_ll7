@@ -54,6 +54,10 @@ class NMPCSocialConfig:
     obstacle_clearance_weight: float = 4.2
     occupancy_cost_weight: float = 1.2
     collision_cost_kappa: float = 10.0
+    prediction_backend: str = "constant_velocity"
+    hard_pedestrian_constraints_enabled: bool = False
+    hard_pedestrian_clearance: float = 0.65
+    invalid_constraint_cost: float = 1e6
     pedestrian_margin: float = 0.55
     obstacle_margin: float = 0.45
     desired_obstacle_clearance: float = 0.9
@@ -108,6 +112,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             "solver_failures": 0,
             "fallback_stop_count": 0,
             "hard_obstacle_guard_count": 0,
+            "hard_pedestrian_constraint_violations": 0,
             "sum_abs_linear": 0.0,
             "sum_abs_angular": 0.0,
             "nonzero_command_count": 0,
@@ -249,15 +254,50 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
     def _predict_pedestrians(
         self, ped_positions: np.ndarray, ped_velocities: np.ndarray, step_idx: int
     ) -> np.ndarray:
-        """Predict pedestrian positions under a constant-velocity assumption.
+        """Predict pedestrian positions for one MPC constraint timestamp.
 
         Returns:
             np.ndarray: Predicted pedestrian positions for the requested rollout step.
         """
         if ped_positions.size == 0:
             return ped_positions
+        backend = str(self.config.prediction_backend).strip().lower()
+        if backend == "stationary":
+            return ped_positions
+        if backend not in {"constant_velocity", "cv", "learned"}:
+            warnings.warn(
+                f"Unknown NMPC pedestrian prediction backend {self.config.prediction_backend!r}; "
+                "using constant_velocity.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         t = float(step_idx + 1) * float(self.config.rollout_dt)
         return ped_positions + ped_velocities * t
+
+    def _predicted_pedestrian_constraint_cost(
+        self,
+        *,
+        robot_pos: np.ndarray,
+        predicted_pedestrians: np.ndarray,
+        robot_radius: float,
+        pedestrian_radius: float,
+    ) -> float | None:
+        """Return a hard penalty for unsafe time-varying pedestrian constraints."""
+        if not bool(self.config.hard_pedestrian_constraints_enabled):
+            return None
+        if predicted_pedestrians.size == 0:
+            return None
+        dists = np.linalg.norm(predicted_pedestrians - robot_pos[None, :], axis=1)
+        if dists.size == 0:
+            return None
+        clearance = float(np.min(dists)) - float(robot_radius) - float(pedestrian_radius)
+        if clearance >= float(self.config.hard_pedestrian_clearance):
+            return None
+        self._stats["hard_pedestrian_constraint_violations"] = (
+            int(self._stats.get("hard_pedestrian_constraint_violations", 0)) + 1
+        )
+        shortfall = float(self.config.hard_pedestrian_clearance) - clearance
+        return float(self.config.invalid_constraint_cost) * (1.0 + shortfall)
 
     def _min_obstacle_clearance(self, point: np.ndarray, observation: dict[str, Any]) -> float:
         """Return the nearest obstacle clearance around a point in meters."""
@@ -443,6 +483,14 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             ped_t = self._predict_pedestrians(
                 context.ped_positions, context.ped_velocities, step_idx
             )
+            constraint_cost = self._predicted_pedestrian_constraint_cost(
+                robot_pos=x,
+                predicted_pedestrians=ped_t,
+                robot_radius=context.robot_radius,
+                pedestrian_radius=context.ped_radius,
+            )
+            if constraint_cost is not None:
+                return constraint_cost
             if ped_t.size > 0:
                 dists = np.linalg.norm(ped_t - x[None, :], axis=1)
                 min_ped_clearance = float(np.min(dists)) - (
@@ -606,6 +654,9 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             "solver_failures": int(self._stats.get("solver_failures", 0)),
             "fallback_stop_count": int(self._stats.get("fallback_stop_count", 0)),
             "hard_obstacle_guard_count": int(self._stats.get("hard_obstacle_guard_count", 0)),
+            "hard_pedestrian_constraint_violations": int(
+                self._stats.get("hard_pedestrian_constraint_violations", 0)
+            ),
             "nonzero_command_count": int(self._stats.get("nonzero_command_count", 0)),
             "mean_abs_linear": float(self._stats.get("sum_abs_linear", 0.0)) / calls,
             "mean_abs_angular": float(self._stats.get("sum_abs_angular", 0.0)) / calls,
@@ -638,6 +689,10 @@ def build_nmpc_social_config(cfg: dict[str, Any] | None) -> NMPCSocialConfig:
         "obstacle_clearance_weight": float,
         "occupancy_cost_weight": float,
         "collision_cost_kappa": float,
+        "prediction_backend": str,
+        "hard_pedestrian_constraints_enabled": _parse_bool,
+        "hard_pedestrian_clearance": float,
+        "invalid_constraint_cost": float,
         "pedestrian_margin": float,
         "obstacle_margin": float,
         "desired_obstacle_clearance": float,

@@ -1989,8 +1989,12 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     elif algo_key in {"socnav_bench"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = SocNavBenchSamplingAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
-    elif algo_key in {"nmpc_social", "nmpc"}:
-        adapter = NMPCSocialPlannerAdapter(config=build_nmpc_social_config(algo_config))
+    elif algo_key in {"nmpc_social", "nmpc", "prediction_aware_mpc"}:
+        effective_config = dict(algo_config)
+        if algo_key == "prediction_aware_mpc":
+            effective_config.setdefault("prediction_backend", "constant_velocity")
+            effective_config.setdefault("hard_pedestrian_constraints_enabled", True)
+        adapter = NMPCSocialPlannerAdapter(config=build_nmpc_social_config(effective_config))
     elif algo_key in {"rvo", "dwa"}:
         adapter = SamplingPlannerAdapter(config=socnav_cfg)
         meta.update({"status": "placeholder", "fallback_reason": "unimplemented"})

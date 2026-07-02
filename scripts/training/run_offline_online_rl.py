@@ -10,7 +10,17 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from scripts.training.train_sac_sb3 import load_sac_training_config, run_sac_training
+from robot_sf.benchmark.rl_trajectory_dataset import (
+    RLTrajectoryEpisode,
+    compute_return_to_go,
+    write_rl_trajectory_dataset,
+)
+from scripts.training.train_sac_sb3 import (
+    _build_env,
+    load_sac_training_config,
+    load_scenarios,
+    run_sac_training,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -75,6 +85,8 @@ def run_offline_online_experiment(config_path: Path | str) -> OfflineOnlineRunSu
     if scratch_config.offline_online.enabled:
         raise ValueError("scratch_arm must keep offline_online disabled")
 
+    _materialize_smoke_dataset_if_missing(offline_config)
+
     offline_checkpoint = run_sac_training(offline_config)
     scratch_checkpoint = run_sac_training(scratch_config)
 
@@ -115,6 +127,104 @@ def _resolve_path(value: object, base_dir: Path) -> Path:
     if path.is_absolute():
         return path
     return (base_dir / path).resolve()
+
+
+def _materialize_smoke_dataset_if_missing(config: Any) -> None:
+    """Create the repository smoke dataset when the checked-in smoke input is absent."""
+
+    offline = config.offline_online
+    dataset_path = getattr(offline, "dataset_path", None)
+    if not offline.enabled or dataset_path is None:
+        return
+    manifest_path = getattr(offline, "manifest_path", None)
+    manifest_exists = manifest_path is None or manifest_path.exists()
+    if dataset_path.exists() and manifest_exists:
+        return
+    if "issue_4012_offline_online_rl_smoke" not in dataset_path.as_posix():
+        return
+
+    scenario_definitions = load_scenarios(config.scenario_config)
+    if isinstance(scenario_definitions, dict):
+        scenario_definitions = list(scenario_definitions.values())
+    env = _build_env(config, scenario_definitions=scenario_definitions)
+    try:
+        obs = env.reset()
+        observations: list[Any] = []
+        actions: list[Any] = []
+        rewards: list[float] = []
+        terminated: list[bool] = []
+        truncated: list[bool] = []
+        steps = max(int(offline.min_transitions), 1)
+        for step_idx in range(steps):
+            action = env.action_space.sample() * 0.0
+            action_batch = action.reshape((1, *action.shape))
+            next_obs, reward, done, _info = env.step(action_batch)
+            observations.append(_jsonable_vecenv_observation(obs))
+            actions.append(_jsonable(action))
+            rewards.append(float(reward[0]))
+            terminated.append(bool(done[0]) and step_idx == steps - 1)
+            truncated.append(False)
+            obs = next_obs
+        if observations:
+            observations[-1] = _jsonable_vecenv_observation(obs)
+            terminated[-1] = True
+    finally:
+        env.close()
+
+    episode = RLTrajectoryEpisode(
+        dataset_id="issue_4012_smoke",
+        episode_id="issue_4012_smoke_train_0",
+        scenario_id="issue_4012_smoke",
+        seed=int(config.seed or 4012),
+        source_policy_id="zero_action_smoke_fixture",
+        split=str(offline.dataset_split),
+        observations=tuple(observations),
+        actions=tuple(actions),
+        rewards=tuple(rewards),
+        return_to_go=tuple(compute_return_to_go(rewards)),
+        terminated=tuple(terminated),
+        truncated=tuple(truncated),
+        pedestrians=tuple({} for _ in rewards),
+        robot_states=tuple({} for _ in rewards),
+        provenance={
+            "schema_version": "issue_4012_smoke_fixture.v1",
+            "claim_boundary": "local diagnostic smoke input only; not durable benchmark evidence",
+        },
+    )
+    write_rl_trajectory_dataset([episode], dataset_path)
+    if manifest_path is not None:
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "rl_trajectory_dataset_manifest.v1",
+                    "dataset_path": str(dataset_path),
+                    "dataset_id": "issue_4012_smoke",
+                    "split_counts": {str(offline.dataset_split): 1},
+                    "claim_boundary": "local diagnostic smoke input only",
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+
+def _jsonable_vecenv_observation(observation: Any) -> Any:
+    if isinstance(observation, dict):
+        return {key: _jsonable(value[0]) for key, value in observation.items()}
+    return _jsonable(observation[0])
+
+
+def _jsonable(value: Any) -> Any:
+    if hasattr(value, "tolist"):
+        return value.tolist()
+    if isinstance(value, dict):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
+    return value
 
 
 def _summary_markdown(summary: OfflineOnlineRunSummary) -> str:

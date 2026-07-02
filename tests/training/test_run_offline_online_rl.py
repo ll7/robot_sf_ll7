@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from scripts.training import run_offline_online_rl
@@ -85,3 +87,60 @@ class _TrainingConfig:
         self.seed = 4012
         self.total_timesteps = 32
         self.offline_online = _OfflineOnline(enabled=enabled)
+
+
+def test_smoke_dataset_materialization_writes_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Canonical smoke orchestrator creates local RLTrajectoryDataset inputs when absent."""
+
+    dataset_path = tmp_path / "issue_4012_offline_online_rl_smoke" / "issue_4012_smoke.jsonl"
+    manifest_path = (
+        tmp_path / "issue_4012_offline_online_rl_smoke" / "issue_4012_smoke.manifest.json"
+    )
+    config = SimpleNamespace(
+        scenario_config=tmp_path / "scenarios.yaml",
+        seed=4012,
+        offline_online=SimpleNamespace(
+            enabled=True,
+            dataset_path=dataset_path,
+            manifest_path=manifest_path,
+            dataset_split="train",
+            min_transitions=1,
+        ),
+    )
+
+    monkeypatch.setattr(run_offline_online_rl, "load_scenarios", lambda _path: [{}])
+    monkeypatch.setattr(run_offline_online_rl, "_build_env", lambda *_args, **_kwargs: _SmokeEnv())
+
+    run_offline_online_rl._materialize_smoke_dataset_if_missing(config)
+
+    assert dataset_path.exists()
+    assert manifest_path.exists()
+    assert "RLTrajectoryEpisode.v1" in dataset_path.read_text(encoding="utf-8")
+
+
+class _SmokeSpace:
+    shape = (2,)
+
+    def sample(self) -> np.ndarray:
+        return np.asarray([0.0, 0.0], dtype=np.float32)
+
+
+class _SmokeEnv:
+    action_space = _SmokeSpace()
+
+    def reset(self) -> np.ndarray:
+        return np.asarray([[0.0, 0.0]], dtype=np.float32)
+
+    def step(self, _action: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[dict]]:
+        return (
+            np.asarray([[0.1, 0.0]], dtype=np.float32),
+            np.asarray([1.0], dtype=np.float32),
+            np.asarray([True]),
+            [{}],
+        )
+
+    def close(self) -> None:
+        return None

@@ -59,6 +59,7 @@ def build(
     *,
     robot_kinematics: str | None = None,
     robot_command_mode: str | None = None,
+    adapter_impact_eval: bool = False,
 ) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
     """Build the diffusion-policy map-runner adapter.
 
@@ -81,6 +82,7 @@ def build(
         },
         "planner_kinematics": {
             "planner_command_space": "unicycle_vw",
+            "adapter_impact_eval": bool(adapter_impact_eval),
             "supports_native_commands": False,
             "supports_adapter_commands": True,
             "default_execution_mode": "adapter",

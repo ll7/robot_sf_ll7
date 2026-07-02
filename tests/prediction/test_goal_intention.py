@@ -85,6 +85,34 @@ def test_stationary_pedestrian_returns_prior_without_nan() -> None:
     assert all(math.isfinite(value) for value in posterior.probabilities.values())
 
 
+def test_zero_speed_blocks_even_when_velocity_minimum_is_zero() -> None:
+    """Exactly stationary observations never divide by zero."""
+
+    posterior = update_goal_posterior(
+        pedestrian_id="ped_1",
+        candidate_goals=_two_goals(),
+        observed_position=(0.0, 0.0),
+        observed_velocity=(0.0, 0.0),
+        config=GoalPosteriorConfig(velocity_min_mps=0.0),
+    )
+
+    assert posterior.blocker == "stationary_below_velocity_min_mps"
+    assert math.isclose(sum(posterior.probabilities.values()), 1.0)
+
+
+def test_extreme_heading_kappa_overflow_fails_closed() -> None:
+    """Huge likelihood exponents become explicit validation errors."""
+
+    with pytest.raises(ValueError, match="goal likelihood must be finite"):
+        update_goal_posterior(
+            pedestrian_id="ped_1",
+            candidate_goals=_two_goals(),
+            observed_position=(0.0, 0.0),
+            observed_velocity=(1.0, 0.0),
+            config=GoalPosteriorConfig(heading_kappa=1000.0),
+        )
+
+
 def test_duplicate_goal_ids_fail_closed() -> None:
     """Duplicate candidate IDs should fail before producing a posterior."""
 

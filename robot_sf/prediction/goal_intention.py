@@ -144,7 +144,7 @@ def update_goal_posterior(
     candidate_source = _candidate_source(goals)
 
     speed = math.hypot(*velocity)
-    if speed < cfg.velocity_min_mps:
+    if speed <= 0.0 or speed < cfg.velocity_min_mps:
         return GoalIntentionPosterior(
             pedestrian_id=pedestrian_id,
             probabilities=normalized_prior,
@@ -164,7 +164,10 @@ def update_goal_posterior(
         else:
             alignment = (velocity_unit[0] * to_goal[0] + velocity_unit[1] * to_goal[1]) / distance
             alignment = max(-1.0, min(1.0, alignment))
-        likelihood = math.exp(cfg.heading_kappa * alignment)
+        try:
+            likelihood = math.exp(cfg.heading_kappa * alignment)
+        except OverflowError as exc:
+            raise ValueError("goal likelihood must be finite") from exc
         if not math.isfinite(likelihood):
             raise ValueError("goal likelihood must be finite")
         weighted[goal.id] = normalized_prior[goal.id] * likelihood

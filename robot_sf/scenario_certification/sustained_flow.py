@@ -473,8 +473,9 @@ def _validate_variant(
     map_file = str(scenario.get("map_file", ""))
     map_path = (scenario_set.parent / map_file).resolve()
 
-    if not name.startswith(f"issue_3813_sustained_flow_t_intersection_{tier}"):
-        errors.append(f"{name}: scenario name must include issue, family, and tier")
+    expected_name = f"issue_3813_sustained_flow_t_intersection_{tier}"
+    if name != expected_name:
+        errors.append(f"{name}: scenario name must be exactly {expected_name}")
     _require_equal(errors, name, "ped_density", ped_density, expected_ped_density)
     _require_equal(errors, name, "seeds", seeds, expected_seeds)
     for seed in seeds:

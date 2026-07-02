@@ -369,7 +369,12 @@ class SocialGroupDefinition:
             raise ValueError(f"SocialGroupDefinition '{self.group_id}' type must be non-empty")
         self.type = self.type.strip().lower()
 
-        members = tuple(str(member).strip() for member in self.members)
+        try:
+            members = tuple(str(member).strip() for member in self.members)
+        except TypeError as exc:
+            raise ValueError(
+                f"SocialGroupDefinition '{self.group_id}' members must be an iterable of strings"
+            ) from exc
         members = tuple(member for member in members if member)
         if not members:
             raise ValueError(
@@ -399,7 +404,12 @@ class SocialGroupDefinition:
 
     def _validate_polygon(self) -> None:
         """Normalize and validate the optional explicit o-space polygon."""
-        points = [(float(x), float(y)) for x, y in self.o_space_polygon]
+        try:
+            points = [(float(x), float(y)) for x, y in self.o_space_polygon]
+        except (TypeError, ValueError, IndexError, KeyError) as exc:
+            raise ValueError(
+                f"SocialGroupDefinition '{self.group_id}' o_space_polygon points must be (x, y) pairs"
+            ) from exc
         if len(points) < 3:
             raise ValueError(
                 f"SocialGroupDefinition '{self.group_id}' o_space_polygon requires "

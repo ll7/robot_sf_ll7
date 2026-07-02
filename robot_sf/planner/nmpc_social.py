@@ -7,7 +7,7 @@ from dataclasses import dataclass, fields
 from typing import Any
 
 import numpy as np
-from scipy.optimize import Bounds, minimize
+from scipy.optimize import Bounds, NonlinearConstraint, minimize
 
 from robot_sf.planner.risk_dwa import _wrap_angle
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
@@ -249,7 +249,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
     def _predict_pedestrians(
         self, ped_positions: np.ndarray, ped_velocities: np.ndarray, step_idx: int
     ) -> np.ndarray:
-        """Predict pedestrian positions under a constant-velocity assumption.
+        """Predict pedestrian positions for one MPC constraint timestamp.
 
         Returns:
             np.ndarray: Predicted pedestrian positions for the requested rollout step.
@@ -471,6 +471,31 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         cost -= float(self.config.progress_reward_weight) * progress
         return float(cost)
 
+    def _rollout_states(self, controls_flat: np.ndarray, *, context: _RolloutContext) -> np.ndarray:
+        """Return rollout states after each control using repository unicycle order."""
+        controls = np.asarray(controls_flat, dtype=float).reshape(-1, 2)
+        dt = float(self.config.rollout_dt)
+        x = np.asarray(context.robot_pos, dtype=float).copy()
+        theta = float(context.heading)
+        states: list[np.ndarray] = []
+        for v_raw, w_raw in controls:
+            v = float(np.clip(v_raw, 0.0, float(context.speed_cap)))
+            w = float(
+                np.clip(
+                    w_raw,
+                    -float(self.config.max_angular_speed),
+                    float(self.config.max_angular_speed),
+                )
+            )
+            theta = _wrap_angle(theta + w * dt)
+            x = x + np.asarray([v * np.cos(theta) * dt, v * np.sin(theta) * dt], dtype=float)
+            states.append(np.asarray([x[0], x[1], theta], dtype=float))
+        return np.asarray(states, dtype=float)
+
+    def _optimizer_constraints(self, context: _RolloutContext) -> tuple[NonlinearConstraint, ...]:
+        """Return additional SLSQP constraints for subclasses."""
+        return ()
+
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return the first command of the locally optimized NMPC sequence."""
         self._stats["calls"] = int(self._stats.get("calls", 0)) + 1
@@ -535,6 +560,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             x0,
             method="SLSQP",
             bounds=Bounds(lower, upper),
+            constraints=self._optimizer_constraints(context),
             options={
                 "ftol": float(self.config.solver_ftol),
                 "maxiter": int(self.config.solver_max_iterations),

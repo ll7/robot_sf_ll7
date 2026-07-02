@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Callable, Mapping
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -18,6 +19,14 @@ from robot_sf.benchmark.algorithm_metadata import (
     resolve_learned_checkpoint_observation_contract,
 )
 from robot_sf.benchmark.ammv_feasibility import evaluate_artifact_command_feasibility
+from robot_sf.benchmark.cbf_safety_filter_runtime import (
+    apply_runtime_cbf_safety_filter,
+    ineligible_cbf_safety_filter_step_record,
+    summarize_cbf_safety_filter_trace,
+)
+from robot_sf.benchmark.cbf_safety_filter_runtime import (
+    runtime_config_from_mapping as cbf_runtime_config_from_mapping,
+)
 from robot_sf.benchmark.group_space_metrics import group_specs_from_map
 from robot_sf.benchmark.latency_stress import not_available_latency_metrics
 from robot_sf.benchmark.map_runner_actions import DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS
@@ -435,7 +444,7 @@ def _episode_metadata_for_benchmark_metrics(
     episode_metadata = _episode_metadata_for_signal_metrics(scenario) or {}
     group_specs = group_specs_from_map(map_def) if map_def is not None else []
     if group_specs:
-        episode_metadata = dict(episode_metadata)
+        episode_metadata = deepcopy(episode_metadata)
         episode_metadata["social_groups"] = {
             "schema_version": "social-groups.v1",
             "groups": group_specs,
@@ -469,6 +478,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     synthetic_actuation_profile: dict[str, Any] | None = None,
     latency_stress_profile: dict[str, Any] | None = None,
     safety_wrapper: dict[str, Any] | None = None,
+    cbf_safety_filter: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
     policy_builder: PolicyBuilder,
@@ -504,8 +514,14 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         scenario_id=scenario_id,
     )
     safety_wrapper_runtime = runtime_config_from_mapping(safety_wrapper)
+    cbf_runtime = cbf_runtime_config_from_mapping(cbf_safety_filter)
+    if safety_wrapper_runtime.enabled and cbf_runtime.enabled:
+        raise ValueError(
+            "safety_wrapper and cbf_safety_filter cannot both be enabled in #3948 first slice"
+        )
     tracking_precision_records: list[dict[str, Any]] = []
     safety_wrapper_trace: list[dict[str, Any]] = []
+    cbf_filter_trace: list[dict[str, Any]] = []
     min_separation_corrupted_values: list[float] = []
     config = _build_env_config(scenario, scenario_path=scenario_path)
     max_steps = int(scenario.get("simulation_config", {}).get("max_episode_steps", 0) or 0)
@@ -773,12 +789,57 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                         previous_ped_positions=previous_trace_ped_pos,
                         step_idx=step_idx,
                     )
+                policy_command = (
+                    corrected_command[0],
+                    corrected_command[1],
+                    *tuple(policy_command[2:]),
+                )
+                safety_wrapper_trace.append(wrapper_record)
+            if cbf_runtime.enabled:
+                if step_is_native:
+                    if cbf_runtime.fail_on_native_action:
+                        raise ValueError(
+                            "cbf_safety_filter.enabled requires absolute commands; "
+                            "native environment actions cannot be filtered safely"
+                        )
+                    cbf_filter_trace.append(
+                        ineligible_cbf_safety_filter_step_record(
+                            runtime=cbf_runtime,
+                            step_idx=step_idx,
+                            reason="native_environment_action",
+                        )
+                    )
+                elif (
+                    not isinstance(policy_command, (tuple, list, np.ndarray))
+                    or len(policy_command) < 2
+                ):
+                    if cbf_runtime.fail_on_unsupported_command:
+                        raise TypeError(
+                            "cbf_safety_filter.enabled expects commands shaped like "
+                            "(linear_velocity, angular_velocity)"
+                        )
+                    cbf_filter_trace.append(
+                        ineligible_cbf_safety_filter_step_record(
+                            runtime=cbf_runtime,
+                            step_idx=step_idx,
+                            reason="unsupported_command_shape",
+                        )
+                    )
+                else:
+                    corrected_command, cbf_record = apply_runtime_cbf_safety_filter(
+                        command=policy_command,
+                        env=env,
+                        config=config,
+                        runtime=cbf_runtime,
+                        previous_ped_positions=previous_trace_ped_pos,
+                        step_idx=step_idx,
+                    )
                     policy_command = (
                         corrected_command[0],
                         corrected_command[1],
                         *tuple(policy_command[2:]),
                     )
-                    safety_wrapper_trace.append(wrapper_record)
+                    cbf_filter_trace.append(cbf_record)
             selected_action_payload = _command_action_payload(policy_command)
             ammv_command_actions.append(selected_action_payload)
             if step_is_native:
@@ -791,7 +852,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     config=config,
                     command=policy_command,
                 )
-            obs, _reward, terminated, truncated, info = env.step(action)
+            obs, reward, terminated, truncated, info = env.step(action)
 
             # Snapshot mutable simulator buffers; do not keep view aliases across steps.
             robot_pos = np.array(env.simulator.robot_pos[0], dtype=float, copy=True)
@@ -873,6 +934,11 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                         },
                         "pedestrians": trace_pedestrians,
                         "planner": planner_payload,
+                        "rl": {
+                            "reward": float(reward),
+                            "terminated": bool(terminated),
+                            "truncated": bool(truncated),
+                        },
                     }
                 )
                 previous_trace_robot_pos = np.array(robot_pos, dtype=float, copy=True)
@@ -1187,6 +1253,13 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             runtime=safety_wrapper_runtime,
         )
         algo_meta["safety_wrapper"] = safety_wrapper_summary
+    cbf_filter_summary: dict[str, Any] | None = None
+    if cbf_runtime.enabled:
+        cbf_filter_summary = summarize_cbf_safety_filter_trace(
+            cbf_filter_trace,
+            runtime=cbf_runtime,
+        )
+        algo_meta["cbf_safety_filter"] = cbf_filter_summary
     intent_summary = _intent_conditioned_behavior_summary(
         scenario,
         single_pedestrian_intent_metadata,
@@ -1252,6 +1325,10 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     metrics["tracking_target_motp_m"] = float(tracking_precision_spec["target_motp_m"])
     if safety_wrapper_summary is not None:
         metrics["wrapper_intervention_rate"] = float(safety_wrapper_summary["intervention_rate"])
+    if cbf_filter_summary is not None:
+        metrics["cbf_filter_intervention_rate"] = float(cbf_filter_summary["intervention_rate"])
+        metrics["cbf_filter_qp_infeasible_rate"] = float(cbf_filter_summary["qp_infeasible_rate"])
+        metrics["cbf_filter_fallback_rate"] = float(cbf_filter_summary["fallback_rate"])
 
     ts_end = datetime.now(UTC).isoformat()
     scenario_params = _scenario_identity_payload(
@@ -1276,6 +1353,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             else None
         ),
         safety_wrapper=dict(safety_wrapper) if safety_wrapper is not None else None,
+        cbf_safety_filter=dict(cbf_safety_filter) if cbf_safety_filter is not None else None,
         record_simulation_step_trace=record_simulation_step_trace,
     )
     steps_taken = int(robot_pos_arr.shape[0])

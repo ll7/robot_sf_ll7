@@ -22,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bounded first slice labeled **diagnostic** (declared social-space intrusion only; not a human-comfort
   or safety claim). The TAGA-like tangent-subgoal group-avoidance planner wrapper and the headless
   comparison benchmark are the deliberate successor slice and are not included.
+* Added `RLTrajectoryDataset.v1` infrastructure (#4011): episode-major JSONL loader/writer,
+  return-to-go computation, split/provenance manifest schema with leakage checks, map-runner
+  simulation-trace reward/terminal capture, recorder CLI, validation CLI support, focused tests, and
+  a tiny preview evidence bundle. This is an infrastructure contract only; it does not train offline
+  reinforcement learning policies, submit jobs, or promote benchmark claims.
 * Added **uncertainty-aware safety primitives** (#3974): conformal prediction buffers and
   cumulative-intrusion metrics in new `robot_sf/benchmark/uncertainty_safety.py`. Split-conformal
   (`split_conformal_radius`) and online Adaptive Conformal Inference (`adaptive_conformal_buffers`)

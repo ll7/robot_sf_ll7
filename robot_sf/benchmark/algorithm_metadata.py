@@ -71,6 +71,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "dwa": "classical",
     "teb": "classical",
     "nmpc_social": "classical",
+    "prediction_mpc": "classical",
 }
 
 _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
@@ -127,6 +128,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "dwa": "placeholder_adapter",
     "teb": "corridor_commitment_local_planner",
     "nmpc_social": "nonlinear_model_predictive_local_planner",
+    "prediction_mpc": "prediction_aware_model_predictive_local_planner",
 }
 
 _DEFAULT_OBSERVATION_SPEC: dict[str, Any] = {
@@ -204,6 +206,16 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supported_modes": ("socnav_state",),
         "inputs": ("robot_state", "goal", "pedestrians", "prediction_model"),
         "notes": "Predictive MPPI consumes SocNav state and learned prediction features.",
+    },
+    "prediction_mpc": {
+        "default_mode": "socnav_state",
+        "supported_modes": ("socnav_state",),
+        "inputs": ("robot_state", "goal", "pedestrians", "predicted_pedestrian_futures"),
+        "notes": (
+            "Consumes structured SocNav state. The constant-velocity backend derives "
+            "time-varying pedestrian futures from tracked pedestrian positions and "
+            "ego-frame pedestrian velocities rotated into world coordinates."
+        ),
     },
     "ppo": {
         "default_mode": "sensor_fusion_state",
@@ -1014,6 +1026,16 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "default_adapter_name": "NMPCSocialPlannerAdapter",
         "benchmark_command_space": "unicycle_vw",
         "projection_policy": "native_nmpc_unicycle_vw",
+        "projection_documented": True,
+    },
+    "prediction_mpc": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "PredictionMPCPlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "constant_velocity_time_varying_pedestrian_constraints",
         "projection_documented": True,
     },
 }

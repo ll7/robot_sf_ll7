@@ -101,10 +101,12 @@ def test_polygon_group_o_space_uses_polygon():
         {"group_id": ""},
         {"type": "  "},
         {"members": []},
+        {"members": None},
         {"formation": ""},
         {"radius": 0.0},
         {"radius": -1.0},
         {"o_space_polygon": [(0.0, 0.0), (1.0, 1.0)]},  # < 3 points
+        {"o_space_polygon": [1.0, 2.0, 3.0]},
     ],
 )
 def test_invalid_group_fields_raise(kwargs):

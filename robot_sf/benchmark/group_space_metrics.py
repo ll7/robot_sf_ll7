@@ -65,7 +65,11 @@ def _group_geometry(spec: Mapping[str, Any]) -> tuple[Any, np.ndarray, float, Po
     centroid = np.asarray(spec.get("centroid", (0.0, 0.0)), dtype=float).reshape(-1)[:2]
     radius = float(spec.get("radius", 0.0))
     poly_points = spec.get("o_space_polygon")
-    polygon = Polygon([(float(x), float(y)) for x, y in poly_points]) if poly_points else None
+    polygon = (
+        Polygon([(float(x), float(y)) for x, y in poly_points])
+        if isinstance(poly_points, (list, tuple)) and len(poly_points) >= 3
+        else None
+    )
     return group_id, centroid, radius, polygon
 
 
@@ -131,6 +135,10 @@ def compute_group_space_metrics(
         return _empty_metrics(len(specs), step_count)
 
     xy = pos[:, :2]
+    finite_mask = np.all(np.isfinite(xy), axis=1)
+    xy_finite = xy[finite_mask]
+    if xy_finite.shape[0] == 0:
+        return _empty_metrics(len(specs), step_count)
     intrusive_steps = np.zeros(step_count, dtype=bool)
     min_centroid = float("inf")
     min_boundary = float("inf")
@@ -138,21 +146,23 @@ def compute_group_space_metrics(
 
     for spec in specs:
         group_id, centroid, radius, polygon = _group_geometry(spec)
-        centroid_dist = np.linalg.norm(xy - centroid[None, :], axis=1)
+        centroid_dist = np.linalg.norm(xy_finite - centroid[None, :], axis=1)
         group_min_centroid = float(np.min(centroid_dist))
         min_centroid = min(min_centroid, group_min_centroid)
 
         if polygon is None:
             signed = centroid_dist - radius
         else:
-            signed = np.array([_polygon_signed_clearance(polygon, p) for p in xy], dtype=float)
+            signed = np.array(
+                [_polygon_signed_clearance(polygon, p) for p in xy_finite], dtype=float
+            )
 
         group_min_boundary = float(np.min(signed))
         if group_min_boundary < min_boundary:
             min_boundary = group_min_boundary
             nearest_group_id = group_id
 
-        intrusive_steps |= signed < 0.0
+        intrusive_steps[finite_mask] |= signed < 0.0
 
     intrusion_step_count = int(np.count_nonzero(intrusive_steps))
     return {

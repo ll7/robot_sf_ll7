@@ -412,6 +412,16 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="Native NMPC-style local planner with short-horizon nonlinear optimization.",
         requires_explicit_opt_in=True,
     ),
+    AlgorithmReadiness(
+        canonical_name="prediction_mpc",
+        tier="experimental",
+        aliases=("prediction_mpc", "prediction_aware_mpc", "cv_prediction_mpc"),
+        note=(
+            "Prediction-aware MPC local planner with constant-velocity pedestrian futures "
+            "as hard time-varying collision constraints."
+        ),
+        requires_explicit_opt_in=True,
+    ),
 )
 
 _ALIAS_INDEX: dict[str, AlgorithmReadiness] = {

@@ -121,6 +121,22 @@ def test_polygon_o_space_detects_inside_and_outside():
     assert result["nearest_group_id"] == "square_a"
 
 
+def test_non_finite_robot_positions_are_excluded_from_distances_but_not_denominator():
+    """NaN/Inf robot positions do not poison distances but still count as timesteps."""
+    robot_pos = np.array([[float("nan"), 0.0], [5.0, 5.0], [float("inf"), 1.0]])
+
+    result = compute_group_space_metrics(
+        robot_pos,
+        [_circular_group(centroid=(5.0, 5.0), radius=1.0)],
+    )
+
+    assert result["group_space_available"] == 1.0
+    assert result["group_intrusion_step_count"] == 1.0
+    assert math.isclose(result["group_intrusion_time_ratio"], 1.0 / 3.0, abs_tol=1e-9)
+    assert result["min_distance_to_group_centroid"] == 0.0
+    assert math.isclose(result["min_distance_to_group_boundary"], -1.0, abs_tol=1e-9)
+
+
 def test_nearest_group_id_is_most_intruded_group():
     """With two groups, the reported nearest group has the deepest intrusion."""
     shallow = _circular_group(centroid=(0.0, 0.0), radius=1.0, group_id="shallow")

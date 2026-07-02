@@ -411,6 +411,8 @@ class ArchiveReadinessReport:
     entries_missing_archive_id: int
     entries_missing_scenario_seed: int
     entries_missing_failure_attribution: int
+    entries_missing_certification_status: int
+    entries_not_certified: int
     entries_unknown_family: int
     scenario_family_overlap_count: int
     seed_overlap_count: int
@@ -432,6 +434,8 @@ class ArchiveReadinessReport:
             "entries_missing_archive_id": self.entries_missing_archive_id,
             "entries_missing_scenario_seed": self.entries_missing_scenario_seed,
             "entries_missing_failure_attribution": self.entries_missing_failure_attribution,
+            "entries_missing_certification_status": self.entries_missing_certification_status,
+            "entries_not_certified": self.entries_not_certified,
             "entries_unknown_family": self.entries_unknown_family,
             "scenario_family_overlap_count": self.scenario_family_overlap_count,
             "seed_overlap_count": self.seed_overlap_count,
@@ -453,6 +457,8 @@ def _not_ready(status: str, *reasons: str, **fields: Any) -> ArchiveReadinessRep
         "entries_missing_archive_id": 0,
         "entries_missing_scenario_seed": 0,
         "entries_missing_failure_attribution": 0,
+        "entries_missing_certification_status": 0,
+        "entries_not_certified": 0,
         "entries_unknown_family": 0,
         "scenario_family_overlap_count": 0,
         "seed_overlap_count": 0,
@@ -473,6 +479,19 @@ def _entry_scenario_seed(entry: dict[str, Any]) -> Any:
     return None
 
 
+def _entry_certification_status(entry: dict[str, Any]) -> str | None:
+    """Return normalized per-entry candidate certification status, if present."""
+    certification = entry.get("certification_status")
+    if certification is None:
+        certification = entry.get("candidate_certification")
+    if not isinstance(certification, dict):
+        return None
+    status = certification.get("status")
+    if not isinstance(status, str) or not status.strip():
+        return None
+    return status.strip().lower()
+
+
 @dataclass(frozen=True)
 class _EntryStats:
     """Aggregate structural statistics over a list of archive entries."""
@@ -482,6 +501,8 @@ class _EntryStats:
     missing_archive_id: int
     missing_seed: int
     missing_attribution: int
+    missing_certification_status: int
+    not_certified: int
     unknown_family: int
     distinct_family_count: int
     disjoint_split_possible: bool
@@ -508,6 +529,8 @@ def _collect_entry_stats(
     if disjoint_split_possible:
         overlap = compute_overlap_provenance(split.fit_entries, split.eval_entries)
 
+    certification_statuses = [_entry_certification_status(e) for e in dict_entries]
+
     return _EntryStats(
         entry_count=len(dict_entries),
         non_dict_count=len(entries) - len(dict_entries),
@@ -517,6 +540,10 @@ def _collect_entry_stats(
             1
             for e in dict_entries
             if not isinstance(e.get("failure_attribution"), dict) or not e["failure_attribution"]
+        ),
+        missing_certification_status=sum(1 for status in certification_statuses if status is None),
+        not_certified=sum(
+            1 for status in certification_statuses if status is not None and status != "passed"
         ),
         unknown_family=sum(1 for e in dict_entries if scenario_family_key(e) == "unknown_family"),
         distinct_family_count=len(distinct_families),
@@ -541,6 +568,8 @@ def _readiness_blocking_reasons(
         ("entries_missing_archive_id", stats.missing_archive_id),
         ("entries_missing_scenario_seed", stats.missing_seed),
         ("entries_missing_failure_attribution", stats.missing_attribution),
+        ("entries_missing_certification_status", stats.missing_certification_status),
+        ("entries_not_certified", stats.not_certified),
         ("entries_unknown_family", stats.unknown_family),
         (
             "insufficient_scenario_families",
@@ -697,7 +726,11 @@ def assess_archive_readiness(
         and not stats.archive_id_overlap_count
     )
     null_test_prerequisites_ready = (
-        overlap_metadata_ready and not stats.missing_attribution and not null_test_manifest_reasons
+        overlap_metadata_ready
+        and not stats.missing_attribution
+        and not null_test_manifest_reasons
+        and not stats.missing_certification_status
+        and not stats.not_certified
     )
 
     ready = not reasons
@@ -713,6 +746,8 @@ def assess_archive_readiness(
         entries_missing_archive_id=stats.missing_archive_id,
         entries_missing_scenario_seed=stats.missing_seed,
         entries_missing_failure_attribution=stats.missing_attribution,
+        entries_missing_certification_status=stats.missing_certification_status,
+        entries_not_certified=stats.not_certified,
         entries_unknown_family=stats.unknown_family,
         scenario_family_overlap_count=stats.scenario_family_overlap_count,
         seed_overlap_count=stats.seed_overlap_count,

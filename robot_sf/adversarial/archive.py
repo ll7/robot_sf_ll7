@@ -233,6 +233,10 @@ def _archive_entry(
         ),
         "replay_command": _replay_command(config, scenario_yaml_path, bundle_path),
     }
+    for certification_key in ("certification_status", "candidate_certification"):
+        certification = candidate_payload.get(certification_key)
+        if isinstance(certification, dict):
+            entry[certification_key] = certification
     return entry
 
 

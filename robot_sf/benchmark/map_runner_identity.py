@@ -11,6 +11,9 @@ if TYPE_CHECKING:
 
 import yaml
 
+from robot_sf.benchmark.cbf_safety_filter_runtime import (
+    runtime_config_from_mapping as cbf_runtime_config_from_mapping,
+)
 from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
     observation_noise_hash,
@@ -89,6 +92,7 @@ def _scenario_identity_payload(  # noqa: C901,PLR0913
     synthetic_actuation_profile: dict[str, Any] | None = None,
     latency_stress_profile: dict[str, Any] | None = None,
     safety_wrapper: dict[str, Any] | None = None,
+    cbf_safety_filter: dict[str, Any] | None = None,
     record_simulation_step_trace: bool = False,
 ) -> dict[str, Any]:
     """Build the canonical scenario payload used for episode identity.
@@ -131,6 +135,10 @@ def _scenario_identity_payload(  # noqa: C901,PLR0913
         resolved_safety_wrapper = runtime_config_from_mapping(safety_wrapper)
         if resolved_safety_wrapper.enabled:
             payload["safety_wrapper"] = asdict(resolved_safety_wrapper)
+    if cbf_safety_filter is not None:
+        resolved_cbf_filter = cbf_runtime_config_from_mapping(cbf_safety_filter)
+        if resolved_cbf_filter.enabled:
+            payload["cbf_safety_filter"] = asdict(resolved_cbf_filter)
     payload["record_simulation_step_trace"] = bool(record_simulation_step_trace)
     if horizon is not None and int(horizon) > 0:
         payload["run_horizon"] = int(horizon)

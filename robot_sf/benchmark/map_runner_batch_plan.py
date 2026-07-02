@@ -68,6 +68,7 @@ def build_worker_fixed_params(  # noqa: PLR0913
     actuation_profile_metadata: dict[str, Any] | None,
     latency_profile_metadata: dict[str, Any] | None,
     latency_stress_metrics: dict[str, Any] | None,
+    safety_wrapper: dict[str, Any] | None,
     record_simulation_step_trace: bool,
 ) -> dict[str, Any]:
     """Build the serialized parameter payload shared by all map workers.
@@ -98,5 +99,6 @@ def build_worker_fixed_params(  # noqa: PLR0913
         "synthetic_actuation_profile": actuation_profile_metadata,
         "latency_stress_profile": latency_profile_metadata,
         "latency_stress_metrics": latency_stress_metrics,
+        "safety_wrapper": safety_wrapper,
         "record_simulation_step_trace": bool(record_simulation_step_trace),
     }

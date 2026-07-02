@@ -112,6 +112,18 @@ def _safety_predicate_records(record: Mapping[str, Any]) -> dict[str, Any]:
     return dict(predicates) if isinstance(predicates, Mapping) else {}
 
 
+def _safety_wrapper_summary(record: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Return episode-level safety-wrapper summary from algorithm metadata."""
+
+    algorithm_metadata = record.get("algorithm_metadata")
+    if not isinstance(algorithm_metadata, Mapping):
+        return None
+    safety_wrapper = algorithm_metadata.get("safety_wrapper")
+    if not isinstance(safety_wrapper, Mapping):
+        return None
+    return dict(safety_wrapper)
+
+
 def _predicate_event(
     predicates: Mapping[str, Any],
     predicate_key: str,
@@ -158,6 +170,7 @@ def build_event_ledger(record: Mapping[str, Any]) -> dict[str, Any]:
         "heading_rate_sign_changes",
     )
     safety_predicates = _safety_predicate_records(record)
+    safety_wrapper = _safety_wrapper_summary(record)
     predicate_oscillation, predicate_oscillation_source = _predicate_event(
         safety_predicates,
         "oscillatory_control_predicate",
@@ -243,6 +256,8 @@ def build_event_ledger(record: Mapping[str, Any]) -> dict[str, Any]:
         provenance={"source": "episode_record"},
     )
     payload = ledger.to_dict()
+    if safety_wrapper is not None:
+        payload["provenance"]["safety_wrapper"] = safety_wrapper
     if safety_predicates:
         payload["surrogate_events"].update(safety_predicates)
     payload["reconciliation"]["audit_result"] = (

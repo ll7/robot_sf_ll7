@@ -306,6 +306,41 @@ def test_scenario_identity_ignores_seed_schedule_fields() -> None:
     assert episode_a == episode_b
 
 
+def test_scenario_identity_ignores_disabled_safety_wrapper() -> None:
+    """Disabled safety-wrapper config must not change wrapper-off episode identity."""
+
+    scenario = _minimal_map_scenario()
+    baseline = map_runner._scenario_identity_payload(
+        scenario,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=None,
+        record_forces=True,
+    )
+    wrapper_off = map_runner._scenario_identity_payload(
+        scenario,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=None,
+        record_forces=True,
+        safety_wrapper={"enabled": False, "arm_key": "wrapper_off"},
+    )
+    wrapper_on = map_runner._scenario_identity_payload(
+        scenario,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=None,
+        record_forces=True,
+        safety_wrapper={"enabled": True, "arm_key": "wrapper_on"},
+    )
+
+    assert wrapper_off == baseline
+    assert wrapper_on != baseline
+
+
 def test_scenario_identity_includes_observation_noise_hash() -> None:
     """Resume identity should distinguish clean and observation-noisy benchmark runs."""
     scenario = _minimal_map_scenario()

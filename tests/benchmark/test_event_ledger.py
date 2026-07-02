@@ -96,6 +96,25 @@ def test_build_event_ledger_preserves_safety_predicate_records() -> None:
     assert surrogate_events["occlusion_near_miss_predicate"] == {"occlusion_near_miss": False}
 
 
+def test_build_event_ledger_preserves_safety_wrapper_provenance() -> None:
+    """Safety-wrapper summaries should survive in ledger provenance."""
+
+    record = _record(collision_event=False, collisions=0.0)
+    record["algorithm_metadata"] = {
+        "safety_wrapper": {
+            "schema_version": "safety_wrapper_episode_summary.v1",
+            "arm_key": "wrapper_on",
+            "enabled": True,
+            "intervened_step_count": 2,
+            "intervention_rate": 0.5,
+        }
+    }
+
+    ledger = build_event_ledger(record)
+
+    assert ledger["provenance"]["safety_wrapper"] == record["algorithm_metadata"]["safety_wrapper"]
+
+
 def test_build_event_ledger_predicate_without_event_key_falls_back_to_metric() -> None:
     """A predicate record lacking its event key must not claim a source or override the metric."""
     record = _record(collision_event=False, collisions=0.0)

@@ -57,7 +57,10 @@ def test_h600_extended_roster_loads_and_planner_algorithms_resolve() -> None:
     for planner in cfg.planners:
         assert get_algorithm_readiness(planner.algo) is not None, planner.algo
         if planner.algo_config_path is not None:
-            assert planner.algo_config_path.exists(), planner.algo_config_path
+            if not planner.algo_config_path.is_file():
+                raise FileNotFoundError(
+                    f"Algorithm config path not found or is not file: {planner.algo_config_path}"
+                )
 
     prediction_mpc = next(planner for planner in cfg.planners if planner.key == "prediction_mpc")
     prediction_mpc_cbf = next(

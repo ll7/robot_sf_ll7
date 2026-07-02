@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added **uncertainty-aware safety primitives** (#3974): conformal prediction buffers and
+  cumulative-intrusion metrics in new `robot_sf/benchmark/uncertainty_safety.py`. Split-conformal
+  (`split_conformal_radius`) and online Adaptive Conformal Inference (`adaptive_conformal_buffers`)
+  turn pedestrian-prediction residuals into per-step spatial buffers calibrated to a target
+  coverage, and `compute_intrusion_metrics` reports current-position / predicted-trajectory /
+  uncertainty-buffer intrusion time ratios plus cumulative and max intrusion depth over a run.
+  This is a bounded first slice: pure, versioned, fixture-tested computation labeled
+  **diagnostic** (no safety guarantee, no benchmark claim). The runtime uncertainty-triggered
+  fallback trigger is a deliberate successor slice and is not included.
 * Tightened the certified adversarial failure-archive readiness checker (#3275) so optional archive
   summary counts fail closed when they disagree with the actual `entries` or `clusters` payload.
 * Tightened the proxy checkpoint-selection readiness preflight (#3204) so registry entries with

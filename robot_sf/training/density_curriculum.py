@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from math import isfinite
@@ -109,7 +110,7 @@ def apply_density_curriculum_stage_to_scenario(
     updated.pop("sim_config", None)
 
     if stage.parameterized_profile is not None:
-        updated["parameterized_profile"] = dict(stage.parameterized_profile)
+        updated["parameterized_profile"] = copy.deepcopy(stage.parameterized_profile)
     return updated
 
 
@@ -180,7 +181,7 @@ def _parse_stage(raw: object, index: int) -> DensityCurriculumStage:
         include_scenarios=_string_tuple(raw.get("include_scenarios", ())),
         exclude_scenarios=_string_tuple(raw.get("exclude_scenarios", ())),
         scenario_weights=scenario_weights,
-        parameterized_profile=dict(profile_raw) if profile_raw is not None else None,
+        parameterized_profile=copy.deepcopy(profile_raw) if profile_raw is not None else None,
     )
 
 
@@ -240,14 +241,4 @@ def _string_tuple(value: object) -> tuple[str, ...]:
 
 
 def _deep_copy_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
-    copied: dict[str, Any] = {}
-    for key, item in value.items():
-        if isinstance(item, Mapping):
-            copied[str(key)] = _deep_copy_mapping(item)
-        elif isinstance(item, list):
-            copied[str(key)] = [
-                _deep_copy_mapping(entry) if isinstance(entry, Mapping) else entry for entry in item
-            ]
-        else:
-            copied[str(key)] = item
-    return copied
+    return copy.deepcopy(dict(value))

@@ -150,6 +150,13 @@ decision-disagreement CSV, Markdown, Pareto SVG, and provenance; raw episode JSO
   public tracked completed/running status, retrieved compact evidence, remaining
   artifact-promotion gap, no-new-Slurm recommendation, cost/risk, and exact
   local packet command without promoting benchmark or paper-facing claims.
+- `issue_2557_seed_variance_2026-07/`: diagnostic-only seed-variance
+  report for issue #2557 / issue #791 leader fixed-seed queue-fill replicas.
+  Records 17 admitted rows, computes mean/std/range and bootstrap confidence
+  intervals over the 17 metric-bearing rows, and carries explicit
+  `manifest-incomplete` caveats plus recovered W&B final/best metric provenance
+  for jobs 12917, 12931, and 12932. Not benchmark-success, ranking, paper, or
+  dissertation evidence.
 - `issue_3484_feasibility_diagnostics/`: reserved location for small dry-run
   manifests and follow-up summaries for universally-failing scenario-family
   feasibility diagnostics. Outputs from

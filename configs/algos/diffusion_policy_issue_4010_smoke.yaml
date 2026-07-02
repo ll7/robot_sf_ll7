@@ -1,0 +1,20 @@
+# Diagnostic-only smoke configuration for issue #4010.
+# This untrained mode is allowed only so map-runner wiring and contracts can be tested.
+allow_untrained_smoke: true
+deterministic: true
+seed: 4010
+device: cpu
+max_pedestrians: 8
+action_horizon: 1
+action_dim: 2
+denoising_steps: 4
+num_action_samples: 6
+max_linear_speed: 1.0
+max_angular_speed: 1.0
+guidance:
+  enabled: true
+  goal_progress_weight: 1.0
+  smooth_weight: 0.15
+  clearance_weight: 0.25
+diagnostics:
+  record_raw_samples: false

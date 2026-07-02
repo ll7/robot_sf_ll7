@@ -38,6 +38,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "gensafenav_gst_predictor_rand_guarded": "learning",
     "ppo": "learning",
     "sac": "learning",
+    "hybrid_global_rl": "diagnostic",
     "guarded_ppo": "learning",
     "socnav_sampling": "classical",
     "sacadrl": "learning",
@@ -72,6 +73,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "teb": "classical",
     "nmpc_social": "classical",
     "prediction_mpc": "classical",
+    "learned_prediction_mpc": "learning",
 }
 
 _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
@@ -97,6 +99,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "dr_mpc": "upstream_dr_mpc_residual_mpc_wrapper",
     "ppo": "policy_network_inference",
     "sac": "policy_network_inference",
+    "hybrid_global_rl": "route_conditioned_policy_network_inference",
     "guarded_ppo": "guarded_policy_network_inference",
     "socnav_sampling": "heuristic_sampling_adapter",
     "sacadrl": "learned_value_adapter",
@@ -129,6 +132,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "teb": "corridor_commitment_local_planner",
     "nmpc_social": "nonlinear_model_predictive_local_planner",
     "prediction_mpc": "prediction_aware_model_predictive_local_planner",
+    "learned_prediction_mpc": "learned_short_horizon_prediction_mpc_local_planner",
 }
 
 _DEFAULT_OBSERVATION_SPEC: dict[str, Any] = {
@@ -217,6 +221,15 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
             "ego-frame pedestrian velocities rotated into world coordinates."
         ),
     },
+    "learned_prediction_mpc": {
+        "default_mode": "socnav_state",
+        "supported_modes": ("socnav_state",),
+        "inputs": ("robot_state", "goal", "pedestrians", "learned_pedestrian_futures"),
+        "notes": (
+            "Consumes deployable SocNav state with a small short-horizon pedestrian predictor; "
+            "diagnostic-only until a trained checkpoint and comparison evidence exist."
+        ),
+    },
     "ppo": {
         "default_mode": "sensor_fusion_state",
         "supported_modes": ("sensor_fusion_state", "socnav_state"),
@@ -225,6 +238,15 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
             "PPO checkpoint inference uses sensor-fusion by default; BC/materialized "
             "checkpoints may opt into the SocNav structured observation stack they were "
             "trained with."
+        ),
+    },
+    "hybrid_global_rl": {
+        "default_mode": "sensor_fusion_state",
+        "supported_modes": ("sensor_fusion_state", "socnav_state"),
+        "inputs": ("robot_state", "goal", "route_waypoint", "pedestrians"),
+        "notes": (
+            "Route-conditioned learned local planner rewrites goal.current/goal_current "
+            "to a short-horizon waypoint before invoking an existing PPO or SAC policy."
         ),
     },
     "guarded_ppo": {
@@ -780,6 +802,17 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_adapter_commands": False,
         "default_execution_mode": "native",
     },
+    "hybrid_global_rl": {
+        "planner_command_space": "mixed_vw_or_vxy",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "HybridGlobalRLLocalAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "route_waypoint_conditioned_rl_action_to_unicycle_vw",
+        "projection_documented": True,
+        "diagnostic_reference_only": True,
+    },
     "guarded_ppo": {
         "planner_command_space": "mixed_vw_or_vxy",
         "supports_native_commands": True,
@@ -1036,6 +1069,16 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "default_adapter_name": "PredictionMPCPlannerAdapter",
         "benchmark_command_space": "unicycle_vw",
         "projection_policy": "constant_velocity_time_varying_pedestrian_constraints",
+        "projection_documented": True,
+    },
+    "learned_prediction_mpc": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "PredictionMPCPlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "learned_short_horizon_time_varying_pedestrian_constraints",
         "projection_documented": True,
     },
 }

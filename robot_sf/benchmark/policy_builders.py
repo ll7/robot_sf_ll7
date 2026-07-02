@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.planner.learned_prediction_mpc import (
+    LEARNED_PREDICTION_MPC_ALIASES,
+    build_learned_prediction_mpc_adapter,
+)
 from robot_sf.planner.prediction_mpc import (
     PredictionMPCPlannerAdapter,
     build_prediction_mpc_config,
@@ -75,7 +79,24 @@ def _build_prediction_mpc_policy_spec(algo_config: dict[str, Any]) -> AdapterPol
     )
 
 
+def _build_learned_prediction_mpc_policy_spec(algo_config: dict[str, Any]) -> AdapterPolicySpec:
+    """Build learned short-horizon prediction MPC algorithm config.
+
+    Returns:
+        AdapterPolicySpec: Map-runner adapter construction payload.
+    """
+
+    return AdapterPolicySpec(
+        algo_key="learned_prediction_mpc",
+        algo_config=algo_config,
+        adapter=build_learned_prediction_mpc_adapter(algo_config),
+        adapter_name="PredictionMPCPlannerAdapter",
+        limitations="diagnostic_learned_short_horizon_prediction_mpc_not_benchmark_evidence",
+    )
+
+
 _ADAPTER_POLICY_BUILDERS: dict[str, Callable[[dict[str, Any]], AdapterPolicySpec]] = {
+    **dict.fromkeys(LEARNED_PREDICTION_MPC_ALIASES, _build_learned_prediction_mpc_policy_spec),
     "cv_prediction_mpc": _build_prediction_mpc_policy_spec,
     "prediction_aware_mpc": _build_prediction_mpc_policy_spec,
     "prediction_mpc": _build_prediction_mpc_policy_spec,

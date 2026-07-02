@@ -1,0 +1,22 @@
+# Learned short-horizon prediction MPC smoke config for issue #4013.
+# Diagnostic only: no trained checkpoint is loaded and no benchmark claim is implied.
+allow_testing_algorithms: true
+allow_untrained_smoke: true
+fallback_to_constant_velocity: false
+checkpoint_path: null
+model_id: null
+normalizer_path: null
+device: cpu
+model_type: mlp
+max_pedestrians: 16
+history_steps: 4
+horizon_steps: 4
+rollout_dt: 0.2
+hidden_dim: 64
+max_linear_speed: 0.9
+max_angular_speed: 1.1
+goal_tolerance: 0.25
+pedestrian_safety_margin: 0.35
+solver_max_iterations: 16
+warm_start: true
+fallback_to_stop: true

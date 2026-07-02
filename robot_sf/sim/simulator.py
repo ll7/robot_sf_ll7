@@ -256,14 +256,16 @@ class Simulator:
         max_speeds = self.pysf_sim.peds.max_speeds
         if max_speeds is None:
             raise RuntimeError("PySocialForce max_speeds are unavailable for HSFM total-force step")
+        current_state = self.pysf_sim.peds.state
         next_state, self.ped_headings = step_hsfm_total_force(
-            self.pysf_sim.peds.state,
+            current_state,
             ped_forces,
             self.ped_headings,
             dt=self.config.time_per_step_in_secs,
             max_speeds=max_speeds,
         )
-        self.pysf_sim.peds.update(next_state, groups)
+        current_state[...] = next_state
+        self.pysf_sim.peds.update(current_state, groups)
 
     def _reset_social_force_state(self) -> None:
         """Restore pedestrian physics state for a fresh deterministic episode reset."""

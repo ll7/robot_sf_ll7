@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -13,7 +15,20 @@ from robot_sf.sim.pedestrian_model_variants import (
     step_hsfm_total_force,
 )
 from robot_sf.sim.sim_config import SimulationSettings
+from robot_sf.sim.simulator import Simulator
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario
+
+
+class _FakePedState:
+    def __init__(self, state: np.ndarray) -> None:
+        self.state = state
+        self.max_speeds = np.array([10.0], dtype=float)
+        self.updated_state: np.ndarray | None = None
+        self.updated_groups: list[list[int]] | None = None
+
+    def update(self, state: np.ndarray, groups: list[list[int]]) -> None:
+        self.updated_state = state
+        self.updated_groups = groups
 
 
 def test_heading_from_total_force_uses_combined_force_vector() -> None:
@@ -48,6 +63,26 @@ def test_step_hsfm_total_force_caps_velocity_and_updates_heading_from_force() ->
     assert next_state[0, 2:4] == pytest.approx([capped_component, capped_component])
     assert next_state[0, 0:2] == pytest.approx([0.1 * capped_component, 0.1 * capped_component])
     assert next_headings[0] == pytest.approx(np.pi / 2)
+
+
+def test_simulator_hsfm_step_preserves_shared_pysf_state_buffer() -> None:
+    """Simulator HSFM stepping mutates the PySocialForce state buffer in place."""
+    state = np.array([[0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.5]], dtype=float)
+    peds = _FakePedState(state)
+    sim = object.__new__(Simulator)
+    sim.pedestrian_model = HSFM_TOTAL_FORCE_V1
+    sim.pysf_sim = SimpleNamespace(peds=peds)
+    sim.config = SimpleNamespace(time_per_step_in_secs=0.1)
+    sim.ped_headings = np.array([0.0], dtype=float)
+
+    sim._step_pedestrians(np.array([[1.0, 0.0]], dtype=float), [[0]])
+
+    assert peds.state is state
+    assert peds.updated_state is state
+    assert peds.updated_groups == [[0]]
+    assert state[0, 0] == pytest.approx(0.01)
+    assert state[0, 2] == pytest.approx(0.1)
+    assert sim.ped_headings[0] == pytest.approx(0.0)
 
 
 def test_pedestrian_model_selector_normalizes_and_rejects_unknown_values() -> None:

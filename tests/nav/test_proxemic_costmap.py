@@ -46,6 +46,28 @@ def test_cost_increases_as_distance_decreases() -> None:
     assert costs[0] < costs[1] < costs[2]
 
 
+def test_gaussian_decay_reaches_zero_at_radius_boundary() -> None:
+    """Gaussian decay stays continuous at the configured zone boundary."""
+    points = np.asarray([[0.0, 0.0], [0.6, 0.0], [1.2, 0.0], [1.3, 0.0]], dtype=float)
+    costs = proxemic_cost_at_points(
+        points,
+        np.asarray([[0.0, 0.0]], dtype=float),
+        np.asarray([[0.0, 0.0]], dtype=float),
+        _enabled_config(
+            decay_function="gaussian",
+            personal_radius=0.0,
+            social_radius=1.2,
+            personal_weight=0.0,
+            social_weight=1.0,
+        ),
+    )
+
+    assert costs[0] == pytest.approx(1.0)
+    assert 0.0 < costs[1] < costs[0]
+    assert costs[2] == pytest.approx(0.0)
+    assert costs[3] == pytest.approx(0.0)
+
+
 def test_velocity_elongation_increases_forward_cost_field() -> None:
     """Moving pedestrians stretch the soft zone in their velocity direction."""
     pedestrian = np.asarray([[0.0, 0.0]], dtype=float)

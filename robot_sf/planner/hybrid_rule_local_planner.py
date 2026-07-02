@@ -1903,8 +1903,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         min_static_clearance = float("inf")
         min_dynamic_clearance = float("inf")
         static_clearance_exception_terms: set[str] = set()
-        proxemic_costmap_config = self._proxemic_costmap_config
-        proxemic_enabled = bool(proxemic_costmap_config.enabled)
+        proxemic_enabled = bool(self.config.proxemic_costmap_enabled)
+        proxemic_costmap_config = self._proxemic_costmap_config if proxemic_enabled else None
         rollout_points = [np.array(robot_pos, dtype=float)] if proxemic_enabled else None
 
         for step_idx, (step_linear, step_angular) in enumerate(rollout_commands):
@@ -2080,7 +2080,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             candidate=candidate,
             state=state,
         )
-        if proxemic_enabled and rollout_points is not None:
+        if proxemic_costmap_config is not None and rollout_points is not None:
             proxemic_cost_values = proxemic_cost_at_points(
                 np.asarray(rollout_points, dtype=float),
                 ped_pos,
@@ -2192,7 +2192,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "predicted_ttc": ttc,
             "continuous_static_checked": bool(use_continuous_static_check),
             "proxemic_cost_summary": {
-                "enabled": bool(self._proxemic_costmap_config.enabled),
+                "enabled": bool(proxemic_costmap_config.enabled)
+                if proxemic_costmap_config is not None
+                else False,
                 "mean": proxemic_cost_mean,
                 "max": proxemic_cost_max,
                 "normalized_mean": proxemic_cost_norm,

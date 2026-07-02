@@ -151,9 +151,10 @@ def _decay(distance: np.ndarray, radius: float, decay_function: DecayFunction) -
         return np.zeros_like(distance, dtype=float)
     if decay_function == "linear":
         return np.clip(1.0 - distance / radius, 0.0, 1.0)
-    inside = distance <= radius
-    values = np.exp(-0.5 * (distance / max(radius, 1e-12)) ** 2)
-    return np.where(inside, values, 0.0)
+    raw = np.exp(-0.5 * (distance / max(radius, 1e-12)) ** 2)
+    baseline = np.exp(-0.5)
+    normalized = (raw - baseline) / (1.0 - baseline)
+    return np.clip(normalized, 0.0, 1.0)
 
 
 __all__ = [

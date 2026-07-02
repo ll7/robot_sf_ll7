@@ -227,10 +227,11 @@ class _DensityCurriculumCallback(BaseCallback):
         self._last_stage_id: str | None = None
 
     def _on_training_start(self) -> None:
+        stage = self._schedule.stage_for_timestep(int(self.num_timesteps))
+        self._last_stage_id = stage.id if stage is not None else None
         self._publish_timestep()
 
     def _on_step(self) -> bool:
-        self._publish_timestep()
         stage = self._schedule.stage_for_timestep(int(self.num_timesteps))
         stage_id = stage.id if stage is not None else None
         if stage_id != self._last_stage_id:
@@ -240,6 +241,7 @@ class _DensityCurriculumCallback(BaseCallback):
                 stage_id,
             )
             self._last_stage_id = stage_id
+            self._publish_timestep()
         return True
 
     def _publish_timestep(self) -> None:
@@ -934,7 +936,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
             "evaluation.step_schedule is required; frequency_episodes alone is not supported."
         )
 
-    build_density_curriculum_schedule(dict(data.get("density_curriculum", {}) or {}))
+    build_density_curriculum_schedule(data.get("density_curriculum"))
     return ExpertTrainingConfig.from_raw(
         scenario_config=scenario_config,
         scenario_id=str(scenario_id) if scenario_id else None,

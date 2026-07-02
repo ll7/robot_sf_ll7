@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from scripts.training.train_ppo import load_expert_training_config
+from robot_sf.training.density_curriculum import build_density_curriculum_schedule
+from scripts.training.train_ppo import _DensityCurriculumCallback, load_expert_training_config
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CURRICULUM_CONFIG = (
@@ -35,3 +36,35 @@ def test_invalid_density_curriculum_config_fails_closed(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="non-decreasing"):
         load_expert_training_config(config_path)
+
+
+def test_density_curriculum_callback_publishes_only_on_stage_change() -> None:
+    """Callback avoids per-step environment IPC when the active stage is unchanged."""
+
+    class _CountingCallback(_DensityCurriculumCallback):
+        def __init__(self) -> None:
+            super().__init__(schedule)
+            self.published_timesteps: list[int] = []
+
+        def _publish_timestep(self) -> None:
+            self.published_timesteps.append(int(self.num_timesteps))
+
+    schedule = build_density_curriculum_schedule(
+        {
+            "enabled": True,
+            "stages": [
+                {"id": "sparse", "until_timesteps": 10, "density_m2": 0.04},
+                {"id": "dense", "until_timesteps": None, "density_m2": 0.12},
+            ],
+        }
+    )
+    callback = _CountingCallback()
+
+    callback.num_timesteps = 0
+    callback._on_training_start()
+    callback.num_timesteps = 5
+    assert callback._on_step() is True
+    callback.num_timesteps = 10
+    assert callback._on_step() is True
+
+    assert callback.published_timesteps == [0, 10]

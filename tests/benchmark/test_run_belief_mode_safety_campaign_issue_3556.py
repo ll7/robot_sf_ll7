@@ -49,7 +49,13 @@ def test_aggregate_ignores_nonfinite_min_clearance() -> None:
 
     report = _MODULE.aggregate(
         [
-            {"metrics": {"total_collision_count": 0, "near_misses": 0, "min_clearance": float("inf")}},
+            {
+                "metrics": {
+                    "total_collision_count": 0,
+                    "near_misses": 0,
+                    "min_clearance": float("inf"),
+                }
+            },
             {"metrics": {"total_collision_count": 0, "near_misses": 0, "min_clearance": 0.5}},
         ]
     )

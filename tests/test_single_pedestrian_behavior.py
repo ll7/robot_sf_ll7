@@ -261,6 +261,17 @@ def test_hold_ref_point_requires_hold_radius():
         )
 
 
+def test_hold_radius_requires_hold_ref_point():
+    """hold_until_robot_within_m without a hold_ref_point is rejected."""
+    with pytest.raises(ValueError, match="requires hold_ref_point"):
+        SinglePedestrianDefinition(
+            id="crosser",
+            start=(0.0, 0.0),
+            trajectory=[(1.0, 0.0), (2.0, 0.0)],
+            hold_until_robot_within_m=5.5,
+        )
+
+
 def test_hold_radius_must_be_positive():
     """A non-positive hold radius is rejected."""
     with pytest.raises(ValueError, match="hold_until_robot_within_m must be > 0"):
@@ -270,4 +281,40 @@ def test_hold_radius_must_be_positive():
             trajectory=[(1.0, 0.0), (2.0, 0.0)],
             hold_until_robot_within_m=0.0,
             hold_ref_point=(2.0, 0.0),
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("hold_until_robot_within_m", float("nan")),
+        ("hold_until_robot_within_m", float("inf")),
+        ("hold_timeout_s", float("-inf")),
+    ],
+)
+def test_proximity_hold_scalars_must_be_finite(field: str, value: float):
+    """Proximity-hold radius and timeout reject non-finite values."""
+    kwargs = {
+        "id": "crosser",
+        "start": (0.0, 0.0),
+        "trajectory": [(1.0, 0.0), (2.0, 0.0)],
+        "hold_until_robot_within_m": 5.5,
+        "hold_ref_point": (2.0, 0.0),
+    }
+    kwargs[field] = value
+
+    with pytest.raises(ValueError, match="must be finite"):
+        SinglePedestrianDefinition(**kwargs)
+
+
+@pytest.mark.parametrize("hold_ref_point", [(float("nan"), 0.0), (2.0, float("inf"))])
+def test_hold_ref_point_coordinates_must_be_finite(hold_ref_point):
+    """Proximity-hold reference point rejects non-finite coordinates."""
+    with pytest.raises(ValueError, match="coordinates must be finite"):
+        SinglePedestrianDefinition(
+            id="crosser",
+            start=(0.0, 0.0),
+            trajectory=[(1.0, 0.0), (2.0, 0.0)],
+            hold_until_robot_within_m=5.5,
+            hold_ref_point=hold_ref_point,
         )

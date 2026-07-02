@@ -1,0 +1,7 @@
+observation_noise:
+  enabled: true
+  profile: issue_3300_false_positive_actor_injection_v1
+  seed: 3300
+  pedestrian_false_positive_prob: 1.0
+  pedestrian_false_positive_radius_m: 3.0
+  pedestrian_false_positive_radius: 0.35

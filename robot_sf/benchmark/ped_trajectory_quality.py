@@ -225,10 +225,7 @@ def _curvature_samples(
     speed = np.linalg.norm(v, axis=2)
     cross = np.abs(v[:, :, 0] * a[:, :, 1] - v[:, :, 1] * a[:, :, 0])
     finite = np.isfinite(cross) & np.isfinite(speed) & (speed > min_heading_speed_mps)
-    curvature = np.empty_like(speed, dtype=float)
-    curvature.fill(np.nan)
-    curvature[finite] = cross[finite] / np.power(speed[finite], 3)
-    return curvature[finite]
+    return cross[finite] / np.power(speed[finite], 3)
 
 
 def _turning_angle_samples(velocities: np.ndarray, min_heading_speed_mps: float) -> np.ndarray:
@@ -246,12 +243,14 @@ def _turning_angle_samples(velocities: np.ndarray, min_heading_speed_mps: float)
         & (prev_speed > min_heading_speed_mps)
         & (curr_speed > min_heading_speed_mps)
     )
-    prev_heading = np.arctan2(prev[:, :, 1], prev[:, :, 0])
-    curr_heading = np.arctan2(curr[:, :, 1], curr[:, :, 0])
+    prev_valid = prev[valid]
+    curr_valid = curr[valid]
+    prev_heading = np.arctan2(prev_valid[:, 1], prev_valid[:, 0])
+    curr_heading = np.arctan2(curr_valid[:, 1], curr_valid[:, 0])
     turn = np.abs(
         np.arctan2(np.sin(curr_heading - prev_heading), np.cos(curr_heading - prev_heading))
     )
-    return turn[valid]
+    return turn
 
 
 def _pairwise_distance_samples(positions: np.ndarray, sample_stride: int) -> np.ndarray:

@@ -376,7 +376,17 @@ def _check_expected_outputs(manifest: dict[str, Any], blockers: list[str]) -> di
             for key in _REQUIRED_OUTPUT_MANIFESTS
         }
 
+    extra_keys = sorted(str(key) for key in raw_outputs if key not in _REQUIRED_OUTPUT_MANIFESTS)
+    if extra_keys:
+        blockers.append(
+            "expected_outputs contains unsupported keys: "
+            + ", ".join(extra_keys)
+            + "; expected only "
+            + ", ".join(_REQUIRED_OUTPUT_MANIFESTS)
+        )
+
     checked: dict[str, Any] = {}
+    normalized_paths: dict[str, str] = {}
     for key in _REQUIRED_OUTPUT_MANIFESTS:
         raw_path = raw_outputs.get(key)
         if not isinstance(raw_path, str) or not raw_path.strip():
@@ -397,6 +407,18 @@ def _check_expected_outputs(manifest: dict[str, Any], blockers: list[str]) -> di
                 "detail": durability_error,
             }
             continue
+
+        normalized_path = path_text.replace("\\", "/").lstrip("./")
+        duplicate_key = normalized_paths.get(normalized_path)
+        if duplicate_key is not None:
+            blockers.append(f"expected_outputs.{key} duplicates {duplicate_key} path: {path_text}")
+            checked[key] = {
+                "path": path_text,
+                "ready": False,
+                "detail": f"duplicates {duplicate_key}",
+            }
+            continue
+        normalized_paths[normalized_path] = key
 
         checked[key] = {"path": path_text, "ready": True}
     return checked

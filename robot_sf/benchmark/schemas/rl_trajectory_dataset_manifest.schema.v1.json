@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/rl_trajectory_dataset_manifest.schema.v1.json",
+  "title": "RL trajectory dataset manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dataset_schema_version",
+    "dataset_id",
+    "created_at_utc",
+    "dataset_path",
+    "episode_count",
+    "step_count",
+    "format",
+    "reward_convention",
+    "return_convention",
+    "split_policy",
+    "splits",
+    "provenance",
+    "dataset_sha256"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "rl_trajectory_dataset_manifest.v1"
+    },
+    "dataset_schema_version": {
+      "const": "RLTrajectoryDataset.v1"
+    },
+    "dataset_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at_utc": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dataset_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "episode_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "step_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "format": {
+      "const": "jsonl"
+    },
+    "reward_convention": {
+      "const": "environment_step_reward"
+    },
+    "return_convention": {
+      "const": "undiscounted_future_return_to_go"
+    },
+    "split_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy", "leakage_prevention", "split_names"],
+      "properties": {
+        "strategy": {
+          "const": "deterministic_scenario_seed_hash"
+        },
+        "leakage_prevention": {
+          "type": "array",
+          "items": {
+            "enum": ["scenario_ids", "scenario_seed_keys"]
+          },
+          "contains": {
+            "const": "scenario_ids"
+          }
+        },
+        "split_names": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "train"
+            },
+            {
+              "const": "validation"
+            },
+            {
+              "const": "test"
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        }
+      }
+    },
+    "splits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["train", "validation", "test"],
+      "properties": {
+        "train": {
+          "$ref": "#/$defs/split_summary"
+        },
+        "validation": {
+          "$ref": "#/$defs/split_summary"
+        },
+        "test": {
+          "$ref": "#/$defs/split_summary"
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "dataset_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "$defs": {
+    "split_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "episode_count",
+        "step_count",
+        "scenario_ids",
+        "scenario_seed_keys",
+        "episode_ids"
+      ],
+      "properties": {
+        "episode_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "step_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scenario_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "scenario_seed_keys": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "episode_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

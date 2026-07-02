@@ -8,6 +8,12 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.benchmark.rl_trajectory_dataset import (
+    RL_TRAJECTORY_DATASET_SCHEMA_VERSION,
+    RL_TRAJECTORY_EPISODE_SCHEMA_VERSION,
+    flatten_rl_trajectory_episodes,
+    load_rl_trajectory_dataset,
+)
 from robot_sf.common import TrajectoryQuality
 
 MAX_DATASET_SIZE_BYTES = 25 * 1024**3
@@ -62,12 +68,16 @@ class TrajectoryDatasetValidator:
         if not self.dataset_path.exists():
             raise FileNotFoundError(f"Dataset not found: {self.dataset_path}")
 
-        if self.dataset_path.suffix.lower() not in {".npz", ".jsonl_frames"}:
+        if self.dataset_path.suffix.lower() not in {".npz", ".jsonl_frames", ".jsonl"}:
             raise ValueError(
                 f"Unsupported trajectory dataset format: {self.dataset_path.suffix}",
             )
 
         file_size = self.dataset_path.stat().st_size
+        if self.dataset_path.suffix.lower() == ".jsonl":
+            result = self._validate_rl_jsonl(file_size, minimum_episodes)
+            return result
+
         if self.dataset_path.suffix.lower() == ".npz":
             result = self._validate_npz(
                 file_size,
@@ -161,6 +171,56 @@ class TrajectoryDatasetValidator:
             dataset_path=self.dataset_path,
             episode_count=episode_count,
             scenario_coverage={},
+            integrity_report=report,
+            quality_status=quality,
+        )
+
+    def _validate_rl_jsonl(
+        self,
+        file_size: int,
+        minimum_episodes: int,
+    ) -> TrajectoryDatasetValidationResult:
+        """Validate an episode-major `RLTrajectoryDataset.v1` JSONL payload.
+
+        Returns:
+            Validation result for the dataset.
+        """
+        episodes = load_rl_trajectory_dataset(self.dataset_path)
+        batch = flatten_rl_trajectory_episodes(episodes)
+        scenario_coverage: dict[str, int] = {}
+        for episode in episodes:
+            scenario_coverage[episode.scenario_id] = (
+                scenario_coverage.get(episode.scenario_id, 0) + 1
+            )
+
+        report = {
+            "file_size": file_size,
+            "line_count": len(episodes),
+            "dataset_schema": RL_TRAJECTORY_DATASET_SCHEMA_VERSION,
+            "episode_schema": RL_TRAJECTORY_EPISODE_SCHEMA_VERSION,
+            "required_arrays": [
+                "observations",
+                "actions",
+                "rewards",
+                "return_to_go",
+                "terminated",
+                "truncated",
+                "pedestrians",
+                "robot_states",
+            ],
+            "missing_arrays": [],
+            "step_count": len(batch["rewards"]),
+            "metadata": {
+                "splits": sorted({episode.split for episode in episodes}),
+                "source_policy_ids": sorted({episode.source_policy_id for episode in episodes}),
+            },
+        }
+        quality = self._determine_quality(len(episodes), [], file_size, minimum_episodes)
+        return TrajectoryDatasetValidationResult(
+            dataset_id=self.dataset_id,
+            dataset_path=self.dataset_path,
+            episode_count=len(episodes),
+            scenario_coverage=scenario_coverage,
             integrity_report=report,
             quality_status=quality,
         )

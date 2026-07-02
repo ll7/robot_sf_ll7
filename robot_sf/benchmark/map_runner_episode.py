@@ -764,7 +764,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     config=config,
                     command=policy_command,
                 )
-            obs, _reward, terminated, truncated, info = env.step(action)
+            obs, reward, terminated, truncated, info = env.step(action)
 
             # Snapshot mutable simulator buffers; do not keep view aliases across steps.
             robot_pos = np.array(env.simulator.robot_pos[0], dtype=float, copy=True)
@@ -846,6 +846,11 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                         },
                         "pedestrians": trace_pedestrians,
                         "planner": planner_payload,
+                        "rl": {
+                            "reward": float(reward),
+                            "terminated": bool(terminated),
+                            "truncated": bool(truncated),
+                        },
                     }
                 )
                 previous_trace_robot_pos = np.array(robot_pos, dtype=float, copy=True)

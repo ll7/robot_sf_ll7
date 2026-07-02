@@ -44,6 +44,12 @@ def _entry(family: str, archive_id: str, seed: int) -> dict:
         "archive_id": archive_id,
         "cluster_key": family,
         "candidate": {"scenario_seed": seed},
+        "certification_status": {
+            "schema_version": "scenario_cert.v1",
+            "status": "passed",
+            "reason": "fixture certified",
+            "details": {},
+        },
         "failure_attribution": {"primary_failure": "collision"},
     }
 
@@ -315,6 +321,34 @@ def test_empty_failure_attribution_breaks_null_test_prereq() -> None:
     assert report.null_test_prerequisites_ready is False
     assert report.ready is False
     assert "entries_missing_failure_attribution:1" in report.blocking_reasons
+
+
+def test_missing_certification_status_breaks_null_test_prereq() -> None:
+    """Certified archive readiness requires per-entry certification status."""
+    entries = [_entry("A", "a0", 1), _entry("B", "b0", 2)]
+    del entries[1]["certification_status"]
+
+    report = assess_archive_readiness(_archive(entries))
+
+    assert report.entries_missing_certification_status == 1
+    assert report.entries_not_certified == 0
+    assert report.null_test_prerequisites_ready is False
+    assert report.ready is False
+    assert "entries_missing_certification_status:1" in report.blocking_reasons
+
+
+def test_failed_certification_status_breaks_null_test_prereq() -> None:
+    """Non-passing candidate certification blocks certified archive readiness."""
+    entries = [_entry("A", "a0", 1), _entry("B", "b0", 2)]
+    entries[1]["certification_status"]["status"] = "failed"
+
+    report = assess_archive_readiness(_archive(entries))
+
+    assert report.entries_missing_certification_status == 0
+    assert report.entries_not_certified == 1
+    assert report.null_test_prerequisites_ready is False
+    assert report.ready is False
+    assert "entries_not_certified:1" in report.blocking_reasons
 
 
 def test_unknown_family_entries_are_counted_and_block() -> None:

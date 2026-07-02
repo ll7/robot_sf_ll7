@@ -12,6 +12,7 @@ from robot_sf.adversarial.archive import (
     failure_archive_feature_rows,
     failure_archive_index,
 )
+from robot_sf.adversarial.disjoint_evaluation import assess_archive_readiness
 from scripts.tools.curate_adversarial_failure_archive import main as archive_cli_main
 
 
@@ -53,6 +54,12 @@ def _manifest(tmp_path: Path) -> Path:
                 "objective_value": 9.0,
                 "bundle_path": "output/adversarial/run/candidate_0000",
                 "scenario_yaml_path": "output/adversarial/run/candidate_0000/scenario.yaml",
+                "certification_status": {
+                    "schema_version": "scenario_cert.v1",
+                    "status": "passed",
+                    "reason": "fixture certified",
+                    "details": {},
+                },
                 "failure_attribution": {
                     "status": "attributed",
                     "primary_failure": "collision",
@@ -68,6 +75,12 @@ def _manifest(tmp_path: Path) -> Path:
                 "objective_value": 7.0,
                 "bundle_path": "output/adversarial/run/candidate_0001",
                 "scenario_yaml_path": "output/adversarial/run/candidate_0001/scenario.yaml",
+                "candidate_certification": {
+                    "schema_version": "scenario_cert.v1",
+                    "status": "passed",
+                    "reason": "legacy fixture certified",
+                    "details": {},
+                },
                 "failure_attribution": {
                     "status": "attributed",
                     "primary_failure": "collision",
@@ -83,6 +96,12 @@ def _manifest(tmp_path: Path) -> Path:
                 "objective_value": 3.0,
                 "bundle_path": "output/adversarial/run/candidate_0002",
                 "scenario_yaml_path": "output/adversarial/run/candidate_0002/scenario.yaml",
+                "certification_status": {
+                    "schema_version": "scenario_cert.v1",
+                    "status": "passed",
+                    "reason": "fixture certified",
+                    "details": {},
+                },
                 "failure_attribution": {
                     "status": "attributed",
                     "primary_failure": "timeout",
@@ -169,7 +188,26 @@ def test_curate_failure_archive_groups_and_selects_representatives(tmp_path: Pat
         if entry["archive_id"] == collision_cluster["representative_archive_id"]
     )
     assert representative["source_candidate_index"] == 1
+    assert representative["candidate_certification"]["status"] == "passed"
     assert representative["replay_command"].startswith("uv run robot_sf_bench run")
+
+
+def test_curated_certified_archive_can_satisfy_readiness_gate(tmp_path: Path) -> None:
+    """Curation preserves certification metadata needed by archive readiness."""
+    archive = curate_failure_archive([_manifest(tmp_path)], output_path=tmp_path / "archive.json")
+    archive["null_test_manifest"] = {
+        "required_tests": [
+            "shuffled_outcome_label_permutation",
+            "ranking_permutation",
+        ],
+        "n_permutations": 100,
+    }
+
+    report = assess_archive_readiness(archive)
+
+    assert report.ready is True
+    assert report.entries_missing_certification_status == 0
+    assert report.entries_not_certified == 0
 
 
 def test_curate_failure_archive_is_deterministic(tmp_path: Path) -> None:

@@ -66,6 +66,7 @@ def _batch(size: int) -> OfflineTransitionBatch:
         actions=np.zeros((size, 2), dtype=np.float32),
         rewards=np.zeros(size, dtype=np.float32),
         dones=np.zeros(size, dtype=bool),
+        truncated=np.zeros(size, dtype=bool),
         episode_ids=tuple(f"ep-{index}" for index in range(size)),
         scenario_ids=tuple("classic" for _ in range(size)),
         seeds=np.zeros(size, dtype=int),

@@ -15,6 +15,7 @@ from robot_sf.benchmark.rl_trajectory_dataset import (
 )
 from robot_sf.training.offline_online_rl import (
     load_offline_transition_batch,
+    seed_sb3_replay_buffer,
     validate_batch_against_env_spaces,
 )
 
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def test_load_train_split_derives_next_observations_and_drops_terminal(tmp_path: Path) -> None:
+def test_load_train_split_derives_next_observations_and_keeps_terminal(tmp_path: Path) -> None:
     """Transition builder uses only train rows and never crosses episode boundaries."""
 
     dataset_path = tmp_path / "dataset.jsonl"
@@ -36,12 +37,15 @@ def test_load_train_split_derives_next_observations_and_drops_terminal(tmp_path:
 
     batch = load_offline_transition_batch(dataset_path, split="train", min_transitions=2)
 
-    assert batch.size == 2
-    assert batch.episode_ids == ("ep-train", "ep-train")
-    assert batch.rewards.tolist() == [1.0, 2.0]
-    assert batch.preflight.dropped_terminal_transitions == 1
+    assert batch.size == 3
+    assert batch.episode_ids == ("ep-train", "ep-train", "ep-train")
+    assert batch.rewards.tolist() == [1.0, 2.0, 3.0]
+    assert batch.dones.tolist() == [False, False, True]
+    assert batch.truncated.tolist() == [False, False, False]
+    assert batch.preflight.dropped_terminal_transitions == 0
     assert np.allclose(batch.observations[0], np.array([0.0, 0.5], dtype=np.float32))
     assert np.allclose(batch.next_observations[1], np.array([2.0, 2.5], dtype=np.float32))
+    assert np.allclose(batch.next_observations[2], batch.observations[2])
 
 
 def test_load_rejects_empty_train_split(tmp_path: Path) -> None:
@@ -113,6 +117,56 @@ def test_validate_batch_against_env_spaces_accepts_box_contract(tmp_path: Path) 
     )
 
     assert preflight.ok
+
+
+def test_seed_sb3_replay_buffer_preserves_truncated_timeout_info(tmp_path: Path) -> None:
+    """Truncated offline transitions keep SB3 timeout bootstrap metadata."""
+
+    class _ReplayBuffer:
+        def __init__(self) -> None:
+            self.infos: list[list[dict[str, object]]] = []
+
+        def add(self, *_args: object) -> None:
+            self.infos.append(_args[-1])  # type: ignore[arg-type]
+
+    class _Model:
+        def __init__(self) -> None:
+            self.replay_buffer = _ReplayBuffer()
+
+    dataset_path = tmp_path / "dataset.jsonl"
+    episode = _episode("train", "ep-timeout", rewards=(1.0,))
+    truncated_episode = RLTrajectoryEpisode(
+        dataset_id=episode.dataset_id,
+        episode_id=episode.episode_id,
+        scenario_id=episode.scenario_id,
+        seed=episode.seed,
+        source_policy_id=episode.source_policy_id,
+        split=episode.split,
+        observations=episode.observations,
+        actions=episode.actions,
+        rewards=episode.rewards,
+        return_to_go=episode.return_to_go,
+        terminated=(False,),
+        truncated=(True,),
+        pedestrians=episode.pedestrians,
+        robot_states=episode.robot_states,
+        provenance=episode.provenance,
+    )
+    write_rl_trajectory_dataset([truncated_episode], dataset_path)
+    batch = load_offline_transition_batch(dataset_path)
+    model = _Model()
+
+    seed_sb3_replay_buffer(model, batch)
+
+    assert model.replay_buffer.infos == [
+        [
+            {
+                "source": "offline_rl_trajectory_dataset",
+                "episode_id": "ep-timeout",
+                "TimeLimit.truncated": True,
+            }
+        ]
+    ]
 
 
 def _episode(

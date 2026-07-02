@@ -48,6 +48,7 @@ class OfflineTransitionBatch:
     actions: np.ndarray
     rewards: np.ndarray
     dones: np.ndarray
+    truncated: np.ndarray
     episode_ids: tuple[str, ...]
     scenario_ids: tuple[str, ...]
     seeds: np.ndarray
@@ -67,6 +68,7 @@ class _TransitionAccumulator:
     actions: list[np.ndarray] = field(default_factory=list)
     rewards: list[float] = field(default_factory=list)
     dones: list[bool] = field(default_factory=list)
+    truncated: list[bool] = field(default_factory=list)
     episode_ids: list[str] = field(default_factory=list)
     scenario_ids: list[str] = field(default_factory=list)
     seeds: list[int] = field(default_factory=list)
@@ -80,7 +82,7 @@ def load_offline_transition_batch(
     min_transitions: int = 1,
     action_contract: str = "box_direct",
     observation_contract: str = "dataset_observation",
-    skip_terminal_without_next_observation: bool = True,
+    skip_terminal_without_next_observation: bool = False,
 ) -> OfflineTransitionBatch:
     """Load train-split transitions from `RLTrajectoryDataset.v1`.
 
@@ -135,6 +137,7 @@ def load_offline_transition_batch(
         actions=actions_array,
         rewards=rewards_array,
         dones=np.asarray(transitions.dones, dtype=bool),
+        truncated=np.asarray(transitions.truncated, dtype=bool),
         episode_ids=tuple(transitions.episode_ids),
         scenario_ids=tuple(transitions.scenario_ids),
         seeds=np.asarray(transitions.seeds, dtype=int),
@@ -190,13 +193,16 @@ def seed_sb3_replay_buffer(model: Any, batch: OfflineTransitionBatch) -> None:
     """Seed an SB3 off-policy replay buffer with validated offline transitions."""
 
     for index in range(batch.size):
+        info = {"source": "offline_rl_trajectory_dataset", "episode_id": batch.episode_ids[index]}
+        if bool(batch.truncated[index]):
+            info["TimeLimit.truncated"] = True
         model.replay_buffer.add(
             _with_vec_dim(batch.observations[index]),
             _with_vec_dim(batch.next_observations[index]),
             np.asarray(batch.actions[index], dtype=np.float32).reshape(1, -1),
             np.asarray([batch.rewards[index]], dtype=np.float32),
             np.asarray([batch.dones[index]], dtype=bool),
-            [{"source": "offline_rl_trajectory_dataset", "episode_id": batch.episode_ids[index]}],
+            [info],
         )
 
 
@@ -216,10 +222,17 @@ def _append_episode_transitions(
     for index, reward in enumerate(episode.rewards):
         if index + 1 >= len(episode.observations):
             terminal = bool(episode.terminated[index] or episode.truncated[index])
-            if terminal and skip_terminal_without_next_observation:
-                dropped_terminal += 1
-                continue
-            raise ValueError(f"episode {episode.episode_id!r} step {index} has no next observation")
+            if terminal:
+                if skip_terminal_without_next_observation:
+                    dropped_terminal += 1
+                    continue
+                next_observation = episode.observations[index]
+            else:
+                raise ValueError(
+                    f"episode {episode.episode_id!r} step {index} has no next observation"
+                )
+        else:
+            next_observation = episode.observations[index + 1]
         if index >= len(episode.actions):
             raise ValueError(f"episode {episode.episode_id!r} step {index} has no action")
 
@@ -235,10 +248,11 @@ def _append_episode_transitions(
             )
 
         transitions.observations.append(episode.observations[index])
-        transitions.next_observations.append(episode.observations[index + 1])
+        transitions.next_observations.append(next_observation)
         transitions.actions.append(action)
         transitions.rewards.append(float(reward))
         transitions.dones.append(bool(episode.terminated[index] or episode.truncated[index]))
+        transitions.truncated.append(bool(episode.truncated[index]))
         transitions.episode_ids.append(episode.episode_id)
         transitions.scenario_ids.append(episode.scenario_id)
         transitions.seeds.append(int(episode.seed))

@@ -67,7 +67,7 @@ def test_sac_training_dry_run_validates_and_seeds_offline_dataset(
 
     assert checkpoint == tmp_path / "checkpoints" / "issue_4012_unit.zip"
     assert _FakeSAC.latest is not None
-    assert _FakeSAC.latest.replay_buffer.add_count == 1
+    assert _FakeSAC.latest.replay_buffer.add_count == 2
     assert _FakeSAC.latest.learn_calls == [train_sac_sb3._DRY_RUN_TIMESTEPS]
 
 

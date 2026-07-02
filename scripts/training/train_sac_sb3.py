@@ -943,8 +943,7 @@ def _seed_offline_online_replay_buffer(
     batch_size = int(
         config.sac_hyperparams.get("batch_size", _DEFAULT_SAC_HYPERPARAMS["batch_size"])
     )
-    if not hasattr(model, "_logger"):
-        model.set_logger(configure_sb3_logger(format_strings=[]))
+    model.set_logger(configure_sb3_logger(format_strings=[]))
     model.train(gradient_steps=offline.offline_gradient_steps, batch_size=batch_size)
 
 

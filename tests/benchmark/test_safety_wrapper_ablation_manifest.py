@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+import os
+from pathlib import Path
 
 import pytest
 
@@ -25,10 +26,6 @@ from robot_sf.benchmark.safety_wrapper_ablation_manifest import (
 from robot_sf.robot.safety_wrapper import SAFETY_WRAPPER_SCHEMA
 
 _CONFIG_PATH = "configs/research/safety_wrapper_ablation_v1.yaml"
-
-if TYPE_CHECKING:
-    from pathlib import Path
-
 
 def _repo_config() -> dict[str, object]:
     return load_safety_wrapper_ablation_config(_CONFIG_PATH)
@@ -159,6 +156,24 @@ def test_manifest_rejects_planner_ids_missing_from_declared_source() -> None:
 
     with pytest.raises(ValueError, match="missing from declared planner source"):
         build_safety_wrapper_ablation_manifest(config, options=_options())
+
+
+def test_manifest_resolves_absolute_config_from_non_repo_cwd(tmp_path: Path) -> None:
+    """Repo-relative planner source remains stable for absolute config callers."""
+    config_path = Path(_CONFIG_PATH).resolve()
+    config = load_safety_wrapper_ablation_config(config_path)
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(tmp_path)
+        manifest = build_safety_wrapper_ablation_manifest(
+            config,
+            options=ManifestOptions(config_path=config_path, git_head="abc1234"),
+        )
+    finally:
+        os.chdir(original_cwd)
+
+    assert manifest["planner_source_check"]["all_requested_planners_declared"] is True
+    assert Path(manifest["planner_source_check"]["planner_source_path"]).is_absolute()
 
 
 def test_config_rejects_non_mapping_wrapper_arm() -> None:

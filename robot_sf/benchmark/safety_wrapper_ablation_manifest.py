@@ -154,9 +154,15 @@ def _load_declared_planner_keys(
     declared_source = _planner_source_path(fixed_scope)
     source_path = Path(declared_source)
     if not source_path.is_absolute():
-        source_path = Path(config_path).parent / source_path
-        if not source_path.exists():
-            source_path = Path(declared_source)
+        candidate = Path(config_path).parent / source_path
+        if candidate.exists():
+            source_path = candidate
+        else:
+            for parent in Path(config_path).resolve().parents:
+                candidate = parent / declared_source
+                if candidate.exists():
+                    source_path = candidate
+                    break
     if not source_path.exists():
         raise ValueError(f"fixed_scope planner source does not exist: {source_path}")
 

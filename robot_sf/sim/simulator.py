@@ -240,10 +240,11 @@ class Simulator:
             One heading angle in radians per pedestrian row.
         """
         velocities = np.asarray(self.pysf_state.ped_velocities, dtype=float)
-        return np.asarray(
-            [_heading_from_velocity(velocity, 0.0) for velocity in velocities],
-            dtype=float,
-        )
+        if velocities.size == 0:
+            return np.empty((0,), dtype=float)
+        speeds = np.linalg.norm(velocities, axis=-1)
+        velocity_headings = np.arctan2(velocities[:, 1], velocities[:, 0])
+        return np.where(speeds <= MIN_HEADING_SPEED_MPS, 0.0, velocity_headings)
 
     def _step_pedestrians(self, ped_forces: np.ndarray, groups: list[list[int]]) -> None:
         """Advance pedestrians through the configured pedestrian-model implementation."""

@@ -80,11 +80,7 @@ def step_hsfm_total_force(
 
     next_state[:, PYSF_POSITION_SLICE] += capped_velocity * float(dt)
     next_state[:, PYSF_VELOCITY_SLICE] = capped_velocity
-    next_headings = np.asarray(
-        [
-            heading_from_total_force(previous_heading, total_force, epsilon=epsilon)
-            for previous_heading, total_force in zip(previous_headings, force_array, strict=True)
-        ],
-        dtype=float,
-    )
+    force_norms = np.linalg.norm(force_array, axis=-1)
+    force_headings = np.arctan2(force_array[:, 1], force_array[:, 0])
+    next_headings = np.where(force_norms <= epsilon, previous_headings, force_headings)
     return next_state, next_headings

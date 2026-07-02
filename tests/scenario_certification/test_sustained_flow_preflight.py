@@ -213,6 +213,20 @@ def test_preflight_rejects_target_density_tier_drift(tmp_path: Path) -> None:
     assert any("continuous_spawn.target_density_tier" in error for error in report.errors)
 
 
+def test_preflight_rejects_variant_name_suffix_drift(tmp_path: Path) -> None:
+    """Scenario-certification preflight pins exact generated variant names."""
+    payload = yaml.safe_load(SCENARIO_SET.read_text(encoding="utf-8"))
+    payload["scenarios"][0]["name"] = "issue_3813_sustained_flow_t_intersection_light_extra"
+
+    drifted = tmp_path / "issue_3813_sustained_flow_name_suffix_drift.yaml"
+    drifted.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    report = sustained_flow.preflight_sustained_flow_scenario_set(drifted)
+
+    assert not report.conforms
+    assert any("scenario name must be exactly" in error for error in report.errors)
+
+
 def test_preflight_rejects_route_respawn_runtime_config_drift(tmp_path: Path) -> None:
     """Scenario YAML must keep route-respawn runtime preflight settings explicit."""
     payload = yaml.safe_load(SCENARIO_SET.read_text(encoding="utf-8"))

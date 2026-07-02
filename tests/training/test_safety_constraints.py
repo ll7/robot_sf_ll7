@@ -83,3 +83,29 @@ def test_multiplier_update_clips_to_bounds() -> None:
 
     assert updated == {"collision": 1.0}
     assert state.completed_episodes == 1
+
+
+def test_normalized_external_episode_costs_require_episode_steps() -> None:
+    """Externally supplied costs must include steps for step-normalized constraints."""
+    specs = [
+        _spec(
+            "near_miss",
+            "near_miss",
+            budget_per_episode=0.5,
+            normalize_by_episode_steps=True,
+        )
+    ]
+    state = LagrangeMultiplierState.from_specs(specs)
+
+    with pytest.raises(ValueError, match="episode_steps must be provided"):
+        state.update_after_episode(specs, episode_costs={"near_miss": 1.0})
+
+
+def test_ttc_risk_cost_is_bounded_for_tiny_positive_values() -> None:
+    """TTC risk source should not create unbounded rewards for tiny positive TTC."""
+    costs = step_safety_costs(
+        {"meta": {"time_to_collision": 1e-12}},
+        [_spec("ttc", "ttc_risk")],
+    )
+
+    assert costs == {"ttc": 10000.0}

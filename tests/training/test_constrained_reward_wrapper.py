@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+import pytest
 from gymnasium import Env, spaces
 
 from robot_sf.training.constrained_reward_wrapper import ConstrainedRewardWrapper
@@ -79,6 +80,18 @@ def test_constrained_reward_decreases_when_cost_multiplier_is_positive() -> None
     assert info["constrained_reward"] == reward
     assert info["constraint_costs"] == {"near_miss": 2.0}
     assert info["constraint_multipliers"] == {"near_miss": 0.25}
+
+
+def test_wrapper_rejects_duplicate_constraint_names_case_insensitively() -> None:
+    """Constraint names key multiplier state, so duplicates must fail closed."""
+    duplicate = SafetyConstraintSpec(
+        name="Near_Miss",
+        source_key="near_miss",
+        budget_per_episode=0.5,
+    )
+
+    with pytest.raises(ValueError, match="Duplicate constraint name"):
+        ConstrainedRewardWrapper(_DummyEnv(), [_near_miss_spec(), duplicate])
 
 
 def test_episode_cost_summary_appears_on_terminal_info() -> None:

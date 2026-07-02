@@ -23,7 +23,7 @@ The first supported safety-cost sources are read from `RobotEnv.step()` `info` m
 - `robot_or_obstacle`: robot or obstacle collision metadata.
 - `near_miss`: finite non-negative `near_misses` scalar.
 - `comfort_exposure`: finite non-negative `comfort_exposure` scalar.
-- `ttc_risk`: inverse finite positive `time_to_collision`.
+- `ttc_risk`: bounded inverse finite positive `time_to_collision`.
 
 Unknown sources fail closed during constraint-spec construction. Non-finite or negative scalar
 metadata is clamped to zero cost rather than propagating invalid values through training rewards.

@@ -17,6 +17,7 @@ SUPPORTED_SAFETY_COST_SOURCES = frozenset(
         "ttc_risk",
     }
 )
+MIN_TTC_SECONDS_FOR_RISK_COST = 1e-4
 
 
 @dataclass(frozen=True)
@@ -113,6 +114,12 @@ class LagrangeMultiplierState:
         """
         costs = self.episode_costs if episode_costs is None else episode_costs
         steps = self.episode_steps if episode_steps is None else episode_steps
+        if episode_costs is not None and episode_steps is None:
+            if any(spec.normalize_by_episode_steps for spec in specs):
+                raise ValueError(
+                    "episode_steps must be provided when external episode_costs are used with "
+                    "step-normalized constraints"
+                )
         for spec in specs:
             observed_cost = _finite_non_negative(costs.get(spec.name, 0.0))
             if spec.normalize_by_episode_steps and steps > 0:
@@ -170,7 +177,9 @@ def _source_cost(info: Mapping[str, Any], source_key: str) -> float:
         return _finite_non_negative(meta_mapping.get("comfort_exposure"))
     if source_key == "ttc_risk":
         time_to_collision = _finite_positive(meta_mapping.get("time_to_collision"))
-        return 0.0 if time_to_collision is None else 1.0 / time_to_collision
+        if time_to_collision is None:
+            return 0.0
+        return 1.0 / max(MIN_TTC_SECONDS_FOR_RISK_COST, time_to_collision)
     raise ValueError(f"Unsupported safety-cost source: {source_key}")
 
 
@@ -212,6 +221,7 @@ def _require_non_negative_finite(value: Any, field_name: str) -> None:
 
 
 __all__ = [
+    "MIN_TTC_SECONDS_FOR_RISK_COST",
     "SUPPORTED_SAFETY_COST_SOURCES",
     "LagrangeMultiplierState",
     "SafetyConstraintSpec",

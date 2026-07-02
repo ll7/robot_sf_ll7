@@ -31,6 +31,12 @@ class ConstrainedRewardWrapper(Wrapper):
         self.constraints = tuple(constraints)
         if not self.constraints:
             raise ValueError("ConstrainedRewardWrapper requires at least one constraint")
+        seen_names: set[str] = set()
+        for spec in self.constraints:
+            normalized_name = spec.name.casefold()
+            if normalized_name in seen_names:
+                raise ValueError(f"Duplicate constraint name: {spec.name}")
+            seen_names.add(normalized_name)
         self.multiplier_state = multiplier_state or LagrangeMultiplierState.from_specs(
             self.constraints
         )

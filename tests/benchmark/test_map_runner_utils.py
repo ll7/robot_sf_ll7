@@ -189,6 +189,7 @@ def test_map_batch_plan_builds_worker_fixed_params(tmp_path: Path) -> None:
         actuation_profile_metadata={"name": "actuation"},
         latency_profile_metadata={"name": "latency"},
         latency_stress_metrics={"held_action_ratio": "not_available"},
+        safety_wrapper={"enabled": True, "arm_key": "wrapper_on"},
         record_simulation_step_trace=True,
     )
 
@@ -209,6 +210,7 @@ def test_map_batch_plan_builds_worker_fixed_params(tmp_path: Path) -> None:
     assert fixed_params["synthetic_actuation_profile"] == {"name": "actuation"}
     assert fixed_params["latency_stress_profile"] == {"name": "latency"}
     assert fixed_params["latency_stress_metrics"] == {"held_action_ratio": "not_available"}
+    assert fixed_params["safety_wrapper"] == {"enabled": True, "arm_key": "wrapper_on"}
     assert fixed_params["record_simulation_step_trace"] is True
 
 

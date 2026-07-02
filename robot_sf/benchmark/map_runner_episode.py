@@ -104,6 +104,12 @@ from robot_sf.benchmark.safety_predicates import (
     occlusion_near_miss_predicate,
     oscillatory_control_predicate,
 )
+from robot_sf.benchmark.safety_wrapper_runtime import (
+    apply_runtime_safety_wrapper,
+    ineligible_safety_wrapper_step_record,
+    runtime_config_from_mapping,
+    summarize_safety_wrapper_trace,
+)
 from robot_sf.benchmark.synthetic_actuation import (
     SyntheticActuationController,
     not_available_saturation_metrics,
@@ -435,6 +441,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     tracking_precision: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
     latency_stress_profile: dict[str, Any] | None = None,
+    safety_wrapper: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
     policy_builder: PolicyBuilder,
@@ -469,7 +476,9 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         seed=seed,
         scenario_id=scenario_id,
     )
+    safety_wrapper_runtime = runtime_config_from_mapping(safety_wrapper)
     tracking_precision_records: list[dict[str, Any]] = []
+    safety_wrapper_trace: list[dict[str, Any]] = []
     min_separation_corrupted_values: list[float] = []
     config = _build_env_config(scenario, scenario_path=scenario_path)
     max_steps = int(scenario.get("simulation_config", {}).get("max_episode_steps", 0) or 0)
@@ -698,6 +707,51 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     *tuple(policy_command[2:]),
                 )
                 tracking_precision_records.append(tracking_record)
+            if safety_wrapper_runtime.enabled:
+                if step_is_native:
+                    if safety_wrapper_runtime.fail_on_native_action:
+                        raise ValueError(
+                            "safety_wrapper.enabled requires absolute commands; "
+                            "native environment actions cannot be wrapped safely"
+                        )
+                    safety_wrapper_trace.append(
+                        ineligible_safety_wrapper_step_record(
+                            runtime=safety_wrapper_runtime,
+                            step_idx=step_idx,
+                            reason="native_environment_action",
+                        )
+                    )
+                elif (
+                    not isinstance(policy_command, (tuple, list, np.ndarray))
+                    or len(policy_command) < 2
+                ):
+                    if safety_wrapper_runtime.fail_on_unsupported_command:
+                        raise TypeError(
+                            "safety_wrapper.enabled expects commands shaped like "
+                            "(linear_velocity, angular_velocity)"
+                        )
+                    safety_wrapper_trace.append(
+                        ineligible_safety_wrapper_step_record(
+                            runtime=safety_wrapper_runtime,
+                            step_idx=step_idx,
+                            reason="unsupported_command_shape",
+                        )
+                    )
+                else:
+                    corrected_command, wrapper_record = apply_runtime_safety_wrapper(
+                        command=policy_command,
+                        env=env,
+                        config=config,
+                        runtime=safety_wrapper_runtime,
+                        previous_ped_positions=previous_trace_ped_pos,
+                        step_idx=step_idx,
+                    )
+                    policy_command = (
+                        corrected_command[0],
+                        corrected_command[1],
+                        *tuple(policy_command[2:]),
+                    )
+                    safety_wrapper_trace.append(wrapper_record)
             selected_action_payload = _command_action_payload(policy_command)
             ammv_command_actions.append(selected_action_payload)
             if step_is_native:
@@ -1099,6 +1153,13 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     if tracking_precision_records:
         tracking_precision_summary["last_step"] = dict(tracking_precision_records[-1])
     algo_meta["tracking_precision"] = tracking_precision_summary
+    safety_wrapper_summary: dict[str, Any] | None = None
+    if safety_wrapper_runtime.enabled:
+        safety_wrapper_summary = summarize_safety_wrapper_trace(
+            safety_wrapper_trace,
+            runtime=safety_wrapper_runtime,
+        )
+        algo_meta["safety_wrapper"] = safety_wrapper_summary
     intent_summary = _intent_conditioned_behavior_summary(
         scenario,
         single_pedestrian_intent_metadata,
@@ -1162,6 +1223,8 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         tracking_precision_summary["contract_honored_rate"]
     )
     metrics["tracking_target_motp_m"] = float(tracking_precision_spec["target_motp_m"])
+    if safety_wrapper_summary is not None:
+        metrics["wrapper_intervention_rate"] = float(safety_wrapper_summary["intervention_rate"])
 
     ts_end = datetime.now(UTC).isoformat()
     scenario_params = _scenario_identity_payload(
@@ -1185,6 +1248,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             if latency_profile is not None
             else None
         ),
+        safety_wrapper=dict(safety_wrapper) if safety_wrapper is not None else None,
         record_simulation_step_trace=record_simulation_step_trace,
     )
     steps_taken = int(robot_pos_arr.shape[0])

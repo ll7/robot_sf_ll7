@@ -1,0 +1,9 @@
+planner_key,scenario_family,safety_status,comfort_status,overall_status,failed_gate_ids,not_evaluable_gate_ids
+goal,classic_crossing,pass,pass,pass,,
+orca,classic_crossing,fail,pass,fail,collision_rate_zero,
+ppo,classic_crossing,pass,fail,fail,proxemic_intrusion_rate_limit;jerk_mean_limit,
+prediction_planner,classic_crossing,fail,pass,fail,near_miss_rate_limit;min_clearance_floor,
+sacadrl,classic_crossing,pass,pass,pass,,
+social_force,classic_crossing,pass,pass,pass,,
+socnav_bench,classic_crossing,not_evaluable,not_evaluable,not_evaluable,,collision_rate_zero;near_miss_rate_limit;min_clearance_floor;proxemic_intrusion_rate_limit;jerk_mean_limit
+socnav_sampling,classic_crossing,pass,not_evaluable,not_evaluable,,proxemic_intrusion_rate_limit;jerk_mean_limit

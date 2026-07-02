@@ -635,6 +635,62 @@ def _dynamic_parabolic_barrier(
     return float(v_tilde_x + lambda_term * v_tilde_y * v_tilde_y + mu_term)
 
 
+def _precompute_dynamic_parabolic_obstacles(
+    *,
+    robot_position: np.ndarray,
+    robot_radius: float,
+    obstacles: tuple[CBFObstacleState, ...],
+    config: CBFSafetyFilterConfig,
+) -> list[tuple[np.ndarray, float, float, float, float]]:
+    """Precompute obstacle constants reused across DPCBF scalar-speed candidates.
+
+    Returns:
+        list[tuple[np.ndarray, float, float, float, float]]: Per-obstacle velocity,
+        line-of-sight trigonometry, clearance, and static DPCBF offset.
+    """
+
+    constants: list[tuple[np.ndarray, float, float, float, float]] = []
+    for obstacle in obstacles:
+        p_rel = np.asarray(obstacle.position_m, dtype=float) - robot_position
+        alpha = math.atan2(float(p_rel[1]), float(p_rel[0]))
+        radius = float(robot_radius) + float(obstacle.radius_m) + float(config.safety_radius_margin_m)
+        clearance_sq = max(float(np.dot(p_rel, p_rel)) - radius * radius, 0.0)
+        clearance = math.sqrt(clearance_sq)
+        constants.append(
+            (
+                np.asarray(obstacle.velocity_mps, dtype=float),
+                math.cos(alpha),
+                math.sin(alpha),
+                clearance,
+                float(config.dpcbf_mu_gain) * clearance,
+            )
+        )
+    return constants
+
+
+def _dynamic_parabolic_barrier_from_constants(
+    *,
+    linear_velocity: float,
+    heading_unit: np.ndarray,
+    obstacle_constants: tuple[np.ndarray, float, float, float, float],
+    config: CBFSafetyFilterConfig,
+) -> float:
+    """Evaluate DPCBF barrier using obstacle constants shared across grid candidates.
+
+    Returns:
+        float: Barrier value where non-negative means scalar speed is feasible.
+    """
+
+    obstacle_velocity, cos_a, sin_a, clearance, mu_term = obstacle_constants
+    v_robot = float(linear_velocity) * heading_unit
+    v_rel = obstacle_velocity - v_robot
+    v_tilde_x = float(cos_a * v_rel[0] + sin_a * v_rel[1])
+    v_tilde_y = float(-sin_a * v_rel[0] + cos_a * v_rel[1])
+    relative_speed = max(float(np.linalg.norm(v_rel)), float(config.relative_speed_epsilon))
+    lambda_term = float(config.dpcbf_lambda_gain) * clearance / relative_speed
+    return float(v_tilde_x + lambda_term * v_tilde_y * v_tilde_y + mu_term)
+
+
 def _apply_dynamic_parabolic_cbf(
     linear_velocity: float,
     angular_velocity: float,
@@ -664,17 +720,22 @@ def _apply_dynamic_parabolic_cbf(
 
     robot_position = np.asarray(context.robot_position_m, dtype=float)
     robot_heading = float(context.robot_heading_rad)
+    heading_unit = np.asarray([math.cos(robot_heading), math.sin(robot_heading)], dtype=float)
+    obstacle_constants = _precompute_dynamic_parabolic_obstacles(
+        robot_position=robot_position,
+        robot_radius=float(context.robot_radius_m),
+        obstacles=context.obstacles,
+        config=config,
+    )
     nominal = float(np.clip(float(linear_velocity), lower, upper))
     barriers_before = [
-        _dynamic_parabolic_barrier(
+        _dynamic_parabolic_barrier_from_constants(
             linear_velocity=nominal,
-            robot_position=robot_position,
-            robot_heading=robot_heading,
-            robot_radius=float(context.robot_radius_m),
-            obstacle=obstacle,
+            heading_unit=heading_unit,
+            obstacle_constants=constants,
             config=config,
         )
-        for obstacle in context.obstacles
+        for constants in obstacle_constants
     ]
     if not context.obstacles:
         selected = nominal
@@ -688,16 +749,14 @@ def _apply_dynamic_parabolic_cbf(
             float(candidate)
             for candidate in grid
             if all(
-                _dynamic_parabolic_barrier(
+                _dynamic_parabolic_barrier_from_constants(
                     linear_velocity=float(candidate),
-                    robot_position=robot_position,
-                    robot_heading=robot_heading,
-                    robot_radius=float(context.robot_radius_m),
-                    obstacle=obstacle,
+                    heading_unit=heading_unit,
+                    obstacle_constants=constants,
                     config=config,
                 )
                 >= 0.0
-                for obstacle in context.obstacles
+                for constants in obstacle_constants
             )
         ]
         if feasible_values:
@@ -708,15 +767,13 @@ def _apply_dynamic_parabolic_cbf(
             feasible = False
 
     barriers_after = [
-        _dynamic_parabolic_barrier(
+        _dynamic_parabolic_barrier_from_constants(
             linear_velocity=selected,
-            robot_position=robot_position,
-            robot_heading=robot_heading,
-            robot_radius=float(context.robot_radius_m),
-            obstacle=obstacle,
+            heading_unit=heading_unit,
+            obstacle_constants=constants,
             config=config,
         )
-        for obstacle in context.obstacles
+        for constants in obstacle_constants
     ]
     min_before = min(barriers_before) if barriers_before else None
     min_after = min(barriers_after) if barriers_after else None

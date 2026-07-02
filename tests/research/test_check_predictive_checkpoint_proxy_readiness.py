@@ -261,8 +261,45 @@ def test_blocked_when_resolvable_checkpoints_missing_training_run_group(tmp_path
     assert ckpt["status"] == "blocked"
     assert mapping["resolvable_count"] == 2
     assert mapping["missing_training_run_group_metadata"] == 2
+    assert mapping["candidate_training_run_group_metadata"] == {
+        "field": "proxy_training_run_id",
+        "candidate_count": 2,
+        "with_group": 0,
+        "missing_group": 2,
+        "missing_group_by_status": {"present": 2},
+    }
     assert mapping["resolvable_by_training_run_group"] == {}
     assert "training run group field" in ckpt["messages"][0]
+
+
+def test_blocked_mapping_summarizes_candidate_lineage_metadata_for_absent_inputs(tmp_path):
+    """Missing lineage metadata remains visible before checkpoints are hydrated."""
+    config = _write_config(tmp_path, min_resolvable=2)
+    models = [
+        {
+            "model_id": f"predictive_absent_without_group_{index}",
+            "local_path": str(tmp_path / "missing" / f"absent_{index}.pt"),
+            "tags": ["predictive"],
+        }
+        for index in range(2)
+    ]
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(yaml.safe_dump({"version": 1, "models": models}), encoding="utf-8")
+
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+
+    ckpt = report["prerequisites"]["checkpoint_artifacts"]
+    mapping = ckpt["mapping"]
+    assert report["status"] == "blocked"
+    assert mapping["resolvable_count"] == 0
+    assert mapping["missing_training_run_group_metadata"] == 0
+    assert mapping["candidate_training_run_group_metadata"] == {
+        "field": "proxy_training_run_id",
+        "candidate_count": 2,
+        "with_group": 0,
+        "missing_group": 2,
+        "missing_group_by_status": {"missing_local_path": 2},
+    }
 
 
 def test_blocked_when_resolvable_checkpoints_split_across_training_runs(tmp_path):
@@ -658,6 +695,11 @@ def test_real_registry_predictive_checkpoints_blocked():
     )
     ckpt = report["prerequisites"]["checkpoint_artifacts"]
     assert ckpt["mapping"]["candidate_count"] >= 6
+    assert ckpt["mapping"]["candidate_training_run_group_metadata"]["missing_group"] >= 1
+    assert (
+        "missing_local_path"
+        in ckpt["mapping"]["candidate_training_run_group_metadata"]["missing_group_by_status"]
+    )
     # Documented current state: insufficient predictive checkpoints resolve locally.
     assert ckpt["status"] == "blocked"
     assert report["status"] == "blocked"

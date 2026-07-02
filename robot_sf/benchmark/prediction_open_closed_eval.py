@@ -349,7 +349,7 @@ def _gaussian_calibration_counts(
                 continue
             offset = truth[index] - mean
             try:
-                mahalanobis_sq = float(offset.T @ np.linalg.inv(covariance) @ offset)
+                mahalanobis_sq = float(offset.T @ np.linalg.solve(covariance, offset))
             except np.linalg.LinAlgError:
                 continue
             if np.isfinite(mahalanobis_sq):
@@ -371,8 +371,9 @@ def _prediction_spread_values(batch: ForecastBatch) -> _SpreadValues:
         elif forecast.samples is not None:
             deterministic_only = False
             samples = np.asarray(forecast.samples, dtype=float)
-            per_horizon_std = np.std(samples, axis=0)
-            values.extend(float(np.linalg.norm(std_xy)) for std_xy in per_horizon_std)
+            if samples.shape[0] > 0:
+                per_horizon_std = np.std(samples, axis=0)
+                values.extend(float(np.linalg.norm(std_xy)) for std_xy in per_horizon_std)
     return _SpreadValues(values=values, deterministic_only=deterministic_only)
 
 
@@ -392,7 +393,10 @@ def _truth_array(
 def _position_array(value: object) -> np.ndarray | None:
     if value is None:
         return None
-    position = np.asarray(value, dtype=float)
+    try:
+        position = np.asarray(value, dtype=float)
+    except (TypeError, ValueError, KeyError, IndexError):
+        return None
     if position.shape != (2,) or not np.all(np.isfinite(position)):
         return None
     return position
@@ -401,7 +405,10 @@ def _position_array(value: object) -> np.ndarray | None:
 def _covariance_array(value: object) -> np.ndarray | None:
     if value is None:
         return None
-    covariance = np.asarray(value, dtype=float)
+    try:
+        covariance = np.asarray(value, dtype=float)
+    except (TypeError, ValueError, KeyError, IndexError):
+        return None
     if covariance.shape != (2, 2) or not np.all(np.isfinite(covariance)):
         return None
     return covariance

@@ -61,6 +61,16 @@ class SinglePedestrianDefinition:
         role (str | None): Optional runtime behavior role (wait, follow, lead, accompany, join, leave).
         role_target_id (str | None): Optional target identifier for role behaviors (e.g., "robot:0").
         role_offset (Vec2D | None): Optional (forward, lateral) offset for follow/lead/accompany roles.
+        hold_until_robot_within_m (float | None): Optional proximity-released hold. When set, the
+            pedestrian holds at the trajectory waypoint immediately before ``hold_ref_point`` until
+            a robot is within this distance (world units) of ``hold_ref_point`` (or ``hold_timeout_s``
+            elapses). Requires ``robot_pose_provider`` wiring in the behavior controller.
+        hold_ref_point (Vec2D | None): Reference point used to measure robot proximity for the hold.
+            Should be a point on the trajectory (typically the event-contract ``conflict_point``); the
+            hold engages at the waypoint immediately preceding it.
+        hold_timeout_s (float | None): Fail-open release time (seconds) so the pedestrian never
+            deadlocks if the robot stalls or never approaches. Defaults to ~6.0s in the behavior
+            controller when a proximity hold is configured but no timeout is given.
         metadata (dict[str, Any]): Optional JSON/YAML-safe attribution metadata.
     """
 
@@ -75,6 +85,9 @@ class SinglePedestrianDefinition:
     role: str | None = None
     role_target_id: str | None = None
     role_offset: Vec2D | None = None
+    hold_until_robot_within_m: float | None = None
+    hold_ref_point: Vec2D | None = None
+    hold_timeout_s: float | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
@@ -97,6 +110,7 @@ class SinglePedestrianDefinition:
         self._validate_role()
         self._validate_role_target()
         self._validate_role_offset()
+        self._validate_proximity_hold()
         self._validate_metadata()
         self._warn_if_static()
 
@@ -263,6 +277,70 @@ class SinglePedestrianDefinition:
                 f"got {self.role_offset!r}"
             )
         self.role_offset = (float(self.role_offset[0]), float(self.role_offset[1]))
+
+    def _validate_proximity_hold(self) -> None:
+        """Validate the optional proximity-released hold configuration.
+
+        A proximity hold lets the pedestrian wait at the curb until a robot approaches
+        ``hold_ref_point``. ``hold_ref_point`` and ``hold_timeout_s`` are only meaningful
+        alongside ``hold_until_robot_within_m`` and are rejected when it is absent so
+        misconfigured scenarios fail loudly rather than silently ignoring the fields.
+        """
+        self._normalize_hold_ref_point()
+        self._normalize_hold_timeout()
+
+        if self.hold_until_robot_within_m is None:
+            if self.hold_ref_point is not None or self.hold_timeout_s is not None:
+                raise ValueError(
+                    f"Pedestrian '{self.id}': hold_ref_point/hold_timeout_s require "
+                    "hold_until_robot_within_m to be set"
+                )
+            return
+
+        self.hold_until_robot_within_m = self._coerce_positive_hold_value(
+            self.hold_until_robot_within_m,
+            "hold_until_robot_within_m",
+        )
+        if self.trajectory is None:
+            raise ValueError(
+                f"Pedestrian '{self.id}': hold_until_robot_within_m requires a trajectory so the "
+                "hold can engage at a curb waypoint before the crossing"
+            )
+
+    def _normalize_hold_ref_point(self) -> None:
+        """Validate and normalize the optional proximity-hold reference point."""
+        if self.hold_ref_point is None:
+            return
+        if not isinstance(self.hold_ref_point, (tuple, list)) or len(self.hold_ref_point) != 2:
+            raise ValueError(
+                f"Pedestrian '{self.id}': hold_ref_point must be a 2-item tuple/list, "
+                f"got {self.hold_ref_point!r}"
+            )
+        self.hold_ref_point = (float(self.hold_ref_point[0]), float(self.hold_ref_point[1]))
+
+    def _normalize_hold_timeout(self) -> None:
+        """Validate and normalize the optional proximity-hold fail-open timeout."""
+        if self.hold_timeout_s is None:
+            return
+        self.hold_timeout_s = self._coerce_positive_hold_value(
+            self.hold_timeout_s, "hold_timeout_s"
+        )
+
+    def _coerce_positive_hold_value(self, value: object, field_name: str) -> float:
+        """Coerce a proximity-hold field to a strictly positive float.
+
+        Returns:
+            float: The validated positive value.
+        """
+        try:
+            coerced = float(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Pedestrian '{self.id}': {field_name} must be a positive number, got: {value!r}"
+            ) from None
+        if coerced <= 0:
+            raise ValueError(f"Pedestrian '{self.id}': {field_name} must be > 0, got: {value!r}")
+        return coerced
 
     def _validate_metadata(self) -> None:
         """Validate and copy optional per-pedestrian metadata."""
@@ -1288,6 +1366,16 @@ def _parse_single_pedestrians(
                     f"got: {role_offset!r}"
                 )
             role_offset_tuple = (float(role_offset[0]), float(role_offset[1]))
+        hold_within = ped_def.get("hold_until_robot_within_m")
+        hold_within = float(hold_within) if hold_within is not None else None
+        hold_ref_raw = ped_def.get("hold_ref_point")
+        hold_ref_point = (
+            _normalize_position(tuple(hold_ref_raw), min_x=min_x, min_y=min_y)
+            if hold_ref_raw is not None
+            else None
+        )
+        hold_timeout_s = ped_def.get("hold_timeout_s")
+        hold_timeout_s = float(hold_timeout_s) if hold_timeout_s is not None else None
         single_pedestrians.append(
             SinglePedestrianDefinition(
                 id=ped_id,
@@ -1301,6 +1389,9 @@ def _parse_single_pedestrians(
                 role=str(role) if role is not None else None,
                 role_target_id=role_target_value,
                 role_offset=role_offset_tuple,
+                hold_until_robot_within_m=hold_within,
+                hold_ref_point=hold_ref_point,
+                hold_timeout_s=hold_timeout_s,
                 metadata=dict(metadata),
             )
         )

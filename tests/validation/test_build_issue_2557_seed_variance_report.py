@@ -81,3 +81,50 @@ def test_artifact_writer_emits_provenance_and_checksums(tmp_path: Path) -> None:
         for name in ("README.md", "per_run_provenance.csv", "report.json")
     }
     assert set(checksum_lines) == expected
+
+
+def test_completed_job_rows_are_validated_before_sorting(tmp_path) -> None:
+    """Malformed packet rows fail with a clear validation error."""
+    packet = tmp_path / "packet.json"
+    packet.write_text(
+        json.dumps(
+            {
+                "schema_version": "test",
+                "completed_jobs": ["not-an-object"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="entries must be objects"):
+        report_builder.build_report(packet)
+
+    packet.write_text(
+        json.dumps(
+            {
+                "schema_version": "test",
+                "completed_jobs": [{"seed": 1}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="entries must contain"):
+        report_builder.build_report(packet)
+
+
+def test_metric_summary_handles_no_available_metrics() -> None:
+    """Unavailable rows produce explicit zero-count metric summaries."""
+    summary = report_builder._metric_summary(
+        [
+            {
+                "metric_status": "pending",
+                "snqi": 0.0,
+                "success_rate": 0.0,
+                "collision_rate": 0.0,
+            }
+        ]
+    )
+
+    assert summary["snqi"]["count"] == 0
+    assert summary["success_rate"]["bootstrap_samples"] == report_builder.BOOTSTRAP_SAMPLES

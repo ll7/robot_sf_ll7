@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = "issue-2557-seed-variance-report.v1"
+REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PACKET = Path(
     "docs/context/evidence/issue_2557_replica_readiness_packet_2026-06-29/packet.json"
 )
@@ -108,9 +109,12 @@ def _clean_rows(packet: dict[str, Any]) -> list[dict[str, Any]]:
         raise ValueError("packet.completed_jobs must be a non-empty list")
 
     provenance_rows: list[dict[str, Any]] = []
-    for row in sorted(rows, key=lambda item: (int(item["seed"]), int(item["job_id"]))):
+    for row in rows:
         if not isinstance(row, dict):
             raise ValueError("packet.completed_jobs entries must be objects")
+        if "seed" not in row or "job_id" not in row:
+            raise ValueError("packet.completed_jobs entries must contain 'seed' and 'job_id'")
+    for row in sorted(rows, key=lambda item: (int(item["seed"]), int(item["job_id"]))):
         job_id = int(row["job_id"])
         provenance_rows.append(
             {
@@ -200,26 +204,43 @@ def _metric_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     summary: dict[str, Any] = {}
     for metric in METRICS:
         values = [float(row[metric]) for row in metric_rows]
-        summary[metric] = {
-            "count": len(values),
-            "mean": _mean(values),
-            "std": _sample_std(values),
-            "min": min(values),
-            "max": max(values),
-            "range": max(values) - min(values),
-            "bootstrap_mean_ci95": _bootstrap_mean_ci(values),
-            "bootstrap_samples": BOOTSTRAP_SAMPLES,
-            "bootstrap_seed": BOOTSTRAP_SEED,
-        }
+        if values:
+            summary[metric] = {
+                "count": len(values),
+                "mean": _mean(values),
+                "std": _sample_std(values),
+                "min": min(values),
+                "max": max(values),
+                "range": max(values) - min(values),
+                "bootstrap_mean_ci95": _bootstrap_mean_ci(values),
+                "bootstrap_samples": BOOTSTRAP_SAMPLES,
+                "bootstrap_seed": BOOTSTRAP_SEED,
+            }
+        else:
+            summary[metric] = {
+                "count": 0,
+                "mean": float("nan"),
+                "std": 0.0,
+                "min": float("nan"),
+                "max": float("nan"),
+                "range": 0.0,
+                "bootstrap_mean_ci95": [float("nan"), float("nan")],
+                "bootstrap_samples": BOOTSTRAP_SAMPLES,
+                "bootstrap_seed": BOOTSTRAP_SEED,
+            }
     return summary
 
 
 def build_report(
-    packet_path: Path = DEFAULT_PACKET,
+    packet_path: Path | None = None,
     *,
-    generated_at: str = DEFAULT_GENERATED_AT,
+    generated_at: str | None = None,
 ) -> dict[str, Any]:
     """Build the report payload from tracked packet metrics."""
+    if packet_path is None:
+        packet_path = DEFAULT_PACKET
+    if generated_at is None:
+        generated_at = DEFAULT_GENERATED_AT
     packet = _load_json(packet_path)
     clean_rows = _clean_rows(packet)
     rows = _with_rescued_rows(clean_rows)
@@ -374,12 +395,18 @@ def _write_sha256sums(output_dir: Path, filenames: list[str]) -> None:
     for filename in filenames:
         path = output_dir / filename
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        lines.append(f"{digest}  {filename}")
+        try:
+            relative_path = path.resolve().relative_to(REPO_ROOT).as_posix()
+        except ValueError:
+            relative_path = filename
+        lines.append(f"{digest}  {relative_path}")
     (output_dir / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def write_artifact(report: dict[str, Any], output_dir: Path = DEFAULT_OUTPUT_DIR) -> None:
+def write_artifact(report: dict[str, Any], output_dir: Path | None = None) -> None:
     """Write report, provenance CSV, README, and checksums."""
+    if output_dir is None:
+        output_dir = DEFAULT_OUTPUT_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
     _write_json(output_dir / "report.json", report)
     _write_csv(output_dir / "per_run_provenance.csv", report["provenance_rows"])

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -14,6 +15,7 @@ from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
     observation_noise_hash,
 )
+from robot_sf.benchmark.safety_wrapper_runtime import runtime_config_from_mapping
 from robot_sf.benchmark.tracking_precision_contract import (
     normalize_tracking_precision_spec,
     tracking_precision_hash,
@@ -125,8 +127,10 @@ def _scenario_identity_payload(  # noqa: C901,PLR0913
         payload["synthetic_actuation_profile"] = dict(synthetic_actuation_profile)
     if latency_stress_profile is not None:
         payload["latency_stress_profile"] = dict(latency_stress_profile)
-    if safety_wrapper is not None and bool(safety_wrapper.get("enabled", False)):
-        payload["safety_wrapper"] = dict(safety_wrapper)
+    if safety_wrapper is not None:
+        resolved_safety_wrapper = runtime_config_from_mapping(safety_wrapper)
+        if resolved_safety_wrapper.enabled:
+            payload["safety_wrapper"] = asdict(resolved_safety_wrapper)
     payload["record_simulation_step_trace"] = bool(record_simulation_step_trace)
     if horizon is not None and int(horizon) > 0:
         payload["run_horizon"] = int(horizon)

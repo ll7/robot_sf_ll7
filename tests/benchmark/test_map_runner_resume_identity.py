@@ -341,6 +341,44 @@ def test_scenario_identity_ignores_disabled_safety_wrapper() -> None:
     assert wrapper_on != baseline
 
 
+def test_scenario_identity_normalizes_enabled_safety_wrapper_defaults() -> None:
+    """Resume identity hashes effective wrapper-on runtime config."""
+
+    scenario = _minimal_map_scenario()
+
+    minimal = map_runner._scenario_identity_payload(
+        scenario,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=None,
+        record_forces=True,
+        safety_wrapper={"enabled": True, "arm_key": "wrapper_on"},
+    )
+    explicit_defaults = map_runner._scenario_identity_payload(
+        scenario,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=None,
+        record_forces=True,
+        safety_wrapper={
+            "enabled": True,
+            "arm_key": "wrapper_on",
+            "pedestrian_caution_radius_m": 2.0,
+            "capped_speed_m_s": 0.5,
+            "ttc_veto_threshold_s": 1.0,
+            "clearance_veto_m": 0.3,
+            "fail_on_native_action": True,
+            "fail_on_unsupported_command": True,
+            "record_step_trace": False,
+            "false_stop_lookahead_s": 2.0,
+        },
+    )
+
+    assert minimal == explicit_defaults
+
+
 def test_scenario_identity_includes_observation_noise_hash() -> None:
     """Resume identity should distinguish clean and observation-noisy benchmark runs."""
     scenario = _minimal_map_scenario()

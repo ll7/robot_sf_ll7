@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from robot_sf.benchmark import map_runner_episode
+from robot_sf.benchmark import map_runner_episode, safety_wrapper_runtime
 from robot_sf.benchmark.event_ledger import build_event_ledger
 from robot_sf.benchmark.safety_wrapper_runtime import (
     SAFETY_WRAPPER_EPISODE_SUMMARY_SCHEMA,
@@ -19,7 +20,7 @@ from robot_sf.benchmark.safety_wrapper_runtime import (
     runtime_config_from_mapping,
     summarize_safety_wrapper_trace,
 )
-from robot_sf.robot.safety_wrapper import INTERVENTION_HARD_STOP
+from robot_sf.robot.safety_wrapper import INTERVENTION_HARD_STOP, INTERVENTION_NONE
 
 
 class _Robot:
@@ -164,6 +165,7 @@ def test_wrapper_on_emits_schema_tagged_intervention_record_and_summary() -> Non
     assert record["eligible_for_wrapper"] is True
     assert record["context_source"] == "simulator_state_pre_step"
     assert record["clearance_sources"] == ["pedestrians"]
+    assert record["pedestrian_velocity_identity"] == "row_order_finite_difference_no_stable_ids"
     assert record["intervention"] == INTERVENTION_HARD_STOP
     assert record["intervened"] is True
 
@@ -173,6 +175,170 @@ def test_wrapper_on_emits_schema_tagged_intervention_record_and_summary() -> Non
     assert summary["intervention_rate"] == 1.0
     assert summary["first_hard_stop_step"] == 3
     assert summary["min_context_clearance_m"] <= 0.0
+    assert summary["false_stop_analysis_supported"] is False
+
+
+@pytest.mark.parametrize(
+    "payload,match",
+    [
+        ({"enabled": True, "arm_key": "wrapper_off"}, "enabled=True"),
+        ({"enabled": False, "arm_key": "wrapper_on"}, "enabled=False"),
+        ({"enabled": True, "arm_key": "wrapper_on_v2"}, "versioned experimental arm"),
+        (
+            {"enabled": True, "arm_key": "wrapper_on", "capped_speed_m_s": 0.25},
+            "predeclared ablation config",
+        ),
+    ],
+)
+def test_runtime_config_fails_closed_for_arm_or_threshold_drift(
+    payload: dict[str, object], match: str
+) -> None:
+    """Wrapper-on semantics must match the predeclared ablation arm."""
+
+    with pytest.raises(ValueError, match=match):
+        runtime_config_from_mapping(payload)
+
+
+@pytest.mark.parametrize(
+    "ped_pos,expected_count",
+    [
+        (np.array([[1.0, 0.0], [2.0, 0.0]], dtype=float), 2),
+        (np.array([[1.0, 0.0, 7.0], [2.0, 0.0, 8.0]], dtype=float), 2),
+        (np.empty((0, 2), dtype=float), 0),
+        (np.array([1.0, 0.0, 2.0, 0.0], dtype=float), 2),
+    ],
+)
+def test_context_accepts_supported_pedestrian_position_shapes(
+    ped_pos: np.ndarray, expected_count: int
+) -> None:
+    """Runtime parser accepts xy rows, xyz rows, empty rows, and even flat xy."""
+
+    env = _Env()
+    env.simulator.ped_pos = ped_pos
+
+    context, provenance = compute_safety_context_from_env(
+        env=env,
+        config=_config(),
+        command=(0.0, 0.0),
+        previous_ped_positions=None,
+        dt=0.1,
+    )
+
+    assert provenance["pedestrian_count"] == expected_count
+    if expected_count == 0:
+        assert math.isinf(context.min_pedestrian_distance_m)
+        assert math.isinf(context.min_clearance_m)
+
+
+@pytest.mark.parametrize(
+    "ped_pos,match",
+    [
+        (np.array([1.0, 0.0, 2.0], dtype=float), "even-length flat"),
+        (np.array([[1.0, np.nan]], dtype=float), "finite"),
+    ],
+)
+def test_context_rejects_malformed_or_nonfinite_pedestrian_positions(
+    ped_pos: np.ndarray, match: str
+) -> None:
+    """Malformed simulator pedestrian state fails closed."""
+
+    env = _Env()
+    env.simulator.ped_pos = ped_pos
+
+    with pytest.raises(ValueError, match=match):
+        compute_safety_context_from_env(
+            env=env,
+            config=_config(),
+            command=(0.0, 0.0),
+            previous_ped_positions=None,
+            dt=0.1,
+        )
+
+
+@pytest.mark.parametrize(
+    "robot_pos,match",
+    [
+        ([], "robot_pos"),
+        ([np.array([math.inf, 0.0], dtype=float)], "finite xy"),
+    ],
+)
+def test_context_rejects_missing_or_nonfinite_robot_position(
+    robot_pos: list[np.ndarray], match: str
+) -> None:
+    """Robot xy position is required for pre-step context construction."""
+
+    env = _Env()
+    env.simulator.robot_pos = robot_pos
+
+    with pytest.raises(ValueError, match=match):
+        compute_safety_context_from_env(
+            env=env,
+            config=_config(),
+            command=(0.0, 0.0),
+            previous_ped_positions=None,
+            dt=0.1,
+        )
+
+
+def test_no_pedestrian_episode_has_infinite_clearance_and_no_intervention() -> None:
+    """No-pedestrian context stays hazard-free and does not invent an intervention."""
+
+    env = _Env()
+    env.simulator.ped_pos = np.empty((0, 2), dtype=float)
+    runtime = runtime_config_from_mapping({"enabled": True, "arm_key": "wrapper_on"})
+
+    corrected, record = apply_runtime_safety_wrapper(
+        command=(1.0, 0.25),
+        env=env,
+        config=_config(),
+        runtime=runtime,
+        previous_ped_positions=None,
+        step_idx=0,
+    )
+
+    assert corrected == (1.0, 0.25)
+    assert math.isinf(record["context"]["min_pedestrian_distance_m"])
+    assert math.isinf(record["context"]["min_clearance_m"])
+    assert record["context"]["min_ttc_s"] is None
+    assert record["intervention"] == INTERVENTION_NONE
+    assert record["intervened"] is False
+
+
+def test_non_closing_relative_velocity_has_no_ttc() -> None:
+    """TTC is undefined when pedestrian motion is not closing on the robot."""
+
+    env = _Env()
+    env.simulator.ped_pos = np.array([[2.0, 0.0]], dtype=float)
+
+    context, _ = compute_safety_context_from_env(
+        env=env,
+        config=_config(),
+        command=(0.0, 0.0),
+        previous_ped_positions=np.array([[1.9, 0.0]], dtype=float),
+        dt=0.1,
+    )
+
+    assert context.min_ttc_s is None
+
+
+def test_nonpositive_dt_fails_closed() -> None:
+    """Runtime context construction requires a positive timestep."""
+
+    with pytest.raises(ValueError, match="dt must be positive"):
+        compute_safety_context_from_env(
+            env=_Env(),
+            config=_config(),
+            command=(0.0, 0.0),
+            previous_ped_positions=None,
+            dt=0.0,
+        )
+
+
+def test_xy_rows_rejects_unsupported_2d_shape() -> None:
+    """Direct parser fixture covers non-xy table shapes before context use."""
+
+    with pytest.raises(ValueError, match="shaped"):
+        safety_wrapper_runtime._xy_rows(np.array([[1.0], [2.0]], dtype=float))
 
 
 def test_context_uses_robot_config_radius_when_sim_radius_absent() -> None:

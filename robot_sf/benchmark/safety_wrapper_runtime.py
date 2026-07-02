@@ -28,6 +28,15 @@ from robot_sf.robot.safety_wrapper import (
 
 SAFETY_WRAPPER_RUNTIME_STEP_SCHEMA = "safety_wrapper_runtime_step.v1"
 SAFETY_WRAPPER_EPISODE_SUMMARY_SCHEMA = "safety_wrapper_episode_summary.v1"
+WRAPPER_OFF_ARM = "wrapper_off"
+WRAPPER_ON_ARM = "wrapper_on"
+_PREDECLARED_WRAPPER_CONFIG = SafetyWrapperConfig()
+_PREDECLARED_THRESHOLD_FIELDS = (
+    "pedestrian_caution_radius_m",
+    "capped_speed_m_s",
+    "ttc_veto_threshold_s",
+    "clearance_veto_m",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,7 +75,38 @@ def runtime_config_from_mapping(
     unknown = sorted(set(payload) - allowed)
     if unknown:
         raise ValueError(f"Unknown safety_wrapper keys: {unknown}")
-    return SafetyWrapperRuntimeConfig(**{key: payload[key] for key in payload})
+    return validate_runtime_config(
+        SafetyWrapperRuntimeConfig(**{key: payload[key] for key in payload})
+    )
+
+
+def validate_runtime_config(runtime: SafetyWrapperRuntimeConfig) -> SafetyWrapperRuntimeConfig:
+    """Validate runtime wrapper arm semantics against predeclared ablation contract.
+
+    Returns:
+        Validated runtime config unchanged.
+    """
+
+    arm_key = str(runtime.arm_key)
+    if arm_key not in {WRAPPER_OFF_ARM, WRAPPER_ON_ARM}:
+        raise ValueError(
+            "safety_wrapper.arm_key must be wrapper_off or wrapper_on; "
+            "threshold changes require a versioned experimental arm"
+        )
+    if bool(runtime.enabled) and arm_key != WRAPPER_ON_ARM:
+        raise ValueError("safety_wrapper.enabled=True requires arm_key='wrapper_on'")
+    if not bool(runtime.enabled) and arm_key != WRAPPER_OFF_ARM:
+        raise ValueError("safety_wrapper.enabled=False requires arm_key='wrapper_off'")
+    if bool(runtime.enabled):
+        for field_name in _PREDECLARED_THRESHOLD_FIELDS:
+            observed = float(getattr(runtime, field_name))
+            expected = float(getattr(_PREDECLARED_WRAPPER_CONFIG, field_name))
+            if not math.isclose(observed, expected, rel_tol=0.0, abs_tol=1.0e-12):
+                raise ValueError(
+                    "safety_wrapper.wrapper_on thresholds must match "
+                    f"predeclared ablation config: {field_name}={expected}"
+                )
+    return runtime
 
 
 def safety_wrapper_config(runtime: SafetyWrapperRuntimeConfig) -> SafetyWrapperConfig:
@@ -82,17 +122,36 @@ def safety_wrapper_config(runtime: SafetyWrapperRuntimeConfig) -> SafetyWrapperC
 
 
 def _xy_rows(value: Any) -> np.ndarray:
-    """Return a ``(n, 2)`` float array, accepting empty simulator buffers."""
+    """Return finite ``(n, 2)`` rows from simulator pedestrian state."""
 
     arr = np.asarray(value, dtype=float)
     if arr.size == 0:
         return np.empty((0, 2), dtype=float)
-    return arr.reshape((-1, 2))[:, :2]
+    if not np.all(np.isfinite(arr)):
+        raise ValueError("safety_wrapper simulator pedestrian positions must be finite")
+    if arr.ndim == 1:
+        if arr.size % 2:
+            raise ValueError("safety_wrapper pedestrian positions require even-length flat xy data")
+        rows = arr.reshape((-1, 2))
+    elif arr.ndim == 2 and arr.shape[1] >= 2:
+        rows = arr[:, :2]
+    else:
+        raise ValueError("safety_wrapper pedestrian positions must be shaped (n,2) or (n,3)")
+    return np.asarray(rows, dtype=float)
 
 
 def _robot_position(env: Any) -> np.ndarray:
     simulator = getattr(env, "simulator", None)
-    return np.asarray(simulator.robot_pos[0], dtype=float)[:2]
+    if simulator is None or not hasattr(simulator, "robot_pos"):
+        raise ValueError("safety_wrapper requires simulator.robot_pos")
+    robot_pos = simulator.robot_pos
+    try:
+        arr = np.asarray(robot_pos[0], dtype=float).reshape(-1)
+    except (IndexError, TypeError, ValueError) as exc:
+        raise ValueError("safety_wrapper requires simulator.robot_pos[0] xy position") from exc
+    if arr.size < 2 or not np.all(np.isfinite(arr[:2])):
+        raise ValueError("safety_wrapper robot_pos must contain finite xy coordinates")
+    return arr[:2]
 
 
 def _pedestrian_positions(env: Any) -> np.ndarray:
@@ -144,7 +203,9 @@ def _pedestrian_velocities(
     previous_positions: np.ndarray | None,
     dt: float,
 ) -> np.ndarray:
-    if previous_positions is None or not dt > 0.0:
+    if not dt > 0.0:
+        raise ValueError("safety_wrapper dt must be positive for pre-step context")
+    if previous_positions is None:
         return np.zeros_like(current_positions, dtype=float)
     previous = _xy_rows(previous_positions)
     velocities = np.zeros_like(current_positions, dtype=float)
@@ -202,6 +263,8 @@ def compute_safety_context_from_env(
         Safety context plus provenance for the context calculation.
     """
 
+    if not dt > 0.0:
+        raise ValueError("safety_wrapper dt must be positive for pre-step context")
     robot_pos = _robot_position(env)
     ped_positions = _pedestrian_positions(env)
     if len(command) < 2:
@@ -241,6 +304,7 @@ def compute_safety_context_from_env(
     provenance = {
         "context_source": "simulator_state_pre_step",
         "ttc_source": "finite_difference_pedestrian_velocity",
+        "pedestrian_velocity_identity": "row_order_finite_difference_no_stable_ids",
         "clearance_sources": ["pedestrians"],
         "robot_radius_m": robot_radius,
         "pedestrian_radius_m": ped_radius,
@@ -366,6 +430,7 @@ def summarize_safety_wrapper_trace(
         "thresholds_source": "predeclared_fixed_no_per_planner_tuning",
         "thresholds": thresholds,
         "false_stop_lookahead_s": float(runtime.false_stop_lookahead_s),
+        "false_stop_analysis_supported": False,
         "step_count": int(step_count),
         "eligible_step_count": int(eligible_step_count),
         "intervention_counts": {

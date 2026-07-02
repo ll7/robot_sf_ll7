@@ -618,7 +618,7 @@ def test_policy_builder_registry_returns_none_for_unmigrated_key() -> None:
 
 def test_policy_builder_registry_forwards_builder_context() -> None:
     """Registry dispatch preserves the policy-builder call contract."""
-    calls: list[tuple[str, dict[str, Any], str | None, str | None]] = []
+    calls: list[tuple[str, dict[str, Any], str | None, str | None, bool]] = []
 
     def _builder(
         algo_key: str,
@@ -626,8 +626,11 @@ def test_policy_builder_registry_forwards_builder_context() -> None:
         *,
         robot_kinematics: str | None = None,
         robot_command_mode: str | None = None,
+        adapter_impact_eval: bool = False,
     ) -> tuple[Any, dict[str, Any]]:
-        calls.append((algo_key, algo_config, robot_kinematics, robot_command_mode))
+        calls.append(
+            (algo_key, algo_config, robot_kinematics, robot_command_mode, adapter_impact_eval)
+        )
 
         def _policy(_obs: dict[str, Any]) -> tuple[float, float]:
             return (0.0, 0.0)
@@ -640,11 +643,12 @@ def test_policy_builder_registry_forwards_builder_context() -> None:
         builders={"demo": _builder},
         robot_kinematics="holonomic",
         robot_command_mode="vxy",
+        adapter_impact_eval=True,
     )
 
     assert policy({}) == (0.0, 0.0)
     assert meta == {"algorithm": "demo"}
-    assert calls == [("demo", {"gain": 2.0}, "holonomic", "vxy")]
+    assert calls == [("demo", {"gain": 2.0}, "holonomic", "vxy", True)]
 
 
 def test_build_policy_simple_alias_still_uses_registered_goal_builder() -> None:

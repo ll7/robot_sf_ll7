@@ -28,6 +28,7 @@ def build(
     *,
     robot_kinematics: str | None = None,
     robot_command_mode: str | None = None,
+    adapter_impact_eval: bool = False,
 ) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
     """Build a safety-barrier or grid-route adapter policy and its metadata.
 
@@ -36,6 +37,7 @@ def build(
         algo_config: Algorithm configuration payload.
         robot_kinematics: Runtime robot kinematics label for metadata enrichment.
         robot_command_mode: Runtime robot command mode (for holonomic metadata labels).
+        adapter_impact_eval: Unused compatibility hook for learned-policy builders.
 
     Returns:
         Policy callable and enriched metadata dictionary.
@@ -46,6 +48,8 @@ def build(
             f"Unsupported safety-barrier/grid-route policy algo_key {algo_key!r}; "
             f"expected one of: {supported}"
         )
+
+    del adapter_impact_eval
 
     from robot_sf.benchmark.map_runner_policy_common import (  # noqa: PLC0415
         build_adapter_policy,

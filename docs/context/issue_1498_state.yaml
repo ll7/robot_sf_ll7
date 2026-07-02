@@ -1,0 +1,26 @@
+issue: 1498
+state_surface: socnavbench_s3dis_eth_external_data
+entries:
+  - recorded_at_utc: "2026-07-02T19:20:41Z"
+    status: staged_verified_ready_for_eth_first
+    generated_file:
+      path: "/home/luttkule/external_data/socnavbench/sd3dis/stanford_building_parser_dataset/traversibles/ETH/data.pkl"
+      size_bytes: 107227
+      sha256: "02d450ee57bdab7aa357457085b3ddac6501ea8ec99324f2f02aecaed82562a6"
+      derived_output_policy: forbidden_without_sign_off
+    source_inputs:
+      mesh_path: "/home/luttkule/external_data/socnavbench/sd3dis/stanford_building_parser_dataset/mesh/ETH"
+      upstream_code_commit: "2724ea85ff22ca61a88ee95285dfc3fa056656c6"
+    validation:
+      manage_external_data_check:
+        command: "ROBOT_SF_EXTERNAL_DATA_ROOT=/home/luttkule/external_data uv run python scripts/tools/manage_external_data.py --json check socnavbench-s3dis-eth"
+        status: available
+        ok: true
+      eth_first_preflight:
+        command: "uv run python scripts/tools/validate_socnav_map_batch.py --socnav-root /home/luttkule/external_data/socnavbench --batch-id eth_first --preflight --report-json /tmp/issue1498_pre_after.json"
+        status: ready
+        conversion_ready: true
+        missing_required: []
+    notes:
+      - "Generated locally from staged SocNavBench ETH mesh assets; no dataset bytes are tracked."
+      - "No full benchmark campaign, SLURM/GPU submission, or paper/dissertation claim update was run."

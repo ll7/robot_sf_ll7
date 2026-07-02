@@ -9,6 +9,7 @@ from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool, SinglePede
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.training.scenario_loader import (
     _apply_single_pedestrian_overrides,
+    _apply_social_group_overrides,
     apply_single_pedestrian_overrides,
 )
 
@@ -156,3 +157,48 @@ def test_single_pedestrian_overrides_do_not_mutate_shared_map_defs():
     assert updated_map is not map_def
     assert map_def.single_pedestrians[0].trajectory is None
     assert updated_map.single_pedestrians[0].trajectory == [(1.0, 1.0), (5.0, 5.0)]
+
+
+def test_social_group_overrides_attach_to_cloned_map_def():
+    """Scenario social_groups attach to a cloned map without mutating the original."""
+    map_def = _build_map_with_pois()  # declares single pedestrian 'ped1'
+    config = RobotSimulationConfig()
+    config.map_pool = MapDefinitionPool(map_defs={"scenario_map": map_def})
+
+    overrides = [
+        {
+            "group_id": "conversation_a",
+            "type": "conversation",
+            "members": ["ped1"],
+            "formation": "circular_conversation",
+            "centroid": [5.0, 5.0],
+            "radius": 1.2,
+        }
+    ]
+    _apply_social_group_overrides(config, overrides)
+
+    updated_map = config.map_pool.map_defs["scenario_map"]
+    assert updated_map is not map_def
+    assert not map_def.social_groups
+    assert updated_map.social_groups[0].group_id == "conversation_a"
+    assert updated_map.social_groups[0].members == ("ped1",)
+
+
+def test_social_group_overrides_reject_unresolved_member():
+    """A group member absent from declared single pedestrians fails fast."""
+    map_def = _build_map_with_pois()
+    config = RobotSimulationConfig()
+    config.map_pool = MapDefinitionPool(map_defs={"scenario_map": map_def})
+
+    overrides = [
+        {
+            "group_id": "conversation_a",
+            "type": "conversation",
+            "members": ["ghost"],
+            "formation": "circular_conversation",
+            "centroid": [5.0, 5.0],
+            "radius": 1.2,
+        }
+    ]
+    with pytest.raises(ValueError, match="unknown"):
+        _apply_social_group_overrides(config, overrides)

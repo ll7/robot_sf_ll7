@@ -60,6 +60,7 @@ from robot_sf.benchmark.constants import (
 from robot_sf.benchmark.constants import (
     NEAR_MISS_DIST as D_NEAR,
 )
+from robot_sf.benchmark.group_space_metrics import compute_group_space_metrics
 from robot_sf.benchmark.signal_metrics import calculate_signal_metrics
 
 if TYPE_CHECKING:
@@ -69,6 +70,7 @@ if TYPE_CHECKING:
 ROLLOVER_STABILITY_METADATA_KEY = "rollover_stability"
 ROLLOVER_CRITICAL_EVENT = "ROLLOVER_CRITICAL"
 CLEAR_TRACKING_METADATA_KEY = "clear_tracking_uncertainty"
+SOCIAL_GROUPS_METADATA_KEY = "social_groups"
 
 
 @dataclass
@@ -1392,6 +1394,30 @@ def clear_tracking_metrics(data: EpisodeData) -> dict[str, Any]:
         "clear_motp_m": _float_value("motp_m"),
         "clear_motp_match_count": _count_value("motp_match_count"),
     }
+
+
+def group_space_metrics(data: EpisodeData) -> dict[str, Any]:
+    """Return group-space intrusion metrics from declared social groups.
+
+    Group geometry is read from
+    ``episode_metadata["social_groups"]["groups"]`` (a list of JSON-safe group
+    specs). When absent, this returns an empty mapping so default benchmark rows
+    are unchanged.
+
+    Returns:
+        Flat group-space metric columns, or an empty mapping when no social
+        groups are declared for the episode.
+    """
+    metadata = data.episode_metadata
+    if not isinstance(metadata, Mapping):
+        return {}
+    payload = metadata.get(SOCIAL_GROUPS_METADATA_KEY)
+    if not isinstance(payload, Mapping):
+        return {}
+    groups = payload.get("groups")
+    if not groups:
+        return {}
+    return compute_group_space_metrics(data.robot_pos, groups)
 
 
 def _bilinear(x: float, y: float, X: np.ndarray, Y: np.ndarray, V: np.ndarray) -> float:
@@ -2950,6 +2976,7 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
     values["force_gradient_norm_mean"] = force_gradient_norm_mean(data)
     values.update(rollover_stability_metrics(data))
     values.update(clear_tracking_metrics(data))
+    values.update(group_space_metrics(data))
     if experimental_near_miss_ttc:
         values.update(_compute_near_miss_ttc_metrics(data, t_thr=near_miss_ttc_threshold_s))
     values["wall_collisions"] = values["obstacle_collision_count"]
@@ -3036,6 +3063,9 @@ def post_process_metrics(
         "signal_unavailable_exclusion_count",
         "signal_metrics_denominator",
         "rollover_critical_count",
+        "group_count",
+        "group_intrusion_step_count",
+        "group_metric_timestep_count",
     ):
         if count_key in metrics and metrics[count_key] is not None:
             try:
@@ -3053,6 +3083,7 @@ def post_process_metrics(
         "social_proxemic_available",
         "human_proxy_available",
         "group_split_intrusion_available",
+        "group_space_available",
         "rollover_stability_enabled",
         "rollover_critical",
     ):
@@ -3070,6 +3101,7 @@ def post_process_metrics(
     _attach_social_acceptability_block(metrics)
     _attach_human_interaction_proxy_block(metrics)
     _attach_clear_tracking_block(metrics)
+    _attach_group_space_block(metrics)
     _attach_social_mini_game_block(metrics)
     metrics.pop("_episode_metadata", None)
     return _sanitize_metrics(metrics)
@@ -3216,6 +3248,49 @@ def _attach_clear_tracking_block(metrics: dict[str, Any]) -> None:
         "claim_boundary": (
             "CLEAR-style diagnostic metrics for synthetic ScenarioBelief observation "
             "contracts; not calibrated real-sensor evidence."
+        ),
+    }
+
+
+def _attach_group_space_block(metrics: dict[str, Any]) -> None:
+    """Attach a schema-backed group-space intrusion block when present.
+
+    The block is emitted only when ``group_space_available`` is present (i.e. the
+    episode declared social groups); default rows are unaffected.
+    """
+    if "group_space_available" not in metrics:
+        return
+    metrics["group_space"] = {
+        "schema_version": "group-space-metrics.v1",
+        "available": bool(metrics.get("group_space_available")),
+        "group_count": metrics.get("group_count"),
+        "definitions": {
+            "group_intrusion_episode_rate": (
+                "Per-episode binary indicator; aggregate mean is the fraction of "
+                "episodes with >=1 timestep inside any group o-space."
+            ),
+            "group_intrusion_time_ratio": (
+                "Fraction of timesteps where the robot center lies inside any group o-space."
+            ),
+            "min_distance_to_group_boundary": (
+                "Signed o-space boundary clearance (m); negative inside, minimized over "
+                "timesteps to reflect worst-case intrusion severity."
+            ),
+        },
+        "metrics": {
+            "group_intrusion_episode_rate": metrics.get("group_intrusion_episode_rate"),
+            "group_intrusion_time_ratio": metrics.get("group_intrusion_time_ratio"),
+            "min_distance_to_group_centroid": metrics.get("min_distance_to_group_centroid"),
+            "min_distance_to_group_boundary": metrics.get("min_distance_to_group_boundary"),
+        },
+        "support": {
+            "group_intrusion_step_count": metrics.get("group_intrusion_step_count"),
+            "group_metric_timestep_count": metrics.get("group_metric_timestep_count"),
+            "nearest_group_id": metrics.get("nearest_group_id"),
+        },
+        "claim_boundary": (
+            "Diagnostic social-space intrusion metrics for declared groups; not "
+            "validated human-comfort or safety evidence."
         ),
     }
 

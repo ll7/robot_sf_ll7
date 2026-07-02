@@ -50,7 +50,11 @@ def ppo_action_to_unicycle(
         return v, omega, "adapter"
 
     robot = obs.get("robot", {}) if isinstance(obs.get("robot"), dict) else {}
-    heading = float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
+    raw_heading = robot.get("heading")
+    if raw_heading is None:
+        raw_heading = [0.0]
+    heading_arr = np.asarray(raw_heading, dtype=float).reshape(-1)
+    heading = float(heading_arr[0]) if heading_arr.size > 0 else 0.0
     desired_heading = float(np.arctan2(vy, vx))
     heading_error = _normalize_heading(desired_heading - heading)
     omega_max = float(cfg.get("omega_max", cfg.get("max_angular_speed", 1.0)))

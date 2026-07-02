@@ -2467,6 +2467,21 @@ def test_ppo_action_to_unicycle_adapter_converts_heading_error_to_angular_veloci
     assert model.calls[0][1] == pytest.approx(1.0)
 
 
+@pytest.mark.parametrize("heading", [None, []])
+def test_ppo_action_to_unicycle_adapter_tolerates_missing_heading(heading: object) -> None:
+    """Adapter path should default malformed heading payloads to zero heading."""
+    model = _KinematicsStub((0.0, 0.0))
+    _ppo_action_to_unicycle(
+        {"vx": 0.0, "vy": 1.0},
+        {"robot": {"heading": heading}},
+        {"omega_kp": 2.0, "omega_max": 1.0},
+        kinematics_model=model,
+    )
+    assert model.calls
+    assert model.calls[0][0] == pytest.approx(1.0)
+    assert model.calls[0][1] == pytest.approx(1.0)
+
+
 def test_preflight_policy_passes_robot_kinematics_to_build_policy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

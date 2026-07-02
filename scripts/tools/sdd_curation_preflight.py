@@ -73,10 +73,11 @@ def probe_annotation_file(
         dict: ``exists``, parse/selection outcome, ``usable_label_points``, ``usable_track_count``
         (tracks meeting ``min_track_points``), ``selection_satisfiable``, and ``blockers``.
     """
+    normalized_label = import_sdd_scenarios.normalize_sdd_label(label)
     report: dict[str, Any] = {
         "path": str(path),
         "exists": path.is_file(),
-        "label": label,
+        "label": normalized_label,
         "min_track_points": min_track_points,
         "max_pedestrians": max_pedestrians,
         "usable_label_points": 0,
@@ -104,7 +105,7 @@ def probe_annotation_file(
     report["selection_satisfiable"] = len(usable_tracks) >= 1
     if not report["selection_satisfiable"]:
         report["blockers"].append(
-            f"no track has >= {min_track_points} usable '{label}' points after lost-filtering "
+            f"no track has >= {min_track_points} usable '{normalized_label}' points after lost-filtering "
             f"(found {len(usable_tracks)} qualifying tracks)"
         )
     return report

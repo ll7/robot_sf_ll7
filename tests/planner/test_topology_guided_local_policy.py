@@ -10,6 +10,7 @@ from robot_sf.planner.topology_guided_local_policy import (
     _apply_primary_route_reuse_penalty,
     _finalize_near_parity_gate_diagnostic,
     _recent_primary_route_progress,
+    blend_topology_command,
     build_topology_guided_local_policy_config,
 )
 
@@ -71,6 +72,84 @@ def _config(**overrides):
     }
     raw.update(overrides)
     return build_topology_guided_local_policy_config(raw)
+
+
+def test_nested_topology_guided_config_overrides_flat_defaults() -> None:
+    """The explicit issue-3463 config block should normalize into runtime fields."""
+    config = build_topology_guided_local_policy_config(
+        {
+            "allow_testing_algorithms": True,
+            "topology_guided": {
+                "schema_version": "topology_guided_hybrid_rule.v1",
+                "enabled": True,
+                "diagnostic_only": True,
+                "candidate_required": True,
+                "fallback_on_no_candidate": False,
+                "arbitration_weight": 0.35,
+                "near_parity_margin": 0.07,
+                "min_route_progress_delta_m": 0.08,
+                "stall_window_steps": 12,
+            },
+        }
+    )
+
+    assert config.schema_version == "topology_guided_hybrid_rule.v1"
+    assert config.enabled is True
+    assert config.diagnostic_only is True
+    assert config.candidate_required is True
+    assert config.fallback_on_no_candidate is False
+    assert config.arbitration_weight == pytest.approx(0.35)
+    assert config.near_parity_route_distance_slack_ratio == pytest.approx(0.07)
+    assert config.min_route_progress_delta_m == pytest.approx(0.08)
+    assert config.stall_window_steps == 12
+
+
+def test_nested_topology_guided_config_does_not_mutate_caller_mapping() -> None:
+    """Nested topology overrides should be copied before local compatibility rewrites."""
+    cfg = {
+        "topology_guided": {
+            "near_parity_margin": 0.07,
+            "arbitration_weight": 0.35,
+        }
+    }
+
+    build_topology_guided_local_policy_config(cfg)
+
+    assert cfg == {
+        "topology_guided": {
+            "near_parity_margin": 0.07,
+            "arbitration_weight": 0.35,
+        }
+    }
+
+
+def test_blend_topology_command_respects_weight_and_limits() -> None:
+    """Explicit arbitration should be finite, monotone, and clipped to command limits."""
+    limits = {"max_linear": 1.0, "max_angular": 0.5}
+
+    assert blend_topology_command((0.2, -0.2), (0.8, 0.4), weight=0.0, command_limits=limits) == (
+        pytest.approx(0.2),
+        pytest.approx(-0.2),
+    )
+    assert blend_topology_command((0.2, -0.2), (0.8, 0.4), weight=1.0, command_limits=limits) == (
+        pytest.approx(0.8),
+        pytest.approx(0.4),
+    )
+    assert blend_topology_command((0.2, -0.2), (2.0, 2.0), weight=0.5, command_limits=limits) == (
+        pytest.approx(1.0),
+        pytest.approx(0.5),
+    )
+
+
+def test_blend_topology_command_rejects_invalid_weight() -> None:
+    """Invalid arbitration weights fail closed instead silently changing behavior."""
+    with pytest.raises(ValueError, match="must be in \\[0, 1\\]"):
+        blend_topology_command(
+            (0.2, 0.0),
+            (0.8, 0.0),
+            weight=1.5,
+            command_limits={"max_linear": 1.0, "max_angular": 1.0},
+        )
 
 
 def test_topology_guided_selector_finds_two_distinct_route_hypotheses() -> None:
@@ -221,6 +300,48 @@ def test_topology_guided_policy_fails_closed_without_required_inputs() -> None:
     assert diagnostics["topology_guided"]["status_counts"] == {"not_available": 1}
     assert diagnostics["last_decision"]["planner_mode"] == "TOPOLOGY_FAIL_CLOSED"
     assert diagnostics["last_decision"]["selected_source"] == "topology_fail_closed"
+    assert diagnostics["last_decision"]["topology_lane_status"] == "failed"
+
+
+def test_topology_guided_policy_records_fallback_only_status() -> None:
+    """Diagnostic fallback remains visible and is not counted as topology success."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(
+        _config(fail_closed_on_missing_inputs=False, fallback_on_no_candidate=True)
+    )
+    observation = _obs(occupied_cells=[])
+    observation.pop("occupancy_grid")
+
+    linear, angular = planner.plan(observation)
+
+    assert np.isfinite(linear)
+    assert np.isfinite(angular)
+    diagnostics = planner.diagnostics()
+    assert diagnostics["topology_guided"]["status_counts"] == {"not_available": 1}
+    assert diagnostics["last_decision"]["topology_lane_status"] == "fallback_only"
+    assert diagnostics["last_decision"]["topology_fallback_status"] == "not_available"
+    assert (
+        diagnostics["last_decision"]["topology_guided_config"]["fallback_on_no_candidate"] is True
+    )
+
+
+def test_topology_guided_policy_candidate_required_can_fail_closed() -> None:
+    """Explicit candidate-required mode stops when no topology candidate is available."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(
+        _config(
+            fail_closed_on_missing_inputs=False,
+            candidate_required=True,
+            fallback_on_no_candidate=False,
+        )
+    )
+    observation = _obs(occupied_cells=[])
+    observation.pop("occupancy_grid")
+
+    command = planner.plan(observation)
+
+    assert command == (0.0, 0.0)
+    diagnostics = planner.diagnostics()
+    assert diagnostics["last_decision"]["planner_mode"] == "TOPOLOGY_FAIL_CLOSED"
+    assert diagnostics["last_decision"]["topology_lane_status"] == "failed"
 
 
 def test_topology_guided_policy_records_selected_hypothesis_diagnostics() -> None:
@@ -236,6 +357,10 @@ def test_topology_guided_policy_records_selected_hypothesis_diagnostics() -> Non
     assert diagnostics["topology_guided"]["selected_hypothesis_counts"]
     route_corridor = diagnostics["last_decision"]["route_corridor"]
     assert route_corridor["topology_status"] == "ok"
+    assert route_corridor["topology_guided_config"]["schema_version"] == (
+        "topology_guided_hybrid_rule.v1"
+    )
+    assert route_corridor["topology_guided_config"]["arbitration_weight"] == pytest.approx(1.0)
     assert len(route_corridor["topology_hypotheses"]) == 2
     assert all("score_components" in item for item in route_corridor["topology_hypotheses"])
     assert any(

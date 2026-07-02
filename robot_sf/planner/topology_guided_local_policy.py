@@ -595,7 +595,7 @@ def _non_negative_float_field(raw: dict[str, Any], key: str, default: float) -> 
 def _topology_guided_payload(raw: dict[str, Any]) -> dict[str, Any]:
     """Return flat topology config with optional nested ``topology_guided`` overrides applied."""
     payload = dict(raw)
-    nested = raw.get("topology_guided")
+    nested = deepcopy(raw.get("topology_guided"))
     if nested is None:
         return payload
     if not isinstance(nested, dict):

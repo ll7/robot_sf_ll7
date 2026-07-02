@@ -104,6 +104,25 @@ def test_nested_topology_guided_config_overrides_flat_defaults() -> None:
     assert config.stall_window_steps == 12
 
 
+def test_nested_topology_guided_config_does_not_mutate_caller_mapping() -> None:
+    """Nested topology overrides should be copied before local compatibility rewrites."""
+    cfg = {
+        "topology_guided": {
+            "near_parity_margin": 0.07,
+            "arbitration_weight": 0.35,
+        }
+    }
+
+    build_topology_guided_local_policy_config(cfg)
+
+    assert cfg == {
+        "topology_guided": {
+            "near_parity_margin": 0.07,
+            "arbitration_weight": 0.35,
+        }
+    }
+
+
 def test_blend_topology_command_respects_weight_and_limits() -> None:
     """Explicit arbitration should be finite, monotone, and clipped to command limits."""
     limits = {"max_linear": 1.0, "max_angular": 0.5}

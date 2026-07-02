@@ -47,6 +47,15 @@ _TOPOLOGY_KEYS = {
     "primary_route_progress_gate_threshold_m",
     "primary_route_progress_gate_min_samples",
     "primary_route_progress_gate_use_monotone_accounting",
+    "topology_guided",
+    "schema_version",
+    "enabled",
+    "candidate_required",
+    "fallback_on_no_candidate",
+    "arbitration_weight",
+    "near_parity_margin",
+    "min_route_progress_delta_m",
+    "stall_window_steps",
     "route_hypothesis",
 }
 
@@ -64,6 +73,13 @@ class TopologyGuidedLocalPolicyConfig:
     route_hypothesis: Any
     diagnostic_only: bool = True
     claim_boundary: str = "diagnostic_only"
+    schema_version: str = "topology_guided_hybrid_rule.v1"
+    enabled: bool = True
+    candidate_required: bool = False
+    fallback_on_no_candidate: bool = True
+    arbitration_weight: float = 1.0
+    min_route_progress_delta_m: float = 0.05
+    stall_window_steps: int = 20
     min_hypotheses: int = 2
     max_hypotheses: int = 2
     block_radius_cells: int = 3
@@ -548,6 +564,80 @@ def _progress_gate_min_samples(raw: dict[str, Any]) -> int:
     return samples
 
 
+def _non_negative_int_field(raw: dict[str, Any], key: str, default: int) -> int:
+    """Return a validated non-negative integer topology config field."""
+    value = raw.get(key, default)
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Topology config '{key}' must be an integer, got {value!r}.") from exc
+    if parsed < 0:
+        raise ValueError(f"Topology config '{key}' must be non-negative, got {parsed}.")
+    return parsed
+
+
+def _bounded_unit_float_field(raw: dict[str, Any], key: str, default: float) -> float:
+    """Return a finite float constrained to the inclusive unit interval."""
+    value = _finite_float_field(raw, key, default)
+    if value < 0.0 or value > 1.0:
+        raise ValueError(f"Topology config '{key}' must be in [0, 1], got {value}.")
+    return value
+
+
+def _non_negative_float_field(raw: dict[str, Any], key: str, default: float) -> float:
+    """Return a finite non-negative float topology config field."""
+    value = _finite_float_field(raw, key, default)
+    if value < 0.0:
+        raise ValueError(f"Topology config '{key}' must be non-negative, got {value}.")
+    return value
+
+
+def _topology_guided_payload(raw: dict[str, Any]) -> dict[str, Any]:
+    """Return flat topology config with optional nested ``topology_guided`` overrides applied."""
+    payload = dict(raw)
+    nested = deepcopy(raw.get("topology_guided"))
+    if nested is None:
+        return payload
+    if not isinstance(nested, dict):
+        raise ValueError("Topology config 'topology_guided' must be a mapping when provided.")
+    payload.update(nested)
+    payload["topology_guided"] = nested
+    if "near_parity_margin" in nested and "near_parity_route_distance_slack_ratio" not in raw:
+        payload["near_parity_route_distance_slack_ratio"] = nested["near_parity_margin"]
+    return payload
+
+
+def blend_topology_command(
+    baseline_cmd: tuple[float, float],
+    topology_cmd: tuple[float, float],
+    *,
+    weight: float,
+    command_limits: dict[str, float],
+) -> tuple[float, float]:
+    """Blend baseline and topology commands with finite bounded arbitration weight.
+
+    Returns:
+        Bounded ``(linear, angular)`` command after explicit topology arbitration.
+    """
+    try:
+        blend_weight = float(weight)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Topology arbitration weight must be finite, got {weight!r}.") from exc
+    if not np.isfinite(blend_weight) or blend_weight < 0.0 or blend_weight > 1.0:
+        raise ValueError(f"Topology arbitration weight must be in [0, 1], got {weight!r}.")
+    baseline = np.asarray(baseline_cmd, dtype=float).reshape(2)
+    topology = np.asarray(topology_cmd, dtype=float).reshape(2)
+    if not np.all(np.isfinite(baseline)) or not np.all(np.isfinite(topology)):
+        raise ValueError("Topology command arbitration requires finite commands.")
+    blended = (1.0 - blend_weight) * baseline + blend_weight * topology
+    max_linear = max(float(command_limits.get("max_linear", 0.0)), 0.0)
+    max_angular = max(float(command_limits.get("max_angular", 0.0)), 0.0)
+    return (
+        float(np.clip(blended[0], 0.0, max_linear)),
+        float(np.clip(blended[1], -max_angular, max_angular)),
+    )
+
+
 def build_topology_guided_local_policy_config(
     cfg: dict[str, Any] | None,
 ) -> TopologyGuidedLocalPolicyConfig:
@@ -560,7 +650,7 @@ def build_topology_guided_local_policy_config(
         ValueError: If a numeric progress-gate field is non-finite, or if
             ``primary_route_progress_gate_min_samples`` is below the minimum of 2.
     """
-    raw = dict(cfg or {}) if isinstance(cfg, dict) else {}
+    raw = _topology_guided_payload(dict(cfg or {}) if isinstance(cfg, dict) else {})
     hybrid_payload = {key: value for key, value in raw.items() if key not in _TOPOLOGY_KEYS}
     route_payload = deepcopy(raw.get("route_hypothesis") or {})
     if not isinstance(route_payload, dict):
@@ -582,6 +672,15 @@ def build_topology_guided_local_policy_config(
         route_hypothesis=build_grid_route_config(route_payload),
         diagnostic_only=bool(raw.get("diagnostic_only", True)),
         claim_boundary=str(raw.get("claim_boundary", "diagnostic_only")),
+        schema_version=str(raw.get("schema_version", "topology_guided_hybrid_rule.v1")),
+        enabled=bool(raw.get("enabled", True)),
+        candidate_required=bool(raw.get("candidate_required", False)),
+        fallback_on_no_candidate=bool(raw.get("fallback_on_no_candidate", True)),
+        arbitration_weight=_bounded_unit_float_field(raw, "arbitration_weight", 1.0),
+        min_route_progress_delta_m=_non_negative_float_field(
+            raw, "min_route_progress_delta_m", 0.05
+        ),
+        stall_window_steps=_non_negative_int_field(raw, "stall_window_steps", 20),
         min_hypotheses=int(raw.get("min_hypotheses", 2)),
         max_hypotheses=int(raw.get("max_hypotheses", 2)),
         block_radius_cells=int(raw.get("block_radius_cells", 3)),
@@ -593,7 +692,9 @@ def build_topology_guided_local_policy_config(
         fail_closed_on_insufficient_hypotheses=bool(
             raw.get("fail_closed_on_insufficient_hypotheses", False)
         ),
-        topology_command_enabled=bool(raw.get("topology_command_enabled", True)),
+        topology_command_enabled=bool(
+            raw.get("topology_command_enabled", raw.get("enabled", True))
+        ),
         topology_command_speed=float(raw.get("topology_command_speed", 0.35)),
         topology_command_heading_gain=float(raw.get("topology_command_heading_gain", 1.0)),
         topology_command_turn_in_place_error=float(
@@ -909,6 +1010,17 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             ),
         }
         route_corridor["topology_status"] = "ok"
+        route_corridor["topology_guided_config"] = {
+            "schema_version": self.topology_config.schema_version,
+            "enabled": bool(self.topology_config.enabled),
+            "diagnostic_only": bool(self.topology_config.diagnostic_only),
+            "claim_boundary": self.topology_config.claim_boundary,
+            "candidate_required": bool(self.topology_config.candidate_required),
+            "fallback_on_no_candidate": bool(self.topology_config.fallback_on_no_candidate),
+            "arbitration_weight": float(self.topology_config.arbitration_weight),
+            "min_route_progress_delta_m": float(self.topology_config.min_route_progress_delta_m),
+            "stall_window_steps": int(self.topology_config.stall_window_steps),
+        }
         return route_corridor
 
     def _candidate_source_priority(self, source: str) -> int:
@@ -930,7 +1042,9 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
         bounds: tuple[float, float, float, float],
     ) -> HybridRuleCandidate | None:
         """Return a bounded command that tracks the selected topology hypothesis."""
-        if not bool(self.topology_config.topology_command_enabled):
+        if not bool(self.topology_config.enabled) or not bool(
+            self.topology_config.topology_command_enabled
+        ):
             return None
         if not isinstance(route_corridor, dict) or route_corridor.get("topology_status") != "ok":
             return None
@@ -1016,6 +1130,23 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             bounds=self._dynamic_window(state["current_speed"], speed_cap),
         )
         if topology_candidate is not None:
+            if candidates:
+                baseline = candidates[0]
+                blended_linear, blended_angular = blend_topology_command(
+                    (baseline.linear, baseline.angular),
+                    (topology_candidate.linear, topology_candidate.angular),
+                    weight=float(self.topology_config.arbitration_weight),
+                    command_limits={
+                        "max_linear": float(speed_cap),
+                        "max_angular": float(self.config.max_angular_speed),
+                    },
+                )
+                topology_candidate = HybridRuleCandidate(
+                    blended_linear,
+                    blended_angular,
+                    "topology_hypothesis",
+                    ((float(self.config.rollout_horizon), blended_linear, blended_angular),),
+                )
             candidates.append(topology_candidate)
 
         unique: dict[tuple[Any, ...], HybridRuleCandidate] = {}
@@ -1082,10 +1213,16 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
         topology = self._last_topology_decision or {}
         status = str(topology.get("status", "unknown"))
         fail_closed = (
-            status == "not_available" and bool(self.topology_config.fail_closed_on_missing_inputs)
-        ) or (
-            status == "insufficient_hypotheses"
-            and bool(self.topology_config.fail_closed_on_insufficient_hypotheses)
+            (status == "not_available" and bool(self.topology_config.fail_closed_on_missing_inputs))
+            or (
+                status == "insufficient_hypotheses"
+                and bool(self.topology_config.fail_closed_on_insufficient_hypotheses)
+            )
+            or (
+                status != "ok"
+                and bool(self.topology_config.candidate_required)
+                and not bool(self.topology_config.fallback_on_no_candidate)
+            )
         )
         if fail_closed:
             self._last_command = (0.0, 0.0)
@@ -1094,9 +1231,21 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
                 self._last_decision["selected_command"] = [0.0, 0.0]
                 self._last_decision["selected_source"] = "topology_fail_closed"
                 self._last_decision["topology_guided"] = topology
+                self._last_decision["topology_lane_status"] = "failed"
             return (0.0, 0.0)
         if self._last_decision:
             self._last_decision["topology_guided"] = topology
+            if status != "ok":
+                self._last_decision["topology_lane_status"] = "fallback_only"
+                self._last_decision["topology_fallback_status"] = status
+                self._last_decision["topology_fallback_reason"] = topology.get("reason")
+                self._last_decision["topology_guided_config"] = {
+                    "schema_version": self.topology_config.schema_version,
+                    "diagnostic_only": bool(self.topology_config.diagnostic_only),
+                    "claim_boundary": self.topology_config.claim_boundary,
+                    "candidate_required": bool(self.topology_config.candidate_required),
+                    "fallback_on_no_candidate": bool(self.topology_config.fallback_on_no_candidate),
+                }
             if self._last_decision.get("selected_source") == "topology_hypothesis":
                 self._last_decision["topology_command_influence"] = {
                     "source": "topology_hypothesis",

@@ -138,6 +138,7 @@ def preflight_sustained_flow_matrix(matrix_path: str | Path) -> SustainedFlowPre
     else:
         blocking_reasons.extend(_variant_blockers(variants))
         blocking_reasons.extend(_variant_tier_order_blockers(variants))
+        blocking_reasons.extend(_variant_name_tier_blockers(variants))
         blocking_reasons.extend(_generator_drift_blockers(variants))
 
     if not variants:
@@ -282,6 +283,30 @@ def _variant_tier_order_blockers(variants: tuple[SustainedFlowVariant, ...]) -> 
     if observed_tiers == expected_tiers:
         return ()
     return ("density tiers must enumerate light, medium, heavy exactly once",)
+
+
+def _variant_name_tier_blockers(variants: tuple[SustainedFlowVariant, ...]) -> tuple[str, ...]:
+    """Fail closed when canonical sustained-flow names drift from their density tier.
+
+    Returns:
+        Blocking reasons for variant names that do not match their density tier.
+    """
+
+    expected_name_by_tier = {
+        tier: f"issue_3813_{SUSTAINED_FLOW_ARCHETYPE}_{tier}"
+        for tier, *_ in EXPECTED_SUSTAINED_FLOW_TIERS
+    }
+    blockers = []
+    for variant in variants:
+        expected_name = expected_name_by_tier.get(variant.density_tier)
+        if expected_name is None:
+            continue
+        if variant.name != expected_name:
+            blockers.append(
+                f"{variant.name}: scenario name must be {expected_name!r} "
+                f"for density tier {variant.density_tier!r}"
+            )
+    return tuple(blockers)
 
 
 def _validate_continuous_spawn_definition(value: Any, *, scenario_name: str) -> None:

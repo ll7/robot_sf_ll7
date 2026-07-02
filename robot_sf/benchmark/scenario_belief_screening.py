@@ -74,7 +74,8 @@ def build_input_screening_report(
         if not isinstance(visibility, Mapping):
             continue
         enabled = bool(visibility.get("enabled", False))
-        scenario_fov = float(visibility.get("fov_degrees", fov_degrees))
+        raw_fov = visibility.get("fov_degrees")
+        scenario_fov = float(raw_fov if raw_fov is not None else fov_degrees)
         has_limited_view = enabled and scenario_fov < 360.0
         has_static_occlusion = bool(visibility.get("static_occlusion", False))
         pedestrians = scenario.get("single_pedestrians")
@@ -150,11 +151,11 @@ def classify_screened_decision(
             "mode_is_discriminating": False,
         }
 
-    oracle_collision_rate = float(oracle["collision_rate"])
-    retained_collision_rate = float(retained["collision_rate"])
-    dropped_collision_rate = float(dropped["collision_rate"])
-    retained_near_misses = int(retained["total_near_misses"])
-    dropped_near_misses = int(dropped["total_near_misses"])
+    oracle_collision_rate = float(oracle.get("collision_rate", 0.0))
+    retained_collision_rate = float(retained.get("collision_rate", 0.0))
+    dropped_collision_rate = float(dropped.get("collision_rate", 0.0))
+    retained_near_misses = int(retained.get("total_near_misses", 0))
+    dropped_near_misses = int(dropped.get("total_near_misses", 0))
     coll_delta = dropped_collision_rate - retained_collision_rate
     nm_delta = dropped_near_misses - retained_near_misses
     worse = coll_delta > 0 or nm_delta > 0

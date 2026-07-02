@@ -107,7 +107,18 @@ def run_mode(
     )
     if not episodes_path.exists():
         return []
-    return [json.loads(line) for line in episodes_path.read_text(encoding="utf-8").splitlines()]
+    episodes = []
+    for line_number, line in enumerate(
+        episodes_path.read_text(encoding="utf-8").splitlines(),
+        start=1,
+    ):
+        if not line.strip():
+            continue
+        try:
+            episodes.append(json.loads(line))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Error parsing JSONL on line {line_number} in {episodes_path}: {exc}") from exc
+    return episodes
 
 
 def _metric(record: dict[str, Any], key: str, default: float = 0.0) -> float:
@@ -128,7 +139,7 @@ def aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
     near_misses = [_metric(record, "near_misses") for record in records]
     min_clear = [_metric(record, "min_clearance", default=float("nan")) for record in records]
     success = [_metric(record, "success") for record in records]
-    valid_clear = [value for value in min_clear if not np.isnan(value)]
+    valid_clear = [value for value in min_clear if np.isfinite(value)]
     return {
         "episodes": n,
         "collision_rate": round(sum(1 for count in collisions if count > 0) / n, 4),

@@ -124,6 +124,28 @@ def test_screened_decision_uses_only_issue_allowed_labels() -> None:
     assert revise["decision"] == "revise"
 
 
+def test_input_screening_treats_null_scenario_fov_as_default() -> None:
+    """Explicit null FOV in scenario visibility falls back to run FOV."""
+
+    report = build_input_screening_report(
+        scenarios=[
+            {
+                "name": "null-fov-scenario",
+                "observation_visibility": {
+                    "enabled": True,
+                    "fov_degrees": None,
+                    "static_occlusion": True,
+                },
+                "single_pedestrians": [{"id": "ped"}],
+            }
+        ],
+        seeds=[1, 2, 3],
+        fov_degrees=120.0,
+    )
+
+    assert report["checks"]["out_of_fov_sidecar_contract"]["passed"] is True
+
+
 def test_runner_preflight_checks_launch_packet_and_screening_inputs() -> None:
     """The runner preflight now gates the #3556 launch packet and screening module."""
     payload = _load_yaml(BENCHMARK_CONFIG)

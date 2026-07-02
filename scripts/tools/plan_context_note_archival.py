@@ -35,12 +35,16 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import yaml
+
 from scripts.tools import check_context_note_freshness as checker
 
 if TYPE_CHECKING:
     from datetime import datetime
 
 SCHEMA_VERSION = "context_note_archival_plan.v1"
+APPROVAL_SCHEMA_VERSION = "context_archive_approved_moves.v1"
+VALID_APPROVAL_CATEGORIES = frozenset({"superseded", "stale"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +69,16 @@ class PlanConflict:
     target: str
     message: str
     sources: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ApprovalFinding:
+    """One fail-closed approval-manifest validation finding."""
+
+    severity: str
+    rule: str
+    message: str
+    path: str | None = None
 
 
 def _archive_target(source: Path, *, archive_dir: Path) -> Path:
@@ -185,6 +199,209 @@ def _detect_conflicts(moves: list[PlannedMove], *, repo_root: Path) -> list[Plan
     return conflicts
 
 
+def _approval_finding(
+    rule: str,
+    message: str,
+    *,
+    path: str | None = None,
+    severity: str = "error",
+) -> ApprovalFinding:
+    """Return a structured approval-manifest validation finding."""
+
+    return ApprovalFinding(severity=severity, rule=rule, message=message, path=path)
+
+
+def _approval_move_to_planned(
+    raw_move: object,
+    *,
+    index: int,
+) -> tuple[PlannedMove | None, list[ApprovalFinding]]:
+    """Parse one approved move into the same shape used by the generated plan."""
+
+    if not isinstance(raw_move, dict):
+        return None, [_approval_finding("move_shape", f"moves[{index}] must be a mapping")]
+
+    findings: list[ApprovalFinding] = []
+    source = checker._safe_repo_path(raw_move.get("source"))
+    target = checker._safe_repo_path(raw_move.get("target"))
+    category = raw_move.get("category")
+    reason = raw_move.get("reason")
+    raw_replacement = raw_move.get("replacement")
+    replacement = None
+    if raw_replacement is not None:
+        replacement = checker._safe_repo_path(raw_replacement)
+        if replacement is None:
+            findings.append(
+                _approval_finding(
+                    "replacement_path",
+                    "replacement must be a safe repository path",
+                    path=source.as_posix() if source else None,
+                )
+            )
+
+    if source is None:
+        findings.append(_approval_finding("source_path", "source must be a safe repository path"))
+    if target is None:
+        findings.append(_approval_finding("target_path", "target must be a safe repository path"))
+    if category not in VALID_APPROVAL_CATEGORIES:
+        findings.append(
+            _approval_finding(
+                "category",
+                "category must be one of: stale, superseded",
+                path=source.as_posix() if source else None,
+            )
+        )
+    if not isinstance(reason, str) or not reason.strip():
+        findings.append(
+            _approval_finding(
+                "reason",
+                "reason must be a non-empty string",
+                path=source.as_posix() if source else None,
+            )
+        )
+
+    if findings or source is None or target is None or not isinstance(category, str):
+        return None, findings
+
+    return (
+        PlannedMove(
+            category=category,
+            confidence="approved",
+            source=source.as_posix(),
+            target=target.as_posix(),
+            reason=reason.strip(),
+            replacement=replacement.as_posix() if replacement else None,
+        ),
+        findings,
+    )
+
+
+def validate_approval_manifest(  # noqa: C901
+    manifest_path: Path,
+    *,
+    repo_root: Path,
+    catalog_path: Path = checker.CATALOG_PATH,
+    context_dir: Path = checker.CONTEXT_DIR,
+    index_path: Path = checker.INDEX_PATH,
+    archive_dir: Path = checker.ARCHIVE_DIR,
+    max_age_days: int = 180,
+    include_stale: bool = True,
+) -> tuple[list[PlannedMove], list[ApprovalFinding], list[PlanConflict]]:
+    """Validate a maintainer-approved archival move manifest against current candidates."""
+
+    archive_dir = _normalized_archive_dir(archive_dir, repo_root=repo_root)
+    try:
+        manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ValueError(f"failed to parse approval manifest YAML: {exc}") from exc
+    findings: list[ApprovalFinding] = []
+    if not isinstance(manifest, dict):
+        raise ValueError("approval manifest must be a YAML mapping")
+
+    if manifest.get("schema_version") != APPROVAL_SCHEMA_VERSION:
+        findings.append(
+            _approval_finding("schema_version", f"schema_version must be {APPROVAL_SCHEMA_VERSION}")
+        )
+    if manifest.get("issue") != 3190:
+        findings.append(_approval_finding("issue", "issue must be 3190"))
+
+    raw_moves = manifest.get("moves")
+    if not isinstance(raw_moves, list) or not raw_moves:
+        findings.append(_approval_finding("moves", "moves must be a non-empty list"))
+        raw_moves = []
+
+    approved_moves: list[PlannedMove] = []
+    for index, raw_move in enumerate(raw_moves):
+        move, move_findings = _approval_move_to_planned(raw_move, index=index)
+        findings.extend(move_findings)
+        if move is not None:
+            approved_moves.append(move)
+
+    plan_moves, _plan_conflicts = plan_archival(
+        repo_root=repo_root,
+        catalog_path=catalog_path,
+        context_dir=context_dir,
+        index_path=index_path,
+        archive_dir=archive_dir,
+        max_age_days=max_age_days,
+        include_stale=include_stale,
+    )
+    planned_by_key = {(move.category, move.source, move.target): move for move in plan_moves}
+
+    seen_sources: set[str] = set()
+    seen_targets: set[str] = set()
+    for move in approved_moves:
+        target_path = Path(move.target)
+        if archive_dir not in target_path.parents:
+            findings.append(
+                _approval_finding(
+                    "target_archive_dir",
+                    f"target must be under {archive_dir.as_posix()}",
+                    path=move.source,
+                )
+            )
+        if move.source in seen_sources:
+            findings.append(
+                _approval_finding(
+                    "duplicate_source", "source appears more than once", path=move.source
+                )
+            )
+        seen_sources.add(move.source)
+        if move.target in seen_targets:
+            findings.append(
+                _approval_finding(
+                    "duplicate_target",
+                    "target appears more than once in approved moves",
+                    path=move.source,
+                )
+            )
+        seen_targets.add(move.target)
+        if not (repo_root / Path(move.source)).is_file():
+            findings.append(
+                _approval_finding("source_exists", "source note does not exist", path=move.source)
+            )
+
+        planned_move = planned_by_key.get((move.category, move.source, move.target))
+        if planned_move is None:
+            findings.append(
+                _approval_finding(
+                    "not_in_current_plan",
+                    "approved move is not in the current generated archival plan",
+                    path=move.source,
+                )
+            )
+            continue
+        if move.replacement != planned_move.replacement:
+            findings.append(
+                _approval_finding(
+                    "replacement_mismatch",
+                    f"replacement must match current plan: {planned_move.replacement}",
+                    path=move.source,
+                )
+            )
+
+    conflicts = _detect_conflicts(approved_moves, repo_root=repo_root)
+    for conflict in conflicts:
+        findings.append(
+            _approval_finding(f"conflict_{conflict.kind}", conflict.message, path=conflict.target)
+        )
+
+    return approved_moves, findings, conflicts
+
+
+def _normalized_archive_dir(archive_dir: Path, *, repo_root: Path) -> Path:
+    """Return a safe repository-relative archive directory path."""
+
+    candidate = archive_dir if archive_dir.is_absolute() else repo_root / archive_dir
+    if candidate.is_symlink():
+        raise ValueError("archive_dir cannot be a symlink")
+    resolved_repo = repo_root.resolve(strict=False)
+    resolved_archive = candidate.resolve(strict=False)
+    if not resolved_archive.is_relative_to(resolved_repo):
+        raise ValueError("archive_dir must be within repository root")
+    return resolved_archive.relative_to(resolved_repo)
+
+
 def plan_archival(
     *,
     repo_root: Path,
@@ -237,6 +454,29 @@ def _summary(
         "moves": [asdict(move) for move in moves],
         "conflicts": [asdict(conflict) for conflict in conflicts],
         "note": "plan-only: no notes were moved or deleted; apply via a maintainer-reviewed sweep PR",
+    }
+
+
+def _approval_summary(
+    *,
+    manifest_path: Path,
+    approved_moves: list[PlannedMove],
+    findings: list[ApprovalFinding],
+    conflicts: list[PlanConflict],
+) -> dict[str, Any]:
+    """Return compact JSON-ready approval validation summary."""
+
+    return {
+        "schema_version": APPROVAL_SCHEMA_VERSION,
+        "manifest": manifest_path.as_posix(),
+        "approved_move_count": len(approved_moves),
+        "finding_count": len(findings),
+        "conflict_count": len(conflicts),
+        "exit_code": 1 if findings else 0,
+        "moves": [asdict(move) for move in approved_moves],
+        "findings": [asdict(finding) for finding in findings],
+        "conflicts": [asdict(conflict) for conflict in conflicts],
+        "note": "approval validation only: no notes were moved or deleted",
     }
 
 
@@ -294,6 +534,14 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         help="Write a JSON plan to this path. Use '-' to print JSON to stdout.",
     )
+    parser.add_argument(
+        "--approval-manifest",
+        type=Path,
+        help=(
+            "Validate an approved move manifest against the current plan. "
+            "Schema: context_archive_approved_moves.v1."
+        ),
+    )
     parser.add_argument("--catalog", type=Path, default=checker.CATALOG_PATH)
     parser.add_argument("--context-dir", type=Path, default=checker.CONTEXT_DIR)
     parser.add_argument("--index", type=Path, default=checker.INDEX_PATH)
@@ -312,6 +560,40 @@ def main() -> int:
 
     args = _parse_args()
     repo_root = checker._repo_root()
+    if args.approval_manifest:
+        approved_moves, findings, conflicts = validate_approval_manifest(
+            repo_root / args.approval_manifest,
+            repo_root=repo_root,
+            catalog_path=args.catalog,
+            context_dir=args.context_dir,
+            index_path=args.index,
+            archive_dir=args.archive_dir,
+            max_age_days=args.max_age_days,
+            include_stale=not args.no_stale,
+        )
+        payload = _approval_summary(
+            manifest_path=args.approval_manifest,
+            approved_moves=approved_moves,
+            findings=findings,
+            conflicts=conflicts,
+        )
+        text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+        if args.json_output:
+            if str(args.json_output) == "-":
+                print(text, end="")
+            else:
+                output_path = repo_root / args.json_output
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(text, encoding="utf-8")
+        elif findings:
+            print(f"approval manifest failed: {len(findings)} finding(s)")
+            for finding in findings:
+                location = f" {finding.path}" if finding.path else ""
+                print(f"  {finding.rule}{location}: {finding.message}")
+        else:
+            print(f"OK approval manifest valid: {len(approved_moves)} move(s)")
+        return int(payload["exit_code"])
+
     moves, conflicts = plan_archival(
         repo_root=repo_root,
         catalog_path=args.catalog,

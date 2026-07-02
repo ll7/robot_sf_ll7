@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+import pytest
 import yaml
 
 from scripts.tools import plan_context_note_archival as planner
@@ -284,3 +286,390 @@ def test_summary_reports_counts_and_plan_only_note(tmp_path: Path) -> None:
     assert summary["exit_code"] == 0
     assert summary["archive_dir"] == "docs/context/archive"
     assert "plan-only" in summary["note"]
+
+
+def test_valid_approval_manifest_accepts_current_superseded_candidate(tmp_path: Path) -> None:
+    """Approved moves are valid only when they match current generated candidates."""
+
+    repo = _repo(tmp_path)
+    _write(repo, "docs/context/old.md", "# Old\n")
+    _write(repo, "docs/context/new.md", "# New\n")
+    _write_catalog(
+        repo,
+        [
+            {
+                "path": "docs/context/old.md",
+                "status": "superseded",
+                "freshness": "dated",
+                "replacement": "docs/context/new.md",
+            }
+        ],
+    )
+    _commit(repo, "superseded", iso_date="2026-01-02T00:00:00+00:00")
+    manifest = repo / "approved_moves.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "context_archive_approved_moves.v1",
+                "issue": 3190,
+                "moves": [
+                    {
+                        "source": "docs/context/old.md",
+                        "target": "docs/context/archive/old.md",
+                        "category": "superseded",
+                        "replacement": "docs/context/new.md",
+                        "reason": "Maintainer approved superseded-note archive move.",
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    approved_moves, findings, conflicts = planner.validate_approval_manifest(
+        manifest,
+        repo_root=repo,
+    )
+
+    assert len(approved_moves) == 1
+    assert findings == []
+    assert conflicts == []
+
+
+def test_approval_manifest_fails_when_replacement_drifted_from_plan(tmp_path: Path) -> None:
+    """A manifest cannot silently approve stale replacement metadata."""
+
+    repo = _repo(tmp_path)
+    _write(repo, "docs/context/old.md", "# Old\n")
+    _write(repo, "docs/context/new.md", "# New\n")
+    _write(repo, "docs/context/wrong.md", "# Wrong\n")
+    _write_catalog(
+        repo,
+        [
+            {
+                "path": "docs/context/old.md",
+                "status": "superseded",
+                "freshness": "dated",
+                "replacement": "docs/context/new.md",
+            }
+        ],
+    )
+    _commit(repo, "superseded", iso_date="2026-01-02T00:00:00+00:00")
+    manifest = repo / "approved_moves.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "context_archive_approved_moves.v1",
+                "issue": 3190,
+                "moves": [
+                    {
+                        "source": "docs/context/old.md",
+                        "target": "docs/context/archive/old.md",
+                        "category": "superseded",
+                        "replacement": "docs/context/wrong.md",
+                        "reason": "Approved before catalog replacement changed.",
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    _approved_moves, findings, _conflicts = planner.validate_approval_manifest(
+        manifest,
+        repo_root=repo,
+    )
+
+    assert [finding.rule for finding in findings] == ["replacement_mismatch"]
+
+
+def test_approval_manifest_fails_when_replacement_is_unsafe(tmp_path: Path) -> None:
+    """An explicitly provided replacement path must be safe, not silently omitted."""
+
+    repo = _repo(tmp_path)
+    _write(repo, "docs/context/old.md", "# Old\n")
+    _write(repo, "docs/context/new.md", "# New\n")
+    _write_catalog(
+        repo,
+        [
+            {
+                "path": "docs/context/old.md",
+                "status": "superseded",
+                "freshness": "dated",
+                "replacement": "docs/context/new.md",
+            }
+        ],
+    )
+    _commit(repo, "superseded", iso_date="2026-01-02T00:00:00+00:00")
+    manifest = repo / "approved_moves.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "context_archive_approved_moves.v1",
+                "issue": 3190,
+                "moves": [
+                    {
+                        "source": "docs/context/old.md",
+                        "target": "docs/context/archive/old.md",
+                        "category": "superseded",
+                        "replacement": "../outside.md",
+                        "reason": "Unsafe replacement should fail closed.",
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    _approved_moves, findings, _conflicts = planner.validate_approval_manifest(
+        manifest,
+        repo_root=repo,
+    )
+
+    assert "replacement_path" in {finding.rule for finding in findings}
+
+
+def test_approval_manifest_fails_when_unexpected_replacement_is_present(
+    tmp_path: Path,
+) -> None:
+    """Approval replacement metadata must match the generated plan exactly."""
+
+    repo = _repo(tmp_path)
+    _write(repo, "docs/context/stale.md", "# Stale\n")
+    _write(repo, "docs/context/current.md", "# Current\n")
+    _write_catalog(
+        repo,
+        [{"path": "docs/context/stale.md", "status": "current", "freshness": "dated"}],
+    )
+    _commit(repo, "stale note", iso_date="2025-01-02T00:00:00+00:00")
+    manifest = repo / "approved_moves.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "context_archive_approved_moves.v1",
+                "issue": 3190,
+                "moves": [
+                    {
+                        "source": "docs/context/stale.md",
+                        "target": "docs/context/archive/stale.md",
+                        "category": "stale",
+                        "replacement": "docs/context/current.md",
+                        "reason": "Unexpected replacement should fail closed.",
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    _approved_moves, findings, _conflicts = planner.validate_approval_manifest(
+        manifest,
+        repo_root=repo,
+    )
+
+    assert "replacement_mismatch" in {finding.rule for finding in findings}
+
+
+def test_approval_manifest_rejects_invalid_yaml_root(tmp_path: Path) -> None:
+    """Malformed and non-mapping YAML manifests fail closed with explicit errors."""
+
+    repo = _repo(tmp_path)
+    malformed = repo / "malformed.yaml"
+    malformed.write_text("schema_version: [", encoding="utf-8")
+    with pytest.raises(ValueError, match="failed to parse approval manifest YAML"):
+        planner.validate_approval_manifest(malformed, repo_root=repo)
+
+    non_mapping = repo / "non_mapping.yaml"
+    non_mapping.write_text("- not\n- a mapping\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="approval manifest must be a YAML mapping"):
+        planner.validate_approval_manifest(non_mapping, repo_root=repo)
+
+
+def test_approval_manifest_rejects_archive_dir_outside_repo(tmp_path: Path) -> None:
+    """A custom archive directory must normalize inside the repository root."""
+
+    repo = _repo(tmp_path)
+    manifest = repo / "approved_moves.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "context_archive_approved_moves.v1",
+                "issue": 3190,
+                "moves": [
+                    {
+                        "source": "docs/context/old.md",
+                        "target": "docs/context/archive/old.md",
+                        "category": "stale",
+                        "reason": "Archive dir validation happens before move validation.",
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="archive_dir must be within repository root"):
+        planner.validate_approval_manifest(
+            manifest,
+            repo_root=repo,
+            archive_dir=tmp_path.parent / "outside-archive",
+        )
+
+
+def test_approval_manifest_fails_for_move_not_in_current_plan(tmp_path: Path) -> None:
+    """Approval manifests are checked against current candidates, not trusted by shape alone."""
+
+    repo = _repo(tmp_path)
+    _write(repo, "docs/context/current.md", "# Current\n")
+    _write_catalog(
+        repo,
+        [{"path": "docs/context/current.md", "status": "current", "freshness": "maintained"}],
+    )
+    _commit(repo, "current note", iso_date="2026-01-02T00:00:00+00:00")
+    manifest = repo / "approved_moves.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "context_archive_approved_moves.v1",
+                "issue": 3190,
+                "moves": [
+                    {
+                        "source": "docs/context/current.md",
+                        "target": "docs/context/archive/current.md",
+                        "category": "superseded",
+                        "reason": "Invalid approval for a non-candidate.",
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    _approved_moves, findings, _conflicts = planner.validate_approval_manifest(
+        manifest,
+        repo_root=repo,
+    )
+
+    assert [finding.rule for finding in findings] == ["not_in_current_plan"]
+
+
+def test_approval_manifest_reports_duplicate_target_conflict(tmp_path: Path) -> None:
+    """A reviewed subset still fails closed when approved targets collide."""
+
+    repo = _repo(tmp_path)
+    _write(repo, "docs/context/old.md", "# Old A\n")
+    _write(repo, "docs/context/sub/old.md", "# Old B\n")
+    _write(repo, "docs/context/new.md", "# New\n")
+    _write_catalog(
+        repo,
+        [
+            {
+                "path": "docs/context/old.md",
+                "status": "superseded",
+                "freshness": "dated",
+                "replacement": "docs/context/new.md",
+            },
+            {
+                "path": "docs/context/sub/old.md",
+                "status": "superseded",
+                "freshness": "dated",
+                "replacement": "docs/context/new.md",
+            },
+        ],
+    )
+    _commit(repo, "superseded collision", iso_date="2026-01-02T00:00:00+00:00")
+    manifest = repo / "approved_moves.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "context_archive_approved_moves.v1",
+                "issue": 3190,
+                "moves": [
+                    {
+                        "source": "docs/context/old.md",
+                        "target": "docs/context/archive/old.md",
+                        "category": "superseded",
+                        "replacement": "docs/context/new.md",
+                        "reason": "First approved move.",
+                    },
+                    {
+                        "source": "docs/context/sub/old.md",
+                        "target": "docs/context/archive/old.md",
+                        "category": "superseded",
+                        "replacement": "docs/context/new.md",
+                        "reason": "Second approved move.",
+                    },
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    _approved_moves, findings, conflicts = planner.validate_approval_manifest(
+        manifest,
+        repo_root=repo,
+    )
+
+    assert [conflict.kind for conflict in conflicts] == ["duplicate_target"]
+    assert "duplicate_target" in {finding.rule for finding in findings}
+    assert "conflict_duplicate_target" in {finding.rule for finding in findings}
+
+
+def test_cli_approval_manifest_json_reports_failure(tmp_path: Path) -> None:
+    """The CLI exposes approval validation as a fail-closed JSON gate."""
+
+    repo = _repo(tmp_path)
+    _write(repo, "docs/context/current.md", "# Current\n")
+    _write_catalog(
+        repo,
+        [{"path": "docs/context/current.md", "status": "current", "freshness": "maintained"}],
+    )
+    _commit(repo, "current note", iso_date="2026-01-02T00:00:00+00:00")
+    manifest = repo / "approved_moves.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "context_archive_approved_moves.v1",
+                "issue": 3190,
+                "moves": [
+                    {
+                        "source": "docs/context/current.md",
+                        "target": "docs/context/archive/current.md",
+                        "category": "superseded",
+                        "reason": "Invalid approval for a non-candidate.",
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            "python",
+            "-m",
+            "scripts.tools.plan_context_note_archival",
+            "--approval-manifest",
+            "approved_moves.yaml",
+            "--json-output",
+            "-",
+        ],
+        cwd=repo,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(result.stdout)
+    assert result.returncode == 1
+    assert payload["schema_version"] == "context_archive_approved_moves.v1"
+    assert payload["finding_count"] == 1
+    assert payload["findings"][0]["rule"] == "not_in_current_plan"

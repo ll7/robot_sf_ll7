@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added **social-group metadata and group-space intrusion metrics** (#3972): scenarios can now
+  declare explicit social pedestrian groups (`social_groups` with `group_id`, `type`, `members`,
+  `formation`, `centroid`, `radius`, and optional `o_space_polygon`) via the new
+  `SocialGroupDefinition` on `MapDefinition` and the scenario loader. Group geometry is exposed to
+  metrics (through episode metadata) and to the simulator (`Simulator.social_groups`). A new pure
+  module `robot_sf/benchmark/group_space_metrics.py` computes group-space intrusion metrics with
+  distinct definitions: `group_intrusion_episode_rate` (per-episode binary), `group_intrusion_time_ratio`
+  (fraction of steps inside any group o-space), `min_distance_to_group_centroid`, and signed
+  `min_distance_to_group_boundary`. Metrics attach as a schema-backed `group_space` block and are
+  computed only when a scenario declares groups, so default benchmark rows are unchanged. This is a
+  bounded first slice labeled **diagnostic** (declared social-space intrusion only; not a human-comfort
+  or safety claim). The TAGA-like tangent-subgoal group-avoidance planner wrapper and the headless
+  comparison benchmark are the deliberate successor slice and are not included.
+* Added `RLTrajectoryDataset.v1` infrastructure (#4011): episode-major JSONL loader/writer,
+  return-to-go computation, split/provenance manifest schema with leakage checks, map-runner
+  simulation-trace reward/terminal capture, recorder CLI, validation CLI support, focused tests, and
+  a tiny preview evidence bundle. This is an infrastructure contract only; it does not train offline
+  reinforcement learning policies, submit jobs, or promote benchmark claims.
 * Added **uncertainty-aware safety primitives** (#3974): conformal prediction buffers and
   cumulative-intrusion metrics in new `robot_sf/benchmark/uncertainty_safety.py`. Split-conformal
   (`split_conformal_radius`) and online Adaptive Conformal Inference (`adaptive_conformal_buffers`)

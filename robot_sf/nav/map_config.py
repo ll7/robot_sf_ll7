@@ -5,7 +5,7 @@ define the map configuration
 import os
 import random
 from dataclasses import dataclass, field
-from math import sqrt
+from math import isfinite, sqrt
 from typing import Any
 
 import matplotlib.axes
@@ -317,6 +317,191 @@ class InfrastructureZone:
 
 
 @dataclass
+class SocialGroupDefinition:
+    """A scenario-declared social pedestrian group with a shared interaction space.
+
+    This is diagnostic/social-space metadata for social-navigation benchmarking
+    (issue #3972). It declares that a set of pedestrians form a socially related
+    group (for example a standing conversation) whose shared "o-space" the robot
+    should ideally not cut through. It does not by itself change pedestrian
+    physics; it is consumed by group-space intrusion metrics and, in a later
+    slice, by a group-avoidance planner wrapper.
+
+    Attributes:
+        group_id (str): Unique, non-empty identifier for the group.
+        type (str): Group category, e.g. ``conversation``, ``queue``,
+            ``walking_group``, ``static_group``. Kept descriptive, not normative.
+        members (tuple[str, ...]): Non-empty tuple of member pedestrian ids. When
+            single pedestrians are declared on the map, these must resolve.
+        formation (str): Descriptive formation label, e.g. ``circular_conversation``.
+        centroid (Vec2D): Finite ``(x, y)`` center of the group's shared space.
+        radius (float): Positive radius of the circular o-space proxy in meters.
+        o_space_polygon (list[Vec2D] | None): Optional explicit o-space polygon
+            (>= 3 finite points forming a valid non-empty polygon). When omitted,
+            metrics use a circular proxy from ``centroid`` and ``radius``.
+        metadata (dict[str, Any]): Optional JSON/YAML-safe attribution metadata.
+    """
+
+    group_id: str
+    type: str
+    members: tuple[str, ...]
+    formation: str
+    centroid: Vec2D
+    radius: float
+    o_space_polygon: list[Vec2D] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Normalize and validate the social-group payload."""
+        self._validate_identity()
+        self._validate_geometry()
+        if self.o_space_polygon is not None:
+            self._validate_polygon()
+        if not isinstance(self.metadata, dict):
+            raise ValueError(f"SocialGroupDefinition '{self.group_id}' metadata must be a mapping")
+
+    def _validate_identity(self) -> None:
+        """Normalize and validate id, type, members, and formation labels."""
+        if not isinstance(self.group_id, str) or not self.group_id.strip():
+            raise ValueError("SocialGroupDefinition group_id must be a non-empty string")
+        self.group_id = self.group_id.strip()
+        if not isinstance(self.type, str) or not self.type.strip():
+            raise ValueError(f"SocialGroupDefinition '{self.group_id}' type must be non-empty")
+        self.type = self.type.strip().lower()
+
+        try:
+            members = tuple(str(member).strip() for member in self.members)
+        except TypeError as exc:
+            raise ValueError(
+                f"SocialGroupDefinition '{self.group_id}' members must be an iterable of strings"
+            ) from exc
+        members = tuple(member for member in members if member)
+        if not members:
+            raise ValueError(
+                f"SocialGroupDefinition '{self.group_id}' requires at least one member id"
+            )
+        self.members = members
+
+        if not isinstance(self.formation, str) or not self.formation.strip():
+            raise ValueError(f"SocialGroupDefinition '{self.group_id}' formation must be non-empty")
+        self.formation = self.formation.strip().lower()
+
+    def _validate_geometry(self) -> None:
+        """Normalize and validate the centroid and radius."""
+        try:
+            cx, cy = (float(self.centroid[0]), float(self.centroid[1]))
+        except (TypeError, ValueError, IndexError) as exc:
+            raise ValueError(
+                f"SocialGroupDefinition '{self.group_id}' centroid must be an (x, y) pair"
+            ) from exc
+        if not (isfinite(cx) and isfinite(cy)):
+            raise ValueError(f"SocialGroupDefinition '{self.group_id}' centroid must be finite")
+        self.centroid = (cx, cy)
+
+        self.radius = float(self.radius)
+        if not isfinite(self.radius) or self.radius <= 0.0:
+            raise ValueError(f"SocialGroupDefinition '{self.group_id}' radius must be positive")
+
+    def _validate_polygon(self) -> None:
+        """Normalize and validate the optional explicit o-space polygon."""
+        try:
+            points = [(float(x), float(y)) for x, y in self.o_space_polygon]
+        except (TypeError, ValueError, IndexError, KeyError) as exc:
+            raise ValueError(
+                f"SocialGroupDefinition '{self.group_id}' o_space_polygon points must be (x, y) pairs"
+            ) from exc
+        if len(points) < 3:
+            raise ValueError(
+                f"SocialGroupDefinition '{self.group_id}' o_space_polygon requires "
+                "at least three points"
+            )
+        if not all(isfinite(x) and isfinite(y) for x, y in points):
+            raise ValueError(
+                f"SocialGroupDefinition '{self.group_id}' o_space_polygon points must be finite"
+            )
+        polygon = Polygon(points)
+        if polygon.is_empty or not polygon.is_valid or polygon.area <= 0:
+            raise ValueError(
+                f"SocialGroupDefinition '{self.group_id}' o_space_polygon must form a "
+                "valid non-empty polygon"
+            )
+        self.o_space_polygon = points
+
+    def o_space(self) -> Polygon:
+        """Return the group's o-space as a Shapely polygon.
+
+        Uses the explicit ``o_space_polygon`` when present, otherwise a circular
+        proxy centered on ``centroid`` with ``radius``.
+
+        Returns:
+            Polygon: The group's shared-space polygon.
+        """
+        if self.o_space_polygon is not None:
+            return Polygon(self.o_space_polygon)
+        return Point(self.centroid).buffer(self.radius)
+
+    def as_spec(self) -> dict[str, Any]:
+        """Return a JSON-safe specification of this group for metrics/planners.
+
+        Returns:
+            dict[str, Any]: Serializable group geometry and attribution.
+        """
+        return {
+            "group_id": self.group_id,
+            "type": self.type,
+            "members": list(self.members),
+            "formation": self.formation,
+            "centroid": [self.centroid[0], self.centroid[1]],
+            "radius": self.radius,
+            "o_space_polygon": (
+                [[x, y] for x, y in self.o_space_polygon]
+                if self.o_space_polygon is not None
+                else None
+            ),
+            "metadata": dict(self.metadata),
+        }
+
+
+def parse_social_group_definitions(entries: Any) -> list[SocialGroupDefinition]:
+    """Parse scenario ``social_groups`` entries into validated definitions.
+
+    Args:
+        entries: A list of mapping entries (or ``None``) as declared under the
+            scenario-level ``social_groups`` key.
+
+    Returns:
+        list[SocialGroupDefinition]: Parsed and validated group definitions.
+
+    Raises:
+        ValueError: If the payload shape or any entry is invalid.
+    """
+    if entries is None:
+        return []
+    if not isinstance(entries, (list, tuple)):
+        raise ValueError("social_groups must be a list of group definitions")
+    groups: list[SocialGroupDefinition] = []
+    for idx, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise ValueError(f"social_groups[{idx}] must be a mapping")
+        try:
+            members = entry["members"]
+            group = SocialGroupDefinition(
+                group_id=entry["group_id"],
+                type=entry["type"],
+                members=tuple(members) if isinstance(members, (list, tuple)) else members,
+                formation=entry["formation"],
+                centroid=entry["centroid"],
+                radius=entry["radius"],
+                o_space_polygon=entry.get("o_space_polygon"),
+                metadata=dict(entry.get("metadata", {})),
+            )
+        except KeyError as exc:
+            raise ValueError(f"social_groups[{idx}] missing required key {exc}") from exc
+        groups.append(group)
+    return groups
+
+
+@dataclass
 class MapDefinition:
     """
     A class to represent a map definition.
@@ -382,6 +567,14 @@ class MapDefinition:
     infrastructure_zones: list[InfrastructureZone] = field(default_factory=list)
     """Semantic public-space zones for certification-only route validation."""
 
+    social_groups: list[SocialGroupDefinition] = field(default_factory=list)
+    """Scenario-declared social pedestrian groups with shared-space geometry.
+
+    Diagnostic social-space metadata (issue #3972): it does not alter pedestrian
+    physics but is exposed to group-space intrusion metrics and group-aware
+    planner wrappers.
+    """
+
     _poi_positions_by_label: dict[str, Vec2D] = field(init=False, default_factory=dict, repr=False)
     """Internal lookup table from POI label to position for faster access."""
     obstacles_pysf: list[Line2D] = field(init=False)
@@ -428,6 +621,7 @@ class MapDefinition:
 
         # Validate single pedestrians
         self._validate_single_pedestrians()
+        self._validate_social_groups()
         self._validate_pois()
         self._build_poi_lookup()
 
@@ -511,6 +705,32 @@ class MapDefinition:
                     logger.warning(
                         f"Pedestrians '{ped1.id}' and '{ped2.id}' have overlapping start positions "
                         f"(distance: {dist:.2f}m < 0.5m threshold)."
+                    )
+
+    def _validate_social_groups(self) -> None:
+        """Validate social groups for unique ids and resolvable members.
+
+        Group ids must be unique. When single pedestrians are declared, group
+        members must resolve to declared pedestrian ids (fail fast), so scenarios
+        cannot silently reference non-existent members.
+        """
+        if not self.social_groups:
+            return
+
+        seen_ids: set[str] = set()
+        for group in self.social_groups:
+            if group.group_id in seen_ids:
+                raise ValueError(f"Duplicate social group id '{group.group_id}'.")
+            seen_ids.add(group.group_id)
+
+        if self.single_pedestrians:
+            known = {ped.id for ped in self.single_pedestrians}
+            for group in self.social_groups:
+                unresolved = sorted(m for m in group.members if m not in known)
+                if unresolved:
+                    raise ValueError(
+                        f"Social group '{group.group_id}' references unknown "
+                        f"single-pedestrian member ids: {unresolved}."
                     )
 
     def _validate_pois(self) -> None:
@@ -700,6 +920,8 @@ class MapDefinition:
             self.semantic_boundaries = []
         if not hasattr(self, "infrastructure_zones"):
             self.infrastructure_zones = []
+        if not hasattr(self, "social_groups"):
+            self.social_groups = []
         self._build_poi_lookup()
 
 

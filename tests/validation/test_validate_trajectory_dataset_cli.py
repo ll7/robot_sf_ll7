@@ -6,6 +6,10 @@ import json
 
 import numpy as np
 
+from robot_sf.benchmark.rl_trajectory_dataset import (
+    RLTrajectoryEpisode,
+    write_rl_trajectory_dataset,
+)
 from scripts.validation import validate_trajectory_dataset
 
 
@@ -75,3 +79,45 @@ def test_validate_trajectory_dataset_cli_fails_on_quarantine(tmp_path, capsys) -
     payload = json.loads(capsys.readouterr().out)
     assert payload["quality_status"] == "quarantined"
     assert "rewards" in payload["integrity_report"]["missing_arrays"]
+
+
+def test_validate_trajectory_dataset_cli_accepts_rl_jsonl_dataset(tmp_path, capsys) -> None:
+    """CLI recognizes first-class episode-major RL trajectory JSONL datasets."""
+    dataset_path = tmp_path / "rl.jsonl"
+    write_rl_trajectory_dataset(
+        [
+            RLTrajectoryEpisode(
+                dataset_id="issue_4011_smoke",
+                episode_id="demo:seed1:goal:000000",
+                scenario_id="demo",
+                seed=1,
+                source_policy_id="goal",
+                split="train",
+                observations=({"robot": {}},),
+                actions=([0.0, 0.0],),
+                rewards=(1.0,),
+                return_to_go=(1.0,),
+                terminated=(True,),
+                truncated=(False,),
+                pedestrians=([],),
+                robot_states=({"position": [0.0, 0.0]},),
+                provenance={"source": "unit_test"},
+            )
+        ],
+        dataset_path,
+    )
+
+    exit_code = validate_trajectory_dataset.main(
+        [
+            "--path",
+            str(dataset_path),
+            "--min-episodes",
+            "1",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["quality_status"] == "validated"
+    assert payload["integrity_report"]["dataset_schema"] == "RLTrajectoryDataset.v1"
+    assert payload["integrity_report"]["missing_arrays"] == []

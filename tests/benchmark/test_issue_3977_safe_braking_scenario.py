@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from robot_sf.gym_env.robot_env import RobotEnv
+from robot_sf.nav.map_config import SinglePedestrianDefinition
 from robot_sf.ped_npc.ped_behavior import SinglePedestrianBehavior
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
@@ -26,6 +28,122 @@ def _single_pedestrian(config):
     map_def = next(iter(config.map_pool.map_defs.values()))
     assert len(map_def.single_pedestrians) == 1
     return map_def.single_pedestrians[0]
+
+
+def _safe_braking_pedestrian_entry(scenario: dict) -> dict:
+    pedestrians = scenario["single_pedestrians"]
+    assert len(pedestrians) == 1
+    return pedestrians[0]
+
+
+def test_safe_braking_proximity_hold_accepts_explicit_ref_point() -> None:
+    """Scenario load preserves explicit hold_ref_point without event metadata."""
+    scenario = deepcopy(_load_safe_braking_scenario())
+    scenario["metadata"].pop("public_requirement")
+
+    config = build_robot_config_from_scenario(scenario, scenario_path=SINGLE_SCENARIO)
+    ped = _single_pedestrian(config)
+
+    assert ped.hold_until_robot_within_m == pytest.approx(5.5)
+    assert ped.hold_ref_point == (14.0, 14.0)
+    assert ped.hold_timeout_s == pytest.approx(6.0)
+
+
+def test_safe_braking_proximity_hold_defaults_ref_point_from_conflict_point() -> None:
+    """Scenario load defaults hold_ref_point from event-contract conflict_point."""
+    scenario = deepcopy(_load_safe_braking_scenario())
+    _safe_braking_pedestrian_entry(scenario).pop("hold_ref_point")
+
+    config = build_robot_config_from_scenario(scenario, scenario_path=SINGLE_SCENARIO)
+    ped = _single_pedestrian(config)
+
+    assert ped.hold_ref_point == (14.0, 14.0)
+
+
+def test_safe_braking_proximity_hold_rejects_missing_ref_point() -> None:
+    """A configured hold radius without any usable reference point fails closed."""
+    scenario = deepcopy(_load_safe_braking_scenario())
+    _safe_braking_pedestrian_entry(scenario).pop("hold_ref_point")
+    scenario["metadata"]["public_requirement"]["event_contract"].pop("conflict_point")
+
+    with pytest.raises(ValueError, match="hold_until_robot_within_m requires hold_ref_point"):
+        build_robot_config_from_scenario(scenario, scenario_path=SINGLE_SCENARIO)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("hold_until_robot_within_m", float("nan")),
+        ("hold_until_robot_within_m", float("inf")),
+        ("hold_until_robot_within_m", float("-inf")),
+        ("hold_timeout_s", float("nan")),
+        ("hold_timeout_s", float("inf")),
+        ("hold_timeout_s", float("-inf")),
+        ("hold_ref_point", [float("nan"), 14.0]),
+        ("hold_ref_point", [14.0, float("inf")]),
+    ],
+)
+def test_safe_braking_proximity_hold_rejects_nan_and_inf(field: str, value: object) -> None:
+    """Scenario load rejects non-finite proximity-hold fields."""
+    scenario = deepcopy(_load_safe_braking_scenario())
+    _safe_braking_pedestrian_entry(scenario)[field] = value
+
+    with pytest.raises(ValueError, match="finite"):
+        build_robot_config_from_scenario(scenario, scenario_path=SINGLE_SCENARIO)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("hold_until_robot_within_m", -1.0),
+        ("hold_timeout_s", -1.0),
+    ],
+)
+def test_safe_braking_proximity_hold_rejects_negative_values(field: str, value: float) -> None:
+    """Scenario load rejects negative hold radius and timeout values."""
+    scenario = deepcopy(_load_safe_braking_scenario())
+    _safe_braking_pedestrian_entry(scenario)[field] = value
+
+    with pytest.raises(ValueError, match="must be > 0"):
+        build_robot_config_from_scenario(scenario, scenario_path=SINGLE_SCENARIO)
+
+
+def test_proximity_hold_definition_rejects_missing_ref_point() -> None:
+    """Direct pedestrian definitions also reject hold radius without ref point."""
+    with pytest.raises(ValueError, match="requires hold_ref_point"):
+        SinglePedestrianDefinition(
+            id="crosser",
+            start=(0.0, 0.0),
+            trajectory=[(1.0, 0.0), (2.0, 0.0)],
+            hold_until_robot_within_m=5.5,
+        )
+
+
+@pytest.mark.parametrize("hold_ref_point", [(float("nan"), 0.0), (2.0, float("inf"))])
+def test_proximity_hold_definition_rejects_non_finite_ref_point(hold_ref_point) -> None:
+    """Direct pedestrian definitions reject non-finite hold_ref_point coordinates."""
+    with pytest.raises(ValueError, match="coordinates must be finite"):
+        SinglePedestrianDefinition(
+            id="crosser",
+            start=(0.0, 0.0),
+            trajectory=[(1.0, 0.0), (2.0, 0.0)],
+            hold_until_robot_within_m=5.5,
+            hold_ref_point=hold_ref_point,
+        )
+
+
+@pytest.mark.parametrize("hold_timeout_s", [float("nan"), float("inf")])
+def test_proximity_hold_definition_rejects_non_finite_timeout(hold_timeout_s: float) -> None:
+    """Direct pedestrian definitions reject non-finite hold_timeout_s values."""
+    with pytest.raises(ValueError, match="hold_timeout_s must be finite"):
+        SinglePedestrianDefinition(
+            id="crosser",
+            start=(0.0, 0.0),
+            trajectory=[(1.0, 0.0), (2.0, 0.0)],
+            hold_until_robot_within_m=5.5,
+            hold_ref_point=(2.0, 0.0),
+            hold_timeout_s=hold_timeout_s,
+        )
 
 
 def test_safe_braking_scenario_manifest_loads_with_public_requirement_contract() -> None:

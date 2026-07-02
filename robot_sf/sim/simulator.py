@@ -37,7 +37,7 @@ from pysocialforce.simulator import make_forces as pysf_make_forces
 from robot_sf.common.types import Line2D, PedPose, RobotAction, RobotPose, Vec2D
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, SimulationSettings
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
-from robot_sf.nav.map_config import MapDefinition
+from robot_sf.nav.map_config import MapDefinition, SocialGroupDefinition
 from robot_sf.nav.navigation import RouteNavigator, get_prepared_obstacles, sample_route
 from robot_sf.nav.occupancy import circle_collides_any_lines
 from robot_sf.ped_ego.unicycle_drive import UnicycleAction, UnicycleDrivePedestrian
@@ -250,6 +250,16 @@ class Simulator:
     def robot_pos(self) -> list[Vec2D]:
         """Current (x, y) positions of all robots."""
         return [r.pose[0] for r in self.robots]
+
+    @property
+    def social_groups(self) -> list[SocialGroupDefinition]:
+        """Declared social pedestrian groups exposed to group-aware consumers.
+
+        Read-only view of the runtime map's ``social_groups`` (issue #3972);
+        empty when the scenario declares none. Consumed by group-space metrics
+        and, in a later slice, a group-avoidance planner wrapper.
+        """
+        return list(getattr(self.map_def, "social_groups", ()) or ())
 
     @property
     def ped_pos(self):

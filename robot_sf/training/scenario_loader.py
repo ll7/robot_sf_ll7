@@ -25,6 +25,7 @@ from robot_sf.nav.map_config import (
     MapDefinitionPool,
     PedestrianWaitRule,
     SinglePedestrianDefinition,
+    parse_social_group_definitions,
     serialize_map,
 )
 from robot_sf.nav.svg_map_parser import convert_map
@@ -1220,6 +1221,7 @@ def build_robot_config_from_scenario(
     _apply_map_pool(config, scenario, scenario_path)
     _apply_route_overrides(config, scenario.get("route_overrides_file"), scenario_path)
     _apply_single_pedestrian_overrides(config, scenario.get("single_pedestrians"))
+    _apply_social_group_overrides(config, scenario.get("social_groups"))
     return config
 
 
@@ -1543,6 +1545,31 @@ def _apply_single_pedestrian_overrides(
     map_def = deepcopy(map_def)
     config.map_pool.map_defs[map_name] = map_def
     apply_single_pedestrian_overrides(map_def, overrides)
+
+
+def _apply_social_group_overrides(
+    config: RobotSimulationConfig,
+    overrides: list[Mapping[str, Any]] | None,
+) -> None:
+    """Attach scenario-declared social groups to the loaded map pool.
+
+    Groups are parsed and validated, then attached to a deep-copied map so cached
+    map definitions shared across scenarios are not mutated. Member ids are
+    re-validated against the map's single pedestrians (fail fast on unknown ids).
+    """
+    if not overrides:
+        return
+    if not getattr(config, "map_pool", None) or not config.map_pool.map_defs:
+        logger.warning("social_groups overrides provided but no map_pool is loaded")
+        return
+    groups = parse_social_group_definitions(overrides)
+    map_name, map_def = next(iter(config.map_pool.map_defs.items()))
+    map_def = deepcopy(map_def)
+    map_def.social_groups = groups
+    # Re-run group validation now that groups are attached to the concrete map
+    # (duplicate ids + member resolution against declared single pedestrians).
+    map_def._validate_social_groups()
+    config.map_pool.map_defs[map_name] = map_def
 
 
 _MISSING = object()

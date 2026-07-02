@@ -18,6 +18,7 @@ from robot_sf.benchmark.algorithm_metadata import (
     resolve_learned_checkpoint_observation_contract,
 )
 from robot_sf.benchmark.ammv_feasibility import evaluate_artifact_command_feasibility
+from robot_sf.benchmark.group_space_metrics import group_specs_from_map
 from robot_sf.benchmark.latency_stress import not_available_latency_metrics
 from robot_sf.benchmark.map_runner_actions import DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS
 from robot_sf.benchmark.map_runner_actions import (
@@ -414,6 +415,32 @@ def _safety_predicates_for_episode(
             visibility_evidence_reason=visibility_evidence.reason,
         ),
     }
+
+
+def _episode_metadata_for_benchmark_metrics(
+    scenario: dict[str, Any],
+    map_def: Any,
+) -> dict[str, Any] | None:
+    """Merge signal-metric metadata with declared social-group geometry.
+
+    Extends :func:`_episode_metadata_for_signal_metrics` with an additive
+    ``social_groups`` payload sourced from the runtime map definition, so
+    group-space intrusion metrics can be computed without changing the episode
+    result schema. Returns ``None`` when neither signal metadata nor social
+    groups are present, preserving existing default behavior.
+
+    Returns:
+        Optional merged episode metadata for benchmark metrics.
+    """
+    episode_metadata = _episode_metadata_for_signal_metrics(scenario) or {}
+    group_specs = group_specs_from_map(map_def) if map_def is not None else []
+    if group_specs:
+        episode_metadata = dict(episode_metadata)
+        episode_metadata["social_groups"] = {
+            "schema_version": "social-groups.v1",
+            "groups": group_specs,
+        }
+    return episode_metadata or None
 
 
 def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
@@ -1051,7 +1078,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             reached_goal_step=reached_goal_step,
             robot_radius=float(getattr(robot_config, "radius", 1.0)),
             ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
-            episode_metadata=_episode_metadata_for_signal_metrics(scenario),
+            episode_metadata=_episode_metadata_for_benchmark_metrics(scenario, map_def),
         )
         metrics_raw = compute_all_metrics(
             ep,

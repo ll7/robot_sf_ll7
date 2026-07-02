@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Social Mini-Game map: curb-ramp conflict, metadata-only candidate. -->
+<svg
+   width="40"
+   height="40"
+   viewBox="0 0 40 40"
+   version="1.1"
+   id="svg_smg_curb_ramp_conflict"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview_smg_curb_ramp_conflict"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:pageopacity="0.0"
+     inkscape:deskcolor="#d1d1d1" />
+  <g id="obstacles" inkscape:label="Obstacles">
+    <rect x="0" y="0" width="40" height="1" fill="#000000" inkscape:label="obstacle" id="wall_top" />
+    <rect x="0" y="39" width="40" height="1" fill="#000000" inkscape:label="obstacle" id="wall_bottom" />
+    <rect x="0" y="0" width="1" height="40" fill="#000000" inkscape:label="obstacle" id="wall_left" />
+    <rect x="39" y="0" width="1" height="40" fill="#000000" inkscape:label="obstacle" id="wall_right" />
+    <rect x="1" y="1" width="13" height="17" fill="#000000" inkscape:label="obstacle" id="upper_curb_left" />
+    <rect x="26" y="1" width="13" height="17" fill="#000000" inkscape:label="obstacle" id="upper_curb_right" />
+    <rect x="1" y="23" width="14" height="16" fill="#000000" inkscape:label="obstacle" id="lower_curb_left" />
+    <rect x="25" y="23" width="14" height="16" fill="#000000" inkscape:label="obstacle" id="lower_curb_right" />
+    <rect x="18" y="17" width="4" height="6" fill="#000000" inkscape:label="obstacle" id="curb_island" />
+  </g>
+  <g id="robot" inkscape:label="Robot">
+    <rect x="17.5" y="32" width="5" height="4" fill="#ffd800" inkscape:label="robot_spawn_zone" id="robot_spawn" />
+    <rect x="17.5" y="4" width="5" height="4" fill="#ff7f2a" inkscape:label="robot_goal_zone" id="robot_goal" />
+    <path
+       d="M 20,32 20,26 16,22 20,14 20,8"
+       stroke="#0300d5"
+       stroke-width="1"
+       fill="none"
+       inkscape:label="robot_route_0_0"
+       id="robot_route"
+       sodipodi:nodetypes="ccccc" />
+  </g>
+  <g id="pedestrians" inkscape:label="Pedestrian">
+    <rect x="4" y="18" width="4" height="4" fill="#23ff00" inkscape:label="ped_spawn_zone" id="ped_spawn" />
+    <rect x="32" y="18" width="4" height="4" fill="#107400" inkscape:label="ped_goal_zone" id="ped_goal" />
+    <path
+       d="M 8,20 15,20 20,17 25,20 32,20"
+       stroke="#c40202"
+       stroke-width="1"
+       fill="none"
+       inkscape:label="ped_route_0_0"
+       id="ped_route"
+       sodipodi:nodetypes="ccccc" />
+  </g>
+</svg>

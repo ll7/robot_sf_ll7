@@ -1,0 +1,96 @@
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - ../archetypes/classic_doorway.yaml
+  - ../archetypes/classic_head_on_corridor.yaml
+  - ../archetypes/classic_bottleneck.yaml
+  - ../single/francis2023_blind_corner.yaml
+  - ../single/francis2023_perpendicular_traffic.yaml
+  - ../archetypes/social_mini_games.yaml
+select_scenarios:
+  - classic_doorway_medium
+  - classic_head_on_corridor_medium
+  - francis2023_blind_corner
+  - francis2023_perpendicular_traffic
+  - classic_head_on_corridor_low
+  - smg_curb_ramp_conflict
+  - classic_bottleneck_high
+scenario_overrides_by_name:
+  classic_doorway_medium:
+    metadata:
+      smg:
+        schema_version: robot_sf.social_mini_game.v1
+        case: doorway
+        capacity_one_resource: true
+        preferred_trajectory_conflict: true
+        occlusion: false
+        symmetry: symmetric
+        expected_failure_modes:
+          - deadlock
+          - stop_go_oscillation
+          - excessive_yielding
+  classic_head_on_corridor_medium:
+    metadata:
+      smg:
+        schema_version: robot_sf.social_mini_game.v1
+        case: narrow_sidewalk
+        capacity_one_resource: true
+        preferred_trajectory_conflict: true
+        occlusion: false
+        symmetry: symmetric
+        expected_failure_modes:
+          - deadlock
+          - stop_go_oscillation
+          - excessive_yielding
+          - near_miss
+  francis2023_blind_corner:
+    metadata:
+      smg:
+        schema_version: robot_sf.social_mini_game.v1
+        case: blind_corner
+        capacity_one_resource: false
+        preferred_trajectory_conflict: true
+        occlusion: true
+        symmetry: asymmetric
+        expected_failure_modes:
+          - near_miss
+          - excessive_yielding
+          - late_yield
+  francis2023_perpendicular_traffic:
+    metadata:
+      smg:
+        schema_version: robot_sf.social_mini_game.v1
+        case: perpendicular_crossing
+        capacity_one_resource: false
+        preferred_trajectory_conflict: true
+        occlusion: false
+        symmetry: asymmetric
+        expected_failure_modes:
+          - near_miss
+          - stop_go_oscillation
+          - excessive_yielding
+  classic_head_on_corridor_low:
+    metadata:
+      smg:
+        schema_version: robot_sf.social_mini_game.v1
+        case: bidirectional_hallway
+        capacity_one_resource: true
+        preferred_trajectory_conflict: true
+        occlusion: false
+        symmetry: symmetric
+        expected_failure_modes:
+          - deadlock
+          - stop_go_oscillation
+          - excessive_yielding
+  classic_bottleneck_high:
+    metadata:
+      smg:
+        schema_version: robot_sf.social_mini_game.v1
+        case: bottleneck_with_static_obstacle
+        capacity_one_resource: true
+        preferred_trajectory_conflict: true
+        occlusion: false
+        symmetry: symmetric
+        expected_failure_modes:
+          - deadlock
+          - stop_go_oscillation
+          - excessive_yielding

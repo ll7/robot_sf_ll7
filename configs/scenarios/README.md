@@ -220,6 +220,30 @@ scenarios:
           bounds: [4.0, 1.0, 6.0, 2.0]
 ```
 
+## Social Mini-Game Metadata
+
+`configs/scenarios/sets/social_mini_games_v0.yaml` defines an exploratory Social Mini-Game (SMG)
+suite for high-agency interaction cases. The suite reuses existing scenarios through manifest
+overrides where possible and adds only missing scenario rows.
+
+Each selected scenario exposes descriptive `metadata.smg` fields:
+
+```yaml
+metadata:
+  smg:
+    schema_version: robot_sf.social_mini_game.v1
+    case: doorway
+    capacity_one_resource: true
+    preferred_trajectory_conflict: true
+    occlusion: false
+    symmetry: symmetric
+    expected_failure_modes:
+      - deadlock
+```
+
+`expected_failure_modes` is descriptive metadata only. It is not a metric, score, benchmark claim,
+or planner behavior change.
+
 ## Usage
 
 Point training/analysis configs at a manifest (or a legacy combined file):

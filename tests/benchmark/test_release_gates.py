@@ -75,6 +75,12 @@ def test_release_gate_matrix_reports_pass_fail_and_not_evaluable(tmp_path: Path)
             "scenario_family": "classic_crossing",
             "collision_rate": 0.0,
         },
+        {
+            "planner_key": "bool_metric_planner",
+            "scenario_family": "classic_crossing",
+            "collision_rate": False,
+            "proxemic_intrusion_rate": 0.05,
+        },
     ]
 
     report = evaluate_release_gates(rows, gates)
@@ -90,6 +96,11 @@ def test_release_gate_matrix_reports_pass_fail_and_not_evaluable(tmp_path: Path)
     assert (
         matrix[("partial_planner", "classic_crossing")]["not_evaluable_gate_ids"]
         == "proxemic_intrusion_limit"
+    )
+    assert matrix[("bool_metric_planner", "classic_crossing")]["safety_status"] == "not_evaluable"
+    assert (
+        matrix[("bool_metric_planner", "classic_crossing")]["not_evaluable_gate_ids"]
+        == "collision_rate_zero"
     )
     assert "not certification" in report["claim_boundary"]
 
@@ -263,6 +274,18 @@ def test_spec_validation_rejects_malformed_gate_entries(tmp_path: Path) -> None:
                 "id": "g",
                 "metric": "collision_rate",
                 "threshold": ".nan",
+                "direction": "max",
+                "category": "safety",
+                "provenance": "fixture",
+            },
+            "threshold must",
+        ),
+        (
+            "boolean_threshold",
+            {
+                "id": "g",
+                "metric": "collision_rate",
+                "threshold": True,
                 "direction": "max",
                 "category": "safety",
                 "provenance": "fixture",

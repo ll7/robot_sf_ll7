@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import sys
 from pathlib import Path
 
@@ -42,7 +43,7 @@ def main() -> int:
     args = parse_args()
     rows = load_metric_rows(args.input_json)
     gates = load_release_gate_spec(args.gate_spec)
-    command = " ".join(sys.argv)
+    command = shlex.join(sys.argv)
     report = build_release_gate_report(
         rows,
         gates,

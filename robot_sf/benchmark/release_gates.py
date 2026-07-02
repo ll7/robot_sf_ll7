@@ -506,6 +506,8 @@ def _required_string(value: Any, field_name: str) -> str:
 
 
 def _finite_float(value: Any, field_name: str) -> float:
+    if isinstance(value, bool):
+        raise ReleaseGateSpecError(f"{field_name} must be numeric")
     try:
         threshold = float(value)
     except (TypeError, ValueError) as exc:
@@ -516,6 +518,8 @@ def _finite_float(value: Any, field_name: str) -> float:
 
 
 def _finite_float_or_none(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
     try:
         observed = float(value)
     except (TypeError, ValueError):

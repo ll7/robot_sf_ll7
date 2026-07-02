@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import warnings
 from dataclasses import dataclass, fields
 from typing import Any, Protocol
@@ -9,10 +10,7 @@ from typing import Any, Protocol
 import numpy as np
 from scipy.optimize import NonlinearConstraint
 
-from robot_sf.nav.uncertainty_envelope import (
-    effective_pedestrian_radius,
-    envelope_diagnostics,
-)
+from robot_sf.nav.uncertainty_envelope import envelope_diagnostics
 from robot_sf.planner.nmpc_social import (
     NMPCSocialConfig,
     NMPCSocialPlannerAdapter,
@@ -213,6 +211,9 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         robot_xy = states[:, :2]
         enabled = bool(self.prediction_config.pedestrian_uncertainty_envelope_enabled)
         alpha = float(self.prediction_config.pedestrian_uncertainty_alpha_mps)
+        dt = float(predicted_futures.dt)
+        use_inflation = enabled and alpha > 0.0
+        base_ped_radius = float(context.ped_radius)
         values: list[float] = []
         future_horizon = predicted_futures.positions_world.shape[1]
         for step_idx in range(robot_xy.shape[0]):
@@ -221,13 +222,7 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
             # Horizon-dependent effective pedestrian radius. inflation(0) == 0.0,
             # so the first step is unchanged and a disabled envelope (or
             # alpha == 0.0) is a bit-for-bit no-op versus the baseline.
-            ped_eff_radius = effective_pedestrian_radius(
-                base_radius=float(context.ped_radius),
-                horizon_step=step_idx,
-                alpha=alpha,
-                dt=float(predicted_futures.dt),
-                enabled=enabled,
-            )
+            ped_eff_radius = base_ped_radius + (alpha * float(step_idx) * dt if use_inflation else 0.0)
             r_safe = (
                 float(context.robot_radius)
                 + ped_eff_radius
@@ -244,7 +239,7 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
             ``pedestrian_uncertainty_envelope`` provenance payload recording the
             envelope settings and an explicit claim boundary.
         """
-        payload: dict[str, Any] = dict(super().diagnostics())
+        payload: dict[str, Any] = copy.deepcopy(super().diagnostics())
         payload["pedestrian_uncertainty_envelope"] = envelope_diagnostics(
             enabled=bool(self.prediction_config.pedestrian_uncertainty_envelope_enabled),
             alpha=float(self.prediction_config.pedestrian_uncertainty_alpha_mps),

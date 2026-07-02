@@ -1,0 +1,65 @@
+scenarios:
+  - name: issue_3977_safe_braking_ped_steps_in_front
+    scenario_family: public_requirement_safe_braking
+    map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+    route_overrides_file: ../route_overrides/issue_3977/safe_braking.yaml
+    simulation_config:
+      max_episode_steps: 80
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal: null
+        trajectory:
+          - [14.0, 22.0]
+          - [14.0, 17.5]
+          - [14.0, 14.0]
+          - [14.0, 4.0]
+        speed_m_s: 2.0
+        # No start_delay_s: the proximity hold (below) provides the wait-at-curb semantics, and a
+        # non-zero spawn velocity is required for pysocialforce to derive a non-zero desired speed
+        # (max_speeds is seeded from the initial velocity magnitude), so the pedestrian actually
+        # walks and then crosses at run time instead of freezing in place.
+        # Proximity-released curb hold: the pedestrian walks to (14, 17.5) and waits there until a
+        # robot is within 5.5 m of the conflict point (14, 14), then steps across at 2.0 m/s. From
+        # 3.5 m out the crossing reaches the conflict in ~1.75 s, while a robot at <=3.0 m/s needs
+        # >=1.83 s to cover the final 5.5 m -> a genuine "steps in front" event across ~0.8-3.0 m/s.
+        # hold_timeout_s fails open so a stalled or absent robot can never deadlock the episode.
+        hold_until_robot_within_m: 5.5
+        hold_ref_point: [14.0, 14.0]
+        hold_timeout_s: 6.0
+        note: "Public-requirement safe-braking proxy: pedestrian holds at the curb, then steps across the robot route when a robot approaches."
+        metadata:
+          role: crossing_ped
+          source_issue: 3977
+          intent_conditioned_behavior:
+            intent_label: pedestrian_steps_in_front
+            intent_phases: [waiting, crossing]
+    robot_config: {}
+    metadata:
+      public_requirement:
+        schema_version: public-requirement-scenario.v1
+        category: safe_braking
+        requirement_label: Safe braking when a pedestrian steps into the path.
+        source: schomakers_2024_public_requirements
+        claim_boundary: authored_scenario_proxy_not_human_subject_evidence
+        event_contract:
+          type: pedestrian_steps_in_front
+          pedestrian_id: h1
+          conflict_point: [14.0, 14.0]
+          trigger_radius_m: 0.75
+          # The steps-in-front trigger is runtime-real, not aspirational: pedestrian h1 holds at
+          # the curb and only crosses once a robot is within hold_until_robot_within_m (5.5 m) of
+          # conflict_point, so the crossing is released by actual robot proximity at run time
+          # (with a fail-open hold_timeout_s fallback). conflict_point doubles as the default
+          # hold reference point.
+          trigger: runtime_robot_proximity_release
+          hold_release_radius_m: 5.5
+      archetype: public_requirement_safe_braking
+      flow: crossing
+      behavior: delayed_crossing
+      purpose: >
+        Deterministic safe-braking scenario proxy for issue #3977; this records
+        an authored public-requirement condition, not validated public acceptance
+        or safety-certification evidence.
+    seeds:
+      - 3977

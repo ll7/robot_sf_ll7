@@ -5,6 +5,7 @@ from math import ceil
 
 from robot_sf.ped_npc.adversial_ped_force import AdversarialPedForceConfig
 from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
+from robot_sf.sim.pedestrian_model_variants import normalize_pedestrian_model
 
 
 @dataclass
@@ -21,6 +22,9 @@ class SimulationSettings:
 
     peds_speed_mult: float = 1.3
     """Pedestrian speed multiplier"""
+
+    pedestrian_model: str = "social_force_default"
+    """Pedestrian dynamics model selector."""
 
     difficulty: int = 0
     """Difficulty level"""
@@ -88,6 +92,7 @@ class SimulationSettings:
         # Check that the pedestrian speed multiplier is positive
         if self.peds_speed_mult <= 0:
             raise ValueError("Pedestrian speed mustn't be negative or zero!")
+        self.pedestrian_model = normalize_pedestrian_model(self.pedestrian_model)
         # Check that the maximum number of pedestrians per group is positive
         if self.max_peds_per_group <= 0:
             raise ValueError("Maximum pedestrians per group mustn't be negative or zero!")

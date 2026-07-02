@@ -9,19 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Added **social-group metadata and group-space intrusion metrics** (#3972): scenarios can now
-  declare explicit social pedestrian groups (`social_groups` with `group_id`, `type`, `members`,
-  `formation`, `centroid`, `radius`, and optional `o_space_polygon`) via the new
-  `SocialGroupDefinition` on `MapDefinition` and the scenario loader. Group geometry is exposed to
-  metrics (through episode metadata) and to the simulator (`Simulator.social_groups`). A new pure
-  module `robot_sf/benchmark/group_space_metrics.py` computes group-space intrusion metrics with
-  distinct definitions: `group_intrusion_episode_rate` (per-episode binary), `group_intrusion_time_ratio`
-  (fraction of steps inside any group o-space), `min_distance_to_group_centroid`, and signed
-  `min_distance_to_group_boundary`. Metrics attach as a schema-backed `group_space` block and are
-  computed only when a scenario declares groups, so default benchmark rows are unchanged. This is a
-  bounded first slice labeled **diagnostic** (declared social-space intrusion only; not a human-comfort
-  or safety claim). The TAGA-like tangent-subgoal group-avoidance planner wrapper and the headless
-  comparison benchmark are the deliberate successor slice and are not included.
+* Added a **proximity-released pedestrian hold** for scripted single pedestrians (#3977):
+  `SinglePedestrianDefinition` gains `hold_until_robot_within_m`, `hold_ref_point` (defaults to the
+  scenario event-contract `conflict_point`), and `hold_timeout_s` (fail-open, ~6s default). A
+  pedestrian holds at its curb waypoint until a robot enters the hold radius of the reference point
+  (or the timeout elapses), then steps across — making the `pedestrian_steps_in_front` event a
+  runtime-real, robot-proximity-triggered crossing instead of a fixed open-loop timer.
+  `SinglePedestrianBehavior` reuses the existing `robot_pose_provider` and exposes
+  `hold_release_reasons()` (`robot_proximity`/`timeout`). The issue #3977 `safe_braking` scenario
+  now uses this hold (hold at `(14, 17.5)` until a robot is within 5.5 m of `(14, 14)`); its
+  `start_delay_s` was removed because a zeroed spawn velocity leaves the pysocialforce desired speed
+  at zero, which otherwise froze the pedestrian in place at run time.
+
 * Added `RLTrajectoryDataset.v1` infrastructure (#4011): episode-major JSONL loader/writer,
   return-to-go computation, split/provenance manifest schema with leakage checks, map-runner
   simulation-trace reward/terminal capture, recorder CLI, validation CLI support, focused tests, and

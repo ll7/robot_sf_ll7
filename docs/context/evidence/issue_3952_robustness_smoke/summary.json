@@ -1,0 +1,51 @@
+{
+  "claim_boundary": "Same-scenario same-seed diagnostic robustness delta under non-calibrated observation perturbations. Not hardware sensor model and not paper-facing benchmark evidence.",
+  "inputs": {
+    "nominal_jsonl": "output/benchmarks/issue_3952/issue_3952_nominal_smoke/runs/goal__differential_drive/episodes.jsonl",
+    "perturbed_jsonl": "output/benchmarks/issue_3952/issue_3952_perturbed_smoke/runs/goal__differential_drive/episodes.jsonl"
+  },
+  "issue": 3952,
+  "pairing": {
+    "pair_keys": [
+      "planner_identity",
+      "algo",
+      "scenario_id",
+      "seed",
+      "observation_mode",
+      "observation_level"
+    ],
+    "paired_rows": 1,
+    "unmatched_nominal_keys": [],
+    "unmatched_nominal_rows": 0,
+    "unmatched_perturbed_keys": [],
+    "unmatched_perturbed_rows": 0
+  },
+  "planner_rows": [
+    {
+      "algo": "goal",
+      "collision_delta": 0.0,
+      "noise_stats_sum": {
+        "heading_noise_applied": 0,
+        "lidar_values_dropped": 0,
+        "pedestrians_added": 0,
+        "pedestrians_removed": 0,
+        "pose_noise_applied": 5,
+        "steps_with_noise": 5
+      },
+      "nominal_collision_incidence": 0.0,
+      "nominal_success_incidence": 0.0,
+      "paired_episodes": 1,
+      "perturbation_hashes": [
+        "2ea65ccd009c"
+      ],
+      "perturbation_profiles": [
+        "issue_3952_robustness_smoke_v1"
+      ],
+      "perturbed_collision_incidence": 0.0,
+      "perturbed_success_incidence": 0.0,
+      "planner_key": "goal",
+      "success_delta": 0.0
+    }
+  ],
+  "schema_version": "observation_robustness_delta.v1"
+}

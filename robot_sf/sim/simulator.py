@@ -51,6 +51,11 @@ from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_simulation
 from robot_sf.ped_npc.ped_robot_force import PedRobotForce, PedRobotForceConfig
 from robot_sf.ped_npc.ped_zone import sample_zone
 from robot_sf.robot.robot_state import Robot
+from robot_sf.sim.pedestrian_model_variants import (
+    HSFM_TOTAL_FORCE_V1,
+    normalize_pedestrian_model,
+    step_hsfm_total_force,
+)
 
 PYSF_POSITION_SLICE = slice(0, 2)
 PYSF_VELOCITY_SLICE = slice(2, 4)
@@ -155,6 +160,9 @@ class Simulator:
     # Last pedestrian force vectors used to step the simulation (K,2)
     last_ped_forces: np.ndarray = field(init=False, repr=False)
     _initial_pysf_states: np.ndarray = field(init=False, repr=False)
+    ped_headings: np.ndarray = field(init=False, repr=False)
+    _initial_ped_headings: np.ndarray = field(init=False, repr=False)
+    pedestrian_model: str = field(init=False)
 
     def __post_init__(self):
         """Initialize simulator components after dataclass construction.
@@ -219,14 +227,54 @@ class Simulator:
         ]
 
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
+        self.pedestrian_model = normalize_pedestrian_model(self.config.pedestrian_model)
+        self.ped_headings = self._headings_from_current_ped_velocities()
+        self._initial_ped_headings = self.ped_headings.copy()
         self._initial_pysf_states = self.pysf_state.pysf_states().copy()
         self.reset_state()
+
+    def _headings_from_current_ped_velocities(self) -> np.ndarray:
+        """Initialize pedestrian headings from current velocities, falling back to zero radians.
+
+        Returns:
+            One heading angle in radians per pedestrian row.
+        """
+        velocities = np.asarray(self.pysf_state.ped_velocities, dtype=float)
+        if velocities.size == 0:
+            return np.empty((0,), dtype=float)
+        speeds = np.linalg.norm(velocities, axis=-1)
+        velocity_headings = np.arctan2(velocities[:, 1], velocities[:, 0])
+        return np.where(speeds <= MIN_HEADING_SPEED_MPS, 0.0, velocity_headings)
+
+    def _step_pedestrians(self, ped_forces: np.ndarray, groups: list[list[int]]) -> None:
+        """Advance pedestrians through the configured pedestrian-model implementation."""
+        if self.pedestrian_model != HSFM_TOTAL_FORCE_V1:
+            self.pysf_sim.peds.step(ped_forces, groups)
+            self.ped_headings = self._headings_from_current_ped_velocities()
+            return
+
+        max_speeds = self.pysf_sim.peds.max_speeds
+        if max_speeds is None:
+            raise RuntimeError("PySocialForce max_speeds are unavailable for HSFM total-force step")
+        current_state = self.pysf_sim.peds.state
+        next_state, self.ped_headings = step_hsfm_total_force(
+            current_state,
+            ped_forces,
+            self.ped_headings,
+            dt=self.config.time_per_step_in_secs,
+            max_speeds=max_speeds,
+        )
+        current_state[...] = next_state
+        self.pysf_sim.peds.update(current_state, groups)
 
     def _reset_social_force_state(self) -> None:
         """Restore pedestrian physics state for a fresh deterministic episode reset."""
         initial_states = getattr(self, "_initial_pysf_states", None)
         if initial_states is not None:
             self.pysf_state.pysf_states()[...] = initial_states
+        initial_headings = getattr(self, "_initial_ped_headings", None)
+        if initial_headings is not None:
+            self.ped_headings = initial_headings.copy()
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
         for behavior in getattr(self, "peds_behaviors", ()):
             behavior.reset()
@@ -315,7 +363,7 @@ class Simulator:
         ped_forces = self.pysf_sim.compute_forces()
         self.last_ped_forces = np.asarray(ped_forces, dtype=float)
         groups = self.groups.groups_as_lists
-        self.pysf_sim.peds.step(ped_forces, groups)
+        self._step_pedestrians(self.last_ped_forces, groups)
         for robot, nav, action in zip(self.robots, self.robot_navs, actions, strict=True):
             robot.apply_action(action, self.config.time_per_step_in_secs)
             nav.update_position(robot.pos)
@@ -493,6 +541,9 @@ class PedSimulator(Simulator):
         ]
 
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
+        self.pedestrian_model = normalize_pedestrian_model(self.config.pedestrian_model)
+        self.ped_headings = self._headings_from_current_ped_velocities()
+        self._initial_ped_headings = self.ped_headings.copy()
         self._initial_pysf_states = self.pysf_state.pysf_states().copy()
 
         self.reset_state()
@@ -615,7 +666,7 @@ class PedSimulator(Simulator):
         ped_forces = self.pysf_sim.compute_forces()
         self.last_ped_forces = np.asarray(ped_forces, dtype=float)
         groups = self.groups.groups_as_lists
-        self.pysf_sim.peds.step(ped_forces, groups)
+        self._step_pedestrians(self.last_ped_forces, groups)
         for robot, nav, action in zip(self.robots, self.robot_navs, actions, strict=True):
             robot.apply_action(action, self.config.time_per_step_in_secs)
             nav.update_position(robot.pos)

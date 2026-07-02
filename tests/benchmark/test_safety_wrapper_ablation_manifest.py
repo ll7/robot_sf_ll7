@@ -27,6 +27,7 @@ from robot_sf.robot.safety_wrapper import SAFETY_WRAPPER_SCHEMA
 
 _CONFIG_PATH = "configs/research/safety_wrapper_ablation_v1.yaml"
 
+
 def _repo_config() -> dict[str, object]:
     return load_safety_wrapper_ablation_config(_CONFIG_PATH)
 

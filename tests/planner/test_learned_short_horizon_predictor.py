@@ -37,6 +37,7 @@ def test_learned_predictor_config_parses_yaml_values() -> None:
     cfg = build_learned_short_horizon_predictor_config(
         {
             "allow_untrained_smoke": "true",
+            "device": None,
             "max_pedestrians": "4",
             "horizon_steps": "3",
             "rollout_dt": "0.1",
@@ -45,10 +46,23 @@ def test_learned_predictor_config_parses_yaml_values() -> None:
     )
 
     assert cfg.allow_untrained_smoke is True
+    assert cfg.device == "cpu"
     assert cfg.max_pedestrians == 4
     assert cfg.horizon_steps == 3
     assert cfg.rollout_dt == 0.1
     assert cfg.hidden_dim == 16
+
+
+def test_learned_predictor_config_rejects_non_positive_dimensions() -> None:
+    """Non-positive model dimensions fail before obscure tensor errors."""
+
+    for field in ("max_pedestrians", "horizon_steps", "hidden_dim"):
+        config = LearnedShortHorizonPredictorConfig(
+            allow_untrained_smoke=True,
+            **{field: 0},
+        )
+        with pytest.raises(ValueError, match=f"{field} must be strictly positive"):
+            LearnedShortHorizonPedestrianPredictor(config)
 
 
 def test_learned_predictor_missing_checkpoint_fails_closed() -> None:

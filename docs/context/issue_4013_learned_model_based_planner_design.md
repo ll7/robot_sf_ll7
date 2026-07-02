@@ -1,4 +1,4 @@
-# Issue 4013 Learned Prediction MPC Design Slice
+# Issue #4013 — Learned Prediction MPC Design Slice
 
 Plain-language summary: this slice adds a small state-based pedestrian predictor that can feed the
 existing prediction-aware model predictive control (MPC) local planner, so future work can train the

@@ -83,6 +83,12 @@ class LearnedShortHorizonPedestrianPredictor:
     def __init__(self, config: LearnedShortHorizonPredictorConfig) -> None:
         """Initialize a fail-closed or diagnostic learned predictor."""
 
+        if config.max_pedestrians <= 0:
+            raise ValueError("max_pedestrians must be strictly positive")
+        if config.horizon_steps <= 0:
+            raise ValueError("horizon_steps must be strictly positive")
+        if config.hidden_dim <= 0:
+            raise ValueError("hidden_dim must be strictly positive")
         self.config = config
         self._cv_predictor = ConstantVelocityPedestrianPredictor()
         self._calls = 0
@@ -299,7 +305,7 @@ def build_learned_short_horizon_predictor_config(
         "checkpoint_path": _optional_str,
         "model_id": _optional_str,
         "normalizer_path": _optional_str,
-        "device": str,
+        "device": lambda value: str(value).strip() if value else "cpu",
         "max_pedestrians": int,
         "history_steps": int,
         "horizon_steps": int,

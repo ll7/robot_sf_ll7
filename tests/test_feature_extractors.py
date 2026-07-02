@@ -15,6 +15,7 @@ from robot_sf.feature_extractors import (
     AttentionFeatureExtractor,
     LightweightCNNExtractor,
     LSTMFeatureExtractor,
+    MambaFeatureExtractor,
     MLPFeatureExtractor,
 )
 from robot_sf.feature_extractors.config import (
@@ -232,6 +233,7 @@ class TestFeatureExtractors:
             AttentionFeatureExtractor(observation_space),
             LightweightCNNExtractor(observation_space),
             LSTMFeatureExtractor(observation_space),
+            MambaFeatureExtractor(observation_space, backend="torch_ssm_lite"),
         ]
 
         for extractor in extractors:

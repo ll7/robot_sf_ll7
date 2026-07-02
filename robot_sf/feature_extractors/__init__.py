@@ -14,6 +14,7 @@ from .attention_extractor import AttentionFeatureExtractor
 from .grid_socnav_extractor import GridSocNavExtractor
 from .lightweight_cnn_extractor import LightweightCNNExtractor
 from .lstm_extractor import LSTMFeatureExtractor
+from .mamba_extractor import MambaFeatureExtractor, MambaFeatureExtractorConfig
 from .mlp_extractor import MLPFeatureExtractor
 
 __all__ = [
@@ -22,4 +23,6 @@ __all__ = [
     "LSTMFeatureExtractor",
     "LightweightCNNExtractor",
     "MLPFeatureExtractor",
+    "MambaFeatureExtractor",
+    "MambaFeatureExtractorConfig",
 ]

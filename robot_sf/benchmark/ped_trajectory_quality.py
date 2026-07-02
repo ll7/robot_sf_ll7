@@ -56,9 +56,9 @@ def compute_trajectory_quality_distributions(
 
     step_count, ped_count, _ = positions_arr.shape
     if step_count == 0:
-        return _empty_report("empty")
+        return _empty_report("empty", cfg.quantiles)
     if ped_count == 0:
-        return _empty_report("no_pedestrians")
+        return _empty_report("no_pedestrians", cfg.quantiles)
 
     velocity_arr = _resolve_velocities(positions_arr, velocities, dt_s)
     speed = np.linalg.norm(velocity_arr, axis=2)
@@ -95,10 +95,10 @@ def compute_trajectory_quality_distributions(
     return report
 
 
-def _empty_report(status: str) -> TrajectoryQualityReport:
+def _empty_report(status: str, quantiles: tuple[float, ...]) -> TrajectoryQualityReport:
     """Return an empty diagnostic report with stable metric keys."""
 
-    empty = _summarize_distribution(np.array([], dtype=float), TrajectoryQualityConfig().quantiles)
+    empty = _summarize_distribution(np.array([], dtype=float), quantiles)
     return {
         "status": status,
         "diagnostic_only": True,
@@ -201,7 +201,12 @@ def _quantile_label(quantile: float) -> str:
 
     if not 0.0 <= quantile <= 1.0:
         raise ValueError("quantiles must be in [0, 1]")
-    return f"{quantile * 100:g}".replace(".", "p")
+    text = f"{quantile * 100:g}"
+    integer_part, _, fractional_part = text.partition(".")
+    integer_part = integer_part.zfill(2)
+    if not fractional_part:
+        return integer_part
+    return f"{integer_part}p{fractional_part}"
 
 
 def _curvature_samples(

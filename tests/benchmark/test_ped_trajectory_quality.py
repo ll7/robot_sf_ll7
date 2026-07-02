@@ -46,6 +46,7 @@ def test_trajectory_quality_reports_required_metric_keys() -> None:
 
     assert report["speed_mps"]["count"] == 6
     assert report["speed_mps"]["mean"] == pytest.approx(0.5)
+    assert "q05" in report["speed_mps"]
     assert report["stop_fraction"]["max"] == pytest.approx(1.0)
     json.dumps(ensure_json_safe(report))
 
@@ -114,3 +115,20 @@ def test_trajectory_quality_respects_pairwise_stride_and_custom_quantiles() -> N
     assert report["pairwise_distance_m"]["count"] == 2
     assert "q25" in report["speed_mps"]
     assert "q75" in report["speed_mps"]
+
+
+def test_empty_trajectory_quality_report_uses_configured_quantiles() -> None:
+    """Empty reports keep the same quantile keys as populated reports."""
+
+    config = TrajectoryQualityConfig(quantiles=(0.25, 0.5, 0.75))
+
+    report = compute_trajectory_quality_distributions(
+        np.empty((0, 2, 2)),
+        dt_s=0.1,
+        config=config,
+    )
+
+    assert report["status"] == "empty"
+    assert "q25" in report["speed_mps"]
+    assert "q75" in report["speed_mps"]
+    assert "q05" not in report["speed_mps"]

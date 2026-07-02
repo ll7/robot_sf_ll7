@@ -2048,6 +2048,7 @@ def _apply_simulation_overrides(
         "peds_speed_mult",
         "ped_radius",
         "goal_radius",
+        "pedestrian_model",
         "route_spawn_distribution",
         "route_spawn_jitter_frac",
         "route_spawn_seed",

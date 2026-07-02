@@ -226,7 +226,18 @@ def _approval_move_to_planned(
     target = checker._safe_repo_path(raw_move.get("target"))
     category = raw_move.get("category")
     reason = raw_move.get("reason")
-    replacement = checker._safe_repo_path(raw_move.get("replacement"))
+    raw_replacement = raw_move.get("replacement")
+    replacement = None
+    if raw_replacement is not None:
+        replacement = checker._safe_repo_path(raw_replacement)
+        if replacement is None:
+            findings.append(
+                _approval_finding(
+                    "replacement_path",
+                    "replacement must be a safe repository path",
+                    path=source.as_posix() if source else None,
+                )
+            )
 
     if source is None:
         findings.append(_approval_finding("source_path", "source must be a safe repository path"))
@@ -278,14 +289,14 @@ def validate_approval_manifest(  # noqa: C901
 ) -> tuple[list[PlannedMove], list[ApprovalFinding], list[PlanConflict]]:
     """Validate a maintainer-approved archival move manifest against current candidates."""
 
-    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    archive_dir = _normalized_archive_dir(archive_dir, repo_root=repo_root)
+    try:
+        manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ValueError(f"failed to parse approval manifest YAML: {exc}") from exc
     findings: list[ApprovalFinding] = []
     if not isinstance(manifest, dict):
-        return (
-            [],
-            [_approval_finding("manifest_shape", "approval manifest must be a YAML mapping")],
-            [],
-        )
+        raise ValueError("approval manifest must be a YAML mapping")
 
     if manifest.get("schema_version") != APPROVAL_SCHEMA_VERSION:
         findings.append(
@@ -360,7 +371,7 @@ def validate_approval_manifest(  # noqa: C901
                 )
             )
             continue
-        if planned_move.replacement and move.replacement != planned_move.replacement:
+        if move.replacement != planned_move.replacement:
             findings.append(
                 _approval_finding(
                     "replacement_mismatch",
@@ -376,6 +387,19 @@ def validate_approval_manifest(  # noqa: C901
         )
 
     return approved_moves, findings, conflicts
+
+
+def _normalized_archive_dir(archive_dir: Path, *, repo_root: Path) -> Path:
+    """Return a safe repository-relative archive directory path."""
+
+    candidate = archive_dir if archive_dir.is_absolute() else repo_root / archive_dir
+    if candidate.is_symlink():
+        raise ValueError("archive_dir cannot be a symlink")
+    resolved_repo = repo_root.resolve(strict=False)
+    resolved_archive = candidate.resolve(strict=False)
+    if not resolved_archive.is_relative_to(resolved_repo):
+        raise ValueError("archive_dir must be within repository root")
+    return resolved_archive.relative_to(resolved_repo)
 
 
 def plan_archival(

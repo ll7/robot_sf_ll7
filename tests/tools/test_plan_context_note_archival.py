@@ -7,6 +7,7 @@ import subprocess
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+import pytest
 import yaml
 
 from scripts.tools import plan_context_note_archival as planner
@@ -382,6 +383,142 @@ def test_approval_manifest_fails_when_replacement_drifted_from_plan(tmp_path: Pa
     )
 
     assert [finding.rule for finding in findings] == ["replacement_mismatch"]
+
+
+def test_approval_manifest_fails_when_replacement_is_unsafe(tmp_path: Path) -> None:
+    """An explicitly provided replacement path must be safe, not silently omitted."""
+
+    repo = _repo(tmp_path)
+    _write(repo, "docs/context/old.md", "# Old\n")
+    _write(repo, "docs/context/new.md", "# New\n")
+    _write_catalog(
+        repo,
+        [
+            {
+                "path": "docs/context/old.md",
+                "status": "superseded",
+                "freshness": "dated",
+                "replacement": "docs/context/new.md",
+            }
+        ],
+    )
+    _commit(repo, "superseded", iso_date="2026-01-02T00:00:00+00:00")
+    manifest = repo / "approved_moves.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "context_archive_approved_moves.v1",
+                "issue": 3190,
+                "moves": [
+                    {
+                        "source": "docs/context/old.md",
+                        "target": "docs/context/archive/old.md",
+                        "category": "superseded",
+                        "replacement": "../outside.md",
+                        "reason": "Unsafe replacement should fail closed.",
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    _approved_moves, findings, _conflicts = planner.validate_approval_manifest(
+        manifest,
+        repo_root=repo,
+    )
+
+    assert "replacement_path" in {finding.rule for finding in findings}
+
+
+def test_approval_manifest_fails_when_unexpected_replacement_is_present(
+    tmp_path: Path,
+) -> None:
+    """Approval replacement metadata must match the generated plan exactly."""
+
+    repo = _repo(tmp_path)
+    _write(repo, "docs/context/stale.md", "# Stale\n")
+    _write(repo, "docs/context/current.md", "# Current\n")
+    _write_catalog(
+        repo,
+        [{"path": "docs/context/stale.md", "status": "current", "freshness": "dated"}],
+    )
+    _commit(repo, "stale note", iso_date="2025-01-02T00:00:00+00:00")
+    manifest = repo / "approved_moves.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "context_archive_approved_moves.v1",
+                "issue": 3190,
+                "moves": [
+                    {
+                        "source": "docs/context/stale.md",
+                        "target": "docs/context/archive/stale.md",
+                        "category": "stale",
+                        "replacement": "docs/context/current.md",
+                        "reason": "Unexpected replacement should fail closed.",
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    _approved_moves, findings, _conflicts = planner.validate_approval_manifest(
+        manifest,
+        repo_root=repo,
+    )
+
+    assert "replacement_mismatch" in {finding.rule for finding in findings}
+
+
+def test_approval_manifest_rejects_invalid_yaml_root(tmp_path: Path) -> None:
+    """Malformed and non-mapping YAML manifests fail closed with explicit errors."""
+
+    repo = _repo(tmp_path)
+    malformed = repo / "malformed.yaml"
+    malformed.write_text("schema_version: [", encoding="utf-8")
+    with pytest.raises(ValueError, match="failed to parse approval manifest YAML"):
+        planner.validate_approval_manifest(malformed, repo_root=repo)
+
+    non_mapping = repo / "non_mapping.yaml"
+    non_mapping.write_text("- not\n- a mapping\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="approval manifest must be a YAML mapping"):
+        planner.validate_approval_manifest(non_mapping, repo_root=repo)
+
+
+def test_approval_manifest_rejects_archive_dir_outside_repo(tmp_path: Path) -> None:
+    """A custom archive directory must normalize inside the repository root."""
+
+    repo = _repo(tmp_path)
+    manifest = repo / "approved_moves.yaml"
+    manifest.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "context_archive_approved_moves.v1",
+                "issue": 3190,
+                "moves": [
+                    {
+                        "source": "docs/context/old.md",
+                        "target": "docs/context/archive/old.md",
+                        "category": "stale",
+                        "reason": "Archive dir validation happens before move validation.",
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="archive_dir must be within repository root"):
+        planner.validate_approval_manifest(
+            manifest,
+            repo_root=repo,
+            archive_dir=tmp_path.parent / "outside-archive",
+        )
 
 
 def test_approval_manifest_fails_for_move_not_in_current_plan(tmp_path: Path) -> None:

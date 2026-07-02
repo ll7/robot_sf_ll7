@@ -73,7 +73,7 @@ def test_artifact_writer_emits_provenance_and_checksums(tmp_path: Path) -> None:
         rows = list(csv.DictReader(handle))
     assert len(rows) == 17
     assert {row["lineage"] for row in rows} == {"clean", "manifest-incomplete"}
-    assert any(row["best_snqi"] != "na" for row in rows if row["lineage"] == "manifest-incomplete")
+    assert all(row["best_snqi"] != "na" for row in rows if row["lineage"] == "manifest-incomplete")
 
     checksum_lines = checksums_path.read_text(encoding="utf-8").splitlines()
     expected = {

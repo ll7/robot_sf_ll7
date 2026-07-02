@@ -19,9 +19,13 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from robot_sf.common.artifact_paths import get_repository_root
+
+if TYPE_CHECKING:
+    from robot_sf.benchmark.latency_stress import LatencyStressProfile
+    from robot_sf.benchmark.synthetic_actuation import SyntheticActuationProfile
 
 
 def _repo_relative(path: Path) -> str:
@@ -130,3 +134,23 @@ def _kinematics_matrix_or_default(kinematics: tuple[str, ...]) -> tuple[str, ...
 
 
 _normalized_kinematics_matrix = _kinematics_matrix_or_default
+
+
+def _synthetic_actuation_metadata(
+    profile: SyntheticActuationProfile | None,
+) -> dict[str, Any] | None:
+    """Return a JSON-safe synthetic-actuation metadata payload when configured."""
+    if profile is None:
+        return None
+    return profile.to_metadata()
+
+
+def _latency_stress_metadata(
+    profile: LatencyStressProfile | None,
+    *,
+    dt: float | None = None,
+) -> dict[str, Any] | None:
+    """Return a JSON-safe latency-stress metadata payload when configured."""
+    if profile is None:
+        return None
+    return profile.to_metadata(dt=dt)

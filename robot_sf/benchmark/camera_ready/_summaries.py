@@ -7,15 +7,13 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from robot_sf.benchmark.camera_ready._preflight import (
-    _latency_stress_metadata,
-    _synthetic_actuation_metadata,
-)
 from robot_sf.benchmark.camera_ready._util import (
     _hash_payload,
     _jsonable_repo_relative,
     _kinematics_matrix_or_default,
+    _latency_stress_metadata,
     _repo_relative,
+    _synthetic_actuation_metadata,
 )
 from robot_sf.benchmark.camera_ready_campaign_config import _AMV_DIMENSIONS, CampaignConfig
 from robot_sf.benchmark.observation_noise import (

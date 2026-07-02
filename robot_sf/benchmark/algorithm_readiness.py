@@ -292,6 +292,21 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="hybrid_global_rl",
+        tier="experimental",
+        aliases=(
+            "hybrid_global_rl",
+            "global_rl_local",
+            "route_conditioned_rl",
+            "hybrid_route_rl",
+        ),
+        note=(
+            "Diagnostic-only route-conditioned learned local planner; not benchmark evidence "
+            "until paired route-scenario comparison is recorded."
+        ),
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="topology_guided_hybrid_rule_v0",
         tier="experimental",
         aliases=("topology_guided_hybrid_rule_v0", "topology_hypothesis_dwa_v0"),
@@ -419,6 +434,21 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note=(
             "Prediction-aware MPC local planner with constant-velocity pedestrian futures "
             "as hard time-varying collision constraints."
+        ),
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
+        canonical_name="learned_prediction_mpc",
+        tier="experimental",
+        aliases=(
+            "learned_prediction_mpc",
+            "learned_short_horizon_mpc",
+            "model_based_local_planner",
+            "learned_prediction_planner",
+        ),
+        note=(
+            "Diagnostic learned short-horizon pedestrian prediction MPC lane; not a full "
+            "navigation world model and not benchmark evidence without a trained checkpoint."
         ),
         requires_explicit_opt_in=True,
     ),

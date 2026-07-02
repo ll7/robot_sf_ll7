@@ -121,7 +121,9 @@ from robot_sf.benchmark.map_runner_observations import (
 from robot_sf.benchmark.map_runner_observations import obs_to_ppo_format as _obs_to_ppo_format
 from robot_sf.benchmark.map_runner_policies import adapters as _adapter_policy_builders
 from robot_sf.benchmark.map_runner_policies import adaptive_proxemic as _adaptive_proxemic_builder
+from robot_sf.benchmark.map_runner_policies import diffusion_policy as _diffusion_policy_builder
 from robot_sf.benchmark.map_runner_policies import goal as _goal_policy_builder
+from robot_sf.benchmark.map_runner_policies import hybrid_global_rl as _hybrid_global_rl_builder
 from robot_sf.benchmark.map_runner_policies import registry as _policy_builder_registry
 from robot_sf.benchmark.map_runner_policies import safety_barrier as _safety_barrier_builder
 from robot_sf.benchmark.map_runner_policy_actions import (
@@ -985,7 +987,14 @@ _POLICY_BUILDERS: dict[str, _policy_builder_registry.PolicyBuilder] = {
         _adaptive_proxemic_builder.ADAPTIVE_PROXEMIC_SELECTOR_KEYS,
         _adaptive_proxemic_builder.build,
     ),
+    **dict.fromkeys(
+        _diffusion_policy_builder.DIFFUSION_POLICY_KEYS,
+        _diffusion_policy_builder.build,
+    ),
     **dict.fromkeys(_safety_barrier_builder.ADAPTER_ALGO_KEYS, _safety_barrier_builder.build),
+    **dict.fromkeys(
+        _hybrid_global_rl_builder.HYBRID_GLOBAL_RL_KEYS, _hybrid_global_rl_builder.build
+    ),
 }
 
 

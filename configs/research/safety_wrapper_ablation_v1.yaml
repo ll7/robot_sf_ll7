@@ -26,13 +26,14 @@ claim_boundary: >
 fixed_scope:
   # Scenario distribution the ablation runs over (verify against tree before running).
   scenario_set: configs/benchmarks/paper_experiment_matrix_v1.yaml
+  planner_source: configs/benchmarks/paper_experiment_matrix_v1.yaml::planners[].key
   # Paired seeds: the SAME seed list is applied identically to both wrapper arms so
   # the only difference between the two arms is the wrapper itself.
   seeds: [111, 112, 113]
   planner_groups:
     - orca
-    - default_social_force
-    - hybrid_rule_v0_minimal
+    - social_force
+    - prediction_planner
 
 # The single factor under test: the planner-agnostic safety wrapper, off vs on.
 # Exactly two arms; the off arm is the baseline. Thresholds are predeclared and

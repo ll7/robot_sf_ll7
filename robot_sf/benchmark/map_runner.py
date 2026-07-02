@@ -1069,6 +1069,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     )
     registered_adapter_spec = build_registered_adapter_policy_spec(algo_key, algo_config)
     if registered_adapter_spec is not None:
+        meta["algorithm"] = registered_adapter_spec.algo_key
         return _build_adapter_policy(
             algo_key=registered_adapter_spec.algo_key,
             algo_config=registered_adapter_spec.algo_config,

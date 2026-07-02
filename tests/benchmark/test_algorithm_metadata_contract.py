@@ -616,6 +616,29 @@ def test_nmpc_social_metadata_exposes_native_optimizer_contract() -> None:
     assert planner["adapter_name"] == "NMPCSocialPlannerAdapter"
 
 
+def test_prediction_mpc_metadata_exposes_constraint_mpc_contract() -> None:
+    """Prediction-aware MPC metadata should name its time-varying constraint boundary."""
+    meta = enrich_algorithm_metadata(
+        algo="prediction_mpc",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+
+    planner = meta["planner_kinematics"]
+    assert meta["baseline_category"] == "classical"
+    assert meta["policy_semantics"] == "prediction_aware_model_predictive_local_planner"
+    assert planner["planner_command_space"] == "unicycle_vw"
+    assert planner["adapter_name"] == "PredictionMPCPlannerAdapter"
+    assert planner["projection_policy"] == "constant_velocity_time_varying_pedestrian_constraints"
+    assert meta["observation_spec"]["inputs"] == [
+        "robot_state",
+        "goal",
+        "pedestrians",
+        "predicted_pedestrian_futures",
+    ]
+
+
 def test_infer_execution_mode_from_counts() -> None:
     """Execution mode inference should reflect observed native/adapted step counts."""
     assert infer_execution_mode_from_counts(native_steps=3, adapted_steps=0) == "native"

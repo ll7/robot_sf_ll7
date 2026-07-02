@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Literal, cast
 
 import numpy as np
 import torch as th
+from gymnasium import spaces
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 from torch import nn
 
@@ -24,8 +25,6 @@ from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-
-    from gymnasium import spaces
 
 MAMBA_TEMPORAL_HISTORY_KEY = "temporal_history"
 MambaBackend = Literal["auto", "mamba_ssm", "torch_ssm_lite"]
@@ -83,7 +82,7 @@ class _TorchSSMLiteBlock(nn.Module):
         """
         residual = sequence
         convolved = self.depthwise_conv(sequence.transpose(1, 2)).transpose(1, 2)
-        convolved = convolved[:, : sequence.shape[1], :]
+        convolved = convolved[:, : sequence.shape[1], :].contiguous()
         gate = th.sigmoid(self.update_gate(convolved))
         values = th.tanh(self.value_gate(convolved))
         return self.norm(residual + gate * values)
@@ -94,7 +93,10 @@ def _load_mamba_ssm_class() -> type[nn.Module] | None:
     if importlib.util.find_spec("mamba_ssm") is None:
         return None
 
-    return import_module("mamba_ssm").Mamba
+    try:
+        return import_module("mamba_ssm").Mamba
+    except ImportError:
+        return None
 
 
 class MambaFeatureExtractor(BaseFeaturesExtractor):
@@ -126,6 +128,12 @@ class MambaFeatureExtractor(BaseFeaturesExtractor):
             raise ValueError(msg)
 
         drive_hidden_dims = tuple(drive_hidden_dims if drive_hidden_dims is not None else (32, 16))
+        if not isinstance(observation_space, spaces.Dict):
+            raise ValueError("observation_space must be gymnasium.spaces.Dict")
+        if OBS_DRIVE_STATE not in observation_space.spaces:
+            msg = f"observation_space must include '{OBS_DRIVE_STATE}'"
+            raise KeyError(msg)
+
         sequence_key = OBS_RAYS if sequence_source == "rays" else MAMBA_TEMPORAL_HISTORY_KEY
         if sequence_key not in observation_space.spaces:
             msg = f"observation_space must include '{sequence_key}' for sequence_source={sequence_source!r}"
@@ -224,6 +232,12 @@ class MambaFeatureExtractor(BaseFeaturesExtractor):
         Returns:
             Tensor ready for the sequence projection layer.
         """
+        if values.ndim < 3:
+            msg = (
+                f"{self.sequence_source} observations must have shape "
+                "(batch, sequence, features...)"
+            )
+            raise ValueError(msg)
         if self.sequence_source == "rays":
             return values.reshape(values.shape[0], -1, 1)
         if values.ndim < 3:

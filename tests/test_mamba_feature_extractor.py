@@ -163,3 +163,58 @@ def test_auto_backend_records_lite_fallback_when_exact_missing(
 
     assert extractor.backend_name == "torch_ssm_lite"
     assert extractor.backend_exact is False
+
+
+def test_auto_backend_falls_back_when_exact_import_is_broken(
+    monkeypatch: pytest.MonkeyPatch,
+    observation_space: spaces.Dict,
+) -> None:
+    """Auto mode treats broken optional Mamba imports as unavailable."""
+
+    monkeypatch.setattr(
+        "robot_sf.feature_extractors.mamba_extractor.importlib.util.find_spec",
+        lambda name: object() if name == "mamba_ssm" else importlib.util.find_spec(name),
+    )
+
+    def _raise_import_error(name: str):
+        if name == "mamba_ssm":
+            raise ImportError("missing causal-conv1d")
+        return importlib.import_module(name)
+
+    monkeypatch.setattr(
+        "robot_sf.feature_extractors.mamba_extractor.import_module", _raise_import_error
+    )
+
+    extractor = MambaFeatureExtractor(observation_space, backend="auto")
+
+    assert extractor.backend_name == "torch_ssm_lite"
+    assert extractor.backend_exact is False
+
+
+def test_observation_space_contract_is_fail_closed() -> None:
+    """Mamba extractor requires a Dict space with drive-state observations."""
+
+    with pytest.raises(ValueError, match="gymnasium.spaces.Dict"):
+        MambaFeatureExtractor(spaces.Box(low=0, high=1, shape=(4,), dtype=np.float32))
+
+    with pytest.raises(KeyError, match=OBS_DRIVE_STATE):
+        MambaFeatureExtractor(
+            spaces.Dict({OBS_RAYS: spaces.Box(low=0, high=1, shape=(5, 64), dtype=np.float32)})
+        )
+
+
+def test_sequence_observation_requires_batch_and_sequence_axes(
+    observation_space: spaces.Dict,
+) -> None:
+    """Under-ranked sequence tensors fail clearly before reshape/projection."""
+
+    extractor = MambaFeatureExtractor(observation_space, backend="torch_ssm_lite", d_model=8)
+
+    with pytest.raises(ValueError, match="rays observations"):
+        extractor(
+            {
+                OBS_DRIVE_STATE: th.randn(2, 5, 5),
+                OBS_RAYS: th.rand(2, 64),
+                MAMBA_TEMPORAL_HISTORY_KEY: th.randn(2, 4, 7),
+            }
+        )

@@ -25,7 +25,6 @@ from robot_sf.nav.map_config import (
     MapDefinitionPool,
     PedestrianWaitRule,
     SinglePedestrianDefinition,
-    parse_social_group_definitions,
     serialize_map,
 )
 from robot_sf.nav.svg_map_parser import convert_map
@@ -1220,8 +1219,11 @@ def build_robot_config_from_scenario(
     )
     _apply_map_pool(config, scenario, scenario_path)
     _apply_route_overrides(config, scenario.get("route_overrides_file"), scenario_path)
-    _apply_single_pedestrian_overrides(config, scenario.get("single_pedestrians"))
-    _apply_social_group_overrides(config, scenario.get("social_groups"))
+    _apply_single_pedestrian_overrides(
+        config,
+        scenario.get("single_pedestrians"),
+        default_hold_ref_point=_scenario_conflict_point(scenario),
+    )
     return config
 
 
@@ -1497,6 +1499,8 @@ def resolve_map_definition(map_file: str | None, *, scenario_path: Path) -> MapD
 def apply_single_pedestrian_overrides(
     map_def: MapDefinition,
     overrides: list[Mapping[str, Any]] | None,
+    *,
+    default_hold_ref_point: tuple[float, float] | None = None,
 ) -> None:
     """Apply single-pedestrian overrides from scenario YAML onto a map definition."""
     if not overrides:
@@ -1521,7 +1525,14 @@ def apply_single_pedestrian_overrides(
         if entry is None:
             updated.append(ped)
             continue
-        updated.append(_apply_single_pedestrian_override(ped, entry, map_def))
+        updated.append(
+            _apply_single_pedestrian_override(
+                ped,
+                entry,
+                map_def,
+                default_hold_ref_point=default_hold_ref_point,
+            )
+        )
 
     if overrides_by_id:
         unknown = ", ".join(sorted(overrides_by_id.keys()))
@@ -1533,6 +1544,8 @@ def apply_single_pedestrian_overrides(
 def _apply_single_pedestrian_overrides(
     config: RobotSimulationConfig,
     overrides: list[Mapping[str, Any]] | None,
+    *,
+    default_hold_ref_point: tuple[float, float] | None = None,
 ) -> None:
     """Apply single-pedestrian overrides to the loaded map pool."""
     if not overrides:
@@ -1544,32 +1557,33 @@ def _apply_single_pedestrian_overrides(
     # Avoid mutating cached map definitions shared across scenarios.
     map_def = deepcopy(map_def)
     config.map_pool.map_defs[map_name] = map_def
-    apply_single_pedestrian_overrides(map_def, overrides)
+    apply_single_pedestrian_overrides(
+        map_def,
+        overrides,
+        default_hold_ref_point=default_hold_ref_point,
+    )
 
 
-def _apply_social_group_overrides(
-    config: RobotSimulationConfig,
-    overrides: list[Mapping[str, Any]] | None,
-) -> None:
-    """Attach scenario-declared social groups to the loaded map pool.
+def _scenario_conflict_point(scenario: Mapping[str, Any]) -> tuple[float, float] | None:
+    """Extract the public-requirement event-contract conflict point, if present.
 
-    Groups are parsed and validated, then attached to a deep-copied map so cached
-    map definitions shared across scenarios are not mutated. Member ids are
-    re-validated against the map's single pedestrians (fail fast on unknown ids).
+    Returns:
+        tuple[float, float] | None: The conflict point used as the default proximity-hold
+        reference, or ``None`` when the scenario declares no such contract.
     """
-    if not overrides:
-        return
-    if not getattr(config, "map_pool", None) or not config.map_pool.map_defs:
-        logger.warning("social_groups overrides provided but no map_pool is loaded")
-        return
-    groups = parse_social_group_definitions(overrides)
-    map_name, map_def = next(iter(config.map_pool.map_defs.items()))
-    map_def = deepcopy(map_def)
-    map_def.social_groups = groups
-    # Re-run group validation now that groups are attached to the concrete map
-    # (duplicate ids + member resolution against declared single pedestrians).
-    map_def._validate_social_groups()
-    config.map_pool.map_defs[map_name] = map_def
+    metadata = scenario.get("metadata")
+    if not isinstance(metadata, Mapping):
+        return None
+    public_requirement = metadata.get("public_requirement")
+    if not isinstance(public_requirement, Mapping):
+        return None
+    event_contract = public_requirement.get("event_contract")
+    if not isinstance(event_contract, Mapping):
+        return None
+    conflict_point = event_contract.get("conflict_point")
+    if conflict_point is None:
+        return None
+    return _coerce_point(conflict_point, "event_contract.conflict_point")
 
 
 _MISSING = object()
@@ -1896,6 +1910,48 @@ def _resolve_role_overrides(
     return role, role_target_id, role_offset
 
 
+def _resolve_hold_overrides(
+    ped: SinglePedestrianDefinition,
+    entry: Mapping[str, Any],
+    *,
+    default_hold_ref_point: tuple[float, float] | None,
+) -> tuple[float | None, tuple[float, float] | None, float | None]:
+    """Resolve proximity-hold overrides for a pedestrian definition.
+
+    When ``hold_until_robot_within_m`` is set without an explicit ``hold_ref_point``, the
+    reference point defaults to the scenario event-contract ``conflict_point`` so authors do
+    not have to repeat the coordinate.
+
+    Returns:
+        tuple[float | None, tuple[float, float] | None, float | None]: Hold radius, reference
+        point, and timeout in seconds.
+    """
+    if "hold_until_robot_within_m" in entry:
+        value = entry.get("hold_until_robot_within_m")
+        hold_within = float(value) if value is not None else None
+    else:
+        hold_within = ped.hold_until_robot_within_m
+
+    if "hold_ref_point" in entry:
+        ref_value = entry.get("hold_ref_point")
+        hold_ref_point = (
+            _coerce_point(ref_value, "hold_ref_point") if ref_value is not None else None
+        )
+    else:
+        hold_ref_point = ped.hold_ref_point
+
+    if "hold_timeout_s" in entry:
+        timeout_value = entry.get("hold_timeout_s")
+        hold_timeout_s = float(timeout_value) if timeout_value is not None else None
+    else:
+        hold_timeout_s = ped.hold_timeout_s
+
+    if hold_within is not None and hold_ref_point is None and default_hold_ref_point is not None:
+        hold_ref_point = default_hold_ref_point
+
+    return hold_within, hold_ref_point, hold_timeout_s
+
+
 def _resolve_metadata_override(
     ped: SinglePedestrianDefinition,
     entry: Mapping[str, Any],
@@ -1921,6 +1977,8 @@ def _apply_single_pedestrian_override(
     ped: SinglePedestrianDefinition,
     entry: Mapping[str, Any],
     map_def: MapDefinition,
+    *,
+    default_hold_ref_point: tuple[float, float] | None = None,
 ) -> SinglePedestrianDefinition:
     """Apply overrides to a single pedestrian definition.
 
@@ -1938,6 +1996,11 @@ def _apply_single_pedestrian_override(
     start_delay_s = _resolve_start_delay_override(ped, entry)
     note = _resolve_note_override(ped, entry)
     role, role_target_id, role_offset = _resolve_role_overrides(ped, entry)
+    hold_within, hold_ref_point, hold_timeout_s = _resolve_hold_overrides(
+        ped,
+        entry,
+        default_hold_ref_point=default_hold_ref_point,
+    )
     metadata = _resolve_metadata_override(ped, entry)
 
     return SinglePedestrianDefinition(
@@ -1952,6 +2015,9 @@ def _apply_single_pedestrian_override(
         role=role,
         role_target_id=role_target_id,
         role_offset=role_offset,
+        hold_until_robot_within_m=hold_within,
+        hold_ref_point=hold_ref_point,
+        hold_timeout_s=hold_timeout_s,
         metadata=metadata,
     )
 

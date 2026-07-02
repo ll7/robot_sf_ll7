@@ -17,6 +17,7 @@ from scripts.validation.check_docs_proof_consistency import (
     _evidence_catalog_coverage_diagnostics,
     _parse_name_status,
     _selected_files,
+    _should_check_context_catalog,
 )
 
 
@@ -404,6 +405,73 @@ def test_explicit_path_outside_repo_is_rejected(tmp_path: Path) -> None:
             argparse.Namespace(path=[str(outside_path)], base="HEAD"),
             repo_root=repo_root,
         )
+
+
+def _write_catalog_with_output_pointer(repo_root: Path) -> None:
+    """Create catalog debt that should only fail strict catalog modes."""
+    (repo_root / "robot_sf").mkdir()
+    (repo_root / "robot_sf/example.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (repo_root / "docs/context/evidence").mkdir(parents=True)
+    evidence = repo_root / "docs/context/evidence/report.md"
+    evidence.write_text("[artifact](output/reports/run.json)\n", encoding="utf-8")
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.write_text(
+        """
+version: 1
+entries:
+  - path: docs/context/evidence/report.md
+    status: evidence
+    freshness: evidence
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def test_code_only_diff_skips_context_catalog_debt(tmp_path: Path) -> None:
+    """Code-only selected files should not surface unrelated catalog debt."""
+    repo_root = tmp_path
+    _write_catalog_with_output_pointer(repo_root)
+
+    diagnostics = _collect_diagnostics(
+        [ChangedFile(status="M", path=Path("robot_sf/example.py"))],
+        repo_root=repo_root,
+    )
+
+    assert diagnostics == []
+    assert not _should_check_context_catalog(
+        [ChangedFile(status="M", path=Path("robot_sf/example.py"))]
+    )
+
+
+def test_selected_context_catalog_keeps_strict_catalog_diagnostics(tmp_path: Path) -> None:
+    """Selecting the context catalog keeps strict catalog provenance checks."""
+    repo_root = tmp_path
+    _write_catalog_with_output_pointer(repo_root)
+
+    diagnostics = _collect_diagnostics(
+        [ChangedFile(status="M", path=Path("docs/context/catalog.yaml"))],
+        repo_root=repo_root,
+    )
+
+    assert _should_check_context_catalog(
+        [ChangedFile(status="M", path=Path("docs/context/catalog.yaml"))]
+    )
+    assert any("ignored output/ artifacts" in diagnostic.message for diagnostic in diagnostics)
+
+
+def test_force_context_catalog_keeps_strict_catalog_diagnostics(tmp_path: Path) -> None:
+    """Explicit full context-catalog mode checks catalog debt even for code diffs."""
+    repo_root = tmp_path
+    _write_catalog_with_output_pointer(repo_root)
+
+    diagnostics = _collect_diagnostics(
+        [ChangedFile(status="M", path=Path("robot_sf/example.py"))],
+        repo_root=repo_root,
+        force_context_catalog=True,
+    )
+
+    assert any("ignored output/ artifacts" in diagnostic.message for diagnostic in diagnostics)
 
 
 def test_context_catalog_reports_missing_status_and_path(tmp_path: Path) -> None:

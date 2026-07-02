@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Diff-scoped PR handoff check:
+# - docs/context-only diffs include README, INDEX, and catalog paths explicitly,
+#   preserving strict docs proof and context-catalog diagnostics.
+# - non-docs or mixed code diffs run changed-file proof only, so unrelated
+#   historical docs/context/catalog.yaml debt does not block code-only readiness.
+# - full evidence catalog hygiene remains explicit via
+#   scripts/validation/check_docs_proof_consistency.py --check-evidence-catalog.
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./common_setup.sh
 source "$SCRIPT_DIR/common_setup.sh"

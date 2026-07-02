@@ -208,6 +208,7 @@ def test_incomplete_rank_stability_analysis_blocks():
         ("target_ci_half_width", 0.25),
         ("rank_effect_stability_threshold", 0.50),
         ("bootstrap_resamples", 100),
+        ("bootstrap_resamples", 5000.0),
         ("seed_sufficiency_gate_command", "uv run python scripts/tools/some_other_gate.py"),
         ("replay_limitation_required", False),
         ("claim_boundary", "rank stability looks good"),

@@ -295,8 +295,12 @@ def _rank_stability_threshold_failures(analysis: dict[str, Any]) -> list[str]:
     failures: list[str] = []
     if schedule != REQUIRED_RANK_STABILITY_SCHEDULE:
         failures.append(f"schedule must be {REQUIRED_RANK_STABILITY_SCHEDULE}")
-    if bootstrap_resamples != REQUIRED_BOOTSTRAP_RESAMPLES:
-        failures.append(f"bootstrap_resamples must be {REQUIRED_BOOTSTRAP_RESAMPLES}")
+    if (
+        not isinstance(bootstrap_resamples, int)
+        or isinstance(bootstrap_resamples, bool)
+        or bootstrap_resamples != REQUIRED_BOOTSTRAP_RESAMPLES
+    ):
+        failures.append(f"bootstrap_resamples must be integer {REQUIRED_BOOTSTRAP_RESAMPLES}")
     if target_ci_half_width != REQUIRED_TARGET_CI_HALF_WIDTH:
         failures.append(f"target_ci_half_width must be {REQUIRED_TARGET_CI_HALF_WIDTH:.2f}")
     if rank_effect_stability_threshold != REQUIRED_RANK_EFFECT_STABILITY_THRESHOLD:

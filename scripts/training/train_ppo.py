@@ -66,6 +66,12 @@ from robot_sf.models import resolve_model_path
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
+from robot_sf.training.density_curriculum import (
+    DensityCurriculumSchedule,
+    apply_density_curriculum_stage_to_scenario,
+    build_density_curriculum_schedule,
+    curriculum_metadata,
+)
 from robot_sf.training.imitation_config import (
     ConvergenceCriteria,
     EvaluationSchedule,
@@ -210,6 +216,40 @@ class _DirectWandbMetricsCallback(BaseCallback):
             self._wandb_run.log(payload, step=int(self.num_timesteps))
             self._last_logged_step = int(self.num_timesteps)
         return True
+
+
+class _DensityCurriculumCallback(BaseCallback):
+    """Publish PPO timesteps to curriculum-aware training environments."""
+
+    def __init__(self, schedule: DensityCurriculumSchedule) -> None:
+        super().__init__()
+        self._schedule = schedule
+        self._last_stage_id: str | None = None
+
+    def _on_training_start(self) -> None:
+        self._publish_timestep()
+
+    def _on_step(self) -> bool:
+        self._publish_timestep()
+        stage = self._schedule.stage_for_timestep(int(self.num_timesteps))
+        stage_id = stage.id if stage is not None else None
+        if stage_id != self._last_stage_id:
+            logger.info(
+                "Density curriculum stage active step={} stage={}",
+                int(self.num_timesteps),
+                stage_id,
+            )
+            self._last_stage_id = stage_id
+        return True
+
+    def _publish_timestep(self) -> None:
+        training_env = getattr(self, "training_env", None)
+        if training_env is None:
+            return
+        try:
+            training_env.env_method("set_curriculum_timestep", int(self.num_timesteps))
+        except AttributeError:
+            return
 
 
 def _constant_schedule(value: float) -> Callable[[float], float]:
@@ -894,6 +934,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
             "evaluation.step_schedule is required; frequency_episodes alone is not supported."
         )
 
+    build_density_curriculum_schedule(dict(data.get("density_curriculum", {}) or {}))
     return ExpertTrainingConfig.from_raw(
         scenario_config=scenario_config,
         scenario_id=str(scenario_id) if scenario_id else None,
@@ -922,6 +963,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         env_overrides=dict(data.get("env_overrides", {}) or {}),
         env_factory_kwargs=dict(data.get("env_factory_kwargs", {}) or {}),
         scenario_sampling=dict(data.get("scenario_sampling", {}) or {}),
+        density_curriculum=dict(data.get("density_curriculum", {}) or {}),
         num_envs=_parse_num_envs(data.get("num_envs")),
         worker_mode=str(data.get("worker_mode", "auto")),
         socnav_orca_time_horizon=(
@@ -1068,9 +1110,13 @@ class _TrainingEnvFactory:
     env_overrides: dict[str, object]
     env_factory_kwargs: dict[str, object]
     scenario_sampling: dict[str, object]
+    density_curriculum: DensityCurriculumSchedule | None = None
 
     def _build_config(self, scenario_def: Mapping[str, Any]):
         """Build an environment config for one scenario definition."""
+        if self.density_curriculum is not None and self.scenario is not None:
+            stage = self.density_curriculum.stage_for_timestep(0)
+            scenario_def = apply_density_curriculum_stage_to_scenario(scenario_def, stage)
         env_config = build_robot_config_from_scenario(
             scenario_def,
             scenario_path=self.scenario_path,
@@ -1131,6 +1177,7 @@ class _TrainingEnvFactory:
             suite_name=self.suite_name,
             algorithm_name=self.algorithm_name,
             env_factory_kwargs=self.env_factory_kwargs,
+            density_curriculum=self.density_curriculum,
             seed=self.seed,
         )
 
@@ -1147,6 +1194,7 @@ def _make_training_env(  # noqa: PLR0913
     env_overrides: Mapping[str, object],
     env_factory_kwargs: Mapping[str, object],
     scenario_sampling: Mapping[str, object],
+    density_curriculum: DensityCurriculumSchedule | None = None,
 ) -> Callable[[], Any]:
     """Create a picklable training environment factory (seeded when provided)."""
     return _TrainingEnvFactory(
@@ -1164,6 +1212,7 @@ def _make_training_env(  # noqa: PLR0913
         env_overrides=dict(env_overrides),
         env_factory_kwargs=dict(env_factory_kwargs),
         scenario_sampling=dict(scenario_sampling),
+        density_curriculum=density_curriculum,
     )
 
 
@@ -2233,6 +2282,9 @@ def _train_with_schedule(  # noqa: C901,PLR0913
     perf_timeline: list[dict[str, float | int]] = []
     timesteps_done = int(max(0, start_timesteps))
     callbacks = []
+    density_curriculum = build_density_curriculum_schedule(config.density_curriculum)
+    if density_curriculum.enabled:
+        callbacks.append(_DensityCurriculumCallback(density_curriculum))
     direct_wandb_callback: _DirectWandbTrainingMetricsCallback | None = None
     if wandb_run is not None:
         direct_wandb_callback = _DirectWandbTrainingMetricsCallback(
@@ -2349,6 +2401,9 @@ def _init_training_model(
     """
     use_random = _randomize_seeds(config)
     base_seed = None if use_random else int(config.seeds[0]) if config.seeds else 0
+    density_curriculum = build_density_curriculum_schedule(config.density_curriculum)
+    if not density_curriculum.enabled:
+        density_curriculum = None
     num_envs = _resolve_num_envs(config)
     worker_mode = _resolve_worker_mode(config, num_envs)
     env_seeds = (
@@ -2368,6 +2423,7 @@ def _init_training_model(
             env_overrides=config.env_overrides,
             env_factory_kwargs=config.env_factory_kwargs,
             scenario_sampling=config.scenario_sampling,
+            density_curriculum=density_curriculum,
         )
         for seed in env_seeds
     ]
@@ -2833,6 +2889,9 @@ def _build_training_notes(
         notes.append(f"train_env_steps_per_sec_mean={mean_train_speed:.3f}")
     if scenario_coverage:
         notes.append(f"scenario_coverage={scenario_coverage}")
+    density_curriculum = build_density_curriculum_schedule(config.density_curriculum)
+    if density_curriculum.enabled:
+        notes.append(f"density_curriculum={json.dumps(curriculum_metadata(density_curriculum))}")
     notes.append("snqi_formula=robot_sf.benchmark.snqi.compute_snqi")
     notes.append(f"snqi_weights_source={outputs.snqi_context.weights_source}")
     notes.append(f"snqi_baseline_source={outputs.snqi_context.baseline_source}")

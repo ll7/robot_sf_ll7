@@ -1,0 +1,47 @@
+# Issue #4018 fixed-density comparator smoke config. Not benchmark evidence.
+policy_id: issue_4018_fixed_density_smoke
+scenario_config: ../../../scenarios/sets/ppo_all_available_training_v1_h500_schedule.yaml
+num_envs: 1
+worker_mode: dummy
+seeds:
+  - 4018
+total_timesteps: 96
+best_checkpoint_metric: success_rate
+feature_extractor: mlp
+policy_net_arch:
+  - 32
+  - 32
+ppo_hyperparams:
+  learning_rate: 0.0003
+  n_steps: 16
+  batch_size: 16
+  n_epochs: 1
+  ent_coef: 0.0
+evaluation:
+  frequency_episodes: 0
+  evaluation_episodes: 1
+  step_schedule:
+    - until_step: 96
+      every_steps: 96
+convergence:
+  success_rate: 0.9
+  collision_rate: 0.05
+  plateau_window: 1
+scenario_sampling:
+  strategy: cycle
+env_overrides:
+  observation_mode: default_gym
+  sim_config:
+    difficulty: 0
+    ped_density_by_difficulty:
+      - 0.04
+    max_peds_per_group: 3
+density_curriculum:
+  enabled: false
+tracking:
+  tensorboard: false
+  wandb:
+    enabled: false
+    tags:
+      - issue-4018
+      - fixed-density-smoke

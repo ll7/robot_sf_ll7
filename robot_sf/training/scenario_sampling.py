@@ -10,10 +10,13 @@ from gymnasium import Env, spaces
 from loguru import logger
 
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.training.density_curriculum import apply_density_curriculum_stage_to_scenario
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
+
+    from robot_sf.training.density_curriculum import DensityCurriculumSchedule
 
 
 def scenario_id_from_definition(scenario: Mapping[str, Any], *, index: int) -> str:
@@ -194,6 +197,7 @@ class ScenarioSwitchingEnv(Env):
         algorithm_name: str = "policy",
         switch_per_reset: bool = True,
         seed: int | None = None,
+        density_curriculum: DensityCurriculumSchedule | None = None,
     ) -> None:
         """Initialize a wrapper that swaps scenarios between episodes."""
         super().__init__()
@@ -210,6 +214,8 @@ class ScenarioSwitchingEnv(Env):
         self._suite_name = suite_name
         self._algorithm_name = algorithm_name
         self._switch_per_reset = switch_per_reset
+        self._density_curriculum = density_curriculum
+        self._curriculum_timestep = 0
         self._rng = np.random.default_rng(seed)
         self._scenario_coverage: dict[str, int] = {}
         self._current_env: Env | None = None
@@ -232,6 +238,18 @@ class ScenarioSwitchingEnv(Env):
         """Return the active scenario identifier."""
         return self._current_scenario_id
 
+    @property
+    def current_curriculum_stage_id(self) -> str | None:
+        """Return active curriculum stage identifier, if a schedule is enabled."""
+        if self._density_curriculum is None:
+            return None
+        stage = self._density_curriculum.stage_for_timestep(self._curriculum_timestep)
+        return stage.id if stage is not None else None
+
+    def set_curriculum_timestep(self, timestep: int) -> None:
+        """Set global training timestep used for the next scenario reset."""
+        self._curriculum_timestep = int(timestep)
+
     def _build_env(self, *, seed: int | None) -> tuple[Env, str]:
         """Create one environment for the next sampled scenario.
 
@@ -239,6 +257,9 @@ class ScenarioSwitchingEnv(Env):
             Newly created environment and active scenario id.
         """
         scenario, scenario_id = self._scenario_sampler.sample()
+        if self._density_curriculum is not None:
+            stage = self._density_curriculum.stage_for_timestep(self._curriculum_timestep)
+            scenario = apply_density_curriculum_stage_to_scenario(scenario, stage)
         env_seed = int(seed) if seed is not None else int(self._rng.integers(0, 2**31 - 1))
         env = self._env_factory(
             config=self._config_builder(scenario),

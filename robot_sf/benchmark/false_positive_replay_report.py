@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -331,7 +332,25 @@ def _has_predeclared_delta(report: Mapping[str, Any]) -> bool:
 
 
 def _pair_key(row: Mapping[str, Any], pair_keys: Sequence[str]) -> tuple[tuple[str, Any], ...]:
-    return tuple((key, _get_nested(row, key)) for key in pair_keys)
+    values: list[tuple[str, Any]] = []
+    for key in pair_keys:
+        if key == "planner_identity":
+            value = _planner_identity(row)
+        else:
+            value = _get_nested(row, key)
+        if not isinstance(value, str | int | float | bool) and value is not None:
+            value = json.dumps(value, sort_keys=True, separators=(",", ":"))
+        values.append((key, value))
+    return tuple(values)
+
+
+def _planner_identity(row: Mapping[str, Any]) -> str:
+    """Return stable planner identity while preserving valid falsy identifiers."""
+    for key in ("planner_key", "planner", "algo", "scenario_params.algo"):
+        value = _get_nested(row, key)
+        if value is not None:
+            return str(value)
+    return "unknown"
 
 
 def _metric_value(row: Mapping[str, Any], field: str) -> Any:
@@ -405,6 +424,7 @@ def _number(value: Any) -> float:
     if isinstance(value, bool):
         return 1.0 if value else 0.0
     try:
-        return float(value)
+        parsed = float(value)
+        return parsed if math.isfinite(parsed) else 0.0
     except (TypeError, ValueError):
         return 0.0

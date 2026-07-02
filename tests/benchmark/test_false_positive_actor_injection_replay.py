@@ -149,6 +149,47 @@ def test_report_records_profile_hash_per_episode_deltas_and_observed_class(tmp_p
     assert "selected_action" in episode["changed_fields"]
 
 
+def test_report_pairs_multiple_planners_without_identity_collision(tmp_path: Path) -> None:
+    """Planner identity must be part of episode pairing when planners share seeds."""
+    nominal = tmp_path / "nominal.jsonl"
+    perturbed = tmp_path / "perturbed.jsonl"
+    clean_a = _row(action="go")
+    clean_b = _row(action="stop")
+    noisy_a = _row(action="yield", noise=True, pedestrians_added=1)
+    noisy_b = _row(action="stop", noise=True, pedestrians_added=1)
+    clean_b["planner_key"] = "alt"
+    clean_b["algo"] = "alt"
+    noisy_b["planner_key"] = "alt"
+    noisy_b["algo"] = "alt"
+    _write_jsonl(nominal, [clean_a, clean_b])
+    _write_jsonl(perturbed, [noisy_a, noisy_b])
+
+    report = build_false_positive_replay_report(nominal_jsonl=nominal, perturbed_jsonl=perturbed)
+
+    assert [row["planner_key"] for row in report["per_episode_deltas"]] == ["alt", "goal"]
+    assert [row["selected_action"]["changed"] for row in report["per_episode_deltas"]] == [
+        False,
+        True,
+    ]
+
+
+def test_report_treats_nonfinite_numeric_metrics_as_no_delta(tmp_path: Path) -> None:
+    """NaN and infinity inputs should not masquerade as observed metric changes."""
+    nominal = tmp_path / "nominal.jsonl"
+    perturbed = tmp_path / "perturbed.jsonl"
+    clean = _row()
+    noisy = _row(noise=True, pedestrians_added=1)
+    clean["metrics"]["route_progress"] = float("nan")
+    noisy["metrics"]["route_progress"] = float("inf")
+    _write_jsonl(nominal, [clean])
+    _write_jsonl(perturbed, [noisy])
+
+    report = build_false_positive_replay_report(nominal_jsonl=nominal, perturbed_jsonl=perturbed)
+
+    assert report["per_episode_deltas"][0]["metric_delta"]["route_progress"] == 0.0
+    assert "route_progress" not in report["per_episode_deltas"][0]["changed_fields"]
+
+
 def test_classifier_distinguishes_scenario_too_weak_and_trace_only(tmp_path: Path) -> None:
     """Classifier keeps no-effect executable smoke separate from trace diagnostics."""
     nominal = tmp_path / "nominal.jsonl"

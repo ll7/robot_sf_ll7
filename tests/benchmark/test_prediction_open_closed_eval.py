@@ -169,7 +169,8 @@ def test_prediction_eval_closed_loop_summary_projects_existing_episode_metrics()
                 "jerk_mean": 0.2,
                 "total_collision_count": 0,
                 "time_to_goal": 4.0,
-            }
+            },
+            "termination_reason": "success",
         },
         {
             "metrics": {
@@ -192,6 +193,57 @@ def test_prediction_eval_closed_loop_summary_projects_existing_episode_metrics()
     assert report["jerk"] == pytest.approx(0.3)
     assert report["closed_loop_denominators"]["episode_count"] == 2
     assert report["closed_loop_denominators"]["time_to_goal_denominator"] == 1
+
+
+def test_prediction_eval_closed_loop_missing_event_fields_are_unavailable() -> None:
+    """Missing event signals should not look like zero-risk closed-loop evidence."""
+    report = summarize_closed_loop_prediction_metrics(
+        [
+            {
+                "metrics": {
+                    "min_distance": 1.2,
+                    "jerk_mean": 0.1,
+                }
+            }
+        ]
+    )
+
+    assert report["collision_rate"] is None
+    assert report["near_miss_rate"] is None
+    assert report["timeout_rate"] is None
+    assert report["closed_loop_denominators"]["collision_rate_denominator"] == 0
+    assert report["closed_loop_denominators"]["near_miss_rate_denominator"] == 0
+    assert report["closed_loop_denominators"]["timeout_rate_denominator"] == 0
+    assert report["statuses"]["collision_rate"]["status"] == "unavailable"
+    assert report["statuses"]["near_miss_rate"]["status"] == "unavailable"
+    assert report["statuses"]["timeout_rate"]["status"] == "unavailable"
+
+
+def test_prediction_eval_open_loop_invalid_covariance_is_unavailable() -> None:
+    """Invalid Gaussian covariance matrices should not count as uncertainty evidence."""
+    batch = ForecastBatch(
+        provenance=_provenance(),
+        forecasts=[
+            ActorForecast(
+                actor_id="ped_1",
+                deterministic=[[0.0, 0.0], [1.0, 0.0]],
+                gaussian=[
+                    {"mean": [0.0, 0.0], "covariance": [[1.0, 0.0], [0.0, -1.0]]},
+                    {"mean": [1.0, 0.0], "covariance": [[1.0, 2.0], [0.0, 1.0]]},
+                ],
+            )
+        ],
+    )
+
+    report = compute_open_loop_prediction_metrics(
+        forecast_batches=[batch],
+        ground_truth_by_batch={"ped_1": [[0.0, 0.0], [1.0, 0.0]]},
+    )
+
+    assert report["calibration_error"] is None
+    assert report["prediction_spread"] is None
+    assert report["statuses"]["calibration_error"]["status"] == "unavailable"
+    assert report["statuses"]["prediction_spread"]["status"] == "unavailable"
 
 
 def test_prediction_eval_closed_loop_empty_rows_are_unavailable() -> None:
@@ -260,3 +312,24 @@ def test_prediction_eval_paired_report_populates_multi_predictor_ranks() -> None
     assert ranks["cv_a"]["closed_loop_rank"] == 2
     assert ranks["cv_b"]["open_loop_rank"] == 2
     assert ranks["cv_b"]["closed_loop_rank"] == 1
+
+
+def test_prediction_eval_paired_report_marks_missing_rank_inputs() -> None:
+    """Multi-predictor rank skips should name missing inputs, not single-predictor smoke."""
+    predictor_a = build_open_closed_prediction_report(
+        predictor_id="cv_a",
+        open_loop_report={"fde": 0.5},
+        closed_loop_report={"collision_rate": 0.0, "near_miss_rate": 0.0, "min_distance": 0.6},
+    )
+    predictor_b = build_open_closed_prediction_report(
+        predictor_id="cv_b",
+        open_loop_report={"ade": 0.1},
+        closed_loop_report={"collision_rate": 0.0, "near_miss_rate": 0.0, "min_distance": 0.7},
+    )
+
+    report = build_paired_prediction_eval_report([predictor_a, predictor_b])
+    divergence = report["predictors"][1]["divergence"]
+
+    assert divergence["rank_comparison_available"] is False
+    assert divergence["reason"] == "missing_rank_inputs"
+    assert divergence["missing_rank_inputs"] == ["open_loop.fde"]

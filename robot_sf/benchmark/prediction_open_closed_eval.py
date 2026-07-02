@@ -146,7 +146,7 @@ def summarize_closed_loop_prediction_metrics(
             "timeout_rate": None,
             "time_to_goal": None,
             "jerk": None,
-            "closed_loop_denominators": _closed_loop_denominators(0, 0, 0, 0, 0, 0),
+            "closed_loop_denominators": _closed_loop_denominators(0, 0, 0, 0, 0, 0, 0),
             "statuses": {
                 field: {"status": "unavailable", "note": "no episode rows supplied"}
                 for field in (
@@ -163,6 +163,9 @@ def summarize_closed_loop_prediction_metrics(
     collision_events = [_collision_event(row) for row in episode_rows]
     near_miss_events = [_near_miss_event(row) for row in episode_rows]
     timeout_events = [_timeout_event(row) for row in episode_rows]
+    present_collision_events = _present_events(collision_events)
+    present_near_miss_events = _present_events(near_miss_events)
+    present_timeout_events = _present_events(timeout_events)
     min_distances = [_number_from_row(row, "min_distance") for row in episode_rows]
     time_to_goal_values = [_number_from_row(row, "time_to_goal") for row in episode_rows]
     jerk_values = [_number_from_row(row, "jerk_mean") for row in episode_rows]
@@ -172,27 +175,34 @@ def summarize_closed_loop_prediction_metrics(
     jerk_present = [value for value in jerk_values if value is not None]
 
     return {
-        "collision_rate": float(sum(collision_events) / episode_count),
-        "near_miss_rate": float(sum(near_miss_events) / episode_count),
+        "collision_rate": _rate_or_none(present_collision_events),
+        "near_miss_rate": _rate_or_none(present_near_miss_events),
         "min_distance": float(min(min_distance_values)) if min_distance_values else None,
-        "timeout_rate": float(sum(timeout_events) / episode_count),
+        "timeout_rate": _rate_or_none(present_timeout_events),
         "time_to_goal": _mean_or_none(time_to_goal_present),
         "jerk": _mean_or_none(jerk_present),
         "closed_loop_denominators": _closed_loop_denominators(
             episode_count,
-            episode_count,
-            episode_count,
+            len(present_collision_events),
+            len(present_near_miss_events),
+            len(present_timeout_events),
             len(min_distance_values),
             len(time_to_goal_present),
             len(jerk_present),
         ),
         "statuses": {
-            "collision_rate": {"status": "ok", "denominator": episode_count},
-            "near_miss_rate": {"status": "ok", "denominator": episode_count},
+            "collision_rate": _availability_status(
+                len(present_collision_events), "metrics.collision unavailable"
+            ),
+            "near_miss_rate": _availability_status(
+                len(present_near_miss_events), "metrics.near_misses unavailable"
+            ),
             "min_distance": _availability_status(
                 len(min_distance_values), "metrics.min_distance unavailable"
             ),
-            "timeout_rate": {"status": "ok", "denominator": episode_count},
+            "timeout_rate": _availability_status(
+                len(present_timeout_events), "metrics.timeout unavailable"
+            ),
             "time_to_goal": _availability_status(
                 len(time_to_goal_present), "metrics.time_to_goal unavailable"
             ),
@@ -344,7 +354,7 @@ def _gaussian_calibration_counts(
             continue
         for index, gaussian in enumerate(forecast.gaussian):
             mean = _position_array(gaussian.get("mean"))
-            covariance = _covariance_array(gaussian.get("covariance"))
+            covariance = _covariance_array(gaussian.get("covariance"), positive_definite=True)
             if mean is None or covariance is None:
                 continue
             offset = truth[index] - mean
@@ -402,7 +412,7 @@ def _position_array(value: object) -> np.ndarray | None:
     return position
 
 
-def _covariance_array(value: object) -> np.ndarray | None:
+def _covariance_array(value: object, *, positive_definite: bool = False) -> np.ndarray | None:
     if value is None:
         return None
     try:
@@ -410,6 +420,15 @@ def _covariance_array(value: object) -> np.ndarray | None:
     except (TypeError, ValueError, KeyError, IndexError):
         return None
     if covariance.shape != (2, 2) or not np.all(np.isfinite(covariance)):
+        return None
+    if not np.allclose(covariance, covariance.T):
+        return None
+    eigenvalues = np.linalg.eigvalsh(covariance)
+    tolerance = np.finfo(float).eps
+    if positive_definite:
+        if np.any(eigenvalues <= tolerance):
+            return None
+    elif np.any(eigenvalues < -tolerance):
         return None
     return covariance
 
@@ -478,6 +497,7 @@ def _closed_loop_denominators(
     episode_count: int,
     collision_count: int,
     near_miss_count: int,
+    timeout_count: int,
     min_distance_count: int,
     time_to_goal_count: int,
     jerk_count: int,
@@ -487,40 +507,75 @@ def _closed_loop_denominators(
         "collision_rate_denominator": collision_count,
         "near_miss_rate_denominator": near_miss_count,
         "min_distance_denominator": min_distance_count,
-        "timeout_rate_denominator": episode_count,
+        "timeout_rate_denominator": timeout_count,
         "time_to_goal_denominator": time_to_goal_count,
         "jerk_denominator": jerk_count,
     }
 
 
-def _collision_event(row: Mapping[str, Any]) -> bool:
+def _collision_event(row: Mapping[str, Any]) -> bool | None:
     metrics = _metrics(row)
     outcome = _mapping(row.get("outcome"))
-    return bool(
-        outcome.get("collision_event")
-        or _number(metrics.get("total_collision_count"), default=0.0) > 0.0
-        or _number(metrics.get("collisions"), default=0.0) > 0.0
-        or _number(row.get("collision"), default=0.0) > 0.0
+    return _event_from_candidates(
+        outcome.get("collision_event"),
+        metrics.get("total_collision_count"),
+        metrics.get("collisions"),
+        row.get("collision"),
     )
 
 
-def _near_miss_event(row: Mapping[str, Any]) -> bool:
+def _near_miss_event(row: Mapping[str, Any]) -> bool | None:
     metrics = _metrics(row)
-    return bool(
-        _number(metrics.get("near_misses"), default=0.0) > 0.0
-        or _number(row.get("near_misses"), default=0.0) > 0.0
-    )
+    return _event_from_candidates(metrics.get("near_misses"), row.get("near_misses"))
 
 
-def _timeout_event(row: Mapping[str, Any]) -> bool:
+def _timeout_event(row: Mapping[str, Any]) -> bool | None:
     metrics = _metrics(row)
     outcome = _mapping(row.get("outcome"))
-    termination_reason = str(row.get("termination_reason") or "").lower()
-    return bool(
-        outcome.get("timeout_event")
-        or termination_reason in _TIMEOUT_REASONS
-        or _number(metrics.get("timeout"), default=0.0) > 0.0
+    termination_signal = None
+    if row.get("termination_reason") is not None:
+        termination_signal = str(row.get("termination_reason")).lower() in _TIMEOUT_REASONS
+    return _event_from_candidates(
+        outcome.get("timeout_event"),
+        termination_signal,
+        metrics.get("timeout"),
     )
+
+
+def _event_from_candidates(*candidates: object) -> bool | None:
+    """Return event state when any explicit boolean/count signal exists."""
+    saw_signal = False
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        if isinstance(candidate, bool):
+            saw_signal = True
+            if candidate:
+                return True
+            continue
+        number = _finite_float(candidate)
+        if number is None:
+            continue
+        saw_signal = True
+        if number > 0.0:
+            return True
+    return False if saw_signal else None
+
+
+def _present_events(events: Iterable[bool | None]) -> list[bool]:
+    """Drop unavailable event rows before rate calculation.
+
+    Returns:
+        Event states with unavailable rows removed.
+    """
+    return [event for event in events if event is not None]
+
+
+def _rate_or_none(events: Sequence[bool]) -> float | None:
+    """Return a rate over present events, or unavailable when no events are present."""
+    if not events:
+        return None
+    return float(sum(events) / len(events))
 
 
 def _number_from_row(row: Mapping[str, Any], key: str) -> float | None:
@@ -585,6 +640,19 @@ def _attach_rank_comparisons(reports: list[dict[str, Any]]) -> None:
                     "closed_loop_rank": closed_ranks[predictor_id],
                     "rank_delta": closed_ranks[predictor_id] - open_ranks[predictor_id],
                     "reason": "multi_predictor_rank_projection",
+                }
+            )
+        else:
+            missing_rank_inputs = []
+            if predictor_id not in open_ranks:
+                missing_rank_inputs.append("open_loop.fde")
+            if predictor_id not in closed_ranks:
+                missing_rank_inputs.append("closed_loop.collision_rate/near_miss_rate/min_distance")
+            divergence.update(
+                {
+                    "rank_comparison_available": False,
+                    "reason": "missing_rank_inputs",
+                    "missing_rank_inputs": missing_rank_inputs,
                 }
             )
         report["divergence"] = divergence

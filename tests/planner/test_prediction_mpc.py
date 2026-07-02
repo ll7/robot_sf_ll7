@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import warnings
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from robot_sf.planner.prediction_mpc import (
     ConstantVelocityPedestrianPredictor,
@@ -185,3 +187,128 @@ def test_prediction_mpc_reset_clears_warm_start_and_diagnostics() -> None:
 
     assert planner._last_solution is None
     assert planner.diagnostics()["calls"] == 0
+
+
+def _clearance_context(planner: PredictionMPCPlannerAdapter, obs: dict) -> SimpleNamespace:
+    """Build a rollout context for direct clearance-constraint evaluation."""
+    *_, robot_radius, ped_radius = planner._extract_state(obs)
+    return SimpleNamespace(
+        robot_pos=np.asarray([0.0, 0.0], dtype=float),
+        heading=0.0,
+        current_speed=0.0,
+        goal=np.asarray([2.0, 0.0], dtype=float),
+        ped_positions=np.asarray(obs["pedestrians"]["positions"], dtype=float),
+        ped_velocities=np.asarray(obs["pedestrians"]["velocities"], dtype=float),
+        robot_radius=robot_radius,
+        ped_radius=ped_radius,
+        observation=obs,
+        speed_cap=0.9,
+    )
+
+
+def test_prediction_mpc_uncertainty_disabled_by_default() -> None:
+    """The envelope is opt-in: the default config reports it disabled."""
+    planner = PredictionMPCPlannerAdapter(PredictionMPCConfig(horizon_steps=3))
+    envelope = planner.diagnostics()["pedestrian_uncertainty_envelope"]
+    assert envelope["enabled"] is False
+    assert envelope["policy"] == "deterministic"
+
+
+def test_prediction_mpc_uncertainty_alpha_zero_preserves_constraints() -> None:
+    """Regression: enabling with alpha=0.0 reproduces baseline clearance values."""
+    obs = _obs(ped_positions=[(0.6, 0.0)], ped_velocities=[(0.0, 0.0)])
+    planner_base = PredictionMPCPlannerAdapter(
+        PredictionMPCConfig(
+            horizon_steps=3,
+            pedestrian_uncertainty_envelope_enabled=False,
+            pedestrian_uncertainty_alpha_mps=0.0,
+        )
+    )
+    planner_zero = PredictionMPCPlannerAdapter(
+        PredictionMPCConfig(
+            horizon_steps=3,
+            pedestrian_uncertainty_envelope_enabled=True,
+            pedestrian_uncertainty_alpha_mps=0.0,
+        )
+    )
+    controls = np.zeros(2 * 3, dtype=float)
+    futures = planner_base._future_predictor.predict(
+        obs, horizon_steps=3, dt=planner_base.config.rollout_dt
+    )
+
+    base_vals = planner_base._pedestrian_clearance_constraints(
+        controls, context=_clearance_context(planner_base, obs), predicted_futures=futures
+    )
+    zero_vals = planner_zero._pedestrian_clearance_constraints(
+        controls, context=_clearance_context(planner_zero, obs), predicted_futures=futures
+    )
+
+    np.testing.assert_array_equal(base_vals, zero_vals)
+
+
+def test_prediction_mpc_uncertainty_positive_alpha_tightens_later_constraints() -> None:
+    """A positive alpha lowers (tightens) clearance margins at later horizon steps."""
+    obs = _obs(ped_positions=[(1.2, 0.0)], ped_velocities=[(0.0, 0.0)])
+    horizon = 4
+    baseline = PredictionMPCPlannerAdapter(PredictionMPCConfig(horizon_steps=horizon))
+    inflated = PredictionMPCPlannerAdapter(
+        PredictionMPCConfig(
+            horizon_steps=horizon,
+            pedestrian_uncertainty_envelope_enabled=True,
+            pedestrian_uncertainty_alpha_mps=0.5,
+        )
+    )
+    controls = np.zeros(2 * horizon, dtype=float)
+    futures = baseline._future_predictor.predict(
+        obs, horizon_steps=horizon, dt=baseline.config.rollout_dt
+    )
+
+    base_vals = baseline._pedestrian_clearance_constraints(
+        controls, context=_clearance_context(baseline, obs), predicted_futures=futures
+    )
+    inflated_vals = inflated._pedestrian_clearance_constraints(
+        controls, context=_clearance_context(inflated, obs), predicted_futures=futures
+    )
+
+    # Step 0 is unchanged; later steps require more room, so the constraint slack
+    # (distance^2 - r_safe^2) is strictly smaller under the active envelope.
+    assert inflated_vals[0] == pytest.approx(base_vals[0])
+    assert inflated_vals[-1] < base_vals[-1]
+
+
+def test_prediction_mpc_config_rejects_negative_uncertainty_alpha() -> None:
+    """A negative conservatism rate fails closed at config construction."""
+    with pytest.raises(ValueError):
+        PredictionMPCConfig(pedestrian_uncertainty_alpha_mps=-0.1)
+
+
+def test_build_prediction_mpc_config_parses_envelope_fields() -> None:
+    """YAML-style envelope keys are parsed onto the prediction-MPC config."""
+    cfg = build_prediction_mpc_config(
+        {
+            "pedestrian_uncertainty_envelope_enabled": "true",
+            "pedestrian_uncertainty_alpha_mps": "0.1",
+        }
+    )
+    assert cfg.pedestrian_uncertainty_envelope_enabled is True
+    assert cfg.pedestrian_uncertainty_alpha_mps == pytest.approx(0.1)
+
+
+def test_uncertainty_envelope_example_config_activates_envelope() -> None:
+    """The shipped example YAML config yields an active envelope planner."""
+    import yaml
+
+    config_path = (
+        Path(__file__).resolve().parents[2]
+        / "configs"
+        / "algos"
+        / "prediction_mpc_cv_uncertainty_envelope.yaml"
+    )
+    raw = yaml.safe_load(config_path.read_text())
+    cfg = build_prediction_mpc_config(raw)
+    planner = PredictionMPCPlannerAdapter(cfg)
+
+    envelope = planner.diagnostics()["pedestrian_uncertainty_envelope"]
+    assert envelope["enabled"] is True
+    assert envelope["policy"] == "linear"
+    assert envelope["alpha_mps"] == pytest.approx(0.1)

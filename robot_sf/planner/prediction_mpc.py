@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import warnings
 from dataclasses import dataclass, fields
 from typing import Any, Protocol
@@ -9,6 +10,7 @@ from typing import Any, Protocol
 import numpy as np
 from scipy.optimize import NonlinearConstraint
 
+from robot_sf.nav.uncertainty_envelope import envelope_diagnostics
 from robot_sf.planner.nmpc_social import (
     NMPCSocialConfig,
     NMPCSocialPlannerAdapter,
@@ -40,6 +42,17 @@ class PredictionMPCConfig:
     fallback_to_stop: bool = True
     predictor_backend: str = "constant_velocity"
     allow_predictor_fallback: bool = False
+    # Opt-in pedestrian uncertainty envelope (issue #4141). When enabled with a
+    # positive alpha, per-horizon-step clearance uses an inflated effective
+    # pedestrian radius r_eff(i) = ped_radius + alpha * i * rollout_dt. Disabled
+    # or alpha == 0.0 reproduces the deterministic baseline exactly.
+    pedestrian_uncertainty_envelope_enabled: bool = False
+    pedestrian_uncertainty_alpha_mps: float = 0.0
+
+    def __post_init__(self) -> None:
+        """Validate the opt-in uncertainty-envelope conservatism rate."""
+        if self.pedestrian_uncertainty_alpha_mps < 0.0:
+            raise ValueError("pedestrian_uncertainty_alpha_mps must be >= 0")
 
 
 @dataclass(frozen=True)
@@ -196,18 +209,45 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         if not np.any(active):
             return np.ones((1,), dtype=float)
         robot_xy = states[:, :2]
-        r_safe = (
-            float(context.robot_radius)
-            + float(context.ped_radius)
-            + float(self.prediction_config.pedestrian_safety_margin)
-        )
+        enabled = bool(self.prediction_config.pedestrian_uncertainty_envelope_enabled)
+        alpha = float(self.prediction_config.pedestrian_uncertainty_alpha_mps)
+        dt = float(predicted_futures.dt)
+        use_inflation = enabled and alpha > 0.0
+        base_ped_radius = float(context.ped_radius)
         values: list[float] = []
         future_horizon = predicted_futures.positions_world.shape[1]
         for step_idx in range(robot_xy.shape[0]):
             ped_k = predicted_futures.positions_world[active, min(step_idx, future_horizon - 1), :]
             d2 = np.sum((ped_k - robot_xy[step_idx][None, :]) ** 2, axis=1)
+            # Horizon-dependent effective pedestrian radius. inflation(0) == 0.0,
+            # so the first step is unchanged and a disabled envelope (or
+            # alpha == 0.0) is a bit-for-bit no-op versus the baseline.
+            ped_eff_radius = base_ped_radius + (
+                alpha * float(step_idx) * dt if use_inflation else 0.0
+            )
+            r_safe = (
+                float(context.robot_radius)
+                + ped_eff_radius
+                + float(self.prediction_config.pedestrian_safety_margin)
+            )
             values.extend((d2 - r_safe**2).tolist())
         return np.asarray(values or [1.0], dtype=float)
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return runtime diagnostics plus the uncertainty-envelope provenance.
+
+        Returns:
+            dict[str, Any]: Base solve/command statistics augmented with a
+            ``pedestrian_uncertainty_envelope`` provenance payload recording the
+            envelope settings and an explicit claim boundary.
+        """
+        payload: dict[str, Any] = copy.deepcopy(super().diagnostics())
+        payload["pedestrian_uncertainty_envelope"] = envelope_diagnostics(
+            enabled=bool(self.prediction_config.pedestrian_uncertainty_envelope_enabled),
+            alpha=float(self.prediction_config.pedestrian_uncertainty_alpha_mps),
+            dt=float(self.prediction_config.rollout_dt),
+        )
+        return payload
 
 
 def _to_nmpc_config(config: PredictionMPCConfig) -> NMPCSocialConfig:
@@ -268,6 +308,8 @@ def build_prediction_mpc_config(cfg: dict[str, Any] | None) -> PredictionMPCConf
         "fallback_to_stop": _parse_bool,
         "predictor_backend": str,
         "allow_predictor_fallback": _parse_bool,
+        "pedestrian_uncertainty_envelope_enabled": _parse_bool,
+        "pedestrian_uncertainty_alpha_mps": float,
     }
     kwargs: dict[str, Any] = {}
     for field in fields(PredictionMPCConfig):

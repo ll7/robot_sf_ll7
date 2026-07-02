@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **pedestrian uncertainty-envelope abstraction** for conservative obstacle clearance
+  (#4141): new `robot_sf/nav/uncertainty_envelope.py` defines `PedestrianUncertaintyEnvelope`, a
+  `linear_inflation_policy(alpha, dt)` factory, an `effective_pedestrian_radius(...)` planner
+  substitution helper, an `envelope_diagnostics(...)` provenance builder, and a
+  `ConformalInflationPolicy` stub interface documenting the future conformal upgrade seam (#4138).
+  The envelope inflates the effective pedestrian radius by `alpha * horizon_step * dt`, so a planner
+  keeps more room at longer prediction horizons; `alpha == 0.0` (or a disabled config) reproduces the
+  deterministic baseline exactly. The prediction-aware MPC planner gains opt-in
+  `pedestrian_uncertainty_envelope_enabled` / `pedestrian_uncertainty_alpha_mps` config fields
+  (default off) wired into its hard per-horizon-step clearance constraints, records the envelope
+  settings and claim boundary in `diagnostics()`, and ships an example
+  `configs/algos/prediction_mpc_cv_uncertainty_envelope.yaml`. This is a structured-conservatism
+  abstraction only; it makes no calibration or benchmark-improvement claim, changes no pedestrian
+  dynamics or simulator collision semantics, leaves existing clearance metrics unchanged, and adds no
+  new dependencies.
 * Added a **proximity-released pedestrian hold** for scripted single pedestrians (#3977):
   `SinglePedestrianDefinition` gains `hold_until_robot_within_m`, `hold_ref_point` (defaults to the
   scenario event-contract `conflict_point`), and `hold_timeout_s` (fail-open, ~6s default). A

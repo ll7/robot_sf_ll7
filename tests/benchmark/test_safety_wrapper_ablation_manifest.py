@@ -98,6 +98,17 @@ def test_manifest_echoes_predeclared_wrapper_thresholds_as_provenance() -> None:
     assert on_arm[SAFETY_WRAPPER_MODE_FIELD] == SAFETY_WRAPPER_MODE_ENABLED
     assert on_arm["runtime_binding_status"] == "unresolved_runtime_binding"
     assert manifest["event_ledger_target"] == 3482
+    assert manifest["planner_source_check"]["all_requested_planners_declared"] is True
+    assert manifest["planner_source_check"]["requested_planner_keys"] == [
+        "orca",
+        "social_force",
+        "prediction_planner",
+    ]
+    assert set(manifest["planner_groups"]).issubset(
+        manifest["planner_source_check"]["declared_planner_keys"]
+    )
+    assert manifest["factorial_check"]["planner_source_declared"] is True
+    assert manifest["factorial_check"]["all_requested_planners_declared"] is True
 
 
 def test_manifest_claim_boundary_prevents_benchmark_or_paper_claims() -> None:
@@ -138,6 +149,15 @@ def test_config_rejects_unpaired_seeds() -> None:
     config["fixed_scope"]["seeds"] = [111, 111, 112]
 
     with pytest.raises(ValueError, match="seeds must be unique"):
+        build_safety_wrapper_ablation_manifest(config, options=_options())
+
+
+def test_manifest_rejects_planner_ids_missing_from_declared_source() -> None:
+    """Planner IDs must reconcile to the declared matrix before later comparison."""
+    config = _repo_config()
+    config["fixed_scope"]["planner_groups"] = ["orca", "default_social_force"]
+
+    with pytest.raises(ValueError, match="missing from declared planner source"):
         build_safety_wrapper_ablation_manifest(config, options=_options())
 
 

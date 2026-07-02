@@ -58,6 +58,7 @@ REQUIRED_ROW_FIELDS = (
 )
 
 REQUIRED_EVENT_LEDGER_SCHEMA = "EpisodeEventLedger.v1"
+PLANNER_SOURCE_SUFFIX = "::planners[].key"
 DRY_RUN_CLAIM_BOUNDARY = (
     "dry-run factorial-ablation manifest only: enumerates the fixed issue #3501 "
     "planner x {wrapper off, wrapper on} cells and paired seeds; not benchmark evidence, "
@@ -113,6 +114,9 @@ def _validate_fixed_scope(fixed_scope: Any) -> None:
         raise ValueError("fixed_scope must be a mapping")
     if not fixed_scope.get("scenario_set"):
         raise ValueError("fixed_scope.scenario_set is required")
+    planner_source = fixed_scope.get("planner_source")
+    if planner_source is not None and not isinstance(planner_source, str):
+        raise ValueError("fixed_scope.planner_source must be a string when provided")
     seeds = fixed_scope.get("seeds")
     if not isinstance(seeds, Sequence) or isinstance(seeds, (str, bytes)) or len(seeds) == 0:
         raise ValueError("fixed_scope.seeds must be a non-empty list")
@@ -127,6 +131,63 @@ def _validate_fixed_scope(fixed_scope: Any) -> None:
         raise ValueError("fixed_scope.planner_groups must be a non-empty list")
     if len(set(planner_groups)) != len(planner_groups):
         raise ValueError("fixed_scope.planner_groups must be unique")
+
+
+def _planner_source_path(fixed_scope: Mapping[str, Any]) -> str:
+    """Return the planner-source path declared by the fixed scope."""
+    planner_source = fixed_scope.get("planner_source")
+    if isinstance(planner_source, str) and planner_source.endswith(PLANNER_SOURCE_SUFFIX):
+        return planner_source[: -len(PLANNER_SOURCE_SUFFIX)]
+    return str(fixed_scope["scenario_set"])
+
+
+def _load_declared_planner_keys(
+    *,
+    config_path: str | Path,
+    fixed_scope: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Load planner keys from the declared matrix and fail closed on ID drift.
+
+    Returns:
+        Structured planner-source reconciliation metadata for the manifest.
+    """
+    declared_source = _planner_source_path(fixed_scope)
+    source_path = Path(declared_source)
+    if not source_path.is_absolute():
+        source_path = Path(config_path).parent / source_path
+        if not source_path.exists():
+            source_path = Path(declared_source)
+    if not source_path.exists():
+        raise ValueError(f"fixed_scope planner source does not exist: {source_path}")
+
+    payload = yaml.safe_load(source_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(payload, Mapping):
+        raise ValueError(f"fixed_scope planner source must be a mapping: {source_path}")
+    planners = payload.get("planners")
+    if not isinstance(planners, Sequence) or isinstance(planners, (str, bytes)):
+        raise ValueError(f"fixed_scope planner source missing planners list: {source_path}")
+    planner_keys = [
+        str(planner["key"])
+        for planner in planners
+        if isinstance(planner, Mapping) and planner.get("key")
+    ]
+    if not planner_keys:
+        raise ValueError(f"fixed_scope planner source has no planner keys: {source_path}")
+
+    requested = [str(planner) for planner in fixed_scope["planner_groups"]]
+    missing = sorted(set(requested) - set(planner_keys))
+    if missing:
+        raise ValueError(
+            "fixed_scope.planner_groups missing from declared planner source "
+            f"{source_path}: {missing}"
+        )
+    return {
+        "planner_source": str(fixed_scope.get("planner_source", fixed_scope["scenario_set"])),
+        "planner_source_path": str(source_path),
+        "declared_planner_keys": planner_keys,
+        "requested_planner_keys": requested,
+        "all_requested_planners_declared": True,
+    }
 
 
 def _validate_result_contract(result_contract: Any) -> None:
@@ -219,6 +280,10 @@ def build_safety_wrapper_ablation_manifest(
     fixed_scope = validated["fixed_scope"]
     seeds = list(fixed_scope["seeds"])
     planner_groups = list(fixed_scope["planner_groups"])
+    planner_source_check = _load_declared_planner_keys(
+        config_path=options.config_path,
+        fixed_scope=fixed_scope,
+    )
     arms = [_arm_manifest(arm) for arm in validated["wrapper_arms"]]
     cells = _enumerate_cells(planner_groups, arms, seeds)
     return {
@@ -235,6 +300,7 @@ def build_safety_wrapper_ablation_manifest(
         "fixed_scope": copy.deepcopy(fixed_scope),
         "seeds": seeds,
         "planner_groups": planner_groups,
+        "planner_source_check": planner_source_check,
         "wrapper_arms": arms,
         "primary_outcomes": copy.deepcopy(validated.get("primary_outcomes", [])),
         "event_ledger_target": validated.get("event_ledger_target"),
@@ -250,7 +316,12 @@ def build_safety_wrapper_ablation_manifest(
         },
         "cell_count": len(cells),
         "cells": cells,
-        "factorial_check": check_factorial_ablation(planner_groups, arms, seeds),
+        "factorial_check": check_factorial_ablation(
+            planner_groups,
+            arms,
+            seeds,
+            planner_source_check=planner_source_check,
+        ),
     }
 
 
@@ -315,6 +386,8 @@ def check_factorial_ablation(
     planner_groups: Sequence[str],
     arms: Sequence[Mapping[str, Any]],
     seeds: Sequence[int],
+    *,
+    planner_source_check: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Check wrapper on/off factorization and paired-seed completeness.
 
@@ -344,6 +417,11 @@ def check_factorial_ablation(
         "arms_are_off_on": bool(arms_are_off_on),
         "off_on_enabled": bool(off_on_enabled),
         "seeds_paired_across_arms": bool(seeds_paired),
+        "planner_source_declared": planner_source_check is not None,
+        "all_requested_planners_declared": bool(
+            planner_source_check
+            and planner_source_check.get("all_requested_planners_declared", False)
+        ),
         "planner_count": len(planner_groups),
         "expected_cell_count": expected_cells,
         "seeds_per_cell": len(seeds),

@@ -36,6 +36,62 @@ def _write_sdd_fixture(path: Path) -> None:
     )
 
 
+def _write_quoted_sdd_fixture(path: Path) -> None:
+    """Write tiny valid SDD-format annotation fixture with quoted labels."""
+    path.write_text(
+        "\n".join(
+            [
+                '1 0 0 10 10 0 0 0 0 "Pedestrian"',
+                '1 5 0 15 10 5 0 0 0 "Pedestrian"',
+                '1 10 0 20 10 10 0 0 0 "Pedestrian"',
+                '1 15 0 25 10 15 0 0 0 "Pedestrian"',
+                '2 100 100 110 110 0 0 0 0 "Pedestrian"',
+                '2 100 105 110 115 5 0 0 0 "Pedestrian"',
+                '2 100 110 110 120 10 0 0 0 "Pedestrian"',
+                '2 100 115 110 125 15 0 0 0 "Pedestrian"',
+                '3 0 0 10 10 0 1 0 0 "Pedestrian"',  # lost -> filtered
+                '4 0 0 10 10 0 0 0 0 "Biker"',  # wrong label -> filtered
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_probe_accepts_user_facing_label_for_quoted_sdd_rows(tmp_path: Path) -> None:
+    """Probe should accept unquoted labels for quoted SDD annotation rows."""
+    annotations = tmp_path / "annotations.txt"
+    _write_quoted_sdd_fixture(annotations)
+
+    probe = sdd_curation_preflight.probe_annotation_file(
+        annotations,
+        label="Pedestrian",
+        min_track_points=4,
+        max_pedestrians=4,
+    )
+
+    assert probe["label"] == "Pedestrian"
+    assert probe["usable_label_points"] == 8
+    assert probe["usable_track_count"] == 2
+    assert probe["selection_satisfiable"] is True
+    assert probe["blockers"] == []
+
+
+def test_probe_normalizes_legacy_quoted_label_argument(tmp_path: Path) -> None:
+    """Probe report should display the canonical unquoted label."""
+    annotations = tmp_path / "annotations.txt"
+    _write_quoted_sdd_fixture(annotations)
+
+    probe = sdd_curation_preflight.probe_annotation_file(
+        annotations,
+        label='"Pedestrian"',
+        min_track_points=4,
+        max_pedestrians=4,
+    )
+
+    assert probe["label"] == "Pedestrian"
+    assert probe["usable_label_points"] == 8
+
+
 def test_probe_counts_usable_tracks_after_filtering(tmp_path: Path) -> None:
     """Probe should count only label-matching, non-lost tracks meeting min_track_points."""
     annotations = tmp_path / "annotations.txt"

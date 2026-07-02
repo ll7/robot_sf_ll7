@@ -31,6 +31,7 @@ def build(
     *,
     robot_kinematics: str | None = None,
     robot_command_mode: str | None = None,
+    adapter_impact_eval: bool = False,
 ) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
     """Build adaptive proxemic selector adapter policy metadata.
 
@@ -39,6 +40,7 @@ def build(
         algo_config: Algorithm configuration payload.
         robot_kinematics: Runtime robot kinematics label for metadata enrichment.
         robot_command_mode: Runtime robot command mode (for holonomic metadata labels).
+        adapter_impact_eval: Unused compatibility hook for learned-policy builders.
 
     Returns:
         Policy callable and enriched metadata dictionary.
@@ -50,6 +52,7 @@ def build(
             f"expected one of: {supported}"
         )
 
+    del adapter_impact_eval
     normalized_robot_command_mode = (
         str(robot_command_mode).strip().lower() if robot_command_mode is not None else None
     )

@@ -618,7 +618,7 @@ def test_policy_builder_registry_returns_none_for_unmigrated_key() -> None:
 
 def test_policy_builder_registry_forwards_builder_context() -> None:
     """Registry dispatch preserves the policy-builder call contract."""
-    calls: list[tuple[str, dict[str, Any], str | None, str | None]] = []
+    calls: list[tuple[str, dict[str, Any], str | None, str | None, bool]] = []
 
     def _builder(
         algo_key: str,
@@ -626,8 +626,11 @@ def test_policy_builder_registry_forwards_builder_context() -> None:
         *,
         robot_kinematics: str | None = None,
         robot_command_mode: str | None = None,
+        adapter_impact_eval: bool = False,
     ) -> tuple[Any, dict[str, Any]]:
-        calls.append((algo_key, algo_config, robot_kinematics, robot_command_mode))
+        calls.append(
+            (algo_key, algo_config, robot_kinematics, robot_command_mode, adapter_impact_eval)
+        )
 
         def _policy(_obs: dict[str, Any]) -> tuple[float, float]:
             return (0.0, 0.0)
@@ -640,11 +643,12 @@ def test_policy_builder_registry_forwards_builder_context() -> None:
         builders={"demo": _builder},
         robot_kinematics="holonomic",
         robot_command_mode="vxy",
+        adapter_impact_eval=True,
     )
 
     assert policy({}) == (0.0, 0.0)
     assert meta == {"algorithm": "demo"}
-    assert calls == [("demo", {"gain": 2.0}, "holonomic", "vxy")]
+    assert calls == [("demo", {"gain": 2.0}, "holonomic", "vxy", True)]
 
 
 def test_build_policy_simple_alias_still_uses_registered_goal_builder() -> None:
@@ -2460,6 +2464,21 @@ def test_ppo_action_to_unicycle_adapter_converts_heading_error_to_angular_veloci
     assert model.calls
     assert model.calls[0][0] == pytest.approx(1.0)
     # heading error = pi/2, with kp=2 and omega_max=1 clips to 1.0
+    assert model.calls[0][1] == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("heading", [None, []])
+def test_ppo_action_to_unicycle_adapter_tolerates_missing_heading(heading: object) -> None:
+    """Adapter path should default malformed heading payloads to zero heading."""
+    model = _KinematicsStub((0.0, 0.0))
+    _ppo_action_to_unicycle(
+        {"vx": 0.0, "vy": 1.0},
+        {"robot": {"heading": heading}},
+        {"omega_kp": 2.0, "omega_max": 1.0},
+        kinematics_model=model,
+    )
+    assert model.calls
+    assert model.calls[0][0] == pytest.approx(1.0)
     assert model.calls[0][1] == pytest.approx(1.0)
 
 

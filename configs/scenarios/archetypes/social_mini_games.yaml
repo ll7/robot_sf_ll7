@@ -1,0 +1,43 @@
+scenarios:
+  - name: smg_curb_ramp_conflict
+    map_file: ../../../maps/svg_maps/smg_curb_ramp_conflict.svg
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: curb_ramp_conflict
+      pack_id: social_mini_games_v0
+      evaluation_scope: exploratory
+      benchmark_evidence: false
+      density: single_interaction
+      flow: perpendicular
+      groups: 0.0
+      smg:
+        schema_version: robot_sf.social_mini_game.v1
+        case: curb_ramp_conflict
+        capacity_one_resource: true
+        preferred_trajectory_conflict: true
+        occlusion: false
+        symmetry: asymmetric
+        expected_failure_modes:
+          - near_miss
+          - excessive_yielding
+          - deadlock
+      plausibility:
+        status: unverified
+        verified_on: null
+        verified_by: null
+        method: null
+        notes: "Metadata-only Social Mini-Game candidate; no benchmark evidence."
+        metrics:
+          min_distance: null
+          mean_distance: null
+          robot_ped_within_5m_frac: null
+          ped_force_mean: null
+          force_q95: null
+        metrics_updated_on: null
+    seeds:
+      - 396801
+      - 396802
+      - 396803

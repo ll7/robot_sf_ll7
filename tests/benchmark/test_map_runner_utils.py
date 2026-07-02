@@ -297,6 +297,41 @@ def test_build_policy_prediction_mpc_alias_registers_same_adapter() -> None:
     assert meta["algorithm"] == "prediction_mpc"
 
 
+def test_build_policy_learned_prediction_mpc_registers_diagnostic_adapter() -> None:
+    """Learned prediction MPC aliases use prediction-MPC adapter diagnostics."""
+
+    pytest.importorskip("torch")
+    policy, meta = _build_policy(
+        "learned_prediction_mpc",
+        {
+            "allow_testing_algorithms": True,
+            "allow_untrained_smoke": True,
+            "max_pedestrians": 2,
+            "horizon_steps": 2,
+            "hidden_dim": 8,
+            "solver_max_iterations": 4,
+        },
+        robot_kinematics="differential_drive",
+    )
+
+    adapter = policy._planner_adapter
+
+    assert adapter.prediction_config.predictor_backend == "learned_short_horizon"
+    assert meta["planner_kinematics"]["adapter_name"] == "PredictionMPCPlannerAdapter"
+    assert (
+        meta["planner_kinematics"]["projection_policy"]
+        == "learned_short_horizon_time_varying_pedestrian_constraints"
+    )
+    assert meta["canonical_algorithm"] == "learned_prediction_mpc"
+    assert meta["baseline_category"] == "learning"
+    assert meta["observation_spec"]["inputs"] == [
+        "robot_state",
+        "goal",
+        "pedestrians",
+        "learned_pedestrian_futures",
+    ]
+
+
 def test_resolve_policy_search_candidate_runtime_merges_base_and_scenario_override(
     tmp_path: Path,
 ) -> None:

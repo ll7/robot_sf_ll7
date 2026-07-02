@@ -135,7 +135,8 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
     ) -> None:
         """Initialize the adapter with strict constant-velocity prediction by default."""
         self.prediction_config = config or PredictionMPCConfig()
-        if self.prediction_config.predictor_backend.strip().lower() not in {
+        backend = self.prediction_config.predictor_backend.strip().lower()
+        if predictor is None and backend not in {
             "constant_velocity",
             "cv",
         }:
@@ -151,6 +152,22 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
             )
         self._future_predictor = predictor or ConstantVelocityPedestrianPredictor()
         super().__init__(_to_nmpc_config(self.prediction_config))
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return predictor diagnostics for benchmark metadata."""
+
+        diagnostics: dict[str, Any] = dict(super().diagnostics())
+        diagnostics.update(
+            {
+                "predictor_backend": self.prediction_config.predictor_backend,
+                "horizon_steps": self.prediction_config.horizon_steps,
+                "rollout_dt": self.prediction_config.rollout_dt,
+            }
+        )
+        predictor_diagnostics = getattr(self._future_predictor, "diagnostics", None)
+        if callable(predictor_diagnostics):
+            diagnostics["predictor"] = predictor_diagnostics()
+        return diagnostics
 
     def _optimizer_constraints(self, context: _RolloutContext) -> tuple[NonlinearConstraint, ...]:
         """Enforce hard time-varying pedestrian-future clearance constraints.

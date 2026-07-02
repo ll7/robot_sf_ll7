@@ -58,11 +58,14 @@ from robot_sf.benchmark.camera_ready._config import (  # noqa: F401 - re-exporte
     _scenario_with_kinematics,
     _validate_scenario_amv_override_keys,
 )
-from robot_sf.benchmark.camera_ready._preflight import (
+from robot_sf.benchmark.camera_ready._preflight import (  # noqa: F401 - re-exported back-compat
     _build_preflight_preview_payload,
     _build_preflight_validate_payload,
     _latency_stress_metadata,
     _synthetic_actuation_metadata,
+)
+from robot_sf.benchmark.camera_ready._preflight import (
+    prepare_campaign_preflight as _prepare_campaign_preflight_impl,
 )
 from robot_sf.benchmark.camera_ready._reporting import (  # noqa: F401 - re-exported for back-compat
     _REPORT_METRICS,
@@ -159,7 +162,6 @@ from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
     observation_noise_hash,
 )
-from robot_sf.benchmark.orca_preflight import check_orca_rvo2_preflight
 from robot_sf.benchmark.runner import run_batch
 from robot_sf.benchmark.seed_variance import (
     build_seed_episode_rows,
@@ -185,15 +187,8 @@ from robot_sf.benchmark.synthetic_actuation import (
     validate_actuation_profile_claim_boundary,
     validate_synthetic_actuation_profile,
 )
-from robot_sf.benchmark.utils import (
-    _config_hash,
-    load_optional_json,
-)
-from robot_sf.common.artifact_paths import (
-    ensure_canonical_tree,
-    get_artifact_category_path,
-    get_repository_root,
-)
+from robot_sf.benchmark.utils import load_optional_json
+from robot_sf.common.artifact_paths import get_artifact_category_path, get_repository_root
 from robot_sf.nav.svg_map_parser import convert_map
 
 CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
@@ -714,272 +709,20 @@ def prepare_campaign_preflight(
     campaign_id: str | None = None,
     invoked_command: str | None = None,
 ) -> dict[str, Any]:
-    """Prepare campaign preflight artifacts and matrix-definition summary.
+    """Prepare campaign preflight artifacts via the extracted preflight module.
 
     Returns:
         Paths and metadata required by preflight-only workflows and full runs.
-
-    Raises:
-        OrcaRvo2PreflightError: When enabled ORCA-dependent planners require ``rvo2`` but it is
-            not importable.
-        RouteClearanceError: When any scenario route centerline lies closer to a static obstacle
-            than the robot radius, making the route geometrically impossible to follow without
-            collision.
     """
-    _validate_campaign_config(cfg)
-    check_orca_rvo2_preflight(cfg)
-    ensure_canonical_tree(categories=("benchmarks",))
-    campaign_id = _resolve_campaign_id(cfg, label=label, campaign_id=campaign_id)
-    base_dir = (
-        output_root.resolve()
-        if output_root
-        else (get_artifact_category_path("benchmarks") / "camera_ready")
-    )
-    campaign_root = (base_dir / campaign_id).resolve()
-    reports_dir = campaign_root / "reports"
-    preflight_dir = campaign_root / "preflight"
-    reports_dir.mkdir(parents=True, exist_ok=True)
-    preflight_dir.mkdir(parents=True, exist_ok=True)
-
-    created_at_utc = _utc_now()
-    scenarios = _load_campaign_scenarios(cfg)
-    route_clearance_certifications = _load_route_clearance_certifications(
-        cfg.route_clearance_certifications_path
-    )
-    route_clearance_warnings = _build_route_clearance_warnings(
-        scenarios,
-        certifications=route_clearance_certifications,
-    )
-    # Fail closed before producing any preflight artifact: a route whose centerline is closer to a
-    # static obstacle than the robot radius is geometrically impossible to follow without
-    # collision, so the benchmark must refuse to run it rather than emit a silent warning
-    # (issue #3628).
-    _assert_route_clearance_feasible(route_clearance_warnings)
-    route_clearance_warning_summary = _route_clearance_warning_summary(route_clearance_warnings)
-    resolved_seeds = _resolved_seed_inventory(scenarios)
-    scenario_hash = _hash_payload(scenarios)
-    scenario_horizons_summary = _scenario_horizon_summary(
-        scenarios,
-        schedule_path=cfg.scenario_horizons_path,
-    )
-    git_meta = _git_context()
-    config_hash = _config_hash(_jsonable_repo_relative(asdict(cfg)))
-    noise_spec = normalize_observation_noise_spec(cfg.observation_noise)
-    noise_hash = observation_noise_hash(noise_spec)
-
-    validate_config_path = preflight_dir / "validate_config.json"
-    preview_scenarios_path = preflight_dir / "preview_scenarios.json"
-    validate_payload = _build_preflight_validate_payload(
+    return _prepare_campaign_preflight_impl(
         cfg,
+        output_root=output_root,
+        label=label,
         campaign_id=campaign_id,
-        created_at_utc=created_at_utc,
-        scenarios=scenarios,
-        resolved_seeds=resolved_seeds,
-        scenario_horizons_summary=scenario_horizons_summary,
-        route_clearance_warnings=route_clearance_warnings,
-        route_clearance_warning_summary=route_clearance_warning_summary,
-        noise_spec=noise_spec,
-        noise_hash=noise_hash,
+        invoked_command=invoked_command,
+        validate_campaign_config=_validate_campaign_config,
+        build_route_clearance_warnings=_build_route_clearance_warnings,
     )
-    preview_payload = _build_preflight_preview_payload(
-        cfg,
-        campaign_id=campaign_id,
-        created_at_utc=created_at_utc,
-        scenarios=scenarios,
-        route_clearance_warnings=route_clearance_warnings,
-        route_clearance_warning_summary=route_clearance_warning_summary,
-    )
-    _write_json(validate_config_path, validate_payload)
-    _write_json(preview_scenarios_path, preview_payload)
-
-    matrix_rows = _build_matrix_summary_rows(
-        cfg,
-        scenarios,
-        resolved_seeds,
-        scenario_hash=scenario_hash,
-        git_meta=git_meta,
-        campaign_id=campaign_id,
-        created_at_utc=created_at_utc,
-    )
-    matrix_summary_json_path, matrix_summary_csv_path = _write_matrix_summary_artifacts(
-        reports_dir,
-        matrix_rows,
-    )
-    amv_summary = _build_amv_coverage_summary(
-        cfg,
-        scenarios,
-        campaign_id=campaign_id,
-        generated_at_utc=created_at_utc,
-    )
-    amv_coverage_json_path, amv_coverage_md_path = _write_amv_coverage_artifacts(
-        reports_dir,
-        amv_summary,
-    )
-    if (
-        cfg.paper_facing
-        and amv_summary.get("status") == "fail"
-        and cfg.amv_profile.coverage_enforcement == "error"
-    ):
-        raise ValueError(
-            "AMV coverage contract validation failed: missing required AMV dimensions "
-            "(coverage_enforcement=error)."
-        )
-
-    comparability_summary: dict[str, Any] | None = None
-    comparability_json_path: Path | None = None
-    comparability_md_path: Path | None = None
-    comparability_mapping_path: Path | None = None
-    if cfg.comparability_mapping_path is not None:
-        try:
-            comparability_summary, comparability_mapping_path = _build_comparability_summary(
-                cfg,
-                scenarios,
-                campaign_id=campaign_id,
-                generated_at_utc=created_at_utc,
-            )
-            comparability_json_path, comparability_md_path = _write_comparability_artifacts(
-                reports_dir,
-                comparability_summary,
-            )
-        except (ValueError, FileNotFoundError, yaml.YAMLError):
-            if cfg.paper_facing:
-                raise
-
-    manifest_payload: dict[str, Any] = {
-        "schema_version": CAMPAIGN_SCHEMA_VERSION,
-        "campaign_id": campaign_id,
-        "name": cfg.name,
-        "created_at_utc": created_at_utc,
-        "started_at_utc": created_at_utc,
-        "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
-        "scenario_matrix_hash": scenario_hash,
-        "scenario_candidates": list(cfg.scenario_candidates.names),
-        "scenario_amv_overrides": {
-            scenario_name: dict(values)
-            for scenario_name, values in sorted(cfg.scenario_amv_overrides.items())
-        },
-        "seed_policy": {
-            "mode": cfg.seed_policy.mode,
-            "seed_set": cfg.seed_policy.seed_set,
-            "seeds": list(cfg.seed_policy.seeds),
-            "resolved_seeds": resolved_seeds,
-            "seed_sets_path": _repo_relative(cfg.seed_policy.seed_sets_path),
-        },
-        "git": git_meta,
-        "config_hash": config_hash,
-        "invoked_command": invoked_command,
-        "paper_facing": bool(cfg.paper_facing),
-        "paper_profile_version": cfg.paper_profile_version,
-        "amv_profile_name": cfg.amv_profile.name,
-        "amv_contract_version": cfg.amv_profile.contract_version,
-        "amv_coverage_enforcement": cfg.amv_profile.coverage_enforcement,
-        "amv_coverage_status": amv_summary.get("status", "unknown"),
-        "synthetic_actuation_profile": _synthetic_actuation_metadata(
-            cfg.synthetic_actuation_profile
-        ),
-        "latency_stress_profile": _latency_stress_metadata(
-            cfg.latency_stress_profile,
-            dt=cfg.dt,
-        ),
-        "latency_stress_metrics": (
-            not_available_latency_metrics() if cfg.latency_stress_profile is not None else None
-        ),
-        "comparability_mapping_path": (
-            _repo_relative(comparability_mapping_path) if comparability_mapping_path else None
-        ),
-        "comparability_mapping_version": (
-            comparability_summary.get("mapping_version") if comparability_summary else None
-        ),
-        "comparability_mapping_hash": (
-            comparability_summary.get("mapping_hash") if comparability_summary else None
-        ),
-        "route_clearance_warnings": route_clearance_warnings,
-        "route_clearance_warning_count": len(route_clearance_warnings),
-        "route_clearance_warning_summary": route_clearance_warning_summary,
-        "route_clearance_certifications_path": (
-            _repo_relative(cfg.route_clearance_certifications_path)
-            if cfg.route_clearance_certifications_path is not None
-            else None
-        ),
-        "scenario_horizons": scenario_horizons_summary,
-        "observation_noise": noise_spec,
-        "observation_noise_hash": noise_hash,
-        "snqi_weights_path": (
-            _repo_relative(cfg.snqi_weights_path) if cfg.snqi_weights_path is not None else None
-        ),
-        "snqi_baseline_path": (
-            _repo_relative(cfg.snqi_baseline_path) if cfg.snqi_baseline_path is not None else None
-        ),
-        "snqi_contract_enabled": bool(cfg.snqi_contract.enabled),
-        "snqi_contract_enforcement": cfg.snqi_contract.enforcement,
-        "snqi_contract_status": "not_evaluated",
-        "snqi_positioning_recommendation": "not_evaluated",
-        "snqi_positioning_claim_scope": "benchmark aggregate, not a universal ground-truth utility",
-        "planners": [
-            {
-                "key": planner.key,
-                "algo": planner.algo,
-                "human_model_variant": planner.human_model_variant,
-                "human_model_source": planner.human_model_source,
-                "planner_group": planner.planner_group,
-                "benchmark_profile": planner.benchmark_profile,
-                "algo_config_path": (
-                    _repo_relative(planner.algo_config_path)
-                    if planner.algo_config_path is not None
-                    else None
-                ),
-                "observation_mode": planner.observation_mode,
-                "enabled": planner.enabled,
-            }
-            for planner in cfg.planners
-        ],
-        "kinematics_matrix": list(cfg.kinematics_matrix),
-        "holonomic_command_mode": cfg.holonomic_command_mode,
-        "observation_mode": cfg.observation_mode,
-        "repository_url": cfg.repository_url,
-        "release_tag": cfg.release_tag,
-        "doi": cfg.doi,
-        "artifacts": {
-            "preflight_validate_config": _repo_relative(validate_config_path),
-            "preflight_preview_scenarios": _repo_relative(preview_scenarios_path),
-            "matrix_summary_json": _repo_relative(matrix_summary_json_path),
-            "matrix_summary_csv": _repo_relative(matrix_summary_csv_path),
-            "amv_coverage_json": _repo_relative(amv_coverage_json_path),
-            "amv_coverage_md": _repo_relative(amv_coverage_md_path),
-            "comparability_json": (
-                _repo_relative(comparability_json_path) if comparability_json_path else None
-            ),
-            "comparability_md": (
-                _repo_relative(comparability_md_path) if comparability_md_path else None
-            ),
-            "snqi_diagnostics_json": None,
-            "snqi_diagnostics_md": None,
-            "snqi_sensitivity_csv": None,
-        },
-    }
-    _write_json(campaign_root / "campaign_manifest.json", manifest_payload)
-    return {
-        "campaign_id": campaign_id,
-        "campaign_root": campaign_root,
-        "reports_dir": reports_dir,
-        "preflight_dir": preflight_dir,
-        "validate_config_path": validate_config_path,
-        "preview_scenarios_path": preview_scenarios_path,
-        "matrix_summary_json_path": matrix_summary_json_path,
-        "matrix_summary_csv_path": matrix_summary_csv_path,
-        "amv_coverage_json_path": amv_coverage_json_path,
-        "amv_coverage_md_path": amv_coverage_md_path,
-        "amv_summary": amv_summary,
-        "comparability_json_path": comparability_json_path,
-        "comparability_md_path": comparability_md_path,
-        "manifest_payload": manifest_payload,
-        "created_at_utc": created_at_utc,
-        "scenarios": scenarios,
-        "resolved_seeds": resolved_seeds,
-        "scenario_hash": scenario_hash,
-        "git_meta": git_meta,
-        "config_hash": config_hash,
-    }
 
 
 def write_campaign_report(  # noqa: C901, PLR0912, PLR0915

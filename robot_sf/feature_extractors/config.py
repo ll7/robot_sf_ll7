@@ -15,6 +15,7 @@ from robot_sf.feature_extractor import DynamicsExtractor
 from robot_sf.feature_extractors.attention_extractor import AttentionFeatureExtractor
 from robot_sf.feature_extractors.lightweight_cnn_extractor import LightweightCNNExtractor
 from robot_sf.feature_extractors.lstm_extractor import LSTMFeatureExtractor
+from robot_sf.feature_extractors.mamba_extractor import MambaFeatureExtractor
 from robot_sf.feature_extractors.mlp_extractor import MLPFeatureExtractor
 
 
@@ -26,6 +27,7 @@ class FeatureExtractorType(Enum):
     ATTENTION = "attention"  # Attention-based extractor
     LIGHTWEIGHT_CNN = "lightweight_cnn"  # Lightweight CNN extractor
     LSTM = "lstm"  # LSTM sequential extractor (spatial, not temporal with standard PPO)
+    MAMBA = "mamba"  # Mamba/SSM sequence extractor (bounded observation sequence)
 
 
 @dataclass
@@ -71,6 +73,7 @@ _EXTRACTOR_REGISTRY: dict[FeatureExtractorType, type[BaseFeaturesExtractor]] = {
     FeatureExtractorType.ATTENTION: AttentionFeatureExtractor,
     FeatureExtractorType.LIGHTWEIGHT_CNN: LightweightCNNExtractor,
     FeatureExtractorType.LSTM: LSTMFeatureExtractor,
+    FeatureExtractorType.MAMBA: MambaFeatureExtractor,
 }
 
 
@@ -189,6 +192,28 @@ class FeatureExtractorPresets:
                 "lstm_dropout": 0.1,
                 "drive_hidden_dims": [64, 32],
                 "bidirectional": True,
+            },
+        )
+
+    @staticmethod
+    def mamba_lite() -> FeatureExtractorConfig:
+        """CPU-safe Mamba/SSM-lite extractor for issue #4014 smoke checks.
+
+        Returns:
+            FeatureExtractorConfig: Preset configuration instance.
+        """
+        return FeatureExtractorConfig(
+            extractor_type=FeatureExtractorType.MAMBA,
+            params={
+                "backend": "torch_ssm_lite",
+                "d_model": 64,
+                "d_state": 16,
+                "d_conv": 4,
+                "expand": 2,
+                "num_layers": 1,
+                "dropout_rate": 0.0,
+                "sequence_source": "rays",
+                "drive_hidden_dims": (32, 16),
             },
         )
 

@@ -22,6 +22,12 @@ CBF_COLLISION_CONE_ARM = "cbf_collision_cone_on"
 CBF_DYNAMIC_PARABOLIC_V1_ARM = "cbf_dynamic_parabolic_v1_on"
 CBF_VARIANT_COLLISION_CONE = "collision_cone"
 CBF_VARIANT_DYNAMIC_PARABOLIC_V1 = "dynamic_parabolic_cbf_v1"
+CBF_KNOWN_VARIANTS = {
+    CBF_VARIANT_COLLISION_CONE,
+    "collision_cone_cbf_v1",
+    "dynamic_parabolic",
+    CBF_VARIANT_DYNAMIC_PARABOLIC_V1,
+}
 
 _PREDECLARED_CBF_CONFIG_BY_ARM = {
     CBF_COLLISION_CONE_ARM: CbfSafetyFilterConfig(
@@ -123,10 +129,7 @@ def validate_runtime_config(  # noqa: C901
     expected_config = _PREDECLARED_CBF_CONFIG_BY_ARM.get(arm_key)
     if bool(runtime.enabled) and expected_config is None:
         raise ValueError("cbf_safety_filter enabled arm must have predeclared config")
-    if arm_key == CBF_OFF_ARM and runtime.variant not in {
-        CBF_VARIANT_COLLISION_CONE,
-        CBF_VARIANT_DYNAMIC_PARABOLIC_V1,
-    }:
+    if arm_key == CBF_OFF_ARM and runtime.variant not in CBF_KNOWN_VARIANTS:
         raise ValueError("cbf_safety_filter.variant must be a known CBF variant")
     if runtime.fallback_mode != "stop_keep_turn":
         raise ValueError("cbf_safety_filter.fallback_mode must be stop_keep_turn")

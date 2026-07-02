@@ -679,6 +679,9 @@ def _apply_dynamic_parabolic_cbf(
     if not context.obstacles:
         selected = nominal
         feasible = True
+    elif all(barrier >= 0.0 for barrier in barriers_before):
+        selected = nominal
+        feasible = True
     else:
         grid = np.linspace(lower, upper, int(config.dpcbf_grid_samples), dtype=float)
         feasible_values = [

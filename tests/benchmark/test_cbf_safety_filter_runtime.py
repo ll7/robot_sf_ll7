@@ -136,6 +136,25 @@ def test_runtime_config_disabled_by_default_preserves_off_state() -> None:
 
 
 @pytest.mark.parametrize(
+    "variant",
+    [
+        "collision_cone",
+        "collision_cone_cbf_v1",
+        "dynamic_parabolic",
+        "dynamic_parabolic_cbf_v1",
+    ],
+)
+def test_runtime_config_off_arm_accepts_known_variant_aliases(variant: str) -> None:
+    """Disabled runtime accepts the same known variant aliases as the planner builder."""
+
+    runtime = runtime_config_from_mapping(
+        {"enabled": False, "arm_key": CBF_OFF_ARM, "variant": variant}
+    )
+
+    assert runtime.variant == variant
+
+
+@pytest.mark.parametrize(
     "payload,match",
     [
         ({"enabled": True, "arm_key": CBF_OFF_ARM}, "enabled=True"),

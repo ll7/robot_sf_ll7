@@ -118,6 +118,29 @@ def test_public_apply_cbf_filter_dynamic_parabolic_no_obstacles_passes_through()
     assert result["filtered_linear_velocity"] == pytest.approx(0.8)
 
 
+def test_public_apply_cbf_filter_dynamic_parabolic_feasible_nominal_passes_through() -> None:
+    """DPCBF should not snap feasible nominal commands to the search grid."""
+
+    context = CBFFilterContext(
+        robot_position_m=(0.0, 0.0),
+        robot_heading_rad=0.0,
+        robot_radius_m=0.3,
+        obstacles=(
+            CBFObstacleState(position_m=(10.0, 5.0), velocity_mps=(0.0, 0.0), radius_m=0.3),
+        ),
+    )
+    result = apply_cbf_safety_filter(
+        0.817,
+        0.1,
+        context,
+        CBFSafetyFilterConfig(enabled=True, variant=CBF_VARIANT_DYNAMIC_PARABOLIC),
+    )
+
+    assert result["qp_status"] == "pass_through"
+    assert result["intervened"] is False
+    assert result["filtered_linear_velocity"] == pytest.approx(0.817)
+
+
 def test_public_apply_cbf_filter_dynamic_parabolic_projects_closing_command() -> None:
     """DPCBF projects a head-on closing command to a lower scalar speed."""
 

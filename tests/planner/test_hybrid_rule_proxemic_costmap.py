@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from robot_sf.planner.hybrid_rule_local_planner import (
     HybridRuleCandidate,
@@ -95,3 +96,40 @@ def test_hybrid_rule_config_builder_accepts_nested_proxemic_costmap() -> None:
     assert cfg.proxemic_costmap_social_radius == 1.4
     assert cfg.proxemic_costmap_decay_function == "gaussian"
     assert cfg.proxemic_costmap_weight == 3.0
+
+
+def test_nested_proxemic_config_validation_does_not_mutate_input() -> None:
+    """Nested proxemic config reuses validation without caller side effects."""
+    payload = {
+        "proxemic_costmap": {
+            "enabled": True,
+            "personal_radius": 0.4,
+            "social_radius": 1.4,
+            "unknown_field": 1.0,
+        },
+        "proxemic_costmap_weight": 3.0,
+    }
+
+    with pytest.raises(ValueError, match="unknown proxemic costmap config fields"):
+        build_hybrid_rule_local_planner_config(payload)
+
+    assert "proxemic_costmap" in payload
+    assert payload["proxemic_costmap"]["unknown_field"] == 1.0
+
+
+def test_proxemic_costmap_config_reflects_runtime_config_updates() -> None:
+    """Planner resolves proxemic config dynamically from current config fields."""
+    cfg = HybridRuleLocalPlannerConfig(
+        proxemic_costmap_enabled=False,
+        proxemic_costmap_social_radius=1.2,
+    )
+    planner = HybridRuleLocalPlannerAdapter(cfg)
+
+    disabled_hash = planner._proxemic_costmap_metadata()["config_hash"]
+
+    planner.config.proxemic_costmap_enabled = True
+    planner.config.proxemic_costmap_social_radius = 1.6
+
+    metadata = planner._proxemic_costmap_metadata()
+    assert metadata["enabled"] is True
+    assert metadata["config_hash"] != disabled_hash

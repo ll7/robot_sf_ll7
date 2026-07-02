@@ -8,6 +8,7 @@ weights, and benchmark-result fitting.
 
 from __future__ import annotations
 
+import copy
 from collections import Counter, deque
 from dataclasses import dataclass, fields
 from itertools import pairwise
@@ -20,6 +21,7 @@ from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
 from robot_sf.nav.occupancy import circle_collides_any_lines
 from robot_sf.nav.proxemic_costmap import (
     ProxemicCostmapConfig,
+    build_proxemic_costmap_config,
     proxemic_cost_at_points,
 )
 from robot_sf.nav.proxemic_costmap import (
@@ -296,10 +298,10 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             else None
         )
         self._continuous_static_context: _ContinuousStaticContext | None = None
-        self._proxemic_costmap_config = self._build_proxemic_costmap_config()
         self.reset()
 
-    def _build_proxemic_costmap_config(self) -> ProxemicCostmapConfig:
+    @property
+    def _proxemic_costmap_config(self) -> ProxemicCostmapConfig:
         """Return typed proxemic-layer config from planner fields."""
         return ProxemicCostmapConfig(
             enabled=bool(self.config.proxemic_costmap_enabled),
@@ -1836,7 +1838,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         route_progress = float(np.dot(end_pos - start_pos, route_dir))
         return float(np.clip(route_progress / max(max_progress, _EPS), -1.0, 1.0))
 
-    def _evaluate_candidate(  # noqa: PLR0915
+    def _evaluate_candidate(  # noqa: C901, PLR0915
         self,
         *,
         candidate: HybridRuleCandidate,
@@ -1901,7 +1903,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         min_static_clearance = float("inf")
         min_dynamic_clearance = float("inf")
         static_clearance_exception_terms: set[str] = set()
-        rollout_points = [np.array(robot_pos, dtype=float)]
+        proxemic_costmap_config = self._proxemic_costmap_config
+        proxemic_enabled = bool(proxemic_costmap_config.enabled)
+        rollout_points = [np.array(robot_pos, dtype=float)] if proxemic_enabled else None
 
         for step_idx, (step_linear, step_angular) in enumerate(rollout_commands):
             t = (step_idx + 1) * dt
@@ -1914,7 +1918,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 * dt
             )
             heading = _wrap_angle(heading + step_angular * dt)
-            rollout_points.append(np.array(robot_pos, dtype=float))
+            if proxemic_enabled and rollout_points is not None:
+                rollout_points.append(np.array(robot_pos, dtype=float))
 
             static_rejection = self._static_collision_rejection(
                 candidate=candidate,
@@ -2075,17 +2080,22 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             candidate=candidate,
             state=state,
         )
-        proxemic_cost_values = proxemic_cost_at_points(
-            np.asarray(rollout_points, dtype=float),
-            ped_pos,
-            ped_vel,
-            self._proxemic_costmap_config,
-        )
-        proxemic_cost_mean = float(np.mean(proxemic_cost_values))
-        proxemic_cost_max = float(np.max(proxemic_cost_values))
-        proxemic_cost_norm = _clip01(
-            proxemic_cost_mean / max(float(self._proxemic_costmap_config.max_cost), _EPS)
-        )
+        if proxemic_enabled and rollout_points is not None:
+            proxemic_cost_values = proxemic_cost_at_points(
+                np.asarray(rollout_points, dtype=float),
+                ped_pos,
+                ped_vel,
+                proxemic_costmap_config,
+            )
+            proxemic_cost_mean = float(np.mean(proxemic_cost_values))
+            proxemic_cost_max = float(np.max(proxemic_cost_values))
+            proxemic_cost_norm = _clip01(
+                proxemic_cost_mean / max(float(proxemic_costmap_config.max_cost), _EPS)
+            )
+        else:
+            proxemic_cost_mean = 0.0
+            proxemic_cost_max = 0.0
+            proxemic_cost_norm = 0.0
         static_safety_gate = self._static_safety_gate(
             candidate=candidate,
             progress=static_gate_progress,
@@ -2600,7 +2610,7 @@ def _expand_nested_proxemic_costmap_config(raw: dict[str, Any]) -> dict[str, Any
         return raw
     if not isinstance(proxemic_layer, dict):
         raise ValueError("proxemic_costmap must be a mapping when provided")
-    proxemic_config = ProxemicCostmapConfig(**dict(proxemic_layer))
+    proxemic_config = build_proxemic_costmap_config(proxemic_layer)
     raw.update(
         {
             "proxemic_costmap_enabled": proxemic_config.enabled,
@@ -2629,7 +2639,7 @@ def build_hybrid_rule_local_planner_config(
     if not isinstance(cfg, dict):
         return HybridRuleLocalPlannerConfig()
 
-    raw = _expand_nested_proxemic_costmap_config(dict(cfg))
+    raw = _expand_nested_proxemic_costmap_config(copy.deepcopy(cfg))
     defaults = HybridRuleLocalPlannerConfig()
     field_map = {field.name: getattr(defaults, field.name) for field in fields(defaults)}
     kwargs: dict[str, Any] = {}

@@ -1,4 +1,4 @@
-# Issue #3484 feasibility diagnostics evidence
+# Issue #3484 — Feasibility Diagnostics Evidence
 
 This directory contains a diagnostic-only smoke report for the universally failing classic scenario
 families `bottleneck`, `cross_trap`, and `head_on_corridor`.

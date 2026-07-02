@@ -1,4 +1,4 @@
-# Issue #3484 feasibility diagnostics
+# Issue #3484 — Feasibility Diagnostics
 
 This note records the diagnostic-only runner that probes whether universally failing classic
 scenario families look route-infeasible, vehicle-infeasible, or still unresolved after simple

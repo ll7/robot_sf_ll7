@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from robot_sf.scenario_certification.failure_cause import (
     DYNAMIC_BLOCKING_OR_DEADLOCK,
     PLANNER_LIMITED,
@@ -98,8 +100,10 @@ def test_actor_free_scenario_mutation_removes_pedestrians_preserves_route_fields
     assert mutated["name"] == "classic_cross_trap_high"
     assert mutated["map_id"] == "classic_cross_trap"
     assert mutated["simulation_config"]["ped_density"] == 0.0
-    assert mutated["simulation_config"]["single_pedestrians"] == []
-    assert mutated["simulation_config"]["pedestrian_flows"] == []
+    assert "single_pedestrians" not in mutated["simulation_config"]
+    assert "pedestrian_flows" not in mutated["simulation_config"]
+    assert mutated["single_pedestrians"] == []
+    assert mutated["social_groups"] == []
     assert mutated["metadata"]["diagnostic_variant"] == "actor_free"
     assert mutated["metadata"]["diagnostic_claim_boundary"] == DIAGNOSTIC_CLAIM_BOUNDARY
 
@@ -194,6 +198,94 @@ def test_report_can_include_extended_time_for_time_limited_verdict(
 
     assert report["family_verdicts"][0]["failure_cause_verdict"]["cause"] == "time_limited"
     assert report["family_verdicts"][0]["failure_cause_verdict"]["comparable_for_ranking"] is False
+
+
+def test_extended_time_blocks_when_seed_missing(monkeypatch) -> None:
+    """Requested extended-time lane reports missing seed instead of not-run."""
+
+    monkeypatch.setattr(
+        "robot_sf.scenario_certification.feasibility_diagnostics.load_scenarios",
+        lambda _path: [
+            {
+                "name": "classic_bottleneck_low",
+                "simulation_config": {"max_episode_steps": 500},
+                "metadata": {"archetype": "bottleneck"},
+            }
+        ],
+    )
+
+    report = run_feasibility_diagnostics(
+        FeasibilityDiagnosticConfig(
+            scenario_path=Path("fixture.yaml"),
+            families=("bottleneck",),
+            run_extended_time=True,
+        ),
+        episode_runner=lambda *_args, **_kwargs: {"success": True},
+        certifier=lambda _scenario, _path: _certificate(VALID),
+    )
+
+    extended = report["scenario_rows"][0]["extended_time_solved"]
+    assert extended["status"] == "blocked"
+    assert extended["blocker"] == "scenario_has_no_seed"
+
+
+def test_multi_seed_request_fails_closed(monkeypatch) -> None:
+    """This diagnostic slice rejects unsupported multi-seed configuration."""
+
+    monkeypatch.setattr(
+        "robot_sf.scenario_certification.feasibility_diagnostics.load_scenarios",
+        lambda _path: [
+            {
+                "name": "classic_bottleneck_low",
+                "simulation_config": {"max_episode_steps": 500},
+                "metadata": {"archetype": "bottleneck"},
+                "seeds": [1, 2],
+            }
+        ],
+    )
+
+    with pytest.raises(ValueError, match="seeds_per_scenario"):
+        run_feasibility_diagnostics(
+            FeasibilityDiagnosticConfig(
+                scenario_path=Path("fixture.yaml"),
+                families=("bottleneck",),
+                seeds_per_scenario=2,
+            ),
+            episode_runner=lambda *_args, **_kwargs: {"success": True},
+            certifier=lambda _scenario, _path: _certificate(VALID),
+        )
+
+
+def test_metrics_false_classifies_lane_failure(monkeypatch) -> None:
+    """Explicit false metric fields count as observed rollout failure."""
+
+    monkeypatch.setattr(
+        "robot_sf.scenario_certification.feasibility_diagnostics.load_scenarios",
+        lambda _path: [
+            {
+                "name": "classic_bottleneck_low",
+                "simulation_config": {"max_episode_steps": 500},
+                "metadata": {"archetype": "bottleneck"},
+                "seeds": [1],
+            }
+        ],
+    )
+
+    report = run_feasibility_diagnostics(
+        FeasibilityDiagnosticConfig(
+            scenario_path=Path("fixture.yaml"),
+            families=("bottleneck",),
+            run_actor_free=False,
+            run_oracle=True,
+        ),
+        episode_runner=lambda *_args, **_kwargs: {"metrics": {"success": False}},
+        certifier=lambda _scenario, _path: _certificate(VALID),
+    )
+
+    assert report["scenario_rows"][0]["oracle_solved"]["passed"] is False
+    assert report["scenario_rows"][0]["oracle_solved"]["evidence"]["success_reason"] == (
+        "metrics_success_false"
+    )
 
 
 def test_family_verdict_false_if_any_scenario_lane_fails(monkeypatch) -> None:

@@ -17,6 +17,14 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+  - path: docs/context/evidence/issue_3484_feasibility_diagnostics_2026-07-02/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3484_feasibility_diagnostics_2026-07-02/diagnostic_report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_2557_seed_variance_2026-07/README.md
     status: evidence
     freshness: evidence

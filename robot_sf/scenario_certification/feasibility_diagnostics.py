@@ -42,7 +42,11 @@ Certifier = Callable[[Mapping[str, Any], Path], ScenarioCertificate]
 
 @dataclass(frozen=True, slots=True)
 class FeasibilityDiagnosticConfig:
-    """Configuration for issue #3484 feasibility diagnostics."""
+    """Configuration for issue #3484 feasibility diagnostics.
+
+    ``seeds_per_scenario`` is a single-seed selector for this diagnostic slice. Values above one
+    are rejected instead of implying unsupported multi-seed rollout semantics.
+    """
 
     scenario_path: Path
     families: tuple[str, ...] = DEFAULT_FAMILIES
@@ -117,10 +121,12 @@ def make_actor_free_scenario(scenario: Mapping[str, Any]) -> dict[str, Any]:
     mutated = deepcopy(dict(scenario))
     sim_cfg = dict(mutated.get("simulation_config") or {})
     sim_cfg["ped_density"] = 0.0
-    sim_cfg["single_pedestrians"] = []
-    sim_cfg["pedestrian_flows"] = []
-    sim_cfg["social_groups"] = []
+    sim_cfg.pop("single_pedestrians", None)
+    sim_cfg.pop("pedestrian_flows", None)
+    sim_cfg.pop("social_groups", None)
     mutated["simulation_config"] = sim_cfg
+    mutated["single_pedestrians"] = []
+    mutated["social_groups"] = []
     metadata = dict(mutated.get("metadata") or {})
     metadata["diagnostic_variant"] = "actor_free"
     metadata["diagnostic_claim_boundary"] = DIAGNOSTIC_CLAIM_BOUNDARY
@@ -290,6 +296,8 @@ def _run_scenario_diagnostics(
             algo=config.oracle_algo,
             episode_runner=episode_runner,
         )
+    elif config.run_extended_time and seed is None:
+        extended = LaneResult(None, "blocked", "scenario_has_no_seed")
     return ScenarioDiagnosticOutcome(
         scenario_id=scenario_id,
         family_id=family_id,
@@ -461,6 +469,12 @@ def _episode_success(record: Mapping[str, Any]) -> tuple[bool | None, str]:
             return True, "metrics_success_true"
         if metrics.get("goal_reached") is True:
             return True, "metrics_goal_reached_true"
+        if (
+            metrics.get("success") is False
+            or metrics.get("route_complete") is False
+            or metrics.get("goal_reached") is False
+        ):
+            return False, "metrics_success_false"
     termination = str(record.get("termination_reason") or record.get("status") or "").lower()
     if termination in {"success", "goal_reached", "route_complete", "completed"}:
         return True, f"termination_reason={termination}"
@@ -518,6 +532,8 @@ def _scenario_id(scenario: Mapping[str, Any]) -> str:
 
 
 def _first_seed(scenario: Mapping[str, Any], *, limit: int | None) -> int | None:
+    if limit is not None and limit > 1:
+        raise ValueError("seeds_per_scenario currently supports only 0, 1, or None")
     seeds = _first_seeds(scenario, 1 if limit is None else min(limit, 1))
     return seeds[0] if seeds else None
 

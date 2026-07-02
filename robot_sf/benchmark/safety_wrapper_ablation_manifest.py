@@ -37,6 +37,7 @@ EXPECTED_WRAPPER_ARMS = (WRAPPER_OFF_ARM, WRAPPER_ON_ARM)
 SAFETY_WRAPPER_MODE_FIELD = "safety_wrapper_mode"
 SAFETY_WRAPPER_MODE_DISABLED = "disabled"
 SAFETY_WRAPPER_MODE_ENABLED = "enabled"
+SAFETY_WRAPPER_CONFIG_FIELD = "safety_wrapper_config"
 EXPECTED_SAFETY_WRAPPER_MODE_BY_ARM = {
     WRAPPER_OFF_ARM: SAFETY_WRAPPER_MODE_DISABLED,
     WRAPPER_ON_ARM: SAFETY_WRAPPER_MODE_ENABLED,
@@ -47,6 +48,7 @@ REQUIRED_ROW_FIELDS = (
     "planner",
     "wrapper_arm",
     SAFETY_WRAPPER_MODE_FIELD,
+    SAFETY_WRAPPER_CONFIG_FIELD,
     "scenario_id",
     "seed",
     "software_commit",
@@ -460,6 +462,8 @@ def _row_provenance_errors(row: Mapping[str, Any]) -> list[str]:
     mode = row.get(SAFETY_WRAPPER_MODE_FIELD)
     if not isinstance(mode, str) or mode != EXPECTED_SAFETY_WRAPPER_MODE_BY_ARM.get(arm):
         invalid.append(SAFETY_WRAPPER_MODE_FIELD)
+    if row.get(SAFETY_WRAPPER_CONFIG_FIELD) != _expected_safety_wrapper_row_config(arm):
+        invalid.append(SAFETY_WRAPPER_CONFIG_FIELD)
 
     seed = row.get("seed")
     if not isinstance(seed, int) or isinstance(seed, bool):
@@ -486,6 +490,22 @@ def _row_provenance_errors(row: Mapping[str, Any]) -> list[str]:
         invalid.append("wrapper_intervention_rate")
 
     return invalid
+
+
+def _expected_safety_wrapper_row_config(arm: str) -> dict[str, float] | None:
+    """Return fixed row-level wrapper config expected for an ablation arm."""
+
+    if arm == WRAPPER_OFF_ARM:
+        return None
+    if arm != WRAPPER_ON_ARM:
+        return None
+    config = SafetyWrapperConfig(enabled=True)
+    return {
+        "pedestrian_caution_radius_m": config.pedestrian_caution_radius_m,
+        "capped_speed_m_s": config.capped_speed_m_s,
+        "ttc_veto_threshold_s": config.ttc_veto_threshold_s,
+        "clearance_veto_m": config.clearance_veto_m,
+    }
 
 
 def _safety_wrapper_mode(enabled: bool) -> str:
@@ -548,6 +568,7 @@ __all__ = [
     "CONFIG_SCHEMA_VERSION",
     "DRY_RUN_CLAIM_BOUNDARY",
     "SAFETY_WRAPPER_ABLATION_SCHEMA",
+    "SAFETY_WRAPPER_CONFIG_FIELD",
     "SAFETY_WRAPPER_MODE_DISABLED",
     "SAFETY_WRAPPER_MODE_ENABLED",
     "SAFETY_WRAPPER_MODE_FIELD",

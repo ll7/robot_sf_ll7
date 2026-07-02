@@ -70,6 +70,7 @@ result_contract:
     - planner
     - wrapper_arm
     - safety_wrapper_mode
+    - safety_wrapper_config
     - scenario_id
     - seed
     - software_commit

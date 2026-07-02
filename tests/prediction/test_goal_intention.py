@@ -100,17 +100,20 @@ def test_zero_speed_blocks_even_when_velocity_minimum_is_zero() -> None:
     assert math.isclose(sum(posterior.probabilities.values()), 1.0)
 
 
-def test_extreme_heading_kappa_overflow_fails_closed() -> None:
-    """Huge likelihood exponents become explicit validation errors."""
+def test_extreme_heading_kappa_stays_finite() -> None:
+    """Huge likelihood exponents remain normalized and finite."""
 
-    with pytest.raises(ValueError, match="goal likelihood must be finite"):
-        update_goal_posterior(
-            pedestrian_id="ped_1",
-            candidate_goals=_two_goals(),
-            observed_position=(0.0, 0.0),
-            observed_velocity=(1.0, 0.0),
-            config=GoalPosteriorConfig(heading_kappa=1000.0),
-        )
+    posterior = update_goal_posterior(
+        pedestrian_id="ped_1",
+        candidate_goals=_two_goals(),
+        observed_position=(0.0, 0.0),
+        observed_velocity=(1.0, 0.0),
+        config=GoalPosteriorConfig(heading_kappa=1000.0),
+    )
+
+    assert posterior.top_goal_id == "east_exit"
+    assert math.isclose(sum(posterior.probabilities.values()), 1.0)
+    assert all(math.isfinite(value) for value in posterior.probabilities.values())
 
 
 def test_duplicate_goal_ids_fail_closed() -> None:

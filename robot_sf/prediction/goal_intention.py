@@ -154,8 +154,8 @@ def update_goal_posterior(
             blocker="stationary_below_velocity_min_mps",
         )
 
-    weighted: dict[str, float] = {}
     velocity_unit = (velocity[0] / speed, velocity[1] / speed)
+    alignments: dict[str, float] = {}
     for goal in goals:
         to_goal = (goal.position[0] - position[0], goal.position[1] - position[1])
         distance = math.hypot(*to_goal)
@@ -163,11 +163,13 @@ def update_goal_posterior(
             alignment = 1.0
         else:
             alignment = (velocity_unit[0] * to_goal[0] + velocity_unit[1] * to_goal[1]) / distance
-            alignment = max(-1.0, min(1.0, alignment))
-        try:
-            likelihood = math.exp(cfg.heading_kappa * alignment)
-        except OverflowError as exc:
-            raise ValueError("goal likelihood must be finite") from exc
+        alignment = max(-1.0, min(1.0, alignment))
+        alignments[goal.id] = alignment
+
+    max_exponent = max(cfg.heading_kappa * alignment for alignment in alignments.values())
+    weighted: dict[str, float] = {}
+    for goal in goals:
+        likelihood = math.exp(cfg.heading_kappa * alignments[goal.id] - max_exponent)
         if not math.isfinite(likelihood):
             raise ValueError("goal likelihood must be finite")
         weighted[goal.id] = normalized_prior[goal.id] * likelihood

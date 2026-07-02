@@ -1,0 +1,76 @@
+{
+  "claim_boundary": "diagnostic rare-event harness smoke only; not a benchmark campaign or failure-rate claim",
+  "config_path": "configs/benchmarks/rare_event/issue_4163_crossing_smoke.yaml",
+  "episodes_jsonl": "output/benchmarks/issue_4163/crossing_smoke/episodes.jsonl",
+  "estimator": {
+    "confidence_interval": [
+      0.0,
+      0.2997753534787636
+    ],
+    "confidence_level": 0.95,
+    "effective_sample_size": 11.825629212563078,
+    "estimate": 0.1345881210473504,
+    "event_count": 9,
+    "naive_monte_carlo_estimate": 0.28125,
+    "objective_event": "collision_or_severe_intrusion",
+    "samples": 32,
+    "schema_version": "rare_event_sampling.v1",
+    "standard_error": 0.08428074889864767,
+    "weight_sum": 17.036997491448947
+  },
+  "objective_event": "collision_or_severe_intrusion",
+  "out_of_scope": [
+    "no full benchmark campaign run",
+    "no Slurm/GPU submission",
+    "no paper/dissertation claim edits"
+  ],
+  "proposal": "tilted_distribution",
+  "sample_provenance": {
+    "likelihood_ratio_max": 3.236972725363512,
+    "likelihood_ratio_min": 0.03655367281202713,
+    "parameter_vector_hashes": [
+      "27f56434fe780dd4",
+      "56e6edf8789d4829",
+      "95fce433def6afde",
+      "89b2930b93996857",
+      "37da91e8d4dc64a9",
+      "70ad6ba96774ee3f",
+      "10bfd0a6377010db",
+      "97cd4d9b26296b33",
+      "c4d54e9626bbe81e",
+      "b57aedbf90950850",
+      "426c5ae730ec59cf",
+      "88d496ead915e21d",
+      "7025064b113b2362",
+      "5f00b457d458b423",
+      "b39597e7746472df",
+      "a8cad17528230348",
+      "1d8b9ec9c7f2d820",
+      "1a60964fc10c7377",
+      "8f7cf6a0ed21cf24",
+      "e30a6b696f0d19cd",
+      "7698f5afc2286e33",
+      "da975b5975a8a608",
+      "50e8d145e2443ae3",
+      "812655e27c11b08e",
+      "06bb783e58c8697c",
+      "52c1d005873e9d32",
+      "d768b1ab9e63a768",
+      "91e41f237bbf5f30",
+      "fd1cc67b2a5f9dce",
+      "c7bdccd7a7b97e3c",
+      "2bf134c3d6e2394e",
+      "028184302501afff"
+    ],
+    "row_count": 32
+  },
+  "samples": 32,
+  "scenario_matrix": "configs/scenarios/planner_sanity_matrix_v1.yaml",
+  "scenario_provenance": {
+    "mutated_parameter_vector_hash": "27f56434fe780dd4",
+    "scenario_name": "planner_sanity_simple"
+  },
+  "schema_version": "rare_event_sampling.v1",
+  "seed": 4163,
+  "smoke_runner": "synthetic_toy_model"
+}

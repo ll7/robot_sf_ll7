@@ -267,20 +267,32 @@ def test_build_policy_rejects_sac_default_local_output_model_path() -> None:
         _build_policy("sac", {}, robot_kinematics="holonomic")
 
 
-def test_build_policy_prediction_aware_mpc_enables_hard_predicted_constraints() -> None:
+def test_build_policy_prediction_mpc_registers_adapter() -> None:
     """Prediction-aware MPC alias should opt into time-varying pedestrian constraints."""
+    policy, meta = _build_policy(
+        "prediction_mpc",
+        {"allow_testing_algorithms": True},
+        robot_kinematics="differential_drive",
+    )
+
+    adapter = policy._planner_adapter
+    assert adapter.prediction_config.predictor_backend == "constant_velocity"
+    assert meta["planner_kinematics"]["projection_policy"] == (
+        "constant_velocity_time_varying_pedestrian_constraints"
+    )
+    assert meta["planner_kinematics"]["adapter_name"] == "PredictionMPCPlannerAdapter"
+
+
+def test_build_policy_prediction_mpc_alias_registers_same_adapter() -> None:
+    """Legacy alias should route through the canonical prediction-MPC adapter."""
     policy, meta = _build_policy(
         "prediction_aware_mpc",
         {"allow_testing_algorithms": True},
         robot_kinematics="differential_drive",
     )
 
-    adapter = policy._planner_adapter
-    assert adapter.config.prediction_backend == "constant_velocity"
-    assert adapter.config.hard_pedestrian_constraints_enabled is True
-    assert meta["planner_kinematics"]["projection_policy"] == (
-        "constant_velocity_time_varying_pedestrian_constraints"
-    )
+    assert policy._planner_adapter.__class__.__name__ == "PredictionMPCPlannerAdapter"
+    assert meta["algorithm"] == "prediction_mpc"
 
 
 def test_resolve_policy_search_candidate_runtime_merges_base_and_scenario_override(

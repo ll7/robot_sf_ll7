@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.planner.prediction_mpc import (
+    PredictionMPCPlannerAdapter,
+    build_prediction_mpc_config,
+)
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, build_risk_dwa_config
 from robot_sf.planner.teb_commitment import (
     TEBCommitmentPlannerAdapter,
@@ -56,7 +60,25 @@ def _build_teb_policy_spec(algo_config: dict[str, Any]) -> AdapterPolicySpec:
     )
 
 
+def _build_prediction_mpc_policy_spec(algo_config: dict[str, Any]) -> AdapterPolicySpec:
+    """Build experimental prediction-aware MPC from algorithm config.
+
+    Returns:
+        AdapterPolicySpec: Map-runner adapter construction payload.
+    """
+    return AdapterPolicySpec(
+        algo_key="prediction_mpc",
+        algo_config=algo_config,
+        adapter=PredictionMPCPlannerAdapter(config=build_prediction_mpc_config(algo_config)),
+        adapter_name="PredictionMPCPlannerAdapter",
+        limitations="experimental_prediction_aware_mpc_local_planner",
+    )
+
+
 _ADAPTER_POLICY_BUILDERS: dict[str, Callable[[dict[str, Any]], AdapterPolicySpec]] = {
+    "cv_prediction_mpc": _build_prediction_mpc_policy_spec,
+    "prediction_aware_mpc": _build_prediction_mpc_policy_spec,
+    "prediction_mpc": _build_prediction_mpc_policy_spec,
     "risk_dwa": _build_risk_dwa_policy_spec,
     "teb": _build_teb_policy_spec,
 }

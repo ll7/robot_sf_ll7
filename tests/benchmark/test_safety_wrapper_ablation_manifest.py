@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+import os
+from pathlib import Path
 
 import pytest
 
@@ -25,9 +26,6 @@ from robot_sf.benchmark.safety_wrapper_ablation_manifest import (
 from robot_sf.robot.safety_wrapper import SAFETY_WRAPPER_SCHEMA
 
 _CONFIG_PATH = "configs/research/safety_wrapper_ablation_v1.yaml"
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _repo_config() -> dict[str, object]:
@@ -98,6 +96,17 @@ def test_manifest_echoes_predeclared_wrapper_thresholds_as_provenance() -> None:
     assert on_arm[SAFETY_WRAPPER_MODE_FIELD] == SAFETY_WRAPPER_MODE_ENABLED
     assert on_arm["runtime_binding_status"] == "unresolved_runtime_binding"
     assert manifest["event_ledger_target"] == 3482
+    assert manifest["planner_source_check"]["all_requested_planners_declared"] is True
+    assert manifest["planner_source_check"]["requested_planner_keys"] == [
+        "orca",
+        "social_force",
+        "prediction_planner",
+    ]
+    assert set(manifest["planner_groups"]).issubset(
+        manifest["planner_source_check"]["declared_planner_keys"]
+    )
+    assert manifest["factorial_check"]["planner_source_declared"] is True
+    assert manifest["factorial_check"]["all_requested_planners_declared"] is True
 
 
 def test_manifest_claim_boundary_prevents_benchmark_or_paper_claims() -> None:
@@ -139,6 +148,33 @@ def test_config_rejects_unpaired_seeds() -> None:
 
     with pytest.raises(ValueError, match="seeds must be unique"):
         build_safety_wrapper_ablation_manifest(config, options=_options())
+
+
+def test_manifest_rejects_planner_ids_missing_from_declared_source() -> None:
+    """Planner IDs must reconcile to the declared matrix before later comparison."""
+    config = _repo_config()
+    config["fixed_scope"]["planner_groups"] = ["orca", "default_social_force"]
+
+    with pytest.raises(ValueError, match="missing from declared planner source"):
+        build_safety_wrapper_ablation_manifest(config, options=_options())
+
+
+def test_manifest_resolves_absolute_config_from_non_repo_cwd(tmp_path: Path) -> None:
+    """Repo-relative planner source remains stable for absolute config callers."""
+    config_path = Path(_CONFIG_PATH).resolve()
+    config = load_safety_wrapper_ablation_config(config_path)
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(tmp_path)
+        manifest = build_safety_wrapper_ablation_manifest(
+            config,
+            options=ManifestOptions(config_path=config_path, git_head="abc1234"),
+        )
+    finally:
+        os.chdir(original_cwd)
+
+    assert manifest["planner_source_check"]["all_requested_planners_declared"] is True
+    assert Path(manifest["planner_source_check"]["planner_source_path"]).is_absolute()
 
 
 def test_config_rejects_non_mapping_wrapper_arm() -> None:

@@ -308,7 +308,13 @@ def test_uncertainty_envelope_example_config_activates_envelope() -> None:
     cfg = build_prediction_mpc_config(raw)
     planner = PredictionMPCPlannerAdapter(cfg)
 
-    envelope = planner.diagnostics()["pedestrian_uncertainty_envelope"]
+    diagnostics = planner.diagnostics()
+    assert diagnostics["predictor_backend"] == "constant_velocity"
+    assert diagnostics["horizon_steps"] == cfg.horizon_steps
+    assert diagnostics["rollout_dt"] == pytest.approx(cfg.rollout_dt)
+    assert diagnostics["predictor"]["calls"] == 0
+
+    envelope = diagnostics["pedestrian_uncertainty_envelope"]
     assert envelope["enabled"] is True
     assert envelope["policy"] == "linear"
     assert envelope["alpha_mps"] == pytest.approx(0.1)

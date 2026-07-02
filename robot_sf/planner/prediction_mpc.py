@@ -222,7 +222,9 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
             # Horizon-dependent effective pedestrian radius. inflation(0) == 0.0,
             # so the first step is unchanged and a disabled envelope (or
             # alpha == 0.0) is a bit-for-bit no-op versus the baseline.
-            ped_eff_radius = base_ped_radius + (alpha * float(step_idx) * dt if use_inflation else 0.0)
+            ped_eff_radius = base_ped_radius + (
+                alpha * float(step_idx) * dt if use_inflation else 0.0
+            )
             r_safe = (
                 float(context.robot_radius)
                 + ped_eff_radius

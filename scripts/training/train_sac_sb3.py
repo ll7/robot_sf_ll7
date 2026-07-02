@@ -49,6 +49,7 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.sensor.socnav_observation import SOCNAV_POSITION_CAP_M
 from robot_sf.training.offline_online_rl import (
+    OfflineTransitionBatch,
     load_offline_transition_batch,
     seed_sb3_replay_buffer,
     validate_batch_against_env_spaces,
@@ -522,6 +523,55 @@ def _build_env(
     return SubprocVecEnv(env_fns, start_method="spawn")
 
 
+def _transform_offline_observation_for_sac(observation: Any, *, obs_transform: str) -> Any:
+    """Apply SAC observation wrappers to one offline dataset observation.
+
+    Returns:
+        Any: Observation shaped like the online SAC environment observation.
+    """
+
+    if not isinstance(observation, Mapping):
+        return observation
+    transformed: Any = _flatten_nested_dict_obs(observation)
+    normalized_transform = obs_transform.strip().lower()
+    if normalized_transform == "relative":
+        transformed = _relative_socnav_obs(transformed)
+    elif normalized_transform == "ego":
+        transformed = _ego_socnav_obs(transformed)
+    return transformed
+
+
+def _transform_offline_batch_for_sac(
+    batch: OfflineTransitionBatch,
+    *,
+    obs_transform: str,
+) -> OfflineTransitionBatch:
+    """Apply SAC observation preprocessing to an offline transition batch.
+
+    Returns:
+        OfflineTransitionBatch: Batch with observations aligned to online SAC env wrappers.
+    """
+
+    return OfflineTransitionBatch(
+        observations=tuple(
+            _transform_offline_observation_for_sac(observation, obs_transform=obs_transform)
+            for observation in batch.observations
+        ),
+        next_observations=tuple(
+            _transform_offline_observation_for_sac(observation, obs_transform=obs_transform)
+            for observation in batch.next_observations
+        ),
+        actions=batch.actions,
+        rewards=batch.rewards,
+        dones=batch.dones,
+        truncated=batch.truncated,
+        episode_ids=batch.episode_ids,
+        scenario_ids=batch.scenario_ids,
+        seeds=batch.seeds,
+        preflight=batch.preflight,
+    )
+
+
 def _apply_env_overrides(robot_config: Any, overrides: Mapping[str, object]) -> None:
     """Apply a minimal set of config-driven environment overrides.
 
@@ -918,6 +968,8 @@ def _seed_offline_online_replay_buffer(
         action_contract=offline.action_contract,
         observation_contract=offline.observation_contract,
     )
+    batch = _transform_offline_batch_for_sac(batch, obs_transform=config.obs_transform)
+
     preflight = validate_batch_against_env_spaces(
         batch,
         observation_space=observation_space,

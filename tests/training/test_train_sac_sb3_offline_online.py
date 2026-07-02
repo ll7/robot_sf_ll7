@@ -10,6 +10,7 @@ import pytest
 from gymnasium import spaces as gym_spaces
 
 from robot_sf.benchmark.rl_trajectory_dataset import write_rl_trajectory_dataset
+from robot_sf.training.offline_online_rl import OfflineDatasetPreflight, OfflineTransitionBatch
 from scripts.training import train_sac_sb3
 from scripts.training.train_sac_sb3 import load_sac_training_config, run_sac_training
 from tests.training.test_offline_online_rl import _episode
@@ -36,6 +37,53 @@ def test_sac_config_rejects_unknown_offline_online_key(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="Unknown offline_online"):
         load_sac_training_config(cfg)
+
+
+def test_offline_online_batch_observations_match_sac_relative_wrappers(tmp_path: Path) -> None:
+    """Offline replay observations are preprocessed like online SAC env observations."""
+
+    raw_observation = {
+        "robot": {"position": np.asarray([1.0, 1.0], dtype=np.float32)},
+        "goal": {
+            "current": np.asarray([2.0, 1.0], dtype=np.float32),
+            "next": np.asarray([2.5, 1.0], dtype=np.float32),
+        },
+        "pedestrians": {
+            "positions": np.asarray([[3.0, 1.0]], dtype=np.float32),
+        },
+    }
+    batch = OfflineTransitionBatch(
+        observations=(raw_observation,),
+        next_observations=(raw_observation,),
+        actions=np.zeros((1, 2), dtype=np.float32),
+        rewards=np.zeros((1,), dtype=np.float32),
+        dones=np.asarray([False]),
+        truncated=np.asarray([False]),
+        episode_ids=("ep0",),
+        scenario_ids=("scenario",),
+        seeds=np.asarray([1]),
+        preflight=OfflineDatasetPreflight(
+            dataset_path=tmp_path / "dataset.jsonl",
+            dataset_sha256="sha256",
+            split="train",
+            episode_count=1,
+            accepted_transitions=1,
+            dropped_terminal_transitions=0,
+            action_shape=(2,),
+            observation_contract="dataset_observation",
+            action_contract="box_direct",
+        ),
+    )
+
+    transformed = train_sac_sb3._transform_offline_batch_for_sac(
+        batch,
+        obs_transform="relative",
+    )
+    observation = transformed.observations[0]
+
+    np.testing.assert_allclose(observation["robot_position"], np.zeros(2, dtype=np.float32))
+    np.testing.assert_allclose(observation["goal_current"], np.asarray([1.0, 0.0]))
+    np.testing.assert_allclose(observation["pedestrians_positions"], np.asarray([[2.0, 0.0]]))
 
 
 def test_sac_config_offline_online_disabled_preserves_defaults(tmp_path: Path) -> None:

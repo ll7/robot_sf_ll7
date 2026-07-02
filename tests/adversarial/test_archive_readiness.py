@@ -50,7 +50,17 @@ def _entry(family: str, archive_id: str, seed: int) -> dict:
 
 def _archive(entries: list[dict]) -> dict:
     """Wrap entries in a schema-tagged archive payload."""
-    return {"schema_version": ARCHIVE_SCHEMA_VERSION, "entries": entries}
+    return {
+        "schema_version": ARCHIVE_SCHEMA_VERSION,
+        "entries": entries,
+        "null_test_manifest": {
+            "required_tests": [
+                "shuffled_outcome_label_permutation",
+                "ranking_permutation",
+            ],
+            "n_permutations": 1000,
+        },
+    }
 
 
 def _ready_archive() -> dict:
@@ -80,6 +90,46 @@ def test_ready_archive_passes_all_prerequisites() -> None:
     assert report.blocking_reasons == []
     # The report is JSON-serializable for durable provenance.
     assert json.loads(json.dumps(report.to_dict()))["ready"] is True
+
+
+def test_missing_null_test_manifest_fails_closed() -> None:
+    """Archive readiness requires explicit null-test prerequisites."""
+    payload = _ready_archive()
+    del payload["null_test_manifest"]
+
+    report = assess_archive_readiness(payload)
+
+    assert report.ready is False
+    assert report.null_test_prerequisites_ready is False
+    assert "null_test_manifest_missing" in report.blocking_reasons
+
+
+def test_malformed_null_test_required_tests_fail_closed() -> None:
+    """Both expected null tests must be declared before rerun readiness."""
+    payload = _ready_archive()
+    payload["null_test_manifest"]["required_tests"] = ["ranking_permutation"]
+
+    report = assess_archive_readiness(payload)
+
+    assert report.ready is False
+    assert report.null_test_prerequisites_ready is False
+    assert (
+        "null_test_required_tests_missing:shuffled_outcome_label_permutation"
+        in report.blocking_reasons
+    )
+
+
+@pytest.mark.parametrize("n_permutations", [0, True])
+def test_invalid_null_test_permutation_count_fails_closed(n_permutations: object) -> None:
+    """Null-test policy must declare a positive permutation count."""
+    payload = _ready_archive()
+    payload["null_test_manifest"]["n_permutations"] = n_permutations
+
+    report = assess_archive_readiness(payload)
+
+    assert report.ready is False
+    assert report.null_test_prerequisites_ready is False
+    assert "null_test_n_permutations_invalid" in report.blocking_reasons
 
 
 def test_matching_summary_metadata_stays_ready() -> None:

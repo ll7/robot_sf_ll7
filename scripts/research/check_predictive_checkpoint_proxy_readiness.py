@@ -441,6 +441,33 @@ def _training_run_group_summary(
     return grouped_resolvable, missing_group_metadata
 
 
+def _candidate_training_run_group_metadata_summary(
+    candidates: list[dict[str, Any]], training_run_group_field: str | None
+) -> dict[str, Any]:
+    """Summarize lineage metadata across all checkpoint candidates."""
+    summary: dict[str, Any] = {
+        "field": training_run_group_field,
+        "candidate_count": len(candidates),
+        "with_group": 0,
+        "missing_group": 0,
+        "missing_group_by_status": {},
+    }
+    if not training_run_group_field:
+        return summary
+
+    missing_by_status: dict[str, int] = {}
+    for candidate in candidates:
+        group = candidate.get("training_run_group")
+        if isinstance(group, str) and group:
+            summary["with_group"] += 1
+            continue
+        summary["missing_group"] += 1
+        status = str(candidate.get("status", "unknown"))
+        missing_by_status[status] = missing_by_status.get(status, 0) + 1
+    summary["missing_group_by_status"] = missing_by_status
+    return summary
+
+
 def _training_run_group_blocker(
     mapping: dict[str, Any], *, registry_tag: str, min_resolvable: int
 ) -> list[str]:
@@ -488,6 +515,9 @@ def _check_checkpoint_artifacts(
     grouped_resolvable, missing_group_metadata = _training_run_group_summary(
         resolvable, training_run_group_field
     )
+    candidate_group_metadata = _candidate_training_run_group_metadata_summary(
+        candidates, training_run_group_field
+    )
     blocked_by_status: dict[str, int] = {}
     blocked_by_artifact_scope: dict[str, int] = {}
     public_artifacts_by_status: dict[str, int] = {}
@@ -511,6 +541,7 @@ def _check_checkpoint_artifacts(
         "resolvable_count": len(resolvable),
         "training_run_group_field": training_run_group_field,
         "min_resolvable_training_run_checkpoints": min_resolvable_training_run_checkpoints,
+        "candidate_training_run_group_metadata": candidate_group_metadata,
         "resolvable_by_training_run_group": grouped_resolvable,
         "missing_training_run_group_metadata": missing_group_metadata,
         "blocked_by_status": blocked_by_status,

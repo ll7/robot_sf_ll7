@@ -425,12 +425,15 @@ class DiffusionPolicyAdapter:
             checkpoint = Path(self.config.checkpoint_path).expanduser()
             if not checkpoint.is_file():
                 raise FileNotFoundError(f"Diffusion policy checkpoint not found: {checkpoint}")
-            return
-        if not self.config.allow_untrained_smoke:
+        elif not self.config.allow_untrained_smoke:
             raise RuntimeError(
                 "diffusion_policy requires checkpoint_path unless allow_untrained_smoke=true. "
                 "Untrained random inference is diagnostic-only and must not be counted as success evidence."
             )
+        if self.config.normalizer_path:
+            normalizer = Path(self.config.normalizer_path).expanduser()
+            if not normalizer.is_file():
+                raise FileNotFoundError(f"Diffusion policy normalizer not found: {normalizer}")
 
     def _load_checkpoint_if_present(self) -> None:
         """Load a checkpoint when provided; smoke mode keeps random initialization."""
@@ -516,9 +519,11 @@ def _pedestrian_distances(observation: dict[str, Any]) -> np.ndarray:
     distances = []
     for agent in agents:
         if isinstance(agent, dict):
-            distances.append(
-                float(np.linalg.norm(_as_xy(agent.get("position"), default=(0.0, 0.0)) - robot_pos))
+            distance = float(
+                np.linalg.norm(_as_xy(agent.get("position"), default=(0.0, 0.0)) - robot_pos)
             )
+            if np.isfinite(distance):
+                distances.append(distance)
     return np.asarray(distances, dtype=float)
 
 

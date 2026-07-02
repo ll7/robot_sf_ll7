@@ -7,6 +7,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
+from robot_sf.planner import diffusion_policy as diffusion_module  # noqa: E402
 from robot_sf.planner.diffusion_policy import (  # noqa: E402
     CLAIM_BOUNDARY,
     DiffusionGuidanceSelector,
@@ -56,6 +57,25 @@ def test_checkpoint_path_must_be_file(tmp_path) -> None:
     """Directory-valued checkpoint paths fail closed."""
     with pytest.raises(FileNotFoundError):
         DiffusionPolicyAdapter({"checkpoint_path": str(tmp_path)})
+
+
+def test_normalizer_path_must_be_file(tmp_path) -> None:
+    """Directory-valued normalizer paths fail closed."""
+    with pytest.raises(FileNotFoundError, match="normalizer"):
+        DiffusionPolicyAdapter({"allow_untrained_smoke": True, "normalizer_path": str(tmp_path)})
+
+
+def test_checkpoint_does_not_skip_normalizer_validation(tmp_path) -> None:
+    """Checkpoint validation still checks a provided normalizer path."""
+    checkpoint = tmp_path / "checkpoint.pt"
+    checkpoint.write_bytes(b"placeholder")
+    normalizer_dir = tmp_path / "normalizer"
+    normalizer_dir.mkdir()
+
+    with pytest.raises(FileNotFoundError, match="normalizer"):
+        DiffusionPolicyAdapter(
+            {"checkpoint_path": str(checkpoint), "normalizer_path": str(normalizer_dir)}
+        )
 
 
 def test_encoder_returns_finite_masked_tensors() -> None:
@@ -136,6 +156,28 @@ def test_guidance_changes_selected_candidate() -> None:
     )
     assert selected_disabled == pytest.approx((0.2, 0.0))
     assert disabled_diagnostics["status"] == "disabled"
+
+
+def test_guidance_filters_non_finite_distances(monkeypatch) -> None:
+    """Non-finite distance computations are excluded from guidance scores."""
+    original_as_xy = diffusion_module._as_xy
+
+    def _patched_as_xy(value, *, default):
+        if value == "nan-agent":
+            return np.asarray([np.nan, 0.0], dtype=float)
+        return original_as_xy(value, default=default)
+
+    monkeypatch.setattr(diffusion_module, "_as_xy", _patched_as_xy)
+    observation = _observation()
+    observation["agents"] = [{"position": "nan-agent"}]
+
+    selected, diagnostics = DiffusionGuidanceSelector().select(
+        np.asarray([[0.3, 0.1]], dtype=float), observation, (0.0, 0.0)
+    )
+
+    assert selected == pytest.approx((0.3, 0.1))
+    assert diagnostics["status"] == "ok"
+    assert np.isfinite(diagnostics["score_min"])
 
 
 def test_diagnostics_exposes_diagnostic_claim_boundary() -> None:

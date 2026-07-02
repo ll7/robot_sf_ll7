@@ -28,6 +28,7 @@ Rough effort band:
 - ACMPC upstream repository: <https://github.com/uzh-rpg/acmpc_public>
 - ACMPC paper: <https://arxiv.org/abs/2306.09852>
 - ACMPC differentiable MPC dependency fork: <https://github.com/uzh-rpg/mpc.pytorch_acmpc>
+- License check: `acmpc_public` reports GPL-3.0; `mpc.pytorch_acmpc` reports MIT.
 - Robot SF planner contribution contract: [`docs/contributing_planner.md`](../contributing_planner.md)
 - Learned local-policy adapter contract:
   [`docs/context/issue_1618_learned_policy_adapter_interface.md`](issue_1618_learned_policy_adapter_interface.md)

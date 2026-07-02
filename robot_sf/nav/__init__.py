@@ -21,6 +21,12 @@ from robot_sf.nav.predictive_types import (
     ProbabilisticPredictor,
     TrajectoryDistribution,
 )
+from robot_sf.nav.proxemic_costmap import (
+    ProxemicCostmapConfig,
+    build_proxemic_costmap_config,
+    config_hash,
+    proxemic_cost_at_points,
+)
 from robot_sf.nav.uncertainty_envelope import (
     DEFAULT_ALPHA_MPS,
     ENVELOPE_SCHEMA_VERSION,
@@ -41,8 +47,11 @@ __all__ = [
     "PedestrianUncertaintyEnvelope",
     "ProbabilisticPrediction",
     "ProbabilisticPredictor",
+    "ProxemicCostmapConfig",
     "SpatialInflationPolicy",
     "TrajectoryDistribution",
+    "build_proxemic_costmap_config",
+    "config_hash",
     "count_obstacle_cells",
     "effective_pedestrian_radius",
     "envelope_diagnostics",
@@ -50,5 +59,6 @@ __all__ = [
     "get_obstacle_statistics",
     "linear_inflation_policy",
     "map_definition_to_motion_planning_grid",
+    "proxemic_cost_at_points",
     "visualize_grid",
 ]

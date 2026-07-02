@@ -1,0 +1,52 @@
+# Hybrid-rule local planner with issue #4165 proxemic soft-cost layer enabled.
+allow_testing_algorithms: true
+planner_variant: hybrid_rule_v3_teb_like_rollout
+max_linear_speed: 2.0
+max_angular_speed: 1.2
+max_linear_accel: 2.0
+max_linear_decel: 2.5
+max_angular_accel: 4.0
+control_period: 0.6
+rollout_dt: 0.2
+rollout_horizon: 1.6
+hard_collision_horizon: 1.2
+soft_prediction_horizon: 3.0
+goal_tolerance: 0.25
+waypoint_switch_distance: 0.9
+linear_samples: 7
+angular_samples: 9
+lookahead_distances: [0.5, 1.0, 1.5, 2.0]
+robot_radius_default: 0.3
+pedestrian_radius_default: 0.3
+hard_safety_margin: 0.05
+desired_static_clearance: 0.7
+desired_dynamic_clearance: 0.9
+obstacle_threshold: 0.5
+obstacle_search_cells: 12
+stop_distance_human: 0.5
+slow_distance_human: 1.0
+moderate_distance_human: 2.0
+very_slow_speed: 0.15
+moderate_speed: 0.6
+near_human_angular_limit_distance: 0.8
+near_human_max_angular_speed: 0.7
+goal_progress_weight: 4.0
+path_alignment_weight: 0.8
+speed_preference_weight: 0.6
+static_clearance_weight: 1.5
+dynamic_clearance_weight: 1.8
+ttc_weight: 0.8
+heading_smoothness_weight: 0.4
+velocity_smoothness_weight: 0.3
+control_effort_weight: 0.2
+route_guide_enabled: true
+proxemic_costmap_weight: 2.0
+proxemic_costmap:
+  enabled: true
+  personal_radius: 0.45
+  social_radius: 1.2
+  personal_weight: 1.0
+  social_weight: 0.35
+  velocity_elongation_factor: 0.5
+  max_cost: 10.0
+  decay_function: linear

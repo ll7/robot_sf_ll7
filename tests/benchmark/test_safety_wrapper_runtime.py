@@ -14,6 +14,8 @@ from robot_sf.benchmark.safety_wrapper_runtime import (
     SAFETY_WRAPPER_EPISODE_SUMMARY_SCHEMA,
     SAFETY_WRAPPER_RUNTIME_STEP_SCHEMA,
     apply_runtime_safety_wrapper,
+    compute_safety_context_from_env,
+    ineligible_safety_wrapper_step_record,
     runtime_config_from_mapping,
     summarize_safety_wrapper_trace,
 )
@@ -43,6 +45,16 @@ def _config() -> SimpleNamespace:
             robot_radius=0.1,
             ped_radius=0.1,
         )
+    )
+
+
+def _config_with_robot_config_radius() -> SimpleNamespace:
+    return SimpleNamespace(
+        sim_config=SimpleNamespace(
+            time_per_step_in_secs=0.1,
+            ped_radius=0.1,
+        ),
+        robot_config=SimpleNamespace(radius=0.5),
     )
 
 
@@ -161,6 +173,49 @@ def test_wrapper_on_emits_schema_tagged_intervention_record_and_summary() -> Non
     assert summary["intervention_rate"] == 1.0
     assert summary["first_hard_stop_step"] == 3
     assert summary["min_context_clearance_m"] <= 0.0
+
+
+def test_context_uses_robot_config_radius_when_sim_radius_absent() -> None:
+    """Runtime clearance should match the scenario robot radius source."""
+
+    context, provenance = compute_safety_context_from_env(
+        command=(0.0, 0.0),
+        env=_Env(),
+        config=_config_with_robot_config_radius(),
+        previous_ped_positions=None,
+        dt=0.1,
+    )
+
+    assert provenance["robot_radius_m"] == 0.5
+    assert context.min_clearance_m == pytest.approx(-0.4)
+
+
+def test_ineligible_step_records_count_in_summary_denominator() -> None:
+    """Fail-open ineligible wrapper steps should not disappear from rates."""
+
+    runtime = runtime_config_from_mapping({"enabled": True, "arm_key": "wrapper_on"})
+    wrapped = apply_runtime_safety_wrapper(
+        command=(1.0, 0.25),
+        env=_Env(),
+        config=_config(),
+        runtime=runtime,
+        previous_ped_positions=None,
+        step_idx=0,
+    )[1]
+    ineligible = ineligible_safety_wrapper_step_record(
+        runtime=runtime,
+        step_idx=1,
+        reason="unsupported_command_shape",
+    )
+
+    summary = summarize_safety_wrapper_trace([wrapped, ineligible], runtime=runtime)
+
+    assert ineligible["eligible_for_wrapper"] is False
+    assert ineligible["intervened"] is False
+    assert summary["step_count"] == 2
+    assert summary["eligible_step_count"] == 1
+    assert summary["intervened_step_count"] == 1
+    assert summary["intervention_rate"] == 0.5
 
 
 def test_run_map_episode_records_wrapper_metadata_when_enabled(monkeypatch) -> None:

@@ -106,6 +106,7 @@ from robot_sf.benchmark.safety_predicates import (
 )
 from robot_sf.benchmark.safety_wrapper_runtime import (
     apply_runtime_safety_wrapper,
+    ineligible_safety_wrapper_step_record,
     runtime_config_from_mapping,
     summarize_safety_wrapper_trace,
 )
@@ -713,6 +714,13 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                             "safety_wrapper.enabled requires absolute commands; "
                             "native environment actions cannot be wrapped safely"
                         )
+                    safety_wrapper_trace.append(
+                        ineligible_safety_wrapper_step_record(
+                            runtime=safety_wrapper_runtime,
+                            step_idx=step_idx,
+                            reason="native_environment_action",
+                        )
+                    )
                 elif (
                     not isinstance(policy_command, (tuple, list, np.ndarray))
                     or len(policy_command) < 2
@@ -722,6 +730,13 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                             "safety_wrapper.enabled expects commands shaped like "
                             "(linear_velocity, angular_velocity)"
                         )
+                    safety_wrapper_trace.append(
+                        ineligible_safety_wrapper_step_record(
+                            runtime=safety_wrapper_runtime,
+                            step_idx=step_idx,
+                            reason="unsupported_command_shape",
+                        )
+                    )
                 else:
                     corrected_command, wrapper_record = apply_runtime_safety_wrapper(
                         command=policy_command,

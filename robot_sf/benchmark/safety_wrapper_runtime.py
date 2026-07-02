@@ -124,6 +124,21 @@ def _radius(config: Any, *names: str, default: float) -> float:
     return float(default)
 
 
+def _robot_radius(config: Any) -> float:
+    robot_config = getattr(config, "robot_config", None)
+    robot_config_radius = getattr(robot_config, "radius", None)
+    return _radius(
+        config,
+        "robot_radius",
+        default=(
+            float(robot_config_radius)
+            if isinstance(robot_config_radius, (int, float))
+            and math.isfinite(float(robot_config_radius))
+            else 1.0
+        ),
+    )
+
+
 def _pedestrian_velocities(
     current_positions: np.ndarray,
     previous_positions: np.ndarray | None,
@@ -198,7 +213,7 @@ def compute_safety_context_from_env(
         dtype=float,
     )
     ped_velocities = _pedestrian_velocities(ped_positions, previous_ped_positions, dt)
-    robot_radius = _radius(config, "robot_radius", default=1.0)
+    robot_radius = _robot_radius(config)
     ped_radius = _radius(config, "ped_radius", "pedestrian_radius", default=0.4)
     radius_sum = robot_radius + ped_radius
 
@@ -280,6 +295,28 @@ def apply_runtime_safety_wrapper(
     return corrected, step_record
 
 
+def ineligible_safety_wrapper_step_record(
+    *,
+    runtime: SafetyWrapperRuntimeConfig,
+    step_idx: int,
+    reason: str,
+) -> dict[str, Any]:
+    """Return a schema-tagged wrapper trace record for fail-open ineligible steps."""
+
+    return {
+        "schema_version": SAFETY_WRAPPER_RUNTIME_STEP_SCHEMA,
+        "wrapper_schema_version": None,
+        "step": int(step_idx),
+        "arm_key": str(runtime.arm_key),
+        "enabled": bool(runtime.enabled),
+        "eligible_for_wrapper": False,
+        "ineligible_reason": str(reason),
+        "intervention": INTERVENTION_DISABLED,
+        "intervened": False,
+        "context": None,
+    }
+
+
 def summarize_safety_wrapper_trace(
     trace: Sequence[Mapping[str, Any]],
     *,
@@ -319,6 +356,9 @@ def summarize_safety_wrapper_trace(
     ]
     thresholds = asdict(safety_wrapper_config(runtime))
     step_count = len(trace)
+    eligible_step_count = sum(
+        1 for record in trace if bool(record.get("eligible_for_wrapper", True))
+    )
     summary: dict[str, Any] = {
         "schema_version": SAFETY_WRAPPER_EPISODE_SUMMARY_SCHEMA,
         "arm_key": str(runtime.arm_key),
@@ -327,7 +367,7 @@ def summarize_safety_wrapper_trace(
         "thresholds": thresholds,
         "false_stop_lookahead_s": float(runtime.false_stop_lookahead_s),
         "step_count": int(step_count),
-        "eligible_step_count": int(step_count),
+        "eligible_step_count": int(eligible_step_count),
         "intervention_counts": {
             INTERVENTION_DISABLED: int(counts.get(INTERVENTION_DISABLED, 0)),
             INTERVENTION_NONE: int(counts.get(INTERVENTION_NONE, 0)),
@@ -355,6 +395,7 @@ __all__ = [
     "SafetyWrapperRuntimeConfig",
     "apply_runtime_safety_wrapper",
     "compute_safety_context_from_env",
+    "ineligible_safety_wrapper_step_record",
     "runtime_config_from_mapping",
     "safety_wrapper_config",
     "summarize_safety_wrapper_trace",

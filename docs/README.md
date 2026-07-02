@@ -326,6 +326,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Issue #605 gym-collision-avoidance Reference Note](./context/issue_605_gym_collision_avoidance_reference_note.md)** - CADRL-family reference assessment, source-harness recommendation, and explicit wrapper boundary for future reproduction
 * **[Issue #604 Pred2Nav Assessment Note](./context/issue_604_pred2nav_assessment.md)** - External predictive-MPC assessment showing Pred2Nav is useful as a concept source but blocked for direct reuse by unclear licensing, legacy runtime, and holonomic action semantics
 * **[Issue #599 Go-MPC Assessment Note](./context/issue_599_go_mpc_assessment.md)** - External prediction-based planner-family assessment showing Go-MPC is solver-locked, GPL, and a poor direct integration target relative to current native predictive planners
+* **[Issue #3985 ACMPC Feasibility Assessment](./context/issue_3985_acmpc_feasibility_assessment.md)** - Actor-Critic Model Predictive Control scoping note for a possible Robot SF-native learned-MPC planner, with adapter-burden, benchmark-boundary, and conditional design-child recommendation
 * **[Issue #593 Predictive Ego-Conditioned v2 Note](./context/issue_593_predictive_ego_conditioned_v2.md)** - Collector-parity closeout for the 9D ego-conditioned predictive-planner path, plus staged evidence showing much better ADE/FDE but no hard-seed outcome gain yet
 * **[Issue #591 Prediction Planner Probabilistic Search](./context/issue_591_prediction_planner_probabilistic_search.md)** - Probabilistic CVaR and MCTS-lite predictive modes improve safety/SNQI slightly but reduce success and impose a large runtime penalty, so they remain experimental only
 * **[Issue #669 Prediction Planner v2 Benchmark Comparison](./context/issue_669_predictive_v2_benchmark_comparison.md)** - Hard-seed and full paper-surface comparison showing the ego-conditioned v2 checkpoint is only a mild tradeoff improvement over the current predictive baseline, not a headline planner-quality win
@@ -718,6 +719,7 @@ When contributing to the project:
 * **Global Planner**: See `specs/342-svg-global-planner/quickstart.md` for the visibility-graph planner API, POI routing, and integration guidance.
 * **Planner selection**: Choose between visibility and classic grid planners in `docs/dev_guide.md#planner-selection-visibility-vs-classic-grid`.
 * **MPC social-navigation spike**: See `docs/context/issue_771_drmpscnav_assessment.md` and `docs/context/issue_771_drmpscnav_implementation_guide.md` for the SICNav / DR-MPC assessment boundary, implementation guardrails, and verified-simple gate plan.
+* **ACMPC learned-MPC feasibility**: See `docs/context/issue_3985_acmpc_feasibility_assessment.md` for the assessment-only boundary for an Actor-Critic Model Predictive Control inspired local planner.
 
 ---
 

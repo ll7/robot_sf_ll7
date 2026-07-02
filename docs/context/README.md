@@ -1660,3 +1660,7 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #3254 Predictive Crossing-Conflict Negative Result](issue_3254_predictive_crossing_conflict_negative_result.md)
   preserves the schema-fixed crossing-conflict predictive retraining outcome: training completed,
   but final evaluation failed the success-rate gate, so the run is not planner promotion evidence.
+* [Issue #3985 ACMPC Feasibility Assessment](issue_3985_acmpc_feasibility_assessment.md)
+  records the assessment-only boundary for an Actor-Critic Model Predictive Control inspired
+  learned-MPC local planner, including adapter burden, benchmark claim limits, and a conditional
+  design-child recommendation.

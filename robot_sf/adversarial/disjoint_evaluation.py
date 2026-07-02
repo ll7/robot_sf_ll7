@@ -377,6 +377,11 @@ def classify_held_out_evidence(
 #: Top-level schema tag emitted by ``robot_sf.adversarial.archive``.
 ARCHIVE_SCHEMA_VERSION = "adversarial_failure_archive.v1"
 
+#: Null-test manifest key required before a certified archive can be treated as
+#: ready for a proposal-vs-random rerun.
+NULL_TEST_MANIFEST_KEY = "null_test_manifest"
+REQUIRED_NULL_TESTS = frozenset({"shuffled_outcome_label_permutation", "ranking_permutation"})
+
 #: Minimum scenario families required to form a disjoint fit/eval split. A
 #: single family collapses both sides together and can never pass the held-out
 #: disjointness gate (see :func:`classify_held_out_evidence`).
@@ -607,6 +612,30 @@ def _summary_consistency_blockers(archive_data: dict[str, Any], entries: list[An
     return blockers
 
 
+def _null_test_manifest_blockers(archive_data: dict[str, Any]) -> list[str]:
+    """Validate explicit null-test prerequisites for held-out archive reruns."""
+    manifest = archive_data.get(NULL_TEST_MANIFEST_KEY)
+    if manifest is None:
+        return ["null_test_manifest_missing"]
+    if not isinstance(manifest, dict):
+        return ["null_test_manifest_not_object"]
+
+    blockers: list[str] = []
+    required_tests = manifest.get("required_tests")
+    if not isinstance(required_tests, list) or not required_tests:
+        blockers.append("null_test_required_tests_missing")
+    else:
+        missing_tests = sorted(REQUIRED_NULL_TESTS - {str(test) for test in required_tests})
+        if missing_tests:
+            blockers.append(f"null_test_required_tests_missing:{','.join(missing_tests)}")
+
+    n_permutations = manifest.get("n_permutations")
+    if type(n_permutations) is not int or n_permutations < 1:
+        blockers.append("null_test_n_permutations_invalid")
+
+    return blockers
+
+
 def assess_archive_readiness(
     archive_data: Any,
     *,
@@ -653,6 +682,8 @@ def assess_archive_readiness(
         stats, schema_ok=schema_ok, schema_version=schema_version, min_entries=min_entries
     )
     reasons.extend(_summary_consistency_blockers(archive_data, entries))
+    null_test_manifest_reasons = _null_test_manifest_blockers(archive_data)
+    reasons.extend(null_test_manifest_reasons)
 
     # Overlap provenance needs disjoint families, unique archive ids, and seeds
     # to compare. Null tests additionally need a non-empty eval side, which the
@@ -665,7 +696,9 @@ def assess_archive_readiness(
         and not stats.seed_overlap_count
         and not stats.archive_id_overlap_count
     )
-    null_test_prerequisites_ready = overlap_metadata_ready and not stats.missing_attribution
+    null_test_prerequisites_ready = (
+        overlap_metadata_ready and not stats.missing_attribution and not null_test_manifest_reasons
+    )
 
     ready = not reasons
     return ArchiveReadinessReport(

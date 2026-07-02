@@ -2247,6 +2247,7 @@ def _run_map_episode(  # noqa: PLR0913
     synthetic_actuation_profile: dict[str, Any] | None = None,
     latency_stress_profile: dict[str, Any] | None = None,
     safety_wrapper: dict[str, Any] | None = None,
+    cbf_safety_filter: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
 ) -> dict[str, Any]:
@@ -2281,6 +2282,7 @@ def _run_map_episode(  # noqa: PLR0913
         synthetic_actuation_profile=synthetic_actuation_profile,
         latency_stress_profile=latency_stress_profile,
         safety_wrapper=safety_wrapper,
+        cbf_safety_filter=cbf_safety_filter,
         record_planner_decision_trace=record_planner_decision_trace,
         record_simulation_step_trace=record_simulation_step_trace,
         policy_builder=_build_policy,
@@ -2449,6 +2451,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     synthetic_actuation_profile: dict[str, Any] | None = None,
     latency_stress_profile: dict[str, Any] | None = None,
     safety_wrapper: dict[str, Any] | None = None,
+    cbf_safety_filter: dict[str, Any] | None = None,
     record_simulation_step_trace: bool = False,
     workers: int = 1,
     resume: bool = True,
@@ -2800,6 +2803,9 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                         else None
                     ),
                     safety_wrapper=dict(safety_wrapper) if safety_wrapper is not None else None,
+                    cbf_safety_filter=dict(cbf_safety_filter)
+                    if cbf_safety_filter is not None
+                    else None,
                     record_simulation_step_trace=record_simulation_step_trace,
                 )
                 if _compute_map_episode_id(identity_payload, seed) not in existing:
@@ -2838,6 +2844,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             not_available_latency_metrics() if latency_profile is not None else None
         ),
         safety_wrapper=dict(safety_wrapper) if safety_wrapper is not None else None,
+        cbf_safety_filter=dict(cbf_safety_filter) if cbf_safety_filter is not None else None,
         record_simulation_step_trace=record_simulation_step_trace,
     )
 

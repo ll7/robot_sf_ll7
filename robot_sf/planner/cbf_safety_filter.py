@@ -399,9 +399,225 @@ class CbfSafetyFilterPlannerWrapper:
             close()
 
 
+CBF_SAFETY_FILTER_SCHEMA = "cbf_safety_filter.v1"
+CBF_VARIANT_COLLISION_CONE = "collision_cone_cbf_v1"
+CBF_VARIANT_DYNAMIC_PARABOLIC = "dynamic_parabolic_cbf_v1"
+
+
+@dataclass(frozen=True, slots=True)
+class CBFSafetyFilterConfig:
+    """Pure-function CBF filter configuration for benchmark runtime binding."""
+
+    enabled: bool = False
+    variant: str = CBF_VARIANT_COLLISION_CONE
+    alpha: float = 2.0
+    safety_radius_margin_m: float = 0.05
+    min_linear_velocity_m_s: float = 0.0
+    max_linear_velocity_m_s: float = 2.0
+    fallback_mode: str = "stop_keep_turn"
+    angular_weight: float = 0.05
+
+
+@dataclass(frozen=True, slots=True)
+class CBFObstacleState:
+    """Current-state dynamic obstacle sample for the CBF filter."""
+
+    position_m: tuple[float, float]
+    velocity_mps: tuple[float, float]
+    radius_m: float
+
+
+@dataclass(frozen=True, slots=True)
+class CBFFilterContext:
+    """Robot and obstacle state needed for one CBF projection."""
+
+    robot_position_m: tuple[float, float]
+    robot_heading_rad: float
+    robot_radius_m: float
+    obstacles: tuple[CBFObstacleState, ...]
+
+
+def _finite_xy_tuple(value: tuple[float, float], *, field_name: str) -> tuple[float, float]:
+    """Validate finite xy tuple.
+
+    Returns:
+        Two finite float values.
+    """
+
+    arr = np.asarray(value, dtype=float).reshape(-1)
+    if arr.size != 2 or not np.all(np.isfinite(arr)):
+        raise ValueError(f"{field_name} must be two finite floats")
+    return (float(arr[0]), float(arr[1]))
+
+
+def _validate_public_context(context: CBFFilterContext) -> None:
+    """Fail closed for malformed public CBF state."""
+
+    _finite_xy_tuple(context.robot_position_m, field_name="robot_position_m")
+    if not math.isfinite(float(context.robot_heading_rad)):
+        raise ValueError("robot_heading_rad must be finite")
+    if not math.isfinite(float(context.robot_radius_m)) or context.robot_radius_m < 0.0:
+        raise ValueError("robot_radius_m must be finite and non-negative")
+    for obstacle in context.obstacles:
+        _finite_xy_tuple(obstacle.position_m, field_name="obstacle.position_m")
+        _finite_xy_tuple(obstacle.velocity_mps, field_name="obstacle.velocity_mps")
+        if not math.isfinite(float(obstacle.radius_m)) or obstacle.radius_m < 0.0:
+            raise ValueError("obstacle.radius_m must be finite and non-negative")
+
+
+def apply_cbf_safety_filter(  # noqa: C901
+    linear_velocity: float,
+    angular_velocity: float,
+    context: CBFFilterContext,
+    config: CBFSafetyFilterConfig | None = None,
+) -> dict[str, Any]:
+    """Project a nominal unicycle command through collision-cone CBF constraints.
+
+    Returns:
+        JSON-safe decision payload containing the filtered command and CBF diagnostics.
+    """
+
+    config = config or CBFSafetyFilterConfig()
+    _validate_public_context(context)
+    if not math.isfinite(float(linear_velocity)) or not math.isfinite(float(angular_velocity)):
+        raise ValueError("nominal command velocities must be finite")
+    if config.variant == CBF_VARIANT_DYNAMIC_PARABOLIC:
+        raise NotImplementedError(
+            "dynamic_parabolic_cbf_v1 scaffolded but out of scope for #3948 first slice"
+        )
+    if config.variant != CBF_VARIANT_COLLISION_CONE:
+        raise ValueError("CBF variant must be collision_cone_cbf_v1")
+    if not config.enabled:
+        return {
+            "schema_version": CBF_SAFETY_FILTER_SCHEMA,
+            "variant": config.variant,
+            "enabled": False,
+            "qp_status": "disabled",
+            "qp_feasible": True,
+            "fallback_applied": False,
+            "intervened": False,
+            "nominal_linear_velocity": float(linear_velocity),
+            "nominal_angular_velocity": float(angular_velocity),
+            "filtered_linear_velocity": float(linear_velocity),
+            "filtered_angular_velocity": float(angular_velocity),
+            "active_constraint_count": 0,
+            "min_barrier_before": None,
+            "min_barrier_after": None,
+            "hard_constraint_violation": False,
+        }
+
+    robot_pos = np.asarray(context.robot_position_m, dtype=float)
+    heading = float(context.robot_heading_rad)
+    e_theta = np.asarray([math.cos(heading), math.sin(heading)], dtype=float)
+    lower = float(config.min_linear_velocity_m_s)
+    upper = float(config.max_linear_velocity_m_s)
+    if lower > upper:
+        raise ValueError("min_linear_velocity_m_s must be <= max_linear_velocity_m_s")
+
+    barriers_before: list[float] = []
+    intervals: list[tuple[float, float]] = []
+    for obstacle in context.obstacles:
+        obstacle_pos = np.asarray(obstacle.position_m, dtype=float)
+        obstacle_velocity = np.asarray(obstacle.velocity_mps, dtype=float)
+        p_i = obstacle_pos - robot_pos
+        radius = (
+            float(context.robot_radius_m)
+            + float(obstacle.radius_m)
+            + float(config.safety_radius_margin_m)
+        )
+        h_i = float(np.dot(p_i, p_i) - radius * radius)
+        coeff = float(-2.0 * np.dot(p_i, e_theta))
+        rhs = float(-config.alpha * h_i - 2.0 * np.dot(p_i, obstacle_velocity))
+        barrier_before = float(
+            2.0 * np.dot(p_i, obstacle_velocity - float(linear_velocity) * e_theta)
+            + float(config.alpha) * h_i
+        )
+        barriers_before.append(barrier_before)
+        if abs(coeff) <= 1.0e-12:
+            if 0.0 < rhs:
+                intervals.append((math.inf, -math.inf))
+            continue
+        bound = rhs / coeff
+        if coeff > 0.0:
+            intervals.append((bound, math.inf))
+        else:
+            intervals.append((-math.inf, bound))
+
+    for interval_lower, interval_upper in intervals:
+        lower = max(lower, interval_lower)
+        upper = min(upper, interval_upper)
+
+    feasible = lower <= upper
+    if feasible:
+        filtered_linear = float(np.clip(float(linear_velocity), lower, upper))
+    elif config.fallback_mode == "stop_keep_turn":
+        filtered_linear = 0.0
+    else:
+        raise ValueError("unsupported CBF fallback_mode")
+    filtered_angular = float(angular_velocity)
+    barriers_after = [
+        float(
+            2.0
+            * np.dot(
+                np.asarray(obstacle.position_m, dtype=float) - robot_pos,
+                np.asarray(obstacle.velocity_mps, dtype=float) - filtered_linear * e_theta,
+            )
+            + float(config.alpha)
+            * (
+                float(
+                    np.dot(
+                        np.asarray(obstacle.position_m, dtype=float) - robot_pos,
+                        np.asarray(obstacle.position_m, dtype=float) - robot_pos,
+                    )
+                )
+                - (
+                    float(context.robot_radius_m)
+                    + float(obstacle.radius_m)
+                    + float(config.safety_radius_margin_m)
+                )
+                ** 2
+            )
+        )
+        for obstacle in context.obstacles
+    ]
+    min_before = min(barriers_before) if barriers_before else None
+    min_after = min(barriers_after) if barriers_after else None
+    intervened = not math.isclose(
+        filtered_linear, float(linear_velocity), rel_tol=1.0e-9, abs_tol=1.0e-9
+    )
+    fallback_applied = not feasible
+    qp_status = (
+        "fallback_infeasible" if fallback_applied else "filtered" if intervened else "pass_through"
+    )
+    return {
+        "schema_version": CBF_SAFETY_FILTER_SCHEMA,
+        "variant": config.variant,
+        "enabled": True,
+        "qp_status": qp_status,
+        "qp_feasible": bool(feasible),
+        "fallback_applied": bool(fallback_applied),
+        "intervened": bool(intervened),
+        "nominal_linear_velocity": float(linear_velocity),
+        "nominal_angular_velocity": float(angular_velocity),
+        "filtered_linear_velocity": float(filtered_linear),
+        "filtered_angular_velocity": float(filtered_angular),
+        "active_constraint_count": len(intervals),
+        "min_barrier_before": min_before,
+        "min_barrier_after": min_after,
+        "hard_constraint_violation": bool(min_after is not None and min_after < -1.0e-9),
+    }
+
+
 __all__ = [
+    "CBF_SAFETY_FILTER_SCHEMA",
+    "CBF_VARIANT_COLLISION_CONE",
+    "CBF_VARIANT_DYNAMIC_PARABOLIC",
+    "CBFFilterContext",
+    "CBFObstacleState",
+    "CBFSafetyFilterConfig",
     "CbfSafetyFilterConfig",
     "CbfSafetyFilterPlannerWrapper",
     "CollisionConeCbfSafetyFilter",
+    "apply_cbf_safety_filter",
     "build_cbf_safety_filter_config",
 ]

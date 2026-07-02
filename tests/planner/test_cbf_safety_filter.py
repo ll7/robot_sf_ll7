@@ -5,9 +5,14 @@ from __future__ import annotations
 import pytest
 
 from robot_sf.planner.cbf_safety_filter import (
+    CBF_VARIANT_DYNAMIC_PARABOLIC,
+    CBFFilterContext,
+    CBFObstacleState,
+    CBFSafetyFilterConfig,
     CbfSafetyFilterConfig,
     CbfSafetyFilterPlannerWrapper,
     CollisionConeCbfSafetyFilter,
+    apply_cbf_safety_filter,
     build_cbf_safety_filter_config,
 )
 
@@ -28,6 +33,92 @@ def _head_on_observation() -> dict[str, object]:
             }
         ],
     }
+
+
+def _public_context() -> CBFFilterContext:
+    return CBFFilterContext(
+        robot_position_m=(0.0, 0.0),
+        robot_heading_rad=0.0,
+        robot_radius_m=0.3,
+        obstacles=(
+            CBFObstacleState(
+                position_m=(1.0, 0.0),
+                velocity_mps=(-0.5, 0.0),
+                radius_m=0.35,
+            ),
+        ),
+    )
+
+
+def test_public_apply_cbf_filter_disabled_returns_original_command() -> None:
+    """Public pure-function API preserves disabled commands."""
+
+    result = apply_cbf_safety_filter(0.8, 0.1, _public_context(), CBFSafetyFilterConfig())
+
+    assert result["qp_status"] == "disabled"
+    assert result["filtered_linear_velocity"] == 0.8
+    assert result["filtered_angular_velocity"] == 0.1
+
+
+def test_public_apply_cbf_filter_no_obstacles_passes_through() -> None:
+    """No obstacle constraints keep enabled CBF pass-through."""
+
+    context = CBFFilterContext(
+        robot_position_m=(0.0, 0.0),
+        robot_heading_rad=0.0,
+        robot_radius_m=0.3,
+        obstacles=(),
+    )
+    result = apply_cbf_safety_filter(
+        0.8,
+        0.1,
+        context,
+        CBFSafetyFilterConfig(enabled=True),
+    )
+
+    assert result["qp_status"] == "pass_through"
+    assert result["active_constraint_count"] == 0
+
+
+def test_public_apply_cbf_filter_projects_head_on_command() -> None:
+    """Head-on obstacle clips the nominal forward command."""
+
+    result = apply_cbf_safety_filter(
+        0.8,
+        0.1,
+        _public_context(),
+        CBFSafetyFilterConfig(enabled=True),
+    )
+
+    assert result["qp_status"] in {"filtered", "fallback_infeasible"}
+    assert result["filtered_linear_velocity"] < 0.8
+    assert result["intervened"] is True
+
+
+def test_public_apply_cbf_filter_dynamic_parabolic_scaffold_fails_closed() -> None:
+    """DPCBF is scaffolded but intentionally unavailable in first slice."""
+
+    with pytest.raises(NotImplementedError, match="dynamic_parabolic_cbf_v1"):
+        apply_cbf_safety_filter(
+            0.8,
+            0.1,
+            _public_context(),
+            CBFSafetyFilterConfig(enabled=True, variant=CBF_VARIANT_DYNAMIC_PARABOLIC),
+        )
+
+
+def test_public_apply_cbf_filter_rejects_malformed_state() -> None:
+    """Non-finite public context state fails closed."""
+
+    context = CBFFilterContext(
+        robot_position_m=(float("nan"), 0.0),
+        robot_heading_rad=0.0,
+        robot_radius_m=0.3,
+        obstacles=(),
+    )
+
+    with pytest.raises(ValueError, match="robot_position_m"):
+        apply_cbf_safety_filter(0.8, 0.1, context, CBFSafetyFilterConfig(enabled=True))
 
 
 def test_collision_cone_cbf_projects_head_on_command() -> None:

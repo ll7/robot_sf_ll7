@@ -5,7 +5,11 @@ from __future__ import annotations
 import numpy as np
 
 from robot_sf.gym_env.env_config import EnvSettings
-from robot_sf.gym_env.robot_env import _build_goal_posterior_planner_input
+from robot_sf.gym_env.robot_env import (
+    _attach_goal_posterior_planner_input,
+    _build_goal_posterior_planner_input,
+    _build_step_info,
+)
 from robot_sf.prediction.goal_intention import planner_goal_posterior_channel_from_state
 
 
@@ -89,3 +93,41 @@ def test_robot_env_goal_posterior_planner_input_is_opt_in_metadata() -> None:
     assert channel["enabled"] is True
     assert sorted(channel["pedestrian_goal_posteriors"]) == ["ped_0", "ped_1"]
     assert channel["pedestrian_goal_posteriors"]["ped_0"]["top_goal_id"] == ("ped_0_route_goal")
+
+
+def _enabled_config_and_sim() -> tuple[EnvSettings, _FakeSimulator]:
+    config = EnvSettings(goal_posterior_planner_input_enabled=True)
+    simulator = _FakeSimulator(np.array([[0.0, 0.0, 1.0, 0.0, 5.0, 0.0]], dtype=float))
+    return config, simulator
+
+
+def test_step_and_reset_expose_channel_at_top_level_info() -> None:
+    """Step and reset must both place the channel at info['planner_goal_posterior_channel'].
+
+    Regression guard: the step path builds info via ``_build_step_info`` (which nests
+    the meta dict under ``info['meta']``); the attach must run on the built info so the
+    channel lands at the top level, matching the reset path and the documented contract.
+    """
+
+    config, simulator = _enabled_config_and_sim()
+
+    reset_info: dict[str, object] = {"meta": {}}
+    _attach_goal_posterior_planner_input(reset_info, config, simulator)
+    assert reset_info["planner_goal_posterior_channel"]["enabled"] is True
+
+    step_info = _build_step_info({"step": 1})
+    _attach_goal_posterior_planner_input(step_info, config, simulator)
+    assert step_info["planner_goal_posterior_channel"]["enabled"] is True
+    # Not buried under info['meta'] (the pre-fix location).
+    assert "planner_goal_posterior_channel" not in step_info["meta"]
+
+
+def test_disabled_config_attaches_no_channel() -> None:
+    """Default-disabled config must not attach the channel to step or reset info."""
+
+    config = EnvSettings()
+    simulator = _FakeSimulator(np.array([[0.0, 0.0, 1.0, 0.0, 5.0, 0.0]], dtype=float))
+
+    info = _build_step_info({"step": 1})
+    _attach_goal_posterior_planner_input(info, config, simulator)
+    assert "planner_goal_posterior_channel" not in info

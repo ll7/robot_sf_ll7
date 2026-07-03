@@ -1020,7 +1020,6 @@ class RobotEnv(BaseEnv):
         reward_dict["action"] = action
         # Add last_action to reward_dict
         reward_dict["last_action"] = self.last_action
-        _attach_goal_posterior_planner_input(reward_dict, self.env_config, self.simulator)
         # Determine if the episode has reached terminal state
         term = self.state.is_terminal
         # Compute the reward using the provided reward function
@@ -1054,6 +1053,11 @@ class RobotEnv(BaseEnv):
 
         # observation, reward, terminal, truncated,info
         info = _build_step_info(reward_dict)
+        # Attach opt-in planner goal-posterior channel at the top level of the
+        # step info so it matches the reset-path contract
+        # (info["planner_goal_posterior_channel"]) rather than nesting under
+        # info["meta"]; keeps it out of the reward-function payload.
+        _attach_goal_posterior_planner_input(info, self.env_config, self.simulator)
         return (
             obs,
             reward,

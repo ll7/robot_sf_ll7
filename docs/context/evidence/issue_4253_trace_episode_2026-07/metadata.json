@@ -1,0 +1,29 @@
+{
+  "claim_boundary": "single illustrative doorway episode only; no statistical, benchmark, paper, or dissertation claim is established by this bundle",
+  "downstream": "ll7/diss#313 item A",
+  "dt": 0.1,
+  "generated_at_utc": "2026-07-03T11:31:33.912419+00:00",
+  "git_commit": "022f60c69749861a578d1bc0a6ca87e0e39d2040",
+  "horizon": 100,
+  "issue": "https://github.com/ll7/robot_sf_ll7/issues/4268",
+  "planner": "simple_policy",
+  "recording_path": "robot_sf.benchmark.map_runner._run_map_episode(record_simulation_step_trace=True)",
+  "scenario_id": "classic_doorway_medium",
+  "scenario_matrix": "configs/scenarios/classic_interactions.yaml",
+  "scenario_matrix_sha256": "5fd4d57c29e4a895e6a85889567c91f24ca7f16f02fafa2373bdf4cb9171bdc5",
+  "schema_version": "issue-4268-trace-episode-metadata.v1",
+  "seed": 141,
+  "status": "collision",
+  "steps": 98,
+  "summary": {
+    "episode_status": "collision",
+    "global_min_distance_step": 97,
+    "global_min_robot_ped_distance_m": 1.3739951708646847,
+    "planner": "simple_policy",
+    "scenario_id": "classic_doorway_medium",
+    "seed": 141,
+    "step_count": 98,
+    "termination_reason": "collision"
+  },
+  "termination_reason": "collision"
+}

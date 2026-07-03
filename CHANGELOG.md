@@ -21,6 +21,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `configs/research/fidelity_sensitivity_v1.yaml` now carries an explicit
   `fixed_scope.planner_algorithms` binding so its planner labels resolve. No benchmark campaign was
   run.
+* Extended the **AMMV feasibility batch-summary artifact block** with the claim-boundary markers it
+  was missing, so a consumer reading only the summary sees the same non-hardware boundary as the
+  per-episode payload (#3466). `robot_sf/benchmark/map_runner_batch_summary.py` now emits
+  `algorithm_metadata_contract.ammv_feasibility` via the new pure helper
+  `build_ammv_feasibility_summary`, which adds `evidence_kind: "diagnostic_proxy"` and a
+  `status` field (`"available"` / `"no_ammv_episodes"`) alongside the existing
+  `proxy_kind: "internal_non_hardware"` and the four folded fields (`min_stability_margin`,
+  `tip_over_violation`, `n_curvature_violations`, `feasible`). Folds stay worst-case (minimum
+  margin, OR tip-over, all-episodes-feasible), so a single tip-over-prone episode is never averaged
+  away. Additive and backward-compatible; internal proxy only — **no** hardware-calibrated AMMV
+  safety claim. Refreshed `docs/context/issue_3466_ammv_command_feasibility.md` (the note previously
+  described the artifact wiring as deferred; it landed in #3845).
+
+* Added a **cross-module pipeline contract test and consolidation note for the issue #4142 dense
+  DPCBF comparison** (#4142). The dense-comparison pipeline landed as separate slices — readiness
+  (#4299), the packet-consuming run planner (#4318), and the plan-consuming summarizer (#4345) —
+  each with its own module, schema constant, and focused test, but no single test drove all three
+  top-level entry points as one unit or pinned the invariants that must hold *across* the slices.
+  `tests/benchmark/test_issue_4142_dpcbf_dense_pipeline_contract.py` closes that gap: it chains
+  `evaluate_readiness` → `build_run_plan` → `summarize_dense_comparison` on the tracked packet and
+  asserts the packet → plan → summary schema lineage
+  (`robot_sf.issue_4142_dpcbf_dense_comparison{,_plan,_summary}.v1`), that the runner and summarizer
+  reuse readiness's required-arms and fail-closed excluded-row-status *objects* (guarding against a
+  re-hardcoded copy drifting), and that execution stays authorization-gated across the whole
+  pipeline. Consolidation/state note `docs/context/issue_4142_dpcbf_dense_pipeline.md` records the
+  now schema-complete pipeline, remaining/intentional blockers, and the one remaining empirical
+  action (the authorized campaign). Diagnostic contract/regression guard only: runs no episodes,
+  authorizes no campaign, submits no Slurm/GPU job, and makes no safety-performance,
+  collision-reduction, or paper/dissertation claim.
 * Added license-safe **CrowdBot and SCAND shape-contract loaders** plus skip-if-absent tests for the
   #4224 external-data program (public slice b). `robot_sf/data/external/crowdbot.py` and
   `robot_sf/data/external/scand.py` only inspect locally staged files — they never download, vendor,

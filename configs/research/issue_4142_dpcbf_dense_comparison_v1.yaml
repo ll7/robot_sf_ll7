@@ -5,6 +5,11 @@
 # paper-facing safety-performance claim are out of scope for this PR.
 # Canonical invocation: `uv run python -m robot_sf.benchmark.cli run --config configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml`.
 schema_version: robot_sf.issue_4142_dpcbf_dense_comparison.v1
+# Canonical run command, mirrored from the comment above as a structured field so the
+# readiness preflight can surface it verbatim. Executing it stays out of scope here; a
+# packet-consuming runner for this schema is a declared downstream gate (see the readiness
+# surface robot_sf/benchmark/issue_4142_dpcbf_dense_readiness.py).
+canonical_command: uv run python -m robot_sf.benchmark.cli run --config configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml
 scenario_manifest: configs/scenarios/sets/issue_4142_dense_dynamic_cbf_v1.yaml
 algorithm: prediction_mpc_cv
 algorithm_configs:
@@ -22,6 +27,13 @@ runtime_cbf_arms:
 summary_contract:
   evidence_tier: bounded_runtime_comparison
   fallback_rows_are_success_evidence: false
+  # Fail-closed exclusion: rows that finished in any of these statuses are caveats and
+  # must never be counted toward a collision-reduction or safety-performance claim.
+  excluded_row_statuses:
+    - fallback
+    - degraded
+    - failed
+    - ineligible
   required_arms:
     - cbf_off
     - cbf_collision_cone_on

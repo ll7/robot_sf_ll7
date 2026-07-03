@@ -9,21 +9,21 @@
     },
     {
       "algo": "ppo",
-      "algo_config": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4207-benchmark-certification-transfer-probe-sfm-hsfm-cpu-first-slice/configs/algos/ppo_v3_camera_ready.yaml",
+      "algo_config": "configs/algos/ppo_v3_camera_ready.yaml",
       "development_pedestrian_model": "unknown",
       "key": "ppo",
       "structural_class": "learned_policy"
     },
     {
       "algo": "prediction_planner",
-      "algo_config": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4207-benchmark-certification-transfer-probe-sfm-hsfm-cpu-first-slice/configs/algos/prediction_planner_example.yaml",
+      "algo_config": "configs/algos/prediction_planner_example.yaml",
       "development_pedestrian_model": "unknown",
       "key": "prediction_planner",
       "structural_class": "predictive"
     },
     {
       "algo": "guarded_ppo",
-      "algo_config": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4207-benchmark-certification-transfer-probe-sfm-hsfm-cpu-first-slice/configs/algos/guarded_ppo_camera_ready.yaml",
+      "algo_config": "configs/algos/guarded_ppo_camera_ready.yaml",
       "development_pedestrian_model": "unknown",
       "key": "guarded_ppo",
       "structural_class": "constraint_first"
@@ -248,7 +248,7 @@
     "No deployment, real-world safety, or general planner-superiority claim follows."
   ],
   "config": {
-    "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4207-benchmark-certification-transfer-probe-sfm-hsfm-cpu-first-slice/configs/benchmarks/issue_4207_certification_transfer_probe.yaml",
+    "path": "configs/benchmarks/issue_4207_certification_transfer_probe.yaml",
     "schema_version": "certification-transfer-probe.v1",
     "sha256": "55c2c48447f38063058a05f0630b77e1b97cb57d51572b4b33129e6133003c53"
   },
@@ -752,7 +752,7 @@
     }
   ],
   "gate_spec": {
-    "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4207-benchmark-certification-transfer-probe-sfm-hsfm-cpu-first-slice/configs/benchmarks/release_gates/issue_4207_certification_transfer_gates.yaml",
+    "path": "configs/benchmarks/release_gates/issue_4207_certification_transfer_gates.yaml",
     "schema_version": "benchmark_release_gate_spec.v1",
     "sha256": "385739fe40258d99c68654b7deee1665c8ff4ed9cbd0c64bcfd6d4c192cbd559"
   },

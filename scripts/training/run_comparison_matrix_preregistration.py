@@ -10,6 +10,11 @@ from typing import Any
 
 import yaml
 
+from robot_sf.training.offline_pretraining_manifest import (
+    OFFLINE_POLICY_CHECKPOINT_MANIFEST_SCHEMA_VERSION,
+    OFFLINE_TO_ONLINE_FINETUNE_MANIFEST_SCHEMA_VERSION,
+)
+
 SCHEMA_VERSION = "training_comparison_matrix_preregistration.v1"
 EXPECTED_ARM_IDS = (
     "ppo_baseline",
@@ -29,6 +34,19 @@ REQUIRED_STOP_RULES = {
     "missing_required_gate_policy",
 }
 SAC_GATE = "sac_after_issue_4245_standalone_offline_pretraining"
+SAC_GATE_REQUIRED_ISSUE = 4245
+# Evidence pointers the SAC inclusion gate must consume from the merged issue
+# #4245 standalone offline-pretraining lane (see docs/context/evidence/).
+SAC_GATE_EVIDENCE_KEYS = (
+    "provenance_chain",
+    "pretrain_manifest_summary",
+    "finetune_manifest_summary",
+)
+# Manifest schema versions the issue #4245 lane produces. Sourced directly from the
+# canonical offline-pretraining manifest module so a schema bump there cannot silently
+# drift from this gate (which would otherwise spuriously exclude valid #4245 evidence).
+PRETRAIN_MANIFEST_SCHEMA = OFFLINE_POLICY_CHECKPOINT_MANIFEST_SCHEMA_VERSION
+FINETUNE_MANIFEST_SCHEMA = OFFLINE_TO_ONLINE_FINETUNE_MANIFEST_SCHEMA_VERSION
 
 
 class MatrixValidationError(ValueError):
@@ -228,9 +246,29 @@ def _validate_inclusion_gates(matrix: ComparisonMatrix) -> dict[str, Any]:
     }
     if SAC_GATE not in gates:
         raise MatrixValidationError(f"missing SAC inclusion gate {SAC_GATE!r}")
-    if gates[SAC_GATE].get("required_issue") != 4245:
-        raise MatrixValidationError(f"{SAC_GATE} must require issue 4245")
+    if gates[SAC_GATE].get("required_issue") != SAC_GATE_REQUIRED_ISSUE:
+        raise MatrixValidationError(f"{SAC_GATE} must require issue {SAC_GATE_REQUIRED_ISSUE}")
+    _validate_sac_gate_evidence_pointers(gates[SAC_GATE])
     return gates
+
+
+def _validate_sac_gate_evidence_pointers(gate: dict[str, Any]) -> None:
+    """Require the SAC gate to name repository-relative issue #4245 evidence.
+
+    The gate's declared policy is ``exclude_arm_with_reason``, so structurally
+    missing evidence pointers fail matrix validation (schema drift), but the
+    presence and contents of the evidence files are evaluated at dry-run time so
+    an absent lane excludes the arm with a reason rather than failing the matrix.
+    """
+    evidence = gate.get("evidence")
+    if not isinstance(evidence, dict):
+        raise MatrixValidationError(f"{SAC_GATE} must declare an evidence mapping")
+    for key in SAC_GATE_EVIDENCE_KEYS:
+        value = evidence.get(key)
+        if not isinstance(value, str) or not value:
+            raise MatrixValidationError(f"{SAC_GATE}.evidence.{key} must be a repo-relative path")
+        _validate_relative_path(value, label=f"{SAC_GATE}.evidence.{key}")
+        _validate_no_host_state(value)
 
 
 def _validate_arms(matrix: ComparisonMatrix, *, gates: dict[str, Any]) -> None:
@@ -284,10 +322,7 @@ def _dry_run_arm(arm: MatrixArm, *, matrix: ComparisonMatrix, repo_root: Path) -
         reasons.append(f"smoke contract manifest not found: {arm.smoke_contract_manifest}")
     elif not _smoke_manifest_passes(manifest_path):
         reasons.append(f"smoke contract manifest did not pass: {arm.smoke_contract_manifest}")
-    if arm.arm_id == "offline_online_sac":
-        reasons.append("requires standalone offline-pretraining gate from issue #4245")
-    status = "eligible_for_queue_plan" if not reasons else "excluded_by_inclusion_gate"
-    return {
+    entry: dict[str, Any] = {
         "id": arm.arm_id,
         "display_name": arm.display_name,
         "algorithm_family": arm.algorithm_family,
@@ -295,17 +330,114 @@ def _dry_run_arm(arm: MatrixArm, *, matrix: ComparisonMatrix, repo_root: Path) -
         "budget": matrix.shared_budget,
         "required_gates": list(arm.required_gates),
         "smoke_contract_manifest": arm.smoke_contract_manifest,
-        "status": status,
-        "excluded_reasons": reasons,
-        "queue_entry": {
-            "issue": 4244,
-            "arm_id": arm.arm_id,
-            "status": "planned_not_submitted",
-            "submit_in_this_pr": False,
-            "training_config": arm.training_config,
-            "output_root": f"output/training/comparison_matrix_issue_4244/{arm.arm_id}",
-        },
     }
+    if arm.arm_id == "offline_online_sac":
+        evidence = _sac_gate_config(matrix).get("evidence") or {}
+        gate = evaluate_sac_offline_pretraining_gate(evidence, repo_root=repo_root)
+        entry["offline_pretraining_gate"] = gate
+        if not gate["passed"]:
+            reasons.append(f"issue #4245 offline-pretraining gate not satisfied: {gate['reason']}")
+    entry["status"] = "eligible_for_queue_plan" if not reasons else "excluded_by_inclusion_gate"
+    entry["excluded_reasons"] = reasons
+    entry["queue_entry"] = {
+        "issue": 4244,
+        "arm_id": arm.arm_id,
+        "status": "planned_not_submitted",
+        "submit_in_this_pr": False,
+        "training_config": arm.training_config,
+        "output_root": f"output/training/comparison_matrix_issue_4244/{arm.arm_id}",
+    }
+    return entry
+
+
+def _sac_gate_config(matrix: ComparisonMatrix) -> dict[str, Any]:
+    """Return the SAC inclusion-gate mapping, or an empty mapping if absent."""
+    for gate in matrix.payload["inclusion_gates"]:
+        if isinstance(gate, dict) and gate.get("id") == SAC_GATE:
+            return gate
+    return {}
+
+
+def evaluate_sac_offline_pretraining_gate(
+    evidence: dict[str, Any], *, repo_root: Path
+) -> dict[str, Any]:
+    """Consume the issue #4245 offline-pretraining provenance/manifest evidence.
+
+    The gate passes only when the standalone offline-pretraining lane's checked-in
+    provenance chain and manifest summaries exist, declare issue #4245 for
+    algorithm ``sac`` with the expected manifest schema versions, and link
+    together by checkpoint SHA (offline checkpoint inherited by the fine-tune,
+    both recorded in the provenance chain). Missing, malformed, or inconsistent
+    evidence fails closed with a specific reason rather than silently including
+    or dropping the arm.
+
+    Returns:
+        Dry-run gate status block with ``passed`` flag, required issue, and either
+        the verified checkpoint SHAs or the failure ``reason``.
+    """
+    block: dict[str, Any] = {
+        "required_issue": SAC_GATE_REQUIRED_ISSUE,
+        "evidence": {key: evidence.get(key) for key in SAC_GATE_EVIDENCE_KEYS},
+    }
+    try:
+        chain = _load_sac_gate_json(repo_root, evidence, "provenance_chain")
+        pretrain = _load_sac_gate_json(repo_root, evidence, "pretrain_manifest_summary")
+        finetune = _load_sac_gate_json(repo_root, evidence, "finetune_manifest_summary")
+    except MatrixValidationError as exc:
+        return {**block, "passed": False, "reason": str(exc)}
+
+    reason = _sac_gate_inconsistency(chain, pretrain, finetune)
+    if reason is not None:
+        return {**block, "passed": False, "reason": reason}
+    return {
+        **block,
+        "passed": True,
+        "offline_checkpoint_sha256": pretrain["checkpoint_sha256"],
+        "finetune_checkpoint_sha256": finetune["checkpoint_sha256"],
+    }
+
+
+def _sac_gate_inconsistency(
+    chain: dict[str, Any], pretrain: dict[str, Any], finetune: dict[str, Any]
+) -> str | None:
+    """Return the first #4245 evidence contract violation, or None when consistent."""
+    for name, payload in (
+        ("provenance_chain", chain),
+        ("pretrain_manifest_summary", pretrain),
+        ("finetune_manifest_summary", finetune),
+    ):
+        if payload.get("issue") != SAC_GATE_REQUIRED_ISSUE:
+            return f"{name} must declare issue {SAC_GATE_REQUIRED_ISSUE}"
+    if pretrain.get("schema_version") != PRETRAIN_MANIFEST_SCHEMA:
+        return f"pretrain manifest schema must be {PRETRAIN_MANIFEST_SCHEMA!r}"
+    if finetune.get("schema_version") != FINETUNE_MANIFEST_SCHEMA:
+        return f"finetune manifest schema must be {FINETUNE_MANIFEST_SCHEMA!r}"
+    if pretrain.get("algorithm") != "sac" or finetune.get("algorithm") != "sac":
+        return "offline-pretraining evidence must be for algorithm 'sac'"
+    offline_sha = pretrain.get("checkpoint_sha256")
+    if not offline_sha or chain.get("offline_checkpoint_sha256") != offline_sha:
+        return "provenance chain offline checkpoint SHA does not match pretrain manifest"
+    if finetune.get("parent_checkpoint_sha256") != offline_sha:
+        return "finetune manifest does not inherit the offline checkpoint SHA"
+    finetune_sha = finetune.get("checkpoint_sha256")
+    if not finetune_sha or chain.get("finetune_checkpoint_sha256") != finetune_sha:
+        return "provenance chain finetune checkpoint SHA does not match finetune manifest"
+    return None
+
+
+def _load_sac_gate_json(repo_root: Path, evidence: dict[str, Any], key: str) -> dict[str, Any]:
+    """Load one SAC-gate evidence JSON file, failing closed on missing/malformed data."""
+    value = evidence.get(key)
+    if not isinstance(value, str) or not value:
+        raise MatrixValidationError(f"missing evidence pointer {key}")
+    path = _resolve_repo_file(repo_root, value, label=f"sac_gate.{key}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise MatrixValidationError(f"{key} is not readable JSON: {value}") from exc
+    if not isinstance(payload, dict):
+        raise MatrixValidationError(f"{key} must be a JSON object: {value}")
+    return payload
 
 
 def _smoke_manifest_passes(manifest_path: Path) -> bool:

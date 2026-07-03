@@ -11,8 +11,13 @@ import yaml
 
 from scripts.training.run_comparison_matrix_preregistration import (
     EXPECTED_ARM_IDS,
+    FINETUNE_MANIFEST_SCHEMA,
+    PRETRAIN_MANIFEST_SCHEMA,
+    SAC_GATE,
+    SAC_GATE_REQUIRED_ISSUE,
     MatrixValidationError,
     build_dry_run_manifest,
+    evaluate_sac_offline_pretraining_gate,
     load_matrix,
     main,
 )
@@ -141,6 +146,111 @@ def test_issue_4244_cli_writes_two_arm_dry_run_manifest(tmp_path: Path) -> None:
     assert payload["schema_version"] == "training_comparison_matrix_dry_run.v1"
     assert payload["selected_arm_count"] == 2
     assert payload["training_executed"] is False
+
+
+def test_issue_4244_sac_gate_consumes_issue_4245_evidence_and_passes() -> None:
+    """The SAC arm consumes the merged issue #4245 evidence and reports a passing gate."""
+    matrix = load_matrix(CONFIG_PATH)
+
+    manifest = build_dry_run_manifest(matrix)
+
+    sac_arm = next(arm for arm in manifest["arms"] if arm["id"] == "offline_online_sac")
+    gate = sac_arm["offline_pretraining_gate"]
+    assert gate["passed"] is True
+    assert gate["required_issue"] == SAC_GATE_REQUIRED_ISSUE
+    assert gate["offline_checkpoint_sha256"]
+    assert gate["finetune_checkpoint_sha256"]
+    # With #4245 evidence now valid, SAC is no longer permanently blocked; the only
+    # remaining exclusion is the shared missing smoke-contract output (as for other
+    # arms), and no #4245 gate reason is emitted.
+    assert not any("issue #4245" in reason for reason in sac_arm["excluded_reasons"])
+
+
+def test_issue_4244_sac_gate_excludes_arm_when_evidence_missing(tmp_path: Path) -> None:
+    """A missing issue #4245 evidence file fails closed with a clear exclusion reason."""
+    gate = evaluate_sac_offline_pretraining_gate(
+        {
+            "provenance_chain": "docs/context/evidence/does_not_exist.json",
+            "pretrain_manifest_summary": "docs/context/evidence/does_not_exist.json",
+            "finetune_manifest_summary": "docs/context/evidence/does_not_exist.json",
+        },
+        repo_root=tmp_path,
+    )
+
+    assert gate["passed"] is False
+    assert "not found" in gate["reason"]
+
+
+def test_issue_4244_sac_gate_fails_closed_on_broken_provenance_chain(tmp_path: Path) -> None:
+    """A provenance chain whose checkpoint SHA does not match the manifest fails closed."""
+    evidence = _write_sac_gate_evidence(tmp_path, offline_sha_in_chain="tampered")
+
+    gate = evaluate_sac_offline_pretraining_gate(evidence, repo_root=tmp_path)
+
+    assert gate["passed"] is False
+    assert "offline checkpoint SHA" in gate["reason"]
+
+
+def test_issue_4244_sac_gate_passes_on_consistent_synthetic_evidence(tmp_path: Path) -> None:
+    """A well-formed, internally consistent synthetic evidence chain passes the gate."""
+    evidence = _write_sac_gate_evidence(tmp_path)
+
+    gate = evaluate_sac_offline_pretraining_gate(evidence, repo_root=tmp_path)
+
+    assert gate["passed"] is True
+    assert gate["offline_checkpoint_sha256"] == "offline-sha"
+    assert gate["finetune_checkpoint_sha256"] == "finetune-sha"
+
+
+def test_issue_4244_matrix_requires_sac_gate_evidence_pointers(tmp_path: Path) -> None:
+    """Matrix validation fails closed if the SAC gate drops its issue #4245 evidence block."""
+    payload = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+    edited = copy.deepcopy(payload)
+    for gate in edited["inclusion_gates"]:
+        if gate["id"] == SAC_GATE:
+            gate.pop("evidence", None)
+    edited_path = tmp_path / "no_evidence_matrix.yaml"
+    edited_path.write_text(yaml.safe_dump(edited), encoding="utf-8")
+
+    with pytest.raises(MatrixValidationError, match="evidence"):
+        load_matrix(edited_path)
+
+
+def _write_sac_gate_evidence(
+    tmp_path: Path, *, offline_sha_in_chain: str = "offline-sha"
+) -> dict[str, str]:
+    """Write a synthetic issue #4245 evidence triplet and return relative pointers."""
+    evidence_dir = Path("docs/context/evidence/issue_4245_synthetic")
+    (tmp_path / evidence_dir).mkdir(parents=True, exist_ok=True)
+    chain = {
+        "issue": SAC_GATE_REQUIRED_ISSUE,
+        "offline_checkpoint_sha256": offline_sha_in_chain,
+        "finetune_checkpoint_sha256": "finetune-sha",
+    }
+    pretrain = {
+        "issue": SAC_GATE_REQUIRED_ISSUE,
+        "schema_version": PRETRAIN_MANIFEST_SCHEMA,
+        "algorithm": "sac",
+        "checkpoint_sha256": "offline-sha",
+    }
+    finetune = {
+        "issue": SAC_GATE_REQUIRED_ISSUE,
+        "schema_version": FINETUNE_MANIFEST_SCHEMA,
+        "algorithm": "sac",
+        "parent_checkpoint_sha256": "offline-sha",
+        "checkpoint_sha256": "finetune-sha",
+    }
+    files = {
+        "provenance_chain": ("provenance_chain.json", chain),
+        "pretrain_manifest_summary": ("pretrain_manifest_summary.json", pretrain),
+        "finetune_manifest_summary": ("finetune_manifest_summary.json", finetune),
+    }
+    pointers: dict[str, str] = {}
+    for key, (name, body) in files.items():
+        rel = evidence_dir / name
+        (tmp_path / rel).write_text(json.dumps(body), encoding="utf-8")
+        pointers[key] = rel.as_posix()
+    return pointers
 
 
 def _temp_matrix_payload(tmp_path: Path) -> dict[str, object]:

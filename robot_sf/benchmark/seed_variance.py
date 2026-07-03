@@ -32,6 +32,7 @@ _PAPER_METRIC_ALIASES = {
     "time_to_goal_norm": "time_to_goal",
     "snqi": "snqi",
 }
+_FAILURE_MECHANISM_TAXONOMY_SCHEMA = "failure_mechanism_taxonomy.v1"
 
 
 def _get_nested(d: dict[str, Any], path: str, default: Any = None) -> Any:
@@ -124,6 +125,79 @@ def _coerce_float(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return numeric if math.isfinite(numeric) else None
+
+
+def _taxonomy_from_record(record: dict[str, Any], flat: dict[str, Any]) -> dict[str, Any]:
+    """Return trace-verified taxonomy fields without geometry-only inference."""
+
+    taxonomy = record.get("failure_mechanism_taxonomy")
+    if not isinstance(taxonomy, dict):
+        taxonomy = _get_nested(record, "metrics.failure_mechanism_taxonomy", default={})
+    if not isinstance(taxonomy, dict):
+        taxonomy = {}
+
+    label = taxonomy.get("label") or flat.get("failure_mechanism_label")
+    source = taxonomy.get("source") or flat.get("failure_mechanism_source")
+    trace_status = taxonomy.get("trace_status") or flat.get("failure_mechanism_trace_status")
+    confidence = taxonomy.get("confidence") or flat.get("failure_mechanism_confidence")
+
+    if label is None or trace_status != "trace_verified":
+        return {
+            "failure_mechanism_taxonomy_schema": _FAILURE_MECHANISM_TAXONOMY_SCHEMA,
+            "failure_mechanism_label": None,
+            "failure_mechanism_source": "not_derivable_from_episode_record",
+            "failure_mechanism_trace_status": "not_derivable",
+            "failure_mechanism_confidence": None,
+            "mechanism_schema_version": _FAILURE_MECHANISM_TAXONOMY_SCHEMA,
+            "mechanism_label": "unknown",
+            "mechanism_confidence": "unknown",
+            "mechanism_evidence_mode": "unknown",
+            "mechanism_evidence_uri": "",
+            "mechanism_case_id": "",
+            "mechanism_caveat": "not_derivable_from_episode_record",
+        }
+
+    confidence_text = "" if confidence is None else str(confidence)
+    source_text = str(source or "trace_verified_episode_record")
+    return {
+        "failure_mechanism_taxonomy_schema": _FAILURE_MECHANISM_TAXONOMY_SCHEMA,
+        "failure_mechanism_label": str(label),
+        "failure_mechanism_source": source_text,
+        "failure_mechanism_trace_status": "trace_verified",
+        "failure_mechanism_confidence": confidence_text,
+        "mechanism_schema_version": _FAILURE_MECHANISM_TAXONOMY_SCHEMA,
+        "mechanism_label": str(label),
+        "mechanism_confidence": confidence_text,
+        "mechanism_evidence_mode": "paired_trace",
+        "mechanism_evidence_uri": source_text,
+        "mechanism_case_id": str(taxonomy.get("case_id") or ""),
+        "mechanism_caveat": str(taxonomy.get("caveat") or ""),
+    }
+
+
+def _interaction_exposure_from_flat(flat: dict[str, Any]) -> dict[str, Any]:
+    """Return interaction-exposure fields when explicitly present on episode metrics."""
+
+    exposure = {
+        "interaction_exposure_share": _coerce_float(flat.get("interaction_exposure_share")),
+        "robot_motion_share_before_first_clearance": _coerce_float(
+            flat.get("robot_motion_share_before_first_clearance")
+        ),
+        "first_clearance_step": _coerce_float(flat.get("first_clearance_step")),
+        "low_exposure_success": _coerce_float(flat.get("low_exposure_success")),
+    }
+    exposure["interaction_exposure_source"] = (
+        "episode_metrics"
+        if any(value is not None for value in exposure.values())
+        else "not_derivable_from_episode_record"
+    )
+    exposure["interaction_exposure_schema_version"] = "interaction_exposure.v1"
+    exposure["interaction_exposure_status"] = (
+        "computed"
+        if exposure["interaction_exposure_source"] == "episode_metrics"
+        else "not_derivable_missing_trace"
+    )
+    return exposure
 
 
 def _confidence_alpha(confidence: float) -> tuple[float, float]:
@@ -447,7 +521,7 @@ def build_seed_episode_rows(
     """
     grouped: dict[
         tuple[str, str, str, int],
-        list[tuple[int, dict[str, Any], dict[str, Any]]],
+        list[tuple[int, dict[str, Any], dict[str, Any], dict[str, Any]]],
     ] = defaultdict(list)
     for index, record in enumerate(records):
         flattened = flatten_metrics(record)
@@ -470,18 +544,20 @@ def build_seed_episode_rows(
             "kinematics": kinematics,
             "algo": algo,
         }
-        grouped[(scenario_id, planner_key, kinematics, seed)].append((index, metadata, flattened))
+        grouped[(scenario_id, planner_key, kinematics, seed)].append(
+            (index, metadata, record, flattened)
+        )
 
     rows: list[dict[str, Any]] = []
     for (_, _, _, _), group_rows in sorted(grouped.items()):
         ordered = sorted(
             group_rows,
             key=lambda item: (
-                str(item[2].get("episode_id", "")),
+                str(item[3].get("episode_id", "")),
                 int(item[0]),
             ),
         )
-        for repeat_index, (_, metadata, flat) in enumerate(ordered):
+        for repeat_index, (_, metadata, record, flat) in enumerate(ordered):
             rows.append(
                 {
                     "episode_id": flat.get("episode_id"),
@@ -496,6 +572,8 @@ def build_seed_episode_rows(
                     "near_miss": _coerce_float(flat.get("near_misses")),
                     "time_to_goal": _coerce_float(flat.get("time_to_goal_norm")),
                     "snqi": _coerce_float(flat.get("snqi")),
+                    **_taxonomy_from_record(record, flat),
+                    **_interaction_exposure_from_flat(flat),
                 }
             )
     rows.sort(

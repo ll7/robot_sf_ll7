@@ -33,6 +33,13 @@ REQUIRED_MECHANISM_FIELDS = (
     "mechanism_evidence_mode",
     "mechanism_evidence_uri",
 )
+LEGACY_MECHANISM_FIELD_ALIASES = (
+    ("failure_mechanism_taxonomy_schema", "mechanism_schema_version"),
+    ("failure_mechanism_label", "mechanism_label"),
+    ("failure_mechanism_confidence", "mechanism_confidence"),
+    ("failure_mechanism_trace_status", "mechanism_evidence_mode"),
+    ("failure_mechanism_source", "mechanism_evidence_uri"),
+)
 GEOMETRY_ONLY_FIELDS = (
     "geometry_bucket",
     "scenario_geometry_bucket",
@@ -195,19 +202,31 @@ def _mechanism_payload(row: Mapping[str, Any]) -> dict[str, Any]:
     return {field: row.get(field, "") for field in REQUIRED_MECHANISM_FIELDS}
 
 
+def _normalize_mechanism_fields(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize v1 episode-row taxonomy fields to the report's stable names."""
+
+    normalized = dict(row)
+    for alias, canonical in LEGACY_MECHANISM_FIELD_ALIASES:
+        if not normalized.get(canonical) and normalized.get(alias):
+            normalized[canonical] = normalized[alias]
+    return normalized
+
+
 def _merge_mechanism_fields(
     row: Mapping[str, Any], sidecar_index: Mapping[tuple[str, ...], Mapping[str, Any]]
 ) -> dict[str, Any]:
-    merged = dict(row)
+    merged = _normalize_mechanism_fields(row)
     if all(str(merged.get(field, "")) for field in REQUIRED_MECHANISM_FIELDS):
         return merged
     for key in _sidecar_keys(row):
         sidecar = sidecar_index.get(key)
         if sidecar is None:
             continue
+        sidecar = _normalize_mechanism_fields(sidecar)
         for field in REQUIRED_MECHANISM_FIELDS:
             if not merged.get(field) and sidecar.get(field):
                 merged[field] = sidecar[field]
+        merged = _normalize_mechanism_fields(merged)
         break
     return merged
 
@@ -248,6 +267,13 @@ def _load_run_rows(root: Path, run_name: str) -> tuple[list[dict[str, Any]], lis
         missing_fields = [
             field for field in REQUIRED_MECHANISM_FIELDS if not str(row.get(field, ""))
         ]
+        if row.get("mechanism_evidence_mode") not in {
+            "paired_trace",
+            "deterministic_replay",
+            "direct_probe",
+            "root_cause",
+        }:
+            missing_fields.append("mechanism_evidence_mode=trace_verified_source")
         if missing_fields:
             missing.append(
                 {
@@ -289,8 +315,9 @@ def _score(row: Mapping[str, Any]) -> tuple[float, float, float, float, float]:
 
 
 def _summarize_groups(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    normalized_rows = [_normalize_mechanism_fields(row) for row in rows]
     grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = defaultdict(list)
-    for row in rows:
+    for row in normalized_rows:
         grouped[(str(row["mechanism_label"]), str(row["structural_class"]))].append(row)
 
     summaries: list[dict[str, Any]] = []
@@ -491,9 +518,13 @@ def _blocked_outputs(
         "loaded_row_count": loaded_row_count,
         "missing_rows_sample": list(missing_rows[:50]),
         "missing_row_count": len(missing_rows),
-        "geometry_bucket_substitution_rejected": any(
-            row.get("geometry_only_fields_present") for row in missing_rows
-        ),
+        "geometry_bucket_substitution_rejected": (
+            config.get("forbidden_fallback", {}).get(
+                "geometry_buckets_may_substitute_mechanism_labels"
+            )
+            is False
+        )
+        or any(row.get("geometry_only_fields_present") for row in missing_rows),
         "followup_issue_skeleton": config.get("blocked_followup_issue", {}),
     }
     _write_json(output_dir / "missing_instrumentation.json", missing_payload)

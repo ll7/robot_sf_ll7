@@ -1,0 +1,21 @@
+{
+  "arm_keys": [
+    "ppo_frozen",
+    "ppo_frozen_wrapper_on",
+    "ppo_frozen_cbf_on"
+  ],
+  "benchmark_contract": "configs/research/issue_4205_static_constriction_codesign_loop_v1.yaml",
+  "compute_submit_authorized": false,
+  "research_contract": "configs/research/issue_4205_static_constriction_codesign_loop_v1.yaml",
+  "scenario_ids": [
+    "classic_bottleneck_low",
+    "classic_head_on_corridor_low",
+    "narrow_passage"
+  ],
+  "schema_version": "robot_sf.issue_4205_static_constriction_codesign_loop.check.v1",
+  "seeds": [
+    111,
+    112,
+    113
+  ]
+}

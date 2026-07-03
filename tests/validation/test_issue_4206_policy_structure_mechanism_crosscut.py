@@ -166,6 +166,34 @@ def test_geometry_bucket_labels_are_rejected_as_substitutes(tmp_path: Path) -> N
     assert "mechanism_label" in missing["required_fields"]
 
 
+def test_non_trace_verified_mechanism_label_blocks_f_c4ii_tables(tmp_path: Path) -> None:
+    """Present labels still fail closed unless trace status is verified."""
+
+    confirm = tmp_path / "confirm"
+    extended = tmp_path / "extended"
+    row = _base_row("prediction_planner", 1.0)
+    row["mechanism_evidence_mode"] = "geometry_proxy"
+    _write_rows(confirm, [row])
+    _write_rows(extended, [row])
+    output = tmp_path / "evidence"
+
+    summary = _MODULE.build_packet(
+        config_path=CONFIG,
+        confirm_root=confirm,
+        extended_root=extended,
+        job13175_packet=tmp_path / "packet.json",
+        output_dir=output,
+        generated_at="2026-07-03T00:00:00Z",
+    )
+
+    assert summary["status"] == "blocked_missing_trace_verified_mechanism_labels"
+    missing = json.loads((output / "missing_instrumentation.json").read_text(encoding="utf-8"))
+    assert (
+        "mechanism_evidence_mode=trace_verified_source"
+        in missing["missing_rows_sample"][0]["missing_fields"]
+    )
+
+
 def test_unknown_planner_key_is_unclassified_and_excluded(tmp_path: Path) -> None:
     """Unknown planners remain visible in metadata but are excluded from F-C4(ii) ranks."""
     confirm = tmp_path / "confirm"

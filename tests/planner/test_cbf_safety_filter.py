@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import struct
+
 import pytest
 
 from robot_sf.planner.cbf_safety_filter import (
@@ -50,6 +52,12 @@ def _public_context() -> CBFFilterContext:
             ),
         ),
     )
+
+
+def _float_bits(value: float) -> bytes:
+    """Return the exact IEEE-754 representation used by Python floats."""
+
+    return struct.pack("!d", value)
 
 
 def test_public_apply_cbf_filter_disabled_returns_original_command() -> None:
@@ -119,7 +127,7 @@ def test_public_apply_cbf_filter_dynamic_parabolic_no_obstacles_passes_through()
 
 
 def test_public_apply_cbf_filter_dynamic_parabolic_feasible_nominal_passes_through() -> None:
-    """DPCBF should not snap feasible nominal commands to the search grid."""
+    """DPCBF keeps already-feasible nominal commands bit-identical."""
 
     context = CBFFilterContext(
         robot_position_m=(0.0, 0.0),
@@ -129,16 +137,21 @@ def test_public_apply_cbf_filter_dynamic_parabolic_feasible_nominal_passes_throu
             CBFObstacleState(position_m=(10.0, 5.0), velocity_mps=(0.0, 0.0), radius_m=0.3),
         ),
     )
+    nominal_linear = 0.817
+    nominal_angular = 0.1
     result = apply_cbf_safety_filter(
-        0.817,
-        0.1,
+        nominal_linear,
+        nominal_angular,
         context,
         CBFSafetyFilterConfig(enabled=True, variant=CBF_VARIANT_DYNAMIC_PARABOLIC),
     )
 
     assert result["qp_status"] == "pass_through"
     assert result["intervened"] is False
-    assert result["filtered_linear_velocity"] == pytest.approx(0.817)
+    assert result["filtered_linear_velocity"] == nominal_linear
+    assert result["filtered_angular_velocity"] == nominal_angular
+    assert _float_bits(result["filtered_linear_velocity"]) == _float_bits(nominal_linear)
+    assert _float_bits(result["filtered_angular_velocity"]) == _float_bits(nominal_angular)
 
 
 def test_public_apply_cbf_filter_dynamic_parabolic_projects_closing_command() -> None:

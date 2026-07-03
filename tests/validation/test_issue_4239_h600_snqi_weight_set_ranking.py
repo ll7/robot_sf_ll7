@@ -3,15 +3,26 @@
 from __future__ import annotations
 
 import csv
+import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts/validation/build_issue_4239_h600_snqi_weight_set_ranking.py"
+
+
+def _load_builder_module():
+    """Import the builder as a module so private helpers can be unit-tested."""
+    spec = importlib.util.spec_from_file_location("build_issue_4239_module", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _write_json(path: Path, data: object) -> None:
@@ -412,3 +423,86 @@ def test_uniform_all_ones_distinct_from_model_canonical_and_ties_deterministic(
     uniform_rows = [row for row in rank_rows if row["weight_set_id"] == "default_uniform_1p0"]
     assert [row["planner_key"] for row in uniform_rows] == ["charlie", "delta"]
     assert {row["rank"] for row in uniform_rows} == {"1.5"}
+
+
+def test_rel_relativizes_worktree_output_symlink(tmp_path: Path, monkeypatch) -> None:
+    """`_rel` returns a repo-relative path even when `output/` is a worktree symlink.
+
+    In a linked worktree, `output/` symlinks into the main checkout, so `path.resolve()`
+    escapes the worktree root. The old fallback then leaked an absolute, username-bearing
+    path into durable evidence (issue #4302). The hardened `_rel` must not.
+    """
+    module = _load_builder_module()
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    main_output = tmp_path / "main_checkout_output"
+    episode = main_output / "issue3810-run" / "13268" / "runs" / "goal__dd" / "episodes.jsonl"
+    episode.parent.mkdir(parents=True)
+    episode.write_text("{}\n", encoding="utf-8")
+    (worktree / "output").symlink_to(main_output)
+    monkeypatch.setattr(module, "_repo_root", lambda: worktree)
+
+    worktree_path = (
+        worktree / "output" / "issue3810-run" / "13268" / "runs" / "goal__dd" / "episodes.jsonl"
+    )
+    rel = module._rel(worktree_path)
+
+    assert rel == "output/issue3810-run/13268/runs/goal__dd/episodes.jsonl"
+    assert not rel.startswith("/")
+
+
+def test_malformed_episodes_jsonl_raises_attributable_error(tmp_path: Path) -> None:
+    """A truncated episodes.jsonl line raises a ValueError naming the file and line."""
+    module = _load_builder_module()
+    episodes = tmp_path / "runs" / "goal__differential_drive" / "episodes.jsonl"
+    episodes.parent.mkdir(parents=True)
+    episodes.write_text('{"metrics": {}}\n{ this is not json\n', encoding="utf-8")
+    run = {
+        "job_id": "13268",
+        "run_label": "confirm",
+        "episodes_jsonl_files": [episodes],
+        "scenario_matrix_hash": "hash",
+        "comparability_mapping_hash": "hash",
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        module._read_episode_jsonl_rows(run)
+
+    message = str(exc_info.value)
+    assert "malformed episodes JSONL" in message
+    assert "episodes.jsonl" in message
+    assert "line 2" in message
+
+
+def test_default_uniform_sha_sentinel_unified_as_null(tmp_path: Path) -> None:
+    """The synthetic default_uniform_1p0 set uses one `null` hash sentinel everywhere.
+
+    Regression for the issue #4302 CodeRabbit item: rank_rows[].weight_sha256 previously
+    used "" while weight_sets[].sha256 used null. Both are now null in JSON, render empty
+    in CSV, and never surface as a literal "None" in the Markdown table.
+    """
+    config, evidence = _fixture(tmp_path)
+
+    result = _run_builder(config, evidence)
+
+    assert result.returncode == 0, result.stderr
+    report = json.loads((evidence / "snqi_weight_set_h600_report.json").read_text())
+    weight_set_sha = next(
+        item["sha256"] for item in report["weight_sets"] if item["id"] == "default_uniform_1p0"
+    )
+    rank_row_sha = next(
+        row["weight_sha256"]
+        for row in report["rank_rows"]
+        if row["weight_set_id"] == "default_uniform_1p0"
+    )
+    assert weight_set_sha is None
+    assert rank_row_sha is None
+
+    rank_md = (evidence / "snqi_weight_set_h600_rank_table.md").read_text(encoding="utf-8")
+    assert "|None|" not in rank_md
+    rank_csv = _read_csv(evidence / "snqi_weight_set_h600_rank_table.csv")
+    assert all(
+        row["weight_sha256"] == ""
+        for row in rank_csv
+        if row["weight_set_id"] == "default_uniform_1p0"
+    )

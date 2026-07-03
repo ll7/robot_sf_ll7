@@ -733,6 +733,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed **absolute machine paths leaking into the #4239 h600 SNQI evidence packet** (#4302). The
+  builder `scripts/validation/build_issue_4239_h600_snqi_weight_set_ranking.py` hardened `_rel()` so a
+  worktree `output/` symlink (which made `path.resolve()` escape the worktree root) no longer falls
+  back to an absolute, username-bearing path, and relativizes the config/source-manifest/baseline
+  provenance blocks. Regenerated the committed packet
+  (`docs/context/evidence/issue_3810_h600_interpretation_2026-07/`): the SNQI ranks, pairwise
+  agreement, dedup audit, and diss#331 snippet are **byte-identical**; only provenance path strings,
+  the `default_uniform_1p0` no-hash sentinel (now `null` everywhere, rendered empty in CSV/Markdown),
+  and checksums changed. Also raises an attributable `ValueError` naming the file/line on a malformed
+  `episodes.jsonl` instead of a raw `JSONDecodeError` traceback. Diagnostic-only evidence hygiene: no
+  SNQI weight decision, benchmark, or paper/dissertation claim change.
 * Fixed **`scripts/dev/pr_ready_check.sh` mishandling a missing `BASE_REF`** on fresh checkouts
   (#3702). When the default `origin/main` (or any configured `BASE_REF`) was not present locally, the
   `git diff "$BASE_REF...HEAD"` comparison emitted a raw `fatal: ambiguous argument` error; because the

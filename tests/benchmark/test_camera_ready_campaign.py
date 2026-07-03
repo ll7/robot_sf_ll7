@@ -3541,6 +3541,95 @@ def test_planner_report_row_counts_existing_records_after_resume() -> None:
     assert row["episodes"] == 2
 
 
+def test_planner_report_row_retains_clearance_and_proxemic_release_gate_fields() -> None:
+    """Row builder retains min_clearance_m and proxemic_intrusion_rate (issue #4326).
+
+    These dedicated release-gate fields aggregate from per-episode values that
+    already exist in episode rows: min_clearance_m is the campaign-wide worst
+    case (minimum) clearance, distinct from the mean-of-per-episode-minimums
+    kept as min_clearance_mean, and proxemic_intrusion_rate is the mean
+    per-episode personal-space intrusion fraction.
+    """
+    planner = PlannerSpec(key="ppo", algo="ppo")
+    summary = {
+        "status": "ok",
+        "written": 2,
+        "runtime_sec": 1.0,
+        "episodes_per_second": 2.0,
+        "algorithm_readiness": {"tier": "experimental"},
+        "preflight": {"status": "ok", "learned_policy_contract": {"status": "pass"}},
+        "algorithm_metadata_contract": {},
+    }
+    records = [
+        {
+            "termination_reason": "success",
+            "metrics": {"min_clearance": 0.8, "social_proxemic_intrusion_frac": 0.10},
+        },
+        {
+            "termination_reason": "success",
+            "metrics": {"min_clearance": 0.3, "social_proxemic_intrusion_frac": 0.20},
+        },
+    ]
+
+    row = _planner_report_row(
+        planner,
+        summary,
+        aggregates=None,
+        kinematics="differential_drive",
+        records=records,
+    )
+
+    # Worst-case minimum clearance across the campaign, not a mean.
+    assert row["min_clearance_m"] == "0.3000"
+    # Mean-of-per-episode-minimums stays distinct and higher than the worst case.
+    assert row["min_clearance_mean"] == "0.5500"
+    # Mean per-episode intrusion fraction.
+    assert row["proxemic_intrusion_rate"] == "0.1500"
+
+
+def test_planner_report_row_release_gate_fields_fail_closed_without_source_values() -> None:
+    """Campaigns that never recorded the fields stay not_evaluable (issue #4326).
+
+    Past/degraded campaigns are not backfilled: with no per-episode clearance or
+    proxemic values, both dedicated release-gate fields fail closed to ``nan``
+    so downstream gates report ``not_evaluable`` rather than a fabricated value.
+    """
+    planner = PlannerSpec(key="goal", algo="goal")
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "runtime_sec": 1.0,
+        "episodes_per_second": 1.0,
+        "algorithm_readiness": {"tier": "baseline-ready"},
+        "preflight": {"status": "ok", "learned_policy_contract": {"status": "not_applicable"}},
+        "algorithm_metadata_contract": {},
+    }
+    # Episode rows lacking clearance/proxemic metrics (older schema); no backfill.
+    records = [{"termination_reason": "success", "metrics": {"success": 1.0}}]
+
+    row = _planner_report_row(
+        planner,
+        summary,
+        aggregates=None,
+        kinematics="differential_drive",
+        records=records,
+    )
+
+    assert row["min_clearance_m"] == "nan"
+    assert row["proxemic_intrusion_rate"] == "nan"
+
+    # Also fail closed on the zero-episode (degraded/failed) path.
+    empty_row = _planner_report_row(
+        planner,
+        summary,
+        aggregates=None,
+        kinematics="differential_drive",
+        records=[],
+    )
+    assert empty_row["min_clearance_m"] == "nan"
+    assert empty_row["proxemic_intrusion_rate"] == "nan"
+
+
 def test_planner_report_row_uses_episode_ci_placeholders_when_means_are_backfilled() -> None:
     """Backfilled success/collision means should not keep stale aggregate CIs."""
     planner = PlannerSpec(key="ppo", algo="ppo")

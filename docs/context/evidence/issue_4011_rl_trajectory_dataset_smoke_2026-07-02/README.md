@@ -14,3 +14,11 @@ Files:
 Durability boundary: this is a compact review fixture, not a durable training dataset. Full datasets
 remain worktree-local under `output/` until promoted to an artifact store with an explicit URI and
 checksum.
+
+Closure guard: `tests/benchmark/test_rl_trajectory_dataset_smoke_evidence.py` pins this committed
+bundle to the canonical recorder/loader contract in `robot_sf/benchmark/rl_trajectory_dataset.py`.
+It fails closed if the preview stops loading, the manifest `dataset_sha256` drifts from the preview,
+the manifest stops validating against the schema, or the manifest is no longer exactly reproducible
+from the committed preview via `build_rl_trajectory_manifest`. If a change to the pipeline is
+intended, regenerate this bundle with `scripts/benchmark/record_rl_trajectory_dataset.py` so the
+committed evidence and the recorder stay in lock-step.

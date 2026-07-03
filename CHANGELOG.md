@@ -35,6 +35,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **license-safe ATC pedestrian-tracking loader + skip-if-absent shape-contract tests**
+  for issue #4289 (follow-up to the #4224 external-data program): `robot_sf/data/external/atc.py`
+  exposes `is_available`, `require_available`, and `load_shape_contract` over the canonical
+  `atc-pedestrian` external-data registry entry. The loader only inspects locally staged files — it
+  never downloads, vendors, or redistributes the license-gated ATC bytes. It reuses
+  `manage_external_data.check_asset` for presence (one daily CSV plus a local terms/README note) and
+  validates each staged daily CSV as headerless, comma-delimited, exactly eight numeric columns wide;
+  scanning is bounded by default (`max_rows=10000`, reported via `scan_truncated`) since a single ATC
+  day can hold millions of samples. Malformed staged CSVs fail closed with `AtcDataError` pointing to
+  `docs/datasets/atc.md`. Tests in `tests/data/external/test_atc_shape.py` skip cleanly when no local
+  ATC copy is staged and otherwise run on synthetic fixtures. No dataset bytes, download code,
+  benchmark consumer, campaign run, or paper-facing claim is introduced; follows the #4279
+  (`socnavbench-s3dis-eth`) exemplar pattern.
 * Retained **`min_clearance_m` and `proxemic_intrusion_rate`** in the camera-ready campaign
   summary/retention schema (issue #4326, from #4313). `robot_sf/benchmark/camera_ready/_reporting.py`
   now emits both fields per planner row, aggregated from per-episode values that already exist in

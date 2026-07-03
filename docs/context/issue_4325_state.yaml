@@ -1,0 +1,65 @@
+# Append-only durable state surface for ready-queue issue #4325.
+# Records the observed mergeability status of PRs #4316 and #4318 so the
+# ready queue can be resolved without fabricating an empty rebase PR.
+# See docs/context/issue_1498_state.yaml for the entry-list convention.
+issue: 4325
+state_surface: restore_mergeability_prs_4316_4318
+entries:
+  - recorded_at_utc: "2026-07-03T19:05:00Z"
+    status: objective_already_satisfied_no_rebase_needed
+    summary: >-
+      The #4325 premise (both PRs mergeable=CONFLICTING against fast-moving
+      main) is stale. PR #4318 has merged; PR #4316 already sits on top of the
+      latest origin/main with zero conflicts. No branch rebase or conflict
+      resolution work was required.
+    pr_4318_dpcbf_run_planner:
+      pr: 4318
+      branch: issue-4142-wire-dpcbf-dense-comparison-packet-runner-schema
+      state: merged
+      merged_at_utc: "2026-07-03T18:54:00Z"
+      merge_commit: "421e5b3e3ecbb8b06977221b9f11fcdc2d613772"
+      fail_closed_behavior_preserved: true
+      fail_closed_evidence:
+        symbol: DenseComparisonExecutionGatedError
+        present_in_merged_main:
+          - robot_sf/benchmark/issue_4142_dpcbf_dense_runner.py
+          - scripts/tools/run_issue_4142_dpcbf_dense_comparison.py
+          - tests/benchmark/test_issue_4142_dpcbf_dense_runner.py
+        note: >-
+          The DenseComparisonExecutionGatedError fail-closed gate the issue
+          asked to keep intact is present verbatim in the merged code; the
+          merge did not weaken it.
+    pr_4316_atc_loader:
+      pr: 4316
+      branch: issue-4289-add-atc-skip-if-absent-shape-contract-loader
+      state: open
+      github_mergeable: MERGEABLE
+      merge_state_status: UNSTABLE_ci_pending_not_conflicting
+      branch_tip: "2f400dbda5d8ee8eb73af5b916e1a1cd4dff5bce"
+      commits_ahead_of_main: 5
+      commits_behind_main: 0
+      note: >-
+        commits_behind_main == 0 means origin/main is fully contained in the
+        #4316 branch, so a merge of main into the branch is a no-op and cannot
+        conflict. The UNSTABLE merge-state is only freshly-pending CI, not a
+        merge conflict. No rebase push was needed. #4316's own PR gate/merge is
+        owned downstream by the imech156-u lane.
+    observed_main_head: "421e5b3e3ecbb8b06977221b9f11fcdc2d613772"
+    validation:
+      pr_4316_divergence:
+        command: "git rev-list --count origin/main..origin/issue-4289-add-atc-skip-if-absent-shape-contract-loader (ahead) and reverse (behind)"
+        ahead: 5
+        behind: 0
+        result: already_rebased_conflict_free
+      dpcbf_fail_closed_grep:
+        command: "git grep -l DenseComparisonExecutionGatedError origin/main -- '*.py'"
+        result: present_in_3_files_fail_closed_intact
+    notes:
+      - "No new features; no execution of the DPCBF dense comparison; no data staging."
+      - "No full benchmark campaign run, no Slurm/GPU submission, no paper/dissertation claim edits."
+      - >-
+        The issue's remaining sub-task ("comment on each PR what was
+        rebased/resolved") was intentionally not performed: this worker lane is
+        authorized comment_issue_or_pr=false, and there was in fact no
+        rebase/resolution to report. This state file is the single durable
+        surface for the resolution per the issue-4325 state-propagation rule.

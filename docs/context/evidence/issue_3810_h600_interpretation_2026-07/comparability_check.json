@@ -1,0 +1,112 @@
+{
+  "checks": {
+    "comparability_mapping_hash_match": true,
+    "scenario_matrix_hash_match": true
+  },
+  "job_campaigns": {
+    "13268": {
+      "benchmark_success": true,
+      "campaign_id": "issue3810_h600_longhorizon_confirm_run_20260702",
+      "comparability_mapping_hash": "6f349046993d",
+      "created_at_utc": "2026-07-02T11:15:01.146142Z",
+      "evidence_status": "valid",
+      "git_hash": "1cb7dc31a018fdf21892beb0e74ca47699e41d9a",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_hash": "c10df617a87c"
+    },
+    "13273": {
+      "benchmark_success": true,
+      "campaign_id": "issue3810_h600_extroster_run_20260702",
+      "comparability_mapping_hash": "6f349046993d",
+      "created_at_utc": "2026-07-02T15:32:24.056840Z",
+      "evidence_status": "valid",
+      "git_hash": "4da0879fa897783fe35f65d52ef488d14e526ccc",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_hash": "c10df617a87c"
+    }
+  },
+  "rows": [
+    {
+      "comparability_mapping_hash_match": true,
+      "job_ids": [
+        "13268",
+        "13273"
+      ],
+      "planner_key": "goal",
+      "scenario_matrix_hash_match": true,
+      "status": "comparable"
+    },
+    {
+      "comparability_mapping_hash_match": true,
+      "job_ids": [
+        "13268",
+        "13273"
+      ],
+      "planner_key": "orca",
+      "scenario_matrix_hash_match": true,
+      "status": "comparable"
+    },
+    {
+      "comparability_mapping_hash_match": true,
+      "job_ids": [
+        "13268",
+        "13273"
+      ],
+      "planner_key": "ppo",
+      "scenario_matrix_hash_match": true,
+      "status": "comparable"
+    },
+    {
+      "comparability_mapping_hash_match": true,
+      "job_ids": [
+        "13268",
+        "13273"
+      ],
+      "planner_key": "prediction_planner",
+      "scenario_matrix_hash_match": true,
+      "status": "comparable"
+    },
+    {
+      "comparability_mapping_hash_match": true,
+      "job_ids": [
+        "13268",
+        "13273"
+      ],
+      "planner_key": "sacadrl",
+      "scenario_matrix_hash_match": true,
+      "status": "comparable"
+    },
+    {
+      "comparability_mapping_hash_match": true,
+      "job_ids": [
+        "13268",
+        "13273"
+      ],
+      "planner_key": "social_force",
+      "scenario_matrix_hash_match": true,
+      "status": "comparable"
+    },
+    {
+      "comparability_mapping_hash_match": true,
+      "job_ids": [
+        "13268",
+        "13273"
+      ],
+      "planner_key": "socnav_sampling",
+      "scenario_matrix_hash_match": true,
+      "status": "comparable"
+    }
+  ],
+  "schema_version": "issue_4195_h600_aggregation.v1.comparability",
+  "shared_planner_count": 7,
+  "shared_planners": [
+    "goal",
+    "orca",
+    "ppo",
+    "prediction_planner",
+    "sacadrl",
+    "social_force",
+    "socnav_sampling"
+  ],
+  "status": "pass"
+}

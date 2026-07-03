@@ -6,6 +6,7 @@ from math import ceil, isfinite
 from robot_sf.ped_npc.adversial_ped_force import AdversarialPedForceConfig
 from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
 from robot_sf.sim.pedestrian_model_variants import (
+    HSFM_ANISOTROPIC_FOV_V1,
     HSFM_TTC_PREDICTIVE_V1,
     normalize_pedestrian_model,
 )
@@ -60,6 +61,50 @@ def _pedestrian_model_ttc_config(
     return ttc_config
 
 
+@dataclass(frozen=True)
+class AnisotropicFovConfig:
+    """Opt-in anisotropic field-of-view attenuation parameters."""
+
+    enabled: bool = False
+    cone_half_angle_rad: float = 1.5707963267948966
+    rear_weight: float = 0.1
+
+    def __post_init__(self) -> None:
+        """Validate finite bounded FoV parameters."""
+        if (
+            not isfinite(self.cone_half_angle_rad)
+            or not 0 <= self.cone_half_angle_rad <= 3.141592653589793
+        ):
+            raise ValueError("anisotropic_fov.cone_half_angle_rad must be within [0, pi]")
+        if not isfinite(self.rear_weight) or not 0 <= self.rear_weight <= 1:
+            raise ValueError("anisotropic_fov.rear_weight must be within [0, 1]")
+
+
+def _normalize_anisotropic_fov_config(
+    value: AnisotropicFovConfig | dict,
+) -> AnisotropicFovConfig:
+    """Return validated anisotropic FoV config."""
+    if isinstance(value, AnisotropicFovConfig):
+        return value
+    if isinstance(value, dict):
+        return AnisotropicFovConfig(**value)
+    raise ValueError("anisotropic_fov must be an AnisotropicFovConfig or dict")
+
+
+def _pedestrian_model_anisotropic_fov_config(
+    pedestrian_model: str,
+    fov_config: AnisotropicFovConfig,
+) -> AnisotropicFovConfig:
+    """Enable anisotropic FoV provenance when selected via pedestrian model.
+
+    Returns:
+        Updated FoV config with ``enabled=True`` when the selector activates it.
+    """
+    if pedestrian_model == HSFM_ANISOTROPIC_FOV_V1 and not fov_config.enabled:
+        return replace(fov_config, enabled=True)
+    return fov_config
+
+
 @dataclass
 class SimulationSettings:
     """
@@ -80,6 +125,9 @@ class SimulationSettings:
 
     ttc_predictive_force: TtcPredictiveForceConfig = field(default_factory=TtcPredictiveForceConfig)
     """TTC predictive force settings used by ``hsfm_ttc_predictive_v1``."""
+
+    anisotropic_fov: AnisotropicFovConfig = field(default_factory=AnisotropicFovConfig)
+    """Anisotropic field-of-view settings used by ``hsfm_anisotropic_fov_v1``."""
 
     difficulty: int = 0
     """Difficulty level"""
@@ -160,6 +208,11 @@ class SimulationSettings:
         self.ttc_predictive_force = _pedestrian_model_ttc_config(
             self.pedestrian_model,
             self.ttc_predictive_force,
+        )
+        self.anisotropic_fov = _normalize_anisotropic_fov_config(self.anisotropic_fov)
+        self.anisotropic_fov = _pedestrian_model_anisotropic_fov_config(
+            self.pedestrian_model,
+            self.anisotropic_fov,
         )
         # Check that the maximum number of pedestrians per group is positive
         if self.max_peds_per_group <= 0:

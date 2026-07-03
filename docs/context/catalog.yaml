@@ -21,11 +21,19 @@ entries:
     status: evidence
     freshness: evidence
     area: workflow_evidence
+  - path: docs/context/evidence/issue_4216_licca_full_suite_env_failures
+    status: evidence
+    freshness: evidence
+    area: test_infrastructure_evidence
   - path: docs/context/evidence/issue_3557_uncertainty_representation_generalization
     status: evidence
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_3810_h600_interpretation_2026-07
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4205_static_constriction_codesign_loop_2026-07
     status: evidence
     freshness: evidence
     area: benchmark_evidence
@@ -2903,6 +2911,10 @@ entries:
     freshness: evidence
     area: benchmark_evidence
     legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_4249_recovery_3216_rank_stability
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4017_constrained_rl/README.md
     status: evidence
     freshness: evidence

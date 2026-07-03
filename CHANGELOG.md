@@ -23,6 +23,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **named-candidate seed-sufficiency closure evaluator for the retained h600 roots** (#4328,
+  toward #3556): `scripts/validation/evaluate_issue_4328_h600_seed_sufficiency_candidates.py` plus pure
+  logic in the canonical screening owner (`robot_sf/benchmark/scenario_belief_screening.py`). It
+  evaluates the three named h600 report roots proposed in issue #4328 against the #3556 ScenarioBelief
+  seed-sufficiency closure contract — existence on the current host, the two analyzer-required report
+  files, **and** a ScenarioBelief provenance/lineage gate — then runs the analyzer on the best fully
+  compatible candidate or fails closed with an explicit per-candidate blocker. The provenance gate is
+  the new capability over PR #4310's durable-root resolver: it prevents a foreign h600 roster
+  campaign's seed-sufficiency (a different question) from being promoted as #3556 closure evidence.
+  On a host without the roots the committed packet records `blocked_no_compatible_candidate` (all three
+  candidates absent + provenance-incompatible) with a deferred queue-row request for a #3556-specific
+  campaign. Diagnostic evidence-closure tooling only; no benchmark/paper-grade claim, no campaign run.
 * Added a **packet-consuming run planner for the issue #4142 dense DPCBF comparison** (#4142):
   `robot_sf/benchmark/issue_4142_dpcbf_dense_runner.py` consumes the predeclared packet schema
   `robot_sf.issue_4142_dpcbf_dense_comparison.v1` and resolves it into an ordered, per-arm run plan

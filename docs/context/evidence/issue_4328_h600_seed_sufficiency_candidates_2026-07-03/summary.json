@@ -1,0 +1,129 @@
+{
+  "schema_version": "issue_4328_h600_candidate_closure.v1",
+  "issue": 3556,
+  "evidence_status": "blocked",
+  "decision_label": "blocked_no_compatible_candidate",
+  "allowed_decision_labels": [
+    "resolved_compatible_candidate",
+    "blocked_no_compatible_candidate"
+  ],
+  "required_report_files": [
+    "seed_variability_by_scenario.json",
+    "seed_episode_rows.csv"
+  ],
+  "resolved_campaign_root": null,
+  "analyzer_command": [
+    "uv",
+    "run",
+    "python",
+    "scripts/tools/analyze_seed_sufficiency.py",
+    "--output-dir",
+    "output/issue_4328_h600_seed_sufficiency"
+  ],
+  "analyzer_output_dir": null,
+  "analyzer_summary": null,
+  "claim_boundary": "No named h600 candidate root satisfied the #3556 seed-sufficiency contract (existence on host + required reports + ScenarioBelief provenance), so no seed-sufficiency evidence is promoted.",
+  "next_empirical_action": "Run a #3556-specific ScenarioBelief drop-vs-retain campaign that emits reports/seed_variability_by_scenario.json and reports/seed_episode_rows.csv, or, if a maintainer accepts a foreign h600 root as a proxy, restore that root on the analysis host and rerun the analyzer command below.",
+  "forbidden_actions_confirmed": {
+    "full_benchmark_campaign_run": false,
+    "slurm_or_gpu_submission": false,
+    "belief_mode_semantic_change": false,
+    "paper_or_dissertation_claim_edit": false
+  },
+  "closure_target_issue": 3556,
+  "closure_attempt_issue": 4328,
+  "candidates": [
+    {
+      "name": "issue3810-h600-longhorizon-confirm-run",
+      "root": "output/issue3810-h600-longhorizon-confirm-run/13268",
+      "lineage": "issue #3810 h600 long-horizon confirmation run",
+      "exists_on_host": false,
+      "required_report_files": [
+        "seed_variability_by_scenario.json",
+        "seed_episode_rows.csv"
+      ],
+      "missing_report_files": [
+        "seed_variability_by_scenario.json",
+        "seed_episode_rows.csv"
+      ],
+      "required_reports_present": false,
+      "provenance": {
+        "provenance_compatible": false,
+        "matched_markers": [],
+        "reason": "no #3556 ScenarioBelief lineage marker in name/lineage; a foreign-campaign seed-sufficiency verdict would answer a different question than the #3556 contrast"
+      },
+      "compatible": false,
+      "blockers": [
+        "root_absent_on_host",
+        "missing_required_reports",
+        "provenance_incompatible_with_3556"
+      ]
+    },
+    {
+      "name": "issue3810-h600-extroster-run",
+      "root": "output/issue3810-h600-extroster-run/13273",
+      "lineage": "issue #3810 h600 extended-roster run",
+      "exists_on_host": false,
+      "required_report_files": [
+        "seed_variability_by_scenario.json",
+        "seed_episode_rows.csv"
+      ],
+      "missing_report_files": [
+        "seed_variability_by_scenario.json",
+        "seed_episode_rows.csv"
+      ],
+      "required_reports_present": false,
+      "provenance": {
+        "provenance_compatible": false,
+        "matched_markers": [],
+        "reason": "no #3556 ScenarioBelief lineage marker in name/lineage; a foreign-campaign seed-sufficiency verdict would answer a different question than the #3556 contrast"
+      },
+      "compatible": false,
+      "blockers": [
+        "root_absent_on_host",
+        "missing_required_reports",
+        "provenance_incompatible_with_3556"
+      ]
+    },
+    {
+      "name": "issue4230-h600-hybrid-roster-run",
+      "root": "output/issue4230-h600-hybrid-roster-run/13282",
+      "lineage": "issue #4230 h600 hybrid-roster run",
+      "exists_on_host": false,
+      "required_report_files": [
+        "seed_variability_by_scenario.json",
+        "seed_episode_rows.csv"
+      ],
+      "missing_report_files": [
+        "seed_variability_by_scenario.json",
+        "seed_episode_rows.csv"
+      ],
+      "required_reports_present": false,
+      "provenance": {
+        "provenance_compatible": false,
+        "matched_markers": [],
+        "reason": "no #3556 ScenarioBelief lineage marker in name/lineage; a foreign-campaign seed-sufficiency verdict would answer a different question than the #3556 contrast"
+      },
+      "compatible": false,
+      "blockers": [
+        "root_absent_on_host",
+        "missing_required_reports",
+        "provenance_incompatible_with_3556"
+      ]
+    }
+  ],
+  "compatible_candidates": [],
+  "resolved_candidate": null,
+  "queue_row_request": {
+    "kind": "scenario_belief_seed_sufficiency_campaign",
+    "issue": 3556,
+    "why": "A #3556-specific ScenarioBelief drop-vs-retain campaign is required to close seed-sufficiency; foreign h600 roster campaigns answer a different question.",
+    "runner": "scripts/benchmark/run_belief_mode_safety_campaign_issue_3556.py",
+    "required_reports": [
+      "reports/seed_variability_by_scenario.json",
+      "reports/seed_episode_rows.csv"
+    ],
+    "min_seed_budget_for_headline": 20,
+    "execution": "deferred (no run performed by this evaluation)"
+  }
+}

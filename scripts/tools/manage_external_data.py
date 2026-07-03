@@ -388,29 +388,55 @@ ASSETS: tuple[AssetSpec, ...] = (
         shared_root_subpath=Path("ind_crossings"),
         source_url="https://levelxdata.com/ind-dataset/",
         source_note=(
-            "Official leveLXData inD page for naturalistic road-user trajectories at "
-            "German intersections, including pedestrians and crossing interactions."
+            "Official leveLXData / ika RWTH Aachen inD page for naturalistic road-user "
+            "trajectories at German intersections (Bock et al. 2020), including pedestrians and "
+            "crossing interactions. Each recording ships tracks, tracksMeta, and recordingMeta "
+            "CSVs plus an aerial background image."
         ),
         license_note=(
-            "Free for non-commercial use after terms acceptance; terms prohibit "
-            "redistributing the dataset or modified versions. Stage local BYO copies only."
+            "Request-gated, free for non-commercial research use only after manual approval and "
+            "terms acceptance; upstream terms prohibit redistributing the dataset or modified "
+            "versions. Robot SF stages local bring-your-own copies only and never redistributes "
+            "inD bytes."
         ),
         access_note=(
-            "Research-request/BYO asset through leveLXData. No automated download or "
-            "redistribution path is encoded."
+            "Manual research-request/BYO asset: submit the leveLXData request form, obtain your "
+            "own approved copy under the upstream terms, and keep a local terms/README note with "
+            "the staged data. No automated download or redistribution path is encoded."
         ),
         required_paths=(
+            # inD ships one per-recording group of CSVs (tracks/tracksMeta/recordingMeta) plus an
+            # aerial background image. Each concept is its own required group so a presence check
+            # only passes for a real inD-shaped staging, not a lone stray CSV.
             RequiredPath(
                 pattern="**/*_tracks.csv",
                 kind="file",
-                description="inD tracks CSV file.",
-                group="trajectory",
+                description="inD per-recording tracks CSV (trajectory samples).",
+                group="tracks",
             ),
             RequiredPath(
-                pattern="**/*.csv",
+                pattern="**/*_tracksMeta.csv",
                 kind="file",
-                description="inD trajectory or metadata CSV file.",
-                group="trajectory",
+                description="inD per-recording tracksMeta CSV (per-track class/size metadata).",
+                group="tracks_meta",
+            ),
+            RequiredPath(
+                pattern="**/*_recordingMeta.csv",
+                kind="file",
+                description="inD per-recording recordingMeta CSV (frame rate, location, counts).",
+                group="recording_meta",
+            ),
+            RequiredPath(
+                pattern="**/*_background.png",
+                kind="file",
+                description="inD per-recording aerial background image.",
+                group="background",
+            ),
+            RequiredPath(
+                pattern="**/*.png",
+                kind="file",
+                description="inD background image staged without the original filename.",
+                group="background",
             ),
             RequiredPath(
                 pattern="**/README*",
@@ -431,7 +457,7 @@ ASSETS: tuple[AssetSpec, ...] = (
                 group="license_or_readme",
             ),
         ),
-        related_issues=(3161,),
+        related_issues=(4290, 4224, 3161),
         license_url="https://levelxdata.com/ind-dataset/",
     ),
     AssetSpec(

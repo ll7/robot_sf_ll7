@@ -22,6 +22,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not_evaluable over the 8-planner roster (degraded `socnav_bench` fails closed to `not_evaluable`).
   Thresholds are provisional configuration, not certification, threshold approval, or a planner
   ranking; no new benchmark run was performed.
+* Added an **evidence-closure regression guard for the issue #4011 RL trajectory smoke bundle**
+  (#4011): `tests/benchmark/test_rl_trajectory_dataset_smoke_evidence.py` pins the committed
+  `RLTrajectoryDataset.v1` smoke evidence bundle under
+  `docs/context/evidence/issue_4011_rl_trajectory_dataset_smoke_2026-07-02/` to the canonical
+  recorder/loader contract in `robot_sf/benchmark/rl_trajectory_dataset.py`. The guard fails
+  closed if the committed preview stops loading, the manifest `dataset_sha256` drifts from the
+  preview, the manifest stops validating against its JSON Schema and split-leakage semantics, or
+  the manifest is no longer exactly reproducible from the committed preview via
+  `build_rl_trajectory_manifest`. This closes the provenance/checksum loop so downstream offline-RL
+  work can depend on the smoke artifact. No pipeline behavior changes and no dataset is regenerated
+  from a live runner.
 * Added a **ScenarioBelief seed-sufficiency closure resolver** for issue #3556:
   `scripts/validation/close_issue_3556_seed_sufficiency.py` searches an ordered set of durable roots
   (`docs/context/evidence` first, then the ephemeral runner output root) for a retained ScenarioBelief

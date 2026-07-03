@@ -1,0 +1,50 @@
+schema_version: robot_sf.optuna_expert_ppo_launcher.v2
+base_config: expert_ppo.yaml
+
+# Smoke-scale Optuna hyperparameter optimization (HPO) harness demo for issue #4019.
+# This validates orchestration, provenance, and best-config export only; it is not
+# benchmark evidence for a stronger baseline.
+trials: 2
+metric: eval_episode_return
+objective_mode: last_n_mean
+objective_window: 2
+trial_timesteps: 1024
+eval_every: 512
+eval_episodes: 1
+study_name: issue_4019_hpo_demo
+storage: sqlite:///output/optuna/issue_4019_hpo_demo.db
+provenance_dir: output/optuna/issue_4019_hpo_demo
+seed: 4019
+disable_wandb: true
+deterministic: true
+log_level: WARNING
+intended_evidence_tier: smoke
+
+cost_bounds:
+  max_trials: 2
+  max_trial_timesteps: 1024
+  max_eval_episodes: 1
+
+search_space:
+  ppo_hyperparams:
+    learning_rate:
+      type: float
+      low: 0.00001
+      high: 0.0003
+      log: true
+    ent_coef:
+      type: float
+      low: 0.0001
+      high: 0.02
+      log: true
+    n_steps:
+      type: categorical
+      values: [512, 1024]
+    batch_size:
+      type: categorical
+      values: [128, 256]
+  policy_net_arch:
+    type: categorical
+    values:
+      - [64, 64]
+      - [128, 128]

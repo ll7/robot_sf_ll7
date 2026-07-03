@@ -48,6 +48,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "predictive_mppi": "learning",
     "risk_dwa": "classical",
     "risk_surface_dwa": "classical",
+    "taga_group_avoidance": "diagnostic",
     "hybrid_rule_local_planner": "classical",
     "adaptive_proxemic_selector_v0": "diagnostic",
     "adaptive_proxemic_selector_v1": "diagnostic",
@@ -107,6 +108,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "predictive_mppi": "predictive_sequence_optimizer",
     "risk_dwa": "risk_aware_dynamic_window",
     "risk_surface_dwa": "deterministic_local_risk_surface_dwa",
+    "taga_group_avoidance": "diagnostic_taga_like_group_avoidance_wrapper",
     "hybrid_rule_local_planner": "hybrid_rule_deterministic_local_planner",
     "adaptive_proxemic_selector_v0": "diagnostic_fixed_proxemic_profile_selector",
     "adaptive_proxemic_selector_v1": "diagnostic_neutral_default_proxemic_profile_selector",
@@ -183,6 +185,15 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "notes": (
             "Exploratory deterministic risk-surface producer consumes structured SocNav state, "
             "derives an ego-frame occupancy-compatible risk grid, and wraps risk_dwa."
+        ),
+    },
+    "taga_group_avoidance": {
+        "default_mode": "socnav_state",
+        "supported_modes": ("socnav_state",),
+        "inputs": ("robot_state", "goal", "social_groups"),
+        "notes": (
+            "Diagnostic TAGA-like tangent-subgoal wrapper consumes declared social-group "
+            "o-space geometry through env binding and otherwise emits goal-like commands."
         ),
     },
     "mppi_social": _DEFAULT_OBSERVATION_SPEC,
@@ -866,6 +877,17 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "projection_documented": True,
         "testing_only_adapter": True,
         "prototype_only": True,
+    },
+    "taga_group_avoidance": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "TangentSubgoalGroupAvoidanceAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "goal_like_tangent_subgoal_to_unicycle_vw",
+        "projection_documented": True,
+        "diagnostic_reference_only": True,
     },
     "hybrid_rule_local_planner": {
         "planner_command_space": "unicycle_vw",

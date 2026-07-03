@@ -17,6 +17,11 @@ _OBJECTIVE_MODES = ("best_checkpoint", "final_eval", "last_n_mean", "auc", "epis
 _CONSTRAINT_HANDLING_CHOICES = ("penalize", "prune")
 _LOG_LEVEL_CHOICES = ("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL")
 OPTUNA_LAUNCHER_SCHEMA_VERSION: str = "robot_sf.optuna_expert_ppo_launcher.v1"
+OPTUNA_LAUNCHER_SCHEMA_VERSION_V2: str = "robot_sf.optuna_expert_ppo_launcher.v2"
+_SUPPORTED_SCHEMA_VERSIONS = {
+    OPTUNA_LAUNCHER_SCHEMA_VERSION,
+    OPTUNA_LAUNCHER_SCHEMA_VERSION_V2,
+}
 
 _SUPPORTED_LAUNCH_KEYS = {
     "schema_version",
@@ -37,6 +42,12 @@ _SUPPORTED_LAUNCH_KEYS = {
     "log_level",
     "disable_wandb",
     "deterministic",
+}
+_SUPPORTED_LAUNCH_KEYS_V2 = _SUPPORTED_LAUNCH_KEYS | {
+    "cost_bounds",
+    "intended_evidence_tier",
+    "provenance_dir",
+    "search_space",
 }
 _INT_KEYS = {
     "trials",
@@ -61,6 +72,7 @@ _SCALAR_FLAG_MAP = {
     "constraint_comfort_exposure_max": "--constraint-comfort-exposure-max",
     "constraint_handling": "--constraint-handling",
     "log_level": "--log-level",
+    "provenance_dir": "--provenance-dir",
 }
 
 
@@ -147,17 +159,26 @@ def load_launch_config(path: Path) -> dict[str, object]:
     if not isinstance(raw, dict):
         raise ValueError("Optuna launcher config must be a mapping.")
     payload = dict(raw)
-    unknown = sorted(set(payload) - _SUPPORTED_LAUNCH_KEYS)
+    schema_version = payload.get("schema_version") or OPTUNA_LAUNCHER_SCHEMA_VERSION
+    supported_keys = (
+        _SUPPORTED_LAUNCH_KEYS_V2
+        if schema_version == OPTUNA_LAUNCHER_SCHEMA_VERSION_V2
+        else _SUPPORTED_LAUNCH_KEYS
+    )
+    unknown = sorted(set(payload) - supported_keys)
     if unknown:
         raise ValueError(f"Unknown launcher config key(s): {', '.join(unknown)}")
-    schema_version = payload.get("schema_version")
-    if schema_version is not None and schema_version != OPTUNA_LAUNCHER_SCHEMA_VERSION:
+    if schema_version not in _SUPPORTED_SCHEMA_VERSIONS:
         raise ValueError(
             f"Unsupported Optuna launcher schema_version {schema_version!r}; "
-            f"expected {OPTUNA_LAUNCHER_SCHEMA_VERSION!r}."
+            f"expected one of {sorted(_SUPPORTED_SCHEMA_VERSIONS)!r}."
         )
     if "base_config" not in payload:
         raise ValueError("Launcher config must define 'base_config'.")
+    if schema_version == OPTUNA_LAUNCHER_SCHEMA_VERSION_V2:
+        from robot_sf.training.optuna_search_space import validate_search_space
+
+        validate_search_space(payload.get("search_space", {}))
     return payload
 
 
@@ -197,6 +218,13 @@ def build_optuna_cli_args(
     deterministic = _effective_value(payload, args, "deterministic")
     if _as_bool(deterministic):
         cli_args.append("--deterministic")
+    schema_version = payload.get("schema_version") or OPTUNA_LAUNCHER_SCHEMA_VERSION
+    if schema_version == OPTUNA_LAUNCHER_SCHEMA_VERSION_V2:
+        cli_args.extend(["--launcher-config", str(launch_config_path)])
+        if _effective_value(payload, args, "provenance_dir") is None:
+            study_name = _effective_value(payload, args, "study_name")
+            if study_name:
+                cli_args.extend(["--provenance-dir", f"output/optuna/{study_name}"])
 
     return cli_args
 
@@ -275,6 +303,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
         choices=_LOG_LEVEL_CHOICES,
         default=None,
         help="Override Optuna console log level.",
+    )
+
+    parser.add_argument(
+        "--provenance-dir",
+        type=Path,
+        default=None,
+        help="Override v2 provenance output directory.",
     )
     parser.add_argument(
         "--disable-wandb",

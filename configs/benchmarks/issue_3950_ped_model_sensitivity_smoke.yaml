@@ -1,0 +1,18 @@
+name: issue_3950_ped_model_sensitivity_smoke
+paper_facing: false
+scenario_matrix: configs/scenarios/single/planner_sanity_simple.yaml
+workers: 1
+horizon: 30
+dt: 0.1
+record_forces: false
+resume: false
+planner:
+  key: goal
+  algo: goal
+  benchmark_profile: baseline-safe
+development_models:
+  - social_force_default
+  - hsfm_total_force_v1
+evaluation_models:
+  - social_force_default
+  - hsfm_total_force_v1

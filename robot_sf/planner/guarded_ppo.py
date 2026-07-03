@@ -6,11 +6,12 @@ short-horizon rollout predicts unsafe pedestrian or obstacle clearance.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields
+from dataclasses import asdict, dataclass, fields
 from typing import Any, Protocol
 
 import numpy as np
 
+from robot_sf.benchmark.uncertainty_safety import compute_intrusion_metrics
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, _wrap_angle, build_risk_dwa_config
 from robot_sf.planner.safety_shield import ShieldDecision
 from robot_sf.planner.socnav import (
@@ -47,6 +48,39 @@ class GuardedPPOConfig:
     prior_residual_mode: bool = False
     prior_residual_max_linear_delta: float = 0.25
     prior_residual_max_angular_delta: float = 0.35
+    uncertainty_fallback_enabled: bool = False
+    uncertainty_base_radius_m: float = 0.58
+    uncertainty_conformal_radius_m: float = 0.25
+    uncertainty_buffer_intrusion_threshold: float = 0.0
+    uncertainty_collision_probability_threshold: float = 0.5
+    uncertainty_min_ttc_threshold_s: float | None = None
+    uncertainty_fallback_mode: str = "stop"
+    uncertainty_slow_down_speed_m_s: float = 0.2
+
+    def __post_init__(self) -> None:
+        """Validate uncertainty fallback thresholds when configured."""
+        if self.uncertainty_fallback_mode not in {"stop", "slow_down", "fallback"}:
+            raise ValueError("uncertainty_fallback_mode must be stop, slow_down, or fallback")
+        for name, value in {
+            "uncertainty_buffer_intrusion_threshold": self.uncertainty_buffer_intrusion_threshold,
+            "uncertainty_collision_probability_threshold": (
+                self.uncertainty_collision_probability_threshold
+            ),
+        }.items():
+            if not 0.0 <= float(value) <= 1.0:
+                raise ValueError(f"{name} must be in [0.0, 1.0]")
+        for name, value in {
+            "uncertainty_base_radius_m": self.uncertainty_base_radius_m,
+            "uncertainty_conformal_radius_m": self.uncertainty_conformal_radius_m,
+            "uncertainty_slow_down_speed_m_s": self.uncertainty_slow_down_speed_m_s,
+        }.items():
+            if float(value) < 0.0:
+                raise ValueError(f"{name} must be non-negative")
+        if (
+            self.uncertainty_min_ttc_threshold_s is not None
+            and float(self.uncertainty_min_ttc_threshold_s) < 0.0
+        ):
+            raise ValueError("uncertainty_min_ttc_threshold_s must be non-negative")
 
 
 class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
@@ -357,6 +391,99 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             "min_ttc": float(min_ttc),
         }
 
+    def _evaluate_uncertainty_fallback(
+        self,
+        observation: dict[str, Any],
+        command: tuple[float, float],
+        base_eval: dict[str, float | bool],
+    ) -> dict[str, Any]:
+        """Evaluate diagnostic uncertainty-triggered fallback conditions.
+
+        Returns:
+            dict[str, Any]: Trigger state, conditions, intrusion metrics, and proxy score.
+        """
+        if not self.config.uncertainty_fallback_enabled:
+            return {"enabled": False, "triggered": False}
+
+        robot_pos, heading, _goal, ped_pos, ped_vel = self._extract_state(observation)
+        steps = max(int(self.config.rollout_steps), 1)
+        dt = float(self.config.rollout_dt)
+        x = np.array(robot_pos, dtype=float)
+        theta = float(heading)
+        robot_rollout: list[np.ndarray] = []
+        pedestrian_rollout: list[np.ndarray] = []
+        for step in range(steps):
+            t = (step + 1) * dt
+            x = x + np.array(
+                [
+                    float(command[0]) * np.cos(theta) * dt,
+                    float(command[0]) * np.sin(theta) * dt,
+                ],
+                dtype=float,
+            )
+            theta = _wrap_angle(theta + float(command[1]) * dt)
+            robot_rollout.append(np.array(x, dtype=float))
+            pedestrian_rollout.append(
+                np.asarray(ped_pos + ped_vel * t, dtype=float)
+                if ped_pos.size > 0
+                else np.zeros((0, 2), dtype=float)
+            )
+
+        current_pedestrians = (
+            np.broadcast_to(ped_pos[None, :, :], (steps, ped_pos.shape[0], 2)).copy()
+            if ped_pos.size > 0
+            else np.zeros((steps, 0, 2), dtype=float)
+        )
+        predicted_pedestrians = np.asarray(pedestrian_rollout, dtype=float)
+        metrics = compute_intrusion_metrics(
+            np.asarray(robot_rollout, dtype=float),
+            current_pedestrians,
+            predicted_pedestrians,
+            float(self.config.uncertainty_conformal_radius_m),
+            base_radius=float(self.config.uncertainty_base_radius_m),
+        )
+        probability_proxy = float(metrics.predicted_trajectory_intrusion_time_ratio)
+        trigger_conditions: list[str] = []
+        min_ttc = float(base_eval.get("min_ttc", float("inf")))
+        ttc_threshold = self.config.uncertainty_min_ttc_threshold_s
+        if ttc_threshold is not None and np.isfinite(min_ttc) and min_ttc <= float(ttc_threshold):
+            trigger_conditions.append("low_ttc")
+        if metrics.uncertainty_buffer_intrusion_time_ratio > float(
+            self.config.uncertainty_buffer_intrusion_threshold
+        ):
+            trigger_conditions.append("uncertainty_buffer_intrusion")
+        if probability_proxy >= float(self.config.uncertainty_collision_probability_threshold):
+            trigger_conditions.append("diagnostic_collision_probability_proxy")
+        return {
+            "enabled": True,
+            "triggered": bool(trigger_conditions),
+            "trigger_conditions": trigger_conditions,
+            "metrics": metrics,
+            "predicted_collision_probability_proxy": probability_proxy,
+        }
+
+    def _uncertainty_fallback_command(
+        self, observation: dict[str, Any], ppo_command: tuple[float, float]
+    ) -> tuple[tuple[float, float], str, str]:
+        """Return configured uncertainty fallback command, label, and policy."""
+        mode = self.config.uncertainty_fallback_mode
+        if mode == "slow_down":
+            speed = max(float(self.config.uncertainty_slow_down_speed_m_s), 0.0)
+            linear = float(np.clip(float(ppo_command[0]), -speed, speed))
+            return (
+                (linear, float(ppo_command[1])),
+                "uncertainty_fallback_slow_down",
+                "slow_down",
+            )
+        if mode == "fallback":
+            command = self.fallback_adapter.plan(observation)
+            return (
+                (float(command[0]), float(command[1])),
+                "uncertainty_fallback_configured",
+                type(self.fallback_adapter).__name__,
+            )
+        return (0.0, 0.0), "uncertainty_fallback_stop", "stop"
+
     def choose_command(
         self, observation: dict[str, Any], ppo_command: tuple[float, float]
     ) -> tuple[tuple[float, float], str]:
@@ -367,7 +494,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         """
         return self.choose_command_decision(observation, ppo_command).as_command_result()
 
-    def choose_command_decision(  # noqa: C901
+    def choose_command_decision(  # noqa: C901, PLR0912
         self, observation: dict[str, Any], ppo_command: tuple[float, float]
     ) -> ShieldDecision:
         """Choose a command and return structured safety-shield metadata.
@@ -447,6 +574,41 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                     selected_eval=blended_eval,
                     fallback_policy=type(self.prior_adapter).__name__,
                 )
+
+        uncertainty_eval = self._evaluate_uncertainty_fallback(observation, ppo_command, ppo_eval)
+        if bool(uncertainty_eval["triggered"]):
+            fallback_command, label, fallback_policy = self._uncertainty_fallback_command(
+                observation, ppo_command
+            )
+            fallback_eval = self._evaluate_command(observation, fallback_command)
+            metrics = uncertainty_eval["metrics"]
+            uncertainty_metadata = {
+                "schema_version": "uncertainty-fallback.v1",
+                "mode": "conformal_buffer_intrusion",
+                "diagnostic_only": True,
+                "triggered": True,
+                "trigger_conditions": list(uncertainty_eval["trigger_conditions"]),
+                "intrusion_metrics": asdict(metrics),
+                "predicted_collision_probability_proxy": float(
+                    uncertainty_eval["predicted_collision_probability_proxy"]
+                ),
+                "conformal_radius_m": float(self.config.uncertainty_conformal_radius_m),
+            }
+            calibration_metadata = {
+                "status": "configured_static_radius",
+                "claim_boundary": "diagnostic_proxy_not_safety_guarantee",
+            }
+            return self._shield_decision(
+                ppo_command=ppo_command,
+                filtered_command=fallback_command,
+                label=label,
+                reason="uncertainty_triggered_fallback",
+                ppo_eval=ppo_eval,
+                selected_eval=fallback_eval,
+                fallback_policy=fallback_policy,
+                uncertainty_metadata=uncertainty_metadata,
+                calibration_metadata=calibration_metadata,
+            )
 
         if current_min_dist > float(self.config.near_field_distance) and bool(ppo_eval["safe"]):
             return self._shield_decision(
@@ -546,6 +708,8 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         fallback_policy: str | None = None,
         intervened: bool | None = None,
         hard_constraint_violation: bool | None = None,
+        uncertainty_metadata: dict[str, Any] | None = None,
+        calibration_metadata: dict[str, Any] | None = None,
     ) -> ShieldDecision:
         """Build a structured shield decision for benchmark metadata.
 
@@ -604,8 +768,8 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             prediction_source="short_horizon_rollout",
             prediction_horizon_steps=int(self.config.rollout_steps),
             prediction_dt=float(self.config.rollout_dt),
-            uncertainty_metadata={"mode": "deterministic_rollout"},
-            calibration_metadata={"status": "not_calibrated"},
+            uncertainty_metadata=uncertainty_metadata or {"mode": "deterministic_rollout"},
+            calibration_metadata=calibration_metadata or {"status": "not_calibrated"},
             fallback_controller_state={
                 "policy": fallback_policy or type(self.fallback_adapter).__name__,
                 "prior_available": self.prior_adapter is not None,
@@ -674,6 +838,20 @@ def build_guarded_ppo_config(cfg: dict[str, Any] | None) -> GuardedPPOConfig:
                 cfg.get("residual_angular_bound", 0.35),
             )
         ),
+        uncertainty_fallback_enabled=bool(cfg.get("uncertainty_fallback_enabled", False)),
+        uncertainty_base_radius_m=float(cfg.get("uncertainty_base_radius_m", 0.58)),
+        uncertainty_conformal_radius_m=float(cfg.get("uncertainty_conformal_radius_m", 0.25)),
+        uncertainty_buffer_intrusion_threshold=float(
+            cfg.get("uncertainty_buffer_intrusion_threshold", 0.0)
+        ),
+        uncertainty_collision_probability_threshold=float(
+            cfg.get("uncertainty_collision_probability_threshold", 0.5)
+        ),
+        uncertainty_min_ttc_threshold_s=None
+        if cfg.get("uncertainty_min_ttc_threshold_s") is None
+        else float(cfg.get("uncertainty_min_ttc_threshold_s")),
+        uncertainty_fallback_mode=str(cfg.get("uncertainty_fallback_mode", "stop")),
+        uncertainty_slow_down_speed_m_s=float(cfg.get("uncertainty_slow_down_speed_m_s", 0.2)),
     )
 
 

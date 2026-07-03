@@ -1,12 +1,12 @@
 {
   "blocker_kinds": [
-    "missing_input_artifact"
+    "missing_mechanism_labels"
   ],
   "followup_issue_skeleton": {
-    "body": "Issue #4206 cannot inspect mechanism labels until the declared h600 run artifacts are present\non the analysis host. Hydrate reports/seed_episode_rows.csv (and any mechanism sidecars) for\nconfirm job 13268 and extended-roster job 13273 from the canonical run store, then re-run the\nbuilder. This is an artifact-retrieval gap, not a mechanism-instrumentation gap.\n",
-    "title": "Retrieve h600 mechanism-crosscut episode artifacts (13268, 13273) to the analysis host"
+    "body": "Issue #4206 cannot produce mechanism-level F-C4(ii) policy-structure conclusions until\nh600 episode rows or sidecars provide mechanism fields using\nmechanism_schema_version=failure_mechanism_taxonomy.v1, mechanism_label,\nmechanism_confidence, mechanism_evidence_mode, and mechanism_evidence_uri.\n",
+    "title": "Add trace-verified failure-mechanism labels to h600 episode exports for F-C4(ii)"
   },
-  "generated_at": "2026-07-03T00:00:00Z",
+  "generated_at": "2026-07-03T20:00:00Z",
   "geometry_bucket_substitution_rejected": true,
   "input_provenance": {
     "config": {
@@ -15,9 +15,9 @@
     },
     "confirm_h600_13268": {
       "root": "output/issue3810-h600-longhorizon-confirm-run/13268",
-      "root_exists": false,
+      "root_exists": true,
       "seed_episode_rows": "output/issue3810-h600-longhorizon-confirm-run/13268/reports/seed_episode_rows.csv",
-      "seed_episode_rows_exists": false
+      "seed_episode_rows_exists": true
     },
     "continuity_h500_job13175": {
       "packet": "docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/packet.json",
@@ -25,33 +25,817 @@
     },
     "extended_h600_13273": {
       "root": "output/issue3810-h600-extroster-run/13273",
-      "root_exists": false,
+      "root_exists": true,
       "seed_episode_rows": "output/issue3810-h600-extroster-run/13273/reports/seed_episode_rows.csv",
-      "seed_episode_rows_exists": false
+      "seed_episode_rows_exists": true
     }
   },
   "issue": 4206,
-  "loaded_row_count": 0,
-  "missing_row_count": 2,
+  "loaded_row_count": 2304,
+  "missing_row_count": 2304,
   "missing_rows_sample": [
     {
-      "blocker_kind": "missing_input_artifact",
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--111--5ee7cc7fcce728ee",
+      "geometry_only_fields_present": [],
       "missing_fields": [
-        "reports/seed_episode_rows.csv"
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
       ],
-      "missing_path": "output/issue3810-h600-longhorizon-confirm-run/13268/reports/seed_episode_rows.csv",
-      "run": "confirm_h600_13268"
+      "planner_key": "goal",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
     },
     {
-      "blocker_kind": "missing_input_artifact",
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--112--2d3a7cb2eb23cab0",
+      "geometry_only_fields_present": [],
       "missing_fields": [
-        "reports/seed_episode_rows.csv"
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
       ],
-      "missing_path": "output/issue3810-h600-extroster-run/13273/reports/seed_episode_rows.csv",
-      "run": "extended_h600_13273"
+      "planner_key": "goal",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--113--1636d0d28f527bd4",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "goal",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--111--c4c9615d91fe5fc8",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "orca",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--112--6953d32efba447e6",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "orca",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--113--eb55fd871144ac56",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "orca",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--111--9f1ab6341251f4a6",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "ppo",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--112--563e2668e8bd823e",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "ppo",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--113--571d800519ee3216",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "ppo",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--111--402f0db1ced70056",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "prediction_planner",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--112--eb592fba5d144060",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "prediction_planner",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--113--412451b03a1ff2b9",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "prediction_planner",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--111--370036442e691106",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "sacadrl",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--112--569698c2146010f3",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "sacadrl",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--113--822d69830734798f",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "sacadrl",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--111--f22be4d6ce10023f",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "social_force",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--112--526b4b9dab31fff6",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "social_force",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--113--50fc10505db139e7",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "social_force",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--111--809c23b70ce9b4a4",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "socnav_sampling",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--112--92363413427a9960",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "socnav_sampling",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_high--113--373fc65332912b03",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "socnav_sampling",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--111--3b2ce01c891fbf73",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "goal",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--112--070bfc01003faad8",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "goal",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--113--f4cbad738a0dcae5",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "goal",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--111--8d8ae1f78dfd0de8",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "orca",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--112--6563ea0dae7f7f69",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "orca",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--113--81a9e68e36d734cb",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "orca",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--111--8fc9dafbf6af2c52",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "ppo",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--112--f429487c141911fc",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "ppo",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--113--a18c0ba65ea2aaad",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "ppo",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--111--dc4ca9cce8014d3f",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "prediction_planner",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--112--2688cb52f115f42c",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "prediction_planner",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--113--df0c1745858b5216",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "prediction_planner",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--111--714b9b4f1b0076af",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "sacadrl",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--112--9a4d68c2fbe1f6c0",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "sacadrl",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--113--f27660cca1b65187",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "sacadrl",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--111--6ca80b2c79930254",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "social_force",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--112--2a397b88f21cf706",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "social_force",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--113--56b906f0c70e7e44",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "social_force",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--111--8aebd819ea9f9a3a",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "socnav_sampling",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--112--b377de7a00df9bb9",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "socnav_sampling",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_low--113--f1c6269eb63f4727",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "socnav_sampling",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_low"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_medium--111--0aa40c91dff8dbcc",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "goal",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_medium"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_medium--112--bcc5224a6970f17a",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "goal",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_medium"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_medium--113--53d0d6a4193fce58",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "goal",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_medium"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_medium--111--a8b5b5842c9af627",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "orca",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_medium"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_medium--112--67a2fdde0272dc2f",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "orca",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_medium"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_medium--113--9b99e73d40fadaf1",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "orca",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_medium"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_medium--111--45982e7186705a94",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "ppo",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_medium"
+    },
+    {
+      "blocker_kind": "missing_mechanism_labels",
+      "episode_id": "classic_bottleneck_medium--112--dafb45d499adeb7a",
+      "geometry_only_fields_present": [],
+      "missing_fields": [
+        "mechanism_schema_version",
+        "mechanism_label",
+        "mechanism_confidence",
+        "mechanism_evidence_mode",
+        "mechanism_evidence_uri",
+        "mechanism_evidence_mode=trace_verified_source"
+      ],
+      "planner_key": "ppo",
+      "run": "confirm_h600_13268",
+      "scenario_id": "classic_bottleneck_medium"
     }
   ],
-  "next_action": "Retrieve/hydrate the missing h600 run artifacts (reports/seed_episode_rows.csv and any mechanism sidecars) to this host, then re-run the builder. No exporter mechanism-label change is required until the rows are present.",
+  "next_action": "Add trace-verified failure-mechanism labels to the h600 episode exports (or a declared sidecar), then re-run the builder.",
   "required_fields": [
     "mechanism_schema_version",
     "mechanism_label",
@@ -59,5 +843,5 @@
     "mechanism_evidence_mode",
     "mechanism_evidence_uri"
   ],
-  "status": "blocked_missing_input_artifacts"
+  "status": "blocked_missing_trace_verified_mechanism_labels"
 }

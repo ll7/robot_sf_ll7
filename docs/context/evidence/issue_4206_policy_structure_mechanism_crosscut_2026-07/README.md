@@ -1,8 +1,8 @@
 # Issue #4206 policy-structure mechanism cross-cut
 
-status: blocked_missing_input_artifacts
+status: blocked_missing_trace_verified_mechanism_labels
 
-Current blocker next action: Retrieve/hydrate the missing h600 run artifacts (reports/seed_episode_rows.csv and any mechanism sidecars) to this host, then re-run the builder. No exporter mechanism-label change is required until the rows are present.
+Current blocker next action: Add trace-verified failure-mechanism labels to the h600 episode exports (or a declared sidecar), then re-run the builder.
 
 This evidence packet is bounded to CPU-only diagnostic analysis for issue #4206. It does not run a
 benchmark campaign, submit Slurm/GPU work, edit paper/dissertation claims, or promote generalized

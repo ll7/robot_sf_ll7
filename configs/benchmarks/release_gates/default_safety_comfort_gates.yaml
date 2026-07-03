@@ -1,0 +1,46 @@
+schema_version: benchmark_release_gate_spec.v1
+description: >
+  Provisional paired safety and comfort gates for release-gate reporting over
+  existing benchmark summary rows. These thresholds are configuration values,
+  not certification or paper-grade approval.
+gates:
+  - id: collision_rate_zero
+    metric: collision_rate
+    threshold: 0.0
+    direction: max
+    category: safety
+    provenance: provisional_not_certification_issue_4166
+    required: true
+    description: Any observed collision rate fails the provisional safety gate.
+  - id: near_miss_rate_limit
+    metric: near_miss_rate
+    threshold: 0.05
+    direction: max
+    category: safety
+    provenance: provisional_not_certification_issue_4166
+    required: true
+    description: Near-miss rate must remain below the provisional reporting limit.
+  - id: min_clearance_floor
+    metric: min_clearance_m
+    threshold: 0.25
+    direction: min
+    category: safety
+    provenance: provisional_not_certification_issue_4166
+    required: true
+    description: Minimum clearance must stay above the provisional reporting floor.
+  - id: proxemic_intrusion_rate_limit
+    metric: proxemic_intrusion_rate
+    threshold: 0.10
+    direction: max
+    category: comfort
+    provenance: provisional_not_certification_issue_4166
+    required: true
+    description: Proxemic intrusion rate must remain below the provisional comfort limit.
+  - id: jerk_mean_limit
+    metric: jerk_mean
+    threshold: 2.0
+    direction: max
+    category: comfort
+    provenance: provisional_not_certification_issue_4166
+    required: true
+    description: Mean jerk proxy must remain below the provisional comfort limit.

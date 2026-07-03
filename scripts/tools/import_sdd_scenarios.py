@@ -33,6 +33,7 @@ class SddPoint:
     x_px: float
     y_px: float
     label: str
+    raw_label: str
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,14 @@ class ImportOptions:
     max_waypoints: int
     margin_m: float
     y_flip_height_px: float | None = None
+
+
+def normalize_sdd_label(raw_label: str) -> str:
+    """Normalize an SDD annotation label for user-facing comparison and storage."""
+    label = str(raw_label).strip()
+    if len(label) >= 2 and label[0] == label[-1] and label[0] in {"'", '"'}:
+        return label[1:-1].strip()
+    return label
 
 
 def _parse_annotation_line(line: str, *, line_number: int) -> SddPoint | None:
@@ -75,22 +84,25 @@ def _parse_annotation_line(line: str, *, line_number: int) -> SddPoint | None:
         frame=int(frame),
         x_px=x_center,
         y_px=y_center,
-        label=str(label),
+        label=normalize_sdd_label(label),
+        raw_label=str(label),
     )
 
 
 def load_sdd_points(path: Path, *, label: str) -> list[SddPoint]:
     """Load pedestrian points from an SDD annotation file."""
+    target_label = normalize_sdd_label(label)
+    target_label_key = target_label.casefold()
     points: list[SddPoint] = []
     with path.open(encoding="utf-8") as handle:
         for line_number, line in enumerate(handle, start=1):
             point = _parse_annotation_line(line, line_number=line_number)
             if point is None:
                 continue
-            if point.label.lower() == label.lower():
+            if point.label.casefold() == target_label_key:
                 points.append(point)
     if not points:
-        raise ValueError(f"No usable '{label}' annotations found in {path}.")
+        raise ValueError(f"No usable '{target_label}' annotations found in {path}.")
     return points
 
 
@@ -178,6 +190,7 @@ def build_import_payload(
                     "source_frame_start": min(frames),
                     "source_frame_end": max(frames),
                     "source_label": track_points[0].label,
+                    "source_raw_label": track_points[0].raw_label,
                 },
             }
         )

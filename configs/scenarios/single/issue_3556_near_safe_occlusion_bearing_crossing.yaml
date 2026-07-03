@@ -1,0 +1,71 @@
+schema_version: robot_sf.scenario_matrix.v1
+scenarios:
+  - name: issue_3556_near_safe_occlusion_bearing_crossing
+    scenario_family: near_safe_occlusion_bearing_crossing
+    map_file: ../../../maps/svg_maps/francis2023/francis2023_blind_corner.svg
+    simulation_config:
+      max_episode_steps: 240
+      ped_density: 0.0
+    observation_visibility:
+      enabled: true
+      fov_degrees: 120.0
+      max_range_m: 8.0
+      static_occlusion: true
+    single_pedestrians:
+      - id: h1
+        goal_poi: poi_h1_goal
+        metadata:
+          role: occluded_crossing_pedestrian
+          safety_relevance: crosses_robot_route_after_blind_corner
+    robot_config: {}
+    metadata:
+      purpose: >-
+        Near-safe occlusion-bearing crossing candidate for the issue #3556 real-runner
+        ScenarioBelief drop-vs-retain smoke contrast.
+      issue: 3556
+      source_issue: 3471
+      predecessor_surface: 3635
+      evidence_status: proposal
+      benchmark_evidence: false
+      family: near_safe_occlusion_bearing_crossing
+      archetype: blind_corner_crossing
+      flow: perpendicular
+      occlusion_bearing: true
+      claim_boundary: >-
+        Scenario definition and smoke-scale launch metadata only. It does not report
+        benchmark results or promote a safety claim.
+      near_safe_precondition: oracle_clears_most_episodes_before_contrast_claim
+      scenario_belief_contract:
+        required_modes:
+          - oracle
+          - uncertain_retained
+          - uncertain_dropped
+        uncertainty_source: field_of_view
+        out_of_fov_agents: retained_except_uncertain_dropped_arm
+      generation_profile:
+        schema_version: scenario_generation_params.v1
+        seed_signature: 363501,363502,363503
+        parameters:
+          id: issue_3556_near_safe_occlusion_bearing_crossing
+          density: low
+          flow: cross
+          obstacle: blind_corner
+          groups: 0.0
+          speed_var: low
+          goal_topology: point
+          robot_context: embedded
+          repeats: 1
+          preset: manual_blind_corner_visibility_contract
+      initial_difficulty:
+        schema_version: scenario_initial_difficulty.v1
+        score: 0.52
+        band: medium
+        components:
+          density: 0.18
+          flow: 0.3
+          obstacle: 0.24
+          speed_var: 0.0
+          goal_topology: 0.0
+          groups: 0.0
+          crowding: 0.0
+          n_agents: 1

@@ -1,0 +1,27 @@
+schema_version: rare_event_sampling.v1
+proposal: tilted_distribution
+parameters:
+  ped_density:
+    base: uniform
+    low: 0.01
+    high: 0.08
+    proposal_low: 0.04
+    proposal_high: 0.08
+  crossing_time_offset_s:
+    base: normal
+    mean: 0.0
+    std: 1.0
+    proposal_mean: -0.5
+  pedestrian_speed_multiplier:
+    base: normal
+    mean: 1.0
+    std: 0.1
+    proposal_mean: 1.1
+objective_event: collision_or_severe_intrusion
+samples: 32
+seed: 4163
+scenario_matrix: configs/scenarios/planner_sanity_matrix_v1.yaml
+smoke_scenario_index: 0
+synthetic_toy_model:
+  parameter: ped_density
+  threshold: 0.065

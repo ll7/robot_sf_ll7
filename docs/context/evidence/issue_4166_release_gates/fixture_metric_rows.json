@@ -1,0 +1,80 @@
+{
+  "claim_boundary": "Fixture rows exercise release-gate reporting for the current camera_ready_all_planners roster. They are not benchmark evidence, certification, or paper-grade claims.",
+  "source_roster": "configs/benchmarks/camera_ready_all_planners.yaml",
+  "rows": [
+    {
+      "collision_rate": 0.0,
+      "evidence_status": "fixture_reporting_only",
+      "jerk_mean": 1.2,
+      "min_clearance_m": 0.4,
+      "near_miss_rate": 0.02,
+      "planner_key": "goal",
+      "proxemic_intrusion_rate": 0.03,
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "collision_rate": 0.0,
+      "evidence_status": "fixture_reporting_only",
+      "jerk_mean": 1.6,
+      "min_clearance_m": 0.32,
+      "near_miss_rate": 0.04,
+      "planner_key": "social_force",
+      "proxemic_intrusion_rate": 0.09,
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "collision_rate": 0.1,
+      "evidence_status": "fixture_reporting_only",
+      "jerk_mean": 1.0,
+      "min_clearance_m": 0.35,
+      "near_miss_rate": 0.03,
+      "planner_key": "orca",
+      "proxemic_intrusion_rate": 0.05,
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "collision_rate": 0.0,
+      "evidence_status": "fixture_reporting_only",
+      "jerk_mean": 2.4,
+      "min_clearance_m": 0.28,
+      "near_miss_rate": 0.01,
+      "planner_key": "ppo",
+      "proxemic_intrusion_rate": 0.13,
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "collision_rate": 0.0,
+      "evidence_status": "fixture_reporting_only",
+      "jerk_mean": 1.8,
+      "min_clearance_m": 0.2,
+      "near_miss_rate": 0.07,
+      "planner_key": "prediction_planner",
+      "proxemic_intrusion_rate": 0.08,
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "collision_rate": 0.0,
+      "evidence_status": "fixture_reporting_only",
+      "min_clearance_m": 0.31,
+      "near_miss_rate": 0.02,
+      "planner_key": "socnav_sampling",
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "collision_rate": 0.0,
+      "evidence_status": "fixture_reporting_only",
+      "jerk_mean": 1.4,
+      "min_clearance_m": 0.34,
+      "near_miss_rate": 0.01,
+      "planner_key": "sacadrl",
+      "proxemic_intrusion_rate": 0.04,
+      "scenario_family": "classic_crossing"
+    },
+    {
+      "evidence_status": "fixture_reporting_only",
+      "planner_key": "socnav_bench",
+      "scenario_family": "classic_crossing"
+    }
+  ],
+  "schema_version": "issue_4166_fixture_metric_rows.v1"
+}

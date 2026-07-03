@@ -35,6 +35,90 @@ def _write_sdd_fixture(path: Path) -> None:
     )
 
 
+def _write_quoted_sdd_fixture(path: Path) -> None:
+    """Write tiny SDD-format annotation fixture with quoted labels."""
+    path.write_text(
+        "\n".join(
+            [
+                '1 0 0 10 10 0 0 0 0 "Pedestrian"',
+                '1 5 0 15 10 5 0 0 0 "Pedestrian"',
+                '1 10 0 20 10 10 0 0 0 "Pedestrian"',
+                '1 15 0 25 10 15 0 0 0 "Pedestrian"',
+                '2 100 100 110 110 0 0 0 0 "Pedestrian"',
+                '2 100 105 110 115 5 0 0 0 "Pedestrian"',
+                '2 100 110 110 120 10 0 0 0 "Pedestrian"',
+                '2 100 115 110 125 15 0 0 0 "Pedestrian"',
+                '3 0 0 10 10 0 1 0 0 "Pedestrian"',
+                '4 0 0 10 10 0 0 0 0 "Biker"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_normalize_sdd_label_strips_one_matching_quote_pair() -> None:
+    """SDD labels should strip only a matching wrapper quote pair."""
+    assert import_sdd_scenarios.normalize_sdd_label('"Pedestrian"') == "Pedestrian"
+    assert import_sdd_scenarios.normalize_sdd_label("'Pedestrian'") == "Pedestrian"
+    assert import_sdd_scenarios.normalize_sdd_label(' "Pedestrian" ') == "Pedestrian"
+    assert import_sdd_scenarios.normalize_sdd_label('"Pedestrian') == '"Pedestrian'
+
+
+def test_load_sdd_points_accepts_user_label_for_quoted_rows(tmp_path: Path) -> None:
+    """User-facing label names should match quoted SDD annotation rows."""
+    annotations = tmp_path / "annotations.txt"
+    _write_quoted_sdd_fixture(annotations)
+
+    points = import_sdd_scenarios.load_sdd_points(annotations, label="Pedestrian")
+
+    assert len(points) == 8
+    assert {point.track_id for point in points} == {"1", "2"}
+    assert {point.label for point in points} == {"Pedestrian"}
+
+
+def test_load_sdd_points_accepts_legacy_quoted_label_argument(tmp_path: Path) -> None:
+    """The prior quoted-label workaround remains accepted."""
+    annotations = tmp_path / "annotations.txt"
+    _write_quoted_sdd_fixture(annotations)
+
+    points = import_sdd_scenarios.load_sdd_points(annotations, label='"Pedestrian"')
+
+    assert len(points) == 8
+    assert {point.label for point in points} == {"Pedestrian"}
+
+
+def test_quoted_sdd_labels_are_normalized_in_import_metadata(tmp_path: Path) -> None:
+    """Generated metadata should store normalized source labels."""
+    annotations = tmp_path / "annotations.txt"
+    _write_quoted_sdd_fixture(annotations)
+    points = import_sdd_scenarios.load_sdd_points(annotations, label="Pedestrian")
+    options = import_sdd_scenarios.ImportOptions(
+        dataset_id="sdd_fixture",
+        source_annotation=annotations,
+        meters_per_pixel=0.1,
+        frame_rate_hz=30.0,
+        min_track_points=4,
+        max_pedestrians=2,
+        stride=2,
+        max_waypoints=3,
+        margin_m=1.0,
+        y_flip_height_px=None,
+    )
+
+    map_payload, scenario_payload, provenance = import_sdd_scenarios.build_import_payload(
+        points,
+        options,
+    )
+
+    assert map_payload["single_pedestrians"][0]["metadata"]["source_label"] == "Pedestrian"
+    assert (
+        scenario_payload["scenarios"][0]["single_pedestrians"][0]["metadata"]["source_label"]
+        == "Pedestrian"
+    )
+    assert provenance["pedestrians"][0]["source_label"] == "Pedestrian"
+    assert provenance["pedestrians"][0]["source_raw_label"] == '"Pedestrian"'
+
+
 def test_import_sdd_scenarios_writes_loadable_map_scenario_and_provenance(tmp_path: Path) -> None:
     """Importer output should be consumable by the existing scenario loader."""
     annotations = tmp_path / "annotations.txt"

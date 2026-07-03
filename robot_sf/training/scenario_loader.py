@@ -1721,7 +1721,24 @@ def _coerce_point(value: Any, label: str) -> tuple[float, float]:
     """
     if not isinstance(value, (list, tuple)) or len(value) != 2:
         raise ValueError(f"'{label}' must be a 2-item list or tuple, got: {value!r}")
-    return (float(value[0]), float(value[1]))
+    point = (float(value[0]), float(value[1]))
+    if not math.isfinite(point[0]) or not math.isfinite(point[1]):
+        raise ValueError(f"'{label}' coordinates must be finite, got: {value!r}")
+    return point
+
+
+def _coerce_positive_finite_float(value: object, label: str) -> float:
+    """Coerce a scenario scalar that must be finite and strictly positive.
+
+    Returns:
+        float: Validated scenario scalar.
+    """
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"'{label}' must be finite, got: {value!r}")
+    if parsed <= 0.0:
+        raise ValueError(f"'{label}' must be > 0, got: {value!r}")
+    return parsed
 
 
 def _parse_wait_overrides(
@@ -1949,7 +1966,11 @@ def _resolve_hold_overrides(
     """
     if "hold_until_robot_within_m" in entry:
         value = entry.get("hold_until_robot_within_m")
-        hold_within = float(value) if value is not None else None
+        hold_within = (
+            _coerce_positive_finite_float(value, "hold_until_robot_within_m")
+            if value is not None
+            else None
+        )
     else:
         hold_within = ped.hold_until_robot_within_m
 
@@ -1963,12 +1984,21 @@ def _resolve_hold_overrides(
 
     if "hold_timeout_s" in entry:
         timeout_value = entry.get("hold_timeout_s")
-        hold_timeout_s = float(timeout_value) if timeout_value is not None else None
+        hold_timeout_s = (
+            _coerce_positive_finite_float(timeout_value, "hold_timeout_s")
+            if timeout_value is not None
+            else None
+        )
     else:
         hold_timeout_s = ped.hold_timeout_s
 
     if hold_within is not None and hold_ref_point is None and default_hold_ref_point is not None:
         hold_ref_point = default_hold_ref_point
+    if hold_within is not None and hold_ref_point is None:
+        raise ValueError(
+            f"Pedestrian '{ped.id}': hold_until_robot_within_m requires hold_ref_point "
+            "or scenario public_requirement.event_contract.conflict_point"
+        )
 
     return hold_within, hold_ref_point, hold_timeout_s
 

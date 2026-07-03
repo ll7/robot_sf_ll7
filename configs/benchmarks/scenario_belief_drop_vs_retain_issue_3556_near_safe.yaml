@@ -1,0 +1,122 @@
+# Issue #3556 ScenarioBelief drop-vs-retain smoke launch packet.
+#
+# This packet is an opt-in real-runner smoke contract, not a benchmark result.
+# The three arms differ only by the ScenarioBelief `belief_mode` knob consumed by
+# robot_sf.benchmark.map_runner through the stream_gap policy hook.
+
+schema_version: scenario-belief-drop-vs-retain-launch-packet.v1
+issue: 3556
+evidence_status: smoke_candidate
+no_benchmark_result_claim: true
+follows:
+  - issue: 3471
+  - issue: 3553
+  - issue: 3635
+
+claim_gate:
+  target_claim: >-
+    In the real benchmark runner, dropping out-of-field-of-view uncertain agents from
+    stream_gap is less safe than conservative retention when the oracle arm is near-safe.
+  no_claim_until_run: true
+  no_paper_grade_claim: true
+
+scenario_family: configs/scenarios/sets/issue_3556_near_safe_occlusion_bearing_crossing.yaml
+seed_set: issue_3556_s3_smoke
+seed_sets:
+  issue_3556_s3_smoke:
+    purpose: >-
+      CPU-local smoke seed fixture for runner wiring and screening propagation only.
+      It is not a seed-sufficiency claim.
+    seeds:
+      - 363501
+      - 363502
+      - 363503
+
+belief_uncertainty_source:
+  kind: field_of_view
+  fov_degrees: 120.0
+  max_range_m: 8.0
+  note: >-
+    Agents outside the configured field of view are marked low-confidence by the
+    ScenarioBelief hook. The uncertainty source is configurable visibility logic,
+    not a calibrated perception model.
+
+belief_modes:
+  oracle:
+    algo: stream_gap
+    belief_mode: oracle
+    belief_fov_degrees: 120.0
+  uncertain_retained:
+    algo: stream_gap
+    belief_mode: uncertain_retained
+    belief_fov_degrees: 120.0
+  uncertain_dropped:
+    algo: stream_gap
+    belief_mode: uncertain_dropped
+    belief_fov_degrees: 120.0
+
+runner_arms:
+  - arm_id: oracle
+    label: oracle_certain_all_agents
+    scenario_family: configs/scenarios/sets/issue_3556_near_safe_occlusion_bearing_crossing.yaml
+    seed_set: issue_3556_s3_smoke
+    algo: stream_gap
+    algo_config:
+      belief_mode: oracle
+      belief_fov_degrees: 120.0
+    expected_gate_enabled: false
+    expected_planner_visibility: all_agents_retained
+  - arm_id: uncertain_retained
+    label: out_of_view_low_confidence_retained
+    scenario_family: configs/scenarios/sets/issue_3556_near_safe_occlusion_bearing_crossing.yaml
+    seed_set: issue_3556_s3_smoke
+    algo: stream_gap
+    algo_config:
+      belief_mode: uncertain_retained
+      belief_fov_degrees: 120.0
+    expected_gate_enabled: false
+    expected_planner_visibility: low_confidence_agents_retained
+  - arm_id: uncertain_dropped
+    label: out_of_view_low_confidence_dropped
+    scenario_family: configs/scenarios/sets/issue_3556_near_safe_occlusion_bearing_crossing.yaml
+    seed_set: issue_3556_s3_smoke
+    algo: stream_gap
+    algo_config:
+      belief_mode: uncertain_dropped
+      belief_fov_degrees: 120.0
+    expected_gate_enabled: true
+    expected_planner_visibility: low_confidence_agents_dropped
+
+screening:
+  oracle_near_safe_collision_rate_threshold: 0.25
+  required_decision_labels:
+    - revise
+    - retention_dominates
+    - inconclusive
+    - inconclusive_oracle_unsafe
+    - blocked_no_near_safe_family
+  required_report_fields:
+    - scenario_set
+    - seeds
+    - fov_degrees
+    - screening
+    - decision
+
+metric_surface:
+  primary:
+    - success
+    - collisions
+    - near_misses
+    - min_separation
+  note: >-
+    The real runner emits collision, near-miss, clearance, success, progress, and runtime
+    fields; no scripted unsafe-commit metric is promoted by this smoke packet.
+
+validation:
+  - "Run --preflight-only to verify scenario, seed, arm, and screening contracts."
+  - "Run a CPU-local 1-scenario smoke through the real map runner before scaling."
+  - "Classify fallback or degraded rows as limitations, never success evidence."
+out_of_scope:
+  - full benchmark campaign
+  - Slurm or GPU submission
+  - paper or dissertation claim edits

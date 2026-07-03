@@ -9,9 +9,16 @@ Modes
 -----
 Default (no flags):
   Checks files in the branch diff / worktree edits against ``origin/main``.
+  Context-catalog schema/provenance diagnostics run only when
+  ``docs/context/catalog.yaml`` is selected by the diff or explicit paths, so
+  code-only diffs do not fail on pre-existing catalog debt.
 
 ``--path <repo-rel-path>``:
   Checks only the explicitly named file(s).
+
+``--check-context-catalog``:
+  Forces strict ``docs/context/catalog.yaml`` diagnostics in addition to the
+  selected changed-file checks.
 
 ``--check-evidence-catalog``:
   Full evidence/catalog check — scans every tracked file under
@@ -727,10 +734,16 @@ def _file_diagnostics(path: Path, text: str) -> list[Diagnostic]:
     return diagnostics
 
 
+def _should_check_context_catalog(changed_files: Sequence[ChangedFile]) -> bool:
+    """Return whether selected files require strict context catalog diagnostics."""
+    return any(changed.path == _CONTEXT_CATALOG for changed in changed_files)
+
+
 def _collect_diagnostics(
     changed_files: Iterable[ChangedFile],
     *,
     repo_root: Path,
+    force_context_catalog: bool = False,
 ) -> list[Diagnostic]:
     """Collect all docs/proof consistency diagnostics for the selected file set."""
     diagnostics: list[Diagnostic] = []
@@ -751,7 +764,8 @@ def _collect_diagnostics(
                 context_index_text=_read_text(context_index),
             )
         )
-    diagnostics.extend(_context_catalog_diagnostics(_CONTEXT_CATALOG, repo_root=repo_root))
+    if force_context_catalog or _should_check_context_catalog(changed_list):
+        diagnostics.extend(_context_catalog_diagnostics(_CONTEXT_CATALOG, repo_root=repo_root))
 
     for changed in changed_list:
         full_path = repo_root / changed.path
@@ -788,6 +802,15 @@ def _parse_args() -> argparse.Namespace:
             "Run a full evidence/catalog coverage check: scan all tracked files under"
             f" {_EVIDENCE_DIR.as_posix()} and report evidence bundles with no entry in"
             f" {_CONTEXT_CATALOG.as_posix()}. Does not use the git diff."
+        ),
+    )
+    parser.add_argument(
+        "--check-context-catalog",
+        action="store_true",
+        dest="check_context_catalog",
+        help=(
+            f"Force strict {_CONTEXT_CATALOG.as_posix()} schema/provenance diagnostics "
+            "even when the selected diff does not include that file."
         ),
     )
     return parser.parse_args()
@@ -833,7 +856,11 @@ def main() -> int:
     except ValueError as exc:
         print(f"ERROR {exc}", file=sys.stderr)
         return 2
-    diagnostics = _collect_diagnostics(changed_files, repo_root=repo_root)
+    diagnostics = _collect_diagnostics(
+        changed_files,
+        repo_root=repo_root,
+        force_context_catalog=args.check_context_catalog,
+    )
 
     if args.json:
         payload = [

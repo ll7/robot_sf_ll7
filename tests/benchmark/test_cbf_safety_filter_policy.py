@@ -69,13 +69,54 @@ def test_adapter_policy_without_cbf_filter_has_no_shield_metadata() -> None:
     assert "shield_stats" not in meta
 
 
-def test_adapter_policy_rejects_unimplemented_cbf_variant() -> None:
+def test_adapter_policy_accepts_dynamic_parabolic_cbf_variant() -> None:
+    """Adapter-backed planners can opt into the versioned DPCBF filter."""
+
+    policy, meta = _build_policy(
+        "safety_barrier",
+        {
+            "max_linear_speed": 0.8,
+            "cbf_safety_filter": {
+                "enabled": True,
+                "variant": "dynamic_parabolic_cbf_v1",
+                "max_linear_speed": 1.0,
+            },
+        },
+        robot_kinematics="differential_drive",
+        robot_command_mode="unicycle",
+    )
+
+    command = policy(
+        {
+            "robot": {
+                "position": [0.0, 0.0],
+                "velocity": [0.8, 0.0],
+                "heading": [0.0],
+                "radius": [0.3],
+            },
+            "goal": {"current": [5.0, 0.0], "next": [5.0, 0.0]},
+            "agents": [
+                {
+                    "position": [0.8, 0.0],
+                    "velocity": [-0.6, 0.0],
+                    "radius": 0.3,
+                }
+            ],
+        }
+    )
+
+    assert command[0] < 0.8
+    assert meta["cbf_safety_filter"]["variant"] == "dynamic_parabolic_cbf_v1"
+    assert meta["safety_shield_contract"]["shield_name"] == "DynamicParabolicCbfSafetyFilter"
+
+
+def test_adapter_policy_rejects_unknown_cbf_variant() -> None:
     """Unsupported variants fail closed at policy construction."""
 
-    with pytest.raises(ValueError, match="collision_cone"):
+    with pytest.raises(ValueError, match="variant"):
         _build_policy(
             "safety_barrier",
-            {"cbf_safety_filter": {"enabled": True, "variant": "dynamic_parabolic"}},
+            {"cbf_safety_filter": {"enabled": True, "variant": "custom_cbf"}},
             robot_kinematics="differential_drive",
             robot_command_mode="unicycle",
         )

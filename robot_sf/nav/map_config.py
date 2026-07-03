@@ -301,6 +301,10 @@ class SinglePedestrianDefinition:
             self.hold_until_robot_within_m,
             "hold_until_robot_within_m",
         )
+        if self.hold_ref_point is None:
+            raise ValueError(
+                f"Pedestrian '{self.id}': hold_until_robot_within_m requires hold_ref_point"
+            )
         if self.trajectory is None:
             raise ValueError(
                 f"Pedestrian '{self.id}': hold_until_robot_within_m requires a trajectory so the "
@@ -316,7 +320,13 @@ class SinglePedestrianDefinition:
                 f"Pedestrian '{self.id}': hold_ref_point must be a 2-item tuple/list, "
                 f"got {self.hold_ref_point!r}"
             )
-        self.hold_ref_point = (float(self.hold_ref_point[0]), float(self.hold_ref_point[1]))
+        point = (float(self.hold_ref_point[0]), float(self.hold_ref_point[1]))
+        if not isfinite(point[0]) or not isfinite(point[1]):
+            raise ValueError(
+                f"Pedestrian '{self.id}': hold_ref_point coordinates must be finite, "
+                f"got {self.hold_ref_point!r}"
+            )
+        self.hold_ref_point = point
 
     def _normalize_hold_timeout(self) -> None:
         """Validate and normalize the optional proximity-hold fail-open timeout."""
@@ -338,6 +348,8 @@ class SinglePedestrianDefinition:
             raise ValueError(
                 f"Pedestrian '{self.id}': {field_name} must be a positive number, got: {value!r}"
             ) from None
+        if not isfinite(coerced):
+            raise ValueError(f"Pedestrian '{self.id}': {field_name} must be finite, got: {value!r}")
         if coerced <= 0:
             raise ValueError(f"Pedestrian '{self.id}': {field_name} must be > 0, got: {value!r}")
         return coerced

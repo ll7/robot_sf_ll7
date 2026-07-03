@@ -24,16 +24,53 @@ run_campaign = _MODULE.run_campaign
 main = _MODULE.main
 
 
+def test_run_mode_reports_malformed_jsonl_line(tmp_path, monkeypatch) -> None:
+    """Malformed runner JSONL names the file and offending line."""
+
+    def _write_bad_jsonl(*_args, **_kwargs) -> None:
+        (tmp_path / "episodes_oracle.jsonl").write_text('{"ok": true}\n{bad\n', encoding="utf-8")
+
+    monkeypatch.setattr(_MODULE, "run_map_batch", _write_bad_jsonl)
+
+    with pytest.raises(ValueError, match="line 2"):
+        _MODULE.run_mode(
+            mode="oracle",
+            scenarios=[],
+            out_dir=tmp_path,
+            fov_degrees=120.0,
+            horizon=10,
+            dt=0.1,
+            workers=1,
+        )
+
+
+def test_aggregate_ignores_nonfinite_min_clearance() -> None:
+    """Infinite clearances should not poison aggregate clearance summaries."""
+
+    report = _MODULE.aggregate(
+        [
+            {
+                "metrics": {
+                    "total_collision_count": 0,
+                    "near_misses": 0,
+                    "min_clearance": float("inf"),
+                }
+            },
+            {"metrics": {"total_collision_count": 0, "near_misses": 0, "min_clearance": 0.5}},
+        ]
+    )
+
+    assert report["worst_min_clearance"] == 0.5
+
+
 def _ready_kwargs() -> dict[str, float | int]:
     """Valid, strictly-positive campaign run geometry for readiness checks."""
     return {"fov_degrees": 120.0, "horizon": 300, "dt": 0.1, "workers": 4}
 
 
-def _scenario_set(tmp_path) -> Path:
-    """Create a placeholder scenario-set file so the existence check passes."""
-    path = tmp_path / "scenario_set.yaml"
-    path.write_text("scenarios: []\n")
-    return path
+def _scenario_set(_tmp_path) -> Path:
+    """Return the checked-in occlusion-bearing #3556 scenario set."""
+    return _MODULE.REPO_ROOT / _MODULE.DEFAULT_SCENARIO_SET
 
 
 def _mode(collision_rate: float, near_misses: int) -> dict[str, float | int]:

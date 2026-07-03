@@ -1,0 +1,113 @@
+{
+  "duplicate_ids": {
+    "manifest_experiment_ids": [],
+    "queue_seed_observations": {}
+  },
+  "errors": [],
+  "evidence_root": "docs/context/evidence/issue_3810_h600_interpretation_2026-07",
+  "finalizer_bridge": {
+    "rows": [
+      {
+        "artifact_status": "all_required_present",
+        "claim_boundary": "compact local finalization manifest only; not durable benchmark evidence until artifacts have durable retrieval URIs and policy-specific validation",
+        "claim_decision": "keep_diagnostic",
+        "durable_pointer": "https://github.com/ll7/robot_sf_ll7/tree/bb674d86833fc8409f359adf93111e603fa27bb2/docs/context/evidence/issue_3810_h600_interpretation_2026-07",
+        "issue": 3425,
+        "issue_transition": {
+          "from": "source_manifest",
+          "to": "success"
+        },
+        "job_id": "13268",
+        "output_pointers": [
+          "docs/context/evidence/issue_3810_h600_interpretation_2026-07/SHA256SUMS",
+          "docs/context/evidence/issue_3810_h600_interpretation_2026-07/comparability_check.json",
+          "docs/context/evidence/issue_3810_h600_interpretation_2026-07/horizon_sensitivity_report.json",
+          "docs/context/evidence/issue_3810_h600_interpretation_2026-07/interaction_exposure_diagnostics.json",
+          "docs/context/evidence/issue_3810_h600_interpretation_2026-07/planner_metric_summary.csv",
+          "docs/context/evidence/issue_3810_h600_interpretation_2026-07/planner_metric_summary.md",
+          "docs/context/evidence/issue_3810_h600_interpretation_2026-07/snqi_recalibration_bundle.json",
+          "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json"
+        ],
+        "queue_id": null,
+        "seeds": [],
+        "source_manifest": [
+          {
+            "campaign_id": "issue3810_h600_longhorizon_confirm_run_20260702",
+            "run_label": "confirm",
+            "source_path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json"
+          }
+        ],
+        "source_path": "docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/finalizer_13268.json"
+      },
+      {
+        "artifact_status": "all_required_present",
+        "claim_boundary": "compact local finalization manifest only; not durable benchmark evidence until artifacts have durable retrieval URIs and policy-specific validation",
+        "claim_decision": "keep_diagnostic",
+        "durable_pointer": "https://github.com/ll7/robot_sf_ll7/tree/bb674d86833fc8409f359adf93111e603fa27bb2/docs/context/evidence/issue_3810_h600_interpretation_2026-07",
+        "issue": 3425,
+        "issue_transition": {
+          "from": "source_manifest",
+          "to": "success"
+        },
+        "job_id": "13273",
+        "output_pointers": [
+          "docs/context/evidence/issue_3810_h600_interpretation_2026-07/SHA256SUMS",
+          "docs/context/evidence/issue_3810_h600_interpretation_2026-07/comparability_check.json",
+          "docs/context/evidence/issue_3810_h600_interpretation_2026-07/horizon_sensitivity_report.json",
+          "docs/context/evidence/issue_3810_h600_interpretation_2026-07/interaction_exposure_diagnostics.json",
+          "docs/context/evidence/issue_3810_h600_interpretation_2026-07/planner_metric_summary.csv",
+          "docs/context/evidence/issue_3810_h600_interpretation_2026-07/planner_metric_summary.md",
+          "docs/context/evidence/issue_3810_h600_interpretation_2026-07/snqi_recalibration_bundle.json",
+          "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json"
+        ],
+        "queue_id": null,
+        "seeds": [],
+        "source_manifest": [
+          {
+            "campaign_id": "issue3810_h600_extroster_run_20260702",
+            "run_label": "extended_roster",
+            "source_path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json"
+          }
+        ],
+        "source_path": "docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/finalizer_13273.json"
+      }
+    ],
+    "schema_version": "slurm-job-finalizer-bridge.v1"
+  },
+  "finalizer_manifests": [
+    "docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/finalizer_13268.json",
+    "docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/finalizer_13273.json"
+  ],
+  "generated_at": "2026-07-03T09:20:00+00:00",
+  "observations": [
+    {
+      "issue": 1977,
+      "job_ids": [],
+      "notes": [],
+      "queue_id": "issue-1977-bc-warm-start-ppo",
+      "seed": 0,
+      "sources": [
+        "queue"
+      ],
+      "status": "planned"
+    },
+    {
+      "issue": 3254,
+      "job_ids": [],
+      "notes": [],
+      "queue_id": "issue-3254-crossing-conflict-predictive",
+      "seed": 42,
+      "sources": [
+        "queue"
+      ],
+      "status": "planned"
+    }
+  ],
+  "queue_path": "experiments/submission_queue.yaml",
+  "schema_version": "slurm-evidence-reconciler.v1",
+  "source_manifests": [
+    "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json"
+  ],
+  "submission_manifests": [],
+  "warnings": []
+}

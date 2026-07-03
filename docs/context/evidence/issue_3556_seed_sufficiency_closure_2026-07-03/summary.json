@@ -1,0 +1,55 @@
+{
+  "schema_version": "issue_3556_seed_sufficiency_closure.v1",
+  "issue": 3556,
+  "evidence_status": "blocked",
+  "decision_label": "blocked_missing_retained_campaign_outputs",
+  "allowed_decision_labels": [
+    "resolved_retained_campaign",
+    "blocked_missing_retained_campaign_outputs"
+  ],
+  "required_report_files": [
+    "seed_variability_by_scenario.json",
+    "seed_episode_rows.csv"
+  ],
+  "searched_roots": [
+    {
+      "search_root": "docs/context/evidence",
+      "exists": true,
+      "campaign_roots_found": [],
+      "usable_campaign_roots": [],
+      "missing_report_files": {}
+    },
+    {
+      "search_root": "output/issue_3556_belief_mode_campaign",
+      "exists": false,
+      "campaign_roots_found": [],
+      "usable_campaign_roots": [],
+      "missing_report_files": {}
+    }
+  ],
+  "resolved_campaign_root": null,
+  "analyzer_command": [
+    "uv",
+    "run",
+    "python",
+    "scripts/tools/analyze_seed_sufficiency.py",
+    "--campaign-output-root",
+    "docs/context/evidence",
+    "--campaign-output-root",
+    "output/issue_3556_belief_mode_campaign",
+    "--campaign-id",
+    "issue_3556",
+    "--output-dir",
+    "output/issue_3556_seed_sufficiency"
+  ],
+  "analyzer_output_dir": null,
+  "analyzer_summary": null,
+  "claim_boundary": "No retained issue #3556 campaign root exposing the analyzer-required report files was found under the searched durable roots, so no seed-sufficiency evidence is promoted.",
+  "next_empirical_action": "Restore or point to a retained issue #3556 campaign root that contains reports/seed_variability_by_scenario.json and reports/seed_episode_rows.csv under one of the searched roots, then rerun this resolver.",
+  "forbidden_actions_confirmed": {
+    "full_benchmark_campaign_run": false,
+    "slurm_or_gpu_submission": false,
+    "belief_mode_semantic_change": false,
+    "paper_or_dissertation_claim_edit": false
+  }
+}

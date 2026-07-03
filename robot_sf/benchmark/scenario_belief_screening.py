@@ -23,6 +23,21 @@ DECISION_LABELS = (
     "blocked_no_near_safe_family",
 )
 
+# Report artifacts the seed-sufficiency analyzer (scripts/tools/analyze_seed_sufficiency.py)
+# requires under a retained campaign root's ``reports/`` folder before it can run.
+REQUIRED_SEED_SUFFICIENCY_REPORTS = (
+    "seed_variability_by_scenario.json",
+    "seed_episode_rows.csv",
+)
+
+# Bounded decision labels for the seed-sufficiency closure resolver. The resolver
+# either points the analyzer at a usable retained campaign root or fails closed
+# with an explicit missing-artifact blocker; it never fabricates evidence.
+SEED_SUFFICIENCY_CLOSURE_LABELS = (
+    "resolved_retained_campaign",
+    "blocked_missing_retained_campaign_outputs",
+)
+
 
 def _scenario_id(scenario: Mapping[str, Any]) -> str | None:
     """Return the stable scenario identifier used in benchmark reports."""
@@ -80,6 +95,90 @@ def build_seed_sufficiency_handoff(
             "Exporter only: run after durable campaign outputs exist; this field is not "
             "seed-sufficiency evidence."
         ),
+    }
+
+
+def build_seed_sufficiency_closure_packet(
+    *,
+    searched_roots: Iterable[Mapping[str, Any]],
+    resolved_campaign_root: str | None,
+    analyzer_command: list[str],
+    analyzer_output_dir: str | None = None,
+    analyzer_summary: Mapping[str, Any] | None = None,
+    required_report_files: tuple[str, ...] = REQUIRED_SEED_SUFFICIENCY_REPORTS,
+) -> dict[str, Any]:
+    """Assemble the issue #3556 seed-sufficiency closure packet from probe results.
+
+    This is pure decision logic: it does not touch the filesystem. The caller
+    probes each durable search root, records which retained campaign roots were
+    found and whether each holds every analyzer-required report file, then passes
+    those probe results here. The packet either promotes a resolved retained
+    campaign root or fails closed with an explicit missing-artifact blocker, so a
+    partially populated or absent retained campaign never reads as evidence.
+
+    Args:
+        searched_roots: Per-root probe results. Each mapping should carry a
+            ``search_root`` string plus discovery details (``exists``,
+            ``campaign_roots_found``, ``usable_campaign_roots``,
+            ``missing_report_files``) so the blocker is fully reproducible.
+        resolved_campaign_root: The first retained campaign root holding every
+            required report file, or ``None`` when none qualified.
+        analyzer_command: The exact ``analyze_seed_sufficiency.py`` argv the
+            resolver ran (resolved) or would run once inputs exist (blocked).
+        analyzer_output_dir: Where analyzer artifacts were written, when resolved.
+        analyzer_summary: Compact analyzer result summary (headline claim status,
+            seed counts), when resolved.
+        required_report_files: Report artifacts each campaign root must contain.
+
+    Returns:
+        JSON-serializable closure packet with an explicit evidence status and a
+        bounded decision label from ``SEED_SUFFICIENCY_CLOSURE_LABELS``.
+    """
+    resolved = resolved_campaign_root is not None
+    decision_label = (
+        "resolved_retained_campaign" if resolved else "blocked_missing_retained_campaign_outputs"
+    )
+    searched = [dict(root) for root in searched_roots]
+    if resolved:
+        claim_boundary = (
+            "Seed-sufficiency analyzer ran on a resolved retained campaign root. This packet "
+            "reports interval-width / rank-stability status only; it does not itself promote a "
+            "benchmark or paper-grade safety claim."
+        )
+        next_action = (
+            "Review the analyzer headline rank-stability contract and record the seed-sufficiency "
+            "decision on issue #3556."
+        )
+    else:
+        claim_boundary = (
+            "No retained issue #3556 campaign root exposing the analyzer-required report files was "
+            "found under the searched durable roots, so no seed-sufficiency evidence is promoted."
+        )
+        next_action = (
+            "Restore or point to a retained issue #3556 campaign root that contains "
+            f"reports/{required_report_files[0]} and reports/{required_report_files[1]} under one "
+            "of the searched roots, then rerun this resolver."
+        )
+    return {
+        "schema_version": "issue_3556_seed_sufficiency_closure.v1",
+        "issue": 3556,
+        "evidence_status": "promoted" if resolved else "blocked",
+        "decision_label": decision_label,
+        "allowed_decision_labels": list(SEED_SUFFICIENCY_CLOSURE_LABELS),
+        "required_report_files": list(required_report_files),
+        "searched_roots": searched,
+        "resolved_campaign_root": resolved_campaign_root,
+        "analyzer_command": list(analyzer_command),
+        "analyzer_output_dir": analyzer_output_dir,
+        "analyzer_summary": dict(analyzer_summary) if analyzer_summary is not None else None,
+        "claim_boundary": claim_boundary,
+        "next_empirical_action": next_action,
+        "forbidden_actions_confirmed": {
+            "full_benchmark_campaign_run": False,
+            "slurm_or_gpu_submission": False,
+            "belief_mode_semantic_change": False,
+            "paper_or_dissertation_claim_edit": False,
+        },
     }
 
 

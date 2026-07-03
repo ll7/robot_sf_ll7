@@ -7,18 +7,34 @@ Strategy:
 
 We do not recurse into running the whole suite; only a tiny inline test file is created
 in a temp directory to keep runtime minimal.
+
+The nested pytest child is bounded via ``run_bounded_subprocess`` so a wedged
+child (e.g. a CUDA/interpreter teardown deadlock on a shared GPU/HPC node) is
+reaped as a process group instead of blocking the parent suite forever after it
+has already reached 100% -- the LiCCA post-guard teardown hang tracked in issue
+#4216. Note: the ``@pytest.mark.timeout`` marker below is *not* enforced
+(``pytest-timeout`` is not installed), so the explicit ``timeout_seconds`` bound is
+what actually protects the parent process.
 """
 
 from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import sys
 import textwrap
 from pathlib import Path
 
 import pytest
+
+from tests.support.process_teardown import NestedProcessTimeout, run_bounded_subprocess
+
+# Generous default: the nested pytest imports the full robot_sf stack (torch, etc.),
+# which is slow but bounded on a healthy host. A true teardown deadlock is reaped
+# once this budget elapses. Overridable for constrained/faster hosts.
+NESTED_PYTEST_TIMEOUT_SECONDS = float(
+    os.environ.get("ROBOT_SF_NESTED_PYTEST_TIMEOUT", "180"),
+)
 
 
 @pytest.mark.timeout(10)
@@ -48,22 +64,31 @@ def test_enforce_mode_escalates():
     env.pop("ROBOT_SF_PERF_RELAX", None)
     env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
     # Run pytest from repository root so root-level conftest performance hooks are active.
+    # Bound the nested pytest child and reap its process group on timeout so a
+    # teardown deadlock cannot hang the parent suite (issue #4216).
     try:
-        proc = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pytest",
-                "-q",
-                "-p",
-                "no:cov",
-                "--disable-warnings",
-                str(test_file.resolve()),
-            ],
-            cwd=str(repo_root),
-            env=env,
-            check=False,
-        )
+        try:
+            proc = run_bounded_subprocess(
+                [
+                    sys.executable,
+                    "-m",
+                    "pytest",
+                    "-q",
+                    "-p",
+                    "no:cov",
+                    "--disable-warnings",
+                    str(test_file.resolve()),
+                ],
+                cwd=str(repo_root),
+                env=env,
+                timeout_seconds=NESTED_PYTEST_TIMEOUT_SECONDS,
+            )
+        except NestedProcessTimeout as exc:
+            pytest.fail(
+                "Nested pytest child did not exit within "
+                f"{NESTED_PYTEST_TIMEOUT_SECONDS:g}s and was reaped "
+                f"({exc.cleanup_status}); suspected teardown deadlock (issue #4216).",
+            )
         assert proc.returncode != 0, (
             "Enforce mode did not convert soft breach to failure (expected non-zero)"
         )

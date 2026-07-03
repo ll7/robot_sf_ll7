@@ -32,6 +32,7 @@ def _make_args(**overrides: object) -> argparse.Namespace:
         "constraint_comfort_exposure_max": None,
         "constraint_handling": None,
         "log_level": None,
+        "provenance_dir": None,
         "disable_wandb": None,
         "deterministic": None,
         "dry_run": False,
@@ -214,3 +215,38 @@ def test_build_optuna_cli_args_forwards_safety_constraint_overrides(tmp_path: Pa
     assert cli_args[cli_args.index("--constraint-comfort-exposure-max") + 1] == "0.2"
     assert "--constraint-handling" in cli_args
     assert cli_args[cli_args.index("--constraint-handling") + 1] == "prune"
+
+
+def test_build_optuna_cli_args_for_v2_adds_launcher_and_provenance(tmp_path: Path):
+    """Version 2 launcher wires explicit provenance and embedded search-space source."""
+
+    launch_dir = tmp_path / "configs"
+    launch_dir.mkdir(parents=True)
+    expert_config = launch_dir / "expert_ppo.yaml"
+    expert_config.write_text("scenario_config: dummy.yaml\n", encoding="utf-8")
+    launch_config = launch_dir / "optuna.yaml"
+    launch_config.write_text(
+        "\n".join(
+            [
+                "schema_version: robot_sf.optuna_expert_ppo_launcher.v2",
+                "base_config: expert_ppo.yaml",
+                "study_name: demo_study",
+                "search_space:",
+                "  ppo_hyperparams:",
+                "    learning_rate: {type: float, low: 0.00001, high: 0.0003, log: true}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    payload = load_launch_config(launch_config)
+    cli_args = build_optuna_cli_args(
+        launch_config_path=launch_config.resolve(),
+        payload=payload,
+        args=_make_args(),
+    )
+
+    assert "--launcher-config" in cli_args
+    assert str(launch_config.resolve()) in cli_args
+    assert "--provenance-dir" in cli_args
+    assert "output/optuna/demo_study" in cli_args

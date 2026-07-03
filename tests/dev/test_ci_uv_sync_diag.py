@@ -35,7 +35,9 @@ def _clean_diag_env(tmp_path: Path) -> dict[str, str]:
         "VIRTUAL_ENV",
     ):
         env.pop(key, None)
-    env["HOME"] = str(tmp_path / "home")
+    home_dir = tmp_path / "home"
+    home_dir.mkdir(parents=True, exist_ok=True)
+    env["HOME"] = str(home_dir)
     env["RUNNER_OS"] = "Linux"
     env["RUNNER_ARCH"] = "X64"
     env["UV_CACHE_DIR"] = str(tmp_path / "uv-cache")

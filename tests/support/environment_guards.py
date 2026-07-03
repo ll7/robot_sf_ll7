@@ -34,8 +34,13 @@ def is_licca_or_shared_hpc(env: Mapping[str, str] | None = None) -> bool:
     if env.get("SLURM_JOB_ID"):
         return True
 
+    # PWD may be unset in non-interactive shells / direct subprocess launches;
+    # fall back to the live cwd when reading the real process environment.
+    pwd = env.get("PWD", "")
+    if not pwd and env is os.environ:
+        pwd = os.getcwd()
     cwd_markers = (
-        env.get("PWD", ""),
+        pwd,
         env.get("TMPDIR", ""),
         env.get("SCRATCH", ""),
     )

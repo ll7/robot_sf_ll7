@@ -13,6 +13,8 @@ from robot_sf.benchmark.proxemic_ablation_report import (
     write_report_artifacts,
 )
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def test_builds_paired_proxemic_delta_report_with_parameter_provenance(tmp_path: Path) -> None:
     """Report includes paired deltas and proxemic parameter provenance."""
@@ -105,13 +107,13 @@ def test_load_records_accepts_json_and_jsonl_and_writes_report(tmp_path: Path) -
 
 def test_checked_in_fixture_matches_report_contract() -> None:
     """Tracked fixture rows keep issue #4165 report contract executable."""
-    fixture_dir = Path("tests/benchmark/fixtures/proxemic_ablation_issue_4165")
+    fixture_dir = _REPO_ROOT / "tests/benchmark/fixtures/proxemic_ablation_issue_4165"
     report = build_proxemic_ablation_report(
         baseline_records=load_records(fixture_dir / "baseline_classical.jsonl"),
         proxemic_records=load_records(fixture_dir / "proxemic_costmap_on.jsonl"),
-        smoke_config_path=Path("configs/benchmarks/issue_4165_proxemic_costmap_smoke.yaml"),
-        proxemic_config_path=Path("configs/planners/proxemic_costmap_v1.yaml"),
-        repo_root=Path("."),
+        smoke_config_path=_REPO_ROOT / "configs/benchmarks/issue_4165_proxemic_costmap_smoke.yaml",
+        proxemic_config_path=_REPO_ROOT / "configs/planners/proxemic_costmap_v1.yaml",
+        repo_root=_REPO_ROOT,
     )
 
     assert report["report_status"] == "ready"

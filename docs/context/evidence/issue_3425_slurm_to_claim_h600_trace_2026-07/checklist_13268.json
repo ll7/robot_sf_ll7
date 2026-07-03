@@ -1,0 +1,110 @@
+{
+  "blockers": [
+    {
+      "detail": "no finalizer manifest provided",
+      "name": "finalizer_manifest",
+      "remediation": "run scripts/tools/slurm_job_finalize.py for the completed job",
+      "status": "blocked"
+    },
+    {
+      "detail": "no reconciliation output provided",
+      "name": "reconciliation_output",
+      "remediation": "run scripts/tools/reconcile_slurm_evidence.py with the finalizer manifest",
+      "status": "blocked"
+    }
+  ],
+  "checks": [
+    {
+      "detail": "job 13268 listed in docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json",
+      "name": "retrieval_source_manifest",
+      "remediation": null,
+      "status": "pass"
+    },
+    {
+      "detail": "evidence directory present: docs/context/evidence/issue_3810_h600_interpretation_2026-07",
+      "name": "evidence_directory",
+      "remediation": null,
+      "status": "pass"
+    },
+    {
+      "detail": "6 checksum entries verified",
+      "name": "evidence_checksums",
+      "remediation": null,
+      "status": "pass"
+    },
+    {
+      "detail": "no finalizer manifest provided",
+      "name": "finalizer_manifest",
+      "remediation": "run scripts/tools/slurm_job_finalize.py for the completed job",
+      "status": "blocked"
+    },
+    {
+      "detail": "no reconciliation output provided",
+      "name": "reconciliation_output",
+      "remediation": "run scripts/tools/reconcile_slurm_evidence.py with the finalizer manifest",
+      "status": "blocked"
+    },
+    {
+      "detail": "tracked evidence pointer: docs/context/evidence/issue_3810_h600_interpretation_2026-07/README.md",
+      "name": "spine_citable_pointer",
+      "remediation": null,
+      "status": "pass"
+    },
+    {
+      "detail": "claim decision: block",
+      "name": "claim_decision",
+      "remediation": null,
+      "status": "pass"
+    }
+  ],
+  "claim_boundary": "workflow trace only over existing h600 compact evidence; no planner-ranking, benchmark, paper, or dissertation claim",
+  "claim_boundary_note": "Checklist status is a workflow/tooling trace only. It does not promote planner ranking, benchmark, paper, or dissertation claims.",
+  "claim_decision": "block",
+  "evidence": {
+    "directory": "docs/context/evidence/issue_3810_h600_interpretation_2026-07",
+    "spine_pointer": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/README.md",
+    "verified_checksum_files": [
+      "docs/context/evidence/issue_3810_h600_interpretation_2026-07/README.md",
+      "docs/context/evidence/issue_3810_h600_interpretation_2026-07/comparability_check.json",
+      "docs/context/evidence/issue_3810_h600_interpretation_2026-07/comparability_check.md",
+      "docs/context/evidence/issue_3810_h600_interpretation_2026-07/planner_metric_summary.csv",
+      "docs/context/evidence/issue_3810_h600_interpretation_2026-07/planner_metric_summary.md",
+      "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json"
+    ]
+  },
+  "finalizer": {
+    "manifest": null,
+    "report": null
+  },
+  "generated_at": "2026-07-03T06:30:00+00:00",
+  "issue": 3425,
+  "job_id": "13268",
+  "reconciliation": {
+    "path": null
+  },
+  "retrieval": {
+    "run": {
+      "campaign_id": "issue3810_h600_longhorizon_confirm_run_20260702",
+      "job_id": "13268",
+      "planner_keys": [
+        "goal",
+        "orca",
+        "ppo",
+        "prediction_planner",
+        "sacadrl",
+        "social_force",
+        "socnav_sampling"
+      ],
+      "run_label": "confirm",
+      "source_sha256": {
+        "campaign_summary.json": "f29e6c5ee12679408b1d65add0149e4cfe07390f0c8828208114f39dd900c257",
+        "seed_episode_rows.csv": "4493c8ebee0942c1c32b0d51e511f4fd98f35ee2be8d24d366564f8979be7d23"
+      }
+    },
+    "source_manifest": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json",
+    "source_manifest_schema": "issue_4195_h600_aggregation.v1.source_manifest",
+    "source_manifest_sha256": "9530d12a34d3efb222725bc5a690624986a5b0cd768774d4df04708988530890"
+  },
+  "schema_version": "slurm-to-claim-trace-checklist.v1",
+  "status": "blocked"
+}

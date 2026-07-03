@@ -1,0 +1,67 @@
+# Issue #4207 / #4327 PHYSICS-VERIFIED interacting certification-transfer probe.
+#
+# Companion to configs/benchmarks/issue_4207_interacting_smoke_probe.yaml. That smoke config is
+# TOOLING-VALIDATION ONLY: its committed packet
+# (docs/context/evidence/issue_4207_interacting_smoke_2026-07/) is generated in report-only mode
+# from a hand-authored SYNTHETIC episode fixture, not from a physics simulation, so its metric
+# values (including the `ppo` pass/fail flip) are fixture design choices, not measurements.
+#
+# THIS config drives an ACTUAL CPU physics run of the interacting scenario family through the real
+# 4-arm probe. It reuses the same scenario matrix and gate spec as the smoke config; the only
+# behavioural difference is `horizon`. The smoke config uses horizon 60 (6 s), which is too short
+# for the robot to traverse the blind-corner L-route and reach the corridor the pedestrian walks,
+# so every real cell stayed `non_interacting` (robot ~24 m away, robot_ped_within_5m_frac = 0).
+# This config sets horizon 400 to match the scenario descriptor's own `max_episode_steps: 400`,
+# giving the robot time to reach the blind corner where the crossing pedestrian is, producing
+# genuine near-field contact (robot_ped_within_5m_frac > 0) from SIMULATION.
+#
+# Evidence packet: docs/context/evidence/issue_4207_interacting_physics_2026-07/ (diagnostic tier;
+# no Slurm/GPU, no retraining, no deployment/paper claim). See that packet's PHYSICS_RUN_NOTICE.md
+# for the exact run command, the fallback-arm caveat, and the SFM/HSFM result.
+name: issue_4207_interacting_physics_probe
+schema_version: certification-transfer-probe.v1
+issue: 4207
+paper_facing: false
+claim_boundary: diagnostic_certification_transfer_probe_no_deployment_claim
+pedestrian_models:
+  - social_force_default
+  - hsfm_total_force_v1
+scenario_family: issue4207_interacting_smoke
+scenario_matrix: configs/scenarios/single/issue_4207_interacting_smoke.yaml
+seed_policy:
+  mode: fixed-list
+  seeds: [111, 112, 113]
+# Match the scenario descriptor's max_episode_steps so the robot can traverse the L-route and
+# reach the blind corner where the crossing pedestrian is; horizon 60 is too short for contact.
+horizon: 400
+dt: 0.1
+workers: 1
+record_forces: false
+resume: true
+run_artifact_dir: output/benchmarks/issue_4207_interacting_physics_runs
+# Arm keys mirror the smoke/main probe so the family stays comparable. algo_config is omitted
+# deliberately: no policy checkpoint is attached, so the learned arms (ppo, guarded_ppo,
+# prediction_planner) run in their goal/sampling FALLBACK mode. This is a diagnostic physics probe
+# of the interacting geometry, NOT a trained-planner comparison. Attaching real arm checkpoints is
+# the tracked follow-up; see the packet PHYSICS_RUN_NOTICE.md.
+arms:
+  - key: goal
+    structural_class: baseline_reactive
+    algo: goal
+    benchmark_profile: baseline-safe
+    development_pedestrian_model: unknown
+  - key: ppo
+    structural_class: learned_policy
+    algo: ppo
+    benchmark_profile: experimental
+    development_pedestrian_model: unknown
+  - key: prediction_planner
+    structural_class: predictive
+    algo: prediction_planner
+    benchmark_profile: experimental
+    development_pedestrian_model: unknown
+  - key: guarded_ppo
+    structural_class: constraint_first
+    algo: guarded_ppo
+    benchmark_profile: experimental
+    development_pedestrian_model: unknown

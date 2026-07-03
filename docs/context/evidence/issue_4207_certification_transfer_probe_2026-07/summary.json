@@ -1,0 +1,1050 @@
+{
+  "arms": [
+    {
+      "algo": "goal",
+      "algo_config": null,
+      "development_pedestrian_model": "unknown",
+      "key": "goal",
+      "structural_class": "baseline_reactive"
+    },
+    {
+      "algo": "ppo",
+      "algo_config": "configs/algos/ppo_v3_camera_ready.yaml",
+      "development_pedestrian_model": "unknown",
+      "key": "ppo",
+      "structural_class": "learned_policy"
+    },
+    {
+      "algo": "prediction_planner",
+      "algo_config": "configs/algos/prediction_planner_example.yaml",
+      "development_pedestrian_model": "unknown",
+      "key": "prediction_planner",
+      "structural_class": "predictive"
+    },
+    {
+      "algo": "guarded_ppo",
+      "algo_config": "configs/algos/guarded_ppo_camera_ready.yaml",
+      "development_pedestrian_model": "unknown",
+      "key": "guarded_ppo",
+      "structural_class": "constraint_first"
+    }
+  ],
+  "certification_transfer_matrix": [
+    {
+      "certification_gate_status": "pass",
+      "certification_model": "social_force_default",
+      "evaluation_gate_status": "pass",
+      "evaluation_model": "social_force_default",
+      "failed_gate_ids": "",
+      "flip_type": "",
+      "not_evaluable_gate_ids": "",
+      "planner_key": "goal",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "baseline_reactive",
+      "transfer_status": "stable_pass"
+    },
+    {
+      "certification_gate_status": "pass",
+      "certification_model": "social_force_default",
+      "evaluation_gate_status": "pass",
+      "evaluation_model": "hsfm_total_force_v1",
+      "failed_gate_ids": "",
+      "flip_type": "",
+      "not_evaluable_gate_ids": "",
+      "planner_key": "goal",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "baseline_reactive",
+      "transfer_status": "stable_pass"
+    },
+    {
+      "certification_gate_status": "pass",
+      "certification_model": "hsfm_total_force_v1",
+      "evaluation_gate_status": "pass",
+      "evaluation_model": "social_force_default",
+      "failed_gate_ids": "",
+      "flip_type": "",
+      "not_evaluable_gate_ids": "",
+      "planner_key": "goal",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "baseline_reactive",
+      "transfer_status": "stable_pass"
+    },
+    {
+      "certification_gate_status": "pass",
+      "certification_model": "hsfm_total_force_v1",
+      "evaluation_gate_status": "pass",
+      "evaluation_model": "hsfm_total_force_v1",
+      "failed_gate_ids": "",
+      "flip_type": "",
+      "not_evaluable_gate_ids": "",
+      "planner_key": "goal",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "baseline_reactive",
+      "transfer_status": "stable_pass"
+    },
+    {
+      "certification_gate_status": "pass",
+      "certification_model": "social_force_default",
+      "evaluation_gate_status": "pass",
+      "evaluation_model": "social_force_default",
+      "failed_gate_ids": "",
+      "flip_type": "",
+      "not_evaluable_gate_ids": "",
+      "planner_key": "ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "learned_policy",
+      "transfer_status": "stable_pass"
+    },
+    {
+      "certification_gate_status": "pass",
+      "certification_model": "social_force_default",
+      "evaluation_gate_status": "pass",
+      "evaluation_model": "hsfm_total_force_v1",
+      "failed_gate_ids": "",
+      "flip_type": "",
+      "not_evaluable_gate_ids": "",
+      "planner_key": "ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "learned_policy",
+      "transfer_status": "stable_pass"
+    },
+    {
+      "certification_gate_status": "pass",
+      "certification_model": "hsfm_total_force_v1",
+      "evaluation_gate_status": "pass",
+      "evaluation_model": "social_force_default",
+      "failed_gate_ids": "",
+      "flip_type": "",
+      "not_evaluable_gate_ids": "",
+      "planner_key": "ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "learned_policy",
+      "transfer_status": "stable_pass"
+    },
+    {
+      "certification_gate_status": "pass",
+      "certification_model": "hsfm_total_force_v1",
+      "evaluation_gate_status": "pass",
+      "evaluation_model": "hsfm_total_force_v1",
+      "failed_gate_ids": "",
+      "flip_type": "",
+      "not_evaluable_gate_ids": "",
+      "planner_key": "ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "learned_policy",
+      "transfer_status": "stable_pass"
+    },
+    {
+      "certification_gate_status": "fail",
+      "certification_model": "social_force_default",
+      "evaluation_gate_status": "fail",
+      "evaluation_model": "social_force_default",
+      "failed_gate_ids": "collision_rate_zero",
+      "flip_type": "",
+      "not_evaluable_gate_ids": "",
+      "planner_key": "prediction_planner",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "predictive",
+      "transfer_status": "stable_fail"
+    },
+    {
+      "certification_gate_status": "fail",
+      "certification_model": "social_force_default",
+      "evaluation_gate_status": "fail",
+      "evaluation_model": "hsfm_total_force_v1",
+      "failed_gate_ids": "collision_rate_zero",
+      "flip_type": "",
+      "not_evaluable_gate_ids": "",
+      "planner_key": "prediction_planner",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "predictive",
+      "transfer_status": "stable_fail"
+    },
+    {
+      "certification_gate_status": "fail",
+      "certification_model": "hsfm_total_force_v1",
+      "evaluation_gate_status": "fail",
+      "evaluation_model": "social_force_default",
+      "failed_gate_ids": "collision_rate_zero",
+      "flip_type": "",
+      "not_evaluable_gate_ids": "",
+      "planner_key": "prediction_planner",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "predictive",
+      "transfer_status": "stable_fail"
+    },
+    {
+      "certification_gate_status": "fail",
+      "certification_model": "hsfm_total_force_v1",
+      "evaluation_gate_status": "fail",
+      "evaluation_model": "hsfm_total_force_v1",
+      "failed_gate_ids": "collision_rate_zero",
+      "flip_type": "",
+      "not_evaluable_gate_ids": "",
+      "planner_key": "prediction_planner",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "predictive",
+      "transfer_status": "stable_fail"
+    },
+    {
+      "certification_gate_status": "pass",
+      "certification_model": "social_force_default",
+      "evaluation_gate_status": "pass",
+      "evaluation_model": "social_force_default",
+      "failed_gate_ids": "",
+      "flip_type": "",
+      "not_evaluable_gate_ids": "",
+      "planner_key": "guarded_ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "constraint_first",
+      "transfer_status": "stable_pass"
+    },
+    {
+      "certification_gate_status": "pass",
+      "certification_model": "social_force_default",
+      "evaluation_gate_status": "pass",
+      "evaluation_model": "hsfm_total_force_v1",
+      "failed_gate_ids": "",
+      "flip_type": "",
+      "not_evaluable_gate_ids": "",
+      "planner_key": "guarded_ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "constraint_first",
+      "transfer_status": "stable_pass"
+    },
+    {
+      "certification_gate_status": "pass",
+      "certification_model": "hsfm_total_force_v1",
+      "evaluation_gate_status": "pass",
+      "evaluation_model": "social_force_default",
+      "failed_gate_ids": "",
+      "flip_type": "",
+      "not_evaluable_gate_ids": "",
+      "planner_key": "guarded_ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "constraint_first",
+      "transfer_status": "stable_pass"
+    },
+    {
+      "certification_gate_status": "pass",
+      "certification_model": "hsfm_total_force_v1",
+      "evaluation_gate_status": "pass",
+      "evaluation_model": "hsfm_total_force_v1",
+      "failed_gate_ids": "",
+      "flip_type": "",
+      "not_evaluable_gate_ids": "",
+      "planner_key": "guarded_ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "constraint_first",
+      "transfer_status": "stable_pass"
+    }
+  ],
+  "claim_boundary": "diagnostic_certification_transfer_probe_no_deployment_claim",
+  "claim_boundary_notes": [
+    "Diagnostic transfer probe only.",
+    "Provisional gate thresholds are not certification approval.",
+    "not_evaluable is never treated as pass.",
+    "Model-transfer flips indicate model-assumption fragility in the gate decision.",
+    "No deployment, real-world safety, or general planner-superiority claim follows."
+  ],
+  "config": {
+    "path": "configs/benchmarks/issue_4207_certification_transfer_probe.yaml",
+    "schema_version": "certification-transfer-probe.v1",
+    "sha256": "55c2c48447f38063058a05f0630b77e1b97cb57d51572b4b33129e6133003c53"
+  },
+  "flip_cases": [],
+  "gate_cells": [
+    {
+      "certification_pedestrian_model": "social_force_default",
+      "development_pedestrian_model": "unknown",
+      "episodes": 3,
+      "evaluation_model": "social_force_default",
+      "failed_gate_ids": "",
+      "gate_results": [
+        {
+          "direction": "max",
+          "id": "collision_rate_zero",
+          "metric": "collision_rate",
+          "status": "pass",
+          "threshold": 0.0,
+          "value": 0.0
+        },
+        {
+          "direction": "max",
+          "id": "near_miss_rate_limit",
+          "metric": "near_miss_rate",
+          "status": "pass",
+          "threshold": 0.05,
+          "value": 0.0
+        },
+        {
+          "direction": "min",
+          "id": "min_clearance_floor",
+          "metric": "min_clearance_m",
+          "status": "pass",
+          "threshold": 0.25,
+          "value": 24.12146330508657
+        },
+        {
+          "direction": "max",
+          "id": "robot_ped_within_5m_frac_limit",
+          "metric": "robot_ped_within_5m_frac",
+          "status": "pass",
+          "threshold": 0.85,
+          "value": 0.0
+        },
+        {
+          "direction": "max",
+          "id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "status": "pass",
+          "threshold": 2.0,
+          "value": 0.02907339088579181
+        }
+      ],
+      "gate_status": "pass",
+      "metrics": {
+        "collision_rate": 0.0,
+        "jerk_mean": 0.02907339088579181,
+        "min_clearance_m": 24.12146330508657,
+        "near_miss_rate": 0.0,
+        "robot_ped_within_5m_frac": 0.0,
+        "success_rate": 0.0
+      },
+      "not_evaluable_gate_ids": "",
+      "planner_key": "goal",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "baseline_reactive"
+    },
+    {
+      "certification_pedestrian_model": "hsfm_total_force_v1",
+      "development_pedestrian_model": "unknown",
+      "episodes": 3,
+      "evaluation_model": "hsfm_total_force_v1",
+      "failed_gate_ids": "",
+      "gate_results": [
+        {
+          "direction": "max",
+          "id": "collision_rate_zero",
+          "metric": "collision_rate",
+          "status": "pass",
+          "threshold": 0.0,
+          "value": 0.0
+        },
+        {
+          "direction": "max",
+          "id": "near_miss_rate_limit",
+          "metric": "near_miss_rate",
+          "status": "pass",
+          "threshold": 0.05,
+          "value": 0.0
+        },
+        {
+          "direction": "min",
+          "id": "min_clearance_floor",
+          "metric": "min_clearance_m",
+          "status": "pass",
+          "threshold": 0.25,
+          "value": 24.12146330508657
+        },
+        {
+          "direction": "max",
+          "id": "robot_ped_within_5m_frac_limit",
+          "metric": "robot_ped_within_5m_frac",
+          "status": "pass",
+          "threshold": 0.85,
+          "value": 0.0
+        },
+        {
+          "direction": "max",
+          "id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "status": "pass",
+          "threshold": 2.0,
+          "value": 0.02907339088579181
+        }
+      ],
+      "gate_status": "pass",
+      "metrics": {
+        "collision_rate": 0.0,
+        "jerk_mean": 0.02907339088579181,
+        "min_clearance_m": 24.12146330508657,
+        "near_miss_rate": 0.0,
+        "robot_ped_within_5m_frac": 0.0,
+        "success_rate": 0.0
+      },
+      "not_evaluable_gate_ids": "",
+      "planner_key": "goal",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "baseline_reactive"
+    },
+    {
+      "certification_pedestrian_model": "social_force_default",
+      "development_pedestrian_model": "unknown",
+      "episodes": 3,
+      "evaluation_model": "social_force_default",
+      "failed_gate_ids": "",
+      "gate_results": [
+        {
+          "direction": "max",
+          "id": "collision_rate_zero",
+          "metric": "collision_rate",
+          "status": "pass",
+          "threshold": 0.0,
+          "value": 0.0
+        },
+        {
+          "direction": "max",
+          "id": "near_miss_rate_limit",
+          "metric": "near_miss_rate",
+          "status": "pass",
+          "threshold": 0.05,
+          "value": 0.0
+        },
+        {
+          "direction": "min",
+          "id": "min_clearance_floor",
+          "metric": "min_clearance_m",
+          "status": "pass",
+          "threshold": 0.25,
+          "value": 19.876616518230957
+        },
+        {
+          "direction": "max",
+          "id": "robot_ped_within_5m_frac_limit",
+          "metric": "robot_ped_within_5m_frac",
+          "status": "pass",
+          "threshold": 0.85,
+          "value": 0.0
+        },
+        {
+          "direction": "max",
+          "id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "status": "pass",
+          "threshold": 2.0,
+          "value": 0.13894295091153427
+        }
+      ],
+      "gate_status": "pass",
+      "metrics": {
+        "collision_rate": 0.0,
+        "jerk_mean": 0.13894295091153427,
+        "min_clearance_m": 19.876616518230957,
+        "near_miss_rate": 0.0,
+        "robot_ped_within_5m_frac": 0.0,
+        "success_rate": 0.0
+      },
+      "not_evaluable_gate_ids": "",
+      "planner_key": "ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "learned_policy"
+    },
+    {
+      "certification_pedestrian_model": "hsfm_total_force_v1",
+      "development_pedestrian_model": "unknown",
+      "episodes": 3,
+      "evaluation_model": "hsfm_total_force_v1",
+      "failed_gate_ids": "",
+      "gate_results": [
+        {
+          "direction": "max",
+          "id": "collision_rate_zero",
+          "metric": "collision_rate",
+          "status": "pass",
+          "threshold": 0.0,
+          "value": 0.0
+        },
+        {
+          "direction": "max",
+          "id": "near_miss_rate_limit",
+          "metric": "near_miss_rate",
+          "status": "pass",
+          "threshold": 0.05,
+          "value": 0.0
+        },
+        {
+          "direction": "min",
+          "id": "min_clearance_floor",
+          "metric": "min_clearance_m",
+          "status": "pass",
+          "threshold": 0.25,
+          "value": 19.876616518230957
+        },
+        {
+          "direction": "max",
+          "id": "robot_ped_within_5m_frac_limit",
+          "metric": "robot_ped_within_5m_frac",
+          "status": "pass",
+          "threshold": 0.85,
+          "value": 0.0
+        },
+        {
+          "direction": "max",
+          "id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "status": "pass",
+          "threshold": 2.0,
+          "value": 0.13894295091153427
+        }
+      ],
+      "gate_status": "pass",
+      "metrics": {
+        "collision_rate": 0.0,
+        "jerk_mean": 0.13894295091153427,
+        "min_clearance_m": 19.876616518230957,
+        "near_miss_rate": 0.0,
+        "robot_ped_within_5m_frac": 0.0,
+        "success_rate": 0.0
+      },
+      "not_evaluable_gate_ids": "",
+      "planner_key": "ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "learned_policy"
+    },
+    {
+      "certification_pedestrian_model": "social_force_default",
+      "development_pedestrian_model": "unknown",
+      "episodes": 3,
+      "evaluation_model": "social_force_default",
+      "failed_gate_ids": "collision_rate_zero",
+      "gate_results": [
+        {
+          "direction": "max",
+          "id": "collision_rate_zero",
+          "metric": "collision_rate",
+          "status": "fail",
+          "threshold": 0.0,
+          "value": 1.0
+        },
+        {
+          "direction": "max",
+          "id": "near_miss_rate_limit",
+          "metric": "near_miss_rate",
+          "status": "pass",
+          "threshold": 0.05,
+          "value": 0.0
+        },
+        {
+          "direction": "min",
+          "id": "min_clearance_floor",
+          "metric": "min_clearance_m",
+          "status": "pass",
+          "threshold": 0.25,
+          "value": 24.176502268105853
+        },
+        {
+          "direction": "max",
+          "id": "robot_ped_within_5m_frac_limit",
+          "metric": "robot_ped_within_5m_frac",
+          "status": "pass",
+          "threshold": 0.85,
+          "value": 0.0
+        },
+        {
+          "direction": "max",
+          "id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "status": "pass",
+          "threshold": 2.0,
+          "value": 0.07047290131251295
+        }
+      ],
+      "gate_status": "fail",
+      "metrics": {
+        "collision_rate": 1.0,
+        "jerk_mean": 0.07047290131251295,
+        "min_clearance_m": 24.176502268105853,
+        "near_miss_rate": 0.0,
+        "robot_ped_within_5m_frac": 0.0,
+        "success_rate": 0.0
+      },
+      "not_evaluable_gate_ids": "",
+      "planner_key": "prediction_planner",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "predictive"
+    },
+    {
+      "certification_pedestrian_model": "hsfm_total_force_v1",
+      "development_pedestrian_model": "unknown",
+      "episodes": 3,
+      "evaluation_model": "hsfm_total_force_v1",
+      "failed_gate_ids": "collision_rate_zero",
+      "gate_results": [
+        {
+          "direction": "max",
+          "id": "collision_rate_zero",
+          "metric": "collision_rate",
+          "status": "fail",
+          "threshold": 0.0,
+          "value": 1.0
+        },
+        {
+          "direction": "max",
+          "id": "near_miss_rate_limit",
+          "metric": "near_miss_rate",
+          "status": "pass",
+          "threshold": 0.05,
+          "value": 0.0
+        },
+        {
+          "direction": "min",
+          "id": "min_clearance_floor",
+          "metric": "min_clearance_m",
+          "status": "pass",
+          "threshold": 0.25,
+          "value": 24.176502268105853
+        },
+        {
+          "direction": "max",
+          "id": "robot_ped_within_5m_frac_limit",
+          "metric": "robot_ped_within_5m_frac",
+          "status": "pass",
+          "threshold": 0.85,
+          "value": 0.0
+        },
+        {
+          "direction": "max",
+          "id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "status": "pass",
+          "threshold": 2.0,
+          "value": 0.07047290131251295
+        }
+      ],
+      "gate_status": "fail",
+      "metrics": {
+        "collision_rate": 1.0,
+        "jerk_mean": 0.07047290131251295,
+        "min_clearance_m": 24.176502268105853,
+        "near_miss_rate": 0.0,
+        "robot_ped_within_5m_frac": 0.0,
+        "success_rate": 0.0
+      },
+      "not_evaluable_gate_ids": "",
+      "planner_key": "prediction_planner",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "predictive"
+    },
+    {
+      "certification_pedestrian_model": "social_force_default",
+      "development_pedestrian_model": "unknown",
+      "episodes": 3,
+      "evaluation_model": "social_force_default",
+      "failed_gate_ids": "",
+      "gate_results": [
+        {
+          "direction": "max",
+          "id": "collision_rate_zero",
+          "metric": "collision_rate",
+          "status": "pass",
+          "threshold": 0.0,
+          "value": 0.0
+        },
+        {
+          "direction": "max",
+          "id": "near_miss_rate_limit",
+          "metric": "near_miss_rate",
+          "status": "pass",
+          "threshold": 0.05,
+          "value": 0.0
+        },
+        {
+          "direction": "min",
+          "id": "min_clearance_floor",
+          "metric": "min_clearance_m",
+          "status": "pass",
+          "threshold": 0.25,
+          "value": 19.885386903210108
+        },
+        {
+          "direction": "max",
+          "id": "robot_ped_within_5m_frac_limit",
+          "metric": "robot_ped_within_5m_frac",
+          "status": "pass",
+          "threshold": 0.85,
+          "value": 0.0
+        },
+        {
+          "direction": "max",
+          "id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "status": "pass",
+          "threshold": 2.0,
+          "value": 0.15673393366728283
+        }
+      ],
+      "gate_status": "pass",
+      "metrics": {
+        "collision_rate": 0.0,
+        "jerk_mean": 0.15673393366728283,
+        "min_clearance_m": 19.885386903210108,
+        "near_miss_rate": 0.0,
+        "robot_ped_within_5m_frac": 0.0,
+        "success_rate": 0.0
+      },
+      "not_evaluable_gate_ids": "",
+      "planner_key": "guarded_ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "constraint_first"
+    },
+    {
+      "certification_pedestrian_model": "hsfm_total_force_v1",
+      "development_pedestrian_model": "unknown",
+      "episodes": 3,
+      "evaluation_model": "hsfm_total_force_v1",
+      "failed_gate_ids": "",
+      "gate_results": [
+        {
+          "direction": "max",
+          "id": "collision_rate_zero",
+          "metric": "collision_rate",
+          "status": "pass",
+          "threshold": 0.0,
+          "value": 0.0
+        },
+        {
+          "direction": "max",
+          "id": "near_miss_rate_limit",
+          "metric": "near_miss_rate",
+          "status": "pass",
+          "threshold": 0.05,
+          "value": 0.0
+        },
+        {
+          "direction": "min",
+          "id": "min_clearance_floor",
+          "metric": "min_clearance_m",
+          "status": "pass",
+          "threshold": 0.25,
+          "value": 19.885386903210108
+        },
+        {
+          "direction": "max",
+          "id": "robot_ped_within_5m_frac_limit",
+          "metric": "robot_ped_within_5m_frac",
+          "status": "pass",
+          "threshold": 0.85,
+          "value": 0.0
+        },
+        {
+          "direction": "max",
+          "id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "status": "pass",
+          "threshold": 2.0,
+          "value": 0.15673393366728283
+        }
+      ],
+      "gate_status": "pass",
+      "metrics": {
+        "collision_rate": 0.0,
+        "jerk_mean": 0.15673393366728283,
+        "min_clearance_m": 19.885386903210108,
+        "near_miss_rate": 0.0,
+        "robot_ped_within_5m_frac": 0.0,
+        "success_rate": 0.0
+      },
+      "not_evaluable_gate_ids": "",
+      "planner_key": "guarded_ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "constraint_first"
+    }
+  ],
+  "gate_spec": {
+    "path": "configs/benchmarks/release_gates/issue_4207_certification_transfer_gates.yaml",
+    "schema_version": "benchmark_release_gate_spec.v1",
+    "sha256": "385739fe40258d99c68654b7deee1665c8ff4ed9cbd0c64bcfd6d4c192cbd559"
+  },
+  "generated_at_utc": "2026-07-03T00:00:00+00:00",
+  "issue": 4207,
+  "metric_deltas_by_model": [
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0",
+      "metric": "collision_rate",
+      "planner_key": "goal",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "baseline_reactive"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0.0290733908858",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0.0290733908858",
+      "metric": "jerk_mean",
+      "planner_key": "goal",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "baseline_reactive"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "24.1214633051",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "24.1214633051",
+      "metric": "min_clearance_m",
+      "planner_key": "goal",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "baseline_reactive"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0",
+      "metric": "near_miss_rate",
+      "planner_key": "goal",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "baseline_reactive"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0",
+      "metric": "robot_ped_within_5m_frac",
+      "planner_key": "goal",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "baseline_reactive"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0",
+      "metric": "success_rate",
+      "planner_key": "goal",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "baseline_reactive"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0",
+      "metric": "collision_rate",
+      "planner_key": "ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "learned_policy"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0.138942950912",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0.138942950912",
+      "metric": "jerk_mean",
+      "planner_key": "ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "learned_policy"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "19.8766165182",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "19.8766165182",
+      "metric": "min_clearance_m",
+      "planner_key": "ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "learned_policy"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0",
+      "metric": "near_miss_rate",
+      "planner_key": "ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "learned_policy"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0",
+      "metric": "robot_ped_within_5m_frac",
+      "planner_key": "ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "learned_policy"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0",
+      "metric": "success_rate",
+      "planner_key": "ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "learned_policy"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "1",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "1",
+      "metric": "collision_rate",
+      "planner_key": "prediction_planner",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "predictive"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0.0704729013125",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0.0704729013125",
+      "metric": "jerk_mean",
+      "planner_key": "prediction_planner",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "predictive"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "24.1765022681",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "24.1765022681",
+      "metric": "min_clearance_m",
+      "planner_key": "prediction_planner",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "predictive"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0",
+      "metric": "near_miss_rate",
+      "planner_key": "prediction_planner",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "predictive"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0",
+      "metric": "robot_ped_within_5m_frac",
+      "planner_key": "prediction_planner",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "predictive"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0",
+      "metric": "success_rate",
+      "planner_key": "prediction_planner",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "predictive"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0",
+      "metric": "collision_rate",
+      "planner_key": "guarded_ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "constraint_first"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0.156733933667",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0.156733933667",
+      "metric": "jerk_mean",
+      "planner_key": "guarded_ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "constraint_first"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "19.8853869032",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "19.8853869032",
+      "metric": "min_clearance_m",
+      "planner_key": "guarded_ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "constraint_first"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0",
+      "metric": "near_miss_rate",
+      "planner_key": "guarded_ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "constraint_first"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0",
+      "metric": "robot_ped_within_5m_frac",
+      "planner_key": "guarded_ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "constraint_first"
+    },
+    {
+      "certification_model": "social_force_default",
+      "certification_value": "0",
+      "delta": "0",
+      "evaluation_model": "hsfm_total_force_v1",
+      "evaluation_value": "0",
+      "metric": "success_rate",
+      "planner_key": "guarded_ppo",
+      "scenario_family": "francis2023_blind_corner",
+      "structural_class": "constraint_first"
+    }
+  ],
+  "paper_facing": false,
+  "pedestrian_models": [
+    "social_force_default",
+    "hsfm_total_force_v1"
+  ],
+  "row_status_counts": {
+    "fail": 2,
+    "pass": 6
+  },
+  "scenario_family": "francis2023_blind_corner",
+  "schema_version": "certification-transfer-report.v1",
+  "seed_policy": {
+    "mode": "fixed-list",
+    "seeds": [
+      111,
+      112,
+      113
+    ]
+  },
+  "transfer_status_counts": {
+    "stable_fail": 4,
+    "stable_pass": 12
+  }
+}

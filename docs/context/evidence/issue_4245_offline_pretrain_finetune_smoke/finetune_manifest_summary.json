@@ -1,0 +1,31 @@
+{
+  "algorithm": "sac",
+  "checkpoint_sha256": "4d20c7a589a24db0b328456e597d0b8cb5cf5b74527470f6ef945342bb845243",
+  "claim_boundary": "diagnostic offline-to-online fine-tune provenance only; not benchmark evidence",
+  "eligible_for_claim": false,
+  "environment_contract": {
+    "action_space_fingerprint": "7f8c6b1a9dc7cd7a4f82e77e6c3fd2087227c282b2a2b3fba676b3d465f6b384",
+    "observation_space_fingerprint": "80ece25a0c7ea922cb40050ace23be6e2446edce23515f3cd7dca489f7118daa",
+    "scenario_config": "configs/scenarios/classic_interactions.yaml"
+  },
+  "git_commit_at_smoke": "b16b229a12f9b14e281370bd0e92c0b4ae1d231d",
+  "inherited_dataset": {
+    "accepted_transitions": 2,
+    "dataset_id": "issue_4245_smoke",
+    "dataset_manifest_sha256": "aecff01f28fb396c612f36706588488f2a2433cf23eca277552aaeb132fa6f0c",
+    "dataset_schema_version": "RLTrajectoryDataset.v1",
+    "dataset_sha256": "0e80eb05a8b530b8b3b19f0514f28351706ffcbbbc6b5cc925f4eb35af4f2f29",
+    "dropped_terminal_transitions": 0,
+    "episode_count": 1,
+    "split": "train"
+  },
+  "issue": 4245,
+  "normalizer_sha256": "642c91f01c354e048c981a7a3a566b579b89973c8f94965984db27ebb6a23953",
+  "online_finetune_config_sha256": "823ada15b8d9ed3f6e5f02ff47bbd19c842ef0d0e1bf6876b7c0f43d56aa134d",
+  "online_timesteps": 1,
+  "parent_checkpoint_sha256": "ca525330e23df5cf01ee26e49a4139ae5f2493b32f239b8e532d9badb7610148",
+  "parent_issue": 4012,
+  "parent_offline_checkpoint_manifest_sha256": "cf897c11f00fe61efe9129f39365310cd95d5ffcd58817c0c0d9885c498950b9",
+  "schema_version": "offline-to-online-finetune-manifest.v1",
+  "seed": 4245
+}

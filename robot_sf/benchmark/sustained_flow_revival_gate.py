@@ -23,6 +23,10 @@ DEFAULT_H600_INTERACTION_EXPOSURE_EVIDENCE = Path(
     "docs/context/evidence/issue_3810_h600_interpretation_2026-07/"
     "interaction_exposure_diagnostics.json"
 )
+DEFAULT_H600_CLAIM_IMPACT_EVIDENCE = Path(
+    "docs/context/evidence/issue_3810_h600_interpretation_2026-07/"
+    "sustained_flow_claim_impact_input.json"
+)
 
 REQUIRED_INTERACTION_EXPOSURE_FIELDS = (
     "interaction_exposure_share",
@@ -105,7 +109,12 @@ def build_sustained_flow_revival_gate_report(
 
     claim_decisions_changed = _claim_decisions_changed(interaction_exposure, claim_impact)
     if claim_decisions_changed is None:
-        blocking_reasons.append("claim-decision impact not supplied")
+        if _claim_impact_supplied(claim_impact):
+            blocking_reasons.append(
+                "claim-decision impact not computable from supplied h600 evidence"
+            )
+        else:
+            blocking_reasons.append("claim-decision impact not supplied")
 
     if blocking_reasons:
         decision = DECISION_DEFER
@@ -227,6 +236,19 @@ def _claim_decisions_changed(
             if isinstance(changed, bool):
                 return changed
     return None
+
+
+def _claim_impact_supplied(claim_impact: Mapping[str, Any] | None) -> bool:
+    if not claim_impact:
+        return False
+    evidence_keys = (
+        "affected_rows",
+        "affected_planner_scenario_rows",
+        "affected_planner_rows",
+        "claim_decision_delta",
+        "wait_it_out_exclusion_or_caveat_impact",
+    )
+    return any(key in claim_impact for key in evidence_keys)
 
 
 def _string_sequence(value: Any) -> tuple[str, ...]:

@@ -35,6 +35,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **skip-if-absent inD shape-contract loader** for issue #4224:
+  `robot_sf/data/external/ind.py` inspects a locally staged inD copy (naturalistic road-user
+  trajectories at German intersections, Bock et al. 2020) and validates the documented per-recording
+  file group (`*_tracks.csv`, `*_tracksMeta.csv`, `*_recordingMeta.csv`, and a background image)
+  without ever downloading or redistributing the request-gated dataset bytes. `is_available`,
+  `require_available`, and `load_shape_contract` provide a cheap structural contract (non-empty,
+  rectangular CSVs carrying inD's published header columns, with finite coordinate/id parsing) and
+  return per-recording row/column shape metadata; no scene content, benchmark, or paper-facing claim
+  is asserted. `tests/data/external/test_ind_shape.py` covers the absent (skip), synthetic-layout,
+  multi-recording, background-fallback, and fail-closed cases. This is the public slice (b) of the
+  maintainer external-data split for the `ind-crossings` asset (registry entry #4238, acquisition
+  docs #4290); private-ops staging remains a follow-up. `docs/datasets/ind.md` documents the loader.
 * Added a **license-safe ATC pedestrian-tracking loader + skip-if-absent shape-contract tests**
   for issue #4289 (follow-up to the #4224 external-data program): `robot_sf/data/external/atc.py`
   exposes `is_available`, `require_available`, and `load_shape_contract` over the canonical

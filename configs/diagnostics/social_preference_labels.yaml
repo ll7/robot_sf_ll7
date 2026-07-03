@@ -1,0 +1,209 @@
+schema_version: social-preference-labels.v1
+profile_id: social_preference_labels_diagnostic_v1
+claim_boundary: >
+  Diagnostic-only social preference label configuration. This is not a reward
+  function, not an SPLC implementation, and not calibrated or validated human
+  preference evidence.
+source_literature:
+  - id: splc_2026_arxiv_2607_01925
+    role: motivation_only
+    url: https://arxiv.org/abs/2607.01925
+    caveat: >
+      The SPLC paper motivates preference-informed diagnostics, but this
+      repository config does not implement SPLC and does not claim learned or
+      validated social preferences.
+allowed_preferred_directions:
+  - maximize
+  - minimize
+  - avoid
+  - target_band
+availability_policy:
+  missing_required_trace_fields: not_available
+  missing_metric_key: not_available
+  fallback_or_degraded_row: diagnostic_only
+labels:
+  - id: clearance
+    display_name: Clearance preference
+    description: Minimum robot-pedestrian surface clearance over an episode.
+    metric_family: safety_proxemics
+    unit: m
+    preferred_direction: maximize
+    diagnostic_thresholds:
+      status: placeholder_default_not_human_calibrated
+      bands:
+        poor: "< 0.0"
+        caution: "[0.0, 0.5)"
+        acceptable: ">= 0.5"
+      provenance: aligned_to_existing_collision_near_miss_threshold_contract_not_preference_data
+    required_trace_fields:
+      - robot_trajectory
+      - pedestrian_trajectories
+      - metric_parameters.threshold_profile
+    candidate_metric_keys:
+      - min_clearance
+      - mean_clearance
+      - social_proxemic_min_clearance_m
+      - metrics.social_acceptability.social_proxemic_min_clearance_m
+    computation_status: diagnostic_config_only
+    notes: >
+      Preferred direction only. Threshold bands follow existing clearance safety
+      contracts and are not human preference calibration.
+  - id: ttc_margin
+    display_name: Time-to-collision margin preference
+    description: Time-to-collision margin for closing robot-pedestrian interactions.
+    metric_family: safety_ttc
+    unit: s
+    preferred_direction: maximize
+    diagnostic_thresholds:
+      status: placeholder_default_not_human_calibrated
+      bands:
+        poor: "< 0.5"
+        caution: "[0.5, 1.0)"
+        acceptable: ">= 1.0"
+      provenance: diagnostic_placeholder_until_ttc_contract_is_exported_for_target_traces
+    required_trace_fields:
+      - robot_trajectory
+      - pedestrian_trajectories
+      - robot_velocity_history
+      - pedestrian_velocity_history
+      - dt
+    candidate_metric_keys:
+      - near_misses_ttc
+      - near_miss_ttc__min_ttc_s
+      - time_to_collision_min
+    computation_status: diagnostic_config_only
+    notes: >
+      Use only when TTC fields are emitted by an explicit trace or metric path;
+      missing TTC data remains not_available.
+  - id: pedestrian_displacement
+    display_name: Pedestrian displacement preference
+    description: Pedestrian trajectory deviation or acceleration change associated with robot interaction.
+    metric_family: pedestrian_impact
+    unit: mixed
+    preferred_direction: minimize
+    diagnostic_thresholds:
+      status: placeholder_default_not_human_calibrated
+      bands:
+        acceptable: "lower relative to scenario baseline"
+        caution: "higher than comparable scenario baseline"
+        poor: "sustained elevated pedestrian deviation proxy"
+      provenance: diagnostic_relative_placeholder_not_preference_data
+    required_trace_fields:
+      - pedestrian_trajectories
+      - near_interaction_samples
+      - far_interaction_samples
+      - dt
+    candidate_metric_keys:
+      - ped_impact_accel_delta_mean
+      - ped_impact_turn_rate_delta_mean
+      - pedestrian_path_deviation_proxy_m
+    computation_status: diagnostic_config_only
+    notes: >
+      Existing pedestrian-impact metrics are exploratory proxies and do not
+      identify intent, discomfort, or human preference without additional evidence.
+  - id: path_blocking
+    display_name: Path blocking preference
+    description: Robot occupancy of likely pedestrian path corridors or route intent.
+    metric_family: path_corridor_interaction
+    unit: event_count_or_s
+    preferred_direction: avoid
+    diagnostic_thresholds:
+      status: placeholder_default_not_human_calibrated
+      bands:
+        acceptable: "no detected blocking episode"
+        caution: "short diagnostic blocking episode"
+        poor: "sustained diagnostic blocking episode"
+      provenance: blocked_until_route_or_corridor_trace_contract_exists
+    required_trace_fields:
+      - pedestrian_route_or_corridor_estimate
+      - robot_occupancy_over_time
+      - interaction_intervals
+      - dt
+    candidate_metric_keys: []
+    computation_status: not_available
+    notes: >
+      No canonical path-corridor occupancy metric is currently available; retain
+      this label as a visible missing trace contract.
+  - id: oscillation
+    display_name: Oscillation preference
+    description: Robot heading, velocity, or command reversals that indicate unstable local navigation.
+    metric_family: motion_quality
+    unit: mixed
+    preferred_direction: minimize
+    diagnostic_thresholds:
+      status: placeholder_default_not_human_calibrated
+      bands:
+        acceptable: "lower relative to scenario baseline"
+        caution: "elevated reversal or jerk proxy"
+        poor: "sustained unstable reversal or jerk proxy"
+      provenance: diagnostic_relative_placeholder_not_preference_data
+    required_trace_fields:
+      - robot_trajectory
+      - robot_velocity_history
+      - robot_heading_history
+      - dt
+    candidate_metric_keys:
+      - jerk_mean
+      - curvature_mean
+      - path_irregularity
+      - socnavbench_path_irregularity
+    computation_status: diagnostic_config_only
+    notes: >
+      Existing smoothness metrics are motion-quality proxies; they are not a
+      learned social preference score.
+  - id: detour_burden
+    display_name: Detour burden preference
+    description: Extra robot or pedestrian path length and time attributable to an interaction.
+    metric_family: path_efficiency
+    unit: ratio_or_m_or_s
+    preferred_direction: minimize
+    diagnostic_thresholds:
+      status: placeholder_default_not_human_calibrated
+      bands:
+        acceptable: "lower relative to scenario baseline"
+        caution: "moderate extra path or time burden"
+        poor: "large extra path or time burden"
+      provenance: diagnostic_relative_placeholder_not_preference_data
+    required_trace_fields:
+      - robot_trajectory
+      - pedestrian_trajectories
+      - straight_line_or_route_baseline
+      - reached_goal_step
+      - dt
+    candidate_metric_keys:
+      - path_efficiency
+      - socnavbench_path_length_ratio
+      - pedestrian_path_deviation_proxy_m
+      - time_to_goal_ideal_ratio
+    computation_status: diagnostic_config_only
+    notes: >
+      Interpret robot and pedestrian burden separately when both channels are
+      available; do not collapse to scalar preference utility.
+  - id: recovery_smoothness
+    display_name: Recovery smoothness preference
+    description: Smoothness of robot recovery after near-conflict, yielding, or avoidance.
+    metric_family: post_conflict_motion_quality
+    unit: mixed
+    preferred_direction: minimize
+    diagnostic_thresholds:
+      status: placeholder_default_not_human_calibrated
+      bands:
+        acceptable: "lower post-conflict jerk or acceleration discontinuity"
+        caution: "elevated post-conflict correction"
+        poor: "abrupt or repeated post-conflict correction"
+      provenance: diagnostic_placeholder_until_conflict_window_export_exists
+    required_trace_fields:
+      - robot_trajectory
+      - robot_velocity_history
+      - robot_acceleration_history
+      - near_conflict_intervals
+      - yielding_or_avoidance_events
+      - dt
+    candidate_metric_keys:
+      - jerk_mean
+      - acceleration_max
+      - jerk_abs_max
+    computation_status: diagnostic_config_only
+    notes: >
+      Current metrics can support coarse motion-quality diagnostics, but
+      conflict-window attribution remains a follow-up trace export contract.

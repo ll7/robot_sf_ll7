@@ -207,6 +207,16 @@ the structured block into scalar columns such as `human_discomfort_exposure_m_s`
 `intrusion_duration_s`, `time_to_yield_s`, `robot_yield_distance_m`, and
 `pedestrian_path_deviation_proxy_m`.
 
+### Diagnostic Social Preference Labels
+
+`configs/diagnostics/social_preference_labels.yaml` defines `social-preference-labels.v1`, a
+diagnostic annotation contract layered over existing safety, Time-to-Collision (TTC), proxemic,
+pedestrian-impact, path-efficiency, and smoothness metrics. These labels are not a new headline
+benchmark score, not learned rewards, and not calibrated human preference evidence. Missing trace
+fields and missing metric keys remain `not_available`; see
+`docs/context/issue_4228_social_preference_labels.md` for the issue #4228 boundary and follow-up
+path.
+
 ### Motion Quality Metrics
 
 #### Smoothness (Jerk)

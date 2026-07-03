@@ -15,6 +15,7 @@
     "planner_metric_summary.md",
     "snqi_recalibration_bundle.json",
     "snqi_recalibration_report.md",
+    "sustained_flow_claim_impact_input.json",
     "source_manifest.json"
   ],
   "h500_s20_reports": "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/reports",

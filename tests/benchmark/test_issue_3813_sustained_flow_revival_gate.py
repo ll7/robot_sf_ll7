@@ -9,6 +9,7 @@ from robot_sf.benchmark.sustained_flow_revival_gate import (
     DECISION_DEFER,
     DECISION_REVIVE,
     DECISION_STOP,
+    DEFAULT_H600_CLAIM_IMPACT_EVIDENCE,
     DEFAULT_H600_INTERACTION_EXPOSURE_EVIDENCE,
     REQUIRED_INTERACTION_EXPOSURE_FIELDS,
     build_sustained_flow_revival_gate_report,
@@ -51,9 +52,13 @@ def test_tracked_h600_evidence_defers_until_exposure_fields_exist() -> None:
 
     exposure_path = REPO_ROOT / DEFAULT_H600_INTERACTION_EXPOSURE_EVIDENCE
     exposure = json.loads(exposure_path.read_text(encoding="utf-8"))
+    claim_impact_path = REPO_ROOT / DEFAULT_H600_CLAIM_IMPACT_EVIDENCE
+    claim_impact = json.loads(claim_impact_path.read_text(encoding="utf-8"))
     report = build_sustained_flow_revival_gate_report(
         exposure,
         interaction_exposure_evidence_path=DEFAULT_H600_INTERACTION_EXPOSURE_EVIDENCE,
+        claim_impact=claim_impact,
+        claim_impact_evidence_path=DEFAULT_H600_CLAIM_IMPACT_EVIDENCE,
     )
     payload = report.to_payload()
     assert payload["decision"] == DECISION_DEFER
@@ -62,7 +67,14 @@ def test_tracked_h600_evidence_defers_until_exposure_fields_exist() -> None:
         "interaction-exposure diagnostics missing computed required fields"
         in payload["blocking_reasons"]
     )
-    assert "claim-decision impact not supplied" in payload["blocking_reasons"]
+    assert (
+        "claim-decision impact not computable from supplied h600 evidence"
+        in payload["blocking_reasons"]
+    )
+    assert payload["claim_impact_evidence_path"].endswith(
+        "sustained_flow_claim_impact_input.json"
+    )
+    assert payload["affected_rows"]
     assert payload["interaction_exposure_evidence_path"].endswith(
         "interaction_exposure_diagnostics.json"
     )
@@ -120,15 +132,16 @@ def test_complete_non_load_bearing_evidence_stops_sustained_flow() -> None:
 def test_cli_reports_default_tracked_gate_decision(capsys) -> None:
     """CLI emits the checked-in default gate report without running benchmarks."""
 
-    exit_code = gate_main(
-        [
-            "--interaction-exposure",
-            str(REPO_ROOT / DEFAULT_H600_INTERACTION_EXPOSURE_EVIDENCE),
-            "--json",
-        ]
-    )
+    exit_code = gate_main(["--json"])
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
     assert exit_code == 0
     assert payload["schema_version"] == "issue_3813.sustained_flow_revival_gate.v1"
     assert payload["decision"] == DECISION_DEFER
+    assert payload["claim_impact_evidence_path"].endswith(
+        "sustained_flow_claim_impact_input.json"
+    )
+    assert payload["blocking_reasons"] == [
+        "interaction-exposure diagnostics missing computed required fields",
+        "claim-decision impact not computable from supplied h600 evidence",
+    ]

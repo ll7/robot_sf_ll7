@@ -1,0 +1,161 @@
+{
+  "schema_version": "issue_3813.h600_claim_impact_input.v1",
+  "issue": 3813,
+  "source_issue": 3810,
+  "status": "diagnostic-only-incomplete",
+  "claim_boundary": "Revival-gate input only; no sustained-flow runtime implementation, benchmark campaign, default benchmark conclusion, paper claim, or dissertation claim changed.",
+  "claim_decisions_changed": null,
+  "claim_decision_delta": {
+    "changed": null,
+    "status": "not_computable_missing_interaction_exposure_fields",
+    "reason": "The retained h600 seed-episode rows do not contain interaction_exposure_share, robot_motion_share_before_first_clearance, first_clearance_step, or low_exposure_success, so wait-it-out exclusions or caveats cannot be mapped to claim-decision changes yet."
+  },
+  "wait_it_out_exclusion_or_caveat_impact": {
+    "exclusion": {
+      "claim_decisions_changed": null,
+      "status": "not_computable_missing_interaction_exposure_fields"
+    },
+    "caveat": {
+      "claim_decisions_changed": null,
+      "status": "not_computable_missing_interaction_exposure_fields"
+    }
+  },
+  "affected_rows": [
+    {
+      "job_id": "13268",
+      "run_label": "confirm",
+      "planner_key": "goal",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_hash": "c10df617a87c",
+      "scenario_scope": "all retained h600 scenario rows pending interaction-exposure fields"
+    },
+    {
+      "job_id": "13268",
+      "run_label": "confirm",
+      "planner_key": "orca",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_hash": "c10df617a87c",
+      "scenario_scope": "all retained h600 scenario rows pending interaction-exposure fields"
+    },
+    {
+      "job_id": "13268",
+      "run_label": "confirm",
+      "planner_key": "ppo",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_hash": "c10df617a87c",
+      "scenario_scope": "all retained h600 scenario rows pending interaction-exposure fields"
+    },
+    {
+      "job_id": "13268",
+      "run_label": "confirm",
+      "planner_key": "prediction_planner",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_hash": "c10df617a87c",
+      "scenario_scope": "all retained h600 scenario rows pending interaction-exposure fields"
+    },
+    {
+      "job_id": "13268",
+      "run_label": "confirm",
+      "planner_key": "sacadrl",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_hash": "c10df617a87c",
+      "scenario_scope": "all retained h600 scenario rows pending interaction-exposure fields"
+    },
+    {
+      "job_id": "13268",
+      "run_label": "confirm",
+      "planner_key": "social_force",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_hash": "c10df617a87c",
+      "scenario_scope": "all retained h600 scenario rows pending interaction-exposure fields"
+    },
+    {
+      "job_id": "13268",
+      "run_label": "confirm",
+      "planner_key": "socnav_sampling",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_hash": "c10df617a87c",
+      "scenario_scope": "all retained h600 scenario rows pending interaction-exposure fields"
+    },
+    {
+      "job_id": "13273",
+      "run_label": "extended_roster",
+      "planner_key": "goal",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_hash": "c10df617a87c",
+      "scenario_scope": "all retained h600 scenario rows pending interaction-exposure fields"
+    },
+    {
+      "job_id": "13273",
+      "run_label": "extended_roster",
+      "planner_key": "orca",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_hash": "c10df617a87c",
+      "scenario_scope": "all retained h600 scenario rows pending interaction-exposure fields"
+    },
+    {
+      "job_id": "13273",
+      "run_label": "extended_roster",
+      "planner_key": "ppo",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_hash": "c10df617a87c",
+      "scenario_scope": "all retained h600 scenario rows pending interaction-exposure fields"
+    },
+    {
+      "job_id": "13273",
+      "run_label": "extended_roster",
+      "planner_key": "prediction_mpc",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_hash": "c10df617a87c",
+      "scenario_scope": "all retained h600 scenario rows pending interaction-exposure fields"
+    },
+    {
+      "job_id": "13273",
+      "run_label": "extended_roster",
+      "planner_key": "prediction_mpc_cbf",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_hash": "c10df617a87c",
+      "scenario_scope": "all retained h600 scenario rows pending interaction-exposure fields"
+    },
+    {
+      "job_id": "13273",
+      "run_label": "extended_roster",
+      "planner_key": "prediction_planner",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_hash": "c10df617a87c",
+      "scenario_scope": "all retained h600 scenario rows pending interaction-exposure fields"
+    },
+    {
+      "job_id": "13273",
+      "run_label": "extended_roster",
+      "planner_key": "sacadrl",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_hash": "c10df617a87c",
+      "scenario_scope": "all retained h600 scenario rows pending interaction-exposure fields"
+    },
+    {
+      "job_id": "13273",
+      "run_label": "extended_roster",
+      "planner_key": "social_force",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_hash": "c10df617a87c",
+      "scenario_scope": "all retained h600 scenario rows pending interaction-exposure fields"
+    },
+    {
+      "job_id": "13273",
+      "run_label": "extended_roster",
+      "planner_key": "socnav_sampling",
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_matrix_hash": "c10df617a87c",
+      "scenario_scope": "all retained h600 scenario rows pending interaction-exposure fields"
+    }
+  ],
+  "evidence_paths": {
+    "interaction_exposure": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/interaction_exposure_diagnostics.json",
+    "planner_metric_summary": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/planner_metric_summary.csv",
+    "source_manifest": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json",
+    "snqi_recalibration": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/snqi_recalibration_bundle.json"
+  },
+  "gate_result_expected_with_current_inputs": "defer_needs_more_evidence",
+  "remaining_blocker": "Compute or retain the four required interaction-exposure fields at episode or row level before wait-it-out exclusions/caveats can be tested for claim-decision impact."
+}

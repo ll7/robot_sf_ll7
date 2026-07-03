@@ -189,15 +189,25 @@ class HybridGlobalRLLocalAdapter:
             waypoint_distance_from_robot = None
         else:
             waypoint = decision.waypoint
-            robot_position = self._extract_robot_position(observation)
             waypoint_distance_from_robot = None
-            if robot_position is not None:
+            waypoint_array = np.asarray(waypoint, dtype=float)
+            if waypoint_array.shape != (2,) or not np.all(np.isfinite(waypoint_array)):
+                decision = WaypointDecision(
+                    status="rejected",
+                    waypoint=decision.waypoint,
+                    source=decision.source,
+                    reason="route_waypoint_non_finite",
+                    route_geometry=decision.route_geometry,
+                )
+
+            robot_position = self._extract_robot_position(observation)
+            if decision.status != "rejected" and robot_position is not None:
                 waypoint_distance_from_robot = hypot(
                     float(waypoint[0]) - robot_position[0],
                     float(waypoint[1]) - robot_position[1],
                 )
 
-            if robot_position is None:
+            if decision.status != "rejected" and robot_position is None:
                 decision = WaypointDecision(
                     status="rejected",
                     waypoint=decision.waypoint,
@@ -205,7 +215,10 @@ class HybridGlobalRLLocalAdapter:
                     reason="route_waypoint_robot_position_missing",
                     route_geometry=decision.route_geometry,
                 )
-            elif waypoint_distance_from_robot > self.config.waypoint_max_distance_from_robot:
+            if (
+                waypoint_distance_from_robot is not None
+                and waypoint_distance_from_robot > self.config.waypoint_max_distance_from_robot
+            ):
                 decision = WaypointDecision(
                     status="rejected",
                     waypoint=decision.waypoint,

@@ -177,6 +177,22 @@ def test_route_waypoint_beyond_configured_distance_can_use_goal_fallback() -> No
     assert diagnostics["waypoint"] == [3.0, 4.0]
 
 
+def test_route_waypoint_non_finite_fails_closed_before_distance_check() -> None:
+    adapter = HybridGlobalRLLocalAdapter(
+        waypoint_provider=_WaypointProvider((float("nan"), 0.0)),
+        local_policy=_LocalPolicy(),
+    )
+
+    with pytest.raises(RuntimeError, match="route_waypoint_non_finite"):
+        adapter.plan({"goal_current": [3.0, 4.0], "robot_position": [0.0, 0.0]})
+
+    diagnostics = adapter.diagnostics()
+    assert diagnostics["waypoint_status"] == "rejected"
+    assert diagnostics["waypoint_reason"] == "route_waypoint_non_finite"
+    assert diagnostics["fallback_status"] == "fail_closed"
+    assert diagnostics["waypoint_distance_from_robot"] is None
+
+
 def test_route_waypoint_missing_robot_position_fails_closed_by_default() -> None:
     adapter = HybridGlobalRLLocalAdapter(
         waypoint_provider=_WaypointProvider((1.5, 0.0)),

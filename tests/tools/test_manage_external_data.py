@@ -41,6 +41,25 @@ def _write_socnavbench_eth_fixture(path: Path) -> None:
     (traversible_dir / "data.pkl").write_bytes(b"synthetic fixture, not official data")
 
 
+def _write_atc_fixture(path: Path) -> None:
+    """Create minimal ATC-shaped fixture; not official data."""
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "atc-20121024.csv").write_text(
+        "time,person_id,x,y,z,velocity,angle,facing_angle\n0,1,0,0,0,0,0,0\n",
+        encoding="utf-8",
+    )
+    (path / "README.md").write_text("Synthetic fixture for registry tests.\n", encoding="utf-8")
+
+
+def _write_ind_fixture(path: Path) -> None:
+    """Create minimal inD-shaped fixture; not official data."""
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "00_tracks.csv").write_text(
+        "trackId,frame,xCenter,yCenter\n1,0,0,0\n", encoding="utf-8"
+    )
+    (path / "TERMS.txt").write_text("Synthetic terms placeholder for tests.\n", encoding="utf-8")
+
+
 def test_registry_covers_initial_required_asset_groups() -> None:
     """The first slice should cover SDD, SocNavBench, and AMV provenance assets."""
     asset_ids = {asset.asset_id for asset in manage_external_data.list_assets()}
@@ -49,6 +68,31 @@ def test_registry_covers_initial_required_asset_groups() -> None:
     assert "socnavbench-s3dis-eth" in asset_ids
     assert "socnavbench-control" in asset_ids
     assert "amv-calibration" in asset_ids
+
+
+def test_registry_covers_alyassi_table_7_asset_slice() -> None:
+    """Issue #4224 registers the Alyassi Table 7 dataset candidates as manual assets."""
+    expected = {
+        "atc-pedestrian",
+        "eth-ucy-trajectories",
+        "ind-crossings",
+        "crowdbot",
+        "scand-demos",
+    }
+    assets = {asset.asset_id: asset for asset in manage_external_data.list_assets()}
+
+    assert expected <= set(assets)
+    for asset_id in expected:
+        asset = assets[asset_id]
+        assert asset.source_url
+        assert asset.license_url
+        assert asset.license_note
+        assert asset.access_note
+        assert asset.shared_root_subpath.as_posix()
+        assert asset.related_issues
+        assert asset.auto_download_allowed is False
+        assert asset.expected_tree_sha256 is None
+        assert asset.expected_tree_sha256_status == "pending_first_staging"
 
 
 def test_missing_license_gated_asset_fails_closed(tmp_path: Path) -> None:
@@ -97,6 +141,25 @@ def test_external_data_root_overrides_asset_paths(
     assert (
         manage_external_data.resolve_asset_local_path_by_id("amv-calibration")
         == shared_root / "amv_calibration"
+    )
+    assert (
+        manage_external_data.resolve_asset_local_path_by_id("atc-pedestrian")
+        == shared_root / "atc_pedestrian"
+    )
+    assert (
+        manage_external_data.resolve_asset_local_path_by_id("eth-ucy-trajectories")
+        == shared_root / "eth_ucy_trajectories"
+    )
+    assert (
+        manage_external_data.resolve_asset_local_path_by_id("ind-crossings")
+        == shared_root / "ind_crossings"
+    )
+    assert (
+        manage_external_data.resolve_asset_local_path_by_id("crowdbot") == shared_root / "crowdbot"
+    )
+    assert (
+        manage_external_data.resolve_asset_local_path_by_id("scand-demos")
+        == shared_root / "scand_demos"
     )
 
 
@@ -173,10 +236,116 @@ def test_cli_list_and_check_report_external_data_root(
     assert check_payload["source_path"] == str((shared_root / "sdd").resolve())
 
 
+def test_cli_list_and_explain_include_alyassi_metadata() -> None:
+    """List/explain JSON expose license/access/checksum-pending metadata."""
+    list_result = subprocess.run(
+        [sys.executable, "scripts/tools/manage_external_data.py", "--json", "list"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    list_payload = json.loads(list_result.stdout)
+    atc_entry = next(entry for entry in list_payload if entry["asset_id"] == "atc-pedestrian")
+
+    assert atc_entry["license_url"] == "https://dil.atr.jp/crest2010_HRI/ATC_dataset/"
+    assert atc_entry["expected_tree_sha256"] is None
+    assert atc_entry["expected_tree_sha256_status"] == "pending_first_staging"
+    assert atc_entry["auto_download_allowed"] is False
+
+    explain_result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/tools/manage_external_data.py",
+            "--json",
+            "explain",
+            "scand-demos",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    explain_payload = json.loads(explain_result.stdout)
+
+    assert explain_payload["asset_id"] == "scand-demos"
+    assert explain_payload["license_url"].startswith("https://dataverse.tdl.org/")
+    assert explain_payload["expected_tree_sha256_status"] == "pending_first_staging"
+    assert explain_payload["required_paths"]
+
+
 def test_download_for_gated_asset_is_rejected() -> None:
     """Download must fail closed when redistribution/download terms are not encoded."""
     with pytest.raises(manage_external_data.ExternalDataError, match="license-gated"):
         manage_external_data.download_asset("sdd")
+
+
+def test_alyassi_table_7_downloads_are_rejected() -> None:
+    """Issue #4224 assets are registry/manual-staging only, not auto-downloadable."""
+    for asset_id in (
+        "atc-pedestrian",
+        "eth-ucy-trajectories",
+        "ind-crossings",
+        "crowdbot",
+        "scand-demos",
+    ):
+        with pytest.raises(manage_external_data.ExternalDataError, match="license-gated"):
+            manage_external_data.download_asset(asset_id)
+
+
+def test_alyassi_table_7_missing_check_fails_closed(tmp_path: Path) -> None:
+    """Missing local Table 7 assets report manual acquisition action."""
+    report = manage_external_data.check_asset("atc-pedestrian", source_path=tmp_path / "missing")
+
+    assert report["ok"] is False
+    assert report["status"] == "missing"
+    assert report["availability"]["state"] == "missing"
+    assert report["expected_tree_sha256"] is None
+    assert report["expected_tree_sha256_status"] == "pending_first_staging"
+    assert "official acquisition" in report["action"]
+
+
+def test_stage_writes_manifest_for_alyassi_direct_style_asset(tmp_path: Path) -> None:
+    """ATC fixture staging records checksum metadata without raw content leakage."""
+    _init_git_repo(tmp_path, gitignore="external/atc/\n")
+    source_root = tmp_path / "external" / "atc"
+    _write_atc_fixture(source_root)
+    manifest_path = tmp_path / "manifests" / "atc.provenance.json"
+
+    manifest = manage_external_data.stage_asset(
+        "atc-pedestrian",
+        source_path=source_root,
+        manifest_out=manifest_path,
+        repo_root=tmp_path,
+    )
+
+    assert manifest_path.is_file()
+    assert manifest["asset_id"] == "atc-pedestrian"
+    assert manifest["license_url"]
+    assert manifest["tree_sha256"]
+    assert manifest["expected_tree_sha256"] is None
+    assert manifest["expected_tree_sha256_status"] == "pending_first_staging"
+    assert manifest["sample_files"]
+    assert all("0,1,0,0" not in json.dumps(sample) for sample in manifest["sample_files"])
+    assert manage_external_data.check_provenance_manifest("atc-pedestrian", manifest_path)["ok"]
+
+
+def test_stage_writes_manifest_for_alyassi_byo_asset(tmp_path: Path) -> None:
+    """BYO/research-request assets still get local provenance when staged."""
+    _init_git_repo(tmp_path, gitignore="external/ind/\n")
+    source_root = tmp_path / "external" / "ind"
+    _write_ind_fixture(source_root)
+    manifest_path = tmp_path / "manifests" / "ind.provenance.json"
+
+    manifest = manage_external_data.stage_asset(
+        "ind-crossings",
+        source_path=source_root,
+        manifest_out=manifest_path,
+        repo_root=tmp_path,
+    )
+
+    assert manifest["asset_id"] == "ind-crossings"
+    assert manifest["license_url"] == "https://levelxdata.com/ind-dataset/"
+    assert manifest["matched_required_paths"] == ["00_tracks.csv", "TERMS.txt"]
+    assert manage_external_data.check_provenance_manifest("ind-crossings", manifest_path)["ok"]
 
 
 def test_stage_rejects_unignored_repo_local_raw_data(tmp_path: Path) -> None:

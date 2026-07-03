@@ -1,0 +1,105 @@
+{
+  "arms": {
+    "baseline_classical": {
+      "arm": "baseline_classical",
+      "collision_rate": 0.5,
+      "intrusion_rate": 0.4,
+      "minimum_clearance": 0.5,
+      "path_efficiency": 0.75,
+      "rows": 2,
+      "runtime_seconds": 1.1,
+      "success_rate": 0.5
+    },
+    "proxemic_costmap_on": {
+      "arm": "proxemic_costmap_on",
+      "collision_rate": 0.5,
+      "intrusion_rate": 0.30000000000000004,
+      "minimum_clearance": 0.6,
+      "path_efficiency": 0.73,
+      "rows": 2,
+      "runtime_seconds": 1.25,
+      "success_rate": 0.5
+    }
+  },
+  "blocked_reasons": [],
+  "claim_boundary": "paired_cpu_smoke_or_fixture_report_only",
+  "deltas": {
+    "collision_rate_delta": 0.0,
+    "intrusion_rate_delta": -0.09999999999999998,
+    "minimum_clearance_delta": 0.09999999999999998,
+    "path_efficiency_delta": -0.020000000000000018,
+    "runtime_overhead_ratio": 1.1363636363636362,
+    "runtime_overhead_seconds": 0.1499999999999999,
+    "success_rate_delta": 0.0
+  },
+  "issue": 4165,
+  "out_of_scope": [
+    "full benchmark campaign",
+    "Slurm or GPU submission",
+    "paper-facing claim update"
+  ],
+  "paired_key_fields": [
+    "scenario_id",
+    "seed"
+  ],
+  "paired_rows": 2,
+  "parameter_provenance": {
+    "proxemic_config": {
+      "parameters": {
+        "decay_function": "linear",
+        "enabled": true,
+        "max_cost": 10.0,
+        "personal_radius": 0.45,
+        "personal_weight": 1.0,
+        "social_radius": 1.2,
+        "social_weight": 0.35,
+        "velocity_elongation_factor": 0.5
+      },
+      "path": "configs/planners/proxemic_costmap_v1.yaml",
+      "sha256": "0b38c3bff442a0d478256d1335376aad5f20f3a03ed775a57b711738fb0f7abd"
+    },
+    "smoke_config": {
+      "parameters": {
+        "arms": {
+          "baseline_classical": {
+            "algo": "hybrid_rule_local_planner",
+            "config": "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml"
+          },
+          "proxemic_costmap_on": {
+            "algo": "hybrid_rule_local_planner",
+            "config": "configs/algos/hybrid_rule_v3_teb_like_rollout_proxemic_costmap.yaml",
+            "proxemic_costmap": "configs/planners/proxemic_costmap_v1.yaml"
+          }
+        },
+        "claim_boundary": "smoke_config_only",
+        "description": "Compare baseline hybrid-rule local planner against opt-in proxemic costmap arm.",
+        "expected_report_fields": [
+          "intrusion_rate_delta",
+          "minimum_clearance_delta",
+          "path_efficiency_delta",
+          "success_collision_caveats",
+          "runtime_overhead"
+        ],
+        "issue": 4165,
+        "out_of_scope": [
+          "full benchmark campaign",
+          "Slurm or GPU submission",
+          "paper-facing claim update"
+        ],
+        "scenario_sets": [
+          "configs/scenarios/planner_sanity_matrix_v1.yaml"
+        ]
+      },
+      "path": "configs/benchmarks/issue_4165_proxemic_costmap_smoke.yaml",
+      "sha256": "73bfd8b96241677380da41e19f62e8353ba0671e48f55141385c7537c216063c"
+    }
+  },
+  "report_status": "ready",
+  "success_collision_caveats": {
+    "baseline_collision_rate": 0.5,
+    "baseline_success_rate": 0.5,
+    "interpretation": "Diagnostic paired smoke deltas only; fallback/degraded rows block readiness and are not treated as successful benchmark evidence.",
+    "proxemic_collision_rate": 0.5,
+    "proxemic_success_rate": 0.5
+  }
+}

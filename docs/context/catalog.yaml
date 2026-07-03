@@ -2955,6 +2955,14 @@ entries:
     status: evidence
     freshness: evidence
     area: learned_policy
+  - path: docs/context/evidence/issue_4165_proxemic_ablation_report/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4165_proxemic_ablation_report/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4253_trace_episode_2026-07
     status: evidence
     freshness: evidence

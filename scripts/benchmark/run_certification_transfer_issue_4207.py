@@ -64,12 +64,19 @@ def main(argv: list[str] | None = None) -> int:
     else:
         records = _load_jsonl_records(_resolve(args.episodes_jsonl))
 
+    # Record portable, repo-relative provenance paths in the committed evidence packet. The
+    # absolute worktree paths that ``_resolve`` produces are correct for local file access, but
+    # baking them into a durable, shared artifact leaks author-specific ``/home/<user>/...``
+    # prefixes and trips the evidence path guard (issue #4324 / #4327). ``build_certification_transfer_report``
+    # opens these paths for hashing/validation relative to the current working directory, so this
+    # runner must be invoked from the repository root (the standard invocation); a wrong cwd fails
+    # closed with ``FileNotFoundError`` rather than emitting silent bad provenance.
     report = build_certification_transfer_report(
         records,
         probe_config=config,
         gate_spec=gate_spec,
-        config_path=config_path,
-        gate_spec_path=gate_spec_path,
+        config_path=_repo_relative(config_path),
+        gate_spec_path=_repo_relative(gate_spec_path),
         generated_at_utc=generated_at,
     )
     paths = write_certification_transfer_evidence(report, output_dir)
@@ -166,6 +173,23 @@ def _generated_at(raw: str) -> str:
     if raw == "now":
         return datetime.now(UTC).isoformat()
     return raw
+
+
+def _repo_relative(path: Path) -> Path:
+    """Return ``path`` relative to the repository root when it lives inside the checkout.
+
+    Evidence packets are committed and shared across machines/CI, so their recorded config and
+    gate-spec provenance paths must stay portable (no absolute ``/home/<user>/...`` prefix). Paths
+    outside the checkout are returned unchanged.
+
+    Returns:
+        A repo-relative ``Path`` when ``path`` is under :data:`REPO_ROOT`, else ``path``.
+    """
+
+    try:
+        return path.resolve().relative_to(REPO_ROOT)
+    except ValueError:
+        return path
 
 
 def _resolve(path: str | Path, *, must_exist: bool = True) -> Path:

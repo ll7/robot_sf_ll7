@@ -31,6 +31,12 @@ INTERACTING_SMOKE_FIXTURE = (
     REPO_ROOT
     / "tests/benchmark/fixtures/issue_4207_interacting_smoke/interacting_smoke_episodes.jsonl"
 )
+INTERACTING_PHYSICS_CONFIG = (
+    REPO_ROOT / "configs/benchmarks/issue_4207_interacting_physics_probe.yaml"
+)
+INTERACTING_PHYSICS_PACKET = (
+    REPO_ROOT / "docs/context/evidence/issue_4207_interacting_physics_2026-07"
+)
 
 
 def test_transfer_matrix_detects_pass_fail_flips(tmp_path: Path) -> None:
@@ -360,6 +366,62 @@ def test_committed_interacting_smoke_config_and_gates_validate() -> None:
         "prediction_planner",
         "guarded_ppo",
     ]
+
+
+def test_committed_physics_config_validates_and_uses_traversal_horizon() -> None:
+    """The committed physics probe config validates and uses a horizon long enough for contact.
+
+    The smoke config's horizon 60 (6 s) is too short for the robot to traverse the blind-corner
+    L-route, which is why the real smoke-horizon run stayed non_interacting; the physics config
+    raises the horizon to the scenario's own max_episode_steps (400) so the robot can reach the
+    corridor the pedestrian walks.
+    """
+
+    config = load_yaml_mapping(INTERACTING_PHYSICS_CONFIG)
+    normalized = validate_probe_config(config, base_dir=INTERACTING_PHYSICS_CONFIG.parent)
+    assert normalized["scenario_family"] == "issue4207_interacting_smoke"
+    assert normalized["pedestrian_models"] == [SOCIAL_FORCE_DEFAULT, HSFM_TOTAL_FORCE_V1]
+    assert [arm["key"] for arm in normalized["arms"]] == [
+        "goal",
+        "ppo",
+        "prediction_planner",
+        "guarded_ppo",
+    ]
+    assert normalized["horizon"] >= 400
+    assert normalized["paper_facing"] is False
+
+
+def test_committed_physics_packet_records_real_near_field_contact() -> None:
+    """The committed physics evidence packet proves nonzero near-field contact from simulation.
+
+    Unlike the synthetic smoke packet (fixture design choices), this packet is generated from an
+    actual CPU physics run. It must show at least one interacting cell with
+    ``robot_ped_within_5m_frac > 0`` and portable, repo-relative provenance paths (no absolute
+    home-dir leak), satisfying the issue #4207 / #4327 acceptance criterion.
+    """
+
+    summary = json.loads((INTERACTING_PHYSICS_PACKET / "summary.json").read_text(encoding="utf-8"))
+
+    assert summary["issue"] == 4207
+    assert summary["paper_facing"] is False
+    assert summary["claim_boundary"] == CLAIM_BOUNDARY
+    assert summary["model_sensitivity_exercised"] is True
+
+    interacting_cells = [
+        cell for cell in summary["gate_cells"] if cell["interaction_status"] == "interacting"
+    ]
+    assert interacting_cells, "physics packet must contain at least one interacting cell"
+    assert any(
+        cell["metrics"].get("robot_ped_within_5m_frac", 0.0) > 0.0 for cell in interacting_cells
+    ), "at least one interacting cell must record robot_ped_within_5m_frac > 0"
+    # Clearance metrics are recorded for the interacting cells (issue acceptance criterion).
+    assert all("min_clearance_m" in cell["metrics"] for cell in interacting_cells)
+
+    # Provenance must be portable: committed evidence never bakes in absolute home-dir paths.
+    for key in ("config", "gate_spec"):
+        recorded = summary[key]["path"]
+        assert not recorded.startswith(("/home/", "/Users/", "/root/")), recorded
+        assert recorded.startswith("configs/"), recorded
 
 
 def _write_config_pair(tmp_path: Path) -> tuple[Path, Path, dict[str, object], dict[str, object]]:

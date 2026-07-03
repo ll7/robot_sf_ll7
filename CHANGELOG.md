@@ -35,6 +35,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the **physics-verified interacting certification-transfer probe evidence** (#4327,
+  following #4207 / #4315): a real CPU run of the interacting scenario family through the 4-arm
+  certification-transfer probe, replacing the synthetic smoke fixture as the *empirical* diagnostic
+  reference. New config `configs/benchmarks/issue_4207_interacting_physics_probe.yaml` raises the
+  probe horizon to the scenario's own `max_episode_steps` (400); at the smoke config's horizon 60
+  the robot cannot traverse the blind-corner L-route, so the real run stayed non_interacting (robot
+  ~24 m from the pedestrian, `robot_ped_within_5m_frac = 0`). At horizon 400 the route-following
+  `goal` baseline reaches the corner and makes near-field contact
+  (`robot_ped_within_5m_frac = 0.106`, `min_clearance_m = -0.024`, a collision), so
+  `model_sensitivity_exercised = true` is backed by a real interacting cell for the first time.
+  Evidence packet `docs/context/evidence/issue_4207_interacting_physics_2026-07/` (diagnostic tier,
+  CPU-only). **Caveats:** the learned arms run without checkpoints in goal/sampling fallback and
+  never reach the pedestrian (their gate statuses are vacuous w.r.t. certification); and the
+  `social_force_default` / `hsfm_total_force_v1` cells are byte-identical, so `flip_cases = 0` —
+  the synthetic fixture's fabricated `ppo` flip does not reproduce under physics. The #4315 synthetic
+  packet is unchanged and remains tooling-validation only. The runner
+  `scripts/benchmark/run_certification_transfer_issue_4207.py` now records repo-relative (portable)
+  config/gate-spec provenance paths.
 * Documented the **runtime uncertainty-triggered fallback** for guarded PPO (#3974), which merged in
   #4193 without a CHANGELOG entry. This is the successor slice the earlier #4138 entry below called
   out as "not included"; that statement is now stale — the fallback ships in

@@ -768,6 +768,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed a **docs-proof readiness false-blocker for docs/context note PRs** (#4178, successor to
+  #4191). The `scripts/dev/check_docs_proof_consistency_diff.sh` wrapper unconditionally injected
+  `docs/context/catalog.yaml` into the `--path` selection for *any* docs/context-only diff, which
+  forced full catalog schema/provenance validation and surfaced pre-existing, unrelated catalog
+  debt (evidence rows that point at ignored `output/` artifacts). A PR that only edited a context
+  note (never touching `catalog.yaml`) was blocked by that baseline debt. The wrapper now keeps only
+  `README.md`/`INDEX.md` as always-selected link anchors; full catalog validation runs when
+  `catalog.yaml` is itself in the diff (selected naturally) or under the explicit
+  `--check-context-catalog` flag. #4191 already made the direct Python checker diff-scoped for
+  code-only diffs; this closes the same gap for docs/context note diffs. Strict catalog proof on
+  actual `catalog.yaml` changes and the explicit `--check-evidence-catalog` mode are unchanged, and
+  no catalog rows were repaired. Added a focused regression test.
+
 * Fixed **absolute machine paths leaking into the #4239 h600 SNQI evidence packet** (#4302). The
   builder `scripts/validation/build_issue_4239_h600_snqi_weight_set_ranking.py` hardened `_rel()` so a
   worktree `output/` symlink (which made `path.resolve()` escape the worktree root) no longer falls

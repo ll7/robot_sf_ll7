@@ -14,7 +14,8 @@ uv run python scripts/tools/manage_external_data.py stage sdd --source /path/to/
 The first supported asset groups are:
 
 - `sdd`: Stanford Drone Dataset annotation text files for the SDD scenario importer.
-- `socnavbench-s3dis-eth`: SocNavBench/S3DIS ETH mesh and traversible inputs.
+- `socnavbench-s3dis-eth`: SocNavBench/S3DIS ETH mesh and traversible inputs; see
+  [SocNavBench S3DIS ETH External Data](datasets/socnavbench-s3dis-eth.md).
 - `socnavbench-control`: SocNavBench `wayptnav_data` control-pipeline assets.
 - `amv-calibration`: local-only AMV actuation calibration source provenance for #1585/#1559.
 

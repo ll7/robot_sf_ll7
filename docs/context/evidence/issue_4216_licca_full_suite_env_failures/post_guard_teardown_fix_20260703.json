@@ -1,0 +1,38 @@
+{
+  "issue": 4216,
+  "evidence_type": "post_guard_teardown_hang_diagnosis_and_fix",
+  "status": "fix_applied",
+  "supersedes_blocker_in": "docs/context/evidence/issue_4216_licca_full_suite_env_failures/post_guard_closure_20260703.json",
+  "claim_boundary": "Identifies a concrete unbounded nested-pytest spawn as the mechanism for the post-100% teardown hang recorded by PR #4276, and bounds it so a wedged child is reaped instead of blocking the parent suite. CPU-verified with a process-group reaping regression test. A clean LiCCA full-suite exit-code rerun is still required to confirm empirically on GPU/HPC.",
+  "diagnosis": {
+    "symptom": "Full suite reaches 100% but pytest never emits its final summary or exits; a nested pytest child survives holding GPU device handles.",
+    "root_cause": "tests/perf_utils/test_enforce_mode.py spawned a nested pytest (python -m pytest, cwd=repo root, loading the full tests/conftest.py + robot_sf import stack) via subprocess.run(...) with no timeout= argument. On a shared GPU/HPC node the nested child can deadlock during CUDA/interpreter teardown or leave a descendant holding device handles, blocking the parent forever after 100%.",
+    "why_silent": "pytest-timeout is not installed in this environment, so the @pytest.mark.timeout(10) decoration on the test is a no-op; nothing bounded the child.",
+    "verification_env": "CPU-only local worktree; the GPU/CUDA teardown deadlock itself was not reproduced here (no GPU, cluster ptrace policy blocked gdb attach per post_guard_closure_20260703.json)."
+  },
+  "fix": {
+    "new_helper": "tests/support/process_teardown.py",
+    "helper_capability": "run_bounded_subprocess() runs a child in a new session/process group and, on timeout, terminates the whole group (SIGTERM->SIGKILL) so descendants holding device handles are reaped, then raises NestedProcessTimeout instead of blocking.",
+    "mirrors_canonical_owner": "scripts/dev/run_compact_validation.py::_terminate_process_group (same process-group termination pattern, lightweight test-lane variant without artifact writes).",
+    "call_site_bounded": "tests/perf_utils/test_enforce_mode.py now uses run_bounded_subprocess with an enforced timeout (ROBOT_SF_NESTED_PYTEST_TIMEOUT, default 180s) and fails loudly on reap.",
+    "regression_test": "tests/support/test_process_teardown.py::test_run_bounded_subprocess_reaps_descendant_on_timeout proves a long-lived grandchild is reaped when the group is terminated."
+  },
+  "validation": {
+    "helper_tests": "5 passed (tests/support/test_process_teardown.py)",
+    "affected_test": "tests/perf_utils/test_enforce_mode.py::test_enforce_mode_escalates passed (nested child completed in ~5s, well under the 180s bound)",
+    "guard_tests_unchanged": "tests/support/test_environment_guards.py 5 passed",
+    "simulated_licca": "ROBOT_SF_TEST_ENV=licca run of the affected + helper tests passed",
+    "lint": "ruff check + ruff format --check clean on changed files"
+  },
+  "out_of_scope": {
+    "pytest_timeout_dependency": "Adding pytest-timeout to enforce all @pytest.mark.timeout markers repo-wide is a broader, higher-risk change (13 files rely on the no-op marker) and was intentionally not done here.",
+    "benchmark_campaign": false,
+    "slurm_or_gpu_submission": false,
+    "paper_or_dissertation_claims": false
+  },
+  "artifact_policy": {
+    "large_or_transient_logs_committed": false,
+    "absolute_local_paths": false,
+    "output_pointers": false
+  }
+}

@@ -12,7 +12,8 @@
 The companion `francis2023_blind_corner` probe
 (`docs/context/evidence/issue_4207_certification_transfer_probe_2026-07/`) recorded cells that were
 all `non_interacting` (`robot_ped_within_5m_frac = 0`, min clearance ~20 m). Because
-`social_force_default` and `hsfm_total_force_v1` only diverge inside the 5 m pedestrian near field,
+`social_force_default` (social-force model, SFM) and `hsfm_total_force_v1` (headed social-force
+model, HSFM) only diverge inside the 5 m pedestrian near field,
 that run's stable transfer statuses were **vacuous** and the guard reported
 `model_sensitivity_exercised = false`.
 

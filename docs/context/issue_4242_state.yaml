@@ -1,0 +1,122 @@
+# Canonical high-churn state surface for issue #4242.
+#
+# Purpose: issue #4242 landed several merged slices within a single day
+# (schema -> backfill -> native writer -> builder consumption). Autonomous
+# ready-queue routing worked from a pre-#4305 snapshot and re-dispatched the
+# already-delivered "teach h600 builders to consume mechanism/exposure fields"
+# slice. This append-only ledger records the delivered scope, the tested
+# builder-consumption status, and the single remaining empirical blocker so
+# future routing does not re-open a completed slice.
+#
+# Scope discipline: this file tracks durable integration state only. It does
+# not encode transient queue-routing state (target hosts, packet lineage
+# pointers), does not promote F-C4(ii) benchmark/ranking claims, and does not
+# change any schema or builder behavior.
+issue: 4242
+state_surface: h600_mechanism_exposure_builder_consumption
+canonical_schema_note: docs/context/issue_4242_episode_mechanism_exposure_schema.md
+entries:
+  - recorded_at_utc: "2026-07-03T00:00:00Z"
+    status: builder_consumption_delivered_tested_remaining_blocker_trace_verified_exposure
+    summary: >-
+      The #4195 exposure diagnostics and #4206 mechanism cross-cut builders
+      already consume native seed_episode_rows.csv mechanism/exposure fields and
+      declared issue_4242_h600_sidecars sidecars, fail-closed with no imputation
+      and geometry-only mechanism labels rejected. Acceptance criteria 1, 2, 4,
+      and 5 are satisfied by merged work; the only open item is trace-verified
+      exposure evidence, which cannot be produced on CPU-only lanes.
+    delivered_slices:
+      - pr: 4255
+        merged_at_utc: "2026-07-03T10:06:17Z"
+        capability: >-
+          seed_variance emits failure_mechanism_taxonomy.v1 + interaction
+          exposure schema fields; real mechanism labels only when
+          trace_status=trace_verified, else not_derivable/unknown.
+        acceptance_criteria: [1, 2]
+      - pr: 4278
+        merged_at_utc: "2026-07-03T13:06:04Z"
+        capability: >-
+          Retained h600 mechanism/exposure sidecar backfill helpers; retained
+          rows are uniformly not_derivable_missing_trace (no retained traces).
+        acceptance_criteria: [3]
+      - pr: 4301
+        merged_at_utc: "2026-07-03T14:37:02Z"
+        capability: >-
+          Map-runner episode writer emits native failure_mechanism +
+          interaction_exposure blocks (writer-emits half of AC 5).
+        acceptance_criteria: [2, 5]
+      - pr: 4305
+        merged_at_utc: "2026-07-03T15:15:57Z"
+        capability: >-
+          #4195/#4206 h600 builders consume native seed_episode_rows.csv
+          mechanism/exposure fields and declared issue_4242_h600_sidecars
+          sidecars; native wins over sidecar; not_derivable/missing markers
+          never count as evidence. This is the exact scope of the ready-queue
+          task title routed on 2026-07-03; it is already merged.
+        acceptance_criteria: [4, 5]
+      - pr: 4312
+        capability: >-
+          #4206 cross-cut distinguishes an un-retrieved-artifact block from a
+          missing-label block.
+        acceptance_criteria: [5]
+      - pr: 4319
+        capability: >-
+          #4206 mechanism cross-cut refreshed against retrieved h600 artifacts
+          (13268/13273).
+        acceptance_criteria: [4]
+      - pr: 4321
+        capability: >-
+          #4195 h600 hybrid-roster F-C4(ii) interpretation gate (diagnostic,
+          records sign-off).
+        acceptance_criteria: [4]
+    builder_consumption_contract:
+      exposure_field_sources:
+        - native_episode_fields
+        - sidecar_declared
+        - blocked_missing_required_fields
+      mechanism_block_status:
+        - blocked_missing_trace_verified_mechanism_labels
+        - geometry_bucket_substitution_rejected
+      no_imputation: derive_from_retained_episode_rows_only_no_imputation
+      precedence: native_wins_over_sidecar
+    validation:
+      builder_consumption_tests:
+        command: >-
+          uv run pytest tests/benchmark/test_failure_mechanism_taxonomy.py
+          tests/benchmark/test_interaction_exposure.py
+          tests/validation/test_issue_4242_h600_mechanism_exposure_sidecars.py
+          tests/validation/test_issue_4206_policy_structure_mechanism_crosscut.py
+          tests/analysis/test_build_issue_4195_h600_aggregation_artifact.py -q
+        result: "35 passed"
+        exit_code: 0
+        covers:
+          - "#4206 test_native_writer_rows_are_consumed_by_builder"
+          - "#4206 test_sidecar_mechanism_labels_are_accepted"
+          - "#4206 test_geometry_bucket_labels_are_rejected_as_substitutes"
+          - "#4195 test_build_artifact_accepts_native_exposure_fields_without_imputation"
+          - "#4195 test_extend_consumes_declared_sidecar_with_computed_rows"
+          - "#4195 test_build_artifact_writes_tables_comparability_and_checksums (blocked_missing_required_fields fail-closed)"
+    remaining_blocker:
+      item: trace_verified_interaction_exposure_evidence
+      why: >-
+        Retained h600 traces are uniformly not_derivable_missing_trace, so
+        F-C4(ii) exposure evidence stays blocked until trace-verified exposure
+        exists. The builders correctly refuse to count not_derivable/missing
+        markers as evidence.
+      next_empirical_action: >-
+        Run a mechanism-instrumented benchmark campaign that retains the
+        trajectory traces the exposure/mechanism helpers need, then re-run the
+        #4195/#4206 builders over the natively-instrumented rows.
+      out_of_scope_for_cpu_lane:
+        - new benchmark campaigns
+        - SLURM/GPU submission
+        - trace-label fabrication or imputation
+        - F-C4(ii) benchmark/ranking/paper/dissertation claim promotion
+    notes:
+      - >-
+        Ready-queue rank 187 routed the builder-consumption task from a
+        pre-#4305 snapshot; #4305 (merged) already delivered it verbatim. No
+        duplicate builder change was produced.
+      - >-
+        No full benchmark campaign run, no SLURM/GPU submission, and no
+        paper/dissertation claim edits were made for this state update.

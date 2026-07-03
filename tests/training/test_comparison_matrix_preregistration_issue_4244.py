@@ -17,7 +17,10 @@ from scripts.training.run_comparison_matrix_preregistration import (
     main,
 )
 
-CONFIG_PATH = Path("configs/training/comparison_matrix/issue_4244_seven_arm_preregistration.yaml")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CONFIG_PATH = (
+    REPO_ROOT / "configs/training/comparison_matrix/issue_4244_seven_arm_preregistration.yaml"
+)
 
 
 def test_issue_4244_matrix_declares_exact_seven_arm_roster() -> None:

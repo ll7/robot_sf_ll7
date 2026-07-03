@@ -1,0 +1,35 @@
+{
+  "algorithm": "sac",
+  "checkpoint_sha256": "d96befeeb8fbe5cefd3106c4d43ac8eca6c8c1978246f44338d019f083ebe3f6",
+  "claim_boundary": "standalone offline pretraining provenance only; not benchmark evidence",
+  "dataset": {
+    "accepted_transitions": 2,
+    "dataset_id": "issue_4245_smoke",
+    "dataset_manifest_sha256": "aecff01f28fb396c612f36706588488f2a2433cf23eca277552aaeb132fa6f0c",
+    "dataset_schema_version": "RLTrajectoryDataset.v1",
+    "dataset_sha256": "0e80eb05a8b530b8b3b19f0514f28351706ffcbbbc6b5cc925f4eb35af4f2f29",
+    "dropped_terminal_transitions": 0,
+    "episode_count": 1,
+    "split": "train"
+  },
+  "eligible_for_claim": false,
+  "environment_contract": {
+    "action_space_fingerprint": "7f8c6b1a9dc7cd7a4f82e77e6c3fd2087227c282b2a2b3fba676b3d465f6b384",
+    "observation_space_fingerprint": "80ece25a0c7ea922cb40050ace23be6e2446edce23515f3cd7dca489f7118daa",
+    "scenario_config": "configs/scenarios/classic_interactions.yaml"
+  },
+  "git_commit_at_smoke": "dfa760ede8a18f71c2eaef5394482db02faaeba0",
+  "issue": 4245,
+  "normalizer_sha256": "2af80358e5a3d8a83f6bd4c947f0b6ae540c97cfe76b4dba39f9475cab426979",
+  "offline_training": {
+    "action_contract": "box_direct",
+    "batch_size": 2,
+    "gradient_steps": 1,
+    "observation_contract": "dataset_observation",
+    "seed": 4245
+  },
+  "parent_issue": 4012,
+  "policy_type": "MultiInputPolicy",
+  "schema_version": "offline-policy-checkpoint-manifest.v1",
+  "training_config_sha256": "b70fb36b37b80604d410dbf37e253227034a14ed1e4529426ab8d73d236be5d8"
+}

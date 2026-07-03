@@ -1,0 +1,25 @@
+policy_id: issue_4245_sac_offline_pretrain
+scenario_config: ../../scenarios/classic_interactions.yaml
+total_timesteps: 1
+seed: 4245
+output_dir: ../../../output/issue_4245_offline_pretrain_smoke
+device: cpu
+action_semantics: delta
+sac_hyperparams:
+  buffer_size: 256
+  learning_starts: 0
+  batch_size: 2
+  gradient_steps: 1
+env_factory_kwargs:
+  reward_name: route_completion_v3
+tracking:
+  enabled: false
+offline_online:
+  enabled: true
+  dataset_path: ../../../output/issue_4245_offline_pretrain_smoke/issue_4245_smoke.jsonl
+  manifest_path: ../../../output/issue_4245_offline_pretrain_smoke/issue_4245_smoke.manifest.json
+  dataset_split: train
+  min_transitions: 2
+  offline_gradient_steps: 1
+  action_contract: box_direct
+  observation_contract: dataset_observation

@@ -323,11 +323,11 @@ ASSETS: tuple[AssetSpec, ...] = (
         license_url="https://dil.atr.jp/crest2010_HRI/ATC_dataset/",
     ),
     AssetSpec(
-        asset_id="eth-ucy-trajectories",
+        asset_id="eth-ucy",
         title="ETH/UCY pedestrian trajectory benchmarks",
-        expected_local_path=REPO_ROOT / "output" / "external_data" / "eth_ucy_trajectories",
-        shared_root_subpath=Path("eth_ucy_trajectories"),
-        source_url="https://vision.ee.ethz.ch/datasets/",
+        expected_local_path=REPO_ROOT / "output" / "external_data" / "eth-ucy",
+        shared_root_subpath=Path("eth-ucy"),
+        source_url="https://vision.ee.ethz.ch/datsets.html",
         source_note=(
             "ETH BIWI Walking Pedestrians official page plus UCY Crowds-by-Example "
             "manual staging for the standard ETH/Hotel/Univ/Zara trajectory benchmark set."
@@ -378,8 +378,8 @@ ASSETS: tuple[AssetSpec, ...] = (
                 group="license_or_readme",
             ),
         ),
-        related_issues=(2844, 4013),
-        license_url="https://vision.ee.ethz.ch/datasets/",
+        related_issues=(2844, 4013, 4224, 4280),
+        license_url="https://vision.ee.ethz.ch/datsets.html",
     ),
     AssetSpec(
         asset_id="ind-crossings",

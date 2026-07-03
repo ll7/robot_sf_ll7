@@ -18,6 +18,9 @@ The first supported asset groups are:
   [SocNavBench S3DIS ETH External Data](datasets/socnavbench-s3dis-eth.md).
 - `socnavbench-control`: SocNavBench `wayptnav_data` control-pipeline assets.
 - `amv-calibration`: local-only AMV actuation calibration source provenance for #1585/#1559.
+- `eth-ucy`: ETH BIWI and UCY Crowds-by-Example pedestrian-trajectory
+  acquisition/provenance metadata; see
+  [ETH/UCY External Trajectory Data](./datasets/eth-ucy.md).
 
 `download` intentionally fails closed for these groups because the repository has not encoded a
 license-safe direct download path. Follow the official source instructions printed by `explain`,
@@ -54,6 +57,7 @@ summary.
 | `sdd` | <https://cvgl.stanford.edu/projects/uav_data/> | CC BY-NC-SA 3.0 (non-commercial); download per the dataset terms | `output/external_data/sdd/` | the original annotation text files (`**/annotations.txt`, columns `track_id xmin ymin xmax ymax frame lost occluded generated label`) |
 | `socnavbench-s3dis-eth` | <https://github.com/CMU-TBD/SocNavBench> install docs → the curated S3DIS/SBPD asset package | **S3DIS** meshes/traversibles have a separate access agreement; not redistributed by Robot SF | `third_party/socnavbench/` | `sd3dis/stanford_building_parser_dataset/mesh/ETH/` (dir) and `sd3dis/stanford_building_parser_dataset/traversibles/ETH/data.pkl` |
 | `socnavbench-control` | <https://github.com/CMU-TBD/SocNavBench> (`wayptnav_data`) | external SocNavBench assets, not redistributed | `third_party/socnavbench/` | `wayptnav_data/` (precomputed waypoint/control data) |
+| `eth-ucy` | <https://vision.ee.ethz.ch/datsets.html> plus UCY Crowds-by-Example source/paper provenance | research-use terms from upstream or maintainer-approved mirror; not redistributed by Robot SF | `output/external_data/eth-ucy/` or `$ROBOT_SF_EXTERNAL_DATA_ROOT/eth-ucy/` | ETH/Hotel `obsmat.txt`, UCY `.vsp` or trajectory `.txt`, plus local `README*`, `LICENSE*`, or `TERMS*`; see [ETH/UCY External Trajectory Data](./datasets/eth-ucy.md) |
 
 After placing the files, validate and write a provenance manifest:
 

@@ -902,17 +902,21 @@ def test_compute_aggregates_with_ci_diagnostic_cross_track_namespaces_groups() -
     assert summary["_meta"]["observation_tracks"]["mode"] == "diagnostic_cross_track"
 
 
-def test_numeric_items_excludes_non_finite_and_bool_values() -> None:
-    """Aggregate numeric extraction ignores non-finite values and booleans."""
+def test_numeric_items_excludes_non_finite_and_coerces_bool_values() -> None:
+    """Aggregate numeric extraction drops non-finite values but coerces bools.
+
+    ``post_process_metrics`` stores ``success`` as a Python bool, so booleans
+    must aggregate as 0.0/1.0 — dropping them would null ``success.mean``.
+    """
 
     numeric = _numeric_items(
         {
-            "success": 1.0,
+            "success": True,
+            "flagged_false": False,
             "inf_metric": float("inf"),
             "neg_inf_metric": float("-inf"),
             "nan_metric": float("nan"),
-            "bool_metric": True,
         }
     )
 
-    assert numeric == {"success": 1.0}
+    assert numeric == {"success": 1.0, "flagged_false": 0.0}

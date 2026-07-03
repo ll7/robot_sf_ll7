@@ -435,3 +435,136 @@ planners:
     grid = payload["decision_packet"]["grid_completeness"]
     assert grid["expected_planners"] == ["custom_config_only"]
     assert grid["missing_cells"] == [{"scenario_id": "*", "planner_key": "custom_config_only"}]
+
+
+def test_campaign_recovery_writes_headline_rows_from_completed_artifacts(
+    tmp_path: Path,
+) -> None:
+    """Completed campaign CSVs are enough to recover headline rows."""
+
+    campaign = tmp_path / "campaign"
+    reports = campaign / "reports"
+    reports.mkdir(parents=True)
+    (reports / "scenario_family_breakdown.csv").write_text(
+        "planner_key,scenario_family,episodes\norca,bottleneck,2\norca,blind_corner,1\n",
+        encoding="utf-8",
+    )
+    (reports / "campaign_table.csv").write_text(
+        "planner_key,execution_mode,status\norca,native,ok\n",
+        encoding="utf-8",
+    )
+    (reports / "seed_episode_rows.csv").write_text(
+        "episode_id,scenario_id,planner_key,seed,success,collision,near_miss,snqi\n"
+        "a,classic_realworld_double_bottleneck_high,orca,111,1,0,2,0.2\n"
+        "b,classic_bottleneck_high,orca,111,0,1,4,0.4\n"
+        "c,francis2023_blind_corner,orca,112,1,0,0,0.8\n",
+        encoding="utf-8",
+    )
+
+    rows_path = issue3216._ensure_campaign_headline_rows(campaign)
+
+    assert rows_path == reports / "headline_rows.json"
+    rows = json.loads(rows_path.read_text(encoding="utf-8"))
+    by_family = {row["scenario_family"]: row for row in rows}
+    assert sorted(by_family) == ["blind_corner", "bottleneck"]
+    bottleneck_seed = by_family["bottleneck"]["per_seed"][0]
+    assert bottleneck_seed["seed"] == 111
+    assert bottleneck_seed["metrics"]["success"] == 0.5
+    assert bottleneck_seed["metrics"]["collisions"] == 0.5
+    assert bottleneck_seed["metrics"]["near_misses"] == 3.0
+    assert bottleneck_seed["metrics"]["snqi"] == pytest.approx(0.3)
+    assert by_family["bottleneck"]["execution_mode"] == "native"
+    assert by_family["bottleneck"]["row_status"] == "ok"
+
+
+def test_campaign_wrapper_runs_builder_before_requiring_headline_rows(
+    tmp_path: Path,
+) -> None:
+    """The wrapper no longer searches for headline_rows before builder execution."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    output_root = tmp_path / "benchmarks"
+    report_dir = tmp_path / "report"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log_path = tmp_path / "uv_calls.log"
+    uv_stub = bin_dir / "uv"
+    uv_stub.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+echo "$*" >> "$UV_STUB_LOG"
+if [ "$1" != "run" ] || [ "$2" != "python" ]; then
+  exit 99
+fi
+shift 2
+case "${1:-}" in
+  -)
+    exec python -
+    ;;
+  scripts/tools/run_camera_ready_benchmark.py)
+    shift
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --campaign-id) campaign_id="$2"; shift 2 ;;
+        --output-root) output_root="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    mkdir -p "$output_root/$campaign_id/reports"
+    ;;
+  scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py)
+    shift
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --campaign) campaign="$2"; shift 2 ;;
+        --output-dir) output_dir="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    test -d "$campaign/reports"
+    test ! -f "$campaign/reports/headline_rows.json"
+    echo '[{"scenario_family":"fixture","planner_key":"orca","per_seed":[]}]' > "$campaign/reports/headline_rows.json"
+    mkdir -p "$output_dir"
+    echo '{"classification":"fixture"}' > "$output_dir/result.json"
+    echo '# fixture' > "$output_dir/report.md"
+    ;;
+  *)
+    exit 98
+    ;;
+esac
+""",
+        encoding="utf-8",
+    )
+    uv_stub.chmod(0o755)
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "OUTPUT_ROOT": str(output_root),
+        "REPORT_DIR": str(report_dir),
+        "UV_STUB_LOG": str(log_path),
+    }
+
+    result = subprocess.run(
+        [
+            "bash",
+            "scripts/benchmark/run_issue3216_headline_campaign.sh",
+            "--campaign-id",
+            "fixture_campaign",
+        ],
+        cwd=repo_root,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "locate headline rows" not in result.stdout
+    assert " rows=" in result.stdout
+    calls = log_path.read_text(encoding="utf-8")
+    assert "scripts/tools/run_camera_ready_benchmark.py" in calls
+    assert "scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py" in calls
+    assert f"--campaign {output_root / 'fixture_campaign'}" in calls
+    assert (output_root / "fixture_campaign" / "reports" / "headline_rows.json").is_file()
+    assert (report_dir / "result.json").is_file()

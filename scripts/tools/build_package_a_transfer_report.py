@@ -270,7 +270,7 @@ def _write_reproduction(
                 "Renderer command:",
                 "",
                 "```bash",
-                " \\\n+  ".join(command_parts),
+                " \\\n  ".join(command_parts),
                 "```",
                 "",
                 "This command renders compact evidence only. It does not run Package A campaigns.",

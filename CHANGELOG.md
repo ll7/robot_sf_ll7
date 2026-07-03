@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **fail-closed readiness preflight for the issue #4142 dense DPCBF comparison**
+  (#4142): new `robot_sf/benchmark/issue_4142_dpcbf_dense_readiness.py` and the CLI
+  `scripts/tools/check_issue_4142_dpcbf_dense_readiness.py` validate the predeclared
+  comparison packet `configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml` before any
+  campaign can be authorized. It reuses the canonical CBF runtime validator to confirm the
+  three arms (`cbf_off`, `cbf_collision_cone_on`, `cbf_dynamic_parabolic_v1_on`) stay
+  predeclared, distinct, and fail-closed, cross-checks each arm's adapter config against
+  its runtime variant, confirms the scenario manifest exists, and enforces the
+  fallback/degraded exclusion. The packet gains a structured `canonical_command` field and
+  an explicit `summary_contract.excluded_row_statuses` list. The surface is read-only:
+  status is `prerequisites_incomplete` (any structural gap) or `inputs_ready_campaign_gated`
+  (inputs valid, campaign still gated behind a not-yet-wired packet runner and human/Slurm
+  authorization). It runs no episodes, submits no Slurm/GPU job, and makes no
+  safety-performance or collision-reduction claim. See
+  `docs/context/issue_4142_dpcbf_dense_readiness.md`.
 * Added **write-time episode-row mechanism and exposure instrumentation** to the map runner
   (#4242): `robot_sf/benchmark/map_runner_episode.run_map_episode` now attaches native
   `failure_mechanism` (`failure_mechanism_taxonomy.v1`) and `interaction_exposure`

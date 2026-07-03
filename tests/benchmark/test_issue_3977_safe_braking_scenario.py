@@ -20,8 +20,13 @@ SINGLE_SCENARIO = REPO_ROOT / "configs/scenarios/single/issue_3977_safe_braking.
 
 def _load_safe_braking_scenario() -> dict:
     scenarios = load_scenarios(SCENARIO_SET)
-    assert len(scenarios) == 1
-    return dict(scenarios[0])
+    matches = [
+        scenario
+        for scenario in scenarios
+        if scenario["name"] == "issue_3977_safe_braking_ped_steps_in_front"
+    ]
+    assert len(matches) == 1
+    return dict(matches[0])
 
 
 def _single_pedestrian(config):

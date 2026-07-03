@@ -1,2 +1,3 @@
 include:
   - ../single/issue_3977_safe_braking.yaml
+  - ../single/issue_3977_visibility_and_intent.yaml

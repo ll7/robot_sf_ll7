@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* Fixed the **LiCCA post-guard full-suite teardown hang** (#4216): the suite could reach 100% and
+  then never exit because `tests/perf_utils/test_enforce_mode.py` spawned a nested `pytest` child
+  with an unbounded `subprocess.run(...)` (its `@pytest.mark.timeout` marker is a no-op because
+  `pytest-timeout` is not installed). On a shared GPU/HPC node that child can deadlock during
+  CUDA/interpreter teardown or leave a descendant holding device handles, blocking the parent
+  forever. Added `tests/support/process_teardown.py::run_bounded_subprocess`, which runs the child
+  in its own process group and, on timeout, reaps the whole group (SIGTERM→SIGKILL) so descendants
+  are terminated too — mirroring the termination pattern already used by
+  `scripts/dev/run_compact_validation.py`. The nested-pytest call site is now bounded
+  (`ROBOT_SF_NESTED_PYTEST_TIMEOUT`, default 180s) and a CPU-only regression test proves a
+  long-lived descendant is reaped. No GitHub Actions behavior changes.
+
 ### Added
 
 * Added a **consolidated failure-archive rerun closure packet** for issue #3275:

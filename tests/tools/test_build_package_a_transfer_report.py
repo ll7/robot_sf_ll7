@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import csv
+import importlib.util
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 
-from scripts.tools.build_package_a_transfer_report import main, render_report
+from scripts.tools.build_package_a_transfer_report import (
+    _surface_families,
+    _table_rows,
+    main,
+    render_report,
+)
 from scripts.tools.campaign_result_store import write_result_store
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -16,6 +23,12 @@ READINESS_MANIFEST = REPO_ROOT / "configs" / "benchmarks" / "issue_3078_package_
 PARTITION_MANIFEST = (
     REPO_ROOT / "configs" / "benchmarks" / "issue_2128_heldout_family_transfer_partitions.yaml"
 )
+PARQUET_ENGINES = ("pyarrow", "fastparquet", "duckdb")
+
+
+def _skip_without_parquet_engine() -> None:
+    if not any(importlib.util.find_spec(engine) for engine in PARQUET_ENGINES):
+        pytest.skip("requires parquet engine: pyarrow, fastparquet, duckdb")
 
 
 def _seed_report(path: Path) -> Path:
@@ -108,6 +121,8 @@ def test_renderer_writes_blocked_skeleton_without_campaign_inputs(tmp_path: Path
 
 def test_renderer_builds_transfer_tables_and_keeps_fallback_visible(tmp_path: Path) -> None:
     """Valid local evidence produces deterministic tables with non-promotable rows visible."""
+    _skip_without_parquet_engine()
+
     output_dir = tmp_path / "report"
     result_store = _result_store(tmp_path / "result-store")
     seed_report = _seed_report(tmp_path / "seed_sufficiency_analysis.json")
@@ -137,6 +152,28 @@ def test_renderer_builds_transfer_tables_and_keeps_fallback_visible(tmp_path: Pa
     ]
     claim_card = yaml.safe_load((output_dir / "claim_card.yaml").read_text())
     assert claim_card["non_promotable_row_status_counts"] == {"fallback": 1}
+    leakage_audit = (output_dir / "leakage_audit.md").read_text()
+    assert "Benchmark-set labeling mode: `inferred_by_excluding_heldout_families`" in leakage_audit
+    assert "benchmark-set families are not declared" in leakage_audit
+
+
+def test_renderer_fails_closed_when_transfer_surface_families_undeclared(tmp_path: Path) -> None:
+    """Partition manifests without any surface families cannot label transfer rows."""
+    partition_manifest = tmp_path / "partitions.yaml"
+    partition_manifest.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "test.transfer_partitions.v1",
+                "benchmark_set_evaluation": {"description": "intentionally empty"},
+                "heldout_family_evaluation": {"description": "intentionally empty"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    families = _surface_families(partition_manifest)
+    with pytest.raises(ValueError, match="must declare benchmark_set_evaluation"):
+        _table_rows(tmp_path / "unused-result-store", families)
 
 
 def test_renderer_fails_closed_for_invalid_supplied_result_store(tmp_path: Path) -> None:

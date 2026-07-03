@@ -145,7 +145,9 @@ def test_offline_online_validation_uses_processed_observations(
     config = load_sac_training_config(_config(tmp_path, tmp_path / "dataset.jsonl", enabled=True))
     assert config.offline_online.manifest_path is not None
     config.offline_online.manifest_path.write_text("{}", encoding="utf-8")
-    monkeypatch.setattr(train_sac_sb3, "load_offline_transition_batch", lambda *_args, **_kwargs: batch)
+    monkeypatch.setattr(
+        train_sac_sb3, "load_offline_transition_batch", lambda *_args, **_kwargs: batch
+    )
     model = _FakeSAC()
 
     train_sac_sb3._seed_offline_online_replay_buffer(

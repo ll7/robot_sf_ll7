@@ -7,6 +7,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 
 def _script_path() -> Path:
     """Return the repository-local uv sync diagnostic script path."""
@@ -16,6 +18,44 @@ def _script_path() -> Path:
 def _repo_root() -> Path:
     """Return the repository root for workflow contract checks."""
     return Path(__file__).resolve().parents[2]
+
+
+def _clean_diag_env(tmp_path: Path) -> dict[str, str]:
+    """Return deterministic diagnostic env independent of host runner metadata."""
+    env = os.environ.copy()
+    for key in (
+        "GITHUB_ACTIONS",
+        "ROBOT_SF_TEST_ENV",
+        "RUNNER_ARCH",
+        "RUNNER_NAME",
+        "RUNNER_OS",
+        "SLURM_CLUSTER_NAME",
+        "SLURM_JOB_ID",
+        "UV_CACHE_DIR",
+        "VIRTUAL_ENV",
+    ):
+        env.pop(key, None)
+    env["HOME"] = str(tmp_path / "home")
+    env["RUNNER_OS"] = "Linux"
+    env["RUNNER_ARCH"] = "X64"
+    env["UV_CACHE_DIR"] = str(tmp_path / "uv-cache")
+    return env
+
+
+@pytest.fixture(autouse=True)
+def _clear_host_runner_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep diagnostic assertions independent of LiCCA/GitHub ambient metadata."""
+    for key in (
+        "GITHUB_ACTIONS",
+        "ROBOT_SF_TEST_ENV",
+        "RUNNER_ARCH",
+        "RUNNER_NAME",
+        "RUNNER_OS",
+        "SLURM_CLUSTER_NAME",
+        "SLURM_JOB_ID",
+        "VIRTUAL_ENV",
+    ):
+        monkeypatch.delenv(key, raising=False)
 
 
 def test_ci_uv_sync_diag_shell_syntax() -> None:
@@ -34,9 +74,8 @@ def test_ci_uv_sync_diag_runs_without_uv(tmp_path: Path) -> None:
     fake_bin = tmp_path / "fake-empty-bin"
     fake_bin.mkdir(exist_ok=True)
     try:
-        env = os.environ.copy()
+        env = _clean_diag_env(tmp_path)
         env["PATH"] = str(fake_bin)
-        env.pop("UV_CACHE_DIR", None)
         result = subprocess.run(
             [bash_path, str(script), "no-uv-test"],
             capture_output=True,

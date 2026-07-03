@@ -151,6 +151,57 @@ def test_hybrid_rule_v0_returns_diagnostics_for_open_space() -> None:
     assert diagnostics["selected_source_counts"]
 
 
+def test_goal_posterior_channel_can_change_selected_command_from_info() -> None:
+    """Opt-in issue #4164 path consumes info channel during action selection."""
+    base = HybridRuleLocalPlannerAdapter(HybridRuleLocalPlannerConfig())
+    obs = _obs(
+        goal=(4.0, 0.0),
+        ped_positions=[(1.0, 0.2)],
+        ped_velocities=[(0.0, 0.8)],
+    )
+    base_command = base.plan(obs)
+
+    config = HybridRuleLocalPlannerConfig(
+        goal_posterior_avoidance_enabled=True,
+        goal_posterior_min_confidence=0.5,
+        goal_posterior_near_distance=2.0,
+        goal_posterior_crossing_lateral_margin=0.5,
+        goal_posterior_yield_speed=0.05,
+        goal_posterior_turn_rate=0.7,
+        goal_posterior_score_bonus=20.0,
+    )
+    planner = HybridRuleLocalPlannerAdapter(config)
+    posterior_obs = _obs(
+        goal=(4.0, 0.0),
+        ped_positions=[(1.0, 0.2)],
+        ped_velocities=[(0.0, 0.8)],
+    )
+    posterior_obs["info"] = {
+        "planner_goal_posterior_channel": {
+            "enabled": True,
+            "pedestrian_goal_posteriors": {
+                "crossing_ped_0": {
+                    "pedestrian_id": "crossing_ped_0",
+                    "top_goal_id": "crossing_ped_0_route_goal",
+                    "top_goal_confidence": 0.9,
+                    "blocker": None,
+                }
+            },
+        }
+    }
+
+    posterior_command = planner.plan(posterior_obs)
+    diagnostics = planner.diagnostics()
+    last = diagnostics["last_decision"]
+
+    assert posterior_command != base_command
+    assert last["selected_source"].startswith("goal_posterior_yield_")
+    assert last["goal_posterior_avoidance"]["consumed"] is True
+    assert last["goal_posterior_avoidance"]["active"] is True
+    assert last["selected_terms"]["goal_posterior_avoidance"] > 0.0
+    assert diagnostics["goal_posterior_avoidance"]["enabled"] is True
+
+
 def test_tentabot_value_scorer_v0_exposes_clean_room_diagnostics() -> None:
     """The Tentabot-style spike should be guarded and explicit about provenance."""
     config = build_hybrid_rule_local_planner_config(
@@ -1674,7 +1725,7 @@ def test_hybrid_rule_rejection_diagnostics_include_moving_and_source_counts(monk
         lambda state, speed_cap, **kwargs: [stop, rotate, blocked_forward],
     )
 
-    def evaluate_candidate(
+    def evaluate_candidate(  # noqa: PLR0913
         *,
         candidate,
         observation,
@@ -1684,6 +1735,7 @@ def test_hybrid_rule_rejection_diagnostics_include_moving_and_source_counts(monk
         progress_windows,
         route_corridor=None,
         strict_static_clearance=False,
+        goal_posterior=None,
     ):
         """Return controlled candidate evaluations for rejection diagnostics."""
         if candidate == blocked_forward:

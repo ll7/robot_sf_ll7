@@ -1585,6 +1585,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             "stop_safe": 0,
             "fallback_best_effort": 0,
             "stop_best_effort": 0,
+            "uncertainty_fallback_stop": 0,
+            "uncertainty_fallback_slow_down": 0,
+            "uncertainty_fallback_configured": 0,
             "goal_reached": 0,
         }
         meta["residual_clipping_stats"] = {
@@ -1766,6 +1769,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             "stop_safe": 0,
             "fallback_best_effort": 0,
             "stop_best_effort": 0,
+            "uncertainty_fallback_stop": 0,
+            "uncertainty_fallback_slow_down": 0,
+            "uncertainty_fallback_configured": 0,
             "goal_reached": 0,
         }
         meta["safety_shield_contract"] = shield_contract_metadata(

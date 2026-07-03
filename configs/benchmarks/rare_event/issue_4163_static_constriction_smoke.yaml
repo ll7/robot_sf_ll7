@@ -1,0 +1,43 @@
+schema_version: rare_event_sampling.v1
+proposal: tilted_distribution
+parameters:
+  ped_density:
+    base: uniform
+    low: 0.01
+    high: 0.08
+    proposal_low: 0.045
+    proposal_high: 0.08
+  crossing_time_offset_s:
+    base: normal
+    mean: 0.0
+    std: 1.0
+    proposal_mean: -0.35
+  pedestrian_speed_multiplier:
+    base: normal
+    mean: 1.0
+    std: 0.1
+    proposal_mean: 1.08
+objective_event: collision_or_severe_intrusion
+samples: 32
+seed: 4163
+scenario_matrix: configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml
+smoke_scenario_index: 0
+planner_arms:
+  - ppo_frozen
+  - ppo_frozen_wrapper_on
+static_constriction_family:
+  family_id: static_constriction
+  source_contract: configs/benchmarks/issue_4205_static_constriction_codesign_loop_v1.yaml
+  scenario_ids:
+    - classic_bottleneck_low
+    - classic_head_on_corridor_low
+    - narrow_passage
+  claim_boundary: >-
+    Diagnostic application of the rare-event harness to the static-constriction
+    family only; this is not benchmark-strength evidence or a failure-rate claim.
+synthetic_toy_model:
+  parameter: ped_density
+  threshold: 0.066
+  arm_threshold_adjustments:
+    ppo_frozen: 0.0
+    ppo_frozen_wrapper_on: 0.006

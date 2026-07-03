@@ -1,10 +1,10 @@
 {
   "followup_issue_skeleton": {
-    "body": "Issue #4206 cannot produce mechanism-level F-C4(ii) policy-structure conclusions until h600\nepisode rows or sidecars provide failure_mechanism_taxonomy.v1 labels with confidence and\nevidence URI fields.\n",
+    "body": "Issue #4206 cannot produce mechanism-level F-C4(ii) policy-structure conclusions until\nh600 episode rows or sidecars provide mechanism fields using\nmechanism_schema_version=failure_mechanism_taxonomy.v1, mechanism_label,\nmechanism_confidence, mechanism_evidence_mode, and mechanism_evidence_uri.\n",
     "title": "Add trace-verified failure-mechanism labels to h600 episode exports for F-C4(ii)"
   },
   "generated_at": "2026-07-03T00:00:00Z",
-  "geometry_bucket_substitution_rejected": false,
+  "geometry_bucket_substitution_rejected": true,
   "issue": 4206,
   "loaded_row_count": 0,
   "missing_row_count": 2,

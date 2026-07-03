@@ -22,6 +22,7 @@ def _write_fixture_reports(
     *,
     scenario_matrix_hash: str = "matrix-a",
     planners: tuple[str, ...] = ("goal", "orca"),
+    with_exposure_fields: bool = False,
 ) -> None:
     reports_dir.mkdir(parents=True)
     planner_rows = [
@@ -69,65 +70,85 @@ def _write_fixture_reports(
         encoding="utf-8",
     )
     with (reports_dir / "seed_episode_rows.csv").open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=[
-                "episode_id",
-                "scenario_id",
-                "planner_key",
-                "seed",
-                "success",
-                "collision",
-                "near_miss",
-                "snqi",
-            ],
-        )
-        writer.writeheader()
-        for planner in planners:
-            writer.writerows(
+        fieldnames = [
+            "episode_id",
+            "scenario_id",
+            "planner_key",
+            "seed",
+            "success",
+            "collision",
+            "near_miss",
+            "snqi",
+        ]
+        if with_exposure_fields:
+            fieldnames.extend(
                 [
-                    {
-                        "episode_id": f"{planner}-111-0",
-                        "scenario_id": "a",
-                        "planner_key": planner,
-                        "seed": "111",
-                        "success": "1.0",
-                        "collision": "0.0",
-                        "near_miss": "1.0",
-                        "snqi": "0.2",
-                    },
-                    {
-                        "episode_id": f"{planner}-111-1",
-                        "scenario_id": "b",
-                        "planner_key": planner,
-                        "seed": "111",
-                        "success": "0.0",
-                        "collision": "1.0",
-                        "near_miss": "3.0",
-                        "snqi": "0.0",
-                    },
-                    {
-                        "episode_id": f"{planner}-112-0",
-                        "scenario_id": "a",
-                        "planner_key": planner,
-                        "seed": "112",
-                        "success": "1.0",
-                        "collision": "0.0",
-                        "near_miss": "0.0",
-                        "snqi": "0.4",
-                    },
-                    {
-                        "episode_id": f"{planner}-112-1",
-                        "scenario_id": "b",
-                        "planner_key": planner,
-                        "seed": "112",
-                        "success": "0.0",
-                        "collision": "1.0",
-                        "near_miss": "2.0",
-                        "snqi": "0.2",
-                    },
+                    "interaction_exposure_share",
+                    "robot_motion_share_before_first_clearance",
+                    "first_clearance_step",
+                    "low_exposure_success",
+                    "interaction_exposure_source",
                 ]
             )
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for planner in planners:
+            rows = [
+                {
+                    "episode_id": f"{planner}-111-0",
+                    "scenario_id": "a",
+                    "planner_key": planner,
+                    "seed": "111",
+                    "success": "1.0",
+                    "collision": "0.0",
+                    "near_miss": "1.0",
+                    "snqi": "0.2",
+                },
+                {
+                    "episode_id": f"{planner}-111-1",
+                    "scenario_id": "b",
+                    "planner_key": planner,
+                    "seed": "111",
+                    "success": "0.0",
+                    "collision": "1.0",
+                    "near_miss": "3.0",
+                    "snqi": "0.0",
+                },
+                {
+                    "episode_id": f"{planner}-112-0",
+                    "scenario_id": "a",
+                    "planner_key": planner,
+                    "seed": "112",
+                    "success": "1.0",
+                    "collision": "0.0",
+                    "near_miss": "0.0",
+                    "snqi": "0.4",
+                },
+                {
+                    "episode_id": f"{planner}-112-1",
+                    "scenario_id": "b",
+                    "planner_key": planner,
+                    "seed": "112",
+                    "success": "0.0",
+                    "collision": "1.0",
+                    "near_miss": "2.0",
+                    "snqi": "0.2",
+                },
+            ]
+            if with_exposure_fields:
+                for index, row in enumerate(rows):
+                    row.update(
+                        {
+                            "interaction_exposure_share": "0.75" if index < 3 else "",
+                            "robot_motion_share_before_first_clearance": "0.5" if index < 3 else "",
+                            "first_clearance_step": "42" if index < 3 else "",
+                            "low_exposure_success": "0.0" if index < 3 else "",
+                            "interaction_exposure_source": "episode_metrics"
+                            if index < 3
+                            else "not_derivable_from_episode_record",
+                        }
+                    )
+            writer.writerows(rows)
 
 
 def _write_h500_fixture(reports_dir: Path) -> None:
@@ -216,6 +237,9 @@ def test_build_artifact_writes_tables_comparability_and_checksums(tmp_path: Path
     exposure = json.loads((output_dir / "interaction_exposure_diagnostics.json").read_text())
     assert exposure["status"] == "blocked_missing_required_fields"
     assert "interaction_exposure_share" in exposure["missing_required_fields"]
+    assert exposure["backfill_policy"] == "derive_from_retained_episode_rows_only_no_imputation"
+    assert exposure["runs"][0]["derivable_episode_rows"] == 0
+    assert exposure["runs"][0]["not_derivable_episode_rows"] == 8
     assert (
         (output_dir / "README.md")
         .read_text(encoding="utf-8")
@@ -234,6 +258,37 @@ def test_build_artifact_writes_tables_comparability_and_checksums(tmp_path: Path
     )
     assert extended_result["snqi_recalibration_status"] == "ok"
     assert extended_result["interaction_exposure_status"] == "blocked_missing_required_fields"
+
+
+def test_build_artifact_accepts_native_exposure_fields_without_imputation(tmp_path: Path) -> None:
+    """Exposure diagnostics become ready only for rows carrying native exposure fields."""
+
+    confirm_reports = tmp_path / "confirm" / "reports"
+    extended_reports = tmp_path / "extended" / "reports"
+    h500_reports = tmp_path / "h500" / "reports"
+    _write_fixture_reports(confirm_reports, with_exposure_fields=True)
+    _write_fixture_reports(extended_reports, planners=("goal", "orca"), with_exposure_fields=True)
+    _write_h500_fixture(h500_reports)
+
+    output_dir = tmp_path / "evidence"
+    result = build_artifact(
+        confirm_reports=confirm_reports,
+        extended_reports=extended_reports,
+        h500_s20_reports=h500_reports,
+        output_dir=output_dir,
+        bootstrap_samples=20,
+        confidence=0.95,
+    )
+
+    assert result["interaction_exposure_status"] == "ready_for_episode_level_scan"
+    exposure = json.loads((output_dir / "interaction_exposure_diagnostics.json").read_text())
+    assert exposure["missing_required_fields"] == []
+    assert exposure["runs"][0]["derivable_episode_rows"] == 6
+    assert exposure["runs"][0]["not_derivable_episode_rows"] == 2
+    assert exposure["runs"][0]["exposure_provenance_values"] == [
+        "episode_metrics",
+        "not_derivable_from_episode_record",
+    ]
 
 
 def test_build_artifact_fails_status_on_shared_hash_mismatch(tmp_path: Path) -> None:

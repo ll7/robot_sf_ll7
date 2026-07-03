@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* Fixed the **LiCCA post-guard full-suite teardown hang** (#4216): the suite could reach 100% and
+  then never exit because `tests/perf_utils/test_enforce_mode.py` spawned a nested `pytest` child
+  with an unbounded `subprocess.run(...)` (its `@pytest.mark.timeout` marker is a no-op because
+  `pytest-timeout` is not installed). On a shared GPU/HPC node that child can deadlock during
+  CUDA/interpreter teardown or leave a descendant holding device handles, blocking the parent
+  forever. Added `tests/support/process_teardown.py::run_bounded_subprocess`, which runs the child
+  in its own process group and, on timeout, reaps the whole group (SIGTERM→SIGKILL) so descendants
+  are terminated too — mirroring the termination pattern already used by
+  `scripts/dev/run_compact_validation.py`. The nested-pytest call site is now bounded
+  (`ROBOT_SF_NESTED_PYTEST_TIMEOUT`, default 180s) and a CPU-only regression test proves a
+  long-lived descendant is reaped. No GitHub Actions behavior changes.
+
 ### Added
 
 * Added **diff-scoped context-note freshness gating** for issue #3190. The docs-proof consistency
@@ -21,6 +35,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stale/orphan warnings to failures). Superseded-without-replacement errors fail closed. No content was
   moved or archived; no benchmark/paper claims changed.
 
+* Added a **consolidated failure-archive rerun closure packet** for issue #3275:
+  `robot_sf/benchmark/failure_archive_rerun_closure.py` (`build_rerun_closure_packet`, schema
+  `failure_archive_rerun_closure_packet.v1`) folds the accumulated rerun readiness/leakage guards into
+  one durable verdict — a single `disposition` (`ready_for_rerun`, `fail_closed_blocked`, or
+  `diagnostic_only`), the consolidated blocker list, and a deterministic `next_empirical_action`.
+  `scripts/adversarial/produce_rerun_closure_packet.py` exposes it as a fail-closed CLI (exit codes
+  `0`/`2`/`3`), and a missing or malformed archive fails closed instead of substituting a synthetic
+  fixture. The closure packet adds no new gate; it composes the canonical pair gate
+  `classify_failure_archive_rerun_readiness`. Running it on the two real smoke archives (`issue_1502`
+  source, `issue_1501` rerun) produces a `fail_closed_blocked` evidence packet under
+  `docs/context/evidence/issue_3275_rerun_closure_2026-07-03/`. No benchmark campaign run, no
+  proposal-model inference, no held-out yield claim, and no paper/dissertation claim edit; the real
+  disjoint certified rerun with independent planner-execution outcomes remains the open issue #3275
+  contract.
 * Generated the **current-roster release-gate evidence report** for issue #4166, the real-campaign
   application of the reporting layer merged in PR #4184. The merged evaluator now consumes the
   canonical retained camera-ready `campaign_summary.json` directly (`release_gates._rows_from_mapping`

@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **consolidated failure-archive rerun closure packet** for issue #3275:
+  `robot_sf/benchmark/failure_archive_rerun_closure.py` (`build_rerun_closure_packet`, schema
+  `failure_archive_rerun_closure_packet.v1`) folds the accumulated rerun readiness/leakage guards into
+  one durable verdict — a single `disposition` (`ready_for_rerun`, `fail_closed_blocked`, or
+  `diagnostic_only`), the consolidated blocker list, and a deterministic `next_empirical_action`.
+  `scripts/adversarial/produce_rerun_closure_packet.py` exposes it as a fail-closed CLI (exit codes
+  `0`/`2`/`3`), and a missing or malformed archive fails closed instead of substituting a synthetic
+  fixture. The closure packet adds no new gate; it composes the canonical pair gate
+  `classify_failure_archive_rerun_readiness`. Running it on the two real smoke archives (`issue_1502`
+  source, `issue_1501` rerun) produces a `fail_closed_blocked` evidence packet under
+  `docs/context/evidence/issue_3275_rerun_closure_2026-07-03/`. No benchmark campaign run, no
+  proposal-model inference, no held-out yield claim, and no paper/dissertation claim edit; the real
+  disjoint certified rerun with independent planner-execution outcomes remains the open issue #3275
+  contract.
 * Added an **evidence-closure regression guard for the issue #4011 RL trajectory smoke bundle**
   (#4011): `tests/benchmark/test_rl_trajectory_dataset_smoke_evidence.py` pins the committed
   `RLTrajectoryDataset.v1` smoke evidence bundle under

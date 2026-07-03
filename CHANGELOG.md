@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Generated the **current-roster release-gate evidence report** for issue #4166, the real-campaign
+  application of the reporting layer merged in PR #4184. The merged evaluator now consumes the
+  canonical retained camera-ready `campaign_summary.json` directly (`release_gates._rows_from_mapping`
+  recognizes the `planner_rows` container), and a new provisional gate spec
+  (`configs/benchmarks/release_gates/camera_ready_current_roster_gates.yaml`) targets the metric field
+  names the retained camera-ready campaign actually records (`collisions_mean`, `near_misses_mean`,
+  `jerk_mean`, `comfort_exposure_mean`). Unrecorded metrics (`min_clearance_m`,
+  `proxemic_intrusion_rate`) are shipped as `required: false` fail-closed coverage-gap gates that
+  render `not_evaluable` without swamping their category. The resulting packet under
+  `docs/context/evidence/issue_4166_release_gates/current_roster/` reports 2 pass / 5 fail / 1
+  not_evaluable over the 8-planner roster (degraded `socnav_bench` fails closed to `not_evaluable`).
+  Thresholds are provisional configuration, not certification, threshold approval, or a planner
+  ranking; no new benchmark run was performed.
 * Added an **evidence-closure regression guard for the issue #4011 RL trajectory smoke bundle**
   (#4011): `tests/benchmark/test_rl_trajectory_dataset_smoke_evidence.py` pins the committed
   `RLTrajectoryDataset.v1` smoke evidence bundle under

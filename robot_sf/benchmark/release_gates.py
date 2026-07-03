@@ -424,13 +424,24 @@ def _normalize_input_row(row: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _rows_from_mapping(payload: Mapping[str, Any]) -> Any:
-    for key in ("rows", "matrix_rows", "summary_rows", "aggregates", "summaries", "results"):
+    # ``planner_rows`` is the canonical container emitted by the retained
+    # camera-ready campaign summaries (``reports/campaign_summary.json``), so the
+    # merged evaluator can consume a real retained campaign summary directly.
+    for key in (
+        "rows",
+        "matrix_rows",
+        "summary_rows",
+        "planner_rows",
+        "aggregates",
+        "summaries",
+        "results",
+    ):
         value = payload.get(key)
         if isinstance(value, list):
             return value
     raise ReleaseGateSpecError(
         "input JSON mapping must contain one of rows, matrix_rows, summary_rows, "
-        "aggregates, summaries, or results"
+        "planner_rows, aggregates, summaries, or results"
     )
 
 

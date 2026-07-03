@@ -35,6 +35,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **plan-consuming result summarizer for the issue #4142 dense DPCBF comparison** (#4142):
+  `robot_sf/benchmark/issue_4142_dpcbf_dense_summary.py` consumes the resolved three-arm run plan
+  (from PR #4318's `build_run_plan`, the single source of truth for arms, output paths, and the
+  fail-closed row-status exclusion) and reads each arm's per-episode JSONL output into a comparison
+  summary under schema `robot_sf.issue_4142_dpcbf_dense_comparison_summary.v1`. It closes the run
+  planner's declared next gate ("a dense-comparison summarizer that consumes the per-arm outputs").
+  It stays fail-closed: an invalid/blocked plan yields `plan_blocked` with no artifacts consumed; a
+  missing, empty, or unparseable arm artifact keeps the comparison out of `complete`
+  (`results_incomplete`), which is the expected state while execution stays authorization-gated (no
+  arm output exists yet); and each row's status is classified against the plan's declared
+  `excluded_row_statuses` (`fallback`, `degraded`, `failed`, `ineligible`) so excluded and
+  unrecognized rows are counted as caveats, broken out by status, and never added to
+  success-evidence counts. Adds the thin CLI
+  `scripts/tools/summarize_issue_4142_dpcbf_dense_comparison.py`
+  (`--format markdown|json`, `--fail-on-incomplete`), tests
+  `tests/benchmark/test_issue_4142_dpcbf_dense_summary.py`, and context note
+  `docs/context/issue_4142_dpcbf_dense_summary.md`. Runs no episodes, submits no Slurm/GPU job, and
+  makes no safety-performance or collision-reduction claim.
 * Taught the **issue #4206 mechanism-level policy-structure cross-cut builder** to consume the
   declared external failure-mechanism sidecar (the #4305 declared-sidecar path) and to fail closed
   with a precise new status `blocked_trace_labels_not_derivable_predates_trace_capture`

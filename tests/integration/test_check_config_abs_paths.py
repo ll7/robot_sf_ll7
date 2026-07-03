@@ -1,9 +1,11 @@
 """
-Tests for the configs/** absolute-path lint hook (issue #3605).
+Tests for the configs/** + docs/context/evidence/** absolute-path lint hook
+(issues #3605, #4324).
 
-Covers the reject path (an unannotated `/home/...` leak), the allowlist path
-(an intentional, annotated absolute path), the clean path, and that files
-outside `configs/` are ignored.
+Covers the reject path (an unannotated `/home/...` leak in a config or evidence
+file), the allowlist path (an intentional, annotated absolute path), the clean
+path, the grandfathered legacy evidence packets, and that files outside the
+scanned roots are ignored.
 """
 
 import subprocess
@@ -11,7 +13,11 @@ from pathlib import Path
 
 import pytest
 
-from hooks.check_config_abs_paths import find_abs_path_violations, main
+from hooks.check_config_abs_paths import (
+    LEGACY_EVIDENCE_ALLOWLIST,
+    find_abs_path_violations,
+    main,
+)
 
 
 def _write(base: Path, rel: str, content: str) -> str:
@@ -73,15 +79,68 @@ class TestCheckConfigAbsPaths:
         assert len(result["violations"]) == 2
 
     def test_ignores_files_outside_configs(self, tmp_path, monkeypatch):
-        """Files outside a configs/ directory are not scanned."""
+        """Files outside a scanned root are not scanned."""
         monkeypatch.chdir(tmp_path)
         f = _write(tmp_path, "scripts/run.sh", "echo /home/someone/x\n")
         result = find_abs_path_violations([f])
         assert result["status"] == "pass"
         assert "nothing to check" in result["message"].lower()
 
+    def test_rejects_home_dir_path_in_evidence_packet(self, tmp_path, monkeypatch):
+        """An unannotated /home/ path in a new evidence packet is a violation (#4324)."""
+        monkeypatch.chdir(tmp_path)
+        f = _write(
+            tmp_path,
+            "docs/context/evidence/issue_9999_new_packet_2026-07/metadata.json",
+            '{"config": {"path": "/home/luttkule/git/robot_sf_ll7.worktrees/x/c.yaml"}}\n',
+        )
+        result = find_abs_path_violations([f])
+        assert result["status"] == "fail"
+        assert len(result["violations"]) == 1
+
+    def test_passes_repo_relative_evidence_packet(self, tmp_path, monkeypatch):
+        """An evidence packet using only repo-relative provenance paths passes."""
+        monkeypatch.chdir(tmp_path)
+        f = _write(
+            tmp_path,
+            "docs/context/evidence/issue_9999_new_packet_2026-07/metadata.json",
+            '{"config": {"path": "configs/benchmarks/probe.yaml"}}\n',
+        )
+        result = find_abs_path_violations([f])
+        assert result["status"] == "pass"
+
+    def test_skips_grandfathered_legacy_evidence_packet(self, tmp_path, monkeypatch):
+        """Files in a grandfathered legacy evidence packet are not scanned (#4324).
+
+        Pre-existing historical packets bake absolute worktree paths into durable
+        checksummed artifacts; they are grandfathered so the guard fails closed
+        for new packets without a retroactive rewrite.
+        """
+        monkeypatch.chdir(tmp_path)
+        legacy_dir = next(iter(LEGACY_EVIDENCE_ALLOWLIST))
+        f = _write(
+            tmp_path,
+            f"docs/context/evidence/{legacy_dir}/reports/campaign_report.md",
+            "- Command: /home/luttkule/git/robot_sf_ll7.worktrees/x/run.py\n",
+        )
+        result = find_abs_path_violations([f])
+        assert result["status"] == "pass"
+        assert "nothing to check" in result["message"].lower()
+
+    def test_ignores_docs_outside_evidence(self, tmp_path, monkeypatch):
+        """Docs files outside docs/context/evidence/ are not scanned."""
+        monkeypatch.chdir(tmp_path)
+        f = _write(tmp_path, "docs/context/notes.md", "path: /home/someone/x\n")
+        result = find_abs_path_violations([f])
+        assert result["status"] == "pass"
+        assert "nothing to check" in result["message"].lower()
+
     def test_repo_baseline_is_clean(self, monkeypatch):
-        """The real tracked configs/ tree must already pass ``--all``."""
+        """The tracked configs/ + docs/context/evidence/ tree must pass ``--all``.
+
+        Grandfathered legacy evidence packets (#4324) are excluded, so the
+        baseline stays clean while new packets remain guarded.
+        """
         monkeypatch.setattr("sys.argv", ["check_config_abs_paths.py", "--all"])
         with pytest.raises(SystemExit) as exc_info:
             main()

@@ -736,6 +736,93 @@ def test_context_note_freshness_strict_reports_stale_current_notes(tmp_path: Pat
     assert any(diagnostic.path == Path("docs/context/dated.md") for diagnostic in diagnostics)
 
 
+def test_freshness_diff_scope_ignores_unchanged_superseded(tmp_path: Path) -> None:
+    """Diff scope must not fail on a superseded row when no relevant file changed."""
+    repo_root = _freshness_repo(
+        tmp_path,
+        "  - path: docs/context/old.md\n    status: superseded\n    freshness: dated\n",
+    )
+    (repo_root / "docs/context/old.md").write_text("# Old\n", encoding="utf-8")
+    _commit_all(repo_root, "superseded fixture", iso_date="2026-01-01T00:00:00+00:00")
+
+    diagnostics = _context_note_freshness_diagnostics(
+        repo_root=repo_root,
+        max_age_days=180,
+        strict=False,
+        changed_note_paths=set(),
+        catalog_changed=False,
+    )
+
+    assert diagnostics == []
+
+
+def test_freshness_diff_scope_reports_changed_superseded_note(tmp_path: Path) -> None:
+    """Diff scope fails when the diff touches the superseded note itself."""
+    repo_root = _freshness_repo(
+        tmp_path,
+        "  - path: docs/context/old.md\n    status: superseded\n    freshness: dated\n",
+    )
+    (repo_root / "docs/context/old.md").write_text("# Old\n", encoding="utf-8")
+    _commit_all(repo_root, "superseded fixture", iso_date="2026-01-01T00:00:00+00:00")
+
+    diagnostics = _context_note_freshness_diagnostics(
+        repo_root=repo_root,
+        max_age_days=180,
+        strict=False,
+        changed_note_paths={Path("docs/context/old.md")},
+        catalog_changed=False,
+    )
+
+    assert any("superseded_replacement" in diagnostic.message for diagnostic in diagnostics)
+
+
+def test_freshness_diff_scope_catalog_change_reports_superseded(tmp_path: Path) -> None:
+    """A catalog edit keeps catalog-driven superseded errors even if the note is unchanged."""
+    repo_root = _freshness_repo(
+        tmp_path,
+        "  - path: docs/context/old.md\n    status: superseded\n    freshness: dated\n",
+    )
+    (repo_root / "docs/context/old.md").write_text("# Old\n", encoding="utf-8")
+    _commit_all(repo_root, "superseded fixture", iso_date="2026-01-01T00:00:00+00:00")
+
+    diagnostics = _context_note_freshness_diagnostics(
+        repo_root=repo_root,
+        max_age_days=180,
+        strict=False,
+        changed_note_paths=set(),
+        catalog_changed=True,
+    )
+
+    assert any("superseded_replacement" in diagnostic.message for diagnostic in diagnostics)
+
+
+def test_freshness_diff_scope_orphan_requires_changed_note(tmp_path: Path) -> None:
+    """Orphan findings are note-driven: a catalog change alone must not resurrect them."""
+    repo_root = _freshness_repo(tmp_path, "")
+    (repo_root / "docs/context/orphan.md").write_text("# Orphan\n", encoding="utf-8")
+    _commit_all(repo_root, "orphan fixture", iso_date="2026-01-01T00:00:00+00:00")
+
+    # Catalog changed but the orphan note itself is not in the diff -> not reported.
+    catalog_only = _context_note_freshness_diagnostics(
+        repo_root=repo_root,
+        max_age_days=180,
+        strict=True,
+        changed_note_paths=set(),
+        catalog_changed=True,
+    )
+    assert catalog_only == []
+
+    # The orphan note is in the diff -> reported under strict scope.
+    note_changed = _context_note_freshness_diagnostics(
+        repo_root=repo_root,
+        max_age_days=180,
+        strict=True,
+        changed_note_paths={Path("docs/context/orphan.md")},
+        catalog_changed=True,
+    )
+    assert any("orphan_context_note" in diagnostic.message for diagnostic in note_changed)
+
+
 def test_context_catalog_evidence_rejects_output_pointer(tmp_path: Path) -> None:
     """Evidence catalog entries should not depend on ignored output paths."""
     repo_root = tmp_path

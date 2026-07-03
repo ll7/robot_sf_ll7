@@ -58,7 +58,9 @@ def test_route_waypoint_is_injected_into_nested_goal_current() -> None:
         local_policy=local_policy,
     )
 
-    command = adapter.plan({"goal": {"current": [9.0, 0.0]}, "robot": {"heading": 0.0}})
+    command = adapter.plan(
+        {"goal": {"current": [9.0, 0.0]}, "robot": {"heading": 0.0, "position": [0.0, 0.0]}}
+    )
 
     assert command == (0.4, 0.1)
     assert local_policy.seen[0]["goal"]["current"] == [1.5, 0.25]
@@ -76,7 +78,7 @@ def test_route_waypoint_handles_array_goal_without_ambiguous_truth_value() -> No
     adapter.plan(
         {
             "goal": {"current": np.asarray([9.0, 0.0], dtype=float)},
-            "robot": {"heading": 0.0},
+            "robot": {"heading": 0.0, "position": [0.0, 0.0]},
         }
     )
 
@@ -91,7 +93,7 @@ def test_route_waypoint_initializes_missing_goal_dict() -> None:
         local_policy=local_policy,
     )
 
-    adapter.plan({"goal": None, "robot": {"heading": 0.0}})
+    adapter.plan({"goal": None, "robot": {"heading": 0.0, "position": [0.0, 0.0]}})
 
     assert local_policy.seen[0]["goal"]["current"] == [1.5, 0.25]
     assert "goal_current" not in local_policy.seen[0]
@@ -104,10 +106,112 @@ def test_route_waypoint_is_injected_into_flat_goal_current() -> None:
         local_policy=local_policy,
     )
 
-    adapter.plan({"goal_current": [3.0, 4.0], "robot_heading": 0.0})
+    adapter.plan({"goal_current": [3.0, 4.0], "robot_position": [0.0, 0.0], "robot_heading": 0.0})
 
     assert local_policy.seen[0]["goal_current"] == [0.75, -0.5]
     assert local_policy.seen[0]["hybrid_global_rl_final_goal"] == (3.0, 4.0)
+
+
+def test_route_waypoint_within_configured_distance_is_accepted() -> None:
+    local_policy = _LocalPolicy()
+    adapter = HybridGlobalRLLocalAdapter(
+        config=HybridGlobalRLLocalConfig(waypoint_max_distance_from_robot=2.0),
+        waypoint_provider=_WaypointProvider((1.5, 0.0)),
+        local_policy=local_policy,
+    )
+
+    adapter.plan({"goal_current": [3.0, 4.0], "robot_position": [0.0, 0.0]})
+
+    diagnostics = adapter.diagnostics()
+    assert local_policy.seen[0]["goal_current"] == [1.5, 0.0]
+    assert diagnostics["waypoint_status"] == "ok"
+    assert diagnostics["fallback_status"] == "none"
+    assert diagnostics["waypoint_reason"] is None
+    assert math.isclose(diagnostics["waypoint_distance_from_robot"], 1.5)
+    assert diagnostics["waypoint_max_distance_from_robot"] == 2.0
+
+
+def test_route_waypoint_beyond_configured_distance_fails_closed_by_default() -> None:
+    local_policy = _LocalPolicy()
+    adapter = HybridGlobalRLLocalAdapter(
+        config=HybridGlobalRLLocalConfig(waypoint_max_distance_from_robot=1.0),
+        waypoint_provider=_WaypointProvider((1.5, 0.0)),
+        local_policy=local_policy,
+    )
+
+    with pytest.raises(RuntimeError, match="route_waypoint_too_far"):
+        adapter.plan({"goal_current": [3.0, 4.0], "robot_position": [0.0, 0.0]})
+
+    diagnostics = adapter.diagnostics()
+    assert local_policy.seen == []
+    assert diagnostics["status"] == "failed"
+    assert diagnostics["waypoint_status"] == "rejected"
+    assert diagnostics["waypoint_reason"] == "route_waypoint_too_far"
+    assert diagnostics["fallback_status"] == "fail_closed"
+    assert math.isclose(diagnostics["waypoint_distance_from_robot"], 1.5)
+    assert diagnostics["waypoint_max_distance_from_robot"] == 1.0
+
+
+def test_route_waypoint_beyond_configured_distance_can_use_goal_fallback() -> None:
+    local_policy = _LocalPolicy()
+    adapter = HybridGlobalRLLocalAdapter(
+        config=HybridGlobalRLLocalConfig(
+            allow_goal_fallback=True,
+            waypoint_max_distance_from_robot=1.0,
+        ),
+        waypoint_provider=_WaypointProvider((1.5, 0.0)),
+        local_policy=local_policy,
+    )
+
+    assert adapter.plan({"goal_current": [3.0, 4.0], "robot_position": [0.0, 0.0]}) == (
+        0.4,
+        0.1,
+    )
+
+    diagnostics = adapter.diagnostics()
+    assert local_policy.seen[0]["goal_current"] == [3.0, 4.0]
+    assert diagnostics["status"] == "ok"
+    assert diagnostics["waypoint_status"] == "rejected"
+    assert diagnostics["waypoint_reason"] == "route_waypoint_too_far"
+    assert diagnostics["fallback_status"] == "goal_fallback"
+    assert diagnostics["waypoint"] == [3.0, 4.0]
+
+
+def test_route_waypoint_non_finite_fails_closed_before_distance_check() -> None:
+    adapter = HybridGlobalRLLocalAdapter(
+        waypoint_provider=_WaypointProvider((float("nan"), 0.0)),
+        local_policy=_LocalPolicy(),
+    )
+
+    with pytest.raises(RuntimeError, match="route_waypoint_non_finite"):
+        adapter.plan({"goal_current": [3.0, 4.0], "robot_position": [0.0, 0.0]})
+
+    diagnostics = adapter.diagnostics()
+    assert diagnostics["waypoint_status"] == "rejected"
+    assert diagnostics["waypoint_reason"] == "route_waypoint_non_finite"
+    assert diagnostics["fallback_status"] == "fail_closed"
+    assert diagnostics["waypoint_distance_from_robot"] is None
+
+
+def test_route_waypoint_missing_robot_position_fails_closed_by_default() -> None:
+    adapter = HybridGlobalRLLocalAdapter(
+        waypoint_provider=_WaypointProvider((1.5, 0.0)),
+        local_policy=_LocalPolicy(),
+    )
+
+    with pytest.raises(RuntimeError, match="route_waypoint_robot_position_missing"):
+        adapter.plan({"goal_current": [3.0, 4.0]})
+
+    diagnostics = adapter.diagnostics()
+    assert diagnostics["waypoint_status"] == "rejected"
+    assert diagnostics["waypoint_reason"] == "route_waypoint_robot_position_missing"
+    assert diagnostics["fallback_status"] == "fail_closed"
+
+
+@pytest.mark.parametrize("max_distance", [0.0, -1.0, math.inf, math.nan])
+def test_waypoint_max_distance_from_robot_must_be_finite_positive(max_distance: float) -> None:
+    with pytest.raises(ValueError, match="waypoint_max_distance_from_robot"):
+        HybridGlobalRLLocalConfig(waypoint_max_distance_from_robot=max_distance)
 
 
 def test_missing_waypoint_fails_closed_by_default() -> None:
@@ -146,7 +250,9 @@ def test_world_velocity_action_converts_to_bounded_unicycle() -> None:
         local_policy=local_policy,
     )
 
-    linear, angular = adapter.plan({"goal_current": [3.0, 4.0], "robot_heading": 0.0})
+    linear, angular = adapter.plan(
+        {"goal_current": [3.0, 4.0], "robot_position": [0.0, 0.0], "robot_heading": 0.0}
+    )
 
     assert linear == 0.5
     assert angular == 0.25
@@ -176,7 +282,7 @@ def test_unicycle_action_is_bounded() -> None:
         local_policy=local_policy,
     )
 
-    linear, angular = adapter.plan({"goal_current": [3.0, 4.0]})
+    linear, angular = adapter.plan({"goal_current": [3.0, 4.0], "robot_position": [0.0, 0.0]})
 
     assert math.isclose(linear, 0.7)
     assert math.isclose(angular, -0.3)

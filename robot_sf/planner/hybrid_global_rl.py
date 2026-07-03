@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from math import atan2, cos, sin
+from math import atan2, cos, hypot, isfinite, sin
 from typing import Any, Protocol
 
 import numpy as np
@@ -34,6 +34,13 @@ class HybridGlobalRLLocalConfig:
     waypoint_max_distance_from_robot: float = 3.0
     max_linear_speed: float = 1.0
     max_angular_speed: float = 1.0
+
+    def __post_init__(self) -> None:
+        """Validate the advertised route-waypoint distance contract."""
+
+        max_distance = float(self.waypoint_max_distance_from_robot)
+        if not isfinite(max_distance) or max_distance <= 0.0:
+            raise ValueError("waypoint_max_distance_from_robot must be finite and positive")
 
 
 @dataclass(frozen=True)
@@ -178,19 +185,81 @@ class HybridGlobalRLLocalAdapter:
             conditioned_observation = deepcopy(observation)
             fallback_status = "goal_fallback"
             waypoint = self._extract_final_goal(conditioned_observation)
+            conditioned = False
+            waypoint_distance_from_robot = None
         else:
             waypoint = decision.waypoint
-            conditioned_observation = self._inject_waypoint_goal(observation, waypoint)
-            fallback_status = "none"
+            waypoint_distance_from_robot = None
+            waypoint_array = np.asarray(waypoint, dtype=float)
+            if waypoint_array.shape != (2,) or not np.all(np.isfinite(waypoint_array)):
+                decision = WaypointDecision(
+                    status="rejected",
+                    waypoint=decision.waypoint,
+                    source=decision.source,
+                    reason="route_waypoint_non_finite",
+                    route_geometry=decision.route_geometry,
+                )
+
+            robot_position = self._extract_robot_position(observation)
+            if decision.status != "rejected" and robot_position is not None:
+                waypoint_distance_from_robot = hypot(
+                    float(waypoint[0]) - robot_position[0],
+                    float(waypoint[1]) - robot_position[1],
+                )
+
+            if decision.status != "rejected" and robot_position is None:
+                decision = WaypointDecision(
+                    status="rejected",
+                    waypoint=decision.waypoint,
+                    source=decision.source,
+                    reason="route_waypoint_robot_position_missing",
+                    route_geometry=decision.route_geometry,
+                )
+            if (
+                waypoint_distance_from_robot is not None
+                and waypoint_distance_from_robot > self.config.waypoint_max_distance_from_robot
+            ):
+                decision = WaypointDecision(
+                    status="rejected",
+                    waypoint=decision.waypoint,
+                    source=decision.source,
+                    reason="route_waypoint_too_far",
+                    route_geometry=decision.route_geometry,
+                )
+
+            if decision.status == "rejected":
+                if (
+                    not self.config.allow_goal_fallback
+                    and self.config.fail_closed_on_missing_waypoint
+                ):
+                    self._last_diagnostics = self._diagnostics_payload(
+                        decision=decision,
+                        conditioned=False,
+                        action_conversion_mode="not_run",
+                        fallback_status="fail_closed",
+                        waypoint_distance_from_robot=waypoint_distance_from_robot,
+                    )
+                    raise RuntimeError(
+                        f"hybrid_global_rl route waypoint rejected: {decision.reason}"
+                    )
+                conditioned_observation = deepcopy(observation)
+                fallback_status = "goal_fallback"
+                waypoint = self._extract_final_goal(conditioned_observation)
+                conditioned = False
+            else:
+                conditioned_observation = self._inject_waypoint_goal(observation, waypoint)
+                fallback_status = "none"
+                conditioned = True
 
         action = self.local_policy.step(conditioned_observation)
         linear, angular, conversion_mode = self._action_to_unicycle(action, conditioned_observation)
         self._last_diagnostics = self._diagnostics_payload(
             decision=decision,
-            conditioned=decision.waypoint is not None,
+            conditioned=conditioned,
             action_conversion_mode=conversion_mode,
             fallback_status=fallback_status,
             injected_waypoint=waypoint,
+            waypoint_distance_from_robot=waypoint_distance_from_robot,
         )
         return linear, angular
 
@@ -202,6 +271,7 @@ class HybridGlobalRLLocalAdapter:
         action_conversion_mode: str,
         fallback_status: str,
         injected_waypoint: tuple[float, float] | None = None,
+        waypoint_distance_from_robot: float | None = None,
     ) -> dict[str, Any]:
         """Build JSON-ready diagnostics for the last planner decision.
 
@@ -215,6 +285,8 @@ class HybridGlobalRLLocalAdapter:
             "waypoint_status": decision.status,
             "waypoint_reason": decision.reason,
             "waypoint": list(injected_waypoint) if injected_waypoint is not None else None,
+            "waypoint_distance_from_robot": waypoint_distance_from_robot,
+            "waypoint_max_distance_from_robot": self.config.waypoint_max_distance_from_robot,
             "route_geometry": decision.route_geometry,
             "fallback_status": fallback_status,
             "action_conversion_mode": action_conversion_mode,
@@ -261,6 +333,25 @@ class HybridGlobalRLLocalAdapter:
                 candidate = goal.get("next")
         if candidate is None:
             candidate = observation.get("goal_current")
+        if candidate is None:
+            return None
+        arr = np.asarray(candidate, dtype=float).reshape(-1)
+        if arr.size < 2 or not np.all(np.isfinite(arr[:2])):
+            return None
+        return (float(arr[0]), float(arr[1]))
+
+    @staticmethod
+    def _extract_robot_position(observation: dict[str, Any]) -> tuple[float, float] | None:
+        """Extract robot position from supported dict observation shapes.
+
+        Returns:
+            Two-dimensional finite robot position, or ``None`` when unavailable.
+        """
+
+        candidate: Any | None = observation.get("robot_position")
+        robot = observation.get("robot")
+        if candidate is None and isinstance(robot, dict):
+            candidate = robot.get("position")
         if candidate is None:
             return None
         arr = np.asarray(candidate, dtype=float).reshape(-1)

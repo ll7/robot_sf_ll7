@@ -9,6 +9,13 @@ continuity_fallback:
   job: 13175
   purpose: h500/S20 materialized rows continuity comparison only
 mechanism_schema_version: failure_mechanism_taxonomy.v1
+# Declared external mechanism-label sidecars (the #4305 declared-sidecar path). The h600 confirm
+# (13268) and extended-roster (13273) episode rows predate trace capture (#4301), so their taxonomy
+# labels live in the retained #4242 backfill sidecar rather than in the run output tree. The builder
+# consumes these to observe the labels (today: all `not_derivable_missing_trace`) instead of
+# reporting a generic missing-label block. Paths are repo-root relative.
+declared_mechanism_sidecars:
+  - docs/context/evidence/issue_3810_h600_interpretation_2026-07/h600_mechanism_labels_sidecar.csv
 accepted_mechanism_confidences:
   - observed_mechanism
   - supported_hypothesis
@@ -47,6 +54,17 @@ blocked_followup_issue:
     h600 episode rows or sidecars provide mechanism fields using
     mechanism_schema_version=failure_mechanism_taxonomy.v1, mechanism_label,
     mechanism_confidence, mechanism_evidence_mode, and mechanism_evidence_uri.
+# Follow-up used when the declared sidecar was consumed but every label is an explicit
+# `not_derivable` unknown because the h600 episodes predate trace capture (#4301). A sidecar backfill
+# cannot recover these labels, so this names a trace-instrumented re-run rather than "add a sidecar".
+blocked_not_derivable_followup:
+  title: "Re-run h600 with trace capture so failure-mechanism labels are derivable for F-C4(ii)"
+  body: |
+    Issue #4206 consumed the declared failure-mechanism sidecar, but every h600 row is an explicit
+    `not_derivable` unknown: confirm (13268) and extended-roster (13273) episodes predate trace
+    capture (#4301), so no trace exists to derive a trace-verified mechanism label. A sidecar
+    backfill cannot recover these labels. Re-run the h600 campaign with the #4301 trace-capable
+    exporter (or a deterministic replay that regenerates traces), then re-run this builder.
 # Follow-up used when the declared h600 run artifacts are not present on the analysis host.
 # This is an artifact-retrieval gap, not a mechanism-instrumentation gap; naming the wrong action
 # would misdirect a reviewer toward changing the exporter when the rows simply need to be hydrated.

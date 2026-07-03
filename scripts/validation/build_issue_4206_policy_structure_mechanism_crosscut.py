@@ -27,11 +27,18 @@ BLOCKED_STATUS = "blocked_missing_trace_verified_mechanism_labels"
 # This is a distinct, earlier blocker than "rows present but unlabeled" and needs a different next
 # action (retrieve/hydrate the run outputs, not add mechanism instrumentation to the exporter).
 BLOCKED_INPUT_STATUS = "blocked_missing_input_artifacts"
+# Rows (or their declared sidecar) DO carry failure_mechanism_taxonomy.v1 fields, but every label is
+# an explicit `not_derivable` unknown because the episodes predate trace capture (#4301). Adding
+# another sidecar cannot recover these labels; only a trace-instrumented re-run can. Naming the
+# generic "add a sidecar" action here would send a reviewer to redo work that already produced
+# all-unknown labels, so this precise blocker gets its own status and follow-up.
+BLOCKED_NOT_DERIVABLE_STATUS = "blocked_trace_labels_not_derivable_predates_trace_capture"
 DIAGNOSTIC_STATUS = "diagnostic_only_supported_hypothesis"
 
 # Tags attached to per-run missing entries so the packet can name the correct next empirical action.
 BLOCKER_KIND_INPUT = "missing_input_artifact"
 BLOCKER_KIND_LABEL = "missing_mechanism_labels"
+BLOCKER_KIND_NOT_DERIVABLE = "mechanism_labels_not_derivable_predates_trace_capture"
 REPORT_SCHEMA_VERSION = "issue_4206_policy_structure_mechanism_crosscut_report.v1"
 
 REQUIRED_MECHANISM_FIELDS = (
@@ -48,6 +55,16 @@ LEGACY_MECHANISM_FIELD_ALIASES = (
     ("failure_mechanism_trace_status", "mechanism_evidence_mode"),
     ("failure_mechanism_source", "mechanism_evidence_uri"),
 )
+# Marker fields the taxonomy backfill (#4278/#4242) writes to explain *why* a label is unknown.
+# They are not part of the required-label contract, but they let this builder tell "the taxonomy was
+# applied and no trace was derivable" apart from "no mechanism fields at all". Carry them across the
+# sidecar merge so downstream classification can read them.
+MECHANISM_MARKER_FIELDS = ("mechanism_backfill_status", "mechanism_caveat")
+# Only "no trace exists at all because the episode predates capture" routes to the predates-trace
+# status; it is fixed by a trace-instrumented re-run. A geometry-only assertion
+# (`not_derivable_non_trace_verified_mechanism`) is a different gap (a label was asserted without a
+# trace) and stays a plain missing-trace-verified-label block, so match the marker exactly.
+NOT_DERIVABLE_MISSING_TRACE_MARKER = "not_derivable_missing_trace"
 GEOMETRY_ONLY_FIELDS = (
     "geometry_bucket",
     "scenario_geometry_bucket",
@@ -234,9 +251,73 @@ def _merge_mechanism_fields(
         for field in REQUIRED_MECHANISM_FIELDS:
             if not merged.get(field) and sidecar.get(field):
                 merged[field] = sidecar[field]
+        for field in MECHANISM_MARKER_FIELDS:
+            if not merged.get(field) and sidecar.get(field):
+                merged[field] = sidecar[field]
         merged = _normalize_mechanism_fields(merged)
         break
     return merged
+
+
+def _is_not_derivable_row(row: Mapping[str, Any]) -> bool:
+    """Return True when a row carries the v1 taxonomy but is an explicit ``not_derivable`` unknown.
+
+    Such a row proves the taxonomy backfill ran and could not derive a real label (the episode
+    predates trace capture), which is a different blocker than "no mechanism fields at all": a sidecar
+    backfill cannot fix it, only a trace-instrumented re-run can.
+    """
+
+    if str(row.get("mechanism_schema_version", "")) != MECHANISM_SCHEMA_VERSION:
+        return False
+    label = str(row.get("mechanism_label", "")).strip().lower()
+    confidence = str(row.get("mechanism_confidence", "")).strip().lower()
+    # A real label alone rules out "every label is unknown": a row with a usable mechanism_label
+    # must not be routed to the predates-trace status just because its confidence is blank while a
+    # stale not_derivable marker lingers. Require the label itself to be unknown/absent.
+    if label not in {"", "unknown"} or confidence not in {"", "unknown"}:
+        return False
+    markers = " ".join(str(row.get(field, "")).lower() for field in MECHANISM_MARKER_FIELDS)
+    return NOT_DERIVABLE_MISSING_TRACE_MARKER in markers
+
+
+def _resolve_declared_path(raw: str, base_dir: Path) -> Path:
+    """Resolve a config-declared sidecar path against the repo base dir.
+
+    Declared sidecar paths are documented as repo-root relative, so resolve them deterministically
+    against ``base_dir`` (the config's repo root). Resolving against the process cwd first would let
+    an unrelated same-named file under the caller's cwd silently win and corrupt the provenance.
+    """
+    candidate = Path(raw)
+    if candidate.is_absolute():
+        return candidate
+    return base_dir / candidate
+
+
+def _load_declared_sidecars(
+    config: Mapping[str, Any], base_dir: Path
+) -> tuple[dict[tuple[str, ...], Mapping[str, Any]], list[dict[str, Any]]]:
+    """Load config-declared external mechanism-label sidecars (the #4305 declared-sidecar path).
+
+    The h600 confirm/extended episode rows predate trace capture (#4301), so their trace-verified
+    mechanism labels live in a declared sidecar under docs/context/evidence/ rather than in the run
+    output tree. Consuming the declared sidecar here is what lets the builder observe those labels
+    (or, today, observe that every label is ``not_derivable``) instead of reporting a generic
+    missing-label block.
+    """
+    declared = config.get("declared_mechanism_sidecars") or []
+    rows: list[dict[str, Any]] = []
+    provenance: list[dict[str, Any]] = []
+    for raw in declared:
+        path = _resolve_declared_path(str(raw), base_dir)
+        exists = path.exists()
+        provenance.append({"path": _public_path(path), "exists": exists})
+        if not exists:
+            continue
+        if path.suffix == ".jsonl":
+            rows.extend(_read_jsonl(path))
+        else:
+            rows.extend(_read_csv(path))
+    return _index_sidecars(rows), provenance
 
 
 def _planner_to_class(config: Mapping[str, Any]) -> dict[str, str]:
@@ -255,7 +336,11 @@ def _planner_to_class(config: Mapping[str, Any]) -> dict[str, str]:
     return planner_map
 
 
-def _load_run_rows(root: Path, run_name: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _load_run_rows(
+    root: Path,
+    run_name: str,
+    declared_sidecar_index: Mapping[tuple[str, ...], Mapping[str, Any]] | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     rows_path = root / "reports" / "seed_episode_rows.csv"
     if not rows_path.exists():
         return [], [
@@ -266,7 +351,10 @@ def _load_run_rows(root: Path, run_name: str) -> tuple[list[dict[str, Any]], lis
                 "blocker_kind": BLOCKER_KIND_INPUT,
             }
         ]
-    sidecar_index = _index_sidecars(_discover_sidecar_rows(root))
+    # In-root sidecars take precedence, then config-declared external sidecars (the #4305 path) fill
+    # any keys the run tree does not already carry.
+    sidecar_index: dict[tuple[str, ...], Mapping[str, Any]] = dict(declared_sidecar_index or {})
+    sidecar_index.update(_index_sidecars(_discover_sidecar_rows(root)))
     rows: list[dict[str, Any]] = []
     missing: list[dict[str, Any]] = []
     for raw in _read_csv(rows_path):
@@ -284,6 +372,7 @@ def _load_run_rows(root: Path, run_name: str) -> tuple[list[dict[str, Any]], lis
         }:
             missing_fields.append("mechanism_evidence_mode=trace_verified_source")
         if missing_fields:
+            not_derivable = _is_not_derivable_row(row)
             missing.append(
                 {
                     "run": run_name,
@@ -291,7 +380,11 @@ def _load_run_rows(root: Path, run_name: str) -> tuple[list[dict[str, Any]], lis
                     "scenario_id": row.get("scenario_id", ""),
                     "planner_key": row.get("planner_key", row.get("planner_id", "")),
                     "missing_fields": missing_fields,
-                    "blocker_kind": BLOCKER_KIND_LABEL,
+                    "blocker_kind": (
+                        BLOCKER_KIND_NOT_DERIVABLE if not_derivable else BLOCKER_KIND_LABEL
+                    ),
+                    "mechanism_backfill_status": row.get("mechanism_backfill_status", ""),
+                    "mechanism_caveat": row.get("mechanism_caveat", ""),
                     "geometry_only_fields_present": [
                         field for field in GEOMETRY_ONLY_FIELDS if str(row.get(field, ""))
                     ],
@@ -550,6 +643,33 @@ def _blocked_reason(
         )
         return {"followup": followup, "next_action": next_action, "claim_boundary": claim_boundary}
 
+    if status == BLOCKED_NOT_DERIVABLE_STATUS:
+        followup = config.get("blocked_not_derivable_followup") or {
+            "title": (
+                "Re-run the h600 campaign with trace capture so failure-mechanism labels "
+                "are derivable for F-C4(ii)"
+            ),
+            "body": (
+                "Issue #4206 consumed the declared failure-mechanism sidecar, but every h600 row is "
+                "an explicit `not_derivable` unknown: the confirm (13268) and extended-roster "
+                "(13273) episodes predate trace capture (#4301), so no trace exists to derive a "
+                "trace-verified mechanism label. A sidecar backfill cannot recover these labels. "
+                "Re-run the h600 campaign with the #4301 trace-capable exporter (or a deterministic "
+                "replay that regenerates traces), then re-run this builder."
+            ),
+        }
+        next_action = (
+            "The declared mechanism sidecar was consumed but all labels are `not_derivable` (rows "
+            "predate trace capture #4301). Re-run the h600 campaign with trace capture (or a "
+            "deterministic replay), then re-run the builder. Adding another sidecar cannot recover "
+            "these labels."
+        )
+        claim_boundary = (
+            "Blocked before F-C4(ii) rank conclusions: the mechanism taxonomy was applied but every "
+            "label is a `not_derivable` unknown because the h600 episodes predate trace capture."
+        )
+        return {"followup": followup, "next_action": next_action, "claim_boundary": claim_boundary}
+
     followup = config.get("blocked_followup_issue", {})
     next_action = (
         "Add trace-verified failure-mechanism labels to the h600 episode exports (or a declared "
@@ -673,18 +793,25 @@ Mechanism-level F-C4(ii) conclusions are allowed only when episode rows carry
 `failure_mechanism_taxonomy.v1` fields with accepted confidence labels. Geometry buckets are used
 only for the agreement/disagreement comparison table and never as substitute mechanism labels.
 
-Blocked statuses distinguish two different next actions:
+Blocked statuses distinguish three different next actions:
 
 - `blocked_missing_input_artifacts`: the declared h600 run outputs are not present on this host;
   retrieve/hydrate them, then re-run. This is not a mechanism-instrumentation gap.
 - `blocked_missing_trace_verified_mechanism_labels`: rows exist but lack trace-verified mechanism
-  labels; add the labels to the exporter or a declared sidecar, then re-run.
+  labels (no mechanism fields, or only geometry/non-trace assertions); add the labels to the exporter
+  or a declared sidecar, then re-run.
+- `blocked_trace_labels_not_derivable_predates_trace_capture`: the declared sidecar was consumed and
+  every label is an explicit `not_derivable` unknown because the h600 episodes predate trace capture
+  (#4301). A sidecar backfill cannot recover these labels; re-run the h600 campaign with trace
+  capture (or a deterministic replay), then re-run.
 """
     claim_boundary = """# Claim Boundary
 
 This packet can support a mechanism-level policy-structure cross-cut only for rows with
 trace-verified failure-mechanism labels. Missing labels produce
-`blocked_missing_trace_verified_mechanism_labels` and stop F-C4(ii) rank conclusions.
+`blocked_missing_trace_verified_mechanism_labels`, and retained rows whose labels are all
+`not_derivable` because the episodes predate trace capture produce
+`blocked_trace_labels_not_derivable_predates_trace_capture`; both stop F-C4(ii) rank conclusions.
 
 Out of scope: no full benchmark campaign run, no Slurm/GPU submission, no paper/dissertation claim
 edits, and no causal-mechanism claim from geometry buckets alone.
@@ -709,10 +836,12 @@ def _input_provenance(
     confirm_root: Path,
     extended_root: Path,
     job13175_packet: Path,
+    declared_sidecars: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     """Record the declared inputs checked by the issue #4206 builder."""
 
     return {
+        "declared_mechanism_sidecars": [dict(item) for item in declared_sidecars],
         "config": {
             "path": _public_path(config_path),
             "exists": config_path.exists(),
@@ -740,6 +869,26 @@ def _input_provenance(
     }
 
 
+def _resolve_block_status(missing_rows: Sequence[Mapping[str, Any]]) -> str:
+    """Pick the blocked status by precedence so the packet names the right next action.
+
+    Most-fundamental first:
+    1. un-retrieved input artifact -> hydrate the run outputs (nothing to inspect yet);
+    2. taxonomy present but every remaining block is ``not_derivable`` -> trace-instrumented re-run
+       (a sidecar backfill already ran and produced only unknowns);
+    3. otherwise rows lack mechanism fields -> add taxonomy instrumentation.
+    """
+
+    if any(row.get("blocker_kind") == BLOCKER_KIND_INPUT for row in missing_rows):
+        return BLOCKED_INPUT_STATUS
+    non_input = [row for row in missing_rows if row.get("blocker_kind") != BLOCKER_KIND_INPUT]
+    if non_input and all(
+        row.get("blocker_kind") == BLOCKER_KIND_NOT_DERIVABLE for row in non_input
+    ):
+        return BLOCKED_NOT_DERIVABLE_STATUS
+    return BLOCKED_STATUS
+
+
 def build_packet(  # noqa: C901
     *,
     config_path: Path,
@@ -758,11 +907,19 @@ def build_packet(  # noqa: C901
     if config.get("mechanism_schema_version") != MECHANISM_SCHEMA_VERSION:
         raise BuildError("config mechanism_schema_version mismatch")
 
+    # Declared external sidecars (the #4305 path) carry the trace-verified labels for h600 episode
+    # rows that predate trace capture; resolve them relative to the config's repo root.
+    repo_base = (
+        config_path.resolve().parents[2] if len(config_path.resolve().parents) >= 3 else Path.cwd()
+    )
+    declared_index, declared_provenance = _load_declared_sidecars(config, repo_base)
+
     input_provenance = _input_provenance(
         config_path=config_path,
         confirm_root=confirm_root,
         extended_root=extended_root,
         job13175_packet=job13175_packet,
+        declared_sidecars=declared_provenance,
     )
 
     rows: list[dict[str, Any]] = []
@@ -771,16 +928,11 @@ def build_packet(  # noqa: C901
         ("confirm_h600_13268", confirm_root),
         ("extended_h600_13273", extended_root),
     ):
-        run_rows, run_missing = _load_run_rows(root, run_name)
+        run_rows, run_missing = _load_run_rows(root, run_name, declared_index)
         rows.extend(run_rows)
         missing_rows.extend(run_missing)
 
     if missing_rows:
-        # An un-retrieved input artifact must be fixed before any label check can run, so it takes
-        # precedence over a missing-label block when both appear across the declared runs.
-        has_missing_input = any(
-            row.get("blocker_kind") == BLOCKER_KIND_INPUT for row in missing_rows
-        )
         return _blocked_outputs(
             output_dir=output_dir,
             config=config,
@@ -788,7 +940,7 @@ def build_packet(  # noqa: C901
             missing_rows=missing_rows,
             loaded_row_count=len(rows),
             input_provenance=input_provenance,
-            status=BLOCKED_INPUT_STATUS if has_missing_input else BLOCKED_STATUS,
+            status=_resolve_block_status(missing_rows),
         )
 
     accepted_confidences = {

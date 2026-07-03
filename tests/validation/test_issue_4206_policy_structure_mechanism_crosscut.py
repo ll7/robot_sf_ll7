@@ -602,3 +602,163 @@ def test_config_declares_forbidden_geometry_substitution() -> None:
     assert (
         payload["forbidden_fallback"]["geometry_buckets_may_substitute_mechanism_labels"] is False
     )
+
+
+def test_config_declares_retained_mechanism_sidecar() -> None:
+    """The checked-in config wires the retained #4242 sidecar as a declared input (#4305 path)."""
+    payload = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
+    declared = payload["declared_mechanism_sidecars"]
+    assert declared == [
+        "docs/context/evidence/issue_3810_h600_interpretation_2026-07/"
+        "h600_mechanism_labels_sidecar.csv"
+    ]
+    # The retained sidecar it points at must actually exist in the repo.
+    assert (REPO_ROOT / declared[0]).exists()
+
+
+def _unlabeled_seed_rows(root: Path, planners: list[str]) -> list[dict[str, object]]:
+    """Write seed_episode_rows.csv rows that carry no mechanism fields (predate trace capture)."""
+
+    rows = []
+    for planner in planners:
+        row = _base_row(planner, 1.0)
+        for field in _MODULE.REQUIRED_MECHANISM_FIELDS:
+            row.pop(field)
+        rows.append(row)
+    _write_rows(root, rows)
+    return rows
+
+
+def _write_sidecar_csv(
+    path: Path, source_rows: list[dict[str, object]], mechanism: dict[str, object]
+) -> None:
+    """Write an external mechanism-label sidecar keyed to ``source_rows``."""
+
+    key_fields = ("episode_id", "scenario_id", "planner_key", "seed", "repeat_index")
+    rows = [{**{k: row[k] for k in key_fields}, **mechanism} for row in source_rows]
+    fields = sorted({field for row in rows for field in row})
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _config_with_declared_sidecar(tmp_path: Path, sidecar: Path) -> Path:
+    """Return a config path identical to the checked-in one but pointing at ``sidecar``."""
+
+    payload = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
+    payload["declared_mechanism_sidecars"] = [str(sidecar)]
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump(payload), encoding="utf-8")
+    return config_path
+
+
+def test_is_not_derivable_row_matches_only_missing_trace() -> None:
+    """The classifier flags predates-trace unknowns, not geometry-only or real labels."""
+
+    missing_trace = {
+        "mechanism_schema_version": "failure_mechanism_taxonomy.v1",
+        "mechanism_label": "unknown",
+        "mechanism_confidence": "unknown",
+        "mechanism_backfill_status": "not_derivable_missing_trace",
+    }
+    geometry_only = {**missing_trace, "mechanism_backfill_status": ""}
+    geometry_only["mechanism_caveat"] = "not_derivable_non_trace_verified_mechanism"
+    real = _base_row("prediction_planner", 1.0)
+
+    assert _MODULE._is_not_derivable_row(missing_trace) is True
+    assert _MODULE._is_not_derivable_row(geometry_only) is False
+    assert _MODULE._is_not_derivable_row(real) is False
+
+
+def test_declared_sidecar_all_not_derivable_reports_predates_trace_capture_block(
+    tmp_path: Path,
+) -> None:
+    """Declared sidecar consumed, all labels not_derivable -> precise predates-trace block.
+
+    This is the retained h600 reality: the confirm/extended rows predate trace capture (#4301), so
+    every declared-sidecar label is `not_derivable_missing_trace`. The builder must consume the
+    sidecar (proving the #4305 path works) yet still fail closed with the precise blocker and a
+    trace-instrumented-rerun follow-up, not the generic "add a sidecar" action.
+    """
+
+    planners = ["prediction_planner", "ppo", "orca"]
+    confirm = tmp_path / "confirm"
+    extended = tmp_path / "extended"
+    confirm_rows = _unlabeled_seed_rows(confirm, planners)
+    _unlabeled_seed_rows(extended, planners)
+    # Mirror the retained #4242 backfill sidecar: v1 schema, all-unknown label, missing-trace marker.
+    unknown_mechanism = {
+        "mechanism_schema_version": "failure_mechanism_taxonomy.v1",
+        "mechanism_label": "unknown",
+        "mechanism_confidence": "unknown",
+        "mechanism_evidence_mode": "unknown",
+        "mechanism_evidence_uri": "",
+        "mechanism_backfill_status": "not_derivable_missing_trace",
+        "mechanism_caveat": "not_derivable_missing_trace",
+    }
+    sidecar = tmp_path / "sidecar.csv"
+    _write_sidecar_csv(sidecar, confirm_rows, unknown_mechanism)
+    config_path = _config_with_declared_sidecar(tmp_path, sidecar)
+    output = tmp_path / "evidence"
+
+    summary = _MODULE.build_packet(
+        config_path=config_path,
+        confirm_root=confirm,
+        extended_root=extended,
+        job13175_packet=tmp_path / "packet.json",
+        output_dir=output,
+        generated_at="2026-07-03T00:00:00Z",
+    )
+
+    assert summary["status"] == "blocked_trace_labels_not_derivable_predates_trace_capture"
+    missing = json.loads((output / "missing_instrumentation.json").read_text(encoding="utf-8"))
+    assert missing["blocker_kinds"] == ["mechanism_labels_not_derivable_predates_trace_capture"]
+    assert "trace" in missing["next_action"].lower()
+    assert "sidecar" not in missing["followup_issue_skeleton"]["title"].lower()
+    # Provenance proves the declared sidecar was actually consumed.
+    declared = missing["input_provenance"]["declared_mechanism_sidecars"]
+    assert declared and declared[0]["exists"] is True
+    # No F-C4(ii) tables are emitted while blocked.
+    assert _read_csv(output / "f_c4ii_probe_predictive_dominance.csv") == []
+
+
+def test_declared_sidecar_supplies_trace_labels_unblocks_tables(tmp_path: Path) -> None:
+    """A declared sidecar with real trace labels unblocks the F-C4(ii) tables (#4305 path)."""
+
+    planners = [
+        "prediction_planner",
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "ppo",
+        "orca",
+    ]
+    confirm = tmp_path / "confirm"
+    extended = tmp_path / "extended"
+    confirm_rows = _unlabeled_seed_rows(confirm, planners)
+    _unlabeled_seed_rows(extended, planners)
+    trace_mechanism = {
+        "mechanism_schema_version": "failure_mechanism_taxonomy.v1",
+        "mechanism_label": "static_deadlock_or_local_minimum",
+        "mechanism_confidence": "observed_mechanism",
+        "mechanism_evidence_mode": "paired_trace",
+        "mechanism_evidence_uri": "docs/context/issue_2220_failure_mechanism_taxonomy.md",
+    }
+    sidecar = tmp_path / "sidecar.csv"
+    _write_sidecar_csv(sidecar, confirm_rows, trace_mechanism)
+    config_path = _config_with_declared_sidecar(tmp_path, sidecar)
+    output = tmp_path / "evidence"
+
+    summary = _MODULE.build_packet(
+        config_path=config_path,
+        confirm_root=confirm,
+        extended_root=extended,
+        job13175_packet=tmp_path / "packet.json",
+        output_dir=output,
+        generated_at="2026-07-03T00:00:00Z",
+    )
+
+    assert summary["status"] == "analysis_ready_trace_verified"
+    assert summary["accepted_rows"] >= len(planners)
+    probe = _read_csv(output / "f_c4ii_probe_predictive_dominance.csv")
+    assert probe != []

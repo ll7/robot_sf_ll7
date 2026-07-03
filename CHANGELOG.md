@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Retained **`min_clearance_m` and `proxemic_intrusion_rate`** in the camera-ready campaign
+  summary/retention schema (issue #4326, from #4313). `robot_sf/benchmark/camera_ready/_reporting.py`
+  now emits both fields per planner row, aggregated from per-episode values that already exist in
+  episode rows: `min_clearance_m` is the campaign-wide **worst-case (minimum)** clearance (distinct
+  from the mean-of-per-episode-minimums kept as `min_clearance_mean`), and `proxemic_intrusion_rate`
+  is the mean per-episode personal-space intrusion fraction (`social_proxemic_intrusion_frac`). This
+  makes the clearance/proxemic release-gate coverage gaps from #4313 evaluable for **future**
+  campaigns with no evaluator code change (the gate spec already targets these exact names). Past and
+  degraded campaigns are **not** backfilled — with no source values both fields fail closed to `nan`
+  so their gates stay `not_evaluable`. No benchmark campaign was run; this is a schema/aggregation
+  change only.
 * Generated the **current-roster release-gate evidence report** for issue #4166, the real-campaign
   application of the reporting layer merged in PR #4184. The merged evaluator now consumes the
   canonical retained camera-ready `campaign_summary.json` directly (`release_gates._rows_from_mapping`

@@ -7,6 +7,10 @@
     "README.md",
     "comparability_check.json",
     "comparability_check.md",
+    "h600_interaction_exposure_sidecar.csv",
+    "h600_mechanism_exposure_backfill_manifest.json",
+    "h600_mechanism_exposure_backfill_report.md",
+    "h600_mechanism_labels_sidecar.csv",
     "horizon_sensitivity_report.json",
     "horizon_sensitivity_report.md",
     "interaction_exposure_diagnostics.json",
@@ -18,6 +22,20 @@
     "source_manifest.json"
   ],
   "h500_s20_reports": "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/reports",
+  "issue_4242_h600_sidecars": {
+    "backfill_manifest": "h600_mechanism_exposure_backfill_manifest.json",
+    "backfill_report": "h600_mechanism_exposure_backfill_report.md",
+    "generated_at": "2026-07-03T11:27:59Z",
+    "interaction_exposure_sidecar": "h600_interaction_exposure_sidecar.csv",
+    "interaction_exposure_status_counts": {
+      "not_derivable_missing_trace": 2304
+    },
+    "mechanism_sidecar": "h600_mechanism_labels_sidecar.csv",
+    "mechanism_status_counts": {
+      "not_derivable_missing_trace": 2304
+    },
+    "schema_version": "issue_4242_h600_mechanism_exposure_backfill.v1"
+  },
   "runs": [
     {
       "campaign": {

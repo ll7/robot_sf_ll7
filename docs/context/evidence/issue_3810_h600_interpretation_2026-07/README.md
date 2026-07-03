@@ -19,6 +19,8 @@ This directory contains diagnostic-only h600 interpretation artifacts for jobs 1
 - `snqi_recalibration_bundle.json` and `snqi_recalibration_report.md`: analysis-only h600 recalibration and h500 reversal checks.
 - `horizon_sensitivity_report.json` and `horizon_sensitivity_report.md`: h600-vs-h500 rank-stability and rank-flip diagnostic.
 - `interaction_exposure_diagnostics.json` and `interaction_exposure_diagnostics.md`: episode-level exposure coverage readiness; fail-closed when required fields are absent.
+- `h600_mechanism_labels_sidecar.csv` `h600_interaction_exposure_sidecar.csv`: retained h600 episode-row sidecars from issue #4242. All retained rows are explicit `not_derivable_missing_trace`; no geometry-only mechanism labels or exposure zero-imputation are used.
+- `h600_mechanism_exposure_backfill_manifest.json` `h600_mechanism_exposure_backfill_report.md`: compact sidecar provenance, status counts, and diagnostic-only claim boundary.
 - `source_manifest.json`: input paths, campaign metadata, and source file SHA-256 digests.
 - `SHA256SUMS`: checksums for generated files in this directory.
 

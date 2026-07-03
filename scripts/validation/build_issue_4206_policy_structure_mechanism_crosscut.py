@@ -271,19 +271,24 @@ def _is_not_derivable_row(row: Mapping[str, Any]) -> bool:
         return False
     label = str(row.get("mechanism_label", "")).strip().lower()
     confidence = str(row.get("mechanism_confidence", "")).strip().lower()
-    # A real, usable label rules out the not-derivable case.
-    if label not in {"", "unknown"} and confidence not in {"", "unknown"}:
+    # A real label alone rules out "every label is unknown": a row with a usable mechanism_label
+    # must not be routed to the predates-trace status just because its confidence is blank while a
+    # stale not_derivable marker lingers. Require the label itself to be unknown/absent.
+    if label not in {"", "unknown"} or confidence not in {"", "unknown"}:
         return False
     markers = " ".join(str(row.get(field, "")).lower() for field in MECHANISM_MARKER_FIELDS)
     return NOT_DERIVABLE_MISSING_TRACE_MARKER in markers
 
 
 def _resolve_declared_path(raw: str, base_dir: Path) -> Path:
-    """Resolve a config-declared sidecar path against cwd first, then the repo base dir."""
+    """Resolve a config-declared sidecar path against the repo base dir.
+
+    Declared sidecar paths are documented as repo-root relative, so resolve them deterministically
+    against ``base_dir`` (the config's repo root). Resolving against the process cwd first would let
+    an unrelated same-named file under the caller's cwd silently win and corrupt the provenance.
+    """
     candidate = Path(raw)
     if candidate.is_absolute():
-        return candidate
-    if candidate.exists():
         return candidate
     return base_dir / candidate
 
@@ -804,7 +809,9 @@ Blocked statuses distinguish three different next actions:
 
 This packet can support a mechanism-level policy-structure cross-cut only for rows with
 trace-verified failure-mechanism labels. Missing labels produce
-`blocked_missing_trace_verified_mechanism_labels` and stop F-C4(ii) rank conclusions.
+`blocked_missing_trace_verified_mechanism_labels`, and retained rows whose labels are all
+`not_derivable` because the episodes predate trace capture produce
+`blocked_trace_labels_not_derivable_predates_trace_capture`; both stop F-C4(ii) rank conclusions.
 
 Out of scope: no full benchmark campaign run, no Slurm/GPU submission, no paper/dissertation claim
 edits, and no causal-mechanism claim from geometry buckets alone.

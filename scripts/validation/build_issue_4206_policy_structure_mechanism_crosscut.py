@@ -90,6 +90,19 @@ def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]], fieldnames: Sequen
             writer.writerow({field: row.get(field, "") for field in fieldnames})
 
 
+def _public_path(path: Path) -> str:
+    """Return a repo-public path without local home/worktree prefixes."""
+    resolved = path.resolve()
+    for anchor in ("docs", "configs", "scripts", "tests", "output"):
+        if anchor in resolved.parts:
+            index = resolved.parts.index(anchor)
+            return str(Path(*resolved.parts[index:]))
+    try:
+        return str(path.resolve().relative_to(Path.cwd().resolve()))
+    except ValueError:
+        return path.name
+
+
 def _to_float(value: Any) -> float | None:
     if value is None or value == "":
         return None
@@ -132,7 +145,6 @@ def _sidecar_keys(row: Mapping[str, Any]) -> list[tuple[str, ...]]:
     return [
         full,
         ("", full[1], full[2], full[3], full[4]),
-        (full[0], "", "", "", ""),
     ]
 
 
@@ -202,7 +214,7 @@ def _load_run_rows(root: Path, run_name: str) -> tuple[list[dict[str, Any]], lis
         return [], [
             {
                 "run": run_name,
-                "missing_path": str(rows_path),
+                "missing_path": _public_path(rows_path),
                 "missing_fields": ["reports/seed_episode_rows.csv"],
             }
         ]
@@ -245,12 +257,14 @@ def _is_fallback_or_degraded(row: Mapping[str, Any]) -> bool:
 
 
 def _score(row: Mapping[str, Any]) -> tuple[float, float, float, float, float]:
+    snqi = row.get("snqi_mean")
+    snqi_score = -9999.0 if snqi is None else float(snqi)
     return (
         -float(row.get("success_rate", 0.0)),
         float(row.get("collision_event_rate", 0.0)),
         float(row.get("near_miss_event_rate", 0.0)),
         float(row.get("timeout_rate", 0.0)),
-        -float(row.get("snqi_mean", -9999.0)),
+        -snqi_score,
     )
 
 
@@ -384,7 +398,11 @@ def _agreement_table(
         if key in seen:
             continue
         seen.add(key)
-        status = "not_comparable_scope_or_roster_change" if not geometry_bucket else "agrees"
+        status = (
+            "geometry_present_not_rank_compared"
+            if geometry_bucket
+            else "not_comparable_scope_or_roster_change"
+        )
         table.append(
             {
                 "geometry_bucket": geometry_bucket,
@@ -394,7 +412,7 @@ def _agreement_table(
                 "old_geometry_rank": "",
                 "new_mechanism_rank": rank_lookup.get((mechanism, structural_class), ""),
                 "agreement_status": status,
-                "conclusion_survives": "" if status != "agrees" else "diagnostic_only",
+                "conclusion_survives": "",
                 "caveat": "old geometry-bucket ranks are not recomputed by this mechanism-level builder",
             }
         )
@@ -551,7 +569,7 @@ def _write_sha256sums(output_dir: Path) -> None:
         if path.name == "SHA256SUMS":
             continue
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        lines.append(f"{digest}  {path.name}")
+        lines.append(f"{digest}  {_public_path(path)}")
     (output_dir / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -641,11 +659,11 @@ def build_packet(  # noqa: C901
         "status": status,
         "issue": 4206,
         "generated_at": generated_at,
-        "config": str(config_path),
+        "config": _public_path(config_path),
         "taxonomy_source": config.get("taxonomy_source"),
-        "confirm_root": str(confirm_root),
-        "extended_root": str(extended_root),
-        "job13175_packet": str(job13175_packet),
+        "confirm_root": _public_path(confirm_root),
+        "extended_root": _public_path(extended_root),
+        "job13175_packet": _public_path(job13175_packet),
         "input_rows": len(rows),
         "accepted_rows": len(enriched),
         "observed_mechanism_rows": observed_count,

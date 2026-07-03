@@ -225,10 +225,25 @@ def test_sidecar_mechanism_labels_are_accepted(tmp_path: Path) -> None:
             "w", encoding="utf-8", newline=""
         ) as handle:
             writer = csv.DictWriter(
-                handle, fieldnames=["episode_id", *_MODULE.REQUIRED_MECHANISM_FIELDS]
+                handle,
+                fieldnames=[
+                    "scenario_id",
+                    "planner_key",
+                    "seed",
+                    "repeat_index",
+                    *_MODULE.REQUIRED_MECHANISM_FIELDS,
+                ],
             )
             writer.writeheader()
-            writer.writerow({"episode_id": "ep-prediction_planner", **sidecar})
+            writer.writerow(
+                {
+                    "scenario_id": row["scenario_id"],
+                    "planner_key": row["planner_key"],
+                    "seed": row["seed"],
+                    "repeat_index": row["repeat_index"],
+                    **sidecar,
+                }
+            )
     output = tmp_path / "evidence"
 
     summary = _MODULE.build_packet(
@@ -241,6 +256,75 @@ def test_sidecar_mechanism_labels_are_accepted(tmp_path: Path) -> None:
     )
 
     assert summary["status"] == "analysis_ready_trace_verified"
+
+
+def test_sidecar_episode_id_only_does_not_attach_to_other_keys(tmp_path: Path) -> None:
+    """Mechanism sidecars must not attach by episode id alone."""
+    confirm = tmp_path / "confirm"
+    extended = tmp_path / "extended"
+    row = _base_row("prediction_planner", 1.0)
+    row["episode_id"] = "shared-episode"
+    for field in _MODULE.REQUIRED_MECHANISM_FIELDS:
+        row.pop(field)
+    _write_rows(confirm, [row])
+    _write_rows(extended, [row])
+    sidecar = _base_row("other_planner", 0.0)
+    sidecar["episode_id"] = "shared-episode"
+    for root in (confirm, extended):
+        with (root / "reports" / "mechanism_labels.csv").open(
+            "w", encoding="utf-8", newline=""
+        ) as handle:
+            writer = csv.DictWriter(
+                handle, fieldnames=["episode_id", *_MODULE.REQUIRED_MECHANISM_FIELDS]
+            )
+            writer.writeheader()
+            writer.writerow(
+                {"episode_id": sidecar["episode_id"]}
+                | {field: sidecar[field] for field in _MODULE.REQUIRED_MECHANISM_FIELDS}
+            )
+
+    summary = _MODULE.build_packet(
+        config_path=CONFIG,
+        confirm_root=confirm,
+        extended_root=extended,
+        job13175_packet=tmp_path / "packet.json",
+        output_dir=tmp_path / "evidence",
+        generated_at="2026-07-03T00:00:00Z",
+    )
+
+    assert summary["status"] == "blocked_missing_trace_verified_mechanism_labels"
+
+
+def test_score_tolerates_missing_snqi_mean() -> None:
+    """Rank scoring keeps missing SNQI fail-closed instead of crashing."""
+    score = _MODULE._score(
+        {
+            "success_rate": 1.0,
+            "collision_event_rate": 0.0,
+            "near_miss_event_rate": 0.0,
+            "timeout_rate": 0.0,
+            "snqi_mean": None,
+        }
+    )
+
+    assert score[-1] == 9999.0
+
+
+def test_geometry_agreement_table_does_not_claim_unverified_agreement() -> None:
+    """Geometry comparison table must label uncomputed comparisons explicitly."""
+    table = _MODULE._agreement_table(
+        [_base_row("prediction_planner", 1.0)],
+        [
+            {
+                "mechanism_label": "static_deadlock_or_local_minimum",
+                "structural_class": "predictive",
+                "mechanism_rank": 1,
+            }
+        ],
+    )
+
+    assert table[0]["agreement_status"] == "geometry_present_not_rank_compared"
+    assert table[0]["conclusion_survives"] == ""
 
 
 def test_cli_json_summary(tmp_path: Path) -> None:

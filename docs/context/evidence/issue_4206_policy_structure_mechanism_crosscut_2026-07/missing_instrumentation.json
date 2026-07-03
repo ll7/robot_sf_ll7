@@ -13,14 +13,14 @@
       "missing_fields": [
         "reports/seed_episode_rows.csv"
       ],
-      "missing_path": "/home/luttkule/git/robot_sf_ll7/output/issue3810-h600-longhorizon-confirm-run/13268/reports/seed_episode_rows.csv",
+      "missing_path": "output/issue3810-h600-longhorizon-confirm-run/13268/reports/seed_episode_rows.csv",
       "run": "confirm_h600_13268"
     },
     {
       "missing_fields": [
         "reports/seed_episode_rows.csv"
       ],
-      "missing_path": "/home/luttkule/git/robot_sf_ll7/output/issue3810-h600-extroster-run/13273/reports/seed_episode_rows.csv",
+      "missing_path": "output/issue3810-h600-extroster-run/13273/reports/seed_episode_rows.csv",
       "run": "extended_h600_13273"
     }
   ],

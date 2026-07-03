@@ -45,6 +45,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4206_policy_structure_mechanism_crosscut_2026-07
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4183_hybrid_global_rl_diagnostic/README.md
     status: evidence
     freshness: evidence

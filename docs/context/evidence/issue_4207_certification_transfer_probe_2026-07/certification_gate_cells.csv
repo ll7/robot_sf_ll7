@@ -1,0 +1,9 @@
+planner_key,structural_class,scenario_family,evaluation_model,gate_status,failed_gate_ids,not_evaluable_gate_ids,episodes
+goal,baseline_reactive,francis2023_blind_corner,social_force_default,pass,,,3
+goal,baseline_reactive,francis2023_blind_corner,hsfm_total_force_v1,pass,,,3
+ppo,learned_policy,francis2023_blind_corner,social_force_default,pass,,,3
+ppo,learned_policy,francis2023_blind_corner,hsfm_total_force_v1,pass,,,3
+prediction_planner,predictive,francis2023_blind_corner,social_force_default,fail,collision_rate_zero,,3
+prediction_planner,predictive,francis2023_blind_corner,hsfm_total_force_v1,fail,collision_rate_zero,,3
+guarded_ppo,constraint_first,francis2023_blind_corner,social_force_default,pass,,,3
+guarded_ppo,constraint_first,francis2023_blind_corner,hsfm_total_force_v1,pass,,,3

@@ -390,12 +390,16 @@ def test_run_map_episode_records_wrapper_metadata_when_enabled(monkeypatch) -> N
     record = _run_episode_with_policy(
         monkeypatch,
         _policy_builder,
-        safety_wrapper={"enabled": True, "arm_key": "wrapper_on"},
+        safety_wrapper={"enabled": True, "arm_key": "wrapper_on", "record_step_trace": True},
     )
 
     summary = record["algorithm_metadata"]["safety_wrapper"]
     assert summary["schema_version"] == SAFETY_WRAPPER_EPISODE_SUMMARY_SCHEMA
+    assert summary["step_count"] == 1
+    assert summary["eligible_step_count"] == 1
     assert summary["intervened_step_count"] == 1
+    assert len(summary["step_trace"]) == 1
+    assert summary["step_trace"][0]["eligible_for_wrapper"] is True
     assert record["metrics"]["wrapper_intervention_rate"] == 1.0
 
     ledger = build_event_ledger(record)
@@ -439,3 +443,70 @@ def test_run_map_episode_fails_closed_for_unsupported_command_when_wrapper_enabl
             unsupported_policy_builder,
             safety_wrapper={"enabled": True, "arm_key": "wrapper_on"},
         )
+
+
+def test_run_map_episode_records_fail_open_native_action_as_ineligible(monkeypatch) -> None:
+    """Fail-open native env actions keep original command and record provenance."""
+
+    def native_policy_builder(*_args, **_kwargs):
+        def policy(_obs):
+            return np.array([0.1, 0.0], dtype=float)
+
+        policy._last_step_native = True
+        return policy, {"algorithm": "unit"}
+
+    record = _run_episode_with_policy(
+        monkeypatch,
+        native_policy_builder,
+        safety_wrapper={
+            "enabled": True,
+            "arm_key": "wrapper_on",
+            "fail_on_native_action": False,
+            "record_step_trace": True,
+        },
+    )
+
+    summary = record["algorithm_metadata"]["safety_wrapper"]
+    assert summary["step_count"] == 1
+    assert summary["eligible_step_count"] == 0
+    assert summary["intervened_step_count"] == 0
+    assert len(summary["step_trace"]) == 1
+    step_record = summary["step_trace"][0]
+    assert step_record["eligible_for_wrapper"] is False
+    assert step_record["ineligible_reason"] == "native_environment_action"
+    assert step_record["context"] is None
+    assert record["metrics"]["wrapper_intervention_rate"] == 0.0
+
+
+def test_run_map_episode_records_fail_open_unsupported_command_as_ineligible(
+    monkeypatch,
+) -> None:
+    """Fail-open unsupported command shapes record provenance without wrapper rewrite."""
+
+    def unsupported_policy_builder(*_args, **_kwargs):
+        def policy(_obs):
+            return {"command_kind": "unsupported"}
+
+        return policy, {"algorithm": "unit"}
+
+    record = _run_episode_with_policy(
+        monkeypatch,
+        unsupported_policy_builder,
+        safety_wrapper={
+            "enabled": True,
+            "arm_key": "wrapper_on",
+            "fail_on_unsupported_command": False,
+            "record_step_trace": True,
+        },
+    )
+
+    summary = record["algorithm_metadata"]["safety_wrapper"]
+    assert summary["step_count"] == 1
+    assert summary["eligible_step_count"] == 0
+    assert summary["intervened_step_count"] == 0
+    assert len(summary["step_trace"]) == 1
+    step_record = summary["step_trace"][0]
+    assert step_record["eligible_for_wrapper"] is False
+    assert step_record["ineligible_reason"] == "unsupported_command_shape"
+    assert step_record["context"] is None
+    assert record["metrics"]["wrapper_intervention_rate"] == 0.0

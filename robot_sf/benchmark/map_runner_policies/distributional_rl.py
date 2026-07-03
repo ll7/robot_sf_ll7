@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from robot_sf.baselines.distributional_rl import DistributionalRLPlanner
-
 if TYPE_CHECKING:
     from .registry import PolicyBuildResult
 
@@ -25,6 +23,8 @@ def build(
     Returns:
         Policy callable and metadata consumed by ``map_runner._build_policy``.
     """
+
+    from robot_sf.baselines.distributional_rl import DistributionalRLPlanner  # noqa: PLC0415
 
     del robot_command_mode, adapter_impact_eval
     planner = DistributionalRLPlanner(algo_config, seed=None)

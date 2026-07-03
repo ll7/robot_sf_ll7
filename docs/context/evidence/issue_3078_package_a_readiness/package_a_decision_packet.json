@@ -1,0 +1,26 @@
+{
+  "classification": "blocked_pending_package_a_evidence",
+  "forbidden_actions_confirmed": {
+    "benchmark_campaign_run": false,
+    "compute_submit": false,
+    "paper_claim_edits": false,
+    "ranking_claim_promotion": false
+  },
+  "heldout_partition_manifests": [
+    {
+      "errors": [],
+      "ok": true,
+      "path": "configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml"
+    }
+  ],
+  "manifest_path": "configs/benchmarks/issue_3078_package_a_readiness.yaml",
+  "package_id": "issue_3078_package_a_readiness",
+  "readiness_status": "ready",
+  "reasons": [
+    "no canonical campaign result store supplied",
+    "no seed-sufficiency analysis report supplied"
+  ],
+  "result_stores": [],
+  "schema_version": "package_a_decision_packet.v1",
+  "seed_analysis_reports": []
+}

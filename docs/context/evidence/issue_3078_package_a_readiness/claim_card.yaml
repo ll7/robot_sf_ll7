@@ -1,0 +1,43 @@
+# Preliminary Package A claim card (issue #3078).
+# Mirrors the canonical campaign-claim-card.v1 shape written by
+# scripts/tools/campaign_result_store.py. This card records a fail-closed
+# BLOCKED decision-packet state; it is not benchmark evidence and not
+# paper-facing.
+schema_version: campaign-claim-card.v1
+study_id: issue_3078_package_a
+issue: 3078
+parent_issue: 3057
+execution_date: "2026-07-03"
+claim_status: not_reviewed
+evidence_tier: diagnostic
+classification: blocked
+decision_packet_classification: blocked_pending_package_a_evidence
+claim_boundary: >
+  Package A seed/planner-rank stability and held-out-family transfer evidence
+  only. No paper-facing planner-superiority or generalization claim is promoted.
+  This card records that the Package A decision packet is BLOCKED pending a
+  canonical campaign result store and a frozen-protocol seed-sufficiency
+  analysis; both require a held-out-family campaign run that is out of scope for
+  this assembly lane.
+blocked_reasons:
+  - no canonical campaign result store supplied
+  - no seed-sufficiency analysis report supplied
+inputs_validated:
+  heldout_partition_manifest: configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml
+  readiness_manifest: configs/benchmarks/issue_3078_package_a_readiness.yaml
+inputs_missing:
+  result_store: none retained (requires frozen held-out-family campaign run)
+  seed_analysis_report: none retained from frozen Package A protocol
+exclusions:
+  fallback_degraded_failed_unavailable_rows: visible_non_success_evidence
+next_empirical_action: >
+  Run the frozen held-out-family transfer pilot to produce a canonical result
+  store, run analyze_seed_sufficiency.py on the frozen-protocol campaign roots,
+  then re-run the decision packet with --result-store and
+  --seed-analysis-report to reach diagnostic_review_ready.
+review_required_before_paper_use: true
+forbidden_actions_confirmed:
+  benchmark_campaign_run: false
+  compute_submit: false
+  ranking_claim_promotion: false
+  paper_claim_edits: false

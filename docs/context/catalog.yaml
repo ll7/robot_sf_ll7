@@ -41,6 +41,18 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4183_hybrid_global_rl_diagnostic/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4183_hybrid_global_rl_diagnostic/paired_rows.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4183_hybrid_global_rl_diagnostic/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3484_feasibility_diagnostics_2026-07-02/README.md
     status: evidence
     freshness: evidence

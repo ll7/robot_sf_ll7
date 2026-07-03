@@ -1,0 +1,29 @@
+# Issue #4017: matched unconstrained PPO CPU smoke baseline config.
+# Smoke/provenance only: no benchmark campaign, no Slurm/GPU submission, no paper claim.
+policy_id: ppo_unconstrained_issue_4017_smoke
+algorithm: ppo
+scenario_config: ../../scenarios/sets/classic_cross_trap_subset.yaml
+total_timesteps: 256
+seed: 4017
+num_envs: 1
+device: cpu
+policy: MultiInputPolicy
+env_overrides:
+  observation_mode: default_gym
+env_factory_kwargs:
+  reward_name: route_completion_v2
+ppo_hyperparams:
+  learning_rate: 0.0001
+  n_steps: 64
+  batch_size: 64
+  n_epochs: 2
+  gamma: 0.99
+safety_constraints:
+  schema_version: constrained_rl.v1
+  enabled: false
+  method: lagrangian_ppo
+  update_mode: episode
+  constraints: []
+tracking:
+  enabled: false
+output_dir: output/models/constrained_rl/issue_4017/ppo_unconstrained_issue_4017_smoke

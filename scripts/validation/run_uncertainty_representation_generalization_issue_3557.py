@@ -146,9 +146,11 @@ def write_report_artifacts(report: dict[str, Any], output_dir: Path, command: st
     persisted_report = {
         key: value for key, value in report.items() if key != "representation_reports"
     }
-    summary_path.write_text(json.dumps(persisted_report, indent=2, sort_keys=True) + "\n")
+    summary_path.write_text(
+        json.dumps(persisted_report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     fieldnames = list(report["per_representation"][0])
-    with csv_path.open("w", newline="") as handle:
+    with csv_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         writer.writerows(report["per_representation"])
@@ -230,7 +232,12 @@ def main(argv: list[str] | None = None) -> int:
         params=params,
         representations=list(args.representations),
     )
-    script = Path(__file__).relative_to(Path.cwd())
+    try:
+        script = Path(__file__).relative_to(Path.cwd())
+    except ValueError:
+        # Invoked from outside the repo root; fall back to the script name so the
+        # recorded command string never crashes on cwd-relative resolution.
+        script = Path(__file__).name
     command_args = sys.argv[1:] if argv is None else argv
     command = " ".join(["uv run python", str(script), *command_args])
     write_report_artifacts(report, args.output_dir, command)

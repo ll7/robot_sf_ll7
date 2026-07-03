@@ -22,6 +22,7 @@ REQUIRED_SMG_FIELDS = {
     "symmetry",
     "expected_failure_modes",
 }
+REQUIRED_INTERACTION_METADATA_FIELDS = {"archetype", "density", "flow", "groups"}
 EXPECTED_CASES = {
     "doorway",
     "narrow_sidewalk",
@@ -48,7 +49,10 @@ def test_social_mini_game_metadata_contract() -> None:
     cases: set[str] = set()
     assert len(scenarios) == len(EXPECTED_CASES)
     for scenario in scenarios:
-        smg = (scenario.get("metadata") or {}).get("smg")
+        metadata = scenario.get("metadata") or {}
+        assert REQUIRED_INTERACTION_METADATA_FIELDS <= set(metadata), scenario.get("name")
+
+        smg = metadata.get("smg")
         assert isinstance(smg, dict), scenario.get("name")
         assert REQUIRED_SMG_FIELDS <= set(smg), scenario.get("name")
         assert smg["schema_version"] == "robot_sf.social_mini_game.v1"

@@ -44,6 +44,8 @@ scenario_overrides_by_name:
           - near_miss
   francis2023_blind_corner:
     metadata:
+      density: single_interaction
+      groups: 0.0
       smg:
         schema_version: robot_sf.social_mini_game.v1
         case: blind_corner
@@ -57,6 +59,8 @@ scenario_overrides_by_name:
           - late_yield
   francis2023_perpendicular_traffic:
     metadata:
+      density: medium
+      groups: 0.0
       smg:
         schema_version: robot_sf.social_mini_game.v1
         case: perpendicular_crossing

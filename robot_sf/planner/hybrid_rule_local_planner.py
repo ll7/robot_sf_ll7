@@ -256,6 +256,17 @@ class HybridRuleLocalPlannerConfig:
     static_safety_gate_penalty: float = 12.0
     static_safety_gate_all_sources: bool = False
 
+    # Issue #4164 opt-in posterior-consumption path. The channel currently
+    # carries confidence, not candidate goal coordinates, so this planner
+    # combines confidence with current pedestrian position/velocity only.
+    goal_posterior_avoidance_enabled: bool = False
+    goal_posterior_min_confidence: float = 0.55
+    goal_posterior_near_distance: float = 2.5
+    goal_posterior_crossing_lateral_margin: float = 0.75
+    goal_posterior_yield_speed: float = 0.15
+    goal_posterior_turn_rate: float = 0.55
+    goal_posterior_score_bonus: float = 2.0
+
     # Experimental AMV synthetic-actuation scoring for issue #1807. These
     # values intentionally mirror the diagnostic profile shape used by issue
     # #1556; they are not calibrated hardware limits.
@@ -608,9 +619,189 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
     def _candidate_source_priority(self, source: str) -> int:
         """Return a source priority for preserving specialized duplicate commands."""
         return {
+            "goal_posterior_yield_left": 40,
+            "goal_posterior_yield_right": 40,
             "corridor_subgoal": 30,
             "route_guide": 20,
         }.get(source, 10)
+
+    def _goal_posterior_metadata(self) -> dict[str, Any]:
+        """Return issue #4164 posterior-consumption configuration metadata."""
+        return {
+            "enabled": bool(self.config.goal_posterior_avoidance_enabled),
+            "status": "ok" if self.config.goal_posterior_avoidance_enabled else "disabled",
+            "min_confidence": float(self.config.goal_posterior_min_confidence),
+            "near_distance": float(self.config.goal_posterior_near_distance),
+            "crossing_lateral_margin": float(self.config.goal_posterior_crossing_lateral_margin),
+            "yield_speed": float(self.config.goal_posterior_yield_speed),
+            "turn_rate": float(self.config.goal_posterior_turn_rate),
+            "score_bonus": float(self.config.goal_posterior_score_bonus),
+            "fallback_or_degraded": False,
+        }
+
+    def _planner_goal_posterior_channel(self, observation: dict[str, Any]) -> dict[str, Any] | None:
+        """Return planner goal-posterior channel from observation or info wrapper."""
+        channel = observation.get("planner_goal_posterior_channel")
+        if isinstance(channel, dict):
+            return channel
+        info = observation.get("info")
+        if isinstance(info, dict):
+            channel = info.get("planner_goal_posterior_channel")
+            if isinstance(channel, dict):
+                return channel
+        return None
+
+    def _goal_posterior_signal(  # noqa: C901
+        self,
+        observation: dict[str, Any],
+        state: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Build a bounded crossing-risk signal from posterior metadata.
+
+        Returns:
+            Diagnostic signal consumed by candidate generation, scoring, and
+            decision reports.
+        """
+        diagnostics: dict[str, Any] = {
+            "enabled": bool(self.config.goal_posterior_avoidance_enabled),
+            "consumed": False,
+            "active": False,
+            "blocker": None,
+            "source": "planner_goal_posterior_channel",
+        }
+        if not bool(self.config.goal_posterior_avoidance_enabled):
+            diagnostics["blocker"] = "planner_disabled"
+            return diagnostics
+        channel = self._planner_goal_posterior_channel(observation)
+        if channel is None:
+            diagnostics["blocker"] = "channel_missing"
+            return diagnostics
+        diagnostics["consumed"] = True
+        if not bool(channel.get("enabled", False)):
+            diagnostics["blocker"] = "channel_disabled"
+            return diagnostics
+        summaries = channel.get("pedestrian_goal_posteriors")
+        if not isinstance(summaries, dict) or not summaries:
+            diagnostics["blocker"] = "posterior_empty"
+            return diagnostics
+
+        ped_pos = np.asarray(state["ped_pos"], dtype=float)
+        ped_vel = np.asarray(state["ped_vel"], dtype=float)
+        if ped_pos.ndim != 2 or ped_pos.shape[1] != 2 or ped_pos.shape[0] == 0:
+            diagnostics["blocker"] = "pedestrian_state_unavailable"
+            return diagnostics
+        if ped_vel.ndim != 2 or ped_vel.shape[1] != 2:
+            ped_vel = np.zeros_like(ped_pos)
+
+        robot_pos = np.asarray(state["robot_pos"], dtype=float)
+        heading = float(state["heading"])
+        forward = np.array([np.cos(heading), np.sin(heading)], dtype=float)
+        left = np.array([-forward[1], forward[0]], dtype=float)
+
+        candidates: list[dict[str, Any]] = []
+        for index, (pedestrian_id, summary) in enumerate(summaries.items()):
+            if index >= ped_pos.shape[0] or not isinstance(summary, dict):
+                continue
+            confidence = summary.get("top_goal_confidence")
+            if not isinstance(confidence, int | float | np.integer | np.floating):
+                continue
+            confidence = float(confidence)
+            if not np.isfinite(confidence):
+                continue
+            if confidence < float(self.config.goal_posterior_min_confidence):
+                continue
+            rel = ped_pos[index] - robot_pos
+            forward_distance = float(np.dot(rel, forward))
+            lateral_offset = float(np.dot(rel, left))
+            ped_speed = float(np.linalg.norm(ped_vel[index])) if index < ped_vel.shape[0] else 0.0
+            if forward_distance < 0.0 or forward_distance > float(
+                self.config.goal_posterior_near_distance
+            ):
+                continue
+            if abs(lateral_offset) > float(self.config.goal_posterior_crossing_lateral_margin):
+                continue
+            candidates.append(
+                {
+                    "pedestrian_index": int(index),
+                    "pedestrian_id": str(summary.get("pedestrian_id", pedestrian_id)),
+                    "top_goal_id": summary.get("top_goal_id"),
+                    "top_goal_confidence": confidence,
+                    "forward_distance": forward_distance,
+                    "lateral_offset": lateral_offset,
+                    "pedestrian_speed": ped_speed,
+                }
+            )
+
+        if not candidates:
+            diagnostics["blocker"] = "no_high_confidence_crossing_risk"
+            return diagnostics
+        candidates.sort(
+            key=lambda item: (
+                -float(item["top_goal_confidence"]),
+                abs(float(item["lateral_offset"])),
+                float(item["forward_distance"]),
+            )
+        )
+        selected = candidates[0]
+        turn_sign = -1.0 if float(selected["lateral_offset"]) >= 0.0 else 1.0
+        diagnostics.update(
+            {
+                "active": True,
+                "blocker": None,
+                "selected": selected,
+                "candidate_count": len(candidates),
+                "turn_sign": turn_sign,
+            }
+        )
+        return diagnostics
+
+    def _goal_posterior_candidates(
+        self,
+        goal_posterior: dict[str, Any] | None,
+        *,
+        speed_cap: float,
+        bounds: tuple[float, float, float, float],
+    ) -> list[HybridRuleCandidate]:
+        """Return posterior-aware yield candidates when crossing signal is active."""
+        if not isinstance(goal_posterior, dict) or not bool(goal_posterior.get("active")):
+            return []
+        v_min, v_max, w_min, w_max = bounds
+        turn_sign = float(goal_posterior.get("turn_sign", 1.0))
+        angular = float(
+            np.clip(
+                turn_sign * float(self.config.goal_posterior_turn_rate),
+                w_min,
+                w_max,
+            )
+        )
+        linear = float(
+            np.clip(
+                min(float(self.config.goal_posterior_yield_speed), float(speed_cap)),
+                v_min,
+                v_max,
+            )
+        )
+        source = "goal_posterior_yield_left" if angular >= 0.0 else "goal_posterior_yield_right"
+        return [HybridRuleCandidate(linear, angular, source)]
+
+    def _goal_posterior_score_term(
+        self,
+        *,
+        candidate: HybridRuleCandidate,
+        goal_posterior: dict[str, Any] | None,
+    ) -> float:
+        """Return additive score term for posterior-aware candidates."""
+        if not isinstance(goal_posterior, dict) or not bool(goal_posterior.get("active")):
+            return 0.0
+        if not candidate.source.startswith("goal_posterior_yield_"):
+            return 0.0
+        selected = goal_posterior.get("selected")
+        confidence = 1.0
+        if isinstance(selected, dict):
+            raw_confidence = selected.get("top_goal_confidence", 1.0)
+            if isinstance(raw_confidence, int | float | np.integer | np.floating):
+                confidence = float(np.clip(float(raw_confidence), 0.0, 1.0))
+        return float(self.config.goal_posterior_score_bonus) * confidence
 
     def _route_point(self, route_corridor: dict[str, Any] | None, key: str) -> np.ndarray | None:
         """Read one finite ``(x, y)`` point from route-corridor diagnostics.
@@ -1041,6 +1232,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         *,
         route_corridor: dict[str, Any] | None = None,
         corridor_subgoal: dict[str, Any] | None = None,
+        goal_posterior: dict[str, Any] | None = None,
     ) -> list[HybridRuleCandidate]:
         """Generate deterministic DWA, path-following, and safety candidates.
 
@@ -1107,6 +1299,13 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         if corridor_subgoal is not None:
             corridor_subgoal["candidate_count"] = len(subgoal_candidates)
         candidates.extend(subgoal_candidates)
+        candidates.extend(
+            self._goal_posterior_candidates(
+                goal_posterior,
+                speed_cap=speed_cap,
+                bounds=(v_min, v_max, w_min, w_max),
+            )
+        )
 
         candidates.extend(
             [
@@ -1838,7 +2037,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         route_progress = float(np.dot(end_pos - start_pos, route_dir))
         return float(np.clip(route_progress / max(max_progress, _EPS), -1.0, 1.0))
 
-    def _evaluate_candidate(  # noqa: C901, PLR0915
+    def _evaluate_candidate(  # noqa: C901, PLR0913, PLR0915
         self,
         *,
         candidate: HybridRuleCandidate,
@@ -1849,6 +2048,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         progress_windows: dict[str, float] | None = None,
         route_corridor: dict[str, Any] | None = None,
         strict_static_clearance: bool = False,
+        goal_posterior: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Filter and score one candidate command.
 
@@ -2146,6 +2346,10 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             else 0.0,
             "route_guide_commitment": route_guide_commitment,
             "static_safety_gate_penalty": static_safety_gate_penalty,
+            "goal_posterior_avoidance": self._goal_posterior_score_term(
+                candidate=candidate,
+                goal_posterior=goal_posterior,
+            ),
             "proxemic_cost": proxemic_cost_norm,
             **corridor_subgoal_terms,
             **actuation_terms,
@@ -2175,6 +2379,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             * terms["corridor_subgoal_clearance_margin"]
             + float(self.config.corridor_subgoal_continuity_weight)
             * terms["corridor_subgoal_continuity"]
+            + terms["goal_posterior_avoidance"]
             - float(self.config.actuation_clip_risk_weight) * terms["actuation_clip_risk"]
             - float(self.config.proxemic_costmap_weight) * terms["proxemic_cost"]
             - float(self.config.freezing_weight) * terms["freezing_penalty"]
@@ -2261,7 +2466,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             row["continuous_static_collision"] = bool(evaluation.get("continuous_static_collision"))
         return row
 
-    def _evaluate_candidates_for_plan(
+    def _evaluate_candidates_for_plan(  # noqa: PLR0913
         self,
         *,
         candidates: list[HybridRuleCandidate],
@@ -2272,6 +2477,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         progress_windows: dict[str, float],
         route_corridor: dict[str, Any] | None = None,
         corridor_subgoal: dict[str, Any] | None = None,
+        goal_posterior: dict[str, Any] | None = None,
     ) -> tuple[
         list[dict[str, Any]],
         Counter[str],
@@ -2301,6 +2507,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 progress_windows=progress_windows,
                 route_corridor=route_corridor,
                 strict_static_clearance=bool(corridor_subgoal and corridor_subgoal.get("active")),
+                goal_posterior=goal_posterior,
             )
             if bool(evaluation.get("accepted")):
                 accepted.append(evaluation)
@@ -2362,6 +2569,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         nearest_ped = self._nearest_ped_distance(robot_pos, state["ped_pos"])
         speed_cap = self._human_speed_cap(nearest_ped)
         self._clearance_context = self._build_clearance_context(observation)
+        goal_posterior = self._goal_posterior_signal(observation, state)
         corridor_subgoal = self._corridor_subgoal_activation(
             route_corridor=route_corridor,
             progress_windows=progress_windows,
@@ -2381,6 +2589,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             speed_cap,
             route_corridor=route_corridor,
             corridor_subgoal=corridor_subgoal_for_candidates,
+            goal_posterior=goal_posterior,
         )
         (
             accepted,
@@ -2397,6 +2606,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             progress_windows=progress_windows,
             route_corridor=route_corridor,
             corridor_subgoal=corridor_subgoal_for_candidates,
+            goal_posterior=goal_posterior,
         )
 
         self._rejection_counts.update(rejection_counts)
@@ -2466,6 +2676,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             route_corridor=route_corridor,
             corridor_subgoal=corridor_subgoal_for_candidates,
             route_trace_recovery=route_trace_recovery,
+            goal_posterior=goal_posterior,
             actuation_diagnostics=actuation_diagnostics,
             static_safety_gate=static_safety_gate,
             rejected_examples=rejected_examples,
@@ -2507,6 +2718,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         route_corridor: dict[str, Any] | None = None,
         corridor_subgoal: dict[str, Any] | None = None,
         route_trace_recovery: dict[str, Any] | None = None,
+        goal_posterior: dict[str, Any] | None = None,
         actuation_diagnostics: dict[str, Any] | None = None,
         static_safety_gate: dict[str, Any] | None = None,
         rejected_examples: list[dict[str, Any]] | None = None,
@@ -2547,6 +2759,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "route_corridor": route_corridor,
             "corridor_subgoal": corridor_subgoal,
             "route_trace_recovery": route_trace_recovery,
+            "goal_posterior_avoidance": goal_posterior,
             "selected_actuation_diagnostics": actuation_diagnostics,
             "selected_static_safety_gate": static_safety_gate,
         }
@@ -2558,6 +2771,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "value_scorer": self._value_scorer_metadata(),
             "proxemic_costmap": self._proxemic_costmap_metadata(),
             "actuation_scoring": self._actuation_scoring_metadata(),
+            "goal_posterior_avoidance": self._goal_posterior_metadata(),
             "steps": int(self._step_index),
             "selected_source_counts": dict(sorted(self._selected_source_counts.items())),
             "rejection_counts": dict(sorted(self._rejection_counts.items())),

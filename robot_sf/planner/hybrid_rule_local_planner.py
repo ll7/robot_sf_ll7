@@ -8,6 +8,7 @@ weights, and benchmark-result fitting.
 
 from __future__ import annotations
 
+import copy
 from collections import Counter, deque
 from dataclasses import dataclass, fields
 from itertools import pairwise
@@ -18,6 +19,14 @@ from scipy.ndimage import distance_transform_edt
 
 from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
 from robot_sf.nav.occupancy import circle_collides_any_lines
+from robot_sf.nav.proxemic_costmap import (
+    ProxemicCostmapConfig,
+    build_proxemic_costmap_config,
+    proxemic_cost_at_points,
+)
+from robot_sf.nav.proxemic_costmap import (
+    config_hash as proxemic_config_hash,
+)
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
@@ -143,6 +152,15 @@ class HybridRuleLocalPlannerConfig:
     desired_dynamic_clearance: float = 0.9
     obstacle_threshold: float = 0.5
     obstacle_search_cells: int = 12
+    proxemic_costmap_enabled: bool = False
+    proxemic_costmap_personal_radius: float = 0.45
+    proxemic_costmap_social_radius: float = 1.2
+    proxemic_costmap_personal_weight: float = 1.0
+    proxemic_costmap_social_weight: float = 0.35
+    proxemic_costmap_velocity_elongation_factor: float = 0.0
+    proxemic_costmap_max_cost: float = 10.0
+    proxemic_costmap_decay_function: str = "linear"
+    proxemic_costmap_weight: float = 0.0
 
     stop_distance_human: float = 0.5
     slow_distance_human: float = 1.0
@@ -281,6 +299,34 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         self._continuous_static_context: _ContinuousStaticContext | None = None
         self.reset()
+
+    @property
+    def _proxemic_costmap_config(self) -> ProxemicCostmapConfig:
+        """Return typed proxemic-layer config from planner fields."""
+        return ProxemicCostmapConfig(
+            enabled=bool(self.config.proxemic_costmap_enabled),
+            personal_radius=float(self.config.proxemic_costmap_personal_radius),
+            social_radius=float(self.config.proxemic_costmap_social_radius),
+            personal_weight=float(self.config.proxemic_costmap_personal_weight),
+            social_weight=float(self.config.proxemic_costmap_social_weight),
+            velocity_elongation_factor=float(
+                self.config.proxemic_costmap_velocity_elongation_factor
+            ),
+            max_cost=float(self.config.proxemic_costmap_max_cost),
+            decay_function=str(self.config.proxemic_costmap_decay_function),
+        )
+
+    def _proxemic_costmap_metadata(self) -> dict[str, Any]:
+        """Return episode metadata for the opt-in proxemic soft-cost layer."""
+        config = self._proxemic_costmap_config
+        return {
+            "enabled": bool(config.enabled),
+            "status": "ok" if config.enabled else "disabled",
+            "config_hash": proxemic_config_hash(config),
+            "weight": float(self.config.proxemic_costmap_weight),
+            "soft_cost_only": True,
+            "fallback_or_degraded": False,
+        }
 
     def bind_env(self, env: Any) -> None:
         """Bind environment obstacle geometry for continuous static-collision checks."""
@@ -1792,7 +1838,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         route_progress = float(np.dot(end_pos - start_pos, route_dir))
         return float(np.clip(route_progress / max(max_progress, _EPS), -1.0, 1.0))
 
-    def _evaluate_candidate(  # noqa: PLR0915
+    def _evaluate_candidate(  # noqa: C901, PLR0915
         self,
         *,
         candidate: HybridRuleCandidate,
@@ -1857,6 +1903,9 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         min_static_clearance = float("inf")
         min_dynamic_clearance = float("inf")
         static_clearance_exception_terms: set[str] = set()
+        proxemic_enabled = bool(self.config.proxemic_costmap_enabled)
+        proxemic_costmap_config = self._proxemic_costmap_config if proxemic_enabled else None
+        rollout_points = [np.array(robot_pos, dtype=float)] if proxemic_enabled else None
 
         for step_idx, (step_linear, step_angular) in enumerate(rollout_commands):
             t = (step_idx + 1) * dt
@@ -1869,6 +1918,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 * dt
             )
             heading = _wrap_angle(heading + step_angular * dt)
+            if proxemic_enabled and rollout_points is not None:
+                rollout_points.append(np.array(robot_pos, dtype=float))
 
             static_rejection = self._static_collision_rejection(
                 candidate=candidate,
@@ -2029,6 +2080,22 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             candidate=candidate,
             state=state,
         )
+        if proxemic_costmap_config is not None and rollout_points is not None:
+            proxemic_cost_values = proxemic_cost_at_points(
+                np.asarray(rollout_points, dtype=float),
+                ped_pos,
+                ped_vel,
+                proxemic_costmap_config,
+            )
+            proxemic_cost_mean = float(np.mean(proxemic_cost_values))
+            proxemic_cost_max = float(np.max(proxemic_cost_values))
+            proxemic_cost_norm = _clip01(
+                proxemic_cost_mean / max(float(proxemic_costmap_config.max_cost), _EPS)
+            )
+        else:
+            proxemic_cost_mean = 0.0
+            proxemic_cost_max = 0.0
+            proxemic_cost_norm = 0.0
         static_safety_gate = self._static_safety_gate(
             candidate=candidate,
             progress=static_gate_progress,
@@ -2079,6 +2146,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             else 0.0,
             "route_guide_commitment": route_guide_commitment,
             "static_safety_gate_penalty": static_safety_gate_penalty,
+            "proxemic_cost": proxemic_cost_norm,
             **corridor_subgoal_terms,
             **actuation_terms,
         }
@@ -2108,6 +2176,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             + float(self.config.corridor_subgoal_continuity_weight)
             * terms["corridor_subgoal_continuity"]
             - float(self.config.actuation_clip_risk_weight) * terms["actuation_clip_risk"]
+            - float(self.config.proxemic_costmap_weight) * terms["proxemic_cost"]
             - float(self.config.freezing_weight) * terms["freezing_penalty"]
             - float(self.config.oscillation_weight) * terms["oscillation_penalty"]
         )
@@ -2122,6 +2191,14 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "min_dynamic_clearance": min_dynamic_clearance,
             "predicted_ttc": ttc,
             "continuous_static_checked": bool(use_continuous_static_check),
+            "proxemic_cost_summary": {
+                "enabled": bool(proxemic_costmap_config.enabled)
+                if proxemic_costmap_config is not None
+                else False,
+                "mean": proxemic_cost_mean,
+                "max": proxemic_cost_max,
+                "normalized_mean": proxemic_cost_norm,
+            },
             "actuation_diagnostics": actuation_diagnostics,
             "static_safety_gate": static_safety_gate,
         }
@@ -2146,6 +2223,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             ]
         if "continuous_static_checked" in evaluation:
             row["continuous_static_checked"] = bool(evaluation.get("continuous_static_checked"))
+        if "proxemic_cost_summary" in evaluation:
+            row["proxemic_cost_summary"] = evaluation.get("proxemic_cost_summary")
         if isinstance(evaluation.get("actuation_diagnostics"), dict):
             row["actuation_diagnostics"] = dict(evaluation["actuation_diagnostics"])
         if isinstance(evaluation.get("static_safety_gate"), dict):
@@ -2444,6 +2523,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         self._last_decision = {
             "planner_variant": self.config.planner_variant,
             "value_scorer": self._value_scorer_metadata(),
+            "proxemic_costmap": self._proxemic_costmap_metadata(),
             "planner_mode": mode,
             "selected_command": [float(command[0]), float(command[1])],
             "selected_source": source,
@@ -2476,6 +2556,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         return {
             "planner_variant": self.config.planner_variant,
             "value_scorer": self._value_scorer_metadata(),
+            "proxemic_costmap": self._proxemic_costmap_metadata(),
             "actuation_scoring": self._actuation_scoring_metadata(),
             "steps": int(self._step_index),
             "selected_source_counts": dict(sorted(self._selected_source_counts.items())),
@@ -2520,6 +2601,35 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         return counts, examples
 
 
+def _expand_nested_proxemic_costmap_config(raw: dict[str, Any]) -> dict[str, Any]:
+    """Flatten optional nested proxemic-layer config into planner fields.
+
+    Returns:
+        dict[str, Any]: Planner config mapping with proxemic fields expanded.
+    """
+    proxemic_layer = raw.pop("proxemic_costmap", None)
+    if proxemic_layer is None:
+        return raw
+    if not isinstance(proxemic_layer, dict):
+        raise ValueError("proxemic_costmap must be a mapping when provided")
+    proxemic_config = build_proxemic_costmap_config(proxemic_layer)
+    raw.update(
+        {
+            "proxemic_costmap_enabled": proxemic_config.enabled,
+            "proxemic_costmap_personal_radius": proxemic_config.personal_radius,
+            "proxemic_costmap_social_radius": proxemic_config.social_radius,
+            "proxemic_costmap_personal_weight": proxemic_config.personal_weight,
+            "proxemic_costmap_social_weight": proxemic_config.social_weight,
+            "proxemic_costmap_velocity_elongation_factor": (
+                proxemic_config.velocity_elongation_factor
+            ),
+            "proxemic_costmap_max_cost": proxemic_config.max_cost,
+            "proxemic_costmap_decay_function": proxemic_config.decay_function,
+        }
+    )
+    return raw
+
+
 def build_hybrid_rule_local_planner_config(
     cfg: dict[str, Any] | None,
 ) -> HybridRuleLocalPlannerConfig:
@@ -2531,7 +2641,7 @@ def build_hybrid_rule_local_planner_config(
     if not isinstance(cfg, dict):
         return HybridRuleLocalPlannerConfig()
 
-    raw = dict(cfg)
+    raw = _expand_nested_proxemic_costmap_config(copy.deepcopy(cfg))
     defaults = HybridRuleLocalPlannerConfig()
     field_map = {field.name: getattr(defaults, field.name) for field in fields(defaults)}
     kwargs: dict[str, Any] = {}

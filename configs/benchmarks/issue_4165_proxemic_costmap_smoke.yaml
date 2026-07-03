@@ -1,0 +1,24 @@
+# Smoke-only paired planner arm for issue #4165. This is not a benchmark campaign result.
+issue: 4165
+description: "Compare baseline hybrid-rule local planner against opt-in proxemic costmap arm."
+claim_boundary: smoke_config_only
+scenario_sets:
+  - configs/scenarios/planner_sanity_matrix_v1.yaml
+arms:
+  baseline_classical:
+    algo: hybrid_rule_local_planner
+    config: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml
+  proxemic_costmap_on:
+    algo: hybrid_rule_local_planner
+    config: configs/algos/hybrid_rule_v3_teb_like_rollout_proxemic_costmap.yaml
+    proxemic_costmap: configs/planners/proxemic_costmap_v1.yaml
+expected_report_fields:
+  - intrusion_rate_delta
+  - minimum_clearance_delta
+  - path_efficiency_delta
+  - success_collision_caveats
+  - runtime_overhead
+out_of_scope:
+  - full benchmark campaign
+  - Slurm or GPU submission
+  - paper-facing claim update

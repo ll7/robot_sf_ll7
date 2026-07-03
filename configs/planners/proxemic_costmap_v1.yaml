@@ -1,0 +1,9 @@
+# Opt-in proxemic soft-cost layer for classical baseline planners.
+enabled: true
+personal_radius: 0.45
+social_radius: 1.2
+personal_weight: 1.0
+social_weight: 0.35
+velocity_elongation_factor: 0.5
+max_cost: 10.0
+decay_function: linear

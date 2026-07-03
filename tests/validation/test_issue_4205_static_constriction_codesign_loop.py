@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 from copy import deepcopy
@@ -24,6 +25,56 @@ def _load_config() -> dict:
     return yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
 
 
+def _hydration_manifest(tmp_path: Path, *, checkpoint_exists: bool = True) -> Path:
+    checkpoint = tmp_path / "frozen_ppo.zip"
+    if checkpoint_exists:
+        checkpoint.write_bytes(b"issue-4205-frozen-ppo-private-hydration-test")
+    checkpoint_sha256 = (
+        hashlib.sha256(checkpoint.read_bytes()).hexdigest() if checkpoint_exists else "0" * 64
+    )
+    config = _load_config()
+    lineage = config["frozen_ppo_lineage"]
+    manifest = {
+        "schema_version": "robot_sf.issue_4205.frozen_ppo_checkpoint_hydration.v1",
+        "issue": 4205,
+        "loop_id": config["loop_id"],
+        "model_id": lineage["model_id"],
+        "algo_config": lineage["algo_config"],
+        "algo_config_sha256": lineage["algo_config_sha256"],
+        "checkpoint_path": checkpoint.name,
+        "checkpoint_sha256": checkpoint_sha256,
+        "arms": [
+            {
+                "key": "ppo_frozen",
+                "model_id": lineage["model_id"],
+                "algo_config": lineage["algo_config"],
+                "checkpoint_sha256": checkpoint_sha256,
+                "safety_wrapper": {"enabled": False, "arm_key": "wrapper_off"},
+                "cbf_safety_filter": {"enabled": False, "arm_key": "cbf_off"},
+            },
+            {
+                "key": "ppo_frozen_wrapper_on",
+                "model_id": lineage["model_id"],
+                "algo_config": lineage["algo_config"],
+                "checkpoint_sha256": checkpoint_sha256,
+                "safety_wrapper": {"enabled": True, "arm_key": "wrapper_on"},
+                "cbf_safety_filter": {"enabled": False, "arm_key": "cbf_off"},
+            },
+            {
+                "key": "ppo_frozen_cbf_on",
+                "model_id": lineage["model_id"],
+                "algo_config": lineage["algo_config"],
+                "checkpoint_sha256": checkpoint_sha256,
+                "safety_wrapper": {"enabled": False, "arm_key": "wrapper_off"},
+                "cbf_safety_filter": {"enabled": True, "arm_key": "cbf_collision_cone_on"},
+            },
+        ],
+    }
+    manifest_path = tmp_path / "hydration_manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    return manifest_path
+
+
 def test_checked_in_preregistration_config_passes() -> None:
     """The tracked contract pre-registers the exact three-arm static-deadlock slice."""
     report = _MODULE.validate_config(_load_config())
@@ -44,6 +95,12 @@ def test_checked_in_preregistration_config_passes() -> None:
     ]
     assert report["compute_submit_authorized"] is False
     assert report["benchmark_evidence"] is False
+    assert report["frozen_ppo_checkpoint"]["model_id"] == (
+        "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
+    )
+    assert report["frozen_ppo_checkpoint"]["hydration_status"] == (
+        "blocked_missing_hydration_manifest"
+    )
     assert (
         report["benchmark_contract"]
         == "configs/research/issue_4205_static_constriction_codesign_loop_v1.yaml"
@@ -122,6 +179,75 @@ def test_submit_authorization_cannot_be_enabled_in_public_config() -> None:
         assert "compute_submit_authorized must stay false" in str(exc)
     else:
         raise AssertionError("public config must not authorize compute submit")
+
+
+def test_require_hydrated_checkpoint_blocks_without_manifest() -> None:
+    """Campaign preflight mode fails closed until private checkpoint hydration is proven."""
+    exit_code = _MODULE.main(
+        [
+            "--config",
+            str(CONFIG),
+            "--require-hydrated-checkpoint",
+        ]
+    )
+
+    assert exit_code == 2
+
+
+def test_hydration_manifest_resolves_same_frozen_checkpoint_lineage(tmp_path: Path) -> None:
+    """Private hydration manifest proves one checkpoint identity shared by all arms."""
+    report = _MODULE.validate_config(_load_config())
+    manifest_path = _hydration_manifest(tmp_path)
+
+    hydration = _MODULE._validate_checkpoint_hydration_manifest(
+        report,
+        json.loads(manifest_path.read_text(encoding="utf-8")),
+        manifest_path=manifest_path,
+    )
+
+    assert hydration["status"] == "hydrated_checkpoint_ready"
+    assert hydration["model_id"] == report["frozen_ppo_checkpoint"]["model_id"]
+    assert hydration["arms"] == [
+        "ppo_frozen",
+        "ppo_frozen_wrapper_on",
+        "ppo_frozen_cbf_on",
+    ]
+
+
+def test_hydration_manifest_missing_checkpoint_fails_closed(tmp_path: Path) -> None:
+    """Private preflight cannot pass when the hydrated checkpoint artifact is absent."""
+    report = _MODULE.validate_config(_load_config())
+    manifest_path = _hydration_manifest(tmp_path, checkpoint_exists=False)
+
+    try:
+        _MODULE._validate_checkpoint_hydration_manifest(
+            report,
+            json.loads(manifest_path.read_text(encoding="utf-8")),
+            manifest_path=manifest_path,
+        )
+    except _MODULE.ContractError as exc:
+        assert "blocked_missing_hydrated_checkpoint" in str(exc)
+    else:
+        raise AssertionError("missing hydrated checkpoint must fail closed")
+
+
+def test_hydration_manifest_wrapper_metadata_drift_fails_closed(tmp_path: Path) -> None:
+    """Private hydration packet must preserve wrapper/CBF arm metadata."""
+    report = _MODULE.validate_config(_load_config())
+    manifest_path = _hydration_manifest(tmp_path)
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["arms"][1]["safety_wrapper"] = {"enabled": False, "arm_key": "wrapper_off"}
+
+    try:
+        _MODULE._validate_checkpoint_hydration_manifest(
+            report,
+            payload,
+            manifest_path=manifest_path,
+        )
+    except _MODULE.ContractError as exc:
+        assert "wrapper metadata drifted" in str(exc)
+    else:
+        raise AssertionError("wrapper metadata drift must fail closed")
 
 
 def test_benchmark_contract_drift_fails_closed(tmp_path: Path) -> None:

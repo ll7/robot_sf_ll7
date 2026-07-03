@@ -36,6 +36,7 @@ DEFAULT_CONFIG = REPO_ROOT / "configs/research/issue_4205_static_constriction_co
 REPORT_SCHEMA = "robot_sf.issue_4205_static_constriction_codesign_loop.check.v1"
 SMOKE_MANIFEST_SCHEMA = "robot_sf.issue_4205.cpu_smoke_manifest.v1"
 EVIDENCE_PACKET_SCHEMA = "robot_sf.issue_4205.pre_run_evidence_packet.v1"
+HYDRATION_MANIFEST_SCHEMA = "robot_sf.issue_4205.frozen_ppo_checkpoint_hydration.v1"
 EXPECTED_ARM_KEYS = (
     "ppo_frozen",
     "ppo_frozen_wrapper_on",
@@ -89,6 +90,20 @@ def _load_json(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ContractError(f"{path} must contain JSON mapping")
     return data
+
+
+def _sha256_path(path: Path) -> str:
+    """Return SHA-256 for a local file."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _repo_file_sha256(value: object) -> str:
+    """Return SHA-256 for a repo-relative file reference."""
+    return _sha256_path(_repo_path(value))
 
 
 def _repo_path(value: object) -> Path:
@@ -207,7 +222,7 @@ def _validate_benchmark_contract(config: dict[str, Any]) -> dict[str, Any]:  # n
     return benchmark
 
 
-def _validate_common(config: dict[str, Any]) -> None:  # noqa: C901
+def _validate_common(config: dict[str, Any]) -> None:  # noqa: C901, PLR0912
     """Validate top-level issue #4205 research-contract fields."""
     if config.get("schema_version") != "robot_sf.issue_4205_static_constriction_codesign_loop.v1":
         raise ContractError("unexpected schema_version")
@@ -240,11 +255,38 @@ def _validate_common(config: dict[str, Any]) -> None:  # noqa: C901
         raise ContractError("frozen_ppo_lineage must be a mapping")
     if lineage.get("algo") != "ppo":
         raise ContractError("frozen_ppo_lineage.algo must be ppo")
-    _repo_path(lineage.get("algo_config"))
+    algo_config_path = _repo_path(lineage.get("algo_config"))
+    algo_config = _load_yaml(algo_config_path)
+    model_id = algo_config.get("model_id")
+    if not isinstance(model_id, str) or not model_id:
+        raise ContractError("frozen_ppo_lineage algo_config must declare model_id")
+    if lineage.get("model_id") != model_id:
+        raise ContractError("frozen_ppo_lineage.model_id must match algo_config model_id")
+    algo_config_sha256 = _sha256_path(algo_config_path)
+    if lineage.get("algo_config_sha256") != algo_config_sha256:
+        raise ContractError("frozen_ppo_lineage.algo_config_sha256 must match algo_config")
+    if lineage.get("hydration_manifest_schema") != HYDRATION_MANIFEST_SCHEMA:
+        raise ContractError("frozen_ppo_lineage.hydration_manifest_schema drifted")
+    required_fields = tuple(lineage.get("hydration_manifest_required_fields") or ())
+    expected_fields = (
+        "schema_version",
+        "issue",
+        "loop_id",
+        "model_id",
+        "algo_config",
+        "algo_config_sha256",
+        "checkpoint_path",
+        "checkpoint_sha256",
+        "arms",
+    )
+    if required_fields != expected_fields:
+        raise ContractError("frozen_ppo_lineage.hydration_manifest_required_fields drifted")
     if lineage.get("failure_job_id") != 13175:
         raise ContractError("frozen_ppo_lineage.failure_job_id must remain 13175")
     if lineage.get("model_preflight_required") is not True:
         raise ContractError("frozen_ppo_lineage.model_preflight_required must be true")
+    if lineage.get("private_artifact_hydration_required") is not True:
+        raise ContractError("frozen_ppo_lineage.private_artifact_hydration_required must be true")
 
 
 def _validate_arms(config: dict[str, Any]) -> list[dict[str, Any]]:  # noqa: C901
@@ -354,6 +396,7 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
             REPO_ROOT / "configs/research/issue_4205_static_constriction_codesign_loop_v1.yaml"
         ).read_bytes()
     ).hexdigest()
+    lineage = config["frozen_ppo_lineage"]
     return {
         "schema_version": REPORT_SCHEMA,
         "ok": True,
@@ -366,6 +409,14 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
         "seeds": list(EXPECTED_SEEDS),
         "arm_keys": [arm["key"] for arm in arms],
         "frozen_ppo_algo_config": config["frozen_ppo_lineage"]["algo_config"],
+        "frozen_ppo_checkpoint": {
+            "model_id": lineage["model_id"],
+            "algo_config": lineage["algo_config"],
+            "algo_config_sha256": lineage["algo_config_sha256"],
+            "hydration_manifest_schema": HYDRATION_MANIFEST_SCHEMA,
+            "hydration_status": "blocked_missing_hydration_manifest",
+            "blocker": "private checkpoint artifact must be hydrated before campaign authorization",
+        },
         "benchmark_contract": benchmark["research_contract"],
         "compute_submit_authorized": False,
         "benchmark_evidence": False,
@@ -373,6 +424,93 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
             "matrix": config["cpu_smoke"]["matrix"],
             "rows": smoke_rows,
         },
+    }
+
+
+def _resolve_hydrated_checkpoint_path(manifest_path: Path, value: object) -> Path:
+    """Resolve private hydration checkpoint path relative to manifest location."""
+    if not isinstance(value, str) or not value:
+        raise ContractError("hydration checkpoint_path must be non-empty string")
+    path = Path(value)
+    if not path.is_absolute():
+        path = manifest_path.parent / path
+    if not path.exists() or not path.is_file():
+        raise ContractError(f"blocked_missing_hydrated_checkpoint: {path}")
+    return path
+
+
+def _validate_checkpoint_hydration_manifest(  # noqa: C901, PLR0912
+    report: dict[str, Any],
+    manifest: dict[str, Any],
+    *,
+    manifest_path: Path,
+) -> dict[str, Any]:
+    """Validate private frozen-PPO checkpoint hydration before campaign authorization."""
+    expected = report["frozen_ppo_checkpoint"]
+    if manifest.get("schema_version") != HYDRATION_MANIFEST_SCHEMA:
+        raise ContractError(f"hydration schema_version must be {HYDRATION_MANIFEST_SCHEMA}")
+    if manifest.get("issue") != 4205:
+        raise ContractError("hydration issue must be 4205")
+    if manifest.get("loop_id") != report["loop_id"]:
+        raise ContractError("hydration loop_id drifted")
+    for key in ("model_id", "algo_config", "algo_config_sha256"):
+        if manifest.get(key) != expected[key]:
+            raise ContractError(f"hydration {key} must match frozen_ppo_checkpoint")
+
+    checkpoint_path = _resolve_hydrated_checkpoint_path(
+        manifest_path, manifest.get("checkpoint_path")
+    )
+    observed_sha256 = _sha256_path(checkpoint_path)
+    if manifest.get("checkpoint_sha256") != observed_sha256:
+        raise ContractError("hydration checkpoint_sha256 must match hydrated checkpoint")
+
+    arms = manifest.get("arms")
+    if not isinstance(arms, list):
+        raise ContractError("hydration arms must be a list")
+    if [arm.get("key") for arm in arms if isinstance(arm, dict)] != list(EXPECTED_ARM_KEYS):
+        raise ContractError(f"hydration arms must be ordered {list(EXPECTED_ARM_KEYS)}")
+
+    report_rows = {row["arm_key"]: row for row in report["cpu_smoke"]["rows"]}
+    for arm in arms:
+        if not isinstance(arm, dict):
+            raise ContractError("each hydration arm must be a mapping")
+        arm_key = arm["key"]
+        for key in ("model_id", "algo_config", "checkpoint_sha256"):
+            expected_value = observed_sha256 if key == "checkpoint_sha256" else expected[key]
+            if arm.get(key) != expected_value:
+                raise ContractError(
+                    f"{arm_key}: hydration {key} must match frozen checkpoint lineage"
+                )
+        smoke_row = report_rows[arm_key]
+        wrapper = arm.get("safety_wrapper")
+        cbf = arm.get("cbf_safety_filter")
+        if not isinstance(wrapper, dict) or not isinstance(cbf, dict):
+            raise ContractError(f"{arm_key}: hydration must include wrapper and CBF metadata")
+        wrapper_expected_enabled = arm_key == "ppo_frozen_wrapper_on"
+        cbf_expected_enabled = arm_key == "ppo_frozen_cbf_on"
+        if bool(wrapper.get("enabled")) != wrapper_expected_enabled:
+            raise ContractError(f"{arm_key}: hydration wrapper metadata drifted")
+        if bool(cbf.get("enabled")) != cbf_expected_enabled:
+            raise ContractError(f"{arm_key}: hydration CBF metadata drifted")
+        expected_wrapper_arm = WRAPPER_ON_ARM if wrapper_expected_enabled else WRAPPER_OFF_ARM
+        expected_cbf_arm = CBF_COLLISION_CONE_ARM if cbf_expected_enabled else CBF_OFF_ARM
+        if wrapper.get("arm_key") != expected_wrapper_arm:
+            raise ContractError(f"{arm_key}: hydration wrapper arm_key drifted")
+        if cbf.get("arm_key") != expected_cbf_arm:
+            raise ContractError(f"{arm_key}: hydration CBF arm_key drifted")
+        if smoke_row["arm_key"] != arm_key:
+            raise ContractError(f"{arm_key}: hydration arm order drifted")
+
+    return {
+        "schema_version": HYDRATION_MANIFEST_SCHEMA,
+        "status": "hydrated_checkpoint_ready",
+        "manifest_path": str(manifest_path),
+        "checkpoint_path": str(checkpoint_path),
+        "checkpoint_sha256": observed_sha256,
+        "model_id": expected["model_id"],
+        "algo_config": expected["algo_config"],
+        "algo_config_sha256": expected["algo_config_sha256"],
+        "arms": [arm["key"] for arm in arms],
     }
 
 
@@ -618,6 +756,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--smoke-out", help="Optional path for compact CPU smoke manifest.")
     parser.add_argument("--smoke-input", help="Optional local CPU smoke evidence JSON to verify.")
     parser.add_argument(
+        "--hydration-manifest",
+        help="Optional private frozen-PPO checkpoint hydration manifest.",
+    )
+    parser.add_argument(
+        "--require-hydrated-checkpoint",
+        action="store_true",
+        help="Fail closed unless --hydration-manifest proves the checkpoint exists.",
+    )
+    parser.add_argument(
         "--evidence-dir", help="Optional compact pre-run evidence packet directory."
     )
     return parser.parse_args(argv)
@@ -642,6 +789,17 @@ def main(argv: list[str] | None = None) -> int:
         config = _load_yaml(Path(args.config))
         report = validate_config(config)
         smoke_manifest: dict[str, Any] | None = None
+        if args.hydration_manifest:
+            manifest_path = Path(args.hydration_manifest)
+            report["frozen_ppo_checkpoint"] = _validate_checkpoint_hydration_manifest(
+                report,
+                _load_json(manifest_path),
+                manifest_path=manifest_path,
+            )
+        elif args.require_hydrated_checkpoint:
+            raise ContractError(
+                "frozen PPO checkpoint hydration manifest required before campaign authorization"
+            )
         if args.smoke_input:
             smoke_manifest = _validate_cpu_smoke_evidence(
                 report, _load_json(Path(args.smoke_input))

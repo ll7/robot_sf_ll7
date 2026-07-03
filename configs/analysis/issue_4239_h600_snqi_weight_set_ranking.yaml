@@ -1,0 +1,42 @@
+schema_version: h600-snqi-weight-set-ranking.v1
+issue: 4239
+parent_evidence_dir: docs/context/evidence/issue_3810_h600_interpretation_2026-07
+source_manifest: docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json
+claim_boundary: >
+  Diagnostic per-weight-set ranking over retained h600 artifacts only. Does not decide canonical
+  Social Navigation Quality Index (SNQI) weights, does not edit dissertation or paper claims, and
+  inherits the h600 three-seed caveat.
+weight_sets:
+  - id: default_uniform_1p0
+    kind: synthetic_uniform
+    weights: null
+    note: all SNQI terms set to 1.0 through the existing load_weight_mapping(None) convention
+  - id: camera_ready_v2
+    kind: shipped_json
+    path: configs/benchmarks/snqi_weights_camera_ready_v2.json
+  - id: camera_ready_v3
+    kind: shipped_json
+    path: configs/benchmarks/snqi_weights_camera_ready_v3.json
+  - id: model_canonical_v1
+    kind: shipped_json
+    path: model/snqi_canonical_weights_v1.json
+    caveat: known jerk-artifact and canonical-label conflict source
+baseline:
+  path: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+  rationale: >
+    Use the same normalization baseline used by the h600 interpretation lineage unless the decision
+    brief explicitly requires a different baseline; do not overwrite or recalibrate it.
+run_inputs:
+  - run_label: confirm
+    job_id: 13268
+  - run_label: extended_roster
+    job_id: 13273
+planner_union_policy:
+  shared_planners: prefer_confirm_when_confirm_and_extended_metrics_match
+  extended_only_planners: include_from_extended_roster
+  mismatch_policy: fail_closed
+deduplication:
+  tolerance: 1.0e-9
+outputs:
+  evidence_dir: docs/context/evidence/issue_3810_h600_interpretation_2026-07
+  stem: snqi_weight_set_h600

@@ -1,0 +1,56 @@
+scenarios:
+  - name: issue_3977_visibility_and_intent_turn_near_ped
+    scenario_family: public_requirement_visibility_and_intent
+    map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+    route_overrides_file: ../route_overrides/issue_3977/visibility_and_intent.yaml
+    simulation_config:
+      max_episode_steps: 90
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal: null
+        trajectory:
+          - [15.5, 22.0]
+          - [15.5, 17.0]
+          - [15.5, 14.0]
+          - [15.5, 10.0]
+        speed_m_s: 2.0
+        # Reuses the validated proximity-release pattern from the safe-braking slice:
+        # the pedestrian waits near the robot's turn until the robot is actually near
+        # the authored visibility/intent conflict point, with timeout as fail-open.
+        hold_until_robot_within_m: 6.0
+        hold_ref_point: [15.5, 14.0]
+        hold_timeout_s: 7.0
+        note: "Public-requirement visibility/intent proxy: pedestrian starts/stops near a robot turn."
+        metadata:
+          intent_conditioned_behavior:
+            intent_label: robot_turn_or_start_stop_near_pedestrian
+            intent_phases:
+              - approaching_turn
+              - pedestrian_waiting
+              - pedestrian_released
+    metadata:
+      public_requirement:
+        schema_version: public-requirement-scenario.v1
+        category: visibility_and_intent
+        requirement_label: Visibility and clear communication of intent near people
+        source: schomakers_2024_public_requirements
+        claim_boundary: authored_scenario_proxy_not_human_subject_evidence
+        event_contract:
+          type: turn_or_start_stop_near_pedestrian
+          pedestrian_id: h1
+          turn_point: [14.0, 14.0]
+          conflict_point: [15.5, 14.0]
+          trigger_radius_m: 1.8
+          trigger: runtime_robot_proximity_release
+          hold_release_radius_m: 6.0
+        archetype: public_requirement_visibility_and_intent
+        flow: turning_near_pedestrian
+        behavior: proximity_released_start_stop
+        purpose: >
+          Deterministic visibility-and-intent scenario proxy for issue #3977;
+          records an authored condition where robot intent should be legible near
+          a pedestrian, not validated public acceptance or safety-certification
+          evidence.
+    seeds:
+      - 3977

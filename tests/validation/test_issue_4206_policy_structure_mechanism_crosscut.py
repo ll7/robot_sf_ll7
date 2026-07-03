@@ -258,6 +258,31 @@ def test_sidecar_mechanism_labels_are_accepted(tmp_path: Path) -> None:
     assert summary["status"] == "analysis_ready_trace_verified"
 
 
+def test_row_key_preserves_zero_seed_and_repeat_values() -> None:
+    """Sidecar identity keys must distinguish zero from missing values."""
+    row = {
+        "episode_id": 0,
+        "scenario_id": "scenario",
+        "planner_key": "planner",
+        "seed": 0,
+        "repeat_index": 0,
+    }
+
+    assert _MODULE._row_key(row) == ("0", "scenario", "planner", "0", "0")
+
+
+def test_progress_mean_preserves_zero_progress_over_ratio() -> None:
+    """Zero progress is a real value, not a reason to fall back to progress_ratio."""
+    row = _base_row("prediction_planner", 1.0)
+    row["structural_class"] = "predictive"
+    row["progress"] = 0.0
+    row["progress_ratio"] = 1.0
+
+    [summary] = _MODULE._summarize_groups([row])
+
+    assert summary["progress_mean"] == 0.0
+
+
 def test_sidecar_episode_id_only_does_not_attach_to_other_keys(tmp_path: Path) -> None:
     """Mechanism sidecars must not attach by episode id alone."""
     confirm = tmp_path / "confirm"

@@ -130,13 +130,33 @@ def _mean(values: Iterable[float | None]) -> float | None:
     return sum(clean) / len(clean)
 
 
+def _stringify_key(value: Any) -> str:
+    """Stringify key parts while preserving legitimate zero values."""
+    return "" if value is None else str(value)
+
+
+def _first_float(row: Mapping[str, Any], *names: str) -> float | None:
+    """Return the first present float field without treating 0.0 as missing."""
+    for name in names:
+        value = _to_float(row.get(name))
+        if value is not None:
+            return value
+    return None
+
+
 def _row_key(row: Mapping[str, Any]) -> tuple[str, ...]:
     return (
-        str(row.get("episode_id") or ""),
-        str(row.get("scenario_id") or ""),
-        str(row.get("planner_key") or row.get("planner_id") or ""),
-        str(row.get("seed") or ""),
-        str(row.get("repeat_index") or row.get("episode_index") or ""),
+        _stringify_key(row.get("episode_id")),
+        _stringify_key(row.get("scenario_id")),
+        _stringify_key(
+            row.get("planner_key") if row.get("planner_key") is not None else row.get("planner_id")
+        ),
+        _stringify_key(row.get("seed")),
+        _stringify_key(
+            row.get("repeat_index")
+            if row.get("repeat_index") is not None
+            else row.get("episode_index")
+        ),
     )
 
 
@@ -295,8 +315,7 @@ def _summarize_groups(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]
             "timeout_rate": _mean(_boolish_rate(row, "timeout", "timed_out") for row in group)
             or 0.0,
             "progress_mean": _mean(
-                _to_float(row.get("progress")) or _to_float(row.get("progress_ratio"))
-                for row in group
+                _first_float(row, "progress", "progress_ratio") for row in group
             ),
             "snqi_mean": _mean(_to_float(row.get("snqi")) for row in group),
             "fallback_or_degraded_count": fallback_count,

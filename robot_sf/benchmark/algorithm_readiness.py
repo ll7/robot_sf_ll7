@@ -234,6 +234,16 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="taga_group_avoidance",
+        tier="experimental",
+        aliases=("taga_group_avoidance", "group_avoidance"),
+        note=(
+            "TAGA-like tangent-subgoal wrapper around the goal baseline using declared "
+            "social-group o-space metadata; diagnostic group-intrusion surface only."
+        ),
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="risk_surface_dwa",
         tier="experimental",
         aliases=("risk_surface_dwa", "risk_surface_dwa_v0"),

@@ -2911,3 +2911,15 @@ entries:
     freshness: evidence
     area: benchmark_evidence
     legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_3971_pedestrian_flow_validation/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3971_pedestrian_flow_validation/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3971_pedestrian_flow_validation/trajectory_quality.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

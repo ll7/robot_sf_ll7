@@ -32,6 +32,14 @@ fixed_scope:
     - orca
     - default_social_force
     - hybrid_rule_v0_minimal
+  # Explicit binding of each planner-group label to a canonical algorithm in the
+  # robot_sf.benchmark.algorithm_readiness catalog. Making the full-fixed-scope
+  # planner set resolvable is what the #3207 preflight checks before launch; the
+  # `default_social_force` label is a configured `social_force` baseline.
+  planner_algorithms:
+    orca: orca
+    default_social_force: social_force
+    hybrid_rule_v0_minimal: hybrid_rule_v0_minimal
 
 ranking:
   metric: snqi

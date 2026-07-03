@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **full fixed-scope fidelity-sensitivity preflight** for issue #3207 that pre-registers the
+  simulator-fidelity sensitivity campaign before launch (`robot_sf/benchmark/fidelity_fixed_scope_preflight.py`,
+  CLI `scripts/benchmark/preflight_fidelity_fixed_scope.py`). It materializes the explicit run plan
+  (planner groups × axis variants × seeds over the fixed scenario set), resolves every planner group
+  against the canonical `algorithm_readiness` catalog and **fails closed** on unavailable/placeholder
+  planners, and validates the primary (ranking) metric is identifiable by contract (failing closed on
+  metrics pre-declared non-identifiable/zero-variance per #3299). It emits a launch/readiness packet
+  only — `preflight_ready` is a pre-registration gate, not execution-ready, and not benchmark,
+  simulator-realism, sim-to-real, or paper-facing evidence. The shipped
+  `configs/research/fidelity_sensitivity_v1.yaml` now carries an explicit
+  `fixed_scope.planner_algorithms` binding so its planner labels resolve. No benchmark campaign was
+  run.
 * Added license-safe **CrowdBot and SCAND shape-contract loaders** plus skip-if-absent tests for the
   #4224 external-data program (public slice b). `robot_sf/data/external/crowdbot.py` and
   `robot_sf/data/external/scand.py` only inspect locally staged files — they never download, vendor,

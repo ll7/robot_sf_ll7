@@ -1,0 +1,80 @@
+{
+  "blockers": [],
+  "claim_boundary": "Launch/readiness preflight only: pre-registers the full fixed-scope fidelity-sensitivity campaign scope, planner availability, and primary-metric identifiability. preflight_ready is a pre-registration gate, not an execution-ready signal; it is not benchmark evidence, not simulator-realism evidence, not sim-to-real evidence, and not paper-facing evidence.",
+  "config_path": "configs/research/fidelity_sensitivity_v1.yaml",
+  "date": "2026-07-04",
+  "decision": "preflight_ready",
+  "evidence_status": "launch_readiness_preflight_not_benchmark_evidence",
+  "git_head": "b619d1be465f08c6edbea0f259e3d6cab07abaf4",
+  "issue": 3207,
+  "launch_prerequisites": [
+    "planner_runtime_dependency:orca requires rvo2 or an explicit fallback policy",
+    "planner_requires_explicit_opt_in:hybrid_rule_v0_minimal (set allow_testing_algorithms in the algo config before launch)",
+    "campaign_runner_not_wired_for_full_fixed_scope: scripts/benchmark/run_fidelity_sensitivity_campaign.py currently runs a bounded two-planner slice; extend it to the resolved planner set before launch",
+    "runtime_rank_identifiability_recheck_required: measured primary-metric variance must be re-validated post-run via robot_sf/benchmark/fidelity_rank_stability.py"
+  ],
+  "materialized_scope": {
+    "axis_count": 4,
+    "planner_group_count": 3,
+    "planner_groups": [
+      "orca",
+      "default_social_force",
+      "hybrid_rule_v0_minimal"
+    ],
+    "run_cells_note": "run_cells_per_scenario counts planner_group x axis-variant x seed cells for each scenario in scenario_set; scenario multiplicity is resolved by the campaign runner and is not expanded here.",
+    "run_cells_per_scenario": 108,
+    "scenario_set": "configs/benchmarks/paper_experiment_matrix_v1.yaml",
+    "seed_count": 3,
+    "seeds": [
+      111,
+      112,
+      113
+    ],
+    "variant_count": 12
+  },
+  "next_command_template": "uv run python scripts/benchmark/run_fidelity_sensitivity_campaign.py --config configs/research/fidelity_sensitivity_v1.yaml --out output/fidelity_sensitivity/",
+  "planner_resolution": [
+    {
+      "algorithm": "orca",
+      "available": true,
+      "canonical_name": "orca",
+      "explicit_algorithm_binding": true,
+      "note": "ORCA baseline (requires rvo2 or explicit fallback policy).",
+      "planner_group": "orca",
+      "requires_explicit_opt_in": false,
+      "tier": "baseline-ready"
+    },
+    {
+      "algorithm": "social_force",
+      "available": true,
+      "canonical_name": "social_force",
+      "explicit_algorithm_binding": true,
+      "note": "Social-force adapter baseline.",
+      "planner_group": "default_social_force",
+      "requires_explicit_opt_in": false,
+      "tier": "baseline-ready"
+    },
+    {
+      "algorithm": "hybrid_rule_v0_minimal",
+      "available": true,
+      "canonical_name": "hybrid_rule_local_planner",
+      "explicit_algorithm_binding": true,
+      "note": "Deterministic hybrid-rule local planner family; v0 is minimal DWA-style. Actuation-aware aliases are synthetic diagnostic-only candidates.",
+      "planner_group": "hybrid_rule_v0_minimal",
+      "requires_explicit_opt_in": true,
+      "tier": "experimental"
+    }
+  ],
+  "preflight_ready": true,
+  "primary_metric": {
+    "direction": "higher_is_better",
+    "higher_is_better": true,
+    "identifiable_by_contract": true,
+    "metric": "snqi",
+    "non_identifiable_reason": null,
+    "present_in_metrics": true,
+    "runtime_identifiability_deferred": "measured zero-variance / degenerate rankings are detected post-run; see robot_sf/benchmark/fidelity_rank_stability.py"
+  },
+  "schema_version": "fidelity-fixed-scope-preflight.v1",
+  "study_id": "issue_3207_fidelity_sensitivity_v1"
+}

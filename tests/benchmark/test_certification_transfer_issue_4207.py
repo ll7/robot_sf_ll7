@@ -12,10 +12,21 @@ from robot_sf.benchmark.certification_transfer import (
     CLAIM_BOUNDARY,
     build_certification_transfer_report,
     classify_interaction_status,
+    load_yaml_mapping,
     validate_probe_config,
     write_certification_transfer_evidence,
 )
 from robot_sf.sim.pedestrian_model_variants import HSFM_TOTAL_FORCE_V1, SOCIAL_FORCE_DEFAULT
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+INTERACTING_SMOKE_CONFIG = REPO_ROOT / "configs/benchmarks/issue_4207_interacting_smoke_probe.yaml"
+INTERACTING_SMOKE_GATES = (
+    REPO_ROOT / "configs/benchmarks/release_gates/issue_4207_interacting_smoke_gates.yaml"
+)
+INTERACTING_SMOKE_FIXTURE = (
+    REPO_ROOT
+    / "tests/benchmark/fixtures/issue_4207_interacting_smoke/interacting_smoke_episodes.jsonl"
+)
 
 
 def test_transfer_matrix_detects_pass_fail_flips(tmp_path: Path) -> None:
@@ -246,6 +257,69 @@ def test_all_non_interacting_report_marks_sensitivity_unexercised(tmp_path: Path
 
     assert report["model_sensitivity_exercised"] is False
     assert set(report["interaction_status_counts"]) <= {"non_interacting"}
+
+
+def test_committed_interacting_smoke_family_exercises_model_sensitivity() -> None:
+    """The committed interacting smoke family drives the guard to model_sensitivity_exercised=true.
+
+    This is the end-to-end positive path over the real checked-in config, gate spec, and episode
+    fixture (not synthetic in-test records): the companion francis2023_blind_corner run was all
+    non_interacting, so this family is what flips the guard for issue #4207.
+    """
+
+    config = load_yaml_mapping(INTERACTING_SMOKE_CONFIG)
+    gates = load_yaml_mapping(INTERACTING_SMOKE_GATES)
+    records = [
+        json.loads(line)
+        for line in INTERACTING_SMOKE_FIXTURE.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+    report = build_certification_transfer_report(
+        records,
+        probe_config=config,
+        gate_spec=gates,
+        config_path=INTERACTING_SMOKE_CONFIG,
+        gate_spec_path=INTERACTING_SMOKE_GATES,
+        generated_at_utc="2026-07-03T00:00:00+00:00",
+    )
+
+    # Every transfer cell entered the near field, so the guard reports exercised model sensitivity.
+    assert report["model_sensitivity_exercised"] is True
+    matrix = report["certification_transfer_matrix"]
+    assert matrix
+    assert all(row["interaction_status"] == "interacting" for row in matrix)
+    assert all(row["interaction_exercised"] is True for row in matrix)
+    assert set(report["interaction_status_counts"]) == {"interacting"}
+
+    # A genuine interacting flip exists (model-assumption fragility, not a vacuous stable status).
+    flips = report["flip_cases"]
+    assert flips
+    assert all(flip["interaction_exercised"] is True for flip in flips)
+    assert {flip["planner_key"] for flip in flips} == {"ppo"}
+    fragile = next(
+        row
+        for row in matrix
+        if row["planner_key"] == "ppo"
+        and row["certification_model"] == SOCIAL_FORCE_DEFAULT
+        and row["evaluation_model"] == HSFM_TOTAL_FORCE_V1
+    )
+    assert fragile["transfer_status"] == "fragile_pass_to_fail"
+
+
+def test_committed_interacting_smoke_config_and_gates_validate() -> None:
+    """The committed interacting smoke config and gate spec pass schema validation."""
+
+    config = load_yaml_mapping(INTERACTING_SMOKE_CONFIG)
+    normalized = validate_probe_config(config, base_dir=INTERACTING_SMOKE_CONFIG.parent)
+    assert normalized["scenario_family"] == "issue4207_interacting_smoke"
+    assert normalized["pedestrian_models"] == [SOCIAL_FORCE_DEFAULT, HSFM_TOTAL_FORCE_V1]
+    assert [arm["key"] for arm in normalized["arms"]] == [
+        "goal",
+        "ppo",
+        "prediction_planner",
+        "guarded_ppo",
+    ]
 
 
 def _write_config_pair(tmp_path: Path) -> tuple[Path, Path, dict[str, object], dict[str, object]]:

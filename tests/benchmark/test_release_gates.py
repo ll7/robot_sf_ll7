@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import pathlib
 import subprocess
 import sys
 from typing import TYPE_CHECKING
@@ -11,6 +12,7 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.release_gates import (
+    GateSpec,
     ReleaseGateSpecError,
     build_release_gate_report,
     evaluate_release_gates,
@@ -424,3 +426,101 @@ def test_cli_writes_json_csv_and_markdown_outputs(tmp_path: Path) -> None:
     assert report["provenance"]["gate_spec"]["sha256"]
     assert "safe_planner,classic_crossing,pass,pass,pass" in csv_path.read_text(encoding="utf-8")
     assert "Paired Safety And Comfort Release-Gate Matrix" in md_path.read_text(encoding="utf-8")
+
+
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+_CURRENT_ROSTER_SPEC = (
+    _REPO_ROOT / "configs/benchmarks/release_gates/camera_ready_current_roster_gates.yaml"
+)
+_CURRENT_ROSTER_INPUT = (
+    _REPO_ROOT
+    / "docs/context/evidence/camera_ready_all_planners_2026-05-04/reports/campaign_summary.json"
+)
+_CURRENT_ROSTER_SUMMARY = (
+    _REPO_ROOT / "docs/context/evidence/issue_4166_release_gates/current_roster/summary.json"
+)
+
+
+def test_load_metric_rows_accepts_planner_rows_container(tmp_path: Path) -> None:
+    """Loader accepts the canonical camera-ready ``planner_rows`` container."""
+
+    path = tmp_path / "campaign_summary.json"
+    path.write_text(
+        json.dumps({"campaign": {}, "planner_rows": [{"planner_key": "goal"}]}),
+        encoding="utf-8",
+    )
+    assert load_metric_rows(path) == [{"planner_key": "goal"}]
+
+
+def test_not_recorded_metric_and_degraded_row_fail_closed() -> None:
+    """String ``nan`` degraded rows and required=false coverage gaps stay not_evaluable.
+
+    A ``required: false`` gate on an unrecorded metric must report ``not_evaluable`` in
+    detail without forcing the category to ``not_evaluable`` when the recorded required
+    gate passes; a degraded all-``nan`` row must render fully ``not_evaluable``.
+    """
+
+    rows = [
+        {"planner_key": "ok_planner", "collisions_mean": "0.05"},
+        {"planner_key": "degraded_planner", "collisions_mean": "nan"},
+    ]
+    gates = [
+        GateSpec(
+            gate_id="mean_collisions_budget",
+            metric="collisions_mean",
+            threshold=0.10,
+            direction="max",
+            category="safety",
+            provenance="provisional",
+            required=True,
+        ),
+        GateSpec(
+            gate_id="min_clearance_coverage_gap",
+            metric="min_clearance_m",
+            threshold=0.25,
+            direction="min",
+            category="safety",
+            provenance="not_recorded",
+            required=False,
+        ),
+    ]
+    report = evaluate_release_gates(rows, gates)
+    by_planner = {row["planner_key"]: row for row in report["results"]}
+
+    ok_row = by_planner["ok_planner"]
+    assert ok_row["safety_status"] == "pass"  # required gate passes; false gate does not gate it
+    assert "min_clearance_coverage_gap" in ok_row["not_evaluable_gate_ids"]
+
+    degraded_row = by_planner["degraded_planner"]
+    assert degraded_row["safety_status"] == "not_evaluable"
+    assert degraded_row["overall_status"] == "not_evaluable"
+
+
+def test_shipped_current_roster_spec_loads_with_coverage_gates() -> None:
+    """The shipped current-roster gate spec parses and marks coverage gaps optional."""
+
+    gates = load_release_gate_spec(_CURRENT_ROSTER_SPEC)
+    by_id = {gate.gate_id: gate for gate in gates}
+    assert by_id["mean_collisions_budget"].required is True
+    assert by_id["min_clearance_floor_coverage_gap"].required is False
+    assert by_id["proxemic_intrusion_rate_coverage_gap"].required is False
+    assert {gate.category for gate in gates} == {"safety", "comfort"}
+
+
+def test_current_roster_evidence_matches_retained_campaign() -> None:
+    """Rebuilding from the retained campaign reproduces the committed evidence packet."""
+
+    rows = load_metric_rows(_CURRENT_ROSTER_INPUT)
+    gates = load_release_gate_spec(_CURRENT_ROSTER_SPEC)
+    report = evaluate_release_gates(rows, gates)
+
+    assert report["status_counts"] == {"pass": 2, "fail": 5, "not_evaluable": 1}
+    by_planner = {row["planner_key"]: row for row in report["matrix_rows"]}
+    # Degraded socnav_bench (all-nan metrics) must fail closed to not_evaluable.
+    assert by_planner["socnav_bench"]["overall_status"] == "not_evaluable"
+    assert by_planner["orca"]["overall_status"] == "pass"
+    assert by_planner["goal"]["overall_status"] == "fail"
+
+    committed = json.loads(_CURRENT_ROSTER_SUMMARY.read_text(encoding="utf-8"))
+    assert committed["status_counts"] == report["status_counts"]
+    assert committed["matrix_rows"] == report["matrix_rows"]

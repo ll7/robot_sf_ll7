@@ -1,0 +1,77 @@
+schema_version: benchmark_release_gate_spec.v1
+description: >
+  Provisional paired safety and comfort gates aligned to the metric field names
+  that the retained camera_ready_all_planners campaign summary actually records
+  (collisions_mean, near_misses_mean, jerk_mean, comfort_exposure_mean). These
+  thresholds are configuration values for reporting only. They are NOT
+  certification, threshold approval, paper-grade evidence, or a planner ranking.
+  Pass/fail values below are the output of the reporting mechanism over
+  provisional thresholds, not a claim about which planner is better.
+gates:
+  # --- Safety (evaluable against retained fields) ---
+  - id: mean_collisions_budget
+    metric: collisions_mean
+    threshold: 0.10
+    direction: max
+    category: safety
+    provenance: provisional_not_certification_issue_4166_mean_collisions_per_episode
+    required: true
+    description: >
+      Provisional per-episode mean-collision budget (<= ~1 collision per 10
+      episodes). collisions_mean is a per-episode mean count, not a certified
+      collision rate.
+  - id: mean_near_misses_budget
+    metric: near_misses_mean
+    threshold: 5.0
+    direction: max
+    category: safety
+    provenance: provisional_not_certification_issue_4166_mean_near_misses_per_episode
+    required: true
+    description: >
+      Provisional per-episode mean near-miss budget. near_misses_mean is a
+      per-episode mean count, not a certified near-miss rate.
+  # --- Safety coverage gap: not recorded by this campaign (stays not_evaluable) ---
+  - id: min_clearance_floor_coverage_gap
+    metric: min_clearance_m
+    threshold: 0.25
+    direction: min
+    category: safety
+    provenance: provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready
+    required: false
+    description: >
+      Minimum-clearance safety gate. The retained camera_ready campaign does not
+      record min_clearance_m, so this gate reports not_evaluable and is marked
+      required=false so it flags the coverage gap without forcing the safety
+      category to not_evaluable.
+  # --- Comfort (evaluable against retained fields) ---
+  - id: jerk_mean_limit
+    metric: jerk_mean
+    threshold: 2.0
+    direction: max
+    category: comfort
+    provenance: provisional_not_certification_issue_4166
+    required: true
+    description: Mean jerk proxy must remain below the provisional comfort limit.
+  - id: comfort_exposure_limit
+    metric: comfort_exposure_mean
+    threshold: 0.10
+    direction: max
+    category: comfort
+    provenance: provisional_not_certification_issue_4166_proxemic_exposure_proxy
+    required: true
+    description: >
+      Provisional proxemic-exposure comfort proxy. comfort_exposure_mean is the
+      closest recorded proxy to proxemic intrusion; it is not a certified
+      intrusion rate.
+  # --- Comfort coverage gap: not recorded by this campaign (stays not_evaluable) ---
+  - id: proxemic_intrusion_rate_coverage_gap
+    metric: proxemic_intrusion_rate
+    threshold: 0.10
+    direction: max
+    category: comfort
+    provenance: provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready
+    required: false
+    description: >
+      Dedicated proxemic-intrusion-rate comfort gate. The retained camera_ready
+      campaign does not record proxemic_intrusion_rate, so this gate reports
+      not_evaluable and is marked required=false to flag the coverage gap.

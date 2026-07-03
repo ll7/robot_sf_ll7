@@ -20,7 +20,8 @@
     "snqi_recalibration_bundle.json",
     "snqi_recalibration_report.md",
     "source_manifest.json",
-    "snqi_weight_set_h600_preflight.json"
+    "snqi_weight_set_h600_preflight.json",
+    "sustained_flow_claim_impact_input.json"
   ],
   "h500_s20_reports": "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/reports",
   "issue_4239_weight_set_packet": {

@@ -212,3 +212,40 @@ def test_static_constriction_config_reports_two_arm_diagnostic_summary(tmp_path:
 
     episode_rows = (output_dir / "episodes.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(episode_rows) == 64
+
+
+def test_smoke_runner_rejects_empty_planner_arms(tmp_path: Path) -> None:
+    """An explicitly empty planner arm list fails instead of falling back silently."""
+
+    config_path = tmp_path / "rare_event_empty_arms.yaml"
+    config_path.write_text(
+        """
+schema_version: rare_event_sampling.v1
+proposal: tilted_distribution
+parameters:
+  ped_density:
+    base: uniform
+    low: 0.01
+    high: 0.08
+    proposal_low: 0.045
+    proposal_high: 0.08
+objective_event: collision_or_severe_intrusion
+samples: 2
+seed: 4163
+scenario_matrix: configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml
+planner_arms: []
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="planner_arms must be a non-empty list"):
+        run_smoke(
+            [
+                "--config",
+                str(config_path),
+                "--output-dir",
+                str(tmp_path / "output"),
+                "--evidence-dir",
+                str(tmp_path / "evidence"),
+            ]
+        )

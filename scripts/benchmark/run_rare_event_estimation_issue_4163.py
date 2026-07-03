@@ -85,16 +85,14 @@ def main(argv: list[str] | None = None) -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     episodes_path = args.output_dir / "episodes.jsonl"
     with episodes_path.open("w", encoding="utf-8") as handle:
-        for row in rows:
+        for idx, row in enumerate(rows):
             for arm_key in planner_arms:
                 handle.write(
                     json.dumps(
                         {
                             "planner_arm": arm_key,
                             "sample": row.to_payload(),
-                            "objective_event_observed": bool(
-                                events_by_arm[arm_key][row.sample_index]
-                            ),
+                            "objective_event_observed": bool(events_by_arm[arm_key][idx]),
                             "scenario": {
                                 "name": mutated_scenario.get("name"),
                                 "parameter_vector_hash": row.parameter_vector_hash,
@@ -114,7 +112,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _planner_arms(payload: dict[str, Any]) -> list[str]:
-    arms = payload.get("planner_arms") or ["synthetic_planner"]
+    arms = payload.get("planner_arms")
+    if arms is None:
+        arms = ["synthetic_planner"]
     if not isinstance(arms, list) or not arms:
         raise ValueError("planner_arms must be a non-empty list when provided")
     return [str(arm) for arm in arms]

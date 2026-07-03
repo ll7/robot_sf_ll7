@@ -1,0 +1,54 @@
+{
+  "issue": 4216,
+  "evidence_type": "post_guard_full_suite_closure_probe",
+  "status": "blocked",
+  "claim_boundary": "Post-guard suite output reached 100% without a failure traceback for the 15 job-9858988 LiCCA residue nodes, but the pytest process did not exit; this is diagnostic closure evidence, not a successful full-suite gate.",
+  "source_inventory": {
+    "path": "docs/context/evidence/issue_4216_licca_full_suite_env_failures/failure_inventory.json",
+    "source_job": "9858988",
+    "failure_count": 15,
+    "failure_classes": {
+      "base_ref_assumption": 9,
+      "github_runner_introspection": 3,
+      "shared_node_wallclock": 3
+    }
+  },
+  "post_guard_probe": {
+    "date": "2026-07-03",
+    "base_commit": "022f60c69749861a578d1bc0a6ca87e0e39d2040",
+    "command": "PYTEST_NUM_WORKERS=8 ROBOT_SF_TEST_ENV=licca uv run pytest -q",
+    "scope": "repository full test suite with the LiCCA/shared-HPC guard marker enabled",
+    "observed_stdout": {
+      "reached_100_percent": true,
+      "failure_traceback_seen": false,
+      "error_summary_seen": false,
+      "final_pytest_summary_seen": false
+    },
+    "exit": {
+      "exit_code": 143,
+      "reason": "manual SIGTERM after pytest reached 100% and then produced no new output while a nested pytest child remained alive"
+    },
+    "process_snapshot": {
+      "nested_pytest_child_remained": true,
+      "gpu_device_handles_seen": true,
+      "ptrace_stack_capture": "unavailable: host ptrace policy blocked gdb attach"
+    }
+  },
+  "comparison_to_job_9858988": {
+    "job_9858988_failures": 15,
+    "post_guard_failure_tracebacks_seen_for_inventory_nodes": 0,
+    "post_guard_environment_conditional_failures_remaining": "not established; no failure traceback appeared, but full-suite process exit was blocked by teardown hang",
+    "residual_blocker": "Identify and close the post-100% nested pytest teardown hang before treating the LiCCA full-suite row as green."
+  },
+  "artifact_policy": {
+    "large_or_transient_logs_committed": false,
+    "raw_snapshots": "local-only debugging inputs; not committed and not a durable dependency",
+    "local_raw_snapshot_checksums": {
+      "post_guard_full_suite_log_sha256": "daf321db9ffd18fa377725cc95b073fcb9e1910e74044340ae99a31b32a06383",
+      "hang_process_snapshot_sha256": "0f749d0eb5b2fb5360d5971e517e5a518af9da3e6b0f0889cc594717b09843b1",
+      "gdb_attach_attempt_sha256": "734ba920970bc38353a56fc79116cc8fd0cc21c5e1334e0d2b71d501ae53bc32"
+    },
+    "compute_submission": false,
+    "slurm_or_gpu_campaign": false
+  }
+}

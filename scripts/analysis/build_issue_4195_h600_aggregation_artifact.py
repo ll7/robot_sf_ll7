@@ -490,7 +490,7 @@ def _write_sha256sums(output_dir: Path) -> None:
     for path in sorted(output_dir.iterdir()):
         if path.name == "SHA256SUMS" or not path.is_file():
             continue
-        lines.append(f"{_sha256(path)}  {path.name}")
+        lines.append(f"{_sha256(path)}  {path.as_posix()}")
     (output_dir / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

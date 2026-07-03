@@ -173,8 +173,8 @@ def test_build_artifact_writes_tables_comparability_and_checksums(tmp_path: Path
         .startswith("# Issue 4195 h600 Aggregation Artifact")
     )
     checksums = (output_dir / "SHA256SUMS").read_text(encoding="utf-8")
-    assert "planner_metric_summary.csv" in checksums
-    assert "source_manifest.json" in checksums
+    assert f"{output_dir.as_posix()}/planner_metric_summary.csv" in checksums
+    assert f"{output_dir.as_posix()}/source_manifest.json" in checksums
 
 
 def test_build_artifact_fails_status_on_shared_hash_mismatch(tmp_path: Path) -> None:

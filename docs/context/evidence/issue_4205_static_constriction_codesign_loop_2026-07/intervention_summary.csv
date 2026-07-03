@@ -1,0 +1,4 @@
+arm_key,scenario_id,seed,row_status,wrapper_intervention_rate,cbf_status_counts,benchmark_evidence
+ppo_frozen,classic_bottleneck_low,111,smoke_plumbing_only,0.0,{},False
+ppo_frozen_wrapper_on,classic_bottleneck_low,111,smoke_plumbing_only,0.125,{},False
+ppo_frozen_cbf_on,classic_bottleneck_low,111,smoke_plumbing_only,0.0,"{""active"": 1, ""nominal"": 0}",False

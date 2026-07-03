@@ -1,0 +1,90 @@
+{
+  "artifact_status": "all_required_present",
+  "artifacts": [
+    {
+      "exists": true,
+      "kind": "file",
+      "path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json",
+      "required": true,
+      "role": "expected",
+      "sha256": "76f83ee7a17f8f85cd42b806be17fcb3d3c2d443445d982b699b968c8669be35",
+      "size_bytes": 3831
+    },
+    {
+      "exists": true,
+      "kind": "file",
+      "path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/planner_metric_summary.csv",
+      "required": true,
+      "role": "expected",
+      "sha256": "b20538a4b3d9c9be0b893fcc87e3afaec2fa4284424502c958406616ffb6d3c9",
+      "size_bytes": 16990
+    },
+    {
+      "exists": true,
+      "kind": "file",
+      "path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/planner_metric_summary.md",
+      "required": true,
+      "role": "expected",
+      "sha256": "069d7b6c1e4b2d7bd090f5bdcb092c7e10969c9a887574848b785b68f09092bd",
+      "size_bytes": 13719
+    },
+    {
+      "exists": true,
+      "kind": "file",
+      "path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/comparability_check.json",
+      "required": true,
+      "role": "expected",
+      "sha256": "5b0882f4257cf0bf017fe5dcb2716520838dc40704d6bcecc3f66d6769a29968",
+      "size_bytes": 2908
+    },
+    {
+      "exists": true,
+      "kind": "file",
+      "path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/snqi_recalibration_bundle.json",
+      "required": true,
+      "role": "expected",
+      "sha256": "2ed65a07eb3bb215a43ebe87f9d3d0044145d91f1afddd3c3553d5a44fe5c12d",
+      "size_bytes": 19293
+    },
+    {
+      "exists": true,
+      "kind": "file",
+      "path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/horizon_sensitivity_report.json",
+      "required": true,
+      "role": "expected",
+      "sha256": "1a3c90b3f347ab695adbb4d287a73e149ce4c024ef2685d69f516c1312cac005",
+      "size_bytes": 14456
+    },
+    {
+      "exists": true,
+      "kind": "file",
+      "path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/interaction_exposure_diagnostics.json",
+      "required": true,
+      "role": "expected",
+      "sha256": "f4e43e121f1c9eb0cf5373b1b602cb1ab9c5021d364d1843115529398fadf0cc",
+      "size_bytes": 2435
+    },
+    {
+      "exists": true,
+      "kind": "file",
+      "path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/SHA256SUMS",
+      "required": true,
+      "role": "expected",
+      "sha256": "ef16632dde5514c73809d5c7ae93f054e83c94b6e4ddde1d5fa2c67c8b8043e6",
+      "size_bytes": 1852
+    }
+  ],
+  "claim_boundary": "compact local finalization manifest only; not durable benchmark evidence until artifacts have durable retrieval URIs and policy-specific validation",
+  "classification": "success",
+  "durable_status": "durable",
+  "durable_uri": "https://github.com/ll7/robot_sf_ll7/tree/bb674d86833fc8409f359adf93111e603fa27bb2/docs/context/evidence/issue_3810_h600_interpretation_2026-07",
+  "generated_at": "2026-07-03T09:22:44.690343+00:00",
+  "issue_number": 3425,
+  "issue_update_markdown": "SLURM finalization for job `13273`:\n\n- classification: `success`\n- job state: `COMPLETED`\n- artifact status: `all_required_present`\n- durable status: `durable` -> `https://github.com/ll7/robot_sf_ll7/tree/bb674d86833fc8409f359adf93111e603fa27bb2/docs/context/evidence/issue_3810_h600_interpretation_2026-07`\n- claim boundary: compact local finalization manifest only; not durable benchmark evidence until artifacts have durable retrieval URIs and policy-specific validation\n\n| Artifact | Required | Status | SHA256 |\n| --- | --- | --- | --- |\n| `docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json` | true | present | `76f83ee7a17f8f85cd42b806be17fcb3d3c2d443445d982b699b968c8669be35` |\n| `docs/context/evidence/issue_3810_h600_interpretation_2026-07/planner_metric_summary.csv` | true | present | `b20538a4b3d9c9be0b893fcc87e3afaec2fa4284424502c958406616ffb6d3c9` |\n| `docs/context/evidence/issue_3810_h600_interpretation_2026-07/planner_metric_summary.md` | true | present | `069d7b6c1e4b2d7bd090f5bdcb092c7e10969c9a887574848b785b68f09092bd` |\n| `docs/context/evidence/issue_3810_h600_interpretation_2026-07/comparability_check.json` | true | present | `5b0882f4257cf0bf017fe5dcb2716520838dc40704d6bcecc3f66d6769a29968` |\n| `docs/context/evidence/issue_3810_h600_interpretation_2026-07/snqi_recalibration_bundle.json` | true | present | `2ed65a07eb3bb215a43ebe87f9d3d0044145d91f1afddd3c3553d5a44fe5c12d` |\n| `docs/context/evidence/issue_3810_h600_interpretation_2026-07/horizon_sensitivity_report.json` | true | present | `1a3c90b3f347ab695adbb4d287a73e149ce4c024ef2685d69f516c1312cac005` |\n| `docs/context/evidence/issue_3810_h600_interpretation_2026-07/interaction_exposure_diagnostics.json` | true | present | `f4e43e121f1c9eb0cf5373b1b602cb1ab9c5021d364d1843115529398fadf0cc` |\n| `docs/context/evidence/issue_3810_h600_interpretation_2026-07/SHA256SUMS` | true | present | `ef16632dde5514c73809d5c7ae93f054e83c94b6e4ddde1d5fa2c67c8b8043e6` |\n\nNext action: Review checksums, promote artifacts to a durable store if downstream work depends on them, and cite only this compact manifest until durable URIs exist.",
+  "job_id": "13273",
+  "job_state": "COMPLETED",
+  "ledger_update_markdown": "| #3425 | `13273` | `success` | `all_required_present` | Review checksums, promote artifacts to a durable store if downstream work depends on them, and cite only this compact manifest until durable URIs exist. |",
+  "next_action": "Review checksums, promote artifacts to a durable store if downstream work depends on them, and cite only this compact manifest until durable URIs exist.",
+  "notes": "Issue #4243 closure finalizer for #3425 trace over tracked compact h600 extended-roster evidence from #4195; metadata-only, no claim interpretation change.",
+  "schema_version": "robot-sf-slurm-job-finalization.v1"
+}

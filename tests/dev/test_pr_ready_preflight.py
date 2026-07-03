@@ -144,9 +144,25 @@ def _run_pr_ready(
     if help_flag:
         cmd.append("--help")
     env = {**os.environ, "PATH": f"{repo / 'bin'}{os.pathsep}{os.environ['PATH']}"}
-    env.pop("PR_READY_FINAL", None)
-    env.pop("PR_READY_MODE", None)
-    env.pop("PR_READY_SKIP_PREFLIGHT", None)
+    home = repo / ".home"
+    home.mkdir(exist_ok=True)
+    env["HOME"] = str(home)
+    for key in (
+        "BASE_REF",
+        "GITHUB_ACTIONS",
+        "GITHUB_BASE_REF",
+        "GITHUB_HEAD_REF",
+        "GITHUB_REF",
+        "GITHUB_SHA",
+        "GITHUB_WORKSPACE",
+        "PR_READY_FINAL",
+        "PR_READY_MODE",
+        "PR_READY_SKIP_PREFLIGHT",
+        "ROBOT_SF_TEST_ENV",
+        "SLURM_CLUSTER_NAME",
+        "SLURM_JOB_ID",
+    ):
+        env.pop(key, None)
     if env_overrides:
         env.update(env_overrides)
     return subprocess.run(

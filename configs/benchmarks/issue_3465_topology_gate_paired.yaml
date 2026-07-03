@@ -1,0 +1,127 @@
+# Issue #3465 pre-run topology near-parity gate paired comparison contract.
+#
+# This freezes the enabled-vs-disabled arm shape before any campaign. It is not
+# benchmark evidence until #3463 corrective completion or waiver is recorded and
+# a later run emits a durable evidence packet.
+schema_version: robot_sf.issue_3465_topology_gate_paired_preregistration.v1
+issue: 3465
+study_id: issue_3465_topology_gate_paired_v1
+status: pre_registered_readiness_blocked_corrective_issue
+benchmark_evidence: false
+claim_boundary: >
+  Pre-registration and readiness-gate contract only. Planned rows prove the
+  paired topology-gate enabled/disabled design is well formed, but do not
+  constitute benchmark evidence, planner-promotion evidence, paper/dissertation
+  claim support, or permission to count fallback/degraded rows as success.
+out_of_scope:
+  - full benchmark campaign execution
+  - Slurm or GPU submission
+  - interpreting enabled-minus-disabled comparison results
+  - paper or dissertation claim edits
+source_contracts:
+  enabled_candidate: configs/policy_search/candidates/topology_guided_hybrid_rule_v0.yaml
+  disabled_candidate: configs/policy_search/candidates/topology_guided_hybrid_rule_v0.yaml
+  promotion_gate: robot_sf/benchmark/near_parity_promotion_gate.py::classify_near_parity_promotion
+campaign_authorization:
+  compute_submit_authorized: false
+  no_slurm_submission_in_this_pr: true
+  no_gpu_submission_in_this_pr: true
+readiness:
+  corrective_issue: 3463
+  corrective_complete: false
+  corrective_waiver_recorded: false
+  topology_gate_config_hash: c7b5c4d09e5d783dc47891b0d68625c148d3619e0aff6e2c468c3b615b9dc68d
+  no_known_fallback_degraded_promotion: true
+  known_ineligible_rows: []
+benchmark_contract:
+  planner_set:
+    - topology_guided_hybrid_rule_v0
+  scenario_set:
+    - classic_realworld_double_bottleneck_high
+  seed_list:
+    - 111
+  horizon: 160
+  output_mode_requirement: native_or_adapter_only
+  paired_metrics:
+    - safety_events
+    - near_events
+    - minimum_clearance
+    - route_progress
+    - terminal_outcome
+    - efficiency
+    - native_adapter_fallback_degraded_status
+output_paths:
+  planned_readiness_packet: output/issue_3465_topology_gate_paired/readiness/issue_3465_topology_gate_paired_readiness.json
+  future_campaign_output_root: output/benchmarks/issue_3465_topology_gate_paired
+  future_evidence_packet: docs/context/evidence/issue_3465_topology_gate_paired/summary.json
+arms:
+  - key: topology_gate_disabled
+    gate_enabled: false
+    policy_config:
+      allow_testing_algorithms: true
+      diagnostic_only: true
+      claim_boundary: diagnostic_only
+      min_hypotheses: 2
+      max_hypotheses: 2
+      block_radius_cells: 3
+      block_stride_cells: 8
+      max_path_overlap: 0.88
+      length_weight: 1.0
+      static_clearance_weight: 0.6
+      near_parity_diversity_gate_enabled: false
+      near_parity_route_distance_slack_m: 0.75
+      near_parity_route_distance_slack_ratio: 0.05
+      near_parity_static_clearance_floor_m: 0.05
+      near_parity_diversity_bonus: 0.5
+      fail_closed_on_missing_inputs: true
+      fail_closed_on_insufficient_hypotheses: false
+      topology_command_enabled: true
+      topology_command_speed: 0.35
+      topology_command_heading_gain: 1.0
+      topology_command_turn_in_place_error: 0.25
+      route_guide_enabled: true
+      route_guide_waypoint_lookahead_cells: 8
+      route_guide_obstacle_inflation_cells: 3
+      route_guide_clearance_penalty_weight: 0.5
+      corridor_subgoal_enabled: true
+      corridor_subgoal_speed: 0.25
+      corridor_subgoal_turn_in_place_error: 0.25
+      corridor_subgoal_heading_gain: 1.0
+      corridor_subgoal_min_nearest_ped_distance: 1.0
+      corridor_subgoal_use_continuous_static_check: true
+      corridor_subgoal_static_clearance_buffer: 0.0
+  - key: topology_gate_enabled
+    gate_enabled: true
+    policy_config:
+      allow_testing_algorithms: true
+      diagnostic_only: true
+      claim_boundary: diagnostic_only
+      min_hypotheses: 2
+      max_hypotheses: 2
+      block_radius_cells: 3
+      block_stride_cells: 8
+      max_path_overlap: 0.88
+      length_weight: 1.0
+      static_clearance_weight: 0.6
+      near_parity_diversity_gate_enabled: true
+      near_parity_route_distance_slack_m: 0.75
+      near_parity_route_distance_slack_ratio: 0.05
+      near_parity_static_clearance_floor_m: 0.05
+      near_parity_diversity_bonus: 0.5
+      fail_closed_on_missing_inputs: true
+      fail_closed_on_insufficient_hypotheses: false
+      topology_command_enabled: true
+      topology_command_speed: 0.35
+      topology_command_heading_gain: 1.0
+      topology_command_turn_in_place_error: 0.25
+      route_guide_enabled: true
+      route_guide_waypoint_lookahead_cells: 8
+      route_guide_obstacle_inflation_cells: 3
+      route_guide_clearance_penalty_weight: 0.5
+      corridor_subgoal_enabled: true
+      corridor_subgoal_speed: 0.25
+      corridor_subgoal_turn_in_place_error: 0.25
+      corridor_subgoal_heading_gain: 1.0
+      corridor_subgoal_min_nearest_ped_distance: 1.0
+      corridor_subgoal_use_continuous_static_check: true
+      corridor_subgoal_static_clearance_buffer: 0.0

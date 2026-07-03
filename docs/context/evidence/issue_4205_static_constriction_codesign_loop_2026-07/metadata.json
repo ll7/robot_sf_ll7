@@ -1,0 +1,17 @@
+{
+  "arms": [
+    "ppo_frozen",
+    "ppo_frozen_wrapper_on",
+    "ppo_frozen_cbf_on"
+  ],
+  "benchmark_evidence": false,
+  "claim_boundary": "CPU arm-plumbing smoke for one static-deadlock seed only; no full benchmark campaign, Slurm/GPU submission, retraining, or paper/dissertation claim.",
+  "config_sha256": "6d3de95125d678b422ba808444eafa33ccb04ae58c5634d34f43e3c7dda8b7ff",
+  "evidence_status": "smoke evidence",
+  "issue": 4205,
+  "loop_id": "issue_4205_static_constriction_codesign_loop_v1",
+  "residual_blocker": "Exact frozen PPO checkpoint hydration remains private-queue preflight before campaign execution.",
+  "scenario_id": "classic_bottleneck_low",
+  "schema_version": "robot_sf.issue_4205.pre_run_evidence_packet.v1",
+  "seed": 111
+}

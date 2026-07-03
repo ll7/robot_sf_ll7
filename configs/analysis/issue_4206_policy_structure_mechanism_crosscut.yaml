@@ -42,6 +42,7 @@ local_minimum_mechanisms:
 blocked_followup_issue:
   title: "Add trace-verified failure-mechanism labels to h600 episode exports for F-C4(ii)"
   body: |
-    Issue #4206 cannot produce mechanism-level F-C4(ii) policy-structure conclusions until h600
-    episode rows or sidecars provide failure_mechanism_taxonomy.v1 labels with confidence and
-    evidence URI fields.
+    Issue #4206 cannot produce mechanism-level F-C4(ii) policy-structure conclusions until
+    h600 episode rows or sidecars provide mechanism fields using
+    mechanism_schema_version=failure_mechanism_taxonomy.v1, mechanism_label,
+    mechanism_confidence, mechanism_evidence_mode, and mechanism_evidence_uri.

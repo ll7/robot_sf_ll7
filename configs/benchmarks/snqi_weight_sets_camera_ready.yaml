@@ -1,0 +1,18 @@
+schema_version: snqi-weight-sets.camera-ready.v1
+decision_record: ll7/diss#331
+decision_date: 2026-07-03
+canonical_set: camera_ready_v3
+weight_sets:
+  camera_ready_v1:
+    role: sensitivity_probe
+    path: configs/benchmarks/snqi_weights_camera_ready_v1.json
+    label: camera_ready_v1_sensitivity_probe
+  camera_ready_v2:
+    role: sensitivity_probe
+    path: configs/benchmarks/snqi_weights_camera_ready_v2.json
+    label: camera_ready_v2_sensitivity_probe
+  camera_ready_v3:
+    role: canonical
+    path: configs/benchmarks/snqi_weights_camera_ready_v3.json
+    label: camera_ready_v3_canonical
+    sha256: 71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2

@@ -1,0 +1,115 @@
+{
+  "issue": 4216,
+  "source_job": "9858988",
+  "source_log": "/hpc/gpfs2/scratch/u/luttkule/robot_sf/licca-all-tests/9858988/pytest.log",
+  "source_log_available_locally": false,
+  "host_checked": "auxme-imech039",
+  "inventory_basis": "Issue #4216 body and owner implementation-plan comment; the raw LiCCA pytest.log path was not mounted on this host.",
+  "failures": [
+    {
+      "nodeid": "tests/dev/test_pr_ready_preflight.py::test_help_bypasses_preflight",
+      "failure_class": "base_ref_assumption",
+      "planned_resolution": "env_agnostic_rewrite",
+      "guard_reason": "requires isolated local git topology and no inherited cluster or CI routing env",
+      "must_run_on_github_actions": true
+    },
+    {
+      "nodeid": "tests/dev/test_pr_ready_preflight.py::test_preflight_fails_when_modules_missing",
+      "failure_class": "base_ref_assumption",
+      "planned_resolution": "env_agnostic_rewrite",
+      "guard_reason": "requires isolated local git topology and no inherited cluster or CI routing env",
+      "must_run_on_github_actions": true
+    },
+    {
+      "nodeid": "tests/dev/test_pr_ready_preflight.py::test_interim_mode_keeps_existing_non_preflight_path",
+      "failure_class": "base_ref_assumption",
+      "planned_resolution": "env_agnostic_rewrite",
+      "guard_reason": "requires isolated local git topology and no inherited cluster or CI routing env",
+      "must_run_on_github_actions": true
+    },
+    {
+      "nodeid": "tests/dev/test_pr_ready_preflight.py::test_pr_ready_check_escalates_optional_changed_files_to_the_optional_lane",
+      "failure_class": "base_ref_assumption",
+      "planned_resolution": "env_agnostic_rewrite",
+      "guard_reason": "requires isolated local git topology and no inherited cluster or CI routing env",
+      "must_run_on_github_actions": true
+    },
+    {
+      "nodeid": "tests/dev/test_pr_ready_preflight.py::test_pr_ready_check_keeps_core_only_changes_on_the_core_lane",
+      "failure_class": "base_ref_assumption",
+      "planned_resolution": "env_agnostic_rewrite",
+      "guard_reason": "requires isolated local git topology and no inherited cluster or CI routing env",
+      "must_run_on_github_actions": true
+    },
+    {
+      "nodeid": "tests/dev/test_pr_ready_preflight.py::test_missing_base_ref_falls_back_to_head_without_crashing",
+      "failure_class": "base_ref_assumption",
+      "planned_resolution": "env_agnostic_rewrite",
+      "guard_reason": "requires isolated local git topology and no inherited cluster or CI routing env",
+      "must_run_on_github_actions": true
+    },
+    {
+      "nodeid": "tests/dev/test_pr_ready_preflight.py::test_valid_base_ref_is_used_unchanged",
+      "failure_class": "base_ref_assumption",
+      "planned_resolution": "env_agnostic_rewrite",
+      "guard_reason": "requires isolated local git topology and no inherited cluster or CI routing env",
+      "must_run_on_github_actions": true
+    },
+    {
+      "nodeid": "tests/dev/test_pr_ready_preflight.py::test_preflight_passes_when_modules_available",
+      "failure_class": "base_ref_assumption",
+      "planned_resolution": "env_agnostic_rewrite",
+      "guard_reason": "requires isolated local git topology and no inherited cluster or CI routing env",
+      "must_run_on_github_actions": true
+    },
+    {
+      "nodeid": "tests/dev/test_pr_ready_preflight.py::test_preflight_skip_env_var_bypasses_check",
+      "failure_class": "base_ref_assumption",
+      "planned_resolution": "env_agnostic_rewrite",
+      "guard_reason": "requires isolated local git topology and no inherited cluster or CI routing env",
+      "must_run_on_github_actions": true
+    },
+    {
+      "nodeid": "tests/dev/test_ci_uv_sync_diag.py::test_ci_uv_sync_diag_runs_without_uv",
+      "failure_class": "github_runner_introspection",
+      "planned_resolution": "env_agnostic_rewrite",
+      "guard_reason": "requires deterministic runner and cache metadata independent of ambient CI or Slurm env",
+      "must_run_on_github_actions": true
+    },
+    {
+      "nodeid": "tests/dev/test_ci_uv_sync_diag.py::test_ci_uv_sync_diag_reports_runner_and_uv_state",
+      "failure_class": "github_runner_introspection",
+      "planned_resolution": "env_agnostic_rewrite",
+      "guard_reason": "requires deterministic runner and cache metadata independent of ambient CI or Slurm env",
+      "must_run_on_github_actions": true
+    },
+    {
+      "nodeid": "tests/dev/test_ci_uv_sync_diag.py::test_ci_uv_sync_diag_cache_sizing_is_single_pass",
+      "failure_class": "github_runner_introspection",
+      "planned_resolution": "env_agnostic_rewrite",
+      "guard_reason": "requires deterministic runner and cache metadata independent of ambient CI or Slurm env",
+      "must_run_on_github_actions": true
+    },
+    {
+      "nodeid": "tests/test_visualization_performance.py::TestVisualizationPerformance::test_generate_benchmark_plots_performance",
+      "failure_class": "shared_node_wallclock",
+      "planned_resolution": "env_agnostic_rewrite",
+      "guard_reason": "requires stable wall-clock budget; artifact correctness still runs everywhere",
+      "must_run_on_github_actions": true
+    },
+    {
+      "nodeid": "tests/test_visualization_performance.py::TestVisualizationPerformance::test_generate_benchmark_videos_performance",
+      "failure_class": "shared_node_wallclock",
+      "planned_resolution": "env_agnostic_rewrite",
+      "guard_reason": "requires stable wall-clock budget; video generation still runs everywhere",
+      "must_run_on_github_actions": true
+    },
+    {
+      "nodeid": "tests/test_visualization_performance.py::TestVisualizationPerformance::test_generate_benchmark_plots_with_filters_performance",
+      "failure_class": "shared_node_wallclock",
+      "planned_resolution": "env_agnostic_rewrite",
+      "guard_reason": "requires stable wall-clock budget; filtered artifact generation still runs everywhere",
+      "must_run_on_github_actions": true
+    }
+  ]
+}

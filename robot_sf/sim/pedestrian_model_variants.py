@@ -9,8 +9,14 @@ import numpy as np
 SOCIAL_FORCE_DEFAULT = "social_force_default"
 HSFM_TOTAL_FORCE_V1 = "hsfm_total_force_v1"
 HSFM_TTC_PREDICTIVE_V1 = "hsfm_ttc_predictive_v1"
+HSFM_ANISOTROPIC_FOV_V1 = "hsfm_anisotropic_fov_v1"
 SUPPORTED_PEDESTRIAN_MODELS = frozenset(
-    {SOCIAL_FORCE_DEFAULT, HSFM_TOTAL_FORCE_V1, HSFM_TTC_PREDICTIVE_V1}
+    {
+        SOCIAL_FORCE_DEFAULT,
+        HSFM_TOTAL_FORCE_V1,
+        HSFM_TTC_PREDICTIVE_V1,
+        HSFM_ANISOTROPIC_FOV_V1,
+    }
 )
 
 PYSF_POSITION_SLICE = slice(0, 2)
@@ -147,6 +153,115 @@ def _repulsion_direction(
     if velocity_norm > epsilon:
         return away_from_closing_velocity / velocity_norm
     return np.zeros(2, dtype=float)
+
+
+def _outside_fov_cone(
+    forward_vector: np.ndarray,
+    offset: np.ndarray,
+    *,
+    cone_half_angle_rad: float,
+    epsilon: float,
+) -> bool:
+    """Return whether an offset falls outside the heading cone."""
+    distance = float(np.linalg.norm(offset))
+    if distance <= epsilon:
+        return False
+    direction = offset / distance
+    cos_angle = float(np.clip(np.dot(forward_vector, direction), -1.0, 1.0))
+    return float(np.arccos(cos_angle)) > cone_half_angle_rad
+
+
+def _validate_anisotropic_fov_inputs(
+    positions: np.ndarray,
+    headings: np.ndarray,
+    *,
+    cone_half_angle_rad: float,
+    rear_weight: float,
+    epsilon: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return finite FoV input arrays or raise a clear validation error."""
+    position_array = np.asarray(positions, dtype=float)
+    heading_array = np.asarray(headings, dtype=float)
+    if position_array.ndim != 2 or position_array.shape[1] != 2:
+        raise ValueError("positions must have shape (N, 2)")
+    if heading_array.shape != (position_array.shape[0],):
+        raise ValueError("headings must have shape (N,) matching positions")
+    if not np.all(np.isfinite(position_array)) or not np.all(np.isfinite(heading_array)):
+        raise ValueError("positions and headings must be finite")
+    if not np.isfinite(cone_half_angle_rad) or not 0.0 <= cone_half_angle_rad <= np.pi:
+        raise ValueError("cone_half_angle_rad must be finite and within [0, pi]")
+    if not np.isfinite(rear_weight) or not 0.0 <= rear_weight <= 1.0:
+        raise ValueError("rear_weight must be finite and within [0, 1]")
+    if not np.isfinite(epsilon) or epsilon <= 0:
+        raise ValueError("epsilon must be finite and > 0")
+    return position_array, heading_array
+
+
+def anisotropic_fov_weights(
+    positions: np.ndarray,
+    headings: np.ndarray,
+    *,
+    cone_half_angle_rad: float,
+    rear_weight: float,
+    epsilon: float = 1e-9,
+) -> np.ndarray:
+    """Return per-pair FoV attenuation weights for actors outside each heading cone."""
+    position_array, heading_array = _validate_anisotropic_fov_inputs(
+        positions,
+        headings,
+        cone_half_angle_rad=cone_half_angle_rad,
+        rear_weight=rear_weight,
+        epsilon=epsilon,
+    )
+
+    pedestrian_count = position_array.shape[0]
+    weights = np.ones((pedestrian_count, pedestrian_count), dtype=float)
+    forward_vectors = np.column_stack((np.cos(heading_array), np.sin(heading_array)))
+
+    for i in range(pedestrian_count):
+        for j in range(pedestrian_count):
+            if i == j:
+                continue
+            if _outside_fov_cone(
+                forward_vectors[i],
+                position_array[j] - position_array[i],
+                cone_half_angle_rad=cone_half_angle_rad,
+                epsilon=epsilon,
+            ):
+                weights[i, j] = float(rear_weight)
+
+    return weights
+
+
+def anisotropic_fov_total_force(
+    positions: np.ndarray,
+    headings: np.ndarray,
+    total_forces: np.ndarray,
+    *,
+    cone_half_angle_rad: float,
+    rear_weight: float,
+    epsilon: float = 1e-9,
+) -> np.ndarray:
+    """Apply diagnostic FoV attenuation to aggregated forces behind each heading.
+
+    Returns:
+        Force array with one attenuation factor per pedestrian row.
+    """
+    force_array = np.asarray(total_forces, dtype=float)
+    position_array = np.asarray(positions, dtype=float)
+    if force_array.shape != position_array.shape:
+        raise ValueError("total_forces must have shape (N, 2) matching positions")
+    weights = anisotropic_fov_weights(
+        position_array,
+        headings,
+        cone_half_angle_rad=cone_half_angle_rad,
+        rear_weight=rear_weight,
+        epsilon=epsilon,
+    )
+    if position_array.shape[0] == 0:
+        return force_array.copy()
+    per_actor_weight = np.min(weights, axis=1)
+    return force_array * np.expand_dims(per_actor_weight, axis=-1)
 
 
 def ttc_predictive_repulsion(

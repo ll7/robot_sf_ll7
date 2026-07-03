@@ -1,0 +1,4 @@
+arm_key,low_progress_window,recenter_activation_count,distance_to_goal_delta,local_minimum_indicator,row_status
+ppo_frozen,present,present,present,present,smoke_plumbing_only
+ppo_frozen_wrapper_on,present,present,present,present,smoke_plumbing_only
+ppo_frozen_cbf_on,present,present,present,present,smoke_plumbing_only

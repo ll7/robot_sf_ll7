@@ -35,6 +35,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Documented the **runtime uncertainty-triggered fallback** for guarded PPO (#3974), which merged in
+  #4193 without a CHANGELOG entry. This is the successor slice the earlier #4138 entry below called
+  out as "not included"; that statement is now stale — the fallback ships in
+  `robot_sf/planner/guarded_ppo.py`. When `uncertainty_fallback_enabled` is set (default off), the
+  `GuardedPPOAdapter` guard can override a PPO command that is nominally clearance-safe but intrudes
+  into conformal uncertainty buffers (reusing #4138's `compute_intrusion_metrics`), crosses a
+  low-time-to-collision (TTC, the time until the robot and a pedestrian would collide at current
+  relative velocity) threshold, or crosses a diagnostic predicted-collision-probability proxy. The
+  override emits one of three decision labels — `uncertainty_fallback_stop`,
+  `uncertainty_fallback_slow_down`, or `uncertainty_fallback_configured` (delegates to the configured
+  fallback adapter, e.g. ORCA) —
+  and `robot_sf/benchmark/map_runner.py` counts each in `guard_stats`. The probability value is an
+  explicitly labeled **diagnostic proxy**, not a calibrated probability: shield metadata carries
+  `claim_boundary: diagnostic_proxy_not_safety_guarantee`. Diagnostic-only, default-off; no safety
+  guarantee, no benchmark claim, no paper-facing claim. Validation:
+  `uv run pytest tests/ -k "conformal or intrusion or fallback_trigger" -q`.
 * Added **diff-scoped context-note freshness gating** for issue #3190. The docs-proof consistency
   checker (`scripts/validation/check_docs_proof_consistency.py`) gains a `--freshness-scope
   {repo,diff}` option: `repo` (default) preserves the existing repo-wide `--check-context-note-freshness`

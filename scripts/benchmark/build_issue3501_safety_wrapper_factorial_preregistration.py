@@ -63,7 +63,11 @@ def main() -> int:
     plan = build_preregistration_plan(config)
     plan["git_head"] = _git_head()
     out_path = write_preregistration_plan(plan, REPO_ROOT / args.out)
-    print(out_path.relative_to(REPO_ROOT))
+    try:
+        display_path = out_path.relative_to(REPO_ROOT)
+    except ValueError:
+        display_path = out_path
+    print(display_path)
     print(f"pair_check.complete={plan['pair_check']['complete']}")
     print(f"row_count={plan['row_count']}")
     return 0

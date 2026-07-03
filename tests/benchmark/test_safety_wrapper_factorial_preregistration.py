@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -143,6 +145,28 @@ def test_write_preregistration_plan_outputs_deterministic_json(tmp_path: Path) -
     assert path.name == "issue_3501_safety_wrapper_factorial_preregistration_plan.json"
     assert path.read_text(encoding="utf-8").endswith("\n")
     assert '"pair_check"' in path.read_text(encoding="utf-8")
+
+
+def test_cli_accepts_output_directory_outside_repo(tmp_path: Path) -> None:
+    """The CLI can write validation output outside the repository."""
+    out_dir = tmp_path / "issue3501-plan"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/benchmark/build_issue3501_safety_wrapper_factorial_preregistration.py",
+            "--config",
+            str(CONFIG_PATH),
+            "--out",
+            str(out_dir),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "pair_check.complete=True" in completed.stdout
+    assert (out_dir / "issue_3501_safety_wrapper_factorial_preregistration_plan.json").is_file()
 
 
 def test_config_rejects_transient_queue_routing_state() -> None:

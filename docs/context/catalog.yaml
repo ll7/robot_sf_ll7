@@ -2899,3 +2899,23 @@ entries:
     freshness: evidence
     area: benchmark_evidence
     legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_4245_offline_pretrain_finetune_smoke/README.md
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_4245_offline_pretrain_finetune_smoke/pretrain_manifest_summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_4245_offline_pretrain_finetune_smoke/finetune_manifest_summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_4245_offline_pretrain_finetune_smoke/provenance_chain.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_4245_offline_pretrain_finetune_smoke/smoke_report.md
+    status: evidence
+    freshness: evidence
+    area: learned_policy

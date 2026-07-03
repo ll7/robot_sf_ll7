@@ -19,7 +19,11 @@ from robot_sf.benchmark.topology_gate_paired_preregistration import (
     write_readiness_packet,
 )
 
-CONFIG_PATH = Path("configs/benchmarks/issue_3465_topology_gate_paired.yaml")
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+CONFIG_PATH = _REPO_ROOT / "configs" / "benchmarks" / "issue_3465_topology_gate_paired.yaml"
+_READINESS_SCRIPT = (
+    _REPO_ROOT / "scripts" / "benchmark" / "build_issue3465_topology_gate_paired_readiness.py"
+)
 
 
 def _config() -> dict[str, object]:
@@ -122,7 +126,7 @@ def test_cli_accepts_output_directory_outside_repo(tmp_path: Path) -> None:
     completed = subprocess.run(
         [
             sys.executable,
-            "scripts/benchmark/build_issue3465_topology_gate_paired_readiness.py",
+            str(_READINESS_SCRIPT),
             "--config",
             str(CONFIG_PATH),
             "--out",

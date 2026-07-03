@@ -3,8 +3,30 @@
     "body": "Issue #4206 cannot produce mechanism-level F-C4(ii) policy-structure conclusions until\nh600 episode rows or sidecars provide mechanism fields using\nmechanism_schema_version=failure_mechanism_taxonomy.v1, mechanism_label,\nmechanism_confidence, mechanism_evidence_mode, and mechanism_evidence_uri.\n",
     "title": "Add trace-verified failure-mechanism labels to h600 episode exports for F-C4(ii)"
   },
-  "generated_at": "2026-07-03T00:00:00Z",
+  "generated_at": "2026-07-03T13:18:37+00:00",
   "geometry_bucket_substitution_rejected": true,
+  "input_provenance": {
+    "config": {
+      "exists": true,
+      "path": "configs/analysis/issue_4206_policy_structure_mechanism_crosscut.yaml"
+    },
+    "confirm_h600_13268": {
+      "root": "output/issue3810-h600-longhorizon-confirm-run/13268",
+      "root_exists": false,
+      "seed_episode_rows": "output/issue3810-h600-longhorizon-confirm-run/13268/reports/seed_episode_rows.csv",
+      "seed_episode_rows_exists": false
+    },
+    "continuity_h500_job13175": {
+      "packet": "docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/packet.json",
+      "packet_exists": true
+    },
+    "extended_h600_13273": {
+      "root": "output/issue3810-h600-extroster-run/13273",
+      "root_exists": false,
+      "seed_episode_rows": "output/issue3810-h600-extroster-run/13273/reports/seed_episode_rows.csv",
+      "seed_episode_rows_exists": false
+    }
+  },
   "issue": 4206,
   "loaded_row_count": 0,
   "missing_row_count": 2,

@@ -21,6 +21,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   isolation, weighted-sum definition, fail-closed validation, and vectorized-vs-scalar TTC equivalence
   on a deterministic bottleneck fixture). Diagnostic/prototype only: no default model change, no
   calibrated-realism claim; simulator per-pair force wiring and benchmark evidence remain follow-up.
+* Added a **reproducible SocNavBench custom-map traversible generator** (#4291):
+  `scripts/tools/generate_socnavbench_traversible.py` builds `traversibles/<MAP>/data.pkl` from a
+  staged per-map mesh using SocNavBench's own renderer, writing the derived artifact **into the data
+  root** (never git) and printing its SHA-256 for the external-data registry pin. Input validation
+  is fail-closed and CI-safe: `--dry-run` and the skip-if-absent path use only the standard library
+  plus the shared external-data path resolver (reusing the `socnavbench-s3dis-eth` registry id), so
+  they run without SocNavBench's heavy mesh dependencies; a missing mesh exits `2` with an actionable
+  message naming the expected path. The build is idempotent (`--force` to rebuild). This closes the
+  last generation gap from #1498 and produces the `eth_traversible_pickle` input that
+  `validate_socnav_map_batch.py --preflight` reports missing, unblocking ETH map conversion (#1134).
+  Docs: new section 7 in `docs/socnav_assets_setup.md`. No generated artifact is committed and no
+  benchmark claim is made.
 * Added a **pedestrian uncertainty-envelope abstraction** for conservative obstacle clearance
   (#4141): new `robot_sf/nav/uncertainty_envelope.py` defines `PedestrianUncertaintyEnvelope`, a
   `linear_inflation_policy(alpha, dt)` factory, an `effective_pedestrian_radius(...)` planner

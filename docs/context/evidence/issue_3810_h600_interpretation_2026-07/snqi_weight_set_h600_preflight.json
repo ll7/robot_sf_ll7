@@ -1,0 +1,59 @@
+{
+  "claim_boundary": "Diagnostic per-weight-set ranking over retained h600 artifacts only. Does not decide canonical Social Navigation Quality Index (SNQI) weights, does not edit dissertation or paper claims, and inherits the h600 three-seed caveat.\n",
+  "config": {
+    "path": "configs/analysis/issue_4239_h600_snqi_weight_set_ranking.yaml",
+    "sha256": "ceaadfd8ff15cfcf11596e3034b5de0ffd3fd7e452c4531c692a90111ffddaaf"
+  },
+  "generated_at": "2026-07-03T11:22:52Z",
+  "issue": 4239,
+  "issues": [
+    {
+      "code": "blocked_missing_source_files",
+      "job_id": "13268",
+      "path": "output/issue3810-h600-longhorizon-confirm-run/13268/reports/seed_episode_rows.csv",
+      "run_label": "confirm",
+      "status": "missing"
+    },
+    {
+      "code": "blocked_missing_source_files",
+      "job_id": "13273",
+      "path": "output/issue3810-h600-extroster-run/13273/reports/seed_episode_rows.csv",
+      "run_label": "extended_roster",
+      "status": "missing"
+    }
+  ],
+  "runs": [
+    {
+      "job_id": "13268",
+      "run_label": "confirm",
+      "seed_episode_rows": "output/issue3810-h600-longhorizon-confirm-run/13268/reports/seed_episode_rows.csv",
+      "seed_episode_rows_exists": false
+    },
+    {
+      "job_id": "13273",
+      "run_label": "extended_roster",
+      "seed_episode_rows": "output/issue3810-h600-extroster-run/13273/reports/seed_episode_rows.csv",
+      "seed_episode_rows_exists": false
+    }
+  ],
+  "schema_version": "h600-snqi-weight-set-ranking.v1.preflight",
+  "source_files_missing": [
+    {
+      "job_id": "13268",
+      "path": "output/issue3810-h600-longhorizon-confirm-run/13268/reports/seed_episode_rows.csv",
+      "run_label": "confirm",
+      "status": "missing"
+    },
+    {
+      "job_id": "13273",
+      "path": "output/issue3810-h600-extroster-run/13273/reports/seed_episode_rows.csv",
+      "run_label": "extended_roster",
+      "status": "missing"
+    }
+  ],
+  "source_manifest": {
+    "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-build-h600-snqi-weight-set-ranking-packet/docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json",
+    "sha256": "c86255f44eb119d28ffc497354c96c8af0a291cb8420676a22dd4f6b3da2ea8d"
+  },
+  "status": "blocked_missing_source_files"
+}

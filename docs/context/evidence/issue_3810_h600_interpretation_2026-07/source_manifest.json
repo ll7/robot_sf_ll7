@@ -19,9 +19,18 @@
     "planner_metric_summary.md",
     "snqi_recalibration_bundle.json",
     "snqi_recalibration_report.md",
-    "source_manifest.json"
+    "source_manifest.json",
+    "snqi_weight_set_h600_preflight.json"
   ],
   "h500_s20_reports": "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/reports",
+  "issue_4239_weight_set_packet": {
+    "artifacts": [
+      "docs/context/evidence/issue_3810_h600_interpretation_2026-07/snqi_weight_set_h600_preflight.json"
+    ],
+    "claim_boundary": "diagnostic-only; no canonical weight decision or claim edit",
+    "schema_version": "h600-snqi-weight-set-ranking.v1",
+    "status": "blocked_missing_source_files"
+  },
   "issue_4242_h600_sidecars": {
     "backfill_manifest": "h600_mechanism_exposure_backfill_manifest.json",
     "backfill_report": "h600_mechanism_exposure_backfill_report.md",

@@ -1,0 +1,35 @@
+{
+  "schema_version": "issue_3556_seed_sufficiency_handoff_check.v1",
+  "issue": 3556,
+  "evidence_status": "blocked",
+  "decision_label": "blocked_missing_retained_campaign_outputs",
+  "claim_boundary": "Analyzer handoff check only; no seed-sufficiency evidence is promoted because retained campaign outputs were not available at the exported root.",
+  "command": [
+    "uv",
+    "run",
+    "python",
+    "scripts/tools/analyze_seed_sufficiency.py",
+    "--campaign-output-root",
+    "output/issue_3556_belief_mode_campaign",
+    "--campaign-id",
+    "issue_3556",
+    "--output-dir",
+    "output/issue_3556_seed_sufficiency"
+  ],
+  "exit_code": 1,
+  "failure": {
+    "type": "FileNotFoundError",
+    "message": "Campaign output root does not exist: output/issue_3556_belief_mode_campaign"
+  },
+  "required_inputs": [
+    "output/issue_3556_belief_mode_campaign/**/reports/seed_variability_by_scenario.json",
+    "output/issue_3556_belief_mode_campaign/**/reports/seed_episode_rows.csv"
+  ],
+  "forbidden_actions_confirmed": {
+    "full_benchmark_campaign_run": false,
+    "slurm_or_gpu_submission": false,
+    "belief_mode_semantic_change": false,
+    "paper_or_dissertation_claim_edit": false
+  },
+  "next_empirical_action": "Restore or point to the retained issue #3556 campaign report root, then rerun the same analyze_seed_sufficiency.py handoff command."
+}

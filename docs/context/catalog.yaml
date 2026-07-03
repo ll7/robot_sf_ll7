@@ -3007,3 +3007,11 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3275_rerun_closure_2026-07-03/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3275_rerun_closure_2026-07-03/real_archive_closure_packet.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

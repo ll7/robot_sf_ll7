@@ -9,18 +9,25 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from robot_sf.benchmark.aggregate import read_jsonl
+from robot_sf.benchmark.camera_ready._artifacts import _escape_markdown_cell
 from robot_sf.benchmark.camera_ready._summaries import _extract_amv_taxonomy
 from robot_sf.benchmark.camera_ready_campaign_config import _AMV_DIMENSIONS, PlannerSpec
-from robot_sf.benchmark.fallback_policy import summarize_benchmark_availability
+from robot_sf.benchmark.fallback_policy import (
+    classify_planner_row_status,
+    summarize_benchmark_availability,
+)
 from robot_sf.benchmark.synthetic_actuation import (
     SyntheticActuationProfile,
     not_available_saturation_metrics,
 )
 from robot_sf.benchmark.utils import episode_metric_value
 from robot_sf.common.artifact_paths import get_repository_root
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _REPORT_METRICS: tuple[str, ...] = (
     "success",
@@ -554,3 +561,255 @@ def _strict_vs_fallback_comparisons(rows: list[dict[str, Any]]) -> list[str]:
             f"fallback success={fallback_row.get('success_mean')}"
         )
     return lines
+
+
+def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
+    path: Path, payload: dict[str, Any]
+) -> None:
+    """Write a human-readable campaign report in Markdown."""
+    campaign = payload.get("campaign", {})
+    rows = payload.get("planner_rows", [])
+    warnings = payload.get("warnings", [])
+    accepted_unavailable_rows = [
+        row
+        for row in rows
+        if classify_planner_row_status(str(row.get("status", ""))) == "accepted_unavailable"
+    ]
+    unexpected_failed_rows = [
+        row
+        for row in rows
+        if classify_planner_row_status(str(row.get("status", ""))) == "unexpected_failure"
+    ]
+
+    lines = [
+        "# Camera-Ready Benchmark Campaign Report",
+        "",
+        f"- Campaign ID: `{campaign.get('campaign_id', 'unknown')}`",
+        f"- Name: `{campaign.get('name', 'unknown')}`",
+        f"- Created (UTC): `{campaign.get('created_at_utc', 'unknown')}`",
+        f"- Scenario matrix: `{campaign.get('scenario_matrix', 'unknown')}`",
+        f"- Scenario matrix hash: `{campaign.get('scenario_matrix_hash', 'unknown')}`",
+        f"- Git commit: `{campaign.get('git_hash', 'unknown')}`",
+        f"- Runtime sec: `{campaign.get('runtime_sec', 0.0)}`",
+        f"- Episodes/sec: `{campaign.get('episodes_per_second', 0.0)}`",
+        f"- Campaign status: `{campaign.get('status', 'unknown')}`",
+        f"- Campaign execution status: `{campaign.get('campaign_execution_status', 'unknown')}`",
+        f"- Evidence status: `{campaign.get('evidence_status', 'unknown')}`",
+        f"- Status reason: `{campaign.get('status_reason', 'unknown')}`",
+        f"- Benchmark success: `{campaign.get('benchmark_success', False)}`",
+        f"- Successful rows: `{campaign.get('successful_runs', 0)}` / `{campaign.get('total_runs', 0)}`",
+        f"- Accepted unavailable/excluded rows: `{campaign.get('accepted_unavailable_runs', 0)}`",
+        f"- Unexpected failed rows: `{campaign.get('unexpected_failed_runs', 0)}`",
+        (f"- Row status summary: `{campaign.get('row_status_summary', {})}`"),
+        f"- Interpretation profile: `{campaign.get('paper_interpretation_profile', 'unknown')}`",
+        f"- Command: `{campaign.get('invoked_command', 'unknown')}`",
+        "",
+        "## Planner Summary",
+        "",
+    ]
+
+    if rows:
+        lines.extend(
+            [
+                "| planner | algo | planner group | kinematics | status | started (UTC) | runtime (s) | episodes | eps/s | success | collisions | snqi | proj_rate | infeasible_rate |",
+                "|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+            ],
+        )
+        for row in rows:
+            lines.append(
+                "| "
+                f"{_escape_markdown_cell(row.get('planner_key'))} | "
+                f"{_escape_markdown_cell(row.get('algo'))} | "
+                f"{_escape_markdown_cell(row.get('planner_group'))} | "
+                f"{_escape_markdown_cell(row.get('kinematics'))} | "
+                f"{_escape_markdown_cell(row.get('status'))} | "
+                f"{_escape_markdown_cell(row.get('started_at_utc'))} | "
+                f"{_escape_markdown_cell(row.get('runtime_sec'))} | "
+                f"{_escape_markdown_cell(row.get('episodes'))} | "
+                f"{_escape_markdown_cell(row.get('episodes_per_second'))} | "
+                f"{_escape_markdown_cell(row.get('success_mean'))} | "
+                f"{_escape_markdown_cell(row.get('collisions_mean'))} | "
+                f"{_escape_markdown_cell(row.get('snqi_mean'))} | "
+                f"{_escape_markdown_cell(row.get('projection_rate'))} | "
+                f"{_escape_markdown_cell(row.get('infeasible_rate'))} |",
+            )
+    else:
+        lines.append("No planner rows were produced.")
+    fallback_rows = [
+        row for row in rows if str(row.get("readiness_status", "")) in {"fallback", "degraded"}
+    ]
+    lines.extend(["", "## Readiness & Degraded/Fallback Status", ""])
+    if rows:
+        lines.append(
+            "| planner | planner group | execution mode | execution detail | planner cmd | benchmark cmd | projection policy | readiness status | tier | preflight | learned contract | run status |"
+        )
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
+        for row in rows:
+            lines.append(
+                "| "
+                f"{_escape_markdown_cell(row.get('planner_key'))} | "
+                f"{_escape_markdown_cell(row.get('planner_group'))} | "
+                f"{_escape_markdown_cell(row.get('execution_mode'))} | "
+                f"{_escape_markdown_cell(row.get('execution_detail'))} | "
+                f"{_escape_markdown_cell(row.get('planner_command_space'))} | "
+                f"{_escape_markdown_cell(row.get('benchmark_command_space'))} | "
+                f"{_escape_markdown_cell(row.get('projection_policy'))} | "
+                f"{_escape_markdown_cell(row.get('readiness_status'))} | "
+                f"{_escape_markdown_cell(row.get('readiness_tier'))} | "
+                f"{_escape_markdown_cell(row.get('preflight_status'))} | "
+                f"{_escape_markdown_cell(row.get('learned_policy_contract_status'))} | "
+                f"{_escape_markdown_cell(row.get('status'))} |"
+            )
+    if fallback_rows:
+        lines.append("")
+        lines.append("Planners in fallback/degraded mode:")
+        for row in fallback_rows:
+            lines.append(
+                f"- `{row.get('planner_key')}`: readiness={row.get('readiness_status')}, "
+                f"preflight={row.get('preflight_status')}, tier={row.get('readiness_tier')}"
+            )
+    else:
+        lines.append("")
+        lines.append("- No fallback/degraded planners detected.")
+
+    lines.extend(["", "## SocNav Strict-vs-Fallback Disclosure", ""])
+    if rows:
+        lines.append(
+            "| planner | algo | planner group | prereq policy | preflight status | readiness status |"
+        )
+        lines.append("|---|---|---|---|---|---|")
+        for row in rows:
+            lines.append(
+                "| "
+                f"{_escape_markdown_cell(row.get('planner_key'))} | "
+                f"{_escape_markdown_cell(row.get('algo'))} | "
+                f"{_escape_markdown_cell(row.get('planner_group'))} | "
+                f"{_escape_markdown_cell(row.get('socnav_prereq_policy'))} | "
+                f"{_escape_markdown_cell(row.get('preflight_status'))} | "
+                f"{_escape_markdown_cell(row.get('readiness_status'))} |"
+            )
+        comparisons = _strict_vs_fallback_comparisons(rows)
+        if comparisons:
+            lines.append("")
+            lines.append("Strict-vs-fallback comparisons (where both modes are present):")
+            for line in comparisons:
+                lines.append(f"- {line}")
+        else:
+            lines.append("")
+            lines.append(
+                "- No within-campaign strict-vs-fallback pair available for direct comparison."
+            )
+
+    scenario_path = (payload.get("artifacts") or {}).get("scenario_breakdown_csv")
+    family_path = (payload.get("artifacts") or {}).get("scenario_family_breakdown_csv")
+    if isinstance(scenario_path, str) or isinstance(family_path, str):
+        lines.extend(["", "## Scenario Diagnostics", ""])
+        if isinstance(scenario_path, str):
+            lines.append(f"- Per-scenario breakdown: `{scenario_path}`")
+        if isinstance(family_path, str):
+            lines.append(f"- Per-family breakdown: `{family_path}`")
+    parity_path = (payload.get("artifacts") or {}).get("kinematics_parity_csv")
+    skipped_path = (payload.get("artifacts") or {}).get("kinematics_skipped_combinations_csv")
+    if isinstance(parity_path, str) or isinstance(skipped_path, str):
+        lines.extend(["", "## Kinematics Parity", ""])
+        if isinstance(parity_path, str):
+            lines.append(f"- Planner x kinematics parity table: `{parity_path}`")
+        if isinstance(skipped_path, str):
+            lines.append(f"- Skipped planner/kinematics combinations: `{skipped_path}`")
+    amv_json = (payload.get("artifacts") or {}).get("amv_coverage_json")
+    amv_md = (payload.get("artifacts") or {}).get("amv_coverage_md")
+    if isinstance(amv_json, str) or isinstance(amv_md, str):
+        lines.extend(["", "## AMV Coverage Contract", ""])
+        if isinstance(amv_json, str):
+            lines.append(f"- Coverage JSON: `{amv_json}`")
+        if isinstance(amv_md, str):
+            lines.append(f"- Coverage Markdown: `{amv_md}`")
+        lines.append(
+            f"- Coverage status: `{campaign.get('amv_coverage_status', 'unknown')}` "
+            f"(enforcement: `{campaign.get('amv_coverage_enforcement', 'warn')}`)"
+        )
+    comparability_json = (payload.get("artifacts") or {}).get("comparability_json")
+    comparability_md = (payload.get("artifacts") or {}).get("comparability_md")
+    if isinstance(comparability_json, str) or isinstance(comparability_md, str):
+        lines.extend(["", "## Alyassi Comparability", ""])
+        if isinstance(comparability_json, str):
+            lines.append(f"- Comparability JSON: `{comparability_json}`")
+        if isinstance(comparability_md, str):
+            lines.append(f"- Comparability Markdown: `{comparability_md}`")
+        lines.append(
+            f"- Mapping version: `{campaign.get('comparability_mapping_version', 'unknown')}`"
+        )
+    snqi_diag_json = (payload.get("artifacts") or {}).get("snqi_diagnostics_json")
+    snqi_diag_md = (payload.get("artifacts") or {}).get("snqi_diagnostics_md")
+    snqi_sensitivity = (payload.get("artifacts") or {}).get("snqi_sensitivity_csv")
+    if isinstance(snqi_diag_json, str) or isinstance(snqi_diag_md, str):
+        lines.extend(["", "## SNQI Contract", ""])
+        lines.append(f"- Contract status: `{campaign.get('snqi_contract_status', 'unknown')}`")
+        lines.append(
+            f"- Rank alignment (Spearman): `{campaign.get('snqi_contract_rank_alignment_spearman', 'nan')}`"
+        )
+        lines.append(
+            f"- Outcome separation: `{campaign.get('snqi_contract_outcome_separation', 'nan')}`"
+        )
+        lines.append(
+            f"- Positioning recommendation: `{campaign.get('snqi_positioning_recommendation', 'unknown')}`"
+        )
+        lines.append(f"- Weights version: `{campaign.get('snqi_weights_version', 'unknown')}`")
+        lines.append(f"- Baseline version: `{campaign.get('snqi_baseline_version', 'unknown')}`")
+        if isinstance(snqi_diag_json, str):
+            lines.append(f"- Diagnostics JSON: `{snqi_diag_json}`")
+        if isinstance(snqi_diag_md, str):
+            lines.append(f"- Diagnostics Markdown: `{snqi_diag_md}`")
+        if isinstance(snqi_sensitivity, str):
+            lines.append(f"- Sensitivity CSV: `{snqi_sensitivity}`")
+
+    lines.extend(["", "## Accepted Unavailable/Excluded Planners", ""])
+    if accepted_unavailable_rows:
+        lines.append("| planner | status | availability reason |")
+        lines.append("|---|---|---|")
+        for row in accepted_unavailable_rows:
+            lines.append(
+                "| "
+                f"{_escape_markdown_cell(row.get('planner_key'))} | "
+                f"{_escape_markdown_cell(row.get('status'))} | "
+                f"{_escape_markdown_cell(row.get('availability_reason') or row.get('most_likely_failure_reason') or 'unspecified')} |"
+            )
+    else:
+        lines.append("- No accepted unavailable/excluded planners.")
+
+    lines.extend(["", "## Unexpected Failed/Partial Planners", ""])
+    if unexpected_failed_rows:
+        lines.append("| planner | status | most likely reason |")
+        lines.append("|---|---|---|")
+        for row in unexpected_failed_rows:
+            lines.append(
+                "| "
+                f"{_escape_markdown_cell(row.get('planner_key'))} | "
+                f"{_escape_markdown_cell(row.get('status'))} | "
+                f"{_escape_markdown_cell(row.get('most_likely_failure_reason') or row.get('availability_reason') or 'unspecified')} |"
+            )
+    else:
+        lines.append("- No unexpected failed/partial planners.")
+
+    lines.extend(["", "## Campaign Warnings", ""])
+    if warnings:
+        for warning in warnings:
+            lines.append(f"- {warning}")
+    else:
+        lines.append("- No campaign-level warnings.")
+
+    publication = payload.get("publication_bundle")
+    if isinstance(publication, dict):
+        lines.extend(
+            [
+                "",
+                "## Publication Bundle",
+                "",
+                f"- Bundle dir: `{publication.get('bundle_dir', 'unknown')}`",
+                f"- Archive: `{publication.get('archive_path', 'unknown')}`",
+                f"- Manifest: `{publication.get('manifest_path', 'unknown')}`",
+                f"- Checksums: `{publication.get('checksums_path', 'unknown')}`",
+            ],
+        )
+
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")

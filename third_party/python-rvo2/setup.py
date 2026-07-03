@@ -1,6 +1,12 @@
+from pathlib import Path
+import sys
+
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext as _build_ext
 from Cython.Build import cythonize
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _rvo2_cmake_build import configure_and_build_rvo2
 
 
 def _macos_sdkroot() -> str | None:
@@ -52,18 +58,8 @@ class BuildRvo2Ext(_build_ext):
 
     def run(self):
         # Build RVO2
-        import os
-        import os.path
-        import subprocess
-
         _ensure_macos_sdk()
-        build_dir = os.path.abspath('build/RVO2')
-        if not os.path.exists(build_dir):
-            os.makedirs(build_dir)
-        if not os.path.exists(os.path.join(build_dir, 'CMakeCache.txt')):
-            subprocess.check_call(['cmake', '../..', '-DCMAKE_CXX_FLAGS=-fPIC'],
-                                  cwd=build_dir)
-        subprocess.check_call(['cmake', '--build', '.'], cwd=build_dir)
+        configure_and_build_rvo2(Path("build/RVO2"))
 
         _build_ext.run(self)
 

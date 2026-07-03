@@ -12,6 +12,30 @@ if TYPE_CHECKING:
 
 INTERACTION_EXPOSURE_SCHEMA_VERSION = "interaction_exposure.v1"
 
+# Canonical claim-bearing interaction-exposure fields. Downstream consumers (for example the
+# issue #3813 sustained-flow revival gate) must import this tuple instead of re-declaring the
+# field names, so the required-field contract has a single owner.
+INTERACTION_EXPOSURE_REQUIRED_FIELDS: tuple[str, ...] = (
+    "interaction_exposure_share",
+    "robot_motion_share_before_first_clearance",
+    "first_clearance_step",
+    "low_exposure_success",
+)
+
+# Status string emitted when the fields were successfully computed from retained trajectories.
+INTERACTION_EXPOSURE_COMPUTED_STATUS = "computed"
+
+# Prefix marking a status where the fields were retained/attempted but could not be derived from
+# the episode rows (for example a missing trace or no pedestrians present). Consumers use this to
+# distinguish "field never retained" from "field retained but not derivable".
+NOT_DERIVABLE_STATUS_PREFIX = "not_derivable_"
+
+
+def is_not_derivable_status(status: object) -> bool:
+    """Return whether ``status`` marks a retained-but-not-derivable exposure record."""
+
+    return isinstance(status, str) and status.strip().startswith(NOT_DERIVABLE_STATUS_PREFIX)
+
 
 class InteractionExposureError(ValueError):
     """Raised when interaction-exposure inputs are malformed."""

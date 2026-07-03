@@ -13,6 +13,7 @@ from robot_sf.benchmark.rl_trajectory_dataset import (
     compute_return_to_go,
     write_rl_trajectory_dataset,
 )
+from robot_sf.training.hybrid_replay_buffer import HybridReplayBuffer
 from robot_sf.training.offline_online_rl import (
     load_offline_transition_batch,
     seed_sb3_replay_buffer,
@@ -46,6 +47,13 @@ def test_load_train_split_derives_next_observations_and_keeps_terminal(tmp_path:
     assert np.allclose(batch.observations[0], np.array([0.0, 0.5], dtype=np.float32))
     assert np.allclose(batch.next_observations[1], np.array([2.0, 2.5], dtype=np.float32))
     assert np.allclose(batch.next_observations[2], batch.observations[2])
+    sample = HybridReplayBuffer(
+        offline_batch=batch,
+        offline_sample_fraction=1.0,
+        seed=7,
+    ).sample(batch.size)
+    assert True in sample["dones"].tolist()
+    assert sample["truncated"].tolist() == [False, False, False]
 
 
 def test_load_rejects_empty_train_split(tmp_path: Path) -> None:

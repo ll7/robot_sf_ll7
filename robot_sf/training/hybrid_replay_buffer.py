@@ -42,6 +42,7 @@ class HybridReplayBuffer:
         self._online_actions: list[np.ndarray] = []
         self._online_rewards: list[float] = []
         self._online_dones: list[bool] = []
+        self._online_truncated: list[bool] = []
 
     @property
     def stats(self) -> HybridReplayStats:
@@ -60,6 +61,7 @@ class HybridReplayBuffer:
         action: np.ndarray,
         reward: float,
         done: bool,
+        truncated: bool = False,
     ) -> None:
         """Append one online transition to the online partition."""
 
@@ -68,6 +70,7 @@ class HybridReplayBuffer:
         self._online_actions.append(np.asarray(action, dtype=np.float32))
         self._online_rewards.append(float(reward))
         self._online_dones.append(bool(done))
+        self._online_truncated.append(bool(truncated))
 
     def sample(self, batch_size: int) -> dict[str, object]:
         """Sample a mixed batch and label transition source for diagnostics.
@@ -93,30 +96,40 @@ class HybridReplayBuffer:
             offline_count = 0
             online_count = batch_size
 
+        self._require_partition_capacity(
+            offline_count=offline_count,
+            offline_available=offline_available,
+            online_count=online_count,
+            online_available=online_available,
+        )
+
         observations: list[object] = []
         next_observations: list[object] = []
         actions: list[np.ndarray] = []
         rewards: list[float] = []
         dones: list[bool] = []
+        truncated: list[bool] = []
         sources: list[str] = []
 
         if offline_count:
             assert self._offline is not None
-            for index in self._rng.choice(offline_available, size=offline_count, replace=True):
+            for index in self._rng.choice(offline_available, size=offline_count, replace=False):
                 observations.append(self._offline.observations[int(index)])
                 next_observations.append(self._offline.next_observations[int(index)])
                 actions.append(self._offline.actions[int(index)])
                 rewards.append(float(self._offline.rewards[int(index)]))
                 dones.append(bool(self._offline.dones[int(index)]))
+                truncated.append(bool(self._offline.truncated[int(index)]))
                 sources.append("offline")
 
         if online_count:
-            for index in self._rng.choice(online_available, size=online_count, replace=True):
+            for index in self._rng.choice(online_available, size=online_count, replace=False):
                 observations.append(self._online_observations[int(index)])
                 next_observations.append(self._online_next_observations[int(index)])
                 actions.append(self._online_actions[int(index)])
                 rewards.append(self._online_rewards[int(index)])
                 dones.append(self._online_dones[int(index)])
+                truncated.append(self._online_truncated[int(index)])
                 sources.append("online")
 
         return {
@@ -125,5 +138,27 @@ class HybridReplayBuffer:
             "actions": np.stack(actions).astype(np.float32, copy=False),
             "rewards": np.asarray(rewards, dtype=np.float32),
             "dones": np.asarray(dones, dtype=bool),
+            "truncated": np.asarray(truncated, dtype=bool),
             "sources": tuple(sources),
         }
+
+    @staticmethod
+    def _require_partition_capacity(
+        *,
+        offline_count: int,
+        offline_available: int,
+        online_count: int,
+        online_available: int,
+    ) -> None:
+        """Fail before sampling when either partition cannot provide requested rows."""
+
+        if offline_count > offline_available:
+            raise ValueError(
+                "offline replay partition has "
+                f"{offline_available} transitions; cannot sample {offline_count}"
+            )
+        if online_count > online_available:
+            raise ValueError(
+                "online replay partition has "
+                f"{online_available} transitions; cannot sample {online_count}"
+            )

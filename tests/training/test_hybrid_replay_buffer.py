@@ -10,7 +10,7 @@ from robot_sf.training.offline_online_rl import OfflineDatasetPreflight, Offline
 
 
 def test_offline_only_sampling_works_before_online_data_exists() -> None:
-    """Offline replay can seed updates before online transitions arrive."""
+    """Offline replay updates can seed before online transitions arrive."""
 
     buffer = HybridReplayBuffer(offline_batch=_batch(4), offline_sample_fraction=1.0, seed=7)
 
@@ -20,19 +20,33 @@ def test_offline_only_sampling_works_before_online_data_exists() -> None:
     assert sample["sources"] == ("offline", "offline", "offline")
 
 
-def test_offline_only_sampling_with_replacement_keeps_requested_batch_size() -> None:
-    """Replacement sampling should not cap batches at available offline rows."""
+def test_offline_only_sampling_fails_closed_when_partition_too_small() -> None:
+    """Sampler never silently under-fills or replaces tiny offline partitions."""
 
     buffer = HybridReplayBuffer(offline_batch=_batch(1), offline_sample_fraction=1.0, seed=7)
 
-    sample = buffer.sample(4)
+    with pytest.raises(ValueError, match="offline replay partition"):
+        buffer.sample(4)
 
-    assert sample["actions"].shape == (4, 2)
-    assert sample["sources"] == ("offline", "offline", "offline", "offline")
+
+def test_terminal_truncated_offline_transition_survives_hybrid_sample() -> None:
+    """Final outcome flags remain present through the hybrid replay sampler."""
+
+    buffer = HybridReplayBuffer(
+        offline_batch=_batch(1, dones=(True,), truncated=(True,)),
+        offline_sample_fraction=1.0,
+        seed=7,
+    )
+
+    sample = buffer.sample(1)
+
+    assert sample["sources"] == ("offline",)
+    assert sample["dones"].tolist() == [True]
+    assert sample["truncated"].tolist() == [True]
 
 
 def test_mixed_sampling_respects_offline_fraction() -> None:
-    """Sampler draws from both partitions under a mixed fraction."""
+    """Sampler draws both partitions according to the configured fraction."""
 
     buffer = HybridReplayBuffer(offline_batch=_batch(10), offline_sample_fraction=0.5, seed=7)
     for index in range(10):
@@ -48,8 +62,18 @@ def test_mixed_sampling_respects_offline_fraction() -> None:
 
     assert sample["sources"].count("offline") == 5
     assert sample["sources"].count("online") == 5
+    assert sample["truncated"].tolist() == [False] * 10
     assert buffer.stats.offline_count == 10
     assert buffer.stats.online_count == 10
+
+
+def test_empty_replay_fails_closed() -> None:
+    """Cannot sample an empty hybrid replay buffer."""
+
+    buffer = HybridReplayBuffer(seed=7)
+
+    with pytest.raises(ValueError, match="empty"):
+        buffer.sample(1)
 
 
 def test_invalid_offline_fraction_fails_closed() -> None:
@@ -59,7 +83,12 @@ def test_invalid_offline_fraction_fails_closed() -> None:
         HybridReplayBuffer(offline_sample_fraction=1.5)
 
 
-def _batch(size: int) -> OfflineTransitionBatch:
+def _batch(
+    size: int,
+    *,
+    dones: tuple[bool, ...] | None = None,
+    truncated: tuple[bool, ...] | None = None,
+) -> OfflineTransitionBatch:
     preflight = OfflineDatasetPreflight(
         dataset_path=__file__,
         dataset_sha256="0" * 64,
@@ -76,8 +105,8 @@ def _batch(size: int) -> OfflineTransitionBatch:
         next_observations=tuple(np.array([index + 1], dtype=np.float32) for index in range(size)),
         actions=np.zeros((size, 2), dtype=np.float32),
         rewards=np.zeros(size, dtype=np.float32),
-        dones=np.zeros(size, dtype=bool),
-        truncated=np.zeros(size, dtype=bool),
+        dones=np.asarray(dones if dones is not None else (False,) * size, dtype=bool),
+        truncated=np.asarray(truncated if truncated is not None else (False,) * size, dtype=bool),
         episode_ids=tuple(f"ep-{index}" for index in range(size)),
         scenario_ids=tuple("classic" for _ in range(size)),
         seeds=np.zeros(size, dtype=int),

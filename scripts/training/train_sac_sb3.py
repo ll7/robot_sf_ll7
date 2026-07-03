@@ -343,6 +343,8 @@ def _load_offline_online_config(
     manifest_path = _resolve_config_path(raw_value.get("manifest_path"), config_dir=config_dir)
     if enabled and dataset_path is None:
         raise ValueError("offline_online.dataset_path is required when enabled")
+    if enabled and manifest_path is None:
+        raise ValueError("offline_online.manifest_path is required when enabled")
 
     min_transitions = int(raw_value.get("min_transitions", 1))
     if min_transitions < 1:

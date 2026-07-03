@@ -590,8 +590,11 @@ def _write_pre_run_evidence_packet(
     checksum_entries = []
     for path in sorted(p for p in evidence_dir.iterdir() if p.name != "SHA256SUMS"):
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        checksum_entries.append(f"{digest}  {path.name}")
-    _write_text(evidence_dir / "SHA256SUMS", "\n".join(checksum_entries))
+        # Use repo-relative paths so the integrity checker resolves each entry to
+        # this evidence packet rather than colliding with a same-named repo-root
+        # file (e.g. a bare "README.md" would resolve to the top-level README).
+        checksum_entries.append(f"{digest}  {_repo_relative(path)}")
+    _write_text(evidence_dir / "SHA256SUMS", "\n".join(checksum_entries) + "\n")
     return {
         "path": _repo_relative(evidence_dir),
         "files": sorted(path.name for path in evidence_dir.iterdir()),

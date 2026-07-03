@@ -64,11 +64,42 @@ def _repo_root() -> Path:
 
 
 def _rel(path: Path) -> str:
+    """Return a repo-root-relative POSIX path, robust to worktree ``output/`` symlinks.
+
+    In a linked worktree, ``output/`` is a symlink into the main checkout, so
+    ``path.resolve()`` escapes the worktree root and ``relative_to(root)`` raises
+    ``ValueError`` -- the old fallback then leaked the absolute (username-bearing)
+    path into durable evidence. Try the un-resolved path against both the raw and
+    resolved repo roots first (this catches the symlink-escape case), then the
+    resolved path, before falling back to an absolute string.
+    """
     root = _repo_root()
-    try:
-        return path.resolve().relative_to(root).as_posix()
-    except ValueError:
-        return path.as_posix()
+    candidates = (
+        (path, root),
+        (path, root.resolve()),
+        (path.resolve(), root),
+        (path.resolve(), root.resolve()),
+    )
+    for candidate, base in candidates:
+        try:
+            return candidate.relative_to(base).as_posix()
+        except ValueError:
+            continue
+    return path.as_posix()
+
+
+def _rel_provenance(path: Path | None) -> dict[str, str | None]:
+    """Provenance block for ``path`` with a repo-relative ``path`` field.
+
+    ``input_file_provenance`` records ``str(path)`` verbatim; when the builder
+    passes ``_repo_root() / ...`` inputs that string is absolute and non-reproducible.
+    Relativize the ``path`` field through the hardened :func:`_rel` while preserving
+    the sha256 provenance.
+    """
+    provenance = dict(input_file_provenance(path))
+    if path is not None and provenance.get("path"):
+        provenance["path"] = _rel(path)
+    return provenance
 
 
 def _sha256(path: Path) -> str:
@@ -168,10 +199,17 @@ def _read_episode_jsonl_rows(run: dict[str, Any]) -> list[dict[str, Any]]:
     for path in run.get("episodes_jsonl_files") or []:
         planner = path.parent.name.split("__", maxsplit=1)[0]
         with path.open("r", encoding="utf-8") as handle:
-            for line in handle:
+            for line_number, line in enumerate(handle, start=1):
                 if not line.strip():
                     continue
-                record = json.loads(line)
+                # Attribute a truncated/corrupt episode line to its file and line
+                # number instead of surfacing a raw JSONDecodeError traceback.
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(
+                        f"malformed episodes JSONL {_rel(path)} (line {line_number}): {exc}"
+                    ) from exc
                 metrics = record.get("metrics") or {}
                 row = {key: metrics.get(key) for key in COMPARISON_METRICS}
                 row.update(
@@ -398,7 +436,9 @@ def _rank_tables(
                 {
                     "weight_set_id": weight_set["id"],
                     "weight_source_path": weight_set["path"] or "synthetic_uniform_1p0",
-                    "weight_sha256": weight_set["sha256"] or "",
+                    # Unify the "no hash" sentinel with weight_sets[].sha256 (null) for the
+                    # synthetic default_uniform_1p0 set; csv.DictWriter renders None as "".
+                    "weight_sha256": weight_set["sha256"],
                     "baseline_path": _rel(baseline_path),
                     "baseline_sha256": baseline_sha,
                     "planner_key": planner,
@@ -504,7 +544,10 @@ def _write_markdown_table(
         "|" + "|".join(["---"] * len(headers)) + "|",
     ]
     for row in rows:
-        lines.append("|" + "|".join(str(row.get(header, "")) for header in headers) + "|")
+        # Render None as an empty cell (matching csv.DictWriter) so the unified
+        # null sentinel does not surface as a literal "None" in the table.
+        cells = ["" if row.get(header) is None else str(row.get(header, "")) for header in headers]
+        lines.append("|" + "|".join(cells) + "|")
     lines.append("")
     path.write_text("\n".join(lines), encoding="utf-8")
 
@@ -528,8 +571,8 @@ def _preflight_report(
         "issue": 4239,
         "status": status,
         "claim_boundary": config["claim_boundary"],
-        "config": input_file_provenance(config_path),
-        "source_manifest": input_file_provenance(_repo_root() / config["source_manifest"]),
+        "config": _rel_provenance(config_path),
+        "source_manifest": _rel_provenance(_repo_root() / config["source_manifest"]),
         "source_files_missing": source_files_missing,
         "runs": [
             {
@@ -572,8 +615,8 @@ def _write_report(  # noqa: PLR0913
         "status": "ok",
         "claim_boundary": config["claim_boundary"],
         "three_seed_caveat": "h600 source artifacts retain three seeds per planner arm.",
-        "config": input_file_provenance(config_path),
-        "baseline": input_file_provenance(baseline_path),
+        "config": _rel_provenance(config_path),
+        "baseline": _rel_provenance(baseline_path),
         "preflight": preflight,
         "weight_sets": [
             {

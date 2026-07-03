@@ -10,109 +10,109 @@
   "runs": [
     {
       "episodes_jsonl_files": [
-        "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-longhorizon-confirm-run/13268/runs/goal__differential_drive/episodes.jsonl",
-        "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-longhorizon-confirm-run/13268/runs/orca__differential_drive/episodes.jsonl",
-        "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-longhorizon-confirm-run/13268/runs/ppo__differential_drive/episodes.jsonl",
-        "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-longhorizon-confirm-run/13268/runs/prediction_planner__differential_drive/episodes.jsonl",
-        "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-longhorizon-confirm-run/13268/runs/sacadrl__differential_drive/episodes.jsonl",
-        "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-longhorizon-confirm-run/13268/runs/social_force__differential_drive/episodes.jsonl",
-        "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-longhorizon-confirm-run/13268/runs/socnav_sampling__differential_drive/episodes.jsonl"
+        "output/issue3810-h600-longhorizon-confirm-run/13268/runs/goal__differential_drive/episodes.jsonl",
+        "output/issue3810-h600-longhorizon-confirm-run/13268/runs/orca__differential_drive/episodes.jsonl",
+        "output/issue3810-h600-longhorizon-confirm-run/13268/runs/ppo__differential_drive/episodes.jsonl",
+        "output/issue3810-h600-longhorizon-confirm-run/13268/runs/prediction_planner__differential_drive/episodes.jsonl",
+        "output/issue3810-h600-longhorizon-confirm-run/13268/runs/sacadrl__differential_drive/episodes.jsonl",
+        "output/issue3810-h600-longhorizon-confirm-run/13268/runs/social_force__differential_drive/episodes.jsonl",
+        "output/issue3810-h600-longhorizon-confirm-run/13268/runs/socnav_sampling__differential_drive/episodes.jsonl"
       ],
       "episodes_jsonl_sha256": [
         {
-          "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-longhorizon-confirm-run/13268/runs/goal__differential_drive/episodes.jsonl",
+          "path": "output/issue3810-h600-longhorizon-confirm-run/13268/runs/goal__differential_drive/episodes.jsonl",
           "sha256": "a2a83abb16dfd1d5c9c535368db9daa722ba6b1f8d0a2946c904c118ca28058d"
         },
         {
-          "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-longhorizon-confirm-run/13268/runs/orca__differential_drive/episodes.jsonl",
+          "path": "output/issue3810-h600-longhorizon-confirm-run/13268/runs/orca__differential_drive/episodes.jsonl",
           "sha256": "4cfda6f23995f1b86d223f1094389abf14214034618365c9edead6de8827eb0b"
         },
         {
-          "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-longhorizon-confirm-run/13268/runs/ppo__differential_drive/episodes.jsonl",
+          "path": "output/issue3810-h600-longhorizon-confirm-run/13268/runs/ppo__differential_drive/episodes.jsonl",
           "sha256": "ecefff8810d31ca3579b296eaa5e515a345dd1d55708d8e57f28250a757a64b4"
         },
         {
-          "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-longhorizon-confirm-run/13268/runs/prediction_planner__differential_drive/episodes.jsonl",
+          "path": "output/issue3810-h600-longhorizon-confirm-run/13268/runs/prediction_planner__differential_drive/episodes.jsonl",
           "sha256": "386d5f3d463f7df7b211210d6b79fbae641adaa269582b352b4aea438635a025"
         },
         {
-          "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-longhorizon-confirm-run/13268/runs/sacadrl__differential_drive/episodes.jsonl",
+          "path": "output/issue3810-h600-longhorizon-confirm-run/13268/runs/sacadrl__differential_drive/episodes.jsonl",
           "sha256": "71404f226b43c76e67f89fd5e74cdc28ef55448401cb1dfa9fe3d8d2dc884c7b"
         },
         {
-          "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-longhorizon-confirm-run/13268/runs/social_force__differential_drive/episodes.jsonl",
+          "path": "output/issue3810-h600-longhorizon-confirm-run/13268/runs/social_force__differential_drive/episodes.jsonl",
           "sha256": "6cdcc650edea03991f630532ba64e5eb796ab14c7faf5ee38cc3eb383b193c03"
         },
         {
-          "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-longhorizon-confirm-run/13268/runs/socnav_sampling__differential_drive/episodes.jsonl",
+          "path": "output/issue3810-h600-longhorizon-confirm-run/13268/runs/socnav_sampling__differential_drive/episodes.jsonl",
           "sha256": "8a5ee9a056ff378a9d26be392fdd2597afb93664b058bed1ded9fb1dc79bb2bf"
         }
       ],
       "job_id": "13268",
       "run_label": "confirm",
-      "seed_episode_rows": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-longhorizon-confirm-run/13268/reports/seed_episode_rows.csv",
+      "seed_episode_rows": "output/issue3810-h600-longhorizon-confirm-run/13268/reports/seed_episode_rows.csv",
       "seed_episode_rows_exists": true
     },
     {
       "episodes_jsonl_files": [
-        "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/runs/goal__differential_drive/episodes.jsonl",
-        "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/runs/orca__differential_drive/episodes.jsonl",
-        "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/runs/ppo__differential_drive/episodes.jsonl",
-        "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/runs/prediction_mpc__differential_drive/episodes.jsonl",
-        "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/runs/prediction_mpc_cbf__differential_drive/episodes.jsonl",
-        "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/runs/prediction_planner__differential_drive/episodes.jsonl",
-        "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/runs/sacadrl__differential_drive/episodes.jsonl",
-        "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/runs/social_force__differential_drive/episodes.jsonl",
-        "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/runs/socnav_sampling__differential_drive/episodes.jsonl"
+        "output/issue3810-h600-extroster-run/13273/runs/goal__differential_drive/episodes.jsonl",
+        "output/issue3810-h600-extroster-run/13273/runs/orca__differential_drive/episodes.jsonl",
+        "output/issue3810-h600-extroster-run/13273/runs/ppo__differential_drive/episodes.jsonl",
+        "output/issue3810-h600-extroster-run/13273/runs/prediction_mpc__differential_drive/episodes.jsonl",
+        "output/issue3810-h600-extroster-run/13273/runs/prediction_mpc_cbf__differential_drive/episodes.jsonl",
+        "output/issue3810-h600-extroster-run/13273/runs/prediction_planner__differential_drive/episodes.jsonl",
+        "output/issue3810-h600-extroster-run/13273/runs/sacadrl__differential_drive/episodes.jsonl",
+        "output/issue3810-h600-extroster-run/13273/runs/social_force__differential_drive/episodes.jsonl",
+        "output/issue3810-h600-extroster-run/13273/runs/socnav_sampling__differential_drive/episodes.jsonl"
       ],
       "episodes_jsonl_sha256": [
         {
-          "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/runs/goal__differential_drive/episodes.jsonl",
+          "path": "output/issue3810-h600-extroster-run/13273/runs/goal__differential_drive/episodes.jsonl",
           "sha256": "b451bcd99ed25ed8e2125fb837e458ab6a6b12fdaa5991cdf5e8b0cf1b009134"
         },
         {
-          "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/runs/orca__differential_drive/episodes.jsonl",
+          "path": "output/issue3810-h600-extroster-run/13273/runs/orca__differential_drive/episodes.jsonl",
           "sha256": "d91f0176d8d94372b14c45db948a916b907a5845bd32eae2a40bc84e0453229a"
         },
         {
-          "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/runs/ppo__differential_drive/episodes.jsonl",
+          "path": "output/issue3810-h600-extroster-run/13273/runs/ppo__differential_drive/episodes.jsonl",
           "sha256": "603c19907d2cfe432886a35f92537c6cfa43ae2bb56b51397c72932fcb2cd4d6"
         },
         {
-          "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/runs/prediction_mpc__differential_drive/episodes.jsonl",
+          "path": "output/issue3810-h600-extroster-run/13273/runs/prediction_mpc__differential_drive/episodes.jsonl",
           "sha256": "13d6ba14b0ba9b6530f422b0483aafc646e277b7ceb6d185d5784c869e5db005"
         },
         {
-          "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/runs/prediction_mpc_cbf__differential_drive/episodes.jsonl",
+          "path": "output/issue3810-h600-extroster-run/13273/runs/prediction_mpc_cbf__differential_drive/episodes.jsonl",
           "sha256": "e6d2c7d771969a9a861739e3df0ec7f8b81266228477e8d1a6426b834d9f7b04"
         },
         {
-          "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/runs/prediction_planner__differential_drive/episodes.jsonl",
+          "path": "output/issue3810-h600-extroster-run/13273/runs/prediction_planner__differential_drive/episodes.jsonl",
           "sha256": "92ccaf8d5b6ff412f665fab374ba5c579869866c4bb4ba471930aa8956c12ee2"
         },
         {
-          "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/runs/sacadrl__differential_drive/episodes.jsonl",
+          "path": "output/issue3810-h600-extroster-run/13273/runs/sacadrl__differential_drive/episodes.jsonl",
           "sha256": "3c4cf82d0e82581a969fff4ea620224357ba0298747bda104bb6fd5112899862"
         },
         {
-          "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/runs/social_force__differential_drive/episodes.jsonl",
+          "path": "output/issue3810-h600-extroster-run/13273/runs/social_force__differential_drive/episodes.jsonl",
           "sha256": "03736a87e79bfcfdc6032ad42bcb69d939b2708f0bc3038cca85127f9b30e849"
         },
         {
-          "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/runs/socnav_sampling__differential_drive/episodes.jsonl",
+          "path": "output/issue3810-h600-extroster-run/13273/runs/socnav_sampling__differential_drive/episodes.jsonl",
           "sha256": "025717bedf0a5953ef9b50da7f1c04cbf1041da00af277dd841388c7396c16f5"
         }
       ],
       "job_id": "13273",
       "run_label": "extended_roster",
-      "seed_episode_rows": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/output/issue3810-h600-extroster-run/13273/reports/seed_episode_rows.csv",
+      "seed_episode_rows": "output/issue3810-h600-extroster-run/13273/reports/seed_episode_rows.csv",
       "seed_episode_rows_exists": true
     }
   ],
   "schema_version": "h600-snqi-weight-set-ranking.v1.preflight",
   "source_files_missing": [],
   "source_manifest": {
-    "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4239-produce-h600-snqi-per-weight-set-ranking-packet/docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json",
+    "path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json",
     "sha256": "41e118121bc1ac672d0937df5ba8fd1260b0f77bd5b276d5ee747eef1d19d399"
   },
   "status": "ready"

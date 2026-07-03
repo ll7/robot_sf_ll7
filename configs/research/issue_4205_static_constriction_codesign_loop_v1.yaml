@@ -1,0 +1,131 @@
+# Issue #4205 static-constriction co-design loop pre-registration.
+#
+# This contract freezes the public campaign shape before private Slurm execution:
+# same PPO lineage in every arm, predeclared static-deadlock suite rows, and
+# mutually exclusive wrapper/CBF runtime hardening. It is not benchmark evidence.
+schema_version: robot_sf.issue_4205_static_constriction_codesign_loop.v1
+issue: 4205
+loop_id: issue_4205_static_constriction_codesign_loop_v1
+status: pre_registered_cpu_smoke_only
+evidence_tier: smoke_evidence
+benchmark_evidence: false
+claim_boundary: >
+  Single static-constriction co-design-loop pre-registration only. This config
+  may support a later failure -> hardening -> re-certification worked example
+  after the private queued campaign runs the same frozen PPO lineage on the
+  predeclared static-deadlock rows. It does not establish broad mitigation,
+  planner-superiority, deployment-safety, paper, or dissertation claims.
+out_of_scope:
+  - full benchmark campaign execution
+  - Slurm or GPU submission
+  - retraining or checkpoint substitution
+  - paper or dissertation claim edits
+parent_evidence:
+  failure_source: job_13175_reanalysis_static_constriction
+  failure_status: discovered_before_this_pr
+  failure_interpretation: control_law_or_recovery_gap_not_perception
+mechanism_suite:
+  path: configs/benchmarks/issue_2452_mechanism_aware_local_nav_suites_v0.yaml
+  suite_id: static_deadlock_recovery
+  target_mechanism: static_deadlock_or_local_minimum
+benchmark_contract: configs/benchmarks/issue_4205_static_constriction_codesign_loop_v1.yaml
+scenario_family:
+  description: static-constriction slice from the static-deadlock mechanism suite
+  scenario_ids:
+    - classic_bottleneck_low
+    - classic_head_on_corridor_low
+    - narrow_passage
+seeds: [111, 112, 113]
+cpu_smoke:
+  matrix: configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml
+  seeds: [111]
+  max_episodes_per_arm: 1
+  evidence_boundary: >
+    CPU smoke proves config and runtime-metadata plumbing only. It is not the
+    re-certification campaign and must not be interpreted as a mitigation result.
+frozen_ppo_lineage:
+  algo: ppo
+  algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
+  model_preflight_required: true
+  private_artifact_hydration_required: true
+  failure_job_id: 13175
+  lineage_note: >
+    Public pre-registration pins the config identity used by the job-13175 PPO
+    failure row family. The private queue runner must hydrate and verify the
+    exact frozen checkpoint before campaign execution; any mismatch is a failed
+    preflight, not a substitute run.
+arms:
+  - key: ppo_frozen
+    role: discovered_failure_baseline
+    algo: ppo
+    algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
+    frozen_ppo_lineage_ref: frozen_ppo_lineage
+    safety_wrapper:
+      enabled: false
+      arm_key: wrapper_off
+    cbf_safety_filter:
+      enabled: false
+      arm_key: cbf_off
+  - key: ppo_frozen_wrapper_on
+    role: targeted_control_law_hardening
+    algo: ppo
+    algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
+    frozen_ppo_lineage_ref: frozen_ppo_lineage
+    safety_wrapper:
+      enabled: true
+      arm_key: wrapper_on
+    safety_wrapper_config_source: configs/research/safety_wrapper_ablation_v1.yaml::expected_wrapper_arms[wrapper_on]
+    cbf_safety_filter:
+      enabled: false
+      arm_key: cbf_off
+  - key: ppo_frozen_cbf_on
+    role: targeted_control_law_hardening
+    algo: ppo
+    algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
+    frozen_ppo_lineage_ref: frozen_ppo_lineage
+    safety_wrapper:
+      enabled: false
+      arm_key: wrapper_off
+    cbf_safety_filter:
+      enabled: true
+      arm_key: cbf_collision_cone_on
+    cbf_config_source: robot_sf.benchmark.cbf_safety_filter_runtime::cbf_collision_cone_on
+campaign_authorization:
+  compute_submit_authorized: false
+  requires_merge_before_submit: true
+  require_private_queue_hydration: true
+  no_ad_hoc_local_campaign: true
+required_trace_fields:
+  - low_progress_window
+  - recenter_activation_count
+  - distance_to_goal_delta
+  - local_minimum_indicator
+  - execution_mode
+  - row_status
+  - wrapper_intervention_rate
+  - cbf_status_counts
+required_metrics:
+  - success_rate
+  - timeout_rate
+  - collision_rate
+  - progress_per_step
+  - minimum_clearance_m
+  - deadlock_count
+evidence_packet_contract:
+  path: docs/context/evidence/issue_4205_static_constriction_codesign_loop_2026-07
+  raw_artifacts_forbidden_in_git:
+    - raw episode JSONL
+    - videos
+    - checkpoints
+    - Slurm logs
+  compact_files:
+    - README.md
+    - metadata.json
+    - pre_registration.json
+    - per_arm_metric_table.csv
+    - failure_mode_counts.csv
+    - intervention_summary.csv
+    - assurance_argument_diff.md
+    - loop_narrative.md
+    - claim_boundary.md
+    - SHA256SUMS

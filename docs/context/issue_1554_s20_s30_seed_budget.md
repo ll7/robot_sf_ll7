@@ -102,6 +102,23 @@ All inputs below are **to be confirmed by maintainer**; this note asserts no pap
   `diagnostic_only` rows are classified fail-closed with exact per-planner reasons and never
   counted as success. Missing/absent planner rows are classified fail-closed.
 
+## S30 deferral ruling (issue #4304, 2026-07-03)
+
+Maintainer ruling (2026-07-03, delegated decision): **S30 is deferred for the dissertation draft.**
+The dissertation-draft evidence tier is **S20** (`paper_eval_s20`). The S10→S20 comparison (job 13175
+closeout) shows the planner ranking is robust to seed budget at the draft's claim level, so a 30-seed
+budget is not required for the draft.
+
+`paper_eval_s30` (seeds 111–140) is kept **predeclared only**: a reversible future-escalation schedule
+so a later S30 run is one Slurm job away with no protocol debt. Run S30 only if a specific
+paper/dissertation claim needs ≥30 seeds or a reviewer requires it — post-draft by default. The
+predeclared entry implies **no** S30 campaign rows, benchmark result, ranking, or claim.
+
+Issue #4304 performs no Slurm submission and produces no new benchmark evidence; it predeclares the
+schedule, adds static seed-set contract tests (`tests/benchmark/test_seed_sets_v1.py`) that lock the
+S10 ⊂ S20 ⊂ S30 prefix-nesting property, and records this ruling. The status below is unchanged — a
+durable S20/S30 campaign result store is still the gate for any S20/S30 claim.
+
 ## Status
 
 `job_13198_constraints_first_analyzed` for the completed S20 H500 planner-family run. The

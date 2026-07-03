@@ -1,0 +1,83 @@
+{
+  "claim_boundary": "interaction-exposure coverage is diagnostic-only and must be computed from episode-level fields; absent fields are not imputed",
+  "missing_required_fields": [
+    "first_clearance_step",
+    "interaction_exposure_share",
+    "low_exposure_success",
+    "robot_motion_share_before_first_clearance"
+  ],
+  "required_fields": [
+    "interaction_exposure_share",
+    "robot_motion_share_before_first_clearance",
+    "first_clearance_step",
+    "low_exposure_success"
+  ],
+  "runs": [
+    {
+      "available_columns": [
+        "algo",
+        "collision",
+        "episode_id",
+        "kinematics",
+        "near_miss",
+        "planner_key",
+        "repeat_index",
+        "scenario_id",
+        "seed",
+        "snqi",
+        "success",
+        "time_to_goal"
+      ],
+      "job_id": "13268",
+      "missing_required_fields": [
+        "interaction_exposure_share",
+        "robot_motion_share_before_first_clearance",
+        "first_clearance_step",
+        "low_exposure_success"
+      ],
+      "required_columns": [
+        "interaction_exposure_share",
+        "robot_motion_share_before_first_clearance",
+        "first_clearance_step",
+        "low_exposure_success"
+      ],
+      "run_label": "confirm",
+      "seed_episode_rows": "/home/luttkule/git/robot_sf_ll7/output/issue3810-h600-longhorizon-confirm-run/13268/reports/seed_episode_rows.csv",
+      "status": "blocked_missing_required_fields"
+    },
+    {
+      "available_columns": [
+        "algo",
+        "collision",
+        "episode_id",
+        "kinematics",
+        "near_miss",
+        "planner_key",
+        "repeat_index",
+        "scenario_id",
+        "seed",
+        "snqi",
+        "success",
+        "time_to_goal"
+      ],
+      "job_id": "13273",
+      "missing_required_fields": [
+        "interaction_exposure_share",
+        "robot_motion_share_before_first_clearance",
+        "first_clearance_step",
+        "low_exposure_success"
+      ],
+      "required_columns": [
+        "interaction_exposure_share",
+        "robot_motion_share_before_first_clearance",
+        "first_clearance_step",
+        "low_exposure_success"
+      ],
+      "run_label": "extended_roster",
+      "seed_episode_rows": "/home/luttkule/git/robot_sf_ll7/output/issue3810-h600-extroster-run/13273/reports/seed_episode_rows.csv",
+      "status": "blocked_missing_required_fields"
+    }
+  ],
+  "schema_version": "issue_4195_h600_aggregation.v1.interaction_exposure",
+  "status": "blocked_missing_required_fields"
+}

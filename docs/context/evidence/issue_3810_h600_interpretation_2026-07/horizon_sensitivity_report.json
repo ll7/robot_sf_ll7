@@ -1,0 +1,642 @@
+{
+  "claim_boundary": "diagnostic-only ranking comparison; not a causal horizon-only ablation because scenario hash, seed budget, planner roster, and SNQI calibration differ",
+  "comparison_rows": [
+    {
+      "h500_rank": 10,
+      "h600_rank": 3,
+      "metric": "snqi",
+      "planner_key": "goal",
+      "rank_delta": -7,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 9,
+      "h600_rank": 4,
+      "metric": "snqi",
+      "planner_key": "orca",
+      "rank_delta": -5,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 8,
+      "h600_rank": 2,
+      "metric": "snqi",
+      "planner_key": "ppo",
+      "rank_delta": -6,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 7,
+      "h600_rank": 1,
+      "metric": "snqi",
+      "planner_key": "prediction_planner",
+      "rank_delta": -6,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 11,
+      "h600_rank": 6,
+      "metric": "snqi",
+      "planner_key": "sacadrl",
+      "rank_delta": -5,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 12,
+      "h600_rank": 7,
+      "metric": "snqi",
+      "planner_key": "social_force",
+      "rank_delta": -5,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 6,
+      "h600_rank": 5,
+      "metric": "snqi",
+      "planner_key": "socnav_sampling",
+      "rank_delta": -1,
+      "stability": "stable"
+    },
+    {
+      "h500_rank": 11,
+      "h600_rank": 4,
+      "metric": "success",
+      "planner_key": "goal",
+      "rank_delta": -7,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 7,
+      "h600_rank": 1,
+      "metric": "success",
+      "planner_key": "orca",
+      "rank_delta": -6,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 6,
+      "h600_rank": 2,
+      "metric": "success",
+      "planner_key": "ppo",
+      "rank_delta": -4,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 8,
+      "h600_rank": 3,
+      "metric": "success",
+      "planner_key": "prediction_planner",
+      "rank_delta": -5,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 10,
+      "h600_rank": 5,
+      "metric": "success",
+      "planner_key": "sacadrl",
+      "rank_delta": -5,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 12,
+      "h600_rank": 7,
+      "metric": "success",
+      "planner_key": "social_force",
+      "rank_delta": -5,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 9,
+      "h600_rank": 6,
+      "metric": "success",
+      "planner_key": "socnav_sampling",
+      "rank_delta": -3,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 11,
+      "h600_rank": 5,
+      "metric": "collision",
+      "planner_key": "goal",
+      "rank_delta": -6,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 6,
+      "h600_rank": 1,
+      "metric": "collision",
+      "planner_key": "orca",
+      "rank_delta": -5,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 7,
+      "h600_rank": 2,
+      "metric": "collision",
+      "planner_key": "ppo",
+      "rank_delta": -5,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 9,
+      "h600_rank": 3,
+      "metric": "collision",
+      "planner_key": "prediction_planner",
+      "rank_delta": -6,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 12,
+      "h600_rank": 6,
+      "metric": "collision",
+      "planner_key": "sacadrl",
+      "rank_delta": -6,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 8,
+      "h600_rank": 4,
+      "metric": "collision",
+      "planner_key": "social_force",
+      "rank_delta": -4,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 10,
+      "h600_rank": 7,
+      "metric": "collision",
+      "planner_key": "socnav_sampling",
+      "rank_delta": -3,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 5,
+      "h600_rank": 5,
+      "metric": "near_miss",
+      "planner_key": "goal",
+      "rank_delta": 0,
+      "stability": "stable"
+    },
+    {
+      "h500_rank": 6,
+      "h600_rank": 7,
+      "metric": "near_miss",
+      "planner_key": "orca",
+      "rank_delta": 1,
+      "stability": "stable"
+    },
+    {
+      "h500_rank": 4,
+      "h600_rank": 2,
+      "metric": "near_miss",
+      "planner_key": "ppo",
+      "rank_delta": -2,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 8,
+      "h600_rank": 6,
+      "metric": "near_miss",
+      "planner_key": "prediction_planner",
+      "rank_delta": -2,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 3,
+      "h600_rank": 3,
+      "metric": "near_miss",
+      "planner_key": "sacadrl",
+      "rank_delta": 0,
+      "stability": "stable"
+    },
+    {
+      "h500_rank": 2,
+      "h600_rank": 4,
+      "metric": "near_miss",
+      "planner_key": "social_force",
+      "rank_delta": 2,
+      "stability": "rank_flip"
+    },
+    {
+      "h500_rank": 1,
+      "h600_rank": 1,
+      "metric": "near_miss",
+      "planner_key": "socnav_sampling",
+      "rank_delta": 0,
+      "stability": "stable"
+    }
+  ],
+  "h500_source": {
+    "campaign_id": "issue1454-s10-h500-candidates",
+    "caveat": "Tracked h500 source is issue #1454 S10/h500 candidate evidence; no tracked S20 h500 result bundle was available in this checkout.",
+    "rankings": {
+      "collision": [
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+          "rank": 1,
+          "value": 0.025
+        },
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress",
+          "rank": 2,
+          "value": 0.0292
+        },
+        {
+          "planner_key": "scenario_adaptive_hybrid_orca_v1",
+          "rank": 3,
+          "value": 0.0333
+        },
+        {
+          "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+          "rank": 4,
+          "value": 0.0333
+        },
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+          "rank": 5,
+          "value": 0.0354
+        },
+        {
+          "planner_key": "orca",
+          "rank": 6,
+          "value": 0.1604
+        },
+        {
+          "planner_key": "ppo",
+          "rank": 7,
+          "value": 0.1938
+        },
+        {
+          "planner_key": "social_force",
+          "rank": 8,
+          "value": 0.3854
+        },
+        {
+          "planner_key": "prediction_planner",
+          "rank": 9,
+          "value": 0.4
+        },
+        {
+          "planner_key": "socnav_sampling",
+          "rank": 10,
+          "value": 0.6
+        },
+        {
+          "planner_key": "goal",
+          "rank": 11,
+          "value": 0.6125
+        },
+        {
+          "planner_key": "sacadrl",
+          "rank": 12,
+          "value": 0.6604
+        }
+      ],
+      "near_miss": [
+        {
+          "planner_key": "socnav_sampling",
+          "rank": 1,
+          "value": 1.9208
+        },
+        {
+          "planner_key": "social_force",
+          "rank": 2,
+          "value": 4.7104
+        },
+        {
+          "planner_key": "sacadrl",
+          "rank": 3,
+          "value": 5.8521
+        },
+        {
+          "planner_key": "ppo",
+          "rank": 4,
+          "value": 6.5146
+        },
+        {
+          "planner_key": "goal",
+          "rank": 5,
+          "value": 7.1396
+        },
+        {
+          "planner_key": "orca",
+          "rank": 6,
+          "value": 13.825
+        },
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+          "rank": 7,
+          "value": 18.9146
+        },
+        {
+          "planner_key": "prediction_planner",
+          "rank": 8,
+          "value": 20.2063
+        },
+        {
+          "planner_key": "scenario_adaptive_hybrid_orca_v1",
+          "rank": 9,
+          "value": 20.7771
+        },
+        {
+          "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+          "rank": 10,
+          "value": 20.7771
+        },
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+          "rank": 11,
+          "value": 21.8875
+        },
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress",
+          "rank": 12,
+          "value": 21.9917
+        }
+      ],
+      "snqi": [
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+          "rank": 1,
+          "value": -0.0972
+        },
+        {
+          "planner_key": "scenario_adaptive_hybrid_orca_v1",
+          "rank": 2,
+          "value": -0.1037
+        },
+        {
+          "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+          "rank": 3,
+          "value": -0.1037
+        },
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+          "rank": 4,
+          "value": -0.1069
+        },
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress",
+          "rank": 5,
+          "value": -0.116
+        },
+        {
+          "planner_key": "socnav_sampling",
+          "rank": 6,
+          "value": -0.1565
+        },
+        {
+          "planner_key": "prediction_planner",
+          "rank": 7,
+          "value": -0.1815
+        },
+        {
+          "planner_key": "ppo",
+          "rank": 8,
+          "value": -0.2415
+        },
+        {
+          "planner_key": "orca",
+          "rank": 9,
+          "value": -0.2476
+        },
+        {
+          "planner_key": "goal",
+          "rank": 10,
+          "value": -0.2594
+        },
+        {
+          "planner_key": "sacadrl",
+          "rank": 11,
+          "value": -0.3514
+        },
+        {
+          "planner_key": "social_force",
+          "rank": 12,
+          "value": -0.9916
+        }
+      ],
+      "success": [
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+          "rank": 1,
+          "value": 0.8771
+        },
+        {
+          "planner_key": "scenario_adaptive_hybrid_orca_v1",
+          "rank": 2,
+          "value": 0.8729
+        },
+        {
+          "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+          "rank": 3,
+          "value": 0.8729
+        },
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+          "rank": 4,
+          "value": 0.8646
+        },
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress",
+          "rank": 5,
+          "value": 0.7875
+        },
+        {
+          "planner_key": "ppo",
+          "rank": 6,
+          "value": 0.7854
+        },
+        {
+          "planner_key": "orca",
+          "rank": 7,
+          "value": 0.775
+        },
+        {
+          "planner_key": "prediction_planner",
+          "rank": 8,
+          "value": 0.5312
+        },
+        {
+          "planner_key": "socnav_sampling",
+          "rank": 9,
+          "value": 0.4
+        },
+        {
+          "planner_key": "sacadrl",
+          "rank": 10,
+          "value": 0.0688
+        },
+        {
+          "planner_key": "goal",
+          "rank": 11,
+          "value": 0.0479
+        },
+        {
+          "planner_key": "social_force",
+          "rank": 12,
+          "value": 0.0167
+        }
+      ]
+    },
+    "reports_dir": "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/reports",
+    "requested_comparison": "h500/S20",
+    "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+    "scenario_matrix_hash": "8973cf0d26dd",
+    "seed_budget": "S10",
+    "status": "available_s10_h500_not_s20"
+  },
+  "h600_rankings": {
+    "collision": [
+      {
+        "planner_key": "orca",
+        "rank": 1,
+        "value": 0.236111
+      },
+      {
+        "planner_key": "ppo",
+        "rank": 2,
+        "value": 0.284722
+      },
+      {
+        "planner_key": "prediction_planner",
+        "rank": 3,
+        "value": 0.5
+      },
+      {
+        "planner_key": "social_force",
+        "rank": 4,
+        "value": 0.513889
+      },
+      {
+        "planner_key": "goal",
+        "rank": 5,
+        "value": 0.611111
+      },
+      {
+        "planner_key": "sacadrl",
+        "rank": 6,
+        "value": 0.694444
+      },
+      {
+        "planner_key": "socnav_sampling",
+        "rank": 7,
+        "value": 0.715278
+      }
+    ],
+    "near_miss": [
+      {
+        "planner_key": "socnav_sampling",
+        "rank": 1,
+        "value": 1.763889
+      },
+      {
+        "planner_key": "ppo",
+        "rank": 2,
+        "value": 4.395833
+      },
+      {
+        "planner_key": "sacadrl",
+        "rank": 3,
+        "value": 4.8125
+      },
+      {
+        "planner_key": "social_force",
+        "rank": 4,
+        "value": 7.895833
+      },
+      {
+        "planner_key": "goal",
+        "rank": 5,
+        "value": 8.638889
+      },
+      {
+        "planner_key": "prediction_planner",
+        "rank": 6,
+        "value": 12.354167
+      },
+      {
+        "planner_key": "orca",
+        "rank": 7,
+        "value": 12.770833
+      }
+    ],
+    "snqi": [
+      {
+        "planner_key": "prediction_planner",
+        "rank": 1,
+        "value": -0.145123
+      },
+      {
+        "planner_key": "ppo",
+        "rank": 2,
+        "value": -0.156038
+      },
+      {
+        "planner_key": "goal",
+        "rank": 3,
+        "value": -0.193225
+      },
+      {
+        "planner_key": "orca",
+        "rank": 4,
+        "value": -0.198384
+      },
+      {
+        "planner_key": "socnav_sampling",
+        "rank": 5,
+        "value": -0.199566
+      },
+      {
+        "planner_key": "sacadrl",
+        "rank": 6,
+        "value": -0.369481
+      },
+      {
+        "planner_key": "social_force",
+        "rank": 7,
+        "value": -0.884998
+      }
+    ],
+    "success": [
+      {
+        "planner_key": "orca",
+        "rank": 1,
+        "value": 0.743056
+      },
+      {
+        "planner_key": "ppo",
+        "rank": 2,
+        "value": 0.701389
+      },
+      {
+        "planner_key": "prediction_planner",
+        "rank": 3,
+        "value": 0.493056
+      },
+      {
+        "planner_key": "goal",
+        "rank": 4,
+        "value": 0.388889
+      },
+      {
+        "planner_key": "sacadrl",
+        "rank": 5,
+        "value": 0.305556
+      },
+      {
+        "planner_key": "socnav_sampling",
+        "rank": 6,
+        "value": 0.284722
+      },
+      {
+        "planner_key": "social_force",
+        "rank": 7,
+        "value": 0.013889
+      }
+    ]
+  },
+  "h600_source_job_id": "13268",
+  "schema_version": "issue_4195_h600_aggregation.v1.horizon_sensitivity",
+  "status": "ok"
+}

@@ -7,10 +7,17 @@
     "README.md",
     "comparability_check.json",
     "comparability_check.md",
+    "horizon_sensitivity_report.json",
+    "horizon_sensitivity_report.md",
+    "interaction_exposure_diagnostics.json",
+    "interaction_exposure_diagnostics.md",
     "planner_metric_summary.csv",
     "planner_metric_summary.md",
+    "snqi_recalibration_bundle.json",
+    "snqi_recalibration_report.md",
     "source_manifest.json"
   ],
+  "h500_s20_reports": "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/reports",
   "runs": [
     {
       "campaign": {

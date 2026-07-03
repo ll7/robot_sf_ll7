@@ -15,6 +15,7 @@ from robot_sf.benchmark.map_runner_provenance import map_result_provenance
 from robot_sf.benchmark.utils import attach_track_metadata
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from pathlib import Path
 
 
@@ -203,6 +204,48 @@ def merge_runtime_algorithm_contract(  # noqa: C901
     return base_contract
 
 
+def build_ammv_feasibility_summary(feasibility_totals: Mapping[str, float]) -> dict[str, Any]:
+    """Fold per-episode AMMV feasibility totals into the batch-summary artifact block (issue #3466).
+
+    The per-episode ``ammv_feasibility.v1`` payload carries the claim-boundary markers
+    (``evidence_kind`` / ``proxy_kind`` / ``status``) that keep this internal proxy from being read
+    as calibrated hardware AMMV safety evidence. This helper re-attaches the same markers to the
+    batch aggregate so a consumer that reads only the summary sees the identical boundary, then folds
+    the four acceptance fields conservatively:
+
+    - ``min_stability_margin`` is the worst-case (minimum) margin across contributing episodes, not a
+      mean, so a single tip-over-prone episode is never averaged away.
+    - ``tip_over_violation`` / ``feasible`` are worst-case AND/OR reductions: any tip-over marks the
+      batch, and ``feasible`` requires every contributing episode to be feasible.
+    - ``status`` distinguishes a real aggregate from the fail-closed "no eligible episodes" case, so
+      a ``None`` margin with ``feasible: false`` is interpretable rather than silently ambiguous.
+
+    Returns:
+        The versioned ``ammv_feasibility.v1`` batch-summary block marked ``internal_non_hardware``.
+    """
+    ammv_episode_count = int(feasibility_totals.get("ammv_episode_count", 0))
+    ammv_margin = float(feasibility_totals.get("ammv_min_stability_margin", float("inf")))
+    return {
+        "schema_version": "ammv_feasibility.v1",
+        "evidence_kind": "diagnostic_proxy",
+        "proxy_kind": "internal_non_hardware",
+        "status": "available" if ammv_episode_count > 0 else "no_ammv_episodes",
+        "episode_count": ammv_episode_count,
+        "commands_evaluated": int(feasibility_totals.get("ammv_commands_evaluated", 0)),
+        "min_stability_margin": (
+            ammv_margin if ammv_episode_count > 0 and ammv_margin != float("inf") else None
+        ),
+        "tip_over_violation": bool(
+            int(feasibility_totals.get("ammv_tip_over_episode_count", 0)) > 0
+        ),
+        "n_curvature_violations": int(feasibility_totals.get("ammv_curvature_violation_count", 0)),
+        "feasible": bool(
+            ammv_episode_count > 0
+            and int(feasibility_totals.get("ammv_feasible_episode_count", 0)) == ammv_episode_count
+        ),
+    }
+
+
 def build_completed_batch_summary(  # noqa: PLR0913
     *,
     algo_contract: dict[str, Any],
@@ -321,25 +364,7 @@ def build_completed_batch_summary(  # noqa: PLR0913
         "max_abs_delta_linear": float(feasibility_totals["max_abs_delta_linear"]),
         "max_abs_delta_angular": float(feasibility_totals["max_abs_delta_angular"]),
     }
-    ammv_episode_count = int(feasibility_totals.get("ammv_episode_count", 0))
-    ammv_margin = float(feasibility_totals.get("ammv_min_stability_margin", float("inf")))
-    algo_contract["ammv_feasibility"] = {
-        "schema_version": "ammv_feasibility.v1",
-        "proxy_kind": "internal_non_hardware",
-        "episode_count": ammv_episode_count,
-        "commands_evaluated": int(feasibility_totals.get("ammv_commands_evaluated", 0)),
-        "min_stability_margin": (
-            ammv_margin if ammv_episode_count > 0 and ammv_margin != float("inf") else None
-        ),
-        "tip_over_violation": bool(
-            int(feasibility_totals.get("ammv_tip_over_episode_count", 0)) > 0
-        ),
-        "n_curvature_violations": int(feasibility_totals.get("ammv_curvature_violation_count", 0)),
-        "feasible": bool(
-            ammv_episode_count > 0
-            and int(feasibility_totals.get("ammv_feasible_episode_count", 0)) == ammv_episode_count
-        ),
-    }
+    algo_contract["ammv_feasibility"] = build_ammv_feasibility_summary(feasibility_totals)
 
     summary = {
         "total_jobs": total_jobs,

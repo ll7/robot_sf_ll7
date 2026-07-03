@@ -1,0 +1,33 @@
+# Append-only execution-state ledger for issue #3466
+# (AMMV feasibility fields wired into benchmark artifacts).
+# Newest entry last. Schema/behavior changes live in the PR diff; this file only
+# records slice lineage and remaining-work state so the canonical surface is one file.
+schema_version: issue-state.v1
+issue: 3466
+
+entries:
+  - date: "2026-07-04"
+    slice: "Batch-summary AMMV claim-boundary parity + doc-drift correction"
+    pr_branch: "issue-3466-ammv-batch-claim-boundary-parity"
+    delivered:
+      - "Extracted build_ammv_feasibility_summary() as a pure, unit-testable helper in
+         map_runner_batch_summary.py."
+      - "Added evidence_kind='diagnostic_proxy' and status ('available'/'no_ammv_episodes') to the
+         batch-summary ammv_feasibility block for claim-boundary parity with the per-episode payload."
+      - "Focused tests: batch-summary claim boundary + worst-case fold + no-episode fail-closed."
+      - "Refreshed docs/context/issue_3466_ammv_command_feasibility.md (previously said the artifact
+         wiring was deferred; it landed in #3845)."
+    acceptance_status: "met"
+    acceptance_notes: >
+      Core acceptance criteria (per-episode + batch fields min_stability_margin, tip_over_violation,
+      n_curvature_violations, feasible; internal_non_hardware; backward-compatible) were already
+      satisfied by evaluator #3600 and wiring #3845. This slice closes the batch-surface claim-
+      boundary gap and the stale context note.
+    out_of_scope:
+      - "No new proxy math, no runtime rollover behavior (that is #3479)."
+      - "No hardware AMMV claim, no external actuation data, no benchmark campaign run."
+      - "No Slurm/GPU submission, no paper/dissertation claim edits."
+    remaining_work:
+      - "None required for the artifact-wiring scope. Any future calibration of the internal proxy
+         envelope remains blocked on real AMMV actuation data (#1585/#2000 provenance), and stays a
+         separate research lane, not artifact wiring."

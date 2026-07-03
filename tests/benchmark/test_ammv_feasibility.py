@@ -12,7 +12,10 @@ from robot_sf.benchmark.ammv_feasibility import (
     evaluate_command_feasibility,
 )
 from robot_sf.benchmark.map_runner_batch_runner import _initial_feasibility_totals
-from robot_sf.benchmark.map_runner_batch_summary import accumulate_batch_metadata
+from robot_sf.benchmark.map_runner_batch_summary import (
+    accumulate_batch_metadata,
+    build_ammv_feasibility_summary,
+)
 
 
 def test_feasible_command_sequence_is_classified_feasible() -> None:
@@ -178,6 +181,58 @@ def test_batch_metadata_folds_ammv_feasibility_fields() -> None:
     assert totals["ammv_tip_over_episode_count"] == 0
     assert totals["ammv_curvature_violation_count"] == 1
     assert totals["ammv_feasible_episode_count"] == 0
+
+
+def test_batch_summary_block_carries_claim_boundary_and_worst_case_fields() -> None:
+    """Batch summary AMMV block mirrors the per-episode claim boundary and folds worst-case."""
+    totals = _initial_feasibility_totals()
+    # Two contributing episodes: one feasible with a larger margin, one tip-over with a smaller
+    # margin. The worst case (tip-over, min margin) must dominate the aggregate.
+    for margin, tip_over, feasible, curvature in ((0.30, False, True, 0), (0.05, True, False, 2)):
+        accumulate_batch_metadata(
+            {
+                "algorithm_metadata": {
+                    "ammv_feasibility": {
+                        "schema_version": AMMV_FEASIBILITY_SCHEMA,
+                        "proxy_kind": "internal_non_hardware",
+                        "n_commands": 4,
+                        "min_stability_margin": margin,
+                        "tip_over_violation": tip_over,
+                        "n_curvature_violations": curvature,
+                        "feasible": feasible,
+                    }
+                }
+            },
+            feasibility_totals=totals,
+        )
+
+    block = build_ammv_feasibility_summary(totals)
+
+    # Claim-boundary parity with the per-episode payload: a consumer reading only the batch
+    # summary must still see the diagnostic-proxy / non-hardware markers.
+    assert block["schema_version"] == AMMV_FEASIBILITY_SCHEMA
+    assert block["evidence_kind"] == "diagnostic_proxy"
+    assert block["proxy_kind"] == "internal_non_hardware"
+    assert block["status"] == "available"
+    # Worst-case reductions across the two episodes.
+    assert block["episode_count"] == 2
+    assert block["commands_evaluated"] == 8
+    assert block["min_stability_margin"] == pytest.approx(0.05)
+    assert block["tip_over_violation"] is True
+    assert block["n_curvature_violations"] == 2
+    assert block["feasible"] is False
+
+
+def test_batch_summary_block_fails_closed_without_ammv_episodes() -> None:
+    """With no contributing episodes the batch block fails closed and stays interpretable."""
+    block = build_ammv_feasibility_summary(_initial_feasibility_totals())
+
+    assert block["evidence_kind"] == "diagnostic_proxy"
+    assert block["proxy_kind"] == "internal_non_hardware"
+    assert block["status"] == "no_ammv_episodes"
+    assert block["episode_count"] == 0
+    assert block["min_stability_margin"] is None
+    assert block["feasible"] is False
 
 
 def test_invalid_params_rejected() -> None:

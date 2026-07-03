@@ -1,5 +1,6 @@
 name: scenario_adaptive_hybrid_orca_v2_collision_guard
 algo: hybrid_rule_local_planner
+allow_testing_algorithms: true
 base_config_path: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml
 params:
   max_linear_speed: 3.0

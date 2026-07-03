@@ -1,0 +1,11 @@
+{
+  "agreement_rows": [],
+  "claim_boundary": "Blocked before F-C4(ii) rank conclusions because trace-verified mechanism labels are unavailable.",
+  "generated_at": "2026-07-03T00:00:00Z",
+  "issue": 4206,
+  "probes": {},
+  "rank_rows": [],
+  "schema_version": "issue_4206_policy_structure_mechanism_crosscut_report.v1",
+  "status": "blocked_missing_trace_verified_mechanism_labels",
+  "taxonomy_source": "docs/context/issue_2220_failure_mechanism_taxonomy.md"
+}

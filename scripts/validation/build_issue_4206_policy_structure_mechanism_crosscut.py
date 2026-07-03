@@ -1,0 +1,784 @@
+#!/usr/bin/env python3
+"""Build issue #4206 mechanism-level policy-structure cross-cut evidence."""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import hashlib
+import json
+import math
+import sys
+from collections import Counter, defaultdict
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+import yaml
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping, Sequence
+
+CONFIG_SCHEMA_VERSION = "issue_4206_policy_structure_mechanism_crosscut_config.v1"
+MECHANISM_SCHEMA_VERSION = "failure_mechanism_taxonomy.v1"
+READY_STATUS = "analysis_ready_trace_verified"
+BLOCKED_STATUS = "blocked_missing_trace_verified_mechanism_labels"
+DIAGNOSTIC_STATUS = "diagnostic_only_supported_hypothesis"
+REPORT_SCHEMA_VERSION = "issue_4206_policy_structure_mechanism_crosscut_report.v1"
+
+REQUIRED_MECHANISM_FIELDS = (
+    "mechanism_schema_version",
+    "mechanism_label",
+    "mechanism_confidence",
+    "mechanism_evidence_mode",
+    "mechanism_evidence_uri",
+)
+GEOMETRY_ONLY_FIELDS = (
+    "geometry_bucket",
+    "scenario_geometry_bucket",
+    "geometry_label",
+    "scenario_family",
+)
+SIDECAR_NAMES = (
+    "mechanism_labels.csv",
+    "failure_mechanism_labels.csv",
+    "trace_failure_mechanisms.csv",
+    "mechanism_labels.jsonl",
+    "failure_mechanism_labels.jsonl",
+)
+FALLBACK_STATUSES = {"fallback", "degraded", "failed", "partial-failure", "not_available"}
+
+
+class BuildError(ValueError):
+    """Raised when issue #4206 inputs or config are malformed."""
+
+
+def _load_yaml(path: Path) -> dict[str, Any]:
+    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise BuildError(f"{path} must contain a YAML mapping")
+    return payload
+
+
+def _read_csv(path: Path) -> list[dict[str, str]]:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if not isinstance(row, dict):
+                raise BuildError(f"{path}:{line_number} must be a JSON object")
+            rows.append(row)
+    return rows
+
+
+def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]], fieldnames: Sequence[str]) -> None:
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({field: row.get(field, "") for field in fieldnames})
+
+
+def _to_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    if math.isnan(result):
+        return None
+    return result
+
+
+def _boolish_rate(row: Mapping[str, Any], *names: str) -> float:
+    for name in names:
+        value = _to_float(row.get(name))
+        if value is not None:
+            return 1.0 if value > 0 else 0.0
+    return 0.0
+
+
+def _mean(values: Iterable[float | None]) -> float | None:
+    clean = [value for value in values if value is not None]
+    if not clean:
+        return None
+    return sum(clean) / len(clean)
+
+
+def _row_key(row: Mapping[str, Any]) -> tuple[str, ...]:
+    return (
+        str(row.get("episode_id") or ""),
+        str(row.get("scenario_id") or ""),
+        str(row.get("planner_key") or row.get("planner_id") or ""),
+        str(row.get("seed") or ""),
+        str(row.get("repeat_index") or row.get("episode_index") or ""),
+    )
+
+
+def _sidecar_keys(row: Mapping[str, Any]) -> list[tuple[str, ...]]:
+    full = _row_key(row)
+    return [
+        full,
+        ("", full[1], full[2], full[3], full[4]),
+        (full[0], "", "", "", ""),
+    ]
+
+
+def _discover_sidecar_rows(root: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    reports = root / "reports"
+    for name in SIDECAR_NAMES:
+        path = reports / name
+        if not path.exists():
+            continue
+        if path.suffix == ".csv":
+            rows.extend(_read_csv(path))
+        elif path.suffix == ".jsonl":
+            rows.extend(_read_jsonl(path))
+    return rows
+
+
+def _index_sidecars(rows: Sequence[Mapping[str, Any]]) -> dict[tuple[str, ...], Mapping[str, Any]]:
+    index: dict[tuple[str, ...], Mapping[str, Any]] = {}
+    for row in rows:
+        for key in _sidecar_keys(row):
+            if any(key):
+                index.setdefault(key, row)
+    return index
+
+
+def _mechanism_payload(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {field: row.get(field, "") for field in REQUIRED_MECHANISM_FIELDS}
+
+
+def _merge_mechanism_fields(
+    row: Mapping[str, Any], sidecar_index: Mapping[tuple[str, ...], Mapping[str, Any]]
+) -> dict[str, Any]:
+    merged = dict(row)
+    if all(str(merged.get(field, "")) for field in REQUIRED_MECHANISM_FIELDS):
+        return merged
+    for key in _sidecar_keys(row):
+        sidecar = sidecar_index.get(key)
+        if sidecar is None:
+            continue
+        for field in REQUIRED_MECHANISM_FIELDS:
+            if not merged.get(field) and sidecar.get(field):
+                merged[field] = sidecar[field]
+        break
+    return merged
+
+
+def _planner_to_class(config: Mapping[str, Any]) -> dict[str, str]:
+    classes = config.get("structural_classes")
+    if not isinstance(classes, dict):
+        raise BuildError("config.structural_classes must be a mapping")
+    planner_map: dict[str, str] = {}
+    for class_name, payload in classes.items():
+        if not isinstance(payload, dict):
+            raise BuildError(f"structural class {class_name!r} must be a mapping")
+        for planner in payload.get("planner_keys") or []:
+            planner_key = str(planner)
+            if planner_key in planner_map:
+                raise BuildError(f"planner key {planner_key!r} appears in multiple classes")
+            planner_map[planner_key] = str(class_name)
+    return planner_map
+
+
+def _load_run_rows(root: Path, run_name: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    rows_path = root / "reports" / "seed_episode_rows.csv"
+    if not rows_path.exists():
+        return [], [
+            {
+                "run": run_name,
+                "missing_path": str(rows_path),
+                "missing_fields": ["reports/seed_episode_rows.csv"],
+            }
+        ]
+    sidecar_index = _index_sidecars(_discover_sidecar_rows(root))
+    rows: list[dict[str, Any]] = []
+    missing: list[dict[str, Any]] = []
+    for raw in _read_csv(rows_path):
+        row = _merge_mechanism_fields(raw, sidecar_index)
+        row["source_run"] = run_name
+        row["source_root"] = str(root)
+        missing_fields = [
+            field for field in REQUIRED_MECHANISM_FIELDS if not str(row.get(field, ""))
+        ]
+        if missing_fields:
+            missing.append(
+                {
+                    "run": run_name,
+                    "episode_id": row.get("episode_id", ""),
+                    "scenario_id": row.get("scenario_id", ""),
+                    "planner_key": row.get("planner_key", row.get("planner_id", "")),
+                    "missing_fields": missing_fields,
+                    "geometry_only_fields_present": [
+                        field for field in GEOMETRY_ONLY_FIELDS if str(row.get(field, ""))
+                    ],
+                }
+            )
+        rows.append(row)
+    return rows, missing
+
+
+def _is_fallback_or_degraded(row: Mapping[str, Any]) -> bool:
+    fields = (
+        row.get("status"),
+        row.get("run_status"),
+        row.get("planner_status"),
+        row.get("availability_status"),
+        row.get("execution_mode"),
+    )
+    return any(str(value).strip().lower() in FALLBACK_STATUSES for value in fields if value)
+
+
+def _score(row: Mapping[str, Any]) -> tuple[float, float, float, float, float]:
+    return (
+        -float(row.get("success_rate", 0.0)),
+        float(row.get("collision_event_rate", 0.0)),
+        float(row.get("near_miss_event_rate", 0.0)),
+        float(row.get("timeout_rate", 0.0)),
+        -float(row.get("snqi_mean", -9999.0)),
+    )
+
+
+def _summarize_groups(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = defaultdict(list)
+    for row in rows:
+        grouped[(str(row["mechanism_label"]), str(row["structural_class"]))].append(row)
+
+    summaries: list[dict[str, Any]] = []
+    by_mechanism: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for (mechanism, structural_class), group in sorted(grouped.items()):
+        count = len(group)
+        fallback_count = sum(1 for row in group if _is_fallback_or_degraded(row))
+        summary = {
+            "mechanism_label": mechanism,
+            "structural_class": structural_class,
+            "episode_count": count,
+            "planner_keys": ";".join(sorted({str(row.get("planner_key", "")) for row in group})),
+            "success_rate": _mean(_to_float(row.get("success")) for row in group) or 0.0,
+            "collision_event_rate": _mean(
+                _boolish_rate(row, "collision", "collisions") for row in group
+            )
+            or 0.0,
+            "near_miss_event_rate": _mean(
+                _boolish_rate(row, "near_miss", "near_misses") for row in group
+            )
+            or 0.0,
+            "timeout_rate": _mean(_boolish_rate(row, "timeout", "timed_out") for row in group)
+            or 0.0,
+            "progress_mean": _mean(
+                _to_float(row.get("progress")) or _to_float(row.get("progress_ratio"))
+                for row in group
+            ),
+            "snqi_mean": _mean(_to_float(row.get("snqi")) for row in group),
+            "fallback_or_degraded_count": fallback_count,
+            "mechanism_confidence_mix": json.dumps(
+                Counter(str(row.get("mechanism_confidence", "")) for row in group),
+                sort_keys=True,
+            ),
+            "eligible_f_c4ii": fallback_count < count,
+        }
+        summaries.append(summary)
+        by_mechanism[mechanism].append(summary)
+
+    for mechanism_rows in by_mechanism.values():
+        mechanism_rows.sort(key=_score)
+        for rank, row in enumerate(mechanism_rows, start=1):
+            row["mechanism_rank"] = rank
+    return sorted(summaries, key=lambda row: (row["mechanism_label"], int(row["mechanism_rank"])))
+
+
+def _predictive_probe(rank_rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    by_mechanism: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for row in rank_rows:
+        by_mechanism[str(row["mechanism_label"])].append(row)
+    probes: list[dict[str, Any]] = []
+    for mechanism, rows in sorted(by_mechanism.items()):
+        by_class = {str(row["structural_class"]): row for row in rows}
+        predictive = by_class.get("predictive")
+        constraint = by_class.get("constraint_first_hybrid")
+        learned = by_class.get("learned_policy")
+        predictive_rank = int(predictive["mechanism_rank"]) if predictive else None
+        constraint_rank = int(constraint["mechanism_rank"]) if constraint else None
+        learned_rank = int(learned["mechanism_rank"]) if learned else None
+        beats_constraint = (
+            predictive_rank is not None
+            and constraint_rank is not None
+            and predictive_rank < constraint_rank
+        )
+        beats_learned = (
+            predictive_rank is not None
+            and learned_rank is not None
+            and predictive_rank < learned_rank
+        )
+        probes.append(
+            {
+                "mechanism_label": mechanism,
+                "predictive_rank": predictive_rank or "",
+                "constraint_first_hybrid_rank": constraint_rank or "",
+                "learned_policy_rank": learned_rank or "",
+                "predictive_beats_constraint_first_hybrid": beats_constraint,
+                "predictive_beats_learned_policy": beats_learned,
+                "predictive_beats_both": beats_constraint and beats_learned,
+                "eligible_f_c4ii": predictive is not None
+                and constraint is not None
+                and learned is not None,
+            }
+        )
+    return probes
+
+
+def _local_minimum_probe(
+    rank_rows: Sequence[Mapping[str, Any]], local_minimum_mechanisms: set[str]
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "mechanism_label": row["mechanism_label"],
+            "structural_class": row["structural_class"],
+            "mechanism_rank": row["mechanism_rank"],
+            "success_rate": row["success_rate"],
+            "timeout_rate": row["timeout_rate"],
+            "progress_mean": row["progress_mean"] if row["progress_mean"] is not None else "",
+            "fallback_or_degraded_count": row["fallback_or_degraded_count"],
+            "eligible_f_c4ii": row["eligible_f_c4ii"],
+        }
+        for row in rank_rows
+        if str(row["mechanism_label"]) in local_minimum_mechanisms
+    ]
+
+
+def _agreement_table(
+    rows: Sequence[Mapping[str, Any]], rank_rows: Sequence[Mapping[str, Any]]
+) -> list[dict[str, Any]]:
+    rank_lookup = {
+        (str(row["mechanism_label"]), str(row["structural_class"])): row.get("mechanism_rank", "")
+        for row in rank_rows
+    }
+    seen: set[tuple[str, str, str, str]] = set()
+    table: list[dict[str, Any]] = []
+    for row in rows:
+        geometry_bucket = str(
+            row.get("geometry_bucket")
+            or row.get("scenario_geometry_bucket")
+            or row.get("geometry_label")
+            or ""
+        )
+        mechanism = str(row.get("mechanism_label", ""))
+        planner = str(row.get("planner_key") or row.get("planner_id") or "")
+        structural_class = str(row.get("structural_class", ""))
+        key = (geometry_bucket, mechanism, planner, structural_class)
+        if key in seen:
+            continue
+        seen.add(key)
+        status = "not_comparable_scope_or_roster_change" if not geometry_bucket else "agrees"
+        table.append(
+            {
+                "geometry_bucket": geometry_bucket,
+                "mechanism_label": mechanism,
+                "planner_key": planner,
+                "structural_class": structural_class,
+                "old_geometry_rank": "",
+                "new_mechanism_rank": rank_lookup.get((mechanism, structural_class), ""),
+                "agreement_status": status,
+                "conclusion_survives": "" if status != "agrees" else "diagnostic_only",
+                "caveat": "old geometry-bucket ranks are not recomputed by this mechanism-level builder",
+            }
+        )
+    return sorted(
+        table,
+        key=lambda row: (
+            row["geometry_bucket"],
+            row["mechanism_label"],
+            row["structural_class"],
+            row["planner_key"],
+        ),
+    )
+
+
+def _markdown_report(status: str, rank_rows: Sequence[Mapping[str, Any]]) -> str:
+    lines = [
+        "# Issue #4206 mechanism-level policy-structure cross-cut",
+        "",
+        f"status: {status}",
+        "",
+        "This packet is diagnostic analysis support only. It is not a benchmark campaign,",
+        "Slurm/GPU submission, or paper/dissertation claim edit.",
+        "",
+    ]
+    if rank_rows:
+        lines.extend(
+            [
+                "## Mechanism x Structural Class Ranks",
+                "",
+                "| mechanism_label | rank | structural_class | success_rate | collision_rate | near_miss_rate |",
+                "| --- | ---: | --- | ---: | ---: | ---: |",
+            ]
+        )
+        for row in rank_rows:
+            lines.append(
+                "| {mechanism_label} | {mechanism_rank} | {structural_class} | "
+                "{success_rate:.3f} | {collision_event_rate:.3f} | "
+                "{near_miss_event_rate:.3f} |".format(**row)
+            )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _blocked_outputs(
+    *,
+    output_dir: Path,
+    config: Mapping[str, Any],
+    generated_at: str,
+    missing_rows: Sequence[Mapping[str, Any]],
+    loaded_row_count: int,
+) -> dict[str, Any]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    missing_payload = {
+        "status": BLOCKED_STATUS,
+        "issue": 4206,
+        "generated_at": generated_at,
+        "required_fields": list(REQUIRED_MECHANISM_FIELDS),
+        "loaded_row_count": loaded_row_count,
+        "missing_rows_sample": list(missing_rows[:50]),
+        "missing_row_count": len(missing_rows),
+        "geometry_bucket_substitution_rejected": any(
+            row.get("geometry_only_fields_present") for row in missing_rows
+        ),
+        "followup_issue_skeleton": config.get("blocked_followup_issue", {}),
+    }
+    _write_json(output_dir / "missing_instrumentation.json", missing_payload)
+    metadata = {
+        "schema_version": REPORT_SCHEMA_VERSION,
+        "status": BLOCKED_STATUS,
+        "issue": 4206,
+        "generated_at": generated_at,
+        "taxonomy_source": config.get("taxonomy_source"),
+        "claim_boundary": "Blocked before F-C4(ii) rank conclusions because trace-verified "
+        "mechanism labels are unavailable.",
+    }
+    _write_json(output_dir / "metadata.json", metadata)
+    _write_json(
+        output_dir / "mechanism_crosscut_report.json",
+        {**metadata, "rank_rows": [], "probes": {}, "agreement_rows": []},
+    )
+    for filename, fieldnames in {
+        "mechanism_by_structural_class.csv": [
+            "mechanism_label",
+            "mechanism_rank",
+            "structural_class",
+            "episode_count",
+            "success_rate",
+            "collision_event_rate",
+            "near_miss_event_rate",
+        ],
+        "f_c4ii_probe_predictive_dominance.csv": [
+            "mechanism_label",
+            "predictive_rank",
+            "constraint_first_hybrid_rank",
+            "learned_policy_rank",
+            "predictive_beats_both",
+        ],
+        "f_c4ii_probe_local_minimum_failures.csv": [
+            "mechanism_label",
+            "structural_class",
+            "mechanism_rank",
+            "success_rate",
+            "timeout_rate",
+        ],
+        "geometry_vs_mechanism_agreement.csv": [
+            "geometry_bucket",
+            "mechanism_label",
+            "planner_key",
+            "structural_class",
+            "old_geometry_rank",
+            "new_mechanism_rank",
+            "agreement_status",
+            "conclusion_survives",
+            "caveat",
+        ],
+    }.items():
+        _write_csv(output_dir / filename, [], fieldnames)
+    (output_dir / "mechanism_crosscut_report.md").write_text(
+        _markdown_report(BLOCKED_STATUS, []), encoding="utf-8"
+    )
+    _write_readmes(output_dir, BLOCKED_STATUS)
+    _write_sha256sums(output_dir)
+    return metadata
+
+
+def _write_readmes(output_dir: Path, status: str) -> None:
+    readme = f"""# Issue #4206 policy-structure mechanism cross-cut
+
+status: {status}
+
+This evidence packet is bounded to CPU-only diagnostic analysis for issue #4206. It does not run a
+benchmark campaign, submit Slurm/GPU work, edit paper/dissertation claims, or promote generalized
+causal claims.
+
+Mechanism-level F-C4(ii) conclusions are allowed only when episode rows carry
+`failure_mechanism_taxonomy.v1` fields with accepted confidence labels. Geometry buckets are used
+only for the agreement/disagreement comparison table and never as substitute mechanism labels.
+"""
+    claim_boundary = """# Claim Boundary
+
+This packet can support a mechanism-level policy-structure cross-cut only for rows with
+trace-verified failure-mechanism labels. Missing labels produce
+`blocked_missing_trace_verified_mechanism_labels` and stop F-C4(ii) rank conclusions.
+
+Out of scope: no full benchmark campaign run, no Slurm/GPU submission, no paper/dissertation claim
+edits, and no causal-mechanism claim from geometry buckets alone.
+"""
+    (output_dir / "README.md").write_text(readme, encoding="utf-8")
+    (output_dir / "claim_boundary.md").write_text(claim_boundary, encoding="utf-8")
+
+
+def _write_sha256sums(output_dir: Path) -> None:
+    lines: list[str] = []
+    for path in sorted(item for item in output_dir.iterdir() if item.is_file()):
+        if path.name == "SHA256SUMS":
+            continue
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        lines.append(f"{digest}  {path.name}")
+    (output_dir / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def build_packet(  # noqa: C901
+    *,
+    config_path: Path,
+    confirm_root: Path,
+    extended_root: Path,
+    job13175_packet: Path,
+    output_dir: Path,
+    generated_at: str,
+) -> dict[str, Any]:
+    """Build the bounded issue #4206 evidence packet."""
+    config = _load_yaml(config_path)
+    if config.get("schema_version") != CONFIG_SCHEMA_VERSION:
+        raise BuildError("config schema_version mismatch")
+    if int(config.get("issue", 0)) != 4206:
+        raise BuildError("config.issue must be 4206")
+    if config.get("mechanism_schema_version") != MECHANISM_SCHEMA_VERSION:
+        raise BuildError("config mechanism_schema_version mismatch")
+
+    rows: list[dict[str, Any]] = []
+    missing_rows: list[dict[str, Any]] = []
+    for run_name, root in (
+        ("confirm_h600_13268", confirm_root),
+        ("extended_h600_13273", extended_root),
+    ):
+        run_rows, run_missing = _load_run_rows(root, run_name)
+        rows.extend(run_rows)
+        missing_rows.extend(run_missing)
+
+    if missing_rows:
+        return _blocked_outputs(
+            output_dir=output_dir,
+            config=config,
+            generated_at=generated_at,
+            missing_rows=missing_rows,
+            loaded_row_count=len(rows),
+        )
+
+    accepted_confidences = {
+        str(item) for item in config.get("accepted_mechanism_confidences") or []
+    }
+    planner_map = _planner_to_class(config)
+    enriched: list[dict[str, Any]] = []
+    unclassified_count = 0
+    for row in rows:
+        if row.get("mechanism_schema_version") != MECHANISM_SCHEMA_VERSION:
+            missing_rows.append({**_mechanism_payload(row), "reason": "schema_version_mismatch"})
+            continue
+        if row.get("mechanism_confidence") not in accepted_confidences:
+            continue
+        planner_key = str(row.get("planner_key") or row.get("planner_id") or "")
+        structural_class = planner_map.get(planner_key, "unclassified")
+        if structural_class == "unclassified":
+            unclassified_count += 1
+        enriched.append({**row, "planner_key": planner_key, "structural_class": structural_class})
+
+    if missing_rows or not enriched:
+        return _blocked_outputs(
+            output_dir=output_dir,
+            config=config,
+            generated_at=generated_at,
+            missing_rows=missing_rows
+            or [
+                {"missing_fields": list(REQUIRED_MECHANISM_FIELDS), "reason": "no accepted labels"}
+            ],
+            loaded_row_count=len(rows),
+        )
+
+    observed_count = sum(
+        1 for row in enriched if row.get("mechanism_confidence") == "observed_mechanism"
+    )
+    status = READY_STATUS if observed_count else DIAGNOSTIC_STATUS
+    output_dir.mkdir(parents=True, exist_ok=True)
+    rank_rows = _summarize_groups(
+        [row for row in enriched if row.get("structural_class") != "unclassified"]
+    )
+    predictive_probe = _predictive_probe(rank_rows)
+    local_probe = _local_minimum_probe(
+        rank_rows, {str(item) for item in config.get("local_minimum_mechanisms") or []}
+    )
+    agreement = _agreement_table(enriched, rank_rows)
+
+    metadata = {
+        "schema_version": REPORT_SCHEMA_VERSION,
+        "status": status,
+        "issue": 4206,
+        "generated_at": generated_at,
+        "config": str(config_path),
+        "taxonomy_source": config.get("taxonomy_source"),
+        "confirm_root": str(confirm_root),
+        "extended_root": str(extended_root),
+        "job13175_packet": str(job13175_packet),
+        "input_rows": len(rows),
+        "accepted_rows": len(enriched),
+        "observed_mechanism_rows": observed_count,
+        "unclassified_planner_rows_excluded_from_f_c4ii": unclassified_count,
+        "claim_boundary": "Mechanism-level conclusions only for accepted trace-labeled rows; "
+        "geometry buckets are comparison-only.",
+    }
+    report = {
+        **metadata,
+        "rank_rows": rank_rows,
+        "probes": {
+            "predictive_dominance": predictive_probe,
+            "local_minimum_failures": local_probe,
+        },
+        "agreement_rows": agreement,
+    }
+    _write_json(output_dir / "metadata.json", metadata)
+    _write_json(output_dir / "mechanism_crosscut_report.json", report)
+    (output_dir / "mechanism_crosscut_report.md").write_text(
+        _markdown_report(status, rank_rows), encoding="utf-8"
+    )
+    _write_csv(
+        output_dir / "mechanism_by_structural_class.csv",
+        rank_rows,
+        [
+            "mechanism_label",
+            "mechanism_rank",
+            "structural_class",
+            "episode_count",
+            "planner_keys",
+            "success_rate",
+            "collision_event_rate",
+            "near_miss_event_rate",
+            "timeout_rate",
+            "progress_mean",
+            "snqi_mean",
+            "fallback_or_degraded_count",
+            "mechanism_confidence_mix",
+            "eligible_f_c4ii",
+        ],
+    )
+    _write_csv(
+        output_dir / "f_c4ii_probe_predictive_dominance.csv",
+        predictive_probe,
+        [
+            "mechanism_label",
+            "predictive_rank",
+            "constraint_first_hybrid_rank",
+            "learned_policy_rank",
+            "predictive_beats_constraint_first_hybrid",
+            "predictive_beats_learned_policy",
+            "predictive_beats_both",
+            "eligible_f_c4ii",
+        ],
+    )
+    _write_csv(
+        output_dir / "f_c4ii_probe_local_minimum_failures.csv",
+        local_probe,
+        [
+            "mechanism_label",
+            "structural_class",
+            "mechanism_rank",
+            "success_rate",
+            "timeout_rate",
+            "progress_mean",
+            "fallback_or_degraded_count",
+            "eligible_f_c4ii",
+        ],
+    )
+    _write_csv(
+        output_dir / "geometry_vs_mechanism_agreement.csv",
+        agreement,
+        [
+            "geometry_bucket",
+            "mechanism_label",
+            "planner_key",
+            "structural_class",
+            "old_geometry_rank",
+            "new_mechanism_rank",
+            "agreement_status",
+            "conclusion_survives",
+            "caveat",
+        ],
+    )
+    if not (output_dir / "missing_instrumentation.json").exists():
+        _write_json(
+            output_dir / "missing_instrumentation.json",
+            {"status": "not_applicable", "missing_row_count": 0},
+        )
+    _write_readmes(output_dir, status)
+    _write_sha256sums(output_dir)
+    return metadata
+
+
+def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--confirm-root", type=Path, required=True)
+    parser.add_argument("--extended-root", type=Path, required=True)
+    parser.add_argument("--job13175-packet", type=Path, required=True)
+    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--generated-at", default="now")
+    parser.add_argument("--json", action="store_true")
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the issue #4206 evidence builder CLI."""
+    args = _parse_args(argv or sys.argv[1:])
+    generated_at = (
+        datetime.now(UTC).isoformat(timespec="seconds")
+        if args.generated_at == "now"
+        else str(args.generated_at)
+    )
+    try:
+        summary = build_packet(
+            config_path=args.config,
+            confirm_root=args.confirm_root,
+            extended_root=args.extended_root,
+            job13175_packet=args.job13175_packet,
+            output_dir=args.output_dir,
+            generated_at=generated_at,
+        )
+    except BuildError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(summary, sort_keys=True))
+    else:
+        print(f"status: {summary['status']}")
+        print(f"output_dir: {args.output_dir}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

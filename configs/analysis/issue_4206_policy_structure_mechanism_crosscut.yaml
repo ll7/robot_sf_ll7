@@ -1,0 +1,47 @@
+schema_version: issue_4206_policy_structure_mechanism_crosscut_config.v1
+issue: 4206
+parent_issue: 4206
+taxonomy_source: docs/context/issue_2220_failure_mechanism_taxonomy.md
+primary_inputs:
+  confirm_job: 13268
+  extended_roster_job: 13273
+continuity_fallback:
+  job: 13175
+  purpose: h500/S20 materialized rows continuity comparison only
+mechanism_schema_version: failure_mechanism_taxonomy.v1
+accepted_mechanism_confidences:
+  - observed_mechanism
+  - supported_hypothesis
+forbidden_fallback:
+  geometry_buckets_may_substitute_mechanism_labels: false
+  geometry_buckets_allowed_only_for_agreement_table: true
+unknown_planner_policy: unclassified_excluded_from_f_c4ii
+structural_classes:
+  constraint_first_hybrid:
+    planner_keys:
+      - scenario_adaptive_hybrid_orca_v1
+      - hybrid_rule_v3_fast_progress_static_escape
+  learned_policy:
+    planner_keys:
+      - ppo
+      - guarded_ppo
+  predictive:
+    planner_keys:
+      - prediction_planner
+      - prediction_mpc
+      - prediction_mpc_cbf
+  baseline_reactive:
+    planner_keys:
+      - goal
+      - social_force
+      - orca
+      - socnav_sampling
+      - sacadrl
+local_minimum_mechanisms:
+  - static_deadlock_or_local_minimum
+blocked_followup_issue:
+  title: "Add trace-verified failure-mechanism labels to h600 episode exports for F-C4(ii)"
+  body: |
+    Issue #4206 cannot produce mechanism-level F-C4(ii) policy-structure conclusions until h600
+    episode rows or sidecars provide failure_mechanism_taxonomy.v1 labels with confidence and
+    evidence URI fields.

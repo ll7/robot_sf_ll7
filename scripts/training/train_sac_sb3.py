@@ -40,6 +40,7 @@ from loguru import logger
 try:
     from stable_baselines3 import SAC
     from stable_baselines3.common.callbacks import BaseCallback
+    from stable_baselines3.common.logger import configure as configure_sb3_logger
     from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecEnv
 except ImportError as exc:
     raise RuntimeError("Stable-Baselines3 must be installed to run SAC training.") from exc
@@ -47,6 +48,12 @@ except ImportError as exc:
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.sensor.socnav_observation import SOCNAV_POSITION_CAP_M
+from robot_sf.training.offline_online_rl import (
+    OfflineTransitionBatch,
+    load_offline_transition_batch,
+    seed_sb3_replay_buffer,
+    validate_batch_against_env_spaces,
+)
 from robot_sf.training.scenario_loader import (
     build_robot_config_from_scenario,
     load_scenarios,
@@ -105,6 +112,7 @@ _ALLOWED_CONFIG_KEYS: frozenset[str] = frozenset(
         "action_semantics",
         "relative_obs",
         "obs_transform",
+        "offline_online",
     }
 )
 
@@ -153,6 +161,20 @@ class SACScenarioSamplingConfig:
 
 
 @dataclass
+class SACOfflineOnlineConfig:
+    """Optional RLTrajectoryDataset.v1 warm-start settings for SAC."""
+
+    enabled: bool = False
+    dataset_path: Path | None = None
+    manifest_path: Path | None = None
+    dataset_split: str = "train"
+    min_transitions: int = 1
+    offline_gradient_steps: int = 0
+    action_contract: str = "box_direct"
+    observation_contract: str = "dataset_observation"
+
+
+@dataclass
 class SACTrainingConfig:
     """Typed container for SAC training configuration."""
 
@@ -172,6 +194,7 @@ class SACTrainingConfig:
     relative_obs: bool = True
     obs_transform: str = _DEFAULT_OBS_TRANSFORM
     evaluation: SACEvaluationConfig = field(default_factory=SACEvaluationConfig)
+    offline_online: SACOfflineOnlineConfig = field(default_factory=SACOfflineOnlineConfig)
 
 
 def load_sac_training_config(config_path: str | Path) -> SACTrainingConfig:
@@ -238,6 +261,10 @@ def load_sac_training_config(config_path: str | Path) -> SACTrainingConfig:
     if obs_transform == _DEFAULT_OBS_TRANSFORM and relative_obs:
         obs_transform = "relative"
     evaluation = _load_eval_config(data.get("evaluation", {}) or {}, config_dir=path.parent)
+    offline_online = _load_offline_online_config(
+        data.get("offline_online", {}) or {},
+        config_dir=path.parent,
+    )
 
     return SACTrainingConfig(
         policy_id=str(data["policy_id"]),
@@ -259,6 +286,7 @@ def load_sac_training_config(config_path: str | Path) -> SACTrainingConfig:
         relative_obs=relative_obs,
         obs_transform=obs_transform,
         evaluation=evaluation,
+        offline_online=offline_online,
     )
 
 
@@ -282,6 +310,60 @@ def _resolve_config_path(raw_value: object | None, *, config_dir: Path) -> Path 
     if raw_path.is_absolute():
         return raw_path.resolve()
     return (config_dir / raw_path).resolve()
+
+
+def _load_offline_online_config(
+    raw_value: object,
+    *,
+    config_dir: Path,
+) -> SACOfflineOnlineConfig:
+    """Load optional offline-to-online SAC settings."""
+
+    if raw_value in (None, {}):
+        return SACOfflineOnlineConfig()
+    if not isinstance(raw_value, Mapping):
+        raise ValueError(f"offline_online block must be a mapping; got {type(raw_value)!r}")
+
+    allowed = {
+        "enabled",
+        "dataset_path",
+        "manifest_path",
+        "dataset_split",
+        "min_transitions",
+        "offline_gradient_steps",
+        "action_contract",
+        "observation_contract",
+    }
+    unknown = set(raw_value) - allowed
+    if unknown:
+        raise ValueError(f"Unknown offline_online config keys: {sorted(unknown)}")
+
+    enabled = bool(raw_value.get("enabled", False))
+    dataset_path = _resolve_config_path(raw_value.get("dataset_path"), config_dir=config_dir)
+    manifest_path = _resolve_config_path(raw_value.get("manifest_path"), config_dir=config_dir)
+    if enabled and dataset_path is None:
+        raise ValueError("offline_online.dataset_path is required when enabled")
+    if enabled and manifest_path is None:
+        raise ValueError("offline_online.manifest_path is required when enabled")
+
+    min_transitions = int(raw_value.get("min_transitions", 1))
+    if min_transitions < 1:
+        raise ValueError("offline_online.min_transitions must be >= 1")
+
+    offline_gradient_steps = int(raw_value.get("offline_gradient_steps", 0))
+    if offline_gradient_steps < 0:
+        raise ValueError("offline_online.offline_gradient_steps must be >= 0")
+
+    return SACOfflineOnlineConfig(
+        enabled=enabled,
+        dataset_path=dataset_path,
+        manifest_path=manifest_path,
+        dataset_split=str(raw_value.get("dataset_split", "train")),
+        min_transitions=min_transitions,
+        offline_gradient_steps=offline_gradient_steps,
+        action_contract=str(raw_value.get("action_contract", "box_direct")),
+        observation_contract=str(raw_value.get("observation_contract", "dataset_observation")),
+    )
 
 
 def _load_eval_config(raw_value: object, *, config_dir: Path) -> SACEvaluationConfig:
@@ -441,6 +523,55 @@ def _build_env(
     if config.num_envs == 1:
         return DummyVecEnv(env_fns)
     return SubprocVecEnv(env_fns, start_method="spawn")
+
+
+def _transform_offline_observation_for_sac(observation: Any, *, obs_transform: str) -> Any:
+    """Apply SAC observation wrappers to one offline dataset observation.
+
+    Returns:
+        Any: Observation shaped like the online SAC environment observation.
+    """
+
+    if not isinstance(observation, Mapping):
+        return observation
+    transformed: Any = _flatten_nested_dict_obs(observation)
+    normalized_transform = obs_transform.strip().lower()
+    if normalized_transform == "relative":
+        transformed = _relative_socnav_obs(transformed)
+    elif normalized_transform == "ego":
+        transformed = _ego_socnav_obs(transformed)
+    return transformed
+
+
+def _transform_offline_batch_for_sac(
+    batch: OfflineTransitionBatch,
+    *,
+    obs_transform: str,
+) -> OfflineTransitionBatch:
+    """Apply SAC observation preprocessing to an offline transition batch.
+
+    Returns:
+        OfflineTransitionBatch: Batch with observations aligned to online SAC env wrappers.
+    """
+
+    return OfflineTransitionBatch(
+        observations=tuple(
+            _transform_offline_observation_for_sac(observation, obs_transform=obs_transform)
+            for observation in batch.observations
+        ),
+        next_observations=tuple(
+            _transform_offline_observation_for_sac(observation, obs_transform=obs_transform)
+            for observation in batch.next_observations
+        ),
+        actions=batch.actions,
+        rewards=batch.rewards,
+        dones=batch.dones,
+        truncated=batch.truncated,
+        episode_ids=batch.episode_ids,
+        scenario_ids=batch.scenario_ids,
+        seeds=batch.seeds,
+        preflight=batch.preflight,
+    )
 
 
 def _apply_env_overrides(robot_config: Any, overrides: Mapping[str, object]) -> None:
@@ -816,6 +947,60 @@ def _save_sac_checkpoint_with_gym_shim(model: SAC, checkpoint_path: Path) -> Non
                 sys.modules["gym"] = gym_module
 
 
+def _seed_offline_online_replay_buffer(
+    model: SAC,
+    *,
+    config: SACTrainingConfig,
+    observation_space: gym_spaces.Space[Any],
+    action_space: gym_spaces.Space[Any],
+    dry_run: bool,
+) -> None:
+    """Load, validate, and seed SAC replay buffer with offline transitions."""
+
+    offline = config.offline_online
+    if offline.dataset_path is None:
+        raise ValueError("offline_online.dataset_path is required when enabled")
+    if offline.manifest_path is not None and not offline.manifest_path.is_file():
+        raise ValueError(f"offline_online.manifest_path not found: {offline.manifest_path}")
+
+    batch = load_offline_transition_batch(
+        offline.dataset_path,
+        split=offline.dataset_split,
+        min_transitions=offline.min_transitions,
+        action_contract=offline.action_contract,
+        observation_contract=offline.observation_contract,
+    )
+    batch = _transform_offline_batch_for_sac(batch, obs_transform=config.obs_transform)
+
+    preflight = validate_batch_against_env_spaces(
+        batch,
+        observation_space=observation_space,
+        action_space=action_space,
+    )
+    if not preflight.ok:
+        raise ValueError(
+            "offline_online dataset failed environment-space preflight: "
+            + "; ".join(preflight.validation_errors)
+        )
+
+    seed_sb3_replay_buffer(model, batch)
+    logger.info(
+        "Seeded SAC replay buffer with {} offline transitions from {} (sha256={})",
+        batch.size,
+        offline.dataset_path,
+        batch.preflight.dataset_sha256,
+    )
+
+    if dry_run or offline.offline_gradient_steps == 0:
+        return
+
+    batch_size = int(
+        config.sac_hyperparams.get("batch_size", _DEFAULT_SAC_HYPERPARAMS["batch_size"])
+    )
+    model.set_logger(configure_sb3_logger(format_strings=[]))
+    model.train(gradient_steps=offline.offline_gradient_steps, batch_size=batch_size)
+
+
 class _PeriodicSACEvaluationCallback(BaseCallback):
     """Periodically evaluate SAC checkpoints against a real scenario matrix."""
 
@@ -952,6 +1137,15 @@ def run_sac_training(
             policy_kwargs=policy_kwargs,
             **hyperparams,  # type: ignore[arg-type]
         )
+
+        if config.offline_online.enabled:
+            _seed_offline_online_replay_buffer(
+                model,
+                config=config,
+                observation_space=vec_env.observation_space,
+                action_space=vec_env.action_space,
+                dry_run=dry_run,
+            )
 
         wandb_run = _maybe_init_wandb(config, dry_run=dry_run)
         eval_callback = (

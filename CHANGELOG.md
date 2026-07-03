@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* Fixed the **LiCCA post-guard full-suite teardown hang** (#4216): the suite could reach 100% and
+  then never exit because `tests/perf_utils/test_enforce_mode.py` spawned a nested `pytest` child
+  with an unbounded `subprocess.run(...)` (its `@pytest.mark.timeout` marker is a no-op because
+  `pytest-timeout` is not installed). On a shared GPU/HPC node that child can deadlock during
+  CUDA/interpreter teardown or leave a descendant holding device handles, blocking the parent
+  forever. Added `tests/support/process_teardown.py::run_bounded_subprocess`, which runs the child
+  in its own process group and, on timeout, reaps the whole group (SIGTERM→SIGKILL) so descendants
+  are terminated too — mirroring the termination pattern already used by
+  `scripts/dev/run_compact_validation.py`. The nested-pytest call site is now bounded
+  (`ROBOT_SF_NESTED_PYTEST_TIMEOUT`, default 180s) and a CPU-only regression test proves a
+  long-lived descendant is reaped. No GitHub Actions behavior changes.
+
 ### Added
 
 * Retained **`min_clearance_m` and `proxemic_intrusion_rate`** in the camera-ready campaign
@@ -20,6 +34,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   degraded campaigns are **not** backfilled — with no source values both fields fail closed to `nan`
   so their gates stay `not_evaluable`. No benchmark campaign was run; this is a schema/aggregation
   change only.
+* Added a **packet-consuming run planner for the issue #4142 dense DPCBF comparison** (#4142):
+  `robot_sf/benchmark/issue_4142_dpcbf_dense_runner.py` consumes the predeclared packet schema
+  `robot_sf.issue_4142_dpcbf_dense_comparison.v1` and resolves it into an ordered, per-arm run plan
+  (`cbf_off`, `cbf_collision_cone_on`, `cbf_dynamic_parabolic_v1_on`), closing the readiness surface's
+  first downstream gate ("no packet-consuming runner is wired to this schema"). Each arm resolves to
+  one benchmark job pinned to the shared `prediction_mpc_cv` algorithm, that arm's validated adapter
+  config, the shared scenario manifest, and a per-arm output path, reusing the canonical readiness
+  validator as the single source of truth (no parallel validation). It stays fail-closed: an invalid
+  packet yields `prerequisites_incomplete` with no executable arm jobs, the fail-closed row-status
+  exclusion (`fallback`, `degraded`, `failed`, `ineligible`) is carried verbatim into the resolved
+  plan (`robot_sf.issue_4142_dpcbf_dense_comparison_plan.v1`), and `execute_run_plan()` always fails
+  closed because running the comparison requires explicit human/Slurm authorization. Adds the thin CLI
+  `scripts/tools/run_issue_4142_dpcbf_dense_comparison.py` (dry-run default), tests
+  `tests/benchmark/test_issue_4142_dpcbf_dense_runner.py`, and context note
+  `docs/context/issue_4142_dpcbf_dense_runner.md`. Runs no episodes, submits no Slurm/GPU job, and
+  makes no safety-performance or collision-reduction claim.
+* Added a **consolidated failure-archive rerun closure packet** for issue #3275:
+  `robot_sf/benchmark/failure_archive_rerun_closure.py` (`build_rerun_closure_packet`, schema
+  `failure_archive_rerun_closure_packet.v1`) folds the accumulated rerun readiness/leakage guards into
+  one durable verdict — a single `disposition` (`ready_for_rerun`, `fail_closed_blocked`, or
+  `diagnostic_only`), the consolidated blocker list, and a deterministic `next_empirical_action`.
+  `scripts/adversarial/produce_rerun_closure_packet.py` exposes it as a fail-closed CLI (exit codes
+  `0`/`2`/`3`), and a missing or malformed archive fails closed instead of substituting a synthetic
+  fixture. The closure packet adds no new gate; it composes the canonical pair gate
+  `classify_failure_archive_rerun_readiness`. Running it on the two real smoke archives (`issue_1502`
+  source, `issue_1501` rerun) produces a `fail_closed_blocked` evidence packet under
+  `docs/context/evidence/issue_3275_rerun_closure_2026-07-03/`. No benchmark campaign run, no
+  proposal-model inference, no held-out yield claim, and no paper/dissertation claim edit; the real
+  disjoint certified rerun with independent planner-execution outcomes remains the open issue #3275
+  contract.
 * Generated the **current-roster release-gate evidence report** for issue #4166, the real-campaign
   application of the reporting layer merged in PR #4184. The merged evaluator now consumes the
   canonical retained camera-ready `campaign_summary.json` directly (`release_gates._rows_from_mapping`

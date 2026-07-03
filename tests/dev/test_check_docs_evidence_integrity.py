@@ -164,6 +164,85 @@ def test_changed_checksum_manifest_validates_targets(tmp_path: Path) -> None:
     assert problems == []
 
 
+def test_bare_name_manifest_verifies_packet_local_file(tmp_path: Path) -> None:
+    """A bare SHA256SUMS entry must verify the packet's own file, not a repo-root twin.
+
+    Regression for issue #4317: packets generated with ``sha256sum *`` list bare
+    filenames (for example ``README.md``). A repo-root file with the same name must
+    not shadow the packet-local file during verification.
+    """
+    (tmp_path / "README.md").write_text("# repo root readme\n", encoding="utf-8")
+
+    bundle = tmp_path / "docs/context/evidence/issue_999_collision"
+    bundle.mkdir(parents=True)
+    readme = bundle / "README.md"
+    readme.write_text("# packet readme\n", encoding="utf-8")
+    manifest = bundle / "SHA256SUMS"
+    manifest.write_text(f"{_sha256(readme)}  README.md\n", encoding="utf-8")
+    _write_catalog(
+        tmp_path,
+        [
+            readme.relative_to(tmp_path).as_posix(),
+            manifest.relative_to(tmp_path).as_posix(),
+        ],
+    )
+
+    problems = check_files([manifest.relative_to(tmp_path).as_posix()], root=tmp_path)
+
+    assert problems == []
+
+
+def test_bare_name_mismatch_names_packet_local_target(tmp_path: Path) -> None:
+    """A wrong bare-name hash must fail against the packet-local file, not repo root."""
+    (tmp_path / "README.md").write_text("# repo root readme\n", encoding="utf-8")
+
+    bundle = tmp_path / "docs/context/evidence/issue_999_collision_bad"
+    bundle.mkdir(parents=True)
+    readme = bundle / "README.md"
+    readme.write_text("# packet readme\n", encoding="utf-8")
+    manifest = bundle / "SHA256SUMS"
+    manifest.write_text(f"{'0' * 64}  README.md\n", encoding="utf-8")
+    _write_catalog(
+        tmp_path,
+        [
+            readme.relative_to(tmp_path).as_posix(),
+            manifest.relative_to(tmp_path).as_posix(),
+        ],
+    )
+
+    problems = check_files([manifest.relative_to(tmp_path).as_posix()], root=tmp_path)
+
+    assert any("checksum mismatch" in problem for problem in problems)
+    # The mismatch must name the packet-local README, not the repo-root twin.
+    assert any(str(readme) in problem for problem in problems)
+    assert not any(
+        problem.endswith(f"checksum mismatch for {tmp_path / 'README.md'}") for problem in problems
+    )
+
+
+def test_changed_bare_name_packet_file_is_validated(tmp_path: Path) -> None:
+    """Changing a packet-local file finds its adjacent bare-name manifest entry (issue #4317)."""
+    (tmp_path / "README.md").write_text("# repo root readme\n", encoding="utf-8")
+
+    bundle = tmp_path / "docs/context/evidence/issue_999_changed_bare"
+    bundle.mkdir(parents=True)
+    readme = bundle / "README.md"
+    readme.write_text("# packet readme\n", encoding="utf-8")
+    manifest = bundle / "SHA256SUMS"
+    manifest.write_text(f"{_sha256(readme)}  README.md\n", encoding="utf-8")
+    _write_catalog(
+        tmp_path,
+        [
+            readme.relative_to(tmp_path).as_posix(),
+            manifest.relative_to(tmp_path).as_posix(),
+        ],
+    )
+
+    problems = check_files([readme.relative_to(tmp_path).as_posix()], root=tmp_path)
+
+    assert problems == []
+
+
 def test_catalog_change_validates_registered_paths(tmp_path: Path) -> None:
     """Changing catalog.yaml validates that registered paths exist."""
     _write_catalog(tmp_path, ["docs/context/evidence/issue_999_missing/summary.json"])

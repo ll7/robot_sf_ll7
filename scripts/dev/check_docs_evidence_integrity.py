@@ -286,6 +286,22 @@ def _checksum_manifest_paths(path: Path, *, root: Path) -> list[Path]:
     return [parent / name for name in sorted(_CHECKSUM_FILENAMES) if (parent / name).is_file()]
 
 
+def _resolve_checksum_target(candidate: Path, *, manifest: Path, root: Path) -> Path:
+    """Resolve a manifest checksum entry to the file it should verify.
+
+    Prefer the file adjacent to the manifest (standard ``sha256sum -c`` semantics
+    run from the packet directory), so a bare entry such as ``README.md`` verifies
+    the packet's own file rather than a repo-root file with the same name (issue
+    #4317). Fall back to the repo-root-relative resolution only when no
+    manifest-local file exists, which preserves manifests written with
+    repo-root-relative paths (for example ``docs/context/evidence/.../summary.json``).
+    """
+    manifest_candidate = manifest.parent / candidate
+    if manifest_candidate.exists():
+        return manifest_candidate
+    return root / candidate
+
+
 def _parse_checksum_line(line: str, *, manifest: Path, root: Path) -> tuple[str, Path] | None:
     """Parse a sha256sum-style manifest line."""
     stripped = line.strip()
@@ -300,10 +316,8 @@ def _parse_checksum_line(line: str, *, manifest: Path, root: Path) -> tuple[str,
     if candidate.is_absolute() or ".." in candidate.parts:
         return None
 
-    root_candidate = root / candidate
-    if root_candidate.exists():
-        return match.group("hash").lower(), root_candidate
-    return match.group("hash").lower(), manifest.parent / candidate
+    target = _resolve_checksum_target(candidate, manifest=manifest, root=root)
+    return match.group("hash").lower(), target
 
 
 def _sha256(path: Path) -> str:

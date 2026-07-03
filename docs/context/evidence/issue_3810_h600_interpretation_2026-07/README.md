@@ -21,8 +21,17 @@ This directory contains diagnostic-only h600 interpretation artifacts for jobs 1
 - `interaction_exposure_diagnostics.json` and `interaction_exposure_diagnostics.md`: episode-level exposure coverage readiness; fail-closed when required fields are absent.
 - `h600_mechanism_labels_sidecar.csv` `h600_interaction_exposure_sidecar.csv`: retained h600 episode-row sidecars from issue #4242. All retained rows are explicit `not_derivable_missing_trace`; no geometry-only mechanism labels or exposure zero-imputation are used.
 - `h600_mechanism_exposure_backfill_manifest.json` `h600_mechanism_exposure_backfill_report.md`: compact sidecar provenance, status counts, and diagnostic-only claim boundary.
+- `hybrid_roster_h600_transfer_packet.md`: pre-registered h600 hybrid-roster campaign (job 13282, issue #4230) — the F-C4(ii) gate input leg; AI-generated, needs review, promotes nothing.
+- `f_c4_ii_interpretation_gate.md`: integrates the hybrid-roster packet (13282) with the confirm/extended bundle (13268/13273) into the diagnostic F-C4(ii) boundary (supported / diagnostic-only / not-supported) so issue #4195 checklist reading comes from committed artifacts. Records the maintainer sign-off (2026-07-03, F-C4 draft→supported, diss `0d853df`) as durable provenance; the evidence stays diagnostic-tier and this note promotes nothing on its own.
 - `source_manifest.json`: input paths, campaign metadata, and source file SHA-256 digests.
 - `SHA256SUMS`: checksums for generated files in this directory.
+
+## F-C4(ii) integration gate
+
+- The h600 hybrid-roster leg (job 13282) shares the confirm/extended scenario-matrix hash `c10df617a87c`, the comparability precondition for reading F-C4(ii) across all three legs.
+- Gate reading is `diagnostic-only`: hybrids separate above every prediction-equipped arm at h600 (Δ ≥ 0.20, disjoint CIs); the hybrid-vs-ORCA lead stays CI-overlapping (diagnostic) at the 3-seed budget. See `f_c4_ii_interpretation_gate.md` for the full boundary.
+- Sign-off: the maintainer promoted F-C4 draft→supported (pillars (i)+(ii)) at exactly this guarded wording on 2026-07-03 (diss `0d853df`), closing the #4195 interpretation chain; pillar (iii) stays draft (outside #4195).
+- Validate the integration with `uv run python scripts/validation/check_issue_4195_f_c4_ii_gate.py` (fail-closed: SHA256SUMS coverage/digest match, required boundary sections, shared-matrix-hash agreement).
 
 ## Notes
 

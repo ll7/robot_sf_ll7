@@ -463,6 +463,7 @@ max-statements = 60
 "robot_sf/benchmark/aggregate.py" = ["BLE001"]
 "robot_sf/benchmark/artifact_catalog.py" = ["BLE001"]
 "robot_sf/benchmark/camera_ready_campaign.py" = ["BLE001"]
+"robot_sf/benchmark/camera_ready/campaign.py" = ["BLE001"]
 "robot_sf/benchmark/cli.py" = ["BLE001", "T201"]
 "robot_sf/benchmark/doctor.py" = ["BLE001"]
 "robot_sf/benchmark/failure_extractor.py" = ["BLE001"]

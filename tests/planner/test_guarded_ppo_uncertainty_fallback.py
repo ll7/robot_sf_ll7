@@ -131,6 +131,7 @@ def test_uncertainty_fallback_disabled_preserves_existing_guarded_ppo_behavior()
         ("uncertainty_buffer_intrusion_threshold", -0.01),
         ("uncertainty_collision_probability_threshold", 1.01),
         ("uncertainty_base_radius_m", -0.1),
+        ("uncertainty_base_radius_m", 0.0),
         ("uncertainty_conformal_radius_m", -0.1),
         ("uncertainty_slow_down_speed_m_s", -0.1),
         ("uncertainty_min_ttc_threshold_s", -0.1),

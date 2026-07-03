@@ -69,8 +69,10 @@ class GuardedPPOConfig:
         }.items():
             if not 0.0 <= float(value) <= 1.0:
                 raise ValueError(f"{name} must be in [0.0, 1.0]")
+        if float(self.uncertainty_base_radius_m) <= 0.0:
+            raise ValueError("uncertainty_base_radius_m must be positive")
+
         for name, value in {
-            "uncertainty_base_radius_m": self.uncertainty_base_radius_m,
             "uncertainty_conformal_radius_m": self.uncertainty_conformal_radius_m,
             "uncertainty_slow_down_speed_m_s": self.uncertainty_slow_down_speed_m_s,
         }.items():

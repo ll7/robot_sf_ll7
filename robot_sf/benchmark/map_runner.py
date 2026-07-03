@@ -1576,12 +1576,15 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             "fallback_safe": 0,
             "prior_blend_safe": 0,
             "prior_residual_safe": 0,
-            "prior_safe": 0,
-            "stop_safe": 0,
-            "fallback_best_effort": 0,
-            "stop_best_effort": 0,
-            "goal_reached": 0,
-        }
+        "prior_safe": 0,
+        "stop_safe": 0,
+        "fallback_best_effort": 0,
+        "stop_best_effort": 0,
+        "uncertainty_fallback_stop": 0,
+        "uncertainty_fallback_slow_down": 0,
+        "uncertainty_fallback_configured": 0,
+        "goal_reached": 0,
+    }
         meta["residual_clipping_stats"] = {
             "schema_version": "orca-residual-clipping-stats.v1",
             "decision_count": 0,

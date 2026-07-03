@@ -35,6 +35,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Taught the **issue #4206 mechanism-level policy-structure cross-cut builder** to consume the
+  declared external failure-mechanism sidecar (the #4305 declared-sidecar path) and to fail closed
+  with a precise new status `blocked_trace_labels_not_derivable_predates_trace_capture`
+  (`scripts/validation/build_issue_4206_policy_structure_mechanism_crosscut.py`, config
+  `configs/analysis/issue_4206_policy_structure_mechanism_crosscut.yaml`). The retained h600 confirm
+  (13268) and extended-roster (13273) episode rows predate trace capture (#4301), so every label in
+  the declared #4242 backfill sidecar
+  (`docs/context/evidence/issue_3810_h600_interpretation_2026-07/h600_mechanism_labels_sidecar.csv`)
+  is `not_derivable_missing_trace`. The builder now distinguishes "taxonomy applied but no trace was
+  derivable → needs a trace-instrumented re-run" from the generic "add a sidecar" block, so the
+  F-C4(ii) blocker names the correct next empirical action instead of pointing at a sidecar backfill
+  that already produced only unknowns. Geometry-bucket substitution stays rejected; a declared
+  sidecar carrying real trace labels unblocks the F-C4(ii) rank/probe tables. Diagnostic analysis
+  support only: no benchmark campaign, Slurm/GPU submission, or paper/dissertation claim change.
 * Added a **named-candidate seed-sufficiency closure evaluator for the retained h600 roots** (#4328,
   toward #3556): `scripts/validation/evaluate_issue_4328_h600_seed_sufficiency_candidates.py` plus pure
   logic in the canonical screening owner (`robot_sf/benchmark/scenario_belief_screening.py`). It

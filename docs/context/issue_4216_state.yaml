@@ -1,0 +1,80 @@
+# Canonical append-only state surface for issue #4216
+# (LiCCA full-suite closure after the nested-pytest teardown hang fix).
+#
+# Purpose: consolidate the multi-PR validation-gate chain into ONE machine-readable
+# surface so the single remaining empirical action -- a LiCCA/shared-HPC full-suite
+# exit-code rerun on the GPU/compute-submit lane -- is deterministic and appendable.
+# This file tracks state only; behavior/schema changes live in the referenced PRs.
+# Append new entries; do not rewrite history.
+issue: 4216
+state_surface: licca_full_suite_env_conditional_closure
+evidence_dir: docs/context/evidence/issue_4216_licca_full_suite_env_failures
+source_job: "9858988"  # LiCCA full-suite run, 2026-07-03: 10310 passed, 15 failed, 11 skipped, 1 error
+
+# Merged validation-gate lineage (fragmentation-guard context: >=3 #4216 PRs in 24h).
+gate_lineage:
+  - pr: 4237
+    role: inventory_and_env_guards
+    state: merged
+    delivered: "tests/support/environment_guards.py + 15-node failure_inventory.json for job 9858988; GitHub Actions coverage preserved."
+  - pr: 4276
+    role: post_guard_full_suite_probe
+    state: merged
+    delivered: "Observed suite reach 100% then hang; nested pytest child survived holding GPU device handles (post_guard_closure_20260703.json, exit_code 143 manual SIGTERM)."
+  - pr: 4320
+    role: nested_pytest_hang_fix
+    state: merged
+    delivered: "tests/support/process_teardown.py::run_bounded_subprocess (session/process-group child + SIGTERM->SIGKILL reaper + NestedProcessTimeout); call site in tests/perf_utils/test_enforce_mode.py fails loud instead of hanging; timeout via ROBOT_SF_NESTED_PYTEST_TIMEOUT (default 180s)."
+    residual_note: "Fix targets the identified mechanism; causal link to the GPU teardown deadlock is a hypothesis, not reproduced (no GPU on the CPU lane)."
+  - pr: 4340
+    role: post_fix_cpu_closure_verification
+    state: merged
+    delivered: "Recorded CPU exit-0 closure of the previously-hanging call site (post_fix_cpu_closure_20260703.json)."
+
+entries:
+  - recorded_at_utc: "2026-07-03T20:11:43Z"
+    host: auxme-imech039
+    lane: cpu_non_compute_submit
+    base_commit: "61fdb980714e60b4a59a1035ff910ef3e8389fc3"
+    status: cpu_closure_reverified__gpu_full_suite_rerun_still_pending
+    claim_boundary: >-
+      Independent re-verification on the current origin/main HEAD that the nested-pytest
+      teardown mechanism which hung the LiCCA post-guard full suite is bounded and reaped
+      on CPU: the exact previously-hanging call site (tests/perf_utils/test_enforce_mode.py)
+      and the process-group reaper (tests/support/process_teardown.py) exit with code 0
+      under both default and simulated-LiCCA envs. This is CPU mechanism-closure evidence
+      only. It does NOT reproduce the GPU/CUDA teardown path and is NOT a green LiCCA
+      full-suite gate. No compute submission, SLURM/GPU job, benchmark campaign, or
+      paper/dissertation claim edit was performed.
+    validation:
+      run_a_default_env:
+        command: "scripts/dev/run_worktree_shared_venv.sh -- pytest tests/support/test_process_teardown.py tests/perf_utils/test_enforce_mode.py tests/support/test_environment_guards.py -q"
+        exit_code: 0
+        result: "10 passed in 8.48s"
+        decisive_evidence: "Reaper + previously-hanging nested-pytest call site + env guards all exit 0; no post-100% hang."
+      run_b_simulated_licca:
+        command: "ROBOT_SF_TEST_ENV=licca scripts/dev/run_worktree_shared_venv.sh -- pytest tests/support/test_process_teardown.py tests/perf_utils/test_enforce_mode.py -q"
+        exit_code: 0
+        result: "5 passed in 8.43s"
+        decisive_evidence: "Under the shared-HPC guard marker the reaper path and nested-pytest call site still exit cleanly."
+      run_c_directory_level:
+        command: "scripts/dev/run_worktree_shared_venv.sh -- pytest tests/support/ tests/perf_utils/ -q"
+        exit_code: 0
+        result: "14 passed in 8.52s"
+        decisive_evidence: "Directory-level run of both affected trees exits cleanly with no orphaned nested child."
+    notes:
+      - "Reproduces PR #4340's decisive CPU runs on the current merged HEAD; no source change in this entry -- verification-and-consolidation only."
+      - "This entry adds no new guard/checker code; per the fragmentation guard it is a consolidation/state slice, not another micro-guard."
+
+# The single remaining action that blocks closing issue #4216.
+remaining_empirical_action:
+  action: "Run the LiCCA/shared-HPC full test suite (the job-9858988 entry point) after the #4320 fix and record the actual exit code + final pytest summary line."
+  reproducible_command: "PYTEST_NUM_WORKERS=8 ROBOT_SF_TEST_ENV=licca uv run pytest -q"
+  raw_log_provenance: "imech156-u:~/licca_9858988_pytest.log (698 lines, from gpfs scratch /hpc/gpfs2/scratch/u/luttkule/robot_sf/licca-all-tests/9858988/pytest.log)"
+  owner_lane: gpu_hpc_compute_submit  # out of scope for this CPU, compute_submit=false slice
+  blocks_close: true
+  fail_closed_classification:
+    green_gate: "pytest exits 0 with a final summary line and zero of the 15 job-9858988 residue nodes failing -> #4216 closeable."
+    residue_remaining: "pytest exits non-zero with one or more inventory nodes still failing -> re-open per-test guard work; do NOT close."
+    hang_regression: "no final summary line and the process must be SIGTERM'd (exit 143) with a surviving nested pytest child -> the #4320 fix did not hold on GPU; re-open the teardown-hang diagnosis. Fallback/degraded is not a successful gate (docs/context/issue_691_benchmark_fallback_policy.md)."
+  record_result_here: "Append a new entry to this file with status green_gate | residue_remaining | hang_regression, the run id, exit code, and final summary line."

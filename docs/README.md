@@ -104,7 +104,8 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Maintainer Values And Hard Contracts](./maintainer_values.md)** - Compact source of truth for current values: honest, transparent, reproducible progress; exploration labels; uncertainty and validation policy
 * **[Runtime Requirements](./dev_runtime_requirements.md)** - Non-`uv` host tools, system packages, optional Docker/`gh-act` support, and the local capability checker
 * **[Security Triage Guidance](./security_triage.md)** - Vulnerability reporting, dependency scanning, static-analysis triage, and accepted-risk handling for research code
-* **[External Data Setup Assistant](./external_data_setup.md)** - License-safe local staging and compact provenance manifests for SDD, SocNavBench, and AMV calibration-source assets
+* **[External Data Setup Assistant](./external_data_setup.md)** - License-safe local staging and compact provenance manifests for external datasets including Stanford Drone Dataset, SocNavBench, ETH/UCY, and AMV calibration-source assets
+* **[ETH/UCY External Trajectory Data](./datasets/eth-ucy.md)** - Public acquisition, citation, and expected layout notes for locally staged ETH BIWI and UCY Crowds-by-Example trajectories
 * **[Context Retrieval Index](./context/INDEX.md)** - Retrieval-first catalog for current context-note entry points, status rules, optional context tools, and curated context-pack scopes
 * **[Agent Workflow Entrypoints And Large-File Navigation](./ai/agent_workflow_entrypoints.md)** - Correct `uv run` command patterns, validation entrypoints, model registry path, and targeted large-file reading guidance for agents
 * **[Issue #2013 Backend Adapter Contract](./context/issue_2013_backend_adapter_contract.md)** - Required adapter fields, fail-closed behavior, and claim boundaries for alternate simulator backend integration

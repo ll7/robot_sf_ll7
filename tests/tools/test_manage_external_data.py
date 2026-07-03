@@ -71,10 +71,10 @@ def test_registry_covers_initial_required_asset_groups() -> None:
 
 
 def test_registry_covers_alyassi_table_7_asset_slice() -> None:
-    """Issue #4224 registers the Alyassi Table 7 dataset candidates as manual assets."""
+    """Issue #4224/#4280 registers manual external dataset candidates."""
     expected = {
         "atc-pedestrian",
-        "eth-ucy-trajectories",
+        "eth-ucy",
         "ind-crossings",
         "crowdbot",
         "scand-demos",
@@ -146,10 +146,7 @@ def test_external_data_root_overrides_asset_paths(
         manage_external_data.resolve_asset_local_path_by_id("atc-pedestrian")
         == shared_root / "atc_pedestrian"
     )
-    assert (
-        manage_external_data.resolve_asset_local_path_by_id("eth-ucy-trajectories")
-        == shared_root / "eth_ucy_trajectories"
-    )
+    assert manage_external_data.resolve_asset_local_path_by_id("eth-ucy") == shared_root / "eth-ucy"
     assert (
         manage_external_data.resolve_asset_local_path_by_id("ind-crossings")
         == shared_root / "ind_crossings"
@@ -282,7 +279,7 @@ def test_alyassi_table_7_downloads_are_rejected() -> None:
     """Issue #4224 assets are registry/manual-staging only, not auto-downloadable."""
     for asset_id in (
         "atc-pedestrian",
-        "eth-ucy-trajectories",
+        "eth-ucy",
         "ind-crossings",
         "crowdbot",
         "scand-demos",

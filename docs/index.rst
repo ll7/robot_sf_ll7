@@ -21,6 +21,8 @@ references.
    Quickstart Map <quickstart>
    Development Guide <dev_guide>
    Runtime Requirements <dev_runtime_requirements>
+   External Data Setup <external_data_setup>
+   ETH/UCY External Trajectory Data <datasets/eth-ucy>
 
 .. toctree::
    :caption: Scenario Zoo

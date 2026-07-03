@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -214,6 +215,7 @@ def train_constrained_rl(
 ) -> dict[str, object]:
     """Run or dry-run PPO-Lagrangian training and persist provenance metadata."""
 
+    start_time = time.perf_counter()
     output_dir = config.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     resolved_config_path = output_dir / "resolved_config.yaml"
@@ -233,6 +235,7 @@ def train_constrained_rl(
             resolved_config_path=resolved_config_path,
             trace_path=trace_path,
             dry_run=True,
+            runtime_seconds=round(time.perf_counter() - start_time, 6),
         )
         _write_json(manifest_path, manifest)
         logger.info("Dry-run wrote constrained-RL manifest to {}", manifest_path)
@@ -269,6 +272,7 @@ def train_constrained_rl(
         resolved_config_path=resolved_config_path,
         trace_path=trace_path,
         dry_run=False,
+        runtime_seconds=round(time.perf_counter() - start_time, 6),
     )
     _write_json(manifest_path, manifest)
     logger.info("Saved constrained-RL checkpoint to {}", checkpoint_path)
@@ -360,6 +364,7 @@ def _training_manifest(
     resolved_config_path: Path,
     trace_path: Path,
     dry_run: bool,
+    runtime_seconds: float,
 ) -> dict[str, object]:
     """Build the reviewable training manifest."""
 
@@ -379,6 +384,7 @@ def _training_manifest(
         "device": config.device,
         "constraints_enabled": config.safety_constraints.enabled,
         "constraints": [asdict(spec) for spec in config.safety_constraints.constraints],
+        "runtime_seconds": runtime_seconds,
         "checkpoint_path": str(checkpoint_path) if checkpoint_path else None,
         "resolved_config_path": str(resolved_config_path),
         "constraint_trace_path": str(trace_path),

@@ -38,6 +38,7 @@ def test_dry_run_writes_manifest_resolved_config_and_empty_trace(tmp_path: Path)
     assert manifest["dry_run"] is True
     assert manifest["fallback_or_degraded"] is False
     assert manifest["checkpoint_path"] is None
+    assert manifest["runtime_seconds"] >= 0.0
     assert len(manifest["constraints"]) == 3
     assert resolved["safety_constraints"]["enabled"] is True
     assert trace_path.read_text(encoding="utf-8") == ""

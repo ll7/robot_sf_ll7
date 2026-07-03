@@ -252,7 +252,7 @@ def run_training(
     recurrent_ppo_cls = _require_sb3_contrib()
     start = time.perf_counter()
     scenario_definitions = tuple(train_ppo.load_scenarios(config.base.scenario_config))
-    scenario_ctx = train_ppo._resolve_training_scenario(config.base, scenario_definitions)
+    scenario_ctx = train_ppo._resolve_scenario_context(config.base, scenario_definitions)
     num_envs = train_ppo._resolve_num_envs(config.base)
     worker_mode = train_ppo._resolve_worker_mode(config.base, num_envs)
     env_fns = [

@@ -14,6 +14,9 @@ CONFIG_PATH = Path("configs/training/ppo/issue_4014_ppo_lstm_recurrent_smoke.yam
 
 def _write_config(tmp_path: Path, updates: dict) -> Path:
     raw = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+    for key in updates:
+        if key not in raw:
+            raise KeyError(f"Key {key!r} not found in base config.")
     raw.update(updates)
     target = tmp_path / "recurrent.yaml"
     target.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")

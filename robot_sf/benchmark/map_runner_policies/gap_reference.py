@@ -77,7 +77,7 @@ def build(
             adapter_name="TrivialReferencePlannerAdapter",
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
-            limitations="Diagnostic adapter template only; do not use benchmark planner evidence.",
+            limitations="Diagnostic adapter template only; do not use as benchmark planner evidence.",
         )
 
     if algo_key == "stream_gap":

@@ -19,6 +19,12 @@ from robot_sf.sim.pedestrian_model_variants import (
     normalize_pedestrian_model,
 )
 
+# Repository root, used to emit portable repo-relative provenance paths in the
+# committed evidence packet (issue #4324; same defect class as #4302). This module
+# lives at ``robot_sf/benchmark/certification_transfer.py``, so the repo root is two
+# parents up.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 PROBE_SCHEMA_VERSION = "certification-transfer-probe.v1"
 GATE_SPEC_SCHEMA_VERSION = "benchmark_release_gate_spec.v1"
 REPORT_SCHEMA_VERSION = "certification-transfer-report.v1"
@@ -245,12 +251,12 @@ def build_certification_transfer_report(
         "claim_boundary": CLAIM_BOUNDARY,
         "paper_facing": False,
         "config": {
-            "path": str(config_path),
+            "path": _repo_relative_path(config_path),
             "sha256": _sha256_file(config_path),
             "schema_version": normalized_config["schema_version"],
         },
         "gate_spec": {
-            "path": str(gate_spec_path),
+            "path": _repo_relative_path(gate_spec_path),
             "sha256": _sha256_file(gate_spec_path),
             "schema_version": normalized_gate_spec["schema_version"],
         },
@@ -283,8 +289,9 @@ def build_certification_transfer_report(
             "not_evaluable is never treated as pass.",
             "Model-transfer flips indicate model-assumption fragility in the gate decision.",
             "A stable transfer status over non_interacting cells is vacuous: the robot never "
-            "entered the pedestrian near field, so the SFM/HSFM swap was not exercised and no "
-            "certification-robustness conclusion follows.",
+            "entered the pedestrian near field, so the social-force model (SFM) / headed "
+            "social-force model (HSFM) swap was not exercised and no certification-robustness "
+            "conclusion follows.",
             "No deployment, real-world safety, or general planner-superiority claim follows.",
         ],
     }
@@ -706,7 +713,7 @@ def _claim_boundary_markdown(report: Mapping[str, Any]) -> str:
         "- `not_evaluable` cells are fail-closed and never count as `pass`.",
         "- `non_interacting` cells (robot never inside the 5 m pedestrian near field) cannot "
         "demonstrate certification robustness; a stable status over them is vacuous, because the "
-        "SFM/HSFM swap was never exercised.",
+        "social-force model (SFM) / headed social-force model (HSFM) swap was never exercised.",
         "- Pass/fail flips are a result: model-assumption fragility in the certification decision.",
         "- No full benchmark campaign, Slurm or GPU submission, retraining, deployment claim, "
         "real-world safety claim, or paper/dissertation claim promotion is included.",
@@ -758,6 +765,26 @@ def _checksums(paths: Iterable[Path]) -> str:
         f"{_sha256_file(path)}  {path.name}" for path in sorted(paths, key=lambda item: item.name)
     ]
     return "\n".join(rows) + "\n"
+
+
+def _repo_relative_path(path: str | Path) -> str:
+    """Return ``path`` as a portable repo-relative POSIX string when possible.
+
+    Evidence packets are committed and shared across machines and CI, so their
+    provenance fields must never bake in absolute, username-bearing local paths
+    such as ``/home/<user>/git/robot_sf_ll7.worktrees/.../config.yaml`` (issue
+    #4324; same non-reproducibility defect as #4302). When ``path`` resolves
+    inside this checkout it is rendered relative to :data:`REPO_ROOT`; otherwise
+    it falls back to the bare file name so no absolute home-dir path can leak
+    into the durable artifact. The pre-commit guard
+    (``hooks/check_config_abs_paths.py``) enforces this fail-closed at commit
+    time for both ``configs/**`` and ``docs/context/evidence/**``.
+    """
+    resolved = Path(path).resolve()
+    try:
+        return resolved.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return resolved.name
 
 
 def _sha256_file(path: Path) -> str:

@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Removed absolute, username-bearing local paths from the committed issue #4207
+  certification-transfer evidence packet and hardened the guard against the class (#4324). The
+  `config.path` / `gate_spec.path` provenance fields in
+  `docs/context/evidence/issue_4207_interacting_smoke_2026-07/{metadata,summary}.json` had baked in
+  the author's worktree path (`/home/<user>/git/robot_sf_ll7.worktrees/...`, same non-reproducibility
+  defect as #4302/#4303) and are now repo-relative (`configs/benchmarks/...`); `SHA256SUMS` is
+  regenerated. `robot_sf/benchmark/certification_transfer.py` now normalizes those fields at
+  generation via `_repo_relative_path(...)`, so future packets stay portable. The
+  `Check Configs For Absolute Home-Dir Paths` pre-commit hook
+  (`hooks/check_config_abs_paths.py`) now also scans `docs/context/evidence/**`, so this class fails
+  closed at commit time. Diagnostic-only evidence hygiene: no benchmark, metric, or paper/dissertation
+  claim changes.
 * Fixed the **LiCCA post-guard full-suite teardown hang** (#4216): the suite could reach 100% and
   then never exit because `tests/perf_utils/test_enforce_mode.py` spawned a nested `pytest` child
   with an unbounded `subprocess.run(...)` (its `@pytest.mark.timeout` marker is a no-op because
@@ -41,6 +53,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   packet is unchanged and remains tooling-validation only. The runner
   `scripts/benchmark/run_certification_transfer_issue_4207.py` now records repo-relative (portable)
   config/gate-spec provenance paths.
+* Added a **named-candidate seed-sufficiency closure evaluator for the retained h600 roots** (#4328,
+  toward #3556): `scripts/validation/evaluate_issue_4328_h600_seed_sufficiency_candidates.py` plus pure
+  logic in the canonical screening owner (`robot_sf/benchmark/scenario_belief_screening.py`). It
+  evaluates the three named h600 report roots proposed in issue #4328 against the #3556 ScenarioBelief
+  seed-sufficiency closure contract — existence on the current host, the two analyzer-required report
+  files, **and** a ScenarioBelief provenance/lineage gate — then runs the analyzer on the best fully
+  compatible candidate or fails closed with an explicit per-candidate blocker. The provenance gate is
+  the new capability over PR #4310's durable-root resolver: it prevents a foreign h600 roster
+  campaign's seed-sufficiency (a different question) from being promoted as #3556 closure evidence.
+  On a host without the roots the committed packet records `blocked_no_compatible_candidate` (all three
+  candidates absent + provenance-incompatible) with a deferred queue-row request for a #3556-specific
+  campaign. Diagnostic evidence-closure tooling only; no benchmark/paper-grade claim, no campaign run.
+* Added a **skip-if-absent inD shape-contract loader** for issue #4224:
+  `robot_sf/data/external/ind.py` inspects a locally staged inD copy (naturalistic road-user
+  trajectories at German intersections, Bock et al. 2020) and validates the documented per-recording
+  file group (`*_tracks.csv`, `*_tracksMeta.csv`, `*_recordingMeta.csv`, and a background image)
+  without ever downloading or redistributing the request-gated dataset bytes. `is_available`,
+  `require_available`, and `load_shape_contract` provide a cheap structural contract (non-empty,
+  rectangular CSVs carrying inD's published header columns, with finite coordinate/id parsing) and
+  return per-recording row/column shape metadata; no scene content, benchmark, or paper-facing claim
+  is asserted. `tests/data/external/test_ind_shape.py` covers the absent (skip), synthetic-layout,
+  multi-recording, background-fallback, and fail-closed cases. This is the public slice (b) of the
+  maintainer external-data split for the `ind-crossings` asset (registry entry #4238, acquisition
+  docs #4290); private-ops staging remains a follow-up. `docs/datasets/ind.md` documents the loader.
+* Added a **license-safe ATC pedestrian-tracking loader + skip-if-absent shape-contract tests**
+  for issue #4289 (follow-up to the #4224 external-data program): `robot_sf/data/external/atc.py`
+  exposes `is_available`, `require_available`, and `load_shape_contract` over the canonical
+  `atc-pedestrian` external-data registry entry. The loader only inspects locally staged files — it
+  never downloads, vendors, or redistributes the license-gated ATC bytes. It reuses
+  `manage_external_data.check_asset` for presence (one daily CSV plus a local terms/README note) and
+  validates each staged daily CSV as headerless, comma-delimited, exactly eight numeric columns wide;
+  scanning is bounded by default (`max_rows=10000`, reported via `scan_truncated`) since a single ATC
+  day can hold millions of samples. Malformed staged CSVs fail closed with `AtcDataError` pointing to
+  `docs/datasets/atc.md`. Tests in `tests/data/external/test_atc_shape.py` skip cleanly when no local
+  ATC copy is staged and otherwise run on synthetic fixtures. No dataset bytes, download code,
+  benchmark consumer, campaign run, or paper-facing claim is introduced; follows the #4279
+  (`socnavbench-s3dis-eth`) exemplar pattern.
+* Retained **`min_clearance_m` and `proxemic_intrusion_rate`** in the camera-ready campaign
+  summary/retention schema (issue #4326, from #4313). `robot_sf/benchmark/camera_ready/_reporting.py`
+  now emits both fields per planner row, aggregated from per-episode values that already exist in
+  episode rows: `min_clearance_m` is the campaign-wide **worst-case (minimum)** clearance (distinct
+  from the mean-of-per-episode-minimums kept as `min_clearance_mean`), and `proxemic_intrusion_rate`
+  is the mean per-episode personal-space intrusion fraction (`social_proxemic_intrusion_frac`). This
+  makes the clearance/proxemic release-gate coverage gaps from #4313 evaluable for **future**
+  campaigns with no evaluator code change (the gate spec already targets these exact names). Past and
+  degraded campaigns are **not** backfilled — with no source values both fields fail closed to `nan`
+  so their gates stay `not_evaluable`. No benchmark campaign was run; this is a schema/aggregation
+  change only.
+* Added **diff-scoped context-note freshness gating** for issue #3190. The docs-proof consistency
+  checker (`scripts/validation/check_docs_proof_consistency.py`) gains a `--freshness-scope
+  {repo,diff}` option: `repo` (default) preserves the existing repo-wide `--check-context-note-freshness`
+  behavior, while `diff` restricts freshness findings to context notes changed against `--base` (plus
+  catalog-driven `superseded_replacement`/`stale_current_dated` rules when `docs/context/catalog.yaml`
+  itself changed). This makes the freshness check safe to run as a per-PR gate without failing on the
+  pre-existing repo-wide backlog of stale/orphan notes. The diff wrapper
+  (`scripts/dev/check_docs_proof_consistency_diff.sh`) now runs the freshness checker in diff scope
+  when `DOCS_PROOF_CHECK_FRESHNESS=1` (opt-in, off by default; `DOCS_PROOF_FRESHNESS_STRICT=1` promotes
+  stale/orphan warnings to failures). Superseded-without-replacement errors fail closed. No content was
+  moved or archived; no benchmark/paper claims changed.
+
 * Added a **packet-consuming run planner for the issue #4142 dense DPCBF comparison** (#4142):
   `robot_sf/benchmark/issue_4142_dpcbf_dense_runner.py` consumes the predeclared packet schema
   `robot_sf.issue_4142_dpcbf_dense_comparison.v1` and resolves it into an ordered, per-arm run plan
@@ -112,7 +184,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `robot_sf/benchmark/certification_transfer.py` gains `classify_interaction_status(...)` and now
   tags every gate cell with `interaction_status` (`interacting` / `non_interacting` / `unknown`) and
   every transfer-matrix row with `interaction_status` plus an `interaction_exercised` flag. Because
-  `social_force_default` and `hsfm_total_force_v1` only diverge when the robot enters the 5 m
+  `social_force_default` (social-force model, SFM) and `hsfm_total_force_v1` (headed social-force
+  model, HSFM) only diverge when the robot enters the 5 m
   pedestrian near field, a `stable_pass`/`stable_fail` built from cells that never do is *vacuous* —
   it does not demonstrate certification robustness. The report/metadata now carry
   `interaction_status_counts` and a `model_sensitivity_exercised` boolean, and the README/claim

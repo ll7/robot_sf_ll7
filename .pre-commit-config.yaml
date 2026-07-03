@@ -17,10 +17,10 @@ repos:
         files: \.schema\.v[0-9]+\.json$
         pass_filenames: true
       - id: check-config-abs-paths
-        name: Check Configs For Absolute Home-Dir Paths
+        name: Check Configs And Evidence For Absolute Home-Dir Paths
         entry: uv run python hooks/check_config_abs_paths.py
         language: system
-        files: ^configs/.*\.(ya?ml|json|toml|cfg|ini)$
+        files: ^(configs/.*\.(ya?ml|json|toml|cfg|ini)|docs/context/evidence/.*\.(json|jsonl|md|csv|ya?ml|txt))$
         pass_filenames: true
       - id: check-config-provenance
         name: Check Training Config Issue Provenance

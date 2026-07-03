@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added an **interaction-validity guard** to the issue #4207 certification-transfer probe (#4207):
+  `robot_sf/benchmark/certification_transfer.py` gains `classify_interaction_status(...)` and now
+  tags every gate cell with `interaction_status` (`interacting` / `non_interacting` / `unknown`) and
+  every transfer-matrix row with `interaction_status` plus an `interaction_exercised` flag. Because
+  `social_force_default` and `hsfm_total_force_v1` only diverge when the robot enters the 5 m
+  pedestrian near field, a `stable_pass`/`stable_fail` built from cells that never do is *vacuous* —
+  it does not demonstrate certification robustness. The report/metadata now carry
+  `interaction_status_counts` and a `model_sensitivity_exercised` boolean, and the README/claim
+  boundary spell out the vacuity caveat. New
+  `scripts/benchmark/annotate_certification_transfer_interaction_issue_4207.py` applies the guard
+  post-hoc to a recorded `summary.json` (no new simulation) and emits `interaction_validity.{md,csv}`.
+  Running it on the committed 2026-07 packet shows all 8 cells are `non_interacting`
+  (`robot_ped_within_5m_frac == 0`, `min_clearance_m ≈ 20 m`), so its "0 flips" result is not yet
+  evidence of model-robust certification; the residual empirical action is an interacting scenario
+  family. Diagnostic-only; no deployment, benchmark-strength, or paper/dissertation claim.
 * Added a **safety-wrapper false-stop diagnostic** for `wrapper_on` benchmark rows (#3501):
   `robot_sf/benchmark/safety_wrapper_runtime.py` gains `analyze_false_stop_diagnostic(...)`, and the
   episode summary now embeds a schema-tagged `false_stop_diagnostic` block plus a

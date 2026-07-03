@@ -69,11 +69,31 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4166_release_gates/current_roster/PROVENANCE.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4166_release_gates/current_roster/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4166_release_gates/current_roster/gate_matrix.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4166_release_gates/current_roster/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4206_policy_structure_mechanism_crosscut_2026-07
     status: evidence
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_4207_certification_transfer_probe_2026-07
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4207_interacting_smoke_2026-07
     status: evidence
     freshness: evidence
     area: benchmark_evidence

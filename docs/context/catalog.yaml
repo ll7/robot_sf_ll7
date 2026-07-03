@@ -33,6 +33,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4163_static_constriction_rare_event_smoke/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4166_release_gates/README.md
     status: evidence
     freshness: evidence

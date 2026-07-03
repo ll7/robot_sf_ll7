@@ -1,0 +1,134 @@
+{
+  "arm_estimates": {
+    "ppo_frozen": {
+      "confidence_interval": [
+        0.0,
+        0.24306336742883233
+      ],
+      "confidence_level": 0.95,
+      "effective_sample_size": 16.938935075228482,
+      "estimate": 0.12081717240029136,
+      "event_count": 9,
+      "importance_sampling_variance": 0.0038902231929316337,
+      "naive_monte_carlo_estimate": 0.28125,
+      "naive_monte_carlo_variance": 0.006317138671875,
+      "objective_event": "collision_or_severe_intrusion",
+      "samples": 32,
+      "schema_version": "rare_event_sampling.v1",
+      "standard_error": 0.06237165376139736,
+      "variance_ratio_vs_naive": 0.6158204521062018,
+      "weight_sum": 15.059663970766673
+    },
+    "ppo_frozen_wrapper_on": {
+      "confidence_interval": [
+        0.0002531345768627749,
+        0.06321214074081591
+      ],
+      "confidence_level": 0.95,
+      "effective_sample_size": 16.938935075228482,
+      "estimate": 0.03173263765883934,
+      "event_count": 4,
+      "importance_sampling_variance": 0.00025796426840496835,
+      "naive_monte_carlo_estimate": 0.125,
+      "naive_monte_carlo_variance": 0.00341796875,
+      "objective_event": "collision_or_severe_intrusion",
+      "samples": 32,
+      "schema_version": "rare_event_sampling.v1",
+      "standard_error": 0.016061266089725565,
+      "variance_ratio_vs_naive": 0.07547297452762503,
+      "weight_sum": 15.059663970766673
+    }
+  },
+  "claim_boundary": "diagnostic rare-event harness smoke only; not a benchmark campaign or failure-rate claim",
+  "config_path": "configs/benchmarks/rare_event/issue_4163_static_constriction_smoke.yaml",
+  "episode_budget": 64,
+  "episodes_jsonl": "output/benchmarks/issue_4163/static_constriction_smoke/episodes.jsonl",
+  "estimator": {
+    "confidence_interval": [
+      0.0,
+      0.24306336742883233
+    ],
+    "confidence_level": 0.95,
+    "effective_sample_size": 16.938935075228482,
+    "estimate": 0.12081717240029136,
+    "event_count": 9,
+    "importance_sampling_variance": 0.0038902231929316337,
+    "naive_monte_carlo_estimate": 0.28125,
+    "naive_monte_carlo_variance": 0.006317138671875,
+    "objective_event": "collision_or_severe_intrusion",
+    "samples": 32,
+    "schema_version": "rare_event_sampling.v1",
+    "standard_error": 0.06237165376139736,
+    "variance_ratio_vs_naive": 0.6158204521062018,
+    "weight_sum": 15.059663970766673
+  },
+  "objective_event": "collision_or_severe_intrusion",
+  "out_of_scope": [
+    "no full benchmark campaign run",
+    "no Slurm/GPU submission",
+    "no paper/dissertation claim edits"
+  ],
+  "planner_arms": [
+    "ppo_frozen",
+    "ppo_frozen_wrapper_on"
+  ],
+  "proposal": "tilted_distribution",
+  "sample_provenance": {
+    "likelihood_ratio_max": 1.9255764542284224,
+    "likelihood_ratio_min": 0.06115346379391808,
+    "parameter_vector_hashes": [
+      "7619758598cb7561",
+      "d99b342d1c9f4a97",
+      "9d282405c66e3624",
+      "ab71cfd322651437",
+      "f095ef2c7d23a07f",
+      "35ef18c126b126e6",
+      "340e83859d3e4050",
+      "0e24c5de7bbc0951",
+      "1e49aa2b921d61d0",
+      "f2841855ca518424",
+      "448ffe9e58ad73aa",
+      "77fdadd2a7abf91b",
+      "50778ff348b05864",
+      "f554c68e625af6a0",
+      "12636e6240bbf6a8",
+      "51e27ea0d1cbc51c",
+      "f9a86edacc76a367",
+      "f8e10356eca6812d",
+      "d1e99fb31230e3bb",
+      "76928106ef713ed4",
+      "0dafe4952cb31f9d",
+      "3c0e57e9240c6828",
+      "cc9e03881435ddb4",
+      "dd6382b36b60bba9",
+      "d09ccd430ab861a0",
+      "17ee27d1d546338c",
+      "6328b3162487dd80",
+      "129df4836a1d5f11",
+      "fdcdc46496afd891",
+      "d89d7643a3e199f2",
+      "a97da43ec55452ef",
+      "8d7133d051742557"
+    ],
+    "row_count": 32
+  },
+  "samples": 32,
+  "scenario_matrix": "configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml",
+  "scenario_provenance": {
+    "mutated_parameter_vector_hash": "7619758598cb7561",
+    "scenario_name": "classic_bottleneck_low"
+  },
+  "schema_version": "rare_event_sampling.v1",
+  "seed": 4163,
+  "smoke_runner": "synthetic_toy_model",
+  "static_constriction_family": {
+    "claim_boundary": "Diagnostic application of the rare-event harness to the static-constriction family only; this is not benchmark-strength evidence or a failure-rate claim.",
+    "family_id": "static_constriction",
+    "scenario_ids": [
+      "classic_bottleneck_low",
+      "classic_head_on_corridor_low",
+      "narrow_passage"
+    ],
+    "source_contract": "configs/benchmarks/issue_4205_static_constriction_codesign_loop_v1.yaml"
+  }
+}

@@ -120,17 +120,17 @@ def test_emergency_reaction_releases_by_robot_proximity_at_required_speeds(
         )
         runtime = behavior._runtimes[0]
         dt = float(config.sim_config.time_per_step_in_secs)
-        step_index = {"value": 0}
+        step_index = 0
 
         def robot_pose_provider():
-            x = min(14.0, 7.0 + robot_speed_m_s * step_index["value"] * dt)
+            x = min(14.0, 7.0 + robot_speed_m_s * step_index * dt)
             return [((x, 14.0), 0.0)]
 
         behavior.set_robot_pose_provider(robot_pose_provider)
         action = np.zeros(env.action_space.shape, dtype=env.action_space.dtype)
 
         for step in range(180):
-            step_index["value"] = step
+            step_index = step
             env.step(action)
             if runtime.hold_released_by is not None:
                 break

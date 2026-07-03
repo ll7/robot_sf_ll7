@@ -42,6 +42,47 @@ def _check(passed: bool, detail: str) -> dict[str, Any]:
     return {"passed": bool(passed), "detail": detail}
 
 
+def build_seed_sufficiency_handoff(
+    *,
+    campaign_output_root: Path | str = "output/issue_3556_belief_mode_campaign",
+    output_dir: Path | str = "output/issue_3556_seed_sufficiency",
+    campaign_id: str = "issue_3556",
+    advisory_seed_threshold: int | None = None,
+) -> dict[str, Any]:
+    """Build the follow-up command for escalating smoke output to seed sufficiency.
+
+    The command is provenance for the next empirical step only. The screening
+    module remains pure and does not inspect campaign artifacts or promote the
+    current smoke seed fixture to seed-sufficient evidence.
+
+    Returns:
+        JSON-serializable handoff status, command argv, and claim boundary.
+    """
+    command = [
+        "uv",
+        "run",
+        "python",
+        "scripts/tools/analyze_seed_sufficiency.py",
+        "--campaign-output-root",
+        str(campaign_output_root),
+        "--campaign-id",
+        campaign_id,
+        "--output-dir",
+        str(output_dir),
+    ]
+    if advisory_seed_threshold is not None:
+        command.extend(["--advisory-seed-threshold", str(advisory_seed_threshold)])
+
+    return {
+        "status": "handoff_only",
+        "command": command,
+        "claim_boundary": (
+            "Exporter only: run after durable campaign outputs exist; this field is not "
+            "seed-sufficiency evidence."
+        ),
+    }
+
+
 def build_input_screening_report(
     *,
     scenarios: Iterable[Mapping[str, Any]],
@@ -120,6 +161,9 @@ def build_input_screening_report(
         "seeds": list(seeds),
         "required_modes": list(required_modes),
         "fov_degrees": fov_degrees,
+        "seed_sufficiency_handoff": build_seed_sufficiency_handoff(
+            advisory_seed_threshold=len(seeds) if seeds_pinned else None
+        ),
         "checks": checks,
         "failed_checks": failed,
         "claim_boundary": (
@@ -248,6 +292,7 @@ def build_screening_report(
         "seeds": input_report["seeds"],
         "required_modes": input_report["required_modes"],
         "fov_degrees": input_report["fov_degrees"],
+        "seed_sufficiency_handoff": input_report["seed_sufficiency_handoff"],
         "checks": checks,
         "failed_checks": failed,
         "decision": decision,

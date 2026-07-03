@@ -10,6 +10,7 @@ import yaml
 from robot_sf.benchmark.scenario_belief_screening import (
     build_input_screening_report,
     build_screening_report,
+    build_seed_sufficiency_handoff,
     classify_screened_decision,
 )
 from robot_sf.benchmark.scenario_schema import (
@@ -87,6 +88,22 @@ def test_screening_input_report_requires_out_of_fov_sidecar_contract() -> None:
     assert report["ready"] is True
     assert report["scenario_ids"] == ["issue_3556_near_safe_occlusion_bearing_crossing"]
     assert report["checks"]["out_of_fov_sidecar_contract"]["passed"] is True
+    handoff = report["seed_sufficiency_handoff"]
+    assert handoff["status"] == "handoff_only"
+    assert handoff["command"] == [
+        "uv",
+        "run",
+        "python",
+        "scripts/tools/analyze_seed_sufficiency.py",
+        "--campaign-output-root",
+        "output/issue_3556_belief_mode_campaign",
+        "--campaign-id",
+        "issue_3556",
+        "--output-dir",
+        "output/issue_3556_seed_sufficiency",
+        "--advisory-seed-threshold",
+        "3",
+    ]
 
     no_visibility = [dict(scenarios[0], observation_visibility={"enabled": False})]
     blocked = build_input_screening_report(
@@ -122,6 +139,33 @@ def test_screened_decision_uses_only_issue_allowed_labels() -> None:
         oracle_near_safe_threshold=0.25,
     )
     assert revise["decision"] == "revise"
+
+
+def test_seed_sufficiency_handoff_command_is_export_only() -> None:
+    """Seed-sufficiency escalation is a command export, not smoke evidence."""
+    handoff = build_seed_sufficiency_handoff(
+        campaign_output_root="output/custom_campaigns",
+        output_dir="output/custom_seed_sufficiency",
+        campaign_id="issue_3556_near_safe",
+        advisory_seed_threshold=20,
+    )
+
+    assert handoff["status"] == "handoff_only"
+    assert handoff["command"] == [
+        "uv",
+        "run",
+        "python",
+        "scripts/tools/analyze_seed_sufficiency.py",
+        "--campaign-output-root",
+        "output/custom_campaigns",
+        "--campaign-id",
+        "issue_3556_near_safe",
+        "--output-dir",
+        "output/custom_seed_sufficiency",
+        "--advisory-seed-threshold",
+        "20",
+    ]
+    assert "not seed-sufficiency evidence" in handoff["claim_boundary"]
 
 
 def test_input_screening_treats_null_scenario_fov_as_default() -> None:
@@ -202,6 +246,7 @@ def test_final_screening_report_propagates_decision_and_provenance() -> None:
     assert report["decision"]["decision"] == "revise"
     assert report["decision"]["oracle_near_safe_threshold"] == 0.25
     assert report["scenario_ids"] == ["issue_3556_near_safe_occlusion_bearing_crossing"]
+    assert report["seed_sufficiency_handoff"]["status"] == "handoff_only"
     assert set(report["allowed_decision_labels"]) == {
         "revise",
         "retention_dominates",

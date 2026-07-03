@@ -1,0 +1,2 @@
+{"scenario_id":"crossing_easy","seed":1,"row_status":"native","metrics":{"intrusion_rate":0.3,"minimum_clearance":0.55,"path_efficiency":0.8,"episode_sec":1.0,"success":true,"collision":false}}
+{"scenario_id":"crossing_hard","seed":2,"row_status":"native","metrics":{"intrusion_rate":0.5,"minimum_clearance":0.45,"path_efficiency":0.7,"episode_sec":1.2,"success":false,"collision":true}}

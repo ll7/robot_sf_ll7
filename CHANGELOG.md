@@ -35,6 +35,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added **diff-scoped context-note freshness gating** for issue #3190. The docs-proof consistency
+  checker (`scripts/validation/check_docs_proof_consistency.py`) gains a `--freshness-scope
+  {repo,diff}` option: `repo` (default) preserves the existing repo-wide `--check-context-note-freshness`
+  behavior, while `diff` restricts freshness findings to context notes changed against `--base` (plus
+  catalog-driven `superseded_replacement`/`stale_current_dated` rules when `docs/context/catalog.yaml`
+  itself changed). This makes the freshness check safe to run as a per-PR gate without failing on the
+  pre-existing repo-wide backlog of stale/orphan notes. The diff wrapper
+  (`scripts/dev/check_docs_proof_consistency_diff.sh`) now runs the freshness checker in diff scope
+  when `DOCS_PROOF_CHECK_FRESHNESS=1` (opt-in, off by default; `DOCS_PROOF_FRESHNESS_STRICT=1` promotes
+  stale/orphan warnings to failures). Superseded-without-replacement errors fail closed. No content was
+  moved or archived; no benchmark/paper claims changed.
+
 * Added a **packet-consuming run planner for the issue #4142 dense DPCBF comparison** (#4142):
   `robot_sf/benchmark/issue_4142_dpcbf_dense_runner.py` consumes the predeclared packet schema
   `robot_sf.issue_4142_dpcbf_dense_comparison.v1` and resolves it into an ordered, per-arm run plan

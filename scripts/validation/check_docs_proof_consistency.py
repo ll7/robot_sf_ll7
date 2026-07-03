@@ -663,13 +663,48 @@ def _evidence_catalog_coverage_diagnostics(
     ]
 
 
+# Freshness rules whose findings originate from docs/context/catalog.yaml metadata
+# rather than from a note file's own content. A diff that edits the catalog can
+# introduce these errors for any referenced row, so under diff scope they are kept
+# when the catalog changed even if the referenced note file itself was untouched.
+_CATALOG_DRIVEN_FRESHNESS_RULES = frozenset({"superseded_replacement", "stale_current_dated"})
+
+
+def _freshness_finding_in_diff(
+    finding: check_context_note_freshness.Finding,
+    *,
+    changed_note_paths: set[Path],
+    catalog_changed: bool,
+) -> bool:
+    """Return whether a freshness finding is attributable to the current diff.
+
+    A finding is in-diff when the note it names was changed in this branch, or
+    when it comes from a catalog-driven rule and ``docs/context/catalog.yaml``
+    itself was changed (an ``orphan_context_note`` finding, by contrast, is only
+    "introduced" when its own note file is added or edited).
+    """
+    if Path(finding.path) in changed_note_paths:
+        return True
+    return catalog_changed and finding.rule in _CATALOG_DRIVEN_FRESHNESS_RULES
+
+
 def _context_note_freshness_diagnostics(
     *,
     repo_root: Path,
     max_age_days: int,
     strict: bool,
+    changed_note_paths: set[Path] | None = None,
+    catalog_changed: bool = False,
 ) -> list[Diagnostic]:
-    """Return context-note freshness findings as docs/proof diagnostics."""
+    """Return context-note freshness findings as docs/proof diagnostics.
+
+    When ``changed_note_paths`` is ``None`` the checker runs repo-wide (the
+    default used by ``--check-context-note-freshness``). When a set is provided
+    the findings are restricted to the current diff via
+    :func:`_freshness_finding_in_diff`, so the check is safe to run as a per-PR
+    gate that must not fail on the pre-existing repo-wide backlog of stale and
+    orphan notes.
+    """
     findings = check_context_note_freshness.check_freshness(
         repo_root=repo_root,
         catalog_path=_CONTEXT_CATALOG,
@@ -680,6 +715,12 @@ def _context_note_freshness_diagnostics(
     diagnostics: list[Diagnostic] = []
     for finding in findings:
         if finding.severity == "warning" and not strict:
+            continue
+        if changed_note_paths is not None and not _freshness_finding_in_diff(
+            finding,
+            changed_note_paths=changed_note_paths,
+            catalog_changed=catalog_changed,
+        ):
             continue
         diagnostics.append(
             Diagnostic(
@@ -864,6 +905,18 @@ def _parse_args() -> argparse.Namespace:
         default=180,
         help="Maximum age for current dated context notes in freshness checks.",
     )
+    parser.add_argument(
+        "--freshness-scope",
+        choices=("repo", "diff"),
+        default="repo",
+        dest="freshness_scope",
+        help=(
+            "Scope for --check-context-note-freshness findings. 'repo' (default) checks all"
+            " context notes; 'diff' restricts findings to notes changed against --base (plus"
+            " catalog-driven rules when docs/context/catalog.yaml changed), so the check is safe"
+            " to run as a per-PR gate without failing on the pre-existing repo-wide backlog."
+        ),
+    )
 
     return parser.parse_args()
 
@@ -878,6 +931,24 @@ def _selected_files(args: argparse.Namespace, repo_root: Path) -> list[ChangedFi
             selected.append(ChangedFile(status=status, path=path))
         return selected
     return _changed_files(str(args.base), repo_root)
+
+
+def _freshness_diff_scope(args: argparse.Namespace, repo_root: Path) -> tuple[set[Path], bool]:
+    """Resolve the changed context notes and catalog-change flag for diff scope.
+
+    Returns the set of changed ``docs/context`` markdown note paths and whether
+    ``docs/context/catalog.yaml`` was among the changed files. Reuses the same
+    diff/``--path`` resolution as the main docs-proof pass so the freshness gate
+    sees exactly the files that pass changed.
+    """
+    changed_files = _selected_files(args, repo_root)
+    changed_note_paths = {
+        changed.path
+        for changed in changed_files
+        if _is_within_dir(changed.path, _TOP_LEVEL_CONTEXT_DIR) and changed.path.suffix == ".md"
+    }
+    catalog_changed = any(changed.path == _CONTEXT_CATALOG for changed in changed_files)
+    return changed_note_paths, catalog_changed
 
 
 def _emit_diagnostics(
@@ -918,16 +989,29 @@ def main() -> int:
         )
 
     if args.check_context_note_freshness:
+        changed_note_paths: set[Path] | None = None
+        catalog_changed = False
+        if args.freshness_scope == "diff":
+            try:
+                changed_note_paths, catalog_changed = _freshness_diff_scope(args, repo_root)
+            except ValueError as exc:
+                print(f"ERROR {exc}", file=sys.stderr)
+                return 2
         diagnostics = _context_note_freshness_diagnostics(
             repo_root=repo_root,
             max_age_days=args.context_note_max_age_days,
             strict=args.strict_context_note_freshness,
+            changed_note_paths=changed_note_paths,
+            catalog_changed=catalog_changed,
         )
         mode = "strict" if args.strict_context_note_freshness else "non-strict"
         return _emit_diagnostics(
             diagnostics,
             json_output=args.json,
-            success_message=f"OK context-note freshness check passed in {mode} mode.",
+            success_message=(
+                f"OK context-note freshness check passed in {mode} mode"
+                f" ({args.freshness_scope} scope)."
+            ),
         )
 
     try:

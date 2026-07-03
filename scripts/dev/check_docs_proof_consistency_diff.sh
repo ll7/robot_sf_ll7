@@ -86,3 +86,17 @@ if [ "$docs_context_only" -eq 1 ]; then
 else
   uv run --active python scripts/validation/check_docs_proof_consistency.py --base "$BASE_REF"
 fi
+
+# Opt-in, CI-safe context-note freshness gate (issue #3190). Off by default so
+# existing docs-proof runs are unchanged. When DOCS_PROOF_CHECK_FRESHNESS=1, run
+# the freshness checker in diff scope so it only flags context notes changed in
+# this branch (never the pre-existing repo-wide backlog). Superseded-without-
+# replacement errors fail closed; stale/orphan findings stay warnings unless
+# DOCS_PROOF_FRESHNESS_STRICT=1 promotes them.
+if [ "${DOCS_PROOF_CHECK_FRESHNESS:-0}" = "1" ]; then
+  freshness_args=(--check-context-note-freshness --freshness-scope diff --base "$BASE_REF")
+  if [ "${DOCS_PROOF_FRESHNESS_STRICT:-0}" = "1" ]; then
+    freshness_args+=(--strict-context-note-freshness)
+  fi
+  uv run --active python scripts/validation/check_docs_proof_consistency.py "${freshness_args[@]}"
+fi

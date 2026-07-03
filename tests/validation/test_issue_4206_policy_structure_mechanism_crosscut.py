@@ -137,6 +137,10 @@ def test_missing_mechanism_label_blocks_f_c4ii_tables(tmp_path: Path) -> None:
     missing = json.loads((output / "missing_instrumentation.json").read_text(encoding="utf-8"))
     assert missing["missing_row_count"] == 2
     assert missing["geometry_bucket_substitution_rejected"] is True
+    assert missing["input_provenance"]["config"]["exists"] is True
+    assert missing["input_provenance"]["confirm_h600_13268"]["seed_episode_rows_exists"] is True
+    assert missing["input_provenance"]["extended_h600_13273"]["seed_episode_rows_exists"] is True
+    assert missing["input_provenance"]["continuity_h500_job13175"]["packet_exists"] is False
     assert _read_csv(output / "f_c4ii_probe_predictive_dominance.csv") == []
 
 

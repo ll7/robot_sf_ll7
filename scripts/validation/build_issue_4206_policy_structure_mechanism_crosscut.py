@@ -508,6 +508,7 @@ def _blocked_outputs(
     generated_at: str,
     missing_rows: Sequence[Mapping[str, Any]],
     loaded_row_count: int,
+    input_provenance: Mapping[str, Any],
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     missing_payload = {
@@ -516,6 +517,7 @@ def _blocked_outputs(
         "generated_at": generated_at,
         "required_fields": list(REQUIRED_MECHANISM_FIELDS),
         "loaded_row_count": loaded_row_count,
+        "input_provenance": dict(input_provenance),
         "missing_rows_sample": list(missing_rows[:50]),
         "missing_row_count": len(missing_rows),
         "geometry_bucket_substitution_rejected": (
@@ -533,6 +535,7 @@ def _blocked_outputs(
         "status": BLOCKED_STATUS,
         "issue": 4206,
         "generated_at": generated_at,
+        "input_provenance": dict(input_provenance),
         "taxonomy_source": config.get("taxonomy_source"),
         "claim_boundary": "Blocked before F-C4(ii) rank conclusions because trace-verified "
         "mechanism labels are unavailable.",
@@ -623,6 +626,43 @@ def _write_sha256sums(output_dir: Path) -> None:
     (output_dir / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _input_provenance(
+    *,
+    config_path: Path,
+    confirm_root: Path,
+    extended_root: Path,
+    job13175_packet: Path,
+) -> dict[str, Any]:
+    """Record the declared inputs checked by the issue #4206 builder."""
+
+    return {
+        "config": {
+            "path": _public_path(config_path),
+            "exists": config_path.exists(),
+        },
+        "confirm_h600_13268": {
+            "root": _public_path(confirm_root),
+            "root_exists": confirm_root.exists(),
+            "seed_episode_rows": _public_path(confirm_root / "reports" / "seed_episode_rows.csv"),
+            "seed_episode_rows_exists": (
+                confirm_root / "reports" / "seed_episode_rows.csv"
+            ).exists(),
+        },
+        "extended_h600_13273": {
+            "root": _public_path(extended_root),
+            "root_exists": extended_root.exists(),
+            "seed_episode_rows": _public_path(extended_root / "reports" / "seed_episode_rows.csv"),
+            "seed_episode_rows_exists": (
+                extended_root / "reports" / "seed_episode_rows.csv"
+            ).exists(),
+        },
+        "continuity_h500_job13175": {
+            "packet": _public_path(job13175_packet),
+            "packet_exists": job13175_packet.exists(),
+        },
+    }
+
+
 def build_packet(  # noqa: C901
     *,
     config_path: Path,
@@ -641,6 +681,13 @@ def build_packet(  # noqa: C901
     if config.get("mechanism_schema_version") != MECHANISM_SCHEMA_VERSION:
         raise BuildError("config mechanism_schema_version mismatch")
 
+    input_provenance = _input_provenance(
+        config_path=config_path,
+        confirm_root=confirm_root,
+        extended_root=extended_root,
+        job13175_packet=job13175_packet,
+    )
+
     rows: list[dict[str, Any]] = []
     missing_rows: list[dict[str, Any]] = []
     for run_name, root in (
@@ -658,6 +705,7 @@ def build_packet(  # noqa: C901
             generated_at=generated_at,
             missing_rows=missing_rows,
             loaded_row_count=len(rows),
+            input_provenance=input_provenance,
         )
 
     accepted_confidences = {
@@ -688,6 +736,7 @@ def build_packet(  # noqa: C901
                 {"missing_fields": list(REQUIRED_MECHANISM_FIELDS), "reason": "no accepted labels"}
             ],
             loaded_row_count=len(rows),
+            input_provenance=input_provenance,
         )
 
     observed_count = sum(

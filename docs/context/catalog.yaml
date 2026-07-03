@@ -21,6 +21,10 @@ entries:
     status: evidence
     freshness: evidence
     area: workflow_evidence
+  - path: docs/context/evidence/issue_4216_licca_full_suite_env_failures
+    status: evidence
+    freshness: evidence
+    area: test_infrastructure_evidence
   - path: docs/context/evidence/issue_3557_uncertainty_representation_generalization
     status: evidence
     freshness: evidence

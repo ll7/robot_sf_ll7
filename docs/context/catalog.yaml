@@ -3015,3 +3015,11 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4328_h600_seed_sufficiency_candidates_2026-07-03/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4328_h600_seed_sufficiency_candidates_2026-07-03/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

@@ -38,6 +38,22 @@ SEED_SUFFICIENCY_CLOSURE_LABELS = (
     "blocked_missing_retained_campaign_outputs",
 )
 
+# Bounded decision labels for the issue #4328 named-candidate closure evaluation.
+# A candidate root is closure-usable only when it exists on the current host, holds
+# every analyzer-required report, and carries a #3556 ScenarioBelief lineage;
+# otherwise the packet fails closed with an explicit, per-candidate blocker.
+SEED_SUFFICIENCY_CANDIDATE_LABELS = (
+    "resolved_compatible_candidate",
+    "blocked_no_compatible_candidate",
+)
+
+# Substrings that identify a #3556 ScenarioBelief campaign lineage. The #3556
+# seed-sufficiency closure is specific to the ScenarioBelief drop-vs-retain
+# contrast; a foreign campaign's seed-sufficiency (for example a long-horizon or
+# extended-roster h600 run) would answer a different question, so promoting it as
+# #3556 closure evidence would be a provenance overclaim.
+SCENARIO_BELIEF_CAMPAIGN_MARKERS = ("3556", "scenario_belief", "belief_mode", "belief")
+
 
 def _scenario_id(scenario: Mapping[str, Any]) -> str | None:
     """Return the stable scenario identifier used in benchmark reports."""
@@ -180,6 +196,179 @@ def build_seed_sufficiency_closure_packet(
             "paper_or_dissertation_claim_edit": False,
         },
     }
+
+
+def evaluate_candidate_root_provenance(
+    *,
+    name: str,
+    lineage: str = "",
+    markers: tuple[str, ...] = SCENARIO_BELIEF_CAMPAIGN_MARKERS,
+) -> dict[str, Any]:
+    """Decide whether a named candidate root carries a #3556 ScenarioBelief lineage.
+
+    Pure substring check over the candidate name and its declared lineage. The
+    #3556 closure resolves seed-sufficiency for the ScenarioBelief drop-vs-retain
+    contrast specifically; a foreign campaign (for example an h600 long-horizon or
+    extended-roster run) would yield a seed-sufficiency verdict about a different
+    planner/scenario family, so it must not be promoted as #3556 closure evidence.
+
+    Returns:
+        Mapping with ``provenance_compatible`` (bool), the ``matched_markers``, and
+        a human-readable ``reason``.
+    """
+    haystack = f"{name} {lineage}".lower()
+    matched = [marker for marker in markers if marker in haystack]
+    compatible = bool(matched)
+    reason = (
+        f"name/lineage matches ScenarioBelief marker(s) {matched}"
+        if compatible
+        else (
+            "no #3556 ScenarioBelief lineage marker in name/lineage; a foreign-campaign "
+            "seed-sufficiency verdict would answer a different question than the #3556 contrast"
+        )
+    )
+    return {
+        "provenance_compatible": compatible,
+        "matched_markers": matched,
+        "reason": reason,
+    }
+
+
+def evaluate_seed_sufficiency_candidate(
+    *,
+    name: str,
+    root: str,
+    exists_on_host: bool,
+    missing_report_files: Iterable[str],
+    lineage: str = "",
+    required_report_files: tuple[str, ...] = REQUIRED_SEED_SUFFICIENCY_REPORTS,
+) -> dict[str, Any]:
+    """Evaluate one named candidate root against the #3556 seed-sufficiency contract.
+
+    A candidate is closure-usable only when it satisfies every gate: it exists on
+    the current host, holds every analyzer-required report file, and carries a
+    #3556 ScenarioBelief lineage. This function is pure decision logic; the caller
+    is responsible for probing the filesystem and passing the observed facts in.
+
+    Args:
+        name: Short candidate identifier (used for the provenance lineage check).
+        root: Repository-root-relative campaign root path.
+        exists_on_host: Whether ``root`` was found on the current analysis host.
+        missing_report_files: Required report files absent under ``root/reports``
+            (empty when every required report is present; the full required set
+            when the root itself is absent and cannot be probed).
+        lineage: Free-text campaign lineage used for the provenance marker check.
+        required_report_files: Report artifacts the analyzer needs.
+
+    Returns:
+        JSON-serializable per-candidate record with a derived ``compatible`` flag
+        and the list of ``blockers`` that prevent closure use.
+    """
+    missing = list(missing_report_files)
+    provenance = evaluate_candidate_root_provenance(name=name, lineage=lineage)
+    reports_present = exists_on_host and not missing
+    blockers: list[str] = []
+    if not exists_on_host:
+        blockers.append("root_absent_on_host")
+    if missing:
+        blockers.append("missing_required_reports")
+    if not provenance["provenance_compatible"]:
+        blockers.append("provenance_incompatible_with_3556")
+    compatible = not blockers
+    return {
+        "name": name,
+        "root": root,
+        "lineage": lineage,
+        "exists_on_host": bool(exists_on_host),
+        "required_report_files": list(required_report_files),
+        "missing_report_files": missing,
+        "required_reports_present": reports_present,
+        "provenance": provenance,
+        "compatible": compatible,
+        "blockers": blockers,
+    }
+
+
+def build_h600_candidate_closure_packet(
+    *,
+    candidates: Iterable[Mapping[str, Any]],
+    analyzer_command: list[str],
+    resolved_candidate: Mapping[str, Any] | None = None,
+    analyzer_output_dir: str | None = None,
+    analyzer_summary: Mapping[str, Any] | None = None,
+    queue_row_request: Mapping[str, Any] | None = None,
+    required_report_files: tuple[str, ...] = REQUIRED_SEED_SUFFICIENCY_REPORTS,
+) -> dict[str, Any]:
+    """Assemble the issue #4328 named-candidate seed-sufficiency closure packet.
+
+    Composes the canonical closure packet (reusing
+    :func:`build_seed_sufficiency_closure_packet` for the shared fields and
+    forbidden-action attestations) with a per-candidate compatibility manifest.
+    The packet promotes the analyzer result only when a fully compatible candidate
+    resolved; otherwise it fails closed with a ``blocked_no_compatible_candidate``
+    decision and records exactly why each candidate was rejected.
+
+    Args:
+        candidates: Per-candidate records from
+            :func:`evaluate_seed_sufficiency_candidate`.
+        analyzer_command: The exact analyzer argv that ran (resolved) or would run
+            once a compatible candidate exists on host (blocked).
+        resolved_candidate: The first fully compatible candidate, or ``None``.
+        analyzer_output_dir: Where analyzer artifacts were written, when resolved.
+        analyzer_summary: Compact analyzer result summary, when resolved.
+        queue_row_request: Description of the #3556-specific ScenarioBelief campaign
+            that would satisfy the contract, recorded when no candidate qualifies.
+        required_report_files: Report artifacts each candidate root must contain.
+
+    Returns:
+        JSON-serializable closure packet with a bounded decision label from
+        ``SEED_SUFFICIENCY_CANDIDATE_LABELS``.
+    """
+    candidate_list = [dict(candidate) for candidate in candidates]
+    resolved = resolved_candidate is not None
+    resolved_root = dict(resolved_candidate)["root"] if resolved else None
+    base = build_seed_sufficiency_closure_packet(
+        searched_roots=candidate_list,
+        resolved_campaign_root=resolved_root,
+        analyzer_command=analyzer_command,
+        analyzer_output_dir=analyzer_output_dir,
+        analyzer_summary=analyzer_summary,
+        required_report_files=required_report_files,
+    )
+    decision_label = (
+        "resolved_compatible_candidate" if resolved else "blocked_no_compatible_candidate"
+    )
+    compatible_candidates = [c["name"] for c in candidate_list if c.get("compatible")]
+    # ``candidates`` is the canonical per-root field for this schema; drop the base
+    # builder's ``searched_roots`` alias so the packet does not duplicate every
+    # candidate record verbatim.
+    base.pop("searched_roots", None)
+    base.update(
+        {
+            "schema_version": "issue_4328_h600_candidate_closure.v1",
+            "closure_target_issue": 3556,
+            "closure_attempt_issue": 4328,
+            "decision_label": decision_label,
+            "allowed_decision_labels": list(SEED_SUFFICIENCY_CANDIDATE_LABELS),
+            "candidates": candidate_list,
+            "compatible_candidates": compatible_candidates,
+            "resolved_candidate": dict(resolved_candidate) if resolved else None,
+            "queue_row_request": dict(queue_row_request) if queue_row_request else None,
+        }
+    )
+    if not resolved:
+        base["claim_boundary"] = (
+            "No named h600 candidate root satisfied the #3556 seed-sufficiency contract "
+            "(existence on host + required reports + ScenarioBelief provenance), so no "
+            "seed-sufficiency evidence is promoted."
+        )
+        base["next_empirical_action"] = (
+            "Run a #3556-specific ScenarioBelief drop-vs-retain campaign that emits "
+            f"reports/{required_report_files[0]} and reports/{required_report_files[1]}, or, if a "
+            "maintainer accepts a foreign h600 root as a proxy, restore that root on the analysis "
+            "host and rerun the analyzer command below."
+        )
+    return base
 
 
 def build_input_screening_report(

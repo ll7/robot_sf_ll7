@@ -9,6 +9,7 @@ import pytest
 
 from robot_sf.sim.pedestrian_model_variants import (
     HSFM_TOTAL_FORCE_V1,
+    HSFM_TTC_PREDICTIVE_V1,
     SOCIAL_FORCE_DEFAULT,
     heading_from_total_force,
     normalize_pedestrian_model,
@@ -90,6 +91,9 @@ def test_pedestrian_model_selector_normalizes_and_rejects_unknown_values() -> No
     assert SimulationSettings().pedestrian_model == SOCIAL_FORCE_DEFAULT
     assert SimulationSettings(pedestrian_model=HSFM_TOTAL_FORCE_V1).pedestrian_model == (
         HSFM_TOTAL_FORCE_V1
+    )
+    assert SimulationSettings(pedestrian_model=HSFM_TTC_PREDICTIVE_V1).pedestrian_model == (
+        HSFM_TTC_PREDICTIVE_V1
     )
     assert normalize_pedestrian_model(None) == SOCIAL_FORCE_DEFAULT
     with pytest.raises(ValueError, match="Unsupported pedestrian_model"):

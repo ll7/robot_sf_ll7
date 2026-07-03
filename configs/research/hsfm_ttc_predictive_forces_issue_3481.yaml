@@ -1,0 +1,29 @@
+# HSFM + TTC predictive pedestrian-force prototype (issue #3481).
+#
+# This config records the opt-in simulator selector and modeling parameters for
+# the Phase 2 prototype. It is diagnostic/prototype metadata only, not a
+# calibrated pedestrian-realism claim or benchmark campaign definition.
+schema_version: hsfm-ttc-predictive-forces.v1
+issue: 3481
+evidence_tier: diagnostic_prototype
+claim_boundary: >-
+  Opt-in simulator force-law prototype. The default pedestrian model remains
+  unchanged. This file does not claim real-world behavioral realism, planner
+  ranking movement, or paper-facing evidence.
+pedestrian_model: hsfm_ttc_predictive_v1
+ttc_predictive_force:
+  enabled: true
+  tau0_s: 1.0
+  horizon_s: 3.0
+  force_scale: 1.0
+  max_force: 5.0
+  include_ped_ped: true
+  include_robot_proxy: false
+validation_scope:
+  focused_tests:
+    - tests/sim/test_hsfm_total_force_model.py
+    - tests/sim/test_ttc_predictive_pedestrian_model.py
+  excluded:
+    - full_benchmark_campaign
+    - slurm_or_gpu_submission
+    - paper_or_dissertation_claim_update

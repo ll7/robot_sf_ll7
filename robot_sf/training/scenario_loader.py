@@ -7,7 +7,7 @@ import math
 import os
 from collections.abc import Iterable, Mapping
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -32,6 +32,8 @@ from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
+from robot_sf.sim.pedestrian_model_variants import HSFM_TTC_PREDICTIVE_V1
+from robot_sf.sim.sim_config import TtcPredictiveForceConfig
 
 _MAP_REGISTRY_ENV = "ROBOT_SF_MAP_REGISTRY"
 _MAP_REGISTRY_PATH = Path("maps/registry.yaml")
@@ -2073,6 +2075,27 @@ def _apply_single_pedestrian_override(
     )
 
 
+def _set_simulation_override_attr(
+    config: RobotSimulationConfig,
+    attr: str,
+    overrides: Mapping[str, Any],
+) -> None:
+    """Apply one scenario-level simulation override attribute."""
+    if attr == "ttc_predictive_force" and isinstance(overrides[attr], Mapping):
+        ttc_force_overrides = dict(overrides[attr])
+        if overrides.get("pedestrian_model") == HSFM_TTC_PREDICTIVE_V1:
+            ttc_force_overrides["enabled"] = True
+        setattr(config.sim_config, attr, TtcPredictiveForceConfig(**ttc_force_overrides))
+    elif attr == "pedestrian_model" and overrides[attr] == HSFM_TTC_PREDICTIVE_V1:
+        setattr(config.sim_config, attr, overrides[attr])
+        config.sim_config.ttc_predictive_force = replace(
+            config.sim_config.ttc_predictive_force,
+            enabled=True,
+        )
+    else:
+        setattr(config.sim_config, attr, overrides[attr])
+
+
 def _apply_simulation_overrides(
     config: RobotSimulationConfig,
     overrides: Mapping[str, Any] | None,
@@ -2100,6 +2123,7 @@ def _apply_simulation_overrides(
         "ped_radius",
         "goal_radius",
         "pedestrian_model",
+        "ttc_predictive_force",
         "route_spawn_distribution",
         "route_spawn_jitter_frac",
         "route_spawn_seed",
@@ -2108,7 +2132,7 @@ def _apply_simulation_overrides(
         "archetype_seed",
     ):
         if attr in overrides:
-            setattr(config.sim_config, attr, overrides[attr])
+            _set_simulation_override_attr(config, attr, overrides)
 
 
 def _apply_map_pool(

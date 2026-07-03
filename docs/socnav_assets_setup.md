@@ -142,8 +142,48 @@ The first batch is `ETH` and is defined in
 mesh/traversible inputs are staged locally before any converted Robot SF SVG or scenario wiring is
 accepted. Missing required source assets fail closed.
 
+## 7. Generate a Custom-Map Traversible (ETH and friends)
+
+The official SocNavBench asset package ships the S3DIS *area* traversibles (areas 1-6) but **not**
+the traversibles for the custom maps (`ETH`, `Hotel`, `Univ`, `Zara`, `DoubleHotel`). SocNavBench
+derives those from each map's curated mesh. Because the derived `data.pkl` is *generated data*, it is
+never committed: it lives in the data root next to the mesh, and external users regenerate it the
+same way.
+
+`scripts/tools/generate_socnavbench_traversible.py` wraps that generation with fail-closed input
+validation so it is safe to run (and test) without the heavy SocNavBench mesh dependencies staged.
+
+Validate inputs first (no SocNavBench dependencies required; safe in CI/local):
+
+```bash
+uv run python scripts/tools/generate_socnavbench_traversible.py --map ETH --dry-run
+```
+
+- Exit `0` means the mesh is staged and a build would run (or the traversible already exists).
+- Exit `2` means the mesh is not staged; the printed `next_action` names the exact expected path.
+
+Run the actual generation (maintainer step, in the SocNavBench environment with the mesh staged):
+
+```bash
+uv run python scripts/tools/generate_socnavbench_traversible.py --map ETH
+```
+
+- **Input:** `sd3dis/stanford_building_parser_dataset/mesh/ETH/` (curated mesh, staged locally).
+- **Output (derived, never committed):**
+  `sd3dis/stanford_building_parser_dataset/traversibles/ETH/data.pkl`, written **into the data root**
+  (honors `ROBOT_SF_EXTERNAL_DATA_ROOT`, otherwise `third_party/socnavbench`).
+- The command prints the SHA-256 of the produced `data.pkl` so the external-data registry pin can be
+  updated after the maintainer re-seeds the internal store.
+
+The build is idempotent: it skips when `data.pkl` already exists unless `--force` is passed. This
+step produces the exact `eth_traversible_pickle` input that
+`scripts/tools/validate_socnav_map_batch.py --batch-id eth_first --preflight` reports as missing,
+so generating it unblocks the ETH map conversion (issue #1134).
+
 ## Licensing and Repository Hygiene
 
 - Do not commit downloaded dataset assets.
+- Do not commit generated traversibles (`traversibles/<MAP>/data.pkl`); they are derived data that
+  stays in the data root and is regenerated with the command in section 7.
 - Keep all third-party data local only.
 - The repository `.gitignore` explicitly ignores SocNav data directories under `third_party/socnavbench`.

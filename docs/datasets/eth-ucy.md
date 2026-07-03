@@ -97,6 +97,51 @@ uv run python scripts/tools/manage_external_data.py stage eth-ucy \
 
 The manifest records source URL, access notes, matched required paths, file counts, and aggregate checksums. Do not commit the raw dataset or the local manifest unless a maintainer explicitly asks for a small reviewable provenance copy.
 
+## Loader And Shape Contract
+
+`robot_sf/data/external/eth_ucy.py` is a license-safe loader that only inspects locally staged files. It never downloads, vendors, or redistributes dataset bytes, and it makes no prediction-comparability claim. It checks a cheap, structural shape contract: the documented per-split layout exists and each trajectory file parses as finite numeric rows. It intentionally asserts no content values (no exact frame counts, coordinates, pedestrian ids, or scene-specific numbers).
+
+### Expected splits
+
+The loader resolves five splits under the staged dataset root; keep this list aligned with the [Expected Layout](#expected-layout) above:
+
+| Split id | Group | Directory | Accepted trajectory file |
+| --- | --- | --- | --- |
+| `eth` | ETH BIWI | `eth/` | `obsmat.txt` |
+| `hotel` | ETH BIWI | `hotel/` | `obsmat.txt` |
+| `univ` | UCY | `univ/` | `*.vsp` or `*.txt` |
+| `zara01` | UCY | `zara01/` | `*.vsp` or `*.txt` |
+| `zara02` | UCY | `zara02/` | `*.vsp` or `*.txt` |
+
+`obsmat.txt` and normalized `.txt` files are validated as whitespace/comma numeric matrices with at least four finite columns (frame, id, x, y). `.vsp` files are validated structurally (integer agent/spline header plus finite numeric control-point rows) without full spline parsing.
+
+### Usage
+
+```python
+from robot_sf.data.external import eth_ucy
+
+# Resolves via ROBOT_SF_EXTERNAL_DATA_ROOT (or the repo-local default), or pass root=...
+if eth_ucy.is_available():
+    contract = eth_ucy.load_shape_contract()
+    # contract["splits"]["eth"] -> {"group", "format", "path", "row_count", "column_count", "delimiter"}
+```
+
+- `is_available(root=None)` returns `False` for an absent or incomplete layout.
+- `require_available(root=None)` returns resolved per-split paths or raises `EthUcyDataError` naming the missing split(s) and this page.
+- `load_shape_contract(root=None)` returns per-split shape metadata (row count, column count, detected delimiter, resolved format, relative path).
+
+### Malformed-data behavior
+
+A present-but-malformed staged file fails closed with `EthUcyDataError`, and every message points back to this page. Failure conditions include an empty file, a non-rectangular matrix, a non-numeric or non-finite value, fewer than four columns, or a `.vsp` file missing its integer header.
+
+### Tests
+
+```bash
+uv run pytest tests/data/external/test_eth_ucy_shape.py -q
+```
+
+The real-data path skips with `external dataset not staged` when no local ETH/UCY copy is present, so the suite stays green in CI without the license-gated bytes. Synthetic-fixture and malformed-fixture tests always run and never touch real data.
+
 ## Claim Boundary
 
 `eth-ucy` registry `ready` means only that a local copy matched the documented file/layout contract and provenance fields. It does not mean Robot SF has a validated ETH/UCY loader, shape-contract tests, benchmark scenarios, prediction-comparability evidence, or permission to redistribute the data.

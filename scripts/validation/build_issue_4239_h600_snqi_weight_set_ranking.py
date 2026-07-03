@@ -147,12 +147,14 @@ def _manifest_runs(config: dict[str, Any], source_manifest: dict[str, Any]) -> l
         key = (str(run.get("job_id")), str(run.get("run_label")))
         if key in requested:
             seed_rows = _repo_root() / str(run.get("seed_episode_rows", ""))
+            runs_dir = seed_rows.parent.parent / "runs"
             campaign = run.get("campaign") or {}
             runs.append(
                 {
                     "job_id": str(run["job_id"]),
                     "run_label": str(run["run_label"]),
                     "seed_episode_rows": seed_rows,
+                    "episodes_jsonl_files": sorted(runs_dir.glob("*/episodes.jsonl")),
                     "campaign_summary": _repo_root() / str(run.get("campaign_summary", "")),
                     "scenario_matrix_hash": campaign.get("scenario_matrix_hash", ""),
                     "comparability_mapping_hash": campaign.get("comparability_mapping_hash", ""),
@@ -161,10 +163,43 @@ def _manifest_runs(config: dict[str, Any], source_manifest: dict[str, Any]) -> l
     return runs
 
 
+def _read_episode_jsonl_rows(run: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for path in run.get("episodes_jsonl_files") or []:
+        planner = path.parent.name.split("__", maxsplit=1)[0]
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                record = json.loads(line)
+                metrics = record.get("metrics") or {}
+                row = {key: metrics.get(key) for key in COMPARISON_METRICS}
+                row.update(
+                    {
+                        "planner_key": planner,
+                        "seed": record.get("seed", ""),
+                        "episode_id": record.get("episode_id", ""),
+                        "scenario_id": record.get("scenario_id", ""),
+                        "_job_id": run["job_id"],
+                        "_run_label": run["run_label"],
+                        "_scenario_matrix_hash": str(run["scenario_matrix_hash"]),
+                        "_comparability_mapping_hash": str(run["comparability_mapping_hash"]),
+                        "_input_source_kind": "episodes_jsonl",
+                    }
+                )
+                rows.append(row)
+    return rows
+
+
 def _read_rows(runs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     rows: list[dict[str, Any]] = []
     missing: list[dict[str, Any]] = []
     for run in runs:
+        jsonl_rows = _read_episode_jsonl_rows(run)
+        if jsonl_rows:
+            rows.extend(jsonl_rows)
+            continue
+
         path = run["seed_episode_rows"]
         if not path.exists():
             missing.append(
@@ -182,6 +217,7 @@ def _read_rows(runs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[d
                 row["_run_label"] = run["run_label"]
                 row["_scenario_matrix_hash"] = str(run["scenario_matrix_hash"])
                 row["_comparability_mapping_hash"] = str(run["comparability_mapping_hash"])
+                row["_input_source_kind"] = "seed_episode_rows_csv"
                 rows.append(row)
     return rows, missing
 
@@ -501,6 +537,13 @@ def _preflight_report(
                 "run_label": run["run_label"],
                 "seed_episode_rows": _rel(run["seed_episode_rows"]),
                 "seed_episode_rows_exists": run["seed_episode_rows"].exists(),
+                "episodes_jsonl_files": [
+                    _rel(path) for path in run.get("episodes_jsonl_files") or []
+                ],
+                "episodes_jsonl_sha256": [
+                    {"path": _rel(path), "sha256": _sha256(path)}
+                    for path in run.get("episodes_jsonl_files") or []
+                ],
             }
             for run in runs
         ],

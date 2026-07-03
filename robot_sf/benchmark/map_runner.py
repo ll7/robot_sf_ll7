@@ -126,6 +126,7 @@ from robot_sf.benchmark.map_runner_policies import goal as _goal_policy_builder
 from robot_sf.benchmark.map_runner_policies import group_avoidance as _group_avoidance_builder
 from robot_sf.benchmark.map_runner_policies import hybrid_global_rl as _hybrid_global_rl_builder
 from robot_sf.benchmark.map_runner_policies import registry as _policy_builder_registry
+from robot_sf.benchmark.map_runner_policies import rule_and_grid as _rule_and_grid_builder
 from robot_sf.benchmark.map_runner_policies import safety_barrier as _safety_barrier_builder
 from robot_sf.benchmark.map_runner_policy_actions import (
     ppo_action_to_unicycle as _ppo_action_to_unicycle_impl,
@@ -234,16 +235,11 @@ from robot_sf.planner.hybrid_portfolio import (
     HybridPortfolioAdapter,
     build_hybrid_portfolio_build_config,
 )
-from robot_sf.planner.hybrid_rule_local_planner import (
-    HybridRuleLocalPlannerAdapter,
-    build_hybrid_rule_local_planner_config,
-)
 from robot_sf.planner.kinematics_model import resolve_benchmark_kinematics_model
 from robot_sf.planner.lidar_occupancy import (  # noqa: F401
     LidarOccupancyPlannerAdapter,
     build_lidar_occupancy_config,
 )
-from robot_sf.planner.lidar_occupancy_grid import build_lidar_grid_route_adapter
 from robot_sf.planner.mppi_social import (
     MPPISocialPlannerAdapter,
     build_mppi_social_config,
@@ -251,10 +247,6 @@ from robot_sf.planner.mppi_social import (
 from robot_sf.planner.nmpc_social import (
     NMPCSocialPlannerAdapter,
     build_nmpc_social_config,
-)
-from robot_sf.planner.policy_stack_v1 import (
-    PolicyStackV1Adapter,
-    build_policy_stack_v1_build_config,
 )
 from robot_sf.planner.predictive_mppi import (
     PredictiveMPPIAdapter,
@@ -295,10 +287,6 @@ from robot_sf.planner.socnav import (
     TrivialReferencePlannerAdapter,
 )
 from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, build_stream_gap_config
-from robot_sf.planner.topology_guided_local_policy import (
-    TopologyGuidedHybridRulePlannerAdapter,
-    build_topology_guided_local_policy_config,
-)
 from robot_sf.training.scenario_loader import load_scenarios
 
 if TYPE_CHECKING:
@@ -996,6 +984,7 @@ _POLICY_BUILDERS: dict[str, _policy_builder_registry.PolicyBuilder] = {
         _group_avoidance_builder.GROUP_AVOIDANCE_ALGO_KEYS,
         _group_avoidance_builder.build,
     ),
+    **dict.fromkeys(_rule_and_grid_builder.RULE_AND_GRID_KEYS, _rule_and_grid_builder.build),
     **dict.fromkeys(_safety_barrier_builder.ADAPTER_ALGO_KEYS, _safety_barrier_builder.build),
     **dict.fromkeys(
         _hybrid_global_rl_builder.HYBRID_GLOBAL_RL_KEYS, _hybrid_global_rl_builder.build
@@ -1069,74 +1058,6 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             limitations=(
                 "Diagnostic adapter template only; do not use as benchmark planner evidence."
             ),
-        )
-
-    if algo_key == "policy_stack_v1":
-        stack_cfg = build_policy_stack_v1_build_config(algo_config)
-        adapter = PolicyStackV1Adapter(
-            config=stack_cfg.policy_stack,
-            risk_dwa=RiskDWAPlannerAdapter(config=stack_cfg.risk_dwa),
-        )
-        return _build_adapter_policy(
-            algo_key=algo_key,
-            algo_config=algo_config,
-            meta=meta,
-            adapter=adapter,
-            adapter_name="PolicyStackV1Adapter",
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-        )
-
-    if algo_key in {
-        "hybrid_rule_local_planner",
-        "hybrid_rule_v0_minimal",
-        "actuation_aware_hybrid_rule_v0",
-    }:
-        adapter = HybridRuleLocalPlannerAdapter(
-            config=build_hybrid_rule_local_planner_config(algo_config)
-        )
-        return _build_adapter_policy(
-            algo_key=algo_key,
-            algo_config=algo_config,
-            meta=meta,
-            adapter=adapter,
-            adapter_name="HybridRuleLocalPlannerAdapter",
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-        )
-
-    if algo_key == "topology_guided_hybrid_rule_v0":
-        adapter = TopologyGuidedHybridRulePlannerAdapter(
-            config=build_topology_guided_local_policy_config(algo_config)
-        )
-        meta["topology_guided_hybrid_rule"] = {
-            "diagnostic_only": True,
-            "claim_boundary": "diagnostic_only",
-            "hypothesis_source": "masked_occupancy_grid_routes",
-            "wrapped_planner": "HybridRuleLocalPlannerAdapter",
-        }
-        return _build_adapter_policy(
-            algo_key=algo_key,
-            algo_config=algo_config,
-            meta=meta,
-            adapter=adapter,
-            adapter_name="TopologyGuidedHybridRulePlannerAdapter",
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            limitations="diagnostic_only_topology_hypothesis_selector",
-        )
-
-    if algo_key in {"lidar_grid_route", "lidar_occupancy_grid_route"}:
-        adapter = build_lidar_grid_route_adapter(algo_config)
-        return _build_adapter_policy(
-            algo_key="lidar_grid_route",
-            algo_config=algo_config,
-            meta=meta,
-            adapter=adapter,
-            adapter_name="LidarOccupancyGridRouteAdapter",
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            limitations="lidar_ego_occupancy_grid_route_testing_only",
         )
 
     if algo_key == "stream_gap":

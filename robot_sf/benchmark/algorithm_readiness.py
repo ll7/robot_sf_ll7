@@ -182,6 +182,15 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="Learned SB3 SAC baseline; benchmarkable only after checkpoint-specific quality gate.",
     ),
     AlgorithmReadiness(
+        canonical_name="distributional_rl",
+        tier="experimental",
+        aliases=("distributional_rl", "qr_dqn"),
+        note=(
+            "Diagnostic QR-DQN-style distributional RL adapter; requires an explicit "
+            "smoke checkpoint and is not benchmark or paper evidence."
+        ),
+    ),
+    AlgorithmReadiness(
         canonical_name="guarded_ppo",
         tier="experimental",
         aliases=("guarded_ppo",),

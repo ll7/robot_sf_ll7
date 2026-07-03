@@ -1,0 +1,44 @@
+policy_id: qr_dqn_issue_4016_smoke
+algorithm: qr_dqn
+scenario_config: ../../scenarios/sets/classic_cross_trap_subset.yaml
+total_timesteps: 128
+seed: 4016
+device: cpu
+num_envs: 1
+env_overrides:
+  observation_mode: socnav_struct
+env_factory_kwargs:
+  reward_name: route_completion_v2
+observation:
+  transform: ego
+  flatten_dict: true
+  synthetic_observation_dim: 8
+action_lattice:
+  linear_values: [0.0, 0.25, 0.5, 0.75, 1.0]
+  angular_values: [-1.0, -0.5, 0.0, 0.5, 1.0]
+  max_linear_speed: 1.0
+  max_angular_speed: 1.0
+critic:
+  hidden_sizes: [32, 32]
+  num_quantiles: 8
+  kappa: 1.0
+  double_q: true
+  target_update_interval: 32
+risk_selection:
+  objective: cvar_lower
+  alpha: 0.2
+  blend_beta: 1.0
+dqn:
+  replay_size: 512
+  batch_size: 16
+  learning_rate: 0.0001
+  gamma: 0.99
+  learning_starts: 16
+  train_freq: 1
+  gradient_steps: 1
+  exploration_initial_eps: 1.0
+  exploration_final_eps: 0.05
+  exploration_fraction: 0.3
+tracking:
+  enabled: false
+output_dir: ../../../output/models/distributional_rl/issue_4016

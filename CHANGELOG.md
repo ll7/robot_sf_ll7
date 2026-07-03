@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* Added license-safe **CrowdBot and SCAND shape-contract loaders** plus skip-if-absent tests for the
+  #4224 external-data program (public slice b). `robot_sf/data/external/crowdbot.py` and
+  `robot_sf/data/external/scand.py` only inspect locally staged files — they never download, vendor,
+  or redistribute dataset bytes — and validate a cheap structural contract (documented
+  recording + license/readme layout present; every staged CSV export non-empty and rectangular;
+  every JSON export parseable; no empty ROS bag). Both share the reusable engine
+  `robot_sf/data/external/recording_shape_contract.py`, which reuses the canonical registry
+  availability contract in `scripts/tools/manage_external_data.py`. Acquisition/layout docs added at
+  `docs/datasets/crowdbot.md` and `docs/datasets/scand.md`. Registry/contract only: no dataset
+  bytes, no automated acquisition, no benchmark or paper/dissertation claim.
+
 ### Fixed
 
 * Removed absolute, username-bearing local paths from the committed issue #4207

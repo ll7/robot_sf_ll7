@@ -41,3 +41,22 @@ uv run python scripts/tools/manage_external_data.py --json provenance-check <ass
 
 Only pin `expected_tree_sha256` after reviewing that the staged tree corresponds to the official
 asset and no raw data is tracked by git.
+
+### Shape-contract loaders (public slice b)
+
+Per the 2026-07-03 maintainer ruling, each asset gets a license-safe shape-contract loader plus
+skip-if-absent tests that validate the expected structure and skip when data is absent (no bytes,
+ever). Current status:
+
+| Asset | Loader module | Tests |
+| --- | --- | --- |
+| `atc-pedestrian` | `robot_sf/data/external/atc.py` | `tests/data/external/test_atc_shape.py` |
+| `eth-ucy-trajectories` | `robot_sf/data/external/eth_ucy.py` | `tests/data/external/test_eth_ucy_shape.py` |
+| `ind-crossings` | `robot_sf/data/external/ind.py` | `tests/data/external/test_ind_shape.py` |
+| `crowdbot` | `robot_sf/data/external/crowdbot.py` | `tests/data/external/test_crowdbot_shape.py` |
+| `scand-demos` | `robot_sf/data/external/scand.py` | `tests/data/external/test_scand_shape.py` |
+
+`crowdbot` and `scand-demos` are recording-style datasets (ROS bags plus exported CSV/JSON tables and
+a license/readme copy) and share the reusable engine in
+`robot_sf/data/external/recording_shape_contract.py`. A passing shape contract is local structural
+evidence only; it is not a benchmark, ingestion, or paper-facing claim.

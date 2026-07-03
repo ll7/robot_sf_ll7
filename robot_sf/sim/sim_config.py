@@ -1,11 +1,63 @@
 """Configuration dataclasses for simulator timing and pedestrian behavior."""
 
-from dataclasses import dataclass, field
-from math import ceil
+from dataclasses import dataclass, field, replace
+from math import ceil, isfinite
 
 from robot_sf.ped_npc.adversial_ped_force import AdversarialPedForceConfig
 from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
-from robot_sf.sim.pedestrian_model_variants import normalize_pedestrian_model
+from robot_sf.sim.pedestrian_model_variants import (
+    HSFM_TTC_PREDICTIVE_V1,
+    normalize_pedestrian_model,
+)
+
+
+@dataclass(frozen=True)
+class TtcPredictiveForceConfig:
+    """Opt-in TTC predictive pedestrian force parameters."""
+
+    enabled: bool = False
+    tau0_s: float = 1.0
+    horizon_s: float = 3.0
+    force_scale: float = 1.0
+    max_force: float = 5.0
+    include_ped_ped: bool = True
+    include_robot_proxy: bool = False
+
+    def __post_init__(self) -> None:
+        """Validate finite positive predictive-force parameters."""
+        if not isfinite(self.tau0_s) or self.tau0_s <= 0:
+            raise ValueError("ttc_predictive_force.tau0_s must be > 0")
+        if not isfinite(self.horizon_s) or self.horizon_s <= 0:
+            raise ValueError("ttc_predictive_force.horizon_s must be > 0")
+        if not isfinite(self.force_scale) or self.force_scale < 0:
+            raise ValueError("ttc_predictive_force.force_scale must be >= 0")
+        if not isfinite(self.max_force) or self.max_force <= 0:
+            raise ValueError("ttc_predictive_force.max_force must be > 0")
+
+
+def _normalize_ttc_predictive_force_config(
+    value: TtcPredictiveForceConfig | dict,
+) -> TtcPredictiveForceConfig:
+    """Return a validated TTC predictive force config."""
+    if isinstance(value, TtcPredictiveForceConfig):
+        return value
+    if isinstance(value, dict):
+        return TtcPredictiveForceConfig(**value)
+    raise ValueError("ttc_predictive_force must be a TtcPredictiveForceConfig")
+
+
+def _pedestrian_model_ttc_config(
+    pedestrian_model: str,
+    ttc_config: TtcPredictiveForceConfig,
+) -> TtcPredictiveForceConfig:
+    """Enable TTC provenance when the predictive pedestrian-model selector is active.
+
+    Returns:
+        The original or selector-adjusted TTC predictive force config.
+    """
+    if pedestrian_model == HSFM_TTC_PREDICTIVE_V1 and not ttc_config.enabled:
+        return replace(ttc_config, enabled=True)
+    return ttc_config
 
 
 @dataclass
@@ -25,6 +77,9 @@ class SimulationSettings:
 
     pedestrian_model: str = "social_force_default"
     """Pedestrian dynamics model selector."""
+
+    ttc_predictive_force: TtcPredictiveForceConfig = field(default_factory=TtcPredictiveForceConfig)
+    """TTC predictive force settings used by ``hsfm_ttc_predictive_v1``."""
 
     difficulty: int = 0
     """Difficulty level"""
@@ -93,6 +148,13 @@ class SimulationSettings:
         if self.peds_speed_mult <= 0:
             raise ValueError("Pedestrian speed mustn't be negative or zero!")
         self.pedestrian_model = normalize_pedestrian_model(self.pedestrian_model)
+        self.ttc_predictive_force = _normalize_ttc_predictive_force_config(
+            self.ttc_predictive_force
+        )
+        self.ttc_predictive_force = _pedestrian_model_ttc_config(
+            self.pedestrian_model,
+            self.ttc_predictive_force,
+        )
         # Check that the maximum number of pedestrians per group is positive
         if self.max_peds_per_group <= 0:
             raise ValueError("Maximum pedestrians per group mustn't be negative or zero!")

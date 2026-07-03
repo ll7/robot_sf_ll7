@@ -21,6 +21,10 @@ entries:
     status: evidence
     freshness: evidence
     area: workflow_evidence
+  - path: docs/context/evidence/issue_4164_goal_intention_smoke_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4216_licca_full_suite_env_failures
     status: evidence
     freshness: evidence
@@ -2919,3 +2923,23 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4245_offline_pretrain_finetune_smoke/README.md
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_4245_offline_pretrain_finetune_smoke/pretrain_manifest_summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_4245_offline_pretrain_finetune_smoke/finetune_manifest_summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_4245_offline_pretrain_finetune_smoke/provenance_chain.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_4245_offline_pretrain_finetune_smoke/smoke_report.md
+    status: evidence
+    freshness: evidence
+    area: learned_policy

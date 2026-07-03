@@ -33,6 +33,7 @@ from robot_sf.ped_ego.unicycle_drive import (
     UnicycleDrivePedestrian,
     UnicycleDriveSettings,
 )
+from robot_sf.prediction.goal_intention import GoalPosteriorConfig
 from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleDriveSettings
 from robot_sf.robot.differential_drive import (
     DifferentialDriveRobot,
@@ -88,6 +89,10 @@ class BaseEnvSettings(TelemetryConfigMixin):
     # Forecast variant selection for planners that consume ProbabilisticPredictor baselines.
     # "none" disables baseline forecast consumption and uses the planner's default behavior.
     forecast_variant: str = field(default="none")
+    # Opt-in planner metadata channel for issue #4164. Disabled by default to
+    # preserve observation-space and benchmark compatibility.
+    goal_posterior_planner_input_enabled: bool = False
+    goal_posterior_planner_input: GoalPosteriorConfig = field(default_factory=GoalPosteriorConfig)
 
     def __post_init__(self):
         """Validate required configuration fields and telemetry settings.

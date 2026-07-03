@@ -1,0 +1,137 @@
+schema_version: training_comparison_matrix_preregistration.v1
+issue: 4244
+title: Seven-arm learned-policy comparison matrix preregistration
+claim_boundary: >-
+  Pre-registration only. This file defines the comparison contract, inclusion
+  gates, and queue-plan shape for a later private campaign; it is not benchmark
+  evidence and does not authorize training execution.
+comparison:
+  objective: learned_policy_architecture_comparison
+  arms_expected: 7
+  scenario_config: configs/scenarios/classic_interactions_francis2023.yaml
+  analysis_plan:
+    rank_table: true
+    confidence_intervals: bootstrap_95
+    mechanism_breakdown_schema_issue: 4245
+    primary_sort_metric: success_rate
+    secondary_sort_metric: collision_rate
+    tertiary_sort_metric: snqi
+  metrics:
+    primary:
+      - success_rate
+      - collision_rate
+    secondary:
+      - snqi
+    diagnostics:
+      - timeout_rate
+      - mean_episode_return
+      - mean_path_efficiency
+  stop_rules:
+    max_total_timesteps: 15000000
+    max_walltime_per_arm: 24:00:00
+    early_stop_allowed: false
+    failed_smoke_contract_policy: exclude_arm_with_reason
+    missing_required_gate_policy: exclude_arm_with_reason
+  shared_budget:
+    total_timesteps: 15000000
+    seeds: [123, 231, 777, 992, 1337]
+    num_envs: auto
+    device: cpu_or_gpu_by_private_queue
+    evaluation_episodes: 100
+    scenario_config: configs/scenarios/classic_interactions_francis2023.yaml
+  per_arm_compute_budget:
+    gpus: 1
+    cpus: 8
+    memory: 32G
+    walltime: 24:00:00
+  queue_plan:
+    submission_surface: private_queue_after_pr
+    submit_in_this_pr: false
+    per_arm_queue_entry_required: true
+    output_root: output/training/comparison_matrix_issue_4244
+inclusion_gates:
+  - id: smoke_contract_manifest_passes
+    applies_to: all
+    policy: exclude_arm_with_reason
+  - id: identical_budget_check_passes
+    applies_to: all
+    policy: fail_matrix_validation
+  - id: sac_after_issue_4245_standalone_offline_pretraining
+    applies_to: offline_online_sac
+    policy: exclude_arm_with_reason
+    required_issue: 4245
+arms:
+  - id: ppo_baseline
+    display_name: PPO baseline
+    algorithm_family: ppo
+    lineage_issue: 576
+    training_config: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+    smoke_contract_manifest: output/training/smoke_contracts/ppo_baseline_issue_4244.json
+    budget_ref: shared_budget
+    required_gates:
+      - smoke_contract_manifest_passes
+      - identical_budget_check_passes
+  - id: recurrent_ppo_lstm
+    display_name: RecurrentPPO-LSTM
+    algorithm_family: recurrent_ppo_lstm
+    lineage_issue: 4234
+    supporting_issue: 4014
+    training_config: configs/training/ppo/issue_4014_ppo_lstm_recurrent_smoke.yaml
+    smoke_contract_manifest: output/training/smoke_contracts/recurrent_ppo_lstm_issue_4234.json
+    budget_ref: shared_budget
+    required_gates:
+      - smoke_contract_manifest_passes
+      - identical_budget_check_passes
+  - id: ppo_mamba
+    display_name: PPO-Mamba
+    algorithm_family: ppo_mamba
+    lineage_issue: 4162
+    training_config: configs/training/comparison_matrix/placeholders/ppo_mamba_issue_4162.yaml
+    smoke_contract_manifest: output/training/smoke_contracts/ppo_mamba_issue_4162.json
+    budget_ref: shared_budget
+    required_gates:
+      - smoke_contract_manifest_passes
+      - identical_budget_check_passes
+  - id: ppo_lagrangian
+    display_name: PPO-Lagrangian
+    algorithm_family: ppo_lagrangian
+    lineage_issue: 4214
+    supporting_issue: 4017
+    training_config: configs/training/ppo/issue_4017_constrained_smoke.yaml
+    smoke_contract_manifest: output/training/smoke_contracts/ppo_lagrangian_issue_4214.json
+    budget_ref: shared_budget
+    required_gates:
+      - smoke_contract_manifest_passes
+      - identical_budget_check_passes
+  - id: diffusion_policy
+    display_name: Diffusion policy
+    algorithm_family: diffusion_policy
+    lineage_issue: 4217
+    supporting_issue: 4225
+    training_config: configs/training/diffusion_policy/issue_4010_smoke.yaml
+    smoke_contract_manifest: output/training/smoke_contracts/diffusion_policy_issue_4217_4225.json
+    budget_ref: shared_budget
+    required_gates:
+      - smoke_contract_manifest_passes
+      - identical_budget_check_passes
+  - id: qr_dqn
+    display_name: QR-DQN
+    algorithm_family: qr_dqn
+    lineage_issue: 4215
+    training_config: configs/training/distributional_rl/qr_dqn_issue_4016_smoke.yaml
+    smoke_contract_manifest: output/training/smoke_contracts/qr_dqn_issue_4215.json
+    budget_ref: shared_budget
+    required_gates:
+      - smoke_contract_manifest_passes
+      - identical_budget_check_passes
+  - id: offline_online_sac
+    display_name: Offline-online SAC
+    algorithm_family: offline_online_sac
+    lineage_issue: 4170
+    training_config: configs/training/offline_online_rl/issue_4012_sac_smoke.yaml
+    smoke_contract_manifest: output/training/smoke_contracts/offline_online_sac_issue_4170.json
+    budget_ref: shared_budget
+    required_gates:
+      - smoke_contract_manifest_passes
+      - identical_budget_check_passes
+      - sac_after_issue_4245_standalone_offline_pretraining

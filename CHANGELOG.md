@@ -61,6 +61,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`robot_ped_within_5m_frac == 0`, `min_clearance_m ≈ 20 m`), so its "0 flips" result is not yet
   evidence of model-robust certification; the residual empirical action is an interacting scenario
   family. Diagnostic-only; no deployment, benchmark-strength, or paper/dissertation claim.
+* Added an **interacting certification-transfer smoke scenario family** for issue #4207 (#4207) — the
+  residual empirical action named by the interaction-validity guard above. New probe config
+  `configs/benchmarks/issue_4207_interacting_smoke_probe.yaml`, gate spec
+  `configs/benchmarks/release_gates/issue_4207_interacting_smoke_gates.yaml`, scenario descriptor
+  `configs/scenarios/single/issue_4207_interacting_smoke.yaml`, and a deterministic CPU-scale smoke
+  episode fixture `tests/benchmark/fixtures/issue_4207_interacting_smoke/interacting_smoke_episodes.jsonl`.
+  Run through the existing runner in report-only mode, the family drives every transfer cell into the
+  5 m near field so the guard reports `model_sensitivity_exercised = true` (16/16 `interacting`) with a
+  genuine interacting flip on the `ppo` arm (`fragile_pass_to_fail` under `hsfm_total_force_v1`). The
+  committed packet `docs/context/evidence/issue_4207_interacting_smoke_2026-07/` is generated from the
+  **synthetic** fixture — it is not a physics run (see its `SYNTHETIC_SMOKE_NOTICE.md`); its purpose is
+  to exercise the guard's positive path end-to-end and template a future physics-verified geometry/spawn
+  CPU re-run, which remains the tracked next step. No simulation, Slurm/GPU submission, retraining,
+  deployment, benchmark-strength, or paper/dissertation claim.
 * Added a **safety-wrapper false-stop diagnostic** for `wrapper_on` benchmark rows (#3501):
   `robot_sf/benchmark/safety_wrapper_runtime.py` gains `analyze_false_stop_diagnostic(...)`, and the
   episode summary now embeds a schema-tagged `false_stop_diagnostic` block plus a

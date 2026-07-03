@@ -46,8 +46,21 @@ cpu_smoke:
 frozen_ppo_lineage:
   algo: ppo
   algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
+  model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
+  algo_config_sha256: 644b57e451cfc42b6ab5cf56ef6ec20fd6290a3bb9bae1be113a1aa6afb792ca
   model_preflight_required: true
   private_artifact_hydration_required: true
+  hydration_manifest_schema: robot_sf.issue_4205.frozen_ppo_checkpoint_hydration.v1
+  hydration_manifest_required_fields:
+    - schema_version
+    - issue
+    - loop_id
+    - model_id
+    - algo_config
+    - algo_config_sha256
+    - checkpoint_path
+    - checkpoint_sha256
+    - arms
   failure_job_id: 13175
   lineage_note: >
     Public pre-registration pins the config identity used by the job-13175 PPO

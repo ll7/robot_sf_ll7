@@ -251,6 +251,81 @@ def test_build_seed_episode_rows_uses_algorithm_metadata_fallback() -> None:
     assert rows[0]["algo"] == "orca"
 
 
+def test_build_seed_episode_rows_emits_mechanism_taxonomy_and_exposure_fields() -> None:
+    """Episode rows expose trace-verified taxonomy plus native exposure fields."""
+
+    rows = build_seed_episode_rows(
+        [
+            {
+                "episode_id": "ep-taxonomy",
+                "scenario_id": "classic_cross_trap_low",
+                "seed": 111,
+                "algo": "orca",
+                "planner_key": "orca",
+                "kinematics": "differential_drive",
+                "failure_mechanism_taxonomy": {
+                    "label": "static_deadlock_or_local_minimum",
+                    "source": "trace_review_issue_2220",
+                    "trace_status": "trace_verified",
+                    "confidence": "observed_mechanism",
+                },
+                "metrics": {
+                    "success": 0.0,
+                    "collisions": 0.0,
+                    "near_misses": 1.0,
+                    "time_to_goal_norm": 1.2,
+                    "interaction_exposure_share": 0.75,
+                    "robot_motion_share_before_first_clearance": 0.5,
+                    "first_clearance_step": 42,
+                    "low_exposure_success": 0.0,
+                },
+            },
+            {
+                "episode_id": "ep-geometry-only",
+                "scenario_id": "classic_cross_trap_low",
+                "seed": 112,
+                "algo": "orca",
+                "planner_key": "orca",
+                "kinematics": "differential_drive",
+                "metrics": {
+                    "success": 0.0,
+                    "collisions": 0.0,
+                    "near_misses": 1.0,
+                    "time_to_goal_norm": 1.2,
+                    "geometry_label": "static_deadlock_or_local_minimum",
+                },
+            },
+        ]
+    )
+
+    trace_row = next(row for row in rows if row["episode_id"] == "ep-taxonomy")
+    assert trace_row["failure_mechanism_taxonomy_schema"] == "failure_mechanism_taxonomy.v1"
+    assert trace_row["failure_mechanism_label"] == "static_deadlock_or_local_minimum"
+    assert trace_row["failure_mechanism_source"] == "trace_review_issue_2220"
+    assert trace_row["failure_mechanism_trace_status"] == "trace_verified"
+    assert trace_row["failure_mechanism_confidence"] == "observed_mechanism"
+    assert trace_row["mechanism_schema_version"] == "failure_mechanism_taxonomy.v1"
+    assert trace_row["mechanism_label"] == "static_deadlock_or_local_minimum"
+    assert trace_row["mechanism_confidence"] == "observed_mechanism"
+    assert trace_row["mechanism_evidence_mode"] == "paired_trace"
+    assert trace_row["mechanism_evidence_uri"] == "trace_review_issue_2220"
+    assert trace_row["interaction_exposure_share"] == pytest.approx(0.75)
+    assert trace_row["interaction_exposure_schema_version"] == "interaction_exposure.v1"
+    assert trace_row["interaction_exposure_status"] == "computed"
+    assert trace_row["robot_motion_share_before_first_clearance"] == pytest.approx(0.5)
+    assert trace_row["first_clearance_step"] == pytest.approx(42)
+    assert trace_row["low_exposure_success"] == pytest.approx(0.0)
+    assert trace_row["interaction_exposure_source"] == "episode_metrics"
+
+    geometry_row = next(row for row in rows if row["episode_id"] == "ep-geometry-only")
+    assert geometry_row["failure_mechanism_label"] is None
+    assert geometry_row["failure_mechanism_trace_status"] == "not_derivable"
+    assert geometry_row["mechanism_label"] == "unknown"
+    assert geometry_row["mechanism_evidence_mode"] == "unknown"
+    assert geometry_row["interaction_exposure_source"] == "not_derivable_from_episode_record"
+    assert geometry_row["interaction_exposure_status"] == "not_derivable_missing_trace"
+
+
 def test_build_statistical_sufficiency_rows_exposes_half_widths() -> None:
     """Sufficiency rows should surface per-metric CI half-widths and counts."""
     rows = build_seed_variability_rows(

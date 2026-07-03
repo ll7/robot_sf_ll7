@@ -1,4 +1,5 @@
 {
+  "backfill_policy": "derive_from_retained_episode_rows_only_no_imputation",
   "claim_boundary": "interaction-exposure coverage is diagnostic-only and must be computed from episode-level fields; absent fields are not imputed",
   "missing_required_fields": [
     "first_clearance_step",
@@ -28,6 +29,9 @@
         "success",
         "time_to_goal"
       ],
+      "backfill_policy": "derive_from_retained_episode_rows_only_no_imputation",
+      "derivable_episode_rows": 0,
+      "exposure_provenance_values": [],
       "job_id": "13268",
       "missing_required_fields": [
         "interaction_exposure_share",
@@ -35,6 +39,7 @@
         "first_clearance_step",
         "low_exposure_success"
       ],
+      "not_derivable_episode_rows": 0,
       "required_columns": [
         "interaction_exposure_share",
         "robot_motion_share_before_first_clearance",
@@ -60,6 +65,9 @@
         "success",
         "time_to_goal"
       ],
+      "backfill_policy": "derive_from_retained_episode_rows_only_no_imputation",
+      "derivable_episode_rows": 0,
+      "exposure_provenance_values": [],
       "job_id": "13273",
       "missing_required_fields": [
         "interaction_exposure_share",
@@ -67,6 +75,7 @@
         "first_clearance_step",
         "low_exposure_success"
       ],
+      "not_derivable_episode_rows": 0,
       "required_columns": [
         "interaction_exposure_share",
         "robot_motion_share_before_first_clearance",

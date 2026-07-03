@@ -22,6 +22,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not_evaluable over the 8-planner roster (degraded `socnav_bench` fails closed to `not_evaluable`).
   Thresholds are provisional configuration, not certification, threshold approval, or a planner
   ranking; no new benchmark run was performed.
+* Added an **interaction-validity guard** to the issue #4207 certification-transfer probe (#4207):
+  `robot_sf/benchmark/certification_transfer.py` gains `classify_interaction_status(...)` and now
+  tags every gate cell with `interaction_status` (`interacting` / `non_interacting` / `unknown`) and
+  every transfer-matrix row with `interaction_status` plus an `interaction_exercised` flag. Because
+  `social_force_default` and `hsfm_total_force_v1` only diverge when the robot enters the 5 m
+  pedestrian near field, a `stable_pass`/`stable_fail` built from cells that never do is *vacuous* —
+  it does not demonstrate certification robustness. The report/metadata now carry
+  `interaction_status_counts` and a `model_sensitivity_exercised` boolean, and the README/claim
+  boundary spell out the vacuity caveat. New
+  `scripts/benchmark/annotate_certification_transfer_interaction_issue_4207.py` applies the guard
+  post-hoc to a recorded `summary.json` (no new simulation) and emits `interaction_validity.{md,csv}`.
+  Running it on the committed 2026-07 packet shows all 8 cells are `non_interacting`
+  (`robot_ped_within_5m_frac == 0`, `min_clearance_m ≈ 20 m`), so its "0 flips" result is not yet
+  evidence of model-robust certification; the residual empirical action is an interacting scenario
+  family. Diagnostic-only; no deployment, benchmark-strength, or paper/dissertation claim.
 * Added a **safety-wrapper false-stop diagnostic** for `wrapper_on` benchmark rows (#3501):
   `robot_sf/benchmark/safety_wrapper_runtime.py` gains `analyze_false_stop_diagnostic(...)`, and the
   episode summary now embeds a schema-tagged `false_stop_diagnostic` block plus a
@@ -780,6 +795,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   diagnostic/provenance evidence only.
 
 ### Fixed
+
+* Fixed a **docs-proof readiness false-blocker for docs/context note PRs** (#4178, successor to
+  #4191). The `scripts/dev/check_docs_proof_consistency_diff.sh` wrapper unconditionally injected
+  `docs/context/catalog.yaml` into the `--path` selection for *any* docs/context-only diff, which
+  forced full catalog schema/provenance validation and surfaced pre-existing, unrelated catalog
+  debt (evidence rows that point at ignored `output/` artifacts). A PR that only edited a context
+  note (never touching `catalog.yaml`) was blocked by that baseline debt. The wrapper now keeps only
+  `README.md`/`INDEX.md` as always-selected link anchors; full catalog validation runs when
+  `catalog.yaml` is itself in the diff (selected naturally) or under the explicit
+  `--check-context-catalog` flag. #4191 already made the direct Python checker diff-scoped for
+  code-only diffs; this closes the same gap for docs/context note diffs. Strict catalog proof on
+  actual `catalog.yaml` changes and the explicit `--check-evidence-catalog` mode are unchanged, and
+  no catalog rows were repaired. Added a focused regression test.
 
 * Fixed **absolute machine paths leaking into the #4239 h600 SNQI evidence packet** (#4302). The
   builder `scripts/validation/build_issue_4239_h600_snqi_weight_set_ranking.py` hardened `_rel()` so a

@@ -2983,6 +2983,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3078_package_a_readiness
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3556_seed_sufficiency_handoff_2026-07-03/README.md
     status: evidence
     freshness: evidence

@@ -81,6 +81,7 @@ def build(
             "checkpoint_status": "untrained_smoke"
             if config.allow_untrained_smoke
             else "checkpoint_loaded",
+            "normalizer_status": "not_required" if config.allow_untrained_smoke else "loaded",
             "claim_boundary": CLAIM_BOUNDARY,
         },
         "planner_kinematics": {

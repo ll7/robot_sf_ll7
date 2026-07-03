@@ -438,6 +438,12 @@ class DiffusionPolicyAdapter:
                 "num_action_samples": self.config.num_action_samples,
                 "device": str(self._device),
                 "allow_untrained_smoke": self.config.allow_untrained_smoke,
+                "checkpoint_status": (
+                    "untrained_smoke" if self.config.allow_untrained_smoke else "checkpoint_loaded"
+                ),
+                "normalizer_status": (
+                    "not_required" if self.config.allow_untrained_smoke else "loaded"
+                ),
                 "guidance": {
                     "enabled": bool(self.selector.guidance.get("enabled", True)),
                     "terms": ["smooth_previous_action", "current_clearance_proxy"],
@@ -459,6 +465,11 @@ class DiffusionPolicyAdapter:
             checkpoint = Path(self.config.checkpoint_path).expanduser()
             if not checkpoint.is_file():
                 raise FileNotFoundError(f"Diffusion policy checkpoint not found: {checkpoint}")
+            if not self.config.normalizer_path:
+                raise RuntimeError(
+                    "diffusion_policy checkpoint_path requires normalizer_path for "
+                    "issue #4010 smoke checkpoint provenance."
+                )
         elif not self.config.allow_untrained_smoke:
             raise RuntimeError(
                 "diffusion_policy requires checkpoint_path unless allow_untrained_smoke=true. "

@@ -319,6 +319,23 @@ def _build_manifest(
             "normalizer_path": normalizer_path.name,
             "checkpoint_format": "encoder_sampler_state_dict",
             "normalizer_schema_version": normalizer["schema_version"],
+            "map_runner_load_contract": {
+                "allow_untrained_smoke": False,
+                "requires_checkpoint_path": True,
+                "requires_normalizer_path": True,
+                "algo_config_fragment": {
+                    "checkpoint_path": checkpoint_path.name,
+                    "normalizer_path": normalizer_path.name,
+                    "allow_untrained_smoke": False,
+                    "deterministic": True,
+                    "seed": config.seed,
+                    "max_pedestrians": config.max_pedestrians,
+                    "denoising_steps": config.denoising_steps,
+                    "num_action_samples": config.num_action_samples,
+                    "max_linear_speed": config.max_linear_speed,
+                    "max_angular_speed": config.max_angular_speed,
+                },
+            },
         },
         "training": {
             "status": "completed",

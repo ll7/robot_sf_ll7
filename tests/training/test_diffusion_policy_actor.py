@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 
 import pytest
 
@@ -85,6 +87,50 @@ def test_training_smoke_writes_checkpoint_normalizer_manifest(tmp_path) -> None:
     assert manifest["artifacts"]["normalizer_path"] == artifacts.normalizer_path.name
     assert manifest["training"]["status"] == "completed"
     assert manifest["evidence_tier"] == "diagnostic-only"
+    load_contract = manifest["artifacts"]["map_runner_load_contract"]
+    assert load_contract["allow_untrained_smoke"] is False
+    assert load_contract["requires_checkpoint_path"] is True
+    assert load_contract["requires_normalizer_path"] is True
+    assert (
+        load_contract["algo_config_fragment"]["checkpoint_path"] == artifacts.checkpoint_path.name
+    )
+    assert (
+        load_contract["algo_config_fragment"]["normalizer_path"] == artifacts.normalizer_path.name
+    )
+
+
+def test_training_script_entrypoint_writes_manifest_path(tmp_path) -> None:
+    """Canonical script command writes smoke manifest for issue #4010."""
+    config_path = tmp_path / "smoke.yaml"
+    output_dir = tmp_path / "artifacts"
+    config_path.write_text(
+        "diffusion_policy_training_smoke:\n"
+        "  schema_version: diffusion_policy_training_smoke.v1\n"
+        "  training_steps: 1\n"
+        "  batch_size: 2\n"
+        "  max_pedestrians: 2\n"
+        "  artifact_prefix: cli_smoke\n",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/training/train_diffusion_policy.py",
+            "--config",
+            str(config_path),
+            "--output-dir",
+            str(output_dir),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(completed.stdout)
+    manifest_path = output_dir / "cli_smoke.manifest.json"
+    assert payload == {"manifest_path": str(manifest_path)}
+    assert manifest_path.exists()
 
 
 def test_map_runner_loads_smoke_checkpoint_not_untrained_weights(tmp_path) -> None:
@@ -121,5 +167,9 @@ def test_map_runner_loads_smoke_checkpoint_not_untrained_weights(tmp_path) -> No
     assert 0.0 <= command[0] <= config.max_linear_speed
     assert -config.max_angular_speed <= command[1] <= config.max_angular_speed
     assert meta["diffusion_policy"]["allow_untrained_smoke"] is False
+    assert meta["diffusion_policy"]["checkpoint_status"] == "checkpoint_loaded"
+    assert meta["diffusion_policy"]["normalizer_status"] == "loaded"
     assert stats["diffusion_policy"]["allow_untrained_smoke"] is False
+    assert stats["diffusion_policy"]["checkpoint_status"] == "checkpoint_loaded"
+    assert stats["diffusion_policy"]["normalizer_status"] == "loaded"
     assert stats["diffusion_policy"]["evidence_tier"] == "diagnostic-only"

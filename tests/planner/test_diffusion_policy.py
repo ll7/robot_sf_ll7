@@ -10,6 +10,7 @@ torch = pytest.importorskip("torch")
 from robot_sf.planner import diffusion_policy as diffusion_module  # noqa: E402
 from robot_sf.planner.diffusion_policy import (  # noqa: E402
     CLAIM_BOUNDARY,
+    DiffusionActionSampler,
     DiffusionGuidanceSelector,
     DiffusionPolicyAdapter,
     RobotPedestrianGraphEncoder,
@@ -140,6 +141,85 @@ def test_sampler_returns_finite_bounded_action_and_reproducible_reset() -> None:
     assert first == pytest.approx(second)
     assert 0.0 <= first[0] <= 0.8
     assert -0.7 <= first[1] <= 0.7
+
+
+def test_sampler_uses_condition_device_for_temporary_tensors() -> None:
+    """Sampler temporaries stay on the condition tensor device."""
+    sampler = DiffusionActionSampler(
+        condition_dim=4,
+        action_dim=2,
+        max_linear_speed=0.8,
+        max_angular_speed=0.7,
+    )
+    condition = torch.zeros(4, dtype=torch.float32, device=torch.device("cpu"))
+
+    actions = sampler.sample(
+        condition,
+        num_samples=3,
+        denoising_steps=2,
+        generator=torch.Generator(device=condition.device),
+        deterministic=True,
+    )
+
+    assert actions.device == condition.device
+    assert actions.dtype == condition.dtype
+
+
+def test_random_sampling_uses_adapter_owned_cpu_generator() -> None:
+    """The adapter-owned generator works with random CPU sampling."""
+    adapter = DiffusionPolicyAdapter(
+        {
+            "allow_untrained_smoke": True,
+            "deterministic": False,
+            "device": "cpu",
+            "seed": 4181,
+            "num_action_samples": 3,
+        }
+    )
+
+    selected = adapter.plan(_observation())
+    payload = adapter.diagnostics()["diffusion_policy"]
+
+    assert np.isfinite(selected).all()
+    assert payload["device"] == "cpu"
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+def test_cuda_plan_uses_configured_device_when_available() -> None:
+    """CUDA smoke test guards against mixed-device sampler tensors."""
+    adapter = DiffusionPolicyAdapter(
+        {
+            "allow_untrained_smoke": True,
+            "device": "cuda",
+            "seed": 4181,
+            "num_action_samples": 2,
+        }
+    )
+
+    selected = adapter.plan(_observation())
+
+    assert np.isfinite(selected).all()
+    assert adapter.diagnostics()["diffusion_policy"]["device"] == "cuda"
+
+
+def test_unavailable_cuda_device_fails_closed_with_configured_device(monkeypatch) -> None:
+    """CPU-only runtimes name the unsupported configured device."""
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+
+    with pytest.raises(RuntimeError, match="configured device 'cuda' is not available"):
+        DiffusionPolicyAdapter({"allow_untrained_smoke": True, "device": "cuda"})
+
+
+def test_generator_creation_failure_names_configured_device(monkeypatch) -> None:
+    """Unsupported PyTorch generator devices surface the configured device."""
+
+    def _raise_generator_error(*_args, **_kwargs):
+        raise RuntimeError("unsupported generator")
+
+    monkeypatch.setattr(diffusion_module.torch, "Generator", _raise_generator_error)
+
+    with pytest.raises(RuntimeError, match="configured device 'cpu'"):
+        DiffusionPolicyAdapter({"allow_untrained_smoke": True, "device": "cpu"})
 
 
 def test_guidance_changes_selected_candidate() -> None:

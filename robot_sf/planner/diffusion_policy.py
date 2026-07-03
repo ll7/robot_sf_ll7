@@ -85,6 +85,27 @@ def _require_torch() -> None:
         )
 
 
+def _build_generator(device: Any) -> Any:
+    """Create a sampling generator on the configured runtime device.
+
+    Returns:
+        Any: PyTorch generator bound to the configured device.
+    """
+    _require_torch()
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError(
+            "DiffusionPolicyAdapter configured device 'cuda' is not available in this "
+            "PyTorch runtime."
+        )
+    try:
+        return torch.Generator(device=device)
+    except RuntimeError as exc:
+        raise RuntimeError(
+            "DiffusionPolicyAdapter cannot create a sampler generator for configured "
+            f"device '{device}'."
+        ) from exc
+
+
 def build_diffusion_policy_config(
     config: dict[str, Any] | DiffusionPolicyConfig,
 ) -> DiffusionPolicyConfig:
@@ -243,13 +264,25 @@ class DiffusionActionSampler(nn.Module if nn is not None else object):  # type: 
             Any: Tensor of bounded candidate actions.
         """
         _require_torch()
+        device = condition.device
+        dtype = condition.dtype
         if deterministic:
-            actions = torch.zeros((num_samples, self.action_dim), dtype=torch.float32)
+            actions = torch.zeros((num_samples, self.action_dim), dtype=dtype, device=device)
         else:
-            actions = torch.randn((num_samples, self.action_dim), generator=generator)
+            actions = torch.randn(
+                (num_samples, self.action_dim),
+                dtype=dtype,
+                device=device,
+                generator=generator,
+            )
         condition_batch = condition.unsqueeze(0).expand(num_samples, -1)
         for step in reversed(range(denoising_steps)):
-            t = torch.full((num_samples, 1), float(step + 1) / float(denoising_steps))
+            t = torch.full(
+                (num_samples, 1),
+                float(step + 1) / float(denoising_steps),
+                dtype=dtype,
+                device=device,
+            )
             eps = self.net(torch.cat([actions, t, condition_batch], dim=-1))
             actions = actions - eps / float(denoising_steps)
             actions = self._bounded(actions)
@@ -333,7 +366,7 @@ class DiffusionPolicyAdapter:
         self.config = build_diffusion_policy_config(config)
         self._validate_runtime_source()
         self._device = torch.device(self.config.device)
-        self._generator = torch.Generator(device="cpu")
+        self._generator = _build_generator(self._device)
         self._previous_action = (0.0, 0.0)
         self._last_candidates: np.ndarray | None = None
         self._last_guidance: dict[str, Any] = {"status": "not_run"}
@@ -403,6 +436,7 @@ class DiffusionPolicyAdapter:
                 "evidence_tier": EVIDENCE_TIER,
                 "denoising_steps": self.config.denoising_steps,
                 "num_action_samples": self.config.num_action_samples,
+                "device": str(self._device),
                 "allow_untrained_smoke": self.config.allow_untrained_smoke,
                 "guidance": {
                     "enabled": bool(self.selector.guidance.get("enabled", True)),

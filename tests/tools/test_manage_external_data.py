@@ -52,10 +52,24 @@ def _write_atc_fixture(path: Path) -> None:
 
 
 def _write_ind_fixture(path: Path) -> None:
-    """Create minimal inD-shaped fixture; not official data."""
+    """Create minimal inD-shaped fixture; not official data.
+
+    Mirrors the per-recording inD layout (tracks/tracksMeta/recordingMeta CSVs plus an aerial
+    background image) required by the tightened registry contract for #4290. Content is synthetic.
+    """
     path.mkdir(parents=True, exist_ok=True)
     (path / "00_tracks.csv").write_text(
         "trackId,frame,xCenter,yCenter\n1,0,0,0\n", encoding="utf-8"
+    )
+    (path / "00_tracksMeta.csv").write_text(
+        "trackId,class,width,length\n1,pedestrian,0,0\n", encoding="utf-8"
+    )
+    (path / "00_recordingMeta.csv").write_text(
+        "recordingId,frameRate,locationId,numTracks\n0,25,1,1\n", encoding="utf-8"
+    )
+    # 1x1 synthetic PNG placeholder standing in for the aerial background image; not official data.
+    (path / "00_background.png").write_bytes(
+        b"\x89PNG\r\n\x1a\n synthetic fixture, not official inD data"
     )
     (path / "TERMS.txt").write_text("Synthetic terms placeholder for tests.\n", encoding="utf-8")
 
@@ -341,8 +355,65 @@ def test_stage_writes_manifest_for_alyassi_byo_asset(tmp_path: Path) -> None:
 
     assert manifest["asset_id"] == "ind-crossings"
     assert manifest["license_url"] == "https://levelxdata.com/ind-dataset/"
-    assert manifest["matched_required_paths"] == ["00_tracks.csv", "TERMS.txt"]
+    assert manifest["matched_required_paths"] == [
+        "00_background.png",
+        "00_recordingMeta.csv",
+        "00_tracks.csv",
+        "00_tracksMeta.csv",
+        "TERMS.txt",
+    ]
     assert manage_external_data.check_provenance_manifest("ind-crossings", manifest_path)["ok"]
+
+
+def test_ind_registry_identity_and_request_gated_metadata() -> None:
+    """#4290: canonical inD entry exposes request-gated, non-commercial, no-redistribution terms."""
+    asset = manage_external_data._get_asset("ind-crossings")
+
+    assert asset.source_url == "https://levelxdata.com/ind-dataset/"
+    assert asset.license_url == "https://levelxdata.com/ind-dataset/"
+    assert asset.auto_download_allowed is False
+    assert "non-commercial" in asset.license_note.lower()
+    assert "redistribut" in asset.license_note.lower()
+    assert "request" in asset.access_note.lower()
+    # #4290 and the #4224 program parent must both be linked from the canonical entry.
+    assert {4290, 4224}.issubset(set(asset.related_issues))
+
+
+def test_ind_missing_data_fails_closed(tmp_path: Path) -> None:
+    """#4290: absent inD data reports manual acquisition without attempting fallback."""
+    report = manage_external_data.check_asset("ind-crossings", source_path=tmp_path / "missing")
+
+    assert report["ok"] is False
+    assert report["status"] == "missing"
+    assert report["availability"]["state"] == "missing"
+    assert report["expected_tree_sha256_status"] == "pending_first_staging"
+    assert "official acquisition" in report["action"]
+
+
+def test_ind_layout_requires_full_per_recording_group(tmp_path: Path) -> None:
+    """#4290: a lone tracks CSV is not a valid inD staging; metadata groups are required."""
+    (tmp_path / "00_tracks.csv").write_text("trackId,frame\n1,0\n", encoding="utf-8")
+
+    report = manage_external_data.check_asset("ind-crossings", source_path=tmp_path)
+
+    assert report["ok"] is False
+    assert report["status"] == "incomplete"
+    # tracksMeta, recordingMeta, background, and terms groups are all still missing.
+    assert "**/*_tracksMeta.csv" in report["missing_required_paths"]
+    assert "**/*_recordingMeta.csv" in report["missing_required_paths"]
+    assert any("background" in entry for entry in report["missing_required_paths"])
+    assert any("license_or_readme" in entry for entry in report["missing_required_paths"])
+
+
+def test_ind_full_layout_passes_presence_check(tmp_path: Path) -> None:
+    """#4290: a full synthetic inD-shaped staging satisfies the declared layout contract."""
+    _write_ind_fixture(tmp_path)
+
+    report = manage_external_data.check_asset("ind-crossings", source_path=tmp_path)
+
+    assert report["ok"] is True
+    assert report["status"] == "available"
+    assert report["missing_required_paths"] == []
 
 
 def test_stage_rejects_unignored_repo_local_raw_data(tmp_path: Path) -> None:

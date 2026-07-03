@@ -194,3 +194,59 @@ def test_arms_remain_mutually_exclusive() -> None:
         assert "mutually exclusive" in str(exc)
     else:
         raise AssertionError("wrapper and CBF composition is outside this slice")
+
+
+def test_cli_verifies_cpu_smoke_evidence_and_writes_packet(tmp_path: Path) -> None:
+    """Fixture-backed arm smoke writes only compact pre-run evidence files."""
+    smoke_path = REPO_ROOT / "tests/fixtures/issue_4205_cpu_smoke_evidence.json"
+    manifest_path = tmp_path / "cpu_smoke_verified.json"
+    evidence_dir = tmp_path / "evidence"
+
+    exit_code = _MODULE.main(
+        [
+            "--config",
+            str(CONFIG),
+            "--json",
+            "--smoke-input",
+            str(smoke_path),
+            "--smoke-out",
+            str(manifest_path),
+            "--evidence-dir",
+            str(evidence_dir),
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert payload["evidence_status"] == "cpu_arm_plumbing_smoke"
+    assert payload["rows"][1]["wrapper_intervention_rate"] == 0.125
+    assert payload["rows"][2]["cbf_status_counts"] == {"active": 1, "nominal": 0}
+
+    expected_files = {
+        "README.md",
+        "metadata.json",
+        "pre_registration.json",
+        "intervention_summary.csv",
+        "failure_mode_counts.csv",
+        "claim_boundary.md",
+        "SHA256SUMS",
+    }
+    assert {path.name for path in evidence_dir.iterdir()} == expected_files
+    serialized = "\n".join(path.read_text(encoding="utf-8") for path in evidence_dir.iterdir())
+    forbidden_tokens = ["episodes.jsonl", ".mp4", "checkpoint.zip", "slurm.log"]
+    assert all(token not in serialized.lower() for token in forbidden_tokens)
+
+
+def test_cpu_smoke_evidence_missing_cbf_status_fails_closed() -> None:
+    """The CBF arm must emit CBF status metadata before evidence packet writing."""
+    report = _MODULE.validate_config(_load_config())
+    smoke_path = REPO_ROOT / "tests/fixtures/issue_4205_cpu_smoke_evidence.json"
+    payload = json.loads(smoke_path.read_text(encoding="utf-8"))
+    payload["rows"][2]["cbf_status_counts"] = {}
+
+    try:
+        _MODULE._validate_cpu_smoke_evidence(report, payload)
+    except _MODULE.ContractError as exc:
+        assert "CBF status counts" in str(exc)
+    else:
+        raise AssertionError("CBF smoke evidence without status counts must fail closed")

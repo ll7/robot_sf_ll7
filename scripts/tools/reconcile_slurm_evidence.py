@@ -191,6 +191,16 @@ class FinalizerReport:
     source_path: str
 
 
+@dataclass(frozen=True)
+class SourceManifestRun:
+    """One public source-manifest run used as non-queue finalizer linkage."""
+
+    job_id: str
+    run_label: str | None
+    campaign_id: str | None
+    source_path: str
+
+
 def _extract_state_from_payload(
     payload: dict[str, Any], *, include_status: bool = True
 ) -> str | None:
@@ -259,6 +269,46 @@ def load_submission_manifests(paths: list[Path]) -> tuple[list[ManifestJob], lis
                 )
             )
     return jobs, errors, warnings
+
+
+def load_source_manifests(paths: list[Path]) -> tuple[list[SourceManifestRun], list[str]]:
+    """Load public source-manifest job linkage rows."""
+    runs: list[SourceManifestRun] = []
+    errors: list[str] = []
+    for path in paths:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except OSError as exc:
+            errors.append(f"cannot read source manifest {path}: {exc}")
+            continue
+        except json.JSONDecodeError as exc:
+            errors.append(f"{path}: malformed JSON {exc}")
+            continue
+        raw_runs = payload.get("runs", [])
+        if not isinstance(raw_runs, list):
+            errors.append(f"{path}: source manifest does not contain runs list")
+            continue
+        for raw_run in raw_runs:
+            if not isinstance(raw_run, dict):
+                errors.append(f"{path}: source manifest run is not mapping")
+                continue
+            job_id = _coerce_csv_value(raw_run.get("job_id")).strip()
+            if not job_id:
+                errors.append(f"{path}: source manifest run missing job_id")
+                continue
+            campaign = raw_run.get("campaign", {})
+            campaign_id = None
+            if isinstance(campaign, dict):
+                campaign_id = _coerce_csv_value(campaign.get("campaign_id")) or None
+            runs.append(
+                SourceManifestRun(
+                    job_id=job_id,
+                    run_label=_coerce_csv_value(raw_run.get("run_label")) or None,
+                    campaign_id=campaign_id,
+                    source_path=str(path),
+                )
+            )
+    return runs, errors
 
 
 @dataclass(frozen=True)
@@ -624,6 +674,7 @@ def _finalizer_rows_from_payloads(  # noqa: C901, PLR0912, PLR0915
     manifest_jobs: list[ManifestJob],
     queue_entries: list[QueueEntry],
     evidence_rows: list[EvidenceRow],
+    source_runs: list[SourceManifestRun],
 ) -> tuple[list[dict[str, Any]], list[str], list[str]]:
     """Build bridge rows for finalizers and validate manifest/context linkage."""
     queue_by_id = {entry.queue_id: entry for entry in queue_entries}
@@ -639,11 +690,13 @@ def _finalizer_rows_from_payloads(  # noqa: C901, PLR0912, PLR0915
 
     for finalizer in finalizers:
         matching_jobs = [job for job in manifest_jobs if job.slurm_job_id == finalizer.job_id]
+        matching_source_runs = [run for run in source_runs if run.job_id == finalizer.job_id]
         queue_id = None
         seeds: tuple[int, ...] = ()
         queue_status = None
         issue_transition_from = "unknown"
         evidence_preserved = False
+        source_manifest_linkage = False
 
         if matching_jobs:
             queue_ids = sorted({job.queue_id for job in matching_jobs})
@@ -700,6 +753,11 @@ def _finalizer_rows_from_payloads(  # noqa: C901, PLR0912, PLR0915
                 )
             elif queue_id is not None and queue_status is not None:
                 evidence_preserved = True
+        elif matching_source_runs:
+            source_manifest_linkage = True
+            issue_transition_from = "source_manifest"
+            if len(matching_source_runs) > 1:
+                warnings.append(f"finalizer job {finalizer.job_id}: multiple source manifest rows")
         elif finalizer.issue_number is not None:
             errors.append(
                 f"finalizer job {finalizer.job_id}: no manifest row for queue/seed linkage"
@@ -729,7 +787,11 @@ def _finalizer_rows_from_payloads(  # noqa: C901, PLR0912, PLR0915
             errors.append(
                 f"finalizer job {finalizer.job_id}: missing durable_pointer for successful output"
             )
-        if finalizer.classification == "success" and queue_id is None:
+        if (
+            finalizer.classification == "success"
+            and queue_id is None
+            and not source_manifest_linkage
+        ):
             errors.append(
                 f"finalizer job {finalizer.job_id}: completed artifacts but no queue linkage"
             )
@@ -751,8 +813,17 @@ def _finalizer_rows_from_payloads(  # noqa: C901, PLR0912, PLR0915
                 "job_id": finalizer.job_id,
                 "queue_id": queue_id,
                 "seeds": list(seeds),
+                "source_manifest": [
+                    {
+                        "campaign_id": run.campaign_id,
+                        "run_label": run.run_label,
+                        "source_path": run.source_path,
+                    }
+                    for run in matching_source_runs
+                ],
                 "artifact_status": finalizer.artifact_status,
-                "claim_decision": finalizer.claim_decision,
+                "claim_decision": finalizer.claim_decision
+                or ("keep_diagnostic" if source_manifest_linkage else None),
                 "claim_boundary": finalizer.claim_boundary,
                 "durable_pointer": finalizer.durable_pointer,
                 "output_pointers": list(finalizer.output_pointers),
@@ -893,15 +964,18 @@ def reconcile(
     submission_manifests: list[Path],
     evidence_root: Path,
     finalizer_manifests: list[Path] | None = None,
+    source_manifests: list[Path] | None = None,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
     """Compute a deterministic status ledger for queue-seed pairs."""
     finalizer_manifests = finalizer_manifests or []
+    source_manifests = source_manifests or []
     generated_at = generated_at or datetime.now(timezone.utc).isoformat()  # noqa: UP017
     queue_entries = load_queue(queue_path)
     manifest_jobs, manifest_errors, manifest_warnings = load_submission_manifests(
         submission_manifests
     )
+    source_runs, source_manifest_errors = load_source_manifests(source_manifests)
     evidence_rows, evidence_warnings = load_evidence_rows(evidence_root)
     finalizer_reports: list[FinalizerReport] = []
     finalizer_load_errors: list[str] = []
@@ -933,6 +1007,7 @@ def reconcile(
         manifest_jobs=manifest_jobs,
         queue_entries=queue_entries,
         evidence_rows=evidence_rows,
+        source_runs=source_runs,
     )
 
     errors, warnings = _build_errors_and_warnings(
@@ -940,7 +1015,7 @@ def reconcile(
         manifest_errors=manifest_errors,
         manifest_warnings=manifest_warnings,
         evidence_warnings=evidence_warnings,
-        finalizer_errors=finalizer_errors + finalizer_load_errors,
+        finalizer_errors=finalizer_errors + finalizer_load_errors + source_manifest_errors,
         finalizer_warnings=finalizer_warnings,
         duplicate_experiments=duplicate_experiments,
         duplicate_observations=duplicate_observations,
@@ -950,6 +1025,7 @@ def reconcile(
         "generated_at": generated_at,
         "queue_path": str(queue_path),
         "submission_manifests": sorted({str(path) for path in submission_manifests}),
+        "source_manifests": sorted({str(path) for path in source_manifests}),
         "finalizer_manifests": sorted({str(path) for path in finalizer_manifests}),
         "evidence_root": str(evidence_root),
         "finalizer_bridge": {
@@ -1003,6 +1079,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Submission manifest path to include. May be repeated.",
     )
     parser.add_argument(
+        "--source-manifest",
+        action="append",
+        default=[],
+        help="Public source manifest path to link finalized jobs. May be repeated.",
+    )
+    parser.add_argument(
         "--evidence-root",
         type=Path,
         default=Path("docs/context/evidence"),
@@ -1036,6 +1118,7 @@ def main(argv: list[str] | None = None) -> int:
             submission_manifests=[Path(path) for path in args.submission_manifest],
             evidence_root=args.evidence_root,
             finalizer_manifests=[Path(path) for path in args.finalizer_manifest],
+            source_manifests=[Path(path) for path in args.source_manifest],
             generated_at=args.generated_at,
         )
     except RuntimeError as exc:

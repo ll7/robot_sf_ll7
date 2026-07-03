@@ -4,7 +4,7 @@ release_id: paper_experiment_matrix_v1_smoke_v0_1_0
 release_tag: paper-benchmark-smoke-v0.1.0
 maturity: pre-1.0
 canonical_campaign_config: ../paper_experiment_matrix_v1_release_smoke.yaml
-campaign_config_sha256: "702771d32751787da97cd58284f9aae585814ee8700ea6b9788a12cf9abe1bc8"
+campaign_config_sha256: "60620b8f28ceb65b6468b343ab1988f87b1187c86ad534bdf2513d48d008ba5e"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: baseline-ready-core
 

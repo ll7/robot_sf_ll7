@@ -1,0 +1,13 @@
+{
+  "claim_boundary": "governance trace only; no claim or interpretation changes",
+  "evidence_dir": "docs/context/evidence/issue_3810_h600_interpretation_2026-07",
+  "evidence_issue": 4195,
+  "issue": 4243,
+  "jobs": [
+    "13268",
+    "13273"
+  ],
+  "parent_trace_issue": 3425,
+  "schema_version": "issue_4243_h600_governance_run_plan.v1",
+  "source_manifest": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json"
+}

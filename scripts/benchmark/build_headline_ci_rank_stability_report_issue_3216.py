@@ -37,6 +37,7 @@ Coordination:
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 import subprocess
@@ -430,6 +431,151 @@ def _optional_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _read_csv_rows(path: Path) -> list[dict[str, str]]:
+    """Read a CSV file as dictionaries, failing closed on empty files."""
+
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        return list(csv.DictReader(handle))
+
+
+def _campaign_family_names(campaign_dir: Path) -> tuple[str, ...]:
+    """Return scenario-family names already emitted by the campaign report."""
+
+    family_csv = campaign_dir / "reports" / "scenario_family_breakdown.csv"
+    if not family_csv.exists():
+        return ()
+    names = {
+        str(row.get("scenario_family", "")).strip()
+        for row in _read_csv_rows(family_csv)
+        if str(row.get("scenario_family", "")).strip()
+    }
+    return tuple(sorted(names, key=lambda name: (-len(name), name)))
+
+
+def _scenario_family_from_id(scenario_id: str, known_families: Sequence[str]) -> str:
+    """Map a concrete scenario id to the campaign's scenario-family key."""
+
+    normalized = scenario_id.strip()
+    for prefix in ("classic_", "francis2023_"):
+        if normalized.startswith(prefix):
+            normalized = normalized[len(prefix) :]
+            break
+    for suffix in ("_low", "_medium", "_high"):
+        if normalized.endswith(suffix):
+            normalized = normalized[: -len(suffix)]
+            break
+    for family in known_families:
+        if normalized == family or normalized.endswith(f"_{family}") or family in normalized:
+            return family
+    return normalized
+
+
+def _campaign_planner_statuses(campaign_dir: Path) -> dict[str, dict[str, str]]:
+    """Return planner row status metadata from the campaign table."""
+
+    table_csv = campaign_dir / "reports" / "campaign_table.csv"
+    if not table_csv.exists():
+        return {}
+    statuses: dict[str, dict[str, str]] = {}
+    for row in _read_csv_rows(table_csv):
+        planner = str(row.get("planner_key", "")).strip()
+        if not planner:
+            continue
+        statuses[planner] = {
+            "execution_mode": str(row.get("execution_mode", "")).strip() or "unknown",
+            "row_status": str(row.get("status", "")).strip()
+            or str(row.get("readiness_status", "")).strip()
+            or "unspecified",
+        }
+    return statuses
+
+
+def _campaign_metric_sources(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Return headline metric source values from one seed episode CSV row."""
+
+    return {
+        "success": row.get("success"),
+        "collisions": row.get("collision"),
+        "near_misses": row.get("near_miss"),
+        "snqi": row.get("snqi"),
+    }
+
+
+def _group_campaign_seed_metrics(
+    seed_csv: Path, known_families: Sequence[str]
+) -> dict[tuple[str, str], dict[int, dict[str, list[float]]]]:
+    """Group completed campaign episode metrics by family, planner, and seed."""
+
+    grouped: dict[tuple[str, str], dict[int, dict[str, list[float]]]] = defaultdict(
+        lambda: defaultdict(lambda: defaultdict(list))
+    )
+    for row in _read_csv_rows(seed_csv):
+        planner = str(row.get("planner_key", "")).strip()
+        scenario_id = str(row.get("scenario_id", "")).strip()
+        seed = _optional_int(row.get("seed"))
+        if not planner or not scenario_id or seed is None:
+            continue
+        family = _scenario_family_from_id(scenario_id, known_families)
+        for metric, raw_value in _campaign_metric_sources(row).items():
+            value = _coerce_float(raw_value)
+            if value is not None:
+                grouped[(family, planner)][seed][metric].append(value)
+    return grouped
+
+
+def _headline_rows_from_campaign(campaign_dir: Path) -> list[dict[str, Any]]:
+    """Build headline rows from completed camera-ready campaign artifacts."""
+
+    seed_csv = campaign_dir / "reports" / "seed_episode_rows.csv"
+    if not seed_csv.exists():
+        raise FileNotFoundError(
+            f"campaign seed episode rows not found: {seed_csv}; cannot recover headline rows"
+        )
+
+    known_families = _campaign_family_names(campaign_dir)
+    planner_statuses = _campaign_planner_statuses(campaign_dir)
+    grouped = _group_campaign_seed_metrics(seed_csv, known_families)
+
+    headline_rows: list[dict[str, Any]] = []
+    for (family, planner), seed_payload in sorted(grouped.items()):
+        status = planner_statuses.get(planner, {})
+        per_seed: list[dict[str, Any]] = []
+        for seed, metrics in sorted(seed_payload.items()):
+            metric_means = {
+                metric: float(np.mean(values))
+                for metric, values in sorted(metrics.items())
+                if values
+            }
+            if metric_means:
+                per_seed.append({"seed": seed, "metrics": metric_means})
+        if per_seed:
+            headline_rows.append(
+                {
+                    "scenario_family": family,
+                    "planner_key": planner,
+                    "row_status": status.get("row_status", "unspecified"),
+                    "execution_mode": status.get("execution_mode", "unknown"),
+                    "per_seed": per_seed,
+                }
+            )
+
+    if not headline_rows:
+        raise ValueError(f"no recoverable headline rows found in {seed_csv}")
+    return headline_rows
+
+
+def _ensure_campaign_headline_rows(campaign_dir: Path) -> Path:
+    """Return campaign headline rows, generating them from completed artifacts if needed."""
+
+    rows_path = campaign_dir / "reports" / "headline_rows.json"
+    if rows_path.exists():
+        return rows_path
+    rows = _headline_rows_from_campaign(campaign_dir)
+    rows_path.parent.mkdir(parents=True, exist_ok=True)
+    rows_path.write_text(json.dumps(rows, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return rows_path
 
 
 def build_cell_results(
@@ -1412,7 +1558,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     src.add_argument(
         "--campaign",
         type=str,
-        help="Campaign id/root; resolves to <root>/reports/headline_rows.json.",
+        help=(
+            "Campaign id/root; uses <root>/reports/headline_rows.json or "
+            "recovers it from completed campaign report CSV artifacts."
+        ),
     )
     src.add_argument(
         "--dry-run",
@@ -1524,7 +1673,7 @@ def _resolve_rows_path(args: argparse.Namespace) -> str:
         return "builtin://issue3216-dry-run"
     if args.rows:
         return args.rows
-    return str(Path(args.campaign) / "reports" / "headline_rows.json")
+    return str(_ensure_campaign_headline_rows(Path(args.campaign)))
 
 
 def main(argv: Sequence[str] | None = None) -> int:

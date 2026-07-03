@@ -1492,12 +1492,14 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     snqi_hard_fail = (
         cfg.paper_facing
         and cfg.snqi_contract.enabled
-        and cfg.snqi_contract.enforcement == "error"
+        and cfg.snqi_contract.enforcement in {"error", "enforce"}
         and contract_eval.status == "fail"
     )
     if snqi_hard_fail:
         warnings.append(
-            "SNQI contract status=fail with snqi_contract.enforcement=error; campaign marked with hard contract warning."
+            "SNQI contract status=fail with "
+            f"snqi_contract.enforcement={cfg.snqi_contract.enforcement}; "
+            "campaign marked with hard contract warning."
         )
     elif (
         cfg.paper_facing
@@ -1836,7 +1838,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
 
     if snqi_hard_fail:
         raise RuntimeError(
-            "SNQI contract failed with enforcement=error; "
+            f"SNQI contract failed with enforcement={cfg.snqi_contract.enforcement}; "
             f"rank_alignment={contract_eval.rank_alignment_spearman:.4f}, "
             f"outcome_separation={contract_eval.outcome_separation:.4f}. "
             f"See diagnostics: {_repo_relative(snqi_diagnostics_json_path)}"

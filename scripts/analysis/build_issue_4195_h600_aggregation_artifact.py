@@ -44,6 +44,7 @@ EXPOSURE_REQUIRED_COLUMNS = (
     "first_clearance_step",
     "low_exposure_success",
 )
+EXPOSURE_PROVENANCE_COLUMN = "interaction_exposure_source"
 
 
 @dataclass(frozen=True)
@@ -686,6 +687,25 @@ def _build_exposure_diagnostics(metadatas: list[dict[str, Any]]) -> dict[str, An
         columns = set(metadata.get("seed_episode_columns") or [])
         missing = [column for column in EXPOSURE_REQUIRED_COLUMNS if column not in columns]
         overall_missing.update(missing)
+        seed_rows_path = Path(metadata["seed_episode_rows"])
+        seed_rows = _read_csv_rows(seed_rows_path) if seed_rows_path.exists() else []
+        derivable_rows = 0
+        not_derivable_rows = 0
+        for row in seed_rows:
+            has_required_values = all(
+                str(row.get(column, "")) for column in EXPOSURE_REQUIRED_COLUMNS
+            )
+            if has_required_values:
+                derivable_rows += 1
+            else:
+                not_derivable_rows += 1
+        provenance_values = sorted(
+            {
+                str(row.get(EXPOSURE_PROVENANCE_COLUMN, ""))
+                for row in seed_rows
+                if str(row.get(EXPOSURE_PROVENANCE_COLUMN, ""))
+            }
+        )
         runs.append(
             {
                 "job_id": metadata["job_id"],
@@ -694,6 +714,10 @@ def _build_exposure_diagnostics(metadatas: list[dict[str, Any]]) -> dict[str, An
                 "available_columns": sorted(columns),
                 "required_columns": list(EXPOSURE_REQUIRED_COLUMNS),
                 "missing_required_fields": missing,
+                "backfill_policy": "derive_from_retained_episode_rows_only_no_imputation",
+                "derivable_episode_rows": derivable_rows,
+                "not_derivable_episode_rows": not_derivable_rows,
+                "exposure_provenance_values": provenance_values,
                 "status": "blocked_missing_required_fields"
                 if missing
                 else "ready_for_episode_level_scan",
@@ -710,6 +734,7 @@ def _build_exposure_diagnostics(metadatas: list[dict[str, Any]]) -> dict[str, An
         ),
         "required_fields": list(EXPOSURE_REQUIRED_COLUMNS),
         "missing_required_fields": sorted(overall_missing),
+        "backfill_policy": "derive_from_retained_episode_rows_only_no_imputation",
         "runs": runs,
     }
 

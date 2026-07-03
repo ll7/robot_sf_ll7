@@ -504,6 +504,76 @@ def test_finalizer_manifest_bridge_captures_output_pointer_and_transition(tmp_pa
     assert bridge_row["source_path"] == str(finalizer)
 
 
+def test_finalizer_bridge_accepts_public_source_manifest_linkage(tmp_path: Path) -> None:
+    """Source manifests can link finalized diagnostic jobs without queue routing state."""
+    queue_path = tmp_path / "experiments" / "submission_queue.yaml"
+    _write_yaml(queue_path, _queue_payload())
+    evidence_root = tmp_path / "evidence"
+    finalizer = evidence_root / "finalization_13268.json"
+    _write_json(
+        finalizer,
+        {
+            "schema_version": "robot-sf-slurm-job-finalization.v1",
+            "issue_number": 4243,
+            "job_id": "13268",
+            "classification": "success",
+            "artifact_status": "all_required_present",
+            "durable_uri": "https://github.com/ll7/robot_sf_ll7/tree/main/docs/context/evidence/h600",
+            "claim_boundary": "workflow trace only; no benchmark claim",
+            "artifacts": [
+                {
+                    "path": "docs/context/evidence/h600/source_manifest.json",
+                    "exists": True,
+                    "required": True,
+                    "kind": "file",
+                    "sha256": "abc123",
+                    "size_bytes": 10,
+                }
+            ],
+        },
+    )
+    source_manifest = evidence_root / "source_manifest.json"
+    _write_json(
+        source_manifest,
+        {
+            "schema_version": "issue_4195_h600_aggregation.v1.source_manifest",
+            "runs": [
+                {
+                    "job_id": "13268",
+                    "run_label": "confirm",
+                    "campaign": {"campaign_id": "issue3810_h600_confirm"},
+                }
+            ],
+        },
+    )
+
+    report = reconcile_slurm_evidence.reconcile(
+        queue_path=queue_path,
+        submission_manifests=[],
+        source_manifests=[source_manifest],
+        evidence_root=evidence_root,
+        finalizer_manifests=[finalizer],
+        generated_at="2026-07-03T09:20:00+00:00",
+    )
+
+    assert report["errors"] == []
+    assert report["source_manifests"] == [str(source_manifest)]
+    bridge_row = report["finalizer_bridge"]["rows"][0]
+    assert bridge_row["job_id"] == "13268"
+    assert bridge_row["claim_decision"] == "keep_diagnostic"
+    assert bridge_row["source_manifest"] == [
+        {
+            "campaign_id": "issue3810_h600_confirm",
+            "run_label": "confirm",
+            "source_path": str(source_manifest),
+        }
+    ]
+    assert bridge_row["issue_transition"] == {
+        "from": "source_manifest",
+        "to": "success",
+    }
+
+
 def test_finalizer_missing_durable_pointer_and_queue_linkage_flags_error(tmp_path: Path) -> None:
     """Missing durable pointers and queue mapping should be flagged by the checker."""
     payload = _queue_payload()

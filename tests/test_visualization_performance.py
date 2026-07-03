@@ -9,6 +9,7 @@ import time
 import pytest
 
 from robot_sf.benchmark.visualization import generate_benchmark_plots, generate_benchmark_videos
+from tests.support.environment_guards import should_enforce_wallclock_budget
 
 
 @pytest.mark.slow
@@ -66,8 +67,10 @@ class TestVisualizationPerformance:
 
         duration = end_time - start_time
 
-        # Should complete within 30 seconds
-        assert duration < 30.0, f"Plot generation took {duration:.2f}s, expected < 30.0s"
+        # LiCCA full-suite runs on shared Slurm nodes where wall-clock latency is not a
+        # stable visualization correctness signal; GitHub/perf lanes still enforce it.
+        if should_enforce_wallclock_budget():
+            assert duration < 30.0, f"Plot generation took {duration:.2f}s, expected < 30.0s"
 
         # Should generate at least some artifacts
         assert len(artifacts) > 0
@@ -92,8 +95,10 @@ class TestVisualizationPerformance:
 
         duration = end_time - start_time
 
-        # Should complete within 60 seconds
-        assert duration < 60.0, f"Video generation took {duration:.2f}s, expected < 60.0s"
+        # LiCCA full-suite runs on shared Slurm nodes where wall-clock latency is not a
+        # stable visualization correctness signal; GitHub/perf lanes still enforce it.
+        if should_enforce_wallclock_budget():
+            assert duration < 60.0, f"Video generation took {duration:.2f}s, expected < 60.0s"
 
         # Videos might be empty if trajectory data is insufficient
         # This is acceptable for performance testing
@@ -116,8 +121,12 @@ class TestVisualizationPerformance:
 
         duration = end_time - start_time
 
-        # Should complete quickly even with filters
-        assert duration < 10.0, f"Filtered plot generation took {duration:.2f}s, expected < 10.0s"
+        # LiCCA full-suite runs on shared Slurm nodes where wall-clock latency is not a
+        # stable visualization correctness signal; GitHub/perf lanes still enforce it.
+        if should_enforce_wallclock_budget():
+            assert duration < 10.0, (
+                f"Filtered plot generation took {duration:.2f}s, expected < 10.0s"
+            )
 
     def test_visualization_memory_usage(self, sample_episodes_file, tmp_path):
         """Test that visualization generation doesn't have excessive memory usage."""

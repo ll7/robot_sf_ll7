@@ -1,11 +1,11 @@
-"""Regression tests for #3384 rule/grid policy-builder registry migration."""
+"""Regression tests for #3384 rule/grid and gap policy-builder registry migrations."""
 
 from __future__ import annotations
 
 import pytest
 
 from robot_sf.benchmark import map_runner
-from robot_sf.benchmark.map_runner_policies import rule_and_grid
+from robot_sf.benchmark.map_runner_policies import gap_reference, rule_and_grid
 
 
 @pytest.mark.parametrize(
@@ -21,11 +21,14 @@ from robot_sf.benchmark.map_runner_policies import rule_and_grid
     ],
 )
 def test_rule_and_grid_keys_resolve_through_registry_bridge(algo_key: str) -> None:
-    """Migrated rule/grid keys should be owned by the registry builder."""
+    """Migrated rule/grid keys are owned by the registry builder."""
     assert map_runner._POLICY_BUILDERS[algo_key] is rule_and_grid.build
 
 
-@pytest.mark.parametrize("algo_key", ["stream_gap", "gap_prediction", "trivial_reference"])
-def test_deferred_rule_gap_keys_remain_legacy_dispatch(algo_key: str) -> None:
-    """Later #3384 slices still own helper-dependent rule/gap branches."""
-    assert algo_key not in map_runner._POLICY_BUILDERS
+@pytest.mark.parametrize(
+    "algo_key",
+    ["stream_gap", "gap_prediction", "trivial_reference", "reference_adapter"],
+)
+def test_gap_reference_keys_resolve_through_registry_bridge(algo_key: str) -> None:
+    """Migrated gap/reference keys are owned by the registry builder."""
+    assert map_runner._POLICY_BUILDERS[algo_key] is gap_reference.build

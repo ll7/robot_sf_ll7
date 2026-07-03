@@ -7,6 +7,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import sys
 from dataclasses import asdict
 from io import StringIO
@@ -421,8 +422,14 @@ def _validate_cpu_smoke_evidence(  # noqa: C901, PLR0912
             if cbf_counts != {}:
                 raise ContractError("ppo_frozen smoke must not report CBF statuses")
         elif arm_key == "ppo_frozen_wrapper_on":
-            if not isinstance(wrapper_rate, (int, float)):
-                raise ContractError("ppo_frozen_wrapper_on smoke needs numeric wrapper rate")
+            if (
+                isinstance(wrapper_rate, bool)
+                or not isinstance(wrapper_rate, (int, float))
+                or not math.isfinite(wrapper_rate)
+            ):
+                raise ContractError(
+                    "ppo_frozen_wrapper_on smoke needs a finite numeric wrapper rate"
+                )
             if cbf_counts != {}:
                 raise ContractError("ppo_frozen_wrapper_on smoke must not report CBF statuses")
         elif arm_key == "ppo_frozen_cbf_on":
@@ -444,14 +451,14 @@ def _validate_cpu_smoke_evidence(  # noqa: C901, PLR0912
 
 
 def _write_text(path: Path, content: str) -> None:
-    """Write UTF-8 text with a final newline."""
-    path.write_text(content.rstrip() + "\n", encoding="utf-8")
+    """Write UTF-8 text with a final newline and stable ``\\n`` line endings."""
+    path.write_text(content.rstrip() + "\n", encoding="utf-8", newline="\n")
 
 
 def _csv_text(fieldnames: list[str], rows: list[dict[str, Any]]) -> str:
-    """Serialize compact CSV text."""
+    """Serialize compact CSV text with stable ``\\n`` line endings."""
     handle = StringIO()
-    writer = csv.DictWriter(handle, fieldnames=fieldnames)
+    writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
     writer.writeheader()
     for row in rows:
         writer.writerow({field: row.get(field, "") for field in fieldnames})

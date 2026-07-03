@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added **pairwise-isolated HSFM field-of-view (FoV) repulsion attenuation** and vectorized the
+  `O(N^2)` time-to-collision (TTC) weight path (#3481). New pure helper
+  `pairwise_fov_attenuated_forces(...)` in `robot_sf/sim/pedestrian_model_variants.py` attenuates each
+  pedestrian-pedestrian force contribution by its own FoV weight before summing
+  (`attenuated[i] = sum_j weights[i, j] * pairwise_forces[i, j]`), so a rear neighbor is down-weighted
+  without disturbing an in-cone neighbor's push — unlike the coarse `anisotropic_fov_total_force(...)`
+  aggregate mode that collapses to one `np.min` factor per actor. `pairwise_time_to_collision(...)` is
+  now solved with NumPy broadcasting instead of a Python double loop, with masks that reproduce the
+  earlier scalar branches exactly. Adds `tests/sim/test_hsfm_fov_pairwise_isolation.py` (narrow-passage
+  isolation, weighted-sum definition, fail-closed validation, and vectorized-vs-scalar TTC equivalence
+  on a deterministic bottleneck fixture). Diagnostic/prototype only: no default model change, no
+  calibrated-realism claim; simulator per-pair force wiring and benchmark evidence remain follow-up.
 * Added a **pedestrian uncertainty-envelope abstraction** for conservative obstacle clearance
   (#4141): new `robot_sf/nav/uncertainty_envelope.py` defines `PedestrianUncertaintyEnvelope`, a
   `linear_inflation_policy(alpha, dt)` factory, an `effective_pedestrian_radius(...)` planner

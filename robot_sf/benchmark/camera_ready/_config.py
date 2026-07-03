@@ -29,7 +29,7 @@ _PAPER_KINEMATICS_BY_PROFILE = {
     "paper-cross-kinematics-v1": ("differential_drive", "bicycle_drive", "holonomic"),
 }
 _AMV_COVERAGE_ENFORCEMENT = {"warn", "error"}
-_SNQI_CONTRACT_ENFORCEMENT = {"warn", "error"}
+_SNQI_CONTRACT_ENFORCEMENT = {"warn", "error", "enforce"}
 
 
 def _normalize_observation_mode(raw: Any, *, label: str) -> str | None:

@@ -1,0 +1,642 @@
+{
+  "claim_boundary": "diagnostic-only pedestrian-flow validation; no realism thresholds, build gates, robot-vs-crowd safety claims, or benchmark-strength claims",
+  "diagnostic_only_not_benchmark_gate": true,
+  "evidence_tier": "diagnostic-only",
+  "flow_metrics": {
+    "average_speed_vs_density": [
+      {
+        "average_speed_mps": 1.397719374898801,
+        "density_ped_per_m2": 0.041666666666666664,
+        "pedestrian_count": 2,
+        "scenario_id": "bidirectional_corridor",
+        "speed_sample_count": 42,
+        "status": "ok"
+      },
+      {
+        "average_speed_mps": 1.3206271101749614,
+        "density_ped_per_m2": 0.125,
+        "pedestrian_count": 6,
+        "scenario_id": "bidirectional_corridor",
+        "speed_sample_count": 126,
+        "status": "ok"
+      },
+      {
+        "average_speed_mps": 1.2217338600320298,
+        "density_ped_per_m2": 0.041666666666666664,
+        "pedestrian_count": 2,
+        "scenario_id": "bottleneck",
+        "speed_sample_count": 42,
+        "status": "ok"
+      },
+      {
+        "average_speed_mps": 1.106515877084745,
+        "density_ped_per_m2": 0.125,
+        "pedestrian_count": 6,
+        "scenario_id": "bottleneck",
+        "speed_sample_count": 126,
+        "status": "ok"
+      },
+      {
+        "average_speed_mps": 1.3928116095138883,
+        "density_ped_per_m2": 0.027777777777777776,
+        "pedestrian_count": 2,
+        "scenario_id": "forked_route",
+        "speed_sample_count": 42,
+        "status": "ok"
+      },
+      {
+        "average_speed_mps": 1.281644015229153,
+        "density_ped_per_m2": 0.08333333333333333,
+        "pedestrian_count": 6,
+        "scenario_id": "forked_route",
+        "speed_sample_count": 126,
+        "status": "ok"
+      }
+    ],
+    "flow_rate": [
+      {
+        "axis": "x",
+        "coordinate": 6.0,
+        "crossing_pedestrian_count": 0,
+        "direction": "both",
+        "flow_rate_ped_per_s": 0.0,
+        "gate_id": "center_x",
+        "status": "ok"
+      },
+      {
+        "axis": "x",
+        "coordinate": 6.0,
+        "crossing_pedestrian_count": 0,
+        "direction": "both",
+        "flow_rate_ped_per_s": 0.0,
+        "gate_id": "center_x",
+        "status": "ok"
+      },
+      {
+        "axis": "x",
+        "coordinate": 6.0,
+        "crossing_pedestrian_count": 0,
+        "direction": "positive",
+        "flow_rate_ped_per_s": 0.0,
+        "gate_id": "neck_x",
+        "status": "ok"
+      },
+      {
+        "axis": "x",
+        "coordinate": 6.0,
+        "crossing_pedestrian_count": 0,
+        "direction": "positive",
+        "flow_rate_ped_per_s": 0.0,
+        "gate_id": "neck_x",
+        "status": "ok"
+      },
+      {
+        "axis": "x",
+        "coordinate": 8.0,
+        "crossing_pedestrian_count": 0,
+        "direction": "positive",
+        "flow_rate_ped_per_s": 0.0,
+        "gate_id": "upper_branch_x",
+        "status": "ok"
+      },
+      {
+        "axis": "x",
+        "coordinate": 8.0,
+        "crossing_pedestrian_count": 0,
+        "direction": "positive",
+        "flow_rate_ped_per_s": 0.0,
+        "gate_id": "lower_branch_x",
+        "status": "ok"
+      },
+      {
+        "axis": "x",
+        "coordinate": 8.0,
+        "crossing_pedestrian_count": 0,
+        "direction": "positive",
+        "flow_rate_ped_per_s": 0.0,
+        "gate_id": "upper_branch_x",
+        "status": "ok"
+      },
+      {
+        "axis": "x",
+        "coordinate": 8.0,
+        "crossing_pedestrian_count": 0,
+        "direction": "positive",
+        "flow_rate_ped_per_s": 0.0,
+        "gate_id": "lower_branch_x",
+        "status": "ok"
+      }
+    ],
+    "jam_duration": [
+      {
+        "jam_duration_s": 0.0,
+        "metric_id": "jam_duration",
+        "sample_count": 21,
+        "speed_threshold_mps": 0.08,
+        "status": "ok"
+      },
+      {
+        "jam_duration_s": 0.0,
+        "metric_id": "jam_duration",
+        "sample_count": 21,
+        "speed_threshold_mps": 0.08,
+        "status": "ok"
+      },
+      {
+        "jam_duration_s": 0.0,
+        "metric_id": "jam_duration",
+        "sample_count": 21,
+        "speed_threshold_mps": 0.08,
+        "status": "ok"
+      },
+      {
+        "jam_duration_s": 0.0,
+        "metric_id": "jam_duration",
+        "sample_count": 21,
+        "speed_threshold_mps": 0.08,
+        "status": "ok"
+      },
+      {
+        "jam_duration_s": 0.0,
+        "metric_id": "jam_duration",
+        "sample_count": 21,
+        "speed_threshold_mps": 0.08,
+        "status": "ok"
+      },
+      {
+        "jam_duration_s": 0.0,
+        "metric_id": "jam_duration",
+        "sample_count": 21,
+        "speed_threshold_mps": 0.08,
+        "status": "ok"
+      }
+    ],
+    "lane_formation_score": [
+      {
+        "lateral_axis": "y",
+        "metric_id": "lane_formation_score",
+        "movement_axis": "x",
+        "sample_count": 21,
+        "score": 1.0,
+        "status": "ok"
+      },
+      {
+        "lateral_axis": "y",
+        "metric_id": "lane_formation_score",
+        "movement_axis": "x",
+        "sample_count": 21,
+        "score": 0.12160926712061307,
+        "status": "ok"
+      },
+      {
+        "lateral_axis": "y",
+        "metric_id": "lane_formation_score",
+        "movement_axis": "x",
+        "sample_count": 0,
+        "score": 0.0,
+        "status": "empty"
+      },
+      {
+        "lateral_axis": "y",
+        "metric_id": "lane_formation_score",
+        "movement_axis": "x",
+        "sample_count": 0,
+        "score": 0.0,
+        "status": "empty"
+      },
+      {
+        "lateral_axis": "y",
+        "metric_id": "lane_formation_score",
+        "movement_axis": "x",
+        "sample_count": 0,
+        "score": 0.0,
+        "status": "empty"
+      },
+      {
+        "lateral_axis": "y",
+        "metric_id": "lane_formation_score",
+        "movement_axis": "x",
+        "sample_count": 0,
+        "score": 0.0,
+        "status": "empty"
+      }
+    ]
+  },
+  "run_config": {
+    "dt_s": 0.1,
+    "duration_s": 2.0,
+    "pedestrian_counts": [
+      2,
+      6
+    ],
+    "seed": 3971,
+    "speed_mps": 1.1
+  },
+  "runs": [
+    {
+      "density_ped_per_m2": 0.041666666666666664,
+      "dt_s": 0.1,
+      "duration_s": 2.0,
+      "flow_metrics": {
+        "average_speed_vs_density": {
+          "average_speed_mps": 1.397719374898801,
+          "density_ped_per_m2": 0.041666666666666664,
+          "pedestrian_count": 2,
+          "scenario_id": "bidirectional_corridor",
+          "speed_sample_count": 42,
+          "status": "ok"
+        },
+        "flow_rate": [
+          {
+            "axis": "x",
+            "coordinate": 6.0,
+            "crossing_pedestrian_count": 0,
+            "direction": "both",
+            "flow_rate_ped_per_s": 0.0,
+            "gate_id": "center_x",
+            "status": "ok"
+          }
+        ],
+        "jam_duration": {
+          "jam_duration_s": 0.0,
+          "metric_id": "jam_duration",
+          "sample_count": 21,
+          "speed_threshold_mps": 0.08,
+          "status": "ok"
+        },
+        "lane_formation_score": {
+          "lateral_axis": "y",
+          "metric_id": "lane_formation_score",
+          "movement_axis": "x",
+          "sample_count": 21,
+          "score": 1.0,
+          "status": "ok"
+        }
+      },
+      "measurement_area_m2": 48.0,
+      "pedestrian_count": 2,
+      "pedestrian_model": "social_force_default",
+      "robot_count": 0,
+      "scenario_id": "bidirectional_corridor",
+      "seed": 3971,
+      "step_count": 20
+    },
+    {
+      "density_ped_per_m2": 0.125,
+      "dt_s": 0.1,
+      "duration_s": 2.0,
+      "flow_metrics": {
+        "average_speed_vs_density": {
+          "average_speed_mps": 1.3206271101749614,
+          "density_ped_per_m2": 0.125,
+          "pedestrian_count": 6,
+          "scenario_id": "bidirectional_corridor",
+          "speed_sample_count": 126,
+          "status": "ok"
+        },
+        "flow_rate": [
+          {
+            "axis": "x",
+            "coordinate": 6.0,
+            "crossing_pedestrian_count": 0,
+            "direction": "both",
+            "flow_rate_ped_per_s": 0.0,
+            "gate_id": "center_x",
+            "status": "ok"
+          }
+        ],
+        "jam_duration": {
+          "jam_duration_s": 0.0,
+          "metric_id": "jam_duration",
+          "sample_count": 21,
+          "speed_threshold_mps": 0.08,
+          "status": "ok"
+        },
+        "lane_formation_score": {
+          "lateral_axis": "y",
+          "metric_id": "lane_formation_score",
+          "movement_axis": "x",
+          "sample_count": 21,
+          "score": 0.12160926712061307,
+          "status": "ok"
+        }
+      },
+      "measurement_area_m2": 48.0,
+      "pedestrian_count": 6,
+      "pedestrian_model": "social_force_default",
+      "robot_count": 0,
+      "scenario_id": "bidirectional_corridor",
+      "seed": 3971,
+      "step_count": 20
+    },
+    {
+      "density_ped_per_m2": 0.041666666666666664,
+      "dt_s": 0.1,
+      "duration_s": 2.0,
+      "flow_metrics": {
+        "average_speed_vs_density": {
+          "average_speed_mps": 1.2217338600320298,
+          "density_ped_per_m2": 0.041666666666666664,
+          "pedestrian_count": 2,
+          "scenario_id": "bottleneck",
+          "speed_sample_count": 42,
+          "status": "ok"
+        },
+        "flow_rate": [
+          {
+            "axis": "x",
+            "coordinate": 6.0,
+            "crossing_pedestrian_count": 0,
+            "direction": "positive",
+            "flow_rate_ped_per_s": 0.0,
+            "gate_id": "neck_x",
+            "status": "ok"
+          }
+        ],
+        "jam_duration": {
+          "jam_duration_s": 0.0,
+          "metric_id": "jam_duration",
+          "sample_count": 21,
+          "speed_threshold_mps": 0.08,
+          "status": "ok"
+        },
+        "lane_formation_score": {
+          "lateral_axis": "y",
+          "metric_id": "lane_formation_score",
+          "movement_axis": "x",
+          "sample_count": 0,
+          "score": 0.0,
+          "status": "empty"
+        }
+      },
+      "measurement_area_m2": 48.0,
+      "pedestrian_count": 2,
+      "pedestrian_model": "social_force_default",
+      "robot_count": 0,
+      "scenario_id": "bottleneck",
+      "seed": 3971,
+      "step_count": 20
+    },
+    {
+      "density_ped_per_m2": 0.125,
+      "dt_s": 0.1,
+      "duration_s": 2.0,
+      "flow_metrics": {
+        "average_speed_vs_density": {
+          "average_speed_mps": 1.106515877084745,
+          "density_ped_per_m2": 0.125,
+          "pedestrian_count": 6,
+          "scenario_id": "bottleneck",
+          "speed_sample_count": 126,
+          "status": "ok"
+        },
+        "flow_rate": [
+          {
+            "axis": "x",
+            "coordinate": 6.0,
+            "crossing_pedestrian_count": 0,
+            "direction": "positive",
+            "flow_rate_ped_per_s": 0.0,
+            "gate_id": "neck_x",
+            "status": "ok"
+          }
+        ],
+        "jam_duration": {
+          "jam_duration_s": 0.0,
+          "metric_id": "jam_duration",
+          "sample_count": 21,
+          "speed_threshold_mps": 0.08,
+          "status": "ok"
+        },
+        "lane_formation_score": {
+          "lateral_axis": "y",
+          "metric_id": "lane_formation_score",
+          "movement_axis": "x",
+          "sample_count": 0,
+          "score": 0.0,
+          "status": "empty"
+        }
+      },
+      "measurement_area_m2": 48.0,
+      "pedestrian_count": 6,
+      "pedestrian_model": "social_force_default",
+      "robot_count": 0,
+      "scenario_id": "bottleneck",
+      "seed": 3971,
+      "step_count": 20
+    },
+    {
+      "density_ped_per_m2": 0.027777777777777776,
+      "dt_s": 0.1,
+      "duration_s": 2.0,
+      "flow_metrics": {
+        "average_speed_vs_density": {
+          "average_speed_mps": 1.3928116095138883,
+          "density_ped_per_m2": 0.027777777777777776,
+          "pedestrian_count": 2,
+          "scenario_id": "forked_route",
+          "speed_sample_count": 42,
+          "status": "ok"
+        },
+        "flow_rate": [
+          {
+            "axis": "x",
+            "coordinate": 8.0,
+            "crossing_pedestrian_count": 0,
+            "direction": "positive",
+            "flow_rate_ped_per_s": 0.0,
+            "gate_id": "upper_branch_x",
+            "status": "ok"
+          },
+          {
+            "axis": "x",
+            "coordinate": 8.0,
+            "crossing_pedestrian_count": 0,
+            "direction": "positive",
+            "flow_rate_ped_per_s": 0.0,
+            "gate_id": "lower_branch_x",
+            "status": "ok"
+          }
+        ],
+        "jam_duration": {
+          "jam_duration_s": 0.0,
+          "metric_id": "jam_duration",
+          "sample_count": 21,
+          "speed_threshold_mps": 0.08,
+          "status": "ok"
+        },
+        "lane_formation_score": {
+          "lateral_axis": "y",
+          "metric_id": "lane_formation_score",
+          "movement_axis": "x",
+          "sample_count": 0,
+          "score": 0.0,
+          "status": "empty"
+        }
+      },
+      "measurement_area_m2": 72.0,
+      "pedestrian_count": 2,
+      "pedestrian_model": "social_force_default",
+      "robot_count": 0,
+      "scenario_id": "forked_route",
+      "seed": 3971,
+      "step_count": 20
+    },
+    {
+      "density_ped_per_m2": 0.08333333333333333,
+      "dt_s": 0.1,
+      "duration_s": 2.0,
+      "flow_metrics": {
+        "average_speed_vs_density": {
+          "average_speed_mps": 1.281644015229153,
+          "density_ped_per_m2": 0.08333333333333333,
+          "pedestrian_count": 6,
+          "scenario_id": "forked_route",
+          "speed_sample_count": 126,
+          "status": "ok"
+        },
+        "flow_rate": [
+          {
+            "axis": "x",
+            "coordinate": 8.0,
+            "crossing_pedestrian_count": 0,
+            "direction": "positive",
+            "flow_rate_ped_per_s": 0.0,
+            "gate_id": "upper_branch_x",
+            "status": "ok"
+          },
+          {
+            "axis": "x",
+            "coordinate": 8.0,
+            "crossing_pedestrian_count": 0,
+            "direction": "positive",
+            "flow_rate_ped_per_s": 0.0,
+            "gate_id": "lower_branch_x",
+            "status": "ok"
+          }
+        ],
+        "jam_duration": {
+          "jam_duration_s": 0.0,
+          "metric_id": "jam_duration",
+          "sample_count": 21,
+          "speed_threshold_mps": 0.08,
+          "status": "ok"
+        },
+        "lane_formation_score": {
+          "lateral_axis": "y",
+          "metric_id": "lane_formation_score",
+          "movement_axis": "x",
+          "sample_count": 0,
+          "score": 0.0,
+          "status": "empty"
+        }
+      },
+      "measurement_area_m2": 72.0,
+      "pedestrian_count": 6,
+      "pedestrian_model": "social_force_default",
+      "robot_count": 0,
+      "scenario_id": "forked_route",
+      "seed": 3971,
+      "step_count": 20
+    }
+  ],
+  "scenario_ids": [
+    "bidirectional_corridor",
+    "bottleneck",
+    "forked_route"
+  ],
+  "schema_version": "pedestrian_flow_validation.report.v1",
+  "status": {
+    "build_gate": false,
+    "pedestrian_dynamics_changed": false,
+    "robot_inserted": false,
+    "slurm_or_gpu_used": false,
+    "thresholds_applied": false
+  },
+  "trajectory_quality": {
+    "acceleration_mps2": {
+      "count": 40,
+      "invalid_count": 0,
+      "max": 2.395711776123359,
+      "mean": 0.3002867145623851,
+      "min": 0.009277099799599694,
+      "q05": 0.030577850503543655,
+      "q50": 0.16237979236992467,
+      "q95": 1.14608425490104,
+      "status": "ok",
+      "std": 0.5261634146461484
+    },
+    "curvature_1pm": {
+      "count": 40,
+      "invalid_count": 0,
+      "max": 0.5997296302694313,
+      "mean": 0.10196704662350693,
+      "min": 0.0045367007245039346,
+      "q05": 0.014953216285571882,
+      "q50": 0.07816722243737337,
+      "q95": 0.2614635187821045,
+      "status": "ok",
+      "std": 0.12395346640957589
+    },
+    "pairwise_distance_m": {
+      "count": 21,
+      "invalid_count": 0,
+      "max": 10.084145972763386,
+      "mean": 7.254370113163246,
+      "min": 4.452117089303662,
+      "q05": 4.722531633251495,
+      "q50": 7.245460464562745,
+      "q95": 9.81884857677882,
+      "status": "ok",
+      "std": 1.7162726586781543
+    },
+    "speed_mps": {
+      "count": 42,
+      "invalid_count": 0,
+      "max": 1.4300000000000004,
+      "mean": 1.397719374898801,
+      "min": 1.1,
+      "q05": 1.3302970477266935,
+      "q50": 1.43,
+      "q95": 1.4300000000000004,
+      "status": "ok",
+      "std": 0.0715270783861029
+    },
+    "stop_fraction": {
+      "count": 2,
+      "invalid_count": 0,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0,
+      "q05": 0.0,
+      "q50": 0.0,
+      "q95": 0.0,
+      "status": "ok",
+      "std": 0.0
+    },
+    "stop_frequency_hz": {
+      "count": 2,
+      "invalid_count": 0,
+      "max": 0.0,
+      "mean": 0.0,
+      "min": 0.0,
+      "q05": 0.0,
+      "q50": 0.0,
+      "q95": 0.0,
+      "status": "ok",
+      "std": 0.0
+    },
+    "turning_angle_rad": {
+      "count": 40,
+      "invalid_count": 0,
+      "max": 0.05457677518253969,
+      "mean": 0.012735999814387297,
+      "min": 0.0006487482491110141,
+      "q05": 0.002138311655753224,
+      "q50": 0.011038032619895777,
+      "q95": 0.03137952106520787,
+      "status": "ok",
+      "std": 0.011376433767836959
+    }
+  }
+}

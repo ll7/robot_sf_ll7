@@ -1,0 +1,14 @@
+diagnostic_only_not_benchmark_gate: true
+claim_boundary: diagnostic-only pedestrian-flow validation; no benchmark-strength claim
+scenarios:
+  - bidirectional_corridor
+  - bottleneck
+  - forked_route
+pedestrian_counts:
+  - 2
+  - 6
+duration_s: 2.0
+dt_s: 0.1
+seed: 3971
+speed_mps: 1.1
+output_dir: output/benchmarks/issue3971_pedestrian_flow_validation

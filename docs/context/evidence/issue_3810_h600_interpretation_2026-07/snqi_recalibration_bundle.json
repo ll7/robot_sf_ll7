@@ -1,0 +1,692 @@
+{
+  "claim_boundary": "diagnostic-only analysis; canonical SNQI weights/baselines are not overwritten",
+  "decision_reversal_rows": [
+    {
+      "decision_reversal": true,
+      "decision_reversal_status": "ok",
+      "h500_snqi_rank": 10,
+      "h500_to_h600_recalibrated_delta": -6,
+      "h500_to_h600_recalibrated_stability": "rank_flip",
+      "h600_original_snqi_rank": 4,
+      "h600_recalibrated_snqi_rank": 4,
+      "original_to_recalibrated_delta": 0,
+      "planner_key": "goal"
+    },
+    {
+      "decision_reversal": null,
+      "decision_reversal_status": "not_evaluable",
+      "h500_snqi_rank": 5,
+      "h500_to_h600_recalibrated_delta": null,
+      "h500_to_h600_recalibrated_stability": "not_evaluable",
+      "h600_original_snqi_rank": null,
+      "h600_recalibrated_snqi_rank": null,
+      "original_to_recalibrated_delta": null,
+      "planner_key": "hybrid_rule_v3_fast_progress"
+    },
+    {
+      "decision_reversal": null,
+      "decision_reversal_status": "not_evaluable",
+      "h500_snqi_rank": 4,
+      "h500_to_h600_recalibrated_delta": null,
+      "h500_to_h600_recalibrated_stability": "not_evaluable",
+      "h600_original_snqi_rank": null,
+      "h600_recalibrated_snqi_rank": null,
+      "original_to_recalibrated_delta": null,
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape"
+    },
+    {
+      "decision_reversal": null,
+      "decision_reversal_status": "not_evaluable",
+      "h500_snqi_rank": 1,
+      "h500_to_h600_recalibrated_delta": null,
+      "h500_to_h600_recalibrated_stability": "not_evaluable",
+      "h600_original_snqi_rank": null,
+      "h600_recalibrated_snqi_rank": null,
+      "original_to_recalibrated_delta": null,
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous"
+    },
+    {
+      "decision_reversal": true,
+      "decision_reversal_status": "ok",
+      "h500_snqi_rank": 9,
+      "h500_to_h600_recalibrated_delta": -6,
+      "h500_to_h600_recalibrated_stability": "rank_flip",
+      "h600_original_snqi_rank": 3,
+      "h600_recalibrated_snqi_rank": 3,
+      "original_to_recalibrated_delta": 0,
+      "planner_key": "orca"
+    },
+    {
+      "decision_reversal": true,
+      "decision_reversal_status": "ok",
+      "h500_snqi_rank": 8,
+      "h500_to_h600_recalibrated_delta": -7,
+      "h500_to_h600_recalibrated_stability": "rank_flip",
+      "h600_original_snqi_rank": 1,
+      "h600_recalibrated_snqi_rank": 1,
+      "original_to_recalibrated_delta": 0,
+      "planner_key": "ppo"
+    },
+    {
+      "decision_reversal": false,
+      "decision_reversal_status": "ok",
+      "h500_snqi_rank": 7,
+      "h500_to_h600_recalibrated_delta": 0,
+      "h500_to_h600_recalibrated_stability": "stable",
+      "h600_original_snqi_rank": 7,
+      "h600_recalibrated_snqi_rank": 7,
+      "original_to_recalibrated_delta": 0,
+      "planner_key": "prediction_planner"
+    },
+    {
+      "decision_reversal": true,
+      "decision_reversal_status": "ok",
+      "h500_snqi_rank": 11,
+      "h500_to_h600_recalibrated_delta": -9,
+      "h500_to_h600_recalibrated_stability": "rank_flip",
+      "h600_original_snqi_rank": 2,
+      "h600_recalibrated_snqi_rank": 2,
+      "original_to_recalibrated_delta": 0,
+      "planner_key": "sacadrl"
+    },
+    {
+      "decision_reversal": null,
+      "decision_reversal_status": "not_evaluable",
+      "h500_snqi_rank": 2,
+      "h500_to_h600_recalibrated_delta": null,
+      "h500_to_h600_recalibrated_stability": "not_evaluable",
+      "h600_original_snqi_rank": null,
+      "h600_recalibrated_snqi_rank": null,
+      "original_to_recalibrated_delta": null,
+      "planner_key": "scenario_adaptive_hybrid_orca_v1"
+    },
+    {
+      "decision_reversal": null,
+      "decision_reversal_status": "not_evaluable",
+      "h500_snqi_rank": 3,
+      "h500_to_h600_recalibrated_delta": null,
+      "h500_to_h600_recalibrated_stability": "not_evaluable",
+      "h600_original_snqi_rank": null,
+      "h600_recalibrated_snqi_rank": null,
+      "original_to_recalibrated_delta": null,
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard"
+    },
+    {
+      "decision_reversal": true,
+      "decision_reversal_status": "ok",
+      "h500_snqi_rank": 12,
+      "h500_to_h600_recalibrated_delta": -6,
+      "h500_to_h600_recalibrated_stability": "rank_flip",
+      "h600_original_snqi_rank": 6,
+      "h600_recalibrated_snqi_rank": 6,
+      "original_to_recalibrated_delta": 0,
+      "planner_key": "social_force"
+    },
+    {
+      "decision_reversal": false,
+      "decision_reversal_status": "ok",
+      "h500_snqi_rank": 6,
+      "h500_to_h600_recalibrated_delta": -1,
+      "h500_to_h600_recalibrated_stability": "stable",
+      "h600_original_snqi_rank": 5,
+      "h600_recalibrated_snqi_rank": 5,
+      "original_to_recalibrated_delta": 0,
+      "planner_key": "socnav_sampling"
+    }
+  ],
+  "h500_source": {
+    "campaign_id": "issue1454-s10-h500-candidates",
+    "caveat": "Tracked h500 source is issue #1454 S10/h500 candidate evidence; no tracked S20 h500 result bundle was available in this checkout.",
+    "rankings": {
+      "collision": [
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+          "rank": 1,
+          "value": 0.025
+        },
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress",
+          "rank": 2,
+          "value": 0.0292
+        },
+        {
+          "planner_key": "scenario_adaptive_hybrid_orca_v1",
+          "rank": 3,
+          "value": 0.0333
+        },
+        {
+          "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+          "rank": 4,
+          "value": 0.0333
+        },
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+          "rank": 5,
+          "value": 0.0354
+        },
+        {
+          "planner_key": "orca",
+          "rank": 6,
+          "value": 0.1604
+        },
+        {
+          "planner_key": "ppo",
+          "rank": 7,
+          "value": 0.1938
+        },
+        {
+          "planner_key": "social_force",
+          "rank": 8,
+          "value": 0.3854
+        },
+        {
+          "planner_key": "prediction_planner",
+          "rank": 9,
+          "value": 0.4
+        },
+        {
+          "planner_key": "socnav_sampling",
+          "rank": 10,
+          "value": 0.6
+        },
+        {
+          "planner_key": "goal",
+          "rank": 11,
+          "value": 0.6125
+        },
+        {
+          "planner_key": "sacadrl",
+          "rank": 12,
+          "value": 0.6604
+        }
+      ],
+      "near_miss": [
+        {
+          "planner_key": "socnav_sampling",
+          "rank": 1,
+          "value": 1.9208
+        },
+        {
+          "planner_key": "social_force",
+          "rank": 2,
+          "value": 4.7104
+        },
+        {
+          "planner_key": "sacadrl",
+          "rank": 3,
+          "value": 5.8521
+        },
+        {
+          "planner_key": "ppo",
+          "rank": 4,
+          "value": 6.5146
+        },
+        {
+          "planner_key": "goal",
+          "rank": 5,
+          "value": 7.1396
+        },
+        {
+          "planner_key": "orca",
+          "rank": 6,
+          "value": 13.825
+        },
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+          "rank": 7,
+          "value": 18.9146
+        },
+        {
+          "planner_key": "prediction_planner",
+          "rank": 8,
+          "value": 20.2063
+        },
+        {
+          "planner_key": "scenario_adaptive_hybrid_orca_v1",
+          "rank": 9,
+          "value": 20.7771
+        },
+        {
+          "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+          "rank": 10,
+          "value": 20.7771
+        },
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+          "rank": 11,
+          "value": 21.8875
+        },
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress",
+          "rank": 12,
+          "value": 21.9917
+        }
+      ],
+      "snqi": [
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+          "rank": 1,
+          "value": -0.0972
+        },
+        {
+          "planner_key": "scenario_adaptive_hybrid_orca_v1",
+          "rank": 2,
+          "value": -0.1037
+        },
+        {
+          "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+          "rank": 3,
+          "value": -0.1037
+        },
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+          "rank": 4,
+          "value": -0.1069
+        },
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress",
+          "rank": 5,
+          "value": -0.116
+        },
+        {
+          "planner_key": "socnav_sampling",
+          "rank": 6,
+          "value": -0.1565
+        },
+        {
+          "planner_key": "prediction_planner",
+          "rank": 7,
+          "value": -0.1815
+        },
+        {
+          "planner_key": "ppo",
+          "rank": 8,
+          "value": -0.2415
+        },
+        {
+          "planner_key": "orca",
+          "rank": 9,
+          "value": -0.2476
+        },
+        {
+          "planner_key": "goal",
+          "rank": 10,
+          "value": -0.2594
+        },
+        {
+          "planner_key": "sacadrl",
+          "rank": 11,
+          "value": -0.3514
+        },
+        {
+          "planner_key": "social_force",
+          "rank": 12,
+          "value": -0.9916
+        }
+      ],
+      "success": [
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+          "rank": 1,
+          "value": 0.8771
+        },
+        {
+          "planner_key": "scenario_adaptive_hybrid_orca_v1",
+          "rank": 2,
+          "value": 0.8729
+        },
+        {
+          "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+          "rank": 3,
+          "value": 0.8729
+        },
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+          "rank": 4,
+          "value": 0.8646
+        },
+        {
+          "planner_key": "hybrid_rule_v3_fast_progress",
+          "rank": 5,
+          "value": 0.7875
+        },
+        {
+          "planner_key": "ppo",
+          "rank": 6,
+          "value": 0.7854
+        },
+        {
+          "planner_key": "orca",
+          "rank": 7,
+          "value": 0.775
+        },
+        {
+          "planner_key": "prediction_planner",
+          "rank": 8,
+          "value": 0.5312
+        },
+        {
+          "planner_key": "socnav_sampling",
+          "rank": 9,
+          "value": 0.4
+        },
+        {
+          "planner_key": "sacadrl",
+          "rank": 10,
+          "value": 0.0688
+        },
+        {
+          "planner_key": "goal",
+          "rank": 11,
+          "value": 0.0479
+        },
+        {
+          "planner_key": "social_force",
+          "rank": 12,
+          "value": 0.0167
+        }
+      ]
+    },
+    "reports_dir": "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/reports",
+    "requested_comparison": "h500/S20",
+    "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+    "scenario_matrix_hash": "8973cf0d26dd",
+    "seed_budget": "S10",
+    "status": "available_s10_h500_not_s20"
+  },
+  "launch_packet": "configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml",
+  "normalization": {
+    "collision": {
+      "denominator": 0.479167,
+      "max": 0.715278,
+      "min": 0.236111
+    },
+    "comfort": {
+      "denominator": 0.011200000000000002,
+      "max": 0.0407,
+      "min": 0.0295
+    },
+    "near_miss": {
+      "denominator": 11.006943999999999,
+      "max": 12.770833,
+      "min": 1.763889
+    },
+    "success": {
+      "denominator": 0.729167,
+      "max": 0.743056,
+      "min": 0.013889
+    }
+  },
+  "planner_rows": [
+    {
+      "collision": 0.611111,
+      "comfort": 0.0306,
+      "missing_metrics": [],
+      "near_miss": 8.638889,
+      "original_h600_snqi": -0.193225,
+      "planner_key": "goal",
+      "rank": 4,
+      "recalibrated_h600_snqi": -0.19429686769483576,
+      "status": "ok",
+      "success": 0.388889
+    },
+    {
+      "collision": 0.236111,
+      "comfort": 0.0305,
+      "missing_metrics": [],
+      "near_miss": 12.770833,
+      "original_h600_snqi": -0.198384,
+      "planner_key": "orca",
+      "rank": 3,
+      "recalibrated_h600_snqi": -0.1338561491005052,
+      "status": "ok",
+      "success": 0.743056
+    },
+    {
+      "collision": 0.284722,
+      "comfort": 0.0299,
+      "missing_metrics": [],
+      "near_miss": 4.395833,
+      "original_h600_snqi": -0.156038,
+      "planner_key": "ppo",
+      "rank": 1,
+      "recalibrated_h600_snqi": 0.08880736329992842,
+      "status": "ok",
+      "success": 0.701389
+    },
+    {
+      "collision": 0.5,
+      "comfort": 0.0395,
+      "missing_metrics": [],
+      "near_miss": 12.354167,
+      "original_h600_snqi": -0.145123,
+      "planner_key": "prediction_planner",
+      "rank": 7,
+      "recalibrated_h600_snqi": -0.3897292702364573,
+      "status": "ok",
+      "success": 0.493056
+    },
+    {
+      "collision": 0.694444,
+      "comfort": 0.0295,
+      "missing_metrics": [],
+      "near_miss": 4.8125,
+      "original_h600_snqi": -0.369481,
+      "planner_key": "sacadrl",
+      "rank": 2,
+      "recalibrated_h600_snqi": -0.10947258334634967,
+      "status": "ok",
+      "success": 0.305556
+    },
+    {
+      "collision": 0.513889,
+      "comfort": 0.0381,
+      "missing_metrics": [],
+      "near_miss": 7.895833,
+      "original_h600_snqi": -0.884998,
+      "planner_key": "social_force",
+      "rank": 6,
+      "recalibrated_h600_snqi": -0.37058839695870216,
+      "status": "ok",
+      "success": 0.013889
+    },
+    {
+      "collision": 0.715278,
+      "comfort": 0.0407,
+      "missing_metrics": [],
+      "near_miss": 1.763889,
+      "original_h600_snqi": -0.199566,
+      "planner_key": "socnav_sampling",
+      "rank": 5,
+      "recalibrated_h600_snqi": -0.21392443897652033,
+      "status": "ok",
+      "success": 0.284722
+    }
+  ],
+  "rankings": {
+    "original_h600_snqi": [
+      {
+        "collision": 0.5,
+        "comfort": 0.0395,
+        "missing_metrics": [],
+        "near_miss": 12.354167,
+        "original_h600_snqi": -0.145123,
+        "planner_key": "prediction_planner",
+        "rank": 7,
+        "recalibrated_h600_snqi": -0.3897292702364573,
+        "status": "ok",
+        "success": 0.493056
+      },
+      {
+        "collision": 0.284722,
+        "comfort": 0.0299,
+        "missing_metrics": [],
+        "near_miss": 4.395833,
+        "original_h600_snqi": -0.156038,
+        "planner_key": "ppo",
+        "rank": 1,
+        "recalibrated_h600_snqi": 0.08880736329992842,
+        "status": "ok",
+        "success": 0.701389
+      },
+      {
+        "collision": 0.611111,
+        "comfort": 0.0306,
+        "missing_metrics": [],
+        "near_miss": 8.638889,
+        "original_h600_snqi": -0.193225,
+        "planner_key": "goal",
+        "rank": 4,
+        "recalibrated_h600_snqi": -0.19429686769483576,
+        "status": "ok",
+        "success": 0.388889
+      },
+      {
+        "collision": 0.236111,
+        "comfort": 0.0305,
+        "missing_metrics": [],
+        "near_miss": 12.770833,
+        "original_h600_snqi": -0.198384,
+        "planner_key": "orca",
+        "rank": 3,
+        "recalibrated_h600_snqi": -0.1338561491005052,
+        "status": "ok",
+        "success": 0.743056
+      },
+      {
+        "collision": 0.715278,
+        "comfort": 0.0407,
+        "missing_metrics": [],
+        "near_miss": 1.763889,
+        "original_h600_snqi": -0.199566,
+        "planner_key": "socnav_sampling",
+        "rank": 5,
+        "recalibrated_h600_snqi": -0.21392443897652033,
+        "status": "ok",
+        "success": 0.284722
+      },
+      {
+        "collision": 0.694444,
+        "comfort": 0.0295,
+        "missing_metrics": [],
+        "near_miss": 4.8125,
+        "original_h600_snqi": -0.369481,
+        "planner_key": "sacadrl",
+        "rank": 2,
+        "recalibrated_h600_snqi": -0.10947258334634967,
+        "status": "ok",
+        "success": 0.305556
+      },
+      {
+        "collision": 0.513889,
+        "comfort": 0.0381,
+        "missing_metrics": [],
+        "near_miss": 7.895833,
+        "original_h600_snqi": -0.884998,
+        "planner_key": "social_force",
+        "rank": 6,
+        "recalibrated_h600_snqi": -0.37058839695870216,
+        "status": "ok",
+        "success": 0.013889
+      }
+    ],
+    "recalibrated_h600_snqi": [
+      {
+        "collision": 0.284722,
+        "comfort": 0.0299,
+        "missing_metrics": [],
+        "near_miss": 4.395833,
+        "original_h600_snqi": -0.156038,
+        "planner_key": "ppo",
+        "rank": 1,
+        "recalibrated_h600_snqi": 0.08880736329992842,
+        "status": "ok",
+        "success": 0.701389
+      },
+      {
+        "collision": 0.694444,
+        "comfort": 0.0295,
+        "missing_metrics": [],
+        "near_miss": 4.8125,
+        "original_h600_snqi": -0.369481,
+        "planner_key": "sacadrl",
+        "rank": 2,
+        "recalibrated_h600_snqi": -0.10947258334634967,
+        "status": "ok",
+        "success": 0.305556
+      },
+      {
+        "collision": 0.236111,
+        "comfort": 0.0305,
+        "missing_metrics": [],
+        "near_miss": 12.770833,
+        "original_h600_snqi": -0.198384,
+        "planner_key": "orca",
+        "rank": 3,
+        "recalibrated_h600_snqi": -0.1338561491005052,
+        "status": "ok",
+        "success": 0.743056
+      },
+      {
+        "collision": 0.611111,
+        "comfort": 0.0306,
+        "missing_metrics": [],
+        "near_miss": 8.638889,
+        "original_h600_snqi": -0.193225,
+        "planner_key": "goal",
+        "rank": 4,
+        "recalibrated_h600_snqi": -0.19429686769483576,
+        "status": "ok",
+        "success": 0.388889
+      },
+      {
+        "collision": 0.715278,
+        "comfort": 0.0407,
+        "missing_metrics": [],
+        "near_miss": 1.763889,
+        "original_h600_snqi": -0.199566,
+        "planner_key": "socnav_sampling",
+        "rank": 5,
+        "recalibrated_h600_snqi": -0.21392443897652033,
+        "status": "ok",
+        "success": 0.284722
+      },
+      {
+        "collision": 0.513889,
+        "comfort": 0.0381,
+        "missing_metrics": [],
+        "near_miss": 7.895833,
+        "original_h600_snqi": -0.884998,
+        "planner_key": "social_force",
+        "rank": 6,
+        "recalibrated_h600_snqi": -0.37058839695870216,
+        "status": "ok",
+        "success": 0.013889
+      },
+      {
+        "collision": 0.5,
+        "comfort": 0.0395,
+        "missing_metrics": [],
+        "near_miss": 12.354167,
+        "original_h600_snqi": -0.145123,
+        "planner_key": "prediction_planner",
+        "rank": 7,
+        "recalibrated_h600_snqi": -0.3897292702364573,
+        "status": "ok",
+        "success": 0.493056
+      }
+    ]
+  },
+  "schema_version": "issue_4195_h600_aggregation.v1.snqi_recalibration",
+  "source_h600_job_id": "13268",
+  "status": "ok",
+  "weights": {
+    "w_collisions": 0.10483542508043969,
+    "w_comfort": 0.17983060763794978,
+    "w_force_exceed": 0.0692114485473155,
+    "w_jerk": 0.05249476557782281,
+    "w_near": 0.30825830332144416,
+    "w_success": 0.19045845847432735,
+    "w_time": 0.09491099136070058
+  }
+}

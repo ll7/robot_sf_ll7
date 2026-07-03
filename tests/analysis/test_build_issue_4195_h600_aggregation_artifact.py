@@ -8,7 +8,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from scripts.analysis.build_issue_4195_h600_aggregation_artifact import build_artifact
+from scripts.analysis.build_issue_4195_h600_aggregation_artifact import (
+    build_artifact,
+    extend_existing_artifact,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -127,24 +130,60 @@ def _write_fixture_reports(
             )
 
 
+def _write_h500_fixture(reports_dir: Path) -> None:
+    """Write compact h500 comparison fixture."""
+
+    reports_dir.mkdir(parents=True)
+    summary = {
+        "campaign": {
+            "campaign_id": "fixture-h500-s20",
+            "scenario_matrix": "configs/scenarios/example.yaml",
+            "scenario_matrix_hash": "h500-matrix",
+        },
+        "planner_rows": [
+            {
+                "planner_key": "goal",
+                "success_mean": "0.25",
+                "collisions_mean": "0.75",
+                "near_misses_mean": "4.0",
+                "snqi_mean": "-0.40",
+            },
+            {
+                "planner_key": "orca",
+                "success_mean": "0.75",
+                "collisions_mean": "0.25",
+                "near_misses_mean": "1.0",
+                "snqi_mean": "-0.10",
+            },
+        ],
+    }
+    (reports_dir / "campaign_summary.json").write_text(json.dumps(summary), encoding="utf-8")
+
+
 def test_build_artifact_writes_tables_comparability_and_checksums(tmp_path: Path) -> None:
     """Fixture reports produce deterministic aggregation artifacts."""
 
     confirm_reports = tmp_path / "confirm" / "reports"
     extended_reports = tmp_path / "extended" / "reports"
+    h500_reports = tmp_path / "h500" / "reports"
     _write_fixture_reports(confirm_reports)
     _write_fixture_reports(extended_reports, planners=("goal", "orca", "prediction_mpc"))
+    _write_h500_fixture(h500_reports)
     output_dir = tmp_path / "evidence"
 
     result = build_artifact(
         confirm_reports=confirm_reports,
         extended_reports=extended_reports,
+        h500_s20_reports=h500_reports,
         output_dir=output_dir,
         bootstrap_samples=100,
         confidence=0.95,
     )
 
     assert result["status"] == "ok"
+    assert result["snqi_recalibration_status"] == "ok"
+    assert result["horizon_sensitivity_status"] == "ok"
+    assert result["interaction_exposure_status"] == "blocked_missing_required_fields"
     assert result["row_count"] == 25
     metric_rows = list(csv.DictReader((output_dir / "planner_metric_summary.csv").open()))
     goal_snqi = next(
@@ -167,14 +206,34 @@ def test_build_artifact_writes_tables_comparability_and_checksums(tmp_path: Path
     comparability = json.loads((output_dir / "comparability_check.json").read_text())
     assert comparability["status"] == "pass"
     assert comparability["shared_planners"] == ["goal", "orca"]
+    snqi_recalibration = json.loads((output_dir / "snqi_recalibration_bundle.json").read_text())
+    assert snqi_recalibration["status"] == "ok"
+    assert snqi_recalibration["h500_source"]["status"] == "available_s10_h500_not_s20"
+    assert snqi_recalibration["decision_reversal_rows"]
+    horizon = json.loads((output_dir / "horizon_sensitivity_report.json").read_text())
+    assert horizon["status"] == "ok"
+    assert {row["metric"] for row in horizon["comparison_rows"]} >= {"snqi", "success"}
+    exposure = json.loads((output_dir / "interaction_exposure_diagnostics.json").read_text())
+    assert exposure["status"] == "blocked_missing_required_fields"
+    assert "interaction_exposure_share" in exposure["missing_required_fields"]
     assert (
         (output_dir / "README.md")
         .read_text(encoding="utf-8")
         .startswith("# Issue 4195 h600 Aggregation Artifact")
     )
     checksums = (output_dir / "SHA256SUMS").read_text(encoding="utf-8")
-    assert f"{output_dir.as_posix()}/planner_metric_summary.csv" in checksums
-    assert f"{output_dir.as_posix()}/source_manifest.json" in checksums
+    assert "planner_metric_summary.csv" in checksums
+    assert "snqi_recalibration_bundle.json" in checksums
+    assert "horizon_sensitivity_report.json" in checksums
+    assert "interaction_exposure_diagnostics.json" in checksums
+    assert "source_manifest.json" in checksums
+
+    extended_result = extend_existing_artifact(
+        output_dir=output_dir,
+        h500_s20_reports=h500_reports,
+    )
+    assert extended_result["snqi_recalibration_status"] == "ok"
+    assert extended_result["interaction_exposure_status"] == "blocked_missing_required_fields"
 
 
 def test_build_artifact_fails_status_on_shared_hash_mismatch(tmp_path: Path) -> None:
@@ -182,12 +241,15 @@ def test_build_artifact_fails_status_on_shared_hash_mismatch(tmp_path: Path) -> 
 
     confirm_reports = tmp_path / "confirm" / "reports"
     extended_reports = tmp_path / "extended" / "reports"
+    h500_reports = tmp_path / "h500" / "reports"
     _write_fixture_reports(confirm_reports, scenario_matrix_hash="matrix-a")
     _write_fixture_reports(extended_reports, scenario_matrix_hash="matrix-b")
+    _write_h500_fixture(h500_reports)
 
     result = build_artifact(
         confirm_reports=confirm_reports,
         extended_reports=extended_reports,
+        h500_s20_reports=h500_reports,
         output_dir=tmp_path / "evidence",
         bootstrap_samples=20,
         confidence=0.95,

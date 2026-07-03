@@ -7,10 +7,17 @@
     "README.md",
     "comparability_check.json",
     "comparability_check.md",
+    "horizon_sensitivity_report.json",
+    "horizon_sensitivity_report.md",
+    "interaction_exposure_diagnostics.json",
+    "interaction_exposure_diagnostics.md",
     "planner_metric_summary.csv",
     "planner_metric_summary.md",
+    "snqi_recalibration_bundle.json",
+    "snqi_recalibration_report.md",
     "source_manifest.json"
   ],
+  "h500_s20_reports": "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/reports",
   "runs": [
     {
       "campaign": {
@@ -23,7 +30,7 @@
         "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
         "scenario_matrix_hash": "c10df617a87c"
       },
-      "campaign_summary": "/home/luttkule/git/robot_sf_ll7/output/issue3810-h600-longhorizon-confirm-run/13268/reports/campaign_summary.json",
+      "campaign_summary": "output/issue3810-h600-longhorizon-confirm-run/13268/reports/campaign_summary.json",
       "job_id": "13268",
       "planner_keys": [
         "goal",
@@ -34,7 +41,7 @@
         "social_force",
         "socnav_sampling"
       ],
-      "reports_dir": "/home/luttkule/git/robot_sf_ll7/output/issue3810-h600-longhorizon-confirm-run/13268/reports",
+      "reports_dir": "output/issue3810-h600-longhorizon-confirm-run/13268/reports",
       "run_label": "confirm",
       "seed_episode_columns": [
         "algo",
@@ -50,7 +57,7 @@
         "success",
         "time_to_goal"
       ],
-      "seed_episode_rows": "/home/luttkule/git/robot_sf_ll7/output/issue3810-h600-longhorizon-confirm-run/13268/reports/seed_episode_rows.csv",
+      "seed_episode_rows": "output/issue3810-h600-longhorizon-confirm-run/13268/reports/seed_episode_rows.csv",
       "source_sha256": {
         "campaign_summary.json": "f29e6c5ee12679408b1d65add0149e4cfe07390f0c8828208114f39dd900c257",
         "seed_episode_rows.csv": "4493c8ebee0942c1c32b0d51e511f4fd98f35ee2be8d24d366564f8979be7d23"
@@ -67,7 +74,7 @@
         "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
         "scenario_matrix_hash": "c10df617a87c"
       },
-      "campaign_summary": "/home/luttkule/git/robot_sf_ll7/output/issue3810-h600-extroster-run/13273/reports/campaign_summary.json",
+      "campaign_summary": "output/issue3810-h600-extroster-run/13273/reports/campaign_summary.json",
       "job_id": "13273",
       "planner_keys": [
         "goal",
@@ -80,7 +87,7 @@
         "social_force",
         "socnav_sampling"
       ],
-      "reports_dir": "/home/luttkule/git/robot_sf_ll7/output/issue3810-h600-extroster-run/13273/reports",
+      "reports_dir": "output/issue3810-h600-extroster-run/13273/reports",
       "run_label": "extended_roster",
       "seed_episode_columns": [
         "algo",
@@ -96,7 +103,7 @@
         "success",
         "time_to_goal"
       ],
-      "seed_episode_rows": "/home/luttkule/git/robot_sf_ll7/output/issue3810-h600-extroster-run/13273/reports/seed_episode_rows.csv",
+      "seed_episode_rows": "output/issue3810-h600-extroster-run/13273/reports/seed_episode_rows.csv",
       "source_sha256": {
         "campaign_summary.json": "f456580bad70167e42d6e24c9570547042fd02ce39c35687ed152928f6a0698e",
         "seed_episode_rows.csv": "f2e5960c2439f28745b4bd2f7cd19f4c94cabd86cb1387693095a656ac859e81"

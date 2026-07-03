@@ -106,15 +106,66 @@ With locally staged official data, `check` (or `stage`) validates the required-p
 write a compact provenance manifest. A successful presence check is only local staging evidence; it
 is not a full benchmark campaign, a trajectory-loader validation, or a dissertation claim.
 
+## Loader and shape contract
+
+`robot_sf/data/external/atc.py` is a license-safe loader that only inspects locally staged files. It
+never downloads, vendors, or redistributes dataset bytes, and it makes no prediction-comparability or
+benchmark claim. It checks a cheap, structural shape contract: the documented layout is present (via
+the `atc-pedestrian` registry entry) and each staged daily CSV parses as finite numeric rows with the
+documented ATC column width. It intentionally asserts no content values (no exact frame counts,
+coordinates, pedestrian ids, or scene-specific numbers).
+
+Each ATC daily CSV is headerless, comma-delimited, and exactly eight columns wide, in this order:
+`time`, `person_id`, `x`, `y`, `z`, `velocity`, `motion_angle`, `facing_angle` (see
+[Chosen subset policy](#chosen-subset-policy) for units).
+
+### Usage
+
+```python
+from robot_sf.data.external import atc
+
+# Resolves via ROBOT_SF_EXTERNAL_DATA_ROOT (or the repo-local default), or pass root=...
+if atc.is_available():
+    contract = atc.load_shape_contract()
+    # contract -> {"asset_id", "root", "docs_path", "delimiter", "column_count",
+    #              "column_names", "file_count", "max_rows",
+    #              "files": [{"path", "scanned_rows", "scan_truncated"}, ...]}
+```
+
+- `is_available(root=None)` returns `False` for an absent or incomplete layout (missing CSV *or*
+  missing terms/README note), so skip-if-absent tests skip cleanly.
+- `require_available(root=None)` returns the resolved trajectory paths or raises `AtcDataError` naming
+  the missing required-path group(s) and this page.
+- `load_shape_contract(root=None, *, max_rows=10000)` validates each staged CSV and returns per-file
+  shape metadata. A single ATC day can hold millions of samples, so scanning is bounded by default and
+  reports `scan_truncated`; pass `max_rows=None` to scan whole files.
+
+### Malformed-data behavior
+
+A present-but-malformed staged CSV fails closed with `AtcDataError`, and every message points back to
+this page. Failure conditions include an empty/comment-only file, a row whose column count is not
+eight, and a non-numeric or non-finite value.
+
+### Tests
+
+```bash
+uv run pytest tests/data/external/test_atc_shape.py -q
+```
+
+The real-data path skips with `external dataset not staged` when no local ATC copy is present, so the
+suite stays green in CI without the license-gated bytes. Synthetic-fixture and malformed-fixture tests
+always run and never touch real data.
+
 ## Citation
 
 > D. Brščić, T. Kanda, T. Ikeda, T. Miyashita, "Person position and body direction tracking in
 > large public spaces using 3-D range sensors," *IEEE Transactions on Human-Machine Systems*,
 > Vol. 43, No. 6, pp. 522–534, 2013.
 
-## Boundary and follow-up
+## Claim boundary and scope
 
-This slice adds registry metadata and acquisition/layout documentation only. Deferred follow-up
-(after local staging exists): an ATC trajectory loader plus skip-if-absent shape-contract tests,
-following the exemplar pattern established for #4279 (`socnavbench-s3dis-eth`). No download code,
-dataset bytes, benchmark consumer, or claim edit is part of #4289.
+`atc-pedestrian` registry `ready` (or a green shape contract) means only that a local copy matched the
+documented file/layout contract and parsed as finite numeric ATC-shaped rows. It does not mean Robot
+SF has benchmark scenarios, prediction-comparability evidence, or permission to redistribute the data.
+This loader slice adds no download code, dataset bytes, benchmark consumer, campaign run, or
+paper-facing claim; it follows the exemplar pattern established for #4279 (`socnavbench-s3dis-eth`).

@@ -54,6 +54,22 @@ as `not_evaluable` in the detail rows **without** forcing the whole category to
 honestly recording that dedicated min-clearance and proxemic-intrusion-rate metrics are not
 yet part of this campaign's summary.
 
+### Forward retention (issue [#4326](https://github.com/ll7/robot_sf_ll7/issues/4326))
+
+The camera-ready campaign summary/retention schema now records both `min_clearance_m` and
+`proxemic_intrusion_rate` per planner row, aggregated from per-episode values that already
+exist in episode rows (`min_clearance` → campaign-wide **worst-case minimum** clearance,
+distinct from the mean-of-per-episode-minimums kept as `min_clearance_mean`;
+`social_proxemic_intrusion_frac` → mean per-episode personal-space intrusion fraction). So
+**future** campaigns make these two gates evaluable with **no evaluator code change** — the
+gate spec already targets these exact field names.
+
+This is **not** a backfill. This retained campaign (dated 2026-05-04, produced before the
+schema change) does **not** carry the fields, so both gates correctly stay `not_evaluable`
+here — fail-closed, no fabricated historical values. Regenerating this packet does not
+change these two cells; only a **newly run** campaign under the updated schema will populate
+them.
+
 ## Fail-closed handling of the degraded planner
 
 `socnav_bench` ran degraded in this campaign (`status: failed`, `benchmark_success: false`,

@@ -91,6 +91,29 @@ def _episode_metric_mean(records: list[dict[str, Any]], metric: str) -> float:
     return float(sum(values) / len(values))
 
 
+def _episode_metric_min(records: list[dict[str, Any]], metric: str) -> float:
+    """Return the campaign-wide minimum of a per-episode metric.
+
+    Used for worst-case safety fields (e.g. ``min_clearance_m``) where the
+    smallest per-episode value across the whole campaign is the fail-closed
+    quantity a safety-floor release gate should evaluate. Returns ``nan`` when
+    no finite per-episode value is present, so downstream gates report
+    ``not_evaluable`` rather than a misleading value.
+
+    Returns:
+        Minimum finite metric value across episodes, or ``nan`` when unavailable.
+    """
+    values: list[float] = []
+    for record in records:
+        value = episode_metric_value(record, metric)
+        if value is None or not math.isfinite(value):
+            continue
+        values.append(value)
+    if not values:
+        return float("nan")
+    return float(min(values))
+
+
 def _episode_metric_ci(records: list[dict[str, Any]], metric: str) -> tuple[float, float]:
     """Return CI placeholders for metrics recomputed directly from episode records.
 
@@ -199,6 +222,17 @@ def _planner_report_row(  # noqa: C901, PLR0912, PLR0915
         ),
         "signed_braking_peak_m_s2_mean": _metric_mean(metric_block, "signed_braking_peak_m_s2"),
         "snqi_mean": _metric_mean(metric_block, "snqi"),
+        # Dedicated release-gate retention fields (issue #4326). These use the
+        # exact names the release-gate evaluator consumes so FUTURE campaigns
+        # become evaluable for the clearance/proxemic gates. min_clearance_m is
+        # the campaign-wide worst-case (minimum) clearance, distinct from the
+        # mean-of-per-episode-minimums already retained as min_clearance_mean;
+        # the aggregate CI block carries no minimum, so it defaults to nan and is
+        # filled from episode records below. proxemic_intrusion_rate is the mean
+        # per-episode personal-space intrusion fraction. Campaigns that never
+        # recorded these stay nan -> not_evaluable (fail-closed); no backfill.
+        "min_clearance_m": float("nan"),
+        "proxemic_intrusion_rate": _metric_mean(metric_block, "social_proxemic_intrusion_frac"),
     }
     if records:
         metric_sources = {
@@ -225,6 +259,9 @@ def _planner_report_row(  # noqa: C901, PLR0912, PLR0915
             "yaw_rate_saturation_fraction_mean": "yaw_rate_saturation_fraction",
             "signed_braking_peak_m_s2_mean": "signed_braking_peak_m_s2",
             "snqi_mean": "snqi",
+            # Release-gate proxemic field (issue #4326): mean per-episode
+            # personal-space intrusion fraction, retained under its gate name.
+            "proxemic_intrusion_rate": "social_proxemic_intrusion_frac",
         }
         for field_name, metric_name in metric_sources.items():
             resolved_metrics[field_name] = _episode_metric_mean(records, metric_name)
@@ -234,6 +271,10 @@ def _planner_report_row(  # noqa: C901, PLR0912, PLR0915
                 collision_ci = _episode_metric_ci(records, metric_name)
             elif field_name == "snqi_mean":
                 snqi_ci = _episode_metric_ci(records, metric_name)
+        # Release-gate clearance floor (issue #4326): worst-case (minimum)
+        # per-episode clearance across the campaign, not a mean, so the safety
+        # floor gate evaluates the strictest observed value.
+        resolved_metrics["min_clearance_m"] = _episode_metric_min(records, "min_clearance")
     episode_count = (
         len(records)
         if records is not None
@@ -263,6 +304,8 @@ def _planner_report_row(  # noqa: C901, PLR0912, PLR0915
         "total_collision_count_mean": _safe_float(resolved_metrics["total_collision_count_mean"]),
         "near_misses_mean": _safe_float(resolved_metrics["near_misses_mean"]),
         "min_clearance_mean": _safe_float(resolved_metrics["min_clearance_mean"]),
+        # Dedicated release-gate safety field (issue #4326): worst-case clearance.
+        "min_clearance_m": _safe_float(resolved_metrics["min_clearance_m"]),
         "time_to_collision_min_mean": _safe_float(resolved_metrics["time_to_collision_min_mean"]),
         "time_to_goal_norm_mean": _safe_float(resolved_metrics["time_to_goal_norm_mean"]),
         "failure_to_progress_mean": _safe_float(resolved_metrics["failure_to_progress_mean"]),
@@ -271,6 +314,8 @@ def _planner_report_row(  # noqa: C901, PLR0912, PLR0915
         "velocity_max_mean": _safe_float(resolved_metrics["velocity_max_mean"]),
         "acceleration_max_mean": _safe_float(resolved_metrics["acceleration_max_mean"]),
         "comfort_exposure_mean": _safe_float(resolved_metrics["comfort_exposure_mean"]),
+        # Dedicated release-gate comfort field (issue #4326): proxemic-intrusion rate.
+        "proxemic_intrusion_rate": _safe_float(resolved_metrics["proxemic_intrusion_rate"]),
         "jerk_mean": _safe_float(resolved_metrics["jerk_mean"]),
         "jerk_max_mean": _safe_float(resolved_metrics["jerk_max_mean"]),
         "curvature_mean_mean": _safe_float(resolved_metrics["curvature_mean_mean"]),

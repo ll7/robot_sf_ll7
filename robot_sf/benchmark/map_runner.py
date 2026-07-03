@@ -538,6 +538,9 @@ _resolve_policy_search_candidate_runtime = (
     _policy_resolution._resolve_policy_search_candidate_runtime
 )
 _apply_planner_selector_v2_context = _policy_resolution._apply_planner_selector_v2_context
+_apply_scenario_uncertainty_envelope_config = (
+    _policy_resolution._apply_scenario_uncertainty_envelope_config
+)
 _build_planner_selector_v2_child_adapter = (
     _policy_resolution._build_planner_selector_v2_child_adapter
 )
@@ -2430,6 +2433,11 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 algo_config=raw_policy_cfg,
                 scenario=scenario,
             )
+            validation_cfg = _apply_scenario_uncertainty_envelope_config(
+                validation_algo,
+                validation_cfg,
+                scenario,
+            )
             validation_observation_contract = resolve_learned_checkpoint_observation_contract(
                 validation_algo,
                 validation_cfg,
@@ -2590,6 +2598,11 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     identity_cfg,
                     scenario=sc,
                     seed=int(seed),
+                )
+                identity_cfg = _apply_scenario_uncertainty_envelope_config(
+                    identity_algo,
+                    identity_cfg,
+                    sc,
                 )
                 identity_observation_contract = resolve_learned_checkpoint_observation_contract(
                     identity_algo,

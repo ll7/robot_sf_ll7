@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 from scipy.optimize import Bounds, NonlinearConstraint, minimize
 
+from robot_sf.nav.uncertainty_envelope import effective_pedestrian_radius, envelope_diagnostics
 from robot_sf.planner.risk_dwa import _wrap_angle
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
@@ -55,6 +56,8 @@ class NMPCSocialConfig:
     occupancy_cost_weight: float = 1.2
     collision_cost_kappa: float = 10.0
     pedestrian_margin: float = 0.55
+    pedestrian_uncertainty_envelope_enabled: bool = False
+    pedestrian_uncertainty_alpha_mps: float = 0.0
     obstacle_margin: float = 0.45
     desired_obstacle_clearance: float = 0.9
     min_turn_speed_scale: float = 0.3
@@ -72,6 +75,11 @@ class NMPCSocialConfig:
     warm_start: bool = True
     fallback_to_stop: bool = True
 
+    def __post_init__(self) -> None:
+        """Validate uncertainty-envelope fields."""
+        if float(self.pedestrian_uncertainty_alpha_mps) < 0.0:
+            raise ValueError("pedestrian_uncertainty_alpha_mps must be >= 0")
+
 
 @dataclass
 class _RolloutContext:
@@ -87,6 +95,8 @@ class _RolloutContext:
     ped_radius: float
     observation: dict[str, Any]
     speed_cap: float
+    pedestrian_uncertainty_envelope_enabled: bool = False
+    pedestrian_uncertainty_alpha_mps: float = 0.0
 
 
 class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -445,9 +455,14 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             )
             if ped_t.size > 0:
                 dists = np.linalg.norm(ped_t - x[None, :], axis=1)
-                min_ped_clearance = float(np.min(dists)) - (
-                    context.robot_radius + context.ped_radius
+                ped_radius = effective_pedestrian_radius(
+                    base_radius=context.ped_radius,
+                    horizon_step=step_idx,
+                    alpha=context.pedestrian_uncertainty_alpha_mps,
+                    dt=dt,
+                    enabled=context.pedestrian_uncertainty_envelope_enabled,
                 )
+                min_ped_clearance = float(np.min(dists)) - (context.robot_radius + ped_radius)
                 cost += float(self.config.pedestrian_clearance_weight) * self._soft_collision_cost(
                     min_ped_clearance,
                     float(self.config.pedestrian_margin),
@@ -537,6 +552,10 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             ped_velocities=ped_velocities,
             robot_radius=robot_radius,
             ped_radius=ped_radius,
+            pedestrian_uncertainty_envelope_enabled=bool(
+                self.config.pedestrian_uncertainty_envelope_enabled
+            ),
+            pedestrian_uncertainty_alpha_mps=float(self.config.pedestrian_uncertainty_alpha_mps),
             observation=observation,
             speed_cap=speed_cap,
         )
@@ -619,11 +638,11 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
                 int(self._stats.get("nonzero_command_count", 0)) + 1
             )
 
-    def diagnostics(self) -> dict[str, float | int]:
+    def diagnostics(self) -> dict[str, Any]:
         """Return episode-local runtime diagnostics for the planner.
 
         Returns:
-            dict[str, float | int]: Aggregated solve and command statistics.
+            dict[str, Any]: Aggregated solve and command statistics plus envelope provenance.
         """
         calls = max(int(self._stats.get("calls", 0)), 1)
         return {
@@ -635,6 +654,11 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             "nonzero_command_count": int(self._stats.get("nonzero_command_count", 0)),
             "mean_abs_linear": float(self._stats.get("sum_abs_linear", 0.0)) / calls,
             "mean_abs_angular": float(self._stats.get("sum_abs_angular", 0.0)) / calls,
+            "pedestrian_uncertainty_envelope": envelope_diagnostics(
+                enabled=bool(self.config.pedestrian_uncertainty_envelope_enabled),
+                alpha=float(self.config.pedestrian_uncertainty_alpha_mps),
+                dt=float(self.config.rollout_dt),
+            ),
         }
 
 
@@ -665,6 +689,8 @@ def build_nmpc_social_config(cfg: dict[str, Any] | None) -> NMPCSocialConfig:
         "occupancy_cost_weight": float,
         "collision_cost_kappa": float,
         "pedestrian_margin": float,
+        "pedestrian_uncertainty_envelope_enabled": _parse_bool,
+        "pedestrian_uncertainty_alpha_mps": float,
         "obstacle_margin": float,
         "desired_obstacle_clearance": float,
         "min_turn_speed_scale": float,

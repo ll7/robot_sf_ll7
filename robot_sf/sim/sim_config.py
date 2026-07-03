@@ -90,6 +90,12 @@ class SimulationSettings:
     ped_radius: float = 0.4
     """Pedestrian radius"""
 
+    pedestrian_uncertainty_envelope_enabled: bool = False
+    """Whether planner configs should opt into horizon-dependent pedestrian inflation."""
+
+    pedestrian_uncertainty_alpha_mps: float = 0.0
+    """Linear pedestrian-envelope inflation rate in metres per second."""
+
     goal_radius: float = 1.0
     """Goal radius"""
 
@@ -161,6 +167,7 @@ class SimulationSettings:
         # Check that the pedestrian radius is positive
         if self.ped_radius <= 0:
             raise ValueError("Pedestrian radius mustn't be negative or zero!")
+        self._validate_pedestrian_uncertainty_envelope_config()
         # Check that the goal radius is positive
         if self.goal_radius <= 0:
             raise ValueError("Goal radius mustn't be negative or zero!")
@@ -173,6 +180,11 @@ class SimulationSettings:
         if self.apf_config is None or not isinstance(self.apf_config, AdversarialPedForceConfig):
             raise ValueError("Adversarial-ped-force settings need to be specified!")
         self._validate_route_spawn_config()
+
+    def _validate_pedestrian_uncertainty_envelope_config(self) -> None:
+        """Validate planner-facing uncertainty-envelope simulation settings."""
+        if self.pedestrian_uncertainty_alpha_mps < 0:
+            raise ValueError("pedestrian_uncertainty_alpha_mps must be >= 0")
 
     def _validate_route_spawn_config(self) -> None:
         """Validate route spawn configuration flags."""

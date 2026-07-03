@@ -68,6 +68,95 @@ def test_build_nmpc_social_config_overrides_fields() -> None:
     assert cfg.solver_max_iterations == 16
 
 
+def test_build_nmpc_social_config_threads_uncertainty_envelope_fields() -> None:
+    """Config builder should thread explicit uncertainty-envelope settings through."""
+    cfg = build_nmpc_social_config(
+        {
+            "pedestrian_uncertainty_envelope_enabled": True,
+            "pedestrian_uncertainty_alpha_mps": 0.1,
+        }
+    )
+
+    assert cfg.pedestrian_uncertainty_envelope_enabled is True
+    assert cfg.pedestrian_uncertainty_alpha_mps == 0.1
+
+
+def test_nmpc_social_uncertainty_alpha_zero_preserves_rollout_cost() -> None:
+    """Enabling the envelope with alpha zero preserves NMPC soft-cost behavior."""
+    obs = _obs(ped_positions=[(0.7, 0.0)], ped_velocities=[(0.0, 0.0)])
+    controls = np.asarray([0.3, 0.0, 0.3, 0.0, 0.3, 0.0], dtype=float)
+    baseline_context = _RolloutContext(
+        robot_pos=np.asarray([0.0, 0.0], dtype=float),
+        heading=0.0,
+        current_speed=0.0,
+        goal=np.asarray([2.0, 0.0], dtype=float),
+        ped_positions=np.asarray([(0.7, 0.0)], dtype=float),
+        ped_velocities=np.asarray([(0.0, 0.0)], dtype=float),
+        robot_radius=0.25,
+        ped_radius=0.25,
+        observation=obs,
+        speed_cap=0.9,
+    )
+    baseline = NMPCSocialPlannerAdapter(
+        NMPCSocialConfig(horizon_steps=3, pedestrian_uncertainty_envelope_enabled=False)
+    )
+    alpha_zero = NMPCSocialPlannerAdapter(
+        NMPCSocialConfig(
+            horizon_steps=3,
+            pedestrian_uncertainty_envelope_enabled=True,
+            pedestrian_uncertainty_alpha_mps=0.0,
+        )
+    )
+
+    assert alpha_zero._rollout_cost(controls, context=baseline_context) == baseline._rollout_cost(
+        controls, context=baseline_context
+    )
+
+
+def test_nmpc_social_positive_uncertainty_alpha_tightens_soft_clearance() -> None:
+    """Positive alpha increases NMPC soft pedestrian-clearance cost on later rollout steps."""
+    obs = _obs(ped_positions=[(0.7, 0.0)], ped_velocities=[(0.0, 0.0)])
+    controls = np.asarray([0.3, 0.0, 0.3, 0.0, 0.3, 0.0], dtype=float)
+    baseline_context = _RolloutContext(
+        robot_pos=np.asarray([0.0, 0.0], dtype=float),
+        heading=0.0,
+        current_speed=0.0,
+        goal=np.asarray([2.0, 0.0], dtype=float),
+        ped_positions=np.asarray([(0.7, 0.0)], dtype=float),
+        ped_velocities=np.asarray([(0.0, 0.0)], dtype=float),
+        robot_radius=0.25,
+        ped_radius=0.25,
+        observation=obs,
+        speed_cap=0.9,
+    )
+    inflated_context = _RolloutContext(
+        robot_pos=np.asarray([0.0, 0.0], dtype=float),
+        heading=0.0,
+        current_speed=0.0,
+        goal=np.asarray([2.0, 0.0], dtype=float),
+        ped_positions=np.asarray([(0.7, 0.0)], dtype=float),
+        ped_velocities=np.asarray([(0.0, 0.0)], dtype=float),
+        robot_radius=0.25,
+        ped_radius=0.25,
+        observation=obs,
+        speed_cap=0.9,
+        pedestrian_uncertainty_envelope_enabled=True,
+        pedestrian_uncertainty_alpha_mps=0.4,
+    )
+    baseline = NMPCSocialPlannerAdapter(NMPCSocialConfig(horizon_steps=3))
+    inflated = NMPCSocialPlannerAdapter(
+        NMPCSocialConfig(
+            horizon_steps=3,
+            pedestrian_uncertainty_envelope_enabled=True,
+            pedestrian_uncertainty_alpha_mps=0.4,
+        )
+    )
+
+    assert inflated._rollout_cost(controls, context=inflated_context) > baseline._rollout_cost(
+        controls, context=baseline_context
+    )
+
+
 def test_build_nmpc_social_config_invalid_numeric_uses_default() -> None:
     """Invalid numeric overrides should warn and fall back to the dataclass default."""
     with warnings.catch_warnings(record=True) as caught:

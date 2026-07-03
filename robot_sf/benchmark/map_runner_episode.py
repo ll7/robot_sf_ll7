@@ -64,6 +64,7 @@ from robot_sf.benchmark.map_runner_policy_metadata import (
 )
 from robot_sf.benchmark.map_runner_policy_resolution import (
     _apply_planner_selector_v2_context,
+    _apply_scenario_uncertainty_envelope_config,
     _parse_algo_config,
     _resolve_policy_search_candidate_runtime,
 )
@@ -570,6 +571,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         scenario=scenario,
         seed=int(seed),
     )
+    policy_cfg = _apply_scenario_uncertainty_envelope_config(algo, policy_cfg, scenario)
     learned_observation_contract = resolve_learned_checkpoint_observation_contract(
         algo,
         policy_cfg,

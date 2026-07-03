@@ -267,6 +267,48 @@ def test_build_robot_config_applies_archetype_simulation_overrides(tmp_path: Pat
     assert config.sim_config.archetype_seed == 3206
 
 
+def test_build_robot_config_applies_pedestrian_uncertainty_envelope_fields(
+    tmp_path: Path,
+) -> None:
+    """Scenario YAML can thread pedestrian uncertainty-envelope fields to runtime config."""
+    scenario = {
+        "name": "uncertainty-envelope-runtime-smoke",
+        "simulation_config": {
+            "pedestrian_uncertainty_envelope_enabled": True,
+            "pedestrian_uncertainty_alpha_mps": 0.1,
+        },
+    }
+
+    config = build_robot_config_from_scenario(scenario, scenario_path=tmp_path / "scenario.yaml")
+
+    assert config.sim_config.pedestrian_uncertainty_envelope_enabled is True
+    assert config.sim_config.pedestrian_uncertainty_alpha_mps == 0.1
+
+
+def test_build_robot_config_rejects_negative_uncertainty_alpha(tmp_path: Path) -> None:
+    """Negative scenario alpha fails closed at config-construction time."""
+    scenario = {
+        "name": "uncertainty-envelope-negative-alpha",
+        "simulation_config": {"pedestrian_uncertainty_alpha_mps": -0.1},
+    }
+
+    with pytest.raises(ValueError, match="pedestrian_uncertainty_alpha_mps"):
+        build_robot_config_from_scenario(scenario, scenario_path=tmp_path / "scenario.yaml")
+
+
+def test_build_robot_config_alpha_zero_preserves_default_config(tmp_path: Path) -> None:
+    """Explicit alpha zero is equivalent to the default deterministic envelope setting."""
+    scenario = {
+        "name": "uncertainty-envelope-alpha-zero",
+        "simulation_config": {"pedestrian_uncertainty_alpha_mps": 0.0},
+    }
+
+    config = build_robot_config_from_scenario(scenario, scenario_path=tmp_path / "scenario.yaml")
+
+    assert config.sim_config.pedestrian_uncertainty_envelope_enabled is False
+    assert config.sim_config.pedestrian_uncertainty_alpha_mps == 0.0
+
+
 def test_load_scenarios_allows_duplicate_names_outside_named_overrides(
     tmp_path: Path,
 ) -> None:

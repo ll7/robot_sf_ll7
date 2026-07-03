@@ -13,14 +13,58 @@ from robot_sf.benchmark import map_runner_episode, safety_wrapper_runtime
 from robot_sf.benchmark.event_ledger import build_event_ledger
 from robot_sf.benchmark.safety_wrapper_runtime import (
     SAFETY_WRAPPER_EPISODE_SUMMARY_SCHEMA,
+    SAFETY_WRAPPER_FALSE_STOP_DIAGNOSTIC_SCHEMA,
     SAFETY_WRAPPER_RUNTIME_STEP_SCHEMA,
+    analyze_false_stop_diagnostic,
     apply_runtime_safety_wrapper,
     compute_safety_context_from_env,
     ineligible_safety_wrapper_step_record,
     runtime_config_from_mapping,
     summarize_safety_wrapper_trace,
 )
-from robot_sf.robot.safety_wrapper import INTERVENTION_HARD_STOP, INTERVENTION_NONE
+from robot_sf.robot.safety_wrapper import (
+    INTERVENTION_HARD_STOP,
+    INTERVENTION_NONE,
+    INTERVENTION_SPEED_CAP,
+)
+
+
+def _hard_stop_row(step: int, clearance: float, ttc: float | None = 0.5) -> dict[str, object]:
+    """Synthetic hard-stop trace row with a given predicted clearance context."""
+
+    return {
+        "schema_version": SAFETY_WRAPPER_RUNTIME_STEP_SCHEMA,
+        "step": int(step),
+        "arm_key": "wrapper_on",
+        "enabled": True,
+        "eligible_for_wrapper": True,
+        "intervention": INTERVENTION_HARD_STOP,
+        "intervened": True,
+        "context": {
+            "min_pedestrian_distance_m": 0.5,
+            "min_clearance_m": float(clearance),
+            "min_ttc_s": ttc,
+        },
+    }
+
+
+def _passthrough_row(step: int, clearance: float) -> dict[str, object]:
+    """Synthetic non-intervening trace row carrying a clearance context."""
+
+    return {
+        "schema_version": SAFETY_WRAPPER_RUNTIME_STEP_SCHEMA,
+        "step": int(step),
+        "arm_key": "wrapper_on",
+        "enabled": True,
+        "eligible_for_wrapper": True,
+        "intervention": INTERVENTION_NONE,
+        "intervened": False,
+        "context": {
+            "min_pedestrian_distance_m": 3.0,
+            "min_clearance_m": float(clearance),
+            "min_ttc_s": None,
+        },
+    }
 
 
 class _Robot:
@@ -510,3 +554,121 @@ def test_run_map_episode_records_fail_open_unsupported_command_as_ineligible(
     assert step_record["ineligible_reason"] == "unsupported_command_shape"
     assert step_record["context"] is None
     assert record["metrics"]["wrapper_intervention_rate"] == 0.0
+
+
+def test_false_stop_diagnostic_unsupported_without_time_per_step() -> None:
+    """Without a positive dt the forward window is undefined and the proxy fails honest."""
+
+    runtime = runtime_config_from_mapping({"enabled": True, "arm_key": "wrapper_on"})
+    trace = [_hard_stop_row(0, clearance=-0.1)]
+
+    diagnostic = analyze_false_stop_diagnostic(trace, runtime=runtime, time_per_step_s=None)
+
+    assert diagnostic["schema_version"] == SAFETY_WRAPPER_FALSE_STOP_DIAGNOSTIC_SCHEMA
+    assert diagnostic["evidence_kind"] == "diagnostic_proxy"
+    assert diagnostic["causal_false_stop_rate_supported"] is False
+    assert diagnostic["supported"] is False
+    assert diagnostic["unsupported_reason"] == "lookahead_step_window_unresolved"
+    assert "hazard_confirmed_count" not in diagnostic
+
+
+def test_false_stop_diagnostic_confirms_valid_stop_on_predicted_contact() -> None:
+    """A veto whose trigger step shows non-positive clearance is a confirmed-valid stop."""
+
+    runtime = runtime_config_from_mapping({"enabled": True, "arm_key": "wrapper_on"})
+    # Contact predicted at the trigger step; window is complete (episode extends beyond lookahead).
+    trace = [
+        _hard_stop_row(0, clearance=-0.2),
+        _passthrough_row(1, clearance=1.5),
+        _passthrough_row(2, clearance=2.0),
+        _passthrough_row(3, clearance=2.5),
+    ]
+
+    diagnostic = analyze_false_stop_diagnostic(trace, runtime=runtime, time_per_step_s=0.1)
+
+    # false_stop_lookahead_s defaults to 2.0s; at dt=0.1 that is 20 steps.
+    assert diagnostic["lookahead_steps"] == 20
+    assert diagnostic["supported"] is True
+    assert diagnostic["hard_stop_count"] == 1
+    assert diagnostic["analyzed_hard_stop_count"] == 1
+    assert diagnostic["hazard_confirmed_count"] == 1
+    assert diagnostic["analysis_unsupported_count"] == 0
+    assert diagnostic["window_truncated_count"] == 0
+    assert diagnostic["hazard_confirmed_rate"] == 1.0
+
+
+def test_false_stop_diagnostic_flags_unsupported_when_hazard_dissipates() -> None:
+    """A veto with a complete positive-clearance window cannot be judged without a counterfactual."""
+
+    runtime = runtime_config_from_mapping({"enabled": True, "arm_key": "wrapper_on"})
+    # Triggered by TTC (clearance positive), hazard never reaches contact across a full window.
+    trace = [_hard_stop_row(0, clearance=0.25, ttc=0.5)]
+    trace += [_passthrough_row(step, clearance=1.0) for step in range(1, 4)]
+
+    # dt=1.0s, lookahead 2.0s -> 2 steps; steps 1..3 present so the window (steps 1,2) is complete.
+    diagnostic = analyze_false_stop_diagnostic(trace, runtime=runtime, time_per_step_s=1.0)
+
+    assert diagnostic["lookahead_steps"] == 2
+    assert diagnostic["hazard_confirmed_count"] == 0
+    assert diagnostic["analysis_unsupported_count"] == 1
+    assert diagnostic["window_truncated_count"] == 0
+    assert diagnostic["analysis_unsupported_rate"] == 1.0
+
+
+def test_false_stop_diagnostic_marks_truncated_window_at_episode_end() -> None:
+    """A veto without a full lookahead window is partial evidence, not unsupported."""
+
+    runtime = runtime_config_from_mapping({"enabled": True, "arm_key": "wrapper_on"})
+    # Hard stop at the last step: no forward steps exist to complete the 2-step window.
+    trace = [_passthrough_row(0, clearance=1.0), _hard_stop_row(1, clearance=0.2, ttc=0.5)]
+
+    diagnostic = analyze_false_stop_diagnostic(trace, runtime=runtime, time_per_step_s=1.0)
+
+    assert diagnostic["hazard_confirmed_count"] == 0
+    assert diagnostic["window_truncated_count"] == 1
+    assert diagnostic["analysis_unsupported_count"] == 0
+
+
+def test_false_stop_diagnostic_counts_speed_caps_separately() -> None:
+    """Speed caps are tallied but not classified as stops in the false-stop proxy."""
+
+    runtime = runtime_config_from_mapping({"enabled": True, "arm_key": "wrapper_on"})
+    speed_cap = _passthrough_row(0, clearance=1.0)
+    speed_cap["intervention"] = INTERVENTION_SPEED_CAP
+    speed_cap["intervened"] = True
+    trace = [speed_cap, _hard_stop_row(1, clearance=-0.1), _passthrough_row(2, clearance=2.0)]
+
+    diagnostic = analyze_false_stop_diagnostic(trace, runtime=runtime, time_per_step_s=2.0)
+
+    assert diagnostic["speed_cap_count"] == 1
+    assert diagnostic["hard_stop_count"] == 1
+    assert diagnostic["hazard_confirmed_count"] == 1
+
+
+def test_summary_embeds_false_stop_proxy_when_dt_available() -> None:
+    """The episode summary carries the proxy block and keeps the causal flag unsupported."""
+
+    runtime = runtime_config_from_mapping({"enabled": True, "arm_key": "wrapper_on"})
+    trace = [_hard_stop_row(0, clearance=-0.2), _passthrough_row(1, clearance=2.0)]
+
+    summary = summarize_safety_wrapper_trace(trace, runtime=runtime, time_per_step_s=0.1)
+
+    assert summary["false_stop_analysis_supported"] is False
+    assert summary["false_stop_proxy_supported"] is True
+    diagnostic = summary["false_stop_diagnostic"]
+    assert diagnostic["schema_version"] == SAFETY_WRAPPER_FALSE_STOP_DIAGNOSTIC_SCHEMA
+    assert diagnostic["causal_false_stop_rate_supported"] is False
+    assert diagnostic["hazard_confirmed_count"] == 1
+
+
+def test_summary_proxy_unsupported_when_dt_missing() -> None:
+    """Without dt the summary still emits the block but marks the proxy unsupported."""
+
+    runtime = runtime_config_from_mapping({"enabled": True, "arm_key": "wrapper_on"})
+    trace = [_hard_stop_row(0, clearance=-0.2)]
+
+    summary = summarize_safety_wrapper_trace(trace, runtime=runtime)
+
+    assert summary["false_stop_analysis_supported"] is False
+    assert summary["false_stop_proxy_supported"] is False
+    assert summary["false_stop_diagnostic"]["supported"] is False

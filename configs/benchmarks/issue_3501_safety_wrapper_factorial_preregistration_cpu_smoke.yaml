@@ -1,0 +1,67 @@
+# Issue #3501 safety-wrapper on/off factorial pre-registration CPU smoke.
+#
+# This is a no-submit public contract for the first executable slice after the
+# runtime binding gate. It freezes one CPU smoke family before any queue
+# campaign: same planner policy, same scenario family, same seed, and only the
+# safety_wrapper runtime config differs between wrapper_off and wrapper_on.
+schema_version: robot_sf.issue_3501_safety_wrapper_factorial_preregistration.v1
+issue: 3501
+study_id: issue_3501_safety_wrapper_factorial_preregistration_cpu_smoke_v1
+status: pre_registered_cpu_smoke_only
+benchmark_evidence: false
+claim_boundary: >
+  Pre-registration and CPU harness contract only. Planned rows may prove the
+  paired wrapper off/on design is well formed, but they are not benchmark
+  evidence, mitigation-effectiveness evidence, deployment-safety evidence, or
+  paper/dissertation claim support until a later campaign executes and emits a
+  durable evidence packet.
+out_of_scope:
+  - full benchmark campaign execution
+  - Slurm or GPU submission
+  - mitigation-effectiveness claims
+  - paper or dissertation claim edits
+source_contracts:
+  ablation_design: configs/research/safety_wrapper_ablation_v1.yaml
+  runtime_validator: robot_sf/benchmark/safety_wrapper_runtime.py::validate_runtime_config
+  planner_source: configs/benchmarks/paper_experiment_matrix_v1.yaml::planners[].key
+campaign_authorization:
+  compute_submit_authorized: false
+  no_slurm_submission_in_this_pr: true
+  no_gpu_submission_in_this_pr: true
+scenario_family:
+  key: francis2023_blind_corner_cpu_smoke
+  scenario_matrix: configs/scenarios/single/francis2023_blind_corner.yaml
+  scenario_ids:
+    - francis2023_blind_corner
+  seeds: [111]
+policy:
+  planner_key: orca
+  planner_source: configs/benchmarks/paper_experiment_matrix_v1.yaml::planners[].key
+  policy_config:
+    planner: orca
+    mode: cpu_smoke
+wrapper_arms:
+  - key: wrapper_off
+    baseline: true
+    safety_wrapper:
+      enabled: false
+      arm_key: wrapper_off
+  - key: wrapper_on
+    baseline: false
+    safety_wrapper:
+      enabled: true
+      arm_key: wrapper_on
+      pedestrian_caution_radius_m: 2.0
+      capped_speed_m_s: 0.5
+      ttc_veto_threshold_s: 1.0
+      clearance_veto_m: 0.3
+pairing_key_fields:
+  - study_id
+  - planner
+  - scenario_family
+  - scenario_id
+  - seed
+required_before_submit:
+  - this pre-registration config is merged on origin/main
+  - harness planned-row check passes without threshold or policy drift
+  - downstream queue run records software commit and wrapper config hash

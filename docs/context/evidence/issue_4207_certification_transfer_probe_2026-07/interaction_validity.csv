@@ -1,0 +1,9 @@
+planner_key,structural_class,evaluation_model,gate_status,interaction_status,min_clearance_m,robot_ped_within_5m_frac,episodes
+goal,baseline_reactive,social_force_default,pass,non_interacting,24.1214633051,0,3
+goal,baseline_reactive,hsfm_total_force_v1,pass,non_interacting,24.1214633051,0,3
+ppo,learned_policy,social_force_default,pass,non_interacting,19.8766165182,0,3
+ppo,learned_policy,hsfm_total_force_v1,pass,non_interacting,19.8766165182,0,3
+prediction_planner,predictive,social_force_default,fail,non_interacting,24.1765022681,0,3
+prediction_planner,predictive,hsfm_total_force_v1,fail,non_interacting,24.1765022681,0,3
+guarded_ppo,constraint_first,social_force_default,pass,non_interacting,19.8853869032,0,3
+guarded_ppo,constraint_first,hsfm_total_force_v1,pass,non_interacting,19.8853869032,0,3

@@ -10,6 +10,7 @@ import json
 import math
 import random
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import mean
@@ -45,6 +46,17 @@ EXPOSURE_REQUIRED_COLUMNS = (
     "low_exposure_success",
 )
 EXPOSURE_PROVENANCE_COLUMN = "interaction_exposure_source"
+EXPOSURE_STATUS_COLUMN = "interaction_exposure_status"
+# Row-level exposure status markers that must never count as derivable evidence.
+# The native writer (robot_sf/benchmark/seed_variance.py) and the #4242 backfill
+# sidecar both emit ``not_derivable*`` / ``missing*`` markers when episode traces
+# cannot support the exposure denominators; these are visible but not imputed.
+EXPOSURE_NOT_DERIVABLE_PREFIXES = ("not_derivable", "missing", "not_applicable", "malformed")
+# source_manifest.json declares retained-run sidecars produced by the #4242
+# backfill helper; the exposure diagnostics builder may consume the declared
+# interaction-exposure sidecar when native episode-row fields are absent.
+SIDECAR_MANIFEST_KEY = "issue_4242_h600_sidecars"
+SIDECAR_EXPOSURE_FIELD = "interaction_exposure_sidecar"
 
 
 @dataclass(frozen=True)
@@ -678,65 +690,195 @@ def _build_horizon_sensitivity(
     }
 
 
-def _build_exposure_diagnostics(metadatas: list[dict[str, Any]]) -> dict[str, Any]:
-    """Return exposure diagnostics or a fail-closed missing-fields report."""
+def _row_is_not_derivable(status_value: str) -> bool:
+    """Return whether a row-level exposure status marks the row as not derivable."""
+
+    lowered = status_value.strip().lower()
+    return any(lowered.startswith(prefix) for prefix in EXPOSURE_NOT_DERIVABLE_PREFIXES)
+
+
+def _classify_exposure_rows(
+    rows: list[dict[str, str]],
+) -> tuple[int, int, dict[str, int], list[str]]:
+    """Classify exposure rows into derivable/not-derivable counts without imputation.
+
+    A row counts as derivable only when every required exposure value is present
+    *and* its native ``interaction_exposure_status`` (when emitted) is not a
+    ``not_derivable`` / ``missing`` marker. Absent values are never imputed.
+
+    Returns:
+        Derivable count, not-derivable count, status-marker histogram, and the
+        sorted set of provenance markers observed on the rows.
+    """
+
+    derivable_rows = 0
+    not_derivable_rows = 0
+    status_counts: dict[str, int] = defaultdict(int)
+    provenance: set[str] = set()
+    for row in rows:
+        status_value = str(row.get(EXPOSURE_STATUS_COLUMN, ""))
+        if status_value.strip():
+            status_counts[status_value.strip()] += 1
+        provenance_value = str(row.get(EXPOSURE_PROVENANCE_COLUMN, ""))
+        if provenance_value.strip():
+            provenance.add(provenance_value.strip())
+        has_required_values = all(str(row.get(column, "")) for column in EXPOSURE_REQUIRED_COLUMNS)
+        if has_required_values and not _row_is_not_derivable(status_value):
+            derivable_rows += 1
+        else:
+            not_derivable_rows += 1
+    return (
+        derivable_rows,
+        not_derivable_rows,
+        dict(sorted(status_counts.items())),
+        sorted(provenance),
+    )
+
+
+def _resolve_declared_exposure_sidecar(
+    output_dir: Path,
+    manifest: Mapping[str, Any] | None,
+) -> Path | None:
+    """Resolve the declared interaction-exposure sidecar from source_manifest.json.
+
+    The #4242 backfill helper records retained-run sidecars under the
+    ``issue_4242_h600_sidecars`` manifest block. When present, the exposure
+    diagnostics builder consumes the declared sidecar as an alternative to native
+    episode-row fields. Returns ``None`` when no sidecar is declared or the file
+    is missing.
+    """
+
+    if not isinstance(manifest, Mapping):
+        return None
+    sidecars = manifest.get(SIDECAR_MANIFEST_KEY)
+    if not isinstance(sidecars, Mapping):
+        return None
+    name = sidecars.get(SIDECAR_EXPOSURE_FIELD)
+    if not name:
+        return None
+    candidate = Path(name)
+    if not candidate.is_absolute():
+        candidate = output_dir / candidate
+    return candidate if candidate.exists() else None
+
+
+def _index_sidecar_rows_by_job(sidecar_path: Path) -> dict[str, list[dict[str, str]]]:
+    """Group declared exposure sidecar rows by their ``job_id`` column."""
+
+    by_job: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in _read_csv_rows(sidecar_path):
+        by_job[str(row.get("job_id", ""))].append(row)
+    return dict(by_job)
+
+
+def _build_exposure_diagnostics(
+    metadatas: list[dict[str, Any]],
+    *,
+    declared_sidecar: Path | None = None,
+) -> dict[str, Any]:
+    """Return exposure diagnostics or a fail-closed missing-fields report.
+
+    Consumes, in order of preference: native ``seed_episode_rows.csv`` exposure
+    fields (including the ``interaction_exposure_status`` provenance column), then
+    a declared interaction-exposure sidecar when native fields are absent. Neither
+    path imputes absent values: rows carrying ``not_derivable`` / ``missing``
+    status markers stay visible but never count as derivable evidence.
+    """
+
+    sidecar_by_job: dict[str, list[dict[str, str]]] = {}
+    if declared_sidecar is not None and declared_sidecar.exists():
+        sidecar_by_job = _index_sidecar_rows_by_job(declared_sidecar)
 
     runs = []
     overall_missing: set[str] = set()
+    any_native_derivable = False
+    any_sidecar_derivable = False
     for metadata in metadatas:
         columns = set(metadata.get("seed_episode_columns") or [])
         missing = [column for column in EXPOSURE_REQUIRED_COLUMNS if column not in columns]
         overall_missing.update(missing)
         seed_rows_path = Path(metadata["seed_episode_rows"])
         seed_rows = _read_csv_rows(seed_rows_path) if seed_rows_path.exists() else []
-        derivable_rows = 0
-        not_derivable_rows = 0
-        for row in seed_rows:
-            has_required_values = all(
-                str(row.get(column, "")) for column in EXPOSURE_REQUIRED_COLUMNS
+        derivable_rows, not_derivable_rows, status_counts, provenance_values = (
+            _classify_exposure_rows(seed_rows)
+        )
+        native_present = not missing
+        if native_present and derivable_rows:
+            any_native_derivable = True
+        run = {
+            "job_id": metadata["job_id"],
+            "run_label": metadata["run_label"],
+            "seed_episode_rows": metadata["seed_episode_rows"],
+            "available_columns": sorted(columns),
+            "required_columns": list(EXPOSURE_REQUIRED_COLUMNS),
+            "missing_required_fields": missing,
+            "backfill_policy": "derive_from_retained_episode_rows_only_no_imputation",
+            "exposure_field_source": "native_episode_fields"
+            if native_present
+            else "blocked_missing_required_fields",
+            "derivable_episode_rows": derivable_rows,
+            "not_derivable_episode_rows": not_derivable_rows,
+            "native_exposure_status_counts": status_counts,
+            "exposure_provenance_values": provenance_values,
+            "status": "ready_for_episode_level_scan"
+            if native_present
+            else "blocked_missing_required_fields",
+        }
+        # Only fall back to the declared sidecar when native fields are absent, so
+        # native instrumentation always wins and the sidecar never masks it.
+        if not native_present and sidecar_by_job:
+            job_rows = sidecar_by_job.get(str(metadata["job_id"]), [])
+            s_derivable, s_not_derivable, s_status_counts, s_provenance = _classify_exposure_rows(
+                job_rows
             )
-            if has_required_values:
-                derivable_rows += 1
-            else:
-                not_derivable_rows += 1
-        provenance_values = sorted(
-            {
-                str(row.get(EXPOSURE_PROVENANCE_COLUMN, ""))
-                for row in seed_rows
-                if str(row.get(EXPOSURE_PROVENANCE_COLUMN, ""))
-            }
+            if s_derivable:
+                any_sidecar_derivable = True
+            run.update(
+                {
+                    "exposure_field_source": "sidecar_declared",
+                    "sidecar_path": _public_path(declared_sidecar),
+                    "sidecar_episode_rows": len(job_rows),
+                    "sidecar_derivable_episode_rows": s_derivable,
+                    "sidecar_not_derivable_episode_rows": s_not_derivable,
+                    "sidecar_exposure_status_counts": s_status_counts,
+                    "sidecar_provenance_values": s_provenance,
+                    "status": "sidecar_ready_for_episode_level_scan"
+                    if s_derivable
+                    else "sidecar_all_not_derivable",
+                }
+            )
+        runs.append(run)
+
+    if any_native_derivable or not overall_missing:
+        status = "ready_for_episode_level_scan"
+        exposure_field_source = "native_episode_fields"
+    elif sidecar_by_job:
+        status = (
+            "sidecar_ready_for_episode_level_scan"
+            if any_sidecar_derivable
+            else "sidecar_all_not_derivable"
         )
-        runs.append(
-            {
-                "job_id": metadata["job_id"],
-                "run_label": metadata["run_label"],
-                "seed_episode_rows": metadata["seed_episode_rows"],
-                "available_columns": sorted(columns),
-                "required_columns": list(EXPOSURE_REQUIRED_COLUMNS),
-                "missing_required_fields": missing,
-                "backfill_policy": "derive_from_retained_episode_rows_only_no_imputation",
-                "derivable_episode_rows": derivable_rows,
-                "not_derivable_episode_rows": not_derivable_rows,
-                "exposure_provenance_values": provenance_values,
-                "status": "blocked_missing_required_fields"
-                if missing
-                else "ready_for_episode_level_scan",
-            }
-        )
-    return {
+        exposure_field_source = "sidecar_declared"
+    else:
+        status = "blocked_missing_required_fields"
+        exposure_field_source = "blocked_missing_required_fields"
+
+    result = {
         "schema_version": f"{SCHEMA_VERSION}.interaction_exposure",
-        "status": "blocked_missing_required_fields"
-        if overall_missing
-        else "ready_for_episode_level_scan",
+        "status": status,
+        "exposure_field_source": exposure_field_source,
         "claim_boundary": (
             "interaction-exposure coverage is diagnostic-only and must be computed from episode-level "
-            "fields; absent fields are not imputed"
+            "fields or a trace-derived sidecar; absent fields are not imputed"
         ),
         "required_fields": list(EXPOSURE_REQUIRED_COLUMNS),
         "missing_required_fields": sorted(overall_missing),
         "backfill_policy": "derive_from_retained_episode_rows_only_no_imputation",
         "runs": runs,
     }
+    if sidecar_by_job:
+        result["declared_sidecar"] = _public_path(declared_sidecar)
+    return result
 
 
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -893,17 +1035,28 @@ def _write_exposure_markdown(path: Path, report: dict[str, Any]) -> None:
         "",
         "- Evidence status: `diagnostic-only`.",
         f"- Status: `{report['status']}`.",
-        "- Episode-level exposure fields are required; missing values are not imputed.",
+        f"- Exposure field source: `{report['exposure_field_source']}`.",
+        "- Episode-level exposure fields (native or declared sidecar) are required; "
+        "missing values are not imputed.",
         "",
-        "| job_id | run_label | status | missing_required_fields |",
-        "| --- | --- | --- | --- |",
+        "| job_id | run_label | exposure_field_source | status | derivable | not_derivable |"
+        " missing_required_fields |",
+        "| --- | --- | --- | --- | ---: | ---: | --- |",
     ]
     for row in report["runs"]:
+        derivable = row.get("sidecar_derivable_episode_rows", row.get("derivable_episode_rows", 0))
+        not_derivable = row.get(
+            "sidecar_not_derivable_episode_rows", row.get("not_derivable_episode_rows", 0)
+        )
         lines.append(
-            "| {job_id} | {run_label} | {status} | {missing} |".format(
+            "| {job_id} | {run_label} | {source} | {status} | {derivable} | {not_derivable} |"
+            " {missing} |".format(
                 job_id=row["job_id"],
                 run_label=row["run_label"],
+                source=row.get("exposure_field_source", ""),
                 status=row["status"],
+                derivable=derivable,
+                not_derivable=not_derivable,
                 missing=", ".join(row["missing_required_fields"]) or "none",
             )
         )
@@ -1006,9 +1159,10 @@ def extend_existing_artifact(
     manifest = _read_json(manifest_path)
     metadatas = _scrub_public_paths(manifest.get("runs") or [])
     manifest["runs"] = metadatas
+    declared_sidecar = _resolve_declared_exposure_sidecar(output_dir, manifest)
     snqi_recalibration = _build_h600_recalibration(rows, h500_reports=h500_s20_reports)
     horizon_sensitivity = _build_horizon_sensitivity(rows, h500_reports=h500_s20_reports)
-    exposure_diagnostics = _build_exposure_diagnostics(metadatas)
+    exposure_diagnostics = _build_exposure_diagnostics(metadatas, declared_sidecar=declared_sidecar)
     outputs = {
         "snqi_recalibration_bundle.json": output_dir / "snqi_recalibration_bundle.json",
         "snqi_recalibration_report.md": output_dir / "snqi_recalibration_report.md",
@@ -1069,6 +1223,7 @@ def build_artifact(
     output_dir: Path,
     bootstrap_samples: int,
     confidence: float,
+    interaction_exposure_sidecar: Path | None = None,
 ) -> dict[str, Any]:
     """Build all issue #4195 aggregation artifact files."""
 
@@ -1089,10 +1244,22 @@ def build_artifact(
         all_rows.extend(rows)
         metadatas.append(metadata)
 
+    # Prefer an explicit sidecar argument; otherwise reuse a declaration from an
+    # existing source_manifest.json before this run overwrites it.
+    declared_sidecar = interaction_exposure_sidecar
+    if declared_sidecar is None:
+        existing_manifest_path = output_dir / "source_manifest.json"
+        if existing_manifest_path.exists():
+            declared_sidecar = _resolve_declared_exposure_sidecar(
+                output_dir, _read_json(existing_manifest_path)
+            )
+    elif not declared_sidecar.exists():
+        declared_sidecar = None
+
     comparability = _comparability_report(metadatas)
     snqi_recalibration = _build_h600_recalibration(all_rows, h500_reports=h500_s20_reports)
     horizon_sensitivity = _build_horizon_sensitivity(all_rows, h500_reports=h500_s20_reports)
-    exposure_diagnostics = _build_exposure_diagnostics(metadatas)
+    exposure_diagnostics = _build_exposure_diagnostics(metadatas, declared_sidecar=declared_sidecar)
     outputs = {
         "planner_metric_summary.csv": output_dir / "planner_metric_summary.csv",
         "planner_metric_summary.md": output_dir / "planner_metric_summary.md",
@@ -1175,6 +1342,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="add items 3-5 outputs from an existing #4199 aggregation artifact",
     )
+    parser.add_argument(
+        "--interaction-exposure-sidecar",
+        type=Path,
+        default=None,
+        help=(
+            "optional declared interaction-exposure sidecar consumed when native "
+            "episode-row fields are absent; by default resolved from "
+            "source_manifest.json's issue_4242_h600_sidecars block"
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -1199,6 +1376,7 @@ def main(argv: list[str] | None = None) -> int:
             output_dir=args.output_dir,
             bootstrap_samples=args.bootstrap_samples,
             confidence=args.confidence,
+            interaction_exposure_sidecar=args.interaction_exposure_sidecar,
         )
     print(json.dumps(result, indent=2, sort_keys=True, default=_json_default))
     return 0 if result["status"] == "ok" else 1

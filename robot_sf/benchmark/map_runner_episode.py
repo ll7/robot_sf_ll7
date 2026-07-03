@@ -1357,6 +1357,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         safety_wrapper_summary = summarize_safety_wrapper_trace(
             safety_wrapper_trace,
             runtime=safety_wrapper_runtime,
+            time_per_step_s=float(config.sim_config.time_per_step_in_secs),
         )
         algo_meta["safety_wrapper"] = safety_wrapper_summary
     cbf_filter_summary: dict[str, Any] | None = None

@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **safety-wrapper false-stop diagnostic** for `wrapper_on` benchmark rows (#3501):
+  `robot_sf/benchmark/safety_wrapper_runtime.py` gains `analyze_false_stop_diagnostic(...)`, and the
+  episode summary now embeds a schema-tagged `false_stop_diagnostic` block plus a
+  `false_stop_proxy_supported` flag. The diagnostic classifies each hard-stop veto over a forward
+  `false_stop_lookahead_s` window into `hazard_confirmed` (the trigger step or a step inside the
+  window shows non-positive predicted clearance — a clearly valid intervention),
+  `analysis_unsupported` (clearance stayed positive across a complete window, so a false stop cannot
+  be told apart from a wrapper-prevented collision), or `window_truncated` (the episode ended before
+  a full window elapsed). This is deliberately non-causal `diagnostic_proxy` evidence over the
+  executed (wrapped) trajectory: the summary keeps `false_stop_analysis_supported: false` because a
+  causal false-stop *rate* still needs the paired `wrapper_off` counterfactual. It changes no wrapper
+  defaults, thresholds, or runtime behavior; the block is only populated on opt-in `wrapper_on` runs.
 * Added a **fail-closed readiness preflight for the issue #4142 dense DPCBF comparison**
   (#4142): new `robot_sf/benchmark/issue_4142_dpcbf_dense_readiness.py` and the CLI
   `scripts/tools/check_issue_4142_dpcbf_dense_readiness.py` validate the predeclared

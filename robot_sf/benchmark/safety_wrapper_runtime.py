@@ -28,6 +28,7 @@ from robot_sf.robot.safety_wrapper import (
 
 SAFETY_WRAPPER_RUNTIME_STEP_SCHEMA = "safety_wrapper_runtime_step.v1"
 SAFETY_WRAPPER_EPISODE_SUMMARY_SCHEMA = "safety_wrapper_episode_summary.v1"
+SAFETY_WRAPPER_FALSE_STOP_DIAGNOSTIC_SCHEMA = "safety_wrapper_false_stop_diagnostic.v1"
 WRAPPER_OFF_ARM = "wrapper_off"
 WRAPPER_ON_ARM = "wrapper_on"
 _PREDECLARED_WRAPPER_CONFIG = SafetyWrapperConfig()
@@ -381,10 +382,161 @@ def ineligible_safety_wrapper_step_record(
     }
 
 
+def _record_context(record: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """Return the per-step safety context mapping when present and usable."""
+
+    context = record.get("context")
+    return context if isinstance(context, Mapping) else None
+
+
+def _record_clearance(record: Mapping[str, Any]) -> float | None:
+    """Return the finite predicted clearance from a step record, if available."""
+
+    context = _record_context(record)
+    if context is None or "min_clearance_m" not in context:
+        return None
+    clearance = float(context["min_clearance_m"])
+    return clearance if math.isfinite(clearance) else None
+
+
+def analyze_false_stop_diagnostic(
+    trace: Sequence[Mapping[str, Any]],
+    *,
+    runtime: SafetyWrapperRuntimeConfig | None = None,
+    time_per_step_s: float | None = None,
+) -> dict[str, Any]:
+    """Classify hard-stop vetoes into confirmed-valid vs. counterfactual-unsupported.
+
+    A hard-stop veto zeroes commanded forward speed when predicted clearance or
+    time-to-collision is critical. Whether such a veto was a *false stop* (an
+    unnecessary intervention) is a causal question: it needs the paired
+    ``wrapper_off`` trajectory the robot would have taken absent the veto. That
+    counterfactual does not exist inside a single ``wrapper_on`` trace, so a
+    causal false-stop *rate* stays unsupported here (see issue #3501, PR #4137).
+
+    What a single trace *can* support is a conservative forward-window proxy over
+    the executed (wrapped) trajectory. For each hard stop we look ahead
+    ``false_stop_lookahead_s`` and split the vetoes into:
+
+    - ``hazard_confirmed``: the trigger step or a step inside the lookahead window
+      shows non-positive predicted clearance (a real predicted surface overlap on
+      the recorded path). These are clearly valid interventions.
+    - ``analysis_unsupported``: clearance stayed positive across a complete
+      lookahead window, so a false stop cannot be distinguished from a
+      wrapper-prevented collision without the ``wrapper_off`` counterfactual.
+    - ``window_truncated``: the episode ended before a full lookahead window
+      elapsed, so the forward evidence is only partial.
+
+    The proxy is deliberately non-causal: a dissipated hazard may reflect the
+    veto working rather than a false positive. It is emitted as
+    ``diagnostic_proxy`` evidence so wrapper-on rows can distinguish clearly valid
+    interventions from ones where false-stop analysis remains unsupported.
+
+    Returns:
+        Schema-tagged false-stop diagnostic block. ``supported`` is ``False`` when
+        the lookahead step window cannot be resolved (missing/invalid ``dt`` or
+        ``false_stop_lookahead_s``); the causal rate is always unsupported.
+    """
+
+    runtime = runtime or SafetyWrapperRuntimeConfig()
+    lookahead_s = float(runtime.false_stop_lookahead_s)
+    diagnostic: dict[str, Any] = {
+        "schema_version": SAFETY_WRAPPER_FALSE_STOP_DIAGNOSTIC_SCHEMA,
+        "evidence_kind": "diagnostic_proxy",
+        "method": "forward_window_clearance_persistence",
+        "causal_false_stop_rate_supported": False,
+        "false_stop_lookahead_s": lookahead_s,
+        "time_per_step_s": (float(time_per_step_s) if time_per_step_s is not None else None),
+        "caveat": (
+            "Proxy over the executed (wrapped) trajectory; a dissipated hazard may "
+            "reflect the veto working, not a false positive. A causal false-stop "
+            "rate needs the paired wrapper_off counterfactual (issue #3501)."
+        ),
+    }
+
+    # Resolve the lookahead into whole steps; without a positive dt / lookahead the
+    # forward window is undefined, so report the proxy as unsupported (fail honest).
+    if (
+        time_per_step_s is None
+        or not float(time_per_step_s) > 0.0
+        or not lookahead_s > 0.0
+        or not math.isfinite(lookahead_s)
+    ):
+        diagnostic["supported"] = False
+        diagnostic["unsupported_reason"] = "lookahead_step_window_unresolved"
+        return diagnostic
+
+    lookahead_steps = max(1, math.ceil(lookahead_s / float(time_per_step_s)))
+    diagnostic["lookahead_steps"] = lookahead_steps
+
+    # Index clearance by step so a forward window can be scanned without assuming
+    # contiguous or gap-free step numbering.
+    steps_present = [int(record["step"]) for record in trace if "step" in record]
+    max_step = max(steps_present) if steps_present else None
+    clearance_by_step: dict[int, float] = {}
+    for record in trace:
+        if "step" not in record:
+            continue
+        clearance = _record_clearance(record)
+        if clearance is not None:
+            clearance_by_step[int(record["step"])] = clearance
+
+    hard_stop_records = [
+        record
+        for record in trace
+        if record.get("intervention") == INTERVENTION_HARD_STOP and "step" in record
+    ]
+    speed_cap_count = sum(
+        1 for record in trace if record.get("intervention") == INTERVENTION_SPEED_CAP
+    )
+
+    hazard_confirmed = 0
+    analysis_unsupported = 0
+    window_truncated = 0
+    for record in hard_stop_records:
+        step = int(record["step"])
+        trigger_clearance = _record_clearance(record)
+        window_clearances = [
+            clearance
+            for probe_step, clearance in clearance_by_step.items()
+            if step < probe_step <= step + lookahead_steps
+        ]
+        observed = list(window_clearances)
+        if trigger_clearance is not None:
+            observed.append(trigger_clearance)
+        contact = any(clearance <= 0.0 for clearance in observed)
+        window_complete = max_step is not None and max_step >= step + lookahead_steps
+        if contact:
+            hazard_confirmed += 1
+        elif not window_complete:
+            window_truncated += 1
+        else:
+            analysis_unsupported += 1
+
+    analyzed = hazard_confirmed + analysis_unsupported + window_truncated
+    diagnostic.update(
+        {
+            "supported": True,
+            "hard_stop_count": len(hard_stop_records),
+            "speed_cap_count": int(speed_cap_count),
+            "analyzed_hard_stop_count": analyzed,
+            "hazard_confirmed_count": hazard_confirmed,
+            "analysis_unsupported_count": analysis_unsupported,
+            "window_truncated_count": window_truncated,
+            "hazard_confirmed_rate": (float(hazard_confirmed / analyzed) if analyzed else None),
+            "analysis_unsupported_rate": (
+                float(analysis_unsupported / analyzed) if analyzed else None
+            ),
+        }
+    )
+    return diagnostic
+
+
 def summarize_safety_wrapper_trace(
     trace: Sequence[Mapping[str, Any]],
     *,
     runtime: SafetyWrapperRuntimeConfig | None = None,
+    time_per_step_s: float | None = None,
 ) -> dict[str, Any]:
     """Summarize per-step wrapper evidence for episode metadata and ledger provenance.
 
@@ -423,6 +575,9 @@ def summarize_safety_wrapper_trace(
     eligible_step_count = sum(
         1 for record in trace if bool(record.get("eligible_for_wrapper", True))
     )
+    false_stop_diagnostic = analyze_false_stop_diagnostic(
+        trace, runtime=runtime, time_per_step_s=time_per_step_s
+    )
     summary: dict[str, Any] = {
         "schema_version": SAFETY_WRAPPER_EPISODE_SUMMARY_SCHEMA,
         "arm_key": str(runtime.arm_key),
@@ -430,7 +585,12 @@ def summarize_safety_wrapper_trace(
         "thresholds_source": "predeclared_fixed_no_per_planner_tuning",
         "thresholds": thresholds,
         "false_stop_lookahead_s": float(runtime.false_stop_lookahead_s),
+        # Causal false-stop rate stays unsupported (needs the paired wrapper_off
+        # counterfactual); the forward-window proxy below is what a single
+        # wrapper_on trace can honestly support. See analyze_false_stop_diagnostic.
         "false_stop_analysis_supported": False,
+        "false_stop_proxy_supported": bool(false_stop_diagnostic.get("supported", False)),
+        "false_stop_diagnostic": false_stop_diagnostic,
         "step_count": int(step_count),
         "eligible_step_count": int(eligible_step_count),
         "intervention_counts": {
@@ -456,8 +616,10 @@ def summarize_safety_wrapper_trace(
 
 __all__ = [
     "SAFETY_WRAPPER_EPISODE_SUMMARY_SCHEMA",
+    "SAFETY_WRAPPER_FALSE_STOP_DIAGNOSTIC_SCHEMA",
     "SAFETY_WRAPPER_RUNTIME_STEP_SCHEMA",
     "SafetyWrapperRuntimeConfig",
+    "analyze_false_stop_diagnostic",
     "apply_runtime_safety_wrapper",
     "compute_safety_context_from_env",
     "ineligible_safety_wrapper_step_record",

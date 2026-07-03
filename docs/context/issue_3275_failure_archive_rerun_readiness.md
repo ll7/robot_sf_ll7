@@ -12,6 +12,28 @@ The check is readiness/leakage evidence only. It does not run benchmark campaign
 - `scripts/validation/check_failure_archive_rerun_readiness.py` exposes the check as a fail-closed JSON CLI, including optional `--null-test-prerequisites` input.
 - Diagnostic-only rerun reports cap the verdict at `diagnostic_only` rather than `ready`.
 
+## Consolidated closure packet
+
+The many bounded readiness guards above accumulated into a stream of micro-checks
+that a reviewer had to re-derive by hand. `robot_sf/benchmark/failure_archive_rerun_closure.py`
+consolidates that pair gate into one durable **closure packet** (schema
+`failure_archive_rerun_closure_packet.v1`). It adds no new gate: it renames the
+pair verdict into a single rerun-facing `disposition` (`ready_for_rerun`,
+`fail_closed_blocked`, or `diagnostic_only`), carries the consolidated blocker
+list, and annotates it with a deterministic `next_empirical_action` (the first
+matching blocker category selects the guidance). `scripts/adversarial/produce_rerun_closure_packet.py`
+exposes it as a fail-closed CLI with exit codes `0`/`2`/`3` matching the
+disposition; a missing or malformed archive input fails closed rather than
+substituting a synthetic fixture.
+
+Real-archive evidence (fail-closed blocker) is recorded under
+`docs/context/evidence/issue_3275_rerun_closure_2026-07-03/`: running the packet
+on the two real smoke archives (`issue_1502` source, `issue_1501` rerun) blocks
+on archive-ID/scenario/seed overlap, missing certification metadata on both
+sides, and absent null-test prerequisites, and prints the disjoint-archive next
+action. The real disjoint certified rerun with independent planner-execution
+outcomes remains the open issue #3275 contract.
+
 ## Validation
 
 Focused tests cover:
@@ -26,3 +48,7 @@ Focused tests cover:
 - complete null-test prerequisite metadata staying ready;
 - missing, absent, invalid, or archive-pair-mismatched null-test prerequisite metadata blocking readiness;
 - diagnostic-only rerun outputs staying diagnostic-only.
+
+Closure-packet tests (`tests/adversarial/test_rerun_closure_packet.py`) additionally lock the
+consolidation contract: disposition mapping, consolidated blockers, deterministic next-action
+selection per blocker category, fail-closed behavior on a missing real archive, and CLI exit codes.

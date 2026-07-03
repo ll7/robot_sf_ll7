@@ -3027,3 +3027,11 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3207_fidelity_fixed_scope_preflight_2026-07-04/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3207_fidelity_fixed_scope_preflight_2026-07-04/fidelity_fixed_scope_preflight.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

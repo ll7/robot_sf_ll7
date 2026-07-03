@@ -113,6 +113,7 @@ from robot_sf.benchmark.pedestrian_control_trace import (
 from robot_sf.benchmark.planner_command_contract import (
     validate_planner_contract as _validate_planner_contract,
 )
+from robot_sf.benchmark.public_requirement_events import evaluate_public_requirement_events
 from robot_sf.benchmark.result_provenance import build_simulator_settings_provenance
 from robot_sf.benchmark.safety_predicates import (
     late_evasive_predicate,
@@ -1301,6 +1302,15 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             "profile": latency_profile.to_metadata(dt=config.sim_config.time_per_step_in_secs),
             "metrics": not_available_latency_metrics(),
         }
+    public_requirement_events = evaluate_public_requirement_events(
+        scenario=scenario,
+        robot_positions=robot_pos_arr,
+        robot_velocities=robot_vel_arr,
+        ped_positions=ped_pos_arr,
+        dt=float(config.sim_config.time_per_step_in_secs),
+    )
+    if public_requirement_events["status"] != "not_applicable":
+        algo_meta["public_requirement"] = public_requirement_events
     visibility_settings = getattr(config, "observation_visibility", None)
     if visibility_settings is not None and hasattr(visibility_settings, "to_metadata"):
         algo_meta["observation_visibility"] = visibility_settings.to_metadata()
@@ -1400,6 +1410,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "scenario_params": scenario_params,
         "metrics": metrics,
         "safety_predicates": safety_predicates,
+        "public_requirement": public_requirement_events,
         "algorithm_metadata": algo_meta,
         "observation_noise": noise_spec,
         "observation_noise_hash": observation_noise_hash(noise_spec),

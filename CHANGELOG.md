@@ -24,6 +24,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   authorization). It runs no episodes, submits no Slurm/GPU job, and makes no
   safety-performance or collision-reduction claim. See
   `docs/context/issue_4142_dpcbf_dense_readiness.md`.
+* Added **write-time episode-row mechanism and exposure instrumentation** to the map runner
+  (#4242): `robot_sf/benchmark/map_runner_episode.run_map_episode` now attaches native
+  `failure_mechanism` (`failure_mechanism_taxonomy.v1`) and `interaction_exposure`
+  (`interaction_exposure.v1`) schema blocks to every episode record. The failure-mechanism block is
+  fail-closed `unknown` (a single episode is not a paired-trace analysis; geometry/scenario names are
+  never substituted), and interaction exposure is computed from the episode's own trajectory or
+  emitted as an explicit `not_derivable` block rather than fabricated zeros. Diagnostic-only; no
+  benchmark-ranking claim promotion.
 * Added **pairwise-isolated HSFM field-of-view (FoV) repulsion attenuation** and vectorized the
   `O(N^2)` time-to-collision (TTC) weight path (#3481). New pure helper
   `pairwise_fov_attenuated_forces(...)` in `robot_sf/sim/pedestrian_model_variants.py` attenuates each

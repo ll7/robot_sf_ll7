@@ -1,0 +1,60 @@
+{
+  "arms": [
+    "route_conditioned_hybrid_global_rl",
+    "learned_local_no_route_conditioning"
+  ],
+  "claim_boundary": "diagnostic-only paired route/occupancy comparison; not benchmark-improvement or paper-facing evidence",
+  "evidence_status": "diagnostic-only",
+  "fallback_or_degraded_excluded_rows": 0,
+  "generated_at": "2026-07-03T04:09:47.373973+00:00",
+  "included_diagnostic_rows": 0,
+  "invalid_pair_rows": 0,
+  "issue": 4183,
+  "linked_work": {
+    "adapter_pr": 4161,
+    "parent_issue": 4015
+  },
+  "paired_rows_csv": "paired_rows.csv",
+  "preflight": {
+    "baseline_config": "configs/benchmarks/issue_4183_learned_local_unconditioned.yaml",
+    "checkpoint_sha256": "02a31a95720453871aa16af7712dd8ed56a7b4aa11ccb1f405e7837f052d296d",
+    "claim_boundary": "diagnostic-only paired route/occupancy comparison; not benchmark-improvement or paper-facing evidence",
+    "dt": 0.1,
+    "errors": [],
+    "horizon": 120,
+    "issue": 4183,
+    "learned_policy_checkpoint": "model/ppo_model_retrained_10m_2025-02-01.zip",
+    "route_config": "configs/benchmarks/issue_4183_hybrid_global_rl_route_conditioned.yaml",
+    "scenario_matrix": "configs/scenarios/single/francis2023_intersection_wait.yaml",
+    "schema_version": "issue-4183-hybrid-global-rl-diagnostic.v1",
+    "seeds": [
+      4183,
+      4184,
+      4185
+    ],
+    "status": "valid"
+  },
+  "route_conditioned_effect_claim_rows": 0,
+  "row_count": 0,
+  "row_inclusion_rule": "exclude fallback/degraded/unavailable/missing-pair rows from route-conditioned effect evidence",
+  "run_failures": [
+    {
+      "arm": "route_conditioned_hybrid_global_rl",
+      "reason": "RuntimeError('hybrid_global_rl route waypoint unavailable')",
+      "row_classification": "fail_closed_no_episode_row",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 4183,
+      "source": "bounded CPU run_map_batch smoke on imech036"
+    },
+    {
+      "arm": "learned_local_no_route_conditioning",
+      "reason": "RuntimeError('PPO model unavailable or prediction failed')",
+      "row_classification": "fail_closed_no_episode_row",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 4183,
+      "source": "bounded CPU run_map_batch smoke on imech036"
+    }
+  ],
+  "run_status": "blocked_no_valid_episode_rows",
+  "schema_version": "issue-4183-hybrid-global-rl-diagnostic.v1"
+}

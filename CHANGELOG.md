@@ -36,6 +36,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ATC copy is staged and otherwise run on synthetic fixtures. No dataset bytes, download code,
   benchmark consumer, campaign run, or paper-facing claim is introduced; follows the #4279
   (`socnavbench-s3dis-eth`) exemplar pattern.
+* Added a **packet-consuming run planner for the issue #4142 dense DPCBF comparison** (#4142):
+  `robot_sf/benchmark/issue_4142_dpcbf_dense_runner.py` consumes the predeclared packet schema
+  `robot_sf.issue_4142_dpcbf_dense_comparison.v1` and resolves it into an ordered, per-arm run plan
+  (`cbf_off`, `cbf_collision_cone_on`, `cbf_dynamic_parabolic_v1_on`), closing the readiness surface's
+  first downstream gate ("no packet-consuming runner is wired to this schema"). Each arm resolves to
+  one benchmark job pinned to the shared `prediction_mpc_cv` algorithm, that arm's validated adapter
+  config, the shared scenario manifest, and a per-arm output path, reusing the canonical readiness
+  validator as the single source of truth (no parallel validation). It stays fail-closed: an invalid
+  packet yields `prerequisites_incomplete` with no executable arm jobs, the fail-closed row-status
+  exclusion (`fallback`, `degraded`, `failed`, `ineligible`) is carried verbatim into the resolved
+  plan (`robot_sf.issue_4142_dpcbf_dense_comparison_plan.v1`), and `execute_run_plan()` always fails
+  closed because running the comparison requires explicit human/Slurm authorization. Adds the thin CLI
+  `scripts/tools/run_issue_4142_dpcbf_dense_comparison.py` (dry-run default), tests
+  `tests/benchmark/test_issue_4142_dpcbf_dense_runner.py`, and context note
+  `docs/context/issue_4142_dpcbf_dense_runner.md`. Runs no episodes, submits no Slurm/GPU job, and
+  makes no safety-performance or collision-reduction claim.
 * Added a **consolidated failure-archive rerun closure packet** for issue #3275:
   `robot_sf/benchmark/failure_archive_rerun_closure.py` (`build_rerun_closure_packet`, schema
   `failure_archive_rerun_closure_packet.v1`) folds the accumulated rerun readiness/leakage guards into

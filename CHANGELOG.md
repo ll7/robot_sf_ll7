@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Extended the **AMMV feasibility batch-summary artifact block** with the claim-boundary markers it
+  was missing, so a consumer reading only the summary sees the same non-hardware boundary as the
+  per-episode payload (#3466). `robot_sf/benchmark/map_runner_batch_summary.py` now emits
+  `algorithm_metadata_contract.ammv_feasibility` via the new pure helper
+  `build_ammv_feasibility_summary`, which adds `evidence_kind: "diagnostic_proxy"` and a
+  `status` field (`"available"` / `"no_ammv_episodes"`) alongside the existing
+  `proxy_kind: "internal_non_hardware"` and the four folded fields (`min_stability_margin`,
+  `tip_over_violation`, `n_curvature_violations`, `feasible`). Folds stay worst-case (minimum
+  margin, OR tip-over, all-episodes-feasible), so a single tip-over-prone episode is never averaged
+  away. Additive and backward-compatible; internal proxy only — **no** hardware-calibrated AMMV
+  safety claim. Refreshed `docs/context/issue_3466_ammv_command_feasibility.md` (the note previously
+  described the artifact wiring as deferred; it landed in #3845).
+
 * Added a **cross-module pipeline contract test and consolidation note for the issue #4142 dense
   DPCBF comparison** (#4142). The dense-comparison pipeline landed as separate slices — readiness
   (#4299), the packet-consuming run planner (#4318), and the plan-consuming summarizer (#4345) —

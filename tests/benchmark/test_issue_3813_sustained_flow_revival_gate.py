@@ -68,6 +68,29 @@ def test_tracked_h600_evidence_defers_until_exposure_fields_exist() -> None:
     )
 
 
+def test_thin_status_without_declared_fields_fails_closed() -> None:
+    """A bare 'computed' status with no declared exposure fields must DEFER.
+
+    Guards against a degraded upstream artifact that only labels itself complete
+    (without positively declaring the required interaction-exposure fields)
+    silently passing the gate to revive/stop.
+    """
+
+    for thin in ({"status": "computed"}, {"runs": [{"status": "computed"}]}):
+        report = build_sustained_flow_revival_gate_report(
+            thin,
+            claim_impact=_claim_impact(changed=True),
+            claim_impact_evidence_path="docs/context/evidence/claim_impact.json",
+        )
+        payload = report.to_payload()
+        assert payload["decision"] == DECISION_DEFER
+        assert payload["ready_for_revived_implementation"] is False
+        assert (
+            "interaction-exposure diagnostics missing computed required fields"
+            in payload["blocking_reasons"]
+        )
+
+
 def test_complete_load_bearing_evidence_revives_sustained_flow() -> None:
     """Complete exposure plus changed claim decisions revives the opt-in design lane."""
 

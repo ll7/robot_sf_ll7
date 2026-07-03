@@ -162,7 +162,12 @@ def _interaction_exposure_complete(report: Mapping[str, Any]) -> bool:
     for run in runs or ():
         available_fields.update(_string_sequence(run.get("available_columns")))
         available_fields.update(_string_sequence(run.get("computed_fields")))
-    if available_fields and not set(REQUIRED_INTERACTION_EXPOSURE_FIELDS) <= available_fields:
+    # Fail closed: a report that only asserts a "complete" status string without
+    # positively declaring the required exposure fields (via available_columns/
+    # computed_fields at top level or per run) is treated as INCOMPLETE, so a
+    # degraded upstream artifact cannot pass the gate to revive/stop. Absent
+    # field-listing is not proof of completeness.
+    if not set(REQUIRED_INTERACTION_EXPOSURE_FIELDS) <= available_fields:
         return False
 
     return True

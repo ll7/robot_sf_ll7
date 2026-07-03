@@ -497,6 +497,29 @@ def test_code_only_diff_skips_context_catalog_debt(tmp_path: Path) -> None:
     )
 
 
+def test_docs_context_note_diff_with_anchors_skips_catalog_debt(tmp_path: Path) -> None:
+    """Docs/context note PRs must not surface unrelated baseline catalog debt.
+
+    Mirrors the ``check_docs_proof_consistency_diff.sh`` docs/context-only
+    selection after issue #4178: a changed note plus the README/INDEX link
+    anchors, but *not* ``catalog.yaml``.  Because the catalog is not selected,
+    pre-existing catalog debt (here an evidence row pointing at ignored
+    ``output/`` artifacts) must stay silent for the note-only PR.
+    """
+    repo_root = tmp_path
+    _write_catalog_with_output_pointer(repo_root)
+    (repo_root / "docs/context/example_note.md").write_text("Clean note body.\n", encoding="utf-8")
+
+    selected = [
+        ChangedFile(status="M", path=Path("docs/context/example_note.md")),
+        ChangedFile(status="M", path=Path("docs/context/README.md")),
+        ChangedFile(status="M", path=Path("docs/context/INDEX.md")),
+    ]
+
+    assert not _should_check_context_catalog(selected)
+    assert _collect_diagnostics(selected, repo_root=repo_root) == []
+
+
 def test_selected_context_catalog_keeps_strict_catalog_diagnostics(tmp_path: Path) -> None:
     """Selecting the context catalog keeps strict catalog provenance checks."""
     repo_root = tmp_path

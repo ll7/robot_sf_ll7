@@ -416,6 +416,132 @@ def test_cli_json_summary(tmp_path: Path) -> None:
     assert payload["status"] == "blocked_missing_trace_verified_mechanism_labels"
 
 
+def _native_writer_episode(
+    planner_key: str,
+    *,
+    seed: int,
+    success: float,
+    trace_verified: bool,
+) -> dict[str, object]:
+    """Build one benchmark episode record for the native seed-row writer."""
+
+    taxonomy = {
+        "label": "static_deadlock_or_local_minimum",
+        "source": "trace_review_issue_2220",
+        "trace_status": "trace_verified" if trace_verified else "geometry_only",
+        "confidence": "observed_mechanism",
+    }
+    return {
+        "episode_id": f"ep-{planner_key}-{seed}",
+        "scenario_id": "classic_static_deadlock",
+        "seed": seed,
+        "algo": planner_key,
+        "planner_key": planner_key,
+        "kinematics": "differential_drive",
+        "failure_mechanism_taxonomy": taxonomy,
+        "metrics": {
+            "success": success,
+            "collisions": 0.0,
+            "near_misses": 1.0,
+            "time_to_goal_norm": 1.0,
+            "snqi": success,
+        },
+    }
+
+
+def _write_native_seed_rows(root: Path, rows: list[dict[str, object]]) -> None:
+    """Persist native writer rows to reports/seed_episode_rows.csv."""
+
+    reports = root / "reports"
+    reports.mkdir(parents=True)
+    fields = sorted({field for row in rows for field in row})
+    with (reports / "seed_episode_rows.csv").open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(
+                {field: ("" if row.get(field) is None else row[field]) for field in fields}
+            )
+    (reports / "campaign_summary.json").write_text('{"status": "fixture"}\n', encoding="utf-8")
+
+
+def test_native_writer_rows_are_consumed_by_builder(tmp_path: Path) -> None:
+    """End-to-end: the real seed-row writer output is consumed as native fields.
+
+    This closes the writer->builder contract for issue #4242: rows produced by
+    ``robot_sf.benchmark.seed_variance.build_seed_episode_rows`` (the #4301/#4255
+    native instrumentation) carry the canonical ``mechanism_*`` columns the #4206
+    builder requires, without any hand-authored taxonomy fields in the test.
+    """
+
+    from robot_sf.benchmark.seed_variance import build_seed_episode_rows
+
+    trace_records = [
+        _native_writer_episode("prediction_planner", seed=1, success=1.0, trace_verified=True),
+        _native_writer_episode(
+            "hybrid_rule_v3_fast_progress_static_escape",
+            seed=1,
+            success=0.4,
+            trace_verified=True,
+        ),
+        _native_writer_episode("ppo", seed=1, success=0.7, trace_verified=True),
+    ]
+    native_rows = build_seed_episode_rows(trace_records)
+    # The writer emitted the canonical consumption columns without a sidecar.
+    assert all(
+        row["mechanism_schema_version"] == "failure_mechanism_taxonomy.v1" for row in native_rows
+    )
+    assert all(row["mechanism_evidence_mode"] == "paired_trace" for row in native_rows)
+
+    confirm = tmp_path / "confirm"
+    extended = tmp_path / "extended"
+    _write_native_seed_rows(confirm, native_rows)
+    _write_native_seed_rows(extended, native_rows)
+    output = tmp_path / "evidence"
+
+    summary = _MODULE.build_packet(
+        config_path=CONFIG,
+        confirm_root=confirm,
+        extended_root=extended,
+        job13175_packet=tmp_path / "packet.json",
+        output_dir=output,
+        generated_at="2026-07-03T00:00:00Z",
+    )
+
+    assert summary["status"] == "analysis_ready_trace_verified"
+    assert summary["accepted_rows"] >= 3
+
+
+def test_native_writer_geometry_only_rows_are_rejected(tmp_path: Path) -> None:
+    """Non-trace-verified native rows fail closed to unknown, blocking F-C4(ii)."""
+
+    from robot_sf.benchmark.seed_variance import build_seed_episode_rows
+
+    native_rows = build_seed_episode_rows(
+        [_native_writer_episode("prediction_planner", seed=1, success=1.0, trace_verified=False)]
+    )
+    # The writer refuses geometry-only mechanism labels: label collapses to unknown.
+    assert native_rows[0]["mechanism_label"] == "unknown"
+    assert native_rows[0]["mechanism_evidence_mode"] == "unknown"
+
+    confirm = tmp_path / "confirm"
+    extended = tmp_path / "extended"
+    _write_native_seed_rows(confirm, native_rows)
+    _write_native_seed_rows(extended, native_rows)
+    output = tmp_path / "evidence"
+
+    summary = _MODULE.build_packet(
+        config_path=CONFIG,
+        confirm_root=confirm,
+        extended_root=extended,
+        job13175_packet=tmp_path / "packet.json",
+        output_dir=output,
+        generated_at="2026-07-03T00:00:00Z",
+    )
+
+    assert summary["status"] == "blocked_missing_trace_verified_mechanism_labels"
+
+
 def test_config_declares_forbidden_geometry_substitution() -> None:
     """The checked-in config owns classes and forbids geometry fallback."""
     payload = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))

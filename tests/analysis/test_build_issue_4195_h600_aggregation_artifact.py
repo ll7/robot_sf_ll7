@@ -291,6 +291,177 @@ def test_build_artifact_accepts_native_exposure_fields_without_imputation(tmp_pa
     ]
 
 
+def _write_exposure_sidecar(
+    path: Path,
+    *,
+    statuses: dict[str, str],
+) -> None:
+    """Write a minimal #4242 interaction-exposure sidecar keyed by job_id.
+
+    ``statuses`` maps job_id -> row-level ``interaction_exposure_status``. A
+    ``computed`` status also carries populated required values; other statuses
+    leave the required values blank so no imputation is possible.
+    """
+
+    fieldnames = [
+        "job_id",
+        "run_label",
+        "episode_id",
+        "scenario_id",
+        "planner_key",
+        "seed",
+        "interaction_exposure_share",
+        "robot_motion_share_before_first_clearance",
+        "first_clearance_step",
+        "low_exposure_success",
+        "interaction_exposure_source",
+        "interaction_exposure_status",
+    ]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for job_id, status in statuses.items():
+            computed = status == "computed"
+            writer.writerow(
+                {
+                    "job_id": job_id,
+                    "run_label": "confirm" if job_id == "13268" else "extended_roster",
+                    "episode_id": f"{job_id}-ep-0",
+                    "scenario_id": "a",
+                    "planner_key": "goal",
+                    "seed": "111",
+                    "interaction_exposure_share": "0.5" if computed else "",
+                    "robot_motion_share_before_first_clearance": "0.5" if computed else "",
+                    "first_clearance_step": "10" if computed else "",
+                    "low_exposure_success": "0.0" if computed else "",
+                    "interaction_exposure_source": "computed_from_retained_trace"
+                    if computed
+                    else "not_derivable_from_episode_record",
+                    "interaction_exposure_status": status,
+                }
+            )
+
+
+def _build_native_absent_artifact(tmp_path: Path) -> Path:
+    """Build a native-absent aggregation artifact and return its output dir."""
+
+    confirm_reports = tmp_path / "confirm" / "reports"
+    extended_reports = tmp_path / "extended" / "reports"
+    h500_reports = tmp_path / "h500" / "reports"
+    _write_fixture_reports(confirm_reports)
+    _write_fixture_reports(extended_reports, planners=("goal", "orca"))
+    _write_h500_fixture(h500_reports)
+    output_dir = tmp_path / "evidence"
+    result = build_artifact(
+        confirm_reports=confirm_reports,
+        extended_reports=extended_reports,
+        h500_s20_reports=h500_reports,
+        output_dir=output_dir,
+        bootstrap_samples=20,
+        confidence=0.95,
+    )
+    assert result["interaction_exposure_status"] == "blocked_missing_required_fields"
+    return output_dir
+
+
+def _declare_sidecar_in_manifest(output_dir: Path, sidecar_name: str) -> None:
+    """Add the #4242 sidecar declaration to the artifact's source manifest."""
+
+    manifest_path = output_dir / "source_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["issue_4242_h600_sidecars"] = {
+        "interaction_exposure_sidecar": sidecar_name,
+    }
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+
+def test_extend_consumes_declared_sidecar_all_not_derivable_without_imputation(
+    tmp_path: Path,
+) -> None:
+    """A declared sidecar with only not-derivable rows stays fail-closed."""
+
+    output_dir = _build_native_absent_artifact(tmp_path)
+    _write_exposure_sidecar(
+        output_dir / "h600_interaction_exposure_sidecar.csv",
+        statuses={"13268": "not_derivable_missing_trace", "13273": "not_derivable_missing_trace"},
+    )
+    _declare_sidecar_in_manifest(output_dir, "h600_interaction_exposure_sidecar.csv")
+
+    result = extend_existing_artifact(
+        output_dir=output_dir,
+        h500_s20_reports=tmp_path / "h500" / "reports",
+    )
+
+    assert result["interaction_exposure_status"] == "sidecar_all_not_derivable"
+    exposure = json.loads((output_dir / "interaction_exposure_diagnostics.json").read_text())
+    assert exposure["exposure_field_source"] == "sidecar_declared"
+    assert exposure["declared_sidecar"] == (
+        "docs/context/evidence/issue_3810_h600_interpretation_2026-07/"
+        "h600_interaction_exposure_sidecar.csv"
+    ) or exposure["declared_sidecar"].endswith("h600_interaction_exposure_sidecar.csv")
+    confirm_run = next(row for row in exposure["runs"] if row["job_id"] == "13268")
+    assert confirm_run["exposure_field_source"] == "sidecar_declared"
+    assert confirm_run["sidecar_derivable_episode_rows"] == 0
+    assert confirm_run["sidecar_not_derivable_episode_rows"] == 1
+    assert confirm_run["sidecar_exposure_status_counts"] == {"not_derivable_missing_trace": 1}
+
+
+def test_extend_consumes_declared_sidecar_with_computed_rows(tmp_path: Path) -> None:
+    """A declared sidecar with a computed row unblocks the episode-level scan."""
+
+    output_dir = _build_native_absent_artifact(tmp_path)
+    _write_exposure_sidecar(
+        output_dir / "h600_interaction_exposure_sidecar.csv",
+        statuses={"13268": "computed", "13273": "not_derivable_missing_trace"},
+    )
+    _declare_sidecar_in_manifest(output_dir, "h600_interaction_exposure_sidecar.csv")
+
+    result = extend_existing_artifact(
+        output_dir=output_dir,
+        h500_s20_reports=tmp_path / "h500" / "reports",
+    )
+
+    assert result["interaction_exposure_status"] == "sidecar_ready_for_episode_level_scan"
+    exposure = json.loads((output_dir / "interaction_exposure_diagnostics.json").read_text())
+    confirm_run = next(row for row in exposure["runs"] if row["job_id"] == "13268")
+    assert confirm_run["status"] == "sidecar_ready_for_episode_level_scan"
+    assert confirm_run["sidecar_derivable_episode_rows"] == 1
+    extended_run = next(row for row in exposure["runs"] if row["job_id"] == "13273")
+    assert extended_run["status"] == "sidecar_all_not_derivable"
+
+
+def test_native_not_derivable_status_marker_is_not_counted_as_derivable(tmp_path: Path) -> None:
+    """Native rows with populated values but not-derivable status are not imputed."""
+
+    from scripts.analysis.build_issue_4195_h600_aggregation_artifact import (
+        _classify_exposure_rows,
+    )
+
+    rows = [
+        {
+            "interaction_exposure_share": "0.5",
+            "robot_motion_share_before_first_clearance": "0.5",
+            "first_clearance_step": "10",
+            "low_exposure_success": "0.0",
+            "interaction_exposure_status": "computed",
+            "interaction_exposure_source": "episode_metrics",
+        },
+        {
+            "interaction_exposure_share": "0.9",
+            "robot_motion_share_before_first_clearance": "0.9",
+            "first_clearance_step": "3",
+            "low_exposure_success": "0.0",
+            "interaction_exposure_status": "not_derivable_missing_trace",
+            "interaction_exposure_source": "not_derivable_from_episode_record",
+        },
+    ]
+    derivable, not_derivable, status_counts, provenance = _classify_exposure_rows(rows)
+    assert derivable == 1
+    assert not_derivable == 1
+    assert status_counts == {"computed": 1, "not_derivable_missing_trace": 1}
+    assert provenance == ["episode_metrics", "not_derivable_from_episode_record"]
+
+
 def test_build_artifact_fails_status_on_shared_hash_mismatch(tmp_path: Path) -> None:
     """Shared planners are not comparable when scenario matrix hashes differ."""
 

@@ -26,12 +26,23 @@ ISSUE = 4207
 CLAIM_BOUNDARY = "diagnostic_certification_transfer_probe_no_deployment_claim"
 DEFAULT_PEDESTRIAN_MODELS = (SOCIAL_FORCE_DEFAULT, HSFM_TOTAL_FORCE_V1)
 
+# Near-field proxemic band (metres). ``social_force_default`` and ``hsfm_total_force_v1``
+# differ only in pedestrian force dynamics, so their pass/fail decision can only diverge
+# when the robot actually enters the pedestrian near field. A cell whose episodes never
+# bring the robot within this band exercises no model-sensitive dynamics; a stable transfer
+# status over such a cell is therefore vacuous, not evidence of certification robustness.
+# The 5 m band mirrors the ``robot_ped_within_5m_frac`` comfort metric already used by the
+# #4166-style gate spec.
+INTERACTION_NEAR_FIELD_M = 5.0
+INTERACTION_STATUSES = ("interacting", "non_interacting", "unknown")
+
 GATE_CELL_COLUMNS = (
     "planner_key",
     "structural_class",
     "scenario_family",
     "evaluation_model",
     "gate_status",
+    "interaction_status",
     "failed_gate_ids",
     "not_evaluable_gate_ids",
     "episodes",
@@ -45,6 +56,8 @@ TRANSFER_MATRIX_COLUMNS = (
     "certification_gate_status",
     "evaluation_gate_status",
     "transfer_status",
+    "interaction_status",
+    "interaction_exercised",
     "flip_type",
     "failed_gate_ids",
     "not_evaluable_gate_ids",
@@ -260,11 +273,18 @@ def build_certification_transfer_report(
         "flip_cases": flip_cases,
         "row_status_counts": dict(Counter(row["gate_status"] for row in gate_cells)),
         "transfer_status_counts": dict(Counter(row["transfer_status"] for row in transfer_matrix)),
+        "interaction_status_counts": dict(
+            Counter(row["interaction_status"] for row in transfer_matrix)
+        ),
+        "model_sensitivity_exercised": any(row["interaction_exercised"] for row in transfer_matrix),
         "claim_boundary_notes": [
             "Diagnostic transfer probe only.",
             "Provisional gate thresholds are not certification approval.",
             "not_evaluable is never treated as pass.",
             "Model-transfer flips indicate model-assumption fragility in the gate decision.",
+            "A stable transfer status over non_interacting cells is vacuous: the robot never "
+            "entered the pedestrian near field, so the SFM/HSFM swap was not exercised and no "
+            "certification-robustness conclusion follows.",
             "No deployment, real-world safety, or general planner-superiority claim follows.",
         ],
     }
@@ -354,6 +374,7 @@ def _build_gate_cells(
                     "scenario_family": scenario_family,
                     "evaluation_model": evaluation_model,
                     "gate_status": gate_status,
+                    "interaction_status": classify_interaction_status(metrics),
                     "failed_gate_ids": ";".join(failed),
                     "not_evaluable_gate_ids": ";".join(not_evaluable),
                     "episodes": len(matching),
@@ -386,6 +407,10 @@ def _build_transfer_matrix(
                     str(certification_cell["gate_status"]),
                     str(evaluation_cell["gate_status"]),
                 )
+                interaction_status, interaction_exercised = _transfer_interaction(
+                    str(certification_cell["interaction_status"]),
+                    str(evaluation_cell["interaction_status"]),
+                )
                 rows.append(
                     {
                         "planner_key": arm["key"],
@@ -396,6 +421,8 @@ def _build_transfer_matrix(
                         "certification_gate_status": certification_cell["gate_status"],
                         "evaluation_gate_status": evaluation_cell["gate_status"],
                         "transfer_status": transfer_status,
+                        "interaction_status": interaction_status,
+                        "interaction_exercised": interaction_exercised,
                         "flip_type": flip_type,
                         "failed_gate_ids": evaluation_cell["failed_gate_ids"],
                         "not_evaluable_gate_ids": evaluation_cell["not_evaluable_gate_ids"],
@@ -476,6 +503,47 @@ def _evaluate_gate(metrics: Mapping[str, float | None], gate: Mapping[str, Any])
         "threshold": threshold,
         "direction": direction,
     }
+
+
+def classify_interaction_status(metrics: Mapping[str, float | None]) -> str:
+    """Classify whether a cell's episodes exercised the robot-pedestrian near field.
+
+    ``social_force_default`` and ``hsfm_total_force_v1`` only diverge when the robot enters
+    the pedestrian near field, so a cell that never does cannot demonstrate certification
+    fragility (its stable transfer status is vacuous).
+
+    Returns:
+        ``"interacting"`` when a proximity metric shows near-field contact,
+        ``"non_interacting"`` when proximity metrics are present but show no contact, and
+        ``"unknown"`` when no proximity metric is available (e.g. an empty/not_evaluable cell).
+    """
+
+    within_frac = metrics.get("robot_ped_within_5m_frac")
+    min_clearance = metrics.get("min_clearance_m")
+    if within_frac is None and min_clearance is None:
+        return "unknown"
+    entered_near_field = (within_frac is not None and within_frac > 0.0) or (
+        min_clearance is not None and min_clearance < INTERACTION_NEAR_FIELD_M
+    )
+    return "interacting" if entered_near_field else "non_interacting"
+
+
+def _transfer_interaction(certification_status: str, evaluation_status: str) -> tuple[str, bool]:
+    """Combine two cells' interaction statuses into a transfer-row interaction verdict.
+
+    Returns:
+        The combined interaction status (``unknown`` dominates, then ``non_interacting``) and
+        an ``interaction_exercised`` flag that is true only when both cells are interacting.
+    """
+
+    statuses = {certification_status, evaluation_status}
+    if "unknown" in statuses:
+        combined = "unknown"
+    elif statuses == {"interacting"}:
+        combined = "interacting"
+    else:
+        combined = "non_interacting"
+    return combined, combined == "interacting"
 
 
 def _transfer_status(certification_status: str, evaluation_status: str) -> tuple[str, str]:
@@ -624,6 +692,8 @@ def _metadata_payload(report: Mapping[str, Any]) -> dict[str, Any]:
         "arms": report["arms"],
         "row_status_counts": report["row_status_counts"],
         "transfer_status_counts": report["transfer_status_counts"],
+        "interaction_status_counts": report["interaction_status_counts"],
+        "model_sensitivity_exercised": report["model_sensitivity_exercised"],
     }
 
 
@@ -634,6 +704,9 @@ def _claim_boundary_markdown(report: Mapping[str, Any]) -> str:
         "- Diagnostic certification-transfer probe only.",
         "- Provisional gates are reporting thresholds, not certification approval.",
         "- `not_evaluable` cells are fail-closed and never count as `pass`.",
+        "- `non_interacting` cells (robot never inside the 5 m pedestrian near field) cannot "
+        "demonstrate certification robustness; a stable status over them is vacuous, because the "
+        "SFM/HSFM swap was never exercised.",
         "- Pass/fail flips are a result: model-assumption fragility in the certification decision.",
         "- No full benchmark campaign, Slurm or GPU submission, retraining, deployment claim, "
         "real-world safety claim, or paper/dissertation claim promotion is included.",
@@ -658,7 +731,13 @@ def _readme_markdown(report: Mapping[str, Any]) -> str:
         "",
         f"- Gate status counts: `{dict(report['row_status_counts'])}`",
         f"- Transfer status counts: `{dict(report['transfer_status_counts'])}`",
+        f"- Interaction status counts: `{dict(report['interaction_status_counts'])}`",
+        f"- Model sensitivity exercised: `{report['model_sensitivity_exercised']}`",
         f"- Flip cases: `{len(report['flip_cases'])}`",
+        "",
+        "If `Model sensitivity exercised` is `false`, every transfer cell is `non_interacting` "
+        "or `unknown`: the robot never entered the pedestrian near field, so the stable statuses "
+        "above are vacuous and do not demonstrate certification robustness.",
         "",
         "## Files",
         "",

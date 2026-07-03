@@ -62,6 +62,9 @@ def test_importance_sampling_recovers_analytic_uniform_tail_probability() -> Non
     assert estimate.estimate == pytest.approx(0.05, abs=0.008)
     assert estimate.confidence_interval[0] <= 0.05 <= estimate.confidence_interval[1]
     assert estimate.naive_monte_carlo_estimate > estimate.estimate
+    assert estimate.importance_sampling_variance >= 0.0
+    assert estimate.naive_monte_carlo_variance >= 0.0
+    assert estimate.variance_ratio_vs_naive is not None
     assert all(row.likelihood_ratio == pytest.approx(0.2) for row in rows)
 
 
@@ -166,4 +169,83 @@ def test_smoke_runner_writes_summary_with_provenance(tmp_path: Path) -> None:
     assert summary["scenario_provenance"]["scenario_name"] == "planner_sanity_simple"
     assert summary["sample_provenance"]["row_count"] == 8
     assert len(summary["sample_provenance"]["parameter_vector_hashes"]) == 8
+    assert summary["planner_arms"] == ["synthetic_planner"]
+    assert summary["episode_budget"] == 8
+    assert "synthetic_planner" in summary["arm_estimates"]
+    assert "variance_ratio_vs_naive" in summary["arm_estimates"]["synthetic_planner"]
     assert (output_dir / "episodes.jsonl").exists()
+
+
+def test_static_constriction_config_reports_two_arm_diagnostic_summary(tmp_path: Path) -> None:
+    """Static-constriction smoke config records family and per-arm estimator provenance."""
+
+    output_dir = tmp_path / "output"
+    evidence_dir = tmp_path / "evidence"
+    assert (
+        run_smoke(
+            [
+                "--config",
+                "configs/benchmarks/rare_event/issue_4163_static_constriction_smoke.yaml",
+                "--output-dir",
+                str(output_dir),
+                "--evidence-dir",
+                str(evidence_dir),
+            ]
+        )
+        == 0
+    )
+
+    summary = json.loads((evidence_dir / "summary.json").read_text(encoding="utf-8"))
+    assert summary["planner_arms"] == ["ppo_frozen", "ppo_frozen_wrapper_on"]
+    assert summary["episode_budget"] == 64
+    assert set(summary["arm_estimates"]) == {"ppo_frozen", "ppo_frozen_wrapper_on"}
+    assert summary["static_constriction_family"]["family_id"] == "static_constriction"
+    assert summary["static_constriction_family"]["scenario_ids"] == [
+        "classic_bottleneck_low",
+        "classic_head_on_corridor_low",
+        "narrow_passage",
+    ]
+    for estimate in summary["arm_estimates"].values():
+        assert estimate["objective_event"] == "collision_or_severe_intrusion"
+        assert "confidence_interval" in estimate
+        assert "variance_ratio_vs_naive" in estimate
+
+    episode_rows = (output_dir / "episodes.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(episode_rows) == 64
+
+
+def test_smoke_runner_rejects_empty_planner_arms(tmp_path: Path) -> None:
+    """An explicitly empty planner arm list fails instead of falling back silently."""
+
+    config_path = tmp_path / "rare_event_empty_arms.yaml"
+    config_path.write_text(
+        """
+schema_version: rare_event_sampling.v1
+proposal: tilted_distribution
+parameters:
+  ped_density:
+    base: uniform
+    low: 0.01
+    high: 0.08
+    proposal_low: 0.045
+    proposal_high: 0.08
+objective_event: collision_or_severe_intrusion
+samples: 2
+seed: 4163
+scenario_matrix: configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml
+planner_arms: []
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="planner_arms must be a non-empty list"):
+        run_smoke(
+            [
+                "--config",
+                str(config_path),
+                "--output-dir",
+                str(tmp_path / "output"),
+                "--evidence-dir",
+                str(tmp_path / "evidence"),
+            ]
+        )

@@ -44,6 +44,8 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from scripts.tools import check_context_note_freshness
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
@@ -661,6 +663,33 @@ def _evidence_catalog_coverage_diagnostics(
     ]
 
 
+def _context_note_freshness_diagnostics(
+    *,
+    repo_root: Path,
+    max_age_days: int,
+    strict: bool,
+) -> list[Diagnostic]:
+    """Return context-note freshness findings as docs/proof diagnostics."""
+    findings = check_context_note_freshness.check_freshness(
+        repo_root=repo_root,
+        catalog_path=_CONTEXT_CATALOG,
+        context_dir=_TOP_LEVEL_CONTEXT_DIR,
+        index_path=_CONTEXT_INDEX,
+        max_age_days=max_age_days,
+    )
+    diagnostics: list[Diagnostic] = []
+    for finding in findings:
+        if finding.severity == "warning" and not strict:
+            continue
+        diagnostics.append(
+            Diagnostic(
+                path=Path(finding.path),
+                message=f"context note freshness {finding.rule}: {finding.message}",
+            )
+        )
+    return diagnostics
+
+
 def _validation_phrase_diagnostics(path: Path, text: str) -> list[Diagnostic]:
     """Flag notes that claim no validation ran while also listing executed commands."""
     if not _is_within_dir(path, _TOP_LEVEL_CONTEXT_DIR):
@@ -813,6 +842,29 @@ def _parse_args() -> argparse.Namespace:
             "even when the selected diff does not include that file."
         ),
     )
+    parser.add_argument(
+        "--check-context-note-freshness",
+        action="store_true",
+        dest="check_context_note_freshness",
+        help=(
+            "Run the context-note freshness checker. Superseded replacement errors fail by "
+            "default; stale current notes and orphan notes fail only with "
+            "--strict-context-note-freshness."
+        ),
+    )
+    parser.add_argument(
+        "--strict-context-note-freshness",
+        action="store_true",
+        dest="strict_context_note_freshness",
+        help="Treat context-note freshness warnings as docs/proof errors.",
+    )
+    parser.add_argument(
+        "--context-note-max-age-days",
+        type=int,
+        default=180,
+        help="Maximum age for current dated context notes in freshness checks.",
+    )
+
     return parser.parse_args()
 
 
@@ -828,6 +880,27 @@ def _selected_files(args: argparse.Namespace, repo_root: Path) -> list[ChangedFi
     return _changed_files(str(args.base), repo_root)
 
 
+def _emit_diagnostics(
+    diagnostics: list[Diagnostic],
+    *,
+    json_output: bool,
+    success_message: str,
+) -> int:
+    """Print diagnostics in requested format and return process exit code."""
+    if json_output:
+        payload = [
+            {"path": diagnostic.path.as_posix(), "message": diagnostic.message}
+            for diagnostic in diagnostics
+        ]
+        print(json.dumps(payload, indent=2))
+    elif diagnostics:
+        for diagnostic in diagnostics:
+            print(f"ERROR {diagnostic.path.as_posix()}: {diagnostic.message}")
+    else:
+        print(success_message)
+    return 1 if diagnostics else 0
+
+
 def main() -> int:
     """Run the docs/proof consistency checker."""
     args = _parse_args()
@@ -835,21 +908,27 @@ def main() -> int:
 
     if args.check_evidence_catalog:
         diagnostics = _evidence_catalog_coverage_diagnostics(repo_root=repo_root)
-        if args.json:
-            payload = [
-                {"path": diagnostic.path.as_posix(), "message": diagnostic.message}
-                for diagnostic in diagnostics
-            ]
-            print(json.dumps(payload, indent=2))
-        elif diagnostics:
-            for diagnostic in diagnostics:
-                print(f"ERROR {diagnostic.path.as_posix()}: {diagnostic.message}")
-        else:
-            print(
+        return _emit_diagnostics(
+            diagnostics,
+            json_output=args.json,
+            success_message=(
                 "OK evidence/catalog coverage check passed:"
                 f" all tracked {_EVIDENCE_DIR.as_posix()} bundles have catalog entries."
-            )
-        return 1 if diagnostics else 0
+            ),
+        )
+
+    if args.check_context_note_freshness:
+        diagnostics = _context_note_freshness_diagnostics(
+            repo_root=repo_root,
+            max_age_days=args.context_note_max_age_days,
+            strict=args.strict_context_note_freshness,
+        )
+        mode = "strict" if args.strict_context_note_freshness else "non-strict"
+        return _emit_diagnostics(
+            diagnostics,
+            json_output=args.json,
+            success_message=f"OK context-note freshness check passed in {mode} mode.",
+        )
 
     try:
         changed_files = _selected_files(args, repo_root)

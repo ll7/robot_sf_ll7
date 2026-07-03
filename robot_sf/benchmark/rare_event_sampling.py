@@ -263,6 +263,9 @@ class ImportanceSamplingEstimate:
     confidence_level: float
     effective_sample_size: float
     naive_monte_carlo_estimate: float
+    importance_sampling_variance: float
+    naive_monte_carlo_variance: float
+    variance_ratio_vs_naive: float | None
     event_count: int
     weight_sum: float
 
@@ -279,6 +282,9 @@ class ImportanceSamplingEstimate:
             "confidence_level": self.confidence_level,
             "effective_sample_size": self.effective_sample_size,
             "naive_monte_carlo_estimate": self.naive_monte_carlo_estimate,
+            "importance_sampling_variance": self.importance_sampling_variance,
+            "naive_monte_carlo_variance": self.naive_monte_carlo_variance,
+            "variance_ratio_vs_naive": self.variance_ratio_vs_naive,
             "event_count": self.event_count,
             "weight_sum": self.weight_sum,
         }
@@ -405,6 +411,7 @@ def estimate_failure_probability(
         standard_error = math.sqrt(variance / samples)
     else:
         standard_error = 0.0
+        variance = 0.0
     alpha = 1.0 - confidence_level
     z_value = NormalDist().inv_cdf(1.0 - alpha / 2.0)
     lower = max(0.0, estimate - z_value * standard_error)
@@ -414,6 +421,20 @@ def estimate_failure_probability(
     effective_sample_size = (
         (weight_sum * weight_sum) / weight_square_sum if weight_square_sum > 0.0 else 0.0
     )
+    naive_monte_carlo_estimate = sum(events) / samples
+    if samples > 1:
+        naive_monte_carlo_variance = (
+            naive_monte_carlo_estimate * (1.0 - naive_monte_carlo_estimate) / samples
+        )
+    else:
+        naive_monte_carlo_variance = 0.0
+    importance_sampling_variance = standard_error * standard_error
+    variance_ratio_vs_naive = (
+        importance_sampling_variance / naive_monte_carlo_variance
+        if naive_monte_carlo_variance > 0.0
+        else None
+    )
+
     return ImportanceSamplingEstimate(
         schema_version=SCHEMA_VERSION,
         objective_event=objective_event,
@@ -423,7 +444,10 @@ def estimate_failure_probability(
         confidence_interval=(lower, upper),
         confidence_level=confidence_level,
         effective_sample_size=effective_sample_size,
-        naive_monte_carlo_estimate=sum(events) / samples,
+        naive_monte_carlo_estimate=naive_monte_carlo_estimate,
+        importance_sampling_variance=importance_sampling_variance,
+        naive_monte_carlo_variance=naive_monte_carlo_variance,
+        variance_ratio_vs_naive=variance_ratio_vs_naive,
         event_count=sum(bool(event) for event in events),
         weight_sum=weight_sum,
     )

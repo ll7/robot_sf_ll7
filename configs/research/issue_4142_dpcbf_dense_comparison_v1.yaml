@@ -3,8 +3,7 @@
 # Claim boundary: predeclared diagnostic comparison inputs only. Running the
 # full dense dynamic-obstacle campaign, Slurm/GPU submission, and any
 # paper-facing safety-performance claim are out of scope for this PR.
-# Canonical invocation: use this packet as the stable experiment config,
-# for example with `--config configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml`.
+# Canonical invocation: `uv run python -m robot_sf.benchmark.cli run --config configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml`.
 schema_version: robot_sf.issue_4142_dpcbf_dense_comparison.v1
 scenario_manifest: configs/scenarios/sets/issue_4142_dense_dynamic_cbf_v1.yaml
 algorithm: prediction_mpc_cv

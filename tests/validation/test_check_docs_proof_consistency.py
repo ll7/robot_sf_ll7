@@ -13,12 +13,65 @@ from scripts.validation.check_docs_proof_consistency import (
     _collect_diagnostics,
     _context_catalog_diagnostics,
     _context_index_link_diagnostics,
+    _context_note_freshness_diagnostics,
     _context_readme_link_diagnostics,
     _evidence_catalog_coverage_diagnostics,
     _parse_name_status,
     _selected_files,
     _should_check_context_catalog,
 )
+
+
+def _run_git(repo_root: Path, *args: str, env: dict[str, str] | None = None) -> None:
+    """Run a git command for a temporary repository fixture."""
+    subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _commit_all(repo_root: Path, message: str, *, iso_date: str) -> None:
+    """Commit all fixture changes with a deterministic timestamp."""
+    env = {
+        "GIT_AUTHOR_DATE": iso_date,
+        "GIT_COMMITTER_DATE": iso_date,
+        "GIT_AUTHOR_NAME": "Test Author",
+        "GIT_AUTHOR_EMAIL": "test@example.com",
+        "GIT_COMMITTER_NAME": "Test Author",
+        "GIT_COMMITTER_EMAIL": "test@example.com",
+    }
+    _run_git(repo_root, "add", ".")
+    _run_git(repo_root, "commit", "-m", message, env=env)
+
+
+def _freshness_repo(tmp_path: Path, catalog_entries: str) -> Path:
+    """Create minimal git repo for context-note freshness integration tests."""
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    _run_git(repo_root, "init")
+    _run_git(repo_root, "config", "user.name", "Test Author")
+    _run_git(repo_root, "config", "user.email", "test@example.com")
+    context_dir = repo_root / "docs/context"
+    context_dir.mkdir(parents=True)
+    (context_dir / "README.md").write_text("# Context\n", encoding="utf-8")
+    (context_dir / "INDEX.md").write_text("# Index\n", encoding="utf-8")
+    (context_dir / "catalog.yaml").write_text(
+        "version: 1\n"
+        "entries:\n"
+        "  - path: docs/context/README.md\n"
+        "    status: current\n"
+        "    freshness: maintained\n"
+        "  - path: docs/context/INDEX.md\n"
+        "    status: current\n"
+        "    freshness: maintained\n"
+        f"{catalog_entries}",
+        encoding="utf-8",
+    )
+    return repo_root
 
 
 def test_missing_context_note_index_link_is_reported() -> None:
@@ -589,6 +642,75 @@ entries:
     )
 
     assert any("replacement is required" in diagnostic.message for diagnostic in diagnostics)
+
+
+def test_context_note_freshness_reports_superseded_errors(tmp_path: Path) -> None:
+    """Docs-proof freshness integration fails superseded rows without replacements."""
+    repo_root = _freshness_repo(
+        tmp_path,
+        "  - path: docs/context/old.md\n    status: superseded\n    freshness: dated\n",
+    )
+    (repo_root / "docs/context/old.md").write_text("# Old\n", encoding="utf-8")
+    _commit_all(repo_root, "superseded fixture", iso_date="2026-01-01T00:00:00+00:00")
+
+    diagnostics = _context_note_freshness_diagnostics(
+        repo_root=repo_root,
+        max_age_days=180,
+        strict=False,
+    )
+
+    assert any("superseded_replacement" in diagnostic.message for diagnostic in diagnostics)
+    assert any(diagnostic.path == Path("docs/context/old.md") for diagnostic in diagnostics)
+
+
+def test_context_note_freshness_non_strict_ignores_orphan_warnings(tmp_path: Path) -> None:
+    """Docs-proof non-strict mode preserves freshness warning-only compatibility."""
+    repo_root = _freshness_repo(tmp_path, "")
+    (repo_root / "docs/context/orphan.md").write_text("# Orphan\n", encoding="utf-8")
+    _commit_all(repo_root, "orphan fixture", iso_date="2026-01-01T00:00:00+00:00")
+
+    diagnostics = _context_note_freshness_diagnostics(
+        repo_root=repo_root,
+        max_age_days=180,
+        strict=False,
+    )
+
+    assert diagnostics == []
+
+
+def test_context_note_freshness_strict_reports_orphan_warnings(tmp_path: Path) -> None:
+    """Docs-proof strict freshness mode promotes orphan warnings to failures."""
+    repo_root = _freshness_repo(tmp_path, "")
+    (repo_root / "docs/context/orphan.md").write_text("# Orphan\n", encoding="utf-8")
+    _commit_all(repo_root, "orphan fixture", iso_date="2026-01-01T00:00:00+00:00")
+
+    diagnostics = _context_note_freshness_diagnostics(
+        repo_root=repo_root,
+        max_age_days=180,
+        strict=True,
+    )
+
+    assert any("orphan_context_note" in diagnostic.message for diagnostic in diagnostics)
+    assert any(diagnostic.path == Path("docs/context/orphan.md") for diagnostic in diagnostics)
+
+
+def test_context_note_freshness_strict_reports_stale_current_notes(tmp_path: Path) -> None:
+    """Docs-proof strict freshness mode promotes stale current-note warnings."""
+    repo_root = _freshness_repo(
+        tmp_path,
+        "  - path: docs/context/dated.md\n    status: current\n    freshness: dated\n",
+    )
+    (repo_root / "docs/context/dated.md").write_text("# Dated\n", encoding="utf-8")
+    _commit_all(repo_root, "dated fixture", iso_date="2025-01-01T00:00:00+00:00")
+
+    diagnostics = _context_note_freshness_diagnostics(
+        repo_root=repo_root,
+        max_age_days=180,
+        strict=True,
+    )
+
+    assert any("stale_current_dated" in diagnostic.message for diagnostic in diagnostics)
+    assert any(diagnostic.path == Path("docs/context/dated.md") for diagnostic in diagnostics)
 
 
 def test_context_catalog_evidence_rejects_output_pointer(tmp_path: Path) -> None:

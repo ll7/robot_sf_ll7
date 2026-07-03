@@ -63,6 +63,9 @@ training = [
     "wandb>=0.28.0",
     "optuna-dashboard>=0.20.0",
 ]
+recurrent = [
+    "sb3-contrib>=2.7.0,<2.8.0",
+]
 docs = [
     "myst-parser>=4.0.0",
     "sphinx>=7.0.0",

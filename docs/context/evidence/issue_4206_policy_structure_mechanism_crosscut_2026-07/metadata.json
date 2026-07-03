@@ -1,6 +1,9 @@
 {
-  "claim_boundary": "Blocked before F-C4(ii) rank conclusions because trace-verified mechanism labels are unavailable.",
-  "generated_at": "2026-07-03T13:18:37+00:00",
+  "blocker_kinds": [
+    "missing_input_artifact"
+  ],
+  "claim_boundary": "Blocked before any mechanism-label inspection because the declared h600 run artifacts are not present on this host.",
+  "generated_at": "2026-07-03T00:00:00Z",
   "input_provenance": {
     "config": {
       "exists": true,
@@ -24,7 +27,8 @@
     }
   },
   "issue": 4206,
+  "next_action": "Retrieve/hydrate the missing h600 run artifacts (reports/seed_episode_rows.csv and any mechanism sidecars) to this host, then re-run the builder. No exporter mechanism-label change is required until the rows are present.",
   "schema_version": "issue_4206_policy_structure_mechanism_crosscut_report.v1",
-  "status": "blocked_missing_trace_verified_mechanism_labels",
+  "status": "blocked_missing_input_artifacts",
   "taxonomy_source": "docs/context/issue_2220_failure_mechanism_taxonomy.md"
 }

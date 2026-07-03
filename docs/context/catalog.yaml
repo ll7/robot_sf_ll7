@@ -2979,3 +2979,11 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3556_seed_sufficiency_closure_2026-07-03/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3556_seed_sufficiency_closure_2026-07-03/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

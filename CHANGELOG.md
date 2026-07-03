@@ -51,6 +51,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `claim_boundary: diagnostic_proxy_not_safety_guarantee`. Diagnostic-only, default-off; no safety
   guarantee, no benchmark claim, no paper-facing claim. Validation:
   `uv run pytest tests/ -k "conformal or intrusion or fallback_trigger" -q`.
+* Added a **named-candidate seed-sufficiency closure evaluator for the retained h600 roots** (#4328,
+  toward #3556): `scripts/validation/evaluate_issue_4328_h600_seed_sufficiency_candidates.py` plus pure
+  logic in the canonical screening owner (`robot_sf/benchmark/scenario_belief_screening.py`). It
+  evaluates the three named h600 report roots proposed in issue #4328 against the #3556 ScenarioBelief
+  seed-sufficiency closure contract — existence on the current host, the two analyzer-required report
+  files, **and** a ScenarioBelief provenance/lineage gate — then runs the analyzer on the best fully
+  compatible candidate or fails closed with an explicit per-candidate blocker. The provenance gate is
+  the new capability over PR #4310's durable-root resolver: it prevents a foreign h600 roster
+  campaign's seed-sufficiency (a different question) from being promoted as #3556 closure evidence.
+  On a host without the roots the committed packet records `blocked_no_compatible_candidate` (all three
+  candidates absent + provenance-incompatible) with a deferred queue-row request for a #3556-specific
+  campaign. Diagnostic evidence-closure tooling only; no benchmark/paper-grade claim, no campaign run.
+* Added a **skip-if-absent inD shape-contract loader** for issue #4224:
+  `robot_sf/data/external/ind.py` inspects a locally staged inD copy (naturalistic road-user
+  trajectories at German intersections, Bock et al. 2020) and validates the documented per-recording
+  file group (`*_tracks.csv`, `*_tracksMeta.csv`, `*_recordingMeta.csv`, and a background image)
+  without ever downloading or redistributing the request-gated dataset bytes. `is_available`,
+  `require_available`, and `load_shape_contract` provide a cheap structural contract (non-empty,
+  rectangular CSVs carrying inD's published header columns, with finite coordinate/id parsing) and
+  return per-recording row/column shape metadata; no scene content, benchmark, or paper-facing claim
+  is asserted. `tests/data/external/test_ind_shape.py` covers the absent (skip), synthetic-layout,
+  multi-recording, background-fallback, and fail-closed cases. This is the public slice (b) of the
+  maintainer external-data split for the `ind-crossings` asset (registry entry #4238, acquisition
+  docs #4290); private-ops staging remains a follow-up. `docs/datasets/ind.md` documents the loader.
+* Added a **license-safe ATC pedestrian-tracking loader + skip-if-absent shape-contract tests**
+  for issue #4289 (follow-up to the #4224 external-data program): `robot_sf/data/external/atc.py`
+  exposes `is_available`, `require_available`, and `load_shape_contract` over the canonical
+  `atc-pedestrian` external-data registry entry. The loader only inspects locally staged files — it
+  never downloads, vendors, or redistributes the license-gated ATC bytes. It reuses
+  `manage_external_data.check_asset` for presence (one daily CSV plus a local terms/README note) and
+  validates each staged daily CSV as headerless, comma-delimited, exactly eight numeric columns wide;
+  scanning is bounded by default (`max_rows=10000`, reported via `scan_truncated`) since a single ATC
+  day can hold millions of samples. Malformed staged CSVs fail closed with `AtcDataError` pointing to
+  `docs/datasets/atc.md`. Tests in `tests/data/external/test_atc_shape.py` skip cleanly when no local
+  ATC copy is staged and otherwise run on synthetic fixtures. No dataset bytes, download code,
+  benchmark consumer, campaign run, or paper-facing claim is introduced; follows the #4279
+  (`socnavbench-s3dis-eth`) exemplar pattern.
+* Retained **`min_clearance_m` and `proxemic_intrusion_rate`** in the camera-ready campaign
+  summary/retention schema (issue #4326, from #4313). `robot_sf/benchmark/camera_ready/_reporting.py`
+  now emits both fields per planner row, aggregated from per-episode values that already exist in
+  episode rows: `min_clearance_m` is the campaign-wide **worst-case (minimum)** clearance (distinct
+  from the mean-of-per-episode-minimums kept as `min_clearance_mean`), and `proxemic_intrusion_rate`
+  is the mean per-episode personal-space intrusion fraction (`social_proxemic_intrusion_frac`). This
+  makes the clearance/proxemic release-gate coverage gaps from #4313 evaluable for **future**
+  campaigns with no evaluator code change (the gate spec already targets these exact names). Past and
+  degraded campaigns are **not** backfilled — with no source values both fields fail closed to `nan`
+  so their gates stay `not_evaluable`. No benchmark campaign was run; this is a schema/aggregation
+  change only.
 * Added **diff-scoped context-note freshness gating** for issue #3190. The docs-proof consistency
   checker (`scripts/validation/check_docs_proof_consistency.py`) gains a `--freshness-scope
   {repo,diff}` option: `repo` (default) preserves the existing repo-wide `--check-context-note-freshness`

@@ -1,0 +1,51 @@
+scenarios:
+  - name: issue_3977_emergency_reaction_sudden_obstacle_proxy
+    scenario_family: public_requirement_emergency_reaction
+    map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+    route_overrides_file: ../route_overrides/issue_3977/emergency_reaction.yaml
+    simulation_config:
+      max_episode_steps: 80
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal: null
+        trajectory:
+          - [14.0, 22.0]
+          - [14.0, 17.5]
+          - [14.0, 14.0]
+          - [14.0, 6.0]
+        speed_m_s: 2.0
+        # Proximity release reuses the validated public-requirement runtime
+        # machinery: actor waits off-corridor, then enters the robot corridor
+        # once the robot is close enough for a sudden-obstacle proxy event.
+        hold_until_robot_within_m: 5.5
+        hold_ref_point: [14.0, 14.0]
+        hold_timeout_s: 6.0
+        note: "Public-requirement emergency-reaction proxy: sudden obstacle enters corridor."
+        metadata:
+          intent_conditioned_behavior:
+            intent_label: sudden_obstacle_proxy_enters_corridor
+            intent_phases:
+              - waiting_off_corridor
+              - proximity_released
+              - crossing_robot_corridor
+    metadata:
+      public_requirement:
+        schema_version: public-requirement-scenario.v1
+        category: emergency_reaction
+        requirement_label: Emergency reaction when an obstacle suddenly becomes conflict-relevant
+        source: schomakers_2024_public_requirements
+        claim_boundary: authored_scenario_proxy_not_human_subject_evidence
+        event_contract:
+          type: sudden_obstacle_proxy
+          actor_id: h1
+          release_condition: robot_proximity_hold
+          hold_ref_point: [14.0, 14.0]
+          hold_until_robot_within_m: 5.5
+          hold_timeout_s: 6.0
+          conflict_point: [14.0, 14.0]
+          trigger_radius_m: 0.75
+          robot_trigger_radius_m: 5.5
+          validated_robot_speed_m_s: [1.0, 2.0, 3.0]
+    seeds:
+      - 3977

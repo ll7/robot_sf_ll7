@@ -58,15 +58,8 @@ paper_eval_s20:
 
 # Issue #1554 paper-facing S30 extension. Extends the S20 set with ten more
 # contiguous seeds while preserving the frozen S3 `eval` seeds (111-113) and the
-# S10/S20 ordering (S10 prefix of S20 prefix of S30). Used by the S20/S30
-# seed-budget launch packet.
-#
-# PREDECLARED ONLY (issue #4304, maintainer ruling 2026-07-03): S30 is DEFERRED
-# for the dissertation draft. S20 (`paper_eval_s20`) is the draft evidence tier;
-# S30 is a reversible future escalation path, run only if a specific
-# paper/dissertation claim needs >=30 seeds or a reviewer requires it. This entry
-# predeclares the schedule so a future run is one Slurm job away with no protocol
-# debt; it does NOT imply any S30 campaign rows, benchmark result, or claim.
+# S10/S20 ordering. Used by the S20/S30 seed-budget launch packet; no S30 campaign
+# rows exist yet, so this set is a launch-only reference until the SLURM run lands.
 paper_eval_s30:
   - 111
   - 112

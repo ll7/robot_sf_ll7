@@ -22,6 +22,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ATC copy is staged and otherwise run on synthetic fixtures. No dataset bytes, download code,
   benchmark consumer, campaign run, or paper-facing claim is introduced; follows the #4279
   (`socnavbench-s3dis-eth`) exemplar pattern.
+* Generated the **current-roster release-gate evidence report** for issue #4166, the real-campaign
+  application of the reporting layer merged in PR #4184. The merged evaluator now consumes the
+  canonical retained camera-ready `campaign_summary.json` directly (`release_gates._rows_from_mapping`
+  recognizes the `planner_rows` container), and a new provisional gate spec
+  (`configs/benchmarks/release_gates/camera_ready_current_roster_gates.yaml`) targets the metric field
+  names the retained camera-ready campaign actually records (`collisions_mean`, `near_misses_mean`,
+  `jerk_mean`, `comfort_exposure_mean`). Unrecorded metrics (`min_clearance_m`,
+  `proxemic_intrusion_rate`) are shipped as `required: false` fail-closed coverage-gap gates that
+  render `not_evaluable` without swamping their category. The resulting packet under
+  `docs/context/evidence/issue_4166_release_gates/current_roster/` reports 2 pass / 5 fail / 1
+  not_evaluable over the 8-planner roster (degraded `socnav_bench` fails closed to `not_evaluable`).
+  Thresholds are provisional configuration, not certification, threshold approval, or a planner
+  ranking; no new benchmark run was performed.
 * Added an **evidence-closure regression guard for the issue #4011 RL trajectory smoke bundle**
   (#4011): `tests/benchmark/test_rl_trajectory_dataset_smoke_evidence.py` pins the committed
   `RLTrajectoryDataset.v1` smoke evidence bundle under
@@ -61,6 +74,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`robot_ped_within_5m_frac == 0`, `min_clearance_m ≈ 20 m`), so its "0 flips" result is not yet
   evidence of model-robust certification; the residual empirical action is an interacting scenario
   family. Diagnostic-only; no deployment, benchmark-strength, or paper/dissertation claim.
+* Added an **interacting certification-transfer smoke scenario family** for issue #4207 (#4207) — the
+  residual empirical action named by the interaction-validity guard above. New probe config
+  `configs/benchmarks/issue_4207_interacting_smoke_probe.yaml`, gate spec
+  `configs/benchmarks/release_gates/issue_4207_interacting_smoke_gates.yaml`, scenario descriptor
+  `configs/scenarios/single/issue_4207_interacting_smoke.yaml`, and a deterministic CPU-scale smoke
+  episode fixture `tests/benchmark/fixtures/issue_4207_interacting_smoke/interacting_smoke_episodes.jsonl`.
+  Run through the existing runner in report-only mode, the family drives every transfer cell into the
+  5 m near field so the guard reports `model_sensitivity_exercised = true` (16/16 `interacting`) with a
+  genuine interacting flip on the `ppo` arm (`fragile_pass_to_fail` under `hsfm_total_force_v1`). The
+  committed packet `docs/context/evidence/issue_4207_interacting_smoke_2026-07/` is generated from the
+  **synthetic** fixture — it is not a physics run (see its `SYNTHETIC_SMOKE_NOTICE.md`); its purpose is
+  to exercise the guard's positive path end-to-end and template a future physics-verified geometry/spawn
+  CPU re-run, which remains the tracked next step. No simulation, Slurm/GPU submission, retraining,
+  deployment, benchmark-strength, or paper/dissertation claim.
 * Added a **safety-wrapper false-stop diagnostic** for `wrapper_on` benchmark rows (#3501):
   `robot_sf/benchmark/safety_wrapper_runtime.py` gains `analyze_false_stop_diagnostic(...)`, and the
   episode summary now embeds a schema-tagged `false_stop_diagnostic` block plus a

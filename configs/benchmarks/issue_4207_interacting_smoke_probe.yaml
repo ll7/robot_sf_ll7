@@ -1,0 +1,55 @@
+# Issue #4207 INTERACTING certification-transfer smoke probe.
+#
+# Companion to configs/benchmarks/issue_4207_certification_transfer_probe.yaml. That probe ran
+# `francis2023_blind_corner`, whose recorded cells were all `non_interacting`
+# (robot_ped_within_5m_frac = 0), so the interaction-validity guard reported
+# `model_sensitivity_exercised = false` (a vacuous stable transfer status).
+#
+# This config declares an INTERACTING scenario family so the guard's positive path can be
+# exercised end-to-end on CPU-scale smoke inputs. The committed evidence packet is generated in
+# report-only mode from a synthetic smoke episode fixture; no physics simulation, Slurm/GPU
+# submission, or retraining is involved. See the scenario descriptor header for the deferred
+# physics-verified geometry/spawn CPU re-run.
+name: issue_4207_interacting_smoke_probe
+schema_version: certification-transfer-probe.v1
+issue: 4207
+paper_facing: false
+claim_boundary: diagnostic_certification_transfer_probe_no_deployment_claim
+pedestrian_models:
+  - social_force_default
+  - hsfm_total_force_v1
+scenario_family: issue4207_interacting_smoke
+scenario_matrix: configs/scenarios/single/issue_4207_interacting_smoke.yaml
+seed_policy:
+  mode: fixed-list
+  seeds: [111, 112, 113]
+horizon: 60
+dt: 0.1
+workers: 1
+record_forces: false
+resume: true
+run_artifact_dir: output/benchmarks/issue_4207_interacting_smoke_runs
+# Arm keys mirror the main probe so the smoke family stays comparable. algo_config is omitted
+# deliberately: the committed evidence is a synthetic smoke fixture, not a policy run, so no
+# checkpoint is loaded. A future physics CPU re-run would re-attach the real arm configs.
+arms:
+  - key: goal
+    structural_class: baseline_reactive
+    algo: goal
+    benchmark_profile: baseline-safe
+    development_pedestrian_model: unknown
+  - key: ppo
+    structural_class: learned_policy
+    algo: ppo
+    benchmark_profile: experimental
+    development_pedestrian_model: unknown
+  - key: prediction_planner
+    structural_class: predictive
+    algo: prediction_planner
+    benchmark_profile: experimental
+    development_pedestrian_model: unknown
+  - key: guarded_ppo
+    structural_class: constraint_first
+    algo: guarded_ppo
+    benchmark_profile: experimental
+    development_pedestrian_model: unknown

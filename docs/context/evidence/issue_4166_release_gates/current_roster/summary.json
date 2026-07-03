@@ -1,0 +1,969 @@
+{
+  "claim_boundary": "Release gates are evaluated over existing benchmark rows only. Provisional thresholds are not certification or paper-grade approval.",
+  "gate_spec": {
+    "gates": [
+      {
+        "category": "safety",
+        "direction": "max",
+        "id": "mean_collisions_budget",
+        "metric": "collisions_mean",
+        "provenance": "provisional_not_certification_issue_4166_mean_collisions_per_episode",
+        "required": true,
+        "scope": {},
+        "threshold": 0.1
+      },
+      {
+        "category": "safety",
+        "direction": "max",
+        "id": "mean_near_misses_budget",
+        "metric": "near_misses_mean",
+        "provenance": "provisional_not_certification_issue_4166_mean_near_misses_per_episode",
+        "required": true,
+        "scope": {},
+        "threshold": 5.0
+      },
+      {
+        "category": "safety",
+        "direction": "min",
+        "id": "min_clearance_floor_coverage_gap",
+        "metric": "min_clearance_m",
+        "provenance": "provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready",
+        "required": false,
+        "scope": {},
+        "threshold": 0.25
+      },
+      {
+        "category": "comfort",
+        "direction": "max",
+        "id": "jerk_mean_limit",
+        "metric": "jerk_mean",
+        "provenance": "provisional_not_certification_issue_4166",
+        "required": true,
+        "scope": {},
+        "threshold": 2.0
+      },
+      {
+        "category": "comfort",
+        "direction": "max",
+        "id": "comfort_exposure_limit",
+        "metric": "comfort_exposure_mean",
+        "provenance": "provisional_not_certification_issue_4166_proxemic_exposure_proxy",
+        "required": true,
+        "scope": {},
+        "threshold": 0.1
+      },
+      {
+        "category": "comfort",
+        "direction": "max",
+        "id": "proxemic_intrusion_rate_coverage_gap",
+        "metric": "proxemic_intrusion_rate",
+        "provenance": "provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready",
+        "required": false,
+        "scope": {},
+        "threshold": 0.1
+      }
+    ],
+    "schema_version": "benchmark_release_gate_spec.v1"
+  },
+  "generated_at_utc": "2026-07-03T00:00:00+00:00",
+  "matrix_rows": [
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": "mean_collisions_budget",
+      "not_evaluable_gate_ids": "min_clearance_floor_coverage_gap;proxemic_intrusion_rate_coverage_gap",
+      "overall_status": "fail",
+      "planner_key": "goal",
+      "safety_status": "fail",
+      "scenario_family": "all"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": "",
+      "not_evaluable_gate_ids": "min_clearance_floor_coverage_gap;proxemic_intrusion_rate_coverage_gap",
+      "overall_status": "pass",
+      "planner_key": "orca",
+      "safety_status": "pass",
+      "scenario_family": "all"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": "",
+      "not_evaluable_gate_ids": "min_clearance_floor_coverage_gap;proxemic_intrusion_rate_coverage_gap",
+      "overall_status": "pass",
+      "planner_key": "ppo",
+      "safety_status": "pass",
+      "scenario_family": "all"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": "mean_collisions_budget;mean_near_misses_budget",
+      "not_evaluable_gate_ids": "min_clearance_floor_coverage_gap;proxemic_intrusion_rate_coverage_gap",
+      "overall_status": "fail",
+      "planner_key": "prediction_planner",
+      "safety_status": "fail",
+      "scenario_family": "all"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": "mean_collisions_budget",
+      "not_evaluable_gate_ids": "min_clearance_floor_coverage_gap;proxemic_intrusion_rate_coverage_gap",
+      "overall_status": "fail",
+      "planner_key": "sacadrl",
+      "safety_status": "fail",
+      "scenario_family": "all"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": "mean_collisions_budget",
+      "not_evaluable_gate_ids": "min_clearance_floor_coverage_gap;proxemic_intrusion_rate_coverage_gap",
+      "overall_status": "fail",
+      "planner_key": "social_force",
+      "safety_status": "fail",
+      "scenario_family": "all"
+    },
+    {
+      "comfort_status": "not_evaluable",
+      "failed_gate_ids": "",
+      "not_evaluable_gate_ids": "mean_collisions_budget;mean_near_misses_budget;min_clearance_floor_coverage_gap;jerk_mean_limit;comfort_exposure_limit;proxemic_intrusion_rate_coverage_gap",
+      "overall_status": "not_evaluable",
+      "planner_key": "socnav_bench",
+      "safety_status": "not_evaluable",
+      "scenario_family": "all"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": "mean_collisions_budget",
+      "not_evaluable_gate_ids": "min_clearance_floor_coverage_gap;proxemic_intrusion_rate_coverage_gap",
+      "overall_status": "fail",
+      "planner_key": "socnav_sampling",
+      "safety_status": "fail",
+      "scenario_family": "all"
+    }
+  ],
+  "provenance": {
+    "command": "scripts/benchmark/build_release_gate_report.py --input-json docs/context/evidence/camera_ready_all_planners_2026-05-04/reports/campaign_summary.json --gate-spec configs/benchmarks/release_gates/camera_ready_current_roster_gates.yaml --output-json docs/context/evidence/issue_4166_release_gates/current_roster/summary.json --output-csv docs/context/evidence/issue_4166_release_gates/current_roster/gate_matrix.csv --output-md docs/context/evidence/issue_4166_release_gates/current_roster/README.md --generated-at-utc 2026-07-03T00:00:00+00:00",
+    "gate_spec": {
+      "path": "configs/benchmarks/release_gates/camera_ready_current_roster_gates.yaml",
+      "sha256": "9689a1a3236fce2fe0f735f8e68c64bbd62f214edd2fea1abea57a941b46f759"
+    },
+    "input": {
+      "path": "docs/context/evidence/camera_ready_all_planners_2026-05-04/reports/campaign_summary.json",
+      "sha256": "2211bf0c13815bf6af34afa2798b50da8559153be76d7b84650f8c970c2539b6"
+    }
+  },
+  "results": [
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": [
+        "mean_collisions_budget"
+      ],
+      "gate_results": [
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "mean_collisions_budget",
+          "metric": "collisions_mean",
+          "observed_values": [
+            0.2361
+          ],
+          "provenance": "provisional_not_certification_issue_4166_mean_collisions_per_episode",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "fail",
+          "threshold": 0.1
+        },
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "mean_near_misses_budget",
+          "metric": "near_misses_mean",
+          "observed_values": [
+            2.9097
+          ],
+          "provenance": "provisional_not_certification_issue_4166_mean_near_misses_per_episode",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 5.0
+        },
+        {
+          "category": "safety",
+          "direction": "min",
+          "gate_id": "min_clearance_floor_coverage_gap",
+          "metric": "min_clearance_m",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready",
+          "required": false,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.25
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "observed_values": [
+            0.0092
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 2.0
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "comfort_exposure_limit",
+          "metric": "comfort_exposure_mean",
+          "observed_values": [
+            0.0297
+          ],
+          "provenance": "provisional_not_certification_issue_4166_proxemic_exposure_proxy",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.1
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "proxemic_intrusion_rate_coverage_gap",
+          "metric": "proxemic_intrusion_rate",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready",
+          "required": false,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.1
+        }
+      ],
+      "not_evaluable_gate_ids": [
+        "min_clearance_floor_coverage_gap",
+        "proxemic_intrusion_rate_coverage_gap"
+      ],
+      "overall_status": "fail",
+      "planner_key": "goal",
+      "safety_status": "fail",
+      "scenario_family": "all"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": [],
+      "gate_results": [
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "mean_collisions_budget",
+          "metric": "collisions_mean",
+          "observed_values": [
+            0.0347
+          ],
+          "provenance": "provisional_not_certification_issue_4166_mean_collisions_per_episode",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.1
+        },
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "mean_near_misses_budget",
+          "metric": "near_misses_mean",
+          "observed_values": [
+            4.9097
+          ],
+          "provenance": "provisional_not_certification_issue_4166_mean_near_misses_per_episode",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 5.0
+        },
+        {
+          "category": "safety",
+          "direction": "min",
+          "gate_id": "min_clearance_floor_coverage_gap",
+          "metric": "min_clearance_m",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready",
+          "required": false,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.25
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "observed_values": [
+            0.1718
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 2.0
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "comfort_exposure_limit",
+          "metric": "comfort_exposure_mean",
+          "observed_values": [
+            0.031
+          ],
+          "provenance": "provisional_not_certification_issue_4166_proxemic_exposure_proxy",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.1
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "proxemic_intrusion_rate_coverage_gap",
+          "metric": "proxemic_intrusion_rate",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready",
+          "required": false,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.1
+        }
+      ],
+      "not_evaluable_gate_ids": [
+        "min_clearance_floor_coverage_gap",
+        "proxemic_intrusion_rate_coverage_gap"
+      ],
+      "overall_status": "pass",
+      "planner_key": "orca",
+      "safety_status": "pass",
+      "scenario_family": "all"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": [],
+      "gate_results": [
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "mean_collisions_budget",
+          "metric": "collisions_mean",
+          "observed_values": [
+            0.0903
+          ],
+          "provenance": "provisional_not_certification_issue_4166_mean_collisions_per_episode",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.1
+        },
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "mean_near_misses_budget",
+          "metric": "near_misses_mean",
+          "observed_values": [
+            3.3542
+          ],
+          "provenance": "provisional_not_certification_issue_4166_mean_near_misses_per_episode",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 5.0
+        },
+        {
+          "category": "safety",
+          "direction": "min",
+          "gate_id": "min_clearance_floor_coverage_gap",
+          "metric": "min_clearance_m",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready",
+          "required": false,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.25
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "observed_values": [
+            0.4629
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 2.0
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "comfort_exposure_limit",
+          "metric": "comfort_exposure_mean",
+          "observed_values": [
+            0.0292
+          ],
+          "provenance": "provisional_not_certification_issue_4166_proxemic_exposure_proxy",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.1
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "proxemic_intrusion_rate_coverage_gap",
+          "metric": "proxemic_intrusion_rate",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready",
+          "required": false,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.1
+        }
+      ],
+      "not_evaluable_gate_ids": [
+        "min_clearance_floor_coverage_gap",
+        "proxemic_intrusion_rate_coverage_gap"
+      ],
+      "overall_status": "pass",
+      "planner_key": "ppo",
+      "safety_status": "pass",
+      "scenario_family": "all"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": [
+        "mean_collisions_budget",
+        "mean_near_misses_budget"
+      ],
+      "gate_results": [
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "mean_collisions_budget",
+          "metric": "collisions_mean",
+          "observed_values": [
+            0.2083
+          ],
+          "provenance": "provisional_not_certification_issue_4166_mean_collisions_per_episode",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "fail",
+          "threshold": 0.1
+        },
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "mean_near_misses_budget",
+          "metric": "near_misses_mean",
+          "observed_values": [
+            8.3681
+          ],
+          "provenance": "provisional_not_certification_issue_4166_mean_near_misses_per_episode",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "fail",
+          "threshold": 5.0
+        },
+        {
+          "category": "safety",
+          "direction": "min",
+          "gate_id": "min_clearance_floor_coverage_gap",
+          "metric": "min_clearance_m",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready",
+          "required": false,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.25
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "observed_values": [
+            0.0835
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 2.0
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "comfort_exposure_limit",
+          "metric": "comfort_exposure_mean",
+          "observed_values": [
+            0.0337
+          ],
+          "provenance": "provisional_not_certification_issue_4166_proxemic_exposure_proxy",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.1
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "proxemic_intrusion_rate_coverage_gap",
+          "metric": "proxemic_intrusion_rate",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready",
+          "required": false,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.1
+        }
+      ],
+      "not_evaluable_gate_ids": [
+        "min_clearance_floor_coverage_gap",
+        "proxemic_intrusion_rate_coverage_gap"
+      ],
+      "overall_status": "fail",
+      "planner_key": "prediction_planner",
+      "safety_status": "fail",
+      "scenario_family": "all"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": [
+        "mean_collisions_budget"
+      ],
+      "gate_results": [
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "mean_collisions_budget",
+          "metric": "collisions_mean",
+          "observed_values": [
+            0.3889
+          ],
+          "provenance": "provisional_not_certification_issue_4166_mean_collisions_per_episode",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "fail",
+          "threshold": 0.1
+        },
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "mean_near_misses_budget",
+          "metric": "near_misses_mean",
+          "observed_values": [
+            3.5694
+          ],
+          "provenance": "provisional_not_certification_issue_4166_mean_near_misses_per_episode",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 5.0
+        },
+        {
+          "category": "safety",
+          "direction": "min",
+          "gate_id": "min_clearance_floor_coverage_gap",
+          "metric": "min_clearance_m",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready",
+          "required": false,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.25
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "observed_values": [
+            0.0763
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 2.0
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "comfort_exposure_limit",
+          "metric": "comfort_exposure_mean",
+          "observed_values": [
+            0.0302
+          ],
+          "provenance": "provisional_not_certification_issue_4166_proxemic_exposure_proxy",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.1
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "proxemic_intrusion_rate_coverage_gap",
+          "metric": "proxemic_intrusion_rate",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready",
+          "required": false,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.1
+        }
+      ],
+      "not_evaluable_gate_ids": [
+        "min_clearance_floor_coverage_gap",
+        "proxemic_intrusion_rate_coverage_gap"
+      ],
+      "overall_status": "fail",
+      "planner_key": "sacadrl",
+      "safety_status": "fail",
+      "scenario_family": "all"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": [
+        "mean_collisions_budget"
+      ],
+      "gate_results": [
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "mean_collisions_budget",
+          "metric": "collisions_mean",
+          "observed_values": [
+            0.2083
+          ],
+          "provenance": "provisional_not_certification_issue_4166_mean_collisions_per_episode",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "fail",
+          "threshold": 0.1
+        },
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "mean_near_misses_budget",
+          "metric": "near_misses_mean",
+          "observed_values": [
+            2.3264
+          ],
+          "provenance": "provisional_not_certification_issue_4166_mean_near_misses_per_episode",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 5.0
+        },
+        {
+          "category": "safety",
+          "direction": "min",
+          "gate_id": "min_clearance_floor_coverage_gap",
+          "metric": "min_clearance_m",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready",
+          "required": false,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.25
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "observed_values": [
+            0.4937
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 2.0
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "comfort_exposure_limit",
+          "metric": "comfort_exposure_mean",
+          "observed_values": [
+            0.0435
+          ],
+          "provenance": "provisional_not_certification_issue_4166_proxemic_exposure_proxy",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.1
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "proxemic_intrusion_rate_coverage_gap",
+          "metric": "proxemic_intrusion_rate",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready",
+          "required": false,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.1
+        }
+      ],
+      "not_evaluable_gate_ids": [
+        "min_clearance_floor_coverage_gap",
+        "proxemic_intrusion_rate_coverage_gap"
+      ],
+      "overall_status": "fail",
+      "planner_key": "social_force",
+      "safety_status": "fail",
+      "scenario_family": "all"
+    },
+    {
+      "comfort_status": "not_evaluable",
+      "failed_gate_ids": [],
+      "gate_results": [
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "mean_collisions_budget",
+          "metric": "collisions_mean",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_mean_collisions_per_episode",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.1
+        },
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "mean_near_misses_budget",
+          "metric": "near_misses_mean",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_mean_near_misses_per_episode",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 5.0
+        },
+        {
+          "category": "safety",
+          "direction": "min",
+          "gate_id": "min_clearance_floor_coverage_gap",
+          "metric": "min_clearance_m",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready",
+          "required": false,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.25
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 2.0
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "comfort_exposure_limit",
+          "metric": "comfort_exposure_mean",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_proxemic_exposure_proxy",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.1
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "proxemic_intrusion_rate_coverage_gap",
+          "metric": "proxemic_intrusion_rate",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready",
+          "required": false,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.1
+        }
+      ],
+      "not_evaluable_gate_ids": [
+        "mean_collisions_budget",
+        "mean_near_misses_budget",
+        "min_clearance_floor_coverage_gap",
+        "jerk_mean_limit",
+        "comfort_exposure_limit",
+        "proxemic_intrusion_rate_coverage_gap"
+      ],
+      "overall_status": "not_evaluable",
+      "planner_key": "socnav_bench",
+      "safety_status": "not_evaluable",
+      "scenario_family": "all"
+    },
+    {
+      "comfort_status": "pass",
+      "failed_gate_ids": [
+        "mean_collisions_budget"
+      ],
+      "gate_results": [
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "mean_collisions_budget",
+          "metric": "collisions_mean",
+          "observed_values": [
+            0.5278
+          ],
+          "provenance": "provisional_not_certification_issue_4166_mean_collisions_per_episode",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "fail",
+          "threshold": 0.1
+        },
+        {
+          "category": "safety",
+          "direction": "max",
+          "gate_id": "mean_near_misses_budget",
+          "metric": "near_misses_mean",
+          "observed_values": [
+            1.4097
+          ],
+          "provenance": "provisional_not_certification_issue_4166_mean_near_misses_per_episode",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 5.0
+        },
+        {
+          "category": "safety",
+          "direction": "min",
+          "gate_id": "min_clearance_floor_coverage_gap",
+          "metric": "min_clearance_m",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready",
+          "required": false,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.25
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "jerk_mean_limit",
+          "metric": "jerk_mean",
+          "observed_values": [
+            0.0724
+          ],
+          "provenance": "provisional_not_certification_issue_4166",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 2.0
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "comfort_exposure_limit",
+          "metric": "comfort_exposure_mean",
+          "observed_values": [
+            0.0363
+          ],
+          "provenance": "provisional_not_certification_issue_4166_proxemic_exposure_proxy",
+          "required": true,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "pass",
+          "threshold": 0.1
+        },
+        {
+          "category": "comfort",
+          "direction": "max",
+          "gate_id": "proxemic_intrusion_rate_coverage_gap",
+          "metric": "proxemic_intrusion_rate",
+          "observed_values": [],
+          "provenance": "provisional_not_certification_issue_4166_metric_not_recorded_by_camera_ready",
+          "required": false,
+          "scenario_family": "all",
+          "scope": {},
+          "status": "not_evaluable",
+          "threshold": 0.1
+        }
+      ],
+      "not_evaluable_gate_ids": [
+        "min_clearance_floor_coverage_gap",
+        "proxemic_intrusion_rate_coverage_gap"
+      ],
+      "overall_status": "fail",
+      "planner_key": "socnav_sampling",
+      "safety_status": "fail",
+      "scenario_family": "all"
+    }
+  ],
+  "schema_version": "benchmark_release_gate_report.v1",
+  "status_counts": {
+    "fail": 5,
+    "not_evaluable": 1,
+    "pass": 2
+  }
+}

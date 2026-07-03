@@ -789,12 +789,12 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                         previous_ped_positions=previous_trace_ped_pos,
                         step_idx=step_idx,
                     )
-                policy_command = (
-                    corrected_command[0],
-                    corrected_command[1],
-                    *tuple(policy_command[2:]),
-                )
-                safety_wrapper_trace.append(wrapper_record)
+                    policy_command = (
+                        corrected_command[0],
+                        corrected_command[1],
+                        *tuple(policy_command[2:]),
+                    )
+                    safety_wrapper_trace.append(wrapper_record)
             if cbf_runtime.enabled:
                 if step_is_native:
                     if cbf_runtime.fail_on_native_action:

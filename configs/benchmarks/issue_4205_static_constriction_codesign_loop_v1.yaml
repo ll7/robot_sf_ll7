@@ -1,0 +1,41 @@
+# Benchmark-side launch contract for issue #4205.
+#
+# This file is intentionally a no-submit pre-registration surface. The private
+# queue may consume it after the matching research contract lands on origin/main.
+schema_version: robot_sf.issue_4205_static_constriction_benchmark.v1
+issue: 4205
+loop_id: issue_4205_static_constriction_codesign_loop_v1
+research_contract: configs/research/issue_4205_static_constriction_codesign_loop_v1.yaml
+mechanism_suite: configs/benchmarks/issue_2452_mechanism_aware_local_nav_suites_v0.yaml::static_deadlock_recovery
+scenario_matrix: configs/scenarios/sets/issue_2588_static_deadlock_controlled_trace.yaml
+smoke_matrix: configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml
+scenario_ids:
+  - classic_bottleneck_low
+  - classic_head_on_corridor_low
+  - narrow_passage
+seeds: [111, 112, 113]
+arms:
+  - ppo_frozen
+  - ppo_frozen_wrapper_on
+  - ppo_frozen_cbf_on
+row_status_policy:
+  fallback_rows_are_success_evidence: false
+  degraded_rows_are_success_evidence: false
+  fail_closed_values:
+    - failed
+    - fallback
+    - degraded
+    - not_available
+campaign_authorization:
+  compute_submit_authorized: false
+  no_slurm_submission_in_this_pr: true
+  no_gpu_submission_in_this_pr: true
+  required_before_submit:
+    - this pre-registration config merged on origin/main
+    - private frozen PPO artifact hydration verifies job-13175 lineage
+    - all three arms pass the public validator without threshold drift
+    - CPU smoke manifest exists for one static-deadlock seed per arm
+claim_boundary: >
+  Runnable benchmark input contract only after private queue hydration. This
+  config does not contain target-host routing state and does not report
+  re-certification results.

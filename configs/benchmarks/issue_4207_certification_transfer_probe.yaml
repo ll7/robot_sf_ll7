@@ -1,0 +1,47 @@
+name: issue_4207_certification_transfer_probe
+schema_version: certification-transfer-probe.v1
+issue: 4207
+paper_facing: false
+claim_boundary: diagnostic_certification_transfer_probe_no_deployment_claim
+pedestrian_models:
+  - social_force_default
+  - hsfm_total_force_v1
+scenario_family: francis2023_blind_corner
+scenario_matrix: configs/scenarios/single/francis2023_blind_corner.yaml
+seed_policy:
+  mode: fixed-list
+  seeds: [111, 112, 113]
+horizon: 60
+dt: 0.1
+workers: 1
+record_forces: false
+resume: true
+run_artifact_dir: output/benchmarks/issue_4207_certification_transfer_runs
+arms:
+  - key: goal
+    structural_class: baseline_reactive
+    algo: goal
+    benchmark_profile: baseline-safe
+    development_pedestrian_model: unknown
+  - key: ppo
+    structural_class: learned_policy
+    algo: ppo
+    algo_config: configs/algos/ppo_v3_camera_ready.yaml
+    benchmark_profile: experimental
+    observation_mode: socnav_state
+    observation_level: oracle_full_state
+    development_pedestrian_model: unknown
+  - key: prediction_planner
+    structural_class: predictive
+    algo: prediction_planner
+    algo_config: configs/algos/prediction_planner_example.yaml
+    benchmark_profile: experimental
+    development_pedestrian_model: unknown
+  - key: guarded_ppo
+    structural_class: constraint_first
+    algo: guarded_ppo
+    algo_config: configs/algos/guarded_ppo_camera_ready.yaml
+    benchmark_profile: experimental
+    observation_mode: socnav_state
+    observation_level: oracle_full_state
+    development_pedestrian_model: unknown

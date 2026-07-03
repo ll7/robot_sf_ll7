@@ -78,6 +78,9 @@ def build(
             "status": "ok",
             "evidence_tier": EVIDENCE_TIER,
             "allow_untrained_smoke": config.allow_untrained_smoke,
+            "checkpoint_status": "untrained_smoke"
+            if config.allow_untrained_smoke
+            else "checkpoint_loaded",
             "claim_boundary": CLAIM_BOUNDARY,
         },
         "planner_kinematics": {
@@ -100,5 +103,9 @@ def build(
         adapter_name="DiffusionPolicyAdapter",
         robot_kinematics=robot_kinematics,
         normalized_robot_command_mode=normalized_robot_command_mode,
-        limitations="diagnostic_only_untrained_smoke_not_benchmark_evidence",
+        limitations=(
+            "diagnostic_only_untrained_smoke_not_benchmark_evidence"
+            if config.allow_untrained_smoke
+            else "diagnostic_only_smoke_checkpoint_not_benchmark_evidence"
+        ),
     )

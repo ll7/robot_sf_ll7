@@ -141,6 +141,11 @@ Social-Navigation-PyEnvs adapter-backed behavior variants. Current status is one
 `benchmark_valid_candidate`, one `diagnostic_only`, and four `not_available` rows; diagnostic and
 unavailable rows are not benchmark-success evidence.
 
+Recent HSFM + TTC predictive force prototype:
+[issue_3481_hsfm_ttc_predictive_forces.md](issue_3481_hsfm_ttc_predictive_forces.md)
+records the opt-in `hsfm_ttc_predictive_v1` selector, TTC parameter contract, diagnostic evidence
+boundary, and explicit no-benchmark/no-paper-claim scope.
+
 Recent heavy forecast-model study/preflight: [forecast_heavy_model_study_2026-06-20.md](forecast_heavy_model_study_2026-06-20.md)
 records the analysis-only inventory of heavy predictor families (transformer, AgentFormer-like,
 CVAE, diffusion) with literature-derived compute/latency/uncertainty/integration estimates, the

@@ -33,6 +33,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4163_static_constriction_rare_event_smoke/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4166_release_gates/README.md
     status: evidence
     freshness: evidence
@@ -121,6 +125,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4014_recurrent_ppo_lstm_dry_run/README.md
+    status: evidence
+    freshness: evidence
+    area: training_evidence
   - path: docs/context/evidence/issue_3978_snqi_v1_recalibration/README.md
     status: evidence
     freshness: evidence

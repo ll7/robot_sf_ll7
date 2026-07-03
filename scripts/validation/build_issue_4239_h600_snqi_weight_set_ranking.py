@@ -532,19 +532,21 @@ def _preflight_report(
         "source_manifest": input_file_provenance(_repo_root() / config["source_manifest"]),
         "source_files_missing": source_files_missing,
         "runs": [
-        {
-            "job_id": run["job_id"],
-            "run_label": run["run_label"],
-            "seed_episode_rows": _rel(run["seed_episode_rows"]),
-            "seed_episode_rows_exists": run["seed_episode_rows"].exists(),
-            "episodes_jsonl_files": [_rel(path) for path in run.get("episodes_jsonl_files") or []],
-            "episodes_jsonl_sha256": [
-                {"path": _rel(path), "sha256": _sha256(path)}
-                for path in run.get("episodes_jsonl_files") or []
-            ],
-        }
-        for run in runs
-    ],
+            {
+                "job_id": run["job_id"],
+                "run_label": run["run_label"],
+                "seed_episode_rows": _rel(run["seed_episode_rows"]),
+                "seed_episode_rows_exists": run["seed_episode_rows"].exists(),
+                "episodes_jsonl_files": [
+                    _rel(path) for path in run.get("episodes_jsonl_files") or []
+                ],
+                "episodes_jsonl_sha256": [
+                    {"path": _rel(path), "sha256": _sha256(path)}
+                    for path in run.get("episodes_jsonl_files") or []
+                ],
+            }
+            for run in runs
+        ],
         "issues": issues,
         "generated_at": generated_at,
     }

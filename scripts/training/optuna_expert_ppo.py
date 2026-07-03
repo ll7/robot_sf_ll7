@@ -19,9 +19,13 @@ from pathlib import Path
 from typing import Any
 
 import optuna
+import yaml
 from loguru import logger
 from optuna.trial import TrialState
 from sqlalchemy.engine import make_url
+
+from robot_sf.training.optuna_provenance import write_study_manifest
+from robot_sf.training.optuna_search_space import apply_search_space_update, suggest_search_space
 
 _OBJECTIVE_MODES = ("best_checkpoint", "final_eval", "last_n_mean", "auc", "episodic_snqi")
 _CONSTRAINT_HANDLING_CHOICES = ("penalize", "prune")
@@ -104,6 +108,23 @@ def _configure_optuna_verbosity(log_level: str) -> None:
         optuna.logging.set_verbosity(optuna.logging.WARNING)
     else:
         optuna.logging.set_verbosity(optuna.logging.ERROR)
+
+
+def _load_launcher_search_space(path: Path | None) -> dict[str, object] | None:
+    """Load a v2 launcher search_space mapping when provided."""
+
+    if path is None:
+        return None
+    with path.open(encoding="utf-8") as handle:
+        payload = yaml.safe_load(handle)
+    if not isinstance(payload, dict):
+        raise ValueError("launcher config must be a mapping.")
+    search_space = payload.get("search_space")
+    if search_space is None:
+        return None
+    if not isinstance(search_space, dict):
+        raise ValueError("launcher config search_space must be a mapping.")
+    return dict(search_space)
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -207,6 +228,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default="WARNING",
         choices=_LOG_LEVEL_CHOICES,
         help="Console log level (default: WARNING).",
+    )
+    parser.add_argument(
+        "--launcher-config",
+        type=Path,
+        default=None,
+        help="Optional v2 launcher YAML used for search-space and provenance hashes.",
+    )
+    parser.add_argument(
+        "--provenance-dir",
+        type=Path,
+        default=None,
+        help="Optional directory for reviewable Optuna study/trial provenance artifacts.",
     )
     return parser
 
@@ -370,7 +403,7 @@ def _apply_constraint_handling(
     raise ValueError(f"Unknown study direction '{direction}'.")
 
 
-def _build_trial_config(
+def _build_trial_config(  # noqa: PLR0913
     trial: optuna.Trial,
     *,
     base_config,
@@ -380,6 +413,7 @@ def _build_trial_config(
     args: argparse.Namespace,
     resolve_num_envs_fn: Any,
     evaluation_schedule_cls: Any,
+    search_space: dict[str, object] | None = None,
 ):
     """Create one trial-specific training configuration."""
     config = copy.deepcopy(base_config)
@@ -430,7 +464,11 @@ def _build_trial_config(
     config.tracking = tracking
     num_envs = resolve_num_envs_fn(config)
     max_batch = max(1, num_envs * 512)
-    config.ppo_hyperparams = _suggest_ppo_hyperparams(trial, max_batch_size=max_batch)
+    if search_space is None:
+        config.ppo_hyperparams = _suggest_ppo_hyperparams(trial, max_batch_size=max_batch)
+    else:
+        update = suggest_search_space(trial, search_space, max_batch_size=max_batch)
+        apply_search_space_update(config, update)
     return config
 
 
@@ -508,6 +546,7 @@ class _ObjectiveContext:
     study_name: str
     safety_constraints: dict[str, float]
     constraint_handling: str
+    search_space: dict[str, object] | None
     log_level: str
     resolve_num_envs_fn: Any
     evaluation_schedule_cls: Any
@@ -532,6 +571,7 @@ def _make_objective(ctx: _ObjectiveContext) -> Any:
             args=ctx.args,
             resolve_num_envs_fn=ctx.resolve_num_envs_fn,
             evaluation_schedule_cls=ctx.evaluation_schedule_cls,
+            search_space=ctx.search_space,
         )
 
         result = ctx.run_expert_training_fn(config, config_path=ctx.config_path, dry_run=False)
@@ -660,6 +700,10 @@ def main(argv: list[str] | None = None) -> int:
         timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
         study_name = args.study_name or f"{base_config.policy_id}_optuna_{timestamp}"
         storage = _resolve_storage_url(study_name, args.storage)
+        launcher_config_path = (
+            Path(args.launcher_config).resolve() if args.launcher_config else None
+        )
+        search_space = _load_launcher_search_space(launcher_config_path)
 
         logger.info(
             "Starting Optuna study '{}' direction={} metric={} objective_mode={} constraints={} handling={} storage={}",
@@ -693,6 +737,7 @@ def main(argv: list[str] | None = None) -> int:
                 study_name=study_name,
                 safety_constraints=safety_constraints,
                 constraint_handling=constraint_handling,
+                search_space=search_space,
                 log_level=log_level,
                 resolve_num_envs_fn=_resolve_num_envs,
                 evaluation_schedule_cls=EvaluationSchedule,
@@ -705,6 +750,24 @@ def main(argv: list[str] | None = None) -> int:
         )
 
         study.optimize(objective, n_trials=int(args.trials))
+        if args.provenance_dir is not None:
+            write_study_manifest(
+                output_dir=Path(args.provenance_dir),
+                study=study,
+                storage=storage,
+                base_config_path=config_path,
+                launcher_config_path=launcher_config_path,
+                search_space=search_space,
+                runtime_bounds={
+                    "trials": int(args.trials),
+                    "trial_timesteps": int(args.trial_timesteps),
+                    "eval_every": int(args.eval_every),
+                    "eval_episodes": int(args.eval_episodes),
+                    "seed": int(args.seed),
+                    "deterministic": bool(args.deterministic),
+                    "disable_wandb": bool(args.disable_wandb),
+                },
+            )
         completed_trials = study.get_trials(states=[TrialState.COMPLETE])
         if not completed_trials:
             logger.warning("Optuna study completed without any successful trials.")

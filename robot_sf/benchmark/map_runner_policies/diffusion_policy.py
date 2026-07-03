@@ -78,9 +78,10 @@ def build(
             "status": "ok",
             "evidence_tier": EVIDENCE_TIER,
             "allow_untrained_smoke": config.allow_untrained_smoke,
-            "checkpoint_status": "untrained_smoke"
-            if config.allow_untrained_smoke
-            else "checkpoint_loaded",
+            "checkpoint_status": "checkpoint_loaded"
+            if config.checkpoint_path
+            else "untrained_smoke",
+            "normalizer_status": "loaded" if config.checkpoint_path else "not_required",
             "claim_boundary": CLAIM_BOUNDARY,
         },
         "planner_kinematics": {

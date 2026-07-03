@@ -79,6 +79,15 @@ def test_checkpoint_does_not_skip_normalizer_validation(tmp_path) -> None:
         )
 
 
+def test_checkpoint_requires_normalizer_path(tmp_path) -> None:
+    """Smoke checkpoint loads require explicit normalizer provenance."""
+    checkpoint = tmp_path / "checkpoint.pt"
+    checkpoint.write_bytes(b"placeholder")
+
+    with pytest.raises(RuntimeError, match="requires normalizer_path"):
+        DiffusionPolicyAdapter({"checkpoint_path": str(checkpoint)})
+
+
 def test_encoder_returns_finite_masked_tensors() -> None:
     """The graph encoder pads visible pedestrians and marks valid nodes."""
     adapter = DiffusionPolicyAdapter(

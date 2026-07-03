@@ -1,6 +1,10 @@
 # Diagnostic-only smoke configuration for issue #4010.
-# This untrained mode is allowed only so map-runner wiring and contracts can be tested.
-allow_untrained_smoke: true
+# Fill checkpoint_path and normalizer_path from the CPU smoke trainer manifest
+# before using this with map_runner. Without those artifacts the adapter fails
+# closed instead of falling back to untrained weights.
+checkpoint_path: null
+normalizer_path: null
+allow_untrained_smoke: false
 deterministic: true
 seed: 4010
 device: cpu

@@ -114,6 +114,112 @@ def test_missing_public_requirement_metadata_is_not_applicable() -> None:
     assert event["triggered"] is False
 
 
+def test_malformed_public_requirement_contracts_fail_closed() -> None:
+    """Malformed or unsupported contracts return unavailable diagnostics."""
+    missing_contract = evaluate_public_requirement_events(
+        scenario={"metadata": {"public_requirement": {"category": "speed_limit"}}},
+        robot_positions=np.zeros((1, 2), dtype=float),
+        robot_velocities=np.zeros((1, 2), dtype=float),
+        ped_positions=np.zeros((1, 0, 2), dtype=float),
+        dt=0.1,
+    )
+    unsupported = evaluate_public_requirement_events(
+        scenario={
+            "metadata": {
+                "public_requirement": {
+                    "category": "speed_limit",
+                    "event_contract": {"type": "future_event"},
+                }
+            }
+        },
+        robot_positions=np.zeros((1, 2), dtype=float),
+        robot_velocities=np.zeros((1, 2), dtype=float),
+        ped_positions=np.zeros((1, 0, 2), dtype=float),
+        dt=0.1,
+    )
+
+    assert missing_contract["status"] == "unavailable"
+    assert "event_contract" in missing_contract["reason"]
+    assert unsupported["status"] == "unavailable"
+    assert "unsupported" in unsupported["reason"]
+
+
+def test_actor_contract_missing_inputs_reports_unavailable() -> None:
+    """Actor-based predicates require a configured actor and trajectory column."""
+    missing_actor = evaluate_public_requirement_events(
+        scenario=_scenario("safe_braking", "pedestrian_steps_in_front"),
+        robot_positions=np.zeros((1, 2), dtype=float),
+        robot_velocities=np.zeros((1, 2), dtype=float),
+        ped_positions=np.zeros((1, 0, 2), dtype=float),
+        dt=0.1,
+    )
+    missing_conflict = evaluate_public_requirement_events(
+        scenario={
+            "single_pedestrians": [{"id": "h1"}],
+            "metadata": {
+                "public_requirement": {
+                    "category": "safe_braking",
+                    "event_contract": {
+                        "type": "pedestrian_steps_in_front",
+                        "pedestrian_id": "h1",
+                    },
+                }
+            },
+        },
+        robot_positions=np.zeros((1, 2), dtype=float),
+        robot_velocities=np.zeros((1, 2), dtype=float),
+        ped_positions=np.zeros((1, 1, 2), dtype=float),
+        dt=0.1,
+    )
+
+    assert missing_actor["status"] == "unavailable"
+    assert "unavailable in trajectory" in missing_actor["reason"]
+    assert missing_conflict["status"] == "unavailable"
+    assert "conflict_point" in missing_conflict["reason"]
+
+
+def test_speed_limit_monitor_missing_or_empty_velocity_data() -> None:
+    """Speed-limit diagnostics fail closed or return zero when data is absent."""
+    missing_limit = evaluate_public_requirement_events(
+        scenario={
+            "metadata": {
+                "public_requirement": {
+                    "category": "speed_limit",
+                    "event_contract": {"type": "speed_limit_monitor"},
+                }
+            }
+        },
+        robot_positions=np.zeros((1, 2), dtype=float),
+        robot_velocities=np.zeros((1, 2), dtype=float),
+        ped_positions=np.zeros((1, 0, 2), dtype=float),
+        dt=0.1,
+    )
+    empty_velocity = evaluate_public_requirement_events(
+        scenario={
+            "metadata": {
+                "public_requirement": {
+                    "category": "speed_limit",
+                    "event_contract": {
+                        "type": "speed_limit_monitor",
+                        "speed_limit_m_s": 0.8,
+                    },
+                }
+            }
+        },
+        robot_positions=np.zeros((1, 2), dtype=float),
+        robot_velocities=np.zeros((0, 2), dtype=float),
+        ped_positions=np.zeros((1, 0, 2), dtype=float),
+        dt=0.1,
+    )
+
+    assert missing_limit["status"] == "unavailable"
+    assert "speed_limit_m_s" in missing_limit["reason"]
+    assert empty_velocity["status"] == "available"
+    assert empty_velocity["triggered"] is False
+    assert empty_velocity["max_speed_m_s"] == 0.0
+    assert empty_velocity["max_excess_m_s"] == 0.0
+
+
 def _scenario(
     category: str,
     event_type: str,

@@ -80,6 +80,67 @@ def test_resume_identity_is_algorithm_aware(
     assert second["written"] == 1
 
 
+def test_resume_identity_distinguishes_uncertainty_envelope_alpha() -> None:
+    """Scenario-level uncertainty-envelope alpha changes the episode identity."""
+    scenario_alpha_zero = _minimal_map_scenario()
+    scenario_alpha_zero["simulation_config"] = {
+        "pedestrian_uncertainty_envelope_enabled": True,
+        "pedestrian_uncertainty_alpha_mps": 0.0,
+    }
+    scenario_alpha_point_one = _minimal_map_scenario()
+    scenario_alpha_point_one["simulation_config"] = {
+        "pedestrian_uncertainty_envelope_enabled": True,
+        "pedestrian_uncertainty_alpha_mps": 0.1,
+    }
+
+    payload_zero = map_runner._scenario_identity_payload(
+        scenario_alpha_zero,
+        algo="prediction_mpc",
+        algo_config=map_runner._apply_scenario_uncertainty_envelope_config(
+            "prediction_mpc", {}, scenario_alpha_zero
+        ),
+        horizon=None,
+        dt=None,
+        record_forces=True,
+    )
+    payload_point_one = map_runner._scenario_identity_payload(
+        scenario_alpha_point_one,
+        algo="prediction_mpc",
+        algo_config=map_runner._apply_scenario_uncertainty_envelope_config(
+            "prediction_mpc", {}, scenario_alpha_point_one
+        ),
+        horizon=None,
+        dt=None,
+        record_forces=True,
+    )
+
+    assert map_runner._compute_map_episode_id(
+        payload_zero, 1
+    ) != map_runner._compute_map_episode_id(payload_point_one, 1)
+
+
+def test_scenario_uncertainty_envelope_config_threads_only_supported_planners() -> None:
+    """Scenario envelope fields become planner config for MPC-family adapters only."""
+    scenario = {
+        "name": "uncertainty-envelope-config",
+        "simulation_config": {
+            "pedestrian_uncertainty_envelope_enabled": True,
+            "pedestrian_uncertainty_alpha_mps": 0.1,
+        },
+    }
+
+    threaded = map_runner._apply_scenario_uncertainty_envelope_config(
+        "prediction_mpc", {"horizon_steps": 3}, scenario
+    )
+    unrelated = map_runner._apply_scenario_uncertainty_envelope_config(
+        "goal", {"horizon_steps": 3}, scenario
+    )
+
+    assert threaded["pedestrian_uncertainty_envelope_enabled"] is True
+    assert threaded["pedestrian_uncertainty_alpha_mps"] == 0.1
+    assert unrelated == {"horizon_steps": 3}
+
+
 def test_resume_identity_uses_identity_algo_observation_mode(
     tmp_path: Path,
     monkeypatch,

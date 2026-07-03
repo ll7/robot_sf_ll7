@@ -2092,6 +2092,17 @@ def _set_simulation_override_attr(
             config.sim_config.ttc_predictive_force,
             enabled=True,
         )
+    elif attr == "pedestrian_uncertainty_envelope_enabled":
+        setattr(
+            config.sim_config,
+            attr,
+            _coerce_bool(overrides[attr], field_name=f"simulation_config.{attr}"),
+        )
+    elif attr == "pedestrian_uncertainty_alpha_mps":
+        alpha = _coerce_finite_float(overrides[attr], field_name=f"simulation_config.{attr}")
+        if alpha < 0.0:
+            raise ValueError("simulation_config.pedestrian_uncertainty_alpha_mps must be >= 0.")
+        setattr(config.sim_config, attr, alpha)
     else:
         setattr(config.sim_config, attr, overrides[attr])
 
@@ -2121,6 +2132,8 @@ def _apply_simulation_overrides(
     for attr in (
         "peds_speed_mult",
         "ped_radius",
+        "pedestrian_uncertainty_envelope_enabled",
+        "pedestrian_uncertainty_alpha_mps",
         "goal_radius",
         "pedestrian_model",
         "ttc_predictive_force",

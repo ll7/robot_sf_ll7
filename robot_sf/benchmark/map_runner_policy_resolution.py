@@ -65,6 +65,44 @@ def _deep_merge_inline(base: dict[str, Any], overrides: dict[str, Any]) -> None:
             base[key] = deepcopy(value)
 
 
+_UNCERTAINTY_ENVELOPE_ALGOS = {
+    "cv_prediction_mpc",
+    "learned_prediction_mpc",
+    "nmpc",
+    "nmpc_social",
+    "prediction_aware_mpc",
+    "prediction_mpc",
+}
+_UNCERTAINTY_ENVELOPE_FIELDS = (
+    "pedestrian_uncertainty_envelope_enabled",
+    "pedestrian_uncertainty_alpha_mps",
+)
+
+
+def _apply_scenario_uncertainty_envelope_config(
+    algo: str,
+    algo_config: dict[str, Any],
+    scenario: dict[str, Any],
+) -> dict[str, Any]:
+    """Thread scenario-level pedestrian uncertainty-envelope fields into planner config.
+
+    Returns:
+        Planner config with scenario envelope fields merged for supported planners.
+    """
+    algo_key = str(algo).strip().lower()
+    if algo_key not in _UNCERTAINTY_ENVELOPE_ALGOS:
+        return algo_config
+    sim_config = scenario.get("simulation_config")
+    if not isinstance(sim_config, dict):
+        return algo_config
+    overrides = {
+        field: sim_config[field] for field in _UNCERTAINTY_ENVELOPE_FIELDS if field in sim_config
+    }
+    if not overrides:
+        return algo_config
+    return {**algo_config, **overrides}
+
+
 def _resolve_config_path(anchor: Path | None, raw_path: Any) -> Path | None:
     """Resolve candidate-manifest config paths from manifest-local or repo-root form.
 

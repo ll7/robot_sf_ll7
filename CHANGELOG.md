@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* Removed absolute, username-bearing local paths from the committed issue #4207
+  certification-transfer evidence packet and hardened the guard against the class (#4324). The
+  `config.path` / `gate_spec.path` provenance fields in
+  `docs/context/evidence/issue_4207_interacting_smoke_2026-07/{metadata,summary}.json` had baked in
+  the author's worktree path (`/home/<user>/git/robot_sf_ll7.worktrees/...`, same non-reproducibility
+  defect as #4302/#4303) and are now repo-relative (`configs/benchmarks/...`); `SHA256SUMS` is
+  regenerated. `robot_sf/benchmark/certification_transfer.py` now normalizes those fields at
+  generation via `_repo_relative_path(...)`, so future packets stay portable. The
+  `Check Configs For Absolute Home-Dir Paths` pre-commit hook
+  (`hooks/check_config_abs_paths.py`) now also scans `docs/context/evidence/**`, so this class fails
+  closed at commit time. Diagnostic-only evidence hygiene: no benchmark, metric, or paper/dissertation
+  claim changes.
+
 ### Added
 
 * Generated the **current-roster release-gate evidence report** for issue #4166, the real-campaign
@@ -50,7 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `robot_sf/benchmark/certification_transfer.py` gains `classify_interaction_status(...)` and now
   tags every gate cell with `interaction_status` (`interacting` / `non_interacting` / `unknown`) and
   every transfer-matrix row with `interaction_status` plus an `interaction_exercised` flag. Because
-  `social_force_default` and `hsfm_total_force_v1` only diverge when the robot enters the 5 m
+  `social_force_default` (social-force model, SFM) and `hsfm_total_force_v1` (headed social-force
+  model, HSFM) only diverge when the robot enters the 5 m
   pedestrian near field, a `stable_pass`/`stable_fail` built from cells that never do is *vacuous* —
   it does not demonstrate certification robustness. The report/metadata now carry
   `interaction_status_counts` and a `model_sensitivity_exercised` boolean, and the README/claim

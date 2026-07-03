@@ -42,7 +42,7 @@
         "low_exposure_success"
       ],
       "run_label": "confirm",
-      "seed_episode_rows": "/home/luttkule/git/robot_sf_ll7/output/issue3810-h600-longhorizon-confirm-run/13268/reports/seed_episode_rows.csv",
+      "seed_episode_rows": "output/issue3810-h600-longhorizon-confirm-run/13268/reports/seed_episode_rows.csv",
       "status": "blocked_missing_required_fields"
     },
     {
@@ -74,7 +74,7 @@
         "low_exposure_success"
       ],
       "run_label": "extended_roster",
-      "seed_episode_rows": "/home/luttkule/git/robot_sf_ll7/output/issue3810-h600-extroster-run/13273/reports/seed_episode_rows.csv",
+      "seed_episode_rows": "output/issue3810-h600-extroster-run/13273/reports/seed_episode_rows.csv",
       "status": "blocked_missing_required_fields"
     }
   ],

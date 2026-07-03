@@ -17,12 +17,8 @@ from typing import Any
 
 SCHEMA_VERSION = "issue_4195_h600_aggregation.v1"
 DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_3810_h600_interpretation_2026-07")
-DEFAULT_CONFIRM_REPORTS = Path(
-    "/home/luttkule/git/robot_sf_ll7/output/issue3810-h600-longhorizon-confirm-run/13268/reports"
-)
-DEFAULT_EXTENDED_REPORTS = Path(
-    "/home/luttkule/git/robot_sf_ll7/output/issue3810-h600-extroster-run/13273/reports"
-)
+DEFAULT_CONFIRM_REPORTS = Path("output/issue3810-h600-longhorizon-confirm-run/13268/reports")
+DEFAULT_EXTENDED_REPORTS = Path("output/issue3810-h600-extroster-run/13273/reports")
 DEFAULT_H500_S20_REPORTS = Path(
     "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/reports"
 )
@@ -69,11 +65,40 @@ METRICS = (
 )
 
 
+def _public_path(path: Path) -> str:
+    """Return a repo-public path without local home/worktree prefixes."""
+    resolved = path.resolve()
+    for anchor in ("docs", "configs", "scripts", "tests", "output"):
+        if anchor in resolved.parts:
+            index = resolved.parts.index(anchor)
+            return str(Path(*resolved.parts[index:]))
+    try:
+        return str(path.resolve().relative_to(Path.cwd().resolve()))
+    except ValueError:
+        return path.name
+
+
 def _json_default(value: Any) -> Any:
     """Serialize non-JSON-native values used by artifact payloads."""
+    if isinstance(value, Path):
+        return _public_path(value)
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    raise TypeError(f"Object type {type(value).__name__} is not JSON serializable")
+
+
+def _scrub_public_paths(value: Any) -> Any:
+    """Recursively remove local machine prefixes from path-like strings."""
+    if isinstance(value, dict):
+        return {key: _scrub_public_paths(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_scrub_public_paths(item) for item in value]
+    if isinstance(value, str) and "/home/" in value:
+        return _public_path(Path(value))
+    return value
 
     if isinstance(value, Path):
-        return value.as_posix()
+        return _public_path(value)
     if isinstance(value, float) and not math.isfinite(value):
         return None
     raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
@@ -292,7 +317,7 @@ def _build_h600_recalibration(
         "schema_version": f"{SCHEMA_VERSION}.snqi_recalibration",
         "status": "ok" if planner_rows else "blocked_no_h600_rows",
         "claim_boundary": "diagnostic-only analysis; canonical SNQI weights/baselines are not overwritten",
-        "launch_packet": LAUNCH_PACKET.as_posix(),
+        "launch_packet": _public_path(LAUNCH_PACKET),
         "source_h600_job_id": "13268",
         "h500_source": h500,
         "weights": SNQI_WEIGHTS,
@@ -556,7 +581,7 @@ def _load_h500_rankings(reports_dir: Path) -> dict[str, Any]:
     if not summary_path.exists():
         return {
             "status": "missing",
-            "reports_dir": reports_dir.as_posix(),
+            "reports_dir": _public_path(reports_dir),
             "reason": "campaign_summary.json not present; h500/S20 reversal checks unavailable",
             "rankings": {},
         }
@@ -584,7 +609,7 @@ def _load_h500_rankings(reports_dir: Path) -> dict[str, Any]:
         rankings[metric] = _rank_rows(metric_rows, value_key="value", descending=descending)
     return {
         "status": "available_s10_h500_not_s20",
-        "reports_dir": reports_dir.as_posix(),
+        "reports_dir": _public_path(reports_dir),
         "campaign_id": campaign.get("campaign_id"),
         "scenario_matrix": campaign.get("scenario_matrix"),
         "scenario_matrix_hash": campaign.get("scenario_matrix_hash"),
@@ -924,7 +949,7 @@ def _write_sha256sums(output_dir: Path) -> None:
     for path in sorted(output_dir.iterdir()):
         if path.name == "SHA256SUMS" or not path.is_file():
             continue
-        lines.append(f"{_sha256(path)}  {path.as_posix()}")
+        lines.append(f"{_sha256(path)}  {_public_path(path)}")
     (output_dir / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -954,7 +979,8 @@ def extend_existing_artifact(
     rows = _read_existing_metric_rows(metric_path)
     comparability = _read_json(comparability_path)
     manifest = _read_json(manifest_path)
-    metadatas = manifest.get("runs") or []
+    metadatas = _scrub_public_paths(manifest.get("runs") or [])
+    manifest["runs"] = metadatas
     snqi_recalibration = _build_h600_recalibration(rows, h500_reports=h500_s20_reports)
     horizon_sensitivity = _build_horizon_sensitivity(rows, h500_reports=h500_s20_reports)
     exposure_diagnostics = _build_exposure_diagnostics(metadatas)
@@ -1082,7 +1108,7 @@ def build_artifact(
     manifest = {
         "schema_version": f"{SCHEMA_VERSION}.source_manifest",
         "bootstrap": {"samples": bootstrap_samples, "confidence": confidence},
-        "runs": metadatas,
+        "runs": _scrub_public_paths(metadatas),
         "h500_s20_reports": h500_s20_reports,
         "generated_outputs": sorted(outputs),
     }

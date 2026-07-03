@@ -222,11 +222,11 @@ def test_build_artifact_writes_tables_comparability_and_checksums(tmp_path: Path
         .startswith("# Issue 4195 h600 Aggregation Artifact")
     )
     checksums = (output_dir / "SHA256SUMS").read_text(encoding="utf-8")
-    assert f"{output_dir.as_posix()}/planner_metric_summary.csv" in checksums
-    assert f"{output_dir.as_posix()}/snqi_recalibration_bundle.json" in checksums
-    assert f"{output_dir.as_posix()}/horizon_sensitivity_report.json" in checksums
-    assert f"{output_dir.as_posix()}/interaction_exposure_diagnostics.json" in checksums
-    assert f"{output_dir.as_posix()}/source_manifest.json" in checksums
+    assert "planner_metric_summary.csv" in checksums
+    assert "snqi_recalibration_bundle.json" in checksums
+    assert "horizon_sensitivity_report.json" in checksums
+    assert "interaction_exposure_diagnostics.json" in checksums
+    assert "source_manifest.json" in checksums
 
     extended_result = extend_existing_artifact(
         output_dir=output_dir,

@@ -1,0 +1,121 @@
+{
+  "claim_boundary": "Controlled #3471 crossing scenario using the real stream_gap planner and ScenarioBelief uncertainty gate. This is diagnostic-tier representation generalization evidence only: no full benchmark campaign, no Slurm/GPU submission, and no paper/dissertation claim edit.",
+  "decision_layer": {
+    "evidence_kind": "diagnostic_proxy",
+    "generalization": "generalizes",
+    "inconclusive_sources": [],
+    "n_sources": 3,
+    "per_source": [
+      {
+        "min_separation_delta_m": -0.4518,
+        "n_episodes": 12,
+        "source": "belief_drop",
+        "unsafe_commit_delta": 0.24642434988179668,
+        "verdict": "reproduces_unsafe_dropping"
+      },
+      {
+        "min_separation_delta_m": -0.4518,
+        "n_episodes": 12,
+        "source": "conformal_radius",
+        "unsafe_commit_delta": 0.24642434988179668,
+        "verdict": "reproduces_unsafe_dropping"
+      },
+      {
+        "min_separation_delta_m": -0.4518,
+        "n_episodes": 12,
+        "source": "envelope_inflation",
+        "unsafe_commit_delta": 0.24642434988179668,
+        "verdict": "reproduces_unsafe_dropping"
+      }
+    ],
+    "reproducing_sources": [
+      "belief_drop",
+      "conformal_radius",
+      "envelope_inflation"
+    ],
+    "schema_version": "uncertainty_source_generalization.v1"
+  },
+  "evidence_tier": "diagnostic",
+  "generalization": "generalizes",
+  "issue": 3557,
+  "params": {
+    "corridor_x": 5.0,
+    "dt": 0.1,
+    "goal_x": 9.0,
+    "max_steps": 120,
+    "near_miss_margin": 0.6,
+    "path_y": 5.0,
+    "ped_cross_speed": 0.7,
+    "ped_radius": 0.3,
+    "robot_radius": 0.4,
+    "start_x": 2.0
+  },
+  "per_representation": [
+    {
+      "dropped_unsafe_commit_rate": 0.284722,
+      "dropped_worst_min_separation_m": -0.6212,
+      "episodes": 12,
+      "fail_closed_any": false,
+      "generalization_verdict": "reproduces_unsafe_dropping",
+      "harness_decision": "revise",
+      "harness_reason": "dropping uncertain agents increased unsafe commitment (unsafe_commit_steps +201, worst_min_sep delta 0.452m); the uncertainty-dropping default should be revised/blocked for safety-relevant use",
+      "min_separation_delta_dropped_minus_retained_m": -0.4518,
+      "representation": "belief_drop",
+      "retained_unsafe_commit_rate": 0.038298,
+      "retained_worst_min_separation_m": -0.1694,
+      "uncertainty_consumed_any": true,
+      "unsafe_commit_rate_delta_dropped_minus_retained": 0.246424
+    },
+    {
+      "dropped_unsafe_commit_rate": 0.284722,
+      "dropped_worst_min_separation_m": -0.6212,
+      "episodes": 12,
+      "fail_closed_any": false,
+      "generalization_verdict": "reproduces_unsafe_dropping",
+      "harness_decision": "revise",
+      "harness_reason": "dropping uncertain agents increased unsafe commitment (unsafe_commit_steps +201, worst_min_sep delta 0.452m); the uncertainty-dropping default should be revised/blocked for safety-relevant use",
+      "min_separation_delta_dropped_minus_retained_m": -0.4518,
+      "representation": "conformal_radius",
+      "retained_unsafe_commit_rate": 0.038298,
+      "retained_worst_min_separation_m": -0.1694,
+      "uncertainty_consumed_any": true,
+      "unsafe_commit_rate_delta_dropped_minus_retained": 0.246424
+    },
+    {
+      "dropped_unsafe_commit_rate": 0.284722,
+      "dropped_worst_min_separation_m": -0.6212,
+      "episodes": 12,
+      "fail_closed_any": false,
+      "generalization_verdict": "reproduces_unsafe_dropping",
+      "harness_decision": "revise",
+      "harness_reason": "dropping uncertain agents increased unsafe commitment (unsafe_commit_steps +201, worst_min_sep delta 0.452m); the uncertainty-dropping default should be revised/blocked for safety-relevant use",
+      "min_separation_delta_dropped_minus_retained_m": -0.4518,
+      "representation": "envelope_inflation",
+      "retained_unsafe_commit_rate": 0.038298,
+      "retained_worst_min_separation_m": -0.1694,
+      "uncertainty_consumed_any": true,
+      "unsafe_commit_rate_delta_dropped_minus_retained": 0.246424
+    }
+  ],
+  "representations": [
+    "belief_drop",
+    "conformal_radius",
+    "envelope_inflation"
+  ],
+  "schema_version": "uncertainty_representation_generalization_report.v1",
+  "seed_count": 12,
+  "seeds": [
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109,
+    110,
+    111,
+    112
+  ]
+}

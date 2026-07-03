@@ -1,0 +1,35 @@
+{
+  "followup_issue_skeleton": {
+    "body": "Issue #4206 cannot produce mechanism-level F-C4(ii) policy-structure conclusions until h600\nepisode rows or sidecars provide failure_mechanism_taxonomy.v1 labels with confidence and\nevidence URI fields.\n",
+    "title": "Add trace-verified failure-mechanism labels to h600 episode exports for F-C4(ii)"
+  },
+  "generated_at": "2026-07-03T00:00:00Z",
+  "geometry_bucket_substitution_rejected": false,
+  "issue": 4206,
+  "loaded_row_count": 0,
+  "missing_row_count": 2,
+  "missing_rows_sample": [
+    {
+      "missing_fields": [
+        "reports/seed_episode_rows.csv"
+      ],
+      "missing_path": "output/issue3810-h600-longhorizon-confirm-run/13268/reports/seed_episode_rows.csv",
+      "run": "confirm_h600_13268"
+    },
+    {
+      "missing_fields": [
+        "reports/seed_episode_rows.csv"
+      ],
+      "missing_path": "output/issue3810-h600-extroster-run/13273/reports/seed_episode_rows.csv",
+      "run": "extended_h600_13273"
+    }
+  ],
+  "required_fields": [
+    "mechanism_schema_version",
+    "mechanism_label",
+    "mechanism_confidence",
+    "mechanism_evidence_mode",
+    "mechanism_evidence_uri"
+  ],
+  "status": "blocked_missing_trace_verified_mechanism_labels"
+}

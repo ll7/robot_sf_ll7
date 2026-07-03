@@ -49,6 +49,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4206_policy_structure_mechanism_crosscut_2026-07
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4207_certification_transfer_probe_2026-07
     status: evidence
     freshness: evidence

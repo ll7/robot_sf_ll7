@@ -20,7 +20,7 @@ issue_result_classification_vocabulary:
   - benchmark
   - diagnostic
   - negative
-  - null
+  - "null"
   - invalid
   - blocked
 claim_boundary: >

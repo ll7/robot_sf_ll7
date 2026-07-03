@@ -2903,3 +2903,7 @@ entries:
     freshness: evidence
     area: benchmark_evidence
     legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_4017_constrained_rl/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

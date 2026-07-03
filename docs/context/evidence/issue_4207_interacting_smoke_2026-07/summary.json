@@ -281,7 +281,7 @@
     "No deployment, real-world safety, or general planner-superiority claim follows."
   ],
   "config": {
-    "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4207-interacting-scenario/configs/benchmarks/issue_4207_interacting_smoke_probe.yaml",
+    "path": "configs/benchmarks/issue_4207_interacting_smoke_probe.yaml",
     "schema_version": "certification-transfer-probe.v1",
     "sha256": "95fe4ce1ecbfe7340912351e5dc58cd3a19af5a48af8c9b986940853847cfe47"
   },
@@ -816,7 +816,7 @@
     }
   ],
   "gate_spec": {
-    "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-4207-interacting-scenario/configs/benchmarks/release_gates/issue_4207_interacting_smoke_gates.yaml",
+    "path": "configs/benchmarks/release_gates/issue_4207_interacting_smoke_gates.yaml",
     "schema_version": "benchmark_release_gate_spec.v1",
     "sha256": "03e036c2cf7eea467e19870a04649764beb57432c0fcf6290933f7d7c5e71d4d"
   },

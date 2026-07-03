@@ -45,3 +45,28 @@ Provenance fields should describe how the denominator was computed:
 
 Missing trace support records `not_derivable_missing_trace`; it does not write zeros or infer
 episode-level exposure from aggregate planner metrics.
+
+## Write-Time Instrumentation (map runner)
+
+The map-runner episode writer (`robot_sf/benchmark/map_runner_episode.run_map_episode`) now emits
+both schema blocks natively on every episode record it returns (which is what is persisted to
+`episodes.jsonl`), closing acceptance criterion #2:
+
+- `record["failure_mechanism"]`: always the fail-closed `unknown` block from
+  `unknown_failure_mechanism_record`. A single map-runner episode is not a paired-trace mechanism
+  analysis, so no trace-verified label is asserted and geometry or scenario names are never
+  substituted. A trace-verified label must come from the mechanism cross-cut path (#4206), not this
+  writer.
+- `record["interaction_exposure"]`: computed by `compute_interaction_exposure_fields` from the
+  episode's own recorded robot/pedestrian trajectory (its real trace, not imputation). When the
+  trajectory support is absent (empty trace or no pedestrians), the writer emits the explicit
+  `not_derivable_*` block instead of fabricated zeros.
+
+The diagnostic exposure radius defaults to `2.0` m, mirroring the proxemic near/far split used by
+`experimental_ped_impact_metrics`, and the low-exposure-success threshold defaults to `0.2`. Both
+values are recorded on each row so downstream tooling can override or re-derive them.
+
+These fields are diagnostic-only. This writer does not promote them into F-C4(ii) ranking
+conclusions. Teaching the seed-episode-row CSV builder and the #4195/#4206 builders to consume the
+native blocks (the other half of AC #5) remains a follow-up slice; the flattened
+`seed_episode_rows.csv` consumer still emits its own fail-closed columns until then.

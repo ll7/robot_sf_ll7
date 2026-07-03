@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added **write-time episode-row mechanism and exposure instrumentation** to the map runner
+  (#4242): `robot_sf/benchmark/map_runner_episode.run_map_episode` now attaches native
+  `failure_mechanism` (`failure_mechanism_taxonomy.v1`) and `interaction_exposure`
+  (`interaction_exposure.v1`) schema blocks to every episode record. The failure-mechanism block is
+  fail-closed `unknown` (a single episode is not a paired-trace analysis; geometry/scenario names are
+  never substituted), and interaction exposure is computed from the episode's own trajectory or
+  emitted as an explicit `not_derivable` block rather than fabricated zeros. Diagnostic-only; no
+  benchmark-ranking claim promotion.
 * Added a **pedestrian uncertainty-envelope abstraction** for conservative obstacle clearance
   (#4141): new `robot_sf/nav/uncertainty_envelope.py` defines `PedestrianUncertaintyEnvelope`, a
   `linear_inflation_policy(alpha, dt)` factory, an `effective_pedestrian_radius(...)` planner

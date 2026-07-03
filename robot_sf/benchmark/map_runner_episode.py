@@ -27,7 +27,13 @@ from robot_sf.benchmark.cbf_safety_filter_runtime import (
 from robot_sf.benchmark.cbf_safety_filter_runtime import (
     runtime_config_from_mapping as cbf_runtime_config_from_mapping,
 )
+from robot_sf.benchmark.failure_mechanism_taxonomy import unknown_failure_mechanism_record
 from robot_sf.benchmark.group_space_metrics import group_specs_from_map
+from robot_sf.benchmark.interaction_exposure import (
+    InteractionExposureError,
+    compute_interaction_exposure_fields,
+    not_derivable_interaction_exposure,
+)
 from robot_sf.benchmark.latency_stress import not_available_latency_metrics
 from robot_sf.benchmark.map_runner_actions import DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS
 from robot_sf.benchmark.map_runner_actions import (
@@ -456,6 +462,99 @@ def _episode_metadata_for_benchmark_metrics(
             "groups": group_specs,
         }
     return episode_metadata or None
+
+
+# Diagnostic interaction-exposure defaults for write-time instrumentation
+# (issue #4242 AC #2). The 2.0 m radius mirrors the existing proxemic near/far
+# split used by ``experimental_ped_impact_metrics`` so the writer is grounded in
+# an existing repository convention rather than an arbitrary threshold. Both
+# values are recorded on every emitted row so downstream tooling can override or
+# re-derive without guessing which radius/threshold produced the value.
+_INTERACTION_EXPOSURE_RADIUS_M = 2.0
+_LOW_EXPOSURE_SUCCESS_THRESHOLD = 0.2
+
+
+def _finite_pedestrian_frames(
+    ped_pos_arr: np.ndarray,
+    step_count: int,
+) -> list[list[tuple[float, float]]]:
+    """Convert a padded ``(T, K, 2)`` pedestrian tensor to per-step finite points.
+
+    ``stack_ped_positions`` pads absent pedestrians with NaN; the interaction
+    exposure helper rejects non-finite coordinates, so padding is dropped here
+    and each frame is aligned to ``step_count`` to match the robot trace length.
+
+    Returns:
+        One list of finite ``(x, y)`` pedestrian points per step.
+    """
+    frames: list[list[tuple[float, float]]] = []
+    peds = np.asarray(ped_pos_arr, dtype=float)
+    if peds.ndim == 3 and peds.shape[0] >= 1:
+        for frame in peds[:step_count]:
+            frames.append(
+                [
+                    (float(px), float(py))
+                    for px, py in frame
+                    if math.isfinite(px) and math.isfinite(py)
+                ]
+            )
+    if len(frames) < step_count:
+        frames.extend([] for _ in range(step_count - len(frames)))
+    return frames[:step_count]
+
+
+def _episode_evidence_fields(
+    *,
+    robot_pos_arr: np.ndarray,
+    ped_pos_arr: np.ndarray,
+    dt: float,
+    success: bool,
+) -> dict[str, Any]:
+    """Build native failure-mechanism and interaction-exposure schema blocks.
+
+    Write-time instrumentation for issue #4242 AC #2. The blocks are attached to
+    every map-runner episode record so new campaigns natively carry the
+    ``failure_mechanism_taxonomy.v1`` and ``interaction_exposure.v1`` fields
+    instead of omitting them.
+
+    Fail-closed policy:
+
+    - Failure mechanism is always ``unknown`` at write time. A single map-runner
+      episode is not a paired-trace mechanism analysis, so no trace-verified
+      label is asserted and geometry/scenario names are never substituted. A
+      trace-verified label must come from the mechanism cross-cut path, not this
+      writer.
+    - Interaction exposure is computed from the episode's own recorded
+      trajectory (its real trace, not imputation). When the trajectory support
+      is missing or malformed, an explicit ``not_derivable`` block is emitted
+      rather than fabricated zeros.
+
+    Returns:
+        Mapping with ``failure_mechanism`` and ``interaction_exposure`` blocks.
+    """
+    mechanism = unknown_failure_mechanism_record("not_derivable_from_single_episode_record")
+
+    robot = np.asarray(robot_pos_arr, dtype=float)
+    if robot.ndim != 2 or robot.shape[0] == 0 or robot.shape[1] != 2:
+        exposure = not_derivable_interaction_exposure("not_derivable_missing_trace")
+        return {"failure_mechanism": mechanism, "interaction_exposure": exposure}
+
+    step_count = int(robot.shape[0])
+    robot_frames = [(float(x), float(y)) for x, y in robot]
+    ped_frames = _finite_pedestrian_frames(ped_pos_arr, step_count)
+    try:
+        exposure = compute_interaction_exposure_fields(
+            robot_positions=robot_frames,
+            pedestrian_positions=ped_frames,
+            dt=float(dt),
+            exposure_radius_m=_INTERACTION_EXPOSURE_RADIUS_M,
+            low_exposure_success_threshold=_LOW_EXPOSURE_SUCCESS_THRESHOLD,
+            success=bool(success),
+        )
+    except (InteractionExposureError, ValueError, TypeError):
+        # Instrumentation must never break the episode writer; fail closed.
+        exposure = not_derivable_interaction_exposure("not_derivable_missing_trace")
+    return {"failure_mechanism": mechanism, "interaction_exposure": exposure}
 
 
 def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
@@ -1442,6 +1541,17 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     )
     attach_pedestrian_model_fields(record, pedestrian_model_provenance)
     record.update(static_deadlock_fields)
+    # Write-time episode-row instrumentation for issue #4242 AC #2: emit native
+    # failure-mechanism (fail-closed unknown) and interaction-exposure (computed
+    # from this episode's trajectory) schema blocks so new campaigns carry them.
+    record.update(
+        _episode_evidence_fields(
+            robot_pos_arr=robot_pos_arr,
+            ped_pos_arr=ped_pos_arr,
+            dt=float(config.sim_config.time_per_step_in_secs),
+            success=route_complete and not collision_seen,
+        )
+    )
     if benchmark_track is not None:
         record["benchmark_track"] = benchmark_track
     if track_schema_version is not None:

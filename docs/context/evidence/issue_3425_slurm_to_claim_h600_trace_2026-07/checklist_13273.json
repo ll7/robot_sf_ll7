@@ -2,7 +2,7 @@
   "blockers": [],
   "checks": [
     {
-      "detail": "job 13268 listed in docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json",
+      "detail": "job 13273 listed in docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json",
       "name": "retrieval_source_manifest",
       "remediation": null,
       "status": "pass"
@@ -20,7 +20,7 @@
       "status": "pass"
     },
     {
-      "detail": "job 13268 finalizer record loaded",
+      "detail": "job 13273 finalizer record loaded",
       "name": "finalizer_manifest",
       "remediation": null,
       "status": "pass"
@@ -44,7 +44,7 @@
       "status": "pass"
     },
     {
-      "detail": "job 13268 present in finalizer_bridge rows",
+      "detail": "job 13273 present in finalizer_bridge rows",
       "name": "reconciliation_finalizer_bridge",
       "remediation": null,
       "status": "pass"
@@ -84,7 +84,7 @@
     ]
   },
   "finalizer": {
-    "manifest": "docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/finalizer_13268.json",
+    "manifest": "docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/finalizer_13273.json",
     "report": {
       "artifact_status": "all_required_present",
       "claim_boundary": "compact local finalization manifest only; not durable benchmark evidence until artifacts have durable retrieval URIs and policy-specific validation",
@@ -92,7 +92,7 @@
       "classification": "success",
       "durable_pointer": "https://github.com/ll7/robot_sf_ll7/tree/bb674d86833fc8409f359adf93111e603fa27bb2/docs/context/evidence/issue_3810_h600_interpretation_2026-07",
       "issue_number": 3425,
-      "job_id": "13268",
+      "job_id": "13273",
       "output_pointers": [
         "docs/context/evidence/issue_3810_h600_interpretation_2026-07/SHA256SUMS",
         "docs/context/evidence/issue_3810_h600_interpretation_2026-07/comparability_check.json",
@@ -103,32 +103,34 @@
         "docs/context/evidence/issue_3810_h600_interpretation_2026-07/snqi_recalibration_bundle.json",
         "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json"
       ],
-      "source_path": "docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/finalizer_13268.json"
+      "source_path": "docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/finalizer_13273.json"
     }
   },
   "generated_at": "2026-07-03T09:20:00+00:00",
   "issue": 3425,
-  "job_id": "13268",
+  "job_id": "13273",
   "reconciliation": {
     "path": "docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/reconciliation_h600_13268_13273.json"
   },
   "retrieval": {
     "run": {
-      "campaign_id": "issue3810_h600_longhorizon_confirm_run_20260702",
-      "job_id": "13268",
+      "campaign_id": "issue3810_h600_extroster_run_20260702",
+      "job_id": "13273",
       "planner_keys": [
         "goal",
         "orca",
         "ppo",
+        "prediction_mpc",
+        "prediction_mpc_cbf",
         "prediction_planner",
         "sacadrl",
         "social_force",
         "socnav_sampling"
       ],
-      "run_label": "confirm",
+      "run_label": "extended_roster",
       "source_sha256": {
-        "campaign_summary.json": "f29e6c5ee12679408b1d65add0149e4cfe07390f0c8828208114f39dd900c257",
-        "seed_episode_rows.csv": "4493c8ebee0942c1c32b0d51e511f4fd98f35ee2be8d24d366564f8979be7d23"
+        "campaign_summary.json": "f456580bad70167e42d6e24c9570547042fd02ce39c35687ed152928f6a0698e",
+        "seed_episode_rows.csv": "f2e5960c2439f28745b4bd2f7cd19f4c94cabd86cb1387693095a656ac859e81"
       }
     },
     "source_manifest": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_manifest.json",

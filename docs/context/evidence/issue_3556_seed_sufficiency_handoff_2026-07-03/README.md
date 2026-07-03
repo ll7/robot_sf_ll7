@@ -1,5 +1,12 @@
 # Issue #3556 Seed-Sufficiency Handoff Check
 
+> Superseded by
+> [`issue_3556_seed_sufficiency_closure_2026-07-03/`](../issue_3556_seed_sufficiency_closure_2026-07-03/README.md),
+> which searches durable roots (not just the single ephemeral runner output root
+> probed here) and records a reproducible per-root manifest via
+> `scripts/validation/close_issue_3556_seed_sufficiency.py`. This note is retained
+> for the decision trail.
+
 Plain-language summary: the exported ScenarioBelief seed-sufficiency command was run against the expected retained campaign output location, but no retained campaign report root was available there, so no seed-sufficiency evidence can be promoted from this check.
 
 ## Claim Boundary

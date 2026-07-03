@@ -1,9 +1,12 @@
 {
+  "blocker_kinds": [
+    "missing_input_artifact"
+  ],
   "followup_issue_skeleton": {
-    "body": "Issue #4206 cannot produce mechanism-level F-C4(ii) policy-structure conclusions until\nh600 episode rows or sidecars provide mechanism fields using\nmechanism_schema_version=failure_mechanism_taxonomy.v1, mechanism_label,\nmechanism_confidence, mechanism_evidence_mode, and mechanism_evidence_uri.\n",
-    "title": "Add trace-verified failure-mechanism labels to h600 episode exports for F-C4(ii)"
+    "body": "Issue #4206 cannot inspect mechanism labels until the declared h600 run artifacts are present\non the analysis host. Hydrate reports/seed_episode_rows.csv (and any mechanism sidecars) for\nconfirm job 13268 and extended-roster job 13273 from the canonical run store, then re-run the\nbuilder. This is an artifact-retrieval gap, not a mechanism-instrumentation gap.\n",
+    "title": "Retrieve h600 mechanism-crosscut episode artifacts (13268, 13273) to the analysis host"
   },
-  "generated_at": "2026-07-03T13:18:37+00:00",
+  "generated_at": "2026-07-03T00:00:00Z",
   "geometry_bucket_substitution_rejected": true,
   "input_provenance": {
     "config": {
@@ -32,6 +35,7 @@
   "missing_row_count": 2,
   "missing_rows_sample": [
     {
+      "blocker_kind": "missing_input_artifact",
       "missing_fields": [
         "reports/seed_episode_rows.csv"
       ],
@@ -39,6 +43,7 @@
       "run": "confirm_h600_13268"
     },
     {
+      "blocker_kind": "missing_input_artifact",
       "missing_fields": [
         "reports/seed_episode_rows.csv"
       ],
@@ -46,6 +51,7 @@
       "run": "extended_h600_13273"
     }
   ],
+  "next_action": "Retrieve/hydrate the missing h600 run artifacts (reports/seed_episode_rows.csv and any mechanism sidecars) to this host, then re-run the builder. No exporter mechanism-label change is required until the rows are present.",
   "required_fields": [
     "mechanism_schema_version",
     "mechanism_label",
@@ -53,5 +59,5 @@
     "mechanism_evidence_mode",
     "mechanism_evidence_uri"
   ],
-  "status": "blocked_missing_trace_verified_mechanism_labels"
+  "status": "blocked_missing_input_artifacts"
 }

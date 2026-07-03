@@ -1,0 +1,51 @@
+schema_version: benchmark_release_gate_spec.v1
+description: >
+  Provisional #4166-style safety and comfort gates for the issue #4207 INTERACTING
+  certification-transfer smoke family. Thresholds mirror the francis2023_blind_corner probe
+  gates; they are configuration values, not certification approval or paper-grade evidence.
+gates:
+  - id: collision_rate_zero
+    metric: collision_rate
+    threshold: 0.0
+    direction: max
+    category: safety
+    provenance: provisional_issue_4166_not_certification
+    required: true
+    scope:
+      scenario_family: issue4207_interacting_smoke
+  - id: near_miss_rate_limit
+    metric: near_miss_rate
+    threshold: 0.05
+    direction: max
+    category: safety
+    provenance: provisional_issue_4166_not_certification
+    required: true
+    scope:
+      scenario_family: issue4207_interacting_smoke
+  - id: min_clearance_floor
+    metric: min_clearance_m
+    threshold: 0.25
+    direction: min
+    category: safety
+    provenance: provisional_issue_4166_not_certification
+    required: true
+    scope:
+      scenario_family: issue4207_interacting_smoke
+  - id: robot_ped_within_5m_frac_limit
+    metric: robot_ped_within_5m_frac
+    threshold: 0.85
+    direction: max
+    category: comfort
+    provenance: provisional_issue_4166_not_certification
+    required: true
+    scope:
+      scenario_family: issue4207_interacting_smoke
+  - id: jerk_mean_limit
+    metric: jerk_mean
+    threshold: 2.0
+    direction: max
+    category: comfort
+    provenance: provisional_issue_4166_not_certification
+    required: true
+    scope:
+      scenario_family: issue4207_interacting_smoke

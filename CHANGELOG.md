@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* Fixed the **LiCCA post-guard full-suite teardown hang** (#4216): the suite could reach 100% and
+  then never exit because `tests/perf_utils/test_enforce_mode.py` spawned a nested `pytest` child
+  with an unbounded `subprocess.run(...)` (its `@pytest.mark.timeout` marker is a no-op because
+  `pytest-timeout` is not installed). On a shared GPU/HPC node that child can deadlock during
+  CUDA/interpreter teardown or leave a descendant holding device handles, blocking the parent
+  forever. Added `tests/support/process_teardown.py::run_bounded_subprocess`, which runs the child
+  in its own process group and, on timeout, reaps the whole group (SIGTERM→SIGKILL) so descendants
+  are terminated too — mirroring the termination pattern already used by
+  `scripts/dev/run_compact_validation.py`. The nested-pytest call site is now bounded
+  (`ROBOT_SF_NESTED_PYTEST_TIMEOUT`, default 180s) and a CPU-only regression test proves a
+  long-lived descendant is reaped. No GitHub Actions behavior changes.
+
 ### Added
 
 * Added a **skip-if-absent inD shape-contract loader** for issue #4224:
@@ -21,6 +35,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   multi-recording, background-fallback, and fail-closed cases. This is the public slice (b) of the
   maintainer external-data split for the `ind-crossings` asset (registry entry #4238, acquisition
   docs #4290); private-ops staging remains a follow-up. `docs/datasets/ind.md` documents the loader.
+* Added a **consolidated failure-archive rerun closure packet** for issue #3275:
+  `robot_sf/benchmark/failure_archive_rerun_closure.py` (`build_rerun_closure_packet`, schema
+  `failure_archive_rerun_closure_packet.v1`) folds the accumulated rerun readiness/leakage guards into
+  one durable verdict — a single `disposition` (`ready_for_rerun`, `fail_closed_blocked`, or
+  `diagnostic_only`), the consolidated blocker list, and a deterministic `next_empirical_action`.
+  `scripts/adversarial/produce_rerun_closure_packet.py` exposes it as a fail-closed CLI (exit codes
+  `0`/`2`/`3`), and a missing or malformed archive fails closed instead of substituting a synthetic
+  fixture. The closure packet adds no new gate; it composes the canonical pair gate
+  `classify_failure_archive_rerun_readiness`. Running it on the two real smoke archives (`issue_1502`
+  source, `issue_1501` rerun) produces a `fail_closed_blocked` evidence packet under
+  `docs/context/evidence/issue_3275_rerun_closure_2026-07-03/`. No benchmark campaign run, no
+  proposal-model inference, no held-out yield claim, and no paper/dissertation claim edit; the real
+  disjoint certified rerun with independent planner-execution outcomes remains the open issue #3275
+  contract.
 * Generated the **current-roster release-gate evidence report** for issue #4166, the real-campaign
   application of the reporting layer merged in PR #4184. The merged evaluator now consumes the
   canonical retained camera-ready `campaign_summary.json` directly (`release_gates._rows_from_mapping`
@@ -73,6 +101,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`robot_ped_within_5m_frac == 0`, `min_clearance_m ≈ 20 m`), so its "0 flips" result is not yet
   evidence of model-robust certification; the residual empirical action is an interacting scenario
   family. Diagnostic-only; no deployment, benchmark-strength, or paper/dissertation claim.
+* Added an **interacting certification-transfer smoke scenario family** for issue #4207 (#4207) — the
+  residual empirical action named by the interaction-validity guard above. New probe config
+  `configs/benchmarks/issue_4207_interacting_smoke_probe.yaml`, gate spec
+  `configs/benchmarks/release_gates/issue_4207_interacting_smoke_gates.yaml`, scenario descriptor
+  `configs/scenarios/single/issue_4207_interacting_smoke.yaml`, and a deterministic CPU-scale smoke
+  episode fixture `tests/benchmark/fixtures/issue_4207_interacting_smoke/interacting_smoke_episodes.jsonl`.
+  Run through the existing runner in report-only mode, the family drives every transfer cell into the
+  5 m near field so the guard reports `model_sensitivity_exercised = true` (16/16 `interacting`) with a
+  genuine interacting flip on the `ppo` arm (`fragile_pass_to_fail` under `hsfm_total_force_v1`). The
+  committed packet `docs/context/evidence/issue_4207_interacting_smoke_2026-07/` is generated from the
+  **synthetic** fixture — it is not a physics run (see its `SYNTHETIC_SMOKE_NOTICE.md`); its purpose is
+  to exercise the guard's positive path end-to-end and template a future physics-verified geometry/spawn
+  CPU re-run, which remains the tracked next step. No simulation, Slurm/GPU submission, retraining,
+  deployment, benchmark-strength, or paper/dissertation claim.
 * Added a **safety-wrapper false-stop diagnostic** for `wrapper_on` benchmark rows (#3501):
   `robot_sf/benchmark/safety_wrapper_runtime.py` gains `analyze_false_stop_diagnostic(...)`, and the
   episode summary now embeds a schema-tagged `false_stop_diagnostic` block plus a

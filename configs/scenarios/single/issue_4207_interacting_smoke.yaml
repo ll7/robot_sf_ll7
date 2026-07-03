@@ -1,0 +1,47 @@
+# Issue #4207 interacting certification-transfer smoke scenario family.
+#
+# Purpose: provide an INTERACTING scenario family for the certification-transfer probe so the
+# interaction-validity guard added in PR #4308 can report `model_sensitivity_exercised = true`.
+# The committed `francis2023_blind_corner` probe run kept the robot ~20 m from the single
+# pedestrian (`robot_ped_within_5m_frac = 0`), so every cell was classified `non_interacting`
+# and the SFM/HSFM swap was never exercised.
+#
+# This descriptor documents a proposed robot-vs-pedestrian crossing geometry whose robot route
+# passes through the pedestrian corridor (near-field contact). It is the template for a future
+# real CPU re-run. The evidence packet committed alongside this slice
+# (docs/context/evidence/issue_4207_interacting_smoke_2026-07/) is generated from a synthetic
+# CPU-scale smoke episode fixture
+# (tests/benchmark/fixtures/issue_4207_interacting_smoke/interacting_smoke_episodes.jsonl),
+# NOT from a physics simulation of this matrix. The physics-verified geometry/spawn CPU re-run
+# remains the tracked follow-up.
+scenarios:
+- name: issue_4207_interacting_smoke
+  # Reuse an existing near-field map so the future real CPU re-run is one command away; the
+  # crossing intent (robot route through the pedestrian corridor) is the geometry under test.
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_blind_corner.svg
+  simulation_config:
+    max_episode_steps: 400
+    # Single scripted pedestrian crossing the robot corridor keeps the smoke deterministic and
+    # CPU-cheap while forcing near-field contact.
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+  robot_config: {}
+  metadata:
+    archetype: interacting_crossing
+    flow: crossing
+    behavior: none
+    plausibility:
+      # Intended interacting geometry; NOT yet physics-verified in this repository. The committed
+      # evidence for this slice comes from the synthetic smoke fixture, not from running this map.
+      status: unverified
+      notes: >-
+        Proposed interacting crossing geometry for the issue #4207 certification-transfer probe.
+        Near-field contact (robot_ped_within_5m_frac > 0) is a design intent to be confirmed by a
+        future CPU re-run; the committed evidence packet is generated from a synthetic smoke
+        episode fixture, not from a physics run of this matrix.
+  seeds:
+  - 111
+  - 112
+  - 113

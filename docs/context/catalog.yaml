@@ -93,6 +93,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4207_interacting_smoke_2026-07
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4183_hybrid_global_rl_diagnostic/README.md
     status: evidence
     freshness: evidence
@@ -3000,6 +3004,14 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_3556_seed_sufficiency_closure_2026-07-03/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3275_rerun_closure_2026-07-03/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3275_rerun_closure_2026-07-03/real_archive_closure_packet.json
     status: evidence
     freshness: evidence
     area: benchmark_evidence

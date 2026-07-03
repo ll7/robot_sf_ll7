@@ -123,6 +123,7 @@ from robot_sf.benchmark.map_runner_policies import adapters as _adapter_policy_b
 from robot_sf.benchmark.map_runner_policies import adaptive_proxemic as _adaptive_proxemic_builder
 from robot_sf.benchmark.map_runner_policies import diffusion_policy as _diffusion_policy_builder
 from robot_sf.benchmark.map_runner_policies import distributional_rl as _distributional_rl_builder
+from robot_sf.benchmark.map_runner_policies import gap_reference as _gap_reference_builder
 from robot_sf.benchmark.map_runner_policies import goal as _goal_policy_builder
 from robot_sf.benchmark.map_runner_policies import group_avoidance as _group_avoidance_builder
 from robot_sf.benchmark.map_runner_policies import hybrid_global_rl as _hybrid_global_rl_builder
@@ -192,14 +193,6 @@ from robot_sf.benchmark.result_provenance import (
 from robot_sf.benchmark.result_provenance import (
     write_result_provenance_manifest as _write_result_provenance_manifest,
 )
-from robot_sf.benchmark.scenario_belief_policy_hook import (
-    BELIEF_MODES,
-    DEFAULT_FOV_DEGREES,
-    DEFAULT_MAX_PEDESTRIANS,
-    DEFAULT_MAX_RANGE_M,
-    DEFAULT_PED_RADIUS,
-    BeliefModeStreamGapAdapter,
-)
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.schema_validator import load_schema
 from robot_sf.benchmark.tracking_precision_contract import (
@@ -214,10 +207,7 @@ from robot_sf.benchmark.utils import (
 )
 from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.gym_env.environment_factory import make_robot_env
-from robot_sf.planner.gap_prediction import (
-    GapAwarePredictionAdapter,
-    build_gap_prediction_config,
-)
+from robot_sf.planner.gap_prediction import GapAwarePredictionAdapter  # noqa: F401
 from robot_sf.planner.grid_route import (  # noqa: F401
     GridRoutePlannerAdapter,
     build_grid_route_config,
@@ -285,9 +275,8 @@ from robot_sf.planner.socnav import (
     SocialForcePlannerAdapter,
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
-    TrivialReferencePlannerAdapter,
 )
-from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, build_stream_gap_config
+from robot_sf.planner.stream_gap import StreamGapPlannerAdapter  # noqa: F401
 from robot_sf.training.scenario_loader import load_scenarios
 
 if TYPE_CHECKING:
@@ -991,6 +980,7 @@ _POLICY_BUILDERS: dict[str, _policy_builder_registry.PolicyBuilder] = {
     ),
     **dict.fromkeys(_rule_and_grid_builder.RULE_AND_GRID_KEYS, _rule_and_grid_builder.build),
     **dict.fromkeys(_safety_barrier_builder.ADAPTER_ALGO_KEYS, _safety_barrier_builder.build),
+    **dict.fromkeys(_gap_reference_builder.GAP_REFERENCE_KEYS, _gap_reference_builder.build),
     **dict.fromkeys(
         _hybrid_global_rl_builder.HYBRID_GLOBAL_RL_KEYS, _hybrid_global_rl_builder.build
     ),
@@ -1047,72 +1037,6 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
             limitations=registered_adapter_spec.limitations,
-        )
-
-    if algo_key in {"trivial_reference", "reference_adapter"}:
-        adapter = TrivialReferencePlannerAdapter(config=_build_socnav_config(algo_config))
-        meta["algorithm"] = "trivial_reference"
-        return _build_adapter_policy(
-            algo_key="trivial_reference",
-            algo_config=algo_config,
-            meta=meta,
-            adapter=adapter,
-            adapter_name="TrivialReferencePlannerAdapter",
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            limitations=(
-                "Diagnostic adapter template only; do not use as benchmark planner evidence."
-            ),
-        )
-
-    if algo_key == "stream_gap":
-        belief_mode = str(algo_config.get("belief_mode") or "").strip().lower() or None
-        stream_gap_config = algo_config
-        limitations: str | None = None
-        if belief_mode in BELIEF_MODES:
-            # The mode owns the uncertainty gate; gate ON only for the dropping mode.
-            stream_gap_config = {
-                **algo_config,
-                "uncertainty_gating_enabled": BELIEF_MODES[belief_mode]["gate"],
-            }
-            limitations = f"scenario_belief_mode={belief_mode}_diagnostic"
-        adapter: Any = StreamGapPlannerAdapter(config=build_stream_gap_config(stream_gap_config))
-        if belief_mode in BELIEF_MODES:
-            adapter = BeliefModeStreamGapAdapter(
-                adapter,
-                mode=belief_mode,
-                fov_degrees=float(algo_config.get("belief_fov_degrees", DEFAULT_FOV_DEGREES)),
-                max_range_m=algo_config.get("belief_max_range_m", DEFAULT_MAX_RANGE_M),
-                ped_radius=float(algo_config.get("belief_ped_radius", DEFAULT_PED_RADIUS)),
-                max_pedestrians=int(
-                    algo_config.get("belief_max_pedestrians", DEFAULT_MAX_PEDESTRIANS)
-                ),
-            )
-        return _build_adapter_policy(
-            algo_key=algo_key,
-            algo_config=stream_gap_config,
-            meta=meta,
-            adapter=adapter,
-            adapter_name="StreamGapPlannerAdapter",
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            limitations=limitations,
-        )
-
-    if algo_key == "gap_prediction":
-        allow_fallback = bool(algo_config.get("allow_fallback", False))
-        adapter = GapAwarePredictionAdapter(
-            config=build_gap_prediction_config(algo_config),
-            allow_fallback=allow_fallback,
-        )
-        return _build_adapter_policy(
-            algo_key=algo_key,
-            algo_config=algo_config,
-            meta=meta,
-            adapter=adapter,
-            adapter_name="GapAwarePredictionAdapter",
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
         )
 
     if algo_key == "mppi_social":

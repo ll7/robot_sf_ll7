@@ -25,10 +25,14 @@ def test_issue_3977_public_requirement_manifest_loads_four_families() -> None:
     assert categories == EXPECTED_CATEGORIES
 
     for scenario in scenarios:
-        contract = scenario["metadata"]["public_requirement"]
+        metadata = scenario["metadata"]
+        contract = metadata["public_requirement"]
         assert contract["schema_version"] == "public-requirement-scenario.v1"
         assert contract["claim_boundary"] == "authored_scenario_proxy_not_human_subject_evidence"
         assert isinstance(contract["event_contract"]["type"], str)
+        for descriptive_key in ("archetype", "flow", "behavior", "purpose"):
+            assert isinstance(metadata[descriptive_key], str)
+            assert descriptive_key not in contract
         build_robot_config_from_scenario(scenario, scenario_path=SCENARIO_SET)
 
 

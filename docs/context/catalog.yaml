@@ -2955,3 +2955,7 @@ entries:
     status: evidence
     freshness: evidence
     area: learned_policy
+  - path: docs/context/evidence/issue_4253_trace_episode_2026-07
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

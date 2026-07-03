@@ -321,8 +321,19 @@ def _write_sha256sums(output_dir: Path) -> None:
     files = sorted(
         path for path in output_dir.iterdir() if path.is_file() and path.name != "SHA256SUMS"
     )
-    lines = [f"{sha256_file(path)}  {path.name}" for path in files]
+    # Use repository-relative paths so the docs-evidence-integrity checker resolves
+    # each entry against this bundle rather than a same-named repo-root file (e.g. README.md).
+    # Fall back to the bare filename when the bundle lives outside the repo (e.g. test tmpdirs).
+    lines = [f"{sha256_file(path)}  {_manifest_label(path)}" for path in files]
     (output_dir / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _manifest_label(path: Path) -> str:
+    """Return the SHA256SUMS entry label for a bundle file (repo-relative when possible)."""
+    try:
+        return path.resolve().relative_to(_repo_root()).as_posix()
+    except ValueError:
+        return path.name
 
 
 def _build_parser() -> argparse.ArgumentParser:

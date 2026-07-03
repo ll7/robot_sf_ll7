@@ -90,7 +90,9 @@ authorized executor.
 - An authorized executor that runs the resolved plan (the second declared gate: explicit
   human/Slurm authorization) — out of scope here.
 - A dense-comparison summarizer that consumes the per-arm outputs under the plan's fail-closed
-  exclusion, and the bounded dense comparison itself.
+  exclusion now exists (`robot_sf/benchmark/issue_4142_dpcbf_dense_summary.py`, PR #4142
+  summary slice; see `docs/context/issue_4142_dpcbf_dense_summary.md`). The bounded dense
+  comparison itself remains out of scope until execution is authorized.
 
 ## Related
 

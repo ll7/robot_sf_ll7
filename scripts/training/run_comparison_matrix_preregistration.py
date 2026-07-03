@@ -10,6 +10,11 @@ from typing import Any
 
 import yaml
 
+from robot_sf.training.offline_pretraining_manifest import (
+    OFFLINE_POLICY_CHECKPOINT_MANIFEST_SCHEMA_VERSION,
+    OFFLINE_TO_ONLINE_FINETUNE_MANIFEST_SCHEMA_VERSION,
+)
+
 SCHEMA_VERSION = "training_comparison_matrix_preregistration.v1"
 EXPECTED_ARM_IDS = (
     "ppo_baseline",
@@ -37,10 +42,11 @@ SAC_GATE_EVIDENCE_KEYS = (
     "pretrain_manifest_summary",
     "finetune_manifest_summary",
 )
-# Manifest schema versions the issue #4245 lane produces; kept in sync with
-# robot_sf/training/offline_pretraining_manifest.py.
-PRETRAIN_MANIFEST_SCHEMA = "offline-policy-checkpoint-manifest.v1"
-FINETUNE_MANIFEST_SCHEMA = "offline-to-online-finetune-manifest.v1"
+# Manifest schema versions the issue #4245 lane produces. Sourced directly from the
+# canonical offline-pretraining manifest module so a schema bump there cannot silently
+# drift from this gate (which would otherwise spuriously exclude valid #4245 evidence).
+PRETRAIN_MANIFEST_SCHEMA = OFFLINE_POLICY_CHECKPOINT_MANIFEST_SCHEMA_VERSION
+FINETUNE_MANIFEST_SCHEMA = OFFLINE_TO_ONLINE_FINETUNE_MANIFEST_SCHEMA_VERSION
 
 
 class MatrixValidationError(ValueError):

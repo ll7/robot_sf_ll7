@@ -13,6 +13,16 @@
       "path": "configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml"
     }
   ],
+  "issue_result_classification": "blocked",
+  "issue_result_classification_reason": "required Package A evidence surfaces are absent or invalid; see reasons for the missing result store / seed-sufficiency analysis",
+  "issue_result_classification_vocabulary": [
+    "benchmark",
+    "diagnostic",
+    "negative",
+    "null",
+    "invalid",
+    "blocked"
+  ],
   "manifest_path": "configs/benchmarks/issue_3078_package_a_readiness.yaml",
   "package_id": "issue_3078_package_a_readiness",
   "readiness_status": "ready",

@@ -41,6 +41,17 @@ paper-facing claim. No ranking is interpreted and no claim boundary is moved.
 | Held-out-family partition manifest | `validate_heldout_transfer_partitions.py …partitions.yaml` | valid (exit 0) |
 | Seed-sufficiency CLI surface | `analyze_seed_sufficiency.py --help` | present |
 | Decision packet | `check_package_a_readiness.py --decision-packet --json …` | `blocked_pending_package_a_evidence` |
+| Issue #3078 result classification | derived by the checker from the packet status | `blocked` |
+
+The decision packet now emits the issue #3078 six-way result classification
+directly (`issue_result_classification`), mapped mechanically from the internal
+packet status by `build_decision_packet`. Previously the `blocked` verdict was
+hand-copied into the claim card; the checker and claim card now share one
+derived source of truth. The checker only ever emits the two conservative
+members `blocked` (evidence missing/invalid) or `diagnostic` (all surfaces
+validate, claim-card review still required); the interpretive members
+`benchmark` / `negative` / `null` / `invalid` stay reserved for claim-card
+review of an actual campaign result and are never auto-promoted here.
 
 See [`reproduction.md`](reproduction.md) for the exact commands and captured
 output, and [`package_a_decision_packet.json`](package_a_decision_packet.json)

@@ -51,6 +51,19 @@ validates (`ok: true`). Full output in
 [`package_a_decision_packet.json`](package_a_decision_packet.json) (the
 committed copy has its `manifest_path` normalized to a repo-relative path).
 
+The packet also now carries the issue #3078 result classification derived by
+the checker: `issue_result_classification: blocked`
+(`issue_result_classification_vocabulary`: benchmark / diagnostic / negative /
+null / invalid / blocked). This value is produced by `build_decision_packet`
+from the internal packet status, so the machine-readable packet and the
+[`claim_card.yaml`](claim_card.yaml) share one derived classification instead of
+a hand-copied string.
+
+> Note: the committed `package_a_decision_packet.json` was regenerated on the
+> branch that added `issue_result_classification` to the checker; re-running the
+> command above on `origin/main` before that change lands will omit the three
+> new keys but report the same `blocked_pending_package_a_evidence` verdict.
+
 ## Focused tests
 
 ```bash

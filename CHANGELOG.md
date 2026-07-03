@@ -22,6 +22,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   safety claim. Refreshed `docs/context/issue_3466_ammv_command_feasibility.md` (the note previously
   described the artifact wiring as deferred; it landed in #3845).
 
+* Added a **cross-module pipeline contract test and consolidation note for the issue #4142 dense
+  DPCBF comparison** (#4142). The dense-comparison pipeline landed as separate slices — readiness
+  (#4299), the packet-consuming run planner (#4318), and the plan-consuming summarizer (#4345) —
+  each with its own module, schema constant, and focused test, but no single test drove all three
+  top-level entry points as one unit or pinned the invariants that must hold *across* the slices.
+  `tests/benchmark/test_issue_4142_dpcbf_dense_pipeline_contract.py` closes that gap: it chains
+  `evaluate_readiness` → `build_run_plan` → `summarize_dense_comparison` on the tracked packet and
+  asserts the packet → plan → summary schema lineage
+  (`robot_sf.issue_4142_dpcbf_dense_comparison{,_plan,_summary}.v1`), that the runner and summarizer
+  reuse readiness's required-arms and fail-closed excluded-row-status *objects* (guarding against a
+  re-hardcoded copy drifting), and that execution stays authorization-gated across the whole
+  pipeline. Consolidation/state note `docs/context/issue_4142_dpcbf_dense_pipeline.md` records the
+  now schema-complete pipeline, remaining/intentional blockers, and the one remaining empirical
+  action (the authorized campaign). Diagnostic contract/regression guard only: runs no episodes,
+  authorizes no campaign, submits no Slurm/GPU job, and makes no safety-performance,
+  collision-reduction, or paper/dissertation claim.
 * Added license-safe **CrowdBot and SCAND shape-contract loaders** plus skip-if-absent tests for the
   #4224 external-data program (public slice b). `robot_sf/data/external/crowdbot.py` and
   `robot_sf/data/external/scand.py` only inspect locally staged files — they never download, vendor,

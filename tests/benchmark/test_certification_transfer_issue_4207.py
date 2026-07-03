@@ -11,6 +11,7 @@ import pytest
 from robot_sf.benchmark.certification_transfer import (
     CLAIM_BOUNDARY,
     build_certification_transfer_report,
+    classify_interaction_status,
     validate_probe_config,
     write_certification_transfer_evidence,
 )
@@ -144,6 +145,109 @@ def test_evidence_writer_emits_checksums_without_raw_artifacts(tmp_path: Path) -
     assert rows
 
 
+def test_interaction_status_classifier_distinguishes_near_field_contact() -> None:
+    """Proximity metrics decide interacting vs non_interacting vs unknown."""
+
+    assert classify_interaction_status({"robot_ped_within_5m_frac": 0.4}) == "interacting"
+    assert classify_interaction_status({"min_clearance_m": 1.2}) == "interacting"
+    # No near-field contact: robot never within 5 m and min clearance far outside the band.
+    assert (
+        classify_interaction_status({"robot_ped_within_5m_frac": 0.0, "min_clearance_m": 20.0})
+        == "non_interacting"
+    )
+    # No proximity metric at all (e.g. an empty / not_evaluable cell).
+    assert classify_interaction_status({"collision_rate": 0.0}) == "unknown"
+    assert classify_interaction_status({}) == "unknown"
+
+
+def test_non_interacting_stable_transfer_is_flagged_not_model_robust(tmp_path: Path) -> None:
+    """A stable_pass built from non_interacting cells must not read as model robustness."""
+
+    config_path, gate_path, config, gates = _write_config_pair(tmp_path)
+    # The "stable" arm passes the gates but never enters the 5 m pedestrian band (mirroring the
+    # committed 2026-07 packet: robot_ped_within_5m_frac=0, min_clearance ~20 m); the "fragile"
+    # arm here does enter the near field. Both use the 4-arm fixture config keys.
+    records = [
+        _record(
+            "stable",
+            SOCIAL_FORCE_DEFAULT,
+            collision_rate=0.0,
+            within_5m_frac=0.0,
+            min_clearance_m=20.0,
+        ),
+        _record(
+            "stable",
+            HSFM_TOTAL_FORCE_V1,
+            collision_rate=0.0,
+            within_5m_frac=0.0,
+            min_clearance_m=20.0,
+        ),
+        _record(
+            "fragile",
+            SOCIAL_FORCE_DEFAULT,
+            collision_rate=0.0,
+            within_5m_frac=0.3,
+            min_clearance_m=1.5,
+        ),
+        _record(
+            "fragile",
+            HSFM_TOTAL_FORCE_V1,
+            collision_rate=0.0,
+            within_5m_frac=0.3,
+            min_clearance_m=1.5,
+        ),
+    ]
+
+    report = build_certification_transfer_report(
+        records,
+        probe_config=config,
+        gate_spec=gates,
+        config_path=config_path,
+        gate_spec_path=gate_path,
+    )
+
+    stable_rows = [
+        r for r in report["certification_transfer_matrix"] if r["planner_key"] == "stable"
+    ]
+    assert stable_rows
+    assert all(r["transfer_status"] == "stable_pass" for r in stable_rows)
+    # The stable status is vacuous: no cell entered the near field, so it is not exercised.
+    assert all(r["interaction_status"] == "non_interacting" for r in stable_rows)
+    assert all(r["interaction_exercised"] is False for r in stable_rows)
+
+    contact_rows = [
+        r for r in report["certification_transfer_matrix"] if r["planner_key"] == "fragile"
+    ]
+    assert all(r["interaction_status"] == "interacting" for r in contact_rows)
+    assert all(r["interaction_exercised"] is True for r in contact_rows)
+
+    # Model sensitivity is exercised overall because the fragile arm entered the near field.
+    assert report["model_sensitivity_exercised"] is True
+    assert report["interaction_status_counts"].get("non_interacting", 0) >= 1
+
+
+def test_all_non_interacting_report_marks_sensitivity_unexercised(tmp_path: Path) -> None:
+    """When every cell stays outside the near field, model sensitivity is not exercised."""
+
+    config_path, gate_path, config, gates = _write_config_pair(tmp_path)
+    records = [
+        _record(arm, model, collision_rate=0.0, within_5m_frac=0.0, min_clearance_m=18.0)
+        for arm in ("stable", "fragile", "conservative", "blocked")
+        for model in (SOCIAL_FORCE_DEFAULT, HSFM_TOTAL_FORCE_V1)
+    ]
+
+    report = build_certification_transfer_report(
+        records,
+        probe_config=config,
+        gate_spec=gates,
+        config_path=config_path,
+        gate_spec_path=gate_path,
+    )
+
+    assert report["model_sensitivity_exercised"] is False
+    assert set(report["interaction_status_counts"]) <= {"non_interacting"}
+
+
 def _write_config_pair(tmp_path: Path) -> tuple[Path, Path, dict[str, object], dict[str, object]]:
     scenario_path = tmp_path / "scenario.yaml"
     scenario_path.write_text("scenarios: []\n", encoding="utf-8")
@@ -210,10 +314,16 @@ def _record(
     *,
     collision_rate: float = 0.0,
     include_required: bool = True,
+    within_5m_frac: float | None = None,
+    min_clearance_m: float | None = None,
 ) -> dict[str, object]:
-    metrics = {"collision_rate": collision_rate}
+    metrics: dict[str, float] = {"collision_rate": collision_rate}
     if include_required:
         metrics["near_miss_rate"] = 0.0
+    if within_5m_frac is not None:
+        metrics["robot_ped_within_5m_frac"] = within_5m_frac
+    if min_clearance_m is not None:
+        metrics["min_clearance_m"] = min_clearance_m
     return {
         "planner_key": planner_key,
         "scenario_family": "fixture_family",

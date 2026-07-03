@@ -1725,7 +1725,7 @@ def test_hybrid_rule_rejection_diagnostics_include_moving_and_source_counts(monk
         lambda state, speed_cap, **kwargs: [stop, rotate, blocked_forward],
     )
 
-    def evaluate_candidate(
+    def evaluate_candidate(  # noqa: PLR0913
         *,
         candidate,
         observation,
@@ -1735,6 +1735,7 @@ def test_hybrid_rule_rejection_diagnostics_include_moving_and_source_counts(monk
         progress_windows,
         route_corridor=None,
         strict_static_clearance=False,
+        goal_posterior=None,
     ):
         """Return controlled candidate evaluations for rejection diagnostics."""
         if candidate == blocked_forward:

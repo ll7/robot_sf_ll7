@@ -1111,6 +1111,7 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
         *,
         route_corridor: dict[str, Any] | None = None,
         corridor_subgoal: dict[str, Any] | None = None,
+        goal_posterior: dict[str, Any] | None = None,
     ) -> list[HybridRuleCandidate]:
         """Add a selected-hypothesis command to the base hybrid-rule candidate set.
 
@@ -1122,6 +1123,7 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             speed_cap,
             route_corridor=route_corridor,
             corridor_subgoal=corridor_subgoal,
+            goal_posterior=goal_posterior,
         )
         topology_candidate = self._topology_hypothesis_candidate(
             state=state,

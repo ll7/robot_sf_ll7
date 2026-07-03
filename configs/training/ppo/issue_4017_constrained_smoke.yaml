@@ -1,0 +1,47 @@
+# Issue #4017: PPO-Lagrangian constrained-RL CPU smoke config.
+# Smoke/provenance only: no benchmark campaign, no Slurm/GPU submission, no paper claim.
+policy_id: ppo_lagrangian_issue_4017_smoke
+algorithm: ppo
+scenario_config: ../../scenarios/sets/classic_cross_trap_subset.yaml
+total_timesteps: 256
+seed: 4017
+num_envs: 1
+device: cpu
+policy: MultiInputPolicy
+env_overrides:
+  observation_mode: default_gym
+env_factory_kwargs:
+  reward_name: route_completion_v2
+ppo_hyperparams:
+  learning_rate: 0.0001
+  n_steps: 64
+  batch_size: 64
+  n_epochs: 2
+  gamma: 0.99
+safety_constraints:
+  schema_version: constrained_rl.v1
+  enabled: true
+  method: lagrangian_ppo
+  update_mode: episode
+  constraints:
+    - name: collision_any
+      source_key: collision_any
+      budget_per_episode: 0.0
+      multiplier_init: 1.0
+      multiplier_lr: 0.05
+      multiplier_max: 50.0
+    - name: near_miss
+      source_key: near_miss
+      budget_per_episode: 0.05
+      multiplier_init: 0.5
+      multiplier_lr: 0.02
+      multiplier_max: 20.0
+    - name: comfort_exposure
+      source_key: comfort_exposure
+      budget_per_episode: 0.20
+      multiplier_init: 0.25
+      multiplier_lr: 0.01
+      multiplier_max: 10.0
+tracking:
+  enabled: false
+output_dir: output/models/constrained_rl/issue_4017/ppo_lagrangian_issue_4017_smoke

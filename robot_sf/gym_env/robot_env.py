@@ -42,6 +42,7 @@ from robot_sf.gym_env.reward import route_completion_v2_reward
 from robot_sf.gym_env.snqi_proxy import StepSNQIProxy
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.nav.occupancy_grid import OccupancyGrid
+from robot_sf.prediction.goal_intention import planner_goal_posterior_channel_from_state
 from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_state import VisualizableAction, VisualizableSimState
 from robot_sf.robot.robot_state import RobotState
@@ -328,6 +329,52 @@ def _build_step_info(meta: dict[str, Any]) -> dict[str, Any]:
         info["rollover_proxy"] = meta["rollover_proxy"]
         info["rollover_critical"] = bool(meta.get("rollover_critical", False))
     return info
+
+
+def _build_goal_posterior_planner_input(env_config: EnvSettings, simulator: Any) -> dict[str, Any]:
+    """Return opt-in planner goal-posterior channel from current pedestrian state."""
+
+    enabled = bool(getattr(env_config, "goal_posterior_planner_input_enabled", False))
+    if not enabled:
+        return planner_goal_posterior_channel_from_state(
+            enabled=False,
+            positions=(),
+            velocities=(),
+            goals=(),
+        )
+
+    pysf_state = getattr(simulator, "pysf_state", None)
+    if pysf_state is None:
+        raise RuntimeError(
+            "goal_posterior_planner_input requires a simulator with a valid pysf_state."
+        )
+    states = np.asarray(pysf_state.pysf_states(), dtype=float)
+    if states.ndim != 2 or states.shape[1] < 6:
+        raise RuntimeError(
+            "goal_posterior_planner_input requires PySocialForce states with "
+            "position, velocity, and goal columns."
+        )
+    return planner_goal_posterior_channel_from_state(
+        enabled=True,
+        positions=states[:, 0:2],
+        velocities=states[:, 2:4],
+        goals=states[:, 4:6],
+        config=getattr(env_config, "goal_posterior_planner_input", None),
+        candidate_source="scenario_route_endpoints",
+    )
+
+
+def _attach_goal_posterior_planner_input(
+    payload: dict[str, Any], env_config: EnvSettings, simulator: Any
+) -> None:
+    """Attach opt-in planner goal-posterior channel to metadata payload."""
+
+    if not bool(getattr(env_config, "goal_posterior_planner_input_enabled", False)):
+        return
+    payload["planner_goal_posterior_channel"] = _build_goal_posterior_planner_input(
+        env_config,
+        simulator,
+    )
 
 
 def _coerce_finite_float(value: Any) -> float | None:
@@ -1006,6 +1053,11 @@ class RobotEnv(BaseEnv):
 
         # observation, reward, terminal, truncated,info
         info = _build_step_info(reward_dict)
+        # Attach opt-in planner goal-posterior channel at the top level of the
+        # step info so it matches the reset-path contract
+        # (info["planner_goal_posterior_channel"]) rather than nesting under
+        # info["meta"]; keeps it out of the reward-function payload.
+        _attach_goal_posterior_planner_input(info, self.env_config, self.simulator)
         return (
             obs,
             reward,
@@ -1114,6 +1166,7 @@ class RobotEnv(BaseEnv):
                 map_def=self.map_def,
                 applied_seed=self.applied_seed,
             )
+            _attach_goal_posterior_planner_input(info, self.env_config, self.simulator)
             # Reset telemetry timing on new episode
             self._last_wall_time = time.perf_counter()
             self._frame_idx = 0

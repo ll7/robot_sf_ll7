@@ -205,6 +205,56 @@ def planner_goal_posterior_channel(
     }
 
 
+def planner_goal_posterior_channel_from_state(
+    *,
+    enabled: bool,
+    positions: Sequence[Sequence[float]],
+    velocities: Sequence[Sequence[float]],
+    goals: Sequence[Sequence[float]],
+    pedestrian_ids: Sequence[str] | None = None,
+    config: GoalPosteriorConfig | None = None,
+    candidate_source: str = "scenario_route_endpoints",
+) -> dict[str, object]:
+    """Build planner goal-posterior metadata from simulator pedestrian state.
+
+    The channel is intentionally JSON-shaped metadata instead of a Gymnasium
+    observation-space leaf. Classical planner and smoke harness callers can
+    opt in without perturbing default training observations.
+
+    Returns:
+        JSON-serializable planner metadata channel.
+    """
+
+    if not enabled:
+        return planner_goal_posterior_channel((), enabled=False)
+
+    if len(positions) != len(velocities) or len(positions) != len(goals):
+        raise ValueError("positions, velocities, and goals must have the same length")
+    if pedestrian_ids is not None and len(pedestrian_ids) != len(positions):
+        raise ValueError("pedestrian_ids length must match positions")
+
+    posteriors: list[GoalIntentionPosterior] = []
+    for index, (position, velocity, goal) in enumerate(
+        zip(positions, velocities, goals, strict=True)
+    ):
+        pedestrian_id = pedestrian_ids[index] if pedestrian_ids is not None else f"ped_{index}"
+        candidate_goals = candidate_goals_from_points(
+            {f"{pedestrian_id}_route_goal": goal},
+            source=candidate_source,
+        )
+        posteriors.append(
+            update_goal_posterior(
+                pedestrian_id=pedestrian_id,
+                candidate_goals=candidate_goals,
+                observed_position=position,
+                observed_velocity=velocity,
+                config=config,
+            )
+        )
+
+    return planner_goal_posterior_channel(posteriors, enabled=True)
+
+
 def _finite_xy(
     value: tuple[float, float] | Sequence[float], field_name: str
 ) -> tuple[float, float]:

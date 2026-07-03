@@ -1,0 +1,17 @@
+name: issue_3977_public_requirement_smoke
+paper_facing: false
+scenario_matrix: configs/scenarios/sets/issue_3977_public_requirements.yaml
+workers: 1
+horizon: 90
+dt: 0.1
+record_forces: false
+resume: false
+export_publication_bundle: false
+record_simulation_step_trace: true
+seed_policy:
+  mode: fixed-list
+  seeds: [3977]
+planners:
+  - key: goal_public_requirement_smoke
+    algo: goal
+    benchmark_profile: baseline-safe

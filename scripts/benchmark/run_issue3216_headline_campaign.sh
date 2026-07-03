@@ -142,22 +142,25 @@ uv run python scripts/tools/run_camera_ready_benchmark.py \
   --campaign-id "$CAMPAIGN_ID" \
   --output-root "$OUTPUT_ROOT"
 
-echo "== [#3216] locate headline rows =="
-ROWS="$(find "$OUTPUT_ROOT" -path '*/reports/headline_rows.json' -newermt '-1 day' 2>/dev/null | sort | tail -1 || true)"
-if [ -z "$ROWS" ] || [ ! -f "$ROWS" ]; then
-  echo "ERROR: headline_rows.json not found under $OUTPUT_ROOT after campaign." >&2
-  echo " Inspect campaign output layout and run the rows report harness manually." >&2
-  exit 5
-fi
-echo " rows=$ROWS"
-
 echo "== [#3216] report: per-cell CI + rank-stability (fail-closed; never self-certifies paper-grade) =="
+CAMPAIGN_ROOT="$OUTPUT_ROOT/$CAMPAIGN_ID"
 mkdir -p "$REPORT_DIR"
 uv run python scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py \
-  --rows "$ROWS" \
+  --campaign "$CAMPAIGN_ROOT" \
   --rank-metric "$RANK_METRIC" \
   --expected-planners-from-config "$CONFIG" \
   --output-dir "$REPORT_DIR"
+
+ROWS="$CAMPAIGN_ROOT/reports/headline_rows.json"
+if [ ! -f "$ROWS" ]; then
+  echo "ERROR: report builder did not produce $ROWS." >&2
+  exit 5
+fi
+if [ ! -f "$REPORT_DIR/result.json" ]; then
+  echo "ERROR: report builder did not produce $REPORT_DIR/result.json." >&2
+  exit 5
+fi
+echo " rows=$ROWS"
 
 echo "== [#3216] done =="
 echo " report: $REPORT_DIR/result.json"

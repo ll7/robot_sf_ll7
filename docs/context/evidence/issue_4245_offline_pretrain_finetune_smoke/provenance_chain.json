@@ -1,0 +1,15 @@
+{
+  "claim_boundary": "diagnostic provenance integrity only; not benchmark evidence",
+  "eligible_for_claim": false,
+  "finetune_checkpoint_sha256": "4d20c7a589a24db0b328456e597d0b8cb5cf5b74527470f6ef945342bb845243",
+  "finetune_manifest_sha256": "e80f440c3d8adfba57440a69512539fe3a8760fa75d0a0d8e1dea37d1dfceba7",
+  "issue": 4245,
+  "offline_checkpoint_sha256": "ca525330e23df5cf01ee26e49a4139ae5f2493b32f239b8e532d9badb7610148",
+  "offline_manifest_sha256": "cf897c11f00fe61efe9129f39365310cd95d5ffcd58817c0c0d9885c498950b9",
+  "parent_issue": 4012,
+  "shared_environment_contract": {
+    "action_space_fingerprint": "7f8c6b1a9dc7cd7a4f82e77e6c3fd2087227c282b2a2b3fba676b3d465f6b384",
+    "observation_space_fingerprint": "80ece25a0c7ea922cb40050ace23be6e2446edce23515f3cd7dca489f7118daa",
+    "scenario_config": "configs/scenarios/classic_interactions.yaml"
+  }
+}

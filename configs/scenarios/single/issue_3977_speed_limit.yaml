@@ -1,0 +1,32 @@
+scenarios:
+  - name: issue_3977_speed_limit_sidewalk_cap
+    scenario_family: public_requirement_speed_limit
+    map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+    route_overrides_file: ../route_overrides/issue_3977/safe_braking.yaml
+    simulation_config:
+      max_episode_steps: 80
+      ped_density: 0.0
+      single_pedestrians: []
+    robot_config:
+      max_linear_speed: 2.0
+    metadata:
+      public_requirement:
+        schema_version: public-requirement-scenario.v1
+        category: speed_limit
+        requirement_label: Sidewalk speed-limit adherence
+        source: schomakers_2024_public_requirements
+        claim_boundary: authored_scenario_proxy_not_human_subject_evidence
+        speed_limit_m_s: 0.8
+        event_contract:
+          type: speed_limit_monitor
+          speed_limit_m_s: 0.8
+          violation_margin_m_s: 0.05
+      archetype: public_requirement_speed_limit
+      flow: route_following
+      behavior: speed_limit_monitor
+      purpose: >
+        Deterministic speed-limit scenario proxy for issue #3977; records diagnostic
+        speed-cap exceedance fields only, not benchmark gating, release gating, safety
+        certification, or public-acceptance evidence.
+    seeds:
+      - 3977

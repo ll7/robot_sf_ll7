@@ -52,8 +52,10 @@ from robot_sf.ped_npc.ped_robot_force import PedRobotForce, PedRobotForceConfig
 from robot_sf.ped_npc.ped_zone import sample_zone
 from robot_sf.robot.robot_state import Robot
 from robot_sf.sim.pedestrian_model_variants import (
+    HSFM_ANISOTROPIC_FOV_V1,
     HSFM_TOTAL_FORCE_V1,
     HSFM_TTC_PREDICTIVE_V1,
+    anisotropic_fov_total_force,
     normalize_pedestrian_model,
     step_hsfm_total_force,
     ttc_predictive_repulsion,
@@ -250,7 +252,11 @@ class Simulator:
 
     def _step_pedestrians(self, ped_forces: np.ndarray, groups: list[list[int]]) -> None:
         """Advance pedestrians through the configured pedestrian-model implementation."""
-        if self.pedestrian_model not in {HSFM_TOTAL_FORCE_V1, HSFM_TTC_PREDICTIVE_V1}:
+        if self.pedestrian_model not in {
+            HSFM_TOTAL_FORCE_V1,
+            HSFM_TTC_PREDICTIVE_V1,
+            HSFM_ANISOTROPIC_FOV_V1,
+        }:
             self.pysf_sim.peds.step(ped_forces, groups)
             self.ped_headings = self._headings_from_current_ped_velocities()
             return
@@ -276,6 +282,15 @@ class Simulator:
                     force_scale=ttc_config.force_scale,
                     max_force=ttc_config.max_force,
                 )
+        elif self.pedestrian_model == HSFM_ANISOTROPIC_FOV_V1:
+            fov_config = self.config.anisotropic_fov
+            ped_forces = anisotropic_fov_total_force(
+                current_state[:, PYSF_POSITION_SLICE],
+                self.ped_headings,
+                ped_forces,
+                cone_half_angle_rad=fov_config.cone_half_angle_rad,
+                rear_weight=fov_config.rear_weight,
+            )
         next_state, self.ped_headings = step_hsfm_total_force(
             current_state,
             ped_forces,

@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **ScenarioBelief seed-sufficiency closure resolver** for issue #3556:
+  `scripts/validation/close_issue_3556_seed_sufficiency.py` searches an ordered set of durable roots
+  (`docs/context/evidence` first, then the ephemeral runner output root) for a retained ScenarioBelief
+  campaign root that exposes the analyzer-required report files
+  (`reports/seed_variability_by_scenario.json`, `reports/seed_episode_rows.csv`). When one is found it
+  runs `scripts/tools/analyze_seed_sufficiency.py` and promotes a compact closure summary; when none is
+  found it fails closed with an explicit, reproducible per-root missing-artifact blocker. The pure
+  packet builder lives in `robot_sf/benchmark/scenario_belief_screening.py`
+  (`build_seed_sufficiency_closure_packet`). This supersedes the single-path handoff probe from PR #4273
+  by searching durable locations. Current state on `main`: **blocked** — no retained #3556 campaign root
+  exists yet, so the committed packet under
+  `docs/context/evidence/issue_3556_seed_sufficiency_closure_2026-07-03/` records the fail-closed blocker.
+  No campaign was run; no Slurm/GPU submission; no benchmark or paper-grade claim.
 * Added an **interaction-validity guard** to the issue #4207 certification-transfer probe (#4207):
   `robot_sf/benchmark/certification_transfer.py` gains `classify_interaction_status(...)` and now
   tags every gate cell with `interaction_status` (`interacting` / `non_interacting` / `unknown`) and

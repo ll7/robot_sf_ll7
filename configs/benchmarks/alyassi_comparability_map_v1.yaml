@@ -47,6 +47,7 @@ planner_key_mapping:
   guarded_ppo_relaxed_v2: guarded-ppo-relaxed-v2
   hybrid_portfolio: hybrid-portfolio
   hybrid_rule_v3_fast_progress_static_escape: hybrid-rule-v3-fast-progress-static-escape
+  hybrid_rule_v3_fast_progress_static_escape_continuous: hybrid-rule-v3-fast-progress-static-escape-continuous
   mppi_social: mppi-social
   orca: orca
   ppo: ppo
@@ -61,6 +62,7 @@ planner_key_mapping:
   social_navigation_pyenvs_orca: social-navigation-pyenvs-orca
   social_navigation_pyenvs_socialforce: social-navigation-pyenvs-socialforce
   scenario_adaptive_hybrid_orca_v1: scenario-adaptive-hybrid-orca-v1
+  scenario_adaptive_hybrid_orca_v2_collision_guard: scenario-adaptive-hybrid-orca-v2-collision-guard
   socnav_bench: socnav-bench
   socnav_sampling: socnav-sampling
   stream_gap: stream-gap

@@ -95,7 +95,18 @@ def pairwise_time_to_collision(
     horizon_s: float,
     epsilon: float = 1e-9,
 ) -> np.ndarray:
-    """Return pairwise TTC in seconds, or ``inf`` when no collision is within horizon."""
+    """Return pairwise TTC in seconds, or ``inf`` when no collision is within horizon.
+
+    Vectorized ``O(N^2)`` weight path: the pairwise quadratic collision condition
+    ``||p_ij + v_ij t|| <= r_i + r_j`` is solved with NumPy broadcasting instead of a
+    Python double loop, so the same weights scale to benchmark-size pedestrian counts.
+    The masking reproduces the earlier scalar branches exactly:
+
+    - already-overlapping pairs (``c <= 0``) return ``0.0``;
+    - non-closing pairs (``a <= epsilon`` or ``b >= 0``) and misses (``discriminant < 0``)
+      stay ``inf``;
+    - a positive first root inside ``(epsilon, horizon_s]`` is the reported TTC.
+    """
 
     position_array, velocity_array, radius_array = _validate_ttc_inputs(
         positions,
@@ -106,33 +117,33 @@ def pairwise_time_to_collision(
     )
     pedestrian_count = position_array.shape[0]
     ttc = np.full((pedestrian_count, pedestrian_count), np.inf, dtype=float)
+    if pedestrian_count == 0:
+        return ttc
 
-    for i in range(pedestrian_count):
-        for j in range(pedestrian_count):
-            if i == j:
-                continue
+    # relative_position[i, j] = p_j - p_i and relative_velocity[i, j] = v_j - v_i.
+    relative_position = position_array[np.newaxis, :, :] - position_array[:, np.newaxis, :]
+    relative_velocity = velocity_array[np.newaxis, :, :] - velocity_array[:, np.newaxis, :]
+    combined_radius = radius_array[:, np.newaxis] + radius_array[np.newaxis, :]
 
-            relative_position = position_array[j] - position_array[i]
-            relative_velocity = velocity_array[j] - velocity_array[i]
-            combined_radius = radius_array[i] + radius_array[j]
+    a = np.sum(relative_velocity * relative_velocity, axis=-1)
+    b = 2.0 * np.sum(relative_position * relative_velocity, axis=-1)
+    c = np.sum(relative_position * relative_position, axis=-1) - combined_radius**2
 
-            a = float(np.dot(relative_velocity, relative_velocity))
-            b = 2.0 * float(np.dot(relative_position, relative_velocity))
-            c = float(np.dot(relative_position, relative_position) - combined_radius**2)
+    off_diagonal = ~np.eye(pedestrian_count, dtype=bool)
+    already_overlapping = off_diagonal & (c <= 0.0)
+    ttc[already_overlapping] = 0.0
 
-            if c <= 0.0:
-                ttc[i, j] = 0.0
-                continue
-            if a <= epsilon or b >= 0.0:
-                continue
+    # Only closing pairs that are not yet overlapping can produce a future collision root.
+    closing = off_diagonal & ~already_overlapping & (a > epsilon) & (b < 0.0)
+    discriminant = b * b - 4.0 * a * c
+    closing &= discriminant >= 0.0
 
-            discriminant = b * b - 4.0 * a * c
-            if discriminant < 0.0:
-                continue
-
-            root = (-b - float(np.sqrt(discriminant))) / (2.0 * a)
-            if epsilon < root <= horizon_s:
-                ttc[i, j] = root
+    # Guard the sqrt/divide so masked-out entries never emit NaN warnings.
+    safe_discriminant = np.where(closing, discriminant, 0.0)
+    safe_a = np.where(closing, a, 1.0)
+    root = (-b - np.sqrt(safe_discriminant)) / (2.0 * safe_a)
+    within_horizon = closing & (root > epsilon) & (root <= horizon_s)
+    ttc[within_horizon] = root[within_horizon]
 
     return ttc
 
@@ -245,6 +256,16 @@ def anisotropic_fov_total_force(
 ) -> np.ndarray:
     """Apply diagnostic FoV attenuation to aggregated forces behind each heading.
 
+    This is the coarse *aggregate* attenuation mode: the per-pair weight matrix is
+    collapsed to a single ``np.min`` factor per actor and applied to that actor's already
+    summed force. It cannot isolate a rear neighbor from an in-cone neighbor, because the
+    pairwise decomposition is lost once the forces are summed — a pedestrian with one
+    neighbor ahead and one behind has its whole force scaled by ``rear_weight``.
+
+    When per-pair pedestrian-pedestrian force contributions are available, prefer
+    :func:`pairwise_fov_attenuated_forces`, which attenuates each neighbor's contribution
+    independently before summing.
+
     Returns:
         Force array with one attenuation factor per pedestrian row.
     """
@@ -263,6 +284,61 @@ def anisotropic_fov_total_force(
         return force_array.copy()
     per_actor_weight = np.min(weights, axis=1)
     return force_array * np.expand_dims(per_actor_weight, axis=-1)
+
+
+def pairwise_fov_attenuated_forces(
+    pairwise_forces: np.ndarray,
+    positions: np.ndarray,
+    headings: np.ndarray,
+    *,
+    cone_half_angle_rad: float,
+    rear_weight: float,
+    epsilon: float = 1e-9,
+) -> np.ndarray:
+    """Attenuate each pedestrian-pedestrian force contribution by its own FoV weight.
+
+    This is the *pairwise-isolated* attenuation mode. Given the per-pair repulsion
+    contributions ``pairwise_forces[i, j]`` (the force neighbor ``j`` exerts on actor
+    ``i``), each contribution is scaled by its own ``anisotropic_fov_weights[i, j]``
+    factor before summing over neighbors. Unlike :func:`anisotropic_fov_total_force`,
+    a rear neighbor is down-weighted without disturbing an in-cone neighbor's push, so
+    the FoV attenuation no longer bleeds across unrelated interactions.
+
+    The layer stays independent of simulator objects so it is unit-testable without a
+    full environment. It remains diagnostic/prototype: no default model changes and no
+    calibrated-realism claim.
+
+    Args:
+        pairwise_forces: Per-pair force contributions with shape ``(N, N, 2)``; entry
+            ``[i, j]`` is the force neighbor ``j`` exerts on actor ``i`` (diagonal is
+            typically zero and is preserved unaffected because self-weights are ``1``).
+        positions: Pedestrian positions with shape ``(N, 2)``.
+        headings: Per-pedestrian heading angles with shape ``(N,)``.
+        cone_half_angle_rad: Half-angle of the forward field-of-view cone in radians.
+        rear_weight: Attenuation factor in ``[0, 1]`` applied outside the cone.
+        epsilon: Small positive tolerance for degenerate zero-distance pairs.
+
+    Returns:
+        Per-actor attenuated force with shape ``(N, 2)``.
+    """
+    force_array = np.asarray(pairwise_forces, dtype=float)
+    position_array = np.asarray(positions, dtype=float)
+    pedestrian_count = position_array.shape[0]
+    if force_array.shape != (pedestrian_count, pedestrian_count, 2):
+        raise ValueError("pairwise_forces must have shape (N, N, 2) matching positions")
+    if not np.all(np.isfinite(force_array)):
+        raise ValueError("pairwise_forces must be finite")
+    if pedestrian_count == 0:
+        return np.zeros((0, 2), dtype=float)
+    weights = anisotropic_fov_weights(
+        position_array,
+        headings,
+        cone_half_angle_rad=cone_half_angle_rad,
+        rear_weight=rear_weight,
+        epsilon=epsilon,
+    )
+    attenuated = force_array * weights[:, :, np.newaxis]
+    return attenuated.sum(axis=1)
 
 
 def ttc_predictive_repulsion(

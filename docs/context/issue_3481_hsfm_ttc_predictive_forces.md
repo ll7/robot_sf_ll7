@@ -57,3 +57,55 @@ for `hsfm_ttc_predictive_v1`.
 
 This slice did not run a full benchmark campaign, submit Slurm/GPU work, perform external
 calibration, or edit paper/dissertation claims.
+
+## Pairwise Isolation and Weight-Path Vectorization (issue #3481 follow-up slice)
+
+The Phase 1/2 slices (PR #4144, #4202, #4258) left two maintainer-flagged blockers before
+benchmark-scale use of the opt-in HSFM field-of-view (FoV) models. This slice closes both at the
+pure-math layer in `robot_sf/sim/pedestrian_model_variants.py`; it remains diagnostic/prototype and
+changes no default model.
+
+### Blocker 1 — pairwise isolation of pedestrian-pedestrian repulsion attenuation
+
+`anisotropic_fov_total_force(...)` is the coarse *aggregate* mode: it collapses the per-pair FoV
+weight matrix to one `np.min(weights, axis=1)` factor per actor and scales that actor's already
+summed force. It cannot distinguish a rear neighbor from an in-cone neighbor, so a pedestrian with
+one neighbor ahead and one behind has its whole force scaled by `rear_weight`.
+
+New pure helper `pairwise_fov_attenuated_forces(pairwise_forces, positions, headings, ...)` performs
+genuine pairwise isolation. Given per-pair contributions `pairwise_forces[i, j]` (the force neighbor
+`j` exerts on actor `i`) it returns:
+
+```text
+attenuated[i] = sum_j anisotropic_fov_weights[i, j] * pairwise_forces[i, j]
+```
+
+Each neighbor's contribution is attenuated by its own FoV weight before summing, so rear attenuation
+no longer bleeds across unrelated in-cone interactions. The layer is simulator-object-independent and
+unit-testable without a full environment.
+
+### Blocker 2 — vectorized O(N^2) TTC weight path
+
+`pairwise_time_to_collision(...)` previously used a Python double loop. It is now solved with NumPy
+broadcasting over the quadratic collision condition `||p_ij + v_ij t|| <= r_i + r_j`, with masks that
+reproduce the earlier scalar branches exactly (overlap → `0.0`; non-closing/miss → `inf`; first root
+in `(epsilon, horizon_s]` → TTC). `anisotropic_fov_weights(...)` was already vectorized upstream
+(PR #4285), so both O(N^2) FoV/TTC weight paths named on the issue are now loop-free.
+
+### Evidence boundary (this slice)
+
+`tests/sim/test_hsfm_fov_pairwise_isolation.py` covers:
+
+- narrow-passage fixture where pairwise isolation keeps the in-cone push and attenuates only the rear
+  push, and differs from the aggregate `np.min` result;
+- `attenuated = sum_j weight * pairwise_force` weighted-sum definition on a seeded random cloud;
+- full-cone identity and fail-closed validation (bad shape, non-finite, empty population);
+- vectorized-vs-scalar TTC equivalence on a seeded random cloud and a deterministic bottleneck
+  fixture (two converging columns) with finite, in-horizon, self/separating-`inf` structure.
+
+The pairwise-isolated mode is available as a pure diagnostic helper; wiring per-pair
+pedestrian-pedestrian force contributions from the simulator seam (so the runtime step can consume
+isolation instead of the aggregate `np.min` path) remains follow-up work, as does narrow-passage
+lateral-sliding / bottleneck freeze benchmark evidence and any evidence-tier upgrade. No full
+benchmark campaign, Slurm/GPU submission, external calibration, or paper/dissertation claim edit was
+performed in this slice.

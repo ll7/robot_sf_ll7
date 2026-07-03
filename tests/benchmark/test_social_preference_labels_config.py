@@ -15,7 +15,12 @@ from robot_sf.benchmark.social_preference_labels import (
     validate_social_preference_label_config,
 )
 
-CONFIG_PATH = Path("configs/diagnostics/social_preference_labels.yaml")
+CONFIG_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "configs"
+    / "diagnostics"
+    / "social_preference_labels.yaml"
+)
 
 
 @pytest.fixture

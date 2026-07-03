@@ -23,6 +23,7 @@ REQUIRED_LABEL_IDS = frozenset(
 REQUIRED_LABEL_FIELDS = frozenset(
     {
         "id",
+        "display_name",
         "description",
         "metric_family",
         "unit",
@@ -30,6 +31,7 @@ REQUIRED_LABEL_FIELDS = frozenset(
         "diagnostic_thresholds",
         "required_trace_fields",
         "candidate_metric_keys",
+        "computation_status",
         "notes",
     }
 )
@@ -172,7 +174,14 @@ def _validate_label_fields(index: int, label: Mapping[str, Any]) -> None:
     if not isinstance(label_id, str) or not _is_lowercase_snake_case(label_id):
         raise SocialPreferenceLabelConfigError(f"label {index} id must be lowercase snake_case")
 
-    for field_name in ("description", "metric_family", "unit", "notes"):
+    for field_name in (
+        "display_name",
+        "description",
+        "metric_family",
+        "unit",
+        "computation_status",
+        "notes",
+    ):
         value = label[field_name]
         if not isinstance(value, str) or not value.strip():
             raise SocialPreferenceLabelConfigError(
@@ -237,6 +246,8 @@ def _require_string_list(label_id: str, value: Any, field_name: str) -> None:
 
 
 def _is_lowercase_snake_case(value: str) -> bool:
+    if not value:
+        return False
     return value[0].islower() and all(
         char.islower() or char.isdigit() or char == "_" for char in value
     )

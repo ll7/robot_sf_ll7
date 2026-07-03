@@ -113,6 +113,11 @@ class AssetSpec:
     required_paths: tuple[RequiredPath, ...]
     related_issues: tuple[int, ...]
     auto_download_allowed: bool = False
+    license_url: str | None = None
+    expected_tree_sha256: str | None = None
+    expected_tree_sha256_status: Literal["pending_first_staging", "pinned"] = (
+        "pending_first_staging"
+    )
     # Optional pointer to a checksum/availability staging manifest. When set, this asset carries a
     # pinned-checksum policy and proxy-vs-dataset-backed availability states (see the SDD asset).
     staging_manifest_path: Path | None = None
@@ -264,6 +269,290 @@ ASSETS: tuple[AssetSpec, ...] = (
         ),
         related_issues=(1585, 1559),
     ),
+    AssetSpec(
+        asset_id="atc-pedestrian",
+        title="ATC shopping-mall pedestrian tracking trajectories",
+        expected_local_path=REPO_ROOT / "output" / "external_data" / "atc_pedestrian",
+        shared_root_subpath=Path("atc_pedestrian"),
+        source_url="https://dil.atr.jp/crest2010_HRI/ATC_dataset/",
+        source_note=(
+            "Official ATR ATC pedestrian tracking dataset page for Brscic et al. 2013. "
+            "The source describes 92 days of shopping-mall trajectories in daily CSV files."
+        ),
+        license_note=(
+            "ATR research-use terms apply; Robot SF does not redistribute ATC bytes. "
+            "Keep a local copy of the source terms or README with staged data."
+        ),
+        access_note=(
+            "Manual direct acquisition from the official ATR page. Scripted download remains "
+            "disabled until a maintainer records stable terms and URL approval."
+        ),
+        required_paths=(
+            RequiredPath(
+                pattern="**/atc-*.csv",
+                kind="file",
+                description="Official ATC daily trajectory CSV file.",
+                group="trajectory",
+            ),
+            RequiredPath(
+                pattern="**/*.csv",
+                kind="file",
+                description="ATC trajectory CSV file when staged without original filename.",
+                group="trajectory",
+            ),
+            RequiredPath(
+                pattern="**/README*",
+                kind="file",
+                description="Dataset README, terms, or local staging note.",
+                group="license_or_readme",
+            ),
+            RequiredPath(
+                pattern="**/LICENSE*",
+                kind="file",
+                description="Dataset license or terms copy.",
+                group="license_or_readme",
+            ),
+            RequiredPath(
+                pattern="**/TERMS*",
+                kind="file",
+                description="Dataset terms copy.",
+                group="license_or_readme",
+            ),
+        ),
+        related_issues=(2918, 3161, 3971, 3813, 3950),
+        license_url="https://dil.atr.jp/crest2010_HRI/ATC_dataset/",
+    ),
+    AssetSpec(
+        asset_id="eth-ucy-trajectories",
+        title="ETH/UCY pedestrian trajectory benchmarks",
+        expected_local_path=REPO_ROOT / "output" / "external_data" / "eth_ucy_trajectories",
+        shared_root_subpath=Path("eth_ucy_trajectories"),
+        source_url="https://vision.ee.ethz.ch/datasets/",
+        source_note=(
+            "ETH BIWI Walking Pedestrians official page plus UCY Crowds-by-Example "
+            "manual staging for the standard ETH/Hotel/Univ/Zara trajectory benchmark set."
+        ),
+        license_note=(
+            "Dataset-specific ETH and UCY terms must be preserved locally; Robot SF does "
+            "not redistribute the combined ETH/UCY trajectory files."
+        ),
+        access_note=(
+            "Manual acquisition from official ETH and UCY sources or maintainer-approved "
+            "mirrors. Scripted download remains disabled pending explicit terms review."
+        ),
+        required_paths=(
+            RequiredPath(
+                pattern="**/obsmat.txt",
+                kind="file",
+                description="ETH/Hotel trajectory observation matrix.",
+                group="trajectory",
+            ),
+            RequiredPath(
+                pattern="**/*.vsp",
+                kind="file",
+                description="UCY Crowds-by-Example trajectory sequence file.",
+                group="trajectory",
+            ),
+            RequiredPath(
+                pattern="**/*.txt",
+                kind="file",
+                description="Trajectory text file from ETH/UCY staging.",
+                group="trajectory",
+            ),
+            RequiredPath(
+                pattern="**/README*",
+                kind="file",
+                description="Dataset README, terms, or local staging note.",
+                group="license_or_readme",
+            ),
+            RequiredPath(
+                pattern="**/LICENSE*",
+                kind="file",
+                description="Dataset license or terms copy.",
+                group="license_or_readme",
+            ),
+            RequiredPath(
+                pattern="**/TERMS*",
+                kind="file",
+                description="Dataset terms copy.",
+                group="license_or_readme",
+            ),
+        ),
+        related_issues=(2844, 4013),
+        license_url="https://vision.ee.ethz.ch/datasets/",
+    ),
+    AssetSpec(
+        asset_id="ind-crossings",
+        title="inD intersection drone trajectories",
+        expected_local_path=REPO_ROOT / "output" / "external_data" / "ind_crossings",
+        shared_root_subpath=Path("ind_crossings"),
+        source_url="https://levelxdata.com/ind-dataset/",
+        source_note=(
+            "Official leveLXData inD page for naturalistic road-user trajectories at "
+            "German intersections, including pedestrians and crossing interactions."
+        ),
+        license_note=(
+            "Free for non-commercial use after terms acceptance; terms prohibit "
+            "redistributing the dataset or modified versions. Stage local BYO copies only."
+        ),
+        access_note=(
+            "Research-request/BYO asset through leveLXData. No automated download or "
+            "redistribution path is encoded."
+        ),
+        required_paths=(
+            RequiredPath(
+                pattern="**/*_tracks.csv",
+                kind="file",
+                description="inD tracks CSV file.",
+                group="trajectory",
+            ),
+            RequiredPath(
+                pattern="**/*.csv",
+                kind="file",
+                description="inD trajectory or metadata CSV file.",
+                group="trajectory",
+            ),
+            RequiredPath(
+                pattern="**/README*",
+                kind="file",
+                description="Dataset README, terms, or local staging note.",
+                group="license_or_readme",
+            ),
+            RequiredPath(
+                pattern="**/LICENSE*",
+                kind="file",
+                description="Dataset license or terms copy.",
+                group="license_or_readme",
+            ),
+            RequiredPath(
+                pattern="**/TERMS*",
+                kind="file",
+                description="Dataset terms copy.",
+                group="license_or_readme",
+            ),
+        ),
+        related_issues=(3161,),
+        license_url="https://levelxdata.com/ind-dataset/",
+    ),
+    AssetSpec(
+        asset_id="crowdbot",
+        title="CrowdBot robot-in-crowd dataset",
+        expected_local_path=REPO_ROOT / "output" / "external_data" / "crowdbot",
+        shared_root_subpath=Path("crowdbot"),
+        source_url="https://www.epfl.ch/labs/lasa/crowdbot-dataset/",
+        source_note=(
+            "Official EPFL LASA CrowdBot dataset page for Qolo robot navigation in "
+            "Lausanne crowds; the published dataset reference points to IEEE DataPort."
+        ),
+        license_note=(
+            "Research access depends on the official CrowdBot/IEEE DataPort terms. "
+            "Do not redistribute raw sensor data through Robot SF."
+        ),
+        access_note=(
+            "Research-request/BYO asset. Stage only a locally obtained copy with the "
+            "terms preserved; scripted download is disabled."
+        ),
+        required_paths=(
+            RequiredPath(
+                pattern="**/*.bag",
+                kind="file",
+                description="CrowdBot ROS bag recording.",
+                group="recording",
+            ),
+            RequiredPath(
+                pattern="**/*.csv",
+                kind="file",
+                description="CrowdBot exported track, annotation, or metadata table.",
+                group="recording",
+            ),
+            RequiredPath(
+                pattern="**/*.json",
+                kind="file",
+                description="CrowdBot metadata or annotation JSON.",
+                group="recording",
+            ),
+            RequiredPath(
+                pattern="**/README*",
+                kind="file",
+                description="Dataset README, terms, or local staging note.",
+                group="license_or_readme",
+            ),
+            RequiredPath(
+                pattern="**/LICENSE*",
+                kind="file",
+                description="Dataset license or terms copy.",
+                group="license_or_readme",
+            ),
+            RequiredPath(
+                pattern="**/TERMS*",
+                kind="file",
+                description="Dataset terms copy.",
+                group="license_or_readme",
+            ),
+        ),
+        related_issues=(3977,),
+        license_url="https://www.epfl.ch/labs/lasa/crowdbot-dataset/",
+    ),
+    AssetSpec(
+        asset_id="scand-demos",
+        title="SCAND socially compliant navigation demonstrations",
+        expected_local_path=REPO_ROOT / "output" / "external_data" / "scand_demos",
+        shared_root_subpath=Path("scand_demos"),
+        source_url="https://dataverse.tdl.org/dataset.xhtml?persistentId=doi:10.18738/T8/0PRYRH",
+        source_note=(
+            "Texas Data Repository SCAND release for Socially CompliAnt Navigation "
+            "Dataset demonstrations from Karnan et al. 2022."
+        ),
+        license_note=(
+            "Use the Texas Data Repository dataset terms and citation metadata. Robot SF "
+            "does not redistribute raw SCAND bags or sensor logs."
+        ),
+        access_note=(
+            "Manual DataVerse acquisition; the dataset is large, so select files through "
+            "the official interface. Scripted download is disabled until terms and exact "
+            "file selection are pinned."
+        ),
+        required_paths=(
+            RequiredPath(
+                pattern="**/*.bag",
+                kind="file",
+                description="SCAND ROS bag demonstration recording.",
+                group="recording",
+            ),
+            RequiredPath(
+                pattern="**/*.csv",
+                kind="file",
+                description="SCAND exported trajectory, command, or metadata table.",
+                group="recording",
+            ),
+            RequiredPath(
+                pattern="**/*.json",
+                kind="file",
+                description="SCAND metadata or annotation JSON.",
+                group="recording",
+            ),
+            RequiredPath(
+                pattern="**/README*",
+                kind="file",
+                description="Dataset README, terms, or local staging note.",
+                group="license_or_readme",
+            ),
+            RequiredPath(
+                pattern="**/LICENSE*",
+                kind="file",
+                description="Dataset license or terms copy.",
+                group="license_or_readme",
+            ),
+            RequiredPath(
+                pattern="**/TERMS*",
+                kind="file",
+                description="Dataset terms copy.",
+                group="license_or_readme",
+            ),
+        ),
+        related_issues=(1470, 1496),
+        license_url="https://dataverse.tdl.org/dataset.xhtml?persistentId=doi:10.18738/T8/0PRYRH",
+    ),
 )
 
 
@@ -402,9 +691,12 @@ def check_asset(asset_id: str, *, source_path: Path | None = None) -> dict[str, 
         "external_data_root_env": EXTERNAL_DATA_ROOT_ENV,
         "external_data_root": str(ext_root) if ext_root else None,
         "source_url": asset.source_url,
+        "license_url": asset.license_url,
         "license_note": asset.license_note,
         "access_note": asset.access_note,
         "auto_download_allowed": asset.auto_download_allowed,
+        "expected_tree_sha256": asset.expected_tree_sha256,
+        "expected_tree_sha256_status": asset.expected_tree_sha256_status,
         "required_paths": [
             {
                 "pattern": required.pattern,
@@ -445,7 +737,7 @@ def check_asset(asset_id: str, *, source_path: Path | None = None) -> dict[str, 
 
     report["missing_required_paths"] = missing
     report["matched_required_paths"] = [
-        path.relative_to(root).as_posix() for path in sorted(matched_paths)
+        path.relative_to(root).as_posix() for path in sorted(set(matched_paths))
     ]
     if missing:
         report["status"] = "incomplete"
@@ -510,8 +802,11 @@ def stage_asset(
         "title": asset.title,
         "source_url": asset.source_url,
         "source_note": asset.source_note,
+        "license_url": asset.license_url,
         "license_note": asset.license_note,
         "access_note": asset.access_note,
+        "expected_tree_sha256": asset.expected_tree_sha256,
+        "expected_tree_sha256_status": asset.expected_tree_sha256_status,
         "local_path": str(source_root),
         "availability": _asset_availability_record(
             asset,
@@ -574,13 +869,20 @@ def _provenance_paths_cover_requirements(asset: AssetSpec, matched_paths: list[A
             for candidate in candidates
             for pattern in literal_patterns
         ) or any(
-            fnmatch.fnmatch(candidate, pattern)
+            _provenance_glob_matches(candidate, pattern)
             for candidate in candidates
             for pattern in glob_patterns
         )
         if not satisfied:
             return False
     return True
+
+
+def _provenance_glob_matches(candidate: str, pattern: str) -> bool:
+    """Return whether a manifest path satisfies a required glob pattern."""
+    return fnmatch.fnmatch(candidate, pattern) or (
+        pattern.startswith("**/") and fnmatch.fnmatch(candidate, pattern[3:])
+    )
 
 
 def _missing_provenance_metadata(asset: AssetSpec, manifest: dict[str, Any]) -> list[str]:
@@ -641,7 +943,10 @@ def check_provenance_manifest(asset_id: str, manifest_path: Path) -> dict[str, A
 
     report["missing_metadata"] = missing
     report["source_url"] = manifest.get("source_url")
+    report["license_url"] = manifest.get("license_url")
     report["license_note"] = manifest.get("license_note")
+    report["expected_tree_sha256"] = manifest.get("expected_tree_sha256")
+    report["expected_tree_sha256_status"] = manifest.get("expected_tree_sha256_status")
     report["tree_sha256"] = manifest.get("tree_sha256")
     report["matched_required_paths"] = manifest.get("matched_required_paths", [])
     if missing:
@@ -1397,9 +1702,12 @@ def _asset_summary(asset: AssetSpec, *, include_status: bool) -> dict[str, Any]:
         "external_data_root_env": EXTERNAL_DATA_ROOT_ENV,
         "external_data_root": str(ext_root) if ext_root else None,
         "source_url": asset.source_url,
+        "license_url": asset.license_url,
         "license_note": asset.license_note,
         "access_note": asset.access_note,
         "auto_download_allowed": asset.auto_download_allowed,
+        "expected_tree_sha256": asset.expected_tree_sha256,
+        "expected_tree_sha256_status": asset.expected_tree_sha256_status,
         "related_issues": list(asset.related_issues),
     }
     if include_status:
@@ -1420,7 +1728,13 @@ def _print_asset_summary(payload: dict[str, Any]) -> None:
         print(f"  action: {payload['action']}")
     print(f"  expected path: {payload['expected_local_path']}")
     print(f"  source: {payload['source_url']}")
+    if payload["license_url"]:
+        print(f"  license url: {payload['license_url']}")
     print(f"  license/access: {payload['license_note']} {payload['access_note']}")
+    checksum_text = payload["expected_tree_sha256_status"]
+    if payload["expected_tree_sha256"]:
+        checksum_text += f" ({payload['expected_tree_sha256']})"
+    print(f"  checksum: {checksum_text}")
     print(
         f"  download: {'allowed' if payload['auto_download_allowed'] else 'manual/license-gated'}"
     )

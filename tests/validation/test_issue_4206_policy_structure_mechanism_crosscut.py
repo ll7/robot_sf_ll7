@@ -385,7 +385,7 @@ def test_geometry_agreement_table_does_not_claim_unverified_agreement() -> None:
 
 
 def test_cli_json_summary(tmp_path: Path) -> None:
-    """The CLI returns a machine-readable blocked summary."""
+    """The CLI returns a machine-readable blocked summary when inputs are absent."""
     output = tmp_path / "evidence"
     completed = subprocess.run(
         [
@@ -413,7 +413,59 @@ def test_cli_json_summary(tmp_path: Path) -> None:
 
     assert completed.returncode == 0, completed.stderr
     payload = json.loads(completed.stdout)
-    assert payload["status"] == "blocked_missing_trace_verified_mechanism_labels"
+    # Absent run directories are an artifact-retrieval block, not a missing-label block.
+    assert payload["status"] == "blocked_missing_input_artifacts"
+
+
+def test_missing_input_artifacts_reports_retrieval_block_not_label_block(tmp_path: Path) -> None:
+    """Absent run outputs fail closed as a retrieval gap with an artifact-retrieval next action."""
+    output = tmp_path / "evidence"
+
+    summary = _MODULE.build_packet(
+        config_path=CONFIG,
+        confirm_root=tmp_path / "missing-confirm",
+        extended_root=tmp_path / "missing-extended",
+        job13175_packet=tmp_path / "packet.json",
+        output_dir=output,
+        generated_at="2026-07-03T00:00:00Z",
+    )
+
+    assert summary["status"] == "blocked_missing_input_artifacts"
+    missing = json.loads((output / "missing_instrumentation.json").read_text(encoding="utf-8"))
+    assert missing["status"] == "blocked_missing_input_artifacts"
+    assert missing["blocker_kinds"] == ["missing_input_artifact"]
+    # The follow-up must point at hydrating the run outputs, not at exporter instrumentation.
+    assert "retriev" in missing["next_action"].lower()
+    assert "13268" in missing["followup_issue_skeleton"]["title"]
+    # Provenance still records that the declared roots are absent on this host.
+    assert missing["input_provenance"]["confirm_h600_13268"]["root_exists"] is False
+    assert _read_csv(output / "f_c4ii_probe_predictive_dominance.csv") == []
+
+
+def test_present_rows_missing_labels_stay_a_label_block(tmp_path: Path) -> None:
+    """Rows present but unlabeled stay a mechanism-label block, distinct from the retrieval block."""
+    confirm = tmp_path / "confirm"
+    extended = tmp_path / "extended"
+    row = _base_row("prediction_planner", 1.0)
+    for field in _MODULE.REQUIRED_MECHANISM_FIELDS:
+        row.pop(field)
+    _write_rows(confirm, [row])
+    _write_rows(extended, [row])
+    output = tmp_path / "evidence"
+
+    summary = _MODULE.build_packet(
+        config_path=CONFIG,
+        confirm_root=confirm,
+        extended_root=extended,
+        job13175_packet=tmp_path / "packet.json",
+        output_dir=output,
+        generated_at="2026-07-03T00:00:00Z",
+    )
+
+    assert summary["status"] == "blocked_missing_trace_verified_mechanism_labels"
+    missing = json.loads((output / "missing_instrumentation.json").read_text(encoding="utf-8"))
+    assert missing["blocker_kinds"] == ["missing_mechanism_labels"]
+    assert "label" in missing["next_action"].lower()
 
 
 def _native_writer_episode(

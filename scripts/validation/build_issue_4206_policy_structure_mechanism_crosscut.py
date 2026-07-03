@@ -23,7 +23,15 @@ CONFIG_SCHEMA_VERSION = "issue_4206_policy_structure_mechanism_crosscut_config.v
 MECHANISM_SCHEMA_VERSION = "failure_mechanism_taxonomy.v1"
 READY_STATUS = "analysis_ready_trace_verified"
 BLOCKED_STATUS = "blocked_missing_trace_verified_mechanism_labels"
+# The h600 run artifacts were never retrieved to this host, so no episode rows exist to inspect.
+# This is a distinct, earlier blocker than "rows present but unlabeled" and needs a different next
+# action (retrieve/hydrate the run outputs, not add mechanism instrumentation to the exporter).
+BLOCKED_INPUT_STATUS = "blocked_missing_input_artifacts"
 DIAGNOSTIC_STATUS = "diagnostic_only_supported_hypothesis"
+
+# Tags attached to per-run missing entries so the packet can name the correct next empirical action.
+BLOCKER_KIND_INPUT = "missing_input_artifact"
+BLOCKER_KIND_LABEL = "missing_mechanism_labels"
 REPORT_SCHEMA_VERSION = "issue_4206_policy_structure_mechanism_crosscut_report.v1"
 
 REQUIRED_MECHANISM_FIELDS = (
@@ -255,6 +263,7 @@ def _load_run_rows(root: Path, run_name: str) -> tuple[list[dict[str, Any]], lis
                 "run": run_name,
                 "missing_path": _public_path(rows_path),
                 "missing_fields": ["reports/seed_episode_rows.csv"],
+                "blocker_kind": BLOCKER_KIND_INPUT,
             }
         ]
     sidecar_index = _index_sidecars(_discover_sidecar_rows(root))
@@ -282,6 +291,7 @@ def _load_run_rows(root: Path, run_name: str) -> tuple[list[dict[str, Any]], lis
                     "scenario_id": row.get("scenario_id", ""),
                     "planner_key": row.get("planner_key", row.get("planner_id", "")),
                     "missing_fields": missing_fields,
+                    "blocker_kind": BLOCKER_KIND_LABEL,
                     "geometry_only_fields_present": [
                         field for field in GEOMETRY_ONLY_FIELDS if str(row.get(field, ""))
                     ],
@@ -501,6 +511,57 @@ def _markdown_report(status: str, rank_rows: Sequence[Mapping[str, Any]]) -> str
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _blocked_reason(
+    status: str,
+    config: Mapping[str, Any],
+    missing_rows: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Resolve the follow-up, next action, and claim boundary for a blocked status.
+
+    The two blocked statuses need different guidance: an un-retrieved-artifact block is fixed by
+    hydrating the run outputs to this host, while a missing-label block is fixed by adding
+    trace-verified mechanism instrumentation to the exporter. Naming the wrong action sends a
+    reviewer down the wrong path, so keep the mapping explicit.
+    """
+
+    if status == BLOCKED_INPUT_STATUS:
+        missing_inputs = [
+            row for row in missing_rows if row.get("blocker_kind") == BLOCKER_KIND_INPUT
+        ]
+        runs = sorted({str(row.get("run", "")) for row in missing_inputs if row.get("run")})
+        followup = config.get("blocked_retrieval_followup") or {
+            "title": "Retrieve h600 mechanism-crosscut episode artifacts to the analysis host",
+            "body": (
+                "Issue #4206 cannot inspect mechanism labels until the declared h600 run "
+                "artifacts are present on the analysis host. Missing runs: "
+                f"{', '.join(runs) or 'declared h600 runs'}. Hydrate reports/seed_episode_rows.csv "
+                "(and any mechanism sidecars) from the canonical run store, then re-run the "
+                "builder. This is an artifact-retrieval gap, not a mechanism-instrumentation gap."
+            ),
+        }
+        next_action = (
+            "Retrieve/hydrate the missing h600 run artifacts (reports/seed_episode_rows.csv and any "
+            "mechanism sidecars) to this host, then re-run the builder. No exporter "
+            "mechanism-label change is required until the rows are present."
+        )
+        claim_boundary = (
+            "Blocked before any mechanism-label inspection because the declared h600 run artifacts "
+            "are not present on this host."
+        )
+        return {"followup": followup, "next_action": next_action, "claim_boundary": claim_boundary}
+
+    followup = config.get("blocked_followup_issue", {})
+    next_action = (
+        "Add trace-verified failure-mechanism labels to the h600 episode exports (or a declared "
+        "sidecar), then re-run the builder."
+    )
+    claim_boundary = (
+        "Blocked before F-C4(ii) rank conclusions because trace-verified mechanism labels are "
+        "unavailable."
+    )
+    return {"followup": followup, "next_action": next_action, "claim_boundary": claim_boundary}
+
+
 def _blocked_outputs(
     *,
     output_dir: Path,
@@ -509,12 +570,19 @@ def _blocked_outputs(
     missing_rows: Sequence[Mapping[str, Any]],
     loaded_row_count: int,
     input_provenance: Mapping[str, Any],
+    status: str = BLOCKED_STATUS,
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
+    reason = _blocked_reason(status, config, missing_rows)
+    blocker_kinds = sorted(
+        {str(row.get("blocker_kind", BLOCKER_KIND_LABEL)) for row in missing_rows}
+    )
     missing_payload = {
-        "status": BLOCKED_STATUS,
+        "status": status,
         "issue": 4206,
         "generated_at": generated_at,
+        "blocker_kinds": blocker_kinds,
+        "next_action": reason["next_action"],
         "required_fields": list(REQUIRED_MECHANISM_FIELDS),
         "loaded_row_count": loaded_row_count,
         "input_provenance": dict(input_provenance),
@@ -527,18 +595,19 @@ def _blocked_outputs(
             is False
         )
         or any(row.get("geometry_only_fields_present") for row in missing_rows),
-        "followup_issue_skeleton": config.get("blocked_followup_issue", {}),
+        "followup_issue_skeleton": reason["followup"],
     }
     _write_json(output_dir / "missing_instrumentation.json", missing_payload)
     metadata = {
         "schema_version": REPORT_SCHEMA_VERSION,
-        "status": BLOCKED_STATUS,
+        "status": status,
         "issue": 4206,
         "generated_at": generated_at,
+        "blocker_kinds": blocker_kinds,
+        "next_action": reason["next_action"],
         "input_provenance": dict(input_provenance),
         "taxonomy_source": config.get("taxonomy_source"),
-        "claim_boundary": "Blocked before F-C4(ii) rank conclusions because trace-verified "
-        "mechanism labels are unavailable.",
+        "claim_boundary": reason["claim_boundary"],
     }
     _write_json(output_dir / "metadata.json", metadata)
     _write_json(
@@ -583,18 +652,19 @@ def _blocked_outputs(
     }.items():
         _write_csv(output_dir / filename, [], fieldnames)
     (output_dir / "mechanism_crosscut_report.md").write_text(
-        _markdown_report(BLOCKED_STATUS, []), encoding="utf-8"
+        _markdown_report(status, []), encoding="utf-8"
     )
-    _write_readmes(output_dir, BLOCKED_STATUS)
+    _write_readmes(output_dir, status, next_action=reason["next_action"])
     _write_sha256sums(output_dir)
     return metadata
 
 
-def _write_readmes(output_dir: Path, status: str) -> None:
+def _write_readmes(output_dir: Path, status: str, *, next_action: str | None = None) -> None:
+    next_action_line = f"\nCurrent blocker next action: {next_action}\n" if next_action else ""
     readme = f"""# Issue #4206 policy-structure mechanism cross-cut
 
 status: {status}
-
+{next_action_line}
 This evidence packet is bounded to CPU-only diagnostic analysis for issue #4206. It does not run a
 benchmark campaign, submit Slurm/GPU work, edit paper/dissertation claims, or promote generalized
 causal claims.
@@ -602,6 +672,13 @@ causal claims.
 Mechanism-level F-C4(ii) conclusions are allowed only when episode rows carry
 `failure_mechanism_taxonomy.v1` fields with accepted confidence labels. Geometry buckets are used
 only for the agreement/disagreement comparison table and never as substitute mechanism labels.
+
+Blocked statuses distinguish two different next actions:
+
+- `blocked_missing_input_artifacts`: the declared h600 run outputs are not present on this host;
+  retrieve/hydrate them, then re-run. This is not a mechanism-instrumentation gap.
+- `blocked_missing_trace_verified_mechanism_labels`: rows exist but lack trace-verified mechanism
+  labels; add the labels to the exporter or a declared sidecar, then re-run.
 """
     claim_boundary = """# Claim Boundary
 
@@ -699,6 +776,11 @@ def build_packet(  # noqa: C901
         missing_rows.extend(run_missing)
 
     if missing_rows:
+        # An un-retrieved input artifact must be fixed before any label check can run, so it takes
+        # precedence over a missing-label block when both appear across the declared runs.
+        has_missing_input = any(
+            row.get("blocker_kind") == BLOCKER_KIND_INPUT for row in missing_rows
+        )
         return _blocked_outputs(
             output_dir=output_dir,
             config=config,
@@ -706,6 +788,7 @@ def build_packet(  # noqa: C901
             missing_rows=missing_rows,
             loaded_row_count=len(rows),
             input_provenance=input_provenance,
+            status=BLOCKED_INPUT_STATUS if has_missing_input else BLOCKED_STATUS,
         )
 
     accepted_confidences = {

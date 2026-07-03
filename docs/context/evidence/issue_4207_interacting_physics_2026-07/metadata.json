@@ -1,0 +1,72 @@
+{
+  "arms": [
+    {
+      "algo": "goal",
+      "algo_config": null,
+      "development_pedestrian_model": "unknown",
+      "key": "goal",
+      "structural_class": "baseline_reactive"
+    },
+    {
+      "algo": "ppo",
+      "algo_config": null,
+      "development_pedestrian_model": "unknown",
+      "key": "ppo",
+      "structural_class": "learned_policy"
+    },
+    {
+      "algo": "prediction_planner",
+      "algo_config": null,
+      "development_pedestrian_model": "unknown",
+      "key": "prediction_planner",
+      "structural_class": "predictive"
+    },
+    {
+      "algo": "guarded_ppo",
+      "algo_config": null,
+      "development_pedestrian_model": "unknown",
+      "key": "guarded_ppo",
+      "structural_class": "constraint_first"
+    }
+  ],
+  "claim_boundary": "diagnostic_certification_transfer_probe_no_deployment_claim",
+  "config": {
+    "path": "configs/benchmarks/issue_4207_interacting_physics_probe.yaml",
+    "schema_version": "certification-transfer-probe.v1",
+    "sha256": "dce652d9e68d922917de2f5b960c8222eea9fdc4dd827318863b85025b9238b5"
+  },
+  "gate_spec": {
+    "path": "configs/benchmarks/release_gates/issue_4207_interacting_smoke_gates.yaml",
+    "schema_version": "benchmark_release_gate_spec.v1",
+    "sha256": "03e036c2cf7eea467e19870a04649764beb57432c0fcf6290933f7d7c5e71d4d"
+  },
+  "generated_at_utc": "2026-07-03T00:00:00+00:00",
+  "interaction_status_counts": {
+    "interacting": 4,
+    "non_interacting": 12
+  },
+  "issue": 4207,
+  "model_sensitivity_exercised": true,
+  "pedestrian_models": [
+    "social_force_default",
+    "hsfm_total_force_v1"
+  ],
+  "row_status_counts": {
+    "fail": 4,
+    "pass": 4
+  },
+  "scenario_family": "issue4207_interacting_smoke",
+  "schema_version": "certification-transfer-report.v1",
+  "seed_policy": {
+    "mode": "fixed-list",
+    "seeds": [
+      111,
+      112,
+      113
+    ]
+  },
+  "transfer_status_counts": {
+    "stable_fail": 8,
+    "stable_pass": 8
+  }
+}

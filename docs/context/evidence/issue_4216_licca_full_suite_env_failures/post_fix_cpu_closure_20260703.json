@@ -1,0 +1,100 @@
+{
+  "issue": 4216,
+  "evidence_type": "post_fix_cpu_closure_verification",
+  "status": "cpu_verified_mechanism_cleared__gpu_full_suite_rerun_still_pending",
+  "date": "2026-07-03",
+  "host": "auxme-imech039",
+  "base_commit": "0ab3e4b171541e45a12f2131708fced9f852eab5",
+  "claim_boundary": "On CPU (non-GPU host) the previously-unbounded nested-pytest teardown mechanism is now bounded and reaped: the exact call site that hung the LiCCA post-guard full suite (tests/perf_utils/test_enforce_mode.py) completes and its containing pytest process EXITS with code 0 instead of blocking after 100%. This is CPU mechanism-closure evidence. It does NOT reproduce the GPU/CUDA teardown deadlock (no GPU here) and is NOT a green LiCCA full-suite gate. The empirical closer -- a LiCCA/shared-HPC full-suite exit-code rerun -- remains out of scope for this CPU, non-compute-submit lane.",
+  "gate_lineage": {
+    "note": "Consolidation of the #4216 validation-gate chain (fragmentation-guard: >=3 PRs merged in 24h, so this slice is an integration/closure report, not another micro-guard).",
+    "steps": [
+      {
+        "pr": 4237,
+        "role": "inventory_and_env_guards",
+        "delivered": "tests/support/environment_guards.py + 15-node failure_inventory.json for LiCCA job 9858988; GitHub Actions coverage preserved.",
+        "state": "merged"
+      },
+      {
+        "pr": 4276,
+        "role": "post_guard_full_suite_probe",
+        "delivered": "Observed the suite reach 100% then hang; nested pytest child survived holding GPU device handles; recorded in post_guard_closure_20260703.json (status=blocked, exit_code=143 manual SIGTERM).",
+        "state": "merged"
+      },
+      {
+        "pr": 4320,
+        "role": "nested_pytest_hang_fix",
+        "delivered": "tests/support/process_teardown.py::run_bounded_subprocess (session/process-group child + SIGTERM->SIGKILL reaper + NestedProcessTimeout); call site in tests/perf_utils/test_enforce_mode.py now fails loud instead of hanging; timeout configurable via ROBOT_SF_NESTED_PYTEST_TIMEOUT (default 180s).",
+        "state": "merged",
+        "residual_note": "Fix targets the identified mechanism; causal link to the GPU teardown deadlock stated as a hypothesis, not reproduced."
+      },
+      {
+        "pr": "this_slice",
+        "role": "post_fix_cpu_closure_verification",
+        "delivered": "Re-ran the targeted teardown/guard tests + the previously-hanging call site on CPU under normal and simulated-LiCCA envs; recorded actual exit codes; consolidated the gate lineage and named the single remaining empirical action.",
+        "state": "proposed"
+      }
+    ]
+  },
+  "source_inventory": {
+    "path": "docs/context/evidence/issue_4216_licca_full_suite_env_failures/failure_inventory.json",
+    "source_job": "9858988",
+    "failure_count": 15,
+    "failure_classes": {
+      "base_ref_assumption": 9,
+      "github_runner_introspection": 3,
+      "shared_node_wallclock": 3
+    }
+  },
+  "cpu_verification_runs": [
+    {
+      "id": "run1",
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- pytest tests/support/test_process_teardown.py -q",
+      "env": "default",
+      "exit_code": 0,
+      "result": "4 passed in 3.53s",
+      "decisive_evidence": "test_run_bounded_subprocess_reaps_descendant_on_timeout passes: a long-lived grandchild left by a timed-out child is reaped via the process group, proving descendants holding device handles cannot outlive the bound."
+    },
+    {
+      "id": "run2",
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- pytest tests/perf_utils/test_enforce_mode.py tests/support/test_environment_guards.py -q",
+      "env": "default",
+      "exit_code": 0,
+      "result": "6 passed in 5.46s",
+      "decisive_evidence": "The exact previously-hanging call site (test_enforce_mode_escalates spawns a nested pytest) completes and the outer pytest process exits 0 -- no post-100% hang; #4237 env guards unchanged."
+    },
+    {
+      "id": "run3",
+      "command": "ROBOT_SF_TEST_ENV=licca scripts/dev/run_worktree_shared_venv.sh -- pytest tests/support/test_process_teardown.py tests/perf_utils/test_enforce_mode.py -q",
+      "env": "simulated_licca (ROBOT_SF_TEST_ENV=licca)",
+      "exit_code": 0,
+      "result": "5 passed in 8.43s",
+      "decisive_evidence": "Under the simulated LiCCA/shared-HPC guard marker the reaper path and nested-pytest call site still exit cleanly."
+    },
+    {
+      "id": "run4",
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- pytest tests/support/ tests/perf_utils/ -q",
+      "env": "default",
+      "exit_code": 0,
+      "result": "14 passed in 8.52s",
+      "decisive_evidence": "Directory-level run of both affected trees exits cleanly with no hang and no orphaned nested child."
+    }
+  ],
+  "comparison_to_pr_4276_probe": {
+    "pr_4276_probe": "suite reached 100%, no final pytest summary, process did not exit, killed with SIGTERM (exit_code 143), nested pytest child remained alive holding GPU device handles.",
+    "post_fix_cpu": "the same nested-pytest call site now completes and its containing pytest process exits 0; on timeout the bound raises NestedProcessTimeout and reaps the whole group instead of blocking.",
+    "delta": "The unbounded-spawn mechanism recorded by PR #4276 is closed on CPU. The GPU-specific deadlock trigger was not reproducible on this host and is bounded rather than proven-absent."
+  },
+  "remaining_empirical_action": {
+    "action": "Run the LiCCA/shared-HPC full test suite (the job-9858988 entry point) after the #4320 fix and record the actual exit code + final pytest summary; expected outcome: clean non-hanging exit with zero environment-conditional residue failures.",
+    "owner_lane": "GPU/HPC compute-submit lane (out of scope for this CPU, compute_submit=false slice).",
+    "blocks_close": true
+  },
+  "artifact_policy": {
+    "large_or_transient_logs_committed": false,
+    "raw_run_logs": "kept local-only under the common Git dir (.git/codex-agent-runs/active/issue-4216/); not a durable dependency.",
+    "compute_submission": false,
+    "slurm_or_gpu_campaign": false,
+    "paper_or_dissertation_claim_edits": false
+  }
+}

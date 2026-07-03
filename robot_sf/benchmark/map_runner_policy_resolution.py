@@ -100,7 +100,9 @@ def _apply_scenario_uncertainty_envelope_config(
     }
     if not overrides:
         return algo_config
-    return {**algo_config, **overrides}
+    merged = deepcopy(algo_config)
+    merged.update(overrides)
+    return merged
 
 
 def _resolve_config_path(anchor: Path | None, raw_path: Any) -> Path | None:

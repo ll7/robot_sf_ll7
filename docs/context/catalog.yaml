@@ -2931,6 +2931,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4017_constrained_rl/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4245_offline_pretrain_finetune_smoke/README.md
     status: evidence
     freshness: evidence

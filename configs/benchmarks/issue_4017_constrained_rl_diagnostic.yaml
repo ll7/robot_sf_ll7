@@ -1,0 +1,10 @@
+schema_version: issue_4017.constrained_rl_diagnostic.v1
+issue: 4017
+evidence_tier: diagnostic-only
+claim_boundary: >-
+  Matched constrained-vs-unconstrained CPU smoke manifest comparison for issue
+  #4017. This is not benchmark, paper-grade, or dissertation safety evidence.
+baseline_manifest: output/models/constrained_rl/issue_4017/ppo_unconstrained_issue_4017_smoke/training_manifest.json
+constrained_manifest: output/models/constrained_rl/issue_4017/ppo_lagrangian_issue_4017_smoke/training_manifest.json
+output_json: output/benchmarks/issue4017/comparison_report.json
+output_markdown: output/benchmarks/issue4017/comparison_report.md

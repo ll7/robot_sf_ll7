@@ -168,8 +168,8 @@ def test_seed_sufficiency_handoff_command_is_export_only() -> None:
     assert "not seed-sufficiency evidence" in handoff["claim_boundary"]
 
 
-def test_input_screening_treats_null_scenario_fov_as_default() -> None:
-    """Explicit null FOV in scenario visibility falls back to run FOV."""
+def test_input_screening_rejects_null_scenario_fov() -> None:
+    """Explicit null FOV in scenario visibility fails closed."""
 
     report = build_input_screening_report(
         scenarios=[
@@ -187,7 +187,8 @@ def test_input_screening_treats_null_scenario_fov_as_default() -> None:
         fov_degrees=120.0,
     )
 
-    assert report["checks"]["out_of_fov_sidecar_contract"]["passed"] is True
+    assert report["ready"] is False
+    assert report["checks"]["explicit_null_fov_rejected"]["passed"] is False
 
 
 def test_runner_preflight_checks_launch_packet_and_screening_inputs() -> None:
@@ -254,3 +255,26 @@ def test_final_screening_report_propagates_decision_and_provenance() -> None:
         "inconclusive_oracle_unsafe",
         "blocked_no_near_safe_family",
     }
+
+
+def test_input_screening_rejects_explicit_null_scenario_fov() -> None:
+    """Scenario-level null FoV is invalid instead of silently using global default."""
+
+    report = build_input_screening_report(
+        scenarios=[
+            {
+                "name": "null_fov",
+                "observation_visibility": {
+                    "enabled": True,
+                    "fov_degrees": None,
+                    "static_occlusion": True,
+                },
+                "single_pedestrians": [{"id": "p1"}],
+            }
+        ],
+        seeds=[111],
+        fov_degrees=120.0,
+    )
+
+    assert report["ready"] is False
+    assert report["checks"]["explicit_null_fov_rejected"]["passed"] is False

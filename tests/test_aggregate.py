@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from robot_sf.benchmark.aggregate import (
+    _numeric_items,
     compute_aggregates,
     compute_aggregates_with_ci,
     flatten_metrics,
@@ -899,3 +900,19 @@ def test_compute_aggregates_with_ci_diagnostic_cross_track_namespaces_groups() -
     assert "grid_socnav_v1 :: planner-a" in summary
     assert "lidar_2d_v1 :: planner-a" in summary
     assert summary["_meta"]["observation_tracks"]["mode"] == "diagnostic_cross_track"
+
+
+def test_numeric_items_excludes_non_finite_and_bool_values() -> None:
+    """Aggregate numeric extraction ignores non-finite values and booleans."""
+
+    numeric = _numeric_items(
+        {
+            "success": 1.0,
+            "inf_metric": float("inf"),
+            "neg_inf_metric": float("-inf"),
+            "nan_metric": float("nan"),
+            "bool_metric": True,
+        }
+    )
+
+    assert numeric == {"success": 1.0}

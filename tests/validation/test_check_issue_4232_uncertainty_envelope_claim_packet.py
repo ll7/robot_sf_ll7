@@ -76,7 +76,7 @@ def test_issue_4232_packet_rejects_non_mpc_envelope_effect_claim() -> None:
         {
             "planner_id": "orca",
             "family": "reactive",
-            "base_config_path": "configs/algos/orca.yaml",
+            "base_config_path": "configs/algos/reference_adapter.yaml",
             "claim_modes": ["envelope_effect"],
         }
     )
@@ -91,7 +91,7 @@ def test_issue_4232_packet_allows_non_mpc_diagnostic_only_planner() -> None:
         {
             "planner_id": "orca",
             "family": "reactive",
-            "base_config_path": "configs/algos/orca.yaml",
+            "base_config_path": "configs/algos/reference_adapter.yaml",
             "claim_modes": ["diagnostic_only"],
         }
     )
@@ -122,3 +122,34 @@ def test_issue_4232_packet_rejects_raw_artifacts_as_review_outputs() -> None:
     packet["outputs"]["required_review_artifacts"].append("episodes.jsonl")
 
     _assert_rejected(packet, "raw episode JSONL must not be review artifact")
+
+
+def test_issue_4232_packet_rejects_bad_planner_config_paths(tmp_path: Path) -> None:
+    """Planner config paths must be repo-relative source files."""
+
+    packet = _load_packet()
+    packet["planner_families"][0]["base_config_path"] = str((tmp_path / "abs.yaml").resolve())
+    with pytest.raises(_MODULE.PacketError, match="repository-relative"):
+        _MODULE.validate_packet(packet, repo_root=REPO_ROOT)
+
+    packet = _load_packet()
+    packet["planner_families"][0]["base_config_path"] = "configs/algos"
+    with pytest.raises(_MODULE.PacketError, match="must be a file"):
+        _MODULE.validate_packet(packet, repo_root=REPO_ROOT)
+
+    root = tmp_path / "repo"
+    (root / "configs/algos").mkdir(parents=True)
+    (root / "configs/scenarios").mkdir(parents=True)
+    (root / "configs/scenarios/classic_interactions_francis2023.yaml").write_text(
+        "scenario: unit\n",
+        encoding="utf-8",
+    )
+    outside = tmp_path / "outside.yaml"
+    outside.write_text("config: outside\n", encoding="utf-8")
+    (root / "configs/algos/link.yaml").symlink_to(outside)
+    packet = _load_packet()
+    for planner in packet["planner_families"]:
+        planner["base_config_path"] = "configs/algos/link.yaml"
+
+    with pytest.raises(_MODULE.PacketError, match="symlinks"):
+        _MODULE.validate_packet(packet, repo_root=root)

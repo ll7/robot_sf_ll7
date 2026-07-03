@@ -592,7 +592,9 @@ def _numeric_items(d: dict[str, Any]) -> dict[str, float]:
             continue
         if v is None:
             continue
-        if isinstance(v, int | float) and not (isinstance(v, float) and math.isnan(v)):
+        if isinstance(v, bool):
+            continue
+        if isinstance(v, int | float) and math.isfinite(float(v)):
             out[k] = float(v)
     return out
 

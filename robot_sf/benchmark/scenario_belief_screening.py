@@ -110,13 +110,17 @@ def build_input_screening_report(
     modes_pinned = tuple(required_modes) == REQUIRED_BELIEF_MODES
 
     out_of_fov_candidates = []
+    explicit_null_fov = []
     for scenario in scenario_list:
         visibility = scenario.get("observation_visibility")
         if not isinstance(visibility, Mapping):
             continue
         enabled = bool(visibility.get("enabled", False))
-        raw_fov = visibility.get("fov_degrees")
-        scenario_fov = float(raw_fov if raw_fov is not None else fov_degrees)
+        if "fov_degrees" in visibility and visibility.get("fov_degrees") is None:
+            explicit_null_fov.append(_scenario_id(scenario) or "<unnamed>")
+            continue
+        raw_fov = visibility.get("fov_degrees", fov_degrees)
+        scenario_fov = float(raw_fov)
         has_limited_view = enabled and scenario_fov < 360.0
         has_static_occlusion = bool(visibility.get("static_occlusion", False))
         pedestrians = scenario.get("single_pedestrians")
@@ -142,6 +146,12 @@ def build_input_screening_report(
             f"required modes pinned: {list(required_modes)}"
             if modes_pinned
             else f"required modes must be {list(REQUIRED_BELIEF_MODES)}",
+        ),
+        "explicit_null_fov_rejected": _check(
+            not explicit_null_fov,
+            "no scenario-level null fov_degrees values"
+            if not explicit_null_fov
+            else f"explicit null fov_degrees in scenario(s): {explicit_null_fov}",
         ),
         "out_of_fov_sidecar_contract": _check(
             bool(out_of_fov_candidates),

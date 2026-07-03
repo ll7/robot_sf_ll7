@@ -12,6 +12,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.interaction_exposure import (
+    INTERACTION_EXPOSURE_COMPUTED_STATUS,
+    INTERACTION_EXPOSURE_REQUIRED_FIELDS,
+    is_not_derivable_status,
+)
+
 SUSTAINED_FLOW_REVIVAL_GATE_SCHEMA_VERSION = "issue_3813.sustained_flow_revival_gate.v1"
 
 DECISION_REVIVE = "revive_sustained_flow"
@@ -28,14 +34,15 @@ DEFAULT_H600_CLAIM_IMPACT_EVIDENCE = Path(
     "sustained_flow_claim_impact_input.json"
 )
 
-REQUIRED_INTERACTION_EXPOSURE_FIELDS = (
-    "interaction_exposure_share",
-    "robot_motion_share_before_first_clearance",
-    "first_clearance_step",
-    "low_exposure_success",
-)
+# Consume the canonical interaction-exposure field contract (owned by
+# ``robot_sf.benchmark.interaction_exposure`` via issue #4242/#4278) instead of re-declaring the
+# field names here; the public alias is kept for backward compatibility with existing importers.
+REQUIRED_INTERACTION_EXPOSURE_FIELDS = INTERACTION_EXPOSURE_REQUIRED_FIELDS
 
-_COMPLETE_EXPOSURE_STATUSES = {"computed", "ok", "complete"}
+# Statuses that positively assert the required exposure fields were computed. The canonical
+# ``computed`` status is sourced from the interaction-exposure module; ``ok``/``complete`` remain
+# accepted synonyms for upstream diagnostic reports that predate the canonical convention.
+_COMPLETE_EXPOSURE_STATUSES = {INTERACTION_EXPOSURE_COMPUTED_STATUS, "ok", "complete"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,7 +108,17 @@ def build_sustained_flow_revival_gate_report(
 
     blocking_reasons: list[str] = []
     if not _interaction_exposure_complete(interaction_exposure):
-        blocking_reasons.append("interaction-exposure diagnostics missing computed required fields")
+        if _interaction_exposure_retained_but_not_derivable(interaction_exposure):
+            # The required fields are retained as columns but their values could not be derived
+            # from the episode rows (canonical ``not_derivable_*`` status). This is a distinct
+            # blocker from fields that were never retained; both still fail the gate closed.
+            blocking_reasons.append(
+                "interaction-exposure fields retained but not derivable from episode rows"
+            )
+        else:
+            blocking_reasons.append(
+                "interaction-exposure diagnostics missing computed required fields"
+            )
 
     affected_rows = _affected_rows(interaction_exposure, claim_impact)
     if not affected_rows:
@@ -180,6 +197,55 @@ def _interaction_exposure_complete(report: Mapping[str, Any]) -> bool:
         return False
 
     return True
+
+
+def _interaction_exposure_retained_but_not_derivable(report: Mapping[str, Any]) -> bool:
+    """Return whether required exposure fields are retained but cannot be derived.
+
+    Distinguishes the "retained-but-not-derivable" state (columns present, but the canonical
+    ``not_derivable_*`` status or a zero-derivable/positive-not-derivable episode-row count means
+    no value could be computed) from the "fields never retained" state. Both fail the gate closed,
+    but naming the difference keeps the deferred-evidence blocker precise.
+    """
+
+    runs = _run_mappings(report)
+    entities = runs if runs else (report,)
+    saw_retained_not_derivable = False
+    for entity in entities:
+        if not _fields_retained(entity):
+            continue
+        if _entity_not_derivable(entity):
+            saw_retained_not_derivable = True
+        else:
+            # A retained-and-derivable entity means the incompleteness is not (only) a
+            # not-derivable state, so do not label the whole report that way.
+            return False
+    return saw_retained_not_derivable
+
+
+def _fields_retained(entity: Mapping[str, Any]) -> bool:
+    """Return whether all required exposure fields are present as columns on ``entity``."""
+
+    if set(_string_sequence(entity.get("missing_required_fields"))):
+        return False
+    retained = set(_string_sequence(entity.get("available_columns")))
+    retained.update(_string_sequence(entity.get("computed_fields")))
+    return set(REQUIRED_INTERACTION_EXPOSURE_FIELDS) <= retained
+
+
+def _entity_not_derivable(entity: Mapping[str, Any]) -> bool:
+    """Return whether ``entity`` marks its retained exposure fields as not derivable."""
+
+    if is_not_derivable_status(entity.get("status")):
+        return True
+    if is_not_derivable_status(entity.get("interaction_exposure_status")):
+        return True
+    not_derivable_rows = entity.get("not_derivable_episode_rows")
+    derivable_rows = entity.get("derivable_episode_rows")
+    if isinstance(not_derivable_rows, int) and not_derivable_rows > 0:
+        if not isinstance(derivable_rows, int) or derivable_rows == 0:
+            return True
+    return False
 
 
 def _run_mappings(report: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...] | None:

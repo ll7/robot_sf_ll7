@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from robot_sf.benchmark.interaction_exposure import INTERACTION_EXPOSURE_REQUIRED_FIELDS
 from robot_sf.benchmark.sustained_flow_revival_gate import (
     DECISION_DEFER,
     DECISION_REVIVE,
@@ -17,6 +18,12 @@ from robot_sf.benchmark.sustained_flow_revival_gate import (
 from scripts.validation.report_issue_3813_sustained_flow_revival_gate import main as gate_main
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_required_fields_consume_canonical_interaction_exposure_contract() -> None:
+    """The gate must reuse the canonical interaction-exposure field tuple, not a private copy."""
+
+    assert REQUIRED_INTERACTION_EXPOSURE_FIELDS == INTERACTION_EXPOSURE_REQUIRED_FIELDS
 
 
 def _complete_exposure() -> dict:
@@ -138,6 +145,70 @@ def test_complete_non_load_bearing_evidence_stops_sustained_flow() -> None:
     assert report.decision == DECISION_STOP
     assert report.ready_for_revived_implementation is False
     assert report.blocking_reasons == ()
+
+
+def test_retained_but_not_derivable_fields_defer_with_distinct_reason() -> None:
+    """Retained columns with a canonical not-derivable status DEFER via a distinct blocker."""
+
+    exposure = {
+        "runs": [
+            {
+                "job_id": "13268",
+                "run_label": "confirm",
+                "status": "not_derivable_missing_trace",
+                "available_columns": list(REQUIRED_INTERACTION_EXPOSURE_FIELDS),
+                "not_derivable_episode_rows": 12,
+                "derivable_episode_rows": 0,
+            }
+        ],
+    }
+    report = build_sustained_flow_revival_gate_report(
+        exposure,
+        claim_impact=_claim_impact(changed=True),
+        claim_impact_evidence_path="docs/context/evidence/claim_impact.json",
+    )
+    payload = report.to_payload()
+    assert payload["decision"] == DECISION_DEFER
+    assert payload["ready_for_revived_implementation"] is False
+    assert (
+        "interaction-exposure fields retained but not derivable from episode rows"
+        in payload["blocking_reasons"]
+    )
+    # The retained-but-not-derivable state must not be conflated with fields never retained.
+    assert (
+        "interaction-exposure diagnostics missing computed required fields"
+        not in payload["blocking_reasons"]
+    )
+
+
+def test_missing_fields_are_not_labelled_retained_but_not_derivable() -> None:
+    """When required columns are absent, the gate keeps the 'missing fields' blocker wording."""
+
+    exposure = {
+        "runs": [
+            {
+                "job_id": "13268",
+                "status": "blocked_missing_required_fields",
+                "available_columns": ["planner_key", "scenario_id", "success"],
+                "missing_required_fields": list(REQUIRED_INTERACTION_EXPOSURE_FIELDS),
+            }
+        ],
+    }
+    report = build_sustained_flow_revival_gate_report(
+        exposure,
+        claim_impact=_claim_impact(changed=True),
+        claim_impact_evidence_path="docs/context/evidence/claim_impact.json",
+    )
+    payload = report.to_payload()
+    assert payload["decision"] == DECISION_DEFER
+    assert (
+        "interaction-exposure diagnostics missing computed required fields"
+        in payload["blocking_reasons"]
+    )
+    assert (
+        "interaction-exposure fields retained but not derivable from episode rows"
+        not in payload["blocking_reasons"]
+    )
 
 
 def test_cli_reports_default_tracked_gate_decision(capsys) -> None:

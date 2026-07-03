@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 
@@ -12,9 +12,6 @@ from robot_sf.benchmark.proxemic_ablation_report import (
     load_records,
     write_report_artifacts,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def test_builds_paired_proxemic_delta_report_with_parameter_provenance(tmp_path: Path) -> None:
@@ -104,6 +101,27 @@ def test_load_records_accepts_json_and_jsonl_and_writes_report(tmp_path: Path) -
 
     assert json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))["issue"] == 4165
     assert "intrusion_rate_delta" in (output_dir / "README.md").read_text(encoding="utf-8")
+
+
+def test_checked_in_fixture_matches_report_contract() -> None:
+    """Tracked fixture rows keep issue #4165 report contract executable."""
+    fixture_dir = Path("tests/benchmark/fixtures/proxemic_ablation_issue_4165")
+    report = build_proxemic_ablation_report(
+        baseline_records=load_records(fixture_dir / "baseline_classical.jsonl"),
+        proxemic_records=load_records(fixture_dir / "proxemic_costmap_on.jsonl"),
+        smoke_config_path=Path("configs/benchmarks/issue_4165_proxemic_costmap_smoke.yaml"),
+        proxemic_config_path=Path("configs/planners/proxemic_costmap_v1.yaml"),
+        repo_root=Path("."),
+    )
+
+    assert report["report_status"] == "ready"
+    assert report["claim_boundary"] == "paired_cpu_smoke_or_fixture_report_only"
+    assert report["paired_rows"] == 2
+    assert report["deltas"]["intrusion_rate_delta"] == pytest.approx(-0.1)
+    assert report["deltas"]["minimum_clearance_delta"] == pytest.approx(0.1)
+    assert report["deltas"]["path_efficiency_delta"] == pytest.approx(-0.02)
+    assert report["deltas"]["runtime_overhead_seconds"] == pytest.approx(0.15)
+    assert report["parameter_provenance"]["proxemic_config"]["sha256"]
 
 
 def _row(

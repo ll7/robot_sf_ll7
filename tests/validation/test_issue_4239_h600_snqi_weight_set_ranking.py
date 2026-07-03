@@ -10,7 +10,8 @@ from pathlib import Path
 
 import yaml
 
-SCRIPT = Path("scripts/validation/build_issue_4239_h600_snqi_weight_set_ranking.py")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = REPO_ROOT / "scripts/validation/build_issue_4239_h600_snqi_weight_set_ranking.py"
 
 
 def _write_json(path: Path, data: object) -> None:
@@ -310,6 +311,18 @@ def test_missing_jerk_blocks_model_canonical_v1(tmp_path: Path) -> None:
         issue["weight_set_id"] == "model_canonical_v1" and "jerk_mean" in issue["missing_terms"]
         for issue in preflight["issues"]
     )
+
+
+def test_non_mapping_config_fails_closed(tmp_path: Path) -> None:
+    """A config that parses as a non-mapping (e.g. a YAML list) is rejected, not crashed on."""
+    config = tmp_path / "config.yaml"
+    config.write_text(yaml.safe_dump(["not", "a", "mapping"]), encoding="utf-8")
+    evidence = tmp_path / "evidence"
+
+    result = _run_builder(config, evidence)
+
+    assert result.returncode != 0
+    assert "must be a mapping" in result.stderr
 
 
 def test_uniform_all_ones_distinct_from_model_canonical_and_ties_deterministic(

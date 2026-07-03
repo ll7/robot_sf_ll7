@@ -32,7 +32,7 @@ This directory contains diagnostic-only h600 interpretation artifacts for jobs 1
 - Comfort rows: 16.
 - Comfort per-seed values are not present in `seed_episode_rows.csv`; those rows preserve the campaign-summary aggregate mean confidence interval and are marked `no_seed_episode_column`.
 
-## Issue 4239 SNQI Weight-Set Ranking Packet
+## Issue #4239 SNQI Weight-Set Ranking Packet
 
 The issue #4239 packet is diagnostic-only h600 Social Navigation Quality Index (SNQI)
 weight-set ranking support for jobs `13268` and `13273`. It de-duplicates shared planner arms,

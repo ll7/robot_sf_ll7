@@ -82,6 +82,8 @@ def _sha256(path: Path) -> str:
 def _load_config(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle) or {}
+    if not isinstance(data, dict):
+        raise ValueError(f"config at {path} must be a mapping, got {type(data).__name__}")
     if data.get("schema_version") != SCHEMA_VERSION:
         raise ValueError(f"unsupported config schema_version: {data.get('schema_version')!r}")
     return data
@@ -145,16 +147,15 @@ def _manifest_runs(config: dict[str, Any], source_manifest: dict[str, Any]) -> l
         key = (str(run.get("job_id")), str(run.get("run_label")))
         if key in requested:
             seed_rows = _repo_root() / str(run.get("seed_episode_rows", ""))
+            campaign = run.get("campaign") or {}
             runs.append(
                 {
                     "job_id": str(run["job_id"]),
                     "run_label": str(run["run_label"]),
                     "seed_episode_rows": seed_rows,
                     "campaign_summary": _repo_root() / str(run.get("campaign_summary", "")),
-                    "scenario_matrix_hash": run.get("campaign", {}).get("scenario_matrix_hash", ""),
-                    "comparability_mapping_hash": run.get("campaign", {}).get(
-                        "comparability_mapping_hash", ""
-                    ),
+                    "scenario_matrix_hash": campaign.get("scenario_matrix_hash", ""),
+                    "comparability_mapping_hash": campaign.get("comparability_mapping_hash", ""),
                 }
             )
     return runs
@@ -610,10 +611,10 @@ def _update_readme(path: Path) -> None:
     text = (
         path.read_text(encoding="utf-8")
         if path.exists()
-        else "# Issue 4195 h600 Aggregation Artifact\n"
+        else "# Issue #4195 h600 Aggregation Artifact\n"
     )
-    marker = "## Issue 4239 SNQI Weight-Set Ranking Packet"
-    block = """## Issue 4239 SNQI Weight-Set Ranking Packet
+    marker = "## Issue #4239 SNQI Weight-Set Ranking Packet"
+    block = """## Issue #4239 SNQI Weight-Set Ranking Packet
 
 The issue #4239 packet is diagnostic-only h600 Social Navigation Quality Index (SNQI)
 weight-set ranking support for jobs `13268` and `13273`. It de-duplicates shared planner arms,
@@ -633,7 +634,7 @@ New compact artifacts, when the fail-closed preflight is ready, use the
 
 def _update_source_manifest(path: Path, generated_paths: list[Path], *, status: str) -> None:
     data = _load_json(path)
-    outputs = list(dict.fromkeys(data.get("generated_outputs", [])))
+    outputs = list(dict.fromkeys(data.get("generated_outputs") or []))
     for generated_path in generated_paths:
         name = generated_path.name
         if name not in outputs:
@@ -710,8 +711,9 @@ def build_packet(config_path: Path, output_dir: Path, generated_at: str) -> int:
         _update_sha256s(sha_path, output_dir)
         return 2
 
+    dedup_config = config.get("deduplication") or {}
     selected, audit_rows, mismatches = _deduplicate(
-        aggregates, tolerance=float(config.get("deduplication", {}).get("tolerance", 1e-9))
+        aggregates, tolerance=float(dedup_config.get("tolerance", 1e-9))
     )
     audit_headers = [
         "planner_key",

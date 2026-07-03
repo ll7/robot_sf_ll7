@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **trace-capable h600 re-run pre-registration contract and fail-closed validator** for the
+  issue #4206 failure-mechanism cross-cut (#4206). PR #4341 proved the retained h600 runs (jobs
+  13268 confirm, 13273 extended roster) predate the trace-capable episode exporter (#4301), so their
+  failure-mechanism labels are all `not_derivable` and a sidecar backfill cannot recover them — the
+  only remaining CPU-dispatchable work is a *contract* for the eventual re-run, not another blocked
+  analysis packet. `configs/benchmarks/issue_4206_trace_capable_h600_rerun_preregistration.yaml`
+  declares the re-run's required `failure_mechanism_taxonomy.v1` and `interaction_exposure.v1`
+  outputs, trace-capture switches, planner roster (grouped by structural class), frozen seed
+  schedule, predecessor-run provenance, downstream consumer, and fail-closed exclusions.
+  `scripts/validation/check_issue_4206_trace_capable_h600_rerun_preregistration.py` validates the
+  contract fail-closed and, critically, cross-checks the declared required-field lists against the
+  canonical schema owners (`robot_sf/benchmark/failure_mechanism_taxonomy.py`,
+  `robot_sf/benchmark/interaction_exposure.py`) so the contract cannot silently drop a claim-bearing
+  field or drift from the schema; it also rejects geometry-bucket substitution, an all-`not_derivable`
+  re-run counting as success, an empty roster/seed schedule, duplicate planner keys, and in-PR
+  submission. Pre-registration only: runs no episodes, submits no campaign, and derives no mechanism
+  label. Validated with `tests/validation/test_issue_4206_trace_capable_h600_rerun_preregistration.py`
+  (16 fixture cases).
 * Added a **cross-module pipeline contract test and consolidation note for the issue #4142 dense
   DPCBF comparison** (#4142). The dense-comparison pipeline landed as separate slices — readiness
   (#4299), the packet-consuming run planner (#4318), and the plan-consuming summarizer (#4345) —

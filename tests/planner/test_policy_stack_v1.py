@@ -286,13 +286,15 @@ def test_policy_stack_map_runner_registration(monkeypatch: pytest.MonkeyPatch) -
                 }
             }
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.PolicyStackV1Adapter", _DummyStack)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.build_policy_stack_v1_build_config",
+        "robot_sf.benchmark.map_runner_policies.rule_and_grid.PolicyStackV1Adapter", _DummyStack
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner_policies.rule_and_grid.build_policy_stack_v1_build_config",
         lambda cfg: SimpleNamespace(policy_stack=cfg, risk_dwa=SimpleNamespace()),
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.RiskDWAPlannerAdapter",
+        "robot_sf.benchmark.map_runner_policies.rule_and_grid.RiskDWAPlannerAdapter",
         lambda config: SimpleNamespace(config=config),
     )
 

@@ -1,4 +1,4 @@
-"""Tests for issue #4164 goal-posterior planner-input smoke report."""
+"""Tests for issue #4164 goal-posterior planner-consumption smoke report."""
 
 from __future__ import annotations
 
@@ -20,26 +20,34 @@ build_report = _MODULE.build_report
 main = _MODULE.main
 
 
-def test_goal_posterior_smoke_report_has_paired_enabled_rows() -> None:
-    """Smoke report includes paired disabled/enabled rows."""
-
+def test_goal_posterior_smoke_report_has_planner_consumption_rows() -> None:
+    """Smoke report includes paired planner-consumption effects."""
     report = build_report(_CONFIG_PATH)
 
-    assert report["schema_version"] == "issue_4164_goal_posterior_planner_input_smoke.v1"
+    assert report["schema_version"] == "issue_4164_goal_posterior_planner_consumption_smoke.v1"
     assert "no full benchmark campaign" in report["claim_boundary"]
     assert len(report["scenarios"]) == 2
     for scenario in report["scenarios"]:
-        assert scenario["without_goal_posterior"]["channel_present"] is False
-        assert scenario["with_goal_posterior"]["channel_present"] is True
-        assert scenario["with_goal_posterior"]["top_goal_ids"]
-        assert scenario["with_goal_posterior"]["blockers"] == {}
+        without = scenario["without_goal_posterior"]
+        with_posterior = scenario["with_goal_posterior"]
+
+        assert scenario["planner_path"] == "hybrid_rule_local_planner.goal_posterior_avoidance"
+        assert without["planner_consumed_channel"] is False
+        assert with_posterior["planner_consumed_channel"] is True
+        assert with_posterior["posterior_active"] is True
+        assert scenario["command_source_changed"] or scenario["trajectory_changed"]
+        assert isinstance(scenario["route_progress_delta"], float)
+        assert scenario["fallback_or_degraded_exclusions"]["with"]["fallback_or_degraded"] is False
+        assert with_posterior["selected_sources"]
+        assert any(
+            source.startswith("goal_posterior_yield_")
+            for source in with_posterior["selected_sources"]
+        )
 
 
 def test_goal_posterior_smoke_main_writes_json(tmp_path: Path) -> None:
     """Smoke CLI writes compact JSON evidence."""
-
     output_path = tmp_path / "smoke.json"
-
     exit_code = main(
         [
             "--config",
@@ -52,4 +60,4 @@ def test_goal_posterior_smoke_main_writes_json(tmp_path: Path) -> None:
     assert exit_code == 0
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     assert payload["posterior_config"]["config_hash"]
-    assert len(payload["scenarios"]) == 2
+    assert payload["scenarios"][0]["with_goal_posterior"]["planner_consumed_channel"] is True

@@ -44,13 +44,13 @@ scenarios:
           trigger_radius_m: 1.8
           trigger: runtime_robot_proximity_release
           hold_release_radius_m: 6.0
-        archetype: public_requirement_visibility_and_intent
-        flow: turning_near_pedestrian
-        behavior: proximity_released_start_stop
-        purpose: >
-          Deterministic visibility-and-intent scenario proxy for issue #3977;
-          records an authored condition where robot intent should be legible near
-          a pedestrian, not validated public acceptance or safety-certification
-          evidence.
+      archetype: public_requirement_visibility_and_intent
+      flow: turning_near_pedestrian
+      behavior: proximity_released_start_stop
+      purpose: >
+        Deterministic visibility-and-intent scenario proxy for issue #3977;
+        records an authored condition where robot intent should be legible near
+        a pedestrian, not validated public acceptance or safety-certification
+        evidence.
     seeds:
       - 3977

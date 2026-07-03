@@ -10,6 +10,8 @@ posterior_config:
 scenarios:
   - id: crossing_conflict_eastbound
     pedestrian_ids: [crossing_ped_0]
+    robot_start: [0.0, 2.0]
+    robot_goal: [4.0, 2.0]
     positions:
       - [1.0, 2.0]
     velocities:
@@ -18,6 +20,9 @@ scenarios:
       - [8.0, 2.0]
   - id: crossing_conflict_northbound
     pedestrian_ids: [crossing_ped_1]
+    robot_start: [3.0, 0.0]
+    robot_goal: [3.0, 4.0]
+    robot_heading: 1.5707963267948966
     positions:
       - [4.0, 1.0]
     velocities:

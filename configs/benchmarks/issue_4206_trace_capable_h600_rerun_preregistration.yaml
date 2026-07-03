@@ -1,0 +1,152 @@
+# Trace-capable h600 re-run pre-registration (queue-row packet) for issue #4206.
+#
+# Plain-language summary: the issue #4206 mechanism cross-cut cannot produce its
+# F-C4(ii) policy-structure conclusions because the retained h600 runs (jobs
+# 13268 confirm, 13273 extended roster) predate the issue #4301 trace-capable
+# episode exporter. Their episode rows therefore carry only `not_derivable`
+# failure-mechanism labels, and a sidecar backfill cannot recover a
+# trace-verified label that never existed (proved by PR #4341). The only
+# remaining CPU-dispatchable work is a *contract* for the eventual trace-capable
+# re-run: what outputs it must emit, from which planner roster and seeds, with
+# what provenance, and which results fail closed. This file is that contract.
+#
+# Claim boundary: PRE-REGISTRATION ONLY. This file declares the re-run contract
+# and its queue-row shape. It is NOT benchmark evidence, does NOT authorize or
+# submit the h600 campaign, and does NOT derive any mechanism label. The
+# companion validator only checks that this contract stays internally
+# consistent with the canonical schema owners; it runs no simulation.
+schema_version: issue_4206_trace_capable_h600_rerun_preregistration.v1
+issue: 4206
+parent_issue: 4206
+title: Trace-capable h600 failure-mechanism-label re-run pre-registration
+claim_boundary: >-
+  Pre-registration only. Declares the trace-capable h600 re-run output contract,
+  planner roster, seeds, provenance, and fail-closed exclusions for issue #4206
+  consumers. Not benchmark evidence; does not submit or run the campaign; does
+  not derive mechanism labels.
+
+# Why the re-run is needed and what consumes its output.
+provenance:
+  taxonomy_source: docs/context/issue_2220_failure_mechanism_taxonomy.md
+  # Predecessor runs whose rows are present on the analysis host but predate
+  # trace capture (#4301), so their taxonomy labels are all `not_derivable`.
+  predecessor_runs:
+    - job: 13268
+      role: confirm
+      output_root: output/issue3810-h600-longhorizon-confirm-run/13268
+      insufficient_reason: episodes_predate_trace_capture_issue_4301
+    - job: 13273
+      role: extended_roster
+      output_root: output/issue3810-h600-extroster-run/13273
+      insufficient_reason: episodes_predate_trace_capture_issue_4301
+  # The blocked mechanism cross-cut packet that this re-run unblocks once it
+  # emits trace-verified mechanism labels.
+  downstream_consumer:
+    config: configs/analysis/issue_4206_policy_structure_mechanism_crosscut.yaml
+    builder: scripts/validation/build_issue_4206_policy_structure_mechanism_crosscut.py
+    blocked_status: blocked_trace_labels_not_derivable_predates_trace_capture
+  # Prior PRs that established this contract's premises.
+  established_by:
+    - pr: 4319
+      note: refreshed cross-cut against retrieved h600 artifacts; no F-C4(ii) table
+    - pr: 4341
+      note: proved retained roots predate trace capture; labels not derivable
+
+# The re-run must natively emit both evidence blocks (issue #4242 / #4301
+# write-time instrumentation). Required-field lists are cross-checked by the
+# validator against the canonical schema owners so this contract cannot silently
+# omit a claim-bearing field or drift from the schema.
+required_outputs:
+  failure_mechanism:
+    schema_version: failure_mechanism_taxonomy.v1
+    schema_owner: robot_sf/benchmark/failure_mechanism_taxonomy.py
+    required_fields:
+      - mechanism_schema_version
+      - mechanism_label
+      - mechanism_confidence
+      - mechanism_evidence_mode
+      - mechanism_evidence_uri
+      - mechanism_case_id
+      - mechanism_caveat
+    # Only trace-verified evidence modes may back an `observed_mechanism` label
+    # used in an F-C4(ii) conclusion. Aggregate/unknown modes stay diagnostic.
+    trace_verified_evidence_modes:
+      - paired_trace
+      - deterministic_replay
+      - direct_probe
+      - root_cause
+    accepted_confidences:
+      - observed_mechanism
+      - supported_hypothesis
+    # The re-run is only useful if it recovers real labels: an output where every
+    # row is `unknown`/`not_derivable` again is rejected (see fail_closed).
+    min_trace_verified_labeled_fraction: 0.5
+  interaction_exposure:
+    schema_version: interaction_exposure.v1
+    schema_owner: robot_sf/benchmark/interaction_exposure.py
+    required_fields:
+      - interaction_exposure_share
+      - robot_motion_share_before_first_clearance
+      - first_clearance_step
+      - low_exposure_success
+
+# Trace capture must be on so mechanism labels are derivable. These map-runner
+# flags (robot_sf/benchmark/map_runner_episode.py) are the switches that let the
+# #4301 exporter attach a real trace to each episode.
+trace_capture:
+  required: true
+  exporter_issue: 4301
+  record_planner_decision_trace: true
+  record_simulation_step_trace: true
+
+# Planner roster, grouped by structural class, mirroring the cross-cut config so
+# the re-run covers exactly the arms the F-C4(ii) probes compare. Unknown planner
+# keys in the re-run output are excluded from conclusions (see fail_closed).
+planner_roster:
+  structural_classes:
+    constraint_first_hybrid:
+      planner_keys:
+        - scenario_adaptive_hybrid_orca_v1
+        - hybrid_rule_v3_fast_progress_static_escape
+    learned_policy:
+      planner_keys:
+        - ppo
+        - guarded_ppo
+    predictive:
+      planner_keys:
+        - prediction_planner
+        - prediction_mpc
+        - prediction_mpc_cbf
+    baseline_reactive:
+      planner_keys:
+        - goal
+        - social_force
+        - orca
+        - socnav_sampling
+        - sacadrl
+
+# Frozen seed schedule for the re-run. Declared here so the campaign is
+# reproducible and cannot silently reduce seed coverage.
+seeds:
+  schedule: [20, 21, 22, 23, 24]
+  horizon: h600
+  seeds_locked: true
+
+# Results that must NOT count as a successful re-run outcome. A trace-capable
+# re-run that reproduces all-`not_derivable` labels or leans on geometry buckets
+# is a failed contract, not evidence.
+fail_closed_exclusions:
+  geometry_buckets_may_substitute_mechanism_labels: false
+  geometry_buckets_allowed_only_for_agreement_table: true
+  all_not_derivable_output_is_success: false
+  fallback_or_degraded_rows_count_as_success: false
+  unknown_planner_keys_included_in_f_c4ii: false
+
+# Queue-row shape for the eventual private submission. This PR does not submit.
+queue_plan:
+  submission_surface: private_queue_after_pr
+  submit_in_this_pr: false
+  per_row_queue_entry_required: true
+  output_root: output/issue4206-h600-trace-capable-rerun
+  # Transient routing state (target host, packet lineage pointers) is NOT encoded
+  # here; it belongs in issue state / private ops per the issue #4206 workflow.

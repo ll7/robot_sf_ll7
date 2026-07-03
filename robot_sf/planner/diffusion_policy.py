@@ -439,11 +439,9 @@ class DiffusionPolicyAdapter:
                 "device": str(self._device),
                 "allow_untrained_smoke": self.config.allow_untrained_smoke,
                 "checkpoint_status": (
-                    "untrained_smoke" if self.config.allow_untrained_smoke else "checkpoint_loaded"
+                    "checkpoint_loaded" if self.config.checkpoint_path else "untrained_smoke"
                 ),
-                "normalizer_status": (
-                    "not_required" if self.config.allow_untrained_smoke else "loaded"
-                ),
+                "normalizer_status": "loaded" if self.config.checkpoint_path else "not_required",
                 "guidance": {
                     "enabled": bool(self.selector.guidance.get("enabled", True)),
                     "terms": ["smooth_previous_action", "current_clearance_proxy"],

@@ -133,6 +133,44 @@ def test_training_script_entrypoint_writes_manifest_path(tmp_path) -> None:
     assert manifest_path.exists()
 
 
+def test_checkpoint_status_uses_loaded_artifacts_even_when_smoke_flag_true(tmp_path) -> None:
+    """Diagnostics report loaded artifacts whenever checkpoint-backed config is used."""
+    config = DiffusionPolicyTrainingSmokeConfig(
+        training_steps=2,
+        batch_size=3,
+        max_pedestrians=2,
+        max_linear_speed=0.6,
+        max_angular_speed=0.5,
+        artifact_prefix="map_runner_smoke_flag",
+    )
+    artifacts = run_training_smoke(config, output_dir=tmp_path)
+
+    policy, meta = _build_policy(
+        "diffusion_policy",
+        {
+            "allow_untrained_smoke": True,
+            "checkpoint_path": str(artifacts.checkpoint_path),
+            "normalizer_path": str(artifacts.normalizer_path),
+            "deterministic": True,
+            "seed": 4010,
+            "max_pedestrians": config.max_pedestrians,
+            "max_linear_speed": config.max_linear_speed,
+            "max_angular_speed": config.max_angular_speed,
+            "num_action_samples": config.num_action_samples,
+            "denoising_steps": config.denoising_steps,
+        },
+        robot_kinematics="differential_drive",
+    )
+    policy(_map_runner_obs())
+    stats = policy._planner_stats()
+
+    assert meta["diffusion_policy"]["allow_untrained_smoke"] is True
+    assert meta["diffusion_policy"]["checkpoint_status"] == "checkpoint_loaded"
+    assert meta["diffusion_policy"]["normalizer_status"] == "loaded"
+    assert stats["diffusion_policy"]["checkpoint_status"] == "checkpoint_loaded"
+    assert stats["diffusion_policy"]["normalizer_status"] == "loaded"
+
+
 def test_map_runner_loads_smoke_checkpoint_not_untrained_weights(tmp_path) -> None:
     """Map-runner can build diffusion policy from the trained smoke checkpoint."""
     config = DiffusionPolicyTrainingSmokeConfig(

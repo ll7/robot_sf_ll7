@@ -1,6 +1,6 @@
 {
   "algorithm": "sac",
-  "checkpoint_sha256": "d96befeeb8fbe5cefd3106c4d43ac8eca6c8c1978246f44338d019f083ebe3f6",
+  "checkpoint_sha256": "ca525330e23df5cf01ee26e49a4139ae5f2493b32f239b8e532d9badb7610148",
   "claim_boundary": "standalone offline pretraining provenance only; not benchmark evidence",
   "dataset": {
     "accepted_transitions": 2,
@@ -18,9 +18,9 @@
     "observation_space_fingerprint": "80ece25a0c7ea922cb40050ace23be6e2446edce23515f3cd7dca489f7118daa",
     "scenario_config": "configs/scenarios/classic_interactions.yaml"
   },
-  "git_commit_at_smoke": "dfa760ede8a18f71c2eaef5394482db02faaeba0",
+  "git_commit_at_smoke": "b16b229a12f9b14e281370bd0e92c0b4ae1d231d",
   "issue": 4245,
-  "normalizer_sha256": "2af80358e5a3d8a83f6bd4c947f0b6ae540c97cfe76b4dba39f9475cab426979",
+  "normalizer_sha256": "4ccfd79bdd7916eb2c68013a1d9ecfc15fc911837a8ad3129f5919014369103e",
   "offline_training": {
     "action_contract": "box_direct",
     "batch_size": 2,

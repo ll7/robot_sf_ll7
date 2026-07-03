@@ -39,6 +39,7 @@ structural_classes:
       - sacadrl
 local_minimum_mechanisms:
   - static_deadlock_or_local_minimum
+# Follow-up used when episode rows are present but lack trace-verified mechanism labels.
 blocked_followup_issue:
   title: "Add trace-verified failure-mechanism labels to h600 episode exports for F-C4(ii)"
   body: |
@@ -46,3 +47,13 @@ blocked_followup_issue:
     h600 episode rows or sidecars provide mechanism fields using
     mechanism_schema_version=failure_mechanism_taxonomy.v1, mechanism_label,
     mechanism_confidence, mechanism_evidence_mode, and mechanism_evidence_uri.
+# Follow-up used when the declared h600 run artifacts are not present on the analysis host.
+# This is an artifact-retrieval gap, not a mechanism-instrumentation gap; naming the wrong action
+# would misdirect a reviewer toward changing the exporter when the rows simply need to be hydrated.
+blocked_retrieval_followup:
+  title: "Retrieve h600 mechanism-crosscut episode artifacts (13268, 13273) to the analysis host"
+  body: |
+    Issue #4206 cannot inspect mechanism labels until the declared h600 run artifacts are present
+    on the analysis host. Hydrate reports/seed_episode_rows.csv (and any mechanism sidecars) for
+    confirm job 13268 and extended-roster job 13273 from the canonical run store, then re-run the
+    builder. This is an artifact-retrieval gap, not a mechanism-instrumentation gap.

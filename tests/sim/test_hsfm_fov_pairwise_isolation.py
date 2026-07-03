@@ -17,13 +17,29 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from pysocialforce.config import SocialForceConfig
+from pysocialforce.forces import social_force
 
 from robot_sf.sim.pedestrian_model_variants import (
     anisotropic_fov_total_force,
     anisotropic_fov_weights,
+    fov_attenuated_total_force,
     pairwise_fov_attenuated_forces,
+    pairwise_social_force_contributions,
     pairwise_time_to_collision,
 )
+
+
+def _social_kwargs(config: SocialForceConfig) -> dict:
+    """Mirror a ``SocialForceConfig`` as pairwise-contribution keyword arguments."""
+    return {
+        "activation_threshold": config.activation_threshold,
+        "n": config.n,
+        "n_prime": config.n_prime,
+        "lambda_importance": config.lambda_importance,
+        "gamma": config.gamma,
+        "factor": config.factor,
+    }
 
 
 def _reference_scalar_ttc(
@@ -235,3 +251,163 @@ def test_vectorized_ttc_bottleneck_fixture_is_finite_and_bounded() -> None:
     finite = ttc[np.isfinite(ttc)]
     assert np.all(finite >= 0.0)
     assert np.all(finite <= 5.0)
+
+
+def test_pairwise_social_contributions_sum_matches_pysf_aggregate() -> None:
+    """Summing per-pair contributions reproduces PySocialForce's aggregate social force.
+
+    This is the correctness contract that lets the runtime substitute the per-pair
+    decomposition for the aggregate the physics engine already sums into the total force.
+    """
+    rng = np.random.default_rng(3481)
+    positions = rng.uniform(-3.0, 3.0, size=(6, 2))
+    velocities = rng.uniform(-1.0, 1.0, size=(6, 2))
+    config = SocialForceConfig()
+
+    contributions = pairwise_social_force_contributions(
+        positions, velocities, **_social_kwargs(config)
+    )
+    assert contributions.shape == (6, 6, 2)
+
+    expected_aggregate = (
+        social_force(
+            positions,
+            velocities,
+            config.activation_threshold,
+            config.n,
+            config.n_prime,
+            config.lambda_importance,
+            config.gamma,
+        )
+        * config.factor
+    )
+    np.testing.assert_allclose(contributions.sum(axis=1), expected_aggregate, rtol=1e-9, atol=1e-9)
+
+
+def test_pairwise_social_contributions_respect_activation_threshold() -> None:
+    """Pairs beyond the activation threshold contribute exactly zero, like PySocialForce."""
+    positions = np.array([[0.0, 0.0], [0.5, 0.0], [50.0, 0.0]], dtype=float)
+    velocities = np.zeros((3, 2), dtype=float)
+    config = SocialForceConfig()
+
+    contributions = pairwise_social_force_contributions(
+        positions, velocities, **_social_kwargs(config)
+    )
+    # Distant actor 2 is outside the 20 m activation radius in either direction.
+    assert contributions[0, 2].tolist() == [0.0, 0.0]
+    assert contributions[2, 0].tolist() == [0.0, 0.0]
+    # The diagonal is always zero (no self-interaction).
+    assert np.allclose(np.einsum("iik->ik", contributions), 0.0)
+
+
+def test_pairwise_social_contributions_fail_closed() -> None:
+    """Fail closed on bad shapes and non-finite inputs."""
+    good = np.zeros((3, 2), dtype=float)
+    config = SocialForceConfig()
+    with pytest.raises(ValueError, match="positions"):
+        pairwise_social_force_contributions(
+            np.zeros((3, 3), dtype=float), good, **_social_kwargs(config)
+        )
+    with pytest.raises(ValueError, match="finite"):
+        bad = good.copy()
+        bad[0, 0] = np.nan
+        pairwise_social_force_contributions(bad, good, **_social_kwargs(config))
+    with pytest.raises(ValueError, match="activation_threshold"):
+        pairwise_social_force_contributions(
+            good, good, **{**_social_kwargs(config), "activation_threshold": -1.0}
+        )
+
+
+def test_fov_attenuated_total_force_full_cone_recovers_total() -> None:
+    """A full-plane cone leaves the total force unchanged (attenuation is identity)."""
+    rng = np.random.default_rng(11)
+    positions = rng.normal(size=(4, 2))
+    velocities = rng.normal(size=(4, 2))
+    headings = rng.uniform(-np.pi, np.pi, size=4)
+    total = rng.normal(size=(4, 2))
+    config = SocialForceConfig()
+    pairwise = pairwise_social_force_contributions(positions, velocities, **_social_kwargs(config))
+
+    result = fov_attenuated_total_force(
+        total,
+        pairwise,
+        positions,
+        headings,
+        cone_half_angle_rad=np.pi,  # every neighbor in cone -> no attenuation
+        rear_weight=0.0,
+    )
+    np.testing.assert_allclose(result, total, rtol=1e-9, atol=1e-9)
+
+
+def test_fov_attenuated_total_force_only_rescales_social_component() -> None:
+    """Only the ped-ped social term is re-weighted; the rest of the total is preserved.
+
+    The result must equal ``total - social_aggregate + per_pair_attenuated_social`` and,
+    equivalently, differ from the input total by exactly the change in the social term.
+    """
+    positions = np.array([[0.0, 0.0], [1.0, 0.0], [-1.0, 0.0]], dtype=float)
+    headings = np.array([0.0, np.pi, 0.0], dtype=float)
+    total = np.array([[3.0, 1.0], [-2.0, 0.5], [0.0, -1.0]], dtype=float)
+    rear_weight = 0.25
+    cone_half_angle_rad = np.pi / 2
+
+    pairwise = np.zeros((3, 3, 2), dtype=float)
+    pairwise[0, 1] = np.array([-2.0, 0.0])  # in-cone neighbor ahead of actor 0
+    pairwise[0, 2] = np.array([2.0, 0.0])  # rear neighbor behind actor 0
+
+    weights = anisotropic_fov_weights(
+        positions, headings, cone_half_angle_rad=cone_half_angle_rad, rear_weight=rear_weight
+    )
+    expected_attenuated = np.einsum("ij,ijk->ik", weights, pairwise)
+    expected = total - pairwise.sum(axis=1) + expected_attenuated
+
+    result = fov_attenuated_total_force(
+        total,
+        pairwise,
+        positions,
+        headings,
+        cone_half_angle_rad=cone_half_angle_rad,
+        rear_weight=rear_weight,
+    )
+    np.testing.assert_allclose(result, expected, rtol=1e-12, atol=1e-12)
+
+    # Non-interacting actors (rows 1 and 2 have no pairwise contributions here) keep their
+    # full total force untouched by the FoV re-weighting.
+    np.testing.assert_allclose(result[1], total[1], rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(result[2], total[2], rtol=1e-12, atol=1e-12)
+
+
+def test_fov_attenuated_total_force_rejects_bad_shapes() -> None:
+    """Fail closed on mismatched total/pairwise shapes and non-finite totals."""
+    positions = np.zeros((3, 2), dtype=float)
+    headings = np.zeros(3, dtype=float)
+    pairwise = np.zeros((3, 3, 2), dtype=float)
+    with pytest.raises(ValueError, match="total_forces must have shape"):
+        fov_attenuated_total_force(
+            np.zeros((2, 2), dtype=float),
+            pairwise,
+            positions,
+            headings,
+            cone_half_angle_rad=np.pi / 2,
+            rear_weight=0.5,
+        )
+    with pytest.raises(ValueError, match="pairwise_social_forces must have shape"):
+        fov_attenuated_total_force(
+            np.zeros((3, 2), dtype=float),
+            np.zeros((3, 2), dtype=float),
+            positions,
+            headings,
+            cone_half_angle_rad=np.pi / 2,
+            rear_weight=0.5,
+        )
+    with pytest.raises(ValueError, match="total_forces must be finite"):
+        bad_total = np.zeros((3, 2), dtype=float)
+        bad_total[0, 0] = np.inf
+        fov_attenuated_total_force(
+            bad_total,
+            pairwise,
+            positions,
+            headings,
+            cone_half_angle_rad=np.pi / 2,
+            rear_weight=0.5,
+        )

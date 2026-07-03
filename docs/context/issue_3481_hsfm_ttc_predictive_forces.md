@@ -109,3 +109,70 @@ isolation instead of the aggregate `np.min` path) remains follow-up work, as doe
 lateral-sliding / bottleneck freeze benchmark evidence and any evidence-tier upgrade. No full
 benchmark campaign, Slurm/GPU submission, external calibration, or paper/dissertation claim edit was
 performed in this slice.
+
+## Runtime wiring of per-pair pedestrian-pedestrian forces (2026-07-04)
+
+This slice closes the "wire per-pair pp-force contributions from the simulator seam" follow-up named
+above and in the maintainer's PR #4297 gate comment. The `hsfm_anisotropic_fov_v1` runtime path now
+consumes per-pair pedestrian-pedestrian forces instead of the aggregate `np.min` attenuation.
+
+New capability: **runtime consumption of per-pair pedestrian-pedestrian forces at the simulator
+seam.**
+
+### What changed
+
+- New pure helper `pairwise_social_force_contributions(positions, velocities, *, activation_threshold,
+  n, n_prime, lambda_importance, gamma, factor)` returns the `(N, N, 2)` per-pair social-force matrix
+  where `[i, j]` is the repulsion neighbor `j` exerts on actor `i`. It reuses PySocialForce's own
+  pairwise kernel (`social_force_ped_ped`) with the same activation threshold and `factor`, so
+  `contributions.sum(axis=1)` reproduces the aggregate `SocialForce()` the physics engine already
+  sums into the total force (verified in a unit test against `pysocialforce.forces.social_force`).
+- New pure helper `fov_attenuated_total_force(total_forces, pairwise_social_forces, positions,
+  headings, *, cone_half_angle_rad, rear_weight)` isolates the aggregate ped-ped social term from the
+  full total force and replaces it with the per-pair FoV-attenuated form:
+
+  ```text
+  result = total_forces - pairwise_social.sum(axis=1) + pairwise_fov_attenuated_forces(...)
+  ```
+
+- The simulator seam (`Simulator._step_pedestrians`, inherited by `PedSimulator`) for
+  `hsfm_anisotropic_fov_v1` now: reads the live `SocialForce` component's parameters
+  (`_social_force_component`, fail-closed if absent), builds the per-pair matrix from the current
+  PySocialForce state (`_pairwise_social_force_contributions`), and calls
+  `fov_attenuated_total_force` before `step_hsfm_total_force`.
+
+### Behavior boundary
+
+- Only the `hsfm_anisotropic_fov_v1` runtime path changed. `social_force_default`,
+  `hsfm_total_force_v1`, and `hsfm_ttc_predictive_v1` are untouched.
+- The previous aggregate path scaled the *entire* per-actor force (goal + social + obstacle + robot
+  coupling) by a single `np.min` FoV weight. The new path attenuates *only* the pedestrian-pedestrian
+  social contributions, per pair, so a rear neighbor is down-weighted without disturbing an in-cone
+  neighbor or the actor's goal/obstacle drive. This is a behavior change for the opt-in FoV model
+  only; the runtime FoV smoke test was updated to pin the new per-pair composition.
+- The aggregate helper `anisotropic_fov_total_force` is retained (still unit-tested) as the reference
+  contrast for the isolation tests.
+- Total-force reconstruction subtracts and re-adds the social term, so non-social forces are
+  preserved to floating-point tolerance. Evidence tier stays diagnostic/prototype.
+
+### Known limitations / follow-up
+
+- `pairwise_social_force_contributions` is an `O(N^2)` Python loop over the njit kernel. It matches
+  the aggregate exactly but should be vectorized before benchmark-scale pedestrian counts, mirroring
+  the earlier TTC weight-path vectorization.
+- Narrow-passage lateral-sliding and bottleneck freeze/deadlock benchmark evidence, seed-controlled
+  campaigns, and any evidence-tier upgrade remain out of scope. No full benchmark campaign, Slurm/GPU
+  submission, external calibration, or paper/dissertation claim edit was performed in this slice.
+
+### Validation
+
+```bash
+uv run pytest tests/sim/test_hsfm_fov_pairwise_isolation.py \
+  tests/sim/test_hsfm_total_force_model.py \
+  tests/sim/test_ttc_predictive_pedestrian_model.py -q
+uv run ruff check robot_sf/sim/pedestrian_model_variants.py robot_sf/sim/simulator.py tests/sim
+```
+
+Plus an end-to-end smoke: a real `make_robot_env` run with `pedestrian_model=hsfm_anisotropic_fov_v1`
+stepped 15 times with finite pedestrian positions, confirming the real force list exposes a
+`SocialForce` component for the seam.

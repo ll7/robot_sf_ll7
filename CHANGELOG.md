@@ -39,6 +39,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   submission. Pre-registration only: runs no episodes, submits no campaign, and derives no mechanism
   label. Validated with `tests/validation/test_issue_4206_trace_capable_h600_rerun_preregistration.py`
   (16 fixture cases).
+* Wired **per-pair pedestrian-pedestrian forces into the opt-in `hsfm_anisotropic_fov_v1` simulator
+  runtime** (#3481). The field-of-view (FoV) pedestrian model now consumes per-pair social-force
+  contributions instead of the coarse aggregate `np.min` attenuation. Two pure helpers were added to
+  `robot_sf/sim/pedestrian_model_variants.py`: `pairwise_social_force_contributions(...)` builds the
+  `(N, N, 2)` per-pair social-force matrix by reusing PySocialForce's own `social_force_ped_ped`
+  kernel (so summing over neighbors reproduces the aggregate `SocialForce()` the engine already
+  computes), and `fov_attenuated_total_force(...)` isolates the ped-ped social term from the total
+  force and replaces it with its per-pair FoV-attenuated form. `Simulator._step_pedestrians`
+  (inherited by `PedSimulator`) now reads the live `SocialForce` component parameters (fail-closed if
+  absent), builds the per-pair matrix from the current PySocialForce state, and attenuates each
+  neighbor's push by its own FoV weight before HSFM stepping. Only the `hsfm_anisotropic_fov_v1` path
+  changed: a rear neighbor is now down-weighted without disturbing an in-cone neighbor or the actor's
+  goal/obstacle drive, whereas the previous path scaled the *entire* per-actor force by a single
+  weight. `social_force_default`, `hsfm_total_force_v1`, and `hsfm_ttc_predictive_v1` are unchanged;
+  the aggregate helper `anisotropic_fov_total_force` is retained as the reference contrast. Evidence
+  tier stays diagnostic/prototype — **no** calibrated-realism, benchmark-strength, or
+  paper/dissertation claim. Vectorizing the `O(N^2)` per-pair matrix and narrow-passage / bottleneck
+  benchmark evidence remain follow-ups. Context note:
+  `docs/context/issue_3481_hsfm_ttc_predictive_forces.md`.
+
 * Extended the **AMMV feasibility batch-summary artifact block** with the claim-boundary markers it
   was missing, so a consumer reading only the summary sees the same non-hardware boundary as the
   per-episode payload (#3466). `robot_sf/benchmark/map_runner_batch_summary.py` now emits

@@ -1,0 +1,26 @@
+schema_version: issue_4164_goal_intention_smoke.v1
+description: >
+  Diagnostic CPU smoke for opt-in Bayesian goal-posterior planner input wiring.
+  This is not a full benchmark campaign and does not claim calibrated human
+  intention prediction or planner-performance improvement.
+posterior_config:
+  heading_kappa: 4.0
+  velocity_min_mps: 0.05
+  prior_floor: 1.0e-6
+scenarios:
+  - id: crossing_conflict_eastbound
+    pedestrian_ids: [crossing_ped_0]
+    positions:
+      - [1.0, 2.0]
+    velocities:
+      - [0.9, 0.0]
+    goals:
+      - [8.0, 2.0]
+  - id: crossing_conflict_northbound
+    pedestrian_ids: [crossing_ped_1]
+    positions:
+      - [4.0, 1.0]
+    velocities:
+      - [0.0, 0.8]
+    goals:
+      - [4.0, 8.0]

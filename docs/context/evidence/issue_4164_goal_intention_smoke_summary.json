@@ -1,0 +1,32 @@
+{
+  "issue": 4164,
+  "schema_version": "issue_4164_goal_posterior_planner_input_smoke.summary.v1",
+  "command": "uv run python scripts/benchmark/run_goal_posterior_planner_input_smoke_issue_4164.py --config configs/benchmarks/issue_4164_goal_intention_smoke.yaml --output output/benchmarks/issue_4164_goal_intention_smoke.json",
+  "output_artifact": "output/benchmarks/issue_4164_goal_intention_smoke.json",
+  "artifact_policy": "output artifact is worktree-local and not committed; this compact summary is the tracked provenance record",
+  "claim_boundary": "diagnostic CPU smoke for opt-in planner input wiring; no full benchmark campaign, no calibrated human-intention claim, no planner-performance claim",
+  "scenario_count": 2,
+  "paired_comparison": [
+    {
+      "scenario_id": "crossing_conflict_eastbound",
+      "without_goal_posterior_channel_present": false,
+      "with_goal_posterior_channel_present": true,
+      "top_goal_ids": {
+        "crossing_ped_0": "crossing_ped_0_route_goal"
+      }
+    },
+    {
+      "scenario_id": "crossing_conflict_northbound",
+      "without_goal_posterior_channel_present": false,
+      "with_goal_posterior_channel_present": true,
+      "top_goal_ids": {
+        "crossing_ped_1": "crossing_ped_1_route_goal"
+      }
+    }
+  ],
+  "forbidden_actions_confirmed": {
+    "full_benchmark_campaign": false,
+    "slurm_or_gpu_submission": false,
+    "paper_or_dissertation_claim_edits": false
+  }
+}

@@ -6,9 +6,11 @@ redistribute, or benchmark with the request-gated data unless you request and st
 under the upstream non-commercial research-use terms.
 
 This is a dataset family in the #4224 external-data program (alongside the Stanford Drone Dataset,
-ETH/UCY, and ATC pedestrian tracking). This page and its registry entry are **registry/docs only**:
-no dataset bytes, no automated acquisition, no loader, no shape-contract tests, no benchmark run, and
-no paper-facing claim are introduced here.
+ETH/UCY, and ATC pedestrian tracking). This page, its registry entry, and the skip-if-absent
+shape-contract loader are **contract-only**: no dataset bytes, no automated acquisition, no benchmark
+run, and no paper-facing claim are introduced here. The shape-contract loader
+(`robot_sf/data/external/ind.py`) inspects a locally staged copy and skips cleanly when the data is
+absent.
 
 Related issues: [#4290](https://github.com/ll7/robot_sf_ll7/issues/4290),
 [#4224](https://github.com/ll7/robot_sf_ll7/issues/4224),
@@ -107,6 +109,32 @@ With locally staged official data, `check` (or `stage`) validates the required-p
 write a compact provenance manifest. A successful presence check is only local staging evidence; it
 is not a full benchmark campaign, a trajectory-loader validation, or a dissertation claim.
 
+## Shape-contract loader
+
+`robot_sf/data/external/ind.py` is a license-safe, skip-if-absent accessor over a locally staged inD
+copy. It never downloads or redistributes inD bytes; it only inspects structure:
+
+- `ind.is_available(root=None)` returns whether at least one complete recording group is staged
+  (resolving the root via `ROBOT_SF_EXTERNAL_DATA_ROOT` when `root` is `None`). Skip-if-absent tests
+  branch on this so external clones without the data skip cleanly.
+- `ind.require_available(root=None)` returns the resolved per-recording paths or raises
+  `IndDataError` with an actionable pointer back to this page.
+- `ind.load_shape_contract(root=None)` validates each recording's `*_tracks.csv`, `*_tracksMeta.csv`,
+  and `*_recordingMeta.csv` structurally (non-empty, rectangular, and carrying inD's documented
+  header columns) and returns per-recording row/column shape metadata plus resolved relative paths.
+
+The contract is deliberately structural: it confirms the documented per-recording layout and that the
+coordinate/id columns in `*_tracks.csv` parse as finite floats. It asserts no scene content (exact
+frame counts, coordinates, or class distributions) and makes no benchmark or prediction-comparability
+claim. Run the shape-contract tests with:
+
+```bash
+uv run pytest tests/data/external/test_ind_shape.py -q
+```
+
+Every test except the single real-data probe builds a synthetic layout under `tmp_path`; the probe
+skips when inD is not staged.
+
 ## Citation
 
 > J. Bock, R. Krajewski, T. Moers, S. Runde, L. Vater, L. Eckstein, "The inD Dataset: A Drone Dataset
@@ -115,7 +143,9 @@ is not a full benchmark campaign, a trajectory-loader validation, or a dissertat
 
 ## Boundary and follow-up
 
-This slice adds registry metadata and acquisition/layout documentation only. Deferred follow-up
-(after local staging exists): an inD trajectory loader plus skip-if-absent shape-contract tests,
-following the exemplar pattern established for `socnavbench-s3dis-eth`. No download code, dataset
-bytes, benchmark consumer, or claim edit is part of #4290.
+The registry metadata and acquisition/layout documentation were added in #4290; the skip-if-absent
+shape-contract loader and tests were added for #4224, following the exemplar pattern established for
+`socnavbench-s3dis-eth` and `eth-ucy`. No download code, dataset bytes, benchmark consumer, or claim
+edit is part of that work. Deferred follow-up (private ops, after local staging exists): acquire →
+seed on the hub → fetch on one spoke → registry `check` flips from `missing`, then pin
+`expected_tree_sha256`.

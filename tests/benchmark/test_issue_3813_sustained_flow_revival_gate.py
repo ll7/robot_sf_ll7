@@ -71,9 +71,7 @@ def test_tracked_h600_evidence_defers_until_exposure_fields_exist() -> None:
         "claim-decision impact not computable from supplied h600 evidence"
         in payload["blocking_reasons"]
     )
-    assert payload["claim_impact_evidence_path"].endswith(
-        "sustained_flow_claim_impact_input.json"
-    )
+    assert payload["claim_impact_evidence_path"].endswith("sustained_flow_claim_impact_input.json")
     assert payload["affected_rows"]
     assert payload["interaction_exposure_evidence_path"].endswith(
         "interaction_exposure_diagnostics.json"
@@ -101,6 +99,19 @@ def test_thin_status_without_declared_fields_fails_closed() -> None:
             "interaction-exposure diagnostics missing computed required fields"
             in payload["blocking_reasons"]
         )
+
+
+def test_empty_claim_impact_still_counts_as_not_supplied() -> None:
+    """An empty claim-impact object does not satisfy the gate input contract."""
+
+    report = build_sustained_flow_revival_gate_report(
+        _complete_exposure(),
+        claim_impact={},
+        claim_impact_evidence_path="docs/context/evidence/claim_impact.json",
+    )
+    payload = report.to_payload()
+    assert payload["decision"] == DECISION_DEFER
+    assert "claim-decision impact not supplied" in payload["blocking_reasons"]
 
 
 def test_complete_load_bearing_evidence_revives_sustained_flow() -> None:
@@ -138,9 +149,7 @@ def test_cli_reports_default_tracked_gate_decision(capsys) -> None:
     assert exit_code == 0
     assert payload["schema_version"] == "issue_3813.sustained_flow_revival_gate.v1"
     assert payload["decision"] == DECISION_DEFER
-    assert payload["claim_impact_evidence_path"].endswith(
-        "sustained_flow_claim_impact_input.json"
-    )
+    assert payload["claim_impact_evidence_path"].endswith("sustained_flow_claim_impact_input.json")
     assert payload["blocking_reasons"] == [
         "interaction-exposure diagnostics missing computed required fields",
         "claim-decision impact not computable from supplied h600 evidence",

@@ -48,6 +48,30 @@ class SurfaceFamilies:
     benchmark: tuple[str, ...]
     heldout: tuple[str, ...]
 
+    @property
+    def benchmark_labeling_mode(self) -> str:
+        """Return how benchmark-set rows are identified for reporting."""
+        if self.benchmark:
+            return "explicit_benchmark_set_families"
+        if self.heldout:
+            return "inferred_by_excluding_heldout_families"
+        return "undeclared"
+
+    @property
+    def benchmark_labeling_warning(self) -> str | None:
+        """Return the warning shown when benchmark-set labeling is inferred."""
+        if self.benchmark:
+            return None
+        if self.heldout:
+            return (
+                "benchmark-set families are not declared; benchmark_set rows are inferred as "
+                "the complement of heldout_family_evaluation.scenario_families"
+            )
+        return (
+            "benchmark-set and held-out scenario families are both undeclared; renderer cannot "
+            "label transfer surfaces"
+        )
+
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
@@ -83,6 +107,11 @@ def _empty_table_rows() -> list[dict[str, str]]:
 def _table_rows(result_store: Path | None, families: SurfaceFamilies) -> list[dict[str, str]]:
     if result_store is None:
         return _empty_table_rows()
+    if not families.benchmark and not families.heldout:
+        raise ValueError(
+            "held-out partition manifest must declare benchmark_set_evaluation.scenario_families "
+            "or heldout_family_evaluation.scenario_families before rendering transfer surfaces"
+        )
 
     frame = read_parquet_frame(result_store / "episodes.parquet")
     if "snqi" not in frame.columns:
@@ -351,6 +380,7 @@ def render_report(
     baseline_rows = [row for row in table_rows if row["surface"] == "benchmark_set"]
     heldout_rows = [row for row in table_rows if row["surface"] == "heldout_family"]
     transfer_rows = _transfer_delta_rows(table_rows)
+    surface_labeling_warning = families.benchmark_labeling_warning
 
     _write_csv(output_dir / "baseline_table.csv", TABLE_FIELDS, baseline_rows)
     _write_csv(output_dir / "heldout_family_table.csv", TABLE_FIELDS, heldout_rows)
@@ -372,6 +402,12 @@ def render_report(
                 "# Leakage Audit",
                 "",
                 f"- Partition manifest: `{heldout_partition_manifest}`",
+                f"- Benchmark-set labeling mode: `{families.benchmark_labeling_mode}`",
+                (
+                    f"- Surface-labeling warning: {surface_labeling_warning}"
+                    if surface_labeling_warning
+                    else "- Surface-labeling warning: none"
+                ),
                 f"- Benchmark-set families: {', '.join(families.benchmark) or 'none declared'}",
                 f"- Held-out families: {', '.join(families.heldout) or 'none declared'}",
                 "- Status: manifest validation delegated to the Package A decision packet.",

@@ -47,5 +47,12 @@ scenarios:
           trigger_radius_m: 0.75
           robot_trigger_radius_m: 5.5
           validated_robot_speed_m_s: [1.0, 2.0, 3.0]
+      archetype: public_requirement_emergency_reaction
+      flow: sudden_crossing
+      behavior: proximity_released_obstacle
+      purpose: >
+        Deterministic emergency-reaction scenario proxy for issue #3977;
+        records authored sudden conflict relevance only, not validated public
+        acceptance, benchmark-gate, or safety-certification evidence.
     seeds:
       - 3977

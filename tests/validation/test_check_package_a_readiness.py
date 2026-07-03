@@ -351,3 +351,41 @@ def test_decision_packet_accepts_valid_local_evidence_packet(
     assert payload["reasons"] == []
     assert payload["forbidden_actions_confirmed"]["benchmark_campaign_run"] is False
     assert payload["forbidden_actions_confirmed"]["paper_claim_edits"] is False
+    # diagnostic_review_ready maps to the issue's "diagnostic" vocabulary member;
+    # it is never auto-promoted to "benchmark" (that needs claim-card review).
+    assert payload["issue_result_classification"] == "diagnostic"
+    assert payload["issue_result_classification_reason"]
+
+
+def test_decision_packet_emits_blocked_issue_classification() -> None:
+    """Blocked packet maps to the issue #3078 required 'blocked' vocabulary member."""
+    packet = checker.build_decision_packet(SHIPPED_MANIFEST, repo_root=REPO_ROOT)
+    payload = packet.to_dict()
+    assert payload["classification"] == "blocked_pending_package_a_evidence"
+    assert payload["issue_result_classification"] == "blocked"
+    assert payload["issue_result_classification_reason"]
+    # The packet self-documents the full issue vocabulary it draws from.
+    assert payload["issue_result_classification_vocabulary"] == list(
+        checker.ISSUE_RESULT_CLASSIFICATIONS
+    )
+    assert set(checker.ISSUE_RESULT_CLASSIFICATIONS) == {
+        "benchmark",
+        "diagnostic",
+        "negative",
+        "null",
+        "invalid",
+        "blocked",
+    }
+
+
+def test_issue_result_classification_mapping_is_fail_closed() -> None:
+    """Every emitted classification is in-vocabulary; unknown status fails to 'blocked'."""
+    for packet_status in ("blocked_pending_package_a_evidence", "diagnostic_review_ready"):
+        classification, reason = checker._issue_result_classification(packet_status)
+        assert classification in checker.ISSUE_RESULT_CLASSIFICATIONS
+        assert reason
+    # A future/unknown internal status must never leak past the contract as an
+    # unclassified or promoted result.
+    classification, reason = checker._issue_result_classification("some_future_status")
+    assert classification == "blocked"
+    assert "some_future_status" in reason

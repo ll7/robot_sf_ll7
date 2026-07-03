@@ -21,6 +21,54 @@ import yaml
 SCHEMA_VERSION = "package_a_readiness_report.v1"
 DECISION_PACKET_SCHEMA_VERSION = "package_a_decision_packet.v1"
 
+# The issue #3078 acceptance contract requires the Package A result to be
+# classified as exactly one of these values.
+ISSUE_RESULT_CLASSIFICATIONS = (
+    "benchmark",
+    "diagnostic",
+    "negative",
+    "null",
+    "invalid",
+    "blocked",
+)
+
+# The decision packet is a mechanical fail-closed check: it can only distinguish
+# "required evidence surfaces are missing/invalid" from "all required surfaces
+# validate". It never interprets planner ranks or transfer deltas, so it emits
+# only the two conservative members of the issue vocabulary. The interpretive
+# members (benchmark / negative / null / invalid) are reserved for claim-card
+# review of an actual campaign result and are never auto-promoted here.
+_PACKET_TO_ISSUE_CLASSIFICATION: dict[str, tuple[str, str]] = {
+    "blocked_pending_package_a_evidence": (
+        "blocked",
+        "required Package A evidence surfaces are absent or invalid; see reasons "
+        "for the missing result store / seed-sufficiency analysis",
+    ),
+    "diagnostic_review_ready": (
+        "diagnostic",
+        "all required evidence surfaces validate, but claim-card review is "
+        "required before any benchmark / negative / null promotion",
+    ),
+}
+
+
+def _issue_result_classification(packet_classification: str) -> tuple[str, str]:
+    """Map the internal packet status to the issue #3078 result vocabulary.
+
+    Returns ``(classification, reason)`` where ``classification`` is one of
+    :data:`ISSUE_RESULT_CLASSIFICATIONS`. Fail closed: an unrecognized packet
+    status is reported as ``blocked`` rather than silently promoted, so a future
+    packet-status change cannot leak an unclassified result past this contract.
+    """
+    return _PACKET_TO_ISSUE_CLASSIFICATION.get(
+        packet_classification,
+        (
+            "blocked",
+            f"unrecognized decision-packet classification: {packet_classification!r}",
+        ),
+    )
+
+
 REQUIRED_SECTIONS = (
     "package",
     "heldout_family_inputs",
@@ -76,6 +124,8 @@ class DecisionPacket:
     package_id: str
     readiness_status: str
     classification: str
+    issue_result_classification: str = "blocked"
+    issue_result_classification_reason: str = ""
     reasons: list[str] = field(default_factory=list)
     result_stores: list[dict[str, Any]] = field(default_factory=list)
     seed_analysis_reports: list[dict[str, Any]] = field(default_factory=list)
@@ -90,6 +140,9 @@ class DecisionPacket:
             "manifest_path": self.manifest_path,
             "readiness_status": self.readiness_status,
             "classification": self.classification,
+            "issue_result_classification": self.issue_result_classification,
+            "issue_result_classification_reason": self.issue_result_classification_reason,
+            "issue_result_classification_vocabulary": list(ISSUE_RESULT_CLASSIFICATIONS),
             "reasons": self.reasons,
             "result_stores": self.result_stores,
             "seed_analysis_reports": self.seed_analysis_reports,
@@ -404,6 +457,10 @@ def build_decision_packet(
     packet.classification = (
         "diagnostic_review_ready" if not packet.reasons else "blocked_pending_package_a_evidence"
     )
+    (
+        packet.issue_result_classification,
+        packet.issue_result_classification_reason,
+    ) = _issue_result_classification(packet.classification)
     return packet
 
 
@@ -555,6 +612,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps(payload, indent=2))
             else:
                 print(f"Package A decision packet: {payload['classification']}")
+                print(
+                    "issue #3078 result classification: "
+                    f"{payload['issue_result_classification']} "
+                    f"({payload['issue_result_classification_reason']})"
+                )
                 for reason in payload["reasons"]:
                     print(f" reason: {reason}")
             return 0 if packet.classification == "diagnostic_review_ready" else 1

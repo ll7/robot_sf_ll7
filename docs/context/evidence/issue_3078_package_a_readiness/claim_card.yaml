@@ -11,7 +11,18 @@ execution_date: "2026-07-03"
 claim_status: not_reviewed
 evidence_tier: diagnostic
 classification: blocked
+# `classification` above is now derived mechanically by the checker
+# (build_decision_packet -> issue_result_classification) rather than hand-copied;
+# the internal packet status maps to the issue #3078 vocabulary as below.
 decision_packet_classification: blocked_pending_package_a_evidence
+issue_result_classification: blocked
+issue_result_classification_vocabulary:
+  - benchmark
+  - diagnostic
+  - negative
+  - "null"
+  - invalid
+  - blocked
 claim_boundary: >
   Package A seed/planner-rank stability and held-out-family transfer evidence
   only. No paper-facing planner-superiority or generalization claim is promoted.

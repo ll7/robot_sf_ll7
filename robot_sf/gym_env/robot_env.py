@@ -343,7 +343,12 @@ def _build_goal_posterior_planner_input(env_config: EnvSettings, simulator: Any)
             goals=(),
         )
 
-    states = np.asarray(simulator.pysf_state.pysf_states(), dtype=float)
+    pysf_state = getattr(simulator, "pysf_state", None)
+    if pysf_state is None:
+        raise RuntimeError(
+            "goal_posterior_planner_input requires a simulator with a valid pysf_state."
+        )
+    states = np.asarray(pysf_state.pysf_states(), dtype=float)
     if states.ndim != 2 or states.shape[1] < 6:
         raise RuntimeError(
             "goal_posterior_planner_input requires PySocialForce states with "

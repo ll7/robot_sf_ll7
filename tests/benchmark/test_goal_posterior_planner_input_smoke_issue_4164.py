@@ -6,7 +6,11 @@ import importlib.util
 import json
 from pathlib import Path
 
-_SCRIPT_PATH = Path("scripts/benchmark/run_goal_posterior_planner_input_smoke_issue_4164.py")
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SCRIPT_PATH = (
+    _REPO_ROOT / "scripts" / "benchmark" / "run_goal_posterior_planner_input_smoke_issue_4164.py"
+)
+_CONFIG_PATH = _REPO_ROOT / "configs" / "benchmarks" / "issue_4164_goal_intention_smoke.yaml"
 _SPEC = importlib.util.spec_from_file_location("issue_4164_goal_posterior_smoke", _SCRIPT_PATH)
 assert _SPEC is not None
 assert _SPEC.loader is not None
@@ -19,7 +23,7 @@ main = _MODULE.main
 def test_goal_posterior_smoke_report_has_paired_enabled_rows() -> None:
     """Smoke report includes paired disabled/enabled rows."""
 
-    report = build_report(Path("configs/benchmarks/issue_4164_goal_intention_smoke.yaml"))
+    report = build_report(_CONFIG_PATH)
 
     assert report["schema_version"] == "issue_4164_goal_posterior_planner_input_smoke.v1"
     assert "no full benchmark campaign" in report["claim_boundary"]
@@ -39,7 +43,7 @@ def test_goal_posterior_smoke_main_writes_json(tmp_path: Path) -> None:
     exit_code = main(
         [
             "--config",
-            "configs/benchmarks/issue_4164_goal_intention_smoke.yaml",
+            str(_CONFIG_PATH),
             "--output",
             str(output_path),
         ]

@@ -1,0 +1,7 @@
+route_payload:
+  robot_routes:
+    - spawn_id: 0
+      goal_id: 0
+      waypoints:
+        - [7.0, 14.0]
+        - [25.5, 14.0]

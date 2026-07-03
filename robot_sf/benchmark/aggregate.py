@@ -592,7 +592,15 @@ def _numeric_items(d: dict[str, Any]) -> dict[str, float]:
             continue
         if v is None:
             continue
-        if isinstance(v, int | float) and not (isinstance(v, float) and math.isnan(v)):
+        # NOTE: benchmark metrics store ``success`` as a Python bool
+        # (see ``post_process_metrics``), so booleans MUST be coerced to
+        # 0.0/1.0 here rather than dropped — excluding them nulls
+        # ``success.mean`` across the entire aggregate surface. Only the
+        # non-metric report scripts filter stray bools out.
+        if isinstance(v, bool):
+            out[k] = float(v)
+            continue
+        if isinstance(v, int | float) and math.isfinite(float(v)):
             out[k] = float(v)
     return out
 

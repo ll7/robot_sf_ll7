@@ -33,6 +33,38 @@ def _load_module() -> ModuleType:
 
 issue3216 = _load_module()
 ReportConfig = issue3216.ReportConfig
+
+
+def test_read_csv_rows_fails_closed_on_missing_empty_and_header_only(tmp_path: Path) -> None:
+    """Recovery CSV inputs cannot silently produce empty headline rows."""
+
+    with pytest.raises(FileNotFoundError):
+        issue3216._read_csv_rows(tmp_path / "missing.csv")
+
+    empty = tmp_path / "empty.csv"
+    empty.write_text("", encoding="utf-8")
+    with pytest.raises(ValueError, match="empty"):
+        issue3216._read_csv_rows(empty)
+
+    header_only = tmp_path / "header_only.csv"
+    header_only.write_text("planner_key,scenario_id,seed\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="header"):
+        issue3216._read_csv_rows(header_only)
+
+
+def test_read_csv_rows_requires_recovery_columns(tmp_path: Path) -> None:
+    """Seed recovery CSVs must include required identifying columns."""
+
+    csv_path = tmp_path / "seed_episode_rows.csv"
+    csv_path.write_text("planner_key,seed\norca,111\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="scenario_id"):
+        issue3216._read_csv_rows(
+            csv_path,
+            required_columns={"planner_key", "scenario_id", "seed"},
+        )
+
+
 build_report = issue3216.build_report
 main = issue3216.main
 _planner_keys_from_benchmark_config = issue3216._planner_keys_from_benchmark_config

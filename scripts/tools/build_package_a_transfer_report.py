@@ -136,9 +136,14 @@ def _table_rows(result_store: Path | None, families: SurfaceFamilies) -> list[di
             eligible = group[group["row_status"].astype(str).isin(ELIGIBLE_EVIDENCE_STATUSES)]
             mean_snqi = None
             if not eligible.empty and "snqi" in eligible.columns:
-                mean_value = eligible["snqi"].dropna().mean()
-                if not math.isnan(float(mean_value)):
-                    mean_snqi = f"{float(mean_value):.6f}"
+                snqi_values = [
+                    numeric
+                    for value in eligible["snqi"].tolist()
+                    if (numeric := _finite_float(value)) is not None
+                ]
+                mean_value = _mean(snqi_values)
+                if mean_value is not None:
+                    mean_snqi = f"{mean_value:.6f}"
             rows.append(
                 {
                     "surface": surface,
@@ -158,9 +163,10 @@ def _transfer_delta_rows(table_rows: list[dict[str, str]]) -> list[dict[str, str
     for row in table_rows:
         if not row["mean_snqi"]:
             continue
-        by_planner.setdefault(row["planner"], {}).setdefault(row["surface"], []).append(
-            float(row["mean_snqi"])
-        )
+        numeric = _finite_float(row["mean_snqi"])
+        if numeric is None:
+            continue
+        by_planner.setdefault(row["planner"], {}).setdefault(row["surface"], []).append(numeric)
 
     delta_rows: list[dict[str, str]] = []
     for planner in sorted(by_planner):
@@ -188,6 +194,16 @@ def _mean(values: list[float]) -> float | None:
     if not values:
         return None
     return sum(values) / len(values)
+
+
+def _finite_float(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    return numeric if math.isfinite(numeric) else None
 
 
 def _format_float(value: float | None) -> str:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -120,7 +121,9 @@ def _run_summary(
     runtime_seconds = manifest.get("runtime_seconds")
     runtime_status = "recorded" if runtime_seconds is not None else "missing_from_manifest"
     if runtime_seconds is not None:
-        runtime_seconds = float(runtime_seconds)
+        runtime_seconds = _finite_float(runtime_seconds)
+        if runtime_seconds is None:
+            runtime_status = "non_finite_ignored"
     return {
         "role": role,
         "manifest_path": str(manifest_path),
@@ -374,7 +377,21 @@ def _read_jsonl_objects(path: Path) -> list[dict[str, object]]:
 def _float_mapping(value: object) -> dict[str, float]:
     if not isinstance(value, Mapping):
         return {}
-    return {str(key): float(raw) for key, raw in value.items()}
+    return {
+        str(key): numeric
+        for key, raw in value.items()
+        if (numeric := _finite_float(raw)) is not None
+    }
+
+
+def _finite_float(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    return numeric if math.isfinite(numeric) else None
 
 
 def _resolve_path(config_path: Path, value: object) -> Path:

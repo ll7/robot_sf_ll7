@@ -136,10 +136,18 @@ def _taxonomy_from_record(record: dict[str, Any], flat: dict[str, Any]) -> dict[
     if not isinstance(taxonomy, dict):
         taxonomy = {}
 
-    label = taxonomy.get("label") or flat.get("failure_mechanism_label")
-    source = taxonomy.get("source") or flat.get("failure_mechanism_source")
-    trace_status = taxonomy.get("trace_status") or flat.get("failure_mechanism_trace_status")
-    confidence = taxonomy.get("confidence") or flat.get("failure_mechanism_confidence")
+    label = _present_text(taxonomy.get("label")) or _present_text(
+        flat.get("failure_mechanism_label")
+    )
+    source = _present_text(taxonomy.get("source")) or _present_text(
+        flat.get("failure_mechanism_source")
+    )
+    trace_status = _present_text(taxonomy.get("trace_status")) or _present_text(
+        flat.get("failure_mechanism_trace_status")
+    )
+    confidence = _present_text(taxonomy.get("confidence")) or _present_text(
+        flat.get("failure_mechanism_confidence")
+    )
 
     if label is None or trace_status != "trace_verified":
         return {
@@ -173,6 +181,15 @@ def _taxonomy_from_record(record: dict[str, Any], flat: dict[str, Any]) -> dict[
         "mechanism_case_id": str(taxonomy.get("case_id") or ""),
         "mechanism_caveat": str(taxonomy.get("caveat") or ""),
     }
+
+
+def _present_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text.lower() in {"none", "null", "nan"}:
+        return None
+    return text
 
 
 def _interaction_exposure_from_flat(flat: dict[str, Any]) -> dict[str, Any]:

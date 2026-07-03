@@ -433,11 +433,24 @@ def _optional_int(value: Any) -> int | None:
         return None
 
 
-def _read_csv_rows(path: Path) -> list[dict[str, str]]:
-    """Read a CSV file as dictionaries, failing closed on empty files."""
+def _read_csv_rows(path: Path, *, required_columns: set[str] | None = None) -> list[dict[str, str]]:
+    """Read a CSV file as dictionaries, failing closed on missing or empty inputs."""
 
+    if not path.is_file():
+        raise FileNotFoundError(f"required CSV not found: {path}")
+    if path.stat().st_size == 0:
+        raise ValueError(f"required CSV is empty: {path}")
     with path.open(newline="", encoding="utf-8-sig") as handle:
-        return list(csv.DictReader(handle))
+        reader = csv.DictReader(handle)
+        fieldnames = set(reader.fieldnames or ())
+        if required_columns:
+            missing = sorted(required_columns - fieldnames)
+            if missing:
+                raise ValueError(f"{path} missing required columns: {missing}")
+        rows = list(reader)
+    if not rows:
+        raise ValueError(f"required CSV has header but no rows: {path}")
+    return rows
 
 
 def _campaign_family_names(campaign_dir: Path) -> tuple[str, ...]:
@@ -511,7 +524,10 @@ def _group_campaign_seed_metrics(
     grouped: dict[tuple[str, str], dict[int, dict[str, list[float]]]] = defaultdict(
         lambda: defaultdict(lambda: defaultdict(list))
     )
-    for row in _read_csv_rows(seed_csv):
+    for row in _read_csv_rows(
+        seed_csv,
+        required_columns={"planner_key", "scenario_id", "seed"},
+    ):
         planner = str(row.get("planner_key", "")).strip()
         scenario_id = str(row.get("scenario_id", "")).strip()
         seed = _optional_int(row.get("seed"))

@@ -200,3 +200,58 @@ def test_simulator_hsfm_anisotropic_fov_one_step_smoke_is_finite_and_determinist
     assert state[0, 0] == pytest.approx(0.005)
     assert state[1, 2] == pytest.approx(0.2)
     assert state[1, 0] == pytest.approx(-0.98)
+
+
+def test_anisotropic_fov_weights_match_nested_loop_oracle() -> None:
+    """Vectorized FoV weights preserve the small-N nested-loop contract."""
+
+    positions = np.asarray(
+        [
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [-1.0, 0.0],
+            [0.0, 0.0],
+        ],
+        dtype=float,
+    )
+    headings = np.asarray([0.0, np.pi, np.pi / 2, 0.0], dtype=float)
+
+    actual = anisotropic_fov_weights(
+        positions,
+        headings,
+        cone_half_angle_rad=np.pi / 3,
+        rear_weight=0.25,
+    )
+
+    assert actual == pytest.approx(_anisotropic_fov_oracle(positions, headings, np.pi / 3, 0.25))
+    assert anisotropic_fov_weights(
+        np.zeros((0, 2)), np.zeros(0), cone_half_angle_rad=1.0, rear_weight=0.5
+    ).shape == (0, 0)
+    assert anisotropic_fov_weights(
+        np.zeros((1, 2)), np.zeros(1), cone_half_angle_rad=1.0, rear_weight=0.5
+    )[0, 0] == pytest.approx(1.0)
+
+
+def _anisotropic_fov_oracle(
+    positions: np.ndarray,
+    headings: np.ndarray,
+    cone_half_angle_rad: float,
+    rear_weight: float,
+    *,
+    epsilon: float = 1e-9,
+) -> np.ndarray:
+    weights = np.ones((len(positions), len(positions)), dtype=float)
+    forward_vectors = np.column_stack((np.cos(headings), np.sin(headings)))
+    for i in range(len(positions)):
+        for j in range(len(positions)):
+            if i == j:
+                continue
+            offset = positions[j] - positions[i]
+            distance = float(np.linalg.norm(offset))
+            if distance <= epsilon:
+                continue
+            direction = offset / distance
+            cos_angle = float(np.clip(np.dot(forward_vectors[i], direction), -1.0, 1.0))
+            if float(np.arccos(cos_angle)) > cone_half_angle_rad:
+                weights[i, j] = rear_weight
+    return weights

@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import json
 
+import numpy as np
+import pytest
+
 from robot_sf.benchmark.pedestrian_flow_validation import (
     PED_FLOW_REPORT_SCHEMA_VERSION,
+    FlowGate,
     PedFlowRunConfig,
+    PedFlowTrace,
     build_ped_flow_scenarios,
+    compute_flow_rate,
     run_ped_flow_trace,
     run_pedestrian_flow_validation,
     write_pedestrian_flow_report,
@@ -96,3 +102,66 @@ def test_report_writer_emits_expected_schema_files(tmp_path) -> None:
     csv_text = written["trajectory_quality_csv"].read_text()
     assert "scenario_id,pedestrian_count" in csv_text
     assert "speed_mps" in csv_text
+
+
+def test_flow_config_rejects_non_finite_and_bool_controls() -> None:
+    """Run controls fail closed on non-finite or bool scalar mistakes."""
+
+    for kwargs in (
+        {"duration_s": float("nan")},
+        {"dt_s": float("inf")},
+        {"speed_mps": True},
+        {"jam_speed_threshold_mps": -0.1},
+    ):
+        with pytest.raises(ValueError):
+            PedFlowRunConfig(**kwargs)
+
+
+def test_flow_gate_crossings_are_strict_one_sided() -> None:
+    """Samples starting on the gate boundary do not create duplicate crossings."""
+
+    trace = PedFlowTrace(
+        scenario_id="unit",
+        pedestrian_count=2,
+        density_ped_per_m2=1.0,
+        seed=1,
+        dt_s=0.1,
+        duration_s=0.2,
+        measurement_area_m2=2.0,
+        pedestrian_model="unit",
+        robot_count=0,
+        positions=np.asarray(
+            [
+                [[-1.0, 0.0], [0.0, 0.0]],
+                [[0.0, 0.0], [1.0, 0.0]],
+                [[1.0, 0.0], [2.0, 0.0]],
+            ],
+            dtype=float,
+        ),
+        velocities=np.zeros((3, 2, 2), dtype=float),
+    )
+
+    boundary_metric = compute_flow_rate(
+        trace,
+        FlowGate("gate", axis="x", coordinate=0.0, direction="positive"),
+    )
+    direct_trace = PedFlowTrace(
+        scenario_id="unit",
+        pedestrian_count=1,
+        density_ped_per_m2=0.5,
+        seed=1,
+        dt_s=0.1,
+        duration_s=0.1,
+        measurement_area_m2=2.0,
+        pedestrian_model="unit",
+        robot_count=0,
+        positions=np.asarray([[[-1.0, 0.0]], [[1.0, 0.0]]], dtype=float),
+        velocities=np.zeros((2, 1, 2), dtype=float),
+    )
+    direct_metric = compute_flow_rate(
+        direct_trace,
+        FlowGate("gate", axis="x", coordinate=0.0, direction="positive"),
+    )
+
+    assert boundary_metric["crossing_pedestrian_count"] == 0
+    assert direct_metric["crossing_pedestrian_count"] == 1

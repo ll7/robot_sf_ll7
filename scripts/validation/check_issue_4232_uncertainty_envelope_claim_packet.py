@@ -70,6 +70,41 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _require_repo_file(value: Any, field_name: str, repo_root: Path) -> Path:
+    _require(isinstance(value, str) and value.strip() != "", f"{field_name} must be non-empty path")
+    path = Path(value)
+    _require(not path.is_absolute(), f"{field_name} must be repository-relative")
+    _require(".." not in path.parts, f"{field_name} must not contain '..'")
+    root = repo_root.resolve()
+    candidate = root / path
+    _require(
+        not _has_symlink_component(candidate, root=root), f"{field_name} must not use symlinks"
+    )
+    try:
+        resolved = candidate.resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise PacketError(f"{field_name} not found: {value}") from exc
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise PacketError(f"{field_name} escapes repository root: {value}") from exc
+    _require(resolved.is_file(), f"{field_name} must be a file")
+    return resolved
+
+
+def _has_symlink_component(path: Path, *, root: Path) -> bool:
+    try:
+        parts = path.relative_to(root).parts
+    except ValueError:
+        return True
+    current = root
+    for part in parts:
+        current = current / part
+        if current.is_symlink():
+            return True
+    return False
+
+
 def _require_claim_boundary(packet: Mapping[str, Any]) -> None:
     boundary = str(packet.get("claim_boundary", "")).lower()
     for phrase in (
@@ -110,12 +145,13 @@ def _require_execution_boundary(packet: Mapping[str, Any]) -> None:
     )
 
 
-def _require_scenario_and_seeds(packet: Mapping[str, Any]) -> None:
+def _require_scenario_and_seeds(packet: Mapping[str, Any], *, repo_root: Path) -> None:
     surface = _require_mapping(packet, "scenario_surface")
     _require(
         surface.get("matrix_path") == "configs/scenarios/classic_interactions_francis2023.yaml",
         "scenario_surface.matrix_path must pin classic_interactions_francis2023.yaml",
     )
+    _require_repo_file(surface.get("matrix_path"), "scenario_surface.matrix_path", repo_root)
     _require(
         surface.get("selection_policy") == "predeclared_before_run",
         "scenario selection must be predeclared before run",
@@ -132,13 +168,17 @@ def _require_scenario_and_seeds(packet: Mapping[str, Any]) -> None:
     _require(len(seeds) == len(set(seeds)), "seeds must be unique")
 
 
-def _require_planners(packet: Mapping[str, Any]) -> int:
+def _require_planners(packet: Mapping[str, Any], *, repo_root: Path) -> int:
     planners = _require_sequence(packet, "planner_families")
     for planner in planners:
         _require(isinstance(planner, Mapping), "planner entries must be mappings")
         planner_id = str(planner.get("planner_id", ""))
         _require(planner_id != "", "planner_id is required")
-        _require(str(planner.get("base_config_path", "")) != "", f"{planner_id} config required")
+        _require_repo_file(
+            planner.get("base_config_path"),
+            f"{planner_id}.base_config_path",
+            repo_root,
+        )
         family = str(planner.get("family", "")).lower()
         claim_modes = set(planner.get("claim_modes") or [])
         if "envelope_effect" in claim_modes:
@@ -290,8 +330,9 @@ def _require_provenance_and_claim_gates(packet: Mapping[str, Any]) -> None:
     )
 
 
-def validate_packet(packet: Mapping[str, Any]) -> dict[str, Any]:
+def validate_packet(packet: Mapping[str, Any], *, repo_root: Path | None = None) -> dict[str, Any]:
     """Validate the issue #4232 pre-registration packet and return a summary."""
+    root = Path.cwd() if repo_root is None else Path(repo_root)
     _require(packet.get("schema_version") == SCHEMA_VERSION, "schema_version mismatch")
     _require(packet.get("issue") == 4232, "issue must be 4232")
     _require(packet.get("parent_runtime_issue") == 4141, "parent_runtime_issue must be 4141")
@@ -303,8 +344,8 @@ def validate_packet(packet: Mapping[str, Any]) -> dict[str, Any]:
 
     _require_claim_boundary(packet)
     _require_execution_boundary(packet)
-    _require_scenario_and_seeds(packet)
-    planner_count = _require_planners(packet)
+    _require_scenario_and_seeds(packet, repo_root=root)
+    planner_count = _require_planners(packet, repo_root=root)
     alpha_arm_count = _require_alpha_arms(packet)
     _require_metrics_and_stop_rules(packet)
     _require_row_status_and_outputs(packet)
@@ -332,7 +373,9 @@ def main(argv: list[str] | None = None) -> int:
     """Run the command-line packet checker."""
     args = _parse_args(argv)
     try:
-        summary = validate_packet(_load_yaml(args.packet))
+        summary = validate_packet(
+            _load_yaml(args.packet), repo_root=args.packet.resolve().parents[2]
+        )
     except PacketError as exc:
         if args.json:
             print(json.dumps({"ok": False, "error": str(exc)}, indent=2, sort_keys=True))

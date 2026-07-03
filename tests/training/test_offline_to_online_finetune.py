@@ -13,6 +13,7 @@ from gymnasium import spaces as gym_spaces
 from robot_sf.training.offline_pretraining_manifest import (
     build_offline_checkpoint_manifest,
     space_fingerprint,
+    write_normalizer_state,
 )
 from scripts.training import offline_to_online_finetune
 
@@ -89,7 +90,7 @@ def test_offline_to_online_finetune_rejects_environment_mismatch(
 
 def _parent_manifest(tmp_path: Path, *, action_space: gym_spaces.Space[Any]) -> Path:
     checkpoint = _file(tmp_path / "checkpoint.zip", "checkpoint\n")
-    normalizer = _file(tmp_path / "normalizer.json", "{}\n")
+    normalizer = _normalizer_state(tmp_path / "normalizer.json")
     config = _file(tmp_path / "pretrain.yaml", "policy_id: pretrain\n")
     dataset = _file(tmp_path / "dataset.jsonl", "{}\n")
     dataset_manifest = _file(
@@ -147,6 +148,11 @@ def _config(tmp_path: Path) -> SimpleNamespace:
 
 def _file(path: Path, content: str) -> Path:
     path.write_text(content, encoding="utf-8")
+    return path
+
+
+def _normalizer_state(path: Path) -> Path:
+    write_normalizer_state(path, present=False, reason="unit test explicit absence")
     return path
 
 

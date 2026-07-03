@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -78,14 +79,27 @@ class PedFlowRunConfig:
     def __post_init__(self) -> None:
         """Validate finite positive run controls and non-negative pedestrian counts."""
 
-        if self.duration_s <= 0.0:
-            raise ValueError("duration_s must be positive")
-        if self.dt_s <= 0.0:
-            raise ValueError("dt_s must be positive")
+        _require_finite_number(self.duration_s, "duration_s", positive=True)
+        _require_finite_number(self.dt_s, "dt_s", positive=True)
+        _require_finite_number(self.speed_mps, "speed_mps", positive=True)
+        _require_finite_number(
+            self.jam_speed_threshold_mps, "jam_speed_threshold_mps", non_negative=True
+        )
         if not self.pedestrian_counts:
             raise ValueError("pedestrian_counts must not be empty")
-        if any(count < 0 for count in self.pedestrian_counts):
-            raise ValueError("pedestrian_counts must be non-negative")
+        if any(isinstance(count, bool) or count < 0 for count in self.pedestrian_counts):
+            raise ValueError("pedestrian_counts must be non-negative integers")
+
+
+def _require_finite_number(
+    value: float, field_name: str, *, positive: bool = False, non_negative: bool = False
+) -> None:
+    if isinstance(value, bool) or not math.isfinite(float(value)):
+        raise ValueError(f"{field_name} must be finite")
+    if positive and float(value) <= 0.0:
+        raise ValueError(f"{field_name} must be positive")
+    if non_negative and float(value) < 0.0:
+        raise ValueError(f"{field_name} must be non-negative")
 
 
 @dataclass(frozen=True)
@@ -231,7 +245,7 @@ def run_ped_flow_trace(
 
     positions = [np.asarray(sim.ped_pos, dtype=float).copy()]
     velocities = [np.asarray(sim.ped_vel, dtype=float).copy()]
-    step_count = round(config.duration_s / config.dt_s)
+    step_count = math.floor(config.duration_s / config.dt_s)
     for _ in range(step_count):
         sim.step_once([])
         positions.append(np.asarray(sim.ped_pos, dtype=float).copy())
@@ -316,11 +330,14 @@ def compute_flow_rate(trace: PedFlowTrace, gate: FlowGate) -> dict[str, float | 
     finite = np.isfinite(samples[:-1]) & np.isfinite(samples[1:])
     previous = samples[:-1] - gate.coordinate
     current = samples[1:] - gate.coordinate
-    crossed = finite & (previous * current <= 0.0) & (previous != current)
+    positive_crossed = finite & (previous < 0.0) & (current > 0.0)
+    negative_crossed = finite & (previous > 0.0) & (current < 0.0)
     if gate.direction == "positive":
-        crossed &= current > previous
+        crossed = positive_crossed
     elif gate.direction == "negative":
-        crossed &= current < previous
+        crossed = negative_crossed
+    else:
+        crossed = positive_crossed | negative_crossed
     crossing_pedestrians = set(np.where(crossed)[1].tolist())
     crossings = len(crossing_pedestrians)
     duration = max(trace.duration_s, trace.dt_s)

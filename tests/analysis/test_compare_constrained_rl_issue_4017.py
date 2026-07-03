@@ -8,7 +8,11 @@ from typing import TYPE_CHECKING
 import pytest
 import yaml
 
-from scripts.analysis.compare_constrained_rl_issue_4017 import build_report_from_config
+from scripts.analysis.compare_constrained_rl_issue_4017 import (
+    _float_mapping,
+    _run_summary,
+    build_report_from_config,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -259,3 +263,24 @@ def _write_config(
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def test_non_finite_constrained_values_are_ignored(tmp_path: Path) -> None:
+    """Non-finite runtime and trace values do not enter summaries."""
+
+    summary = _run_summary(
+        _manifest(
+            policy_id="ppo_constrained_issue_4017_smoke",
+            algorithm="ppo_lagrangian",
+            constraints_enabled=True,
+            constraints=["collision_budget"],
+            runtime_seconds=float("inf"),
+            trace_path=tmp_path / "trace.jsonl",
+        ),
+        role="constrained",
+        manifest_path=tmp_path / "manifest.json",
+    )
+
+    assert summary["runtime_seconds"] is None
+    assert summary["runtime_status"] == "non_finite_ignored"
+    assert _float_mapping({"ok": 1.0, "bad": float("-inf"), "flag": True}) == {"ok": 1.0}

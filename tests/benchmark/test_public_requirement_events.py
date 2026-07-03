@@ -100,6 +100,35 @@ def test_speed_limit_monitor_records_violation_fields() -> None:
     assert event["max_excess_m_s"] == pytest.approx(0.3)
 
 
+def test_speed_limit_monitor_respects_event_contract_margin() -> None:
+    """Speed just above limit but inside event_contract margin is not a violation."""
+
+    scenario = {
+        "metadata": {
+            "public_requirement": {
+                "category": "speed_limit",
+                "event_contract": {
+                    "type": "speed_limit_monitor",
+                    "speed_limit_m_s": 1.0,
+                    "violation_margin_m_s": 0.2,
+                },
+            }
+        }
+    }
+    event = evaluate_public_requirement_events(
+        scenario=scenario,
+        robot_positions=np.zeros((2, 2), dtype=float),
+        robot_velocities=np.asarray([[1.1, 0.0], [1.15, 0.0]], dtype=float),
+        ped_positions=np.zeros((2, 0, 2), dtype=float),
+        dt=0.1,
+    )
+
+    assert event["status"] == "available"
+    assert event["triggered"] is False
+    assert event["speed_limit_violation_count"] == 0
+    assert event["max_excess_m_s"] == pytest.approx(0.15)
+
+
 def test_missing_public_requirement_metadata_is_not_applicable() -> None:
     """Ordinary scenarios remain compatible with the diagnostic helper."""
     event = evaluate_public_requirement_events(

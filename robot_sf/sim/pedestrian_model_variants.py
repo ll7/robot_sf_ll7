@@ -216,19 +216,20 @@ def anisotropic_fov_weights(
 
     pedestrian_count = position_array.shape[0]
     weights = np.ones((pedestrian_count, pedestrian_count), dtype=float)
+    if pedestrian_count <= 1:
+        return weights
     forward_vectors = np.column_stack((np.cos(heading_array), np.sin(heading_array)))
 
-    for i in range(pedestrian_count):
-        for j in range(pedestrian_count):
-            if i == j:
-                continue
-            if _outside_fov_cone(
-                forward_vectors[i],
-                position_array[j] - position_array[i],
-                cone_half_angle_rad=cone_half_angle_rad,
-                epsilon=epsilon,
-            ):
-                weights[i, j] = float(rear_weight)
+    offsets = position_array[None, :, :] - position_array[:, None, :]
+    distances = np.linalg.norm(offsets, axis=2)
+    valid = distances > epsilon
+    directions = np.zeros_like(offsets, dtype=float)
+    directions[valid] = offsets[valid] / distances[valid, None]
+    cos_angles = np.einsum("ik,ijk->ij", forward_vectors, directions)
+    cos_angles = np.clip(cos_angles, -1.0, 1.0)
+    outside = valid & (np.arccos(cos_angles) > cone_half_angle_rad)
+    weights[outside] = float(rear_weight)
+    np.fill_diagonal(weights, 1.0)
 
     return weights
 

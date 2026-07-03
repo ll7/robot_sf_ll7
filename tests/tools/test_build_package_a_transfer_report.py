@@ -198,3 +198,45 @@ def test_renderer_fails_closed_for_invalid_supplied_result_store(tmp_path: Path)
     assert exit_code == 1
     packet = json.loads((output_dir / "package_a_decision_packet.json").read_text())
     assert packet["result_stores"][0]["ok"] is False
+
+
+def test_table_rows_ignore_non_finite_snqi_values(tmp_path: Path) -> None:
+    """Package A means ignore non-finite SNQI values."""
+
+    _skip_without_parquet_engine()
+    result_store = tmp_path / "result-store"
+    write_result_store(
+        result_store,
+        [
+            {
+                "run_id": "run-a",
+                "episode_id": "run-a-001",
+                "planner": "orca",
+                "scenario_id": "blind-corner",
+                "scenario_family": "francis2023_blind_corner",
+                "seed": 111,
+                "row_status": "native",
+                "artifact_uri": "wandb://robot-sf/run-a/episodes/run-a-001.jsonl",
+                "artifact_sha256": "a" * 64,
+                "snqi": float("inf"),
+            },
+            {
+                "run_id": "run-a",
+                "episode_id": "run-a-002",
+                "planner": "orca",
+                "scenario_id": "blind-corner",
+                "scenario_family": "francis2023_blind_corner",
+                "seed": 112,
+                "row_status": "native",
+                "artifact_uri": "wandb://robot-sf/run-a/episodes/run-a-002.jsonl",
+                "artifact_sha256": "b" * 64,
+                "snqi": 0.25,
+            },
+        ],
+        study_id="issue-3078-package-a-inf-fixture",
+        command="unit",
+    )
+
+    rows = _table_rows(result_store, _surface_families(PARTITION_MANIFEST))
+
+    assert rows[0]["mean_snqi"] == "0.250000"

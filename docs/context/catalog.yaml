@@ -2899,3 +2899,7 @@ entries:
     freshness: evidence
     area: benchmark_evidence
     legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_4249_recovery_3216_rank_stability
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

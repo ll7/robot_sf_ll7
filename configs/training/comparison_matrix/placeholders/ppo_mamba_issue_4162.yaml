@@ -1,0 +1,20 @@
+# PPO-Mamba comparison-matrix placeholder (issue #4162)
+#
+# This is a NON-RUNNABLE placeholder lane for the seven-arm comparison-matrix
+# preregistration (issue #4244). The PPO-Mamba training config does not exist yet
+# because the architecture is not implemented; this file only reserves the cited
+# path so the preregistration is complete and integrity checks resolve.
+#
+# The ppo_mamba arm stays excluded from any queue plan until the real training
+# config and a passing smoke_contract_manifest exist (see issue #4162). Do not
+# treat this file as an executable training configuration.
+schema_version: training_comparison_matrix_placeholder.v1
+status: placeholder_pending_implementation
+arm_id: ppo_mamba
+blocking_issue: 4162
+preregistration: configs/training/comparison_matrix/issue_4244_seven_arm_preregistration.yaml
+runnable: false
+claim_boundary: >-
+  Placeholder path reservation only. Not benchmark evidence and not an
+  executable training configuration. The ppo_mamba arm remains excluded until
+  its real training config and passing smoke contract manifest exist (#4162).

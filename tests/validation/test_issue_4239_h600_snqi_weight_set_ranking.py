@@ -19,6 +19,32 @@ def _write_json(path: Path, data: object) -> None:
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _write_episode_jsonl(path: Path, planner: str, rows: list[dict[str, object]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = []
+    for index, row in enumerate(rows):
+        lines.append(
+            json.dumps(
+                {
+                    "episode_id": f"{planner}-{index}",
+                    "scenario_id": "fixture_scenario",
+                    "seed": row["seed"],
+                    "metrics": {
+                        "success": row["success"],
+                        "time_to_goal_norm": row["time_to_goal_norm"],
+                        "collisions": row["collisions"],
+                        "near_misses": row["near_misses"],
+                        "comfort_exposure": row["comfort_exposure"],
+                        "force_exceed_events": row["force_exceed_events"],
+                        "jerk_mean": row["jerk_mean"],
+                    },
+                },
+                sort_keys=True,
+            )
+        )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def _write_rows(path: Path, rows: list[dict[str, object]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     headers = [
@@ -64,6 +90,16 @@ def _base_rows(planners: list[str]) -> list[dict[str, object]]:
                 }
             )
     return rows
+
+
+def _write_jsonl_run(run_root: Path, planners: list[str]) -> None:
+    rows = _base_rows(planners)
+    for planner in planners:
+        _write_episode_jsonl(
+            run_root / "runs" / f"{planner}__differential_drive" / "episodes.jsonl",
+            planner,
+            [row for row in rows if row["planner_key"] == planner],
+        )
 
 
 def _fixture(tmp_path: Path, *, tie_rows: bool = False) -> tuple[Path, Path]:
@@ -253,6 +289,40 @@ def test_happy_path_writes_rank_agreement_audit_snippet_and_checksums(tmp_path: 
     sums = (evidence / "SHA256SUMS").read_text(encoding="utf-8")
     assert "snqi_weight_set_h600_rank_table.csv" in sums
     assert "seed_episode_rows.csv" not in {path.name for path in evidence.iterdir()}
+
+
+def test_episode_jsonl_metrics_preferred_over_compact_csv(tmp_path: Path) -> None:
+    """Retained raw JSONL metrics can produce ranks when compact CSV lacks active terms."""
+    config, evidence = _fixture(tmp_path)
+    confirm = tmp_path / "output/confirm/13268/reports/seed_episode_rows.csv"
+    extended = tmp_path / "output/extended/13273/reports/seed_episode_rows.csv"
+    sparse_rows = [
+        {
+            "planner_key": row["planner_key"],
+            "seed": row["seed"],
+            "success": row["success"],
+            "time_to_goal_norm": "",
+            "collisions": row["collisions"],
+            "near_misses": row["near_misses"],
+            "comfort_exposure": "",
+            "force_exceed_events": "",
+            "jerk_mean": "",
+        }
+        for row in _base_rows(["alpha", "bravo", "charlie"])
+    ]
+    _write_rows(confirm, [row for row in sparse_rows if row["planner_key"] in {"alpha", "bravo"}])
+    _write_rows(extended, sparse_rows)
+    _write_jsonl_run(tmp_path / "output/confirm/13268", ["alpha", "bravo"])
+    _write_jsonl_run(tmp_path / "output/extended/13273", ["alpha", "bravo", "charlie"])
+
+    result = _run_builder(config, evidence)
+
+    assert result.returncode == 0, result.stderr
+    preflight = json.loads((evidence / "snqi_weight_set_h600_preflight.json").read_text())
+    assert preflight["status"] == "ready"
+    assert all(run["episodes_jsonl_files"] for run in preflight["runs"])
+    rank_rows = _read_csv(evidence / "snqi_weight_set_h600_rank_table.csv")
+    assert {row["planner_key"] for row in rank_rows} == {"alpha", "bravo", "charlie"}
 
 
 def test_shared_planner_mismatch_fails_closed_with_audit(tmp_path: Path) -> None:

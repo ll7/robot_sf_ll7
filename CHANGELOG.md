@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Removed absolute, username-bearing local paths from the committed issue #4207
+  certification-transfer evidence packet and hardened the guard against the class (#4324). The
+  `config.path` / `gate_spec.path` provenance fields in
+  `docs/context/evidence/issue_4207_interacting_smoke_2026-07/{metadata,summary}.json` had baked in
+  the author's worktree path (`/home/<user>/git/robot_sf_ll7.worktrees/...`, same non-reproducibility
+  defect as #4302/#4303) and are now repo-relative (`configs/benchmarks/...`); `SHA256SUMS` is
+  regenerated. `robot_sf/benchmark/certification_transfer.py` now normalizes those fields at
+  generation via `_repo_relative_path(...)`, so future packets stay portable. The
+  `Check Configs For Absolute Home-Dir Paths` pre-commit hook
+  (`hooks/check_config_abs_paths.py`) now also scans `docs/context/evidence/**`, so this class fails
+  closed at commit time. Diagnostic-only evidence hygiene: no benchmark, metric, or paper/dissertation
+  claim changes.
 * Fixed the **LiCCA post-guard full-suite teardown hang** (#4216): the suite could reach 100% and
   then never exit because `tests/perf_utils/test_enforce_mode.py` spawned a nested `pytest` child
   with an unbounded `subprocess.run(...)` (its `@pytest.mark.timeout` marker is a no-op because
@@ -36,6 +48,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ATC copy is staged and otherwise run on synthetic fixtures. No dataset bytes, download code,
   benchmark consumer, campaign run, or paper-facing claim is introduced; follows the #4279
   (`socnavbench-s3dis-eth`) exemplar pattern.
+* Added **diff-scoped context-note freshness gating** for issue #3190. The docs-proof consistency
+  checker (`scripts/validation/check_docs_proof_consistency.py`) gains a `--freshness-scope
+  {repo,diff}` option: `repo` (default) preserves the existing repo-wide `--check-context-note-freshness`
+  behavior, while `diff` restricts freshness findings to context notes changed against `--base` (plus
+  catalog-driven `superseded_replacement`/`stale_current_dated` rules when `docs/context/catalog.yaml`
+  itself changed). This makes the freshness check safe to run as a per-PR gate without failing on the
+  pre-existing repo-wide backlog of stale/orphan notes. The diff wrapper
+  (`scripts/dev/check_docs_proof_consistency_diff.sh`) now runs the freshness checker in diff scope
+  when `DOCS_PROOF_CHECK_FRESHNESS=1` (opt-in, off by default; `DOCS_PROOF_FRESHNESS_STRICT=1` promotes
+  stale/orphan warnings to failures). Superseded-without-replacement errors fail closed. No content was
+  moved or archived; no benchmark/paper claims changed.
+
 * Added a **packet-consuming run planner for the issue #4142 dense DPCBF comparison** (#4142):
   `robot_sf/benchmark/issue_4142_dpcbf_dense_runner.py` consumes the predeclared packet schema
   `robot_sf.issue_4142_dpcbf_dense_comparison.v1` and resolves it into an ordered, per-arm run plan
@@ -107,7 +131,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `robot_sf/benchmark/certification_transfer.py` gains `classify_interaction_status(...)` and now
   tags every gate cell with `interaction_status` (`interacting` / `non_interacting` / `unknown`) and
   every transfer-matrix row with `interaction_status` plus an `interaction_exercised` flag. Because
-  `social_force_default` and `hsfm_total_force_v1` only diverge when the robot enters the 5 m
+  `social_force_default` (social-force model, SFM) and `hsfm_total_force_v1` (headed social-force
+  model, HSFM) only diverge when the robot enters the 5 m
   pedestrian near field, a `stable_pass`/`stable_fail` built from cells that never do is *vacuous* —
   it does not demonstrate certification robustness. The report/metadata now carry
   `interaction_status_counts` and a `model_sensitivity_exercised` boolean, and the README/claim

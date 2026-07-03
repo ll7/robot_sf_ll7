@@ -10,11 +10,15 @@ import pytest
 
 from robot_sf.benchmark.certification_transfer import (
     CLAIM_BOUNDARY,
+    _repo_relative_path,
     build_certification_transfer_report,
     classify_interaction_status,
     load_yaml_mapping,
     validate_probe_config,
     write_certification_transfer_evidence,
+)
+from robot_sf.benchmark.certification_transfer import (
+    REPO_ROOT as CERT_REPO_ROOT,
 )
 from robot_sf.sim.pedestrian_model_variants import HSFM_TOTAL_FORCE_V1, SOCIAL_FORCE_DEFAULT
 
@@ -154,6 +158,42 @@ def test_evidence_writer_emits_checksums_without_raw_artifacts(tmp_path: Path) -
     with Path(paths["certification_transfer_matrix_csv"]).open("r", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
     assert rows
+
+
+def test_provenance_paths_are_not_absolute(tmp_path: Path) -> None:
+    """Config/gate provenance paths must never leak an absolute home-dir path (#4324).
+
+    The committed packet previously baked an author worktree path
+    (``/home/<user>/git/robot_sf_ll7.worktrees/...``) into ``config.path`` /
+    ``gate_spec.path``, which is non-reproducible across machines/CI.
+    """
+    config_path, gate_path, config, gates = _write_config_pair(tmp_path)
+    report = build_certification_transfer_report(
+        [_record("stable", SOCIAL_FORCE_DEFAULT, collision_rate=0.0)],
+        probe_config=config,
+        gate_spec=gates,
+        config_path=config_path,
+        gate_spec_path=gate_path,
+    )
+    for field in ("config", "gate_spec"):
+        recorded = report[field]["path"]
+        assert not Path(recorded).is_absolute(), f"{field}.path is absolute: {recorded}"
+        for leak in ("/home/", "/Users/", "/root/", ".worktrees"):
+            assert leak not in recorded, f"{field}.path leaks {leak!r}: {recorded}"
+
+
+def test_repo_relative_path_normalizes_in_repo_and_falls_back() -> None:
+    """`_repo_relative_path` emits repo-relative POSIX in-repo, basename otherwise."""
+    in_repo = CERT_REPO_ROOT / "configs/benchmarks/issue_4207_interacting_smoke_probe.yaml"
+    assert (
+        _repo_relative_path(in_repo) == "configs/benchmarks/issue_4207_interacting_smoke_probe.yaml"
+    )
+    # A path outside this checkout (e.g. a sibling worktree) must not leak an
+    # absolute home path; it collapses to the bare file name.
+    outside = "/home/someone/git/robot_sf_ll7.worktrees/other/configs/x/probe.yaml"
+    result = _repo_relative_path(outside)
+    assert result == "probe.yaml"
+    assert "/home/" not in result
 
 
 def test_interaction_status_classifier_distinguishes_near_field_contact() -> None:

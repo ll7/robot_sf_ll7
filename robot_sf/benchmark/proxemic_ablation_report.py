@@ -150,9 +150,12 @@ def build_proxemic_ablation_report(
     _validate_metric_fields("baseline_classical", paired_baseline, blockers)
     _validate_metric_fields("proxemic_costmap_on", paired_proxemic, blockers)
 
-    report_status = "blocked" if blockers else "ready"
     baseline_summary = _summarize_arm("baseline_classical", paired_baseline)
     proxemic_summary = _summarize_arm("proxemic_costmap_on", paired_proxemic)
+    if baseline_summary.runtime_seconds <= 0.0:
+        blockers.append("baseline_classical runtime_seconds must be positive for ratio computation")
+
+    report_status = "blocked" if blockers else "ready"
 
     deltas = {
         "intrusion_rate_delta": proxemic_summary.intrusion_rate - baseline_summary.intrusion_rate,
@@ -298,6 +301,15 @@ def _validate_metric_fields(
         missing.extend(metric for metric in REPORT_CAVEATS if _get_alias(record, metric) is None)
         if missing:
             blockers.append(f"{arm} paired row {idx} missing metrics: {', '.join(missing)}")
+        invalid_caveats = [
+            metric
+            for metric in REPORT_CAVEATS
+            if _get_alias(record, metric) is not None and _extract_bool(record, metric) is None
+        ]
+        if invalid_caveats:
+            blockers.append(
+                f"{arm} paired row {idx} invalid caveat values: {', '.join(invalid_caveats)}"
+            )
 
 
 def _summarize_arm(arm: str, records: Sequence[Mapping[str, Any]]) -> ArmSummary:
@@ -320,14 +332,30 @@ def _required_values(records: Sequence[Mapping[str, Any]], metric: str) -> list[
 def _bool_values(records: Sequence[Mapping[str, Any]], field: str) -> list[float]:
     values: list[float] = []
     for record in records:
-        raw = _get_alias(record, field)
-        if raw is None:
+        parsed = _extract_bool(record, field)
+        if parsed is None:
             continue
-        if isinstance(raw, bool):
-            values.append(float(raw))
-        else:
-            values.append(float(raw) > 0.0)
+        values.append(float(parsed))
     return values
+
+
+def _extract_bool(record: Mapping[str, Any], field: str) -> bool | None:
+    raw = _get_alias(record, field)
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        if not math.isfinite(float(raw)):
+            return None
+        return float(raw) > 0.0
+    if isinstance(raw, str):
+        normalized = raw.strip().lower()
+        if normalized in {"true", "t", "yes", "y", "1", "pass", "passed", "success"}:
+            return True
+        if normalized in {"false", "f", "no", "n", "0", "fail", "failed", "none"}:
+            return False
+    return None
 
 
 def _extract_float(record: Mapping[str, Any], metric: str) -> float | None:

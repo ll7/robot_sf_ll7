@@ -326,6 +326,40 @@ def test_build_seed_episode_rows_emits_mechanism_taxonomy_and_exposure_fields() 
     assert geometry_row["interaction_exposure_status"] == "not_derivable_missing_trace"
 
 
+def test_build_seed_episode_rows_treats_stringified_none_mechanism_as_missing() -> None:
+    """Serialized null mechanism fields do not satisfy trace-required metadata."""
+
+    rows = build_seed_episode_rows(
+        [
+            {
+                "episode_id": "ep-null-mechanism",
+                "scenario_id": "classic_cross_trap_low",
+                "seed": 111,
+                "algo": "orca",
+                "planner_key": "orca",
+                "kinematics": "differential_drive",
+                "failure_mechanism_taxonomy": {
+                    "label": "None",
+                    "source": "None",
+                    "trace_status": "trace_verified",
+                    "confidence": "None",
+                },
+                "metrics": {
+                    "success": 0.0,
+                    "collisions": 0.0,
+                    "near_misses": 1.0,
+                    "time_to_goal_norm": 1.0,
+                },
+            }
+        ]
+    )
+
+    assert rows[0]["failure_mechanism_label"] is None
+    assert rows[0]["mechanism_label"] == "unknown"
+    assert rows[0]["mechanism_confidence"] == "unknown"
+    assert rows[0]["mechanism_evidence_mode"] == "unknown"
+
+
 def test_build_statistical_sufficiency_rows_exposes_half_widths() -> None:
     """Sufficiency rows should surface per-metric CI half-widths and counts."""
     rows = build_seed_variability_rows(

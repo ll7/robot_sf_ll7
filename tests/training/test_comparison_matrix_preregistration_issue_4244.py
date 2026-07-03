@@ -75,6 +75,37 @@ def test_issue_4244_matrix_rejects_missing_sac_gate(tmp_path: Path) -> None:
         load_matrix(edited_path)
 
 
+def test_issue_4244_matrix_rejects_symlinked_scenario_config(tmp_path: Path) -> None:
+    """Matrix source paths must not traverse symlinks out of the repo root."""
+
+    payload = _temp_matrix_payload(tmp_path)
+    external = tmp_path / "external.yaml"
+    external.write_text("scenario: external\n", encoding="utf-8")
+    scenario_link = tmp_path / "configs/scenarios/symlink.yaml"
+    scenario_link.parent.mkdir(parents=True, exist_ok=True)
+    scenario_link.symlink_to(external)
+    payload["comparison"]["shared_budget"]["scenario_config"] = "configs/scenarios/symlink.yaml"
+    matrix_path = tmp_path / "matrix.yaml"
+    matrix_path.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    with pytest.raises(MatrixValidationError, match="symlinks"):
+        load_matrix(matrix_path, repo_root=tmp_path)
+
+
+def test_issue_4244_matrix_rejects_directory_training_config(tmp_path: Path) -> None:
+    """Directory-valued arm configs are not silently accepted as source files."""
+
+    payload = _temp_matrix_payload(tmp_path)
+    bad_dir = tmp_path / "configs/training/bad_dir"
+    bad_dir.mkdir(parents=True)
+    payload["arms"][0]["training_config"] = "configs/training/bad_dir"
+    matrix_path = tmp_path / "matrix.yaml"
+    matrix_path.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    with pytest.raises(MatrixValidationError, match="training_config not found"):
+        load_matrix(matrix_path, repo_root=tmp_path)
+
+
 def test_issue_4244_dry_run_limits_to_two_arms_and_does_not_execute_training() -> None:
     """CPU dry-run produces a bounded manifest and records explicit inclusion-gate exclusions."""
     matrix = load_matrix(CONFIG_PATH)
@@ -110,3 +141,18 @@ def test_issue_4244_cli_writes_two_arm_dry_run_manifest(tmp_path: Path) -> None:
     assert payload["schema_version"] == "training_comparison_matrix_dry_run.v1"
     assert payload["selected_arm_count"] == 2
     assert payload["training_executed"] is False
+
+
+def _temp_matrix_payload(tmp_path: Path) -> dict[str, object]:
+    payload = copy.deepcopy(yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")))
+    scenario_path = tmp_path / payload["comparison"]["shared_budget"]["scenario_config"]
+    scenario_path.parent.mkdir(parents=True, exist_ok=True)
+    scenario_path.write_text("scenario: unit\n", encoding="utf-8")
+    for arm in payload["arms"]:
+        training_config = arm["training_config"]
+        if "/placeholders/" in training_config:
+            continue
+        config_path = tmp_path / training_config
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text("policy_id: unit\n", encoding="utf-8")
+    return payload

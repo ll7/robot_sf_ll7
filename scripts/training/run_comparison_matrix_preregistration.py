@@ -259,12 +259,18 @@ def _validate_arms(matrix: ComparisonMatrix, *, gates: dict[str, Any]) -> None:
 def _validate_existing_source_paths(matrix: ComparisonMatrix, *, repo_root: Path) -> None:
     """Require stable checked-in source paths, while allowing named placeholder lanes."""
     scenario_config = matrix.shared_budget.get("scenario_config")
-    if not isinstance(scenario_config, str) or not (repo_root / scenario_config).is_file():
+    if not isinstance(scenario_config, str):
         raise MatrixValidationError(f"shared_budget.scenario_config not found: {scenario_config}")
+    _resolve_repo_file(repo_root, scenario_config, label="shared_budget.scenario_config")
     for arm in matrix.arms:
-        config_path = repo_root / arm.training_config
-        if config_path.is_file():
+        try:
+            _resolve_repo_file(
+                repo_root, arm.training_config, label=f"{arm.arm_id}.training_config"
+            )
             continue
+        except MatrixValidationError as exc:
+            if "/placeholders/" not in arm.training_config or "not found" not in str(exc):
+                raise
         if "/placeholders/" not in arm.training_config:
             raise MatrixValidationError(
                 f"{arm.arm_id}: training_config not found: {arm.training_config}"
@@ -316,6 +322,35 @@ def _validate_relative_path(value: str, *, label: str) -> None:
     path = Path(value)
     if path.is_absolute() or ".." in path.parts:
         raise MatrixValidationError(f"{label} must be a repository-relative path")
+
+
+def _resolve_repo_file(repo_root: Path, value: str, *, label: str) -> Path:
+    _validate_relative_path(value, label=label)
+    root = repo_root.resolve()
+    raw_path = root / value
+    resolved = raw_path.resolve(strict=False)
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise MatrixValidationError(f"{label} escapes repository root: {value}") from exc
+    if _has_symlink_component(raw_path, root=root):
+        raise MatrixValidationError(f"{label} must not traverse symlinks: {value}")
+    if not resolved.is_file():
+        raise MatrixValidationError(f"{label} not found: {value}")
+    return resolved
+
+
+def _has_symlink_component(path: Path, *, root: Path) -> bool:
+    try:
+        relative_parts = path.relative_to(root).parts
+    except ValueError:
+        return True
+    current = root
+    for part in relative_parts:
+        current = current / part
+        if current.is_symlink():
+            return True
+    return False
 
 
 def _validate_no_host_state(value: str) -> None:

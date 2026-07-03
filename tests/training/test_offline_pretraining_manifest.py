@@ -13,6 +13,7 @@ from robot_sf.training.offline_pretraining_manifest import (
     load_offline_checkpoint_manifest,
     space_fingerprint,
     validate_offline_checkpoint_manifest,
+    write_normalizer_state,
 )
 
 
@@ -60,7 +61,7 @@ def test_finetune_manifest_records_parent_manifest_hash(tmp_path: Path) -> None:
     parent_path = tmp_path / "offline_manifest.json"
     _write_json(parent_path, parent)
     checkpoint = _file(tmp_path / "finetuned.zip", "fine\n")
-    normalizer = _file(tmp_path / "finetune_normalizer.json", "{}\n")
+    normalizer = _normalizer_state(tmp_path / "finetune_normalizer.json", present=False)
     config = _file(tmp_path / "finetune.yaml", "policy_id: fine\n")
 
     manifest = build_finetune_manifest(
@@ -75,13 +76,37 @@ def test_finetune_manifest_records_parent_manifest_hash(tmp_path: Path) -> None:
     )
 
     assert manifest["parent_checkpoint_sha256"] == parent["checkpoint_sha256"]
+    assert manifest["parent_normalizer_sha256"] == parent["normalizer_sha256"]
     assert manifest["inherited_dataset"]["dataset_id"] == "issue_4245_unit"
     assert manifest["eligible_for_claim"] is False
 
 
-def _offline_manifest(tmp_path: Path) -> dict[str, object]:
+def test_finetune_manifest_rejects_unapplied_parent_normalizer(tmp_path: Path) -> None:
+    """Fine-tune provenance fails closed when parent requires a normalizer state."""
+
+    parent = _offline_manifest(tmp_path, normalizer_present=True)
+    parent_path = tmp_path / "offline_manifest.json"
+    _write_json(parent_path, parent)
+    checkpoint = _file(tmp_path / "finetuned.zip", "fine\n")
+    normalizer = _normalizer_state(tmp_path / "finetune_normalizer.json", present=False)
+    config = _file(tmp_path / "finetune.yaml", "policy_id: fine\n")
+
+    with pytest.raises(ValueError, match="matching parent normalizer"):
+        build_finetune_manifest(
+            parent_manifest_path=parent_path,
+            parent_manifest=parent,
+            checkpoint_path=checkpoint,
+            normalizer_path=normalizer,
+            training_config_path=config,
+            online_timesteps=1,
+            seed=4245,
+            environment_contract=parent["environment_contract"],
+        )
+
+
+def _offline_manifest(tmp_path: Path, *, normalizer_present: bool = False) -> dict[str, object]:
     checkpoint = _file(tmp_path / "checkpoint.zip", "checkpoint\n")
-    normalizer = _file(tmp_path / "normalizer.json", "{}\n")
+    normalizer = _normalizer_state(tmp_path / "normalizer.json", present=normalizer_present)
     config = _file(tmp_path / "pretrain.yaml", "policy_id: unit\n")
     dataset = _file(tmp_path / "dataset.jsonl", "{}\n")
     dataset_manifest = _file(
@@ -126,6 +151,15 @@ def _offline_manifest(tmp_path: Path) -> dict[str, object]:
 
 def _file(path: Path, content: str) -> Path:
     path.write_text(content, encoding="utf-8")
+    return path
+
+
+def _normalizer_state(path: Path, *, present: bool) -> Path:
+    write_normalizer_state(
+        path,
+        present=present,
+        reason="unit test normalizer present" if present else "unit test explicit absence",
+    )
     return path
 
 

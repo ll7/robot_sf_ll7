@@ -77,6 +77,31 @@ def test_blocks_fallback_rows_and_missing_delta_fields(tmp_path: Path) -> None:
     assert any("missing metrics" in reason for reason in report["blocked_reasons"])
 
 
+def test_report_blocks_invalid_caveats_and_nonpositive_runtime_ratio(tmp_path: Path) -> None:
+    """Bad caveat text and non-positive baseline runtime block ratio interpretation."""
+
+    smoke_config, proxemic_config = _write_configs(tmp_path)
+    baseline_rows = [
+        _row("crossing_easy", 1, intrusion_rate=0.30, clearance=0.55, efficiency=0.80, runtime=0.0)
+    ]
+    proxemic_rows = [
+        _row("crossing_easy", 1, intrusion_rate=0.20, clearance=0.70, efficiency=0.78, runtime=1.0)
+    ]
+    proxemic_rows[0]["metrics"]["success"] = "maybe"
+
+    report = build_proxemic_ablation_report(
+        baseline_records=baseline_rows,
+        proxemic_records=proxemic_rows,
+        smoke_config_path=smoke_config.relative_to(tmp_path),
+        proxemic_config_path=proxemic_config.relative_to(tmp_path),
+        repo_root=tmp_path,
+    )
+
+    assert report["report_status"] == "blocked"
+    assert any("invalid caveat values: success" in reason for reason in report["blocked_reasons"])
+    assert any("runtime_seconds must be positive" in reason for reason in report["blocked_reasons"])
+
+
 def test_load_records_accepts_json_and_jsonl_and_writes_report(tmp_path: Path) -> None:
     """Rows load from JSON/JSONL and report artifacts are written."""
 

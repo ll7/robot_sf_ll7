@@ -98,7 +98,7 @@ def evaluate_public_requirement_events(
             return _evaluate_speed_limit(
                 base=base,
                 robot_velocities=robot_velocities,
-                contract=contract,
+                contract=event_contract,
                 dt=dt,
             )
         case _:

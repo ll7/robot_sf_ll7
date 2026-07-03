@@ -183,6 +183,7 @@ def build_finetune_manifest(  # noqa: PLR0913
         "parent_offline_checkpoint_manifest_path": str(parent_manifest_path),
         "parent_offline_checkpoint_manifest_sha256": sha256_file(parent_manifest_path),
         "parent_checkpoint_sha256": str(parent_manifest["checkpoint_sha256"]),
+        "parent_normalizer_sha256": str(parent_manifest["normalizer_sha256"]),
         "inherited_dataset": dict(parent_manifest["dataset"]),
         "checkpoint_path": str(checkpoint_path),
         "normalizer_path": str(normalizer_path),
@@ -277,6 +278,7 @@ def validate_finetune_manifest(
             "parent_offline_checkpoint_manifest_path",
             "parent_offline_checkpoint_manifest_sha256",
             "parent_checkpoint_sha256",
+            "parent_normalizer_sha256",
             "inherited_dataset",
             "checkpoint_path",
             "normalizer_path",
@@ -304,6 +306,71 @@ def validate_finetune_manifest(
         "online_finetune_config_sha256",
         base_dir=base_dir,
     )
+    _validate_finetune_normalizer_compatibility(manifest, base_dir=base_dir)
+
+
+def _validate_finetune_normalizer_compatibility(
+    manifest: Mapping[str, Any], *, base_dir: Path | None
+) -> None:
+    parent_state = _load_normalizer_state(
+        manifest["parent_offline_checkpoint_manifest_path"],
+        normalizer_path_key="normalizer_path",
+        base_dir=base_dir,
+    )
+    parent_present = bool(parent_state.get("present"))
+    if not parent_present:
+        return
+
+    current_state = _load_normalizer_state(
+        manifest,
+        normalizer_path_key="normalizer_path",
+        base_dir=base_dir,
+    )
+    current_parent_sha = str(manifest["parent_normalizer_sha256"])
+    if (
+        not bool(current_state.get("present"))
+        or str(manifest["normalizer_sha256"]) != current_parent_sha
+    ):
+        raise ValueError(
+            "fine-tune manifest must apply matching parent normalizer state "
+            "when the parent offline checkpoint requires one"
+        )
+
+
+def _load_normalizer_state(
+    manifest_or_path: Mapping[str, Any] | Path | str,
+    *,
+    normalizer_path_key: str,
+    base_dir: Path | None,
+) -> dict[str, Any]:
+    if isinstance(manifest_or_path, Mapping):
+        manifest = manifest_or_path
+        manifest_dir = base_dir
+    else:
+        manifest_path = _resolve_manifest_path(Path(manifest_or_path), base_dir=base_dir)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if not isinstance(manifest, dict):
+            raise ValueError("parent offline checkpoint manifest must JSON object")
+        manifest_dir = manifest_path.parent
+
+    normalizer_path = Path(str(manifest[normalizer_path_key]))
+    if not normalizer_path.is_absolute() and manifest_dir is not None:
+        normalizer_path = manifest_dir / normalizer_path
+    try:
+        payload = json.loads(normalizer_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"normalizer state must be readable JSON: {normalizer_path}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"normalizer state must be JSON object: {normalizer_path}")
+    if payload.get("schema_version") != NORMALIZER_STATE_SCHEMA_VERSION:
+        raise ValueError(f"normalizer state schema mismatch: {normalizer_path}")
+    return payload
+
+
+def _resolve_manifest_path(path: Path, *, base_dir: Path | None) -> Path:
+    if not path.is_absolute() and base_dir is not None:
+        return base_dir / path
+    return path
 
 
 def assert_environment_compatible(

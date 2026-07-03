@@ -102,6 +102,10 @@ from robot_sf.benchmark.observation_noise import (
 )
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
+from robot_sf.benchmark.ped_model_sensitivity import (
+    attach_pedestrian_model_fields,
+    build_pedestrian_model_provenance,
+)
 from robot_sf.benchmark.pedestrian_control_trace import (
     attach_pedestrian_control_trace,
 )
@@ -1418,6 +1422,12 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             "effective_view": view_integrity,
         },
     }
+    pedestrian_model_provenance = build_pedestrian_model_provenance(
+        sim_config=config.sim_config,
+        policy_cfg=policy_cfg,
+        algorithm_metadata=algo_meta,
+    )
+    attach_pedestrian_model_fields(record, pedestrian_model_provenance)
     record.update(static_deadlock_fields)
     if benchmark_track is not None:
         record["benchmark_track"] = benchmark_track

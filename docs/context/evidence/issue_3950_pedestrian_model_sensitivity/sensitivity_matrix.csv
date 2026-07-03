@@ -1,0 +1,5 @@
+development_model,evaluation_model,planner_key,algo,episodes,success_incidence,collision_incidence,fallback_degraded_rows,status
+social_force_default,social_force_default,goal,goal,3,0.0,0.0,0,ok
+social_force_default,hsfm_total_force_v1,goal,goal,3,0.0,0.0,0,ok
+hsfm_total_force_v1,social_force_default,goal,goal,3,0.0,0.0,0,ok
+hsfm_total_force_v1,hsfm_total_force_v1,goal,goal,3,0.0,0.0,0,ok

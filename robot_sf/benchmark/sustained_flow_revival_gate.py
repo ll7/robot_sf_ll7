@@ -36,6 +36,10 @@ REQUIRED_INTERACTION_EXPOSURE_FIELDS = (
 )
 
 _COMPLETE_EXPOSURE_STATUSES = {"computed", "ok", "complete"}
+_NO_DERIVABLE_EXPOSURE_STATUSES = {
+    "blocked_no_derivable_episode_rows",
+    "not_computable_no_derivable_interaction_exposure",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,8 +104,9 @@ def build_sustained_flow_revival_gate_report(
         raise SustainedFlowRevivalGateError("claim impact evidence must be a mapping")
 
     blocking_reasons: list[str] = []
-    if not _interaction_exposure_complete(interaction_exposure):
-        blocking_reasons.append("interaction-exposure diagnostics missing computed required fields")
+    interaction_exposure_blocker = _interaction_exposure_blocker(interaction_exposure)
+    if interaction_exposure_blocker is not None:
+        blocking_reasons.append(interaction_exposure_blocker)
 
     affected_rows = _affected_rows(interaction_exposure, claim_impact)
     if not affected_rows:
@@ -155,6 +160,16 @@ def build_sustained_flow_revival_gate_report(
     )
 
 
+def _interaction_exposure_blocker(report: Mapping[str, Any]) -> str | None:
+    if _interaction_exposure_retained_but_not_derivable(report):
+        return (
+            "interaction-exposure row fields retained but not derivable from h600 episode records"
+        )
+    if not _interaction_exposure_complete(report):
+        return "interaction-exposure diagnostics missing computed required fields"
+    return None
+
+
 def _interaction_exposure_complete(report: Mapping[str, Any]) -> bool:
     missing_fields = set(_string_sequence(report.get("missing_required_fields")))
     if missing_fields:
@@ -180,6 +195,31 @@ def _interaction_exposure_complete(report: Mapping[str, Any]) -> bool:
         return False
 
     return True
+
+
+def _interaction_exposure_retained_but_not_derivable(report: Mapping[str, Any]) -> bool:
+    status = str(report.get("status", "")).strip()
+    if status in _NO_DERIVABLE_EXPOSURE_STATUSES:
+        return True
+    runs = _run_mappings(report)
+    if runs is None:
+        return False
+    for run in runs:
+        run_status = str(run.get("status", "")).strip()
+        derivable_rows = _int_or_none(run.get("derivable_episode_rows"))
+        not_derivable_rows = _int_or_none(run.get("not_derivable_episode_rows"))
+        if run_status in _NO_DERIVABLE_EXPOSURE_STATUSES:
+            return True
+        if derivable_rows == 0 and not_derivable_rows is not None and not_derivable_rows > 0:
+            return True
+    return False
+
+
+def _int_or_none(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _run_mappings(report: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...] | None:

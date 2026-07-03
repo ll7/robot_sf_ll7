@@ -64,7 +64,7 @@ def test_tracked_h600_evidence_defers_until_exposure_fields_exist() -> None:
     assert payload["decision"] == DECISION_DEFER
     assert payload["ready_for_revived_implementation"] is False
     assert (
-        "interaction-exposure diagnostics missing computed required fields"
+        "interaction-exposure row fields retained but not derivable from h600 episode records"
         in payload["blocking_reasons"]
     )
     assert (
@@ -114,6 +114,37 @@ def test_empty_claim_impact_still_counts_as_not_supplied() -> None:
     assert "claim-decision impact not supplied" in payload["blocking_reasons"]
 
 
+def test_retained_but_not_derivable_exposure_rows_fail_closed() -> None:
+    """Retained row fields do not satisfy the gate unless values are derivable."""
+
+    exposure = {
+        "status": "blocked_no_derivable_episode_rows",
+        "missing_required_fields": [],
+        "available_columns": list(REQUIRED_INTERACTION_EXPOSURE_FIELDS),
+        "runs": [
+            {
+                "job_id": "13268",
+                "run_label": "confirm",
+                "status": "blocked_no_derivable_episode_rows",
+                "missing_required_fields": [],
+                "available_columns": list(REQUIRED_INTERACTION_EXPOSURE_FIELDS),
+                "derivable_episode_rows": 0,
+                "not_derivable_episode_rows": 1008,
+            }
+        ],
+    }
+
+    report = build_sustained_flow_revival_gate_report(
+        exposure,
+        claim_impact=_claim_impact(changed=True),
+    )
+
+    assert report.decision == DECISION_DEFER
+    assert report.blocking_reasons == (
+        "interaction-exposure row fields retained but not derivable from h600 episode records",
+    )
+
+
 def test_complete_load_bearing_evidence_revives_sustained_flow() -> None:
     """Complete exposure plus changed claim decisions revives the opt-in design lane."""
 
@@ -151,6 +182,6 @@ def test_cli_reports_default_tracked_gate_decision(capsys) -> None:
     assert payload["decision"] == DECISION_DEFER
     assert payload["claim_impact_evidence_path"].endswith("sustained_flow_claim_impact_input.json")
     assert payload["blocking_reasons"] == [
-        "interaction-exposure diagnostics missing computed required fields",
+        "interaction-exposure row fields retained but not derivable from h600 episode records",
         "claim-decision impact not computable from supplied h600 evidence",
     ]

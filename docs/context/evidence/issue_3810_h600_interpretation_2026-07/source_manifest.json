@@ -7,6 +7,7 @@
     "README.md",
     "comparability_check.json",
     "comparability_check.md",
+    "h600_interaction_exposure_sidecar.csv",
     "horizon_sensitivity_report.json",
     "horizon_sensitivity_report.md",
     "interaction_exposure_diagnostics.json",
@@ -15,11 +16,22 @@
     "planner_metric_summary.md",
     "snqi_recalibration_bundle.json",
     "snqi_recalibration_report.md",
-    "source_manifest.json",
     "snqi_weight_set_h600_preflight.json",
+    "source_manifest.json",
     "sustained_flow_claim_impact_input.json"
   ],
   "h500_s20_reports": "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/reports",
+  "issue_3813_retained_interaction_exposure_sidecar": {
+    "claim_boundary": "Retained h600 interaction-exposure sidecar only; no imputation, benchmark campaign, default benchmark conclusion, or paper/dissertation claim.",
+    "derivable_episode_rows": 0,
+    "interaction_exposure_sidecar": "h600_interaction_exposure_sidecar.csv",
+    "interaction_exposure_status_counts": {
+      "not_derivable_missing_trace": 2304
+    },
+    "not_derivable_episode_rows": 2304,
+    "retained_episode_rows": 2304,
+    "schema_version": "issue_3813.retained_interaction_exposure_sidecar.v1"
+  },
   "issue_4239_weight_set_packet": {
     "artifacts": [
       "docs/context/evidence/issue_3810_h600_interpretation_2026-07/snqi_weight_set_h600_preflight.json"

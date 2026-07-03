@@ -18,7 +18,8 @@ This directory contains diagnostic-only h600 interpretation artifacts for jobs 1
 - `comparability_check.json` and `comparability_check.md`: shared-arm scenario matrix comparability check.
 - `snqi_recalibration_bundle.json` and `snqi_recalibration_report.md`: analysis-only h600 recalibration and h500 reversal checks.
 - `horizon_sensitivity_report.json` and `horizon_sensitivity_report.md`: h600-vs-h500 rank-stability and rank-flip diagnostic.
-- `interaction_exposure_diagnostics.json` and `interaction_exposure_diagnostics.md`: episode-level exposure coverage readiness; fail-closed when required fields are absent.
+- `interaction_exposure_diagnostics.json` and `interaction_exposure_diagnostics.md`: episode-level exposure coverage readiness; fail-closed when required fields are absent or retained rows are not derivable.
+- `h600_interaction_exposure_sidecar.csv`: retained episode-row interaction-exposure fields and explicit non-derivable statuses.
 - `source_manifest.json`: input paths, campaign metadata, and source file SHA-256 digests.
 - `SHA256SUMS`: checksums for generated files in this directory.
 
@@ -28,7 +29,7 @@ This directory contains diagnostic-only h600 interpretation artifacts for jobs 1
 - Shared-arm comparability status: `pass`.
 - SNQI recalibration status: `ok`.
 - Horizon-sensitivity status: `ok`.
-- Interaction-exposure status: `blocked_missing_required_fields`.
+- Interaction-exposure status: `blocked_no_derivable_episode_rows`.
 - Comfort rows: 16.
 - Comfort per-seed values are not present in `seed_episode_rows.csv`; those rows preserve the campaign-summary aggregate mean confidence interval and are marked `no_seed_episode_column`.
 

@@ -1,92 +1,137 @@
 {
-  "backfill_policy": "derive_from_retained_episode_rows_only_no_imputation",
-  "claim_boundary": "interaction-exposure coverage is diagnostic-only and must be computed from episode-level fields; absent fields are not imputed",
-  "missing_required_fields": [
-    "first_clearance_step",
+  "available_columns": [
+    "job_id",
+    "run_label",
+    "campaign_id",
+    "episode_id",
+    "scenario_id",
+    "planner_key",
+    "seed",
+    "repeat_index",
+    "interaction_exposure_schema_version",
     "interaction_exposure_share",
+    "robot_motion_share_before_first_clearance",
+    "first_clearance_step",
     "low_exposure_success",
-    "robot_motion_share_before_first_clearance"
+    "interaction_exposure_radius_m",
+    "interaction_exposure_steps",
+    "interaction_exposure_denominator_steps",
+    "robot_motion_steps_before_first_clearance",
+    "robot_motion_denominator_steps_before_first_clearance",
+    "first_clearance_reason",
+    "interaction_exposure_status",
+    "low_exposure_success_threshold",
+    "interaction_exposure_backfill_status"
   ],
+  "backfill_policy": "derive_from_retained_episode_rows_only_no_imputation",
+  "claim_boundary": "interaction-exposure coverage diagnostic-only must compute episode-level fields; absent or not-derivable fields are not imputed",
+  "derivable_episode_rows": 0,
+  "missing_required_fields": [],
+  "not_derivable_episode_rows": 2304,
   "required_fields": [
     "interaction_exposure_share",
     "robot_motion_share_before_first_clearance",
     "first_clearance_step",
     "low_exposure_success"
   ],
+  "retained_episode_rows": 2304,
+  "retained_exposure_sidecar": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/h600_interaction_exposure_sidecar.csv",
   "runs": [
     {
       "available_columns": [
-        "algo",
-        "collision",
+        "job_id",
+        "run_label",
+        "campaign_id",
         "episode_id",
-        "kinematics",
-        "near_miss",
-        "planner_key",
-        "repeat_index",
         "scenario_id",
+        "planner_key",
         "seed",
-        "snqi",
-        "success",
-        "time_to_goal"
-      ],
-      "backfill_policy": "derive_from_retained_episode_rows_only_no_imputation",
-      "derivable_episode_rows": 0,
-      "exposure_provenance_values": [],
-      "job_id": "13268",
-      "missing_required_fields": [
+        "repeat_index",
+        "interaction_exposure_schema_version",
         "interaction_exposure_share",
         "robot_motion_share_before_first_clearance",
         "first_clearance_step",
-        "low_exposure_success"
+        "low_exposure_success",
+        "interaction_exposure_radius_m",
+        "interaction_exposure_steps",
+        "interaction_exposure_denominator_steps",
+        "robot_motion_steps_before_first_clearance",
+        "robot_motion_denominator_steps_before_first_clearance",
+        "first_clearance_reason",
+        "interaction_exposure_status",
+        "low_exposure_success_threshold",
+        "interaction_exposure_backfill_status"
       ],
-      "not_derivable_episode_rows": 0,
+      "backfill_policy": "derive_from_retained_episode_rows_only_no_imputation",
+      "derivable_episode_rows": 0,
+      "exposure_provenance_values": [
+        "not_derivable_missing_trace"
+      ],
+      "interaction_exposure_status_counts": {
+        "not_derivable_missing_trace": 1008
+      },
+      "job_id": "13268",
+      "missing_required_fields": [],
+      "not_derivable_episode_rows": 1008,
       "required_columns": [
         "interaction_exposure_share",
         "robot_motion_share_before_first_clearance",
         "first_clearance_step",
         "low_exposure_success"
       ],
+      "retained_exposure_sidecar": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/h600_interaction_exposure_sidecar.csv",
       "run_label": "confirm",
       "seed_episode_rows": "output/issue3810-h600-longhorizon-confirm-run/13268/reports/seed_episode_rows.csv",
-      "status": "blocked_missing_required_fields"
+      "status": "blocked_no_derivable_episode_rows"
     },
     {
       "available_columns": [
-        "algo",
-        "collision",
+        "job_id",
+        "run_label",
+        "campaign_id",
         "episode_id",
-        "kinematics",
-        "near_miss",
-        "planner_key",
-        "repeat_index",
         "scenario_id",
+        "planner_key",
         "seed",
-        "snqi",
-        "success",
-        "time_to_goal"
-      ],
-      "backfill_policy": "derive_from_retained_episode_rows_only_no_imputation",
-      "derivable_episode_rows": 0,
-      "exposure_provenance_values": [],
-      "job_id": "13273",
-      "missing_required_fields": [
+        "repeat_index",
+        "interaction_exposure_schema_version",
         "interaction_exposure_share",
         "robot_motion_share_before_first_clearance",
         "first_clearance_step",
-        "low_exposure_success"
+        "low_exposure_success",
+        "interaction_exposure_radius_m",
+        "interaction_exposure_steps",
+        "interaction_exposure_denominator_steps",
+        "robot_motion_steps_before_first_clearance",
+        "robot_motion_denominator_steps_before_first_clearance",
+        "first_clearance_reason",
+        "interaction_exposure_status",
+        "low_exposure_success_threshold",
+        "interaction_exposure_backfill_status"
       ],
-      "not_derivable_episode_rows": 0,
+      "backfill_policy": "derive_from_retained_episode_rows_only_no_imputation",
+      "derivable_episode_rows": 0,
+      "exposure_provenance_values": [
+        "not_derivable_missing_trace"
+      ],
+      "interaction_exposure_status_counts": {
+        "not_derivable_missing_trace": 1296
+      },
+      "job_id": "13273",
+      "missing_required_fields": [],
+      "not_derivable_episode_rows": 1296,
       "required_columns": [
         "interaction_exposure_share",
         "robot_motion_share_before_first_clearance",
         "first_clearance_step",
         "low_exposure_success"
       ],
+      "retained_exposure_sidecar": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/h600_interaction_exposure_sidecar.csv",
       "run_label": "extended_roster",
       "seed_episode_rows": "output/issue3810-h600-extroster-run/13273/reports/seed_episode_rows.csv",
-      "status": "blocked_missing_required_fields"
+      "status": "blocked_no_derivable_episode_rows"
     }
   ],
   "schema_version": "issue_4195_h600_aggregation.v1.interaction_exposure",
-  "status": "blocked_missing_required_fields"
+  "status": "blocked_no_derivable_episode_rows"
 }

@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from robot_sf.benchmark.sustained_flow_revival_gate import (
+    DEFAULT_H600_CLAIM_IMPACT_EVIDENCE,
     DEFAULT_H600_INTERACTION_EXPOSURE_EVIDENCE,
     build_sustained_flow_revival_gate_report,
 )
@@ -25,7 +26,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--claim-impact",
         type=Path,
-        default=None,
+        default=DEFAULT_H600_CLAIM_IMPACT_EVIDENCE,
         help=(
             "Optional JSON report stating affected rows and whether wait-it-out exclusions "
             "or caveats change claim decisions."

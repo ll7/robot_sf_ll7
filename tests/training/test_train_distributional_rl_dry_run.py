@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from robot_sf.baselines.distributional_rl import DistributionalRLPlanner
 from scripts.training.train_distributional_rl import (
     load_distributional_rl_training_config,
     run_distributional_rl_training,
@@ -76,3 +77,29 @@ def test_distributional_rl_cpu_smoke_trains_and_writes_trace(tmp_path: Path) -> 
     assert manifest["dry_run"] is False
     assert manifest["final_loss"] is not None
     assert Path(result["training_trace_path"]).read_text(encoding="utf-8").strip()
+
+
+def test_distributional_rl_smoke_checkpoint_loads_runtime_adapter(tmp_path: Path) -> None:
+    """Trainer output is directly loadable by the map-runner runtime adapter."""
+
+    config = load_distributional_rl_training_config(_write_config(tmp_path, total_timesteps=8))
+    result = run_distributional_rl_training(config, dry_run=False)
+
+    planner = DistributionalRLPlanner(
+        {
+            "checkpoint_path": result["checkpoint_path"],
+            "risk_objective": "cvar_lower",
+            "risk_alpha": 0.5,
+        }
+    )
+
+    action = planner.step({"goal_position": [1.0, 0.0], "robot_position": [0.0, 0.0]})
+    manifest = json.loads(Path(result["manifest_path"]).read_text(encoding="utf-8"))
+
+    assert set(action) == {"v", "omega"}
+    assert manifest["checkpoint_path"] == result["checkpoint_path"]
+    assert planner.get_metadata()["evidence_tier"] == "diagnostic-only"
+    assert (
+        planner.diagnostics()["last_decision"]["candidate_count"]
+        == config.action_lattice.action_count
+    )

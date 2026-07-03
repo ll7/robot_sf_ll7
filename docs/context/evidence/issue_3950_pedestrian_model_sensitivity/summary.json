@@ -1,0 +1,55 @@
+{
+  "cells": [
+    {
+      "algo": "goal",
+      "collision_incidence": 0.0,
+      "development_model": "social_force_default",
+      "episodes": 3,
+      "evaluation_model": "social_force_default",
+      "fallback_degraded_rows": 0,
+      "planner_key": "goal",
+      "status": "ok",
+      "success_incidence": 0.0
+    },
+    {
+      "algo": "goal",
+      "collision_incidence": 0.0,
+      "development_model": "social_force_default",
+      "episodes": 3,
+      "evaluation_model": "hsfm_total_force_v1",
+      "fallback_degraded_rows": 0,
+      "planner_key": "goal",
+      "status": "ok",
+      "success_incidence": 0.0
+    },
+    {
+      "algo": "goal",
+      "collision_incidence": 0.0,
+      "development_model": "hsfm_total_force_v1",
+      "episodes": 3,
+      "evaluation_model": "social_force_default",
+      "fallback_degraded_rows": 0,
+      "planner_key": "goal",
+      "status": "ok",
+      "success_incidence": 0.0
+    },
+    {
+      "algo": "goal",
+      "collision_incidence": 0.0,
+      "development_model": "hsfm_total_force_v1",
+      "episodes": 3,
+      "evaluation_model": "hsfm_total_force_v1",
+      "fallback_degraded_rows": 0,
+      "planner_key": "goal",
+      "status": "ok",
+      "success_incidence": 0.0
+    }
+  ],
+  "claim_boundary": "CPU diagnostic sensitivity harness. No new training. Development-model axis is declared policy provenance unless backed by a training artifact.",
+  "issue": 3950,
+  "models": [
+    "hsfm_total_force_v1",
+    "social_force_default"
+  ],
+  "schema_version": "ped_model_sensitivity.v1"
+}

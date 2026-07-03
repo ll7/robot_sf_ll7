@@ -21,7 +21,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   executed (wrapped) trajectory: the summary keeps `false_stop_analysis_supported: false` because a
   causal false-stop *rate* still needs the paired `wrapper_off` counterfactual. It changes no wrapper
   defaults, thresholds, or runtime behavior; the block is only populated on opt-in `wrapper_on` runs.
-=======
+* Added a **fail-closed readiness preflight for the issue #4142 dense DPCBF comparison**
+  (#4142): new `robot_sf/benchmark/issue_4142_dpcbf_dense_readiness.py` and the CLI
+  `scripts/tools/check_issue_4142_dpcbf_dense_readiness.py` validate the predeclared
+  comparison packet `configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml` before any
+  campaign can be authorized. It reuses the canonical CBF runtime validator to confirm the
+  three arms (`cbf_off`, `cbf_collision_cone_on`, `cbf_dynamic_parabolic_v1_on`) stay
+  predeclared, distinct, and fail-closed, cross-checks each arm's adapter config against
+  its runtime variant, confirms the scenario manifest exists, and enforces the
+  fallback/degraded exclusion. The packet gains a structured `canonical_command` field and
+  an explicit `summary_contract.excluded_row_statuses` list. The surface is read-only:
+  status is `prerequisites_incomplete` (any structural gap) or `inputs_ready_campaign_gated`
+  (inputs valid, campaign still gated behind a not-yet-wired packet runner and human/Slurm
+  authorization). It runs no episodes, submits no Slurm/GPU job, and makes no
+  safety-performance or collision-reduction claim. See
+  `docs/context/issue_4142_dpcbf_dense_readiness.md`.
 * Added **write-time episode-row mechanism and exposure instrumentation** to the map runner
   (#4242): `robot_sf/benchmark/map_runner_episode.run_map_episode` now attaches native
   `failure_mechanism` (`failure_mechanism_taxonomy.v1`) and `interaction_exposure`
@@ -754,6 +768,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed **absolute machine paths leaking into the #4239 h600 SNQI evidence packet** (#4302). The
+  builder `scripts/validation/build_issue_4239_h600_snqi_weight_set_ranking.py` hardened `_rel()` so a
+  worktree `output/` symlink (which made `path.resolve()` escape the worktree root) no longer falls
+  back to an absolute, username-bearing path, and relativizes the config/source-manifest/baseline
+  provenance blocks. Regenerated the committed packet
+  (`docs/context/evidence/issue_3810_h600_interpretation_2026-07/`): the SNQI ranks, pairwise
+  agreement, dedup audit, and diss#331 snippet are **byte-identical**; only provenance path strings,
+  the `default_uniform_1p0` no-hash sentinel (now `null` everywhere, rendered empty in CSV/Markdown),
+  and checksums changed. Also raises an attributable `ValueError` naming the file/line on a malformed
+  `episodes.jsonl` instead of a raw `JSONDecodeError` traceback. Diagnostic-only evidence hygiene: no
+  SNQI weight decision, benchmark, or paper/dissertation claim change.
 * Fixed **`scripts/dev/pr_ready_check.sh` mishandling a missing `BASE_REF`** on fresh checkouts
   (#3702). When the default `origin/main` (or any configured `BASE_REF`) was not present locally, the
   `git diff "$BASE_REF...HEAD"` comparison emitted a raw `fatal: ambiguous argument` error; because the

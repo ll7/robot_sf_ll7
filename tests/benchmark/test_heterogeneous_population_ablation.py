@@ -9,8 +9,10 @@ import pytest
 
 from robot_sf.benchmark.heterogeneous_population_ablation import (
     HETEROGENEOUS_POPULATION_ABLATION_SCHEMA,
+    MEAN_MATCHED_HETEROGENEITY_HARNESS_SCHEMA,
     ArchetypePopulationSpec,
     audit_smoke_mean_match,
+    build_mean_matched_harness_manifest,
     build_mean_matched_population_pair,
     build_per_archetype_ablation_report,
 )
@@ -186,4 +188,140 @@ def test_issue_3206_three_seed_smoke_audits_as_mean_matched_but_not_per_archetyp
     assert (
         detailed_report["per_archetype_distributional_status"]
         == "not_computable_from_current_smoke"
+    )
+
+
+def _manifest_config() -> dict[str, object]:
+    return {
+        "trace_metric_keys": ["clearance_m"],
+        "planners": [{"key": "goal", "algo": "goal"}, {"key": "social_force"}],
+        "seeds": [101, 102],
+        "scenarios": [
+            {
+                "id": "classic_density_002",
+                "density": 0.02,
+                "population_size": 4,
+                "archetype_seed": 3574,
+                "composition": {"cautious": 0.25, "standard": 0.5, "hurried": 0.25},
+                "archetypes": {
+                    "cautious": {"desired_speed_factor": 0.7, "radius_m": 0.35},
+                    "standard": {"desired_speed_factor": 1.0, "radius_m": 0.3},
+                    "hurried": {"desired_speed_factor": 1.4, "radius_m": 0.25},
+                },
+            }
+        ],
+    }
+
+
+def test_mean_matched_harness_manifest_attributes_rows_by_pairing_keys() -> None:
+    """Dry-run rows are attributable by scenario, seed, planner, density, and arm."""
+
+    manifest = build_mean_matched_harness_manifest(_manifest_config(), config_path="smoke.yaml")
+
+    assert manifest["schema_version"] == MEAN_MATCHED_HETEROGENEITY_HARNESS_SCHEMA
+    assert manifest["issue"] == 3574
+    assert manifest["claim_boundary"] == "harness_only_no_ablation_result"
+    assert manifest["paired_arms"] == ["heterogeneous", "mean_matched_homogeneous"]
+    assert manifest["row_count"] == 8
+    rows = manifest["manifest_rows"]
+    row_keys = {
+        (row["scenario_id"], row["planner"], row["seed"], row["density"], row["population_arm"])
+        for row in rows
+    }
+    assert ("classic_density_002", "goal", 101, 0.02, "heterogeneous") in row_keys
+    assert ("classic_density_002", "goal", 101, 0.02, "mean_matched_homogeneous") in row_keys
+    assert {row["population_composition_hash"] for row in rows} == {
+        manifest["scenario_rows"][0]["population_composition_hash"]
+    }
+    assert {
+        row["arm_population"]["counts"]["mean_matched_homogeneous"]
+        for row in rows
+        if row["population_arm"] == "mean_matched_homogeneous"
+    } == {4}
+    assert manifest["scenario_rows"][0]["mean_matched_parameters"][
+        "desired_speed_factor"
+    ] == pytest.approx(1.025)
+
+
+def test_mean_matched_harness_manifest_fails_closed_on_missing_control_trace_inputs() -> None:
+    """Pre-run manifests name the exact trace fields future metrics require."""
+
+    manifest = build_mean_matched_harness_manifest(_manifest_config())
+
+    assert manifest["status"] == "blocked_pending_control_trace"
+    assert any(
+        "metadata.pedestrian_control_trace missing" in blocker for blocker in manifest["blockers"]
+    )
+    assert any("steps[].clearance_m missing" in blocker for blocker in manifest["blockers"])
+    first_row = manifest["manifest_rows"][0]
+    assert first_row["trace_readiness"]["ready"] is False
+    assert (
+        "metadata.pedestrian_control_trace.pedestrians[].steps[].clearance_m"
+        in first_row["expected_episode_output_keys"]
+    )
+
+
+def test_mean_matched_harness_manifest_accepts_fixture_control_traces() -> None:
+    """Fixture-only dry-run proves bridge to existing trace-readiness primitive."""
+
+    config = _manifest_config()
+    scenario = config["scenarios"][0]
+    assert isinstance(scenario, dict)
+    scenario["control_traces"] = {
+        "heterogeneous": _control_trace(),
+        "mean_matched_homogeneous": _control_trace(),
+    }
+
+    manifest = build_mean_matched_harness_manifest(config)
+
+    assert manifest["status"] == "ready"
+    assert manifest["blockers"] == []
+    readiness = manifest["scenario_rows"][0]["trace_readiness_by_arm"]["heterogeneous"]
+    assert readiness["metrics"]["clearance_m"]["status"] == "ready"
+    assert readiness["metrics"]["clearance_m"]["archetype_counts"] == {
+        "cautious": 1,
+        "hurried": 1,
+    }
+
+
+@pytest.mark.parametrize(
+    ("patch", "match"),
+    [
+        ({"trace_metric_keys": "clearance_m"}, "trace_metric_keys must be sequence"),
+        ({"seeds": [True]}, "seeds"),
+        ({"planners": [object()]}, "planners\\[0\\] must be string or mapping"),
+    ],
+)
+def test_mean_matched_harness_manifest_rejects_malformed_config(
+    patch: dict[str, object],
+    match: str,
+) -> None:
+    """Malformed dry-run configs fail before producing ambiguous row contracts."""
+
+    config = _manifest_config()
+    config.update(patch)
+
+    with pytest.raises(ValueError, match=match):
+        build_mean_matched_harness_manifest(config)
+
+
+def test_mean_matched_harness_manifest_reports_bad_fixture_trace_metric() -> None:
+    """Trace fixtures with missing metric fields stay blocked with field-level detail."""
+
+    config = _manifest_config()
+    scenario = config["scenarios"][0]
+    assert isinstance(scenario, dict)
+    scenario["control_traces"] = {
+        "heterogeneous": {
+            "pedestrians": [{"id": "ped_cautious", "archetype": "cautious", "steps": [{}]}]
+        },
+        "mean_matched_homogeneous": _control_trace(),
+    }
+
+    manifest = build_mean_matched_harness_manifest(config)
+
+    assert manifest["status"] == "blocked_pending_control_trace"
+    assert any(
+        "control_trace.pedestrians[0].steps[0] missing 'clearance_m'" in blocker
+        for blocker in manifest["blockers"]
     )

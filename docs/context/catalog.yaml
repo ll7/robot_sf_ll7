@@ -153,6 +153,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3484_closure_audit_2026-07-04/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_2557_seed_variance_2026-07/README.md
     status: evidence
     freshness: evidence

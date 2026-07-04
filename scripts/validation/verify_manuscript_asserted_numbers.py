@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import re
@@ -126,6 +127,44 @@ def _values_equal(expected: Any, actual: Any, *, tolerance: float) -> bool:
     return expected == actual
 
 
+def _sha256_file(path: Path) -> str:
+    """Return the SHA-256 digest for a source artifact."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _verify_locator_table_hash(
+    actual: Any, *, repo_root: Path, entry_id: str
+) -> tuple[bool, Any] | None:
+    """Validate source locator table_sha256 against the referenced table artifact."""
+    if not isinstance(actual, dict):
+        return None
+    has_table_path = "table_path" in actual
+    has_table_sha256 = "table_sha256" in actual
+    if not has_table_path and not has_table_sha256:
+        return None
+    if not has_table_path or not has_table_sha256:
+        raise VerificationError(
+            f"{entry_id}: locator table hash validation requires table_path and table_sha256"
+        )
+    table_path = actual["table_path"]
+    recorded_sha256 = actual["table_sha256"]
+    if not isinstance(table_path, str) or not table_path:
+        raise VerificationError(f"{entry_id}: locator table_path must be non-empty string")
+    if not isinstance(recorded_sha256, str) or not recorded_sha256:
+        raise VerificationError(f"{entry_id}: locator table_sha256 must be non-empty string")
+    artifact_path = repo_root / table_path
+    if not artifact_path.is_file():
+        raise VerificationError(f"{entry_id}: locator table artifact does not exist: {table_path}")
+    computed_sha256 = _sha256_file(artifact_path)
+    actual_with_digest = dict(actual)
+    actual_with_digest["computed_table_sha256"] = computed_sha256
+    return recorded_sha256 == computed_sha256, actual_with_digest
+
+
 def _source_locator_fields(entry: dict[str, Any], entry_id: str) -> dict[str, Any]:
     """Return optional source-locator review metadata for report rows."""
     source_locator_status = entry.get("source_locator_status")
@@ -189,6 +228,24 @@ def _verify_entry(
     source_file = repo_root / source_path
     actual = _resolve_pointer(_load_structured_file(source_file), pointer)
     expected = entry["expected"]
+    locator_hash = _verify_locator_table_hash(actual, repo_root=repo_root, entry_id=entry_id)
+    if locator_hash is not None:
+        hash_matches, actual = locator_hash
+        status = MATCH if hash_matches else MISMATCH
+        reason = None if status == MATCH else "locator table_sha256 differs from table artifact"
+        return VerificationResult(
+            id=entry_id,
+            status=status,
+            manuscript_locator=manuscript_locator,
+            expected=expected,
+            actual=actual,
+            source_path=source_path,
+            pointer=pointer,
+            reason=reason,
+            source_locator_status=locator_fields["source_locator_status"] or MATCH,
+            source_locator_note=locator_fields["source_locator_note"],
+            candidate_sources_reviewed=locator_fields["candidate_sources_reviewed"],
+        )
     status = MATCH if _values_equal(expected, actual, tolerance=tolerance) else MISMATCH
     reason = None if status == MATCH else "expected value differs from source-of-record value"
     return VerificationResult(

@@ -7,7 +7,8 @@ from pathlib import Path
 from robot_sf.feature_extractors.mamba_extractor import MambaFeatureExtractor
 from scripts.training import train_ppo
 
-CONFIG_PATH = Path("configs/training/ppo/issue_4014_ppo_mamba_smoke.yaml")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CONFIG_PATH = REPO_ROOT / "configs" / "training" / "ppo" / "issue_4014_ppo_mamba_smoke.yaml"
 
 
 def test_ppo_mamba_smoke_config_loads_cpu_safe_extractor_contract() -> None:

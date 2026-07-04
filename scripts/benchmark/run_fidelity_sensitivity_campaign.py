@@ -38,7 +38,7 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCHEMA_VERSION = "issue_3207_fidelity_sensitivity_campaign_slice.v1"
@@ -271,6 +271,193 @@ def write_fixed_scope_run_plan(
         encoding="utf-8",
     )
     return plan_path
+
+
+# Catalog algorithm -> concrete runner planner. This is the only place a
+# fixed-scope planner group becomes an actual episode-executing planner. The
+# bounded slice runner has a native, dependency-free implementation only for the
+# social-force baseline, so that is the only binding here. ORCA (needs rvo2) and
+# the experimental hybrid-rule planner deliberately have NO binding: a cell that
+# resolves to them stays unbound and fails closed rather than silently running a
+# substitute planner (no silent fallback).
+RUNNER_ALGORITHM_PLANNERS: Mapping[str, str] = {
+    "social_force": "baseline_social_force",
+}
+
+
+@dataclass(frozen=True)
+class RunnerCellBinding:
+    """Concrete runner inputs bound to one fixed-scope run cell.
+
+    ``runner_bound`` is ``True`` only when the cell's resolved catalog algorithm
+    has a native runner planner *and* the preflight marked the planner available
+    and not pending an explicit opt-in *and* the variant has a supported runtime
+    binding. When it is ``False``, ``planner_name`` is ``None`` and
+    ``unbound_reason`` explains why; the runner must never substitute a supported
+    planner for an unbound cell.
+    """
+
+    cell: FixedScopeRunCell
+    variant: VariantSpec
+    planner_name: str | None
+    runner_bound: bool
+    unbound_reason: str | None
+
+
+def build_fixed_scope_variant_index(
+    config: Mapping[str, Any],
+) -> dict[tuple[str, str], VariantSpec]:
+    """Index one runtime-bound :class:`VariantSpec` per ``(axis, source key)``.
+
+    Unlike :func:`load_variant_specs` — which collapses to a single nominal
+    baseline for the bounded slice — this materializes *every* configured
+    variant, including each axis's own baseline, and keys them by
+    ``(axis_key, source_variant_key)``. That is exactly the grain a fixed-scope
+    run cell carries (``cell.axis`` / ``cell.variant``), so every plan cell maps
+    to exactly one variant runtime binding.
+
+    Args:
+        config: Raw fidelity-sensitivity study config mapping.
+
+    Returns:
+        Mapping of ``(axis_key, source_variant_key)`` to its runtime-bound spec.
+    """
+    index: dict[tuple[str, str], VariantSpec] = {}
+    for axis in config["axes"]:
+        axis_key = str(axis["key"])
+        for raw_variant in axis["variants"]:
+            source_key = str(raw_variant["key"])
+            baseline = bool(raw_variant.get("baseline", False))
+            patch = copy.deepcopy(raw_variant.get("patch") or {})
+            observation_noise = copy.deepcopy(raw_variant.get("observation_noise") or {})
+            runtime_binding = _runtime_binding(axis_key, patch, observation_noise)
+            index[(axis_key, source_key)] = VariantSpec(
+                axis=axis_key,
+                # Keep every variant key distinct (baselines included) so per-axis
+                # nominal cells stay traceable in output rows and stable seeds.
+                key=f"{axis_key}__{source_key}",
+                source_key=source_key,
+                baseline=baseline,
+                patch=patch,
+                observation_noise=observation_noise,
+                runtime_binding=runtime_binding,
+            )
+    return index
+
+
+def bind_fixed_scope_run_cell(
+    cell: FixedScopeRunCell,
+    variant_index: Mapping[tuple[str, str], VariantSpec],
+) -> RunnerCellBinding:
+    """Bind one fixed-scope run cell to concrete runner inputs, fail-closed.
+
+    The cell's ``(axis, variant)`` must resolve to a materialized variant spec;
+    a miss is an internal contract violation (the plan and the variant index
+    disagree), raised rather than silently dropped. The planner side is
+    fail-closed: a cell is only ``runner_bound`` when its resolved algorithm has
+    a native runner planner and the preflight found it available and not pending
+    an explicit opt-in. Unbound cells carry ``planner_name = None`` and never
+    inherit a substitute planner.
+
+    Args:
+        cell: One enumerated fixed-scope run cell.
+        variant_index: Output of :func:`build_fixed_scope_variant_index`.
+
+    Returns:
+        The resolved :class:`RunnerCellBinding`.
+
+    Raises:
+        KeyError: If the cell's ``(axis, variant)`` is absent from the index.
+    """
+    variant = variant_index.get((cell.axis, cell.variant))
+    if variant is None:
+        raise KeyError(
+            "fixed-scope run cell has no materialized variant: "
+            f"axis={cell.axis!r} variant={cell.variant!r}"
+        )
+
+    reasons: list[str] = []
+    planner_name = RUNNER_ALGORITHM_PLANNERS.get(cell.algorithm)
+    if planner_name is None:
+        reasons.append(f"no_native_runner_planner_for_algorithm:{cell.algorithm}")
+    if not cell.planner_available:
+        reasons.append(f"planner_unavailable:{cell.planner_group}")
+    if cell.requires_explicit_opt_in:
+        reasons.append(f"planner_requires_explicit_opt_in:{cell.planner_group}")
+    if variant.runtime_binding == "unsupported":
+        reasons.append(f"variant_runtime_binding_unsupported:{cell.axis}__{cell.variant}")
+
+    runner_bound = not reasons
+    return RunnerCellBinding(
+        cell=cell,
+        variant=variant,
+        planner_name=planner_name if runner_bound else None,
+        runner_bound=runner_bound,
+        unbound_reason=None if runner_bound else "; ".join(reasons),
+    )
+
+
+def _run_cells_from_plan(plan: Mapping[str, Any]) -> list[FixedScopeRunCell]:
+    """Reconstruct :class:`FixedScopeRunCell` objects from a serialized plan."""
+    return [FixedScopeRunCell(**cell) for cell in plan["run_cells"]]
+
+
+def bind_fixed_scope_run_plan(
+    plan: Mapping[str, Any],
+    config: Mapping[str, Any],
+) -> list[RunnerCellBinding]:
+    """Bind every cell of a fixed-scope run plan to concrete runner inputs.
+
+    Args:
+        plan: Packet from :func:`build_fixed_scope_run_plan`.
+        config: Raw fidelity-sensitivity study config the plan was built from.
+
+    Returns:
+        One :class:`RunnerCellBinding` per plan cell, in plan order.
+    """
+    variant_index = build_fixed_scope_variant_index(config)
+    return [bind_fixed_scope_run_cell(cell, variant_index) for cell in _run_cells_from_plan(plan)]
+
+
+def execute_fixed_scope_cells(
+    bindings: Sequence[RunnerCellBinding],
+    *,
+    cell_runner: Callable[[RunnerCellBinding], list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Run each runner-bound cell via ``cell_runner``; fail closed on unbound.
+
+    This is the per-cell execution seam: ``cell_runner`` receives one binding and
+    returns its episode rows. It is injected so the mapping from plan cell to
+    runner inputs (planner, variant, seed) is testable without the heavy real
+    simulator, and so the campaign runner never grows a second silent-fallback
+    path. If *any* binding is unbound this raises before running a single cell,
+    so a launch that slipped past the plan-level gate still cannot substitute a
+    supported planner for an ORCA/hybrid cell.
+
+    Args:
+        bindings: Bound cells from :func:`bind_fixed_scope_run_plan`.
+        cell_runner: Callable that executes one bound cell and returns its rows.
+
+    Returns:
+        Flattened episode rows across all bound cells.
+
+    Raises:
+        FixedScopeNotLaunchableError: If any binding is not ``runner_bound``.
+    """
+    unbound = [b for b in bindings if not b.runner_bound]
+    if unbound:
+        reasons = "; ".join(
+            f"{b.cell.planner_group}/{b.cell.axis}/{b.cell.variant}: {b.unbound_reason}"
+            for b in unbound[:5]
+        )
+        raise FixedScopeNotLaunchableError(
+            f"{len(unbound)} of {len(bindings)} fixed-scope cells are unbound; "
+            f"refusing to run with a substitute planner. Examples: {reasons}"
+        )
+    rows: list[dict[str, Any]] = []
+    for binding in bindings:
+        rows.extend(cell_runner(binding))
+    return rows
 
 
 @dataclass(frozen=True)
@@ -898,6 +1085,17 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "and the post-run rank-identifiability recheck unmet, so this fails closed."
         ),
     )
+    parser.add_argument(
+        "--fixed-scope-execute",
+        action="store_true",
+        help=(
+            "Explicit opt-in to drive per-cell episode execution from the fixed-scope run "
+            "plan. Fails closed via ensure_fixed_scope_launchable unless every launch gate is "
+            "cleared, so on the shipped config it runs zero episodes. When launchable, each "
+            "plan cell is bound to concrete runner inputs (planner, variant, seed) with no "
+            "silent fallback for unbound (ORCA/hybrid) planners."
+        ),
+    )
     parser.add_argument("--date", default=dt.datetime.now(tz=dt.UTC).date().isoformat())
     return parser.parse_args(argv)
 
@@ -932,6 +1130,86 @@ def _run_fixed_scope_plan_only(args: argparse.Namespace, config: Mapping[str, An
     return 0
 
 
+def _default_fixed_scope_cell_runner(
+    *,
+    scenarios: Sequence[Mapping[str, Any]],
+    scenario_path: pathlib.Path,
+    horizon: int,
+) -> Callable[[RunnerCellBinding], list[dict[str, Any]]]:
+    """Build the real per-cell runner: one episode per scenario for a bound cell.
+
+    Only reached after :func:`ensure_fixed_scope_launchable` passes, so every
+    binding here is guaranteed ``runner_bound`` with a concrete ``planner_name``.
+    """
+
+    def _run(binding: RunnerCellBinding) -> list[dict[str, Any]]:
+        assert binding.planner_name is not None  # guaranteed by execute guard
+        return [
+            run_episode(
+                scenario,
+                scenario_path=scenario_path,
+                variant=binding.variant,
+                planner_name=binding.planner_name,
+                seed=int(binding.cell.seed),
+                horizon=horizon,
+            )
+            for scenario in scenarios
+        ]
+
+    return _run
+
+
+def _run_fixed_scope_execute(args: argparse.Namespace, config: Mapping[str, Any]) -> int:
+    """Drive per-cell episode execution from the fixed-scope plan, fail-closed.
+
+    Returns:
+        ``1`` (fail-closed, zero episodes) while any launch gate remains — the
+        state on the shipped config — or ``0`` after executing every bound cell
+        when the plan is fully launchable.
+    """
+    plan = build_fixed_scope_run_plan(
+        config,
+        config_path=args.config,
+        git_head=_git_head(),
+        date=str(args.date),
+    )
+    try:
+        ensure_fixed_scope_launchable(plan)
+    except FixedScopeNotLaunchableError as exc:
+        print(f"fail-closed: {exc}")
+        print(
+            "no episodes executed; fixed-scope per-cell execution stays gated behind "
+            "launch prerequisites (ORCA/rvo2, hybrid opt-in, runtime rank-identifiability recheck)"
+        )
+        return 1
+
+    # Reached only when every launch gate is cleared (not on the shipped config).
+    bindings = bind_fixed_scope_run_plan(plan, config)
+    scenario_set = str(plan["materialized_scope"]["scenario_set"])
+    scenario_path = REPO_ROOT / scenario_set
+    scenarios = list(load_scenarios(scenario_path))
+    if not scenarios:
+        raise ValueError(f"fixed-scope scenario set produced no scenarios: {scenario_path}")
+    rows = execute_fixed_scope_cells(
+        bindings,
+        cell_runner=_default_fixed_scope_cell_runner(
+            scenarios=scenarios,
+            scenario_path=scenario_path,
+            horizon=int(args.horizon),
+        ),
+    )
+    raw_root = REPO_ROOT / args.raw_root
+    raw_rows_path = raw_root / "episode_rows.jsonl"
+    raw_root.mkdir(parents=True, exist_ok=True)
+    raw_rows_path.write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    print(f"executed {len(rows)} fixed-scope episode rows across {len(bindings)} cells")
+    print(f"wrote raw rows: {_repo_rel(raw_rows_path)}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the bounded actual campaign."""
     args = _parse_args(argv)
@@ -943,6 +1221,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Plan-consumption mode: enumerate the full fixed-scope run plan and stop
         # before any episode. Execution stays fail-closed behind launch gates.
         return _run_fixed_scope_plan_only(args, config)
+    if args.fixed_scope_execute:
+        # Explicit opt-in: bind the plan to concrete per-cell runner inputs and
+        # execute, but only after ensure_fixed_scope_launchable passes. On the
+        # shipped config this fails closed and runs zero episodes.
+        return _run_fixed_scope_execute(args, config)
     scenario_path = REPO_ROOT / args.scenario_set
     scenarios = list(load_scenarios(scenario_path))
     if not scenarios:

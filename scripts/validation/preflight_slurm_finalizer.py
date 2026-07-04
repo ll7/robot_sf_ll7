@@ -84,6 +84,7 @@ SCHEMA_VERSION = "slurm-finalizer-preflight.v1"
 _SUCCESS_CLASSIFICATIONS = {"success"}
 _DURABLE_POINTER_PREFIXES = (
     "wandb://",
+    "wandb-artifact://",
     "https://",
     "http://",
     "s3://",

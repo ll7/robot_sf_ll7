@@ -8,6 +8,7 @@ import pytest
 from robot_sf.benchmark.observation_noise import (
     apply_observation_noise,
     make_observation_noise_rng,
+    make_observation_noise_state,
     normalize_observation_noise_spec,
     observation_noise_hash,
 )
@@ -73,6 +74,98 @@ def test_observation_noise_applies_lidar_pedestrian_and_pose_noise() -> None:
     assert stats["pedestrians_removed"] == 2
     assert stats["pedestrians_added"] == 1
     assert stats["steps_with_noise"] == 1
+
+
+def test_observation_noise_range_occlusion_filters_planner_pedestrians() -> None:
+    """Range occlusion removes only planner-facing pedestrian detections."""
+
+    spec = normalize_observation_noise_spec(
+        {
+            "profile": "range_occlusion",
+            "pedestrian_occlusion_max_range_m": 1.5,
+        }
+    )
+    obs = _sample_obs()
+    rng = make_observation_noise_rng(spec, seed=1, scenario_id="s1")
+
+    noisy, stats = apply_observation_noise(obs, spec, rng)
+
+    assert spec["enabled"] is True
+    assert obs["pedestrians"]["count"] == 2
+    assert noisy["pedestrians"]["count"] == 1
+    assert noisy["pedestrians"]["positions"] == [[2.0, 2.0]]
+    assert stats["pedestrians_occluded"] == 1
+    assert stats["steps_with_noise"] == 1
+
+
+def test_observation_noise_adds_deterministic_pedestrian_track_noise_only() -> None:
+    """Gaussian track noise perturbs planner-facing pedestrians, not simulator truth."""
+
+    spec = normalize_observation_noise_spec(
+        {
+            "profile": "pedestrian_track_noise",
+            "seed": 4455,
+            "pedestrian_position_noise_std_m": 0.1,
+        }
+    )
+    obs = _sample_obs()
+    rng_a = make_observation_noise_rng(spec, seed=1, scenario_id="s1")
+    rng_b = make_observation_noise_rng(spec, seed=1, scenario_id="s1")
+
+    noisy_a, stats_a = apply_observation_noise(obs, spec, rng_a)
+    noisy_b, stats_b = apply_observation_noise(obs, spec, rng_b)
+
+    assert obs["pedestrians"]["positions"] == [[2.0, 2.0], [3.0, 2.0]]
+    assert noisy_a["robot"]["position"] == [1.0, 2.0]
+    assert noisy_a["pedestrians"]["positions"] != [[2.0, 2.0], [3.0, 2.0]]
+    assert noisy_a["pedestrians"]["positions"] == noisy_b["pedestrians"]["positions"]
+    assert stats_a["pedestrian_position_noise_applied"] == 2
+    assert stats_a == stats_b
+    assert stats_a["steps_with_noise"] == 1
+
+
+def test_observation_noise_delay_uses_previous_pedestrian_snapshot() -> None:
+    """Observation delay lags pedestrian detections while leaving robot pose current."""
+
+    spec = normalize_observation_noise_spec(
+        {
+            "profile": "one_step_delay",
+            "observation_delay_steps": 1,
+        }
+    )
+    state = make_observation_noise_state(spec)
+    rng = make_observation_noise_rng(spec, seed=1, scenario_id="s1")
+    first = _sample_obs()
+    second = _sample_obs()
+    second["robot"]["position"] = [10.0, 20.0]
+    second["pedestrians"]["positions"] = [[8.0, 8.0]]
+    second["pedestrians"]["velocities"] = [[0.0, 0.0]]
+    second["pedestrians"]["radius"] = [0.35]
+    second["pedestrians"]["count"] = 1
+
+    first_noisy, first_stats = apply_observation_noise(first, spec, rng, state)
+    second_noisy, second_stats = apply_observation_noise(second, spec, rng, state)
+
+    assert first_noisy["pedestrians"]["positions"] == [[2.0, 2.0], [3.0, 2.0]]
+    assert first_stats["observation_delay_applied"] == 0
+    assert second_noisy["robot"]["position"] == [10.0, 20.0]
+    assert second_noisy["pedestrians"]["positions"] == [[2.0, 2.0], [3.0, 2.0]]
+    assert second_stats["observation_delay_applied"] == 1
+    assert second_stats["steps_with_noise"] == 1
+
+
+def test_observation_noise_delay_requires_persistent_state() -> None:
+    """Enabling observation delay without persistent state fails closed."""
+
+    spec = normalize_observation_noise_spec(
+        {
+            "profile": "one_step_delay",
+            "observation_delay_steps": 1,
+        }
+    )
+    rng = make_observation_noise_rng(spec, seed=1, scenario_id="s1")
+    with pytest.raises(ValueError, match="persistent ObservationNoiseState"):
+        apply_observation_noise(_sample_obs(), spec, rng)
 
 
 def test_observation_noise_applies_map_runner_top_level_pose_keys() -> None:

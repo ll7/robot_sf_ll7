@@ -1,0 +1,47 @@
+schema_version: perception-degradation-profiles.v1
+issue: 4455
+claim_boundary: >
+  Diagnostic, non-calibrated planner-input perception stressors only. Simulator
+  ground truth, collision detection, termination logic, and metric computation
+  remain unchanged.
+ordered_profile_keys:
+  - nominal_oracle
+  - gaussian_track_noise_low
+  - fixed_detection_delay_1
+  - false_negative_pedestrian_drop_10pct
+  - occlusion_range_4m
+profiles:
+  - key: nominal_oracle
+    profile_hash: 0a5609f0b2b1
+    claim_boundary: no-op oracle-grade planner input baseline
+    observation_noise:
+      enabled: false
+      profile: none
+  - key: gaussian_track_noise_low
+    profile_hash: fc9abd0c2c88
+    claim_boundary: non-calibrated Gaussian pedestrian-track noise on planner input
+    observation_noise:
+      profile: gaussian_track_noise_low
+      seed: 445501
+      pedestrian_position_noise_std_m: 0.05
+  - key: fixed_detection_delay_1
+    profile_hash: 55e7ff4d05c0
+    claim_boundary: deterministic one-step pedestrian detection delay on planner input
+    observation_noise:
+      profile: fixed_detection_delay_1
+      seed: 445502
+      observation_delay_steps: 1
+  - key: false_negative_pedestrian_drop_10pct
+    profile_hash: c76cf85c757d
+    claim_boundary: ten percent planner-facing pedestrian track dropout
+    observation_noise:
+      profile: false_negative_pedestrian_drop_10pct
+      seed: 445503
+      pedestrian_false_negative_prob: 0.10
+  - key: occlusion_range_4m
+    profile_hash: 600086b5b447
+    claim_boundary: planner-facing range-limited pedestrian visibility proxy
+    observation_noise:
+      profile: occlusion_range_4m
+      seed: 445504
+      pedestrian_occlusion_max_range_m: 4.0

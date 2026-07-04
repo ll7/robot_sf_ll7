@@ -157,6 +157,56 @@ def test_similarity_report_summarizes_label_and_trajectory_validation(tmp_path: 
     assert trajectory["records_with_trajectory_fields"] == 2
     assert trajectory["selected_with_trajectory_fields"] == 1
     assert trajectory["selected_fields_observed"] == ["min_rollout_clearance_m"]
+    trajectory_metrics = report["validation"]["trajectory_metric_fields"]
+    assert trajectory_metrics["status"] == "available"
+    assert trajectory_metrics["records_with_trajectory_metric_fields"] == 2
+    assert trajectory_metrics["selected_with_trajectory_metric_fields"] == 1
+    assert trajectory_metrics["selected_metric_fields_observed"] == ["metrics.min_separation"]
+
+
+def test_similarity_report_summarizes_trajectory_metric_validation(tmp_path: Path) -> None:
+    """Representative benchmark summaries expose trajectory-derived metric evidence."""
+    episodes = tmp_path / "episodes.jsonl"
+    records = [
+        {
+            "episode_id": "durable-collision",
+            "scenario_id": "classic_head_on_corridor_low",
+            "seed": 202,
+            "termination_reason": "collision",
+            "metrics": {
+                "collisions": 1,
+                "near_misses": 0,
+                "min_distance": 0.2,
+                "min_clearance": -0.1,
+                "socnavbench_path_length": 0.0,
+            },
+            "outcome": {"collision_event": True, "route_complete": False},
+        },
+        {
+            "episode_id": "durable-safe",
+            "scenario_id": "classic_crossing_low",
+            "seed": 203,
+            "termination_reason": "success",
+            "metrics": {"collisions": 0, "near_misses": 0, "min_distance": 2.0},
+            "outcome": {"collision_event": False, "route_complete": True},
+        },
+    ]
+    _write_jsonl(episodes, records)
+
+    report = build_collision_scenario_similarity_report(episodes, nearest_k=1)
+
+    assert report["selection"]["selected_count"] == 1
+    trajectory = report["validation"]["trajectory_fields"]
+    assert trajectory["status"] == "unavailable"
+    trajectory_metrics = report["validation"]["trajectory_metric_fields"]
+    assert trajectory_metrics["status"] == "available"
+    assert trajectory_metrics["records_with_trajectory_metric_fields"] == 2
+    assert trajectory_metrics["selected_with_trajectory_metric_fields"] == 1
+    assert trajectory_metrics["selected_metric_fields_observed"] == [
+        "metrics.min_clearance",
+        "metrics.min_distance",
+        "metrics.socnavbench_path_length",
+    ]
 
 
 def test_collision_scenario_similarity_cli_writes_json_and_markdown(tmp_path: Path) -> None:

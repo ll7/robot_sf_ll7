@@ -19,6 +19,7 @@
 
 - External labels: available (1 selected records with labels; 1 positive).
 - Trajectory fields: available (1 selected records).
+- Trajectory-derived metric fields: available (1 selected records).
 
 ## Limitations
 

@@ -148,6 +148,30 @@
       "selected_fields_observed": [],
       "selected_with_trajectory_fields": 0,
       "status": "unavailable"
+    },
+    "trajectory_metric_fields": {
+      "interpretation": "Trajectory-derived benchmark metric fields are descriptive validation context only and are not a new ranking signal.",
+      "records_with_trajectory_metric_fields": 6,
+      "selected_metric_fields_observed": [
+        "metrics.avg_speed",
+        "metrics.clearing_distance_avg",
+        "metrics.clearing_distance_min",
+        "metrics.curvature_mean",
+        "metrics.energy",
+        "metrics.jerk_mean",
+        "metrics.mean_clearance",
+        "metrics.mean_distance",
+        "metrics.min_clearance",
+        "metrics.min_distance",
+        "metrics.path_efficiency",
+        "metrics.robot_ped_within_5m_frac",
+        "metrics.socnavbench_path_irregularity",
+        "metrics.socnavbench_path_length",
+        "metrics.socnavbench_path_length_ratio",
+        "metrics.time_to_goal_norm"
+      ],
+      "selected_with_trajectory_metric_fields": 2,
+      "status": "available"
     }
   }
 }

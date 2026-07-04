@@ -153,6 +153,8 @@ knowledge, not every transient iteration detail.
   [issue_2276_carla_parity_lane_decision.md](issue_2276_carla_parity_lane_decision.md)
 * Issue #3028 external simulator bridge preflight:
   [issue_3028_external_simulator_bridge_preflight.md](issue_3028_external_simulator_bridge_preflight.md)
+* Issue #4289 ATC public external-data surface terminality:
+  [issue_4289_atc_public_surface_terminality.md](issue_4289_atc_public_surface_terminality.md)
 * Issue #1894 SLURM job finalizer:
   [issue_1894_slurm_job_finalizer.md](issue_1894_slurm_job_finalizer.md)
 * Issue #3075 durable artifact backend decision (W&B):

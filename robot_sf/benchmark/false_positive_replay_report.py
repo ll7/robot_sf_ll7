@@ -265,9 +265,7 @@ def _paired_episode_deltas(
             changed_fields.append("selected_action")
         deltas.append(
             {
-                "planner_key": _first_present(
-                    perturbed, nominal, "planner_key", "planner_identity"
-                ),
+                "planner_key": _planner_identity(perturbed) or _planner_identity(nominal),
                 "scenario_id": _first_present(perturbed, nominal, "scenario_id"),
                 "seed": _first_present(perturbed, nominal, "seed"),
                 "pedestrians_added": _noise_stat(perturbed, "pedestrians_added"),

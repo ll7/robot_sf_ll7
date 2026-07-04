@@ -238,3 +238,19 @@ def test_cli_writes_json_csv_and_markdown(tmp_path: Path) -> None:
     markdown = output_md.read_text(encoding="utf-8")
     assert "Issue #3300 False-Positive Actor-Injection Replay" in markdown
     assert "No full benchmark campaign" in markdown
+
+
+def test_report_uses_algo_as_episode_display_planner_when_key_missing(tmp_path: Path) -> None:
+    """Camera-ready episode rows may carry algo but no planner_key."""
+    nominal = tmp_path / "nominal.jsonl"
+    perturbed = tmp_path / "perturbed.jsonl"
+    clean = _row()
+    noisy = _row(noise=True, pedestrians_added=0)
+    del clean["planner_key"]
+    del noisy["planner_key"]
+    _write_jsonl(nominal, [clean])
+    _write_jsonl(perturbed, [noisy])
+
+    report = build_false_positive_replay_report(nominal_jsonl=nominal, perturbed_jsonl=perturbed)
+
+    assert report["per_episode_deltas"][0]["planner_key"] == "goal"

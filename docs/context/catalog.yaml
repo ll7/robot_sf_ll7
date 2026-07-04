@@ -3151,6 +3151,10 @@ entries:
     status: evidence
     freshness: evidence
     area: context_architecture
+  - path: docs/context/evidence/issue_1496_closure_audit_2026-07-04.md
+    status: evidence
+    freshness: evidence
+    area: training_evidence
   - path: docs/context/evidence/issue_1490_closure_audit_2026-07-04/summary.json
     status: evidence
     freshness: evidence

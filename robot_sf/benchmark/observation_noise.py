@@ -572,11 +572,19 @@ def _apply_observation_delay(
     delay_steps = int(spec.get("observation_delay_steps", 0) or 0)
     if delay_steps <= 0:
         return
+    if state is None:
+        # Fail closed: observation delay needs persistent per-episode state to
+        # carry pedestrian snapshots across steps. A transient state created
+        # here would be discarded every call, silently yielding a no-op delay
+        # (under-reported perception degradation). Callers must thread the
+        # state from ``make_observation_noise_state``.
+        raise ValueError(
+            "observation_delay_steps > 0 requires a persistent ObservationNoiseState; "
+            "pass the state from make_observation_noise_state()"
+        )
     snapshot = _pedestrian_snapshot(obs)
     if snapshot is None:
         return
-    if state is None:
-        state = ObservationNoiseState(delay_steps=delay_steps)
     state.pedestrian_delay_buffer.append(snapshot)
     if len(state.pedestrian_delay_buffer) <= delay_steps:
         return

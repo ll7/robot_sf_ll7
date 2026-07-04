@@ -154,6 +154,20 @@ def test_observation_noise_delay_uses_previous_pedestrian_snapshot() -> None:
     assert second_stats["steps_with_noise"] == 1
 
 
+def test_observation_noise_delay_requires_persistent_state() -> None:
+    """Enabling observation delay without persistent state fails closed."""
+
+    spec = normalize_observation_noise_spec(
+        {
+            "profile": "one_step_delay",
+            "observation_delay_steps": 1,
+        }
+    )
+    rng = make_observation_noise_rng(spec, seed=1, scenario_id="s1")
+    with pytest.raises(ValueError, match="persistent ObservationNoiseState"):
+        apply_observation_noise(_sample_obs(), spec, rng)
+
+
 def test_observation_noise_applies_map_runner_top_level_pose_keys() -> None:
     """Map-runner SOCNAV observations expose top-level robot pose fields."""
     spec = normalize_observation_noise_spec(

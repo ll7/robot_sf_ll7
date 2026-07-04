@@ -19,8 +19,19 @@ from typing import Any
 
 import yaml
 
+from robot_sf.research.scenario_prior_staging_contract import (
+    CONTRACT_STATUS_READY,
+    ScenarioPriorStagingContractError,
+    ScenarioPriorStagingContractReport,
+    check_scenario_prior_staging_contract,
+    load_scenario_prior_staging_contract,
+)
+
 DEFAULT_REGISTRY_PATH = Path("configs/research/scenario_prior_cards_issue_2917.yaml")
 DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_2919_scenario_prior_gap_2026-06-21")
+DEFAULT_DATASET_STAGING_CONTRACT_PATH = Path(
+    "configs/research/scenario_prior_staging_contract_issue_3161.yaml"
+)
 REPORT_NAME = "scenario_prior_gap_report.md"
 SUMMARY_NAME = "summary.json"
 CSV_NAME = "parameter_comparisons.csv"
@@ -653,6 +664,87 @@ def analysis_base_commit(repo_root: Path) -> str:
     return result.stdout.strip()
 
 
+def load_dataset_staging_report(
+    contract_path: Path | None,
+    *,
+    repo_root: Path,
+) -> ScenarioPriorStagingContractReport | None:
+    """Load optional Issue #3161 dataset-backed staging readiness report."""
+
+    if contract_path is None:
+        return None
+    resolved_contract_path = (repo_root / contract_path).resolve()
+    contract = load_scenario_prior_staging_contract(resolved_contract_path)
+    return check_scenario_prior_staging_contract(
+        contract,
+        allowed_distribution_groups=set(PARAMETER_GROUPS),
+        source=resolved_contract_path,
+    )
+
+
+def _dataset_staging_summary(
+    staging_report: ScenarioPriorStagingContractReport | None,
+) -> dict[str, Any] | None:
+    """Return compact JSON-safe dataset-backed comparison readiness summary."""
+
+    if staging_report is None:
+        return None
+    return {
+        "schema_version": staging_report.schema_version,
+        "contract_id": staging_report.contract_id,
+        "issue": staging_report.issue,
+        "evidence_boundary": staging_report.evidence_boundary,
+        "contract_status": staging_report.contract_status,
+        "dataset_backed_comparison_allowed": staging_report.dataset_backed_comparison_allowed,
+        "comparison_ready_datasets": staging_report.comparison_ready_datasets,
+        "blockers": staging_report.blockers,
+        "datasets": [dataset.to_dict() for dataset in staging_report.datasets],
+    }
+
+
+def _dataset_staging_markdown_lines(
+    staging_report: ScenarioPriorStagingContractReport | None,
+) -> list[str]:
+    """Return report lines for Issue #3161 dataset-backed staging readiness."""
+
+    if staging_report is None:
+        return [
+            "- Dataset-backed staging contract was not checked in this run.",
+            "- Dataset-backed comparison remains out of scope for this report.",
+        ]
+    lines = [
+        f"- Contract status: `{staging_report.contract_status}`.",
+        f"- Dataset-backed comparison allowed: `{staging_report.dataset_backed_comparison_allowed}`.",
+        f"- Comparison-ready datasets: `{', '.join(staging_report.comparison_ready_datasets) or 'none'}`.",
+        f"- Evidence boundary: {staging_report.evidence_boundary}.",
+    ]
+    if staging_report.blockers:
+        lines.append("- Blockers:")
+        lines.extend(f"  - {blocker}" for blocker in staging_report.blockers)
+    lines.append("- Dataset statuses:")
+    lines.extend(
+        (
+            f"  - `{dataset.dataset_id}`: declared `{dataset.declared_staging_status}`, "
+            f"live `{dataset.live_staging_status or 'not-probed'}`, "
+            f"ready `{dataset.comparison_ready}`."
+        )
+        for dataset in staging_report.datasets
+    )
+    return lines
+
+
+def _dataset_not_ready_reasons(staging_report: ScenarioPriorStagingContractReport) -> list[str]:
+    """Return actionable reasons dataset-backed comparison is not ready."""
+
+    reasons = list(staging_report.blockers)
+    reasons.extend(
+        f"{dataset.dataset_id}: declared {dataset.declared_staging_status}"
+        for dataset in staging_report.datasets
+        if not dataset.comparison_ready and not dataset.blockers
+    )
+    return reasons
+
+
 def write_summary(
     *,
     rows: list[dict[str, Any]],
@@ -661,6 +753,7 @@ def write_summary(
     output_dir: Path,
     repo_root: Path,
     registry_path: Path,
+    dataset_staging_report: ScenarioPriorStagingContractReport | None = None,
 ) -> dict[str, Any]:
     """Write the machine-readable summary and return its payload."""
 
@@ -672,6 +765,7 @@ def write_summary(
         "evidence_tier": "analysis_only",
         "claim_boundary": CLAIM_BOUNDARY,
         "dataset_comparison_deferral": DATASET_DEFERRAL,
+        "dataset_backed_staging": _dataset_staging_summary(dataset_staging_report),
         "no_planner_ranking": NO_RANKING_NOTE,
         "sample_count": len(samples),
         "skipped_non_machine_readable_sources": skipped_sources,
@@ -700,6 +794,7 @@ def write_markdown_report(
     output_dir: Path,
     repo_root: Path,
     registry_path: Path,
+    dataset_staging_report: ScenarioPriorStagingContractReport | None = None,
 ) -> None:
     """Write the human-readable gap report."""
 
@@ -711,6 +806,10 @@ def write_markdown_report(
         f"- Registry input: `{registry_path.relative_to(repo_root).as_posix()}`.",
         f"- {DATASET_DEFERRAL}",
         f"- {NO_RANKING_NOTE}",
+        "",
+        "## Dataset-Backed Readiness",
+        "",
+        *_dataset_staging_markdown_lines(dataset_staging_report),
         "",
         "## Method",
         "",
@@ -776,27 +875,40 @@ def run_comparison(
     registry_path: Path = DEFAULT_REGISTRY_PATH,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     repo_root: Path | None = None,
+    dataset_staging_contract: Path | None = DEFAULT_DATASET_STAGING_CONTRACT_PATH,
+    require_dataset_backed_ready: bool = False,
 ) -> dict[str, Any]:
-    """Run the Issue #2919 comparison and write evidence files."""
+    """Run Issue #2919 comparison write evidence files."""
 
     repo_root = repo_root or repository_root()
     registry_path = (repo_root / registry_path).resolve()
     output_dir = (repo_root / output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-
+    dataset_staging_report = load_dataset_staging_report(
+        dataset_staging_contract,
+        repo_root=repo_root,
+    )
+    if (
+        require_dataset_backed_ready
+        and dataset_staging_report is not None
+        and dataset_staging_report.contract_status != CONTRACT_STATUS_READY
+    ):
+        raise ScenarioPriorComparisonError(
+            "dataset-backed comparison requested but Issue #3161 staging contract is "
+            f"{dataset_staging_report.contract_status!r}; "
+            f"blockers: {'; '.join(_dataset_not_ready_reasons(dataset_staging_report)) or 'none'}"
+        )
     samples, skipped_sources = collect_samples(registry_path, repo_root)
     rows = build_comparison_rows(samples)
     if not rows:
-        raise ScenarioPriorComparisonError(
-            "no comparable authored and trace-derived parameters found"
-        )
-
+        raise ScenarioPriorComparisonError("no comparable authored trace-derived parameters found")
     write_csv(rows, output_dir / CSV_NAME)
     write_markdown_report(
         rows=rows,
         output_dir=output_dir,
         repo_root=repo_root,
         registry_path=registry_path,
+        dataset_staging_report=dataset_staging_report,
     )
     return write_summary(
         rows=rows,
@@ -805,6 +917,7 @@ def run_comparison(
         output_dir=output_dir,
         repo_root=repo_root,
         registry_path=registry_path,
+        dataset_staging_report=dataset_staging_report,
     )
 
 
@@ -829,6 +942,25 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_OUTPUT_DIR,
         help=f"Evidence output directory (default: {DEFAULT_OUTPUT_DIR})",
     )
+    parser.add_argument(
+        "--dataset-staging-contract",
+        type=Path,
+        default=DEFAULT_DATASET_STAGING_CONTRACT_PATH,
+        help=(
+            "Issue #3161 dataset-backed staging contract path "
+            f"(default: {DEFAULT_DATASET_STAGING_CONTRACT_PATH})"
+        ),
+    )
+    parser.add_argument(
+        "--skip-dataset-staging-contract",
+        action="store_true",
+        help="Do not load the Issue #3161 dataset-backed staging contract.",
+    )
+    parser.add_argument(
+        "--require-dataset-backed-ready",
+        action="store_true",
+        help="Fail unless the Issue #3161 staging contract permits dataset-backed comparison.",
+    )
     return parser.parse_args()
 
 
@@ -836,7 +968,18 @@ def main() -> None:
     """CLI entry point."""
 
     args = parse_args()
-    summary = run_comparison(registry_path=args.registry, output_dir=args.output_dir)
+    dataset_staging_contract = (
+        None if args.skip_dataset_staging_contract else args.dataset_staging_contract
+    )
+    try:
+        summary = run_comparison(
+            registry_path=args.registry,
+            output_dir=args.output_dir,
+            dataset_staging_contract=dataset_staging_contract,
+            require_dataset_backed_ready=args.require_dataset_backed_ready,
+        )
+    except (ScenarioPriorComparisonError, ScenarioPriorStagingContractError) as exc:
+        raise SystemExit(f"error: {exc}") from exc
     print(f"wrote {summary['files']['markdown_report']}")
     print(f"wrote {summary['files']['comparison_csv']}")
     print(f"wrote {summary['files']['summary_json']}")

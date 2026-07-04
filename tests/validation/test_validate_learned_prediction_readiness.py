@@ -235,6 +235,30 @@ def test_blocked_when_prerequisite_paths_not_provided(tmp_path: Path) -> None:
         "closed-loop gate path not provided",
     ):
         assert key in report["errors"]
+    assert [blocker["name"] for blocker in report["blocking_prerequisites"]] == [
+        "trace_registry",
+        "split_manifest",
+        "baseline_evidence",
+        "calibration_report",
+        "transferability_split",
+        "closed_loop_gate",
+    ]
+
+
+def test_ready_report_has_no_blocking_prerequisites(tmp_path: Path) -> None:
+    """Ready report exposes no remaining training blockers."""
+    bundle = _write_validation_bundle(tmp_path)
+    report = validate_readiness(
+        doc_path=bundle["doc"],
+        registry_path=bundle["registry"],
+        split_manifest_path=bundle["split"],
+        baseline_path=bundle["baseline"],
+        calibration_report_path=bundle["calibration"],
+        transferability_report_path=bundle["transferability"],
+        closed_loop_gate_path=bundle["closed_loop"],
+    )
+    assert report["status"] == "ready"
+    assert report["blocking_prerequisites"] == []
 
 
 def test_blocked_when_trace_registry_has_no_sources(tmp_path: Path) -> None:

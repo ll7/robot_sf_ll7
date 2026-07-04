@@ -257,6 +257,9 @@ def test_run_row_handles_child_command_without_json_stdout(monkeypatch) -> None:
 _ISSUE_2742_MANIFEST = Path(
     "configs/policy_search/topology_reselection_cross_slice_issue_2742.yaml"
 )
+_ISSUE_3463_MANIFEST = Path(
+    "configs/policy_search/topology_reselection_cross_slice_issue_3463.yaml"
+)
 
 
 def test_issue_2742_manifest_loads_with_decision_rule() -> None:
@@ -367,6 +370,78 @@ def test_issue_2742_classifier_revises_when_hard_not_all_clear() -> None:
 
     assert classification == "revise"
     assert "did not clear" in rationale
+
+
+def test_issue_3463_manifest_uses_monotone_progress_gated_candidate() -> None:
+    """The issue-3463 packet should route the progress-gated arm through the monotone candidate."""
+
+    manifest = runner.load_manifest(_ISSUE_3463_MANIFEST)
+
+    assert manifest["issue"] == 3463
+    assert manifest["stage"] == "corrective_monotone_sensitivity"
+    assert (
+        manifest["candidates"]["progress_gated"]
+        == "topology_guided_hybrid_rule_v0_progress_gated_reselection_monotone"
+    )
+    roles = [row["role"] for row in manifest["slices"]]
+    assert roles.count("hard") >= 3
+    assert roles.count("negative_control") >= 1
+
+
+def test_issue_3463_threshold_materialization_preserves_monotone_accounting(
+    tmp_path: Path,
+) -> None:
+    """Threshold-specific issue-3463 rows should keep the monotone progress-accounting toggle."""
+
+    registry_path, candidate_name = runner.materialize_threshold_candidate_registry(
+        source_registry=Path("docs/context/policy_search/candidate_registry.yaml"),
+        base_candidate="topology_guided_hybrid_rule_v0_progress_gated_reselection_monotone",
+        threshold_m=0.2,
+        work_dir=tmp_path,
+        issue_number=3463,
+    )
+
+    registry = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    generated_entry = registry["candidates"][candidate_name]
+    generated_config = yaml.safe_load(
+        Path(generated_entry["candidate_config_path"]).read_text(encoding="utf-8")
+    )
+
+    assert candidate_name.endswith("0p2")
+    assert generated_config["params"]["primary_route_progress_gate_threshold_m"] == 0.2
+    assert generated_config["params"]["primary_route_progress_gate_use_monotone_accounting"] is True
+
+
+def test_issue_3463_dry_run_reports_issue_stage_and_monotone_candidate(tmp_path: Path) -> None:
+    """Dry-run should emit the issue-3463 stage label and monotone progress-gated candidate."""
+
+    exit_code = runner.main(
+        [
+            "--manifest",
+            str(_ISSUE_3463_MANIFEST),
+            "--dry-run",
+            "--max-runs",
+            "3",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+
+    report = json.loads((tmp_path / "topology_reselection_cross_slice_report.json").read_text())
+
+    assert exit_code == 0
+    assert report["issue"] == 3463
+    assert report["classification"] == "dry_run"
+    monotone_rows = [
+        entry
+        for entry in report["commands"]
+        if "topology_guided_hybrid_rule_v0_progress_gated_reselection_monotone_threshold_0p05"
+        in entry["command"]
+    ]
+    assert monotone_rows
+    for entry in report["commands"]:
+        stage_idx = entry["command"].index("--stage") + 1
+        assert entry["command"][stage_idx] == "issue_3463_slice"
 
 
 def test_issue_2742_classifier_promotes_only_when_all_hard_clear() -> None:

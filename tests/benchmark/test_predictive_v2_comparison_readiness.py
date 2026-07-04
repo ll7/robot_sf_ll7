@@ -131,10 +131,20 @@ def test_complete_metadata_is_blocked_by_default(tmp_path: Path) -> None:
 
 
 def test_gate_clears_only_with_continue_and_hypothesis(tmp_path: Path) -> None:
-    """The blocked gate clears only with a 'continue' coupling gate and maintainer ack."""
+    """The blocked gate clears only with a 'continue' coupling gate, provenance, and ack."""
     contract_path = _write_contract(tmp_path, _minimal_contract(tmp_path))
     gate = tmp_path / "gate.json"
-    gate.write_text(json.dumps({"recommendation": {"decision": "continue"}}), encoding="utf-8")
+    gate.write_text(
+        json.dumps(
+            {
+                "recommendation": {
+                    "decision": "continue",
+                    "evidence_path": "docs/context/evidence/issue_1490/gate.json",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
 
     ready = _run(contract_path, tmp_path, coupling_gate_path=gate, revised_hypothesis_recorded=True)
     assert ready["status"] == "ready"
@@ -148,6 +158,83 @@ def test_gate_clears_only_with_continue_and_hypothesis(tmp_path: Path) -> None:
     # Missing maintainer acknowledgement keeps it blocked.
     still_blocked = _run(contract_path, tmp_path, coupling_gate_path=gate)
     assert still_blocked["status"] == "blocked"
+
+
+def test_continue_gate_without_provenance_stays_blocked(tmp_path: Path) -> None:
+    """A go-like gate must name durable evidence before compute can be unblocked."""
+    contract_path = _write_contract(tmp_path, _minimal_contract(tmp_path))
+    gate = tmp_path / "gate.json"
+    gate.write_text(json.dumps({"recommendation": {"decision": "continue"}}), encoding="utf-8")
+
+    report = _run(
+        contract_path,
+        tmp_path,
+        coupling_gate_path=gate,
+        revised_hypothesis_recorded=True,
+    )
+
+    assert report["status"] == "blocked"
+    messages = report["stages"]["blocked_slurm_gate"]["messages"]
+    assert any("evidence/provenance pointer" in message for message in messages)
+
+
+def test_continue_gate_accepts_nested_root_provenance(tmp_path: Path) -> None:
+    """Root-level nested provenance pointers are valid for future gate artifacts."""
+    contract_path = _write_contract(tmp_path, _minimal_contract(tmp_path))
+    gate = tmp_path / "gate.json"
+    gate.write_text(
+        json.dumps(
+            {
+                "recommendation": "continue",
+                "provenance": {
+                    "artifacts": ["docs/context/evidence/issue_1490/gate.json"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = _run(
+        contract_path,
+        tmp_path,
+        coupling_gate_path=gate,
+        revised_hypothesis_recorded=True,
+    )
+
+    assert report["status"] == "ready"
+
+
+def test_malformed_gate_artifacts_stay_blocked(tmp_path: Path) -> None:
+    """Malformed/non-object gate artifacts fail closed with actionable messages."""
+    contract_path = _write_contract(tmp_path, _minimal_contract(tmp_path))
+
+    malformed = tmp_path / "malformed.json"
+    malformed.write_text("{", encoding="utf-8")
+    malformed_report = _run(
+        contract_path,
+        tmp_path,
+        coupling_gate_path=malformed,
+        revised_hypothesis_recorded=True,
+    )
+    assert malformed_report["status"] == "blocked"
+    assert any(
+        "malformed JSON" in message
+        for message in malformed_report["stages"]["blocked_slurm_gate"]["messages"]
+    )
+
+    non_object = tmp_path / "non_object.json"
+    non_object.write_text(json.dumps(["continue"]), encoding="utf-8")
+    non_object_report = _run(
+        contract_path,
+        tmp_path,
+        coupling_gate_path=non_object,
+        revised_hypothesis_recorded=True,
+    )
+    assert non_object_report["status"] == "blocked"
+    assert any(
+        "JSON object" in message
+        for message in non_object_report["stages"]["blocked_slurm_gate"]["messages"]
+    )
 
 
 def test_failing_coupling_gate_stays_blocked(tmp_path: Path) -> None:
@@ -270,7 +357,12 @@ def test_cli_markdown_gate_clears(tmp_path: Path, capsys) -> None:
     contract = _minimal_contract(tmp_path)
     contract_path = _write_contract(tmp_path, contract)
     gate = tmp_path / "gate.md"
-    gate.write_text("# Coupling gate\n\n- recommendation: continue\n", encoding="utf-8")
+    gate.write_text(
+        "# Coupling gate\n\n"
+        "- recommendation: continue\n"
+        "- evidence_path: docs/context/evidence/issue_1490/gate.md\n",
+        encoding="utf-8",
+    )
 
     exit_code = cli_main(
         [

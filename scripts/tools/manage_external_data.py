@@ -319,7 +319,7 @@ ASSETS: tuple[AssetSpec, ...] = (
                 group="license_or_readme",
             ),
         ),
-        related_issues=(2918, 3161, 3971, 3813, 3950),
+        related_issues=(4289, 4224, 2918, 3161, 3971, 3813, 3950),
         license_url="https://dil.atr.jp/crest2010_HRI/ATC_dataset/",
     ),
     AssetSpec(

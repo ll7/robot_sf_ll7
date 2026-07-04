@@ -12,10 +12,15 @@ pytest.importorskip("torch")
 
 from robot_sf.benchmark.map_runner import _build_policy
 from robot_sf.training.diffusion_policy import (
+    DIAGNOSTIC_PACKET_SCHEMA_VERSION,
     SMOKE_MANIFEST_SCHEMA_VERSION,
     DiffusionPolicyTrainingSmokeConfig,
+    build_diagnostic_packet,
     load_smoke_config,
     run_training_smoke,
+)
+from robot_sf.training.diffusion_policy import (
+    main as diffusion_training_main,
 )
 
 
@@ -131,6 +136,164 @@ def test_training_script_entrypoint_writes_manifest_path(tmp_path) -> None:
     manifest_path = output_dir / "cli_smoke.manifest.json"
     assert payload == {"manifest_path": str(manifest_path)}
     assert manifest_path.exists()
+
+
+def test_training_script_can_write_diagnostic_packet(tmp_path) -> None:
+    """Canonical command writes smoke-only integration packet issue #4010."""
+    config_path = tmp_path / "smoke.yaml"
+    output_dir = tmp_path / "artifacts"
+    config_path.write_text(
+        "diffusion_policy_training_smoke:\n"
+        "  schema_version: diffusion_policy_training_smoke.v1\n"
+        "  training_steps: 1\n"
+        "  batch_size: 2\n"
+        "  max_pedestrians: 2\n"
+        "  artifact_prefix: cli_packet\n",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/training/train_diffusion_policy.py",
+            "--config",
+            str(config_path),
+            "--output-dir",
+            str(output_dir),
+            "--write-diagnostic-packet",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(completed.stdout)
+    packet_path = output_dir / "cli_packet.manifest.diagnostic_packet.json"
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    assert payload == {
+        "diagnostic_packet_path": str(packet_path),
+        "manifest_path": str(output_dir / "cli_packet.manifest.json"),
+    }
+    assert packet["schema_version"] == DIAGNOSTIC_PACKET_SCHEMA_VERSION
+    assert packet["evidence_tier"] == "diagnostic-only"
+    assert packet["acceptance_status"]["benchmark_campaign_run"] is False
+    assert packet["acceptance_status"]["slurm_or_gpu_submission"] is False
+    assert packet["acceptance_status"]["paper_or_dissertation_claim"] is False
+
+
+def test_diagnostic_packet_records_checkpoint_backed_integration(tmp_path) -> None:
+    """Packet records loaded checkpoint/normalizer and residual blockers together."""
+    config = DiffusionPolicyTrainingSmokeConfig(
+        training_steps=2,
+        batch_size=3,
+        max_pedestrians=2,
+        artifact_prefix="diagnostic_packet",
+    )
+    artifacts = run_training_smoke(config, output_dir=tmp_path)
+    _policy, meta = _build_policy(
+        "diffusion_policy",
+        {
+            "checkpoint_path": str(artifacts.checkpoint_path),
+            "normalizer_path": str(artifacts.normalizer_path),
+            "deterministic": True,
+            "seed": 4010,
+            "max_pedestrians": config.max_pedestrians,
+            "max_linear_speed": config.max_linear_speed,
+            "max_angular_speed": config.max_angular_speed,
+            "num_action_samples": config.num_action_samples,
+            "denoising_steps": config.denoising_steps,
+        },
+        robot_kinematics="differential_drive",
+    )
+
+    packet = build_diagnostic_packet(artifacts.manifest, map_runner_metadata=meta)
+
+    assert packet["schema_version"] == DIAGNOSTIC_PACKET_SCHEMA_VERSION
+    assert (
+        packet["new_capability"]
+        == "checkpoint-backed diffusion-policy diagnostic integration packet"
+    )
+    assert packet["acceptance_status"]["checkpoint_backed_map_runner_load"] is True
+    assert packet["runtime_metadata"]["checkpoint_status"] == "checkpoint_loaded"
+    assert packet["runtime_metadata"]["normalizer_status"] == "loaded"
+    assert {item["id"] for item in packet["remaining_blockers"]} == {
+        "representative_rollout",
+        "multimodal_action_probe",
+        "paper_grade_benchmark_claim",
+    }
+
+
+def test_diagnostic_packet_fails_closed_for_wrong_manifest_schema() -> None:
+    """Packet builder rejects unrelated manifests instead of emitting weak evidence."""
+    with pytest.raises(ValueError, match=SMOKE_MANIFEST_SCHEMA_VERSION):
+        build_diagnostic_packet({"schema_version": "other"})
+
+
+def test_diagnostic_packet_fails_closed_for_missing_artifacts_mapping() -> None:
+    """Packet builder rejects manifests without artifact provenance."""
+    with pytest.raises(ValueError, match="artifacts mapping"):
+        build_diagnostic_packet({"schema_version": SMOKE_MANIFEST_SCHEMA_VERSION})
+
+
+def test_diagnostic_packet_fails_closed_for_missing_required_artifact_path() -> None:
+    """Packet builder requires both checkpoint and normalizer paths."""
+    with pytest.raises(ValueError, match="normalizer_path"):
+        build_diagnostic_packet(
+            {
+                "schema_version": SMOKE_MANIFEST_SCHEMA_VERSION,
+                "artifacts": {"checkpoint_path": "checkpoint.pt", "normalizer_path": ""},
+            }
+        )
+
+
+def test_diagnostic_packet_without_runtime_metadata_marks_load_blocked(tmp_path) -> None:
+    """Packet without map-runner metadata keeps checkpoint-backed load blocked."""
+    config = DiffusionPolicyTrainingSmokeConfig(
+        training_steps=1,
+        batch_size=2,
+        max_pedestrians=2,
+        artifact_prefix="metadata_absent",
+    )
+    artifacts = run_training_smoke(config, output_dir=tmp_path)
+
+    packet = build_diagnostic_packet(artifacts.manifest)
+
+    assert packet["acceptance_status"]["checkpoint_backed_map_runner_load"] is False
+    assert packet["remaining_blockers"][0]["id"] == "checkpoint_backed_map_runner_load"
+    assert packet["runtime_metadata"]["checkpoint_status"] == "unknown"
+    assert packet["runtime_metadata"]["normalizer_status"] == "unknown"
+
+
+def test_training_main_returns_zero_and_writes_packet(tmp_path, capsys) -> None:
+    """Direct main path covers CLI packet branch without spawning a subprocess."""
+    config_path = tmp_path / "smoke.yaml"
+    output_dir = tmp_path / "artifacts"
+    config_path.write_text(
+        "diffusion_policy_training_smoke:\n"
+        "  schema_version: diffusion_policy_training_smoke.v1\n"
+        "  training_steps: 1\n"
+        "  batch_size: 2\n"
+        "  max_pedestrians: 2\n"
+        "  artifact_prefix: direct_main\n",
+        encoding="utf-8",
+    )
+
+    exit_code = diffusion_training_main(
+        [
+            "--config",
+            str(config_path),
+            "--output-dir",
+            str(output_dir),
+            "--write-diagnostic-packet",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["manifest_path"] == str(output_dir / "direct_main.manifest.json")
+    assert payload["diagnostic_packet_path"] == str(
+        output_dir / "direct_main.manifest.diagnostic_packet.json"
+    )
 
 
 def test_checkpoint_status_uses_loaded_artifacts_even_when_smoke_flag_true(tmp_path) -> None:

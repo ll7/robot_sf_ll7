@@ -266,6 +266,8 @@ Full details live in
 * `time_to_goal_ideal_ratio`: success-only ratio of achieved time to ideal time
   (`shortest_path_len / robot_max_speed`).
 * `outcome.collision_event`: canonical per-episode collision event flag for new episode outputs.
+* `event_ledger.collision_events`: typed exact collision-event records (`EpisodeEventLedger.v2`)
+  carrying partner type/id, collision time, relative contact speed, and source provenance.
 * `metrics.collisions`: collision count metric based on distance thresholds. For schema v1 episode
   outputs it must agree with `outcome.collision_event`: positive when the canonical event is true
   and zero when the canonical event is false.
@@ -313,6 +315,9 @@ Full details live in
 * `time_to_goal_norm` includes failures via clamp-to-`1.0`; for success-only reporting, use
   `time_to_goal_norm_success_only` together with the numeric validity flag
   `time_to_goal_success_only_valid == 1.0`.
+* The scalar `collision` / `outcome.collision_event` flag is a termination indicator, not a typed
+  safety interpretation. Safety claims should cite `event_ledger.collision_events` (for example, do
+  not reinterpret a non-collision doorway trace with ~1.37 m clearance as collision evidence).
 * Experimental `ped_impact_*` metrics are exploratory and should be reported
   with the associated validity/sample counters from `metrics.pedestrian_impact.sample_counts`.
   Deltas can be undefined when a pedestrian has only near or only far samples.

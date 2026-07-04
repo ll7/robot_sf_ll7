@@ -157,7 +157,7 @@ def validate_runnable_config_pair(
             ]
         ),
         "accepted_unavailable_planner_keys": [
-            planner["key"]
+            planner.get("key")
             for planner in planners
             if isinstance(planner, dict) and planner.get("availability_gate") == "dependency_gated"
         ],

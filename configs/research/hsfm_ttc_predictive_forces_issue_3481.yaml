@@ -19,6 +19,23 @@ ttc_predictive_force:
   max_force: 5.0
   include_ped_ped: true
   include_robot_proxy: false
+selector_variants:
+  hsfm_ttc_predictive_v1:
+    pedestrian_model: hsfm_ttc_predictive_v1
+    ttc_predictive_force:
+      enabled: true
+      tau0_s: 1.0
+      horizon_s: 3.0
+      force_scale: 1.0
+      max_force: 5.0
+      include_ped_ped: true
+      include_robot_proxy: false
+  hsfm_anisotropic_fov_v1:
+    pedestrian_model: hsfm_anisotropic_fov_v1
+    anisotropic_fov:
+      enabled: true
+      cone_half_angle_rad: 1.5707963267948966
+      rear_weight: 0.1
 validation_scope:
   focused_tests:
     - tests/sim/test_hsfm_total_force_model.py

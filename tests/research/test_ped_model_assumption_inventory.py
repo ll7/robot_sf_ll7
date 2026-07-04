@@ -235,13 +235,18 @@ def test_real_checkout_inventory_passes_and_lists_pending_blockers():
 
     This keeps the declared required surfaces honest against the current tree (if a named
     force-core or ped-NPC surface is renamed, this fails) while documenting that the force-law
-    upgrade itself has not landed.
+    family still lacks stronger proof and external calibration.
     """
     report = build_inventory_report(root=repo_root())
     assert report.ok, [b.to_dict() for b in report.surface_blockers]
-    # The HSFM/TTC/FoV terms and fixtures are not built yet on the inventory branch.
     pending_keys = {p.spec.key for p in report.pending_prerequisites}
-    assert {"hsfm_heading_state", "fov_attenuation", "ttc_predictive_term"} <= pending_keys
+    assert "hsfm_heading_state" in pending_keys
+    assert "fov_attenuation" not in pending_keys
+    assert "ttc_predictive_term" not in pending_keys
+    assert "narrow_passage_fixture" in pending_keys
+    assert "bottleneck_fixture" in pending_keys
+    assert "versioned_parameters" not in pending_keys
+    assert "design_note" not in pending_keys
     # The calibration-data prerequisite is an external standing blocker.
     external = {p.spec.key for p in report.prerequisites if p.status is PrerequisiteStatus.EXTERNAL}
     assert "calibration_data" in external

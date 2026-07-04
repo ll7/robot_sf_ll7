@@ -13,7 +13,7 @@ blockers.
 ## Evidence status
 
 - `schema`: `HorizonTimestepDenominatorHealth.v1`
-- `claim_boundary`: `analysis_only_not_navigation_evidence`
+- `claim_boundary`: `analysis_only_not_navigation_evidence: this report measures denominator coverage of the horizon x timestep ablation matrix. It does not change forecast defaults, prove navigation value, closed-loop benefit, safety improvement, or benchmark-strength predictor quality.`
 - `forecast_defaults_unchanged`: `true`
 - `reason`: the report only diagnoses why ablation cells are unevaluable on the
   repaired durable fixture set. It does not change forecast defaults, simulator

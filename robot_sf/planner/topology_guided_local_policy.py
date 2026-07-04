@@ -18,6 +18,7 @@ from robot_sf.planner.hybrid_rule_local_planner import (
 )
 
 _EPS = 1e-9
+_DEFAULT_TOPOLOGY_ARBITRATION_WEIGHT = 0.35
 _TOPOLOGY_KEYS = {
     "diagnostic_only",
     "claim_boundary",
@@ -77,7 +78,7 @@ class TopologyGuidedLocalPolicyConfig:
     enabled: bool = True
     candidate_required: bool = False
     fallback_on_no_candidate: bool = True
-    arbitration_weight: float = 1.0
+    arbitration_weight: float = _DEFAULT_TOPOLOGY_ARBITRATION_WEIGHT
     min_route_progress_delta_m: float = 0.05
     stall_window_steps: int = 20
     min_hypotheses: int = 2
@@ -699,7 +700,9 @@ def build_topology_guided_local_policy_config(
         enabled=bool(raw.get("enabled", True)),
         candidate_required=bool(raw.get("candidate_required", False)),
         fallback_on_no_candidate=bool(raw.get("fallback_on_no_candidate", True)),
-        arbitration_weight=_bounded_unit_float_field(raw, "arbitration_weight", 1.0),
+        arbitration_weight=_bounded_unit_float_field(
+            raw, "arbitration_weight", _DEFAULT_TOPOLOGY_ARBITRATION_WEIGHT
+        ),
         min_route_progress_delta_m=_non_negative_float_field(
             raw, "min_route_progress_delta_m", 0.05
         ),
@@ -772,6 +775,7 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
         self._topology_status_counts: Counter[str] = Counter()
         self._selected_hypothesis_counts: Counter[str] = Counter()
         self._last_topology_decision: dict[str, Any] | None = None
+        self._last_topology_command_influence: dict[str, Any] | None = None
         self._recent_primary_selections: deque[tuple[str, float | None]] = deque(
             maxlen=max(int(self.topology_config.primary_route_reuse_penalty_cooldown_steps), 1)
         )
@@ -784,6 +788,7 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
         self._topology_status_counts = Counter()
         self._selected_hypothesis_counts = Counter()
         self._last_topology_decision = None
+        self._last_topology_command_influence = None
         self._recent_primary_selections = deque(
             maxlen=max(int(self.topology_config.primary_route_reuse_penalty_cooldown_steps), 1)
         )
@@ -1207,6 +1212,7 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
         Returns:
             list[HybridRuleCandidate]: De-duplicated local command candidates.
         """
+        self._last_topology_command_influence = None
         candidates = super()._generate_candidates(
             state,
             speed_cap,
@@ -1223,15 +1229,51 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
         if topology_candidate is not None:
             if candidates:
                 baseline = candidates[0]
+                command_limits = {
+                    "max_linear": float(speed_cap),
+                    "max_angular": float(self.config.max_angular_speed),
+                }
+                arbitration_weight = float(self.topology_config.arbitration_weight)
+                raw_blended_linear = (1.0 - arbitration_weight) * float(
+                    baseline.linear
+                ) + arbitration_weight * float(topology_candidate.linear)
+                raw_blended_angular = (1.0 - arbitration_weight) * float(
+                    baseline.angular
+                ) + arbitration_weight * float(topology_candidate.angular)
                 blended_linear, blended_angular = blend_topology_command(
                     (baseline.linear, baseline.angular),
                     (topology_candidate.linear, topology_candidate.angular),
-                    weight=float(self.topology_config.arbitration_weight),
-                    command_limits={
-                        "max_linear": float(speed_cap),
-                        "max_angular": float(self.config.max_angular_speed),
-                    },
+                    weight=arbitration_weight,
+                    command_limits=command_limits,
                 )
+                selected_hypothesis_id = None
+                if isinstance(route_corridor, dict):
+                    hypothesis = route_corridor.get("topology_hypothesis")
+                    if isinstance(hypothesis, dict):
+                        selected_hypothesis_id = hypothesis.get("hypothesis_id")
+                self._last_topology_command_influence = {
+                    "schema_version": "topology-command-influence.v1",
+                    "source": "topology_hypothesis",
+                    "arbitration_weight": arbitration_weight,
+                    "selected_hypothesis_id": selected_hypothesis_id,
+                    "baseline_command": [float(baseline.linear), float(baseline.angular)],
+                    "topology_command": [
+                        float(topology_candidate.linear),
+                        float(topology_candidate.angular),
+                    ],
+                    "raw_blended_command": [
+                        float(raw_blended_linear),
+                        float(raw_blended_angular),
+                    ],
+                    "projected_command": [float(blended_linear), float(blended_angular)],
+                    "command_limits": command_limits,
+                    "projection_applied": not (
+                        np.isclose(raw_blended_linear, blended_linear)
+                        and np.isclose(raw_blended_angular, blended_angular)
+                    ),
+                    "linear_delta_from_baseline": float(blended_linear - baseline.linear),
+                    "angular_delta_from_baseline": float(blended_angular - baseline.angular),
+                }
                 topology_candidate = HybridRuleCandidate(
                     blended_linear,
                     blended_angular,
@@ -1330,21 +1372,30 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
                 self._last_decision["topology_lane_status"] = "fallback_only"
                 self._last_decision["topology_fallback_status"] = status
                 self._last_decision["topology_fallback_reason"] = topology.get("reason")
-                self._last_decision["topology_guided_config"] = {
-                    "schema_version": self.topology_config.schema_version,
-                    "diagnostic_only": bool(self.topology_config.diagnostic_only),
-                    "claim_boundary": self.topology_config.claim_boundary,
-                    "candidate_required": bool(self.topology_config.candidate_required),
-                    "fallback_on_no_candidate": bool(self.topology_config.fallback_on_no_candidate),
-                }
+            self._last_decision["topology_guided_config"] = {
+                "schema_version": self.topology_config.schema_version,
+                "diagnostic_only": bool(self.topology_config.diagnostic_only),
+                "claim_boundary": self.topology_config.claim_boundary,
+                "candidate_required": bool(self.topology_config.candidate_required),
+                "fallback_on_no_candidate": bool(self.topology_config.fallback_on_no_candidate),
+                "arbitration_weight": float(self.topology_config.arbitration_weight),
+                "min_route_progress_delta_m": float(
+                    self.topology_config.min_route_progress_delta_m
+                ),
+                "stall_window_steps": int(self.topology_config.stall_window_steps),
+            }
             if self._last_decision.get("selected_source") == "topology_hypothesis":
-                self._last_decision["topology_command_influence"] = {
-                    "source": "topology_hypothesis",
-                    "reason": "selected_hypothesis_route_command_won_safety_scoring",
-                    "selected_hypothesis_id": topology.get("selected_hypothesis_id"),
-                    "selected_score": self._last_decision.get("selected_score"),
-                    "selected_terms": self._last_decision.get("selected_terms", {}),
-                }
+                influence = deepcopy(self._last_topology_command_influence or {})
+                influence.update(
+                    {
+                        "source": "topology_hypothesis",
+                        "reason": "selected_hypothesis_route_command_won_safety_scoring",
+                        "selected_hypothesis_id": topology.get("selected_hypothesis_id"),
+                        "selected_score": self._last_decision.get("selected_score"),
+                        "selected_terms": self._last_decision.get("selected_terms", {}),
+                    }
+                )
+                self._last_decision["topology_command_influence"] = influence
         return command
 
     def diagnostics(self) -> dict[str, Any]:

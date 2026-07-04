@@ -5,6 +5,7 @@ params:
   allow_testing_algorithms: true
   diagnostic_only: true
   claim_boundary: diagnostic_only
+  arbitration_weight: 0.35
   min_hypotheses: 2
   max_hypotheses: 2
   block_radius_cells: 3

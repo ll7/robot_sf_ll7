@@ -17,7 +17,7 @@ circular import back onto the facade.
 from __future__ import annotations
 
 import time
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -96,7 +96,42 @@ CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
 DEFAULT_EPISODE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
 
 
-def run_campaign(  # noqa: C901, PLR0912, PLR0913, PLR0915
+@dataclass(frozen=True)
+class _CampaignRuntimeDependencies:
+    prepare_campaign_preflight: Callable[..., dict[str, Any]]
+    run_batch: Callable[..., dict[str, Any]]
+    compute_aggregates_with_ci: Callable[..., dict[str, Any]]
+    export_publication_bundle: Callable[..., Any]
+
+
+def _resolve_campaign_runtime_dependencies(
+    *,
+    prepare_campaign_preflight: Callable[..., dict[str, Any]] | None = None,
+    run_batch: Callable[..., dict[str, Any]] | None = None,
+    compute_aggregates_with_ci: Callable[..., dict[str, Any]] | None = None,
+    export_publication_bundle: Callable[..., Any] | None = None,
+) -> _CampaignRuntimeDependencies:
+    if prepare_campaign_preflight is None:
+        from robot_sf.benchmark.camera_ready._preflight import (  # noqa: PLC0415
+            prepare_campaign_preflight,
+        )
+    if run_batch is None:
+        from robot_sf.benchmark.runner import run_batch  # noqa: PLC0415
+    if compute_aggregates_with_ci is None:
+        from robot_sf.benchmark.aggregate import compute_aggregates_with_ci  # noqa: PLC0415
+    if export_publication_bundle is None:
+        from robot_sf.benchmark.artifact_publication import (  # noqa: PLC0415
+            export_publication_bundle,
+        )
+    return _CampaignRuntimeDependencies(
+        prepare_campaign_preflight=prepare_campaign_preflight,
+        run_batch=run_batch,
+        compute_aggregates_with_ci=compute_aggregates_with_ci,
+        export_publication_bundle=export_publication_bundle,
+    )
+
+
+def run_campaign(  # noqa: PLR0913
     cfg: CampaignConfig,
     *,
     output_root: Path | None = None,
@@ -126,21 +161,35 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0913, PLR0915
             than the robot radius, making the route geometrically impossible to follow without
             collision.
     """
-    if prepare_campaign_preflight is None:
-        from robot_sf.benchmark.camera_ready._preflight import (  # noqa: PLC0415
-            prepare_campaign_preflight,
-        )
-    if run_batch is None:
-        from robot_sf.benchmark.runner import run_batch  # noqa: PLC0415
-    if compute_aggregates_with_ci is None:
-        from robot_sf.benchmark.aggregate import compute_aggregates_with_ci  # noqa: PLC0415
-    if export_publication_bundle is None:
-        from robot_sf.benchmark.artifact_publication import (  # noqa: PLC0415
-            export_publication_bundle,
-        )
+    dependencies = _resolve_campaign_runtime_dependencies(
+        prepare_campaign_preflight=prepare_campaign_preflight,
+        run_batch=run_batch,
+        compute_aggregates_with_ci=compute_aggregates_with_ci,
+        export_publication_bundle=export_publication_bundle,
+    )
+    return _run_campaign_orchestrator(
+        cfg,
+        output_root=output_root,
+        label=label,
+        campaign_id=campaign_id,
+        skip_publication_bundle=skip_publication_bundle,
+        invoked_command=invoked_command,
+        dependencies=dependencies,
+    )
 
+
+def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
+    cfg: CampaignConfig,
+    *,
+    output_root: Path | None = None,
+    label: str | None = None,
+    campaign_id: str | None = None,
+    skip_publication_bundle: bool = False,
+    invoked_command: str | None = None,
+    dependencies: _CampaignRuntimeDependencies,
+) -> dict[str, Any]:
     start = time.perf_counter()
-    prepared = prepare_campaign_preflight(
+    prepared = dependencies.prepare_campaign_preflight(
         cfg,
         output_root=output_root,
         label=label,
@@ -225,7 +274,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0913, PLR0915
             ]
 
             try:
-                summary = run_batch(
+                summary = dependencies.run_batch(
                     scoped_scenarios,
                     out_path=episodes_path,
                     schema_path=DEFAULT_EPISODE_SCHEMA_PATH,
@@ -305,7 +354,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0913, PLR0915
                         annotated["kinematics"] = kinematics
                         seed_variability_records.append(annotated)
                 try:
-                    aggregates = compute_aggregates_with_ci(
+                    aggregates = dependencies.compute_aggregates_with_ci(
                         records,
                         group_by="scenario_params.algo",
                         bootstrap_samples=cfg.bootstrap_samples,
@@ -1198,7 +1247,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0913, PLR0915
         publication_dir = get_artifact_category_path("benchmarks") / "publication"
         bundle_name = f"{campaign_id}_publication_bundle"
         try:
-            bundle = export_publication_bundle(
+            bundle = dependencies.export_publication_bundle(
                 campaign_root,
                 publication_dir,
                 bundle_name=bundle_name,

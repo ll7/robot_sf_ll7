@@ -199,6 +199,10 @@ knowledge, not every transient iteration detail.
 * Issue #3014 Evidence Catalog Backlog 2026-06-19:
   [issue_3014_evidence_catalog_backlog.md](issue_3014_evidence_catalog_backlog.md)
   records the current uncovered evidence-bundle count and split strategy for catalog cleanup.
+* Issue #4404 trace-capable horizon-600 (`h600`) runtime-scaling context:
+  [issue_4404_trace_capable_h600_runtime_scaling.md](issue_4404_trace_capable_h600_runtime_scaling.md)
+  records static config-derived workload surface for the issue #4206 trace-capable h600 re-run and
+  the explicit no-submit/no-claim boundary.
 * Active research-lane scientific states:
   [research_lane_states.md](research_lane_states.md)
 * Issue #2571 Active Research Queue:

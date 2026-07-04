@@ -8,6 +8,7 @@ from pathlib import Path
 
 from robot_sf.benchmark.proxemic_ablation_report import (
     build_proxemic_ablation_report,
+    build_proxemic_ablation_report_from_map_runner_records,
     load_records,
     write_report_artifacts,
 )
@@ -23,6 +24,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline-episodes", type=Path, required=True)
     parser.add_argument("--proxemic-episodes", type=Path, required=True)
+    parser.add_argument(
+        "--input-format",
+        choices=("report-rows", "map-runner"),
+        default="report-rows",
+        help=(
+            "Use 'map-runner' for real robot_sf.benchmark.map_runner episode records; "
+            "default keeps the legacy generic report-row input contract."
+        ),
+    )
     parser.add_argument("--smoke-config", type=Path, default=DEFAULT_SMOKE_CONFIG)
     parser.add_argument("--proxemic-config", type=Path, default=DEFAULT_PROXEMIC_CONFIG)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
@@ -34,13 +44,24 @@ def main(argv: list[str] | None = None) -> int:
     """Run the report builder."""
 
     args = parse_args(argv)
-    report = build_proxemic_ablation_report(
-        baseline_records=load_records(args.baseline_episodes),
-        proxemic_records=load_records(args.proxemic_episodes),
-        smoke_config_path=args.smoke_config,
-        proxemic_config_path=args.proxemic_config,
-        repo_root=args.repo_root,
-    )
+    baseline_records = load_records(args.baseline_episodes)
+    proxemic_records = load_records(args.proxemic_episodes)
+    if args.input_format == "map-runner":
+        report = build_proxemic_ablation_report_from_map_runner_records(
+            baseline_records=baseline_records,
+            proxemic_records=proxemic_records,
+            smoke_config_path=args.smoke_config,
+            proxemic_config_path=args.proxemic_config,
+            repo_root=args.repo_root,
+        )
+    else:
+        report = build_proxemic_ablation_report(
+            baseline_records=baseline_records,
+            proxemic_records=proxemic_records,
+            smoke_config_path=args.smoke_config,
+            proxemic_config_path=args.proxemic_config,
+            repo_root=args.repo_root,
+        )
     write_report_artifacts(report, args.output_dir)
     print(args.output_dir / "summary.json")
     return 1 if report["report_status"] == "blocked" else 0

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 
@@ -9,7 +10,9 @@ import pytest
 
 from robot_sf.benchmark.proxemic_ablation_report import (
     build_proxemic_ablation_report,
+    build_proxemic_ablation_report_from_map_runner_records,
     load_records,
+    map_runner_records_to_ablation_rows,
     write_report_artifacts,
 )
 
@@ -151,6 +154,155 @@ def test_checked_in_fixture_matches_report_contract() -> None:
     assert report["parameter_provenance"]["proxemic_config"]["sha256"]
 
 
+def test_builds_report_from_map_runner_episode_records(tmp_path: Path) -> None:
+    """Map-runner episode rows feed paired delta report with fail-closed provenance."""
+
+    smoke_config, proxemic_config = _write_configs(tmp_path)
+    baseline_records = [
+        _map_runner_record(
+            "crossing_easy",
+            1,
+            proxemic_enabled=False,
+            intrusion_rate=0.30,
+            clearance=0.55,
+            efficiency=0.80,
+            runtime=1.0,
+        )
+    ]
+    proxemic_records = [
+        _map_runner_record(
+            "crossing_easy",
+            1,
+            proxemic_enabled=True,
+            intrusion_rate=0.20,
+            clearance=0.70,
+            efficiency=0.78,
+            runtime=1.1,
+        )
+    ]
+
+    report = build_proxemic_ablation_report_from_map_runner_records(
+        baseline_records=baseline_records,
+        proxemic_records=proxemic_records,
+        smoke_config_path=smoke_config.relative_to(tmp_path),
+        proxemic_config_path=proxemic_config.relative_to(tmp_path),
+        repo_root=tmp_path,
+    )
+
+    assert report["report_status"] == "ready"
+    assert report["claim_boundary"] == "paired_cpu_smoke_report_only"
+    assert report["input_source"]["source"] == "map_runner_episode_records"
+    assert report["deltas"]["intrusion_rate_delta"] == pytest.approx(-0.1)
+
+
+def test_map_runner_rows_fail_closed_on_wrong_layer_state() -> None:
+    """Baseline/proxemic arm state mismatches are blocked before reporting."""
+
+    with pytest.raises(ValueError, match="expected False"):
+        map_runner_records_to_ablation_rows(
+            [_map_runner_record("crossing_easy", 1, proxemic_enabled=True)],
+            arm="baseline_classical",
+            expected_proxemic_enabled=False,
+        )
+
+
+def test_map_runner_rows_fail_closed_on_malformed_records() -> None:
+    """Malformed map-runner rows report all source-contract blockers."""
+
+    fallback = _map_runner_record("crossing_easy", 1, proxemic_enabled=True)
+    fallback["algorithm_metadata"]["last_decision"]["proxemic_costmap"]["fallback_or_degraded"] = (
+        True
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        map_runner_records_to_ablation_rows(
+            [
+                {"scenario_id": "missing-everything", "seed": 1},
+                {
+                    "scenario_id": "bad-enabled",
+                    "seed": 2,
+                    "metrics": {},
+                    "algorithm_metadata": {"proxemic_costmap": {"enabled": "yes"}},
+                },
+                fallback,
+            ],
+            arm="proxemic_costmap_on",
+            expected_proxemic_enabled=True,
+        )
+
+    message = str(excinfo.value)
+    assert "missing map-runner metrics mapping" in message
+    assert "missing algorithm_metadata proxemic_costmap" in message
+    assert "proxemic_costmap.enabled must be boolean" in message
+    assert "fallback/degraded" in message
+
+
+def test_map_runner_rows_accept_direct_and_runtime_proxemic_metadata() -> None:
+    """Map-runner adapter accepts known proxemic metadata locations."""
+
+    direct = _map_runner_record("crossing_easy", 1, proxemic_enabled=True)
+    direct["algorithm_metadata"]["proxemic_costmap"] = direct["algorithm_metadata"].pop(
+        "last_decision"
+    )["proxemic_costmap"]
+    runtime = _map_runner_record("crossing_hard", 2, proxemic_enabled=True)
+    runtime["algorithm_metadata"]["planner_runtime"] = runtime["algorithm_metadata"].pop(
+        "last_decision"
+    )
+
+    rows = map_runner_records_to_ablation_rows(
+        [direct, runtime],
+        arm="proxemic_costmap_on",
+        expected_proxemic_enabled=True,
+    )
+
+    assert [row["source"] for row in rows] == [
+        "map_runner_episode_records",
+        "map_runner_episode_records",
+    ]
+    assert rows[0]["proxemic_costmap"]["enabled"] is True
+    assert rows[1]["proxemic_costmap"]["enabled"] is True
+
+
+def test_cli_builds_map_runner_input_report(tmp_path: Path) -> None:
+    """Issue CLI supports real map-runner episode JSONL input."""
+
+    smoke_config, proxemic_config = _write_configs(tmp_path)
+    baseline_path = tmp_path / "baseline.jsonl"
+    proxemic_path = tmp_path / "proxemic.jsonl"
+    baseline_path.write_text(
+        json.dumps(_map_runner_record("crossing_easy", 1, proxemic_enabled=False)) + "\n",
+        encoding="utf-8",
+    )
+    proxemic_path.write_text(
+        json.dumps(_map_runner_record("crossing_easy", 1, proxemic_enabled=True)) + "\n",
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "report"
+
+    exit_code = _report_main(
+        [
+            "--baseline-episodes",
+            str(baseline_path),
+            "--proxemic-episodes",
+            str(proxemic_path),
+            "--input-format",
+            "map-runner",
+            "--smoke-config",
+            str(smoke_config.relative_to(tmp_path)),
+            "--proxemic-config",
+            str(proxemic_config.relative_to(tmp_path)),
+            "--repo-root",
+            str(tmp_path),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert exit_code == 0
+    summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
+    assert summary["input_source"]["fail_closed_layer_state"] is True
+
+
 def _row(
     scenario_id: str,
     seed: int,
@@ -175,6 +327,55 @@ def _row(
             "collisions": 0,
         },
     }
+
+
+def _map_runner_record(
+    scenario_id: str,
+    seed: int,
+    *,
+    proxemic_enabled: bool,
+    intrusion_rate: float = 0.30,
+    clearance: float = 0.55,
+    efficiency: float = 0.80,
+    runtime: float = 1.0,
+) -> dict:
+    return {
+        "scenario_id": scenario_id,
+        "seed": seed,
+        "status": "completed",
+        "algo": "hybrid_rule_local_planner",
+        "metrics": {
+            "social_space_intrusion_rate": intrusion_rate,
+            "min_clearance": clearance,
+            "path_efficiency": efficiency,
+            "episode_sec": runtime,
+            "success": True,
+            "collision": False,
+        },
+        "algorithm_metadata": {
+            "last_decision": {
+                "proxemic_costmap": {
+                    "enabled": proxemic_enabled,
+                    "status": "ok" if proxemic_enabled else "disabled",
+                    "config_hash": "unit-test-hash",
+                    "fallback_or_degraded": False,
+                    "soft_cost_only": True,
+                }
+            }
+        },
+    }
+
+
+def _report_main(argv: list[str]) -> int:
+    script_path = (
+        _REPO_ROOT / "scripts/benchmark/build_proxemic_layer_ablation_report_issue_4165.py"
+    )
+    spec = importlib.util.spec_from_file_location("issue_4165_proxemic_report_cli", script_path)
+    assert spec is not None
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module.main(argv)
 
 
 def _write_configs(tmp_path: Path) -> tuple[Path, Path]:

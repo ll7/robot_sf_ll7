@@ -1,0 +1,90 @@
+# Fresh current-roster release-gate campaign pre-registration for issue #4400.
+#
+# Plain-language summary: this config declares the next CPU campaign needed to
+# make current release-gate rows evaluable for clearance and personal-space
+# metrics. It does not submit the campaign or certify any release gate.
+name: release_gate_current_roster_social_proxemic_issue_4400
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+seed_policy:
+  mode: seed-set
+  seed_set: eval
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v1.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v1.json
+workers: 2
+horizon: 100
+dt: 0.1
+record_forces: true
+resume: true
+stop_on_failure: true
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+export_publication_bundle: true
+include_videos_in_publication: false
+overwrite_publication_bundle: true
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: "{release_tag}"
+doi: 10.5281/zenodo.<record-id>
+paper_interpretation_profile: baseline-ready-core
+release_gate_preregistration:
+  schema_version: release_gate_campaign_preregistration.v1
+  issue: 4400
+  purpose: >-
+    Re-run the issue #4313 current-roster release-gate evaluation on fresh rows
+    so min_clearance_m and proxemic_intrusion_rate gates can be evaluated.
+  claim_boundary: >-
+    Gate evaluability only. This config is not release certification, planner
+    ranking evidence, threshold approval, or paper-grade benchmark evidence.
+  retained_baseline_packet: docs/context/evidence/camera_ready_all_planners_2026-05-04/reports/campaign_summary.json
+  release_gate_spec: configs/benchmarks/release_gates/camera_ready_current_roster_gates.yaml
+  retained_summary_contract:
+    required_fields:
+      - min_clearance_m
+      - proxemic_intrusion_rate
+  metric_groups:
+    social_proxemic:
+      enabled: true
+      required_episode_metrics:
+        - min_clearance
+        - social_proxemic_intrusion_frac
+      retained_summary_fields:
+        - min_clearance_m
+        - proxemic_intrusion_rate
+  no_submit_boundary:
+    submit_in_this_pr: false
+    slurm_or_gpu_submission: false
+    campaign_execution: false
+    release_approval_claim: false
+planners:
+  - key: prediction_planner
+    algo: prediction_planner
+    algo_config: configs/algos/prediction_planner_camera_ready.yaml
+    benchmark_profile: experimental
+  - key: goal
+    algo: goal
+    benchmark_profile: baseline-safe
+  - key: social_force
+    algo: social_force
+    benchmark_profile: baseline-safe
+  - key: orca
+    algo: orca
+    benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fallback
+  - key: ppo
+    algo: ppo
+    algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
+    benchmark_profile: experimental
+    adapter_impact_eval: true
+  - key: socnav_sampling
+    algo: socnav_sampling
+    benchmark_profile: experimental
+    socnav_missing_prereq_policy: fail-fast
+  - key: sacadrl
+    algo: sacadrl
+    benchmark_profile: experimental
+    socnav_missing_prereq_policy: fallback
+  - key: socnav_bench
+    algo: socnav_bench
+    benchmark_profile: experimental
+    socnav_missing_prereq_policy: fail-fast

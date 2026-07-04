@@ -300,6 +300,8 @@ knowledge, not every transient iteration detail.
 * Issue #2752 topology reselection mechanism diagnosis:
   [issue_2752_topology_reselection_mechanism.md](issue_2752_topology_reselection_mechanism.md)
   ([evidence](evidence/issue_2752_topology_reselection_mechanism/README.md))
+* Issue #3463 topology corrective behaviors integration report:
+  [issue_3463_topology_corrective_behaviors.md](issue_3463_topology_corrective_behaviors.md)
 * Issue #2801 topology successor recommendation:
   [issue_2801_topology_successor_recommendation.md](issue_2801_topology_successor_recommendation.md)
   ([summary](evidence/issue_2801_topology_successor_recommendation/summary.json))

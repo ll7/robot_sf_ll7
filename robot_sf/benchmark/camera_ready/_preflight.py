@@ -456,6 +456,11 @@ def prepare_campaign_preflight(
                     if planner.algo_config_path is not None
                     else None
                 ),
+                "availability_gate": planner.availability_gate,
+                "fail_closed_reason": planner.fail_closed_reason,
+                "status": (
+                    "not_available" if planner.availability_gate == "dependency_gated" else "ok"
+                ),
                 "observation_mode": planner.observation_mode,
                 "enabled": planner.enabled,
             }

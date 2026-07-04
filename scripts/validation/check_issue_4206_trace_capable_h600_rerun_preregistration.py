@@ -135,6 +135,11 @@ def validate_runnable_config_pair(
         "guarded_ppo must declare availability_gate=dependency_gated",
     )
     _require(
+        guarded.get("fail_closed_reason") == "guarded_ppo_checkpoint_observation_contract_missing",
+        "guarded_ppo must declare fail_closed_reason="
+        "guarded_ppo_checkpoint_observation_contract_missing",
+    )
+    _require(
         bool(str(guarded.get("fail_closed_reason", "")).strip()),
         "guarded_ppo must declare fail_closed_reason",
     )
@@ -143,6 +148,19 @@ def validate_runnable_config_pair(
         "path": path.as_posix(),
         "planner_arm_count": len(actual_keys),
         "planner_keys": actual_keys,
+        "required_available_planner_count": len(
+            [
+                planner
+                for planner in planners
+                if isinstance(planner, dict)
+                and planner.get("availability_gate") != "dependency_gated"
+            ]
+        ),
+        "accepted_unavailable_planner_keys": [
+            planner["key"]
+            for planner in planners
+            if isinstance(planner, dict) and planner.get("availability_gate") == "dependency_gated"
+        ],
         "seeds": list(seed_policy["seeds"]),
         "horizon": payload["horizon"],
         "trace_capture": {

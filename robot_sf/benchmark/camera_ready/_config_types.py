@@ -60,6 +60,8 @@ class PlannerSpec:
     benchmark_profile: str = "baseline-safe"
     algo_config_path: Path | None = None
     socnav_missing_prereq_policy: str = "fail-fast"
+    availability_gate: str | None = None
+    fail_closed_reason: str | None = None
     adapter_impact_eval: bool = False
     observation_mode: str | None = None
     workers_override: int | None = None

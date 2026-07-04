@@ -3,11 +3,23 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-EPISODE_EVENT_LEDGER_SCHEMA_VERSION = "EpisodeEventLedger.v1"
+EPISODE_EVENT_LEDGER_SCHEMA_VERSION = "EpisodeEventLedger.v2"
+SUPPORTED_EVENT_LEDGER_SCHEMA_VERSIONS = frozenset(
+    {
+        "EpisodeEventLedger.v1",
+        EPISODE_EVENT_LEDGER_SCHEMA_VERSION,
+    }
+)
+COLLISION_PARTNER_TYPES = (
+    "pedestrian",
+    "static_geometry",
+    "boundary",
+    "goal_artifact",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +45,18 @@ class SurrogateEvents:
 
 
 @dataclass(frozen=True, slots=True)
+class CollisionEventRecord:
+    """Typed exact-collision record for one collision event."""
+
+    collision_partner_type: str
+    collision_partner_id: str | None
+    collision_time: float
+    relative_speed_at_contact: float | None
+    clearance_series_source: str
+    exact_event_source: str
+
+
+@dataclass(frozen=True, slots=True)
 class EpisodeEventLedger:
     """Versioned source-of-truth event block for benchmark episode records."""
 
@@ -42,6 +66,7 @@ class EpisodeEventLedger:
     planner: str
     software_commit: str | None
     exact_events: ExactEvents
+    collision_events: list[CollisionEventRecord] = field(default_factory=list)
     surrogate_events: SurrogateEvents = field(default_factory=SurrogateEvents)
     metric_definitions: dict[str, dict[str, str]] = field(default_factory=dict)
     reconciliation: dict[str, Any] = field(default_factory=dict)
@@ -154,8 +179,69 @@ def _predicate_event(
     return _bool_at(payload, event_key), f"safety_predicates.{predicate_key}.{event_key}"
 
 
-def build_event_ledger(record: Mapping[str, Any]) -> dict[str, Any]:
-    """Build an ``EpisodeEventLedger.v1`` payload from an episode record.
+def _normalize_collision_partner_type(value: Any) -> str:
+    """Return a validated collision partner type."""
+    partner_type = str(value).strip()
+    if partner_type not in COLLISION_PARTNER_TYPES:
+        allowed = ", ".join(COLLISION_PARTNER_TYPES)
+        raise ValueError(f"collision_partner_type must be one of {allowed}; got {partner_type!r}")
+    return partner_type
+
+
+def _normalize_collision_event_record(event: Mapping[str, Any]) -> CollisionEventRecord:
+    """Validate and normalize one typed collision-event payload.
+
+    Returns:
+        Normalized collision-event record ready for JSON serialization.
+    """
+    collision_time = _finite_float(event.get("collision_time"))
+    if collision_time is None or collision_time < 0.0:
+        raise ValueError("collision_time must be a finite value >= 0.")
+    clearance_series_source = str(event.get("clearance_series_source") or "").strip()
+    if not clearance_series_source:
+        raise ValueError("clearance_series_source must be a non-empty string.")
+    exact_event_source = str(event.get("exact_event_source") or "").strip()
+    if not exact_event_source:
+        raise ValueError("exact_event_source must be a non-empty string.")
+    collision_partner_id = event.get("collision_partner_id")
+    normalized_partner_id = (
+        str(collision_partner_id).strip() if collision_partner_id is not None else None
+    )
+    if normalized_partner_id == "":
+        normalized_partner_id = None
+    return CollisionEventRecord(
+        collision_partner_type=_normalize_collision_partner_type(
+            event.get("collision_partner_type")
+        ),
+        collision_partner_id=normalized_partner_id,
+        collision_time=collision_time,
+        relative_speed_at_contact=_finite_float(event.get("relative_speed_at_contact")),
+        clearance_series_source=clearance_series_source,
+        exact_event_source=exact_event_source,
+    )
+
+
+def _normalize_collision_events(
+    collision_events: Sequence[Mapping[str, Any]] | None,
+) -> list[CollisionEventRecord]:
+    """Return validated typed collision events."""
+    if collision_events is None:
+        return []
+    normalized: list[CollisionEventRecord] = []
+    for event in collision_events:
+        if not isinstance(event, Mapping):
+            raise ValueError("collision event records must be mappings.")
+        normalized.append(_normalize_collision_event_record(event))
+    normalized.sort(key=lambda event: (event.collision_time, event.collision_partner_type))
+    return normalized
+
+
+def build_event_ledger(
+    record: Mapping[str, Any],
+    *,
+    collision_events: Sequence[Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build an ``EpisodeEventLedger.v2`` payload from an episode record.
 
     Returns:
         JSON-serializable ledger payload.
@@ -201,6 +287,7 @@ def build_event_ledger(record: Mapping[str, Any]) -> dict[str, Any]:
     )
     if predicate_oscillation_source is not None:
         oscillation_source = predicate_oscillation_source
+    normalized_collision_events = _normalize_collision_events(collision_events)
 
     metric_definitions = {
         "collision_count": {
@@ -263,6 +350,7 @@ def build_event_ledger(record: Mapping[str, Any]) -> dict[str, Any]:
             str(record.get("git_hash")) if record.get("git_hash") is not None else None
         ),
         exact_events=exact,
+        collision_events=normalized_collision_events,
         surrogate_events=surrogate,
         metric_definitions=metric_definitions,
         reconciliation=reconciliation,
@@ -305,6 +393,8 @@ def reconcile_event_ledger(ledger: Mapping[str, Any]) -> list[str]:
     reconciliation = reconciliation if isinstance(reconciliation, Mapping) else {}
     metric_definitions = ledger.get("metric_definitions")
     metric_definitions = metric_definitions if isinstance(metric_definitions, Mapping) else {}
+    collision_events = ledger.get("collision_events")
+    collision_events = collision_events if isinstance(collision_events, list) else []
 
     collision_metric = _finite_float(reconciliation.get("collision_metric_value"))
     if bool(exact.get("collision")) and (collision_metric is None or collision_metric <= 0.0):
@@ -327,6 +417,24 @@ def reconcile_event_ledger(ledger: Mapping[str, Any]) -> list[str]:
     ]
     if missing_definitions:
         violations.append("missing metric definitions: " + ", ".join(missing_definitions))
+    for index, event in enumerate(collision_events):
+        if not isinstance(event, Mapping):
+            violations.append(f"collision_events[{index}] must be a mapping")
+            continue
+        partner_type = str(event.get("collision_partner_type") or "")
+        if partner_type not in COLLISION_PARTNER_TYPES:
+            violations.append(
+                f"collision_events[{index}].collision_partner_type invalid: {partner_type!r}"
+            )
+        collision_time = _finite_float(event.get("collision_time"))
+        if collision_time is None or collision_time < 0.0:
+            violations.append(f"collision_events[{index}].collision_time must be finite and >= 0")
+        if not str(event.get("clearance_series_source") or "").strip():
+            violations.append(
+                f"collision_events[{index}].clearance_series_source must be non-empty"
+            )
+        if not str(event.get("exact_event_source") or "").strip():
+            violations.append(f"collision_events[{index}].exact_event_source must be non-empty")
     return violations
 
 
@@ -340,7 +448,10 @@ def validate_record_event_ledger(record: dict[str, Any]) -> list[str]:
 
 
 __all__ = [
+    "COLLISION_PARTNER_TYPES",
     "EPISODE_EVENT_LEDGER_SCHEMA_VERSION",
+    "SUPPORTED_EVENT_LEDGER_SCHEMA_VERSIONS",
+    "CollisionEventRecord",
     "EpisodeEventLedger",
     "ExactEvents",
     "SurrogateEvents",

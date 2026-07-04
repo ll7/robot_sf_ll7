@@ -3123,6 +3123,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3190_closure_audit_2026-07-04/README.md
+    status: evidence
+    freshness: evidence
+    area: context_architecture
   - path: docs/context/evidence/issue_1490_closure_audit_2026-07-04/summary.json
     status: evidence
     freshness: evidence

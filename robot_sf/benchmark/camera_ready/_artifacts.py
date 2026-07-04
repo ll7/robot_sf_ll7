@@ -6,8 +6,8 @@ import csv
 import json
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.benchmark.camera_ready._config_types import _AMV_DIMENSIONS
 from robot_sf.benchmark.camera_ready._util import _sanitize_csv_cell
-from robot_sf.benchmark.camera_ready_campaign_config import _AMV_DIMENSIONS
 from robot_sf.benchmark.seed_variance import build_seed_variability_csv_rows
 from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES
 

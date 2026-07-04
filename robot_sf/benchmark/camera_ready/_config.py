@@ -16,8 +16,7 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.camera_ready._util import _repo_relative
-from robot_sf.benchmark.camera_ready_campaign_config import (
+from robot_sf.benchmark.camera_ready._config_types import (
     _AMV_DIMENSIONS,
     DEFAULT_SEED_SETS_PATH,
     AmvProfileConfig,
@@ -27,6 +26,7 @@ from robot_sf.benchmark.camera_ready_campaign_config import (
     SeedPolicy,
     SnqiContractConfig,
 )
+from robot_sf.benchmark.camera_ready._util import _repo_relative
 from robot_sf.benchmark.latency_stress import (
     load_latency_stress_profile,
     validate_latency_stress_profile,

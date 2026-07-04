@@ -54,6 +54,16 @@ from robot_sf.benchmark.camera_ready._config import (  # noqa: F401 - re-exporte
     _validate_scenario_amv_override_keys,
     load_campaign_config,
 )
+from robot_sf.benchmark.camera_ready._config_types import (  # noqa: F401 - re-exported for back-compat
+    _AMV_DIMENSIONS,
+    DEFAULT_SEED_SETS_PATH,
+    AmvProfileConfig,
+    CampaignConfig,
+    PlannerSpec,
+    ScenarioCandidateSelection,
+    SeedPolicy,
+    SnqiContractConfig,
+)
 from robot_sf.benchmark.camera_ready._preflight import (  # noqa: F401 - re-exported back-compat
     _build_preflight_preview_payload,
     _build_preflight_validate_payload,
@@ -134,16 +144,6 @@ from robot_sf.benchmark.camera_ready._util import (  # noqa: F401 - re-exported 
     _utc_now,
 )
 from robot_sf.benchmark.camera_ready.campaign import run_campaign as _run_campaign_impl
-from robot_sf.benchmark.camera_ready_campaign_config import (  # noqa: F401 - re-exported for back-compat
-    _AMV_DIMENSIONS,
-    DEFAULT_SEED_SETS_PATH,
-    AmvProfileConfig,
-    CampaignConfig,
-    PlannerSpec,
-    ScenarioCandidateSelection,
-    SeedPolicy,
-    SnqiContractConfig,
-)
 from robot_sf.benchmark.runner import run_batch
 from robot_sf.benchmark.utils import (  # noqa: F401 - re-exported for back-compat / test patch surface
     load_optional_json,

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from robot_sf.benchmark.camera_ready._config_types import _AMV_DIMENSIONS, CampaignConfig
 from robot_sf.benchmark.camera_ready._util import (
     _hash_payload,
     _jsonable_repo_relative,
@@ -15,7 +16,6 @@ from robot_sf.benchmark.camera_ready._util import (
     _repo_relative,
     _synthetic_actuation_metadata,
 )
-from robot_sf.benchmark.camera_ready_campaign_config import _AMV_DIMENSIONS, CampaignConfig
 from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
     observation_noise_hash,

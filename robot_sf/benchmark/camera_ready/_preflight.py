@@ -53,7 +53,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from robot_sf.benchmark.camera_ready_campaign_config import CampaignConfig
+    from robot_sf.benchmark.camera_ready._config_types import CampaignConfig
 
 
 def _scenario_display_name(scenario: dict[str, Any]) -> str:

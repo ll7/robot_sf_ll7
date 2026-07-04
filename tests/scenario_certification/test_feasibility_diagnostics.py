@@ -550,3 +550,22 @@ def test_claim_boundary_synthesis_fails_closed_for_wrong_source_boundary() -> No
     assert {row["unsupported_reason"] for row in synthesis["family_claim_boundaries"]} == {
         "unsupported_source_claim_boundary"
     }
+
+
+def test_claim_boundary_synthesis_fails_closed_for_null_failure_cause_inputs() -> None:
+    """A null ``inputs`` block must fail closed rather than raise AttributeError."""
+
+    report = _synthesis_fixture_report()
+    report["family_verdicts"][0]["failure_cause_verdict"]["inputs"] = None
+
+    synthesis = build_difficulty_ramp_claim_boundary_synthesis(
+        report,
+        source_report="fixture://diagnostic_report.json",
+    )
+
+    assert "bottleneck" in synthesis["still_unsupported_families"]
+    bottleneck = next(
+        row for row in synthesis["family_claim_boundaries"] if row["family_id"] == "bottleneck"
+    )
+    assert bottleneck["unsupported_reason"] == "missing_failure_cause_inputs"
+    assert bottleneck["comparable_for_ranking"] is False

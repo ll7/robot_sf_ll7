@@ -460,6 +460,10 @@ def _synthesize_family_claim_boundary(
     if category == "still_unsupported":
         return _unsupported_synthesis_row(family_id, f"unsupported_verdict:{cause or 'missing'}")
 
+    inputs = failure_verdict.get("inputs")
+    if not isinstance(inputs, Mapping):
+        return _unsupported_synthesis_row(family_id, "missing_failure_cause_inputs")
+
     comparable = failure_verdict.get("comparable_for_ranking") is True
     return {
         "family_id": family_id,
@@ -467,10 +471,10 @@ def _synthesize_family_claim_boundary(
         "failure_cause": cause,
         "comparable_for_ranking": comparable,
         "evidence_complete": True,
-        "route_feasible": failure_verdict.get("inputs", {}).get("route_feasible"),
-        "actor_free_solved": failure_verdict.get("inputs", {}).get("actor_free_solved"),
-        "extended_time_solved": failure_verdict.get("inputs", {}).get("extended_time_solved"),
-        "oracle_solved": failure_verdict.get("inputs", {}).get("oracle_solved"),
+        "route_feasible": inputs.get("route_feasible"),
+        "actor_free_solved": inputs.get("actor_free_solved"),
+        "extended_time_solved": inputs.get("extended_time_solved"),
+        "oracle_solved": inputs.get("oracle_solved"),
         "difficulty_ramp": {
             "axis": difficulty_ramp.get("axis"),
             "level_count": len(ramp_levels),

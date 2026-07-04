@@ -41,6 +41,24 @@ DEFAULT_PEDESTRIAN_MODELS = (SOCIAL_FORCE_DEFAULT, HSFM_TOTAL_FORCE_V1)
 # #4166-style gate spec.
 INTERACTION_NEAR_FIELD_M = 5.0
 INTERACTION_STATUSES = ("interacting", "non_interacting", "unknown")
+# Metric keys the runner can aggregate per gate cell (see ``_aggregate_metrics``). A release gate
+# whose ``metric`` is not in this set can never resolve to ``pass``/``fail``: every cell would be
+# ``not_evaluable``, the vacuously-inconclusive trap the issue #4207 preflight forbids.
+# ``preflight_gate_evaluability`` uses this set to fail closed with
+# ``blocked_no_evaluable_gate_family`` before any simulation runs.
+AGGREGATABLE_METRICS = frozenset(
+    {
+        "collision_rate",
+        "success_rate",
+        "near_miss_rate",
+        "min_clearance_m",
+        "proxemic_intrusion_rate",
+        "robot_ped_within_5m_frac",
+        "jerk_mean",
+    }
+)
+PREFLIGHT_OK = "ok"
+PREFLIGHT_BLOCKED_NO_EVALUABLE_GATE_FAMILY = "blocked_no_evaluable_gate_family"
 TRAINED_PLANNER_STRUCTURAL_CLASSES = frozenset({"learned_policy", "predictive"})
 TRAINED_PLANNER_ALGOS = frozenset({"ppo", "guarded_ppo", "prediction_planner"})
 TRAINED_PLANNER_ELIGIBLE = "eligible"
@@ -205,6 +223,56 @@ def validate_gate_spec(gate_spec: Mapping[str, Any], *, scenario_family: str) ->
         "schema_version": GATE_SPEC_SCHEMA_VERSION,
         "description": str(gate_spec.get("description", "")),
         "gates": normalized_gates,
+    }
+
+
+def preflight_gate_evaluability(
+    probe_config: Mapping[str, Any],
+    gate_spec: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Preflight-check that the declared scenario family has evaluable required gate metrics.
+
+    The certification-transfer probe declares a single, hard-coded scenario family (it is not
+    discovered dynamically at run time). A required release gate whose ``metric`` is not one the
+    runner can aggregate (:data:`AGGREGATABLE_METRICS`) can never produce a ``pass``/``fail``
+    decision: every cell would be ``not_evaluable``, the vacuously-inconclusive trap the issue
+    #4207 plan forbids. Such a family is not evaluable; preflight fails closed with
+    :data:`PREFLIGHT_BLOCKED_NO_EVALUABLE_GATE_FAMILY` instead of running a moot probe.
+
+    Optional gates (``required: false``) with non-aggregatable metrics do not block: they surface
+    as ``not_evaluable`` at evaluation time but do not drive the pass/fail decision.
+
+    Args:
+        probe_config: Normalized probe config (from :func:`validate_probe_config`).
+        gate_spec: Normalized gate spec (from :func:`validate_gate_spec`).
+
+    Returns:
+        Preflight payload with ``status`` (``ok`` or ``blocked_no_evaluable_gate_family``), the
+        declared ``scenario_family``, the runner's ``aggregatable_metrics``, the required gate
+        metrics, and the blocking ``not_evaluable_gate_ids`` / ``not_evaluable_gate_metrics``
+        (empty when the family is evaluable).
+    """
+
+    scenario_family = str(probe_config["scenario_family"])
+    gates = list(gate_spec.get("gates") or [])
+    required_gates = [gate for gate in gates if bool(gate.get("required", True))]
+    required_metrics = sorted({str(gate["metric"]) for gate in required_gates})
+    blocking = [
+        {"gate_id": str(gate["id"]), "metric": str(gate["metric"])}
+        for gate in required_gates
+        if str(gate["metric"]) not in AGGREGATABLE_METRICS
+    ]
+    not_evaluable_gate_ids = sorted({entry["gate_id"] for entry in blocking})
+    not_evaluable_gate_metrics = sorted({entry["metric"] for entry in blocking})
+    blocked = bool(blocking)
+    return {
+        "status": PREFLIGHT_BLOCKED_NO_EVALUABLE_GATE_FAMILY if blocked else PREFLIGHT_OK,
+        "scenario_family": scenario_family,
+        "aggregatable_metrics": sorted(AGGREGATABLE_METRICS),
+        "required_gate_metrics": required_metrics,
+        "not_evaluable_gate_ids": not_evaluable_gate_ids,
+        "not_evaluable_gate_metrics": not_evaluable_gate_metrics,
+        "blocking_gates": blocking,
     }
 
 

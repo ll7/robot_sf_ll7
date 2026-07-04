@@ -1,8 +1,8 @@
 # Minimal valid false-positive actor-injection replay condition (issue #3300).
 #
-# Readiness fixture only: it carries the injected-actor inputs and the provenance
-# fields required before a false-positive actor-injection replay can run. It does
-# not itself run a replay or assert any benchmark/safety outcome.
+# Readiness fixture only: carries injected-actor inputs, provenance, and a
+# planner observation view capable of carrying structured pedestrians. It does
+# not itself run replay or assert any benchmark/safety outcome.
 false_positive_injection:
   # Provenance contract (REQUIRED_PROVENANCE_FIELDS).
   scenario_id: occluded_emergence_episode_0000
@@ -10,6 +10,14 @@ false_positive_injection:
   planner_mode: trace_derived
   perturbation_family: false_positive_actor_injection
   execution_mode: readiness_check_only
+  planner_observation_view:
+    observation_level: oracle_full_state
+    active_observation_mode: socnav_state
+    required_inputs:
+      - robot_state
+      - goal
+      - pedestrians
+
   # Injected observed-only false-positive actor inputs.
   false_positive_positions:
     - [2.0, 3.0]

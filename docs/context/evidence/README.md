@@ -185,6 +185,11 @@ decision-disagreement CSV, Markdown, Pareto SVG, and provenance; raw episode JSO
   `no_claim` / `not_benchmark_evidence` because the slice is not full fixed scope and rank evidence
   is non-identifiable (`primary_metric_zero_variance`). Does not run a simulator study or promote a
   simulator-dependence, simulator-realism, sim-to-real, paper-facing, or dissertation claim.
+- `issue_3207_integration_status_2026-07-05.md`: consolidation report for the high-churn #3207
+  launchability/checker sequence. Records delivered launch-packet, preflight, plan, execution
+  wiring, prerequisite, and post-run rank-identifiability contract surfaces, and names the
+  remaining empirical full fixed-scope campaign plus measured rank-identifiability result as the
+  only claim-blocking input.
 - `issue_2557_replica_readiness_packet_2026-06-29/`: diagnostic-only
   fixed-seed queue-fill replica readiness packet for Issue #2557. It records the
   public tracked completed/running status, retrieved compact evidence, remaining

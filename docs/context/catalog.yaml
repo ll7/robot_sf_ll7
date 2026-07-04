@@ -3211,6 +3211,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3207_integration_status_2026-07-05.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4455_closure_audit_2026-07-04.md
     status: evidence
     freshness: evidence

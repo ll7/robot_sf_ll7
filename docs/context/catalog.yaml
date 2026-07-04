@@ -2930,6 +2930,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3300_false_positive_actor_injection_2026-07-04
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3556_belief_mode_real_runner_2026-06-24/report.json
     status: evidence
     freshness: evidence

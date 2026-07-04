@@ -1,5 +1,5 @@
 name: issue_3300_false_positive_nominal_smoke
-scenario_matrix: configs/scenarios/planner_sanity_matrix_v1.yaml
+scenario_matrix: configs/scenarios/sets/issue_3300_false_positive_single_ped_smoke.yaml
 workers: 1
 horizon: 5
 dt: 0.1

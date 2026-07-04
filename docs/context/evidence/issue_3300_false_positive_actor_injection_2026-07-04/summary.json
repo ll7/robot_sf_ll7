@@ -1,0 +1,88 @@
+{
+  "claim_boundary": "CPU-local observation-quality replay smoke for false-positive actor injection. Diagnostic only; not a full benchmark campaign, hardware sensor model, or paper-facing claim.",
+  "classification": {
+    "label": "blocked_unavailable",
+    "reason": "no perturbed episode recorded pedestrians_added > 0"
+  },
+  "injection_summary": {
+    "hashes": [
+      "f3149ea5da06"
+    ],
+    "pedestrians_added": 0,
+    "profiles": [
+      "issue_3300_false_positive_actor_injection_v1"
+    ],
+    "steps_with_noise": 0
+  },
+  "inputs": {
+    "nominal_jsonl": "output/benchmarks/issue_3300/issue_3300_nominal_single_ped_smoke/runs/goal__differential_drive/episodes.jsonl",
+    "perturbed_jsonl": "output/benchmarks/issue_3300/issue_3300_false_positive_single_ped_smoke/runs/goal__differential_drive/episodes.jsonl"
+  },
+  "issue": 3300,
+  "pairing": {
+    "pair_keys": [
+      "planner_identity",
+      "algo",
+      "scenario_id",
+      "seed",
+      "observation_mode",
+      "observation_level"
+    ],
+    "paired_rows": 1,
+    "unmatched_nominal_keys": [],
+    "unmatched_nominal_rows": 0,
+    "unmatched_perturbed_keys": [],
+    "unmatched_perturbed_rows": 0
+  },
+  "per_episode_deltas": [
+    {
+      "changed_fields": [],
+      "metric_delta": {
+        "route_complete": 0.0
+      },
+      "observed_actor_counts": {
+        "nominal": null,
+        "perturbed": null
+      },
+      "pedestrians_added": 0,
+      "planner_key": "goal",
+      "scenario_id": "single_ped_crossing_orthogonal",
+      "seed": 0,
+      "selected_action": {
+        "changed": false,
+        "nominal": null,
+        "perturbed": null
+      },
+      "steps_with_noise": 0
+    }
+  ],
+  "planner_rows": [
+    {
+      "algo": "goal",
+      "collision_delta": 0.0,
+      "noise_stats_sum": {
+        "heading_noise_applied": 0,
+        "lidar_values_dropped": 0,
+        "pedestrians_added": 0,
+        "pedestrians_removed": 0,
+        "pose_noise_applied": 0,
+        "steps_with_noise": 0
+      },
+      "nominal_collision_incidence": 0.0,
+      "nominal_success_incidence": 0.0,
+      "paired_episodes": 1,
+      "perturbation_hashes": [
+        "f3149ea5da06"
+      ],
+      "perturbation_profiles": [
+        "issue_3300_false_positive_actor_injection_v1"
+      ],
+      "perturbed_collision_incidence": 0.0,
+      "perturbed_success_incidence": 0.0,
+      "planner_key": "goal",
+      "success_delta": 0.0
+    }
+  ],
+  "replay_mode": "executable",
+  "schema_version": "false_positive_actor_injection_replay.v1"
+}

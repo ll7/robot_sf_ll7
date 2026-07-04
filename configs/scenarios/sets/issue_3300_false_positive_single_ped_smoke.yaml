@@ -1,0 +1,7 @@
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - verified_simple_subset_v1.yaml
+select_scenarios:
+  - single_ped_crossing_orthogonal
+map_search_paths:
+  - ../../../maps/svg_maps

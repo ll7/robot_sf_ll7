@@ -103,6 +103,7 @@ from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_pr
 from robot_sf.benchmark.observation_noise import (
     apply_observation_noise,
     make_observation_noise_rng,
+    make_observation_noise_state,
     merge_observation_noise_stats,
     new_observation_noise_stats,
     normalize_observation_noise_spec,
@@ -829,6 +830,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     )
     noise_spec = normalize_observation_noise_spec(observation_noise)
     noise_rng = make_observation_noise_rng(noise_spec, seed=seed, scenario_id=scenario_id)
+    noise_state = make_observation_noise_state(noise_spec)
     noise_stats = new_observation_noise_stats()
     tracking_precision_spec = normalize_tracking_precision_spec(tracking_precision)
     tracking_precision_rng = make_tracking_precision_rng(
@@ -996,7 +998,12 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         ammv_command_actions: list[dict[str, Any]] = []
         view_integrity: dict[str, Any] | None = None
         for step_idx in range(horizon_val):
-            policy_obs, step_noise_stats = apply_observation_noise(obs, noise_spec, noise_rng)
+            policy_obs, step_noise_stats = apply_observation_noise(
+                obs,
+                noise_spec,
+                noise_rng,
+                noise_state,
+            )
             merge_observation_noise_stats(noise_stats, step_noise_stats)
             policy_obs, corrupted_ped_positions = _apply_tracking_precision_to_observation(
                 policy_obs,

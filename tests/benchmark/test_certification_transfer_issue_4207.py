@@ -406,6 +406,11 @@ def test_committed_physics_packet_records_real_near_field_contact() -> None:
     assert summary["paper_facing"] is False
     assert summary["claim_boundary"] == CLAIM_BOUNDARY
     assert summary["model_sensitivity_exercised"] is True
+    metric_summary = summary["interaction_metric_summary"]
+    assert metric_summary["physics_near_field_confirmed"] is True
+    assert metric_summary["interacting_cell_count"] > 0
+    assert metric_summary["max_robot_ped_within_5m_frac"] > 0.0
+    assert metric_summary["min_clearance_m"] < 5.0
 
     interacting_cells = [
         cell for cell in summary["gate_cells"] if cell["interaction_status"] == "interacting"

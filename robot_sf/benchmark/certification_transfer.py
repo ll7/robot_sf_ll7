@@ -239,6 +239,7 @@ def build_certification_transfer_report(
         models=normalized_config["pedestrian_models"],
         scenario_family=normalized_config["scenario_family"],
     )
+    interaction_metric_summary = _interaction_metric_summary(gate_cells)
     flip_cases = [
         row
         for row in transfer_matrix
@@ -282,6 +283,7 @@ def build_certification_transfer_report(
         "interaction_status_counts": dict(
             Counter(row["interaction_status"] for row in transfer_matrix)
         ),
+        "interaction_metric_summary": interaction_metric_summary,
         "model_sensitivity_exercised": any(row["interaction_exercised"] for row in transfer_matrix),
         "claim_boundary_notes": [
             "Diagnostic transfer probe only.",
@@ -494,6 +496,47 @@ def _aggregate_metrics(records: Sequence[Mapping[str, Any]]) -> dict[str, float 
     return {key: value for key, value in metrics.items() if value is not None}
 
 
+def _interaction_metric_summary(gate_cells: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Summarize near-field interaction metrics across evaluated gate cells.
+
+    Returns:
+        Packet-level near-field proof fields for compact evidence artifacts.
+    """
+
+    within_values: list[float] = []
+    clearance_values: list[float] = []
+    interacting_cells: list[Mapping[str, Any]] = []
+
+    for cell in gate_cells:
+        metrics = cell.get("metrics")
+        if not isinstance(metrics, Mapping):
+            continue
+        within = metrics.get("robot_ped_within_5m_frac")
+        if within is not None:
+            within_values.append(float(within))
+        clearance = metrics.get("min_clearance_m")
+        if clearance is not None:
+            clearance_values.append(float(clearance))
+        if cell.get("interaction_status") == "interacting":
+            interacting_cells.append(cell)
+
+    max_within = max(within_values) if within_values else None
+    return {
+        "cell_count": len(gate_cells),
+        "interacting_cell_count": len(interacting_cells),
+        "interacting_planner_keys": sorted(
+            {str(cell.get("planner_key")) for cell in interacting_cells}
+        ),
+        "interacting_evaluation_models": sorted(
+            {str(cell.get("evaluation_model")) for cell in interacting_cells}
+        ),
+        "max_robot_ped_within_5m_frac": max_within,
+        "min_robot_ped_within_5m_frac": min(within_values) if within_values else None,
+        "min_clearance_m": min(clearance_values) if clearance_values else None,
+        "physics_near_field_confirmed": bool(max_within is not None and max_within > 0.0),
+    }
+
+
 def _evaluate_gate(metrics: Mapping[str, float | None], gate: Mapping[str, Any]) -> dict[str, Any]:
     metric = str(gate["metric"])
     value = metrics.get(metric)
@@ -700,6 +743,7 @@ def _metadata_payload(report: Mapping[str, Any]) -> dict[str, Any]:
         "row_status_counts": report["row_status_counts"],
         "transfer_status_counts": report["transfer_status_counts"],
         "interaction_status_counts": report["interaction_status_counts"],
+        "interaction_metric_summary": report["interaction_metric_summary"],
         "model_sensitivity_exercised": report["model_sensitivity_exercised"],
     }
 
@@ -724,6 +768,7 @@ def _claim_boundary_markdown(report: Mapping[str, Any]) -> str:
 
 
 def _readme_markdown(report: Mapping[str, Any]) -> str:
+    interaction_metrics = report["interaction_metric_summary"]
     lines = [
         "# Issue #4207 Certification-Transfer Probe Evidence",
         "",
@@ -739,6 +784,12 @@ def _readme_markdown(report: Mapping[str, Any]) -> str:
         f"- Gate status counts: `{dict(report['row_status_counts'])}`",
         f"- Transfer status counts: `{dict(report['transfer_status_counts'])}`",
         f"- Interaction status counts: `{dict(report['interaction_status_counts'])}`",
+        f"- Physics near-field confirmed: `{interaction_metrics['physics_near_field_confirmed']}`",
+        f"- Max robot-pedestrian within-5m fraction: "
+        f"`{interaction_metrics['max_robot_ped_within_5m_frac']}`",
+        f"- Minimum clearance: `{interaction_metrics['min_clearance_m']}`",
+        f"- Interacting gate cells: `{interaction_metrics['interacting_cell_count']}` "
+        f"of `{interaction_metrics['cell_count']}`",
         f"- Model sensitivity exercised: `{report['model_sensitivity_exercised']}`",
         f"- Flip cases: `{len(report['flip_cases'])}`",
         "",

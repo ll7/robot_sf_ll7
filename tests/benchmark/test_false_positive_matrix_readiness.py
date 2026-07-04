@@ -13,6 +13,7 @@ from robot_sf.benchmark.false_positive_matrix_readiness import (
     REQUIRED_OBSERVATION_MODE,
     STATUS_BLOCKED,
     STATUS_READY,
+    _scenario_ids,
     check_false_positive_matrix_readiness,
 )
 
@@ -38,6 +39,21 @@ def test_stronger_matrix_configs_are_ready() -> None:
     assert len(readiness.pedestrian_scenario_ids) == 3
     assert readiness.injection_probe["pedestrians_added"] == 1
     assert readiness.injection_probe["pedestrians_count"] == 2
+
+
+def test_scenario_ids_treat_null_name_as_missing_not_none_string() -> None:
+    """A null ``name`` falls through to scenario_id/id instead of coercing to "None"."""
+
+    ids = _scenario_ids(
+        [
+            {"name": "corridor_a"},
+            {"name": None, "scenario_id": "trap_b"},
+            {"name": None, "scenario_id": None, "id": "cross_c"},
+            {"name": None, "scenario_id": None, "id": None},
+        ]
+    )
+
+    assert ids == ["corridor_a", "trap_b", "cross_c", "unknown"]
 
 
 def test_one_scenario_or_one_seed_matrix_blocks() -> None:

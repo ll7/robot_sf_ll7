@@ -117,7 +117,7 @@ def check_false_positive_matrix_readiness(
     )
     pedestrian_scenario_ids = [
         scenario_id
-        for scenario_id, scenario in zip(scenario_ids, nominal_scenarios, strict=False)
+        for scenario_id, scenario in zip(scenario_ids, nominal_scenarios, strict=True)
         if _scenario_has_pedestrians(scenario)
     ]
     injection_probe = _structured_injection_probe(
@@ -220,7 +220,11 @@ def _observation_noise_blockers(
 def _scenario_ids(scenarios: Sequence[Mapping[str, Any]]) -> list[str]:
     ids: list[str] = []
     for scenario in scenarios:
-        value = scenario.get("name") or scenario.get("scenario_id") or scenario.get("id")
+        value = scenario.get("name")
+        if value is None:
+            value = scenario.get("scenario_id")
+        if value is None:
+            value = scenario.get("id")
         ids.append(str(value) if value is not None else "unknown")
     return ids
 
@@ -255,6 +259,7 @@ def _scenario_has_pedestrians(scenario: Mapping[str, Any]) -> bool:
 def _structured_injection_probe(noise_spec: Mapping[str, Any] | None) -> dict[str, Any]:
     if noise_spec is None:
         return {"pedestrians_added": 0, "steps_with_noise": 0}
+    noise_dict = dict(noise_spec)
     observation = {
         "robot": {"position": [1.0, 2.0]},
         "pedestrians_positions": [[2.0, 2.0], [0.0, 0.0], [0.0, 0.0]],
@@ -262,11 +267,11 @@ def _structured_injection_probe(noise_spec: Mapping[str, Any] | None) -> dict[st
         "pedestrians_count": [1.0],
     }
     rng = make_observation_noise_rng(
-        noise_spec,
+        noise_dict,
         seed=0,
         scenario_id="issue_3300_matrix_readiness_probe",
     )
-    noisy, stats = apply_observation_noise(observation, noise_spec, rng)
+    noisy, stats = apply_observation_noise(observation, noise_dict, rng)
     return {
         "pedestrians_added": int(stats.get("pedestrians_added", 0)),
         "steps_with_noise": int(stats.get("steps_with_noise", 0)),

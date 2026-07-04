@@ -5,7 +5,7 @@ entries:
   - date_utc: "2026-07-04"
     slice: "map-runner proxemic ablation report input contract"
     branch: "issue-4165-closure-audit-verify-acceptance-criteria-of-4165-against-merged-prs-clos"
-    pr_url: "pending"
+    pr_url: "https://github.com/ll7/robot_sf_ll7/pull/4516"
     delivered:
       - "Adds a fail-closed map-runner episode-record adapter for the paired proxemic ablation report."
       - "Extends the issue-specific report CLI with --input-format map-runner while preserving legacy report-row input."

@@ -119,6 +119,11 @@ Policy caveats:
 - fallback/degraded/diagnostic status must be preserved in `claim_boundary` or a payload note.
 
 ## Current Bundles
+
+- `issue_4224_closure_audit_2026-07-04.md`: closure-audit integration report for issue #4224.
+  Maps merged public registry, acquisition-doc, and skip-if-absent loader PRs for ATC, ETH/UCY,
+  inD, CrowdBot, and SCAND, while preserving the remaining private acquisition, seeding, and
+  trusted `expected_tree_sha256` pinning blocker.
 - `issue_4401_closure_audit_2026-07-04.md`: closure-audit integration report for the
   fixed-scope fidelity-sensitivity launch prerequisites in issue #4401. Maps the hybrid opt-in,
   ORCA `rvo2` remediation, plan-mode launchability, and rank-identifiability contract criteria to

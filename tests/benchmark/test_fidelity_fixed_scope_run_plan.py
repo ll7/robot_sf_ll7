@@ -179,3 +179,145 @@ def test_plan_only_cli_require_launchable_fails_closed(tmp_path: Path) -> None:
         ]
     )
     assert exit_code == 1
+
+
+# ---------------------------------------------------------------------------
+# Per-cell episode wiring: mapping fixed-scope plan cells to concrete runner
+# inputs, fail-closed, with no silent fallback (issue #3207 next launch gate).
+# ---------------------------------------------------------------------------
+
+
+def test_variant_index_covers_every_plan_cell() -> None:
+    """Every plan cell's (axis, variant) resolves to exactly one materialized variant."""
+    config = _config()
+    index = campaign_runner.build_fixed_scope_variant_index(config)
+    plan = _plan()
+
+    # Four axes x three variants each = twelve materialized variants.
+    assert len(index) == 12
+    for cell in plan["run_cells"]:
+        assert (cell["axis"], cell["variant"]) in index
+    # Every variant is runtime-bound (no "unsupported"), so no cell is stranded.
+    assert all(spec.runtime_binding != "unsupported" for spec in index.values())
+
+
+def test_bind_social_force_cell_maps_to_runner_planner() -> None:
+    """A default_social_force cell binds to the runner's baseline_social_force planner."""
+    config = _config()
+    index = campaign_runner.build_fixed_scope_variant_index(config)
+    cells = campaign_runner._run_cells_from_plan(_plan())
+    cell = next(c for c in cells if c.planner_group == "default_social_force")
+
+    binding = campaign_runner.bind_fixed_scope_run_cell(cell, index)
+    assert binding.runner_bound is True
+    assert binding.planner_name == "baseline_social_force"
+    assert binding.unbound_reason is None
+    # The bound variant carries the cell's own axis/variant runtime binding.
+    assert binding.variant.axis == cell.axis
+    assert binding.variant.source_key == cell.variant
+
+
+def test_bind_orca_cell_is_unbound_no_silent_fallback() -> None:
+    """An ORCA cell has no native runner planner and never inherits a substitute."""
+    config = _config()
+    index = campaign_runner.build_fixed_scope_variant_index(config)
+    cells = campaign_runner._run_cells_from_plan(_plan())
+    cell = next(c for c in cells if c.planner_group == "orca")
+
+    binding = campaign_runner.bind_fixed_scope_run_cell(cell, index)
+    assert binding.runner_bound is False
+    assert binding.planner_name is None
+    assert "no_native_runner_planner_for_algorithm:orca" in binding.unbound_reason
+
+
+def test_bind_hybrid_cell_requires_opt_in_unbound() -> None:
+    """The experimental hybrid-rule cell stays unbound pending explicit opt-in."""
+    config = _config()
+    index = campaign_runner.build_fixed_scope_variant_index(config)
+    cells = campaign_runner._run_cells_from_plan(_plan())
+    cell = next(c for c in cells if c.planner_group == "hybrid_rule_v0_minimal")
+
+    binding = campaign_runner.bind_fixed_scope_run_cell(cell, index)
+    assert binding.runner_bound is False
+    assert binding.planner_name is None
+    assert "planner_requires_explicit_opt_in:hybrid_rule_v0_minimal" in binding.unbound_reason
+
+
+def test_bind_plan_preserves_cell_count_and_order() -> None:
+    """bind_fixed_scope_run_plan yields one binding per plan cell, in plan order."""
+    config = _config()
+    plan = _plan()
+    bindings = campaign_runner.bind_fixed_scope_run_plan(plan, config)
+
+    assert len(bindings) == plan["run_cell_count"] == 108
+    for binding, cell in zip(bindings, plan["run_cells"], strict=True):
+        assert binding.cell.planner_group == cell["planner_group"]
+        assert binding.cell.axis == cell["axis"]
+        assert binding.cell.variant == cell["variant"]
+        assert binding.cell.seed == cell["seed"]
+    # Only the social-force group is runner-bound today; ORCA/hybrid stay unbound.
+    bound_groups = {b.cell.planner_group for b in bindings if b.runner_bound}
+    assert bound_groups == {"default_social_force"}
+
+
+def test_bind_missing_variant_raises_not_silently_dropped() -> None:
+    """A plan/variant-index disagreement is a hard error, not a silent skip."""
+    config = _config()
+    index = campaign_runner.build_fixed_scope_variant_index(config)
+    cells = campaign_runner._run_cells_from_plan(_plan())
+    ghost = cells[0].__class__(
+        **{**cells[0].__dict__, "axis": "no_such_axis", "variant": "no_such_variant"}
+    )
+    with pytest.raises(KeyError):
+        campaign_runner.bind_fixed_scope_run_cell(ghost, index)
+
+
+def test_execute_raises_on_unbound_cells_without_running_any() -> None:
+    """execute_fixed_scope_cells fails closed before running a single unbound cell."""
+    config = _config()
+    bindings = campaign_runner.bind_fixed_scope_run_plan(_plan(), config)
+    calls: list[object] = []
+
+    def _recording_runner(binding: object) -> list[dict]:
+        calls.append(binding)
+        return [{"marker": True}]
+
+    with pytest.raises(campaign_runner.FixedScopeNotLaunchableError):
+        campaign_runner.execute_fixed_scope_cells(bindings, cell_runner=_recording_runner)
+    # No silent fallback: the runner is never invoked when any cell is unbound.
+    assert calls == []
+
+
+def test_execute_runs_one_batch_per_bound_cell_with_correct_inputs() -> None:
+    """Each bound cell drives the injected runner with its planner, variant, and seed."""
+    config = _config()
+    bindings = campaign_runner.bind_fixed_scope_run_plan(_plan(), config)
+    bound = [b for b in bindings if b.runner_bound]
+    # Sanity: 12 variants x 3 seeds for the single runner-bound planner group.
+    assert len(bound) == 36
+
+    seen: list[tuple] = []
+
+    def _fake_runner(binding: object) -> list[dict]:
+        seen.append((binding.planner_name, binding.variant.source_key, binding.cell.seed))
+        return [{"planner": binding.planner_name}]
+
+    rows = campaign_runner.execute_fixed_scope_cells(bound, cell_runner=_fake_runner)
+    assert len(rows) == len(bound)
+    assert all(name == "baseline_social_force" for name, _variant, _seed in seen)
+    # Every (variant, seed) pairing in the bound scope is driven exactly once.
+    assert len(set(seen)) == len(bound)
+
+
+def test_fixed_scope_execute_cli_fails_closed_and_writes_no_rows(tmp_path: Path) -> None:
+    """--fixed-scope-execute exits non-zero and runs zero episodes on the shipped config."""
+    raw_root = tmp_path / "raw"
+    exit_code = campaign_runner.main(
+        [
+            "--fixed-scope-execute",
+            "--raw-root",
+            str(raw_root),
+        ]
+    )
+    assert exit_code == 1
+    assert not (raw_root / "episode_rows.jsonl").exists()

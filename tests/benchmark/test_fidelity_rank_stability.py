@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -11,11 +12,15 @@ from robot_sf.benchmark.fidelity_rank_stability import (
     AXIS_PRIMARY_METRIC_NON_IDENTIFIABLE_REASON,
     FIDELITY_RANK_STABILITY_SCHEMA,
     PRIMARY_METRIC_ZERO_VARIANCE_REASON,
+    RANK_STABILITY_REPORT_SCHEMA,
+    PostRunContractResult,
     analyze_fidelity_sensitivity,
+    check_rank_identifiability_contract,
     count_rank_flips,
     kendall_tau,
     metric_drift,
     rank_planners,
+    write_rank_identifiability_report,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -249,3 +254,78 @@ def test_config_declares_three_axes_and_primary_metric() -> None:
     assert data["primary_metric"]
     assert len(data["fidelity_axes"]) >= 3
     assert {"timestep", "sfm_params", "observation_noise"} <= set(data["fidelity_axes"])
+
+
+# --- post-run contract: standalone report write -----------------------------
+
+
+def test_write_rank_identifiability_report_roundtrips(tmp_path: Path) -> None:
+    """The standalone report file carries the wrapper schema and report content."""
+    report = analyze_fidelity_sensitivity(
+        _NOMINAL, {}, primary_metric="success_rate", drift_metrics=["success_rate"]
+    ).to_dict()
+    path = write_rank_identifiability_report(report, tmp_path)
+    assert path.name == "fidelity_rank_stability_report.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == RANK_STABILITY_REPORT_SCHEMA
+    assert payload["rank_identifiable"] is True
+    assert payload["primary_metric"] == "success_rate"
+
+
+# --- post-run contract: check_rank_identifiability_contract -----------------
+
+
+_CONTRACT_SPEC = {
+    "id": "runtime_rank_identifiability_recheck",
+    "report": "fidelity_rank_stability_report.json",
+    "builder": "robot_sf/benchmark/fidelity_rank_stability.py",
+    "metric": "success_rate",
+    "threshold": "non_zero_variance_and_rank_identifiable",
+    "output_path": "output/fidelity_sensitivity/<campaign>/rank_identifiability.json",
+    "blocks_claims_when_failed": True,
+}
+
+
+def test_check_contract_passes_when_identifiable() -> None:
+    """An identifiable report satisfies the contract."""
+    report = analyze_fidelity_sensitivity(
+        _NOMINAL, {}, primary_metric="success_rate", drift_metrics=["success_rate"]
+    ).to_dict()
+    result = check_rank_identifiability_contract(report, _CONTRACT_SPEC)
+    assert result.satisfied is True
+    assert result.reason is None
+    assert result.contract_id == "runtime_rank_identifiability_recheck"
+
+
+def test_check_contract_fails_when_not_identifiable() -> None:
+    """All-tied metrics fail the identifiability contract."""
+    tied = {
+        "p_a": {"success_rate": 0.0},
+        "p_b": {"success_rate": 0.0},
+    }
+    report = analyze_fidelity_sensitivity(
+        tied, {}, primary_metric="success_rate", drift_metrics=["success_rate"]
+    ).to_dict()
+    result = check_rank_identifiability_contract(report, _CONTRACT_SPEC)
+    assert result.satisfied is False
+    assert result.reason is not None
+    assert "rank not identifiable" in result.reason
+    assert "blocks_claims_when_failed=True" in result.reason
+
+
+def test_check_contract_rejects_unsupported_threshold() -> None:
+    """An unknown threshold raises ValueError."""
+    bad_spec = {**_CONTRACT_SPEC, "threshold": "bogus"}
+    report = analyze_fidelity_sensitivity(
+        _NOMINAL, {}, primary_metric="success_rate", drift_metrics=["success_rate"]
+    ).to_dict()
+    with pytest.raises(ValueError, match="unsupported post-run contract threshold"):
+        check_rank_identifiability_contract(report, bad_spec)
+
+
+def test_check_contract_result_to_dict_roundtrips() -> None:
+    """PostRunContractResult.to_dict is JSON-safe."""
+    result = PostRunContractResult(contract_id="test", satisfied=True, reason=None)
+    payload = result.to_dict()
+    assert json.dumps(payload)
+    assert payload == {"contract_id": "test", "satisfied": True, "reason": None}

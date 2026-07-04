@@ -1385,7 +1385,7 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
                 "stall_window_steps": int(self.topology_config.stall_window_steps),
             }
             if self._last_decision.get("selected_source") == "topology_hypothesis":
-                influence = dict(self._last_topology_command_influence or {})
+                influence = deepcopy(self._last_topology_command_influence or {})
                 influence.update(
                     {
                         "source": "topology_hypothesis",

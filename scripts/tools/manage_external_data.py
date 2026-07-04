@@ -516,7 +516,7 @@ ASSETS: tuple[AssetSpec, ...] = (
                 group="license_or_readme",
             ),
         ),
-        related_issues=(3977,),
+        related_issues=(4357, 4224, 3977),
         license_url="https://www.epfl.ch/labs/lasa/crowdbot-dataset/",
     ),
     AssetSpec(
@@ -576,7 +576,7 @@ ASSETS: tuple[AssetSpec, ...] = (
                 group="license_or_readme",
             ),
         ),
-        related_issues=(1470, 1496),
+        related_issues=(4357, 4224, 1470, 1496),
         license_url="https://dataverse.tdl.org/dataset.xhtml?persistentId=doi:10.18738/T8/0PRYRH",
     ),
 )

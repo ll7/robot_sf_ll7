@@ -26,6 +26,12 @@ The first supported asset groups are:
 - `ind-crossings`: inD naturalistic road-user trajectories at German intersections (Bock et al.
   2020), a request-gated non-commercial dataset; see
   [inD Intersection Drone External Data](datasets/ind.md).
+- `crowdbot`: CrowdBot robot-in-crowd recordings of the Qolo robot navigating dense pedestrian
+  crowds (EPFL LASA / EU CrowdBot project), a research-access bring-your-own dataset; see
+  [CrowdBot Robot-in-Crowd External Data](datasets/crowdbot.md).
+- `scand-demos`: SCAND (Socially CompliAnt Navigation Dataset) teleoperated robot navigation
+  demonstrations (Karnan et al. 2022), a Texas Data Repository release; see
+  [SCAND Socially-Compliant Navigation Demonstrations External Data](datasets/scand.md).
 
 `download` intentionally fails closed for these groups because the repository has not encoded a
 license-safe direct download path. Follow the official source instructions printed by `explain`,
@@ -65,6 +71,8 @@ summary.
 | `eth-ucy` | <https://vision.ee.ethz.ch/datsets.html> plus UCY Crowds-by-Example source/paper provenance | research-use terms from upstream or maintainer-approved mirror; not redistributed by Robot SF | `output/external_data/eth-ucy/` or `$ROBOT_SF_EXTERNAL_DATA_ROOT/eth-ucy/` | ETH/Hotel `obsmat.txt`, UCY `.vsp` or trajectory `.txt`, plus local `README*`, `LICENSE*`, or `TERMS*`; see [ETH/UCY External Trajectory Data](./datasets/eth-ucy.md) |
 | `atc-pedestrian` | <https://dil.atr.jp/crest2010_HRI/ATC_dataset/> | ATR research-use-only terms; cite Brščić et al. 2013; not redistributed by Robot SF | `output/external_data/atc_pedestrian/` | one or more daily trajectory CSVs (`**/atc-*.csv`, columns `time person_id x y z velocity motion_angle facing_angle`) plus a local `README*`/`LICENSE*`/`TERMS*` terms copy |
 | `ind-crossings` | <https://levelxdata.com/ind-dataset/> | request-gated, non-commercial research use only after manual approval; cite Bock et al. 2020; no redistribution of inD bytes | `output/external_data/ind_crossings/` | per-recording `**/*_tracks.csv`, `**/*_tracksMeta.csv`, `**/*_recordingMeta.csv`, and a `**/*_background.png` image, plus a local `README*`/`LICENSE*`/`TERMS*` terms copy; see [inD Intersection Drone External Data](datasets/ind.md) |
+| `crowdbot` | <https://www.epfl.ch/labs/lasa/crowdbot-dataset/> (links to the IEEE DataPort release) | research-access / bring-your-own; preserve the CrowdBot / IEEE DataPort terms locally; not redistributed by Robot SF | `output/external_data/crowdbot/` | one or more `**/*.bag` recordings (and/or exported `**/*.csv` / `**/*.json`), plus a local `README*`/`LICENSE*`/`TERMS*` terms copy; see [CrowdBot Robot-in-Crowd External Data](datasets/crowdbot.md) |
+| `scand-demos` | <https://dataverse.tdl.org/dataset.xhtml?persistentId=doi:10.18738/T8/0PRYRH> (DOI `10.18738/T8/0PRYRH`) | Texas Data Repository terms; clickthrough/manual file selection; cite Karnan et al. 2022; not redistributed by Robot SF | `output/external_data/scand_demos/` | one or more `**/*.bag` recordings (and/or exported `**/*.csv` / `**/*.json`), plus a local `README*`/`LICENSE*`/`TERMS*` terms copy; see [SCAND Socially-Compliant Navigation Demonstrations External Data](datasets/scand.md) |
 
 After placing the files, validate and write a provenance manifest:
 

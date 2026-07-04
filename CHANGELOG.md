@@ -25,6 +25,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Wired the CrowdBot and SCAND external datasets into the external-data setup nav and completed
+  their registry traceability** (issue #4357, #4224 program). `docs/external_data_setup.md` now lists
+  and tabulates `crowdbot` and `scand-demos` alongside their program siblings (SDD, ETH/UCY, ATC,
+  inD) with links to the existing `docs/datasets/crowdbot.md` / `docs/datasets/scand.md` acquisition
+  pages, and the two `scripts/tools/manage_external_data.py` registry entries plus the
+  `docs/context/issue_4224_external_dataset_registry.md` rows now cite the delivering issue #4357 and
+  program parent #4224. Registry/docs discoverability only — no dataset bytes, no automated
+  acquisition, and no new loader/benchmark/paper claim (the shape-contract loaders landed earlier in
+  #4346). Both assets still fail closed with `status: missing` when unstaged.
 * Extended the **issue #3207 fidelity-sensitivity campaign runner to consume the fixed-scope preflight
   plan** (`scripts/benchmark/run_fidelity_sensitivity_campaign.py`). A new `--fixed-scope-plan-only`
   mode builds the preflight packet and enumerates the concrete full run plan — every

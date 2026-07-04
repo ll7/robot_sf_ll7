@@ -1,0 +1,45 @@
+schema_version: heatmap-per-family-means-source-locator.v1
+issue: 4366
+claim_boundary: >-
+  Stable source locator for the manuscript heatmap per-family means verification
+  row only. This manifest does not edit manuscript claims, recompute benchmark
+  values, promote the table beyond its existing dissertation-export boundary, or
+  run a new campaign.
+heatmap_per_family_means_locator:
+  artifact_id: tab_issue_1023_scenario_family_breakdown
+  table_path: docs/context/evidence/issue_2542_dissertation_export_bundle/payload/artifacts/tab_issue_1023_scenario_family_breakdown.md
+  table_sha256: f131df376285acc7bad926e01cde0b2bf6bd8f33b53a409d70dbd59e6d7796b8
+  artifact_manifest_path: docs/context/evidence/issue_2542_dissertation_export_bundle/artifact_manifest.json
+  artifact_spec_path: docs/context/evidence/issue_2542_dissertation_export_bundle/artifact_spec.json
+  checksum_manifest_path: docs/context/evidence/issue_2542_dissertation_export_bundle/checksums.sha256
+  checksum_manifest_entry: artifacts/tab_issue_1023_scenario_family_breakdown.md
+  source_artifact_summary: >-
+    Scenario-family breakdown table re-exported in the issue #2542 dissertation
+    export bundle from the issue #3203 bounded scenario-horizon rerun.
+  locator_contract: >-
+    Treat this tracked Markdown table, identified by artifact id, path, and
+    checksum, as the stable repository locator for heatmap per-family means.
+    Heatmap consumers select rows by planner_key and scenario_family, and select
+    mean values from *_mean columns.
+  row_key_fields:
+    - planner_key
+    - scenario_family
+  mean_value_fields:
+    - success_mean
+    - collisions_mean
+    - ped_collision_count_mean
+    - obstacle_collision_count_mean
+    - total_collision_count_mean
+    - near_misses_mean
+    - time_to_goal_norm_mean
+    - path_efficiency_mean
+    - comfort_exposure_mean
+    - jerk_mean
+    - snqi_mean
+  source_locator_status: match
+  evidence_status: locator_verified_only
+  caveat: >-
+    This verifies the stable locator and checksum for the per-family means table;
+    it does not byte-verify any dissertation-side rendered heatmap image or
+    promote the underlying campaign beyond the artifact bundle's recorded claim
+    boundary.

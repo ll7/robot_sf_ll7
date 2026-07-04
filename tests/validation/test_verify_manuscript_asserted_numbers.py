@@ -23,7 +23,7 @@ SPEC.loader.exec_module(_MODULE)
 
 
 def test_checked_in_declarations_verify_and_report(tmp_path: Path) -> None:
-    """Checked-in issue declarations produce the committed match/not-verifiable partition."""
+    """Checked-in issue declarations produce the committed verified partition."""
     report_path = tmp_path / "report.md"
     json_path = tmp_path / "report.json"
 
@@ -42,22 +42,23 @@ def test_checked_in_declarations_verify_and_report(tmp_path: Path) -> None:
     report = json.loads(json_path.read_text(encoding="utf-8"))
     assert report["overall_status"] == "pass"
     assert report["status_counts"] == {
-        "match": 9,
+        "match": 10,
         "mismatch": 0,
-        "not_verifiable": 1,
+        "not_verifiable": 0,
         "blocked": 0,
     }
     text = report_path.read_text(encoding="utf-8")
     assert "AI-GENERATED" in text
     assert "heatmap_per_family_means_source" in text
-    assert "`not_verifiable`" in text
+    assert "issue_4366_heatmap_per_family_means_source_locator.yaml" in text
+    assert '"evidence_status": "locator_verified_only"' in text
     assert "marker-placement placeholder" in text
-    assert "No manuscript value is treated as matched" in text
+    assert "Stable locator declared" in text
     heatmap = next(
         result for result in report["results"] if result["id"] == "heatmap_per_family_means_source"
     )
-    assert heatmap["source_locator_status"] == "not_verifiable"
-    assert "docs/context/evidence/" in heatmap["candidate_sources_reviewed"]
+    assert heatmap["source_locator_status"] == "match"
+    assert heatmap["actual"]["artifact_id"] == "tab_issue_1023_scenario_family_breakdown"
     result_rows = [line for line in text.splitlines() if line.startswith("| ")][2:]
     assert len(result_rows) == 10
     assert all(line.count("|") == 9 for line in result_rows)

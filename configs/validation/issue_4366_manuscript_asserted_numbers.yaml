@@ -5,10 +5,11 @@ claim_boundary: >-
   does not edit manuscript claims, promote benchmark evidence, run campaigns, or silently fix
   source values.
 selection_assumption: >-
-  The tracked issue thread names number families, but it does not include the dissertation-side
+  The tracked issue thread names number families, but does not include the dissertation-side
   audit table. These ten declarations remain the reviewed top-10 seed from PR #4375 because each
-  row maps to one requested family and no live issue comment replaced the selection. Ambiguous
-  heatmap source records are explicitly marked not_verifiable.
+  row maps to one requested family and no live issue comment replaced the selection. The heatmap
+  row verifies the stable tracked locator manifest only; it does not recompute heatmap values or
+  promote the underlying campaign.
 entries:
   - id: snqi_camera_ready_v3_w_success
     manuscript_locator: "audit finding F / SNQI weight vector / camera_ready_v3 / w_success"
@@ -56,8 +57,9 @@ entries:
       pointer: scenarios[name=classic_bottleneck_high].simulation_config.ped_density
     source_locator_status: resolved
     source_locator_note: >-
-      The 0.0 value is the checked source field for the scenario row. It is a marker-placement
-      placeholder, not evidence that the high-density bottleneck scene has no pedestrians; see
+      The 0.0 value is the checked source field for the scenario row. It is a
+      marker-placement placeholder, not evidence that the high-density bottleneck
+      scene has no pedestrians; see
       configs/scenarios/archetypes/classic_density_tier_index.yaml#spawn_modes.markers.note.
 
   - id: ppo_br06_v3_total_timesteps
@@ -83,18 +85,48 @@ entries:
 
   - id: heatmap_per_family_means_source
     manuscript_locator: "audit finding F / heatmap per-family means"
-    expected_status: not_verifiable
-    source_locator_status: not_verifiable
-    candidate_sources_reviewed:
-      - docs/benchmark_camera_ready.md#per-planner-per-family-archetype-metric-means
-      - docs/context/evidence/
-      - output/
-    not_verifiable_reason: >-
-      The issue names heatmap per-family means but does not identify one canonical
-      source-of-record table or locator. Repository search found documentation for
-      per-planner/per-family metric means and generated evidence/output locations, but no stable
-      reviewed declaration table for the manuscript heatmap values. This declaration records the
-      gap instead of guessing among generated evidence packets.
+    expected:
+      artifact_id: tab_issue_1023_scenario_family_breakdown
+      table_path: docs/context/evidence/issue_2542_dissertation_export_bundle/payload/artifacts/tab_issue_1023_scenario_family_breakdown.md
+      table_sha256: f131df376285acc7bad926e01cde0b2bf6bd8f33b53a409d70dbd59e6d7796b8
+      artifact_manifest_path: docs/context/evidence/issue_2542_dissertation_export_bundle/artifact_manifest.json
+      artifact_spec_path: docs/context/evidence/issue_2542_dissertation_export_bundle/artifact_spec.json
+      checksum_manifest_path: docs/context/evidence/issue_2542_dissertation_export_bundle/checksums.sha256
+      checksum_manifest_entry: artifacts/tab_issue_1023_scenario_family_breakdown.md
+      source_artifact_summary: >-
+        Scenario-family breakdown table re-exported in the issue #2542 dissertation
+        export bundle from the issue #3203 bounded scenario-horizon rerun.
+      locator_contract: >-
+        Treat this tracked Markdown table, identified by artifact id, path, and
+        checksum, as the stable repository locator for heatmap per-family means.
+        Heatmap consumers select rows by planner_key and scenario_family, and select
+        mean values from *_mean columns.
+      row_key_fields:
+        - planner_key
+        - scenario_family
+      mean_value_fields:
+        - success_mean
+        - collisions_mean
+        - ped_collision_count_mean
+        - obstacle_collision_count_mean
+        - total_collision_count_mean
+        - near_misses_mean
+        - time_to_goal_norm_mean
+        - path_efficiency_mean
+        - comfort_exposure_mean
+        - jerk_mean
+        - snqi_mean
+      source_locator_status: match
+      evidence_status: locator_verified_only
+      caveat: >-
+        This verifies the stable locator and checksum for the per-family means table;
+        it does not byte-verify any dissertation-side rendered heatmap image or
+        promote the underlying campaign beyond the artifact bundle's recorded claim
+        boundary.
+    source:
+      path: docs/context/evidence/issue_4366_heatmap_per_family_means_source_locator.yaml
+      pointer: heatmap_per_family_means_locator
+    source_locator_status: match
     source_locator_note: >-
-      No manuscript value is treated as matched until a stable source table or explicit locator is
-      declared.
+      Stable locator declared for the tracked per-family means table. This is a locator-only
+      verification, not a fresh campaign or rendered-heatmap value audit.

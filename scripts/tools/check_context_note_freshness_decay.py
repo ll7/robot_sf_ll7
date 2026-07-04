@@ -69,14 +69,61 @@ def _load_yaml(path: Path) -> object:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
+def _normalize_repo_path(
+    raw_path: object,
+    *,
+    repo_root: Path | None = None,
+    base_dir: Path | None = None,
+) -> Path | None:
+    """Return a normalized, safe repository-relative path if possible."""
+    if isinstance(raw_path, Path):
+        path = raw_path
+    elif isinstance(raw_path, str) and raw_path.strip():
+        path = Path(raw_path.strip())
+    else:
+        return None
+
+    if path.is_absolute():
+        if repo_root is None:
+            return None
+        try:
+            path = path.resolve().relative_to(repo_root.resolve())
+        except ValueError:
+            return None
+    elif base_dir is not None and not path.parts[:2] == ("docs", "context"):
+        path = base_dir / path
+
+    normalized = Path(os.path.normpath(path.as_posix()))
+    if normalized == Path(".") or ".." in normalized.parts:
+        return None
+    return normalized
+
+
 def _safe_repo_path(raw_path: object) -> Path | None:
     """Return a safe repository-relative Path if possible."""
-    if not isinstance(raw_path, str) or not raw_path.strip():
+    return _normalize_repo_path(raw_path)
+
+
+def _path_is_relative_to(path: Path, parent: Path) -> bool:
+    """Return whether path is parent or contained under parent."""
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def _resolve_markdown_target(target: str, *, source_dir: Path, context_dir: Path) -> Path | None:
+    """Resolve a Markdown target to a normalized repository-relative path."""
+    direct_path = _normalize_repo_path(target)
+    if direct_path is None:
         return None
-    path = Path(raw_path.strip())
-    if path.is_absolute() or ".." in path.parts:
-        return None
-    return path
+    if _path_is_relative_to(direct_path, context_dir) or direct_path.parts[:2] == (
+        "docs",
+        "context",
+    ):
+        return direct_path
+    return _normalize_repo_path(target, base_dir=source_dir)
 
 
 def _catalog_entries(catalog_path: Path) -> list[dict[str, Any]]:
@@ -108,19 +155,22 @@ def _markdown_targets(text: str) -> set[str]:
 
 
 def _index_references(index_path: Path, *, context_dir: Path) -> set[Path]:
-    """Return note paths referenced by INDEX.md."""
+    """Return note paths referenced by INDEX.md.
+
+    Missing configured index files fail closed in ``check_freshness_decay`` so orphan
+    findings are not computed from an empty, misleading reference set.
+    """
     if not index_path.exists():
-        return set()
+        raise FileNotFoundError(index_path)
     targets = _markdown_targets(index_path.read_text(encoding="utf-8"))
     references: set[Path] = set()
     for target in targets:
-        path = Path(target)
+        path = _resolve_markdown_target(target, source_dir=context_dir, context_dir=context_dir)
+        if path is None:
+            continue
         if path.suffix != ".md":
             continue
-        if path.parts[:2] == ("docs", "context"):
-            references.add(path)
-        else:
-            references.add(context_dir / path)
+        references.add(path)
     return references
 
 
@@ -140,6 +190,31 @@ def _tracked_context_notes(repo_root: Path, context_dir: Path) -> set[Path]:
     return notes
 
 
+def _build_inbound_markdown_ref_map(repo_root: Path, context_dir: Path) -> dict[Path, set[Path]]:
+    """Map referenced context note paths to tracked Markdown files that reference them."""
+    output = _run(["git", "ls-files", "--", context_dir.as_posix()], cwd=repo_root)
+    inbound_refs: dict[Path, set[Path]] = {}
+    for line in output.splitlines():
+        source_path = _normalize_repo_path(line.strip())
+        if source_path is None or source_path.suffix != ".md":
+            continue
+        full_source_path = repo_root / source_path
+        if not full_source_path.is_file():
+            continue
+        try:
+            content = full_source_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for target in _markdown_targets(content):
+            target_path = _resolve_markdown_target(
+                target, source_dir=source_path.parent, context_dir=context_dir
+            )
+            if target_path is None or target_path.suffix != ".md" or target_path == source_path:
+                continue
+            inbound_refs.setdefault(target_path, set()).add(source_path)
+    return inbound_refs
+
+
 def _last_touch(repo_root: Path, path: Path) -> datetime | None:
     """Return the last commit touch date."""
     output = _run(["git", "log", "-1", "--format=%cI", "--", path.as_posix()], cwd=repo_root)
@@ -150,42 +225,21 @@ def _last_touch(repo_root: Path, path: Path) -> datetime | None:
 
 def _has_inbound_markdown_ref(note_path: Path, repo_root: Path, context_dir: Path) -> bool:
     """Check if any other Markdown file under context_dir references note_path."""
-    output = _run(["git", "ls-files", "--", context_dir.as_posix()], cwd=repo_root)
-    for line in output.splitlines():
-        source_path = Path(line.strip())
-        if source_path.suffix != ".md" or source_path == note_path:
-            continue
-        full_source_path = repo_root / source_path
-        if not full_source_path.is_file():
-            continue
-        try:
-            content = full_source_path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        targets = _markdown_targets(content)
-        for target in targets:
-            target_path = Path(target)
-            if target_path.parts[:2] == ("docs", "context"):
-                resolved = target_path
-            else:
-                resolved = Path(os.path.normpath(source_path.parent / target_path))
-            if resolved == note_path:
-                return True
-    return False
+    return bool(_build_inbound_markdown_ref_map(repo_root, context_dir).get(note_path))
 
 
 def _is_referenced_in_catalog(
-    path: Path, current_entry: dict[str, Any], entries: list[dict[str, Any]]
+    path: Path, current_entry: dict[str, Any], entries: list[dict[str, Any]], repo_root: Path
 ) -> bool:
     """Check if the path is listed elsewhere in catalog.yaml."""
     for entry in entries:
         if entry is current_entry:
             continue
-        if _safe_repo_path(entry.get("path")) == path:
+        if _normalize_repo_path(entry.get("path"), repo_root=repo_root) == path:
             return True
-        if _safe_repo_path(entry.get("replacement")) == path:
+        if _normalize_repo_path(entry.get("replacement"), repo_root=repo_root) == path:
             return True
-    if _safe_repo_path(current_entry.get("replacement")) == path:
+    if _normalize_repo_path(current_entry.get("replacement"), repo_root=repo_root) == path:
         return True
     return False
 
@@ -200,10 +254,10 @@ def _check_superseded_rules(
     """Validate Rule A: superseded catalog rows must name their replacement."""
     findings: list[Finding] = []
     for index, entry in enumerate(entries):
-        path = _safe_repo_path(entry.get("path"))
+        path = _normalize_repo_path(entry.get("path"), repo_root=repo_root)
         status = entry.get("status")
         freshness = entry.get("freshness")
-        replacement = _safe_repo_path(entry.get("replacement"))
+        replacement = _normalize_repo_path(entry.get("replacement"), repo_root=repo_root)
 
         entry_path = (
             path.as_posix() if path is not None else f"{catalog_path.as_posix()}:entries[{index}]"
@@ -252,16 +306,16 @@ def _check_superseded_rules(
 def _check_stale_rules(
     entries: list[dict[str, Any]],
     repo_root: Path,
-    context_dir: Path,
     archive_dir: Path,
     max_age_days: int,
     now: datetime,
+    inbound_markdown_refs: dict[Path, set[Path]],
     proposed_moves: list[ProposedMove],
 ) -> list[Finding]:
     """Validate Rule B: current dated notes older than max age with no inbound references."""
     findings: list[Finding] = []
     for entry in entries:
-        path = _safe_repo_path(entry.get("path"))
+        path = _normalize_repo_path(entry.get("path"), repo_root=repo_root)
         status = entry.get("status")
         freshness = entry.get("freshness")
         if status != "current" or freshness != "dated" or path is None:
@@ -276,8 +330,8 @@ def _check_stale_rules(
         if age_days <= max_age_days:
             continue
 
-        has_md_ref = _has_inbound_markdown_ref(path, repo_root, context_dir)
-        has_catalog_ref = _is_referenced_in_catalog(path, entry, entries)
+        has_md_ref = bool(inbound_markdown_refs.get(path))
+        has_catalog_ref = _is_referenced_in_catalog(path, entry, entries, repo_root)
 
         if not (has_md_ref or has_catalog_ref):
             findings.append(
@@ -309,13 +363,14 @@ def _check_orphan_rules(
     tracked_notes: set[Path],
     entries: list[dict[str, Any]],
     indexed_paths: set[Path],
+    repo_root: Path,
 ) -> list[Finding]:
     """Validate Rule C: orphan notes absent from both INDEX.md and catalog.yaml."""
     catalog_paths_and_reps: set[Path] = set()
     for entry in entries:
-        if (p := _safe_repo_path(entry.get("path"))) is not None:
+        if (p := _normalize_repo_path(entry.get("path"), repo_root=repo_root)) is not None:
             catalog_paths_and_reps.add(p)
-        if (r := _safe_repo_path(entry.get("replacement"))) is not None:
+        if (r := _normalize_repo_path(entry.get("replacement"), repo_root=repo_root)) is not None:
             catalog_paths_and_reps.add(r)
 
     findings: list[Finding] = []
@@ -343,25 +398,63 @@ def check_freshness_decay(
     now: datetime | None = None,
 ) -> tuple[list[Finding], list[ProposedMove], list[str]]:
     """Scan docs/context notes for staleness, superseded replacement, and orphan signals."""
+    repo_root = repo_root.resolve()
+    normalized_catalog_path = _normalize_repo_path(catalog_path, repo_root=repo_root)
+    normalized_context_dir = _normalize_repo_path(context_dir, repo_root=repo_root)
+    normalized_index_path = _normalize_repo_path(index_path, repo_root=repo_root)
+    if normalized_catalog_path is None:
+        raise ValueError(f"catalog path must be repository-relative: {catalog_path}")
+    if normalized_context_dir is None:
+        raise ValueError(f"context dir must be repository-relative: {context_dir}")
+    if normalized_index_path is None:
+        raise ValueError(f"index path must be repository-relative: {index_path}")
+    catalog_path = normalized_catalog_path
+    context_dir = normalized_context_dir
+    index_path = normalized_index_path
+
     now = (now or datetime.now(UTC)).astimezone(UTC)
     archive_dir = context_dir / "archive"
     entries = _catalog_entries(repo_root / catalog_path)
-    indexed_paths = _index_references(repo_root / index_path, context_dir=context_dir)
-    tracked_notes = _tracked_context_notes(repo_root, context_dir)
 
     findings: list[Finding] = []
     proposed_moves: list[ProposedMove] = []
     conflicts: list[str] = []
+    try:
+        indexed_paths = _index_references(repo_root / index_path, context_dir=context_dir)
+        should_check_orphans = True
+    except FileNotFoundError:
+        indexed_paths = set()
+        should_check_orphans = False
+        findings.append(
+            Finding(
+                rule="missing_context_index",
+                severity="error",
+                path=index_path.as_posix(),
+                message=(
+                    "configured context index is missing; orphan checks fail closed because "
+                    "empty index references would be misleading"
+                ),
+            )
+        )
+    tracked_notes = _tracked_context_notes(repo_root, context_dir)
+    inbound_markdown_refs = _build_inbound_markdown_ref_map(repo_root, context_dir)
 
     findings.extend(
         _check_superseded_rules(entries, repo_root, catalog_path, archive_dir, proposed_moves)
     )
     findings.extend(
         _check_stale_rules(
-            entries, repo_root, context_dir, archive_dir, max_age_days, now, proposed_moves
+            entries,
+            repo_root,
+            archive_dir,
+            max_age_days,
+            now,
+            inbound_markdown_refs,
+            proposed_moves,
         )
     )
-    findings.extend(_check_orphan_rules(tracked_notes, entries, indexed_paths))
+    if should_check_orphans:
+        findings.extend(_check_orphan_rules(tracked_notes, entries, indexed_paths, repo_root))
 
     by_target: dict[str, list[str]] = {}
     for move in proposed_moves:

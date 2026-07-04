@@ -16,6 +16,7 @@ import yaml
 from loguru import logger
 
 import robot_sf.benchmark.camera_ready._artifacts as camera_ready_artifacts_module
+import robot_sf.benchmark.camera_ready._config as camera_ready_config_module
 import robot_sf.benchmark.camera_ready._run_state as camera_ready_run_state_module
 import robot_sf.benchmark.camera_ready_campaign as camera_ready_campaign_module
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
@@ -89,6 +90,19 @@ def test_camera_ready_campaign_reexports_package_artifact_helpers() -> None:
     for helper_name in helper_names:
         assert getattr(camera_ready_campaign_module, helper_name) is getattr(
             camera_ready_artifacts_module, helper_name
+        )
+
+
+def test_camera_ready_campaign_reexports_package_config_loader() -> None:
+    """Legacy camera_ready_campaign imports expose the moved config loader/validator."""
+    helper_names = (
+        "_validate_campaign_config",
+        "load_campaign_config",
+    )
+
+    for helper_name in helper_names:
+        assert getattr(camera_ready_campaign_module, helper_name) is getattr(
+            camera_ready_config_module, helper_name
         )
 
 

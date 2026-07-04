@@ -19,7 +19,7 @@ from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.failure_extractor import is_failure
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Callable, Iterable, Sequence
 
 SCHEMA_VERSION = "collision_scenario_similarity.v1"
 ISSUE_URL = "https://github.com/ll7/robot_sf_ll7/issues/4359"
@@ -43,6 +43,29 @@ _CATEGORICAL_FEATURES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("scenario_family", ("scenario_family", "scenario_params.family", "scenario_params.kind")),
     ("planner", ("planner_id", "algo", "scenario_params.algo", "scenario_params.planner")),
     ("termination_reason", ("termination_reason", "status")),
+)
+
+_TRAJECTORY_METRIC_FIELDS: frozenset[str] = frozenset(
+    {
+        "avg_speed",
+        "clearing_distance_avg",
+        "clearing_distance_min",
+        "curvature_mean",
+        "energy",
+        "jerk_mean",
+        "mean_clearance",
+        "mean_distance",
+        "min_clearance",
+        "min_distance",
+        "min_separation",
+        "minimum_separation",
+        "path_efficiency",
+        "robot_ped_within_5m_frac",
+        "socnavbench_path_irregularity",
+        "socnavbench_path_length",
+        "socnavbench_path_length_ratio",
+        "time_to_goal_norm",
+    }
 )
 
 _LABEL_POSITIVE_KEYS = (
@@ -336,6 +359,32 @@ def _trajectory_fields(record: dict[str, Any]) -> set[str]:
     return fields
 
 
+def _trajectory_metric_fields(record: dict[str, Any]) -> set[str]:
+    metrics = record.get("metrics")
+    if not isinstance(metrics, dict):
+        return set()
+    return {f"metrics.{key}" for key in metrics if key in _TRAJECTORY_METRIC_FIELDS}
+
+
+def _field_availability_summary(
+    records_by_id: dict[str, dict[str, Any]],
+    selected_ids: set[str],
+    extractor: Callable[[dict[str, Any]], set[str]],
+) -> tuple[int, int, set[str]]:
+    records_with_fields = 0
+    selected_records_with_fields = 0
+    selected_fields: set[str] = set()
+    for record_id, record in records_by_id.items():
+        fields = extractor(record)
+        if not fields:
+            continue
+        records_with_fields += 1
+        if record_id in selected_ids:
+            selected_records_with_fields += 1
+            selected_fields.update(fields)
+    return records_with_fields, selected_records_with_fields, selected_fields
+
+
 def _validation_summary(
     records: Sequence[dict[str, Any]],
     descriptors: Sequence[ScenarioDescriptor],
@@ -360,17 +409,20 @@ def _validation_summary(
         else:
             selected_label_conflicts.append(record_id)
 
-    trajectory_records = 0
-    selected_trajectory_records = 0
-    observed_fields: set[str] = set()
-    for record_id, record in records_by_id.items():
-        fields = _trajectory_fields(record)
-        if not fields:
-            continue
-        trajectory_records += 1
-        if record_id in selected_ids:
-            selected_trajectory_records += 1
-            observed_fields.update(fields)
+    trajectory_records, selected_trajectory_records, observed_fields = _field_availability_summary(
+        records_by_id,
+        selected_ids,
+        _trajectory_fields,
+    )
+    (
+        trajectory_metric_records,
+        selected_trajectory_metric_records,
+        observed_metric_fields,
+    ) = _field_availability_summary(
+        records_by_id,
+        selected_ids,
+        _trajectory_metric_fields,
+    )
 
     return {
         "external_labels": {
@@ -390,6 +442,16 @@ def _validation_summary(
             "selected_fields_observed": sorted(observed_fields),
             "interpretation": (
                 "Trajectory fields are reported for reviewer inspection and are not a new metric."
+            ),
+        },
+        "trajectory_metric_fields": {
+            "status": "available" if trajectory_metric_records else "unavailable",
+            "records_with_trajectory_metric_fields": trajectory_metric_records,
+            "selected_with_trajectory_metric_fields": selected_trajectory_metric_records,
+            "selected_metric_fields_observed": sorted(observed_metric_fields),
+            "interpretation": (
+                "Trajectory-derived benchmark metric fields are descriptive validation context "
+                "only and are not a new ranking signal."
             ),
         },
     }
@@ -480,6 +542,7 @@ def format_collision_scenario_similarity_markdown(report: dict[str, Any]) -> str
     validation = report.get("validation", {})
     external_labels = validation.get("external_labels", {})
     trajectory_fields = validation.get("trajectory_fields", {})
+    trajectory_metric_fields = validation.get("trajectory_metric_fields", {})
     lines.extend(
         [
             "",
@@ -490,6 +553,10 @@ def format_collision_scenario_similarity_markdown(report: dict[str, Any]) -> str
             f"{external_labels.get('selected_positive_labels', 0)} positive).",
             f"- Trajectory fields: {trajectory_fields.get('status', 'unavailable')} "
             f"({trajectory_fields.get('selected_with_trajectory_fields', 0)} selected records).",
+            f"- Trajectory-derived metric fields: "
+            f"{trajectory_metric_fields.get('status', 'unavailable')} "
+            f"({trajectory_metric_fields.get('selected_with_trajectory_metric_fields', 0)} "
+            f"selected records).",
         ]
     )
     lines.extend(["", "## Limitations", ""])

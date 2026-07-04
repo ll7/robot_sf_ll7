@@ -91,6 +91,16 @@
       ],
       "selected_with_trajectory_fields": 1,
       "status": "available"
+    },
+    "trajectory_metric_fields": {
+      "interpretation": "Trajectory-derived benchmark metric fields are descriptive validation context only and are not a new ranking signal.",
+      "records_with_trajectory_metric_fields": 2,
+      "selected_metric_fields_observed": [
+        "metrics.avg_speed",
+        "metrics.min_distance"
+      ],
+      "selected_with_trajectory_metric_fields": 1,
+      "status": "available"
     }
   }
 }

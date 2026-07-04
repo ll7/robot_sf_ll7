@@ -1,18 +1,19 @@
 # Issue #4359 Collision-Similarity Durable Artifact Report
 
-Evidence status: diagnostic-only analysis artifact. This directory records a representative run of
-the `collision-scenario-similarity` report against existing tracked evidence artifacts. It does not
+Evidence status: diagnostic-only analysis artifact. This directory records representative
+`collision-scenario-similarity` reports against existing tracked evidence artifacts. It does not
 promote a planner, benchmark, paper, or dissertation claim.
 
 ## Inputs
 
 - `durable_issue1470_similarity_report.*` uses
   `docs/context/evidence/issue_1470_oracle_imitation_traces_12911_2026-06-17/oracle_imitation/issue1470_train_candidate_traces/train__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl`.
-  The report selects two collision records and records singleton representative groups plus a
-  nearest-neighbor example for each selected record.
+  The report selects two collision records and records singleton representative groups,
+  nearest-neighbor examples, available external labels, and available trajectory-derived benchmark
+  metric fields for those selected records.
 - `labeled_trace_fixture_validation_report.*` uses
   `docs/context/evidence/issue_1395_learned_risk_launch_packet_2026-05-24/trace_contract_fixture.jsonl`.
-  The report selects one near-miss record and records external-label and trajectory-field
+  The report selects one near-miss record and records external-label plus raw trajectory-field
   availability where the fixture supports it.
 
 ## Reproduction
@@ -35,6 +36,6 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run robot_sf_bench collision-scena
 
 ## Boundary
 
-The similarity distances are local to the input artifact and descriptor fields. External labels and
-trajectory fields are reported as descriptive validation context only; they are not treated as
-benchmark truth or a new metric.
+Similarity distances are local to the input artifact descriptor fields. External labels, raw
+trajectory fields, and trajectory-derived metric fields are reported as descriptive validation
+context only; they are not treated as benchmark truth or a new metric.

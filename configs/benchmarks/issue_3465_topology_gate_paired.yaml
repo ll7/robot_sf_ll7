@@ -6,7 +6,7 @@
 schema_version: robot_sf.issue_3465_topology_gate_paired_preregistration.v1
 issue: 3465
 study_id: issue_3465_topology_gate_paired_v1
-status: pre_registered_readiness_blocked_corrective_issue
+status: pre_registered_ready_for_paired_run
 benchmark_evidence: false
 claim_boundary: >
   Pre-registration and readiness-gate contract only. Planned rows prove the
@@ -28,8 +28,28 @@ campaign_authorization:
   no_gpu_submission_in_this_pr: true
 readiness:
   corrective_issue: 3463
-  corrective_complete: false
+  corrective_complete: true
   corrective_waiver_recorded: false
+  corrective_packets:
+  - pr: "4388"
+    issue: 3463
+    capability: topology_guided_episode_diagnostics
+    summary: Episode-level topology diagnostics summarize candidate availability and near-parity churn.
+  - pr: "4411"
+    issue: 3463
+    capability: topology_route_progress_corrective_metadata
+    summary: Route-progress and churn terminal metadata distinguishes true stalls from near-parity churn.
+  - pr: "4426"
+    issue: 3463
+    capability: topology_arbitration_weight_config
+    summary: Topology arbitration weight is explicit, bounded, and testable.
+  - pr: "4435"
+    capability: topology_command_influence_diagnostics
+    summary: Command-influence diagnostics report dynamic-window-faithful command limits and projection.
+  - pr: "4444"
+    issue: 3463
+    capability: monotone_progress_gated_topology_packet
+    summary: Monotone progress-gated topology sensitivity packet is registered for corrective follow-up.
   topology_gate_config_hash: c7b5c4d09e5d783dc47891b0d68625c148d3619e0aff6e2c468c3b615b9dc68d
   no_known_fallback_degraded_promotion: true
   known_ineligible_rows: []

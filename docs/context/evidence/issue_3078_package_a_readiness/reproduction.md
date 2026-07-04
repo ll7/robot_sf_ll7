@@ -1,8 +1,8 @@
 # Reproduction — Package A decision packet (issue #3078)
 
-- Execution date: 2026-07-03
-- Base commit (origin/main): `79f6dab2dc498e61baf71bf033e1c0f838cad7db`
-- Host: imech036 (CPU only; no compute submission, no campaign execution)
+- Execution date: 2026-07-05
+- Base commit (origin/main): `83fb5bdf7f289a7c1b19de5eb83ae58f13a5624a`
+- Host: auxme-imech039 (CPU only; no compute submission, no campaign execution)
 - All commands run via the worktree shared-venv wrapper
   (`scripts/dev/run_worktree_shared_venv.sh`), which pins `PYTHONPATH` to the
   worktree while reusing the primary checkout `.venv`.
@@ -47,7 +47,9 @@ uv run --extra analytics python scripts/validation/check_package_a_readiness.py 
 Result: `classification: blocked_pending_package_a_evidence`
 (`readiness_status: ready`). Reasons: no canonical campaign result store
 supplied; no seed-sufficiency analysis report supplied. Partition manifest
-validates (`ok: true`). Full output in
+validates (`ok: true`). The command exits `1` because the packet is
+intentionally blocked until the result store and seed-sufficiency report are
+supplied. Full output in
 [`package_a_decision_packet.json`](package_a_decision_packet.json) (the
 committed copy has its `manifest_path` normalized to a repo-relative path).
 
@@ -59,10 +61,10 @@ from the internal packet status, so the machine-readable packet and the
 [`claim_card.yaml`](claim_card.yaml) share one derived classification instead of
 a hand-copied string.
 
-> Note: the committed `package_a_decision_packet.json` was regenerated on the
-> branch that added `issue_result_classification` to the checker; re-running the
-> command above on `origin/main` before that change lands will omit the three
-> new keys but report the same `blocked_pending_package_a_evidence` verdict.
+The packet also carries `acceptance_criteria`, a criterion-to-evidence audit
+for issue #3078. It records three blocked criteria (seed-sufficiency report,
+canonical result store/transfer outputs, and campaign-derived tables/figures)
+plus the satisfied blocked-classification criterion.
 
 ## Focused tests
 

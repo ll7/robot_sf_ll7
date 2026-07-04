@@ -8,7 +8,8 @@ declared by `configs/benchmarks/issue_3078_package_a_readiness.yaml`.
 - **Issue:** [#3078](https://github.com/ll7/robot_sf_ll7/issues/3078)
 - **Parent:** [#3057](https://github.com/ll7/robot_sf_ll7/issues/3057)
 - **Package:** A — seed/planner-rank stability + held-out scenario-family transfer
-- **Execution date:** 2026-07-03
+- **Execution date:** 2026-07-05
+- **Regeneration host:** `auxme-imech039`
 - **Issue state at execution:** `state:ready`
 - **Classification (this slice):** `blocked` — pending a canonical Package A
   campaign result store (see below).
@@ -42,6 +43,19 @@ paper-facing claim. No ranking is interpreted and no claim boundary is moved.
 | Seed-sufficiency CLI surface | `analyze_seed_sufficiency.py --help` | present |
 | Decision packet | `check_package_a_readiness.py --decision-packet --json …` | `blocked_pending_package_a_evidence` |
 | Issue #3078 result classification | derived by the checker from the packet status | `blocked` |
+
+## Acceptance-Criteria Audit
+
+`package_a_decision_packet.json` now carries an `acceptance_criteria` array so
+closure audits can compare the issue checklist against retained evidence without
+promoting missing results.
+
+| Issue #3078 criterion | Current status | Evidence | Remaining work |
+| --- | --- | --- | --- |
+| Runs seed-sufficiency analysis on retained campaign bundles. | `blocked` | none retained | Produce a `seed_sufficiency_analysis.v1` report from the frozen Package A protocol. |
+| Runs or validates held-out-family pilot rows, leakage audit, and transfer-delta outputs. | `blocked` | Held-out-family partition manifest validates: `configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml` | Produce the canonical Package A result store from the frozen held-out-family run. |
+| Produces baseline table, seed-stability figure, transfer-delta figure, and preliminary claim card. | `blocked` | preliminary blocked claim card retained; no campaign-derived table/figures retained | Render tables and figures from the canonical result store and seed analysis, then retain the reviewed Package A claim card. |
+| Classifies result as benchmark, diagnostic, negative, null, invalid, or blocked durable evidence. | `satisfied` | `issue_result_classification=blocked` in `package_a_decision_packet.json` | none for the blocked state; a non-blocked classification requires the missing evidence above. |
 
 The decision packet now emits the issue #3078 six-way result classification
 directly (`issue_result_classification`), mapped mechanically from the internal

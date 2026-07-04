@@ -297,6 +297,18 @@ def test_decision_packet_blocks_without_evidence_surfaces() -> None:
     assert "no held-out-family partition manifest supplied" in payload["reasons"]
     assert payload["forbidden_actions_confirmed"]["compute_submit"] is False
     assert payload["forbidden_actions_confirmed"]["ranking_claim_promotion"] is False
+    criteria = {item["criterion"]: item for item in payload["acceptance_criteria"]}
+    seed_criterion = "Runs seed-sufficiency analysis on retained campaign bundles."
+    assert criteria[seed_criterion]["status"] == "blocked"
+    assert any(
+        "seed_sufficiency_analysis.v1" in remaining
+        for remaining in criteria[seed_criterion]["remaining"]
+    )
+    classification_criterion = (
+        "Classifies result as benchmark, diagnostic, negative, null, invalid, or blocked "
+        "durable evidence."
+    )
+    assert criteria[classification_criterion]["status"] == "satisfied"
 
 
 def test_decision_packet_accepts_valid_local_evidence_packet(
@@ -355,6 +367,11 @@ def test_decision_packet_accepts_valid_local_evidence_packet(
     # it is never auto-promoted to "benchmark" (that needs claim-card review).
     assert payload["issue_result_classification"] == "diagnostic"
     assert payload["issue_result_classification_reason"]
+    criteria = {item["criterion"]: item for item in payload["acceptance_criteria"]}
+    assert all(item["status"] == "satisfied" for item in criteria.values())
+    assert all(item["remaining"] == [] for item in criteria.values())
+    seed_criterion = "Runs seed-sufficiency analysis on retained campaign bundles."
+    assert criteria[seed_criterion]["evidence"] == [str(seed_report)]
 
 
 def test_decision_packet_emits_blocked_issue_classification() -> None:

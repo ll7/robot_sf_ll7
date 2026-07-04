@@ -130,6 +130,7 @@ class DecisionPacket:
     result_stores: list[dict[str, Any]] = field(default_factory=list)
     seed_analysis_reports: list[dict[str, Any]] = field(default_factory=list)
     heldout_partition_manifests: list[dict[str, Any]] = field(default_factory=list)
+    acceptance_criteria: list[dict[str, Any]] = field(default_factory=list)
     schema_version: str = DECISION_PACKET_SCHEMA_VERSION
 
     def to_dict(self) -> dict[str, Any]:
@@ -147,6 +148,7 @@ class DecisionPacket:
             "result_stores": self.result_stores,
             "seed_analysis_reports": self.seed_analysis_reports,
             "heldout_partition_manifests": self.heldout_partition_manifests,
+            "acceptance_criteria": self.acceptance_criteria,
             "forbidden_actions_confirmed": {
                 "benchmark_campaign_run": False,
                 "compute_submit": False,
@@ -416,7 +418,7 @@ def build_decision_packet(
     repo_root = repo_root or _repo_root()
     readiness = check_readiness(manifest_path, repo_root=repo_root)
     packet = DecisionPacket(
-        manifest_path=str(manifest_path),
+        manifest_path=_display_path(repo_root, _resolve_repo_path(repo_root, manifest_path)),
         package_id=readiness.package_id,
         readiness_status=readiness.status,
         classification="diagnostic_review_ready",
@@ -461,7 +463,103 @@ def build_decision_packet(
         packet.issue_result_classification,
         packet.issue_result_classification_reason,
     ) = _issue_result_classification(packet.classification)
+    packet.acceptance_criteria = _build_acceptance_criteria_audit(packet)
     return packet
+
+
+def _surface_status(surfaces: list[dict[str, Any]]) -> str:
+    """Return compact status for optional evidence-surface checks."""
+    if not surfaces:
+        return "blocked"
+    return "satisfied" if all(surface.get("ok") is True for surface in surfaces) else "blocked"
+
+
+def _surface_evidence(surfaces: list[dict[str, Any]]) -> list[str]:
+    """Return path/error evidence for packet surface checks."""
+    evidence: list[str] = []
+    for surface in surfaces:
+        path = surface.get("path")
+        if path:
+            evidence.append(str(path))
+        evidence.extend(str(error) for error in surface.get("errors", []))
+    return evidence
+
+
+def _build_acceptance_criteria_audit(packet: DecisionPacket) -> list[dict[str, Any]]:
+    """Map issue #3078 acceptance criteria to fail-closed packet evidence."""
+    seed_status = _surface_status(packet.seed_analysis_reports)
+    result_store_status = _surface_status(packet.result_stores)
+    heldout_status = _surface_status(packet.heldout_partition_manifests)
+    classification_status = (
+        "satisfied"
+        if packet.issue_result_classification in ISSUE_RESULT_CLASSIFICATIONS
+        else "blocked"
+    )
+    artifact_status = (
+        "satisfied"
+        if seed_status == result_store_status == heldout_status == "satisfied"
+        else "blocked"
+    )
+
+    return [
+        {
+            "criterion": "Runs seed-sufficiency analysis on retained campaign bundles.",
+            "status": seed_status,
+            "evidence": _surface_evidence(packet.seed_analysis_reports),
+            "remaining": []
+            if seed_status == "satisfied"
+            else [
+                "provide a seed_sufficiency_analysis.v1 report from the frozen Package A protocol",
+            ],
+        },
+        {
+            "criterion": (
+                "Runs or validates held-out-family pilot rows, leakage audit, and "
+                "transfer-delta outputs."
+            ),
+            "status": "satisfied"
+            if heldout_status == result_store_status == "satisfied"
+            else "blocked",
+            "evidence": [
+                *_surface_evidence(packet.heldout_partition_manifests),
+                *_surface_evidence(packet.result_stores),
+            ],
+            "remaining": []
+            if heldout_status == result_store_status == "satisfied"
+            else [
+                "provide a canonical Package A result store from the frozen held-out-family run",
+            ],
+        },
+        {
+            "criterion": (
+                "Produces baseline table, seed-stability figure, transfer-delta figure, "
+                "and preliminary claim card."
+            ),
+            "status": artifact_status,
+            "evidence": [
+                *_surface_evidence(packet.result_stores),
+                *_surface_evidence(packet.seed_analysis_reports),
+            ],
+            "remaining": []
+            if artifact_status == "satisfied"
+            else [
+                "render tables and figures from the canonical result store and seed analysis",
+                "retain the reviewed Package A claim card with those inputs",
+            ],
+        },
+        {
+            "criterion": (
+                "Classifies result as benchmark, diagnostic, negative, null, invalid, or "
+                "blocked durable evidence."
+            ),
+            "status": classification_status,
+            "evidence": [
+                f"issue_result_classification={packet.issue_result_classification}",
+                packet.issue_result_classification_reason,
+            ],
+            "remaining": [],
+        },
+    ]
 
 
 def _resolve_repo_path(repo_root: Path, path: Path) -> Path:

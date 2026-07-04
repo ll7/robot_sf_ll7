@@ -1,0 +1,53 @@
+schema: topology_reselection_cross_slice.v1
+issue: 3463
+claim_boundary: diagnostic_only_not_benchmark_or_paper_evidence
+description: >
+  Successor packet for the issue-3463 monotone progress-gated topology corrective lane.
+  This manifest keeps the existing baseline and reuse-penalty comparators but swaps the
+  progress-gated arm to a monotone-accounting candidate so bounded CPU-only cross-slice
+  diagnostics can measure whether the corrective gate survives transient re-plan bumps
+  without treating any row as benchmark or paper evidence.
+stage: corrective_monotone_sensitivity
+horizon: 160
+seed: 111
+max_hypotheses: 3
+min_hypotheses: 2
+block_radius_cells: 3
+block_stride_cells: 8
+progress_gate_thresholds_m:
+  - 0.05
+  - 0.1
+  - 0.2
+candidates:
+  baseline: topology_guided_hybrid_rule_v0
+  reuse_penalty: topology_guided_hybrid_rule_v0_reuse_penalty
+  progress_gated: topology_guided_hybrid_rule_v0_progress_gated_reselection_monotone
+slices:
+  - id: bottleneck_transfer
+    scenario_name: classic_bottleneck_medium
+    role: hard
+    source_surface: configs/policy_search/stress_slice_matrix.yaml
+    rationale: Non-canonical bottleneck slice for topology-switch pressure under re-plan noise.
+  - id: doorway_transfer
+    scenario_name: classic_doorway_medium
+    role: hard
+    source_surface: configs/policy_search/stress_slice_matrix.yaml
+    rationale: Non-canonical doorway slice for stalled-route recovery under reselection pressure.
+  - id: t_intersection_transfer
+    scenario_name: classic_t_intersection_medium
+    role: hard
+    source_surface: configs/policy_search/stress_slice_matrix.yaml
+    rationale: Non-canonical intersection slice for route-commitment robustness.
+  - id: simple_negative_control
+    scenario_name: empty_map_8_directions_east
+    role: negative_control
+    source_surface: configs/scenarios/confirmation_v1.yaml
+    rationale: Negative-control row should not add unnecessary topology switching.
+decision_rule:
+  promote_if: >
+    Every hard slice has at least one monotone progress-gated row that clears while preserving
+    topology-command influence and the negative-control slice shows no unnecessary topology switching.
+  stop_if: >
+    The monotone progress-gated arm loses topology-command influence, worsens negative-control
+    switching, or only changes route labels without route-progress or terminal-outcome signal.
+  otherwise: revise

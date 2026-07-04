@@ -1372,6 +1372,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accounting mode + sample threshold are surfaced in the `topology_reuse_penalty` diagnostics. Deferred
   to follow-ups: command-arbitration-strength tuning, a registered candidate config + paired benchmark
   diagnostic for the monotone variant, and any benchmark promotion (#3463).
+* Added the next #3463 successor slice for the topology near-parity selector lane: a registered
+  diagnostic-only monotone progress-gated reselection candidate
+  (`topology_guided_hybrid_rule_v0_progress_gated_reselection_monotone`) plus a bounded CPU-only
+  cross-slice sensitivity packet at
+  [`configs/policy_search/topology_reselection_cross_slice_issue_3463.yaml`](configs/policy_search/topology_reselection_cross_slice_issue_3463.yaml).
+  This does not duplicate the runtime/code slices in PRs #4176, #4388, #4411, or #4426; it packages
+  the monotone corrective behavior for reproducible future smoke runs without making a benchmark claim.
 * Added a pre-commit lint that fails when a file under `configs/**` contains an absolute
   home-dir path (`/home/`, `/Users/`, `/root/`), which is non-portable for other contributors
   and automated runners. Intentional absolute paths (e.g. private-ops SLURM routing targets

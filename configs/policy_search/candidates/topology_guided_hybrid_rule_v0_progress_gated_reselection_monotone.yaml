@@ -1,0 +1,59 @@
+name: topology_guided_hybrid_rule_v0_progress_gated_reselection_monotone
+algo: topology_guided_hybrid_rule_v0
+base_config_path: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml
+params:
+  allow_testing_algorithms: true
+  diagnostic_only: true
+  claim_boundary: diagnostic_only
+  min_hypotheses: 2
+  max_hypotheses: 2
+  block_radius_cells: 3
+  block_stride_cells: 8
+  max_path_overlap: 0.88
+  length_weight: 1.0
+  static_clearance_weight: 0.6
+  near_parity_diversity_gate_enabled: true
+  near_parity_route_distance_slack_m: 0.75
+  near_parity_route_distance_slack_ratio: 0.05
+  near_parity_static_clearance_floor_m: 0.05
+  near_parity_diversity_bonus: 0.5
+  primary_route_reuse_penalty_enabled: true
+  primary_route_reuse_penalty_weight: 1.0
+  primary_route_reuse_penalty_cooldown_steps: 3
+  primary_route_reuse_penalty_min_prior_primary_selections: 2
+  primary_route_progress_gate_enabled: true
+  primary_route_progress_gate_threshold_m: 0.1
+  primary_route_progress_gate_min_samples: 2
+  primary_route_progress_gate_use_monotone_accounting: true
+  fail_closed_on_missing_inputs: true
+  fail_closed_on_insufficient_hypotheses: false
+  topology_command_enabled: true
+  topology_command_speed: 0.35
+  topology_command_heading_gain: 1.0
+  topology_command_turn_in_place_error: 0.25
+  route_guide_enabled: true
+  route_guide_waypoint_lookahead_cells: 8
+  route_guide_obstacle_inflation_cells: 3
+  route_guide_clearance_penalty_weight: 0.5
+  corridor_subgoal_enabled: true
+  corridor_subgoal_speed: 0.25
+  corridor_subgoal_turn_in_place_error: 0.25
+  corridor_subgoal_heading_gain: 1.0
+  corridor_subgoal_min_nearest_ped_distance: 1.0
+  corridor_subgoal_use_continuous_static_check: true
+  corridor_subgoal_static_clearance_buffer: 0.0
+  corridor_subgoal_goal_stall_progress_3s: 0.05
+  corridor_subgoal_route_stall_progress_3s: 0.05
+  corridor_subgoal_route_regression_1s: -0.05
+  corridor_subgoal_min_route_remaining_distance: 0.5
+  corridor_subgoal_max_lateral_offset: 0.5
+  corridor_subgoal_route_progress_weight: 2.0
+  corridor_subgoal_centering_weight: 0.5
+  corridor_subgoal_tangent_alignment_weight: 1.2
+  corridor_subgoal_clearance_weight: 0.3
+  corridor_subgoal_continuity_weight: 0.2
+  route_hypothesis:
+    waypoint_lookahead_cells: 8
+    obstacle_inflation_cells: 3
+    clearance_search_cells: 5
+    clearance_penalty_weight: 0.5

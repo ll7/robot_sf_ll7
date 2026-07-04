@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-06-11
+updated_at: 2026-07-04
 freshness:
   policy: manual_registry_edit
   max_age_days: 90
@@ -342,6 +342,23 @@ candidates:
       preserving route commitment during meaningful forward progress while
       still demoting primary-route reselection when progress stalls. This is
       a diagnostic-only #2660 successor mechanism test and not benchmark evidence.
+    required_stages:
+      - smoke
+
+  topology_guided_hybrid_rule_v0_progress_gated_reselection_monotone:
+    status: experimental_spike
+    family: topology_hypothesis_diagnostic
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/topology_guided_hybrid_rule_v0_progress_gated_reselection_monotone.yaml
+    issue: 3463
+    hypothesis: >
+      An issue-3463 successor variant keeps the progress-gated reselection contract but
+      switches the recent-progress accounting to the monotone baseline so transient A*
+      route-remaining bumps do not erase evidence of real primary-route progress. This
+      stays diagnostic-only until a bounded cross-slice sensitivity packet and the
+      separate #3465 promotion gate classify it with stronger evidence.
     required_stages:
       - smoke
 

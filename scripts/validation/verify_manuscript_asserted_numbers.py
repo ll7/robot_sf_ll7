@@ -165,6 +165,15 @@ def _verify_locator_table_hash(
     return recorded_sha256 == computed_sha256, actual_with_digest
 
 
+def _locator_status_reason(hash_matches: bool, values_match: bool) -> tuple[str, str | None]:
+    """Return locator row status after requiring artifact and structural matches."""
+    if not hash_matches:
+        return MISMATCH, "locator table_sha256 differs from table artifact"
+    if not values_match:
+        return MISMATCH, "expected locator fields differ from source-of-record value"
+    return MATCH, None
+
+
 def _source_locator_fields(entry: dict[str, Any], entry_id: str) -> dict[str, Any]:
     """Return optional source-locator review metadata for report rows."""
     source_locator_status = entry.get("source_locator_status")
@@ -230,9 +239,10 @@ def _verify_entry(
     expected = entry["expected"]
     locator_hash = _verify_locator_table_hash(actual, repo_root=repo_root, entry_id=entry_id)
     if locator_hash is not None:
+        structural_actual = actual
         hash_matches, actual = locator_hash
-        status = MATCH if hash_matches else MISMATCH
-        reason = None if status == MATCH else "locator table_sha256 differs from table artifact"
+        values_match = _values_equal(expected, structural_actual, tolerance=tolerance)
+        status, reason = _locator_status_reason(hash_matches, values_match)
         return VerificationResult(
             id=entry_id,
             status=status,

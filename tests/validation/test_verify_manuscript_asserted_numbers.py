@@ -24,22 +24,34 @@ SPEC.loader.exec_module(_MODULE)
 
 
 def _write_locator_declaration(
-    tmp_path: Path, *, recorded_sha256: str, expected_sha256: str
+    tmp_path: Path,
+    *,
+    recorded_sha256: str | None,
+    expected_sha256: str | None,
+    recorded_table_path: str | None = None,
+    expected_table_path: str | None = None,
+    expected_artifact_id: str = "fixture_table",
 ) -> Path:
     table = tmp_path / "table.md"
     table.write_text(
         "| planner_key | success_mean |\n| --- | --- |\n| ppo | 1.0 |\n", encoding="utf-8"
     )
+    actual_locator = {
+        "artifact_id": "fixture_table",
+        "table_path": recorded_table_path or str(table),
+    }
+    if recorded_sha256 is not None:
+        actual_locator["table_sha256"] = recorded_sha256
+    expected_locator = {
+        "artifact_id": expected_artifact_id,
+        "table_path": expected_table_path or str(table),
+    }
+    if expected_sha256 is not None:
+        expected_locator["table_sha256"] = expected_sha256
     locator = tmp_path / "locator.yaml"
     locator.write_text(
         yaml.safe_dump(
-            {
-                "heatmap_per_family_means_locator": {
-                    "artifact_id": "fixture_table",
-                    "table_path": str(table),
-                    "table_sha256": recorded_sha256,
-                }
-            },
+            {"heatmap_per_family_means_locator": actual_locator},
             sort_keys=False,
         ),
         encoding="utf-8",
@@ -56,11 +68,7 @@ def _write_locator_declaration(
                     {
                         "id": "heatmap_per_family_means_source",
                         "manuscript_locator": "fixture / heatmap per-family means",
-                        "expected": {
-                            "artifact_id": "fixture_table",
-                            "table_path": str(table),
-                            "table_sha256": expected_sha256,
-                        },
+                        "expected": expected_locator,
                         "source": {
                             "path": str(locator),
                             "pointer": "heatmap_per_family_means_locator",
@@ -141,14 +149,14 @@ def test_mismatch_returns_failure_without_silent_source_fix(tmp_path: Path) -> N
     assert report["results"][0]["actual"] == pytest.approx(0.19045845847432735)
 
 
-def test_locator_table_sha256_validates_against_recorded_artifact(tmp_path: Path) -> None:
-    """Locator table rows hash the recorded artifact instead of comparing expected copies."""
+def test_locator_table_sha256_and_structural_fields_match(tmp_path: Path) -> None:
+    """Locator table rows match when artifact hash and structural locator fields match."""
     table_content = "| planner_key | success_mean |\n| --- | --- |\n| ppo | 1.0 |\n"
     table_sha256 = hashlib.sha256(table_content.encode("utf-8")).hexdigest()
     declarations = _write_locator_declaration(
         tmp_path,
         recorded_sha256=table_sha256,
-        expected_sha256="0" * 64,
+        expected_sha256=table_sha256,
     )
 
     exit_code = _MODULE.main(
@@ -166,8 +174,38 @@ def test_locator_table_sha256_validates_against_recorded_artifact(tmp_path: Path
     report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
     result = report["results"][0]
     assert result["status"] == "match"
-    assert result["expected"]["table_sha256"] == "0" * 64
+    assert result["expected"]["table_sha256"] == table_sha256
     assert result["actual"]["table_sha256"] == table_sha256
+    assert result["actual"]["computed_table_sha256"] == table_sha256
+
+
+def test_locator_table_sha256_match_with_structural_drift_fails(tmp_path: Path) -> None:
+    """Locator table rows fail when non-hash locator fields drift from expected."""
+    table_content = "| planner_key | success_mean |\n| --- | --- |\n| ppo | 1.0 |\n"
+    table_sha256 = hashlib.sha256(table_content.encode("utf-8")).hexdigest()
+    declarations = _write_locator_declaration(
+        tmp_path,
+        recorded_sha256=table_sha256,
+        expected_sha256=table_sha256,
+        expected_artifact_id="stale_fixture_table",
+    )
+    exit_code = _MODULE.main(
+        [
+            "--declarations",
+            str(declarations),
+            "--report",
+            str(tmp_path / "report.md"),
+            "--json-output",
+            str(tmp_path / "report.json"),
+        ]
+    )
+    assert exit_code == 1
+    report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
+    result = report["results"][0]
+    assert result["status"] == "mismatch"
+    assert result["reason"] == "expected locator fields differ from source-of-record value"
+    assert result["expected"]["artifact_id"] == "stale_fixture_table"
+    assert result["actual"]["artifact_id"] == "fixture_table"
     assert result["actual"]["computed_table_sha256"] == table_sha256
 
 
@@ -197,6 +235,49 @@ def test_locator_table_sha256_mismatch_fails(tmp_path: Path) -> None:
     assert result["reason"] == "locator table_sha256 differs from table artifact"
     assert result["actual"]["table_sha256"] == "0" * 64
     assert result["actual"]["computed_table_sha256"] != "0" * 64
+
+
+def test_locator_table_missing_artifact_fails_closed(tmp_path: Path) -> None:
+    """Locator rows with missing table artifacts fail closed."""
+    missing_table = tmp_path / "missing-table.md"
+    declarations = _write_locator_declaration(
+        tmp_path,
+        recorded_sha256="0" * 64,
+        expected_sha256="0" * 64,
+        recorded_table_path=str(missing_table),
+        expected_table_path=str(missing_table),
+    )
+    exit_code = _MODULE.main(
+        [
+            "--declarations",
+            str(declarations),
+            "--report",
+            str(tmp_path / "report.md"),
+            "--json-output",
+            str(tmp_path / "report.json"),
+        ]
+    )
+    assert exit_code == 2
+
+
+def test_locator_table_missing_hash_metadata_fails_closed(tmp_path: Path) -> None:
+    """Locator rows with partial table metadata fail closed."""
+    declarations = _write_locator_declaration(
+        tmp_path,
+        recorded_sha256=None,
+        expected_sha256=None,
+    )
+    exit_code = _MODULE.main(
+        [
+            "--declarations",
+            str(declarations),
+            "--report",
+            str(tmp_path / "report.md"),
+            "--json-output",
+            str(tmp_path / "report.json"),
+        ]
+    )
+    assert exit_code == 2
 
 
 def test_missing_source_key_fails_closed(tmp_path: Path) -> None:

@@ -40,6 +40,9 @@ def attach_pedestrian_control_trace(
     ped_positions: np.ndarray,
     ped_forces: np.ndarray | None,
     dt: float,
+    robot_positions: np.ndarray | None = None,
+    robot_radius: float = 0.0,
+    ped_radius: float = 0.0,
 ) -> None:
     """Attach a control trace to episode metadata when archetype labels are available.
 
@@ -51,6 +54,9 @@ def attach_pedestrian_control_trace(
         ped_positions: Simulator pedestrian positions shaped `(steps, pedestrians, 2)`.
         ped_forces: Optional simulator pedestrian force vectors with the same shape.
         dt: Episode time step in seconds.
+        robot_positions: Optional simulator robot positions shaped `(steps, 2)`.
+        robot_radius: Optional simulator robot footprint radius.
+        ped_radius: Optional simulator pedestrian footprint radius.
     """
 
     if not has_pedestrian_control_trace_metadata(scenario):
@@ -60,7 +66,105 @@ def attach_pedestrian_control_trace(
         ped_positions=ped_positions,
         ped_forces=ped_forces,
         dt=dt,
+        robot_positions=robot_positions,
+        robot_radius=robot_radius,
+        ped_radius=ped_radius,
     )
+
+
+def _validate_robot_parameters(
+    robot_positions: np.ndarray | None,
+    robot_radius: float,
+    ped_radius: float,
+    positions: np.ndarray,
+) -> tuple[np.ndarray | None, float, float]:
+    """Validate robot parameters.
+
+    Returns:
+        tuple[np.ndarray | None, float, float]: Resolved position, robot_radius, and ped_radius.
+    """
+    if robot_positions is None:
+        return None, 0.0, 0.0
+    robot_pos = require_finite_array("pedestrian_control_trace.robot_positions", robot_positions)
+    if robot_pos.ndim != 2 or robot_pos.shape[1] != 2:
+        raise ValueError("pedestrian_control_trace.robot_positions must have shape (steps, 2)")
+    if robot_pos.shape[0] != positions.shape[0]:
+        raise ValueError(
+            "pedestrian_control_trace.robot_positions step count must match ped_positions"
+        )
+    robot_rad = require_finite_scalar("pedestrian_control_trace.robot_radius", robot_radius)
+    if robot_rad < 0.0:
+        raise ValueError("robot_radius must be non-negative")
+    ped_rad = require_finite_scalar("pedestrian_control_trace.ped_radius", ped_radius)
+    if ped_rad < 0.0:
+        raise ValueError("ped_radius must be non-negative")
+    return robot_pos, robot_rad, ped_rad
+
+
+def _build_pedestrian_steps(
+    *,
+    positions: np.ndarray,
+    forces: np.ndarray | None,
+    robot_pos: np.ndarray | None,
+    robot_rad: float,
+    ped_rad: float,
+    dt_value: float,
+    simulator_index: int,
+) -> list[dict[str, Any]]:
+    """Build per-step payloads for a single pedestrian.
+
+    Returns:
+        list[dict[str, Any]]: Per-step payloads for the pedestrian.
+    """
+    step_count = int(positions.shape[0])
+    pedestrian_steps: list[dict[str, Any]] = []
+    previous_position: np.ndarray | None = None
+    for step in range(step_count):
+        position = positions[step]
+        velocity = (
+            (position - previous_position) / dt_value
+            if previous_position is not None
+            else np.zeros(2, dtype=float)
+        )
+        speed = float(np.linalg.norm(velocity))
+        require_finite_scalar(
+            f"pedestrian_control_trace.pedestrians[{simulator_index}].steps[{step}].speed_m_s",
+            speed,
+        )
+        payload: dict[str, Any] = {
+            "step": step,
+            "x_m": float(position[0]),
+            "y_m": float(position[1]),
+            "vx_m_s": float(velocity[0]),
+            "vy_m_s": float(velocity[1]),
+            "speed_m_s": speed,
+        }
+        if robot_pos is not None:
+            r_pos = robot_pos[step]
+            dist = float(np.linalg.norm(position - r_pos))
+            clearance = dist - (robot_rad + ped_rad)
+            require_finite_scalar(
+                f"pedestrian_control_trace.pedestrians[{simulator_index}].steps[{step}].clearance_m",
+                clearance,
+            )
+            payload["clearance_m"] = clearance
+        if forces is not None:
+            force = forces[step]
+            force_norm = float(np.linalg.norm(force))
+            require_finite_scalar(
+                f"pedestrian_control_trace.pedestrians[{simulator_index}].steps[{step}].force_norm",
+                force_norm,
+            )
+            payload.update(
+                {
+                    "force_x": float(force[0]),
+                    "force_y": float(force[1]),
+                    "force_norm": force_norm,
+                }
+            )
+        pedestrian_steps.append(payload)
+        previous_position = np.array(position, dtype=float, copy=True)
+    return pedestrian_steps
 
 
 def build_pedestrian_control_trace(
@@ -69,6 +173,9 @@ def build_pedestrian_control_trace(
     ped_positions: np.ndarray,
     ped_forces: np.ndarray | None,
     dt: float,
+    robot_positions: np.ndarray | None = None,
+    robot_radius: float = 0.0,
+    ped_radius: float = 0.0,
 ) -> dict[str, Any]:
     """Build a finite, per-pedestrian control trace grouped by simulator pedestrian index.
 
@@ -95,6 +202,10 @@ def build_pedestrian_control_trace(
         if forces.shape != positions.shape:
             raise ValueError("pedestrian_control_trace.ped_forces must match ped_positions shape")
 
+    robot_pos, robot_rad, ped_rad = _validate_robot_parameters(
+        robot_positions, robot_radius, ped_radius, positions
+    )
+
     step_count = int(positions.shape[0])
     pedestrian_count = int(positions.shape[1])
     metadata = _aligned_pedestrian_metadata(scenario, pedestrian_count)
@@ -106,45 +217,15 @@ def build_pedestrian_control_trace(
                 "pedestrian_control_trace requires archetype metadata for "
                 f"simulator pedestrian {simulator_index}"
             )
-        pedestrian_steps: list[dict[str, Any]] = []
-        previous_position: np.ndarray | None = None
-        for step in range(step_count):
-            position = positions[step, simulator_index]
-            velocity = (
-                (position - previous_position) / dt_value
-                if previous_position is not None
-                else np.zeros(2, dtype=float)
-            )
-            speed = float(np.linalg.norm(velocity))
-            require_finite_scalar(
-                f"pedestrian_control_trace.pedestrians[{simulator_index}].steps[{step}].speed_m_s",
-                speed,
-            )
-            payload: dict[str, Any] = {
-                "step": step,
-                "x_m": float(position[0]),
-                "y_m": float(position[1]),
-                "vx_m_s": float(velocity[0]),
-                "vy_m_s": float(velocity[1]),
-                "speed_m_s": speed,
-            }
-            if forces is not None:
-                force = forces[step, simulator_index]
-                force_norm = float(np.linalg.norm(force))
-                require_finite_scalar(
-                    "pedestrian_control_trace."
-                    f"pedestrians[{simulator_index}].steps[{step}].force_norm",
-                    force_norm,
-                )
-                payload.update(
-                    {
-                        "force_x": float(force[0]),
-                        "force_y": float(force[1]),
-                        "force_norm": force_norm,
-                    }
-                )
-            pedestrian_steps.append(payload)
-            previous_position = np.array(position, dtype=float, copy=True)
+        pedestrian_steps = _build_pedestrian_steps(
+            positions=positions[:, simulator_index],
+            forces=forces[:, simulator_index] if forces is not None else None,
+            robot_pos=robot_pos,
+            robot_rad=robot_rad,
+            ped_rad=ped_rad,
+            dt_value=dt_value,
+            simulator_index=simulator_index,
+        )
 
         pedestrian_payload: dict[str, Any] = {
             "id": str(pedestrian_metadata.get("id") or f"pedestrian_{simulator_index}"),

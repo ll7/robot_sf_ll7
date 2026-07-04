@@ -2,31 +2,191 @@
   "schema_version": "issue_4445.ch8_statistics_reproducibility.v1",
   "issue": 4445,
   "title": "Chapter 8 statistics reproducibility registration packet",
-  "source_status": "blocked: issue title names eta-squared, Spearman rho=-0.998, and a 10000-sample bootstrap statistic, but the live issue body available to this PR did not expose the raw source rows or final expected values for all three statistics.",
+  "source_status": "blocked: diss#337 now provides audited expected values and frozen-release provenance, but this Robot SF packet still lacks repo-local source rows for recomputation.",
+  "upstream_audit": {
+    "repository": "ll7/diss",
+    "issue": 337,
+    "evidence_id": "E-FROZEN002-DIAG-01",
+    "output_artifact": "ll7/diss@56e67f8:docs/context/research_results/2026-07-04_frozen002_cheapwin_analysis_output.md",
+    "producing_script": "ll7/diss commit 56e67f8, file diss_frozen002_cheapwin_analysis.py",
+    "script_commit": "56e67f8",
+    "script_sha": "e952c0c80b088edabf464bfcaf295d63ebc04534",
+    "frozen_release": {
+      "version": "0.0.2",
+      "doi": "10.5281/zenodo.19563812",
+      "source_commit": "f7ebdcae2375d085e925213197a75a386e26a79c",
+      "bundle_sha256": "64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90"
+    },
+    "input_files": [
+      {
+        "path": "payload/reports/campaign_table.csv",
+        "sha256": "70589a630087868e86dc489219af96e1427e875198ef24cd698bca24f95ae425"
+      },
+      {
+        "path": "payload/reports/scenario_family_breakdown.csv",
+        "sha256": "1a7adde430efb7d90f85197d94f8cca03ae8eec8c2f7f0a70a0841a00aabb52b"
+      },
+      {
+        "path": "payload/reports/snqi_diagnostics.json",
+        "sha256": "aba8803dccde08fb3edaa93528d8b2c2de31e97414a4f4fd60eb4222fc6d074f5"
+      }
+    ],
+    "claim_boundary": "diagnostic-only frozen-release reproducibility support; not benchmark-strength or paper-grade evidence."
+  },
   "statistics": [
     {
-      "id": "ch8_eta_squared",
+      "id": "ch8_eta_squared_success_mean",
       "statistic_kind": "partial_eta_squared",
-      "source_artifact": "Chapter 8 source table required; not included in issue #4445 live body",
-      "expected": {},
+      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports success_mean eta^2 from scenario_family_breakdown.csv; raw rows are not yet registered in this repo.",
+      "source_query": {
+        "input_file": "payload/reports/scenario_family_breakdown.csv",
+        "metric": "success_mean",
+        "cells": 238,
+        "planners": 7,
+        "families": 34
+      },
+      "expected": {
+        "scenario_family_eta_squared": 0.388,
+        "planner_eta_squared": 0.15,
+        "interaction_eta_squared": 0.462,
+        "tolerance": 0.001
+      },
       "data": {}
     },
     {
-      "id": "ch8_spearman_rho_minus_0_998",
+      "id": "ch8_eta_squared_near_misses_mean",
+      "statistic_kind": "partial_eta_squared",
+      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports near_misses_mean eta^2 from scenario_family_breakdown.csv; raw rows are not yet registered in this repo.",
+      "source_query": {
+        "input_file": "payload/reports/scenario_family_breakdown.csv",
+        "metric": "near_misses_mean",
+        "cells": 238,
+        "planners": 7,
+        "families": 34
+      },
+      "expected": {
+        "scenario_family_eta_squared": 0.454,
+        "planner_eta_squared": 0.09,
+        "interaction_eta_squared": 0.456,
+        "tolerance": 0.001
+      },
+      "data": {}
+    },
+    {
+      "id": "ch8_eta_squared_time_to_goal_norm_mean",
+      "statistic_kind": "partial_eta_squared",
+      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports time_to_goal_norm_mean eta^2 from scenario_family_breakdown.csv; raw rows are not yet registered in this repo.",
+      "source_query": {
+        "input_file": "payload/reports/scenario_family_breakdown.csv",
+        "metric": "time_to_goal_norm_mean",
+        "cells": 238,
+        "planners": 7,
+        "families": 34
+      },
+      "expected": {
+        "scenario_family_eta_squared": 0.375,
+        "planner_eta_squared": 0.113,
+        "interaction_eta_squared": 0.512,
+        "tolerance": 0.001
+      },
+      "data": {}
+    },
+    {
+      "id": "ch8_spearman_success_time_to_goal_minus_0_998",
       "statistic_kind": "spearman_rho",
-      "source_artifact": "Chapter 8 paired rank source rows required; not included in issue #4445 live body",
+      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports the Chapter 8 metric-panel correlation audit from campaign_table.csv; raw paired rows are not yet registered in this repo.",
+      "source_query": {
+        "input_file": "payload/reports/campaign_table.csv",
+        "x_field": "success_mean",
+        "y_field": "time_to_goal_norm_mean",
+        "n": 238
+      },
       "expected": {
         "value": -0.998,
+        "n": 238,
         "tolerance": 0.0005
       },
       "data": {}
     },
     {
-      "id": "ch8_bootstrap_10000",
-      "statistic_kind": "bootstrap_mean_ci",
-      "source_artifact": "Chapter 8 bootstrap source values required; not included in issue #4445 live body",
+      "id": "ch8_spearman_success_near_misses_plus_0_024",
+      "statistic_kind": "spearman_rho",
+      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports the Chapter 8 metric-panel correlation audit from campaign_table.csv; raw paired rows are not yet registered in this repo.",
+      "source_query": {
+        "input_file": "payload/reports/campaign_table.csv",
+        "x_field": "success_mean",
+        "y_field": "near_misses_mean",
+        "n": 238
+      },
       "expected": {
-        "samples": 10000
+        "value": 0.024,
+        "n": 238,
+        "tolerance": 0.0005
+      },
+      "data": {}
+    },
+    {
+      "id": "ch8_bootstrap_ppo_rank_1_ci",
+      "statistic_kind": "bootstrap_mean_ci",
+      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports the Chapter 8 family-resampling rank-stability bootstrap; raw family rows are not yet registered in this repo.",
+      "source_query": {
+        "input_file": "payload/reports/scenario_family_breakdown.csv",
+        "method": "family_resampling_rank_stability",
+        "metric": "success_mean",
+        "planner": "ppo",
+        "bootstrap_samples": 10000,
+        "seed": 42
+      },
+      "expected": {
+        "samples": 10000,
+        "rank_ci": [
+          1,
+          1
+        ],
+        "tolerance": 0
+      },
+      "data": {}
+    },
+    {
+      "id": "ch8_bootstrap_rank_swap_bounds",
+      "statistic_kind": "bootstrap_mean_ci",
+      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports fixed ranks 4-7 and socnav/orca swap bounds; raw family rows are not yet registered in this repo.",
+      "source_query": {
+        "input_file": "payload/reports/scenario_family_breakdown.csv",
+        "method": "family_resampling_rank_stability",
+        "metric": "success_mean",
+        "bootstrap_samples": 10000,
+        "seed": 42
+      },
+      "expected": {
+        "samples": 10000,
+        "rank_ci_by_planner": {
+          "socnav_sampling": [
+            2,
+            3
+          ],
+          "orca": [
+            2,
+            3
+          ],
+          "prediction_planner": [
+            4,
+            4
+          ],
+          "goal": [
+            5,
+            5
+          ],
+          "sacadrl": [
+            6,
+            6
+          ],
+          "social_force": [
+            7,
+            7
+          ]
+        },
+        "tolerance": 0
       },
       "data": {}
     }

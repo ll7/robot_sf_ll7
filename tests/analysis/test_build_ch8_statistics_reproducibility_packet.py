@@ -42,6 +42,13 @@ def test_packet_builder_recomputes_fixture(tmp_path: Path) -> None:
     packet = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
     assert packet["overall_status"] == "reproducible"
     assert {row["status"] for row in packet["statistics"]} == {"matches_expected"}
+    assert (tmp_path / "report.md").is_file()
+    assert (tmp_path / "README.md").is_file()
+    checksums = (tmp_path / "SHA256SUMS").read_text(encoding="utf-8")
+    assert "summary.json" in checksums
+    assert "report.md" in checksums
+    assert "README.md" in checksums
+    assert "reproducible_manifest.json" in checksums
 
 
 def test_default_manifest_fails_closed_until_ch8_sources_are_registered(tmp_path: Path) -> None:
@@ -66,6 +73,11 @@ def test_default_manifest_fails_closed_until_ch8_sources_are_registered(tmp_path
     packet = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
     assert packet["overall_status"] == "blocked"
     assert {row["status"] for row in packet["statistics"]} == {"blocked_missing_source_data"}
+    expected_by_id = {row["id"]: row["expected"] for row in packet["statistics"]}
+    assert expected_by_id["ch8_eta_squared_success_mean"]["scenario_family_eta_squared"] == 0.388
+    assert expected_by_id["ch8_spearman_success_time_to_goal_minus_0_998"]["value"] == -0.998
+    assert expected_by_id["ch8_bootstrap_ppo_rank_1_ci"]["rank_ci"] == [1, 1]
+    assert len(packet["statistics"]) == 7
 
 
 def test_manifest_with_non_dict_statistic_entry_fails_closed(tmp_path: Path) -> None:

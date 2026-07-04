@@ -45,6 +45,15 @@ _CATEGORICAL_FEATURES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("termination_reason", ("termination_reason", "status")),
 )
 
+_LABEL_POSITIVE_KEYS = (
+    "collision",
+    "collision_event",
+    "near_miss",
+    "unsafe",
+    "failure",
+    "low_progress",
+)
+
 
 @dataclass(frozen=True)
 class ScenarioDescriptor:
@@ -300,6 +309,92 @@ def _representative(
     return scored[0][1]
 
 
+def _record_labels(record: dict[str, Any]) -> dict[str, Any]:
+    labels = record.get("external_labels")
+    if not isinstance(labels, dict):
+        labels = record.get("labels")
+    if not isinstance(labels, dict):
+        labels = {}
+    outcome = record.get("outcome")
+    if isinstance(outcome, dict):
+        labels = {**outcome, **labels}
+    return labels
+
+
+def _label_is_positive(labels: dict[str, Any]) -> bool:
+    return any(bool(labels.get(key)) for key in _LABEL_POSITIVE_KEYS)
+
+
+def _trajectory_fields(record: dict[str, Any]) -> set[str]:
+    fields: set[str] = set()
+    trajectory_features = record.get("trajectory_features")
+    if isinstance(trajectory_features, dict):
+        fields.update(str(key) for key in trajectory_features)
+    trajectory = record.get("trajectory")
+    if isinstance(trajectory, dict):
+        fields.update(f"trajectory.{key}" for key in trajectory)
+    return fields
+
+
+def _validation_summary(
+    records: Sequence[dict[str, Any]],
+    descriptors: Sequence[ScenarioDescriptor],
+) -> dict[str, Any]:
+    selected_ids = {descriptor.record_id for descriptor in descriptors}
+    records_by_id = {_record_id(record, index): record for index, record in enumerate(records)}
+
+    labeled_records = 0
+    selected_labeled_records = 0
+    selected_label_positive = 0
+    selected_label_conflicts: list[str] = []
+    for record_id, record in records_by_id.items():
+        labels = _record_labels(record)
+        if not labels:
+            continue
+        labeled_records += 1
+        if record_id not in selected_ids:
+            continue
+        selected_labeled_records += 1
+        if _label_is_positive(labels):
+            selected_label_positive += 1
+        else:
+            selected_label_conflicts.append(record_id)
+
+    trajectory_records = 0
+    selected_trajectory_records = 0
+    observed_fields: set[str] = set()
+    for record_id, record in records_by_id.items():
+        fields = _trajectory_fields(record)
+        if not fields:
+            continue
+        trajectory_records += 1
+        if record_id in selected_ids:
+            selected_trajectory_records += 1
+            observed_fields.update(fields)
+
+    return {
+        "external_labels": {
+            "status": "available" if labeled_records else "unavailable",
+            "records_with_labels": labeled_records,
+            "selected_with_labels": selected_labeled_records,
+            "selected_positive_labels": selected_label_positive,
+            "selected_label_conflicts": selected_label_conflicts,
+            "interpretation": (
+                "Descriptive alignment check only; labels are not treated as benchmark truth."
+            ),
+        },
+        "trajectory_fields": {
+            "status": "available" if trajectory_records else "unavailable",
+            "records_with_trajectory_fields": trajectory_records,
+            "selected_with_trajectory_fields": selected_trajectory_records,
+            "selected_fields_observed": sorted(observed_fields),
+            "interpretation": (
+                "Trajectory fields are reported for reviewer inspection and are not a new metric."
+            ),
+        },
+    }
+
+
 def build_collision_scenario_similarity_report(
     episodes_jsonl: str | Path,
     *,
@@ -340,10 +435,13 @@ def build_collision_scenario_similarity_report(
         "descriptors": [descriptor.to_json() for descriptor in descriptors],
         "nearest_neighbors": neighbors,
         "groups": groups,
+        "validation": _validation_summary(records, descriptors),
         "limitations": [
             "Scenario similarity is an analysis aid, not benchmark evidence by itself.",
             "Distances depend on logged descriptor fields and do not validate external labels.",
             "Missing trajectory-level fields are excluded rather than imputed.",
+            "External labels and trajectory fields, when present, are descriptive validation "
+            "context only.",
         ],
     }
 
@@ -379,6 +477,21 @@ def format_collision_scenario_similarity_markdown(report: dict[str, Any]) -> str
             for neighbor in row["neighbors"]
         )
         lines.append(f"| `{row['record_id']}` | {neighbor_text} |")
+    validation = report.get("validation", {})
+    external_labels = validation.get("external_labels", {})
+    trajectory_fields = validation.get("trajectory_fields", {})
+    lines.extend(
+        [
+            "",
+            "## Validation Context",
+            "",
+            f"- External labels: {external_labels.get('status', 'unavailable')} "
+            f"({external_labels.get('selected_with_labels', 0)} selected records with labels; "
+            f"{external_labels.get('selected_positive_labels', 0)} positive).",
+            f"- Trajectory fields: {trajectory_fields.get('status', 'unavailable')} "
+            f"({trajectory_fields.get('selected_with_trajectory_fields', 0)} selected records).",
+        ]
+    )
     lines.extend(["", "## Limitations", ""])
     lines.extend(f"- {limitation}" for limitation in report["limitations"])
     return "\n".join(lines) + "\n"

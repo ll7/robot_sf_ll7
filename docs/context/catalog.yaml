@@ -3123,3 +3123,19 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3300_stronger_matrix_closure_audit_2026-07-04/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3300_stronger_matrix_closure_audit_2026-07-04/false_positive_replay_report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3300_stronger_matrix_closure_audit_2026-07-04/robustness_delta.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3300_stronger_matrix_closure_audit_2026-07-04/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

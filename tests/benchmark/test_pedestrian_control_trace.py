@@ -66,6 +66,69 @@ def test_build_pedestrian_control_trace_records_archetype_controls() -> None:
     assert hurried["steps"][1]["speed_m_s"] == pytest.approx(2.0)
 
 
+def test_build_pedestrian_control_trace_computes_clearance() -> None:
+    """Recorder computes per-step clearance_m when robot positions are supplied."""
+
+    positions = np.array(
+        [
+            [[0.0, 0.0], [2.0, 0.0]],
+            [[0.0, 1.0], [2.0, 3.0]],
+        ],
+        dtype=float,
+    )
+    robot_positions = np.array(
+        [
+            [1.0, 0.0],
+            [1.0, 1.0],
+        ],
+        dtype=float,
+    )
+
+    trace = build_pedestrian_control_trace(
+        scenario=_scenario(),
+        ped_positions=positions,
+        ped_forces=None,
+        dt=0.1,
+        robot_positions=robot_positions,
+        robot_radius=0.3,
+        ped_radius=0.2,
+    )
+
+    cautious, hurried = trace["pedestrians"]
+    assert cautious["steps"][0]["clearance_m"] == pytest.approx(0.5)
+    assert cautious["steps"][1]["clearance_m"] == pytest.approx(0.5)
+    assert hurried["steps"][0]["clearance_m"] == pytest.approx(0.5)
+    assert hurried["steps"][1]["clearance_m"] == pytest.approx(math.sqrt(5) - 0.5)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"robot_positions": np.zeros((1, 2), dtype=float)}, "step count must match"),
+        ({"robot_positions": np.zeros((2, 3), dtype=float)}, "must have shape"),
+        ({"robot_positions": np.zeros((2, 2), dtype=float), "robot_radius": -0.1}, "must be non-negative"),
+        ({"robot_positions": np.zeros((2, 2), dtype=float), "ped_radius": -0.1}, "must be non-negative"),
+    ],
+)
+def test_build_pedestrian_control_trace_rejects_invalid_robot_params(
+    kwargs: dict[str, object],
+    message: str,
+) -> None:
+    """Invalid robot positions or radii raise ValueError."""
+
+    positions = np.zeros((2, 2, 2), dtype=float)
+    params = {
+        "scenario": _scenario(),
+        "ped_positions": positions,
+        "ped_forces": None,
+        "dt": 0.1,
+    }
+    params.update(kwargs)
+
+    with pytest.raises(ValueError, match=message):
+        build_pedestrian_control_trace(**params)
+
+
 def test_has_pedestrian_control_trace_metadata_detects_archetypes() -> None:
     """Episode integration should only attach the trace for explicitly labeled pedestrians."""
 

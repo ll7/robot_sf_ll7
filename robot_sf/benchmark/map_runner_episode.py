@@ -1772,6 +1772,9 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             ped_positions=ped_pos_arr,
             ped_forces=ped_forces_arr if record_forces else None,
             dt=float(config.sim_config.time_per_step_in_secs),
+            robot_positions=robot_pos_arr,
+            robot_radius=float(getattr(robot_config, "radius", 1.0)),
+            ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
         )
     tracking_precision_summary: dict[str, Any] = {
         "spec": tracking_precision_spec,

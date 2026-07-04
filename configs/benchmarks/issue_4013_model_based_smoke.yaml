@@ -1,0 +1,19 @@
+name: issue_4013_model_based_smoke
+scenario_matrix: configs/scenarios/single/francis2023_blind_corner.yaml
+workers: 1
+horizon: 30
+dt: 0.1
+record_forces: true
+resume: false
+export_publication_bundle: false
+stop_on_failure: true
+seed_policy:
+  mode: fixed-list
+  seeds: [4013]
+planners:
+  - key: learned_prediction_mpc_diagnostic
+    algo: learned_prediction_mpc
+    algo_config: configs/algos/learned_prediction_mpc_issue_4013_smoke.yaml
+    benchmark_profile: experimental
+    issue_4013_role: model_based_candidate
+    claim_boundary: diagnostic_smoke_only

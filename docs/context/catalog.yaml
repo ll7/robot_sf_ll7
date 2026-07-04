@@ -45,6 +45,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4445_ch8_statistics_reproducibility/source_manifest.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4163_rare_event_smoke/summary.json
     status: evidence
     freshness: evidence

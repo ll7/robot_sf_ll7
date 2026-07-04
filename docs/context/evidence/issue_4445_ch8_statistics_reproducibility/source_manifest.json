@@ -1,0 +1,34 @@
+{
+  "schema_version": "issue_4445.ch8_statistics_reproducibility.v1",
+  "issue": 4445,
+  "title": "Chapter 8 statistics reproducibility registration packet",
+  "source_status": "blocked: issue title names eta-squared, Spearman rho=-0.998, and a 10000-sample bootstrap statistic, but the live issue body available to this PR did not expose the raw source rows or final expected values for all three statistics.",
+  "statistics": [
+    {
+      "id": "ch8_eta_squared",
+      "statistic_kind": "partial_eta_squared",
+      "source_artifact": "Chapter 8 source table required; not included in issue #4445 live body",
+      "expected": {},
+      "data": {}
+    },
+    {
+      "id": "ch8_spearman_rho_minus_0_998",
+      "statistic_kind": "spearman_rho",
+      "source_artifact": "Chapter 8 paired rank source rows required; not included in issue #4445 live body",
+      "expected": {
+        "value": -0.998,
+        "tolerance": 0.0005
+      },
+      "data": {}
+    },
+    {
+      "id": "ch8_bootstrap_10000",
+      "statistic_kind": "bootstrap_mean_ci",
+      "source_artifact": "Chapter 8 bootstrap source values required; not included in issue #4445 live body",
+      "expected": {
+        "samples": 10000
+      },
+      "data": {}
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+# Example public-source discovery ledger for issue #3278.
+#
+# This file records metadata about candidate public sources only. It contains no
+# raw trace data, downloads nothing, and makes no real-world validation claim.
+# The maintainer decision on issue #3278 keeps implementation blocked until a
+# viable data-gathering method appears.
+schema_version: real_trace_source_discovery.v1
+issue: 3278
+discovery_status: complete
+required_targets:
+  - late_evasive_reaction
+  - oscillatory_local_control
+candidate_sources:
+  - source_id: placeholder_public_micromobility_survey
+    title: Placeholder public micromobility trajectory source
+    source_type: public_dataset
+    url_or_reference: "TBD - replace only after accepted source discovery"
+    license_status: unknown
+    access_status: blocked
+    coverage_status: proxy_only
+    covered_targets:
+      - late_evasive_reaction
+      - oscillatory_local_control
+    notes: >
+      Demonstrates the blocked-external-input state. Public trajectory
+      datasets may provide proxy kinematics, but no accepted source is known
+      to provide directly usable late-evasive and oscillatory validation traces.
+notes: >
+  Fail-closed discovery ledger example. A future source may move one target to
+  ready only when access is available, license status is accepted or permissive,
+  and coverage is direct.

@@ -48,6 +48,11 @@ def _ready_spec() -> dict[str, object]:
     """Return a fully valid false-positive injection replay-condition spec."""
     return {
         **_valid_provenance(),
+        "planner_observation_view": {
+            "observation_level": "oracle_full_state",
+            "active_observation_mode": "socnav_state",
+            "required_inputs": ["robot_state", "goal", "pedestrians"],
+        },
         "false_positive_positions": [[2.0, 3.0]],
         "false_positive_velocities": [[0.0, 0.0]],
         "false_positive_ids": ["fp_close"],
@@ -78,7 +83,12 @@ class TestReadyCondition:
 
     def test_multiple_injected_actors_counted(self) -> None:
         """Injected-actor count reflects all requested false positives."""
-        spec = {**_valid_provenance(), "false_positive_positions": [[2.0, 3.0], [4.0, 5.0]]}
+        spec = {
+            **_ready_spec(),
+            "false_positive_positions": [[2.0, 3.0], [4.0, 5.0]],
+            "false_positive_velocities": [[0.0, 0.0], [0.0, 0.0]],
+            "false_positive_ids": ["fp_close", "fp_far"],
+        }
         readiness = check_false_positive_injection_readiness(spec)
         assert readiness.status == STATUS_READY
         assert readiness.injected_actor_count == 2
@@ -127,6 +137,29 @@ class TestFailClosed:
         readiness = check_false_positive_injection_readiness(spec)
         assert readiness.status == STATUS_BLOCKED
         assert any("perturbation_family" in blocker for blocker in readiness.blockers)
+
+    def test_missing_observation_view_blocks_when_injecting_actor(self) -> None:
+        """Injected actors require a declared structured-pedestrian planner view."""
+        spec = _ready_spec()
+        del spec["planner_observation_view"]
+        readiness = check_false_positive_injection_readiness(spec)
+        assert readiness.status == STATUS_BLOCKED
+        assert any("structured pedestrians" in blocker for blocker in readiness.blockers)
+        assert readiness.injected_actor_count == 1
+
+    def test_goal_state_observation_view_blocks_false_positive_injection(self) -> None:
+        """A goal-only observation view fails closed before replay execution."""
+        spec = {
+            **_ready_spec(),
+            "planner_observation_view": {
+                "observation_level": "oracle_full_state",
+                "active_observation_mode": "goal_state",
+                "required_inputs": ["robot_state", "goal", "pedestrians"],
+            },
+        }
+        readiness = check_false_positive_injection_readiness(spec)
+        assert readiness.status == STATUS_BLOCKED
+        assert any("goal_state" in blocker for blocker in readiness.blockers)
 
     def test_malformed_positions_block(self) -> None:
         """A bad injection-input shape must fail closed, not raise out."""

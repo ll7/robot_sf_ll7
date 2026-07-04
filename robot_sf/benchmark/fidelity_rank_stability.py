@@ -341,8 +341,8 @@ def write_rank_identifiability_report(
     out.mkdir(parents=True, exist_ok=True)
     path = out / "fidelity_rank_stability_report.json"
     payload: dict[str, object] = {
-        "schema_version": RANK_STABILITY_REPORT_SCHEMA,
         **report,
+        "schema_version": RANK_STABILITY_REPORT_SCHEMA,
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
@@ -404,7 +404,6 @@ def check_rank_identifiability_contract(
         contract_id=contract_id,
         satisfied=False,
         reason=(
-            f"rank not identifiable (reason={reason}); "
-            f"blocks_claims_when_failed={blocks_claims}"
+            f"rank not identifiable (reason={reason}); blocks_claims_when_failed={blocks_claims}"
         ),
     )

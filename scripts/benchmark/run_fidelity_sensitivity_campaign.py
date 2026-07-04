@@ -30,7 +30,6 @@ from robot_sf.baselines.interface import Observation
 from robot_sf.baselines.social_force import SFPlannerConfig, SocialForcePlanner
 from robot_sf.benchmark.fidelity_fixed_scope_preflight import build_fixed_scope_preflight
 from robot_sf.benchmark.fidelity_rank_stability import (
-    PostRunContractResult,
     analyze_fidelity_sensitivity,
     check_rank_identifiability_contract,
     write_rank_identifiability_report,
@@ -1325,7 +1324,11 @@ def _run_fixed_scope_execute(args: argparse.Namespace, config: Mapping[str, Any]
     # Post-run contract gate: validate rank-identifiability against plan spec.
     contract_specs = plan.get("post_run_contract_specs") or []
     rank_contract_spec = next(
-        (spec for spec in contract_specs if spec.get("id") == "runtime_rank_identifiability_recheck"),
+        (
+            spec
+            for spec in contract_specs
+            if spec.get("id") == "runtime_rank_identifiability_recheck"
+        ),
         None,
     )
     if rank_contract_spec is not None:
@@ -1333,8 +1336,10 @@ def _run_fixed_scope_execute(args: argparse.Namespace, config: Mapping[str, Any]
             report["rank_stability"], rank_contract_spec
         )
         if not contract_result.satisfied:
-            print(f"fail-closed: post-run contract '{contract_result.contract_id}' failed: "
-                  f"{contract_result.reason}")
+            print(
+                f"fail-closed: post-run contract '{contract_result.contract_id}' failed: "
+                f"{contract_result.reason}"
+            )
             return 1
     elif not bool(report["rank_stability"].get("rank_identifiable")):
         reason = report["rank_stability"].get("rank_identifiability_reason", "unknown")

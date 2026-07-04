@@ -26,6 +26,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = (
     REPO_ROOT / "configs/benchmarks/issue_4206_trace_capable_h600_rerun_preregistration.yaml"
 )
+RUN_CONFIG_PATH = (
+    REPO_ROOT / "configs/benchmarks/paper_experiment_matrix_v1_h600_trace_capable_rerun.yaml"
+)
 
 
 def _write_config(tmp_path: Path, payload: dict) -> Path:
@@ -177,3 +180,53 @@ def test_missing_provenance_predecessors_fails_closed(tmp_path: Path, base_paylo
     path = _write_config(tmp_path, base_payload)
     with pytest.raises(RerunPreregistrationError, match="predecessor_runs"):
         load_preregistration(path)
+
+
+def test_runnable_h600_config_matches_preregistration_contract() -> None:
+    """Issue #4404 runnable config preserves the issue #4350 pre-registration identity."""
+    from scripts.validation.check_issue_4206_trace_capable_h600_rerun_preregistration import (
+        validate_runnable_config_pair,
+    )
+
+    payload = load_preregistration(CONFIG_PATH)
+    manifest = validate_runnable_config_pair(payload, RUN_CONFIG_PATH)
+    expected_keys = [
+        key
+        for spec in payload["planner_roster"]["structural_classes"].values()
+        for key in spec["planner_keys"]
+    ]
+    assert manifest["planner_keys"] == expected_keys
+    assert manifest["planner_arm_count"] == len(expected_keys) == 12
+    assert manifest["seeds"] == [20, 21, 22, 23, 24]
+    assert manifest["horizon"] == 600
+    assert manifest["expected_scenario_matrix_hash"] == "c10df617a87c"
+    assert manifest["trace_capture"] == {
+        "record_planner_decision_trace": True,
+        "record_simulation_step_trace": True,
+    }
+
+
+def test_runnable_h600_config_loads_trace_capture_flags() -> None:
+    """Camera-ready config loader preserves trace switches for the runner."""
+    from robot_sf.benchmark.camera_ready._config import load_campaign_config
+
+    cfg = load_campaign_config(RUN_CONFIG_PATH)
+    assert cfg.name == "paper_experiment_matrix_v1_h600_trace_capable_rerun"
+    assert cfg.horizon == 600
+    assert tuple(cfg.seed_policy.seeds) == (20, 21, 22, 23, 24)
+    assert cfg.record_planner_decision_trace is True
+    assert cfg.record_simulation_step_trace is True
+    assert [planner.key for planner in cfg.planners] == [
+        "scenario_adaptive_hybrid_orca_v1",
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "ppo",
+        "guarded_ppo",
+        "prediction_planner",
+        "prediction_mpc",
+        "prediction_mpc_cbf",
+        "goal",
+        "social_force",
+        "orca",
+        "socnav_sampling",
+        "sacadrl",
+    ]

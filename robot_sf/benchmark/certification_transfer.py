@@ -41,6 +41,12 @@ DEFAULT_PEDESTRIAN_MODELS = (SOCIAL_FORCE_DEFAULT, HSFM_TOTAL_FORCE_V1)
 # #4166-style gate spec.
 INTERACTION_NEAR_FIELD_M = 5.0
 INTERACTION_STATUSES = ("interacting", "non_interacting", "unknown")
+TRAINED_PLANNER_STRUCTURAL_CLASSES = frozenset({"learned_policy", "predictive"})
+TRAINED_PLANNER_ALGOS = frozenset({"ppo", "guarded_ppo", "prediction_planner"})
+TRAINED_PLANNER_ELIGIBLE = "eligible"
+TRAINED_PLANNER_NOT_A_TRAINED_PLANNER = "not_a_trained_planner"
+TRAINED_PLANNER_EXCLUDED_MISSING_CHECKPOINT = "excluded_missing_checkpoint_or_config"
+TRAINED_PLANNER_EXCLUDED_FALLBACK = "excluded_fallback_execution"
 
 GATE_CELL_COLUMNS = (
     "planner_key",
@@ -49,6 +55,8 @@ GATE_CELL_COLUMNS = (
     "evaluation_model",
     "gate_status",
     "interaction_status",
+    "trained_planner_claim_status",
+    "trained_planner_claim_exclusion",
     "failed_gate_ids",
     "not_evaluable_gate_ids",
     "episodes",
@@ -64,6 +72,8 @@ TRANSFER_MATRIX_COLUMNS = (
     "transfer_status",
     "interaction_status",
     "interaction_exercised",
+    "trained_planner_claim_status",
+    "trained_planner_claim_exclusion",
     "flip_type",
     "failed_gate_ids",
     "not_evaluable_gate_ids",
@@ -136,6 +146,18 @@ def validate_probe_config(config: Mapping[str, Any], *, base_dir: Path) -> dict[
         "record_forces": bool(config.get("record_forces", False)),
         "resume": bool(config.get("resume", True)),
         "run_artifact_dir": str(config.get("run_artifact_dir", "output/benchmarks/issue_4207")),
+        "trained_planner_claim_policy": {
+            "schema_version": "trained-planner-claim-policy.v1",
+            "claim": (
+                "certification-transfer packet rows with fallback or missing checkpoints are "
+                "excluded from trained-planner comparison claims."
+            ),
+            "eligible_status": TRAINED_PLANNER_ELIGIBLE,
+            "excluded_statuses": [
+                TRAINED_PLANNER_EXCLUDED_MISSING_CHECKPOINT,
+                TRAINED_PLANNER_EXCLUDED_FALLBACK,
+            ],
+        },
     }
 
 
@@ -271,9 +293,15 @@ def build_certification_transfer_report(
                 "algo": arm["algo"],
                 "algo_config": arm.get("algo_config"),
                 "development_pedestrian_model": arm["development_pedestrian_model"],
+                "trained_planner_claim_status": arm["trained_planner_claim_status"],
+                "trained_planner_claim_exclusion": arm["trained_planner_claim_exclusion"],
             }
             for arm in normalized_config["arms"]
         ],
+        "trained_planner_claim_policy": normalized_config["trained_planner_claim_policy"],
+        "trained_planner_claim_status_counts": dict(
+            Counter(row["trained_planner_claim_status"] for row in transfer_matrix)
+        ),
         "gate_cells": gate_cells,
         "certification_transfer_matrix": transfer_matrix,
         "metric_deltas_by_model": metric_deltas,
@@ -294,6 +322,9 @@ def build_certification_transfer_report(
             "entered the pedestrian near field, so the social-force model (SFM) / headed "
             "social-force model (HSFM) swap was not exercised and no certification-robustness "
             "conclusion follows.",
+            "Learned or predictive arms that run through fallback execution or without a "
+            "resolved trained checkpoint/config are excluded from trained-planner comparison "
+            "claims.",
             "No deployment, real-world safety, or general planner-superiority claim follows.",
         ],
     }
@@ -384,6 +415,8 @@ def _build_gate_cells(
                     "evaluation_model": evaluation_model,
                     "gate_status": gate_status,
                     "interaction_status": classify_interaction_status(metrics),
+                    "trained_planner_claim_status": arm["trained_planner_claim_status"],
+                    "trained_planner_claim_exclusion": arm["trained_planner_claim_exclusion"],
                     "failed_gate_ids": ";".join(failed),
                     "not_evaluable_gate_ids": ";".join(not_evaluable),
                     "episodes": len(matching),
@@ -432,6 +465,8 @@ def _build_transfer_matrix(
                         "transfer_status": transfer_status,
                         "interaction_status": interaction_status,
                         "interaction_exercised": interaction_exercised,
+                        "trained_planner_claim_status": arm["trained_planner_claim_status"],
+                        "trained_planner_claim_exclusion": arm["trained_planner_claim_exclusion"],
                         "flip_type": flip_type,
                         "failed_gate_ids": evaluation_cell["failed_gate_ids"],
                         "not_evaluable_gate_ids": evaluation_cell["not_evaluable_gate_ids"],
@@ -636,12 +671,40 @@ def _validate_arms(raw_arms: object, *, base_dir: Path) -> list[dict[str, Any]]:
             normalized["observation_mode"] = str(arm["observation_mode"])
         if arm.get("observation_level") is not None:
             normalized["observation_level"] = str(arm["observation_level"])
+        if arm.get("fallback_execution") is not None:
+            normalized["fallback_execution"] = bool(arm["fallback_execution"])
+        if arm.get("fallback_to_goal") is not None:
+            normalized["fallback_to_goal"] = bool(arm["fallback_to_goal"])
         if arm.get("algo_config") is not None:
             normalized["algo_config"] = str(
                 _resolve_existing_path(arm.get("algo_config"), base_dir=base_dir)
             )
+        status, exclusion = _trained_planner_claim_status(normalized)
+        normalized["trained_planner_claim_status"] = status
+        normalized["trained_planner_claim_exclusion"] = exclusion
         normalized_arms.append(normalized)
     return normalized_arms
+
+
+def _trained_planner_claim_status(arm: Mapping[str, Any]) -> tuple[str, str]:
+    """Classify whether an arm may support trained-planner comparison claims.
+
+    Returns:
+        Pair of claim status and optional exclusion reason.
+    """
+
+    structural_class = str(arm.get("structural_class", ""))
+    algo = str(arm.get("algo", ""))
+    if (
+        structural_class not in TRAINED_PLANNER_STRUCTURAL_CLASSES
+        and algo not in TRAINED_PLANNER_ALGOS
+    ):
+        return TRAINED_PLANNER_NOT_A_TRAINED_PLANNER, ""
+    if bool(arm.get("fallback_execution")) or bool(arm.get("fallback_to_goal")):
+        return TRAINED_PLANNER_EXCLUDED_FALLBACK, "fallback_execution"
+    if not str(arm.get("algo_config", "")).strip():
+        return TRAINED_PLANNER_EXCLUDED_MISSING_CHECKPOINT, "missing_checkpoint_or_config"
+    return TRAINED_PLANNER_ELIGIBLE, ""
 
 
 def _collision_value(record: Mapping[str, Any]) -> float | None:
@@ -740,6 +803,8 @@ def _metadata_payload(report: Mapping[str, Any]) -> dict[str, Any]:
         "scenario_family": report["scenario_family"],
         "seed_policy": report["seed_policy"],
         "arms": report["arms"],
+        "trained_planner_claim_policy": report["trained_planner_claim_policy"],
+        "trained_planner_claim_status_counts": report["trained_planner_claim_status_counts"],
         "row_status_counts": report["row_status_counts"],
         "transfer_status_counts": report["transfer_status_counts"],
         "interaction_status_counts": report["interaction_status_counts"],
@@ -758,6 +823,8 @@ def _claim_boundary_markdown(report: Mapping[str, Any]) -> str:
         "- `non_interacting` cells (robot never inside the 5 m pedestrian near field) cannot "
         "demonstrate certification robustness; a stable status over them is vacuous, because the "
         "social-force model (SFM) / headed social-force model (HSFM) swap was never exercised.",
+        "- Learned or predictive arms that run through fallback execution or without a resolved "
+        "trained checkpoint/config are excluded from trained-planner comparison claims.",
         "- Pass/fail flips are a result: model-assumption fragility in the certification decision.",
         "- No full benchmark campaign, Slurm or GPU submission, retraining, deployment claim, "
         "real-world safety claim, or paper/dissertation claim promotion is included.",
@@ -784,6 +851,8 @@ def _readme_markdown(report: Mapping[str, Any]) -> str:
         f"- Gate status counts: `{dict(report['row_status_counts'])}`",
         f"- Transfer status counts: `{dict(report['transfer_status_counts'])}`",
         f"- Interaction status counts: `{dict(report['interaction_status_counts'])}`",
+        f"- Trained-planner claim status counts: "
+        f"`{dict(report['trained_planner_claim_status_counts'])}`",
         f"- Physics near-field confirmed: `{interaction_metrics['physics_near_field_confirmed']}`",
         f"- Max robot-pedestrian within-5m fraction: "
         f"`{interaction_metrics['max_robot_ped_within_5m_frac']}`",
@@ -796,6 +865,9 @@ def _readme_markdown(report: Mapping[str, Any]) -> str:
         "If `Model sensitivity exercised` is `false`, every transfer cell is `non_interacting` "
         "or `unknown`: the robot never entered the pedestrian near field, so the stable statuses "
         "above are vacuous and do not demonstrate certification robustness.",
+        "Learned or predictive arms with `excluded_missing_checkpoint_or_config` or "
+        "`excluded_fallback_execution` trained-planner claim status are diagnostic "
+        "certification-transfer rows only, not trained-planner comparison evidence.",
         "",
         "## Files",
         "",

@@ -5,28 +5,36 @@
       "algo_config": null,
       "development_pedestrian_model": "unknown",
       "key": "goal",
-      "structural_class": "baseline_reactive"
+      "structural_class": "baseline_reactive",
+      "trained_planner_claim_exclusion": "",
+      "trained_planner_claim_status": "not_a_trained_planner"
     },
     {
       "algo": "ppo",
       "algo_config": null,
       "development_pedestrian_model": "unknown",
       "key": "ppo",
-      "structural_class": "learned_policy"
+      "structural_class": "learned_policy",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config"
     },
     {
       "algo": "prediction_planner",
       "algo_config": null,
       "development_pedestrian_model": "unknown",
       "key": "prediction_planner",
-      "structural_class": "predictive"
+      "structural_class": "predictive",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config"
     },
     {
       "algo": "guarded_ppo",
       "algo_config": null,
       "development_pedestrian_model": "unknown",
       "key": "guarded_ppo",
-      "structural_class": "constraint_first"
+      "structural_class": "constraint_first",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config"
     }
   ],
   "claim_boundary": "diagnostic_certification_transfer_probe_no_deployment_claim",
@@ -79,6 +87,19 @@
       112,
       113
     ]
+  },
+  "trained_planner_claim_policy": {
+    "claim": "certification-transfer packet rows with fallback or missing checkpoints are excluded from trained-planner comparison claims.",
+    "eligible_status": "eligible",
+    "excluded_statuses": [
+      "excluded_missing_checkpoint_or_config",
+      "excluded_fallback_execution"
+    ],
+    "schema_version": "trained-planner-claim-policy.v1"
+  },
+  "trained_planner_claim_status_counts": {
+    "excluded_missing_checkpoint_or_config": 12,
+    "not_a_trained_planner": 4
   },
   "transfer_status_counts": {
     "stable_fail": 8,

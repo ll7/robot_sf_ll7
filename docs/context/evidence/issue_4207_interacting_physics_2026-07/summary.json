@@ -5,28 +5,36 @@
       "algo_config": null,
       "development_pedestrian_model": "unknown",
       "key": "goal",
-      "structural_class": "baseline_reactive"
+      "structural_class": "baseline_reactive",
+      "trained_planner_claim_exclusion": "",
+      "trained_planner_claim_status": "not_a_trained_planner"
     },
     {
       "algo": "ppo",
       "algo_config": null,
       "development_pedestrian_model": "unknown",
       "key": "ppo",
-      "structural_class": "learned_policy"
+      "structural_class": "learned_policy",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config"
     },
     {
       "algo": "prediction_planner",
       "algo_config": null,
       "development_pedestrian_model": "unknown",
       "key": "prediction_planner",
-      "structural_class": "predictive"
+      "structural_class": "predictive",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config"
     },
     {
       "algo": "guarded_ppo",
       "algo_config": null,
       "development_pedestrian_model": "unknown",
       "key": "guarded_ppo",
-      "structural_class": "constraint_first"
+      "structural_class": "constraint_first",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config"
     }
   ],
   "certification_transfer_matrix": [
@@ -43,6 +51,8 @@
       "planner_key": "goal",
       "scenario_family": "issue4207_interacting_smoke",
       "structural_class": "baseline_reactive",
+      "trained_planner_claim_exclusion": "",
+      "trained_planner_claim_status": "not_a_trained_planner",
       "transfer_status": "stable_fail"
     },
     {
@@ -58,6 +68,8 @@
       "planner_key": "goal",
       "scenario_family": "issue4207_interacting_smoke",
       "structural_class": "baseline_reactive",
+      "trained_planner_claim_exclusion": "",
+      "trained_planner_claim_status": "not_a_trained_planner",
       "transfer_status": "stable_fail"
     },
     {
@@ -73,6 +85,8 @@
       "planner_key": "goal",
       "scenario_family": "issue4207_interacting_smoke",
       "structural_class": "baseline_reactive",
+      "trained_planner_claim_exclusion": "",
+      "trained_planner_claim_status": "not_a_trained_planner",
       "transfer_status": "stable_fail"
     },
     {
@@ -88,6 +102,8 @@
       "planner_key": "goal",
       "scenario_family": "issue4207_interacting_smoke",
       "structural_class": "baseline_reactive",
+      "trained_planner_claim_exclusion": "",
+      "trained_planner_claim_status": "not_a_trained_planner",
       "transfer_status": "stable_fail"
     },
     {
@@ -103,6 +119,8 @@
       "planner_key": "ppo",
       "scenario_family": "issue4207_interacting_smoke",
       "structural_class": "learned_policy",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config",
       "transfer_status": "stable_pass"
     },
     {
@@ -118,6 +136,8 @@
       "planner_key": "ppo",
       "scenario_family": "issue4207_interacting_smoke",
       "structural_class": "learned_policy",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config",
       "transfer_status": "stable_pass"
     },
     {
@@ -133,6 +153,8 @@
       "planner_key": "ppo",
       "scenario_family": "issue4207_interacting_smoke",
       "structural_class": "learned_policy",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config",
       "transfer_status": "stable_pass"
     },
     {
@@ -148,6 +170,8 @@
       "planner_key": "ppo",
       "scenario_family": "issue4207_interacting_smoke",
       "structural_class": "learned_policy",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config",
       "transfer_status": "stable_pass"
     },
     {
@@ -163,6 +187,8 @@
       "planner_key": "prediction_planner",
       "scenario_family": "issue4207_interacting_smoke",
       "structural_class": "predictive",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config",
       "transfer_status": "stable_fail"
     },
     {
@@ -178,6 +204,8 @@
       "planner_key": "prediction_planner",
       "scenario_family": "issue4207_interacting_smoke",
       "structural_class": "predictive",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config",
       "transfer_status": "stable_fail"
     },
     {
@@ -193,6 +221,8 @@
       "planner_key": "prediction_planner",
       "scenario_family": "issue4207_interacting_smoke",
       "structural_class": "predictive",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config",
       "transfer_status": "stable_fail"
     },
     {
@@ -208,6 +238,8 @@
       "planner_key": "prediction_planner",
       "scenario_family": "issue4207_interacting_smoke",
       "structural_class": "predictive",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config",
       "transfer_status": "stable_fail"
     },
     {
@@ -223,6 +255,8 @@
       "planner_key": "guarded_ppo",
       "scenario_family": "issue4207_interacting_smoke",
       "structural_class": "constraint_first",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config",
       "transfer_status": "stable_pass"
     },
     {
@@ -238,6 +272,8 @@
       "planner_key": "guarded_ppo",
       "scenario_family": "issue4207_interacting_smoke",
       "structural_class": "constraint_first",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config",
       "transfer_status": "stable_pass"
     },
     {
@@ -253,6 +289,8 @@
       "planner_key": "guarded_ppo",
       "scenario_family": "issue4207_interacting_smoke",
       "structural_class": "constraint_first",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config",
       "transfer_status": "stable_pass"
     },
     {
@@ -268,6 +306,8 @@
       "planner_key": "guarded_ppo",
       "scenario_family": "issue4207_interacting_smoke",
       "structural_class": "constraint_first",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config",
       "transfer_status": "stable_pass"
     }
   ],
@@ -278,6 +318,7 @@
     "not_evaluable is never treated as pass.",
     "Model-transfer flips indicate model-assumption fragility in the gate decision.",
     "A stable transfer status over non_interacting cells is vacuous: the robot never entered the pedestrian near field, so the social-force model (SFM) / headed social-force model (HSFM) swap was not exercised and no certification-robustness conclusion follows.",
+    "Learned or predictive arms that run through fallback execution or without a resolved trained checkpoint/config are excluded from trained-planner comparison claims.",
     "No deployment, real-world safety, or general planner-superiority claim follows."
   ],
   "config": {
@@ -348,7 +389,9 @@
       "not_evaluable_gate_ids": "",
       "planner_key": "goal",
       "scenario_family": "issue4207_interacting_smoke",
-      "structural_class": "baseline_reactive"
+      "structural_class": "baseline_reactive",
+      "trained_planner_claim_exclusion": "",
+      "trained_planner_claim_status": "not_a_trained_planner"
     },
     {
       "certification_pedestrian_model": "hsfm_total_force_v1",
@@ -411,7 +454,9 @@
       "not_evaluable_gate_ids": "",
       "planner_key": "goal",
       "scenario_family": "issue4207_interacting_smoke",
-      "structural_class": "baseline_reactive"
+      "structural_class": "baseline_reactive",
+      "trained_planner_claim_exclusion": "",
+      "trained_planner_claim_status": "not_a_trained_planner"
     },
     {
       "certification_pedestrian_model": "social_force_default",
@@ -474,7 +519,9 @@
       "not_evaluable_gate_ids": "",
       "planner_key": "ppo",
       "scenario_family": "issue4207_interacting_smoke",
-      "structural_class": "learned_policy"
+      "structural_class": "learned_policy",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config"
     },
     {
       "certification_pedestrian_model": "hsfm_total_force_v1",
@@ -537,7 +584,9 @@
       "not_evaluable_gate_ids": "",
       "planner_key": "ppo",
       "scenario_family": "issue4207_interacting_smoke",
-      "structural_class": "learned_policy"
+      "structural_class": "learned_policy",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config"
     },
     {
       "certification_pedestrian_model": "social_force_default",
@@ -600,7 +649,9 @@
       "not_evaluable_gate_ids": "",
       "planner_key": "prediction_planner",
       "scenario_family": "issue4207_interacting_smoke",
-      "structural_class": "predictive"
+      "structural_class": "predictive",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config"
     },
     {
       "certification_pedestrian_model": "hsfm_total_force_v1",
@@ -663,7 +714,9 @@
       "not_evaluable_gate_ids": "",
       "planner_key": "prediction_planner",
       "scenario_family": "issue4207_interacting_smoke",
-      "structural_class": "predictive"
+      "structural_class": "predictive",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config"
     },
     {
       "certification_pedestrian_model": "social_force_default",
@@ -726,7 +779,9 @@
       "not_evaluable_gate_ids": "",
       "planner_key": "guarded_ppo",
       "scenario_family": "issue4207_interacting_smoke",
-      "structural_class": "constraint_first"
+      "structural_class": "constraint_first",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config"
     },
     {
       "certification_pedestrian_model": "hsfm_total_force_v1",
@@ -789,7 +844,9 @@
       "not_evaluable_gate_ids": "",
       "planner_key": "guarded_ppo",
       "scenario_family": "issue4207_interacting_smoke",
-      "structural_class": "constraint_first"
+      "structural_class": "constraint_first",
+      "trained_planner_claim_exclusion": "missing_checkpoint_or_config",
+      "trained_planner_claim_status": "excluded_missing_checkpoint_or_config"
     }
   ],
   "gate_spec": {
@@ -1103,6 +1160,19 @@
       112,
       113
     ]
+  },
+  "trained_planner_claim_policy": {
+    "claim": "certification-transfer packet rows with fallback or missing checkpoints are excluded from trained-planner comparison claims.",
+    "eligible_status": "eligible",
+    "excluded_statuses": [
+      "excluded_missing_checkpoint_or_config",
+      "excluded_fallback_execution"
+    ],
+    "schema_version": "trained-planner-claim-policy.v1"
+  },
+  "trained_planner_claim_status_counts": {
+    "excluded_missing_checkpoint_or_config": 12,
+    "not_a_trained_planner": 4
   },
   "transfer_status_counts": {
     "stable_fail": 8,

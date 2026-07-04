@@ -1,0 +1,42 @@
+issue: 4195
+state_surface: h600_interpretation_gate_terminality
+entries:
+  - recorded_at_utc: "2026-07-04T05:28:17Z"
+    status: ready_for_issue_closure
+    source:
+      issue_url: "https://github.com/ll7/robot_sf_ll7/issues/4195"
+      live_issue_state_checked: "open"
+      comments_checked_through_utc: "2026-07-04T03:29:57Z"
+    merged_prs_verified:
+      - pr: 4321
+        merged_at_utc: "2026-07-03T18:34:57Z"
+        role: "integrated signed-off h600 hybrid-roster F-C4(ii) interpretation gate"
+      - pr: 4374
+        merged_at_utc: "2026-07-04T03:29:53Z"
+        role: "recorded issue #4195 terminality review in the h600 evidence bundle"
+    dedupe:
+      open_pr_covering_issue_or_closure_scope: false
+      high_churn_guard: "triggered; more than three issue #4195-related pull requests merged in the previous 24 hours"
+      propagation_surface: "single tracked state table plus checksummed terminality review, not an issue comment stream"
+    closure_boundary:
+      supported: "issue #4195 h600 interpretation-gate bookkeeping is complete"
+      diagnostic_only: "h600 evidence bundle readings and three-seed hybrid-roster comparisons"
+      outside_issue_4195:
+        - "pillar (iii) falsification-to-hardening documentation"
+        - "any future S30 hybrid-vs-ORCA escalation"
+        - "new h600 analysis or campaign execution"
+        - "paper or dissertation claim edits"
+    validation:
+      - command: "gh issue view 4195 --repo ll7/robot_sf_ll7 --comments"
+        result: "issue open; seven comments read; latest maintainer comment records PR #4374 merge and residual boundary"
+      - command: "gh pr view 4321 --repo ll7/robot_sf_ll7 --json state,mergedAt"
+        result: "MERGED at 2026-07-03T18:34:57Z"
+      - command: "gh pr view 4374 --repo ll7/robot_sf_ll7 --json state,mergedAt"
+        result: "MERGED at 2026-07-04T03:29:53Z"
+      - command: "gh pr list --repo ll7/robot_sf_ll7 --state open --search '4195 OR \"h600 interpretation-gate\" OR \"Close h600 interpretation-gate chain\"'"
+        result: "no open pull request covers the issue or closure scope"
+    forbidden_actions_confirmed:
+      compute_submit: false
+      merged: false
+      released: false
+      deleted: false

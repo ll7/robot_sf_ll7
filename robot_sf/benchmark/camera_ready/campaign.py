@@ -232,6 +232,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0913, PLR0915
                     horizon=effective_horizon if effective_horizon is not None else 0,
                     dt=effective_dt if effective_dt is not None else 0.0,
                     record_forces=cfg.record_forces,
+                    record_planner_decision_trace=cfg.record_planner_decision_trace,
+                    record_simulation_step_trace=cfg.record_simulation_step_trace,
                     snqi_weights=snqi_weights,
                     snqi_baseline=snqi_baseline,
                     algo=planner.algo,

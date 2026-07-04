@@ -1,0 +1,140 @@
+# Issue #4404 runnable config for the issue #4206 / #4350 trace-capable h600 re-run.
+# Claim boundary: campaign enablement only. This config does not submit a campaign,
+# interpret outputs, change thresholds, or establish paper/dissertation evidence.
+name: paper_experiment_matrix_v1_h600_trace_capable_rerun
+paper_facing: false
+paper_profile_version: paper-matrix-v1
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
+
+amv_profile:
+  name: amv-paper-v1
+  contract_version: "1"
+  coverage_enforcement: warn
+  required_dimensions:
+    use_case: [delivery_robot, shared_space_micromobility]
+    context: [sidewalk, shared_space]
+    speed_regime: [walking_speed, scooter_speed]
+    maneuver_type: [overtake, crossing, bottleneck]
+
+seed_policy:
+  mode: fixed-list
+  seeds: [20, 21, 22, 23, 24]
+
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
+  enabled: true
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 123
+  calibration_trials: 6000
+
+workers: 1
+horizon: 600
+dt: 0.1
+record_forces: true
+record_planner_decision_trace: true
+record_simulation_step_trace: true
+resume: true
+stop_on_failure: true
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+kinematics_matrix:
+  - differential_drive
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: false
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: "{release_tag}"
+doi: 10.5281/zenodo.<record-id>
+paper_interpretation_profile: diagnostic-h600-trace-capable-rerun-preregistered
+
+preregistration:
+  issue: 4404
+  parent_issue: 4206
+  implements_contract: configs/benchmarks/issue_4206_trace_capable_h600_rerun_preregistration.yaml
+  feeds_issue: 4206
+  claim_boundary: >-
+    Campaign enablement only. No benchmark campaign run, no Slurm/GPU submission,
+    no threshold changes, no result interpretation, and no paper/dissertation claim edits.
+  source_h600_jobs: [13268, 13273]
+  expected_scenario_matrix_hash: c10df617a87c
+  expected_predecessor_limitation: retained h600 exports predate trace-capable episode rows
+  trace_capture_required: true
+  availability_gates:
+    guarded_ppo:
+      status: dependency_gated
+      fail_closed_reason: >-
+        guarded_ppo remains in the pre-registered roster, but campaign launch must
+        verify its checkpoint/config availability before execution; unavailable
+        guarded_ppo rows must fail closed instead of being silently dropped.
+
+planners:
+  - key: scenario_adaptive_hybrid_orca_v1
+    algo: hybrid_rule_local_planner
+    planner_group: experimental
+    algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
+    benchmark_profile: experimental
+  - key: hybrid_rule_v3_fast_progress_static_escape
+    algo: hybrid_rule_local_planner
+    planner_group: experimental
+    algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml
+    benchmark_profile: experimental
+  - key: ppo
+    algo: ppo
+    planner_group: experimental
+    algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
+    benchmark_profile: experimental
+    adapter_impact_eval: true
+  - key: guarded_ppo
+    algo: guarded_ppo
+    planner_group: experimental
+    algo_config: configs/algos/orca_prior_guarded_ppo_v1.yaml
+    benchmark_profile: experimental
+    availability_gate: dependency_gated
+    fail_closed_reason: checkpoint/config availability must be verified before campaign launch
+  - key: prediction_planner
+    algo: prediction_planner
+    planner_group: experimental
+    algo_config: configs/algos/prediction_planner_camera_ready.yaml
+    benchmark_profile: experimental
+  - key: prediction_mpc
+    algo: prediction_mpc
+    planner_group: experimental
+    algo_config: configs/algos/prediction_mpc_cv.yaml
+    benchmark_profile: experimental
+  - key: prediction_mpc_cbf
+    algo: prediction_mpc_cbf
+    planner_group: experimental
+    algo_config: configs/algos/prediction_mpc_cv_cbf_collision_cone.yaml
+    benchmark_profile: experimental
+  - key: goal
+    algo: goal
+    planner_group: core
+    benchmark_profile: baseline-safe
+  - key: social_force
+    algo: social_force
+    planner_group: core
+    benchmark_profile: baseline-safe
+  - key: orca
+    algo: orca
+    planner_group: core
+    benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fallback
+  - key: socnav_sampling
+    algo: socnav_sampling
+    planner_group: experimental
+    benchmark_profile: experimental
+    socnav_missing_prereq_policy: fail-fast
+  - key: sacadrl
+    algo: sacadrl
+    planner_group: experimental
+    benchmark_profile: experimental
+    socnav_missing_prereq_policy: fallback

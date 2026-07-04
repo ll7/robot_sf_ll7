@@ -600,6 +600,61 @@ def _terminal_outcome(done_info: dict[str, Any], steps: list[dict[str, Any]]) ->
     }
 
 
+def _route_progress_state_summary(steps: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate planner route-progress terminal reasons from topology decisions."""
+    reason_counts: Counter[str] = Counter()
+    max_candidate_switch_count = 0
+    max_stagnant_steps = 0
+    max_progress_delta: float | None = None
+    examples: list[dict[str, Any]] = []
+    for row in steps:
+        route_corridor = row.get("planner_route_corridor")
+        if not isinstance(route_corridor, dict):
+            continue
+        progress = route_corridor.get("topology_route_progress")
+        if not isinstance(progress, dict):
+            continue
+        reason = str(progress.get("terminal_reason", "unknown"))
+        reason_counts[reason] += 1
+        max_candidate_switch_count = max(
+            max_candidate_switch_count,
+            int(progress.get("candidate_switch_count", 0) or 0),
+        )
+        max_stagnant_steps = max(max_stagnant_steps, int(progress.get("stagnant_steps", 0) or 0))
+        delta = progress.get("route_progress_delta_m")
+        if isinstance(delta, int | float) and np.isfinite(delta):
+            max_progress_delta = (
+                float(delta)
+                if max_progress_delta is None
+                else max(float(delta), max_progress_delta)
+            )
+        if len(examples) < 5 and reason in {"near_parity_churn", "true_stall", "goal_progress"}:
+            examples.append(
+                {
+                    "step": int(row.get("step", -1)),
+                    "terminal_reason": reason,
+                    "selected_hypothesis_id": progress.get("selected_hypothesis_id"),
+                    "previous_selected_hypothesis_id": progress.get(
+                        "previous_selected_hypothesis_id"
+                    ),
+                    "route_progress_delta_m": progress.get("route_progress_delta_m"),
+                    "stagnant_steps": progress.get("stagnant_steps"),
+                    "candidate_switch_count": progress.get("candidate_switch_count"),
+                }
+            )
+    return {
+        "schema_version": "topology_route_progress_summary.v1",
+        "terminal_reason_counts": dict(sorted(reason_counts.items())),
+        "near_parity_churn_steps": int(reason_counts.get("near_parity_churn", 0)),
+        "true_stall_steps": int(reason_counts.get("true_stall", 0)),
+        "goal_progress_steps": int(reason_counts.get("goal_progress", 0)),
+        "max_candidate_switch_count": int(max_candidate_switch_count),
+        "max_stagnant_steps": int(max_stagnant_steps),
+        "max_route_progress_delta_m": max_progress_delta,
+        "examples": examples,
+    }
+
+
 def _corrective_behavior_summary(
     steps: list[dict[str, Any]],
     *,
@@ -608,8 +663,10 @@ def _corrective_behavior_summary(
     progress_by_rank: dict[str, dict[str, Any]],
     hypothesis_switch_count: int,
     terminal_outcome: dict[str, Any],
+    route_progress: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Classify whether topology near-parity evidence reached corrective behavior."""
+    route_progress = route_progress or _route_progress_state_summary(steps)
     topology_command_steps = int(selected_source_counts.get("topology_hypothesis", 0))
     non_primary_influence_steps = int(
         sum(
@@ -665,6 +722,9 @@ def _corrective_behavior_summary(
         "topology_command_steps": topology_command_steps,
         "non_primary_topology_command_steps": non_primary_influence_steps,
         "hypothesis_switch_count": int(hypothesis_switch_count),
+        "route_progress_terminal_reason_counts": route_progress["terminal_reason_counts"],
+        "near_parity_churn_steps": int(route_progress["near_parity_churn_steps"]),
+        "true_stall_steps": int(route_progress["true_stall_steps"]),
         "max_route_progress_delta_m": max_progress_delta,
         "positive_route_progress": positive_route_progress,
         "terminal_outcome": terminal_outcome,
@@ -756,11 +816,13 @@ def _summarize_hypotheses(
 
     terminal = _terminal_outcome(done_info or {}, steps)
     selected_hypothesis_summary = _selected_topology_hypothesis_summary(steps)
+    route_progress = _route_progress_state_summary(steps)
     return {
         "topology_status_counts": dict(sorted(availability_counts.items())),
         "selected_source_counts": dict(sorted(selected_source_counts.items())),
         **selected_hypothesis_summary,
         "hypothesis_progress_by_rank": progress_by_rank,
+        "topology_route_progress": route_progress,
         "topology_command_influence_counts": dict(sorted(influence_counts.items())),
         "hypothesis_switch_count": hypothesis_switch_count,
         "topology_command_influence_examples": influence_examples,
@@ -773,6 +835,7 @@ def _summarize_hypotheses(
             progress_by_rank=progress_by_rank,
             hypothesis_switch_count=hypothesis_switch_count,
             terminal_outcome=terminal,
+            route_progress=route_progress,
         ),
     }
 

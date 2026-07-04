@@ -3,17 +3,25 @@
 from __future__ import annotations
 
 import csv
+import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 from robot_sf.benchmark.certification_transfer import (
+    AGGREGATABLE_METRICS,
     CLAIM_BOUNDARY,
+    PREFLIGHT_BLOCKED_NO_EVALUABLE_GATE_FAMILY,
+    PREFLIGHT_OK,
     _repo_relative_path,
     build_certification_transfer_report,
     classify_interaction_status,
     load_yaml_mapping,
+    preflight_gate_evaluability,
+    validate_gate_spec,
     validate_probe_config,
     write_certification_transfer_evidence,
 )
@@ -37,6 +45,15 @@ INTERACTING_PHYSICS_CONFIG = (
 INTERACTING_PHYSICS_PACKET = (
     REPO_ROOT / "docs/context/evidence/issue_4207_interacting_physics_2026-07"
 )
+
+_RUNNER_MODULE_PATH = (
+    REPO_ROOT / "scripts" / "benchmark" / "run_certification_transfer_issue_4207.py"
+)
+_spec = importlib.util.spec_from_file_location("run_cert_transfer_4207", _RUNNER_MODULE_PATH)
+assert _spec is not None and _spec.loader is not None
+_run_cert_transfer = importlib.util.module_from_spec(_spec)
+sys.modules["run_cert_transfer_4207"] = _run_cert_transfer
+_spec.loader.exec_module(_run_cert_transfer)
 
 
 def test_transfer_matrix_detects_pass_fail_flips(tmp_path: Path) -> None:
@@ -549,6 +566,217 @@ def test_committed_physics_packet_records_real_near_field_contact() -> None:
         recorded = summary[key]["path"]
         assert not recorded.startswith(("/home/", "/Users/", "/root/")), recorded
         assert recorded.startswith("configs/"), recorded
+
+
+def test_preflight_passes_when_required_gate_metrics_are_aggregatable(tmp_path: Path) -> None:
+    """Preflight reports ok when every required gate metric is aggregatable."""
+
+    _config_path, _gate_path, config, gates = _write_config_pair(tmp_path)
+    normalized_config = validate_probe_config(config, base_dir=tmp_path)
+    normalized_gates = validate_gate_spec(
+        gates, scenario_family=normalized_config["scenario_family"]
+    )
+
+    result = preflight_gate_evaluability(normalized_config, normalized_gates)
+
+    assert result["status"] == PREFLIGHT_OK
+    assert result["not_evaluable_gate_ids"] == []
+    assert result["not_evaluable_gate_metrics"] == []
+    assert set(result["aggregatable_metrics"]) == set(AGGREGATABLE_METRICS)
+    assert set(result["required_gate_metrics"]) <= set(AGGREGATABLE_METRICS)
+
+
+def test_preflight_blocks_when_required_gate_metric_is_not_aggregatable(
+    tmp_path: Path,
+) -> None:
+    """A required gate on a non-aggregatable metric fails closed as blocked_no_evaluable_gate_family."""
+
+    _config_path, _gate_path, config, gates = _write_config_pair(tmp_path)
+    gates["gates"][0]["metric"] = "bogus_metric"
+    normalized_config = validate_probe_config(config, base_dir=tmp_path)
+    normalized_gates = validate_gate_spec(
+        gates, scenario_family=normalized_config["scenario_family"]
+    )
+
+    result = preflight_gate_evaluability(normalized_config, normalized_gates)
+
+    assert result["status"] == PREFLIGHT_BLOCKED_NO_EVALUABLE_GATE_FAMILY
+    assert result["not_evaluable_gate_ids"] == ["collision_rate_zero"]
+    assert result["not_evaluable_gate_metrics"] == ["bogus_metric"]
+    assert result["scenario_family"] == normalized_config["scenario_family"]
+
+
+def test_preflight_optional_gate_with_non_aggregatable_metric_does_not_block(
+    tmp_path: Path,
+) -> None:
+    """An optional gate on a non-aggregatable metric surfaces as not_evaluable but does not block."""
+
+    _config_path, _gate_path, config, gates = _write_config_pair(tmp_path)
+    gates["gates"].append(
+        {
+            "id": "optional_unknown_metric",
+            "metric": "bogus_metric",
+            "threshold": 0.0,
+            "direction": "max",
+            "category": "diagnostic",
+            "provenance": "fixture",
+            "required": False,
+            "scope": {"scenario_family": "fixture_family"},
+        }
+    )
+    normalized_config = validate_probe_config(config, base_dir=tmp_path)
+    normalized_gates = validate_gate_spec(
+        gates, scenario_family=normalized_config["scenario_family"]
+    )
+
+    result = preflight_gate_evaluability(normalized_config, normalized_gates)
+
+    assert result["status"] == PREFLIGHT_OK
+    assert result["not_evaluable_gate_ids"] == []
+
+
+def test_runner_validate_only_passes_preflight_on_committed_smoke_config(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--validate-only runs preflight on the committed smoke config without simulation."""
+
+    exit_code = _run_cert_transfer.main(
+        [
+            "--config",
+            str(INTERACTING_SMOKE_CONFIG),
+            "--gate-spec",
+            str(INTERACTING_SMOKE_GATES),
+            "--validate-only",
+        ]
+    )
+
+    assert exit_code == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["status"] == "ok"
+    assert out["preflight"]["status"] == PREFLIGHT_OK
+    assert out["preflight"]["scenario_family"] == "issue4207_interacting_smoke"
+    assert out["preflight"]["not_evaluable_gate_ids"] == []
+
+
+def test_runner_validate_only_fails_closed_on_non_evaluable_gate_family(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--validate-only exits 2 with blocked_no_evaluable_gate_family for a non-aggregatable required gate."""
+
+    config_path, gate_path = _write_runner_yaml_pair(tmp_path, gate_metric="bogus_metric")
+
+    exit_code = _run_cert_transfer.main(
+        [
+            "--config",
+            str(config_path),
+            "--gate-spec",
+            str(gate_path),
+            "--validate-only",
+        ]
+    )
+
+    assert exit_code == 2
+    out = json.loads(capsys.readouterr().out)
+    assert out["status"] == PREFLIGHT_BLOCKED_NO_EVALUABLE_GATE_FAMILY
+    assert out["not_evaluable_gate_metrics"] == ["bogus_metric"]
+    assert "gate_one" in out["not_evaluable_gate_ids"]
+    assert "aggregatable_metrics" in out
+
+
+def test_runner_validate_only_does_not_require_output_dir(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--validate-only succeeds without --output-dir and writes no evidence artifacts."""
+
+    config_path, gate_path = _write_runner_yaml_pair(tmp_path)
+    evidence_dir = tmp_path / "evidence"
+
+    exit_code = _run_cert_transfer.main(
+        [
+            "--config",
+            str(config_path),
+            "--gate-spec",
+            str(gate_path),
+            "--validate-only",
+        ]
+    )
+
+    assert exit_code == 0
+    assert not evidence_dir.exists()
+
+
+def _write_runner_yaml_pair(
+    tmp_path: Path, *, gate_metric: str = "collision_rate", required: bool = True
+) -> tuple[Path, Path]:
+    """Write a minimal valid probe config and gate spec as real YAML for runner-level tests.
+
+    Unlike ``_write_config_pair`` (which writes placeholder file bodies and returns in-memory
+    mappings for ``build_certification_transfer_report`` tests), this helper writes YAML that the
+    runner's ``load_yaml_mapping`` can actually parse, so ``main`` can be exercised end-to-end up
+    to (but not including) simulation.
+    """
+
+    scenario_path = tmp_path / "scenario.yaml"
+    scenario_path.write_text("scenarios: []\n", encoding="utf-8")
+    algo_path = tmp_path / "algo.yaml"
+    algo_path.write_text("{}\n", encoding="utf-8")
+    config = {
+        "name": "issue_4207_certification_transfer_probe",
+        "schema_version": "certification-transfer-probe.v1",
+        "issue": 4207,
+        "paper_facing": False,
+        "claim_boundary": CLAIM_BOUNDARY,
+        "pedestrian_models": [SOCIAL_FORCE_DEFAULT, HSFM_TOTAL_FORCE_V1],
+        "scenario_family": "fixture_family",
+        "scenario_matrix": str(scenario_path),
+        "seed_policy": {"mode": "fixed-list", "seeds": [111, 112, 113]},
+        "arms": [
+            {
+                "key": "goal_a",
+                "structural_class": "baseline_reactive",
+                "algo": "goal",
+                "algo_config": str(algo_path),
+                "development_pedestrian_model": "unknown",
+            },
+            {
+                "key": "goal_b",
+                "structural_class": "baseline_reactive",
+                "algo": "goal",
+                "development_pedestrian_model": "unknown",
+            },
+            {
+                "key": "goal_c",
+                "structural_class": "baseline_reactive",
+                "algo": "goal",
+                "development_pedestrian_model": "unknown",
+            },
+        ],
+        "horizon": 60,
+        "dt": 0.1,
+        "workers": 1,
+    }
+    gates = {
+        "schema_version": "benchmark_release_gate_spec.v1",
+        "gates": [
+            {
+                "id": "gate_one",
+                "metric": gate_metric,
+                "threshold": 0.0,
+                "direction": "max",
+                "category": "safety",
+                "provenance": "fixture",
+                "required": required,
+                "scope": {"scenario_family": "fixture_family"},
+            },
+        ],
+    }
+    config_path = tmp_path / "config.yaml"
+    gate_path = tmp_path / "gates.yaml"
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    gate_path.write_text(yaml.safe_dump(gates), encoding="utf-8")
+    return config_path, gate_path
 
 
 def _write_config_pair(tmp_path: Path) -> tuple[Path, Path, dict[str, object], dict[str, object]]:

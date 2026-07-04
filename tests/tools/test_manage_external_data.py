@@ -108,6 +108,8 @@ def test_registry_covers_alyassi_table_7_asset_slice() -> None:
         assert asset.expected_tree_sha256 is None
         assert asset.expected_tree_sha256_status == "pending_first_staging"
 
+    assert {4289, 4224}.issubset(set(assets["atc-pedestrian"].related_issues))
+
 
 def test_missing_license_gated_asset_fails_closed(tmp_path: Path) -> None:
     """Missing gated data should report why without attempting fallback."""

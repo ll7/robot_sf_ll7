@@ -1,0 +1,135 @@
+{
+  "schema_version": "issue_closure_audit.v1",
+  "issue": 4425,
+  "audit_date": "2026-07-04",
+  "status": "criteria_met_not_closed_by_this_pr",
+  "claim_boundary": "Closure audit only. This is not a new benchmark campaign, not a Slurm/GPU submission, and not a paper-facing claim.",
+  "issue_title": "fix: camera-ready campaign path drops trace-capture flags (run_batch TypeError) - blocks #4206 trace-capable re-run",
+  "linked_prs": [
+    {
+      "number": 4428,
+      "title": "Fix trace-capture flag plumbing in camera-ready path (#4425)",
+      "merged_at": "2026-07-04T10:17:57Z",
+      "merge_commit": "ea3583dbc74cc6ccf9eb836e80dfd3b347c8b5f8",
+      "role": "plumbed trace-capture flags through the camera-ready batch path and added regression/smoke evidence"
+    }
+  ],
+  "issue_comments_reviewed": [
+    {
+      "created_at": "2026-07-04T10:18:21Z",
+      "author": "ll7",
+      "summary": "PR #4428 merged; trace-capture flag plumbed end-to-end through camera-ready batch path, default-off, with resume-identity fix and regression test. Comment states this closes the flag-plumbing slice for #4425."
+    }
+  ],
+  "acceptance_evidence": [
+    {
+      "criterion": "Plumb record_planner_decision_trace and record_simulation_step_trace from the campaign config through camera-ready batch invocation into the episode runner, default off when absent.",
+      "status": "met",
+      "evidence": [
+        "PR #4428 merged commit ea3583dbc74cc6ccf9eb836e80dfd3b347c8b5f8.",
+        "PR #4428 changed robot_sf/benchmark/runner.py, robot_sf/benchmark/map_runner.py, robot_sf/benchmark/map_runner_batch_plan.py, robot_sf/benchmark/map_runner_worker.py, and robot_sf/benchmark/map_runner_identity.py.",
+        "The PR body records record_planner_decision_trace as a new default-off run_batch/run_map_batch API parameter and notes that existing record_simulation_step_trace plumbing was preserved."
+      ]
+    },
+    {
+      "criterion": "Regression test proves a campaign-path config carrying trace flags reaches the episode-layer boundary without executing a full episode in continuous integration.",
+      "status": "met",
+      "evidence": [
+        "PR #4428 changed tests/benchmark/test_camera_ready_campaign.py, tests/benchmark/test_map_runner_utils.py, and tests/benchmark/test_map_runner_resume_identity.py.",
+        "PR #4428 validation recorded targeted pytest passing for tests/benchmark/test_map_runner_utils.py::test_map_batch_plan_builds_worker_fixed_params and tests/benchmark/test_camera_ready_campaign.py::test_run_campaign_writes_core_artifacts.",
+        "The merged PR also added resume-identity regression coverage so trace-enabled rows do not reuse non-trace rows."
+      ]
+    },
+    {
+      "criterion": "One-arm, one-seed CPU smoke invocation of the trace-capable config writes at least one episode row carrying native failure_mechanism and interaction_exposure blocks, with row keys pasted in the PR.",
+      "status": "met",
+      "evidence": [
+        "PR #4428 validation recorded a CPU smoke command exiting 0 with status=benchmark_success and row_count=1.",
+        "The smoke row top-level keys include failure_mechanism and interaction_exposure.",
+        "The sanitized row-key evidence in this artifact records the native failure_mechanism and interaction_exposure key sets without worktree-local output paths."
+      ],
+      "smoke_row_key_summary": {
+        "status": "benchmark_success",
+        "row_count": 1,
+        "top_level_keys": [
+          "algo",
+          "algorithm_metadata",
+          "config_hash",
+          "development_pedestrian_model",
+          "episode_id",
+          "evaluation_pedestrian_model",
+          "event_ledger",
+          "failure_mechanism",
+          "git_hash",
+          "horizon",
+          "integrity",
+          "interaction_exposure",
+          "metric_parameters",
+          "metrics",
+          "observation_level",
+          "observation_mode",
+          "observation_noise",
+          "observation_noise_hash",
+          "observation_noise_stats",
+          "outcome",
+          "pedestrian_model",
+          "public_requirement",
+          "result_provenance",
+          "safety_predicates",
+          "scenario_id",
+          "scenario_params",
+          "seed",
+          "status",
+          "steps",
+          "termination_reason",
+          "timestamps",
+          "timing",
+          "tracking_precision",
+          "tracking_precision_hash",
+          "version",
+          "wall_time_sec"
+        ],
+        "failure_mechanism_keys": [
+          "mechanism_case_id",
+          "mechanism_caveat",
+          "mechanism_confidence",
+          "mechanism_evidence_mode",
+          "mechanism_evidence_uri",
+          "mechanism_label",
+          "mechanism_schema_version"
+        ],
+        "interaction_exposure_keys": [
+          "first_clearance_reason",
+          "first_clearance_step",
+          "interaction_exposure_denominator_steps",
+          "interaction_exposure_radius_m",
+          "interaction_exposure_schema_version",
+          "interaction_exposure_share",
+          "interaction_exposure_status",
+          "interaction_exposure_steps",
+          "low_exposure_success",
+          "low_exposure_success_threshold",
+          "robot_motion_denominator_steps_before_first_clearance",
+          "robot_motion_share_before_first_clearance",
+          "robot_motion_steps_before_first_clearance"
+        ]
+      }
+    }
+  ],
+  "residual_risks": [
+    {
+      "risk": "Issue #4425 may remain open until a maintainer-authorized closer posts the criterion-to-evidence closure comment and closes it.",
+      "why_it_remains": "This run was authorized for triage, local edits, validation, branch push, and PR opening, but not for issue or PR comments."
+    },
+    {
+      "risk": "No full #4206 trace-capable campaign rerun was performed.",
+      "why_it_remains": "The issue acceptance criterion only required a one-arm, one-seed CPU smoke proof; full benchmark campaigns and Slurm/GPU submissions are out of scope for this closure audit."
+    }
+  ],
+  "forbidden_actions_confirmed": {
+    "compute_submit": false,
+    "merged": false,
+    "released": false,
+    "deleted": false
+  }
+}

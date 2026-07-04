@@ -1,0 +1,56 @@
+schema_version: adversarial_dispatchable_repro_manifest.v1
+issue: 4360
+status: dispatchable_inventory_only
+claim_boundary: >
+  Reproducibility manifest for existing adversarial pedestrian hooks. These entries
+  identify current smoke and manifest-generation lanes; they do not add a new
+  benchmark, metric, planner policy interface, or paper-facing claim.
+related_context:
+  issue_4360_note: docs/context/issue_4360_adversarial_dispatchable_inventory.md
+  adversarial_smoke_suite: docs/benchmark_suites/adversarial_smoke.md
+  manifest_generation: docs/context/issue_2524_adversarial_manifests.md
+  runner_contract: docs/context/issue_869_adversarial_runner.md
+  failure_archive_rerun: docs/context/issue_3275_failure_archive_rerun_readiness.md
+lanes:
+  - lane_id: crossing_ttc_manifest_generation
+    purpose: Generate validator-backed adversarial scenario manifests without planner execution.
+    entrypoint: scripts/tools/generate_adversarial_scenario_manifests.py
+    search_space: configs/adversarial/crossing_ttc_space.yaml
+    scenario_template: configs/scenarios/templates/crossing_ttc.yaml
+    generator_family: random
+    seed: 42
+    count: 16
+    output_dir: output/adversarial/issue4360_manifest_generation_smoke
+    durable_output_policy: >
+      Generated candidate YAML files and summary.json stay under output/ unless a
+      later PR promotes a compact evidence copy with provenance.
+    expected_status: generated_only
+  - lane_id: crossing_ttc_planner_smoke
+    purpose: Materialize valid manifests and run a tiny planner smoke through existing runner plumbing.
+    entrypoint: scripts/tools/run_adversarial_manifest_smoke.py
+    search_space: configs/adversarial/crossing_ttc_space.yaml
+    scenario_template: configs/scenarios/templates/crossing_ttc.yaml
+    seed: 42
+    count: 4
+    planners:
+      - goal
+      - social_force
+    output_dir: output/adversarial/issue4360_planner_smoke
+    expected_status: smoke_only
+    evidence_boundary: >
+      Development stress smoke only. Fallback, degraded, simulation-error,
+      not-available, invalid, or degenerate rows are exclusions or limitations,
+      not successful adversarial evidence.
+  - lane_id: head_on_route_generation
+    purpose: Exercise existing route/start-state adversarial generation prototype.
+    entrypoint: scripts/tools/generate_adversarial_routes.py
+    config: configs/adversarial_routes/default.yaml
+    scenario_file: configs/scenarios/classic_interactions.yaml
+    scenario_id: classic_head_on_corridor_low
+    seed: 123
+    trial_count: 20
+    output_dir: output/adversarial_routes
+    expected_status: route_generation_smoke
+parked_until_after_release:
+  - bounded adversary policy interface redesign
+  - new stress-case metrics

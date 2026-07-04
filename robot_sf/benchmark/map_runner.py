@@ -2287,6 +2287,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     latency_stress_profile: dict[str, Any] | None = None,
     safety_wrapper: dict[str, Any] | None = None,
     cbf_safety_filter: dict[str, Any] | None = None,
+    record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
     multiprocessing_context: Any | None = None,
     workers: int = 1,
@@ -2691,6 +2692,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         ),
         safety_wrapper=dict(safety_wrapper) if safety_wrapper is not None else None,
         cbf_safety_filter=dict(cbf_safety_filter) if cbf_safety_filter is not None else None,
+        record_planner_decision_trace=record_planner_decision_trace,
         record_simulation_step_trace=record_simulation_step_trace,
     )
 

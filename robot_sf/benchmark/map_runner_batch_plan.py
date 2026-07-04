@@ -69,6 +69,7 @@ def build_worker_fixed_params(  # noqa: PLR0913
     latency_profile_metadata: dict[str, Any] | None,
     latency_stress_metrics: dict[str, Any] | None,
     safety_wrapper: dict[str, Any] | None,
+    record_planner_decision_trace: bool,
     record_simulation_step_trace: bool,
     cbf_safety_filter: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -102,5 +103,6 @@ def build_worker_fixed_params(  # noqa: PLR0913
         "latency_stress_metrics": latency_stress_metrics,
         "safety_wrapper": safety_wrapper,
         "cbf_safety_filter": cbf_safety_filter,
+        "record_planner_decision_trace": bool(record_planner_decision_trace),
         "record_simulation_step_trace": bool(record_simulation_step_trace),
     }

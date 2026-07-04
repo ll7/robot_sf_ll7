@@ -2299,6 +2299,8 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
                 f"scenario_matrix: {scenario_rel.as_posix()}",
                 "paper_interpretation_profile: baseline-ready-core",
                 "preview_scenario_limit: 0",
+                "record_planner_decision_trace: true",
+                "record_simulation_step_trace: true",
                 "seed_policy:",
                 "  mode: fixed-list",
                 "  seeds: [111]",
@@ -2460,6 +2462,8 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
 
     result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="test")
     assert run_batch_calls[0]["observation_mode"] == "socnav_state"
+    assert all(call["record_planner_decision_trace"] is True for call in run_batch_calls)
+    assert all(call["record_simulation_step_trace"] is True for call in run_batch_calls)
 
     campaign_root = Path(result["campaign_root"])
     assert campaign_root.exists()

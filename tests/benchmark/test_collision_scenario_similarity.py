@@ -115,7 +115,48 @@ def test_similarity_report_groups_nearby_collision_cases(tmp_path: Path) -> None
     alpha_group = next(group for group in report["groups"] if "alpha-1" in group["record_ids"])
     assert alpha_group["record_ids"] == ["alpha-1", "alpha-2"]
     assert alpha_group["representative_record_id"] in {"alpha-1", "alpha-2"}
+    assert report["validation"]["external_labels"]["status"] == "unavailable"
     assert any("analysis aid" in limitation for limitation in report["limitations"])
+
+
+def test_similarity_report_summarizes_label_and_trajectory_validation(tmp_path: Path) -> None:
+    """Selected unsafe rows report available external labels and trajectory fields."""
+    episodes = tmp_path / "episodes.jsonl"
+    records = [
+        {
+            "episode_id": "labeled-near-miss",
+            "scenario_id": "crossing",
+            "seed": 11,
+            "termination_reason": "max_steps",
+            "metrics": {"collisions": 0, "near_misses": 1, "min_separation": 0.3},
+            "labels": {"near_miss": True, "collision": False},
+            "trajectory_features": {"min_rollout_clearance_m": 0.3},
+        },
+        {
+            "episode_id": "labeled-safe",
+            "scenario_id": "open",
+            "seed": 12,
+            "termination_reason": "success",
+            "metrics": {"collisions": 0, "near_misses": 0, "min_separation": 2.0},
+            "labels": {"near_miss": False, "collision": False},
+            "trajectory": {"robot_states": [{"position": [0.0, 0.0]}]},
+        },
+    ]
+    _write_jsonl(episodes, records)
+
+    report = build_collision_scenario_similarity_report(episodes)
+
+    labels = report["validation"]["external_labels"]
+    assert labels["status"] == "available"
+    assert labels["records_with_labels"] == 2
+    assert labels["selected_with_labels"] == 1
+    assert labels["selected_positive_labels"] == 1
+    assert labels["selected_label_conflicts"] == []
+    trajectory = report["validation"]["trajectory_fields"]
+    assert trajectory["status"] == "available"
+    assert trajectory["records_with_trajectory_fields"] == 2
+    assert trajectory["selected_with_trajectory_fields"] == 1
+    assert trajectory["selected_fields_observed"] == ["min_rollout_clearance_m"]
 
 
 def test_collision_scenario_similarity_cli_writes_json_and_markdown(tmp_path: Path) -> None:
@@ -145,6 +186,7 @@ def test_collision_scenario_similarity_cli_writes_json_and_markdown(tmp_path: Pa
     assert payload["nearest_neighbors"][0]["neighbors"]
     markdown = out_md.read_text(encoding="utf-8")
     assert "Collision Scenario Similarity Report" in markdown
+    assert "Validation Context" in markdown
     assert "alpha-1" in markdown
 
 

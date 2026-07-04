@@ -21,6 +21,16 @@ execution_boundary:
   local_submission_allowed: false
   slurm_job_id: not_submitted
   target_host: not_applicable
+diagnostic_runner:
+  path: scripts/benchmark/run_issue_4232_uncertainty_envelope_alpha_sweep.py
+  phase: diagnostic-smoke
+  default_output_dir: output/issue_4232_uncertainty_envelope_diagnostic_smoke
+  default_row_status: diagnostic_only
+  claim_boundary: >-
+    CPU-local diagnostic smoke runner only. Outputs are ignored by default and
+    remain ineligible for benchmark-strength, paper, dissertation, conformal,
+    deployment, or real-world safety claims unless a later reviewed evidence PR
+    explicitly promotes bounded claim support.
 claim_modes:
   allowed_after_evidence:
     - diagnostic_alpha_effect

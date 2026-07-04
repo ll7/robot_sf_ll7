@@ -22,6 +22,7 @@ REPORT_METRICS = (
     "runtime_seconds",
 )
 REPORT_CAVEATS = ("success", "collision")
+MAP_RUNNER_INPUT_SOURCE = "map_runner_episode_records"
 
 _FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "intrusion_rate": (
@@ -119,6 +120,124 @@ def load_yaml_file(path: Path) -> dict[str, Any]:
     if not isinstance(loaded, Mapping):
         raise ValueError(f"config must be a YAML mapping: {path}")
     return dict(loaded)
+
+
+def map_runner_records_to_ablation_rows(
+    records: Sequence[Mapping[str, Any]],
+    *,
+    arm: str,
+    expected_proxemic_enabled: bool,
+) -> list[dict[str, Any]]:
+    """Convert real map-runner episode records into paired ablation report rows.
+
+    Raises:
+        ValueError: If a record lacks required map-runner fields or layer-state metadata.
+
+    Returns:
+        Report-row dictionaries accepted by :func:`build_proxemic_ablation_report`.
+    """
+
+    rows: list[dict[str, Any]] = []
+    blockers: list[str] = []
+    for idx, record in enumerate(records):
+        metrics = record.get("metrics")
+        if not isinstance(metrics, Mapping):
+            blockers.append(f"{arm} record {idx} missing map-runner metrics mapping")
+            metrics = {}
+        proxemic_metadata = _proxemic_costmap_metadata(record)
+        if proxemic_metadata is None:
+            blockers.append(f"{arm} record {idx} missing algorithm_metadata proxemic_costmap")
+            proxemic_metadata = {}
+        enabled = proxemic_metadata.get("enabled")
+        if not isinstance(enabled, bool):
+            blockers.append(f"{arm} record {idx} proxemic_costmap.enabled must be boolean")
+        elif enabled is not expected_proxemic_enabled:
+            blockers.append(
+                f"{arm} record {idx} proxemic_costmap.enabled={enabled!r}; "
+                f"expected {expected_proxemic_enabled!r}"
+            )
+        fallback_or_degraded = proxemic_metadata.get("fallback_or_degraded")
+        if fallback_or_degraded is True:
+            blockers.append(f"{arm} record {idx} proxemic metadata marks fallback/degraded")
+
+        rows.append(
+            {
+                "scenario_id": record.get("scenario_id"),
+                "seed": record.get("seed"),
+                "row_status": record.get("status", record.get("row_status", "native")),
+                "metrics": {
+                    "intrusion_rate": _first_present(
+                        metrics,
+                        "intrusion_rate",
+                        "proxemic_intrusion_rate",
+                        "social_space_intrusion_rate",
+                    ),
+                    "minimum_clearance": _first_present(
+                        metrics,
+                        "minimum_clearance",
+                        "min_clearance",
+                        "min_distance",
+                        "clearing_distance_min",
+                    ),
+                    "path_efficiency": _first_present(metrics, "path_efficiency"),
+                    "runtime_seconds": _first_present(
+                        metrics,
+                        "runtime_seconds",
+                        "wall_time_seconds",
+                        "episode_runtime_seconds",
+                        "episode_sec",
+                    ),
+                    "success": _first_present(metrics, "success"),
+                    "collision": _first_present(metrics, "collision", "collisions"),
+                },
+                "source": MAP_RUNNER_INPUT_SOURCE,
+                "algo": record.get("algo"),
+                "proxemic_costmap": dict(proxemic_metadata),
+            }
+        )
+
+    if blockers:
+        raise ValueError("; ".join(blockers))
+    return rows
+
+
+def build_proxemic_ablation_report_from_map_runner_records(
+    *,
+    baseline_records: Sequence[Mapping[str, Any]],
+    proxemic_records: Sequence[Mapping[str, Any]],
+    smoke_config_path: Path,
+    proxemic_config_path: Path,
+    repo_root: Path = Path("."),
+) -> dict[str, Any]:
+    """Build a paired report from fail-closed map-runner episode records.
+
+    Returns:
+        Machine-readable report dictionary.
+    """
+
+    report = build_proxemic_ablation_report(
+        baseline_records=map_runner_records_to_ablation_rows(
+            baseline_records,
+            arm="baseline_classical",
+            expected_proxemic_enabled=False,
+        ),
+        proxemic_records=map_runner_records_to_ablation_rows(
+            proxemic_records,
+            arm="proxemic_costmap_on",
+            expected_proxemic_enabled=True,
+        ),
+        smoke_config_path=smoke_config_path,
+        proxemic_config_path=proxemic_config_path,
+        repo_root=repo_root,
+    )
+    report["claim_boundary"] = "paired_cpu_smoke_report_only"
+    report["input_source"] = {
+        "source": MAP_RUNNER_INPUT_SOURCE,
+        "fail_closed_layer_state": True,
+        "baseline_expected_proxemic_enabled": False,
+        "proxemic_expected_proxemic_enabled": True,
+    }
+    return report
 
 
 def build_proxemic_ablation_report(
@@ -393,6 +512,33 @@ def _mean(values: Iterable[float]) -> float:
     if not value_list:
         return 0.0
     return sum(value_list) / len(value_list)
+
+
+def _proxemic_costmap_metadata(record: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    algorithm_metadata = record.get("algorithm_metadata")
+    if not isinstance(algorithm_metadata, Mapping):
+        return None
+    direct = algorithm_metadata.get("proxemic_costmap")
+    if isinstance(direct, Mapping):
+        return direct
+    planner_runtime = algorithm_metadata.get("planner_runtime")
+    if isinstance(planner_runtime, Mapping):
+        proxemic_runtime = planner_runtime.get("proxemic_costmap")
+        if isinstance(proxemic_runtime, Mapping):
+            return proxemic_runtime
+    last_decision = algorithm_metadata.get("last_decision")
+    if isinstance(last_decision, Mapping):
+        proxemic_decision = last_decision.get("proxemic_costmap")
+        if isinstance(proxemic_decision, Mapping):
+            return proxemic_decision
+    return None
+
+
+def _first_present(record: Mapping[str, Any], *fields: str) -> Any | None:
+    for field in fields:
+        if field in record:
+            return record[field]
+    return None
 
 
 def _safe_ratio(numerator: float, denominator: float) -> float:

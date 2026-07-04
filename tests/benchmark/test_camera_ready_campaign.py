@@ -122,7 +122,9 @@ def test_camera_ready_config_types_keep_legacy_import_identity() -> None:
     )
 
     for name in public_names:
-        assert getattr(camera_ready_package, name) is getattr(camera_ready_config_types_module, name)
+        assert getattr(camera_ready_package, name) is getattr(
+            camera_ready_config_types_module, name
+        )
         assert getattr(camera_ready_campaign_config_module, name) is getattr(
             camera_ready_config_types_module, name
         )
@@ -134,7 +136,9 @@ def test_camera_ready_config_types_keep_legacy_import_identity() -> None:
         camera_ready_campaign_config_module._AMV_DIMENSIONS
         is camera_ready_config_types_module._AMV_DIMENSIONS
     )
-    assert camera_ready_package.load_campaign_config is camera_ready_config_module.load_campaign_config
+    assert (
+        camera_ready_package.load_campaign_config is camera_ready_config_module.load_campaign_config
+    )
 
 
 def test_camera_ready_campaign_reexports_package_run_state_helpers() -> None:

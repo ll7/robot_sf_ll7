@@ -3,12 +3,11 @@
 
 This module is the canonical owner for the *assumption and artifact inventory* slice of
 issue #3481 ("headed social-force (HSFM) + TTC-predictive pedestrian forces to remove
-passive-sliding exploits"). It is a **read-only, design-stage preflight**: it documents the
-assumptions baked into the *current* pedestrian force model, probes that the entry-point
-surfaces an HSFM/TTC experiment would touch are importable, and reports the still-missing
-prerequisites (HSFM heading state, anisotropic field-of-view attenuation, TTC-scaled
-repulsion, narrow-passage / bottleneck fixtures, versioned parameters, calibration data) as
-explicit blockers.
+passive-sliding exploits"). It is a **read-only preflight**: it documents the assumptions
+baked into the *current* pedestrian force model, probes that the entry-point surfaces an
+HSFM/TTC experiment would touch are importable, and tracks which local experiment surfaces
+now exist versus which stronger proof steps (for example seed-controlled benchmark evidence
+or external calibration) still remain.
 
 Scope and boundaries (read before extending):
 
@@ -24,9 +23,9 @@ Scope and boundaries (read before extending):
   the issue proposes to close; this module only records them.
 - The verdict is *fail-closed on the existing entry-point surfaces only*. If a named force-core
   or pedestrian-NPC surface cannot be imported the preflight fails (an HSFM/TTC experiment
-  could not even be wired in). Missing *prerequisites* (HSFM/TTC/FoV/fixtures) are expected to
-  be absent today and are reported as planned blockers; they do **not** fail the verdict,
-  because the whole point of the inventory is to enumerate that remaining work.
+  could not even be wired in). Missing *prerequisites* are reported as planned blockers, but
+  they do **not** fail the verdict, because the whole point of the inventory is to enumerate
+  what local capability exists and what proof work still remains.
 
 Companions: ``scripts/research/check_ped_model_assumption_inventory.py`` (thin CLI).
 """
@@ -364,16 +363,18 @@ class PrerequisiteSpec:
         }
 
 
-# Ordered inventory of what the HSFM/TTC experiments still need. Paths are probed so the
-# inventory flips an item to "present" automatically once the work lands, instead of going
-# stale. Keep this list aligned with the issue's Definition of Done.
+# Ordered inventory of the local surfaces and proof blockers around the HSFM/TTC experiments.
+# Paths are probed so the inventory flips an item to "present" automatically once the work
+# lands, instead of going stale.
 EXPERIMENT_PREREQUISITES: tuple[PrerequisiteSpec, ...] = (
     PrerequisiteSpec(
         key="hsfm_heading_state",
         title="HSFM heading state + alignment torque",
         description=(
             "A body-orientation state phi_i decoupled from instantaneous velocity v_i, plus "
-            "an alignment-torque term, added to the force core. Absent today."
+            "an alignment-torque term, added to the force core. The current total-force "
+            "heading proxy is present, but this fuller body-orientation surface is still "
+            "absent."
         ),
         blocks=("DoD: HSFM heading state + alignment-torque term",),
         probe_paths=("robot_sf/ped_npc/hsfm_heading.py", "fast-pysf/pysocialforce/hsfm.py"),
@@ -382,28 +383,35 @@ EXPERIMENT_PREREQUISITES: tuple[PrerequisiteSpec, ...] = (
         key="fov_attenuation",
         title="Anisotropic field-of-view repulsion weight",
         description=(
-            "A view-cone weight on the vectorized ped-ped force (full strength in-cone, "
-            "~0.1 behind heading). Absent today."
+            "An opt-in view-cone weight on the vectorized pedestrian-pedestrian force "
+            "(full strength in-cone, rear attenuation behind heading)."
         ),
         blocks=("DoD: anisotropic FoV weight prototyped",),
-        probe_paths=("robot_sf/ped_npc/fov_weight.py", "fast-pysf/pysocialforce/fov.py"),
+        probe_paths=(
+            "robot_sf/sim/pedestrian_model_variants.py",
+            "tests/sim/test_hsfm_fov_pairwise_isolation.py",
+        ),
     ),
     PrerequisiteSpec(
         key="ttc_predictive_term",
         title="TTC-scaled predictive repulsion term",
         description=(
             "An opt-in time-to-collision repulsion F_ij ~ exp(-tau_ij/tau_0) offered as an "
-            "alternative to pure Euclidean-distance repulsion. Absent today."
+            "alternative to pure Euclidean-distance repulsion."
         ),
         blocks=("DoD: opt-in TTC-scaled predictive repulsion term",),
-        probe_paths=("robot_sf/ped_npc/ttc_force.py", "fast-pysf/pysocialforce/ttc.py"),
+        probe_paths=(
+            "robot_sf/sim/pedestrian_model_variants.py",
+            "tests/sim/test_ttc_predictive_pedestrian_model.py",
+        ),
     ),
     PrerequisiteSpec(
         key="narrow_passage_fixture",
         title="Narrow-passage lateral-sliding fixture",
         description=(
-            "A seed-controlled fixture/scenario that exercises lateral sliding so reduced "
-            "sliding vs isotropic SFM can be measured. Absent today."
+            "A seed-controlled narrow-passage fixture/scenario that exercises lateral sliding "
+            "so reduced sliding vs isotropic SFM can be measured. The shared-throat local "
+            "precursor harness does not satisfy this geometric fixture blocker."
         ),
         blocks=("DoD: fixture proving reduced lateral sliding",),
         probe_paths=(
@@ -416,8 +424,9 @@ EXPERIMENT_PREREQUISITES: tuple[PrerequisiteSpec, ...] = (
         key="bottleneck_fixture",
         title="Bottleneck freeze/deadlock fixture",
         description=(
-            "A seed-controlled bottleneck fixture/scenario to measure mutual-freeze / "
-            "deadlock rate ('freezing robot' anomaly). Absent today."
+            "A seed-controlled geometric bottleneck fixture/scenario to measure mutual-freeze / "
+            "deadlock rate ('freezing robot' anomaly). The shared-throat local precursor "
+            "harness does not satisfy this bottleneck-specific blocker."
         ),
         blocks=("DoD: fixture proving reduced mutual-freeze/deadlock rate",),
         probe_paths=(
@@ -430,20 +439,20 @@ EXPERIMENT_PREREQUISITES: tuple[PrerequisiteSpec, ...] = (
         title="Versioned HSFM/TTC parameter set",
         description=(
             "A config-first, versioned parameter set for the HSFM/TTC/FoV terms so runs are "
-            "reproducible. Absent today."
+            "reproducible."
         ),
         blocks=("DoD: HSFM/TTC parameters versioned",),
-        probe_paths=("configs/pedestrian/hsfm_ttc.yaml", "configs/pedestrian/hsfm_ttc.yml"),
+        probe_paths=("configs/research/hsfm_ttc_predictive_forces_issue_3481.yaml",),
     ),
     PrerequisiteSpec(
         key="design_note",
         title="Scoping/design note for the force-law changes",
         description=(
             "A note describing the HSFM/TTC/FoV force-law changes and their modeling "
-            "assumptions (idea-tier, no calibrated-realism claim). Absent today."
+            "assumptions (diagnostic/prototype, no calibrated-realism claim)."
         ),
         blocks=("DoD: scoping/design note",),
-        probe_paths=("docs/context/issue_3481_hsfm_ttc_force_model.md",),
+        probe_paths=("docs/context/issue_3481_hsfm_ttc_predictive_forces.md",),
     ),
     PrerequisiteSpec(
         key="calibration_data",

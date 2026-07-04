@@ -3,8 +3,9 @@
 
 Read-only inventory CLI. It documents the current pedestrian force-model assumptions, probes
 that the entry-point surfaces an HSFM/TTC experiment would touch are importable (fail-closed),
-and lists the still-missing prerequisites (HSFM heading state, FoV attenuation, TTC term,
-fixtures, versioned parameters, calibration data) as explicit blockers.
+and lists the remaining local or external proof blockers (for example full HSFM heading-state
+work, local fixture surfaces, seed-controlled evidence, calibration data) without mutating the
+checkout.
 
 Modes:
 

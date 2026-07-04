@@ -47,7 +47,9 @@ Robot-proxy TTC coupling intentionally fails closed when enabled because this sl
 stable robot-state injection point for pedestrian stepping.
 
 Tracked prototype metadata lives in
-`configs/research/hsfm_ttc_predictive_forces_issue_3481.yaml`.
+`configs/research/hsfm_ttc_predictive_forces_issue_3481.yaml`, which now records both the TTC
+predictive selector parameters and the opt-in anisotropic FoV selector defaults used in this issue
+family.
 
 ## Evidence Boundary
 
@@ -211,3 +213,38 @@ Evidence tier stays diagnostic/prototype: no default-model change, no calibrated
 ranking, benchmark-strength, or paper/dissertation claim. Remaining under the issue: narrow-passage
 lateral-sliding and bottleneck freeze/deadlock benchmark evidence, seed-controlled campaigns, and any
 evidence-tier upgrade.
+
+## CPU-only shared-throat precursor diagnostics (cheap successor slice)
+
+This slice adds a small local harness in
+`robot_sf/benchmark/pedestrian_model_fixture_diagnostics.py` so the remaining
+narrow-passage / bottleneck work has an in-repo, CPU-only *precursor* surface before any campaign
+work. These are synthetic shared-throat interactions, not the final benchmark-grade geometric
+fixtures.
+
+- Scenarios:
+  - `shared_throat_sliding`: symmetric lane-preserving crossing through a shared throat; reports
+    lateral-displacement proxies for passive sliding.
+  - `shared_throat_congestion`: symmetric opposing flows through a shared throat; reports
+    interaction-zone slowdown proxies for freeze/deadlock-like congestion.
+- Supported outputs:
+  - `minimum_pairwise_distance_m`
+  - `mean_max_lateral_displacement_m`
+  - `mean_speed_mps`
+  - `entered_interaction_zone`
+  - `max_pedestrians_in_interaction_zone`
+  - `interaction_zone_slow_steps`
+  - `max_consecutive_interaction_zone_slow_steps`
+  - `interaction_zone_slow_detected`
+  - finite position / velocity checks
+- Boundaries:
+  - no benchmark pass/fail threshold,
+  - no Slurm/GPU work,
+  - no seed-sweep or evidence-tier upgrade,
+  - no claim that these synthetic shared-throat fixtures replace the remaining true
+    narrow-passage / bottleneck benchmark evidence,
+  - no claim that any opt-in model is now realistic or benchmark-superior.
+
+The harness writes compact JSON / Markdown artifacts via
+`write_pedestrian_model_fixture_report(...)` and is covered by
+`tests/benchmark/test_pedestrian_model_fixture_diagnostics.py`.

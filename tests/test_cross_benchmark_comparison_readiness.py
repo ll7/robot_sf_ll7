@@ -12,14 +12,19 @@ from typing import TYPE_CHECKING
 import pytest
 
 from scripts.tools.cross_benchmark_comparison_readiness import (
+    CAMPAIGN_MANIFEST_PATH,
+    LIMITATIONS_TEMPLATE_PATH,
     PREREQUISITE_FAMILIES,
+    REQUIRED_LIMITATION_SECTIONS,
     RUN_GATES,
     SOCIAL_NAV_EXTERNAL_ASSET_IDS,
+    CampaignManifestError,
     WaiverError,
     _parse_waiver_args,
     evaluate_readiness,
     main,
     render_text,
+    validate_campaign_manifest,
     validate_waivers,
 )
 
@@ -195,4 +200,48 @@ def test_real_checkout_reports_converter_and_metric_ready_external_blocked() -> 
     report = evaluate_readiness()  # real REPO_ROOT
     assert _family(report, "converter")["status"] == "ready"
     assert _family(report, "metric_wrapper")["status"] == "ready"
+    assert _family(report, "policy_metadata")["status"] == "ready"
     assert _family(report, "external_assets")["status"] == "blocked"
+
+
+def test_issue_3287_campaign_manifest_scaffold_validates() -> None:
+    """Real scaffold pins blocked status, limitations, provenance, and no equivalence claim."""
+    manifest = validate_campaign_manifest()
+
+    assert manifest["status"] == "blocked_prerequisite"
+    assert manifest["campaign_authorized"] is False
+    assert manifest["direct_equivalence_claim_allowed"] is False
+    assert manifest["limitations_template"] == LIMITATIONS_TEMPLATE_PATH.as_posix()
+    assert set(REQUIRED_LIMITATION_SECTIONS).issubset(manifest["limitations_sections"])
+    assert manifest["external_asset_provenance"]
+
+
+def test_issue_3287_manifest_paths_are_readiness_inputs() -> None:
+    """The policy-metadata family tracks both scaffold files named by maintainer plan."""
+    policy_metadata = next(
+        family for family in PREREQUISITE_FAMILIES if family.family_id == "policy_metadata"
+    )
+
+    assert CAMPAIGN_MANIFEST_PATH in policy_metadata.required_paths
+    assert LIMITATIONS_TEMPLATE_PATH in policy_metadata.required_paths
+
+
+def test_campaign_manifest_validation_rejects_equivalence_claim(tmp_path: Path) -> None:
+    """The scaffold contract fails closed if a manifest permits direct equivalence."""
+    source = CAMPAIGN_MANIFEST_PATH
+    target = tmp_path / source.name
+    target.write_text(
+        source.read_text(encoding="utf-8").replace(
+            "direct_equivalence_claim_allowed: false",
+            "direct_equivalence_claim_allowed: true",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CampaignManifestError, match="direct_equivalence_claim_allowed"):
+        validate_campaign_manifest(target)
+
+
+def test_main_validate_manifest_keeps_campaign_blocked() -> None:
+    """CLI manifest validation succeeds but still reports blocked campaign prerequisites."""
+    assert main(["--validate-manifest"]) == 1

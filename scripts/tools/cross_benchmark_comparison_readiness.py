@@ -39,6 +39,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Prerequisite family lifecycle states, ordered by escalating readiness. A family is only
@@ -65,6 +67,21 @@ RUN_GATES: tuple[str, ...] = (
     "sim-to-sim differences reported as limitations; no direct-equivalence claim where mappings "
     "are approximate",
     "maintainer authorizes the cross-suite comparison run",
+)
+
+
+CAMPAIGN_MANIFEST_PATH = Path(
+    "configs/benchmarks/cross_benchmark_policy_comparison_issue_3287.yaml"
+)
+LIMITATIONS_TEMPLATE_PATH = Path("docs/context/issue_3287_cross_benchmark_limitations_template.md")
+REQUIRED_LIMITATION_SECTIONS: tuple[str, ...] = (
+    "scenario_mapping_quality",
+    "metric_denominator_differences",
+    "observation_space_differences",
+    "action_space_differences",
+    "dynamics_and_pedestrian_model_differences",
+    "unsupported_direct_equivalence_claims",
+    "valid_bounded_comparison_statements",
 )
 
 
@@ -125,7 +142,7 @@ PREREQUISITE_FAMILIES: tuple[PrerequisiteFamily, ...] = (
             "scenarios, metrics, seeds, and external assets, so the run is mechanical and "
             "reproducible once converter, metric, and asset prerequisites clear."
         ),
-        required_paths=(Path("configs/benchmarks/cross_benchmark_policy_comparison_v1.yaml"),),
+        required_paths=(CAMPAIGN_MANIFEST_PATH, LIMITATIONS_TEMPLATE_PATH),
         source_issues=(3287,),
         notes=(
             "Manifest scaffold is downstream campaign-design work (deferred); blocked until the "
@@ -177,6 +194,10 @@ class FamilyReadiness:
 
 class WaiverError(ValueError):
     """Raised when a waiver is malformed (unknown family or missing reason)."""
+
+
+class CampaignManifestError(ValueError):
+    """Raised when the issue #3287 campaign manifest scaffold is invalid."""
 
 
 def _classify_paths(repo_root: Path, paths: tuple[Path, ...]) -> tuple[list[PathStatus], list[str]]:
@@ -261,6 +282,90 @@ def evaluate_readiness(
         "run_gates": list(RUN_GATES),
         "families": [_family_to_dict(fam) for fam in families],
     }
+
+
+def _validate_manifest_header(manifest: dict, errors: list[str]) -> None:
+    """Check issue identity and fail-closed campaign status."""
+    expected_schema = "cross_benchmark_policy_comparison.issue_3287.v1"
+    expected_values = {
+        "schema_version": expected_schema,
+        "issue": 3287,
+        "status": "blocked_prerequisite",
+        "campaign_authorized": False,
+        "direct_equivalence_claim_allowed": False,
+    }
+    for key, expected in expected_values.items():
+        if manifest.get(key) != expected:
+            errors.append(f"{key} must be {expected!r}")
+
+
+def _validate_non_empty_lists(manifest: dict, errors: list[str]) -> None:
+    """Check the manifest carries required scaffold lists."""
+    for key in (
+        "policies",
+        "robot_sf_scenarios",
+        "external_benchmark_scenarios",
+        "scenario_mapping_notes",
+        "metric_mapping_notes",
+        "seeds",
+        "observation_action_space_caveats",
+        "pedestrian_model_and_dynamics_caveats",
+        "external_asset_provenance",
+    ):
+        value = manifest.get(key)
+        if not isinstance(value, list) or not value:
+            errors.append(f"{key} must be a non-empty list")
+
+
+def _validate_limitations(manifest: dict, errors: list[str]) -> None:
+    """Check the manifest points at the required limitations template sections."""
+    if manifest.get("limitations_template") != LIMITATIONS_TEMPLATE_PATH.as_posix():
+        errors.append(f"limitations_template must be {LIMITATIONS_TEMPLATE_PATH.as_posix()}")
+
+    sections = manifest.get("limitations_sections")
+    if not isinstance(sections, list):
+        errors.append("limitations_sections must be a list")
+        return
+
+    missing = sorted(set(REQUIRED_LIMITATION_SECTIONS) - set(sections))
+    if missing:
+        errors.append("limitations_sections missing: " + ", ".join(missing))
+
+
+def _validate_prerequisite_gate(manifest: dict, errors: list[str]) -> None:
+    """Check prerequisite gates are explicit and waivers carry reasons."""
+    prereqs = manifest.get("prerequisite_gate", {})
+    if not isinstance(prereqs, dict):
+        errors.append("prerequisite_gate must be a mapping")
+        return
+
+    for gate in ("converter", "metric_wrapper", "external_assets", "policy_compatibility"):
+        entry = prereqs.get(gate)
+        if not isinstance(entry, dict):
+            errors.append(f"prerequisite_gate.{gate} must be a mapping")
+            continue
+        status = entry.get("status")
+        if status not in {"ready", "blocked", "waived"}:
+            errors.append(f"prerequisite_gate.{gate}.status must be ready, blocked, or waived")
+        if status == "waived" and not str(entry.get("waiver_reason", "")).strip():
+            errors.append(f"prerequisite_gate.{gate}.waiver_reason required when waived")
+
+
+def validate_campaign_manifest(
+    manifest_path: Path = REPO_ROOT / CAMPAIGN_MANIFEST_PATH,
+) -> dict:
+    """Validate the blocked #3287 campaign-manifest scaffold."""
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    errors: list[str] = []
+
+    _validate_manifest_header(manifest, errors)
+    _validate_non_empty_lists(manifest, errors)
+    _validate_limitations(manifest, errors)
+    _validate_prerequisite_gate(manifest, errors)
+
+    if errors:
+        raise CampaignManifestError("; ".join(errors))
+    return manifest
 
 
 def validate_waivers(waivers: dict[str, str]) -> dict[str, str]:
@@ -375,6 +480,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=REPO_ROOT,
         help="Repository root to evaluate prerequisites against (defaults to this checkout).",
     )
+    parser.add_argument(
+        "--validate-manifest",
+        action="store_true",
+        help="Validate the issue #3287 campaign-manifest scaffold before reporting readiness.",
+    )
     return parser.parse_args(argv)
 
 
@@ -388,8 +498,10 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
         waivers = _parse_waiver_args(args.waive)
+        if args.validate_manifest:
+            validate_campaign_manifest(args.repo_root / CAMPAIGN_MANIFEST_PATH)
         report = evaluate_readiness(args.repo_root, waivers)
-    except WaiverError as exc:
+    except (WaiverError, CampaignManifestError) as exc:
         # Diagnostics go to stderr so stdout stays reserved for the text/JSON report.
         print(f"error: {exc}", file=sys.stderr)
         return 2

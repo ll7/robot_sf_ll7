@@ -6,9 +6,9 @@ benchmark with the license-gated data unless you stage it yourself under the ups
 terms.
 
 This is the third dataset family in the #4224 external-data program (after the Stanford Drone
-Dataset and the ETH/UCY trajectory benchmarks). This page and its registry entry are
-**registry/docs only**: no dataset bytes, no automated acquisition, no loader, no shape-contract
-tests, no benchmark run, and no paper-facing claim are introduced here.
+Dataset and the ETH/UCY trajectory benchmarks). The public ATC surface now consists of a
+registry/docs slice plus a license-safe skip-if-absent loader shape contract. It still
+introduces no dataset bytes, no automated acquisition, no benchmark run, and no paper-facing claim.
 
 Related issues: [#4289](https://github.com/ll7/robot_sf_ll7/issues/4289),
 [#4224](https://github.com/ll7/robot_sf_ll7/issues/4224),
@@ -169,3 +169,7 @@ documented file/layout contract and parsed as finite numeric ATC-shaped rows. It
 SF has benchmark scenarios, prediction-comparability evidence, or permission to redistribute the data.
 This loader slice adds no download code, dataset bytes, benchmark consumer, campaign run, or
 paper-facing claim; it follows the exemplar pattern established for #4279 (`socnavbench-s3dis-eth`).
+
+The #4289 public external-data surface is terminal at that boundary; the smallest remaining
+empirical work belongs in later ATC loader-consumer, private staging, or benchmark-evidence
+issues.

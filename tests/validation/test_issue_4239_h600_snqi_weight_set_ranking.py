@@ -297,6 +297,12 @@ def test_happy_path_writes_rank_agreement_audit_snippet_and_checksums(tmp_path: 
     assert len(agreement_rows) == 6
     snippet = (evidence / "snqi_weight_set_h600_diss331_comment.md").read_text(encoding="utf-8")
     assert "does not choose canonical weights" in snippet
+    manifest = json.loads((evidence / "source_manifest.json").read_text(encoding="utf-8"))
+    portability = manifest["issue_4239_weight_set_packet"]["provenance_portability"]
+    assert portability["path_policy"] == "repo_relative"
+    assert portability["source_manifest_paths"] == "repo_relative"
+    assert portability["checksum_manifest"].endswith("SHA256SUMS")
+    assert "authorization-gated" in portability["review_gate"]
     sums = (evidence / "SHA256SUMS").read_text(encoding="utf-8")
     assert "snqi_weight_set_h600_rank_table.csv" in sums
     assert "seed_episode_rows.csv" not in {path.name for path in evidence.iterdir()}

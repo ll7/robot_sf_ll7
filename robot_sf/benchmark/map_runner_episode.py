@@ -28,6 +28,7 @@ from robot_sf.benchmark.cbf_safety_filter_runtime import (
 from robot_sf.benchmark.cbf_safety_filter_runtime import (
     runtime_config_from_mapping as cbf_runtime_config_from_mapping,
 )
+from robot_sf.benchmark.event_ledger import build_event_ledger
 from robot_sf.benchmark.failure_mechanism_taxonomy import unknown_failure_mechanism_record
 from robot_sf.benchmark.group_space_metrics import group_specs_from_map
 from robot_sf.benchmark.interaction_exposure import (
@@ -177,6 +178,169 @@ class VisibilityEvidenceTrace:
     track_confidence: np.ndarray | None = None
     status: str = "unavailable"
     reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _CollisionEventContext:
+    """Immutable context for per-step collision-event typing."""
+
+    dt_seconds: float
+    map_def: Any
+    robot_radius: float
+    ped_radius: float
+
+
+def _point_to_segment_distance(point: np.ndarray, segment: Any) -> float:
+    """Return Euclidean distance from ``point`` to one line segment."""
+    try:
+        segment_arr = np.asarray(segment, dtype=float)
+    except (TypeError, ValueError):
+        return float("inf")
+    if segment_arr.shape != (2, 2):
+        return float("inf")
+    start = segment_arr[0]
+    end = segment_arr[1]
+    line_vec = end - start
+    denom = float(np.dot(line_vec, line_vec))
+    if denom <= 0.0:
+        return float(np.linalg.norm(point - start))
+    t_val = float(np.dot(point - start, line_vec) / denom)
+    closest = start + np.clip(t_val, 0.0, 1.0) * line_vec
+    return float(np.linalg.norm(point - closest))
+
+
+def _closest_segment_partner_id(
+    point: np.ndarray,
+    segments: list[Any],
+    *,
+    prefix: str,
+) -> str | None:
+    """Return a stable partner id for the nearest segment, when available."""
+    if not segments:
+        return None
+    indexed_distances = [
+        (_point_to_segment_distance(point, segment), index) for index, segment in enumerate(segments)
+    ]
+    finite = [(distance, index) for distance, index in indexed_distances if math.isfinite(distance)]
+    if not finite:
+        return None
+    _, best_index = min(finite)
+    return f"{prefix}:{best_index}"
+
+
+def _map_obstacle_segments(map_def: Any) -> list[Any]:
+    """Return flattened obstacle segments from the live map definition."""
+    obstacles = getattr(map_def, "obstacles", None)
+    if not isinstance(obstacles, list):
+        return []
+    segments: list[Any] = []
+    for obstacle in obstacles:
+        lines = getattr(obstacle, "lines", None)
+        if isinstance(lines, list):
+            segments.extend(lines)
+    return segments
+
+
+def _point_inside_map_bounds(point: np.ndarray, map_def: Any) -> bool:
+    """Return whether ``point`` lies inside the declared rectangular map bounds."""
+    width = getattr(map_def, "width", None)
+    height = getattr(map_def, "height", None)
+    if not isinstance(width, int | float) or not isinstance(height, int | float):
+        return True
+    if not math.isfinite(float(width)) or not math.isfinite(float(height)):
+        return True
+    return 0.0 <= float(point[0]) <= float(width) and 0.0 <= float(point[1]) <= float(height)
+
+
+def _step_collision_events(
+    *,
+    step_idx: int,
+    robot_pos: np.ndarray,
+    previous_robot_pos: np.ndarray | None,
+    ped_positions: np.ndarray,
+    previous_ped_positions: np.ndarray | None,
+    meta: Mapping[str, Any],
+    context: _CollisionEventContext,
+) -> list[dict[str, Any]]:
+    """Return typed collision-event records for one simulator step."""
+    events: list[dict[str, Any]] = []
+    collision_time = float((step_idx + 1) * context.dt_seconds)
+    if previous_robot_pos is not None and context.dt_seconds > 0.0:
+        robot_velocity = (robot_pos - previous_robot_pos) / context.dt_seconds
+    else:
+        robot_velocity = np.zeros(2, dtype=float)
+
+    if bool(meta.get("is_pedestrian_collision", False)):
+        ped_array = np.asarray(ped_positions, dtype=float).reshape(-1, 2)
+        partner_id: str | None = None
+        relative_speed = float(np.linalg.norm(robot_velocity))
+        if ped_array.size:
+            ped_distances = np.linalg.norm(ped_array - robot_pos[np.newaxis, :], axis=1)
+            contact_threshold = max(0.0, context.robot_radius + context.ped_radius) + 1.0e-6
+            contact_candidates = np.where(ped_distances <= contact_threshold)[0]
+            if contact_candidates.size:
+                ped_index = int(contact_candidates[np.argmin(ped_distances[contact_candidates])])
+            else:
+                ped_index = int(np.argmin(ped_distances))
+            partner_id = str(ped_index)
+            ped_velocity = np.zeros(2, dtype=float)
+            if (
+                previous_ped_positions is not None
+                and previous_ped_positions.shape == ped_array.shape
+                and context.dt_seconds > 0.0
+            ):
+                ped_velocity = (
+                    ped_array[ped_index] - previous_ped_positions[ped_index]
+                ) / context.dt_seconds
+            relative_speed = float(np.linalg.norm(robot_velocity - ped_velocity))
+        events.append(
+            {
+                "collision_partner_type": "pedestrian",
+                "collision_partner_id": partner_id,
+                "collision_time": collision_time,
+                "relative_speed_at_contact": relative_speed,
+                "clearance_series_source": "runtime.step.pedestrian_positions",
+                "exact_event_source": "runtime.step.meta.is_pedestrian_collision",
+            }
+        )
+
+    if bool(meta.get("is_obstacle_collision", False)):
+        bounds = list(getattr(context.map_def, "bounds", [])) if context.map_def is not None else []
+        obstacle_segments = _map_obstacle_segments(context.map_def)
+        in_bounds = (
+            _point_inside_map_bounds(robot_pos, context.map_def)
+            if context.map_def is not None
+            else True
+        )
+        partner_type = "static_geometry" if in_bounds else "boundary"
+        partner_type_override = str(meta.get("collision_partner_type") or "").strip()
+        if partner_type_override in {"static_geometry", "boundary", "goal_artifact"}:
+            partner_type = partner_type_override
+        partner_id = (
+            str(meta.get("collision_partner_id"))
+            if meta.get("collision_partner_id") is not None
+            else _closest_segment_partner_id(
+                robot_pos,
+                obstacle_segments if partner_type == "static_geometry" else bounds,
+                prefix="obstacle" if partner_type == "static_geometry" else "boundary",
+            )
+        )
+        events.append(
+            {
+                "collision_partner_type": partner_type,
+                "collision_partner_id": partner_id,
+                "collision_time": collision_time,
+                "relative_speed_at_contact": float(np.linalg.norm(robot_velocity)),
+                "clearance_series_source": (
+                    "runtime.step.map.obstacles"
+                    if partner_type in {"static_geometry", "goal_artifact"}
+                    else "runtime.step.map.bounds"
+                ),
+                "exact_event_source": "runtime.step.meta.is_obstacle_collision",
+            }
+        )
+
+    return events
 
 
 def _nearest_hazard_distances(
@@ -984,14 +1148,25 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         obstacle_collision_seen = False
         robot_collision_seen = False
         timeout_seen = False
+        collision_events: list[dict[str, Any]] = []
 
-        map_def = None
+        map_def = getattr(env.simulator, "map_def", None)
         goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
         initial_robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
         initial_goal_distance = float(np.linalg.norm(initial_robot_pos - goal_vec))
+        robot_radius = float(getattr(getattr(config, "robot_config", None), "radius", 1.0))
+        ped_radius = float(getattr(config.sim_config, "ped_radius", 0.4))
+        collision_event_context = _CollisionEventContext(
+            dt_seconds=float(config.sim_config.time_per_step_in_secs),
+            map_def=map_def,
+            robot_radius=robot_radius,
+            ped_radius=ped_radius,
+        )
         previous_trace_robot_pos = np.array(initial_robot_pos, dtype=float, copy=True)
         previous_trace_ped_pos: np.ndarray | None = None
         previous_trace_heading = _observation_heading(obs)
+        previous_collision_robot_pos = np.array(initial_robot_pos, dtype=float, copy=True)
+        previous_collision_ped_pos: np.ndarray | None = None
         robot_headings: list[float] = []
         ammv_command_actions: list[dict[str, Any]] = []
         view_integrity: dict[str, Any] | None = None
@@ -1375,6 +1550,19 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 meta.get("is_robot_collision", False)
             )
             timeout_seen = timeout_seen or step_timeout
+            collision_events.extend(
+                _step_collision_events(
+                    step_idx=step_idx,
+                    robot_pos=robot_pos,
+                    previous_robot_pos=previous_collision_robot_pos,
+                    ped_positions=peds,
+                    previous_ped_positions=previous_collision_ped_pos,
+                    meta=meta,
+                    context=collision_event_context,
+                )
+            )
+            previous_collision_robot_pos = np.array(robot_pos, dtype=float, copy=True)
+            previous_collision_ped_pos = np.array(peds, dtype=float, copy=True)
             if reached_goal_step is None and step_success:
                 reached_goal_step = step_idx
             if step_success:
@@ -1793,6 +1981,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             success=route_complete and not collision_seen,
         )
     )
+    record["event_ledger"] = build_event_ledger(record, collision_events=collision_events)
     if benchmark_track is not None:
         record["benchmark_track"] = benchmark_track
     if track_schema_version is not None:

@@ -3818,6 +3818,17 @@ def test_run_map_episode_floors_exact_obstacle_collision_metrics(
     assert record["metrics"]["total_collision_count"] == pytest.approx(1.0)
     assert record["metrics"]["collisions"] == pytest.approx(1.0)
     assert record["metrics"]["wall_collisions"] == pytest.approx(1.0)
+    assert record["event_ledger"]["schema_version"] == "EpisodeEventLedger.v2"
+    assert record["event_ledger"]["collision_events"] == [
+        {
+            "collision_partner_type": "static_geometry",
+            "collision_partner_id": None,
+            "collision_time": pytest.approx(0.1),
+            "relative_speed_at_contact": pytest.approx(0.0),
+            "clearance_series_source": "runtime.step.map.obstacles",
+            "exact_event_source": "runtime.step.meta.is_obstacle_collision",
+        }
+    ]
 
 
 def test_collision_metric_floor_preserves_untyped_collision_event() -> None:

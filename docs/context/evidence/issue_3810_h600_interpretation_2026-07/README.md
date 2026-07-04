@@ -34,6 +34,7 @@ This directory contains diagnostic-only h600 interpretation artifacts for jobs 1
 - Validate the integration with `uv run python scripts/validation/check_issue_4195_f_c4_ii_gate.py` (fail-closed: SHA256SUMS coverage/digest match, required boundary sections, shared-matrix-hash agreement).
 
 - Terminality review: `issue_4195_terminality_review.md` records that the #4195 checklist and sign-off boundary are satisfied, verifies PR #4321 and PR #4374 are merged, confirms no open pull request covers the closure scope, and keeps pillar (iii) documentation plus any S30 hybrid-vs-ORCA escalation outside #4195.
+- Issue #4230 terminality: `issue_4230_terminality_review.md` and `issue_4230_terminality_summary.json` record that PR #4265, completed job 13282 packet, and #4195 sign-off close the h600 hybrid-roster implementation lane; S30 or pillar-(iii) follow-ups remain outside issue #4230.
 
 ## Notes
 

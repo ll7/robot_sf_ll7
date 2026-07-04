@@ -47,6 +47,7 @@ TRAINED_PLANNER_ELIGIBLE = "eligible"
 TRAINED_PLANNER_NOT_A_TRAINED_PLANNER = "not_a_trained_planner"
 TRAINED_PLANNER_EXCLUDED_MISSING_CHECKPOINT = "excluded_missing_checkpoint_or_config"
 TRAINED_PLANNER_EXCLUDED_FALLBACK = "excluded_fallback_execution"
+TRAINED_PLANNER_REQUIRED_FIELDS = ("algo_config", "checkpoint", "training_manifest")
 
 GATE_CELL_COLUMNS = (
     "planner_key",
@@ -157,6 +158,7 @@ def validate_probe_config(config: Mapping[str, Any], *, base_dir: Path) -> dict[
                 TRAINED_PLANNER_EXCLUDED_MISSING_CHECKPOINT,
                 TRAINED_PLANNER_EXCLUDED_FALLBACK,
             ],
+            "required_fields": list(TRAINED_PLANNER_REQUIRED_FIELDS),
         },
     }
 
@@ -299,6 +301,7 @@ def build_certification_transfer_report(
             for arm in normalized_config["arms"]
         ],
         "trained_planner_claim_policy": normalized_config["trained_planner_claim_policy"],
+        "trained_planner_readiness": _trained_planner_readiness(normalized_config["arms"]),
         "trained_planner_claim_status_counts": dict(
             Counter(row["trained_planner_claim_status"] for row in transfer_matrix)
         ),
@@ -660,30 +663,64 @@ def _validate_arms(raw_arms: object, *, base_dir: Path) -> list[dict[str, Any]]:
         algo = str(arm.get("algo", "")).strip()
         if not key or not structural_class or not algo:
             raise ValueError("each arm requires key, structural_class, and algo")
-        normalized = {
-            "key": key,
-            "structural_class": structural_class,
-            "algo": algo,
-            "benchmark_profile": str(arm.get("benchmark_profile", "experimental")),
-            "development_pedestrian_model": str(arm.get("development_pedestrian_model", "unknown")),
-        }
-        if arm.get("observation_mode") is not None:
-            normalized["observation_mode"] = str(arm["observation_mode"])
-        if arm.get("observation_level") is not None:
-            normalized["observation_level"] = str(arm["observation_level"])
-        if arm.get("fallback_execution") is not None:
-            normalized["fallback_execution"] = bool(arm["fallback_execution"])
-        if arm.get("fallback_to_goal") is not None:
-            normalized["fallback_to_goal"] = bool(arm["fallback_to_goal"])
-        if arm.get("algo_config") is not None:
-            normalized["algo_config"] = str(
-                _resolve_existing_path(arm.get("algo_config"), base_dir=base_dir)
-            )
+        normalized = _normalized_arm_base(
+            arm, key=key, structural_class=structural_class, algo=algo
+        )
+        _copy_optional_arm_fields(normalized, arm, base_dir=base_dir)
         status, exclusion = _trained_planner_claim_status(normalized)
         normalized["trained_planner_claim_status"] = status
         normalized["trained_planner_claim_exclusion"] = exclusion
         normalized_arms.append(normalized)
     return normalized_arms
+
+
+def _copy_optional_arm_fields(
+    normalized: dict[str, Any],
+    arm: Mapping[str, Any],
+    *,
+    base_dir: Path,
+) -> None:
+    for field in ("observation_mode", "observation_level"):
+        if arm.get(field) is not None:
+            normalized[field] = str(arm[field])
+    for field in ("fallback_execution", "fallback_to_goal"):
+        if arm.get(field) is not None:
+            normalized[field] = bool(arm[field])
+    _copy_optional_existing_path(normalized, arm, "algo_config", base_dir=base_dir)
+    for artifact_field in ("checkpoint", "training_manifest"):
+        _copy_optional_existing_path(
+            normalized,
+            arm,
+            artifact_field,
+            base_dir=base_dir,
+        )
+
+
+def _normalized_arm_base(
+    arm: Mapping[str, Any],
+    *,
+    key: str,
+    structural_class: str,
+    algo: str,
+) -> dict[str, Any]:
+    return {
+        "key": key,
+        "structural_class": structural_class,
+        "algo": algo,
+        "benchmark_profile": str(arm.get("benchmark_profile", "experimental")),
+        "development_pedestrian_model": str(arm.get("development_pedestrian_model", "unknown")),
+    }
+
+
+def _copy_optional_existing_path(
+    target: dict[str, Any],
+    source: Mapping[str, Any],
+    field: str,
+    *,
+    base_dir: Path,
+) -> None:
+    if source.get(field) is not None:
+        target[field] = str(_resolve_existing_path(source.get(field), base_dir=base_dir))
 
 
 def _trained_planner_claim_status(arm: Mapping[str, Any]) -> tuple[str, str]:
@@ -705,6 +742,70 @@ def _trained_planner_claim_status(arm: Mapping[str, Any]) -> tuple[str, str]:
     if not str(arm.get("algo_config", "")).strip():
         return TRAINED_PLANNER_EXCLUDED_MISSING_CHECKPOINT, "missing_checkpoint_or_config"
     return TRAINED_PLANNER_ELIGIBLE, ""
+
+
+def _trained_planner_readiness(arms: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    for arm in arms:
+        status = str(arm["trained_planner_claim_status"])
+        missing_fields: list[str] = []
+        if _is_trained_planner_arm(arm):
+            if not str(arm.get("algo_config", "")).strip():
+                missing_fields.append("algo_config")
+            if not str(arm.get("checkpoint", "")).strip():
+                missing_fields.append("checkpoint")
+            if not str(arm.get("training_manifest", "")).strip():
+                missing_fields.append("training_manifest")
+        rows.append(
+            {
+                "planner_key": arm["key"],
+                "structural_class": arm["structural_class"],
+                "algo": arm["algo"],
+                "eligible_for_trained_planner_claim": status == TRAINED_PLANNER_ELIGIBLE
+                and not missing_fields,
+                "readiness_status": _readiness_status(status, missing_fields),
+                "missing_fields": missing_fields,
+                "trained_planner_claim_status": status,
+                "trained_planner_claim_exclusion": arm["trained_planner_claim_exclusion"],
+            }
+        )
+
+    blockers = [
+        row
+        for row in rows
+        if row["readiness_status"]
+        in {"blocked_missing_artifact_provenance", "blocked_fallback_execution"}
+    ]
+    eligible_rows = [row for row in rows if row["eligible_for_trained_planner_claim"]]
+    return {
+        "schema_version": "trained-planner-readiness.v1",
+        "claim_boundary": (
+            "eligible rows may support trained-planner comparison claims only after a fresh "
+            "certification-transfer run; excluded rows remain diagnostic-only"
+        ),
+        "required_fields": list(TRAINED_PLANNER_REQUIRED_FIELDS),
+        "all_trained_planner_arms_ready": not blockers,
+        "eligible_trained_planner_arm_count": len(eligible_rows),
+        "blocker_count": len(blockers),
+        "rows": rows,
+    }
+
+
+def _readiness_status(status: str, missing_fields: Sequence[str]) -> str:
+    if status == TRAINED_PLANNER_NOT_A_TRAINED_PLANNER:
+        return "not_required_baseline"
+    if status == TRAINED_PLANNER_EXCLUDED_FALLBACK:
+        return "blocked_fallback_execution"
+    if missing_fields:
+        return "blocked_missing_artifact_provenance"
+    return "ready_for_fresh_probe"
+
+
+def _is_trained_planner_arm(arm: Mapping[str, Any]) -> bool:
+    return (
+        str(arm.get("structural_class", "")) in TRAINED_PLANNER_STRUCTURAL_CLASSES
+        or str(arm.get("algo", "")) in TRAINED_PLANNER_ALGOS
+    )
 
 
 def _collision_value(record: Mapping[str, Any]) -> float | None:
@@ -804,6 +905,7 @@ def _metadata_payload(report: Mapping[str, Any]) -> dict[str, Any]:
         "seed_policy": report["seed_policy"],
         "arms": report["arms"],
         "trained_planner_claim_policy": report["trained_planner_claim_policy"],
+        "trained_planner_readiness": report["trained_planner_readiness"],
         "trained_planner_claim_status_counts": report["trained_planner_claim_status_counts"],
         "row_status_counts": report["row_status_counts"],
         "transfer_status_counts": report["transfer_status_counts"],
@@ -853,6 +955,9 @@ def _readme_markdown(report: Mapping[str, Any]) -> str:
         f"- Interaction status counts: `{dict(report['interaction_status_counts'])}`",
         f"- Trained-planner claim status counts: "
         f"`{dict(report['trained_planner_claim_status_counts'])}`",
+        f"- Trained-planner readiness: "
+        f"`{report['trained_planner_readiness']['eligible_trained_planner_arm_count']}` "
+        f"eligible, `{report['trained_planner_readiness']['blocker_count']}` blocked",
         f"- Physics near-field confirmed: `{interaction_metrics['physics_near_field_confirmed']}`",
         f"- Max robot-pedestrian within-5m fraction: "
         f"`{interaction_metrics['max_robot_ped_within_5m_frac']}`",

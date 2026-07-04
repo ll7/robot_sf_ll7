@@ -197,6 +197,8 @@ def test_runnable_h600_config_matches_preregistration_contract() -> None:
     ]
     assert manifest["planner_keys"] == expected_keys
     assert manifest["planner_arm_count"] == len(expected_keys) == 12
+    assert manifest["required_available_planner_count"] == 11
+    assert manifest["accepted_unavailable_planner_keys"] == ["guarded_ppo"]
     assert manifest["seeds"] == [20, 21, 22, 23, 24]
     assert manifest["horizon"] == 600
     assert manifest["expected_scenario_matrix_hash"] == "c10df617a87c"
@@ -216,6 +218,9 @@ def test_runnable_h600_config_loads_trace_capture_flags() -> None:
     assert tuple(cfg.seed_policy.seeds) == (20, 21, 22, 23, 24)
     assert cfg.record_planner_decision_trace is True
     assert cfg.record_simulation_step_trace is True
+    guarded_ppo = next(planner for planner in cfg.planners if planner.key == "guarded_ppo")
+    assert guarded_ppo.availability_gate == "dependency_gated"
+    assert guarded_ppo.fail_closed_reason == "guarded_ppo_checkpoint_observation_contract_missing"
     assert [planner.key for planner in cfg.planners] == [
         "scenario_adaptive_hybrid_orca_v1",
         "hybrid_rule_v3_fast_progress_static_escape",
@@ -230,3 +235,28 @@ def test_runnable_h600_config_loads_trace_capture_flags() -> None:
         "socnav_sampling",
         "sacadrl",
     ]
+
+
+def test_runnable_h600_preflight_reports_guarded_ppo_accepted_unavailable(
+    tmp_path: Path,
+) -> None:
+    """Preflight exposes gated guarded_ppo as accepted unavailable, not unexpected failure."""
+    from robot_sf.benchmark.camera_ready._config import load_campaign_config
+    from robot_sf.benchmark.camera_ready._preflight import prepare_campaign_preflight
+
+    cfg = load_campaign_config(RUN_CONFIG_PATH)
+    preflight = prepare_campaign_preflight(
+        cfg,
+        output_root=tmp_path,
+        label="issue-4448",
+        validate_campaign_config=lambda _cfg: None,
+        build_route_clearance_warnings=lambda *_args, **_kwargs: [],
+    )
+
+    planner_rows = preflight["manifest_payload"]["planners"]
+    guarded_ppo = next(row for row in planner_rows if row["key"] == "guarded_ppo")
+    assert guarded_ppo["status"] == "not_available"
+    assert guarded_ppo["availability_gate"] == "dependency_gated"
+    assert (
+        guarded_ppo["fail_closed_reason"] == "guarded_ppo_checkpoint_observation_contract_missing"
+    )

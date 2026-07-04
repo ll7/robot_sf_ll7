@@ -440,6 +440,7 @@ def test_issue_3463_dry_run_reports_issue_stage_and_monotone_candidate(tmp_path:
     ]
     assert monotone_rows
     for entry in report["commands"]:
+        assert "--stage" in entry["command"]
         stage_idx = entry["command"].index("--stage") + 1
         assert entry["command"][stage_idx] == "issue_3463_slice"
 

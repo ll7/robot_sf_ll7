@@ -102,7 +102,7 @@ def test_checked_in_policy_search_registry_validates() -> None:
 
     issues = validate_registry(
         repo_root / "docs/context/policy_search/candidate_registry.yaml",
-        as_of=date(2026, 6, 11),
+        as_of=date(2026, 7, 4),
     )
 
     assert issues == []

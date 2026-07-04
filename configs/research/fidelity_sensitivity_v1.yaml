@@ -40,6 +40,11 @@ fixed_scope:
     orca: orca
     default_social_force: social_force
     hybrid_rule_v0_minimal: hybrid_rule_v0_minimal
+  planner_configs:
+    hybrid_rule_v0_minimal: configs/algos/hybrid_rule_v0_minimal.yaml
+  planner_opt_ins:
+    hybrid_rule_v0_minimal:
+      allow_testing_algorithms: true
 
 ranking:
   metric: snqi

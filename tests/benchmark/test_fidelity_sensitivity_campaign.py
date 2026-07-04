@@ -413,3 +413,54 @@ def test_build_report_marks_zero_success_slice_rank_non_identifiable(tmp_path: P
         in markdown
     )
     assert "primary_metric_zero_variance" in markdown
+
+
+def test_fixed_scope_runner_binds_remaining_planner_prerequisites() -> None:
+    """ORCA and hybrid cells bind once rvo2/opt-in gates are represented as satisfied."""
+    config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+    variant_index = campaign_runner.build_fixed_scope_variant_index(config)
+    cells = [
+        campaign_runner.FixedScopeRunCell(
+            planner_group="orca",
+            algorithm="orca",
+            planner_available=True,
+            planner_tier="baseline-ready",
+            requires_explicit_opt_in=False,
+            axis="integration_timestep",
+            variant="dt_0_05",
+            baseline_variant=False,
+            seed=111,
+            scenario_set="configs/benchmarks/paper_experiment_matrix_v1.yaml",
+        ),
+        campaign_runner.FixedScopeRunCell(
+            planner_group="default_social_force",
+            algorithm="social_force",
+            planner_available=True,
+            planner_tier="baseline-ready",
+            requires_explicit_opt_in=False,
+            axis="integration_timestep",
+            variant="dt_0_05",
+            baseline_variant=False,
+            seed=111,
+            scenario_set="configs/benchmarks/paper_experiment_matrix_v1.yaml",
+        ),
+        campaign_runner.FixedScopeRunCell(
+            planner_group="hybrid_rule_v0_minimal",
+            algorithm="hybrid_rule_local_planner",
+            planner_available=True,
+            planner_tier="experimental",
+            requires_explicit_opt_in=False,
+            axis="integration_timestep",
+            variant="dt_0_05",
+            baseline_variant=False,
+            seed=111,
+            scenario_set="configs/benchmarks/paper_experiment_matrix_v1.yaml",
+        ),
+    ]
+    bindings = [campaign_runner.bind_fixed_scope_run_cell(cell, variant_index) for cell in cells]
+    assert [binding.runner_bound for binding in bindings] == [True, True, True]
+    assert [binding.planner_name for binding in bindings] == [
+        "orca",
+        "baseline_social_force",
+        "hybrid_rule_v0_minimal",
+    ]

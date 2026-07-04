@@ -94,26 +94,35 @@ def test_run_cells_carry_resolved_algorithm_and_scope_axes() -> None:
     ) * len(seeds)
 
 
-def test_shipped_config_plan_is_not_launchable_and_records_gates() -> None:
-    """The shipped config is preflight_ready but fails closed on launch prerequisites."""
+def test_shipped_config_plan_is_launchable_when_prerequisites_are_bound() -> None:
+    """The shipped config is launchable when rvo2 and hybrid opt-in are present."""
     plan = _plan()
 
     assert plan["preflight_decision"] == "preflight_ready"
     assert plan["preflight_ready"] is True
-    # Fail-closed: unmet launch prerequisites keep the plan non-executable / unlaunched.
-    assert plan["executable"] is False
+    assert plan["executable"] is True
     assert plan["launched"] is False
-    assert plan["gate_reasons"], "expected residual launch gates"
-
-    joined = " ".join(plan["gate_reasons"])
-    assert "rvo2" in joined  # ORCA runtime dependency
-    assert "explicit_opt_in:hybrid_rule_v0_minimal" in joined  # hybrid opt-in
-    assert "runtime_rank_identifiability_recheck_required" in joined  # post-run recheck
-    assert "campaign_runner_not_wired_for_full_fixed_scope" in joined
+    assert plan["gate_reasons"] == []
+    assert "runtime_rank_identifiability_recheck_required" in " ".join(plan["post_run_contracts"])
 
 
-def test_ensure_launchable_raises_when_gated() -> None:
+def test_shipped_config_plan_fails_closed_without_rvo2(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ORCA cells keep fixed-scope launch non-executable when rvo2 is unavailable."""
+    monkeypatch.setattr(
+        "robot_sf.benchmark.fidelity_fixed_scope_preflight._rvo2_importable",
+        lambda: False,
+    )
+    plan = _plan()
+    assert plan["executable"] is False
+    assert "planner_requires_rvo2:orca" in plan["gate_reasons"]
+
+
+def test_ensure_launchable_raises_when_gated(monkeypatch: pytest.MonkeyPatch) -> None:
     """ensure_fixed_scope_launchable must fail closed while gates remain."""
+    monkeypatch.setattr(
+        "robot_sf.benchmark.fidelity_fixed_scope_preflight._rvo2_importable",
+        lambda: False,
+    )
     plan = _plan()
     with pytest.raises(campaign_runner.FixedScopeNotLaunchableError):
         campaign_runner.ensure_fixed_scope_launchable(plan)
@@ -168,8 +177,8 @@ def test_plan_only_cli_writes_plan_without_running_episodes(tmp_path: Path) -> N
     assert plan["run_cell_count"] == 108
 
 
-def test_plan_only_cli_require_launchable_fails_closed(tmp_path: Path) -> None:
-    """--require-launchable exits non-zero because launch gates remain unmet."""
+def test_plan_only_cli_require_launchable_passes_when_prerequisites_bound(tmp_path: Path) -> None:
+    """--require-launchable exits zero when runtime prerequisites are satisfied."""
     exit_code = campaign_runner.main(
         [
             "--fixed-scope-plan-only",
@@ -178,7 +187,7 @@ def test_plan_only_cli_require_launchable_fails_closed(tmp_path: Path) -> None:
             "--require-launchable",
         ]
     )
-    assert exit_code == 1
+    assert exit_code == 0
 
 
 # ---------------------------------------------------------------------------
@@ -225,9 +234,9 @@ def test_bind_orca_cell_is_unbound_no_silent_fallback() -> None:
     cell = next(c for c in cells if c.planner_group == "orca")
 
     binding = campaign_runner.bind_fixed_scope_run_cell(cell, index)
-    assert binding.runner_bound is False
-    assert binding.planner_name is None
-    assert "no_native_runner_planner_for_algorithm:orca" in binding.unbound_reason
+    assert binding.runner_bound is True
+    assert binding.planner_name == "orca"
+    assert binding.unbound_reason is None
 
 
 def test_bind_hybrid_cell_requires_opt_in_unbound() -> None:
@@ -238,9 +247,9 @@ def test_bind_hybrid_cell_requires_opt_in_unbound() -> None:
     cell = next(c for c in cells if c.planner_group == "hybrid_rule_v0_minimal")
 
     binding = campaign_runner.bind_fixed_scope_run_cell(cell, index)
-    assert binding.runner_bound is False
-    assert binding.planner_name is None
-    assert "planner_requires_explicit_opt_in:hybrid_rule_v0_minimal" in binding.unbound_reason
+    assert binding.runner_bound is True
+    assert binding.planner_name == "hybrid_rule_v0_minimal"
+    assert binding.unbound_reason is None
 
 
 def test_bind_plan_preserves_cell_count_and_order() -> None:
@@ -257,7 +266,7 @@ def test_bind_plan_preserves_cell_count_and_order() -> None:
         assert binding.cell.seed == cell["seed"]
     # Only the social-force group is runner-bound today; ORCA/hybrid stay unbound.
     bound_groups = {b.cell.planner_group for b in bindings if b.runner_bound}
-    assert bound_groups == {"default_social_force"}
+    assert bound_groups == {"orca", "default_social_force", "hybrid_rule_v0_minimal"}
 
 
 def test_bind_missing_variant_raises_not_silently_dropped() -> None:
@@ -276,6 +285,14 @@ def test_execute_raises_on_unbound_cells_without_running_any() -> None:
     """execute_fixed_scope_cells fails closed before running a single unbound cell."""
     config = _config()
     bindings = campaign_runner.bind_fixed_scope_run_plan(_plan(), config)
+    unbound = bindings[0].__class__(
+        cell=bindings[0].cell,
+        variant=bindings[0].variant,
+        planner_name=None,
+        runner_bound=False,
+        unbound_reason="unit_test_unbound",
+    )
+    bindings = [unbound, *bindings[1:]]
     calls: list[object] = []
 
     def _recording_runner(binding: object) -> list[dict]:
@@ -294,7 +311,7 @@ def test_execute_runs_one_batch_per_bound_cell_with_correct_inputs() -> None:
     bindings = campaign_runner.bind_fixed_scope_run_plan(_plan(), config)
     bound = [b for b in bindings if b.runner_bound]
     # Sanity: 12 variants x 3 seeds for the single runner-bound planner group.
-    assert len(bound) == 36
+    assert len(bound) == 108
 
     seen: list[tuple] = []
 
@@ -304,13 +321,23 @@ def test_execute_runs_one_batch_per_bound_cell_with_correct_inputs() -> None:
 
     rows = campaign_runner.execute_fixed_scope_cells(bound, cell_runner=_fake_runner)
     assert len(rows) == len(bound)
-    assert all(name == "baseline_social_force" for name, _variant, _seed in seen)
+    assert {name for name, _variant, _seed in seen} == {
+        "orca",
+        "baseline_social_force",
+        "hybrid_rule_v0_minimal",
+    }
     # Every (variant, seed) pairing in the bound scope is driven exactly once.
     assert len(set(seen)) == len(bound)
 
 
-def test_fixed_scope_execute_cli_fails_closed_and_writes_no_rows(tmp_path: Path) -> None:
-    """--fixed-scope-execute exits non-zero and runs zero episodes on the shipped config."""
+def test_fixed_scope_execute_cli_fails_closed_and_writes_no_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--fixed-scope-execute exits non-zero and runs zero episodes when rvo2 is missing."""
+    monkeypatch.setattr(
+        "robot_sf.benchmark.fidelity_fixed_scope_preflight._rvo2_importable",
+        lambda: False,
+    )
     raw_root = tmp_path / "raw"
     exit_code = campaign_runner.main(
         [

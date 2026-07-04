@@ -10,9 +10,11 @@ import yaml
 
 from robot_sf.benchmark.hybrid_global_rl_diagnostic import ROUTE_ARM
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _load_issue_4183_runner():
-    script_path = Path("scripts/benchmark/run_hybrid_global_rl_diagnostic_issue_4183.py")
+    script_path = _REPO_ROOT / "scripts/benchmark/run_hybrid_global_rl_diagnostic_issue_4183.py"
     spec = importlib.util.spec_from_file_location("issue_4183_runner", script_path)
     assert spec is not None
     assert spec.loader is not None

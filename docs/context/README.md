@@ -350,6 +350,8 @@ knowledge, not every transient iteration detail.
   [issue_1504_ego_feature_contract.md](issue_1504_ego_feature_contract.md)
 * Issue #1543 predictive v2 negative audit:
   [issue_1543_predictive_v2_negative_audit.md](issue_1543_predictive_v2_negative_audit.md)
+* Issue #1490 predictive-v2 closure audit:
+  [issue_1490_closure_audit.md](issue_1490_closure_audit.md)
 * Issue #2275 predictive-v2 fate decision:
   [issue_2275_predictive_v2_fate.md](issue_2275_predictive_v2_fate.md)
 * Issue #2411 predictive-v2 child classification:

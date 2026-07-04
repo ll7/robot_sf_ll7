@@ -119,6 +119,10 @@ Policy caveats:
 - fallback/degraded/diagnostic status must be preserved in `claim_boundary` or a payload note.
 
 ## Current Bundles
+- `issue_1490_closure_audit_2026-07-04/`: closure-audit evidence for predictive planner v2
+  Issue #1490. Maps parent acceptance criteria to merged PR/comment evidence, classifies the issue
+  `blocked_not_closable`, and preserves the remaining blocker without running training, submitting
+  compute, or promoting a benchmark or paper-facing claim.
 
 - `issue_3300_stronger_matrix_closure_audit_2026-07-04/`: smoke/diagnostic closure
 audit bundle for issue #3300 false-positive actor-injection replay. Runs the pre-registered

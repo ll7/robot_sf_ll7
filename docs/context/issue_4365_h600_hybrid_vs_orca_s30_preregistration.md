@@ -30,11 +30,12 @@ not promote a benchmark, paper, or dissertation claim.
 
 ## Claim Boundary
 
-The intended future analysis is an F-C4(ii) separation-strengthening test: whether the targeted
-hybrid-vs-ORCA success lead survives the predeclared 30-seed schedule on the h600 surface. This PR
-does not run the campaign, submit Slurm or GPU work, archive rows, change seed schedules, or edit
-paper/dissertation claims. No claim is promoted without author sign-off and retained campaign
-evidence that satisfies the fail-closed benchmark-row policy.
+The intended future analysis is an F-C4(ii) separation-strengthening test: whether hybrid
+control-law arms retain advantage over non-hybrid baselines, here narrowed to whether the
+targeted hybrid-vs-ORCA success lead survives the predeclared 30-seed schedule on the h600
+surface. This PR does not run the campaign, submit Slurm or GPU work, archive rows, change
+seed schedules, or edit paper/dissertation claims. No claim is promoted without author
+sign-off and retained campaign evidence that satisfies the fail-closed benchmark-row policy.
 
 The full-roster S30 campaign remains deferred by the 2026-07-03 S30 ruling. This config is a
 reversible escalation path for the arm-restricted comparison only.
@@ -62,3 +63,13 @@ The canonical focused validation command is:
 ```bash
 uv run pytest tests/benchmark/test_h600_hybrid_vs_orca_s30_config.py
 ```
+
+## Terminality Status
+
+PR #4368 landed the complete issue #4365 config and preflight-only slice on 2026-07-04:
+the arm-restricted h600 S30 config, this pre-registration note, and the static identity
+test. No distinct CPU implementation follow-up remains inside this issue scope.
+
+Remaining empirical work is intentionally outside this terminality slice: authorized
+campaign submission, Slurm/GPU execution, full-roster S30 expansion, retained-row archive
+generation, benchmark interpretation, and paper/dissertation claim edits.

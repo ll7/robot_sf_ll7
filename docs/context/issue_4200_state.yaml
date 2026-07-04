@@ -1,19 +1,20 @@
-# Append-only terminality ledger for issue #4200.
+# Append-only terminality ledger issue #4200.
 #
-# Scope discipline: this file records durable issue state only. It does not
-# encode transient ready-queue routing, target hosts, packet lineage, campaign
-# launch state, benchmark results, or paper/dissertation claims.
+# Scope discipline: records durable issue state only. This does not encode
+# transient ready-queue routing, target hosts, packet lineage, campaign launch
+# state, benchmark results, paper/dissertation claims.
 issue: 4200
 state_surface: guarded_ppo_workers1_tuning_compare_config
 entries:
   - recorded_at_utc: "2026-07-04T03:34:00Z"
     status: config_contract_delivered_by_pr_4208
     summary: >-
-      Issue #4200 requested only the guarded-PPO tuning-compare workers=1
-      benchmark config plus a config-validation test. Merged PR #4208 added
-      the requested config and test on origin/main. The remaining tuning
-      comparison campaign execution is downstream work, not residual issue
-      #4200 implementation scope.
+      Issue #4200 requested only a guarded Proximal Policy Optimization
+      (guarded-PPO) tuning-compare workers=1 benchmark config plus a
+      config-validation test. Merged pull request (PR) #4208 added the
+      requested config and test on origin/main. Remaining tuning-comparison
+      campaign execution is downstream work, not residual issue #4200
+      implementation scope.
     delivered_slice:
       pr: 4208
       merged_at_utc: "2026-07-03T04:29:37Z"
@@ -25,7 +26,7 @@ entries:
       issue_contract:
         source: "https://github.com/ll7/robot_sf_ll7/issues/4200"
         criterion: >-
-          Add a workers=1 guarded-PPO tuning-compare matrix and matching
+          Add workers=1 guarded-PPO tuning-compare matrix matching the
           config-validation test; do not run a campaign or promote claims.
       merged_pr_validation:
         source: "https://github.com/ll7/robot_sf_ll7/pull/4208"
@@ -34,18 +35,55 @@ entries:
           the claim boundary to config shape/loading.
       origin_main_spot_check:
         result: >-
-          The requested config and test paths are present on origin/main after
+          Requested config and test paths are present on origin/main after
           PR #4208 merged.
     terminality_decision:
       issue_status_recommendation: close_as_completed
       why: >-
-        The issue's implementation contract was config + test only. Full
-        benchmark campaign execution, SLURM/GPU submission, and result
-        interpretation were explicitly out of scope in the issue and PR #4208.
+        Issue #4200's implementation contract was config + test only. Full
+        benchmark campaign execution, Slurm workload-manager or graphics
+        processing unit (GPU) submission, and result interpretation were
+        explicitly out of scope in the issue and PR #4208.
       remaining_work_is_separate:
         - downstream benchmark campaign launch
         - benchmark result interpretation
-        - paper or dissertation claim updates
+        - paper dissertation claim updates
+    out_of_scope_confirmed:
+      full_benchmark_campaign_run: false
+      slurm_or_gpu_submission: false
+      paper_or_dissertation_claim_edit: false
+  - recorded_at_utc: "2026-07-04T05:24:44Z"
+    status: terminality_state_verified_for_closure
+    summary: >-
+      PR #4208 delivered the static guarded-PPO workers=1 config/test slice,
+      and PR #4381 recorded the terminality decision on origin/main. Live
+      GitHub state still shows issue #4200 open with no open covering PR. This
+      entry preserves the closure boundary in the durable issue-state surface
+      because this run is not authorized to comment on or close the issue
+      directly.
+    verified_github_state:
+      issue:
+        source: "https://github.com/ll7/robot_sf_ll7/issues/4200"
+        state: open
+        checked_at_utc: "2026-07-04T05:24:44Z"
+      merged_prs:
+        - pr: 4208
+          source: "https://github.com/ll7/robot_sf_ll7/pull/4208"
+          merged_at_utc: "2026-07-03T04:29:37Z"
+          role: static_config_and_test_slice
+        - pr: 4381
+          source: "https://github.com/ll7/robot_sf_ll7/pull/4381"
+          merged_at_utc: "2026-07-04T03:52:31Z"
+          role: terminality_record
+      open_covering_prs:
+        query: 'gh pr list --repo ll7/robot_sf_ll7 --state open --search "4200 in:title,body"'
+        result: none
+    terminality_decision:
+      issue_status_recommendation: close_as_completed
+      remaining_work_is_separate:
+        - downstream benchmark campaign launch
+        - benchmark result interpretation
+        - paper dissertation claim updates
     out_of_scope_confirmed:
       full_benchmark_campaign_run: false
       slurm_or_gpu_submission: false

@@ -146,3 +146,35 @@ def test_collision_scenario_similarity_cli_writes_json_and_markdown(tmp_path: Pa
     markdown = out_md.read_text(encoding="utf-8")
     assert "Collision Scenario Similarity Report" in markdown
     assert "alpha-1" in markdown
+
+
+def test_collision_scenario_similarity_cli_fails_closed_on_bad_input(tmp_path: Path) -> None:
+    """Missing or malformed episode JSONL fails closed with exit code 2 and no output."""
+    out_json = tmp_path / "similarity.json"
+
+    missing = tmp_path / "does_not_exist.jsonl"
+    missing_exit = cli_main(
+        [
+            "collision-scenario-similarity",
+            "--episodes-jsonl",
+            str(missing),
+            "--out-json",
+            str(out_json),
+        ]
+    )
+    assert missing_exit == 2
+    assert not out_json.exists()
+
+    malformed = tmp_path / "malformed.jsonl"
+    malformed.write_text("{not valid json}\n", encoding="utf-8")
+    malformed_exit = cli_main(
+        [
+            "collision-scenario-similarity",
+            "--episodes-jsonl",
+            str(malformed),
+            "--out-json",
+            str(out_json),
+        ]
+    )
+    assert malformed_exit == 2
+    assert not out_json.exists()

@@ -1,0 +1,26 @@
+# Append-only issue state for high-churn #4359 propagation.
+# Do not record transient queue-routing state, target hosts, or private packet lineage here.
+issue: 4359
+title: "research: collision scenario similarity analysis"
+state_updates:
+  - date: "2026-07-04"
+    source: "PR #4371"
+    status: "merged"
+    summary: "Added collision-scenario-similarity CLI and collision_scenario_similarity.v1 report."
+    boundary: "Diagnostic-only analysis aid; no planner, benchmark, metric, or ranking semantics changed."
+  - date: "2026-07-04"
+    source: "PR #4386"
+    status: "merged"
+    summary: "Applied the report to a durable issue #1470 artifact and added descriptive validation blocks."
+    boundary: "External labels and trajectory fields are validation context only; unavailable fields are not imputed."
+  - date: "2026-07-04"
+    source: "PR #4410"
+    status: "merged"
+    summary: "Refreshed the durable evidence bundle and surfaced trajectory-derived metric-field availability."
+    boundary: "Trajectory-derived metric fields are diagnostic context only and are not a ranking signal."
+  - date: "2026-07-04"
+    source: "PR pending: issue-4359-record-collision-similarity-raw-array-blocker"
+    status: "proposed"
+    summary: "Records the integrated validation boundary and raw-array blocker after PRs #4371, #4386, and #4410."
+    boundary: "Durable collision-similarity metrics remain diagnostic-only; replay validation remains blocked until a durable source provides raw per-step trajectory arrays."
+    remaining_work: "Identify a durable raw trajectory-array source for the same records before making replay-level validation or stronger claim."

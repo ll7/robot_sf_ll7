@@ -41,6 +41,9 @@ class VerificationResult:
     source_path: str | None = None
     pointer: str | None = None
     reason: str | None = None
+    source_locator_status: str | None = None
+    source_locator_note: str | None = None
+    candidate_sources_reviewed: list[str] | None = None
 
 
 def _repo_root() -> Path:
@@ -123,6 +126,29 @@ def _values_equal(expected: Any, actual: Any, *, tolerance: float) -> bool:
     return expected == actual
 
 
+def _source_locator_fields(entry: dict[str, Any], entry_id: str) -> dict[str, Any]:
+    """Return optional source-locator review metadata for report rows."""
+    source_locator_status = entry.get("source_locator_status")
+    if source_locator_status is not None:
+        source_locator_status = str(source_locator_status)
+    source_locator_note = entry.get("source_locator_note")
+    if source_locator_note is not None:
+        source_locator_note = str(source_locator_note).strip() or None
+    candidate_sources_reviewed = entry.get("candidate_sources_reviewed")
+    if candidate_sources_reviewed is not None:
+        if not isinstance(candidate_sources_reviewed, list) or not all(
+            isinstance(candidate, str) for candidate in candidate_sources_reviewed
+        ):
+            raise VerificationError(
+                f"{entry_id}: candidate_sources_reviewed must be a list of strings"
+            )
+    return {
+        "source_locator_status": source_locator_status,
+        "source_locator_note": source_locator_note,
+        "candidate_sources_reviewed": candidate_sources_reviewed,
+    }
+
+
 def _verify_entry(
     entry: dict[str, Any], *, repo_root: Path, tolerance: float
 ) -> VerificationResult:
@@ -130,6 +156,8 @@ def _verify_entry(
     manuscript_locator = str(entry.get("manuscript_locator", ""))
     if not entry_id or not manuscript_locator:
         raise VerificationError("each entry requires id and manuscript_locator")
+
+    locator_fields = _source_locator_fields(entry, entry_id)
 
     expected_status = entry.get("expected_status", MATCH)
     if expected_status == NOT_VERIFIABLE:
@@ -142,6 +170,9 @@ def _verify_entry(
             manuscript_locator=manuscript_locator,
             expected=NOT_VERIFIABLE,
             reason=reason,
+            source_locator_status=locator_fields["source_locator_status"] or NOT_VERIFIABLE,
+            source_locator_note=locator_fields["source_locator_note"],
+            candidate_sources_reviewed=locator_fields["candidate_sources_reviewed"],
         )
     if expected_status != MATCH:
         raise VerificationError(f"{entry_id}: unsupported expected_status {expected_status!r}")
@@ -169,6 +200,9 @@ def _verify_entry(
         source_path=source_path,
         pointer=pointer,
         reason=reason,
+        source_locator_status=locator_fields["source_locator_status"] or MATCH,
+        source_locator_note=locator_fields["source_locator_note"],
+        candidate_sources_reviewed=locator_fields["candidate_sources_reviewed"],
     )
 
 
@@ -238,23 +272,32 @@ def write_markdown_report(report: dict[str, Any], path: Path) -> None:
         "",
         "## Results",
         "",
-        "| id | status | manuscript locator | expected | actual | source | reason |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        "| id | status | manuscript locator | expected | actual | source | locator review | reason |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for result in report["results"]:
         source = ""
         if result.get("source_path"):
             source = f"`{result['source_path']}#{result['pointer']}`"
         reason = result.get("reason") or ""
+        locator_review = result.get("source_locator_status") or ""
+        if result.get("source_locator_note"):
+            locator_review = f"{locator_review}: {result['source_locator_note']}"
+        if result.get("candidate_sources_reviewed"):
+            candidates = "; ".join(
+                f"`{candidate}`" for candidate in result["candidate_sources_reviewed"]
+            )
+            locator_review = f"{locator_review} Reviewed: {candidates}".strip()
         actual = "" if result.get("actual") is None else _format_value(result["actual"])
         lines.append(
-            "| {id} | `{status}` | {locator} | {expected} | {actual} | {source} | {reason} |".format(
+            "| {id} | `{status}` | {locator} | {expected} | {actual} | {source} | {locator_review} | {reason} |".format(
                 id=result["id"],
                 status=result["status"],
                 locator=_escape_table_cell(str(result["manuscript_locator"])),
                 expected=_escape_table_cell(_format_value(result["expected"])),
                 actual=_escape_table_cell(actual),
                 source=_escape_table_cell(source),
+                locator_review=_escape_table_cell(str(locator_review)),
                 reason=_escape_table_cell(str(reason)),
             )
         )

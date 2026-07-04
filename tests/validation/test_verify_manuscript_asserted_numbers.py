@@ -51,9 +51,16 @@ def test_checked_in_declarations_verify_and_report(tmp_path: Path) -> None:
     assert "AI-GENERATED" in text
     assert "heatmap_per_family_means_source" in text
     assert "`not_verifiable`" in text
+    assert "marker-placement placeholder" in text
+    assert "No manuscript value is treated as matched" in text
+    heatmap = next(
+        result for result in report["results"] if result["id"] == "heatmap_per_family_means_source"
+    )
+    assert heatmap["source_locator_status"] == "not_verifiable"
+    assert "docs/context/evidence/" in heatmap["candidate_sources_reviewed"]
     result_rows = [line for line in text.splitlines() if line.startswith("| ")][2:]
     assert len(result_rows) == 10
-    assert all(line.count("|") == 8 for line in result_rows)
+    assert all(line.count("|") == 9 for line in result_rows)
 
 
 def test_mismatch_returns_failure_without_silent_source_fix(tmp_path: Path) -> None:

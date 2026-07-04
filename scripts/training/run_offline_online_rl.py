@@ -327,11 +327,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """CLI entry point."""
+    """CLI entry point.
+
+    Returns a non-zero exit code when the run is blocked so non-Python callers
+    (CI, Slurm) never read a fallback/degraded run as success.
+    """
 
     args = build_arg_parser().parse_args(argv)
-    run_offline_online_experiment(args.config)
-    return 0
+    summary = run_offline_online_experiment(args.config)
+    print(_summary_markdown(summary))
+    return 0 if summary.status == "completed" else 1
 
 
 if __name__ == "__main__":  # pragma: no cover

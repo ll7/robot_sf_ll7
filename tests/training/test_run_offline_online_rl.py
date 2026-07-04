@@ -99,6 +99,10 @@ output_dir: {tmp_path / "out"}
     assert "Remaining Blockers" in report
     assert "Next Empirical Action" in report
 
+    # CLI must fail closed: a blocked run returns a non-zero exit code so CI/Slurm
+    # callers never read a fallback/degraded run as success.
+    assert run_offline_online_rl.main(["--config", str(experiment_cfg)]) == 1
+
 
 def test_orchestrator_fails_closed_when_scratch_arm_uses_offline_online(
     tmp_path: Path,

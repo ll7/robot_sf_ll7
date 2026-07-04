@@ -238,6 +238,7 @@ def build_diagnostic_report(
         "row_inclusion_rule": route_config.row_inclusion_rule,
         "paired_rows_csv": "paired_rows.csv",
     }
+    summary["integration_report"] = _integration_report_payload(summary)
 
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -259,6 +260,90 @@ def _run_status(
     if run_failures:
         return "completed_with_fail_closed_exclusions"
     return "completed"
+
+
+def _integration_report_payload(summary: dict[str, Any]) -> dict[str, Any]:
+    """Classify issue #4183 packet state for successor handoff.
+
+    Returns:
+        dict[str, Any]: Integration-report fields embedded in ``summary.json``.
+    """
+
+    remaining_blockers: list[dict[str, Any]] = []
+    intentional_exclusions = [
+        {
+            "blocker": "fallback_or_degraded_rows_excluded",
+            "status": "intentional",
+            "evidence": (
+                f"{summary['fallback_or_degraded_excluded_rows']} rows excluded from "
+                "route-conditioned effect evidence"
+            ),
+        },
+        {
+            "blocker": "pairing_errors_excluded",
+            "status": "intentional",
+            "evidence": (
+                f"{summary['invalid_pair_rows']} rows excluded because the scenario, seed, "
+                "or checkpoint pairing contract was not satisfied"
+            ),
+        },
+    ]
+
+    if summary["run_status"] == "blocked_no_valid_episode_rows":
+        remaining_blockers.append(
+            {
+                "blocker": "no_valid_episode_rows",
+                "status": "remaining",
+                "evidence": "Fail-closed runner failures produced no paired episode rows.",
+            }
+        )
+    elif summary["included_diagnostic_rows"] == 0:
+        remaining_blockers.append(
+            {
+                "blocker": "no_included_route_conditioned_effect_rows",
+                "status": "remaining",
+                "evidence": "The packet has no native, paired route-conditioned effect rows.",
+            }
+        )
+
+    preflight = summary.get("preflight", {})
+    if preflight.get("status") != "valid":
+        remaining_blockers.append(
+            {
+                "blocker": "preflight_not_valid",
+                "status": "remaining",
+                "evidence": "; ".join(preflight.get("errors", [])) or "preflight status invalid",
+            }
+        )
+
+    for failure in summary["run_failures"]:
+        blocker = {
+            "blocker": f"fail_closed_{failure.get('arm', 'unknown_arm')}",
+            "status": "remaining",
+            "evidence": str(failure.get("reason", "missing failure reason")),
+        }
+        if failure.get("row_classification"):
+            blocker["row_classification"] = str(failure["row_classification"])
+        remaining_blockers.append(blocker)
+
+    if remaining_blockers:
+        next_action = (
+            "Resolve the fail-closed runner blockers, then rerun the same paired route/occupancy "
+            "diagnostic builder so route-conditioned and unconditioned arms emit matched native "
+            "episode rows for the predeclared seeds."
+        )
+    else:
+        next_action = (
+            "Promote the diagnostic packet only after a broader predeclared benchmark campaign "
+            "with fallback/degraded exclusions and provenance matching the claim boundary."
+        )
+
+    return {
+        "blockers_remaining": remaining_blockers,
+        "blockers_new": [],
+        "intentional_exclusions": intentional_exclusions,
+        "next_empirical_action": next_action,
+    }
 
 
 def _pair_rows(
@@ -478,6 +563,7 @@ def _write_readme(path: Path, summary: dict[str, Any]) -> None:
         "Rows marked fallback, degraded, unavailable, or missing-pair are not evidence for a "
         "route-conditioned effect. They remain diagnostic rows only.",
     ]
+    _append_integration_report_section(lines, summary)
     if summary["run_failures"]:
         lines.extend(["", "## Fail-Closed Runner Failures", ""])
         for failure in summary["run_failures"]:
@@ -490,6 +576,49 @@ def _write_readme(path: Path, summary: dict[str, Any]) -> None:
                 )
             )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _append_integration_report_section(lines: list[str], summary: dict[str, Any]) -> None:
+    report = summary["integration_report"]
+    lines.extend(
+        [
+            "",
+            "## Integration Report",
+            "",
+            "This section classifies the diagnostic packet state so the next empirical action is "
+            "clear without promoting diagnostic-only evidence.",
+            "",
+            f"- New blockers: {len(report['blockers_new'])}",
+            f"- Next empirical action: {report['next_empirical_action']}",
+            "",
+            "### Blockers Remaining",
+            "",
+        ]
+    )
+    if report["blockers_remaining"]:
+        lines.extend(_blocker_lines(report["blockers_remaining"]))
+    else:
+        lines.append("- none")
+    lines.extend(["", "### New Blockers", ""])
+    if report["blockers_new"]:
+        lines.extend(_blocker_lines(report["blockers_new"]))
+    else:
+        lines.append("- none")
+    lines.extend(["", "### Intentional Exclusions", ""])
+    lines.extend(_blocker_lines(report["intentional_exclusions"]))
+
+
+def _blocker_lines(blockers: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    for blocker in blockers:
+        details = [
+            f"status={blocker['status']}",
+            f"evidence={blocker['evidence']}",
+        ]
+        if blocker.get("row_classification"):
+            details.append(f"row_classification={blocker['row_classification']}")
+        lines.append(f"- {blocker['blocker']}: " + ", ".join(details))
+    return lines
 
 
 def _sha256_file(path: Path) -> str:

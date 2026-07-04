@@ -6,8 +6,43 @@
   "claim_boundary": "diagnostic-only paired route/occupancy comparison; not benchmark-improvement or paper-facing evidence",
   "evidence_status": "diagnostic-only",
   "fallback_or_degraded_excluded_rows": 0,
-  "generated_at": "2026-07-03T04:09:47.373973+00:00",
+  "generated_at": "2026-07-04T14:51:23.030586+00:00",
   "included_diagnostic_rows": 0,
+  "integration_report": {
+    "blockers_new": [],
+    "blockers_remaining": [
+      {
+        "blocker": "no_valid_episode_rows",
+        "evidence": "Fail-closed runner failures produced no paired episode rows.",
+        "status": "remaining"
+      },
+      {
+        "blocker": "fail_closed_route_conditioned_hybrid_global_rl",
+        "evidence": "RuntimeError('hybrid_global_rl route waypoint unavailable')",
+        "row_classification": "fail_closed_no_episode_row",
+        "status": "remaining"
+      },
+      {
+        "blocker": "fail_closed_learned_local_no_route_conditioning",
+        "evidence": "RuntimeError('PPO model unavailable or prediction failed')",
+        "row_classification": "fail_closed_no_episode_row",
+        "status": "remaining"
+      }
+    ],
+    "intentional_exclusions": [
+      {
+        "blocker": "fallback_or_degraded_rows_excluded",
+        "evidence": "0 rows excluded from route-conditioned effect evidence",
+        "status": "intentional"
+      },
+      {
+        "blocker": "pairing_errors_excluded",
+        "evidence": "0 rows excluded because the scenario, seed, or checkpoint pairing contract was not satisfied",
+        "status": "intentional"
+      }
+    ],
+    "next_empirical_action": "Resolve the fail-closed runner blockers, then rerun the same paired route/occupancy diagnostic builder so route-conditioned and unconditioned arms emit matched native episode rows for the predeclared seeds."
+  },
   "invalid_pair_rows": 0,
   "issue": 4183,
   "linked_work": {

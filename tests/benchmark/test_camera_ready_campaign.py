@@ -15,6 +15,7 @@ import pytest
 import yaml
 from loguru import logger
 
+import robot_sf.benchmark.camera_ready as camera_ready_package
 import robot_sf.benchmark.camera_ready._artifacts as camera_ready_artifacts_module
 import robot_sf.benchmark.camera_ready._config as camera_ready_config_module
 import robot_sf.benchmark.camera_ready._config_types as camera_ready_config_types_module
@@ -109,7 +110,7 @@ def test_camera_ready_campaign_reexports_package_config_loader() -> None:
 
 
 def test_camera_ready_config_types_keep_legacy_import_identity() -> None:
-    """Config dataclass extraction keeps legacy import paths object-identical."""
+    """Config dataclass extraction keeps package and legacy import paths object-identical."""
     public_names = (
         "DEFAULT_SEED_SETS_PATH",
         "AmvProfileConfig",
@@ -121,12 +122,23 @@ def test_camera_ready_config_types_keep_legacy_import_identity() -> None:
     )
 
     for name in public_names:
+        assert getattr(camera_ready_package, name) is getattr(
+            camera_ready_config_types_module, name
+        )
         assert getattr(camera_ready_campaign_config_module, name) is getattr(
             camera_ready_config_types_module, name
         )
         assert getattr(camera_ready_campaign_module, name) is getattr(
             camera_ready_config_types_module, name
         )
+    assert camera_ready_package._AMV_DIMENSIONS is camera_ready_config_types_module._AMV_DIMENSIONS
+    assert (
+        camera_ready_campaign_config_module._AMV_DIMENSIONS
+        is camera_ready_config_types_module._AMV_DIMENSIONS
+    )
+    assert (
+        camera_ready_package.load_campaign_config is camera_ready_config_module.load_campaign_config
+    )
 
 
 def test_camera_ready_campaign_reexports_package_run_state_helpers() -> None:

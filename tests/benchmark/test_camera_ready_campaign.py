@@ -19,6 +19,7 @@ import robot_sf.benchmark.camera_ready as camera_ready_package
 import robot_sf.benchmark.camera_ready._artifacts as camera_ready_artifacts_module
 import robot_sf.benchmark.camera_ready._config as camera_ready_config_module
 import robot_sf.benchmark.camera_ready._config_types as camera_ready_config_types_module
+import robot_sf.benchmark.camera_ready._legacy_campaign_facade as camera_ready_legacy_facade
 import robot_sf.benchmark.camera_ready._run_state as camera_ready_run_state_module
 import robot_sf.benchmark.camera_ready_campaign as camera_ready_campaign_module
 import robot_sf.benchmark.camera_ready_campaign_config as camera_ready_campaign_config_module
@@ -107,6 +108,12 @@ def test_camera_ready_campaign_reexports_package_config_loader() -> None:
         assert getattr(camera_ready_campaign_module, helper_name) is getattr(
             camera_ready_config_module, helper_name
         )
+
+
+def test_camera_ready_campaign_legacy_module_is_package_owned_facade() -> None:
+    """Legacy campaign module resolves to the package-owned compatibility facade."""
+    assert camera_ready_campaign_module is camera_ready_legacy_facade
+    assert camera_ready_campaign_module.run_campaign is camera_ready_legacy_facade.run_campaign
 
 
 def test_camera_ready_config_types_keep_legacy_import_identity() -> None:

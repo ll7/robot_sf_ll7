@@ -4082,6 +4082,40 @@ def test_run_map_batch_rejects_unsupported_observation_override(
     assert not out_path.exists()
 
 
+def test_run_map_batch_list_input_uses_explicit_scenario_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """In-memory scenario batches should retain their source matrix path."""
+    scenario = {"name": "s1", "metadata": {"supported": True}}
+    scenario_path = tmp_path / "scenario_matrix.yaml"
+    observed: dict[str, Path] = {}
+
+    def representative_config(
+        _scenarios: list[dict[str, Any]], *, scenario_path: Path
+    ) -> dict[str, Any]:
+        observed["scenario_path"] = scenario_path
+        raise RuntimeError("stop after scenario_path capture")
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._representative_metric_affecting_config",
+        representative_config,
+    )
+
+    with pytest.raises(RuntimeError, match="stop after scenario_path capture"):
+        run_map_batch(
+            [scenario],
+            tmp_path / "episodes.jsonl",
+            schema_path=tmp_path / "schema.json",
+            scenario_path=scenario_path,
+            resume=False,
+        )
+
+    assert observed["scenario_path"] == scenario_path
+
+
 def test_run_map_batch_fail_closed_when_synthetic_actuation_profile_is_not_diff_drive(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

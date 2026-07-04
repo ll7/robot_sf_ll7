@@ -221,6 +221,21 @@ def test_ci_driver_typecheck_phase_is_explicitly_advisory() -> None:
     assert "uvx ty check . --exit-zero" in script_text
 
 
+def test_ci_driver_test_phase_runs_benchmark_reconciliation_guard() -> None:
+    """Fast-feedback must not silently skip frozen-trace reconciliation tests."""
+
+    script_text = CI_DRIVER.read_text(encoding="utf-8")
+
+    assert "run_fast_feedback_benchmark_reconciliation_guard()" in script_text
+    assert "Running fast-feedback benchmark reconciliation guard" in script_text
+    assert "tests/benchmark/test_frozen_trace_reconciliation.py" in script_text
+    assert "tests/benchmark/test_safety_wrapper_ablation_manifest.py" in script_text
+    assert '[[ "$shard_index" != "1" ]]' in script_text
+    assert "$SCRIPT_DIR/check_event_ledger_reconciliation_guard.sh" in script_text
+    assert "run_fast_feedback_benchmark_reconciliation_guard" in script_text
+    assert '"$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples' in script_text
+
+
 def test_run_ci_local_loads_default_phases_from_ci_driver() -> None:
     """Avoid duplicating the canonical CI phase list in the local wrapper."""
 

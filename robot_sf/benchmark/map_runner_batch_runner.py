@@ -156,6 +156,7 @@ def _parallel_execute_map_jobs(  # noqa: PLR0913
     workers: int,
     executor_cls,
     as_completed_fn,
+    multiprocessing_context: Any | None = None,
 ) -> tuple[int, list[dict[str, Any]], list[dict[str, Any]], bool, int, int, dict[str, Any] | None]:
     """Execute map-runner jobs in parallel and append records in job order.
 
@@ -170,7 +171,10 @@ def _parallel_execute_map_jobs(  # noqa: PLR0913
     adapter_samples_seen = False
     runtime_algorithm_contract: dict[str, Any] | None = None
     results_by_idx: dict[int, dict[str, Any]] = {}
-    with executor_cls(max_workers=int(workers)) as ex:
+    executor_kwargs: dict[str, Any] = {"max_workers": int(workers)}
+    if multiprocessing_context is not None:
+        executor_kwargs["mp_context"] = multiprocessing_context
+    with executor_cls(**executor_kwargs) as ex:
         future_to_job: dict[Any, tuple[int, dict[str, Any], int]] = {}
         for idx, (scenario, seed) in enumerate(jobs, start=1):
             fut = ex.submit(run_map_job, (scenario, seed, fixed_params))
@@ -256,6 +260,7 @@ def execute_map_jobs(  # noqa: PLR0913
     scenario_id,
     executor_cls,
     as_completed_fn,
+    multiprocessing_context: Any | None = None,
 ) -> BatchExecutionResult:
     """Execute map-runner jobs and append validated JSONL records.
 
@@ -307,6 +312,7 @@ def execute_map_jobs(  # noqa: PLR0913
             workers=workers,
             executor_cls=executor_cls,
             as_completed_fn=as_completed_fn,
+            multiprocessing_context=multiprocessing_context,
         )
     return BatchExecutionResult(
         wrote=wrote,

@@ -2288,6 +2288,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     safety_wrapper: dict[str, Any] | None = None,
     cbf_safety_filter: dict[str, Any] | None = None,
     record_simulation_step_trace: bool = False,
+    multiprocessing_context: Any | None = None,
     workers: int = 1,
     resume: bool = True,
 ) -> dict[str, Any]:
@@ -2706,6 +2707,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         scenario_id=_scenario_id,
         executor_cls=ProcessPoolExecutor,
         as_completed_fn=as_completed,
+        multiprocessing_context=multiprocessing_context,
     )
     wrote = batch_execution.wrote
     episode_records = batch_execution.episode_records

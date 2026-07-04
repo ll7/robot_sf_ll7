@@ -222,6 +222,38 @@ def test_full_campaign_plan_uses_all_preregistered_scenarios_seeds_and_arms(
     assert calls[2]["cbf_safety_filter"]["enabled"] is True
 
 
+def test_parallel_campaign_uses_spawn_multiprocessing_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Parallel co-design runs pass a spawn context into the map runner."""
+    contexts = []
+
+    def recording_runner(*args, **kwargs):
+        contexts.append(kwargs["multiprocessing_context"])
+        return _fake_run_map_batch(*args, **kwargs)
+
+    monkeypatch.setattr(_MODULE, "run_map_batch", recording_runner)
+    _MODULE.run_campaign(
+        _MODULE.parse_args(
+            [
+                "--config",
+                str(BENCHMARK_CONFIG),
+                "--hydration-manifest",
+                str(_hydration_manifest(tmp_path)),
+                "--output-root",
+                str(tmp_path / "campaign"),
+                "--smoke",
+                "--workers",
+                "2",
+            ]
+        )
+    )
+
+    assert len(contexts) == 3
+    assert {context.get_start_method() for context in contexts} == {"spawn"}
+
+
 def test_missing_hydration_manifest_fails_before_outputs(tmp_path: Path) -> None:
     """Campaign execution is fail-closed without the private hydration manifest."""
     output_root = tmp_path / "campaign"

@@ -1,36 +1,74 @@
 {
-  "classification": "blocked_pending_package_a_evidence",
-  "forbidden_actions_confirmed": {
-    "benchmark_campaign_run": false,
-    "compute_submit": false,
-    "paper_claim_edits": false,
-    "ranking_claim_promotion": false
-  },
-  "heldout_partition_manifests": [
-    {
-      "errors": [],
-      "ok": true,
-      "path": "configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml"
+    "schema_version": "package_a_decision_packet.v1",
+    "package_id": "issue_3078_package_a_readiness",
+    "manifest_path": "configs/benchmarks/issue_3078_package_a_readiness.yaml",
+    "readiness_status": "ready",
+    "classification": "blocked_pending_package_a_evidence",
+    "issue_result_classification": "blocked",
+    "issue_result_classification_reason": "required Package A evidence surfaces are absent or invalid; see reasons for the missing result store / seed-sufficiency analysis",
+    "issue_result_classification_vocabulary": [
+        "benchmark",
+        "diagnostic",
+        "negative",
+        "null",
+        "invalid",
+        "blocked"
+    ],
+    "reasons": [
+        "no canonical campaign result store supplied",
+        "no seed-sufficiency analysis report supplied"
+    ],
+    "result_stores": [],
+    "seed_analysis_reports": [],
+    "heldout_partition_manifests": [
+        {
+            "path": "configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml",
+            "ok": true,
+            "errors": []
+        }
+    ],
+    "acceptance_criteria": [
+        {
+            "criterion": "Runs seed-sufficiency analysis on retained campaign bundles.",
+            "status": "blocked",
+            "evidence": [],
+            "remaining": [
+                "provide a seed_sufficiency_analysis.v1 report from the frozen Package A protocol"
+            ]
+        },
+        {
+            "criterion": "Runs or validates held-out-family pilot rows, leakage audit, and transfer-delta outputs.",
+            "status": "blocked",
+            "evidence": [
+                "configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml"
+            ],
+            "remaining": [
+                "provide a canonical Package A result store from the frozen held-out-family run"
+            ]
+        },
+        {
+            "criterion": "Produces baseline table, seed-stability figure, transfer-delta figure, and preliminary claim card.",
+            "status": "blocked",
+            "evidence": [],
+            "remaining": [
+                "render tables and figures from the canonical result store and seed analysis",
+                "retain the reviewed Package A claim card with those inputs"
+            ]
+        },
+        {
+            "criterion": "Classifies result as benchmark, diagnostic, negative, null, invalid, or blocked durable evidence.",
+            "status": "satisfied",
+            "evidence": [
+                "issue_result_classification=blocked",
+                "required Package A evidence surfaces are absent or invalid; see reasons for the missing result store / seed-sufficiency analysis"
+            ],
+            "remaining": []
+        }
+    ],
+    "forbidden_actions_confirmed": {
+        "benchmark_campaign_run": false,
+        "compute_submit": false,
+        "ranking_claim_promotion": false,
+        "paper_claim_edits": false
     }
-  ],
-  "issue_result_classification": "blocked",
-  "issue_result_classification_reason": "required Package A evidence surfaces are absent or invalid; see reasons for the missing result store / seed-sufficiency analysis",
-  "issue_result_classification_vocabulary": [
-    "benchmark",
-    "diagnostic",
-    "negative",
-    "null",
-    "invalid",
-    "blocked"
-  ],
-  "manifest_path": "configs/benchmarks/issue_3078_package_a_readiness.yaml",
-  "package_id": "issue_3078_package_a_readiness",
-  "readiness_status": "ready",
-  "reasons": [
-    "no canonical campaign result store supplied",
-    "no seed-sufficiency analysis report supplied"
-  ],
-  "result_stores": [],
-  "schema_version": "package_a_decision_packet.v1",
-  "seed_analysis_reports": []
 }

@@ -27,3 +27,4 @@ Detailed machine-readable outputs:
 
 - `summary.json`
 - `per_representation_decisions.csv`
+- `integration_report.md`

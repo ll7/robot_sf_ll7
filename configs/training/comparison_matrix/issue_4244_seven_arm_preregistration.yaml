@@ -12,7 +12,14 @@ comparison:
   analysis_plan:
     rank_table: true
     confidence_intervals: bootstrap_95
-    mechanism_breakdown_schema_issue: 4245
+    mechanism_breakdown_schema_issue: 4242
+    mechanism_breakdown_schema_note: docs/context/issue_4242_episode_mechanism_exposure_schema.md
+    mechanism_breakdown_required_fields:
+      - mechanism_schema_version
+      - mechanism_label
+      - mechanism_confidence
+      - mechanism_evidence_mode
+      - mechanism_evidence_uri
     primary_sort_metric: success_rate
     secondary_sort_metric: collision_rate
     tertiary_sort_metric: snqi

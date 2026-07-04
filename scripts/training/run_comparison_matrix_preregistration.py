@@ -33,6 +33,14 @@ REQUIRED_STOP_RULES = {
     "failed_smoke_contract_policy",
     "missing_required_gate_policy",
 }
+MECHANISM_BREAKDOWN_SCHEMA_ISSUE = 4242
+MECHANISM_BREAKDOWN_REQUIRED_FIELDS = {
+    "mechanism_schema_version",
+    "mechanism_label",
+    "mechanism_confidence",
+    "mechanism_evidence_mode",
+    "mechanism_evidence_uri",
+}
 SAC_GATE = "sac_after_issue_4245_standalone_offline_pretraining"
 SAC_GATE_REQUIRED_ISSUE = 4245
 # Evidence pointers the SAC inclusion gate must consume from the merged issue
@@ -206,6 +214,7 @@ def _validate_contract_fields(matrix: ComparisonMatrix, *, repo_root: Path) -> N
     comparison = matrix.payload["comparison"]
     _validate_metrics(comparison)
     _validate_stop_rules(comparison)
+    _validate_analysis_plan(comparison, repo_root=repo_root)
     gates = _validate_inclusion_gates(matrix)
     _validate_arms(matrix, gates=gates)
     _validate_no_host_state(str(comparison))
@@ -235,6 +244,35 @@ def _validate_stop_rules(comparison: dict[str, Any]) -> None:
     missing_stop_rules = REQUIRED_STOP_RULES - set(stop_rules)
     if missing_stop_rules:
         raise MatrixValidationError(f"missing required stop rules: {sorted(missing_stop_rules)}")
+
+
+def _validate_analysis_plan(comparison: dict[str, Any], *, repo_root: Path) -> None:
+    """Require the analysis plan to point at landed mechanism instrumentation."""
+    analysis_plan = comparison.get("analysis_plan")
+    if not isinstance(analysis_plan, dict):
+        raise MatrixValidationError("comparison.analysis_plan must be a mapping")
+    if analysis_plan.get("rank_table") is not True:
+        raise MatrixValidationError("comparison.analysis_plan.rank_table must be true")
+    if analysis_plan.get("confidence_intervals") != "bootstrap_95":
+        raise MatrixValidationError(
+            "comparison.analysis_plan.confidence_intervals must be bootstrap_95"
+        )
+    if analysis_plan.get("mechanism_breakdown_schema_issue") != MECHANISM_BREAKDOWN_SCHEMA_ISSUE:
+        raise MatrixValidationError(
+            "comparison.analysis_plan.mechanism_breakdown_schema_issue must be 4242"
+        )
+    note_path = str(analysis_plan.get("mechanism_breakdown_schema_note", ""))
+    _resolve_repo_file(repo_root, note_path, label="mechanism_breakdown_schema_note")
+    fields = analysis_plan.get("mechanism_breakdown_required_fields")
+    if not isinstance(fields, list):
+        raise MatrixValidationError(
+            "comparison.analysis_plan.mechanism_breakdown_required_fields must be a list"
+        )
+    missing_fields = MECHANISM_BREAKDOWN_REQUIRED_FIELDS - {str(field) for field in fields}
+    if missing_fields:
+        raise MatrixValidationError(
+            f"comparison.analysis_plan missing mechanism breakdown fields: {sorted(missing_fields)}"
+        )
 
 
 def _validate_inclusion_gates(matrix: ComparisonMatrix) -> dict[str, Any]:

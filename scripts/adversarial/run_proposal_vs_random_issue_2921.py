@@ -26,6 +26,49 @@ HELD_OUT_DIAGNOSTIC_BOUNDARY = (
 )
 
 
+def classify_issue_2921_stop_rule(
+    *,
+    held_out_evidence: bool,
+    held_out_status: str | None,
+    comparison: dict[str, float | int | str],
+) -> dict[str, Any]:
+    """Return the issue #2921 continue/revise/stop decision without promoting claims.
+
+    The issue #3275 rerun can only move into the #2921 stop-rule lane after the held-out
+    diagnostic gate is open. Until then the stop rule is explicitly blocked so plumbing-only
+    deltas cannot be mistaken for proposal-model evidence.
+    """
+    if not held_out_evidence:
+        return {
+            "status": "blocked",
+            "reason": held_out_status or "held_out_evidence_not_available",
+            "evidence_tier": "analysis_only",
+            "claim_boundary": "no #2921 stop-rule decision without held-out diagnostic evidence",
+        }
+
+    mean_delta = float(comparison["mean_objective_improvement"])
+    failure_delta = int(comparison["failure_count_improvement"])
+    if mean_delta > 0.0 or failure_delta > 0:
+        status = "continue"
+        reason = "diagnostic held-out deltas are positive; run the next predeclared proof step"
+    elif mean_delta < 0.0 or failure_delta < 0:
+        status = "stop"
+        reason = "diagnostic held-out deltas are negative; do not expand this proposal lane"
+    else:
+        status = "revise"
+        reason = "diagnostic held-out deltas are neutral; revise before another empirical batch"
+
+    return {
+        "status": status,
+        "reason": reason,
+        "evidence_tier": "diagnostic_only",
+        "claim_boundary": (
+            "issue #2921 stop-rule classification from held-out diagnostic evidence only; "
+            "not benchmark, paper, or planner-performance evidence"
+        ),
+    }
+
+
 def create_synthetic_search_space() -> Any:
     """Create a default synthetic search space config for diagnostics."""
     from robot_sf.adversarial.config import RangeConfig, SearchSpaceConfig
@@ -400,6 +443,24 @@ def main() -> int:
     else:
         comparison_interpretation = "plumbing_only_circular_archive_nearness_objective"
 
+    comparison = {
+        "interpretation": comparison_interpretation,
+        "mean_objective_improvement": round(
+            proposal_metrics["mean_objective"] - random_metrics["mean_objective"], 4
+        ),
+        "max_objective_improvement": round(
+            proposal_metrics["max_objective"] - random_metrics["max_objective"], 4
+        ),
+        "failure_count_improvement": (
+            proposal_metrics["failure_count"] - random_metrics["failure_count"]
+        ),
+    }
+    issue_2921_stop_rule = classify_issue_2921_stop_rule(
+        held_out_evidence=held_out_evidence,
+        held_out_status=held_out_status,
+        comparison=comparison,
+    )
+
     report = {
         "schema_version": "adversarial_proposal_comparison.v1",
         "state": state,
@@ -418,18 +479,8 @@ def main() -> int:
         "seed": args.seed,
         "random_metrics": random_metrics,
         "proposal_metrics": proposal_metrics,
-        "comparison": {
-            "interpretation": comparison_interpretation,
-            "mean_objective_improvement": round(
-                proposal_metrics["mean_objective"] - random_metrics["mean_objective"], 4
-            ),
-            "max_objective_improvement": round(
-                proposal_metrics["max_objective"] - random_metrics["max_objective"], 4
-            ),
-            "failure_count_improvement": (
-                proposal_metrics["failure_count"] - random_metrics["failure_count"]
-            ),
-        },
+        "comparison": comparison,
+        "issue_2921_stop_rule": issue_2921_stop_rule,
         "archive_evaluation_provenance": provenance,
         "independent_outcome_evaluation": independent_evaluation,
         "null_tests": independent_evaluation.get(

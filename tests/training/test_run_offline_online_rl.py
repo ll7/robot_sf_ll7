@@ -46,10 +46,58 @@ output_dir: {tmp_path / "out"}
 
     summary = run_offline_online_rl.run_offline_online_experiment(experiment_cfg)
 
+    assert summary.status == "completed"
     assert summary.evidence_tier == "diagnostic-smoke-only"
     assert not summary.eligible_for_claim
+    assert summary.arms["offline_online"].status == "completed"
+    assert summary.arms["scratch"].status == "completed"
+    assert summary.remaining_blockers == ()
     assert (tmp_path / "out" / "issue_4012_offline_online_summary.json").exists()
     assert (tmp_path / "out" / "issue_4012_offline_online_report.md").exists()
+
+
+def test_orchestrator_writes_blocked_summary_when_arm_training_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Arm failures become explicit blockers in the diagnostic report."""
+
+    offline_cfg = tmp_path / "offline.yaml"
+    scratch_cfg = tmp_path / "scratch.yaml"
+    offline_cfg.write_text("offline\n", encoding="utf-8")
+    scratch_cfg.write_text("scratch\n", encoding="utf-8")
+    experiment_cfg = tmp_path / "experiment.yaml"
+    experiment_cfg.write_text(
+        f"""offline_online_arm:
+  config: {offline_cfg}
+scratch_arm:
+  config: {scratch_cfg}
+output_dir: {tmp_path / "out"}
+""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        run_offline_online_rl,
+        "load_sac_training_config",
+        lambda path: _TrainingConfig(enabled=Path(path) == offline_cfg),
+    )
+
+    def _run_training(config: _TrainingConfig) -> Path:
+        if config.offline_online.enabled:
+            raise RuntimeError("offline preflight rejected dataset")
+        return tmp_path / "scratch.zip"
+
+    monkeypatch.setattr(run_offline_online_rl, "run_sac_training", _run_training)
+
+    summary = run_offline_online_rl.run_offline_online_experiment(experiment_cfg)
+
+    assert summary.status == "blocked"
+    assert summary.arms["offline_online"].status == "blocked"
+    assert "offline preflight rejected dataset" in summary.remaining_blockers[0]
+    report = (tmp_path / "out" / "issue_4012_offline_online_report.md").read_text(encoding="utf-8")
+    assert "Remaining Blockers" in report
+    assert "Next Empirical Action" in report
 
 
 def test_orchestrator_fails_closed_when_scratch_arm_uses_offline_online(

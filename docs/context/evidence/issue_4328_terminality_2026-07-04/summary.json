@@ -1,13 +1,15 @@
 {
-  "schema_version": "issue_terminality_review.v1",
+  "schema_version": "issue_terminality_review.v2",
   "issue": 4328,
   "review_date": "2026-07-04",
   "status": "terminal_no_work_needed",
   "reviewed_surfaces": [
     "https://github.com/ll7/robot_sf_ll7/issues/4328",
     "https://github.com/ll7/robot_sf_ll7/pull/4336",
+    "https://github.com/ll7/robot_sf_ll7/pull/4379",
     "docs/context/evidence/issue_4328_h600_seed_sufficiency_candidates_2026-07-03/README.md",
-    "docs/context/evidence/issue_4328_h600_seed_sufficiency_candidates_2026-07-03/summary.json"
+    "docs/context/evidence/issue_4328_h600_seed_sufficiency_candidates_2026-07-03/summary.json",
+    "docs/context/evidence/issue_4328_terminality_2026-07-04/integration_report.md"
   ],
   "recorded_resolver_outcome": {
     "source_pr": 4336,
@@ -16,9 +18,25 @@
     "decision_label": "blocked_no_compatible_candidate",
     "evidence_status": "blocked"
   },
+  "terminality_record": {
+    "source_pr": 4379,
+    "merged_at": "2026-07-04T03:54:58Z",
+    "packet": "docs/context/evidence/issue_4328_terminality_2026-07-04/",
+    "latest_issue_comment_at_review": "2026-07-04T03:55:53Z",
+    "latest_issue_comment_summary": "PR #4379 recorded terminality evidence; no implementation work remains under #4328; the seed-sufficiency campaign belongs to #3556; #4328 is ready to close."
+  },
   "dedupe": {
     "open_pr_covering_issue_4328": false,
-    "open_pr_covering_exact_scope": false
+    "open_pr_covering_exact_scope": false,
+    "checked_at": "2026-07-04T05:19:20Z"
+  },
+  "fragmentation_guard": {
+    "merged_issue_prs_last_24h": [
+      4336,
+      4379
+    ],
+    "action": "consolidation_report",
+    "new_micro_guard": false
   },
   "implementation_remaining_in_issue_4328": false,
   "next_empirical_action": {

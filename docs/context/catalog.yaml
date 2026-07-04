@@ -3067,6 +3067,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4328_terminality_2026-07-04/integration_report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4328_terminality_2026-07-04/summary.json
     status: evidence
     freshness: evidence

@@ -88,6 +88,9 @@ def _fake_run_map_batch(
 ):
     """Write deterministic fake episode rows without rolling episodes."""
     assert kwargs["benchmark_profile"] == "experimental"
+    assert Path(kwargs["scenario_path"]) == (
+        REPO_ROOT / "configs/scenarios/sets/issue_2588_static_deadlock_controlled_trace.yaml"
+    )
     del schema_path, algo_config_path, kwargs
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -180,6 +183,7 @@ def test_full_campaign_plan_uses_all_preregistered_scenarios_seeds_and_arms(
                 "scenario_ids": [scenario["name"] for scenario in scenarios],
                 "seeds": [scenario["seeds"] for scenario in scenarios],
                 "benchmark_profile": kwargs["benchmark_profile"],
+                "scenario_path": Path(kwargs["scenario_path"]),
                 "safety_wrapper": kwargs["safety_wrapper"],
                 "cbf_safety_filter": kwargs["cbf_safety_filter"],
             }
@@ -210,6 +214,9 @@ def test_full_campaign_plan_uses_all_preregistered_scenarios_seeds_and_arms(
     ]
     assert calls[0]["seeds"] == [[111, 112, 113]] * 3
     assert {call["benchmark_profile"] for call in calls} == {"experimental"}
+    assert {call["scenario_path"] for call in calls} == {
+        REPO_ROOT / "configs/scenarios/sets/issue_2588_static_deadlock_controlled_trace.yaml"
+    }
     assert calls[0]["safety_wrapper"]["enabled"] is False
     assert calls[1]["safety_wrapper"]["enabled"] is True
     assert calls[2]["cbf_safety_filter"]["enabled"] is True

@@ -2263,6 +2263,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     out_path: str | Path,
     schema_path: str | Path,
     *,
+    scenario_path: str | Path | None = None,
     horizon: int | None = None,
     dt: float | None = None,
     record_forces: bool = True,
@@ -2305,7 +2306,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         scenario_path = Path(scenarios_or_path)
         scenarios = load_scenarios(scenario_path)
     else:
-        scenario_path = Path(".")
+        scenario_path = Path(scenario_path) if scenario_path is not None else Path(".")
         scenarios = list(scenarios_or_path)
 
     errors = validate_scenario_list([dict(s) for s in scenarios])

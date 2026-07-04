@@ -175,6 +175,47 @@ def test_rule_a_superseded_with_valid_replacement(tmp_path: Path) -> None:
     assert proposed_moves[0].target == "docs/context/archive/old.md"
 
 
+def test_custom_context_dir_targets_its_own_archive(tmp_path: Path) -> None:
+    """A custom --context-dir must propose moves into that context's archive, not the global one."""
+    from pathlib import Path as _Path
+
+    repo = _repo(tmp_path)
+    context_dir = _Path("custom/ctx")
+    _write(repo, "custom/ctx/old.md", "# Old\n")
+    _write(repo, "custom/ctx/new.md", "# New\n")
+    _write(repo, "custom/ctx/INDEX.md", "# Index\n")
+    _write(
+        repo,
+        "custom/ctx/catalog.yaml",
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "entries": [
+                    {
+                        "path": "custom/ctx/old.md",
+                        "status": "superseded",
+                        "freshness": "dated",
+                        "replacement": "custom/ctx/new.md",
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+    )
+    _commit(repo, "custom context superseded note", iso_date="2026-01-02T00:00:00+00:00")
+
+    _findings, proposed_moves, _conflicts = checker.check_freshness_decay(
+        repo_root=repo,
+        catalog_path=context_dir / "catalog.yaml",
+        context_dir=context_dir,
+        index_path=context_dir / "INDEX.md",
+    )
+
+    assert len(proposed_moves) == 1
+    assert proposed_moves[0].source == "custom/ctx/old.md"
+    assert proposed_moves[0].target == "custom/ctx/archive/old.md"
+
+
 def test_rule_b_stale_current_dated_note(tmp_path: Path) -> None:
     """Current dated entries trigger Rule B findings if older than max-age-days and unreferenced."""
     repo = _repo(tmp_path)

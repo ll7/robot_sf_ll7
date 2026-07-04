@@ -19,7 +19,6 @@ import yaml
 CONTEXT_DIR = Path("docs/context")
 CATALOG_PATH = CONTEXT_DIR / "catalog.yaml"
 INDEX_PATH = CONTEXT_DIR / "INDEX.md"
-ARCHIVE_DIR = CONTEXT_DIR / "archive"
 MARKDOWN_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)|<((?:\./)?[^ >]+)>")
 
 
@@ -195,6 +194,7 @@ def _check_superseded_rules(
     entries: list[dict[str, Any]],
     repo_root: Path,
     catalog_path: Path,
+    archive_dir: Path,
     proposed_moves: list[ProposedMove],
 ) -> list[Finding]:
     """Validate Rule A: superseded catalog rows must name their replacement."""
@@ -235,11 +235,11 @@ def _check_superseded_rules(
                     replacement=replacement.as_posix(),
                 )
             )
-        elif path is not None and (repo_root / path).is_file() and ARCHIVE_DIR not in path.parents:
+        elif path is not None and (repo_root / path).is_file() and archive_dir not in path.parents:
             proposed_moves.append(
                 ProposedMove(
                     source=path.as_posix(),
-                    target=(ARCHIVE_DIR / path.name).as_posix(),
+                    target=(archive_dir / path.name).as_posix(),
                     category="superseded",
                     reason="superseded note with a named, existing replacement",
                     replacement=replacement.as_posix(),
@@ -253,6 +253,7 @@ def _check_stale_rules(
     entries: list[dict[str, Any]],
     repo_root: Path,
     context_dir: Path,
+    archive_dir: Path,
     max_age_days: int,
     now: datetime,
     proposed_moves: list[ProposedMove],
@@ -291,11 +292,11 @@ def _check_stale_rules(
                     age_days=age_days,
                 )
             )
-            if ARCHIVE_DIR not in path.parents:
+            if archive_dir not in path.parents:
                 proposed_moves.append(
                     ProposedMove(
                         source=path.as_posix(),
-                        target=(ARCHIVE_DIR / path.name).as_posix(),
+                        target=(archive_dir / path.name).as_posix(),
                         category="stale",
                         reason=f"current dated context note is older than {max_age_days} days and has no inbound references",
                         confidence="review",
@@ -343,6 +344,7 @@ def check_freshness_decay(
 ) -> tuple[list[Finding], list[ProposedMove], list[str]]:
     """Scan docs/context notes for staleness, superseded replacement, and orphan signals."""
     now = (now or datetime.now(UTC)).astimezone(UTC)
+    archive_dir = context_dir / "archive"
     entries = _catalog_entries(repo_root / catalog_path)
     indexed_paths = _index_references(repo_root / index_path, context_dir=context_dir)
     tracked_notes = _tracked_context_notes(repo_root, context_dir)
@@ -351,9 +353,13 @@ def check_freshness_decay(
     proposed_moves: list[ProposedMove] = []
     conflicts: list[str] = []
 
-    findings.extend(_check_superseded_rules(entries, repo_root, catalog_path, proposed_moves))
     findings.extend(
-        _check_stale_rules(entries, repo_root, context_dir, max_age_days, now, proposed_moves)
+        _check_superseded_rules(entries, repo_root, catalog_path, archive_dir, proposed_moves)
+    )
+    findings.extend(
+        _check_stale_rules(
+            entries, repo_root, context_dir, archive_dir, max_age_days, now, proposed_moves
+        )
     )
     findings.extend(_check_orphan_rules(tracked_notes, entries, indexed_paths))
 

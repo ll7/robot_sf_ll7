@@ -323,3 +323,87 @@ def test_family_verdict_false_if_any_scenario_lane_fails(monkeypatch) -> None:
     verdict = report["family_verdicts"][0]["failure_cause_verdict"]
     assert verdict["cause"] == DYNAMIC_BLOCKING_OR_DEADLOCK
     assert verdict["comparable_for_ranking"] is False
+
+
+def test_report_summarizes_difficulty_ramp_first_failure(monkeypatch) -> None:
+    """Difficulty ramp reports ordered observed scenario variants only."""
+
+    monkeypatch.setattr(
+        "robot_sf.scenario_certification.feasibility_diagnostics.load_scenarios",
+        lambda _path: [
+            {
+                "name": "classic_bottleneck_high",
+                "simulation_config": {"max_episode_steps": 500},
+                "metadata": {"archetype": "bottleneck"},
+                "seeds": [1],
+            },
+            {
+                "name": "classic_bottleneck_low",
+                "simulation_config": {"max_episode_steps": 500},
+                "metadata": {"archetype": "bottleneck"},
+                "seeds": [1],
+            },
+            {
+                "name": "classic_bottleneck_medium",
+                "simulation_config": {"max_episode_steps": 500},
+                "metadata": {"archetype": "bottleneck"},
+                "seeds": [1],
+            },
+        ],
+    )
+
+    def runner(
+        scenario: dict[str, Any], _seed: int, _horizon: int | None, _algo: str
+    ) -> dict[str, Any]:
+        if scenario["name"].endswith("_low"):
+            return {"success": True, "termination_reason": "success"}
+        return {"success": False, "termination_reason": "timeout"}
+
+    report = run_feasibility_diagnostics(
+        FeasibilityDiagnosticConfig(
+            scenario_path=Path("fixture.yaml"),
+            families=("bottleneck",),
+            run_extended_time=True,
+        ),
+        episode_runner=runner,
+        certifier=lambda _scenario, _path: _certificate(VALID),
+    )
+
+    ramp = report["difficulty_ramp"][0]
+    assert ramp["family_id"] == "bottleneck"
+    assert ramp["claim_boundary"] == DIAGNOSTIC_CLAIM_BOUNDARY
+    assert [level["difficulty_level"] for level in ramp["levels"]] == [
+        "low",
+        "medium",
+        "high",
+    ]
+    assert ramp["first_actor_free_failure_level"] == "medium"
+    assert ramp["first_oracle_failure_level"] == "medium"
+
+
+def test_report_uses_metadata_difficulty_before_name_suffix(monkeypatch) -> None:
+    """Difficulty labels prefer explicit scenario metadata when present."""
+
+    monkeypatch.setattr(
+        "robot_sf.scenario_certification.feasibility_diagnostics.load_scenarios",
+        lambda _path: [
+            {
+                "name": "classic_head_on_corridor_low",
+                "simulation_config": {"max_episode_steps": 500},
+                "metadata": {"archetype": "head_on_corridor", "difficulty": "custom"},
+                "seeds": [1],
+            }
+        ],
+    )
+
+    report = run_feasibility_diagnostics(
+        FeasibilityDiagnosticConfig(
+            scenario_path=Path("fixture.yaml"),
+            families=("head_on_corridor",),
+        ),
+        episode_runner=lambda *_args, **_kwargs: {"success": True},
+        certifier=lambda _scenario, _path: _certificate(VALID),
+    )
+
+    assert report["scenario_rows"][0]["difficulty_level"] == "custom"
+    assert report["difficulty_ramp"][0]["levels"][0]["difficulty_level"] == "custom"

@@ -398,6 +398,110 @@
       "status": "failed"
     }
   ],
+  "difficulty_ramp": [
+    {
+      "axis": "scenario_variant_difficulty",
+      "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+      "family_id": "bottleneck",
+      "first_actor_free_failure_level": "medium",
+      "first_oracle_failure_level": "medium",
+      "levels": [
+        {
+          "actor_free_solved": true,
+          "difficulty_level": "low",
+          "extended_time_solved": true,
+          "oracle_solved": true,
+          "route_feasible": true,
+          "scenario_id": "classic_bottleneck_low"
+        },
+        {
+          "actor_free_solved": false,
+          "difficulty_level": "medium",
+          "extended_time_solved": false,
+          "oracle_solved": false,
+          "route_feasible": true,
+          "scenario_id": "classic_bottleneck_medium"
+        },
+        {
+          "actor_free_solved": false,
+          "difficulty_level": "high",
+          "extended_time_solved": false,
+          "oracle_solved": false,
+          "route_feasible": true,
+          "scenario_id": "classic_bottleneck_high"
+        },
+        {
+          "actor_free_solved": false,
+          "difficulty_level": "high",
+          "extended_time_solved": false,
+          "oracle_solved": false,
+          "route_feasible": true,
+          "scenario_id": "classic_realworld_double_bottleneck_high"
+        }
+      ],
+      "source": "scenario_metadata_or_name"
+    },
+    {
+      "axis": "scenario_variant_difficulty",
+      "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+      "family_id": "cross_trap",
+      "first_actor_free_failure_level": "low",
+      "first_oracle_failure_level": "low",
+      "levels": [
+        {
+          "actor_free_solved": false,
+          "difficulty_level": "low",
+          "extended_time_solved": false,
+          "oracle_solved": false,
+          "route_feasible": true,
+          "scenario_id": "classic_cross_trap_low"
+        },
+        {
+          "actor_free_solved": false,
+          "difficulty_level": "medium",
+          "extended_time_solved": false,
+          "oracle_solved": false,
+          "route_feasible": true,
+          "scenario_id": "classic_cross_trap_medium"
+        },
+        {
+          "actor_free_solved": false,
+          "difficulty_level": "high",
+          "extended_time_solved": false,
+          "oracle_solved": false,
+          "route_feasible": true,
+          "scenario_id": "classic_cross_trap_high"
+        }
+      ],
+      "source": "scenario_metadata_or_name"
+    },
+    {
+      "axis": "scenario_variant_difficulty",
+      "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+      "family_id": "head_on_corridor",
+      "first_actor_free_failure_level": null,
+      "first_oracle_failure_level": "medium",
+      "levels": [
+        {
+          "actor_free_solved": true,
+          "difficulty_level": "low",
+          "extended_time_solved": true,
+          "oracle_solved": true,
+          "route_feasible": true,
+          "scenario_id": "classic_head_on_corridor_low"
+        },
+        {
+          "actor_free_solved": true,
+          "difficulty_level": "medium",
+          "extended_time_solved": false,
+          "oracle_solved": false,
+          "route_feasible": true,
+          "scenario_id": "classic_head_on_corridor_medium"
+        }
+      ],
+      "source": "scenario_metadata_or_name"
+    }
+  ],
   "families": [
     "bottleneck",
     "cross_trap",
@@ -504,6 +608,7 @@
         "passed": true,
         "status": "passed"
       },
+      "difficulty_level": "low",
       "extended_time_solved": {
         "blocker": null,
         "evidence": {
@@ -734,6 +839,7 @@
         "passed": false,
         "status": "failed"
       },
+      "difficulty_level": "medium",
       "extended_time_solved": {
         "blocker": null,
         "evidence": {
@@ -965,6 +1071,7 @@
         "passed": false,
         "status": "failed"
       },
+      "difficulty_level": "high",
       "extended_time_solved": {
         "blocker": null,
         "evidence": {
@@ -1196,6 +1303,7 @@
         "passed": false,
         "status": "failed"
       },
+      "difficulty_level": "high",
       "extended_time_solved": {
         "blocker": null,
         "evidence": {
@@ -1467,6 +1575,7 @@
         "passed": false,
         "status": "failed"
       },
+      "difficulty_level": "low",
       "extended_time_solved": {
         "blocker": null,
         "evidence": {
@@ -1676,6 +1785,7 @@
         "passed": false,
         "status": "failed"
       },
+      "difficulty_level": "medium",
       "extended_time_solved": {
         "blocker": null,
         "evidence": {
@@ -1885,6 +1995,7 @@
         "passed": false,
         "status": "failed"
       },
+      "difficulty_level": "high",
       "extended_time_solved": {
         "blocker": null,
         "evidence": {
@@ -2094,6 +2205,7 @@
         "passed": true,
         "status": "passed"
       },
+      "difficulty_level": "low",
       "extended_time_solved": {
         "blocker": null,
         "evidence": {
@@ -2761,6 +2873,7 @@
         "passed": true,
         "status": "passed"
       },
+      "difficulty_level": "medium",
       "extended_time_solved": {
         "blocker": null,
         "evidence": {

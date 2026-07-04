@@ -83,6 +83,7 @@ def test_campaign_runs_real_runner_and_feeds_quantifier(tmp_path: Path) -> None:
     )
 
     assert report["issue"] == 3573
+    assert report["source_mechanism_issue"] == 3573
     assert report["evidence_tier"] == "diagnostic"
     assert "goal" in report["per_planner"]
     for condition in ("reactive", "replay"):
@@ -90,3 +91,22 @@ def test_campaign_runs_real_runner_and_feeds_quantifier(tmp_path: Path) -> None:
         assert {"collision_rate", "near_miss_rate", "min_separation_m"} <= set(block)
     assert report["assessment"]["schema_version"] == REACTIVITY_ABLATION_SCHEMA
     assert report["assessment"]["n_planners"] == 1
+
+
+def test_campaign_study_issue_and_evidence_tier_override(tmp_path: Path) -> None:
+    """CLI metadata flags override the default issue number and evidence tier."""
+    report = run_campaign(
+        Path("configs/scenarios/sets/classic_crossing_subset.yaml"),
+        seeds=[101],
+        planners=("goal",),
+        out_dir=tmp_path,
+        horizon=60,
+        dt=0.1,
+        workers=1,
+        study_issue=3637,
+        evidence_tier="seed_sufficient_candidate",
+    )
+
+    assert report["issue"] == 3637
+    assert report["source_mechanism_issue"] == 3573
+    assert report["evidence_tier"] == "seed_sufficient_candidate"

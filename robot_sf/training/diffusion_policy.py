@@ -23,6 +23,7 @@ from robot_sf.planner.diffusion_policy import (
     CLAIM_BOUNDARY,
     EVIDENCE_TIER,
     DiffusionActionSampler,
+    DiffusionPolicyAdapter,
     RobotPedestrianGraphEncoder,
 )
 
@@ -37,6 +38,7 @@ except ImportError:  # pragma: no cover
 SMOKE_MANIFEST_SCHEMA_VERSION = "diffusion_policy_smoke_manifest.v1"
 SMOKE_CONFIG_SCHEMA_VERSION = "diffusion_policy_training_smoke.v1"
 DIAGNOSTIC_PACKET_SCHEMA_VERSION = "diffusion_policy_diagnostic_packet.v1"
+MULTIMODAL_PROBE_SCHEMA_VERSION = "diffusion_policy_multimodal_probe.v1"
 
 
 @dataclass(frozen=True)
@@ -94,6 +96,7 @@ def build_diagnostic_packet(
     manifest: dict[str, Any],
     *,
     map_runner_metadata: dict[str, Any] | None = None,
+    multimodal_probe: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Summarize issue #4010 smoke/runtime artifacts as diagnostic-only evidence.
 
@@ -108,24 +111,14 @@ def build_diagnostic_packet(
         raise ValueError(
             f"Diffusion policy diagnostic packet requires {SMOKE_MANIFEST_SCHEMA_VERSION} manifest"
         )
-    artifacts = manifest.get("artifacts")
-    if not isinstance(artifacts, dict):
-        raise ValueError("Diffusion policy smoke manifest missing artifacts mapping")
-    required_artifacts = ("checkpoint_path", "normalizer_path")
-    missing_artifacts = [
-        artifact for artifact in required_artifacts if not str(artifacts.get(artifact, "")).strip()
-    ]
-    if missing_artifacts:
-        raise ValueError(
-            "Diffusion policy smoke manifest missing required artifacts: "
-            + ", ".join(missing_artifacts)
-        )
+    artifacts = _validated_smoke_artifacts(manifest)
 
     metadata = map_runner_metadata or {}
     diffusion_metadata = metadata.get("diffusion_policy", {})
     checkpoint_status = diffusion_metadata.get("checkpoint_status", "unknown")
     normalizer_status = diffusion_metadata.get("normalizer_status", "unknown")
     runtime_loaded = checkpoint_status == "checkpoint_loaded" and normalizer_status == "loaded"
+    multimodal_probe_status = _multimodal_probe_status(multimodal_probe)
     remaining_blockers: list[dict[str, str]] = []
     if not runtime_loaded:
         remaining_blockers.append(
@@ -135,24 +128,27 @@ def build_diagnostic_packet(
                 "reason": "map-runner metadata does not prove checkpoint and normalizer loaded",
             }
         )
-    remaining_blockers.extend(
-        [
-            {
-                "id": "representative_rollout",
-                "status": "remaining",
-                "reason": "no representative scenario rollout is recorded in this diagnostic packet",
-            },
+    remaining_blockers.append(
+        {
+            "id": "representative_rollout",
+            "status": "remaining",
+            "reason": "no representative scenario rollout is recorded in this diagnostic packet",
+        }
+    )
+    if not multimodal_probe_status["passed"]:
+        remaining_blockers.append(
             {
                 "id": "multimodal_action_probe",
                 "status": "remaining",
-                "reason": "candidate diversity has not yet been classified on a fixed conflict case",
-            },
-            {
-                "id": "paper_grade_benchmark_claim",
-                "status": "blocked",
-                "reason": "CPU smoke fixture is synthetic and cannot support benchmark or paper claims",
-            },
-        ]
+                "reason": str(multimodal_probe_status["reason"]),
+            }
+        )
+    remaining_blockers.append(
+        {
+            "id": "paper_grade_benchmark_claim",
+            "status": "blocked",
+            "reason": "CPU smoke fixture is synthetic and cannot support benchmark or paper claims",
+        }
     )
 
     return {
@@ -179,12 +175,202 @@ def build_diagnostic_packet(
         "acceptance_status": {
             "smoke_manifest_present": True,
             "checkpoint_backed_map_runner_load": runtime_loaded,
+            "multimodal_action_probe": multimodal_probe_status["passed"],
             "benchmark_campaign_run": False,
             "slurm_or_gpu_submission": False,
             "paper_or_dissertation_claim": False,
         },
+        "multimodal_probe": multimodal_probe_status["summary"],
         "remaining_blockers": remaining_blockers,
     }
+
+
+def build_multimodal_probe(
+    manifest: dict[str, Any],
+    *,
+    artifact_dir: Path | None = None,
+    sample_count: int = 64,
+    seed: int = 4010,
+    angular_threshold: float = 0.05,
+    slow_speed_threshold: float = 0.15,
+) -> dict[str, Any]:
+    """Classify fixed-conflict diffusion samples as diagnostic-only mode evidence.
+
+    Returns:
+        JSON-serializable report for issue #4010 multimodal action probe.
+    """
+    if sample_count <= 0:
+        raise ValueError("sample_count must be positive")
+    artifacts = _validated_smoke_artifacts(manifest)
+    artifact_base = Path(".") if artifact_dir is None else artifact_dir
+    checkpoint_path = _resolve_manifest_artifact(artifact_base, artifacts["checkpoint_path"])
+    normalizer_path = _resolve_manifest_artifact(artifact_base, artifacts["normalizer_path"])
+    config_payload = manifest.get("config", {})
+    if not isinstance(config_payload, dict):
+        config_payload = {}
+    adapter = DiffusionPolicyAdapter(
+        {
+            "checkpoint_path": str(checkpoint_path),
+            "normalizer_path": str(normalizer_path),
+            "seed": seed,
+            "deterministic": False,
+            "allow_untrained_smoke": False,
+            "max_pedestrians": int(config_payload.get("max_pedestrians", 4)),
+            "max_linear_speed": float(config_payload.get("max_linear_speed", 1.0)),
+            "max_angular_speed": float(config_payload.get("max_angular_speed", 1.0)),
+            "denoising_steps": int(config_payload.get("denoising_steps", 4)),
+            "num_action_samples": sample_count,
+            "diagnostics": {"record_raw_samples": True},
+        }
+    )
+    observation = _fixed_conflict_observation()
+    selected = adapter.plan(observation)
+    raw_samples = adapter.diagnostics()["diffusion_policy"].get("raw_samples", [])
+    labels = [
+        _classify_action_mode(sample, angular_threshold, slow_speed_threshold)
+        for sample in raw_samples
+    ]
+    mode_counts = {label: labels.count(label) for label in sorted(set(labels))}
+    non_empty_core_modes = [
+        label
+        for label in ("pass_left", "pass_right", "slow_or_wait")
+        if mode_counts.get(label, 0) > 0
+    ]
+    return {
+        "schema_version": MULTIMODAL_PROBE_SCHEMA_VERSION,
+        "issue": 4010,
+        "evidence_tier": EVIDENCE_TIER,
+        "claim_boundary": (
+            "diagnostic fixed-conflict action diversity probe only; not rollout, "
+            "benchmark, COLSON reproduction, or paper evidence"
+        ),
+        "scenario_id": "issue_4010_fixed_conflict_probe",
+        "sample_count": len(raw_samples),
+        "seed": seed,
+        "selected_action": [float(selected[0]), float(selected[1])],
+        "mode_clusters": [
+            {"label": label, "count": int(count)} for label, count in sorted(mode_counts.items())
+        ],
+        "distinct_core_mode_count": len(non_empty_core_modes),
+        "passed": len(non_empty_core_modes) >= 2,
+        "out_of_scope": [
+            "no representative scenario rollout",
+            "no benchmark campaign",
+            "no Slurm/GPU submission",
+            "no paper/dissertation claim",
+        ],
+    }
+
+
+def _validated_smoke_artifacts(manifest: dict[str, Any]) -> dict[str, str]:
+    """Return required smoke artifact paths or fail closed."""
+    if manifest.get("schema_version") != SMOKE_MANIFEST_SCHEMA_VERSION:
+        raise ValueError(
+            f"Diffusion policy probe requires {SMOKE_MANIFEST_SCHEMA_VERSION} manifest"
+        )
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, dict):
+        raise ValueError("Diffusion policy smoke manifest missing artifacts mapping")
+    required_artifacts = ("checkpoint_path", "normalizer_path")
+    missing_artifacts = [
+        artifact for artifact in required_artifacts if not str(artifacts.get(artifact, "")).strip()
+    ]
+    if missing_artifacts:
+        raise ValueError(
+            "Diffusion policy smoke manifest missing required artifacts: "
+            + ", ".join(missing_artifacts)
+        )
+    return {artifact: str(artifacts[artifact]) for artifact in required_artifacts}
+
+
+def _resolve_manifest_artifact(artifact_dir: Path, artifact_path: str) -> Path:
+    """Resolve manifest artifact path relative to its smoke artifact directory.
+
+    Returns:
+        Absolute or artifact-directory-relative path to the generated file.
+    """
+    path = Path(artifact_path).expanduser()
+    if path.is_absolute():
+        return path
+    return artifact_dir.expanduser() / path
+
+
+def _multimodal_probe_status(probe: dict[str, Any] | None) -> dict[str, Any]:
+    """Normalize optional multimodal probe payload for diagnostic packet status.
+
+    Returns:
+        Compact status payload consumed by the integration diagnostic packet.
+    """
+    if probe is None:
+        return {
+            "passed": False,
+            "reason": "candidate diversity has not yet been classified on a fixed conflict case",
+            "summary": None,
+        }
+    if probe.get("schema_version") != MULTIMODAL_PROBE_SCHEMA_VERSION:
+        return {
+            "passed": False,
+            "reason": "multimodal probe schema is not recognized",
+            "summary": {"schema_version": probe.get("schema_version"), "passed": False},
+        }
+    passed = bool(probe.get("passed"))
+    return {
+        "passed": passed,
+        "reason": (
+            "fixed-conflict probe did not record at least two non-empty core action modes"
+            if not passed
+            else "fixed-conflict probe recorded at least two non-empty core action modes"
+        ),
+        "summary": {
+            "schema_version": probe.get("schema_version"),
+            "scenario_id": probe.get("scenario_id"),
+            "sample_count": probe.get("sample_count"),
+            "mode_clusters": probe.get("mode_clusters", []),
+            "distinct_core_mode_count": probe.get("distinct_core_mode_count"),
+            "passed": passed,
+            "claim_boundary": probe.get("claim_boundary"),
+        },
+    }
+
+
+def _fixed_conflict_observation() -> dict[str, Any]:
+    """Return deterministic symmetric conflict observation for action diversity probe."""
+    return {
+        "robot": {
+            "position": [0.0, 0.0],
+            "velocity": [0.0, 0.0],
+            "goal": [2.0, 0.0],
+            "heading": 0.0,
+            "radius": 0.3,
+        },
+        "agents": [
+            {"position": [0.85, 0.18], "velocity": [-0.12, -0.02], "radius": 0.25},
+            {"position": [0.85, -0.18], "velocity": [-0.12, 0.02], "radius": 0.25},
+        ],
+        "obstacles": [],
+        "dt": 0.1,
+    }
+
+
+def _classify_action_mode(
+    action: list[float] | tuple[float, ...],
+    angular_threshold: float,
+    slow_speed_threshold: float,
+) -> str:
+    """Classify one `(linear, angular)` command into diagnostic mode labels.
+
+    Returns:
+        Diagnostic mode label for the sampled command.
+    """
+    linear = float(action[0])
+    angular = float(action[1])
+    if linear <= slow_speed_threshold:
+        return "slow_or_wait"
+    if angular >= angular_threshold:
+        return "pass_left"
+    if angular <= -angular_threshold:
+        return "pass_right"
+    return "straight_or_uncertain"
 
 
 def load_smoke_config(path: Path) -> DiffusionPolicyTrainingSmokeConfig:
@@ -484,12 +670,35 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Also write a diagnostic-only integration packet next to the smoke manifest.",
     )
+    parser.add_argument(
+        "--write-multimodal-probe",
+        action="store_true",
+        help="Also write a diagnostic-only fixed-conflict multimodal action probe.",
+    )
+    parser.add_argument(
+        "--multimodal-samples",
+        type=int,
+        default=64,
+        help="Number of fixed-conflict candidate actions to classify.",
+    )
     args = parser.parse_args(argv)
     artifacts = run_training_smoke(load_smoke_config(args.config), output_dir=args.output_dir)
     payload = {"manifest_path": str(artifacts.manifest_path)}
+    multimodal_probe = None
+    if args.write_multimodal_probe:
+        probe_path = artifacts.manifest_path.with_suffix(".multimodal_probe.json")
+        multimodal_probe = build_multimodal_probe(
+            artifacts.manifest,
+            artifact_dir=artifacts.manifest_path.parent,
+            sample_count=args.multimodal_samples,
+        )
+        probe_path.write_text(
+            json.dumps(multimodal_probe, indent=2, sort_keys=True), encoding="utf-8"
+        )
+        payload["multimodal_probe_path"] = str(probe_path)
     if args.write_diagnostic_packet:
         packet_path = artifacts.manifest_path.with_suffix(".diagnostic_packet.json")
-        packet = build_diagnostic_packet(artifacts.manifest)
+        packet = build_diagnostic_packet(artifacts.manifest, multimodal_probe=multimodal_probe)
         packet_path.write_text(json.dumps(packet, indent=2, sort_keys=True), encoding="utf-8")
         payload["diagnostic_packet_path"] = str(packet_path)
     sys.stdout.write(json.dumps(payload, sort_keys=True))

@@ -361,6 +361,7 @@ max-statements = 60
 "scripts/benchmark/run_forecast_risk_coupling_gate.py" = ["BLE001"]
 "scripts/benchmark/run_observation_noise_envelope.py" = ["BLE001"]
 "scripts/benchmark/run_observation_noise_live_replay_issue_2777.py" = ["BLE001"]
+"scripts/benchmark/run_reactivity_ablation_campaign_issue_3573.py" = ["PLR0913"]
 "scripts/benchmark_ped_policy_collisions.py" = ["BLE001"]
 "scripts/benchmark_repro_check.py" = ["BLE001"]
 "scripts/classic_benchmark_full.py" = ["BLE001"]

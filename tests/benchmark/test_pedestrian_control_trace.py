@@ -106,8 +106,14 @@ def test_build_pedestrian_control_trace_computes_clearance() -> None:
     [
         ({"robot_positions": np.zeros((1, 2), dtype=float)}, "step count must match"),
         ({"robot_positions": np.zeros((2, 3), dtype=float)}, "must have shape"),
-        ({"robot_positions": np.zeros((2, 2), dtype=float), "robot_radius": -0.1}, "must be non-negative"),
-        ({"robot_positions": np.zeros((2, 2), dtype=float), "ped_radius": -0.1}, "must be non-negative"),
+        (
+            {"robot_positions": np.zeros((2, 2), dtype=float), "robot_radius": -0.1},
+            "must be non-negative",
+        ),
+        (
+            {"robot_positions": np.zeros((2, 2), dtype=float), "ped_radius": -0.1},
+            "must be non-negative",
+        ),
     ],
 )
 def test_build_pedestrian_control_trace_rejects_invalid_robot_params(

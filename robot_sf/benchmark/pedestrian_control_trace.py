@@ -87,9 +87,7 @@ def _validate_robot_parameters(
         return None, 0.0, 0.0
     robot_pos = require_finite_array("pedestrian_control_trace.robot_positions", robot_positions)
     if robot_pos.ndim != 2 or robot_pos.shape[1] != 2:
-        raise ValueError(
-            "pedestrian_control_trace.robot_positions must have shape (steps, 2)"
-        )
+        raise ValueError("pedestrian_control_trace.robot_positions must have shape (steps, 2)")
     if robot_pos.shape[0] != positions.shape[0]:
         raise ValueError(
             "pedestrian_control_trace.robot_positions step count must match ped_positions"
@@ -154,8 +152,7 @@ def _build_pedestrian_steps(
             force = forces[step]
             force_norm = float(np.linalg.norm(force))
             require_finite_scalar(
-                "pedestrian_control_trace."
-                f"pedestrians[{simulator_index}].steps[{step}].force_norm",
+                f"pedestrian_control_trace.pedestrians[{simulator_index}].steps[{step}].force_norm",
                 force_norm,
             )
             payload.update(

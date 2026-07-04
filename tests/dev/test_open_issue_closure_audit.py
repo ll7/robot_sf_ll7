@@ -46,6 +46,30 @@ def test_collect_candidates_reports_open_issues_with_merged_title_linked_prs() -
     assert "acceptance_criteria" in candidates[0].recommended_action
 
 
+def test_collect_candidates_treats_null_fields_as_empty_not_none_string() -> None:
+    """Explicit JSON nulls must not coerce to the literal string ``"None"``."""
+    issue_row: dict[str, object] = {
+        "number": 20,
+        "title": None,
+        "url": "https://github.com/ll7/robot_sf_ll7/issues/20",
+        "state": "open",
+    }
+    pr_row: dict[str, object] = {
+        "number": 200,
+        "title": "fix #20 handler",
+        "url": "https://github.com/ll7/robot_sf_ll7/pull/200",
+        "state": "merged",
+        "closedAt": "2026-07-04T11:00:00Z",
+        "mergedAt": None,
+    }
+
+    candidates = open_issue_closure_audit.collect_candidates([issue_row], {20: [pr_row]})
+
+    assert len(candidates) == 1
+    assert candidates[0].title == ""
+    assert candidates[0].title_linked_prs[0].merged_at == "2026-07-04T11:00:00Z"
+
+
 def test_collect_candidates_classifies_parent_roadmap_without_closure() -> None:
     """Parent or roadmap issues get ledger-update guidance, not closure guidance."""
     candidates = open_issue_closure_audit.collect_candidates(

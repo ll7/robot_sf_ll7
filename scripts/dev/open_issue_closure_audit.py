@@ -69,6 +69,15 @@ class ClosureAuditCandidate:
         }
 
 
+def _optional_str(value: object) -> str:
+    """Coerce an optional JSON field to text, mapping an explicit null to ``""``.
+
+    Prevents a null field (parsed to ``None``) from being coerced to the literal
+    string ``"None"``; valid strings pass through unchanged.
+    """
+    return str(value) if value is not None else ""
+
+
 def _is_issue_url(raw_url: object) -> bool:
     """Return true only for canonical GitHub issue URLs."""
     if not isinstance(raw_url, str):
@@ -95,7 +104,7 @@ def _issue_number(row: dict[str, object]) -> int | None:
     """Parse a GitHub search issue row number."""
     if not _is_issue_url(row.get("url")):
         return None
-    if str(row.get("state", "")).lower() != "open":
+    if _optional_str(row.get("state")).lower() != "open":
         return None
     try:
         return int(row["number"])
@@ -107,9 +116,9 @@ def _pull_request(row: dict[str, object], *, issue_number: int) -> LinkedPullReq
     """Parse a merged PR row and require a title link to the issue number."""
     if not _is_pull_request_url(row.get("url")):
         return None
-    if str(row.get("state", "")).lower() != "merged":
+    if _optional_str(row.get("state")).lower() != "merged":
         return None
-    title = str(row.get("title", ""))
+    title = _optional_str(row.get("title"))
     if not _title_mentions_issue(title, issue_number):
         return None
     try:
@@ -119,8 +128,8 @@ def _pull_request(row: dict[str, object], *, issue_number: int) -> LinkedPullReq
     return LinkedPullRequest(
         number=number,
         title=title,
-        url=str(row.get("url", "")),
-        merged_at=str(row.get("mergedAt") or row.get("closedAt") or ""),
+        url=_optional_str(row.get("url")),
+        merged_at=_optional_str(row.get("mergedAt") or row.get("closedAt")),
     )
 
 
@@ -165,14 +174,13 @@ def collect_candidates(
         )
         if not linked_prs:
             continue
-        classification, recommended_action = _classification_for_issue(
-            str(issue_row.get("title", ""))
-        )
+        title = _optional_str(issue_row.get("title"))
+        classification, recommended_action = _classification_for_issue(title)
         candidates.append(
             ClosureAuditCandidate(
                 number=number,
-                title=str(issue_row.get("title", "")),
-                url=str(issue_row.get("url", "")),
+                title=title,
+                url=_optional_str(issue_row.get("url")),
                 title_linked_prs=tuple(sorted(linked_prs, key=lambda pr: pr.number)),
                 classification=classification,
                 recommended_action=recommended_action,

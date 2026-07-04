@@ -32,8 +32,19 @@ graphics processing unit (GPU) dependencies are introduced.
   - `rays`: current CPU-safe default, matching the LSTM extractor's within-observation ray sequence
   - `temporal_history`: fail-closed planned input key for the later bounded-history wrapper
 
+## 2026-07-04 PPO Training Registration Slice
+
+This successor slice registers `feature_extractor: mamba` in the standard Proximal Policy
+Optimization (PPO) training entry point and adds
+`configs/training/ppo/issue_4014_ppo_mamba_smoke.yaml`, a CPU-safe smoke config using the
+`torch_ssm_lite` backend. The issue #4244 comparison-matrix preregistration now points its
+`ppo_mamba` arm at this checked-in config instead of the placeholder.
+
+Claim boundary: this proves config parsing, policy selection, and dry-run trainability prep for the
+PPO-Mamba lane only. It does not run full PPO optimization, submit Slurm or GPU work, produce
+throughput metrics, or make benchmark, paper, or dissertation claims.
+
 ## Explicit Non-Claims
 
-This slice does not register `feature_extractor: mamba` in PPO training, does not run a benchmark
-campaign, does not submit Slurm Workload Manager or GPU jobs, and does not make paper- or
-dissertation-facing performance claims.
+This slice does not run a benchmark campaign, does not submit Slurm Workload Manager or GPU jobs,
+and does not make paper- or dissertation-facing performance claims.

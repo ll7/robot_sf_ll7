@@ -820,3 +820,76 @@ def test_blocked_artifact_summary_is_reported_for_decision_packet(tmp_path: Path
     assert summary["by_artifact_type"].get("checkpoint_set", 0) >= 1
     assert summary["by_status"].get("blocked", 0) >= 1
     assert summary["by_storage_scope"].get("worktree_local_output", 0) >= 1
+
+
+def test_integration_report_records_blocked_contract_and_next_action(tmp_path: Path):
+    """Readiness output includes one coherent issue #3204 integration handoff."""
+    config = _write_config(
+        tmp_path,
+        min_resolvable=2,
+        min_epochs=2,
+        known_blockers=[
+            {
+                "id": "missing_durable_predictive_checkpoints",
+                "status": "blocked",
+                "revival_condition": "hydrate checkpoint artifacts",
+            }
+        ],
+    )
+    data = yaml.safe_load(config.read_text(encoding="utf-8"))
+    data["blocked_artifacts"] = [
+        {
+            "id": "missing_blocked_artifact",
+            "artifact_type": "checkpoint_set",
+            "status": "blocked",
+            "storage_scope": "worktree_local_output",
+            "path_pattern": "output/tmp/predictive/**/*.pt",
+            "required_metadata": ["local_path", "proxy_training_run_id"],
+            "revival_condition": "Promote or hydrate deterministic input local paths.",
+        }
+    ]
+    config.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    registry = _write_registry(tmp_path, present_count=2, absent_count=0)
+
+    report = mod.check_readiness(
+        config_path=config,
+        registry_path=registry,
+        repo_root=_REPO_ROOT,
+    )
+
+    integration = report["integration_report"]
+    assert integration["schema_version"] == "issue_3204.proxy_checkpoint_selection_integration.v1"
+    assert integration["status"] == "blocked"
+    assert integration["new_blockers"] == []
+    assert any(
+        blocker["surface"] == "blocked_artifacts" for blocker in integration["remaining_blockers"]
+    )
+    assert "six predictive checkpoints" in integration["next_empirical_action"]
+    assert any("No training" in boundary for boundary in integration["intentional_boundaries"])
+
+
+def test_integration_report_ready_boundary_still_requires_empirical_action(tmp_path: Path):
+    """Ready integration state is still an input-readiness result, not a benchmark claim."""
+    config = _write_config(tmp_path, min_resolvable=2, min_epochs=2)
+    data = yaml.safe_load(config.read_text(encoding="utf-8"))
+    data["blocked_artifacts"] = []
+    data["known_blockers"] = []
+    config.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    registry = _write_registry(tmp_path, present_count=2, absent_count=0)
+    summary = _write_summary(tmp_path, enabled=True, pairs=[(0.5, 0.1), (0.4, 0.3)])
+
+    report = mod.check_readiness(
+        config_path=config,
+        registry_path=registry,
+        repo_root=_REPO_ROOT,
+        training_summary=summary,
+    )
+
+    assert report["status"] == "ready"
+    integration = report["integration_report"]
+    assert integration["status"] == "ready_for_empirical_action"
+    assert integration["remaining_blockers"] == []
+    assert "analyze_predictive_checkpoint_proxy.py" in integration["next_empirical_action"]
+    assert any(
+        "not a benchmark claim" in boundary for boundary in integration["intentional_boundaries"]
+    )

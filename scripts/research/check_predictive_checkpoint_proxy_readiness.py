@@ -679,6 +679,54 @@ def _blocked_proxy_metadata_result(
     )
 
 
+def _build_integration_report(
+    *,
+    status: str,
+    prerequisites: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Summarize the issue #3204 integration state without promoting evidence."""
+    remaining_blockers = [
+        {
+            "surface": key,
+            "status": payload["status"],
+            "messages": payload["messages"],
+        }
+        for key, payload in prerequisites.items()
+        if payload["status"] != STATUS_PASSED
+    ]
+    intentional_boundaries = [
+        "No checkpoint selection is performed by this preflight.",
+        "No training, benchmark campaign, Slurm/GPU job, download, or hydration is triggered.",
+        (
+            "A ready result only means the proxy-vs-ADE analyzer inputs are present; "
+            "it is not a benchmark claim."
+        ),
+    ]
+    if status == "ready":
+        next_empirical_action = (
+            "Run scripts/research/analyze_predictive_checkpoint_proxy.py on the non-degenerate "
+            "proxy-enabled training summary, then run the proxy-selected vs ADE-selected hard-seed "
+            "benchmark before making any checkpoint-selection claim."
+        )
+    else:
+        next_empirical_action = (
+            "Hydrate or promote at least six predictive checkpoints from one real training run and "
+            "provide a proxy.enabled training summary with non-degenerate hard-seed success spread; "
+            "then rerun this readiness preflight."
+        )
+    return {
+        "schema_version": "issue_3204.proxy_checkpoint_selection_integration.v1",
+        "status": "ready_for_empirical_action" if status == "ready" else "blocked",
+        "delivered_contract": (
+            "Fail-closed readiness packet for proxy-based predictive-planner checkpoint selection."
+        ),
+        "remaining_blockers": remaining_blockers,
+        "new_blockers": [],
+        "intentional_boundaries": intentional_boundaries,
+        "next_empirical_action": next_empirical_action,
+    }
+
+
 def _validate_proxy_summary_metadata(
     summary: dict[str, Any], *, require_enabled: bool
 ) -> list[str]:
@@ -833,6 +881,10 @@ def check_readiness(
             "training_summary": str(training_summary) if training_summary else None,
         },
         "prerequisites": prerequisites,
+        "integration_report": _build_integration_report(
+            status=status,
+            prerequisites=prerequisites,
+        ),
         "claim_boundary": (
             "Diagnostic readiness/preflight only. Reports whether proxy-based checkpoint "
             "selection inputs resolve locally; selects no checkpoint and asserts no benchmark "

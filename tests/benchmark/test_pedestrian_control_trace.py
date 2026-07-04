@@ -179,6 +179,9 @@ def test_generated_population_trace_labels_accept_zero_pedestrian_trace() -> Non
 
     assert trace["pedestrian_count"] == 0
     assert trace["pedestrians"] == []
+    # An explicit (empty) label feed must be attributed to the labels key, not to
+    # single_pedestrians metadata, even when it yields zero pedestrians.
+    assert trace["archetype_source"] == f"scenario.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY}"
 
 
 @pytest.mark.parametrize(

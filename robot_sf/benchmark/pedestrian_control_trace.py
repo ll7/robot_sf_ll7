@@ -157,7 +157,7 @@ def build_pedestrian_control_trace(
 
     archetype_source = (
         f"scenario.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY}"
-        if _trace_label_records(scenario)
+        if PEDESTRIAN_CONTROL_TRACE_LABELS_KEY in scenario
         else "scenario.single_pedestrians.metadata"
     )
     return {

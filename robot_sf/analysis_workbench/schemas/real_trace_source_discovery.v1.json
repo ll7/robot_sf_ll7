@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/real_trace_source_discovery.v1.json",
+  "title": "Robot SF Real Micromobility Trace Source Discovery Ledger v1",
+  "description": "Metadata-only ledger of public sources reviewed for issue #3278 real micromobility validation traces. It stores no raw trace data and makes no real-world validation claim.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "issue",
+    "discovery_status",
+    "required_targets",
+    "candidate_sources"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "real_trace_source_discovery.v1"
+    },
+    "issue": {
+      "const": 3278
+    },
+    "discovery_status": {
+      "enum": ["not_started", "in_progress", "complete"]
+    },
+    "required_targets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "candidate_sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_id",
+          "title",
+          "source_type",
+          "url_or_reference",
+          "license_status",
+          "access_status",
+          "coverage_status",
+          "covered_targets"
+        ],
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.-]+$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_type": {
+            "enum": [
+              "public_dataset",
+              "paper_supplement",
+              "repository",
+              "field_measurement",
+              "collaborator",
+              "other"
+            ]
+          },
+          "url_or_reference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "license_status": {
+            "enum": ["accepted", "permissive", "restricted", "unknown", "blocked"]
+          },
+          "access_status": {
+            "enum": ["available", "pending", "blocked", "unknown"]
+          },
+          "coverage_status": {
+            "enum": ["direct", "proxy_only", "insufficient", "unknown"]
+          },
+          "covered_targets": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "notes": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

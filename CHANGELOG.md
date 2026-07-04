@@ -33,6 +33,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added **metadata-only public-source discovery ledger checker** for real micromobility trace
+  collection issue #3278. New schema `real_trace_source_discovery.v1`, module
+  `robot_sf.analysis_workbench.real_trace_source_discovery`, CLI
+  `scripts/tools/check_real_trace_source_discovery.py`, and example ledger
+  `configs/benchmarks/issue_3278_real_trace_source_discovery_example.yaml` record candidate public
+  sources searched for `late_evasive_reaction` and `oscillatory_local_control` validation traces.
+  The checker fails closed until every required target has an available, accepted/permissive,
+  directly covering source. It stores no raw external data, downloads nothing, and makes no
+  real-world validation, calibration, benchmark, or paper-facing claim.
+
 * **Wired the CrowdBot and SCAND external datasets into the external-data setup nav and completed
   their registry traceability** (issue #4357, #4224 program). `docs/external_data_setup.md` now lists
   and tabulates `crowdbot` and `scand-demos` alongside their program siblings (SDD, ETH/UCY, ATC,

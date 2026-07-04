@@ -1,5 +1,16 @@
 """Analysis-workbench contracts and helpers."""
 
+from robot_sf.analysis_workbench.real_trace_source_discovery import (
+    REAL_TRACE_SOURCE_DISCOVERY_SCHEMA_VERSION,
+    SOURCE_DISCOVERY_EVIDENCE_BOUNDARY,
+    SOURCE_DISCOVERY_STATUS_BLOCKED,
+    SOURCE_DISCOVERY_STATUS_READY,
+    RealTraceSourceDiscoveryError,
+    RealTraceSourceDiscoveryReport,
+    SourceCandidateReport,
+    check_real_trace_source_discovery,
+    load_real_trace_source_discovery,
+)
 from robot_sf.analysis_workbench.real_trace_validation_contract import (
     CONTRACT_EVIDENCE_BOUNDARY,
     REAL_TRACE_VALIDATION_CONTRACT_SCHEMA_VERSION,
@@ -44,18 +55,25 @@ from robot_sf.analysis_workbench.trace_failure_predicates import (
 
 __all__ = [
     "CONTRACT_EVIDENCE_BOUNDARY",
+    "REAL_TRACE_SOURCE_DISCOVERY_SCHEMA_VERSION",
     "REAL_TRACE_VALIDATION_CONTRACT_SCHEMA_VERSION",
     "SIMULATION_TIMELINE_SCHEMA_FILE",
     "SIMULATION_TIMELINE_SCHEMA_VERSION",
     "SIMULATION_TRACE_EXPORT_SCHEMA_VERSION",
+    "SOURCE_DISCOVERY_EVIDENCE_BOUNDARY",
+    "SOURCE_DISCOVERY_STATUS_BLOCKED",
+    "SOURCE_DISCOVERY_STATUS_READY",
     "TRACE_ANNOTATION_SET_SCHEMA_VERSION",
     "TRACE_FAILURE_PREDICATE_SCHEMA_VERSION",
     "PredicateCompatibility",
+    "RealTraceSourceDiscoveryError",
+    "RealTraceSourceDiscoveryReport",
     "RealTraceValidationContractError",
     "RealTraceValidationContractReport",
     "SimulationTimelineValidationError",
     "SimulationTraceExport",
     "SimulationTraceExportValidationError",
+    "SourceCandidateReport",
     "TraceAnnotationSet",
     "TraceAnnotationSetValidationError",
     "TraceFailurePredicate",
@@ -63,8 +81,10 @@ __all__ = [
     "aggregate_trace_failure_predicate_tables",
     "build_simulation_timeline",
     "build_trace_failure_predicate_definitions",
+    "check_real_trace_source_discovery",
     "check_real_trace_validation_contract",
     "extract_trace_failure_predicates",
+    "load_real_trace_source_discovery",
     "load_real_trace_validation_contract",
     "load_simulation_timeline_schema",
     "load_simulation_trace_export",

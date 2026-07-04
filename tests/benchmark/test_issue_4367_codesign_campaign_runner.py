@@ -87,6 +87,7 @@ def _fake_run_map_batch(
     **kwargs,
 ):
     """Write deterministic fake episode rows without rolling episodes."""
+    assert kwargs["benchmark_profile"] == "experimental"
     del schema_path, algo_config_path, kwargs
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -145,6 +146,7 @@ def test_smoke_campaign_requires_hydration_and_writes_contract_outputs(
     assert exit_code == 0
     metadata = json.loads((output_root / "run_metadata.json").read_text(encoding="utf-8"))
     assert metadata["mode"] == "smoke"
+    assert metadata["benchmark_profile"] == "experimental"
     assert metadata["benchmark_evidence"] is False
     assert metadata["observed_episode_count"] == 3
     assert metadata["scenario_ids"] == ["classic_bottleneck_low"]
@@ -177,6 +179,7 @@ def test_full_campaign_plan_uses_all_preregistered_scenarios_seeds_and_arms(
             {
                 "scenario_ids": [scenario["name"] for scenario in scenarios],
                 "seeds": [scenario["seeds"] for scenario in scenarios],
+                "benchmark_profile": kwargs["benchmark_profile"],
                 "safety_wrapper": kwargs["safety_wrapper"],
                 "cbf_safety_filter": kwargs["cbf_safety_filter"],
             }
@@ -206,6 +209,7 @@ def test_full_campaign_plan_uses_all_preregistered_scenarios_seeds_and_arms(
         "narrow_passage",
     ]
     assert calls[0]["seeds"] == [[111, 112, 113]] * 3
+    assert {call["benchmark_profile"] for call in calls} == {"experimental"}
     assert calls[0]["safety_wrapper"]["enabled"] is False
     assert calls[1]["safety_wrapper"]["enabled"] is True
     assert calls[2]["cbf_safety_filter"]["enabled"] is True

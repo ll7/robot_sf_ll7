@@ -3035,3 +3035,7 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4366_manuscript_asserted_numbers_report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

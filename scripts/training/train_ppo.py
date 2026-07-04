@@ -59,6 +59,7 @@ from robot_sf.feature_extractors.attention_extractor import AttentionFeatureExtr
 from robot_sf.feature_extractors.grid_socnav_extractor import GridSocNavExtractor
 from robot_sf.feature_extractors.lightweight_cnn_extractor import LightweightCNNExtractor
 from robot_sf.feature_extractors.lstm_extractor import LSTMFeatureExtractor
+from robot_sf.feature_extractors.mamba_extractor import MambaFeatureExtractor
 from robot_sf.feature_extractors.mlp_extractor import MLPFeatureExtractor
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.observation_mode import ObservationMode
@@ -1225,6 +1226,7 @@ _FEATURE_EXTRACTOR_REGISTRY: dict[str, type] = {
     "attention": AttentionFeatureExtractor,
     "lightweight_cnn": LightweightCNNExtractor,
     "lstm": LSTMFeatureExtractor,
+    "mamba": MambaFeatureExtractor,
 }
 
 

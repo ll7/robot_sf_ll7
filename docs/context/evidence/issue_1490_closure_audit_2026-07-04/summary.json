@@ -1,0 +1,137 @@
+{
+  "schema_version": "issue_closure_audit.v1",
+  "issue": 1490,
+  "audit_date": "2026-07-04",
+  "status": "blocked_not_closable",
+  "claim_boundary": "Closure audit and readiness-state synthesis only; not benchmark evidence, not a training or evaluation result, and not a paper-facing claim.",
+  "acceptance_evidence": [
+    {
+      "criterion": "Same-seed baseline, obstacle-only, ego-only, and combined variants are defined.",
+      "status": "preflighted_not_executed",
+      "evidence": [
+        "PR #1520 added predictive ego feature contract and same-seed config surfaces.",
+        "PR #3769 added fail-closed readiness checks for variant completeness, provenance, ego-obstacle conditioning, and same-seed schedule metadata."
+      ]
+    },
+    {
+      "criterion": "Ego-conditioned feature contract documented and preflighted.",
+      "status": "met_for_contract",
+      "evidence": [
+        "configs/training/predictive/predictive_ego_features_contract_v1.yaml",
+        "docs/context/issue_1504_ego_feature_contract.md",
+        "tests/benchmark/test_predictive_v2_comparison_readiness.py"
+      ]
+    },
+    {
+      "criterion": "Training and evaluation artifacts are durable with manifests and checksums.",
+      "status": "blocked",
+      "evidence": [
+        "No gate-cleared four-way training/evaluation campaign exists.",
+        "PR #3833 and PR #4459 keep the decision packet no_go unless a future continue gate includes durable evidence/provenance."
+      ]
+    },
+    {
+      "criterion": "Forecast metrics and downstream navigation metrics are reported separately.",
+      "status": "partially_met_historical_only",
+      "evidence": [
+        "PR #1549 recorded obstacle-feature forecast-vs-closed-loop interpretation boundaries.",
+        "No new gate-cleared four-way comparison result exists."
+      ]
+    },
+    {
+      "criterion": "Hard-seed diagnostics are included.",
+      "status": "met_for_stop_boundary",
+      "evidence": [
+        "PR #1549 recorded hard-seed success 0.0000 for both baseline and obstacle-feature prerequisite rows.",
+        "PR #1901 recorded the local coupling gate with hard and global success 0.0000."
+      ]
+    },
+    {
+      "criterion": "Missing artifacts and fallback/degraded states are explicit stage-gate outcomes.",
+      "status": "met_for_readiness_gate",
+      "evidence": [
+        "PR #3769 added fail-closed readiness stage output.",
+        "PR #3833 added no_go decision packet fields.",
+        "PR #4459 requires durable evidence/provenance for any continue gate."
+      ]
+    },
+    {
+      "criterion": "A context note recommends continue, revise, or stop predictive planner v2.",
+      "status": "met_stop_old_expansion",
+      "evidence": [
+        "PR #2287 added docs/context/issue_2275_predictive_v2_fate.md selecting stop_old_predictive_v2_expansion.",
+        "PR #2421 classified child issues under that stop/revise decision."
+      ]
+    },
+    {
+      "criterion": "Parent issue has no routine four-way expansion without maintainer-selected revised hypothesis.",
+      "status": "met",
+      "evidence": [
+        "Issue #1490 comments on 2026-06-21 and 2026-07-04 reaffirm blocked/deferred state.",
+        "Readiness code fails closed without a provenance-backed continue gate artifact and revised-hypothesis acknowledgement."
+      ]
+    },
+    {
+      "criterion": "Lane explicitly continued, revised, downgraded, or closed.",
+      "status": "blocked_not_closable",
+      "evidence": [
+        "Lane is explicitly revised/deferred, not closed.",
+        "Remaining blocker is maintainer-selected revised hypothesis plus provenance-backed closed-loop coupling-gate artifact recommending continue, or an explicit maintainer close/downgrade decision."
+      ]
+    }
+  ],
+  "linked_prs": [
+    {
+      "number": 1520,
+      "merge_commit": "6d0ffd21a09f87bf58dc0e614e195d33e5290ed0",
+      "role": "ego feature contract and same-seed config surfaces"
+    },
+    {
+      "number": 1549,
+      "merge_commit": "7dcf7b263ddc3bd722190ff61e501a207a08d8dc",
+      "role": "negative obstacle-transfer audit"
+    },
+    {
+      "number": 1881,
+      "merge_commit": "477fa07082ef166925696518a0bb6a604a034315",
+      "role": "predictive coupling-gate machinery"
+    },
+    {
+      "number": 1901,
+      "merge_commit": "d0abb190d3aad78cc04a9391fb15a2b470a99789",
+      "role": "failed local coupling-gate evidence"
+    },
+    {
+      "number": 2287,
+      "merge_commit": "21b3632383df834409c63860efe6a5a9792fa7eb",
+      "role": "predictive-v2 fate decision"
+    },
+    {
+      "number": 2421,
+      "merge_commit": "fdf6e3059c6501dd2db95c47d05b96ed2c824750",
+      "role": "child issue classification"
+    },
+    {
+      "number": 3769,
+      "merge_commit": "47ee331a531b698a594482dbd5c5125ba1a756c9",
+      "role": "fail-closed readiness checker"
+    },
+    {
+      "number": 3833,
+      "merge_commit": "4243d354f872d2737399a5ebf7bdbcf8d3b77829",
+      "role": "decision packet no_go surface"
+    },
+    {
+      "number": 4459,
+      "merge_commit": "9637a504292db33db923612dcdc68208e1b50bb8",
+      "role": "gate-provenance hardening"
+    }
+  ],
+  "residual_blocker": "Maintainer-selected revised predictive-v2 hypothesis plus provenance-backed closed-loop coupling-gate artifact recommending continue, or an explicit maintainer close/downgrade decision.",
+  "forbidden_actions_confirmed": {
+    "compute_submit": false,
+    "merged": false,
+    "released": false,
+    "deleted": false
+  }
+}

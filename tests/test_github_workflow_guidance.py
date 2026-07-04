@@ -15,9 +15,19 @@ def test_core_guidance_surfaces_are_mcp_first_with_gh_fallback() -> None:
     stop using gh entirely.
     """
 
+    # The AGENTS.md token diet (#4464) relocated the MCP-first GitHub workflow guidance into the
+    # linked pointer file, so accept these strings either directly in AGENTS.md or via the relocated
+    # guidance that AGENTS.md references. See issue #4469.
     agents_text = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-    assert "Prefer GitHub MCP / GitHub app tools" in agents_text
-    assert "Keep the GitHub CLI (`gh`) for scripted batch" in agents_text
+    relocated_guidance_path = ROOT / "docs" / "dev" / "agents" / "relocated-agents-guidance.md"
+    relocated_text = (
+        relocated_guidance_path.read_text(encoding="utf-8")
+        if "relocated-agents-guidance.md" in agents_text and relocated_guidance_path.exists()
+        else ""
+    )
+    agents_guidance = f"{agents_text}\n{relocated_text}"
+    assert "Prefer GitHub MCP / GitHub app tools" in agents_guidance
+    assert "Keep the GitHub CLI (`gh`) for scripted batch" in agents_guidance
 
     dev_guide_text = (ROOT / "docs" / "dev_guide.md").read_text(encoding="utf-8")
     assert "Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project work" in (

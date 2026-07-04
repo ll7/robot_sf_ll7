@@ -16,6 +16,15 @@ PLAN_SCHEMA_VERSION = "robot_sf.issue_3465_topology_gate_paired_readiness.v1"
 EXPECTED_ARMS = ("topology_gate_disabled", "topology_gate_enabled")
 GATE_FLAG = "near_parity_diversity_gate_enabled"
 PAIRING_KEY_FIELDS = ("study_id", "planner", "scenario_id", "seed", "horizon")
+CORRECTIVE_REQUIRED_CAPABILITIES = frozenset(
+    {
+        "topology_guided_episode_diagnostics",
+        "topology_route_progress_corrective_metadata",
+        "topology_arbitration_weight_config",
+        "topology_command_influence_diagnostics",
+        "monotone_progress_gated_topology_packet",
+    }
+)
 TRANSIENT_QUEUE_KEYS = frozenset(
     {
         "target_host",
@@ -124,6 +133,8 @@ def build_topology_gate_readiness_packet(config: Mapping[str, Any]) -> dict[str,
     if not arm_report["complete"] or not row_report["complete"]:
         blockers.append("blocked_pairing_contract")
     status = "ready_for_paired_run" if not blockers else blockers[0]
+    corrective_packets = tuple(readiness.get("corrective_packets", ()))
+    corrective_capabilities = _corrective_capabilities(corrective_packets)
     return {
         "schema_version": PLAN_SCHEMA_VERSION,
         "source_schema_version": SCHEMA_VERSION,
@@ -134,6 +145,11 @@ def build_topology_gate_readiness_packet(config: Mapping[str, Any]) -> dict[str,
         "benchmark_evidence": False,
         "claim_boundary": validated["claim_boundary"],
         "corrective_issue": readiness["corrective_issue"],
+        "corrective_complete": readiness["corrective_complete"],
+        "corrective_waiver_recorded": readiness["corrective_waiver_recorded"],
+        "corrective_required_capabilities": sorted(CORRECTIVE_REQUIRED_CAPABILITIES),
+        "corrective_capabilities": sorted(corrective_capabilities),
+        "corrective_packets": copy.deepcopy(list(corrective_packets)),
         "topology_gate_config_hash": readiness["computed_topology_gate_config_hash"],
         "pairing_key_fields": list(PAIRING_KEY_FIELDS),
         "row_count": len(rows),
@@ -373,6 +389,28 @@ def _validate_readiness(value: Any) -> None:
             raise ValueError(f"readiness.{key} must be boolean")
     if not isinstance(value.get("known_ineligible_rows"), list):
         raise ValueError("readiness.known_ineligible_rows must be list")
+    packets = value.get("corrective_packets", [])
+    _validate_corrective_packets(packets)
+    if bool(value.get("corrective_complete")) and not bool(value.get("corrective_waiver_recorded")):
+        missing = CORRECTIVE_REQUIRED_CAPABILITIES - _corrective_capabilities(packets)
+        if missing:
+            raise ValueError(
+                "readiness.corrective_packets missing required capabilities: "
+                + ", ".join(sorted(missing))
+            )
+
+
+def _validate_corrective_packets(packets: Any) -> None:
+    if not isinstance(packets, list):
+        raise ValueError("readiness.corrective_packets must be list")
+    for index, packet in enumerate(packets):
+        if not isinstance(packet, Mapping):
+            raise ValueError(f"readiness.corrective_packets[{index}] must be mapping")
+        for key in ("pr", "capability"):
+            if not isinstance(packet.get(key), str) or not packet[key].strip():
+                raise ValueError(f"readiness.corrective_packets[{index}].{key} must be string")
+        if "issue" in packet and int(packet["issue"]) != 3463:
+            raise ValueError(f"readiness.corrective_packets[{index}].issue must be 3463")
 
 
 def _validate_output_paths(value: Any) -> None:
@@ -385,6 +423,14 @@ def _validate_output_paths(value: Any) -> None:
     ):
         if not isinstance(value.get(key), str) or not value[key].strip():
             raise ValueError(f"output_paths.{key} must be non-empty string")
+
+
+def _corrective_capabilities(packets: Sequence[Mapping[str, Any]]) -> set[str]:
+    return {
+        str(packet.get("capability", "")).strip()
+        for packet in packets
+        if str(packet.get("capability", "")).strip()
+    }
 
 
 def _repo_root_from_config_path(config_path: Path) -> Path:

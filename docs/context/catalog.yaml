@@ -1051,6 +1051,18 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3203_scenario_horizon_table_reexport_closure_2026-07-04/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3203_scenario_horizon_table_reexport_closure_2026-07-04/checksums.sha256
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3203_scenario_horizon_table_reexport_closure_2026-07-04/readiness_packet.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2686_release_0_0_2_table_bundle.md
     status: current
     freshness: evidence

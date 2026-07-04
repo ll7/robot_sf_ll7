@@ -382,6 +382,20 @@ def test_episode_keys_preserve_valid_falsy_identifiers() -> None:
     assert report["unchanged_rows"] == [{"episode_key": "0|0|0|0"}]
 
 
+def test_v1_durable_rows_pass_and_unsupported_schema_fails_closed() -> None:
+    """Frozen durable v1 ledgers remain supported, unknown schema versions do not."""
+
+    v1_row = _ledger_row("episode-1")
+    report = build_frozen_trace_reconciliation_report([v1_row], [v1_row])
+
+    assert report["unchanged_rows"] == [{"episode_key": "scenario-a|episode-1|7|demo"}]
+
+    unsupported_row = _ledger_row("episode-1")
+    unsupported_row["event_ledger"]["schema_version"] = "EpisodeEventLedger.v3"
+    with pytest.raises(ValueError, match="supported EpisodeEventLedger payload"):
+        build_frozen_trace_reconciliation_report([unsupported_row], [v1_row])
+
+
 def test_cli_jsonl_parse_error_names_path_and_line(tmp_path: Path) -> None:
     """Malformed JSONL input errors should identify the path and line."""
 

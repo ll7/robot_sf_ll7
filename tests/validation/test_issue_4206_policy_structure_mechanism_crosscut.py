@@ -161,6 +161,34 @@ def test_missing_mechanism_label_blocks_f_c4ii_tables(tmp_path: Path) -> None:
     assert _read_csv(output / "f_c4ii_probe_predictive_dominance.csv") == []
 
 
+def test_empty_present_mechanism_label_blocks_f_c4ii_tables(tmp_path: Path) -> None:
+    """Present-but-empty taxonomy fields fail through the canonical validator."""
+    confirm = tmp_path / "confirm"
+    extended = tmp_path / "extended"
+    row = _base_row("prediction_planner", 1.0)
+    row["mechanism_label"] = ""
+    _write_rows(confirm, [row])
+    _write_rows(extended, [row])
+    output = tmp_path / "evidence"
+
+    summary = _MODULE.build_packet(
+        config_path=CONFIG,
+        confirm_root=confirm,
+        extended_root=extended,
+        job13175_packet=tmp_path / "packet.json",
+        output_dir=output,
+        generated_at="2026-07-03T00:00:00Z",
+    )
+
+    assert summary["status"] == "blocked_missing_trace_verified_mechanism_labels"
+    missing = json.loads((output / "missing_instrumentation.json").read_text(encoding="utf-8"))
+    assert missing["missing_row_count"] == 2
+    assert missing["missing_rows_sample"][0]["missing_fields"] == [
+        "failure_mechanism_taxonomy: unsupported mechanism_label: ''"
+    ]
+    assert _read_csv(output / "f_c4ii_probe_predictive_dominance.csv") == []
+
+
 def test_geometry_bucket_labels_are_rejected_as_substitutes(tmp_path: Path) -> None:
     """Geometry-only labels cannot satisfy the mechanism taxonomy contract."""
     confirm = tmp_path / "confirm"

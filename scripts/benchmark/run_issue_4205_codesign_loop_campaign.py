@@ -11,6 +11,7 @@ import argparse
 import csv
 import hashlib
 import json
+import multiprocessing
 import sys
 from collections import Counter, defaultdict
 from io import StringIO
@@ -453,6 +454,7 @@ def _run_arm(  # noqa: PLR0913
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Run one campaign arm and summarize its episode rows."""
     episode_jsonl_path = output_root / "episodes" / f"{arm_key}.jsonl"
+    multiprocessing_context = multiprocessing.get_context("spawn") if workers > 1 else None
     summary = run_map_batch(
         scenarios,
         episode_jsonl_path,
@@ -467,6 +469,7 @@ def _run_arm(  # noqa: PLR0913
         safety_wrapper=arm_runtime["safety_wrapper"],
         cbf_safety_filter=arm_runtime["cbf_safety_filter"],
         record_simulation_step_trace=True,
+        multiprocessing_context=multiprocessing_context,
         workers=workers,
         resume=resume,
     )

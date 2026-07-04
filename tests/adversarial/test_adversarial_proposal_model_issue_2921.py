@@ -11,9 +11,54 @@ from robot_sf.adversarial.config import CandidateSpec, Pose2D
 from robot_sf.adversarial.proposal_model import FailureArchiveProposalModel
 from robot_sf.adversarial.scenario_manifest import AdversarialScenarioManifest
 from scripts.adversarial.run_proposal_vs_random_issue_2921 import (
+    classify_issue_2921_stop_rule,
     create_synthetic_archive,
     create_synthetic_search_space,
 )
+
+
+def _held_out_comparison(*, mean_delta: float, failure_delta: int) -> dict[str, float | int | str]:
+    """Build a comparison payload for the #2921 stop-rule classifier."""
+    return {
+        "interpretation": "independent_planner_execution_outcomes",
+        "mean_objective_improvement": mean_delta,
+        "max_objective_improvement": mean_delta,
+        "failure_count_improvement": failure_delta,
+    }
+
+
+def test_classify_issue_2921_stop_rule_blocks_without_held_out_evidence() -> None:
+    """The stop rule must fail closed to blocked when held-out evidence is unavailable."""
+    decision = classify_issue_2921_stop_rule(
+        held_out_evidence=False,
+        held_out_status="not_available_no_disjoint_split",
+        comparison=_held_out_comparison(mean_delta=5.0, failure_delta=5),
+    )
+    assert decision["status"] == "blocked"
+    assert decision["reason"] == "not_available_no_disjoint_split"
+    assert decision["evidence_tier"] == "analysis_only"
+
+
+def test_classify_issue_2921_stop_rule_stop_on_negative_deltas() -> None:
+    """Negative held-out deltas classify as stop (do not expand the proposal lane)."""
+    decision = classify_issue_2921_stop_rule(
+        held_out_evidence=True,
+        held_out_status="eligible_held_out_diagnostic",
+        comparison=_held_out_comparison(mean_delta=-0.5, failure_delta=-2),
+    )
+    assert decision["status"] == "stop"
+    assert decision["evidence_tier"] == "diagnostic_only"
+
+
+def test_classify_issue_2921_stop_rule_revise_on_neutral_deltas() -> None:
+    """Neutral (zero) held-out deltas classify as revise before another empirical batch."""
+    decision = classify_issue_2921_stop_rule(
+        held_out_evidence=True,
+        held_out_status="eligible_held_out_diagnostic",
+        comparison=_held_out_comparison(mean_delta=0.0, failure_delta=0),
+    )
+    assert decision["status"] == "revise"
+    assert decision["evidence_tier"] == "diagnostic_only"
 
 
 def _candidate(x: float, y: float, speed: float = 1.0) -> CandidateSpec:
@@ -448,6 +493,15 @@ def test_real_archive_with_independent_outcomes_becomes_diagnostic_only(
     assert report["planner_performance_claim"] is False
     assert report["result_classification"] == "held_out_diagnostic_only"
     assert report["comparison"]["interpretation"] == "independent_planner_execution_outcomes"
+    assert report["issue_2921_stop_rule"] == {
+        "status": "continue",
+        "reason": "diagnostic held-out deltas are positive; run the next predeclared proof step",
+        "evidence_tier": "diagnostic_only",
+        "claim_boundary": (
+            "issue #2921 stop-rule classification from held-out diagnostic evidence only; "
+            "not benchmark, paper, or planner-performance evidence"
+        ),
+    }
     assert report["archive_evaluation_provenance"]["held_out_evidence_status"] == (
         "eligible_held_out_diagnostic"
     )
@@ -518,6 +572,8 @@ def test_real_archive_seed_overlap_cannot_be_held_out_evidence(tmp_path: Path, m
     assert report["comparison"]["interpretation"] == (
         "independent_outcomes_rejected_by_held_out_gate"
     )
+    assert report["issue_2921_stop_rule"]["status"] == "blocked"
+    assert report["issue_2921_stop_rule"]["reason"] == "not_available_no_disjoint_split"
     assert provenance["held_out_evidence_status"] == "not_available_no_disjoint_split"
     assert provenance["disjointness_checks_passed"] is False
     assert provenance["seed_overlap"] == [100, 101, 102]
@@ -580,4 +636,8 @@ def test_real_archive_with_circular_outcomes_stays_fail_closed(tmp_path: Path, m
     )
     assert report["independent_outcome_evaluation"]["status"] == (
         "blocked_invalid_independent_outcomes"
+    )
+    assert report["issue_2921_stop_rule"]["status"] == "blocked"
+    assert report["issue_2921_stop_rule"]["reason"] == (
+        "not_available_requires_independent_planner_outcomes"
     )

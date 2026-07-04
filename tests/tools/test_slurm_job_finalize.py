@@ -158,6 +158,8 @@ def test_cli_writes_json_and_markdown(tmp_path: Path, capsys) -> None:
             str(output),
             "--markdown-output",
             str(markdown),
+            "--claim-decision",
+            "keep-diagnostic",
         ]
     )
 
@@ -165,8 +167,12 @@ def test_cli_writes_json_and_markdown(tmp_path: Path, capsys) -> None:
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["schema_version"] == "robot-sf-slurm-job-finalization.v1"
     assert payload["classification"] == "success"
+    assert payload["claim_decision"] == "keep_diagnostic"
+    assert "| `keep_diagnostic` |" in payload["ledger_update_markdown"]
     assert markdown.read_text(encoding="utf-8").startswith("SLURM finalization")
-    assert "classification: `success`" in capsys.readouterr().out
+    rendered = capsys.readouterr().out
+    assert "classification: `success`" in rendered
+    assert "claim decision: `keep_diagnostic`" in rendered
 
 
 def test_cli_returns_nonzero_for_missing_artifacts(tmp_path: Path) -> None:

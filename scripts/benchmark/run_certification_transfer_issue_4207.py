@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.certification_transfer import (
+    PREFLIGHT_OK,
     build_certification_transfer_report,
     load_yaml_mapping,
+    preflight_gate_evaluability,
     validate_gate_spec,
     validate_probe_config,
     write_certification_transfer_evidence,
@@ -24,14 +26,17 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCHEMA_PATH = REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Parse CLI arguments."""
+def build_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser."""
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True, help="Probe YAML config.")
     parser.add_argument("--gate-spec", type=Path, required=True, help="Release-gate YAML spec.")
     parser.add_argument(
-        "--output-dir", type=Path, required=True, help="Compact evidence directory."
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Compact evidence directory (required unless --validate-only is set).",
     )
     parser.add_argument(
         "--generated-at",
@@ -43,20 +48,66 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="Existing episode JSONL input for report-only mode; skips CPU episode execution.",
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--validate-only",
+        action="store_true",
+        help=(
+            "Preflight only: validate probe config, gate spec, arm resolution, and required-gate"
+            " metric evaluability without running simulation or writing evidence. Fails closed"
+            " with status 'blocked_no_evaluable_gate_family' when a required gate references a"
+            " metric the runner cannot aggregate."
+        ),
+    )
+    return parser
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse CLI arguments."""
+
+    return build_parser().parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run or summarize the CPU certification-transfer probe."""
+    """Run, summarize, or preflight the CPU certification-transfer probe."""
 
     args = parse_args(argv)
+    parser = build_parser()
     config_path = _resolve(args.config)
     gate_spec_path = _resolve(args.gate_spec)
-    output_dir = _resolve(args.output_dir, must_exist=False)
     config = load_yaml_mapping(config_path)
     probe_config = validate_probe_config(config, base_dir=config_path.parent)
     gate_spec = load_yaml_mapping(gate_spec_path)
-    validate_gate_spec(gate_spec, scenario_family=probe_config["scenario_family"])
+    normalized_gate_spec = validate_gate_spec(
+        gate_spec, scenario_family=probe_config["scenario_family"]
+    )
+
+    # Preflight: the probe declares a single, hard-coded scenario family. A required gate whose
+    # metric the runner cannot aggregate would make every cell ``not_evaluable`` (a vacuously
+    # inconclusive run), so fail closed with ``blocked_no_evaluable_gate_family`` before any
+    # simulation or evidence write (issue #4207 preflight requirement).
+    preflight = preflight_gate_evaluability(probe_config, normalized_gate_spec)
+    if preflight["status"] != PREFLIGHT_OK:
+        print(
+            json.dumps(
+                {
+                    "status": preflight["status"],
+                    "scenario_family": preflight["scenario_family"],
+                    "not_evaluable_gate_ids": preflight["not_evaluable_gate_ids"],
+                    "not_evaluable_gate_metrics": preflight["not_evaluable_gate_metrics"],
+                    "aggregatable_metrics": preflight["aggregatable_metrics"],
+                },
+                sort_keys=True,
+            )
+        )
+        return 2
+
+    if args.validate_only:
+        print(json.dumps({"status": "ok", "preflight": preflight}, sort_keys=True))
+        return 0
+
+    if args.output_dir is None:
+        parser.error("--output-dir is required unless --validate-only is set")
+    output_dir = _resolve(args.output_dir, must_exist=False)
 
     generated_at = _generated_at(args.generated_at)
     if args.episodes_jsonl is None:

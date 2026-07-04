@@ -46,11 +46,26 @@ def build_packet(manifest_path: Path, output_dir: Path) -> dict[str, Any]:
     }
     summary_path = output_dir / "summary.json"
     report_path = output_dir / "report.md"
+    readme_path = output_dir / "README.md"
+    checksums_path = output_dir / "SHA256SUMS"
     summary_path.write_text(json.dumps(packet, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    report_path.write_text(_render_markdown(packet), encoding="utf-8")
+    report_text = _render_markdown(packet)
+    report_path.write_text(report_text, encoding="utf-8")
+    readme_path.write_text(report_text, encoding="utf-8")
+    _write_checksums(
+        checksums_path,
+        [
+            summary_path,
+            report_path,
+            readme_path,
+            manifest_path,
+        ],
+    )
     packet["outputs"] = {
         "summary_json": _public_path(summary_path),
         "report_markdown": _public_path(report_path),
+        "readme_markdown": _public_path(readme_path),
+        "sha256sums": _public_path(checksums_path),
     }
     return packet
 
@@ -123,6 +138,11 @@ def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     digest.update(path.read_bytes())
     return digest.hexdigest()
+
+
+def _write_checksums(path: Path, files: list[Path]) -> None:
+    lines = [f"{_sha256(file_path)}  {_public_path(file_path)}" for file_path in files]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _public_path(path: Path) -> str:

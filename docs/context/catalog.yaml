@@ -53,6 +53,22 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4445_ch8_statistics_reproducibility/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4445_ch8_statistics_reproducibility/report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4445_ch8_statistics_reproducibility/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4445_ch8_statistics_reproducibility/SHA256SUMS
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4163_rare_event_smoke/summary.json
     status: evidence
     freshness: evidence
@@ -3156,6 +3172,18 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_4400_closure_audit_2026-07-04.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4401_closure_audit_2026-07-04.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4455_closure_audit_2026-07-04.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4425_closure_audit_2026-07-04/summary.json
     status: evidence
     freshness: evidence
     area: benchmark_evidence

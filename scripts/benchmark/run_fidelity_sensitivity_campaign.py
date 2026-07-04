@@ -35,6 +35,11 @@ from robot_sf.benchmark.fidelity_sensitivity import (
     validate_fidelity_sensitivity_config,
 )
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.planner.hybrid_rule_local_planner import (
+    HybridRuleLocalPlannerAdapter,
+    build_hybrid_rule_local_planner_config,
+)
+from robot_sf.planner.socnav import ORCAPlannerAdapter, SocNavPlannerConfig
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
 if TYPE_CHECKING:
@@ -143,7 +148,9 @@ def enumerate_fixed_scope_run_cells(
                     cells.append(
                         FixedScopeRunCell(
                             planner_group=group,
-                            algorithm=str(record.get("algorithm", group)),
+                            algorithm=str(
+                                record.get("canonical_name") or record.get("algorithm", group)
+                            ),
                             planner_available=bool(record.get("available", False)),
                             planner_tier=record.get("tier"),
                             requires_explicit_opt_in=bool(
@@ -231,6 +238,7 @@ def build_fixed_scope_run_plan(
         "primary_metric": preflight["primary_metric"],
         "blockers": blockers,
         "launch_prerequisites": launch_prerequisites,
+        "post_run_contracts": preflight["post_run_contracts"],
         "gate_reasons": gate_reasons,
         "run_cells": [asdict(cell) for cell in cells],
     }
@@ -281,7 +289,9 @@ def write_fixed_scope_run_plan(
 # resolves to them stays unbound and fails closed rather than silently running a
 # substitute planner (no silent fallback).
 RUNNER_ALGORITHM_PLANNERS: Mapping[str, str] = {
+    "orca": "orca",
     "social_force": "baseline_social_force",
+    "hybrid_rule_local_planner": "hybrid_rule_v0_minimal",
 }
 
 
@@ -679,6 +689,70 @@ def _build_observation(
     )
 
 
+class AdapterPlanner:
+    """Bridge benchmark adapter ``plan(dict)`` planners into this runner's ``step`` API."""
+
+    def __init__(self, adapter: Any) -> None:
+        """Store a benchmark adapter behind the compact runner planner API."""
+        self._adapter = adapter
+
+    def bind_env(self, env: Any) -> None:
+        """Bind environment geometry when the wrapped adapter supports it."""
+        bind_env = getattr(self._adapter, "bind_env", None)
+        if callable(bind_env):
+            bind_env(env)
+
+    def step(self, obs: Observation) -> dict[str, float]:
+        """Return a unicycle command for the compact runner episode loop."""
+        linear, angular = self._adapter.plan(_socnav_adapter_observation(obs))
+        return {"v": float(linear), "omega": float(angular)}
+
+    def close(self) -> None:
+        """Release wrapped adapter resources when available."""
+        close = getattr(self._adapter, "close", None)
+        if callable(close):
+            close()
+
+
+def _socnav_adapter_observation(obs: Observation) -> dict[str, Any]:
+    """Convert compact baseline observation into SocNav adapter observation."""
+    robot = dict(obs.robot)
+    agents = list(obs.agents)
+    return {
+        "dt": float(obs.dt),
+        "robot": {
+            "position": robot.get("position", [0.0, 0.0]),
+            "heading": [float(robot.get("heading", 0.0))],
+            "speed": robot.get("velocity", [0.0, 0.0]),
+            "radius": [float(robot.get("radius", 0.3))],
+        },
+        "goal": {"current": robot.get("goal", [0.0, 0.0])},
+        "pedestrians": {
+            "positions": [agent.get("position", [0.0, 0.0]) for agent in agents],
+            "velocities": [agent.get("velocity", [0.0, 0.0]) for agent in agents],
+            "count": [len(agents)],
+            "radius": float(agents[0].get("radius", 0.3)) if agents else 0.3,
+        },
+        "obstacles": list(obs.obstacles),
+    }
+
+
+def _load_yaml_mapping(path: pathlib.Path) -> dict[str, Any]:
+    """Load a YAML mapping for local adapter configuration."""
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict):
+        raise ValueError(f"planner config must be a mapping: {_repo_rel(path)}")
+    return data
+
+
+def _socnav_config(config: Any) -> SocNavPlannerConfig:
+    """Build a SocNav adapter config using the active scenario speed caps."""
+    return SocNavPlannerConfig(
+        max_linear_speed=float(config.robot_config.max_linear_speed),
+        max_angular_speed=float(config.robot_config.max_angular_speed),
+    )
+
+
 def _planner(planner: str, config: Any, *, seed: int) -> Any:
     if planner == "goal_seek":
         return GoalSeekPlanner(
@@ -695,6 +769,19 @@ def _planner(planner: str, config: Any, *, seed: int) -> Any:
                 omega_max=float(config.robot_config.max_angular_speed),
             ),
             seed=seed,
+        )
+    if planner == "orca":
+        return AdapterPlanner(
+            ORCAPlannerAdapter(config=_socnav_config(config), allow_fallback=False)
+        )
+    if planner == "hybrid_rule_v0_minimal":
+        algo_config = _load_yaml_mapping(REPO_ROOT / "configs/algos/hybrid_rule_v0_minimal.yaml")
+        if not bool(algo_config.get("allow_testing_algorithms")):
+            raise ValueError("hybrid_rule_v0_minimal requires allow_testing_algorithms opt-in")
+        return AdapterPlanner(
+            HybridRuleLocalPlannerAdapter(
+                config=build_hybrid_rule_local_planner_config(algo_config)
+            )
         )
     raise ValueError(f"unsupported planner: {planner}")
 
@@ -743,6 +830,9 @@ def run_episode(
     env = make_robot_env(config=config, seed=seed, debug=False)
     rng = np.random.default_rng(_stable_seed(seed, variant.key, planner_name))
     planner = _planner(planner_name, config, seed=seed)
+    bind_env = getattr(planner, "bind_env", None)
+    if callable(bind_env):
+        bind_env(env)
     reset = getattr(planner, "reset", None)
     if callable(reset):
         reset(seed=seed)
@@ -1205,6 +1295,26 @@ def _run_fixed_scope_execute(args: argparse.Namespace, config: Mapping[str, Any]
         "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
         encoding="utf-8",
     )
+    report = build_report(
+        config=config,
+        rows=rows,
+        variants=list(build_fixed_scope_variant_index(config).values()),
+        scenario_set=scenario_set,
+        horizon=int(args.horizon),
+        raw_rows_path=raw_rows_path,
+        git_provenance=_git_provenance(),
+        date=str(args.date),
+    )
+    write_outputs(
+        rows=rows,
+        report=report,
+        raw_root=raw_root,
+        evidence_dir=REPO_ROOT / args.evidence_dir,
+    )
+    if not bool(report["rank_stability"].get("rank_identifiable")):
+        reason = report["rank_stability"].get("rank_identifiability_reason", "unknown")
+        print(f"fail-closed: post-run rank identifiability recheck failed: {reason}")
+        return 1
     print(f"executed {len(rows)} fixed-scope episode rows across {len(bindings)} cells")
     print(f"wrote raw rows: {_repo_rel(raw_rows_path)}")
     return 0

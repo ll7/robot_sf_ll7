@@ -15,16 +15,17 @@ campaign before it is launched. It does three things and nothing more:
 
 It runs no benchmark episodes and promotes no claim. ``preflight_ready`` is a
 pre-registration gate only: it means the contract-level launch checks pass, not
-that the campaign runner is wired to execute the full planner set, that the
-runtime dependencies (e.g. rvo2 for ORCA) are present, or that the measured
-ranking will be identifiable at runtime. Those remain explicit
-``launch_prerequisites``. The emitted packet is a launch/readiness artifact and
+that runtime dependencies (e.g. rvo2 for ORCA) are present or that the measured
+ranking will be identifiable at runtime. Runtime dependencies remain explicit
+``launch_prerequisites``; measured rank identifiability is a post-run contract.
+The emitted packet is a launch/readiness artifact and
 is not benchmark evidence, not simulator-realism evidence, not sim-to-real
 evidence, and not paper-facing evidence.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from collections.abc import Mapping
 from pathlib import Path
@@ -90,18 +91,10 @@ def build_fixed_scope_preflight(
     )
     primary_metric = _check_primary_metric(validated, blockers=blockers)
 
-    # The bounded slice runner is intentionally not wired for the full planner
-    # set yet; surface that as a launch prerequisite so preflight_ready is never
-    # read as "the campaign will run".
-    launch_prerequisites.append(
-        "campaign_runner_not_wired_for_full_fixed_scope: "
-        "scripts/benchmark/run_fidelity_sensitivity_campaign.py currently runs a bounded "
-        "two-planner slice; extend it to the resolved planner set before launch"
-    )
-    launch_prerequisites.append(
-        "runtime_rank_identifiability_recheck_required: measured primary-metric variance must be "
+    post_run_contracts = [
+        "runtime_rank_identifiability_recheck_required: measured primary-metric variance is "
         "re-validated post-run via robot_sf/benchmark/fidelity_rank_stability.py"
-    )
+    ]
 
     decision = DECISION_BLOCKED if blockers else DECISION_READY
 
@@ -121,6 +114,7 @@ def build_fixed_scope_preflight(
         "primary_metric": primary_metric,
         "blockers": blockers,
         "launch_prerequisites": launch_prerequisites,
+        "post_run_contracts": post_run_contracts,
         "next_command_template": (
             "uv run python scripts/benchmark/run_fidelity_sensitivity_campaign.py --config "
             f"{config_path} --out output/fidelity_sensitivity/"
@@ -195,6 +189,9 @@ def _resolve_planner_groups(
     algorithm_map = fixed_scope.get("planner_algorithms")
     if algorithm_map is not None and not isinstance(algorithm_map, Mapping):
         raise ValueError("fixed_scope.planner_algorithms must be a mapping when set")
+    opt_in_map = fixed_scope.get("planner_opt_ins") or {}
+    if not isinstance(opt_in_map, Mapping):
+        raise ValueError("fixed_scope.planner_opt_ins must be a mapping when set")
 
     resolution: list[dict[str, Any]] = []
     for group in planner_groups:
@@ -213,7 +210,9 @@ def _resolve_planner_groups(
                 available=False,
                 canonical_name=None,
                 tier=None,
+                catalog_requires_explicit_opt_in=None,
                 requires_explicit_opt_in=None,
+                explicit_opt_in_satisfied=False,
                 note="unresolved: no algorithm-readiness catalog entry",
             )
             blockers.append(f"planner_unavailable:{group_name}")
@@ -222,29 +221,51 @@ def _resolve_planner_groups(
                 available=False,
                 canonical_name=readiness.canonical_name,
                 tier=readiness.tier,
+                catalog_requires_explicit_opt_in=readiness.requires_explicit_opt_in,
                 requires_explicit_opt_in=readiness.requires_explicit_opt_in,
+                explicit_opt_in_satisfied=False,
                 note=readiness.note,
             )
             blockers.append(f"planner_placeholder:{group_name}")
         else:
+            opt_in_satisfied = not readiness.requires_explicit_opt_in or _explicit_opt_in_satisfied(
+                opt_in_map, group_name
+            )
             record.update(
                 available=True,
                 canonical_name=readiness.canonical_name,
                 tier=readiness.tier,
-                requires_explicit_opt_in=readiness.requires_explicit_opt_in,
+                catalog_requires_explicit_opt_in=readiness.requires_explicit_opt_in,
+                requires_explicit_opt_in=readiness.requires_explicit_opt_in
+                and not opt_in_satisfied,
+                explicit_opt_in_satisfied=opt_in_satisfied,
                 note=readiness.note,
             )
-            if readiness.requires_explicit_opt_in:
+            if readiness.requires_explicit_opt_in and not opt_in_satisfied:
                 launch_prerequisites.append(
                     f"planner_requires_explicit_opt_in:{group_name} "
                     "(set allow_testing_algorithms in the algo config before launch)"
                 )
             if readiness.canonical_name == "orca":
-                launch_prerequisites.append(
-                    "planner_runtime_dependency:orca requires rvo2 or an explicit fallback policy"
-                )
+                if not _rvo2_importable():
+                    launch_prerequisites.append(f"planner_requires_rvo2:{group_name}")
         resolution.append(record)
     return resolution
+
+
+def _explicit_opt_in_satisfied(opt_in_map: Mapping[str, Any], group_name: str) -> bool:
+    """Return whether a planner group carries the fixed-scope explicit opt-in."""
+    raw = opt_in_map.get(group_name)
+    if raw is True:
+        return True
+    if isinstance(raw, Mapping):
+        return bool(raw.get("allow_testing_algorithms"))
+    return False
+
+
+def _rvo2_importable() -> bool:
+    """Return whether the ORCA runtime dependency is importable."""
+    return importlib.util.find_spec("rvo2") is not None
 
 
 def _check_primary_metric(

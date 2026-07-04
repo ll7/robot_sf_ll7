@@ -151,8 +151,38 @@ def test_experimental_planner_recorded_as_launch_prerequisite() -> None:
     assert packet["decision"] == DECISION_READY
     prereqs = "\n".join(packet["launch_prerequisites"])
     assert "planner_requires_explicit_opt_in:hybrid_rule_v0_minimal" in prereqs
-    # The runner-not-wired prerequisite always guards against false-ready reads.
-    assert "campaign_runner_not_wired_for_full_fixed_scope" in prereqs
+
+
+def test_experimental_planner_opt_in_satisfies_launch_prerequisite() -> None:
+    """Fixed-scope opt-in binds hybrid-rule planner without leaving a stale gate."""
+    config = _base_config()
+    config["fixed_scope"]["planner_groups"].append("hybrid_rule_v0_minimal")
+    config["fixed_scope"]["planner_algorithms"]["hybrid_rule_v0_minimal"] = "hybrid_rule_v0_minimal"
+    config["fixed_scope"]["planner_opt_ins"] = {
+        "hybrid_rule_v0_minimal": {"allow_testing_algorithms": True}
+    }
+    packet = _build(config)
+    prereqs = "\n".join(packet["launch_prerequisites"])
+    assert "planner_requires_explicit_opt_in:hybrid_rule_v0_minimal" not in prereqs
+    record = next(
+        item
+        for item in packet["planner_resolution"]
+        if item["planner_group"] == "hybrid_rule_v0_minimal"
+    )
+    assert record["catalog_requires_explicit_opt_in"] is True
+    assert record["explicit_opt_in_satisfied"] is True
+    assert record["requires_explicit_opt_in"] is False
+
+
+def test_orca_rvo2_missing_stays_launch_prerequisite(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ORCA binds only when rvo2 is importable; otherwise launch remains fail-closed."""
+    monkeypatch.setattr(
+        "robot_sf.benchmark.fidelity_fixed_scope_preflight._rvo2_importable",
+        lambda: False,
+    )
+    packet = _build(_base_config())
+    prereqs = "\n".join(packet["launch_prerequisites"])
+    assert "planner_requires_rvo2:orca" in prereqs
 
 
 def test_bad_planner_algorithms_type_raises() -> None:

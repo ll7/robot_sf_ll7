@@ -1,0 +1,32 @@
+schema_version: mean_matched_heterogeneity_harness.config.v1
+issue: 3574
+claim_boundary: harness_only_no_ablation_result
+trace_metric_keys:
+  - clearance_m
+planners:
+  - key: goal
+    algo: goal
+  - key: social_force
+    algo: social_force
+seeds:
+  - 101
+  - 102
+scenarios:
+  - id: issue_3574_classic_crossing_density_002
+    density: 0.02
+    population_size: 12
+    archetype_seed: 3574
+    composition:
+      cautious: 0.25
+      standard: 0.5
+      hurried: 0.25
+    archetypes:
+      cautious:
+        desired_speed_factor: 0.7
+        radius_m: 0.35
+      standard:
+        desired_speed_factor: 1.0
+        radius_m: 0.3
+      hurried:
+        desired_speed_factor: 1.4
+        radius_m: 0.25

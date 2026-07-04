@@ -2653,6 +2653,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     cbf_safety_filter=dict(cbf_safety_filter)
                     if cbf_safety_filter is not None
                     else None,
+                    record_planner_decision_trace=record_planner_decision_trace,
                     record_simulation_step_trace=record_simulation_step_trace,
                 )
                 if _compute_map_episode_id(identity_payload, seed) not in existing:

@@ -1709,6 +1709,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         ),
         safety_wrapper=dict(safety_wrapper) if safety_wrapper is not None else None,
         cbf_safety_filter=dict(cbf_safety_filter) if cbf_safety_filter is not None else None,
+        record_planner_decision_trace=record_planner_decision_trace,
         record_simulation_step_trace=record_simulation_step_trace,
     )
     steps_taken = int(robot_pos_arr.shape[0])

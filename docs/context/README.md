@@ -184,7 +184,11 @@ knowledge, not every transient iteration detail.
 * Issue #3281 naturalistic VRU priors:
   [issue_3281_naturalistic_vru_priors.md](issue_3281_naturalistic_vru_priors.md)
   records the additive generated-manifest prior metadata, manifest-quality naturalness filters, and
-  plausible-hard-case vs stress-only claim boundary.
+plausible-hard-case vs stress-only claim boundary.
+* Issue #4360 adversarial dispatchable inventory:
+[issue_4360_adversarial_dispatchable_inventory.md](issue_4360_adversarial_dispatchable_inventory.md)
+records current adversarial pedestrian hooks, repeatable seeds/configs, runner assumptions,
+and runbook boundary for the dispatchable half only.
 * Issue #3014 Evidence Catalog Backlog 2026-06-19:
   [issue_3014_evidence_catalog_backlog.md](issue_3014_evidence_catalog_backlog.md)
   records the current uncovered evidence-bundle count and split strategy for catalog cleanup.

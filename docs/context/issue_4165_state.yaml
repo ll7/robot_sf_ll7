@@ -1,0 +1,32 @@
+issue: 4165
+title: "planner: proxemic costmap layer for classical baseline planners"
+state_surface: "high_churn_issue_state"
+entries:
+  - date_utc: "2026-07-04"
+    slice: "map-runner proxemic ablation report input contract"
+    branch: "issue-4165-closure-audit-verify-acceptance-criteria-of-4165-against-merged-prs-clos"
+    pr_url: "pending"
+    delivered:
+      - "Adds a fail-closed map-runner episode-record adapter for the paired proxemic ablation report."
+      - "Extends the issue-specific report CLI with --input-format map-runner while preserving legacy report-row input."
+      - "Adds focused tests for map-runner source provenance, layer-state mismatch blocking, and CLI report generation."
+    acceptance_audit:
+      - criterion: "Layer parameters configurable."
+        status: "met"
+        evidence: "Merged PR #4185 added configs/planners/proxemic_costmap_v1.yaml and planner config wiring."
+      - criterion: "At least one classical planner can run without the layer."
+        status: "met"
+        evidence: "Merged PR #4185 kept baseline hybrid-rule config and default proxemic layer disabled."
+      - criterion: "Paired report records intrusion, clearance, efficiency, success/collision caveats, and runtime overhead."
+        status: "partially_met"
+        evidence: "Merged PR #4250 added the report builder; PR #4277 added fixture evidence; this slice accepts real map-runner episode records."
+      - criterion: "Default behavior remains unchanged."
+        status: "met"
+        evidence: "Merged PR #4185 made the proxemic layer opt-in; this slice only changes report input handling."
+    remaining:
+      - "Run and attach real paired CPU smoke or campaign rows through the map-runner input contract."
+      - "Rebuild the paired report from those real rows before closing the issue."
+    out_of_scope:
+      - "full benchmark campaign"
+      - "Slurm or GPU submission"
+      - "paper-facing claim update"

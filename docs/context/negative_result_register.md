@@ -107,7 +107,7 @@ Each entry records:
 | `comparator` | N/A (synthesis, not a paired experiment). |
 | `result_classification` | `diagnostic_only` |
 | `failure_mode` | `evidence_diagnostic_only` |
-| `why_failed_or_inconclusive` | Five of seven ledger rows are diagnostic-tier or blocked evidence (topology, signalized behavior, prediction, pedestrian density, exported tables). One area (observation robustness) is release-backed but is a contract/provenance layer only. The exported-tables payload gap is resolved, but the Issue #3203 rerun remains invalid as benchmark-success evidence because PPO partial-failed and SNQI contract status failed. No row supports Results-chapter wording without qualification. |
+| `why_failed_or_inconclusive` | Five of seven ledger rows are diagnostic-tier or blocked evidence (topology, signalized behavior, prediction, pedestrian density, exported tables). One area (observation robustness) is release-backed but is a contract/provenance layer only. The exported-tables payload gap and PPO partial-failure blocker are resolved, but the Issue #3203 rerun remains invalid as benchmark-success evidence because Social Navigation Quality Index (SNQI) contract status failed. No row supports Results-chapter wording without qualification. |
 | `evidence_pointer` | `docs/context/dissertation_evidence_ledger.md`, `docs/context/evidence/issue_2760_dissertation_evidence_ledger/ledger.json` |
 | `recommended_next_action` | Use the ledger as a planning aid to identify which thesis areas need new experiments before Results wording is possible. Do not cite any current row as benchmark-strength evidence. |
 | `linked_issues` | [#2760](https://github.com/ll7/robot_sf_ll7/issues/2760) |

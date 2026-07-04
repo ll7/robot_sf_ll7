@@ -36,6 +36,7 @@ except ImportError:  # pragma: no cover
 
 SMOKE_MANIFEST_SCHEMA_VERSION = "diffusion_policy_smoke_manifest.v1"
 SMOKE_CONFIG_SCHEMA_VERSION = "diffusion_policy_training_smoke.v1"
+DIAGNOSTIC_PACKET_SCHEMA_VERSION = "diffusion_policy_diagnostic_packet.v1"
 
 
 @dataclass(frozen=True)
@@ -87,6 +88,103 @@ class DiffusionPolicySmokeArtifacts:
     normalizer_path: Path
     manifest_path: Path
     manifest: dict[str, Any]
+
+
+def build_diagnostic_packet(
+    manifest: dict[str, Any],
+    *,
+    map_runner_metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Summarize issue #4010 smoke/runtime artifacts as diagnostic-only evidence.
+
+    The packet is an integration handoff for the staged implementation lane: it
+    records what is now wired, what remains blocked, and why the result is not a
+    benchmark or paper-facing claim.
+
+    Returns:
+        JSON-serializable diagnostic packet with claim boundary and blockers.
+    """
+    if manifest.get("schema_version") != SMOKE_MANIFEST_SCHEMA_VERSION:
+        raise ValueError(
+            f"Diffusion policy diagnostic packet requires {SMOKE_MANIFEST_SCHEMA_VERSION} manifest"
+        )
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, dict):
+        raise ValueError("Diffusion policy smoke manifest missing artifacts mapping")
+    required_artifacts = ("checkpoint_path", "normalizer_path")
+    missing_artifacts = [
+        artifact for artifact in required_artifacts if not str(artifacts.get(artifact, "")).strip()
+    ]
+    if missing_artifacts:
+        raise ValueError(
+            "Diffusion policy smoke manifest missing required artifacts: "
+            + ", ".join(missing_artifacts)
+        )
+
+    metadata = map_runner_metadata or {}
+    diffusion_metadata = metadata.get("diffusion_policy", {})
+    checkpoint_status = diffusion_metadata.get("checkpoint_status", "unknown")
+    normalizer_status = diffusion_metadata.get("normalizer_status", "unknown")
+    runtime_loaded = checkpoint_status == "checkpoint_loaded" and normalizer_status == "loaded"
+    remaining_blockers: list[dict[str, str]] = []
+    if not runtime_loaded:
+        remaining_blockers.append(
+            {
+                "id": "checkpoint_backed_map_runner_load",
+                "status": "blocked",
+                "reason": "map-runner metadata does not prove checkpoint and normalizer loaded",
+            }
+        )
+    remaining_blockers.extend(
+        [
+            {
+                "id": "representative_rollout",
+                "status": "remaining",
+                "reason": "no representative scenario rollout is recorded in this diagnostic packet",
+            },
+            {
+                "id": "multimodal_action_probe",
+                "status": "remaining",
+                "reason": "candidate diversity has not yet been classified on a fixed conflict case",
+            },
+            {
+                "id": "paper_grade_benchmark_claim",
+                "status": "blocked",
+                "reason": "CPU smoke fixture is synthetic and cannot support benchmark or paper claims",
+            },
+        ]
+    )
+
+    return {
+        "schema_version": DIAGNOSTIC_PACKET_SCHEMA_VERSION,
+        "issue": 4010,
+        "evidence_tier": EVIDENCE_TIER,
+        "claim_boundary": CLAIM_BOUNDARY,
+        "new_capability": "checkpoint-backed diffusion-policy diagnostic integration packet",
+        "integrated_contracts": {
+            "runtime_adapter": "DiffusionPolicyAdapter",
+            "map_runner_policy": "diffusion_policy",
+            "training_smoke_manifest": SMOKE_MANIFEST_SCHEMA_VERSION,
+        },
+        "artifact_inputs": {
+            "checkpoint_path": artifacts["checkpoint_path"],
+            "normalizer_path": artifacts["normalizer_path"],
+            "manifest_kind": manifest.get("artifact_kind"),
+        },
+        "runtime_metadata": {
+            "checkpoint_status": checkpoint_status,
+            "normalizer_status": normalizer_status,
+            "allow_untrained_smoke": diffusion_metadata.get("allow_untrained_smoke"),
+        },
+        "acceptance_status": {
+            "smoke_manifest_present": True,
+            "checkpoint_backed_map_runner_load": runtime_loaded,
+            "benchmark_campaign_run": False,
+            "slurm_or_gpu_submission": False,
+            "paper_or_dissertation_claim": False,
+        },
+        "remaining_blockers": remaining_blockers,
+    }
 
 
 def load_smoke_config(path: Path) -> DiffusionPolicyTrainingSmokeConfig:
@@ -381,9 +479,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, default=None)
+    parser.add_argument(
+        "--write-diagnostic-packet",
+        action="store_true",
+        help="Also write a diagnostic-only integration packet next to the smoke manifest.",
+    )
     args = parser.parse_args(argv)
     artifacts = run_training_smoke(load_smoke_config(args.config), output_dir=args.output_dir)
-    sys.stdout.write(json.dumps({"manifest_path": str(artifacts.manifest_path)}, sort_keys=True))
+    payload = {"manifest_path": str(artifacts.manifest_path)}
+    if args.write_diagnostic_packet:
+        packet_path = artifacts.manifest_path.with_suffix(".diagnostic_packet.json")
+        packet = build_diagnostic_packet(artifacts.manifest)
+        packet_path.write_text(json.dumps(packet, indent=2, sort_keys=True), encoding="utf-8")
+        payload["diagnostic_packet_path"] = str(packet_path)
+    sys.stdout.write(json.dumps(payload, sort_keys=True))
     sys.stdout.write("\n")
     return 0
 

@@ -36,8 +36,19 @@ def test_batch_first_workflow_note_is_linked_from_repo_guidance() -> None:
     assert "Project #5" in note_text
     assert "score sync" in note_text.lower()
 
+    # The AGENTS.md token diet (#4464) relocated some workflow links into the linked pointer file,
+    # so for AGENTS.md accept the note link either directly or via the relocated guidance that
+    # AGENTS.md references. See issue #4469.
+    relocated_guidance_path = ROOT / "docs" / "dev" / "agents" / "relocated-agents-guidance.md"
     for path, needle in SURFACE_PATHS.items():
         text = path.read_text(encoding="utf-8")
+        if (
+            path.name == "AGENTS.md"
+            and needle not in text
+            and "relocated-agents-guidance.md" in text
+            and relocated_guidance_path.exists()
+        ):
+            text += "\n" + relocated_guidance_path.read_text(encoding="utf-8")
         assert needle in text, f"missing workflow note link in {path.name}"
 
     for path in SKILL_PATHS:

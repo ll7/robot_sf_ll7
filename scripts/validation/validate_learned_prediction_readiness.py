@@ -420,6 +420,25 @@ def _register_prerequisite(
     prerequisites[name] = {"status": status, "messages": messages}
 
 
+def _summarize_blocking_prerequisites(
+    prerequisites: dict[str, dict[str, list[str] | str]],
+) -> list[dict[str, object]]:
+    """Return blockers that still prevent learned-prediction training readiness."""
+    blockers: list[dict[str, object]] = []
+    for name, payload in prerequisites.items():
+        status = str(payload["status"])
+        if status == STATUS_PASSED:
+            continue
+        blockers.append(
+            {
+                "name": name,
+                "status": status,
+                "messages": payload["messages"],
+            }
+        )
+    return blockers
+
+
 def validate_readiness(
     doc_path: Path,
     registry_path: Path | None = None,
@@ -479,10 +498,12 @@ def validate_readiness(
         if status != STATUS_PASSED:
             errors.extend(messages)
 
+    blocking_prerequisites = _summarize_blocking_prerequisites(prerequisites)
     status = "ready" if not errors else "blocked"
     return {
         "status": status,
         "errors": errors,
+        "blocking_prerequisites": blocking_prerequisites,
         "checked": {
             "readiness_doc": str(doc_path),
             "trace_registry": str(registry_path) if registry_path else None,
@@ -587,6 +608,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f" - {key}: {status}")
     else:
         print("learned-prediction readiness: BLOCKED")
+        print(f"blocking prerequisites: {len(report['blocking_prerequisites'])}")
         for key, payload in report["prerequisites"].items():
             status = payload["status"]
             print(f" - {key}: {status}")

@@ -271,6 +271,31 @@ def test_check_factorial_ablation_rows_accepts_exact_paired_rows() -> None:
     assert report["pair_provenance_mismatches"] == []
 
 
+def test_check_factorial_ablation_rows_accepts_supported_v2_event_ledger() -> None:
+    """Live v2 ledger rows remain valid for the additive collision-events schema bump."""
+
+    rows = [_ablation_row(WRAPPER_OFF_ARM), _ablation_row(WRAPPER_ON_ARM)]
+    for row in rows:
+        row["event_ledger"]["schema_version"] = "EpisodeEventLedger.v2"
+
+    report = check_factorial_ablation_rows(rows)
+
+    assert report["complete"] is True
+    assert report["invalid_provenance_fields"] == []
+
+
+def test_check_factorial_ablation_rows_rejects_unsupported_event_ledger_schema() -> None:
+    """Unsupported event-ledger versions fail closed before ablation comparison."""
+
+    rows = [_ablation_row(WRAPPER_OFF_ARM), _ablation_row(WRAPPER_ON_ARM)]
+    rows[0]["event_ledger"]["schema_version"] = "EpisodeEventLedger.v3"
+
+    report = check_factorial_ablation_rows(rows)
+
+    assert report["complete"] is False
+    assert report["invalid_provenance_fields"] == [{"row_index": 0, "fields": ["event_ledger"]}]
+
+
 def test_check_factorial_ablation_rows_rejects_arm_mode_mismatch() -> None:
     """Wrapper arm and opt-in mode provenance must agree before comparison."""
     off_row = _ablation_row(WRAPPER_OFF_ARM)

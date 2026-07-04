@@ -1,5 +1,7 @@
 # Context Retrieval Index
 
+Recent camera-ready decomposition closure audit:
+[issue_3385_closure_audit_2026_07_04.md](issue_3385_closure_audit_2026_07_04.md).
 Recent predictive-v2 closure audit: [issue_1490_closure_audit.md](issue_1490_closure_audit.md).
 
 Issue: [#1714](https://github.com/ll7/robot_sf_ll7/issues/1714)

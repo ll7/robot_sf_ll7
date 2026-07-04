@@ -213,6 +213,21 @@ run_examples_smoke_phase() {
   uv run python scripts/validation/run_examples_smoke.py --skip-perf-tests
 }
 
+run_fast_feedback_benchmark_reconciliation_guard() {
+  local shard_count="${PYTEST_SHARD_COUNT:-1}"
+  local shard_index="${PYTEST_SHARD_INDEX:-1}"
+
+  if [[ "$shard_count" =~ ^[0-9]+$ ]] && [[ "$shard_count" -gt 1 ]] && [[ "$shard_index" != "1" ]]; then
+    echo "Skipping benchmark reconciliation guard on pytest shard $shard_index/$shard_count"
+    return 0
+  fi
+
+  echo "Running fast-feedback benchmark reconciliation guard..."
+  uv run pytest -q \
+    tests/benchmark/test_frozen_trace_reconciliation.py \
+    tests/benchmark/test_safety_wrapper_ablation_manifest.py
+}
+
 run_phase() {
   local phase="$1"
   local event_name="$2"
@@ -232,6 +247,7 @@ run_phase() {
       ;;
     test)
       "$SCRIPT_DIR/check_event_ledger_reconciliation_guard.sh"
+      run_fast_feedback_benchmark_reconciliation_guard
       "$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples
       ;;
     examples-smoke)

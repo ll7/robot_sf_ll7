@@ -45,6 +45,14 @@ STATUS_BLOCKED = "blocked"
 
 
 @dataclass(frozen=True, slots=True)
+class ResearchFlowStage:
+    """One named vertical-flow stage required by a package."""
+
+    stage_id: str
+    artifact: str
+
+
+@dataclass(frozen=True, slots=True)
 class ResearchPackage:
     """One declared research-engine package and its preflight inputs.
 
@@ -63,6 +71,7 @@ class ResearchPackage:
     resource: str | None
     required_artifacts: tuple[str, ...]
     prerequisites: tuple[str, ...]
+    flow_stages: tuple[ResearchFlowStage, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -254,6 +263,7 @@ def _evaluate_package(
             present_artifacts.append(artifact)
         else:
             missing_artifacts.append(artifact)
+    flow_stage_results = _evaluate_flow_stages(package.flow_stages, repo_root=repo_root)
 
     # A prerequisite counts as satisfied only when it resolved to ``ready``; anything
     # else (blocked) is a blocking gap. Unknown ids are rejected at load time.
@@ -272,6 +282,18 @@ def _evaluate_package(
                 "detail": f"required artifact not found: {artifact}",
             }
         )
+    for stage in flow_stage_results:
+        if not stage["present"]:
+            gaps.append(
+                {
+                    "package_id": package.package_id,
+                    "gap_type": "missing_flow_stage",
+                    "detail": (
+                        f"vertical flow stage {stage['stage_id']} missing artifact: "
+                        f"{stage['artifact']}"
+                    ),
+                }
+            )
     for prerequisite in blocked_prerequisites:
         gaps.append(
             {
@@ -296,6 +318,7 @@ def _evaluate_package(
         },
         "prerequisites": list(package.prerequisites),
         "blocked_prerequisites": blocked_prerequisites,
+        "flow_stages": flow_stage_results,
         "gaps": gaps,
     }
 
@@ -335,6 +358,7 @@ def _parse_package(item: Any, *, index: int) -> ResearchPackage:
     prerequisites = _parse_str_list(
         item.get("prerequisites", []), field="prerequisites", package_id=package_id
     )
+    flow_stages = _parse_flow_stages(item.get("flow_stages", []), package_id=package_id)
     return ResearchPackage(
         package_id=package_id,
         title=title,
@@ -342,7 +366,54 @@ def _parse_package(item: Any, *, index: int) -> ResearchPackage:
         resource=resource,
         required_artifacts=required_artifacts,
         prerequisites=prerequisites,
+        flow_stages=flow_stages,
     )
+
+
+def _evaluate_flow_stages(
+    stages: tuple[ResearchFlowStage, ...], *, repo_root: Path
+) -> list[dict[str, Any]]:
+    """Return presence report for declared vertical-flow stages."""
+    return [
+        {
+            "stage_id": stage.stage_id,
+            "artifact": stage.artifact,
+            "present": (repo_root / stage.artifact).exists(),
+        }
+        for stage in stages
+    ]
+
+
+def _parse_flow_stages(raw: Any, *, package_id: str) -> tuple[ResearchFlowStage, ...]:
+    """Parse optional package vertical-flow stage declarations.
+
+    Returns:
+        Parsed flow-stage declarations.
+    """
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError(f"package {package_id!r} field 'flow_stages' must be a list")
+    stages: list[ResearchFlowStage] = []
+    seen: set[str] = set()
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise ValueError(f"package {package_id!r} flow_stages[{index}] must be mapping")
+        stage_id = str(item.get("id", "")).strip()
+        if not stage_id:
+            raise ValueError(
+                f"package {package_id!r} flow_stages[{index}] must define non-empty 'id'"
+            )
+        if stage_id in seen:
+            raise ValueError(f"package {package_id!r} duplicate flow stage id {stage_id!r}")
+        seen.add(stage_id)
+        artifact = str(item.get("artifact", "")).strip()
+        if not artifact:
+            raise ValueError(
+                f"package {package_id!r} flow_stages[{index}] must define non-empty 'artifact'"
+            )
+        stages.append(ResearchFlowStage(stage_id=stage_id, artifact=artifact))
+    return tuple(stages)
 
 
 def _parse_str_list(value: Any, *, field: str, package_id: str) -> tuple[str, ...]:

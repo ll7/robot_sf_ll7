@@ -115,6 +115,59 @@ def test_blocked_prerequisite_propagates(tmp_path: Path) -> None:
     assert any(g["gap_type"] == "blocked_prerequisite" for g in downstream["gaps"])
 
 
+def test_missing_flow_stage_blocks_package(tmp_path: Path) -> None:
+    """A missing declared vertical-flow stage fails closed."""
+    (tmp_path / "manifest.md").write_text("ok", encoding="utf-8")
+    registry_path = _write_registry(
+        tmp_path,
+        [
+            {
+                "id": "release",
+                "title": "Release",
+                "required_artifacts": ["manifest.md"],
+                "prerequisites": [],
+                "flow_stages": [
+                    {"id": "campaign_manifest", "artifact": "manifest.md"},
+                    {"id": "claim_card", "artifact": "missing_claim_card.yaml"},
+                ],
+            }
+        ],
+    )
+
+    report = evaluate_registry_preflight(load_registry(registry_path), repo_root=tmp_path)
+
+    package = report["packages"][0]
+    assert package["status"] == "blocked"
+    assert package["flow_stages"] == [
+        {"stage_id": "campaign_manifest", "artifact": "manifest.md", "present": True},
+        {"stage_id": "claim_card", "artifact": "missing_claim_card.yaml", "present": False},
+    ]
+    assert {
+        "package_id": "release",
+        "gap_type": "missing_flow_stage",
+        "detail": ("vertical flow stage claim_card missing artifact: missing_claim_card.yaml"),
+    } in report["gaps"]
+
+
+def test_malformed_flow_stage_rejected(tmp_path: Path) -> None:
+    """Flow stages require stable ids and artifact paths."""
+    registry_path = _write_registry(
+        tmp_path,
+        [
+            {
+                "id": "release",
+                "title": "Release",
+                "required_artifacts": [],
+                "prerequisites": [],
+                "flow_stages": [{"id": "campaign_manifest"}],
+            }
+        ],
+    )
+
+    with pytest.raises(ValueError, match="flow_stages\\[0\\].*artifact"):
+        load_registry(registry_path)
+
+
 def test_dependency_order_independent_of_declaration_order(tmp_path: Path) -> None:
     """Prerequisites resolve transitively regardless of declared order."""
     for name in ("a.yaml", "b.yaml"):
@@ -269,3 +322,18 @@ def test_real_registry_preflight_against_checkout() -> None:
     # The release gate points at a release-owned artifact that #3081 has not yet
     # published, so it must fail closed to blocked rather than reporting ready.
     assert statuses["release_july_2026"] == "blocked"
+    release = next(p for p in report["packages"] if p["package_id"] == "release_july_2026")
+    stage_ids = {stage["stage_id"] for stage in release["flow_stages"]}
+    assert stage_ids == {
+        "campaign_manifest",
+        "scenario_seed_expansion",
+        "local_or_slurm_execution_packet",
+        "episode_rows_result_store",
+        "social_compliance_metrics",
+        "comparison_report",
+        "claim_card_durable_manifest",
+    }
+    assert any(
+        gap["gap_type"] == "missing_flow_stage" and "claim_card_durable_manifest" in gap["detail"]
+        for gap in release["gaps"]
+    )

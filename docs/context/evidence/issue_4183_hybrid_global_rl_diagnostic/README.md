@@ -12,7 +12,29 @@ This packet records a diagnostic-only paired route/occupancy comparison for `hyb
 
 Rows marked fallback, degraded, unavailable, or missing-pair are not evidence for a route-conditioned effect. They remain diagnostic rows only.
 
+## Integration Report
+
+This section classifies the diagnostic packet state so the next empirical action is clear without promoting diagnostic-only evidence.
+
+- New blockers: 0
+- Next empirical action: Resolve the fail-closed runner blockers, then rerun the same paired route/occupancy diagnostic builder so route-conditioned and unconditioned arms emit matched native episode rows for the predeclared seeds.
+
+### Blockers Remaining
+
+- no_valid_episode_rows: status=remaining, evidence=Fail-closed runner failures produced no paired episode rows.
+- fail_closed_route_conditioned_hybrid_global_rl: status=remaining, evidence=RuntimeError('hybrid_global_rl route waypoint unavailable'), row_classification=fail_closed_no_episode_row
+- fail_closed_learned_local_no_route_conditioning: status=remaining, evidence=RuntimeError('PPO model unavailable or prediction failed'), row_classification=fail_closed_no_episode_row
+
+### New Blockers
+
+- none
+
+### Intentional Exclusions
+
+- fallback_or_degraded_rows_excluded: status=intentional, evidence=0 rows excluded from route-conditioned effect evidence
+- pairing_errors_excluded: status=intentional, evidence=0 rows excluded because the scenario, seed, or checkpoint pairing contract was not satisfied
+
 ## Fail-Closed Runner Failures
 
-- arm=route_conditioned_hybrid_global_rl, scenario_id=francis2023_intersection_wait, seed=4183, reason=RuntimeError('hybrid_global_rl route waypoint unavailable'), source=bounded CPU run_map_batch smoke on imech036, row_classification=fail_closed_no_episode_row
-- arm=learned_local_no_route_conditioning, scenario_id=francis2023_intersection_wait, seed=4183, reason=RuntimeError('PPO model unavailable or prediction failed'), source=bounded CPU run_map_batch smoke on imech036, row_classification=fail_closed_no_episode_row
+- arm=route_conditioned_hybrid_global_rl, reason=RuntimeError('hybrid_global_rl route waypoint unavailable'), row_classification=fail_closed_no_episode_row, scenario_id=francis2023_intersection_wait, seed=4183, source=bounded CPU run_map_batch smoke on imech036
+- arm=learned_local_no_route_conditioning, reason=RuntimeError('PPO model unavailable or prediction failed'), row_classification=fail_closed_no_episode_row, scenario_id=francis2023_intersection_wait, seed=4183, source=bounded CPU run_map_batch smoke on imech036

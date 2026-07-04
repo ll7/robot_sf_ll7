@@ -130,6 +130,9 @@ def test_build_report_pairs_rows_and_excludes_fallback(tmp_path: Path) -> None:
     readme = (tmp_path / "README.md").read_text(encoding="utf-8")
     assert "diagnostic-only" in readme
     assert "#4161 and #4015" in readme
+    assert "## Integration Report" in readme
+    assert "New Blockers" in readme
+    assert "- none" in readme
 
 
 def test_build_report_rejects_unpaired_rows(tmp_path: Path) -> None:
@@ -172,6 +175,17 @@ def test_build_report_records_blocked_fail_closed_run(tmp_path: Path) -> None:
     assert summary["run_status"] == "blocked_no_valid_episode_rows"
     assert summary["included_diagnostic_rows"] == 0
     assert summary["run_failures"][0]["reason"] == "hybrid_global_rl route waypoint unavailable"
+    assert summary["integration_report"]["blockers_remaining"][0]["blocker"] == (
+        "no_valid_episode_rows"
+    )
+    assert summary["integration_report"]["blockers_new"] == []
+    assert (
+        "rerun the same paired route/occupancy diagnostic builder"
+        in summary["integration_report"]["next_empirical_action"]
+    )
+    readme = (tmp_path / "README.md").read_text(encoding="utf-8")
+    assert "no_valid_episode_rows" in readme
+    assert "fail_closed_route_conditioned_hybrid_global_rl" in readme
 
 
 def test_jsonl_loader_rejects_bad_rows(tmp_path: Path) -> None:

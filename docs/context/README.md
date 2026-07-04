@@ -216,8 +216,8 @@ knowledge, not every transient iteration detail.
   [checksums](evidence/issue_2542_dissertation_export_bundle/checksums.sha256),
   [campaign table](evidence/issue_2542_dissertation_export_bundle/payload/artifacts/tab_issue_1023_campaign_table.md),
   [scenario-family table](evidence/issue_2542_dissertation_export_bundle/payload/artifacts/tab_issue_1023_scenario_family_breakdown.md)).
-  The #3203 refresh is payload-complete but diagnostic only because the source campaign exited
-  invalid with a PPO partial-failure row and SNQI contract failure.
+  The #3203 refresh is payload-complete but diagnostic only because the row-complete July 1
+  campaign still fails the Social Navigation Quality Index (SNQI) rank-alignment contract.
 * Issue #2686 Release 0.0.2 Table Evidence Bundle:
   [issue_2686_release_0_0_2_table_bundle.md](issue_2686_release_0_0_2_table_bundle.md)
   ([spec](evidence/issue_2686_release_0_0_2_table_bundle/artifact_spec.json),

@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Extended the **issue #3207 fidelity-sensitivity campaign runner to consume the fixed-scope preflight
+  plan** (`scripts/benchmark/run_fidelity_sensitivity_campaign.py`). A new `--fixed-scope-plan-only`
+  mode builds the preflight packet and enumerates the concrete full run plan — every
+  planner_group × axis-variant × seed run cell (the shipped config materializes 108 cells/scenario) —
+  with each cell carrying its resolved `algorithm_readiness` catalog algorithm and opt-in/tier state.
+  It runs **no** episode and promotes no claim; actual launch stays **fail-closed** behind the
+  preflight's unmet launch prerequisites (ORCA/rvo2 runtime dependency, hybrid-rule explicit opt-in,
+  runner-not-yet-wired for the full planner set, and the post-run rank-identifiability recheck). A
+  `--require-launchable` flag exits non-zero while any gate remains, and `ensure_fixed_scope_launchable`
+  raises `FixedScopeNotLaunchableError` so no full campaign can launch against unresolved prerequisites.
+  The enumerated plan JSON is written to gitignored `output/`; the bounded two-planner slice runner
+  behavior is unchanged. Not benchmark, simulator-realism, sim-to-real, or paper-facing evidence.
 * Added a **full fixed-scope fidelity-sensitivity preflight** for issue #3207 that pre-registers the
   simulator-fidelity sensitivity campaign before launch (`robot_sf/benchmark/fidelity_fixed_scope_preflight.py`,
   CLI `scripts/benchmark/preflight_fidelity_fixed_scope.py`). It materializes the explicit run plan

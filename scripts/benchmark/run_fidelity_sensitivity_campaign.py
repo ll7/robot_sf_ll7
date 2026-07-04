@@ -20,7 +20,7 @@ import math
 import pathlib
 import subprocess
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -28,8 +28,12 @@ import yaml
 
 from robot_sf.baselines.interface import Observation
 from robot_sf.baselines.social_force import SFPlannerConfig, SocialForcePlanner
+from robot_sf.benchmark.fidelity_fixed_scope_preflight import build_fixed_scope_preflight
 from robot_sf.benchmark.fidelity_rank_stability import analyze_fidelity_sensitivity
-from robot_sf.benchmark.fidelity_sensitivity import DIAGNOSTIC_SMOKE_CLAIM_BOUNDARY
+from robot_sf.benchmark.fidelity_sensitivity import (
+    DIAGNOSTIC_SMOKE_CLAIM_BOUNDARY,
+    validate_fidelity_sensitivity_config,
+)
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
@@ -61,6 +65,212 @@ CLAIM_BOUNDARY = (
     "paper-facing planner-ranking, or full #3207 acceptance evidence."
 )
 ARCHETYPE_SPEED_FACTORS = {"cautious": 0.8, "standard": 1.0, "hurried": 1.2}
+
+FIXED_SCOPE_PLAN_SCHEMA_VERSION = "issue_3207_fidelity_fixed_scope_run_plan.v1"
+FIXED_SCOPE_PLAN_CLAIM_BOUNDARY = (
+    "fixed_scope_run_plan_enumeration_only: consumes the issue #3207 fixed-scope preflight "
+    "packet and enumerates the concrete planner_group x axis-variant x seed run cells that the "
+    "full fixed-scope campaign would execute. It launches no episode and promotes no claim; "
+    "execution stays fail-closed behind unmet launch prerequisites (ORCA/rvo2 runtime "
+    "dependency, hybrid-rule explicit opt-in, and the post-run rank-identifiability recheck). "
+    "It is not benchmark evidence, not simulator-realism evidence, not sim-to-real evidence, "
+    "and not paper-facing evidence."
+)
+
+
+class FixedScopeNotLaunchableError(RuntimeError):
+    """Raised when a fixed-scope run plan still has unmet launch gates.
+
+    The bounded slice runner intentionally leaves the ORCA/rvo2 runtime
+    dependency, the hybrid-rule explicit opt-in, and the post-run
+    rank-identifiability recheck unsatisfied, so an actual full campaign launch
+    must fail closed rather than silently run against unresolved prerequisites.
+    """
+
+
+@dataclass(frozen=True)
+class FixedScopeRunCell:
+    """One planner_group x axis-variant x seed cell of the full fixed scope.
+
+    A cell describes a unit of work the full campaign would execute for each
+    scenario in the fixed scenario set. It carries the resolved catalog
+    algorithm and its availability/opt-in state so downstream launch logic can
+    reason about the cell without re-resolving the planner group.
+    """
+
+    planner_group: str
+    algorithm: str
+    planner_available: bool
+    planner_tier: str | None
+    requires_explicit_opt_in: bool
+    axis: str
+    variant: str
+    baseline_variant: bool
+    seed: int
+    scenario_set: str
+
+
+def enumerate_fixed_scope_run_cells(
+    validated: Mapping[str, Any],
+    resolution_by_group: Mapping[str, Mapping[str, Any]],
+) -> list[FixedScopeRunCell]:
+    """Enumerate the full fixed-scope run cells from a validated study config.
+
+    The enumeration mirrors the preflight materialization order
+    (planner_group x every axis variant x seed, including baseline variants) so
+    the cell count matches ``materialized_scope.run_cells_per_scenario``.
+
+    Args:
+        validated: Config returned by ``validate_fidelity_sensitivity_config``.
+        resolution_by_group: Planner-group name to preflight resolution record.
+
+    Returns:
+        Run cells in deterministic planner/axis/variant/seed order.
+    """
+    fixed_scope = validated["fixed_scope"]
+    seeds = [int(seed) for seed in fixed_scope["seeds"]]
+    scenario_set = str(fixed_scope["scenario_set"])
+    planner_groups = [str(group) for group in fixed_scope["planner_groups"]]
+    cells: list[FixedScopeRunCell] = []
+    for group in planner_groups:
+        record = resolution_by_group.get(group, {})
+        for axis in validated["axes"]:
+            axis_key = str(axis["key"])
+            for variant in axis["variants"]:
+                variant_key = str(variant["key"])
+                baseline = bool(variant.get("baseline", False))
+                for seed in seeds:
+                    cells.append(
+                        FixedScopeRunCell(
+                            planner_group=group,
+                            algorithm=str(record.get("algorithm", group)),
+                            planner_available=bool(record.get("available", False)),
+                            planner_tier=record.get("tier"),
+                            requires_explicit_opt_in=bool(
+                                record.get("requires_explicit_opt_in", False)
+                            ),
+                            axis=axis_key,
+                            variant=variant_key,
+                            baseline_variant=baseline,
+                            seed=seed,
+                            scenario_set=scenario_set,
+                        )
+                    )
+    return cells
+
+
+def build_fixed_scope_run_plan(
+    config: Mapping[str, Any],
+    *,
+    config_path: str,
+    git_head: str,
+    date: str | None = None,
+) -> dict[str, Any]:
+    """Consume the #3207 fixed-scope preflight and build an executable run plan.
+
+    This is the runner-side counterpart to
+    :func:`robot_sf.benchmark.fidelity_fixed_scope_preflight.build_fixed_scope_preflight`:
+    the preflight owns the launch/readiness gate, while this function turns the
+    materialized scope into the concrete run cells the campaign runner would
+    iterate. It runs no episode. ``executable`` is only ``True`` when the
+    preflight is ready and *all* launch prerequisites and blockers are cleared,
+    so the shipped config (which still lists rvo2/opt-in/runner-not-wired
+    prerequisites) yields a fail-closed, non-executable plan.
+
+    Args:
+        config: Raw fidelity-sensitivity study config mapping.
+        config_path: Repo-relative config path, recorded for provenance.
+        git_head: Git head recorded for provenance.
+        date: Optional ISO date string recorded for provenance.
+
+    Returns:
+        JSON-serializable run-plan packet embedding the preflight decision, the
+        enumerated run cells, and the residual launch gates.
+    """
+    validated = validate_fidelity_sensitivity_config(config)
+    preflight = build_fixed_scope_preflight(
+        config, config_path=config_path, git_head=git_head, date=date
+    )
+    resolution_by_group = {
+        str(record["planner_group"]): record for record in preflight["planner_resolution"]
+    }
+    cells = enumerate_fixed_scope_run_cells(validated, resolution_by_group)
+
+    materialized = preflight["materialized_scope"]
+    expected_cells = int(materialized["run_cells_per_scenario"])
+    if len(cells) != expected_cells:
+        # Internal contract: the runner plan and the preflight materialization
+        # must agree on scope, otherwise one of them is stale.
+        raise ValueError(
+            "fixed-scope run-plan enumeration disagrees with preflight materialization: "
+            f"{len(cells)} cells vs run_cells_per_scenario={expected_cells}"
+        )
+
+    blockers = list(preflight["blockers"])
+    launch_prerequisites = list(preflight["launch_prerequisites"])
+    gate_reasons = blockers + launch_prerequisites
+    executable = bool(preflight["preflight_ready"]) and not gate_reasons
+
+    return {
+        "schema_version": FIXED_SCOPE_PLAN_SCHEMA_VERSION,
+        "issue": int(preflight.get("issue", 3207)),
+        "study_id": str(validated["study_id"]),
+        "claim_boundary": FIXED_SCOPE_PLAN_CLAIM_BOUNDARY,
+        "config_path": config_path,
+        "git_head": git_head,
+        "date": date,
+        "preflight_decision": preflight["decision"],
+        "preflight_ready": bool(preflight["preflight_ready"]),
+        "preflight_claim_boundary": preflight["claim_boundary"],
+        "executable": executable,
+        "launched": False,
+        "run_cell_count": len(cells),
+        "run_cells_per_scenario_expected": expected_cells,
+        "materialized_scope": materialized,
+        "planner_resolution": preflight["planner_resolution"],
+        "primary_metric": preflight["primary_metric"],
+        "blockers": blockers,
+        "launch_prerequisites": launch_prerequisites,
+        "gate_reasons": gate_reasons,
+        "run_cells": [asdict(cell) for cell in cells],
+    }
+
+
+def ensure_fixed_scope_launchable(plan: Mapping[str, Any]) -> None:
+    """Fail closed unless a fixed-scope run plan has cleared every launch gate.
+
+    Args:
+        plan: Packet from :func:`build_fixed_scope_run_plan`.
+
+    Raises:
+        FixedScopeNotLaunchableError: If the plan is not executable or any
+            blocker/launch-prerequisite remains.
+    """
+    gate_reasons = list(plan.get("gate_reasons") or [])
+    if plan.get("executable") and not gate_reasons:
+        return
+    reasons = gate_reasons or ["preflight_not_ready"]
+    raise FixedScopeNotLaunchableError(
+        "fixed-scope campaign is not launchable; unmet gates: " + "; ".join(reasons)
+    )
+
+
+def write_fixed_scope_run_plan(
+    plan: Mapping[str, Any], output_dir: str | pathlib.Path
+) -> pathlib.Path:
+    """Write a deterministic fixed-scope run-plan JSON to gitignored output.
+
+    Returns:
+        Path to the written ``fidelity_fixed_scope_run_plan.json`` file.
+    """
+    out = pathlib.Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    plan_path = out / "fidelity_fixed_scope_run_plan.json"
+    plan_path.write_text(
+        json.dumps(plan, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return plan_path
 
 
 @dataclass(frozen=True)
@@ -666,8 +876,60 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Run only the baseline plus the first runtime-bound perturbation per fidelity axis.",
     )
+    parser.add_argument(
+        "--fixed-scope-plan-only",
+        action="store_true",
+        help=(
+            "Consume the #3207 fixed-scope preflight and enumerate the full run plan "
+            "(planner_group x axis-variant x seed) without running any episode."
+        ),
+    )
+    parser.add_argument(
+        "--plan-out",
+        default="output/fidelity_sensitivity/issue_3207_fixed_scope_run_plan",
+        help="Directory for the emitted fixed-scope run-plan JSON (gitignored output).",
+    )
+    parser.add_argument(
+        "--require-launchable",
+        action="store_true",
+        help=(
+            "With --fixed-scope-plan-only, exit non-zero (fail closed) unless every launch "
+            "prerequisite is cleared. The bounded slice runner leaves ORCA/rvo2, hybrid opt-in, "
+            "and the post-run rank-identifiability recheck unmet, so this fails closed."
+        ),
+    )
     parser.add_argument("--date", default=dt.datetime.now(tz=dt.UTC).date().isoformat())
     return parser.parse_args(argv)
+
+
+def _run_fixed_scope_plan_only(args: argparse.Namespace, config: Mapping[str, Any]) -> int:
+    """Emit the fixed-scope run plan without running any episode.
+
+    Returns:
+        ``0`` on success, or ``1`` when ``--require-launchable`` is set and the
+        plan still has unmet launch gates (fail-closed).
+    """
+    plan = build_fixed_scope_run_plan(
+        config,
+        config_path=args.config,
+        git_head=_git_head(),
+        date=str(args.date),
+    )
+    plan_path = write_fixed_scope_run_plan(plan, REPO_ROOT / args.plan_out)
+    print(f"wrote fixed-scope run plan: {_repo_rel(plan_path)}")
+    print(
+        f"preflight_decision={plan['preflight_decision']} executable={plan['executable']} "
+        f"launched={plan['launched']} run_cells={plan['run_cell_count']}"
+    )
+    for reason in plan["gate_reasons"]:
+        print(f"  launch gate: {reason}")
+    if args.require_launchable:
+        try:
+            ensure_fixed_scope_launchable(plan)
+        except FixedScopeNotLaunchableError as exc:
+            print(f"fail-closed: {exc}")
+            return 1
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -677,6 +939,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     if not isinstance(config, Mapping):
         raise ValueError(f"config must be a mapping: {config_path}")
+    if args.fixed_scope_plan_only:
+        # Plan-consumption mode: enumerate the full fixed-scope run plan and stop
+        # before any episode. Execution stays fail-closed behind launch gates.
+        return _run_fixed_scope_plan_only(args, config)
     scenario_path = REPO_ROOT / args.scenario_set
     scenarios = list(load_scenarios(scenario_path))
     if not scenarios:

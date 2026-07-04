@@ -29,7 +29,12 @@ import yaml
 from robot_sf.baselines.interface import Observation
 from robot_sf.baselines.social_force import SFPlannerConfig, SocialForcePlanner
 from robot_sf.benchmark.fidelity_fixed_scope_preflight import build_fixed_scope_preflight
-from robot_sf.benchmark.fidelity_rank_stability import analyze_fidelity_sensitivity
+from robot_sf.benchmark.fidelity_rank_stability import (
+    PostRunContractResult,
+    analyze_fidelity_sensitivity,
+    check_rank_identifiability_contract,
+    write_rank_identifiability_report,
+)
 from robot_sf.benchmark.fidelity_sensitivity import (
     DIAGNOSTIC_SMOKE_CLAIM_BOUNDARY,
     validate_fidelity_sensitivity_config,
@@ -1140,6 +1145,10 @@ def write_outputs(
         for variant, by_planner in sorted(report["aggregates"].items()):
             for planner, metrics in sorted(by_planner.items()):
                 writer.writerow({"variant": variant, "planner": planner, **metrics})
+    # Standalone post-run contract artifact: rank-identifiability report.
+    rank_report = report.get("rank_stability")
+    if isinstance(rank_report, Mapping):
+        write_rank_identifiability_report(rank_report, evidence_dir)
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -1313,7 +1322,21 @@ def _run_fixed_scope_execute(args: argparse.Namespace, config: Mapping[str, Any]
         raw_root=raw_root,
         evidence_dir=REPO_ROOT / args.evidence_dir,
     )
-    if not bool(report["rank_stability"].get("rank_identifiable")):
+    # Post-run contract gate: validate rank-identifiability against plan spec.
+    contract_specs = plan.get("post_run_contract_specs") or []
+    rank_contract_spec = next(
+        (spec for spec in contract_specs if spec.get("id") == "runtime_rank_identifiability_recheck"),
+        None,
+    )
+    if rank_contract_spec is not None:
+        contract_result = check_rank_identifiability_contract(
+            report["rank_stability"], rank_contract_spec
+        )
+        if not contract_result.satisfied:
+            print(f"fail-closed: post-run contract '{contract_result.contract_id}' failed: "
+                  f"{contract_result.reason}")
+            return 1
+    elif not bool(report["rank_stability"].get("rank_identifiable")):
         reason = report["rank_stability"].get("rank_identifiability_reason", "unknown")
         print(f"fail-closed: post-run rank identifiability recheck failed: {reason}")
         return 1

@@ -369,3 +369,49 @@ def test_fixed_scope_execute_cli_fails_closed_and_writes_no_rows(
     )
     assert exit_code == 1
     assert not (raw_root / "episode_rows.jsonl").exists()
+
+
+# ---------------------------------------------------------------------------
+# Post-run contract: rank-identifiability report and checker wiring
+# ---------------------------------------------------------------------------
+
+
+def test_plan_carries_rank_identifiability_contract_spec() -> None:
+    """The plan's post_run_contract_specs includes the rank-identifiability recheck."""
+    from robot_sf.benchmark.fidelity_rank_stability import (
+        PostRunContractResult,
+        check_rank_identifiability_contract,
+    )
+
+    plan = _plan()
+    specs = plan.get("post_run_contract_specs") or []
+    rank_spec = next(
+        (s for s in specs if s.get("id") == "runtime_rank_identifiability_recheck"),
+        None,
+    )
+    assert rank_spec is not None, "rank-identifiability contract spec missing from plan"
+    assert rank_spec["threshold"] == "non_zero_variance_and_rank_identifiable"
+    assert rank_spec["blocks_claims_when_failed"] is True
+    assert rank_spec["builder"] == "robot_sf/benchmark/fidelity_rank_stability.py"
+
+    # The contract checker is importable and callable on a well-formed report.
+    identifiable_report = {"rank_identifiable": True, "rank_identifiability_reason": None}
+    result = check_rank_identifiability_contract(identifiable_report, rank_spec)
+    assert isinstance(result, PostRunContractResult)
+    assert result.satisfied is True
+
+    non_identifiable_report = {
+        "rank_identifiable": False,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+    }
+    result_fail = check_rank_identifiability_contract(non_identifiable_report, rank_spec)
+    assert result_fail.satisfied is False
+    assert "rank not identifiable" in (result_fail.reason or "")
+
+
+def test_campaign_runner_imports_contract_checker() -> None:
+    """The campaign runner module exposes the post-run contract checker."""
+    assert hasattr(campaign_runner, "check_rank_identifiability_contract")
+    assert hasattr(campaign_runner, "write_rank_identifiability_report")
+    assert callable(campaign_runner.check_rank_identifiability_contract)
+    assert callable(campaign_runner.write_rank_identifiability_report)

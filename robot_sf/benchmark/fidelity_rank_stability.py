@@ -16,8 +16,10 @@ runs. The fidelity *sweep execution* lives with parent issue #3207.
 
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.rank_metrics import kendall_tau as _shared_kendall_tau
@@ -315,4 +317,94 @@ def analyze_fidelity_sensitivity(
         rank_identifiable=rank_identifiable,
         rank_identifiability_reason=rank_identifiability_reason,
         rank_stable=rank_stable,
+    )
+
+
+RANK_STABILITY_REPORT_SCHEMA = "fidelity_rank_stability_report.v1"
+
+
+def write_rank_identifiability_report(
+    report: Mapping[str, object],
+    output_dir: str | Path,
+) -> Path:
+    """Write the standalone rank-identifiability post-run contract report.
+
+    This is the artifact referenced by the ``post_run_contract_specs`` field
+    in the fixed-scope preflight.  It is a plain copy of the ``FidelitySensitivityReport``
+    dict with a leading ``schema_version`` wrapper so downstream contract
+    checkers can validate the file independently of the campaign report.
+
+    Returns:
+        Path to the written ``fidelity_rank_stability_report.json`` file.
+    """
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / "fidelity_rank_stability_report.json"
+    payload: dict[str, object] = {
+        "schema_version": RANK_STABILITY_REPORT_SCHEMA,
+        **report,
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+@dataclass(frozen=True)
+class PostRunContractResult:
+    """Result of checking a ``post_run_contract_specs`` entry against a report."""
+
+    contract_id: str
+    satisfied: bool
+    reason: str | None
+
+    def to_dict(self) -> dict[str, object]:
+        """Return JSON-safe mapping."""
+        return {
+            "contract_id": self.contract_id,
+            "satisfied": self.satisfied,
+            "reason": self.reason,
+        }
+
+
+def check_rank_identifiability_contract(
+    report: Mapping[str, object],
+    contract_spec: Mapping[str, object],
+) -> PostRunContractResult:
+    """Check whether ``report`` satisfies a rank-identifiability post-run contract.
+
+    The ``contract_spec`` is one entry from the ``post_run_contract_specs``
+    list produced by the fixed-scope preflight.  Only the
+    ``non_zero_variance_and_rank_identifiable`` threshold is currently
+    supported; other thresholds raise :class:`ValueError`.
+
+    The check is fail-closed: any missing or unexpected field is treated as
+    a failure so that claim promotion stays blocked until the report is
+    well-formed.
+
+    Returns:
+        A :class:`PostRunContractResult` with the contract id, pass/fail,
+        and an optional human-readable reason on failure.
+    """
+    contract_id = str(contract_spec.get("id", "unknown"))
+    threshold = str(contract_spec.get("threshold", ""))
+    blocks_claims = bool(contract_spec.get("blocks_claims_when_failed", True))
+
+    if threshold != "non_zero_variance_and_rank_identifiable":
+        raise ValueError(
+            f"unsupported post-run contract threshold: {threshold!r}; "
+            "only 'non_zero_variance_and_rank_identifiable' is currently supported"
+        )
+
+    rank_identifiable = bool(report.get("rank_identifiable", False))
+    reason = str(report.get("rank_identifiability_reason") or "none")
+
+    if rank_identifiable:
+        return PostRunContractResult(contract_id=contract_id, satisfied=True, reason=None)
+
+    return PostRunContractResult(
+        contract_id=contract_id,
+        satisfied=False,
+        reason=(
+            f"rank not identifiable (reason={reason}); "
+            f"blocks_claims_when_failed={blocks_claims}"
+        ),
     )

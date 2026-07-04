@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import gc
+import os
+import sys
 import time
 from pathlib import Path
 from typing import Any, NamedTuple
 
 from loguru import logger
+
+# Set PyTorch allocator configuration early before torch is loaded.
+os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
 
 FeasibilityTotals = dict[str, float | int]
 
@@ -131,6 +137,14 @@ def _serial_execute_map_jobs(  # noqa: PLR0913
                         "error": repr(exc),
                     }
                 )
+            finally:
+                # Force garbage collection to clean up model/env refs between consecutive arms
+                gc.collect()
+                if "torch" in sys.modules:
+                    import torch  # noqa: PLC0415
+
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
     return (
         wrote,
         episode_records,

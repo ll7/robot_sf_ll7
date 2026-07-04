@@ -120,6 +120,11 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_4245_closure_audit_2026-07-04.md`: closure-audit integration report for
+  issue #4245. Maps merged PR #4257 standalone offline-pretraining checkpoint
+  manifest and manifest-driven fine-tuning evidence to acceptance criteria
+  without promoting benchmark, comparison, or paper-facing claims.
+
 - `issue_4454_closure_audit_2026-07-04.md`: closure-audit integration report for
   issue #4454. Maps merged PR #4456 typed collision-event export evidence to the live issue
   acceptance criteria, with the issue left for authorized closure/comment propagation.

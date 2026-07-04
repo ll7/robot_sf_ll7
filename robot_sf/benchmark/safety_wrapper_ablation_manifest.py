@@ -26,6 +26,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.event_ledger import SUPPORTED_EVENT_LEDGER_SCHEMA_VERSIONS
 from robot_sf.robot.safety_wrapper import SAFETY_WRAPPER_SCHEMA, SafetyWrapperConfig
 
 SAFETY_WRAPPER_ABLATION_SCHEMA = "safety-wrapper-ablation-manifest.v1"
@@ -57,7 +58,6 @@ REQUIRED_ROW_FIELDS = (
     "wrapper_intervention_rate",
 )
 
-REQUIRED_EVENT_LEDGER_SCHEMA = "EpisodeEventLedger.v1"
 PLANNER_SOURCE_SUFFIX = "::planners[].key"
 DRY_RUN_CLAIM_BOUNDARY = (
     "dry-run factorial-ablation manifest only: enumerates the fixed issue #3501 "
@@ -556,7 +556,7 @@ def _row_provenance_errors(row: Mapping[str, Any]) -> list[str]:
     event_ledger = row.get("event_ledger")
     if (
         not isinstance(event_ledger, Mapping)
-        or event_ledger.get("schema_version") != REQUIRED_EVENT_LEDGER_SCHEMA
+        or event_ledger.get("schema_version") not in SUPPORTED_EVENT_LEDGER_SCHEMA_VERSIONS
     ):
         invalid.append("event_ledger")
 

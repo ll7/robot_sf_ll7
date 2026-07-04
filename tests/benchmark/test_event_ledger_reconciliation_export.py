@@ -56,7 +56,7 @@ def test_build_export_row_wraps_episode_identity_and_audit_table() -> None:
     assert row["seed"] == 7
     assert row["planner"] == "goal"
     assert row["software_commit"] == "abc123"
-    assert row["event_ledger_schema_version"] == "EpisodeEventLedger.v1"
+    assert row["event_ledger_schema_version"] == "EpisodeEventLedger.v2"
     assert row["reconciliation_table"]["reconciles"] is True
     assert {entry["field"] for entry in row["reconciliation_table"]["rows"]} >= {
         "collision_count",

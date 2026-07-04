@@ -123,12 +123,12 @@ explicitly blocked from manuscript promotion.
 | **Claim** | Two scenario-horizon tables were re-exported into a dissertation bundle with payload files, manifest entries, and checksums from a fresh bounded Issue #3203 campaign, but the campaign is invalid as benchmark-success evidence. |
 | **Artifact status** | current (payload-complete) |
 | **Evidence tier** | diagnostic |
-| **Allowed wording** | "Payload-complete scenario-horizon dissertation table exports exist for discussion/provenance only; the fresh campaign preserved the PPO partial-failure row and does not establish benchmark-success, ranking, or Results-chapter evidence." |
-| **Caveat** | The Issue #3203 campaign exited 2 with `evidence_status=invalid`: 8 successful evidence rows, 1 unexpected failed PPO row (144/144 serial-worker jobs failed from missing dict observation keys), and SNQI contract status `fail` under warn enforcement. Preserve the PPO row as failed/degraded evidence, not benchmark success. |
+| **Allowed wording** | "Payload-complete scenario-horizon dissertation table exports exist for discussion/provenance only; the fresh row-complete campaign still does not establish benchmark-success, ranking, or Results-chapter evidence." |
+| **Caveat** | Issue #3203 2026-07-01 campaign completed 9/9 planner rows, 1296 total episodes, `evidence_status=valid`, PPO `native` execution, and PPO learned-policy contract `pass`; however, Social Navigation Quality Index (SNQI) contract status remains `fail` with rank-alignment Spearman `-0.19999999999999998`, below the `0.3` fail threshold. Treat the packet as diagnostic/provenance only, not benchmark-success evidence. |
 | **Source PR/issue** | [#1023](https://github.com/ll7/robot_sf_ll7/issues/1023), [#2542](issue_2542_dissertation_export_bundle.md), [#3203](https://github.com/ll7/robot_sf_ll7/issues/3203) |
 | **Dissertation chapter** | Discussion, Limitations |
-| **Claim gap** | Payload absence is resolved, but the tables remain diagnostic/provenance artifacts until the PPO observation contract and SNQI contract caveats are repaired or explicitly scoped out by a new issue contract. |
-| **Evidence promotion path** | **invalid campaign repair**: fix or intentionally scope the PPO observation-contract failure and SNQI contract caveat, then rerun a fresh bounded campaign before any benchmark or Results wording. |
+| **Claim gap** | Payload absence and PPO observation-contract blockers are resolved, but the tables remain diagnostic/provenance artifacts until the SNQI contract caveat is repaired or explicitly scoped out by a new issue contract. |
+| **Evidence promotion path** | **SNQI contract repair or explicit narrow-boundary rerun**: repair the SNQI rank-alignment blocker, or predeclare a narrower claim boundary that excludes SNQI validity, then rerun a fresh bounded campaign before any benchmark Results wording. |
 
 ### 7. Recovered Reward-Curriculum Seed Runs (Diagnostic)
 
@@ -201,12 +201,13 @@ uv run python scripts/tools/stale_artifact_detector.py \
   docs/context/evidence/issue_2542_dissertation_export_bundle/artifact_manifest.json \
   --json-out output/issue-2760/stale_artifact_report.json
 
-# Issue #3203 fresh bounded campaign command used for the current table payloads
+# Issue #3203 latest fresh bounded campaign command behind the diagnostic packet
 uv run python scripts/tools/run_camera_ready_benchmark.py \
-  --config configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml \
+  --config configs/benchmarks/issue_3203_scenario_horizons_h500_reexport_valid.yaml \
   --output-root output/benchmarks/issue_3203 \
-  --campaign-id issue3203_scenario_horizons_h500_reexport_2026-06-20 \
+  --campaign-id issue3203_scenario_horizons_h500_reexport_valid_2026-07-01 \
   --mode run \
+  --skip-publication-bundle \
   --log-level INFO
 
 # JSON schema validation (targeted)

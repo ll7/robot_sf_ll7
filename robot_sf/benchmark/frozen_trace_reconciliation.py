@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from robot_sf.benchmark.event_ledger import EPISODE_EVENT_LEDGER_SCHEMA_VERSION
+from robot_sf.benchmark.event_ledger import SUPPORTED_EVENT_LEDGER_SCHEMA_VERSIONS
 
 FROZEN_TRACE_RECONCILIATION_SCHEMA = "frozen_trace_event_reconciliation.v1"
 FROZEN_TRACE_MISSING_EXPORT_SCHEMA = "frozen_trace_event_export_blocker.v1"
@@ -47,19 +47,21 @@ def _ledger_from_row(row: Mapping[str, Any]) -> Mapping[str, Any]:
 
     ledger = (
         row
-        if row.get("schema_version") == EPISODE_EVENT_LEDGER_SCHEMA_VERSION
+        if row.get("schema_version") in SUPPORTED_EVENT_LEDGER_SCHEMA_VERSIONS
         else row.get("event_ledger")
     )
     if not isinstance(ledger, Mapping):
-        if row.get("event_ledger_schema_version") == EPISODE_EVENT_LEDGER_SCHEMA_VERSION:
+        if row.get("event_ledger_schema_version") in SUPPORTED_EVENT_LEDGER_SCHEMA_VERSIONS:
             raise ValueError(
                 "frozen reconciliation rows must carry event_ledger exact/surrogate event "
-                "values; metric-semantics exports only name EpisodeEventLedger.v1 and cannot "
+                "values; metric-semantics exports only name the event ledger schema and cannot "
                 "be compared without the durable ledger payload"
             )
         raise ValueError("frozen reconciliation rows must contain event_ledger")
-    if ledger.get("schema_version") != EPISODE_EVENT_LEDGER_SCHEMA_VERSION:
-        raise ValueError("frozen reconciliation rows must contain EpisodeEventLedger.v1 payloads")
+    if ledger.get("schema_version") not in SUPPORTED_EVENT_LEDGER_SCHEMA_VERSIONS:
+        raise ValueError(
+            "frozen reconciliation rows must contain a supported EpisodeEventLedger payload"
+        )
     return ledger
 
 

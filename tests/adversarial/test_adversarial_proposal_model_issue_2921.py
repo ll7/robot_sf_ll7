@@ -11,9 +11,54 @@ from robot_sf.adversarial.config import CandidateSpec, Pose2D
 from robot_sf.adversarial.proposal_model import FailureArchiveProposalModel
 from robot_sf.adversarial.scenario_manifest import AdversarialScenarioManifest
 from scripts.adversarial.run_proposal_vs_random_issue_2921 import (
+    classify_issue_2921_stop_rule,
     create_synthetic_archive,
     create_synthetic_search_space,
 )
+
+
+def _held_out_comparison(*, mean_delta: float, failure_delta: int) -> dict[str, float | int | str]:
+    """Build a comparison payload for the #2921 stop-rule classifier."""
+    return {
+        "interpretation": "independent_planner_execution_outcomes",
+        "mean_objective_improvement": mean_delta,
+        "max_objective_improvement": mean_delta,
+        "failure_count_improvement": failure_delta,
+    }
+
+
+def test_classify_issue_2921_stop_rule_blocks_without_held_out_evidence() -> None:
+    """The stop rule must fail closed to blocked when held-out evidence is unavailable."""
+    decision = classify_issue_2921_stop_rule(
+        held_out_evidence=False,
+        held_out_status="not_available_no_disjoint_split",
+        comparison=_held_out_comparison(mean_delta=5.0, failure_delta=5),
+    )
+    assert decision["status"] == "blocked"
+    assert decision["reason"] == "not_available_no_disjoint_split"
+    assert decision["evidence_tier"] == "analysis_only"
+
+
+def test_classify_issue_2921_stop_rule_stop_on_negative_deltas() -> None:
+    """Negative held-out deltas classify as stop (do not expand the proposal lane)."""
+    decision = classify_issue_2921_stop_rule(
+        held_out_evidence=True,
+        held_out_status="eligible_held_out_diagnostic",
+        comparison=_held_out_comparison(mean_delta=-0.5, failure_delta=-2),
+    )
+    assert decision["status"] == "stop"
+    assert decision["evidence_tier"] == "diagnostic_only"
+
+
+def test_classify_issue_2921_stop_rule_revise_on_neutral_deltas() -> None:
+    """Neutral (zero) held-out deltas classify as revise before another empirical batch."""
+    decision = classify_issue_2921_stop_rule(
+        held_out_evidence=True,
+        held_out_status="eligible_held_out_diagnostic",
+        comparison=_held_out_comparison(mean_delta=0.0, failure_delta=0),
+    )
+    assert decision["status"] == "revise"
+    assert decision["evidence_tier"] == "diagnostic_only"
 
 
 def _candidate(x: float, y: float, speed: float = 1.0) -> CandidateSpec:

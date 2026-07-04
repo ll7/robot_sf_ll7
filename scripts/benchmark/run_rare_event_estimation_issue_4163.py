@@ -76,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     static_family = _static_constriction_family(payload)
     if static_family:
         summary["static_constriction_family"] = static_family
+    summary["empirical_reference"] = _empirical_reference(payload)
     summary["out_of_scope"] = [
         "no full benchmark campaign run",
         "no Slurm/GPU submission",
@@ -138,6 +139,42 @@ def _static_constriction_family(payload: dict[str, Any]) -> dict[str, Any] | Non
             "diagnostic rare-event application only; not a failure-rate claim",
         ),
     }
+
+
+def _empirical_reference(payload: dict[str, Any]) -> dict[str, Any]:
+    reference = payload.get("empirical_reference")
+    if reference is None:
+        return {
+            "status": "blocked",
+            "comparison": "larger_bruteforce_reference",
+            "reason": "No brute-force reference evidence configured for this smoke run.",
+            "next_action": (
+                "Run the cheap-family naive baseline, accelerated sample, and larger brute-force "
+                "reference before treating the estimate as calibrated evidence."
+            ),
+            "claim_boundary": "diagnostic-only smoke; not benchmark-strength failure-rate claim",
+        }
+    if not isinstance(reference, dict):
+        raise ValueError("empirical_reference must be a mapping when provided")
+    status = str(reference.get("status", "")).strip()
+    if status not in {"blocked", "not_run", "planned", "available"}:
+        raise ValueError(
+            "empirical_reference.status must be one of: blocked, not_run, planned, available"
+        )
+    payload_reference = {
+        "status": status,
+        "comparison": reference.get("comparison", "larger_bruteforce_reference"),
+        "claim_boundary": reference.get(
+            "claim_boundary",
+            "diagnostic-only smoke; not benchmark-strength failure-rate claim",
+        ),
+    }
+    for key in ("reason", "next_action", "evidence_path", "reference_samples", "reference_seed"):
+        if key in reference:
+            payload_reference[key] = reference[key]
+    if status == "available" and "evidence_path" not in payload_reference:
+        raise ValueError("empirical_reference.evidence_path is required when status is available")
+    return payload_reference
 
 
 def _load_smoke_scenario(payload: dict[str, Any]) -> dict[str, Any]:

@@ -20,6 +20,17 @@ parameters:
 objective_event: collision_or_severe_intrusion
 samples: 32
 seed: 4163
+empirical_reference:
+  status: blocked
+  comparison: larger_bruteforce_reference
+  reason: >-
+    This crossing smoke config validates likelihood-ratio accounting only; no larger
+    brute-force reference has been run for calibrated rare-event estimates.
+  next_action: >-
+    Run the Phase 5 cheap-family naive baseline, accelerated sample, and larger
+    brute-force reference before claiming calibrated failure-rate evidence.
+  claim_boundary: >-
+    Diagnostic-only rare-event sampling smoke; not benchmark-strength failure-rate claim.
 scenario_matrix: configs/scenarios/planner_sanity_matrix_v1.yaml
 smoke_scenario_index: 0
 synthetic_toy_model:

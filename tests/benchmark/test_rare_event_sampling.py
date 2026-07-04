@@ -171,6 +171,9 @@ def test_smoke_runner_writes_summary_with_provenance(tmp_path: Path) -> None:
     assert len(summary["sample_provenance"]["parameter_vector_hashes"]) == 8
     assert summary["planner_arms"] == ["synthetic_planner"]
     assert summary["episode_budget"] == 8
+    assert summary["empirical_reference"]["status"] == "blocked"
+    assert summary["empirical_reference"]["comparison"] == "larger_bruteforce_reference"
+    assert "larger brute-force reference" in summary["empirical_reference"]["next_action"]
     assert "synthetic_planner" in summary["arm_estimates"]
     assert "variance_ratio_vs_naive" in summary["arm_estimates"]["synthetic_planner"]
     assert (output_dir / "episodes.jsonl").exists()
@@ -205,6 +208,8 @@ def test_static_constriction_config_reports_two_arm_diagnostic_summary(tmp_path:
         "classic_head_on_corridor_low",
         "narrow_passage",
     ]
+    assert summary["empirical_reference"]["status"] == "blocked"
+    assert summary["empirical_reference"]["claim_boundary"].startswith("Diagnostic-only")
     for estimate in summary["arm_estimates"].values():
         assert estimate["objective_event"] == "collision_or_severe_intrusion"
         assert "confidence_interval" in estimate
@@ -239,6 +244,40 @@ planner_arms: []
     )
 
     with pytest.raises(ValueError, match="planner_arms must be a non-empty list"):
+        run_smoke(
+            [
+                "--config",
+                str(config_path),
+                "--output-dir",
+                str(tmp_path / "output"),
+                "--evidence-dir",
+                str(tmp_path / "evidence"),
+            ]
+        )
+
+
+def test_smoke_runner_rejects_available_reference_without_evidence(tmp_path: Path) -> None:
+    """Available empirical references must point at the reference evidence."""
+
+    config_path = tmp_path / "rare_event_bad_reference.yaml"
+    payload = _toy_spec_payload(samples=2)
+    payload["parameters"] = {
+        "ped_density": {
+            "base": "uniform",
+            "low": 0.01,
+            "high": 0.08,
+            "proposal_low": 0.04,
+            "proposal_high": 0.08,
+        }
+    }
+    payload["objective_event"] = "collision_or_severe_intrusion"
+    payload["empirical_reference"] = {
+        "status": "available",
+        "comparison": "larger_bruteforce_reference",
+    }
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="empirical_reference.evidence_path"):
         run_smoke(
             [
                 "--config",

@@ -37,8 +37,9 @@ Run the actual generation (maintainer step, SocNavBench environment with staged 
 
     uv run python scripts/tools/generate_socnavbench_traversible.py --map ETH
 
-The build prints the SHA-256 of the produced ``data.pkl`` so the external-data registry
-pin can be updated after the maintainer re-seeds the internal store.
+The build prints the SHA-256 of the produced ``data.pkl`` plus registry-style output
+tree checksum metadata so the external-data registry pin can be updated after the
+maintainer re-seeds the internal store.
 """
 
 from __future__ import annotations
@@ -132,6 +133,31 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def output_tree_checksum(paths: TraversiblePaths) -> dict[str, Any]:
+    """Return registry-style checksum metadata for the generated traversible output tree."""
+    if not paths.output_pkl.is_file():
+        return {
+            "output_tree_sha256": None,
+            "output_tree_file_count": 0,
+            "output_tree_total_size_bytes": 0,
+        }
+    file_sha = sha256_file(paths.output_pkl)
+    size = paths.output_pkl.stat().st_size
+    rel = paths.output_pkl.relative_to(paths.traversible_dir).as_posix()
+    digest = hashlib.sha256()
+    digest.update(rel.encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(str(size).encode("ascii"))
+    digest.update(b"\0")
+    digest.update(file_sha.encode("ascii"))
+    digest.update(b"\0")
+    return {
+        "output_tree_sha256": digest.hexdigest(),
+        "output_tree_file_count": 1,
+        "output_tree_total_size_bytes": size,
+    }
+
+
 def preflight(map_name: str, *, root: Path | None = None) -> dict[str, Any]:
     """Inspect staged inputs and existing output for one map without building anything.
 
@@ -180,6 +206,7 @@ def preflight(map_name: str, *, root: Path | None = None) -> dict[str, Any]:
     if output_exists:
         # Surface the current pin so callers can compare before/after a --force rebuild.
         report["output_sha256"] = sha256_file(paths.output_pkl)
+        report.update(output_tree_checksum(paths))
     return report
 
 
@@ -248,11 +275,12 @@ def _build_socnav_traversible(paths: TraversiblePaths) -> None:  # pragma: no co
 def build_traversible(
     map_name: str, *, root: Path | None = None, force: bool = False
 ) -> dict[str, Any]:
-    """Build the traversible for one map, failing closed on missing inputs.
+    """Build traversible one map, failing closed on missing inputs.
 
-    Returns a report dict including the SHA-256 of the produced ``data.pkl`` so the
-    external-data registry pin can be updated. Raises :class:`TraversibleGenerationError`
-    if the mesh is not staged or if the build does not produce the expected output.
+    Returns report dict including SHA-256 produced ``data.pkl`` and registry-style output
+    tree checksum metadata so external-data registry pin can be updated. Raises
+    :class:`TraversibleGenerationError` if mesh is not staged or the build does not
+    produce expected output.
     """
     paths = resolve_paths(map_name, root=root)
     if not _mesh_is_staged(paths.mesh_dir):
@@ -269,6 +297,7 @@ def build_traversible(
             "status": STATUS_ALREADY_PRESENT,
             "built": False,
             "output_sha256": sha256_file(paths.output_pkl),
+            **output_tree_checksum(paths),
         }
 
     if force and paths.output_pkl.is_file():
@@ -288,6 +317,7 @@ def build_traversible(
         "status": "generated",
         "built": True,
         "output_sha256": sha256_file(paths.output_pkl),
+        **output_tree_checksum(paths),
     }
 
 

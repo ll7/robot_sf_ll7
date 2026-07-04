@@ -8,6 +8,7 @@ imported by any of these paths.
 
 from __future__ import annotations
 
+import hashlib
 from typing import TYPE_CHECKING
 
 import pytest
@@ -23,6 +24,7 @@ from scripts.tools.generate_socnavbench_traversible import (
     TraversibleGenerationError,
     build_traversible,
     main,
+    output_tree_checksum,
     preflight,
     resolve_paths,
     sha256_file,
@@ -50,6 +52,19 @@ def _stage_mesh(root: Path, map_name: str = "ETH") -> Path:
 def _output_pkl(root: Path, map_name: str = "ETH") -> Path:
     """Return the traversible output path for a map under a synthetic external data root."""
     return root / SOCNAV_SUBPATH / DATASET_SUBPATH / "traversibles" / map_name / "data.pkl"
+
+
+def _expected_single_file_tree_hash(path: Path, *, root: Path) -> str:
+    """Return the registry-style tree hash for one file under root."""
+    file_sha = sha256_file(path)
+    digest = hashlib.sha256()
+    digest.update(path.relative_to(root).as_posix().encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(str(path.stat().st_size).encode("ascii"))
+    digest.update(b"\0")
+    digest.update(file_sha.encode("ascii"))
+    digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def test_resolve_paths_uses_expected_layout(tmp_path: Path) -> None:
@@ -95,7 +110,7 @@ def test_preflight_ready_when_mesh_staged(tmp_path: Path) -> None:
 
 
 def test_preflight_already_present_reports_hash(tmp_path: Path) -> None:
-    """An existing output is reported as already-present with its content hash."""
+    """An existing output reports file and registry-style tree hashes."""
     _stage_mesh(tmp_path)
     out = _output_pkl(tmp_path)
     out.parent.mkdir(parents=True)
@@ -104,6 +119,19 @@ def test_preflight_already_present_reports_hash(tmp_path: Path) -> None:
     assert report["status"] == STATUS_ALREADY_PRESENT
     assert report["output_exists"] is True
     assert report["output_sha256"] == sha256_file(out)
+    assert report["output_tree_sha256"] == _expected_single_file_tree_hash(out, root=out.parent)
+    assert report["output_tree_file_count"] == 1
+    assert report["output_tree_total_size_bytes"] == len(b"fake-traversible")
+
+
+def test_output_tree_checksum_missing_output_reports_empty_tree(tmp_path: Path) -> None:
+    """Missing output yields explicit empty-tree metadata."""
+    paths = resolve_paths("ETH", root=tmp_path)
+    assert output_tree_checksum(paths) == {
+        "output_tree_sha256": None,
+        "output_tree_file_count": 0,
+        "output_tree_total_size_bytes": 0,
+    }
 
 
 def test_dry_run_absent_mesh_exits_blocked(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
@@ -160,3 +188,4 @@ def test_build_traversible_idempotent_when_output_present(tmp_path: Path) -> Non
     assert report["status"] == STATUS_ALREADY_PRESENT
     assert report["built"] is False
     assert report["output_sha256"] == sha256_file(out)
+    assert report["output_tree_sha256"] == _expected_single_file_tree_hash(out, root=out.parent)

@@ -162,9 +162,19 @@ def test_coding_agents_compatibility_note_is_discoverable() -> None:
 
     note_ref = "issue_728_coding_agents_compatibility.md"
 
+    # The AGENTS.md token diet (#4464) relocated the cross-agent compatibility detail into the
+    # linked guidance file, so accept discoverability either directly from AGENTS.md or via the
+    # relocated pointer that AGENTS.md references. See issue #4469.
     agents_text = AGENTS_MD.read_text(encoding="utf-8")
-    assert note_ref in agents_text, (
-        f"{note_ref!r} not linked from AGENTS.md; add it to the Cross-Agent Compatibility section"
+    relocated_guidance = ROOT / "docs" / "dev" / "agents" / "relocated-agents-guidance.md"
+    agents_links_note = note_ref in agents_text or (
+        "relocated-agents-guidance.md" in agents_text
+        and relocated_guidance.exists()
+        and note_ref in relocated_guidance.read_text(encoding="utf-8")
+    )
+    assert agents_links_note, (
+        f"{note_ref!r} not discoverable from AGENTS.md or its relocated guidance pointer "
+        "(docs/dev/agents/relocated-agents-guidance.md); link it from one of them"
     )
 
     copilot_text = COPILOT_INSTRUCTIONS.read_text(encoding="utf-8")

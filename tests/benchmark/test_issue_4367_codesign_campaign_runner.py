@@ -238,3 +238,26 @@ def test_missing_hydration_manifest_fails_before_outputs(tmp_path: Path) -> None
     )
     assert exit_code == 2
     assert not output_root.exists()
+
+
+def test_aggregate_per_arm_tolerates_dict_valued_trace_fields() -> None:
+    """Slurm job 13292 regression: trace fields can be dict-valued; set-membership
+    against {"", None} raised TypeError (unhashable). Tuple membership must work."""
+    rows = [
+        {
+            "arm_key": "ppo_frozen",
+            "success": True,
+            "collision": False,
+            "near_miss": False,
+            "snqi": -0.1,
+            "deadlock_count": 0,
+            "low_progress_window": {"window_steps": 5, "threshold": 0.1},
+            "local_minimum_indicator": None,
+            "row_status": "completed",
+        }
+    ]
+    out = _MODULE._aggregate_per_arm(rows)
+    assert out[0]["arm_key"] == "ppo_frozen"
+    # the dict-valued field counts as a present trace field
+    trace_keys = [k for k in out[0] if "trace" in k]
+    assert trace_keys and any(out[0][k] in (1, True) for k in trace_keys)

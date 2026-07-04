@@ -78,6 +78,15 @@ SAME_SEED_PATH_FIELDS = (
 )
 
 _GATE_CONTINUE = "continue"
+_GATE_PROVENANCE_KEYS = (
+    "artifact_path",
+    "artifact_uri",
+    "evidence",
+    "evidence_path",
+    "evidence_uri",
+    "provenance",
+    "source_artifact",
+)
 
 _READINESS_COMMAND_TEMPLATE = (
     "uv run python scripts/validation/validate_predictive_v2_comparison_readiness.py "
@@ -342,6 +351,65 @@ def _coupling_gate_recommendation(path: Path) -> tuple[str | None, str | None]:
     return None, "coupling-gate artifact must be JSON or Markdown"
 
 
+def _has_nonempty_pointer(value: Any) -> bool:
+    """Return whether a JSON value carries at least one non-empty provenance pointer."""
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, dict):
+        return any(_has_nonempty_pointer(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_has_nonempty_pointer(item) for item in value)
+    return False
+
+
+def _coupling_gate_provenance(path: Path) -> tuple[bool, str | None]:
+    """Check gate artifact records durable evidence or provenance for the go decision.
+
+    Returns:
+        A ``(valid, error)`` tuple. ``error`` is populated when ``valid`` is false.
+    """
+    suffix = path.suffix.lower()
+    if suffix == ".json":
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            return False, f"coupling-gate artifact is malformed JSON: {exc}"
+        if not isinstance(payload, dict):
+            return False, "coupling-gate artifact must be a JSON object"
+
+        recommendation = payload.get("recommendation")
+        search_roots: list[Any] = [payload]
+        if isinstance(recommendation, dict):
+            search_roots.append(recommendation)
+
+        for root in search_roots:
+            if isinstance(root, dict) and any(
+                _has_nonempty_pointer(root.get(key)) for key in _GATE_PROVENANCE_KEYS
+            ):
+                return True, None
+        return (
+            False,
+            "coupling-gate artifact missing durable evidence/provenance pointer "
+            f"(one of: {', '.join(_GATE_PROVENANCE_KEYS)})",
+        )
+
+    if suffix in {".md", ".markdown"}:
+        try:
+            content = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            return False, f"coupling-gate Markdown could not be read: {exc}"
+        pattern = (
+            r"(?im)^[-*]?\s*(?:artifact_path|artifact_uri|evidence|evidence_path|"
+            r"evidence_uri|provenance|source_artifact)\s*:\s*`?(.+?)`?\s*$"
+        )
+        match = re.search(pattern, content)
+        if match and match.group(1).strip():
+            return True, None
+        return False, "coupling-gate Markdown missing durable evidence/provenance pointer line"
+
+    return False, "coupling-gate artifact must be JSON or Markdown"
+
+
 def _check_blocked_slurm_gate(
     coupling_gate_path: Path | None,
     revised_hypothesis_recorded: bool,
@@ -373,6 +441,9 @@ def _check_blocked_slurm_gate(
             errors.append(
                 f"coupling-gate recommendation is {recommendation!r}, expected {_GATE_CONTINUE!r}"
             )
+        provenance_ok, provenance_error = _coupling_gate_provenance(coupling_gate_path)
+        if not provenance_ok and provenance_error is not None:
+            errors.append(provenance_error)
 
     if errors:
         return STATUS_BLOCKED, errors

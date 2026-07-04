@@ -13,6 +13,8 @@ from scripts.tools import check_context_note_freshness_decay as checker
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from pytest import MonkeyPatch
+
 
 def _run(repo: Path, *args: str, env: dict[str, str] | None = None) -> None:
     subprocess.run(
@@ -227,7 +229,7 @@ def test_rule_b_stale_current_dated_note(tmp_path: Path) -> None:
                 "path": "docs/context/dated.md",
                 "status": "current",
                 "freshness": "dated",
-            }
+            },
         ],
     )
     _commit(repo, "dated note", iso_date="2025-01-01T00:00:00+00:00")
@@ -259,7 +261,7 @@ def test_rule_b_stale_referenced_is_skipped(tmp_path: Path) -> None:
                 "path": "docs/context/dated.md",
                 "status": "current",
                 "freshness": "dated",
-            }
+            },
         ],
     )
     _commit(repo, "dated note with reference", iso_date="2025-01-01T00:00:00+00:00")
@@ -341,3 +343,140 @@ def test_conflict_target_exists(tmp_path: Path) -> None:
     _findings, _proposed_moves, conflicts = checker.check_freshness_decay(repo_root=repo)
     assert len(conflicts) == 1
     assert "target_exists" in conflicts[0]
+
+
+def test_absolute_paths_normalize_and_preserve_custom_context_dir(tmp_path: Path) -> None:
+    """Absolute inputs compare against normalized repo-relative paths."""
+    repo = _repo(tmp_path)
+    context_dir = repo / "custom/ctx"
+    _write(repo, "custom/ctx/old.md", "# Old\n")
+    _write(repo, "custom/ctx/new.md", "# New\n")
+    _write(repo, "custom/ctx/INDEX.md", "[old](./old.md)\n")
+    _write(
+        repo,
+        "custom/ctx/catalog.yaml",
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "entries": [
+                    {
+                        "path": str(repo / "custom/ctx/old.md"),
+                        "status": "superseded",
+                        "freshness": "dated",
+                        "replacement": str(repo / "custom/ctx/new.md"),
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+    )
+    _commit(repo, "custom context normalized paths", iso_date="2026-01-02T00:00:00+00:00")
+
+    findings, proposed_moves, _conflicts = checker.check_freshness_decay(
+        repo_root=repo,
+        catalog_path=repo / "custom/ctx/catalog.yaml",
+        context_dir=context_dir,
+        index_path=repo / "custom/ctx/INDEX.md",
+    )
+
+    assert findings == []
+    assert proposed_moves[0].source == "custom/ctx/old.md"
+    assert proposed_moves[0].target == "custom/ctx/archive/old.md"
+
+
+def test_missing_index_fails_closed_without_orphan_noise(tmp_path: Path) -> None:
+    """Missing configured INDEX.md is an error and skips misleading orphan checks."""
+    repo = _repo(tmp_path)
+    (repo / "docs/context/INDEX.md").unlink()
+    _write(repo, "docs/context/orphan.md", "# Orphan\n")
+    _commit(repo, "remove context index", iso_date="2026-01-02T00:00:00+00:00")
+
+    findings, _proposed_moves, _conflicts = checker.check_freshness_decay(repo_root=repo)
+
+    assert [finding.rule for finding in findings] == ["missing_context_index"]
+    assert findings[0].severity == "error"
+    assert findings[0].path == "docs/context/INDEX.md"
+    assert "fail closed" in findings[0].message
+
+
+def test_rule_b_stale_referenced_by_markdown_file_is_skipped(tmp_path: Path) -> None:
+    """A non-index Markdown inbound reference suppresses stale-current findings."""
+    repo = _repo(tmp_path)
+    _write(repo, "docs/context/dated.md", "# Dated\n")
+    _write(repo, "docs/context/topic.md", "[dated](dated.md)\n")
+    _write_catalog(
+        repo,
+        [
+            {
+                "path": "docs/context/dated.md",
+                "status": "current",
+                "freshness": "dated",
+            },
+            {
+                "path": "docs/context/topic.md",
+                "status": "current",
+                "freshness": "maintained",
+            },
+        ],
+    )
+    _commit(repo, "dated note markdown reference", iso_date="2025-01-01T00:00:00+00:00")
+
+    findings, proposed_moves, _conflicts = checker.check_freshness_decay(
+        repo_root=repo,
+        max_age_days=180,
+        now=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+    assert findings == []
+    assert proposed_moves == []
+
+
+def test_inbound_markdown_refs_are_built_once_per_check(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """Multiple stale notes reuse one inbound Markdown map instead of rescanning per note."""
+    repo = _repo(tmp_path)
+    _write(repo, "docs/context/dated_a.md", "# Dated A\n")
+    _write(repo, "docs/context/dated_b.md", "# Dated B\n")
+    _write(repo, "docs/context/topic.md", "[dated a](dated_a.md)\n[dated b](dated_b.md)\n")
+    _write_catalog(
+        repo,
+        [
+            {
+                "path": "docs/context/dated_a.md",
+                "status": "current",
+                "freshness": "dated",
+            },
+            {
+                "path": "docs/context/dated_b.md",
+                "status": "current",
+                "freshness": "dated",
+            },
+            {
+                "path": "docs/context/topic.md",
+                "status": "current",
+                "freshness": "maintained",
+            },
+        ],
+    )
+    _commit(repo, "two dated notes markdown references", iso_date="2025-01-01T00:00:00+00:00")
+    original_run = checker._run
+    ls_files_calls = 0
+
+    def counted_run(cmd: list[str], *, cwd: Path) -> str:
+        nonlocal ls_files_calls
+        if cmd[:2] == ["git", "ls-files"] and cmd[-1] == "docs/context":
+            ls_files_calls += 1
+        return original_run(cmd, cwd=cwd)
+
+    monkeypatch.setattr(checker, "_run", counted_run)
+
+    findings, proposed_moves, _conflicts = checker.check_freshness_decay(
+        repo_root=repo,
+        max_age_days=180,
+        now=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+    assert findings == []
+    assert proposed_moves == []
+    assert ls_files_calls == 2

@@ -157,6 +157,63 @@ def test_learned_predictive_missing_checkpoint_excluded_from_trained_planner_cla
     assert rows["fragile"]["trained_planner_claim_exclusion"] == "missing_checkpoint_or_config"
     assert rows["conservative"]["trained_planner_claim_exclusion"] == "missing_checkpoint_or_config"
     assert report["trained_planner_claim_status_counts"]["excluded_missing_checkpoint_or_config"]
+    readiness = report["trained_planner_readiness"]
+    assert readiness["all_trained_planner_arms_ready"] is False
+    assert readiness["blocker_count"] == 2
+    blocked = {
+        row["planner_key"]: row
+        for row in readiness["rows"]
+        if row["readiness_status"] == "blocked_missing_artifact_provenance"
+    }
+    assert blocked["fragile"]["missing_fields"] == [
+        "algo_config",
+        "checkpoint",
+        "training_manifest",
+    ]
+    assert blocked["conservative"]["missing_fields"] == [
+        "algo_config",
+        "checkpoint",
+        "training_manifest",
+    ]
+
+
+def test_trained_planner_readiness_turns_ready_with_artifact_provenance(
+    tmp_path: Path,
+) -> None:
+    """Checkpoint-backed trained arm records readiness for a fresh probe."""
+
+    config_path, gate_path, config, gates = _write_config_pair(tmp_path)
+    checkpoint_path = tmp_path / "policy.zip"
+    manifest_path = tmp_path / "training_manifest.json"
+    checkpoint_path.write_bytes(b"fixture checkpoint")
+    manifest_path.write_text('{"schema_version": "fixture"}\n', encoding="utf-8")
+    config["arms"][1].update(
+        {
+            "structural_class": "learned_policy",
+            "algo": "ppo",
+            "algo_config": str(tmp_path / "algo.yaml"),
+            "checkpoint": str(checkpoint_path),
+            "training_manifest": str(manifest_path),
+        }
+    )
+    records = [
+        _record("stable", SOCIAL_FORCE_DEFAULT, collision_rate=0.0),
+        _record("fragile", SOCIAL_FORCE_DEFAULT, collision_rate=0.0),
+    ]
+
+    report = build_certification_transfer_report(
+        records,
+        probe_config=config,
+        gate_spec=gates,
+        config_path=config_path,
+        gate_spec_path=gate_path,
+    )
+
+    readiness = report["trained_planner_readiness"]
+    row = next(row for row in readiness["rows"] if row["planner_key"] == "fragile")
+    assert row["eligible_for_trained_planner_claim"] is True
+    assert row["readiness_status"] == "ready_for_fresh_probe"
+    assert row["missing_fields"] == []
 
 
 def test_declared_fallback_execution_excluded_from_trained_planner_claims(tmp_path: Path) -> None:
@@ -217,6 +274,10 @@ def test_evidence_writer_emits_checksums_without_raw_artifacts(tmp_path: Path) -
     )
     loaded = json.loads(Path(paths["summary_json"]).read_text(encoding="utf-8"))
     assert loaded["issue"] == 4207
+    metadata = json.loads(Path(paths["metadata_json"]).read_text(encoding="utf-8"))
+    assert metadata["trained_planner_readiness"]["schema_version"] == "trained-planner-readiness.v1"
+    readme = Path(paths["readme"]).read_text(encoding="utf-8")
+    assert "Trained-planner readiness" in readme
     with Path(paths["certification_transfer_matrix_csv"]).open("r", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
     assert rows

@@ -687,6 +687,16 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
                 socnav_missing_prereq_policy=str(
                     entry.get("socnav_missing_prereq_policy", "fail-fast"),
                 ),
+                availability_gate=(
+                    str(entry["availability_gate"]).strip()
+                    if entry.get("availability_gate") is not None
+                    else None
+                ),
+                fail_closed_reason=(
+                    str(entry["fail_closed_reason"]).strip()
+                    if entry.get("fail_closed_reason") is not None
+                    else None
+                ),
                 adapter_impact_eval=bool(entry.get("adapter_impact_eval", False)),
                 observation_mode=_normalize_observation_mode(
                     entry.get("observation_mode"),

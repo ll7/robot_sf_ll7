@@ -99,7 +99,7 @@ planners:
     algo_config: configs/algos/orca_prior_guarded_ppo_v1.yaml
     benchmark_profile: experimental
     availability_gate: dependency_gated
-    fail_closed_reason: checkpoint/config availability must be verified before campaign launch
+    fail_closed_reason: guarded_ppo_checkpoint_observation_contract_missing
   - key: prediction_planner
     algo: prediction_planner
     planner_group: experimental

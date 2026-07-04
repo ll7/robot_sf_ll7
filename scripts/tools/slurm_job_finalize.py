@@ -47,6 +47,7 @@ DURABLE_URI_SCHEMES = (
     "gs://",
     "dvc://",
 )
+ALLOWED_CLAIM_DECISIONS = {"promote", "keep_diagnostic", "block", "stop"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,6 +179,19 @@ def validate_durable_uri(value: str | None) -> str | None:
     return candidate
 
 
+def normalize_claim_decision(value: str | None) -> str | None:
+    """Normalize bounded #3425 claim-decision labels."""
+    if value is None:
+        return None
+    normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
+    if not normalized:
+        return None
+    if normalized not in ALLOWED_CLAIM_DECISIONS:
+        allowed = ", ".join(sorted(ALLOWED_CLAIM_DECISIONS))
+        raise ValueError(f"claim decision {value!r} must be one of: {allowed}")
+    return normalized
+
+
 def classify_durable_status(classification: str, durable_uri: str | None) -> str:
     """Classify durable-store readiness, fail-closed.
 
@@ -238,11 +252,17 @@ def issue_update_markdown(report: dict[str, Any]) -> str:
         f"- artifact status: `{report['artifact_status']}`",
         f"- durable status: `{report.get('durable_status', 'not_applicable')}`"
         + (f" -> `{report['durable_uri']}`" if report.get("durable_uri") else ""),
-        f"- claim boundary: {report['claim_boundary']}",
-        "",
-        "| Artifact | Required | Status | SHA256 |",
-        "| --- | --- | --- | --- |",
     ]
+    if report.get("claim_decision"):
+        lines.append(f"- claim decision: `{report['claim_decision']}`")
+    lines.extend(
+        [
+            f"- claim boundary: {report['claim_boundary']}",
+            "",
+            "| Artifact | Required | Status | SHA256 |",
+            "| --- | --- | --- | --- |",
+        ]
+    )
     for artifact in report["artifacts"]:
         status = "present" if artifact["exists"] else "missing"
         digest = artifact["sha256"] or "n/a"
@@ -255,10 +275,11 @@ def issue_update_markdown(report: dict[str, Any]) -> str:
 
 def ledger_update_markdown(report: dict[str, Any]) -> str:
     """Return one compact ledger row for context notes or issue comments."""
+    claim_decision = report.get("claim_decision") or "n/a"
     return (
         f"| #{report['issue_number']} | `{report['job_id']}` | "
         f"`{report['classification']}` | `{report['artifact_status']}` | "
-        f"{report['next_action']} |"
+        f"`{claim_decision}` | {report['next_action']} |"
     )
 
 
@@ -292,9 +313,11 @@ def build_finalization_report(  # noqa: PLR0913
     manual_decision: bool = False,
     notes: str = "",
     durable_uri: str | None = None,
+    claim_decision: str | None = None,
 ) -> dict[str, Any]:
     """Build a compact SLURM finalization report."""
     validated_uri = validate_durable_uri(durable_uri)
+    normalized_claim_decision = normalize_claim_decision(claim_decision)
     artifacts = [
         artifact_record(path, repo_root=repo_root, role="expected", required=True)
         for path in expected_artifacts
@@ -326,6 +349,8 @@ def build_finalization_report(  # noqa: PLR0913
         "next_action": _next_action(classification),
         "notes": notes,
     }
+    if normalized_claim_decision is not None:
+        report["claim_decision"] = normalized_claim_decision
     report["issue_update_markdown"] = issue_update_markdown(report)
     report["ledger_update_markdown"] = ledger_update_markdown(report)
     return report
@@ -342,6 +367,7 @@ def build_control_plane_finalization_report(  # noqa: PLR0913
     manual_decision: bool = False,
     notes: str = "",
     durable_uri: str | None = None,
+    claim_decision: str | None = None,
 ) -> dict[str, Any]:
     """Build a report using the July 2026 research-control-plane run contract."""
     root = Path(run_root)
@@ -356,6 +382,7 @@ def build_control_plane_finalization_report(  # noqa: PLR0913
         manual_decision=manual_decision,
         notes=notes,
         durable_uri=durable_uri,
+        claim_decision=claim_decision,
     )
 
 
@@ -379,6 +406,17 @@ def _durable_uri_cli(value: str) -> str:
     if validated is None:
         raise argparse.ArgumentTypeError("durable URI must be non-empty")
     return validated
+
+
+def _claim_decision_cli(value: str) -> str:
+    """argparse type for bounded claim-decision labels."""
+    try:
+        normalized = normalize_claim_decision(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    if normalized is None:
+        raise argparse.ArgumentTypeError("claim decision must be non-empty")
+    return normalized
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -418,6 +456,15 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--notes", default="", help="Optional short note copied into the report.")
     parser.add_argument(
+        "--claim-decision",
+        type=_claim_decision_cli,
+        metavar="{promote,keep-diagnostic,keep_diagnostic,block,stop}",
+        help=(
+            "Bounded final disposition for the SLURM-to-claim slice. "
+            "Accepted labels normalize to promote, keep_diagnostic, block, or stop."
+        ),
+    )
+    parser.add_argument(
         "--durable-uri",
         type=_durable_uri_cli,
         help=(
@@ -444,6 +491,7 @@ def main(argv: list[str] | None = None) -> int:
             manual_decision=args.manual_decision,
             notes=args.notes,
             durable_uri=args.durable_uri,
+            claim_decision=args.claim_decision,
         )
     else:
         report = build_finalization_report(
@@ -456,6 +504,7 @@ def main(argv: list[str] | None = None) -> int:
             manual_decision=args.manual_decision,
             notes=args.notes,
             durable_uri=args.durable_uri,
+            claim_decision=args.claim_decision,
         )
     write_report(report, args.output, markdown_output=args.markdown_output)
     print(report["issue_update_markdown"])

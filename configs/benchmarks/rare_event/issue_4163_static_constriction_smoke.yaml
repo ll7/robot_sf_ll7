@@ -20,6 +20,18 @@ parameters:
 objective_event: collision_or_severe_intrusion
 samples: 32
 seed: 4163
+empirical_reference:
+  status: blocked
+  comparison: larger_bruteforce_reference
+  reason: >-
+    This static-constriction smoke config applies the rare-event accounting harness
+    to a cheap family only; no larger brute-force reference has been run.
+  next_action: >-
+    Run the Phase 5 cheap-family naive baseline, accelerated sample, and larger
+    brute-force reference before claiming calibrated failure-rate evidence.
+  claim_boundary: >-
+    Diagnostic-only static-constriction rare-event smoke; not benchmark-strength
+    failure-rate claim.
 scenario_matrix: configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml
 smoke_scenario_index: 0
 planner_arms:

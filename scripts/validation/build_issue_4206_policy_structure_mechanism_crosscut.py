@@ -21,6 +21,8 @@ from robot_sf.benchmark.failure_mechanism_taxonomy import (
     MECHANISM_SCHEMA_VERSION,
     REQUIRED_MECHANISM_FIELDS,
     TRACE_VERIFIED_EVIDENCE_MODES,
+    FailureMechanismTaxonomyError,
+    validate_failure_mechanism_record,
 )
 
 if TYPE_CHECKING:
@@ -220,6 +222,17 @@ def _mechanism_payload(row: Mapping[str, Any]) -> dict[str, Any]:
     return {field: row.get(field, "") for field in REQUIRED_MECHANISM_FIELDS}
 
 
+def _mechanism_validation_errors(row: Mapping[str, Any]) -> list[str]:
+    missing_fields = [field for field in REQUIRED_MECHANISM_FIELDS if field not in row]
+    if missing_fields:
+        return missing_fields
+    try:
+        validate_failure_mechanism_record(_mechanism_payload(row))
+    except FailureMechanismTaxonomyError as exc:
+        return [f"failure_mechanism_taxonomy: {exc}"]
+    return []
+
+
 def _normalize_mechanism_fields(row: Mapping[str, Any]) -> dict[str, Any]:
     """Normalize v1 episode-row taxonomy fields to the report's stable names."""
 
@@ -234,7 +247,7 @@ def _merge_mechanism_fields(
     row: Mapping[str, Any], sidecar_index: Mapping[tuple[str, ...], Mapping[str, Any]]
 ) -> dict[str, Any]:
     merged = _normalize_mechanism_fields(row)
-    if all(field in merged for field in REQUIRED_MECHANISM_FIELDS):
+    if not _mechanism_validation_errors(merged):
         return merged
     for key in _sidecar_keys(row):
         sidecar = sidecar_index.get(key)
@@ -354,7 +367,7 @@ def _load_run_rows(
         row = _merge_mechanism_fields(raw, sidecar_index)
         row["source_run"] = run_name
         row["source_root"] = str(root)
-        missing_fields = [field for field in REQUIRED_MECHANISM_FIELDS if field not in row]
+        missing_fields = _mechanism_validation_errors(row)
         if row.get("mechanism_evidence_mode") not in TRACE_VERIFIED_EVIDENCE_MODES:
             missing_fields.append("mechanism_evidence_mode=trace_verified_source")
         if missing_fields:

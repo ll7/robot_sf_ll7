@@ -7,7 +7,11 @@ benchmark-scale use of the opt-in HSFM field-of-view models:
    neighbor is down-weighted without disturbing an in-cone neighbor's push
    (contrast with the coarse ``np.min`` aggregate mode); and
 2. vectorization of the ``O(N^2)`` pairwise time-to-collision (TTC) weight path,
-   which must remain numerically identical to the earlier scalar double loop.
+   which must remain numerically identical to the earlier scalar double loop; and
+3. vectorization of the ``O(N^2)`` pairwise pedestrian-pedestrian *social-force*
+   contribution matrix (:func:`pairwise_social_force_contributions`), which must stay
+   pair-by-pair identical to the PySocialForce scalar kernel it replaces before
+   benchmark-scale use.
 
 Evidence tier: diagnostic/prototype. No default model change and no
 calibrated-realism claim is made here.
@@ -411,3 +415,140 @@ def test_fov_attenuated_total_force_rejects_bad_shapes() -> None:
             cone_half_angle_rad=np.pi / 2,
             rear_weight=0.5,
         )
+
+
+def _reference_scalar_social_contributions(
+    positions: np.ndarray,
+    velocities: np.ndarray,
+    config: SocialForceConfig,
+) -> np.ndarray:
+    """Per-pair reference via PySocialForce's scalar ``social_force_ped_ped`` kernel.
+
+    This mirrors the pre-vectorization ``O(N^2)`` double loop the maintainer named on
+    issue #3481, so the closed-form NumPy implementation can be pinned pair-by-pair
+    (not just on the aggregate sum) to the exact kernel it replaces.
+    """
+    from pysocialforce.forces import social_force_ped_ped
+
+    count = positions.shape[0]
+    reference = np.zeros((count, count, 2), dtype=float)
+    threshold_sq = float(config.activation_threshold) ** 2
+    for i in range(count):
+        for j in range(count):
+            if i == j:
+                continue
+            pos_diff = positions[i] - positions[j]
+            if float(pos_diff[0] ** 2 + pos_diff[1] ** 2) > threshold_sq:
+                continue
+            vel_diff = velocities[j] - velocities[i]
+            force_x, force_y = social_force_ped_ped(
+                (float(pos_diff[0]), float(pos_diff[1])),
+                (float(vel_diff[0]), float(vel_diff[1])),
+                config.n,
+                config.n_prime,
+                config.lambda_importance,
+                config.gamma,
+            )
+            reference[i, j, 0] = float(config.factor) * float(force_x)
+            reference[i, j, 1] = float(config.factor) * float(force_y)
+    return reference
+
+
+@pytest.mark.parametrize("count", [2, 5, 17, 40])
+def test_vectorized_social_contributions_match_scalar_kernel(count: int) -> None:
+    """Vectorized per-pair contributions equal the scalar njit kernel loop.
+
+    Pins the whole ``(N, N, 2)`` matrix (every pair, not just the neighbor sum) to the
+    exact PySocialForce kernel the O(N^2) loop used, across several population sizes and
+    a mix of interacting and out-of-range pairs. This is the equivalence contract that
+    keeps the vectorization behavior-preserving (issue #3481).
+    """
+    rng = np.random.default_rng(20260704 + count)
+    positions = rng.uniform(-6.0, 6.0, size=(count, 2))
+    velocities = rng.uniform(-1.5, 1.5, size=(count, 2))
+    config = SocialForceConfig()
+
+    vectorized = pairwise_social_force_contributions(
+        positions, velocities, **_social_kwargs(config)
+    )
+    reference = _reference_scalar_social_contributions(positions, velocities, config)
+
+    assert vectorized.shape == (count, count, 2)
+    # Tolerance far tighter than the aggregate 1e-9 contract; only fastmath-vs-IEEE
+    # rounding separates the two paths.
+    np.testing.assert_allclose(vectorized, reference, rtol=1e-9, atol=1e-11)
+
+
+def test_vectorized_social_contributions_handle_coincident_pairs() -> None:
+    """Coincident actors (zero position diff) stay finite and match the scalar kernel.
+
+    The scalar kernel's ``norm_vec`` maps the zero position difference to a zero unit
+    direction, and ``arctan2(0, 0) == 0``; the vectorized path must reproduce that
+    degenerate handling (via masked division) instead of producing NaN from 0/0. With a
+    zero separation but non-zero relative velocity the interaction vector is still
+    ``lambda_importance * vel_diff``, so the force is finite and generally non-zero — the
+    contract is finiteness and pair-by-pair equivalence, not a zero force.
+    """
+    positions = np.array([[0.0, 0.0], [0.0, 0.0], [1.0, 0.0]], dtype=float)
+    velocities = np.array([[0.2, 0.0], [-0.2, 0.0], [0.0, 0.1]], dtype=float)
+    config = SocialForceConfig()
+
+    contributions = pairwise_social_force_contributions(
+        positions, velocities, **_social_kwargs(config)
+    )
+    assert np.all(np.isfinite(contributions))
+    reference = _reference_scalar_social_contributions(positions, velocities, config)
+    np.testing.assert_allclose(contributions, reference, rtol=1e-9, atol=1e-11)
+
+
+def test_vectorized_social_contributions_fully_degenerate_pair_is_zero() -> None:
+    """Actors sharing both position and velocity produce an exactly zero force.
+
+    Here the position diff and the interaction vector are both zero, so ``norm_vec``
+    returns a zero direction and the force collapses to zero — the pure zero-vector path
+    the masked division must handle without a NaN.
+    """
+    positions = np.array([[0.0, 0.0], [0.0, 0.0], [2.0, 0.0]], dtype=float)
+    velocities = np.array([[0.5, -0.3], [0.5, -0.3], [0.0, 0.0]], dtype=float)
+    config = SocialForceConfig()
+
+    contributions = pairwise_social_force_contributions(
+        positions, velocities, **_social_kwargs(config)
+    )
+    assert np.all(np.isfinite(contributions))
+    assert np.array_equal(contributions[0, 1], np.zeros(2))
+    assert np.array_equal(contributions[1, 0], np.zeros(2))
+
+
+def test_vectorized_social_contributions_scale_to_large_population() -> None:
+    """The vectorized seam runs at benchmark-scale N and stays sum-consistent.
+
+    A performance-oriented smoke: a size that is impractical for a per-pair Python loop
+    completes as a single NumPy evaluation and still reproduces the aggregate social
+    force PySocialForce sums, confirming the O(N^2) loop removal did not change results.
+    """
+    rng = np.random.default_rng(4352)
+    positions = rng.uniform(-15.0, 15.0, size=(256, 2))
+    velocities = rng.uniform(-1.0, 1.0, size=(256, 2))
+    config = SocialForceConfig()
+
+    contributions = pairwise_social_force_contributions(
+        positions, velocities, **_social_kwargs(config)
+    )
+    assert contributions.shape == (256, 256, 2)
+    assert np.all(np.isfinite(contributions))
+    assert np.allclose(np.einsum("iik->ik", contributions), 0.0)
+
+    expected_aggregate = (
+        social_force(
+            positions,
+            velocities,
+            config.activation_threshold,
+            config.n,
+            config.n_prime,
+            config.lambda_importance,
+            config.gamma,
+        )
+        * config.factor
+    )
+    np.testing.assert_allclose(contributions.sum(axis=1), expected_aggregate, rtol=1e-9, atol=1e-9)

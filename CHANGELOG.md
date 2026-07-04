@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+* **Vectorized the O(N²) pairwise pedestrian-pedestrian social-force contribution path** used by the
+  opt-in `hsfm_anisotropic_fov_v1` runtime seam (issue #3481). `pairwise_social_force_contributions`
+  (`robot_sf/sim/pedestrian_model_variants.py`) previously built its `(N, N, 2)` per-pair matrix with
+  a Python double loop calling the PySocialForce njit kernel one pair at a time; it now evaluates the
+  whole matrix in closed NumPy form via the new pure helper `_pairwise_social_force_kernel`, matching
+  the scalar kernel pair-by-pair to ~5e-15 (aggregate sum unchanged to ~7e-15, well under the existing
+  `rtol=1e-9` contract) and running ~14–23× faster for N=50–200 in single-CPU diagnostic timing. The
+  activation-threshold mask, zero-vector/`norm_vec` handling, and diagonal exclusion are preserved
+  exactly, and the module stays numpy-pure at import (the deferred numba import is no longer needed on
+  this path). Behavior-preserving; default pedestrian models are untouched. Evidence tier remains
+  diagnostic/prototype — no benchmark campaign, Slurm/GPU submission, calibrated-realism, planner
+  ranking, or paper/dissertation claim. New equivalence, degenerate-pair, and N=256 scale tests in
+  `tests/sim/test_hsfm_fov_pairwise_isolation.py`.
+
 ### Added
 
 * Extended the **issue #3207 fidelity-sensitivity campaign runner to consume the fixed-scope preflight

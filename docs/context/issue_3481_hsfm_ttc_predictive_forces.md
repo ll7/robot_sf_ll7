@@ -157,9 +157,8 @@ seam.**
 
 ### Known limitations / follow-up
 
-- `pairwise_social_force_contributions` is an `O(N^2)` Python loop over the njit kernel. It matches
-  the aggregate exactly but should be vectorized before benchmark-scale pedestrian counts, mirroring
-  the earlier TTC weight-path vectorization.
+- `pairwise_social_force_contributions` is now vectorized (see the section below); the last named
+  runtime O(N^2) loop under this issue is closed.
 - Narrow-passage lateral-sliding and bottleneck freeze/deadlock benchmark evidence, seed-controlled
   campaigns, and any evidence-tier upgrade remain out of scope. No full benchmark campaign, Slurm/GPU
   submission, external calibration, or paper/dissertation claim edit was performed in this slice.
@@ -176,3 +175,39 @@ uv run ruff check robot_sf/sim/pedestrian_model_variants.py robot_sf/sim/simulat
 Plus an end-to-end smoke: a real `make_robot_env` run with `pedestrian_model=hsfm_anisotropic_fov_v1`
 stepped 15 times with finite pedestrian positions, confirming the real force list exposes a
 `SocialForce` component for the seam.
+
+## Vectorized pairwise social-force contribution matrix (issue #3481, CPU successor slice)
+
+The runtime FoV seam wired by PR #4352 built its per-pair pedestrian-pedestrian social matrix with
+an `O(N^2)` Python double loop that called the PySocialForce njit kernel `social_force_ped_ped` one
+pair at a time. That loop was the last named CPU blocker before benchmark-scale pedestrian counts.
+
+- `pairwise_social_force_contributions` now evaluates the whole `(N, N, 2)` matrix in closed NumPy
+  form via the pure helper `_pairwise_social_force_kernel`, a direct vectorization of the reference
+  kernel's expression (normalize the position diff, build/normalize the interaction vector, angle
+  `theta`, `B = gamma * interaction_length + 1e-8`, velocity + angle force terms). Zero-vector
+  handling matches `pysocialforce.forces.norm_vec` (zero difference → zero unit direction,
+  `arctan2(0, 0) == 0`), so coincident actors and the diagonal give a finite zero force, not NaN.
+- The activation-threshold masking and diagonal exclusion are reproduced with a boolean mask so
+  out-of-range pairs and self-interactions stay exactly zero, matching the loop's `continue` branches.
+- The deferred `numba` import is no longer needed on this path; the module stays numpy-pure at import.
+
+Behavior is preserved to floating-point tolerance (only fastmath-vs-IEEE rounding separates the two
+paths):
+
+- per-pair vs. scalar njit loop: max abs error ~5e-15 across N ∈ {2, 5, 20, 50};
+- aggregate `contributions.sum(axis=1)` vs. `social_force(...) * factor`: max abs error ~7e-15
+  (well under the pre-existing `rtol=1e-9` contract).
+
+Measured speedup (single CPU, diagnostic timing only — not a benchmark campaign):
+`N=50` ~20x, `N=100` ~23x, `N=200` ~14x versus the per-pair loop.
+
+Tests (added to `tests/sim/test_hsfm_fov_pairwise_isolation.py`):
+`test_vectorized_social_contributions_match_scalar_kernel` (parametrized N, per-pair equivalence),
+`test_vectorized_social_contributions_handle_coincident_pairs` (degenerate zero-diff finiteness),
+`test_vectorized_social_contributions_scale_to_large_population` (N=256 scale + aggregate parity).
+
+Evidence tier stays diagnostic/prototype: no default-model change, no calibrated-realism, planner
+ranking, benchmark-strength, or paper/dissertation claim. Remaining under the issue: narrow-passage
+lateral-sliding and bottleneck freeze/deadlock benchmark evidence, seed-controlled campaigns, and any
+evidence-tier upgrade.

@@ -364,6 +364,79 @@ def _validate_social_force_inputs(
     return position_array, velocity_array
 
 
+def _pairwise_social_force_kernel(
+    pos_diff: np.ndarray,
+    vel_diff: np.ndarray,
+    *,
+    n: int,
+    n_prime: int,
+    lambda_importance: float,
+    gamma: float,
+) -> np.ndarray:
+    """Vectorized NumPy port of PySocialForce's ``social_force_ped_ped`` kernel.
+
+    Operates on stacked pair arrays of shape ``(..., 2)`` (typically ``(N, N, 2)``) and
+    returns the per-pair social force with the same trailing shape. The scalar reference in
+    ``pysocialforce.forces`` evaluates one pair at a time inside a Python loop; this
+    reproduces the same closed-form expression across every pair at once so the seam scales
+    without per-element njit dispatch. Zero-vector handling matches ``norm_vec`` exactly:
+    a zero difference maps to a zero unit direction and ``arctan2(0, 0) == 0``, so degenerate
+    pairs (including the diagonal) yield a finite zero force rather than a NaN.
+
+    Args:
+        pos_diff: Position differences ``p_i - p_j`` with shape ``(..., 2)``.
+        vel_diff: Velocity differences ``v_j - v_i`` with shape ``(..., 2)``.
+        n: Angular decay-shape parameter for the lateral (angle) interaction component.
+        n_prime: Angular decay-shape parameter for the velocity-aligned component.
+        lambda_importance: Weight of relative velocity in the interaction direction.
+        gamma: Scale factor for the interaction range parameter ``B``.
+
+    Returns:
+        Per-pair force array with the same shape as ``pos_diff``.
+    """
+    # norm_vec(pos_diff): unit direction and length, with the zero vector mapped to
+    # (itself, 0) exactly as ``pysocialforce.forces.norm_vec`` does (avoids 0/0 -> NaN).
+    diff_length = np.sqrt(pos_diff[..., 0] ** 2 + pos_diff[..., 1] ** 2)
+    diff_dir = np.zeros_like(pos_diff)
+    nonzero = diff_length > 0.0
+    np.divide(pos_diff, diff_length[..., np.newaxis], out=diff_dir, where=nonzero[..., np.newaxis])
+
+    # interaction_vec = lambda_importance * vel_diff + diff_dir, then normalize it too.
+    interaction_vec = lambda_importance * vel_diff + diff_dir
+    interaction_length = np.sqrt(interaction_vec[..., 0] ** 2 + interaction_vec[..., 1] ** 2)
+    interaction_dir = np.zeros_like(interaction_vec)
+    inter_nonzero = interaction_length > 0.0
+    np.divide(
+        interaction_vec,
+        interaction_length[..., np.newaxis],
+        out=interaction_dir,
+        where=inter_nonzero[..., np.newaxis],
+    )
+
+    # Angle between interaction direction and difference direction; ``arctan2(0, 0) == 0``
+    # mirrors the scalar kernel's behavior for the degenerate zero-direction case.
+    theta = np.arctan2(interaction_dir[..., 1], interaction_dir[..., 0]) - np.arctan2(
+        diff_dir[..., 1], diff_dir[..., 0]
+    )
+    theta_sign = np.where(theta >= 0.0, 1.0, -1.0)
+    b = gamma * interaction_length + 1e-8  # the reference kernel's interaction-range ``B``
+
+    force_velocity_amount = np.exp(-1.0 * diff_length / b - (n_prime * b * theta) ** 2)
+    force_angle_amount = -theta_sign * np.exp(-1.0 * diff_length / b - (n * b * theta) ** 2)
+
+    # force = velocity component (along interaction_dir) + angle component (perpendicular).
+    force = np.empty_like(pos_diff, dtype=float)
+    force[..., 0] = (
+        interaction_dir[..., 0] * force_velocity_amount
+        - interaction_dir[..., 1] * force_angle_amount
+    )
+    force[..., 1] = (
+        interaction_dir[..., 1] * force_velocity_amount
+        + interaction_dir[..., 0] * force_angle_amount
+    )
+    return force
+
+
 def pairwise_social_force_contributions(
     positions: np.ndarray,
     velocities: np.ndarray,
@@ -391,10 +464,15 @@ def pairwise_social_force_contributions(
     aggregate mode in :func:`anisotropic_fov_total_force`.
 
     The layer stays independent of simulator objects so it is unit-testable without a full
-    environment; it only depends on the pure pairwise force kernel. The current
-    implementation is an ``O(N^2)`` Python loop over the njit kernel and is
-    diagnostic/prototype: vectorizing this matrix is a named follow-up before
-    benchmark-scale use, mirroring the earlier TTC weight-path vectorization.
+    environment. It is a closed-form NumPy vectorization of PySocialForce's ``social_force``
+    kernel over all ``N**2`` pairs at once (see :func:`_pairwise_social_force_kernel`),
+    replacing the earlier ``O(N^2)`` Python loop that called the per-pair njit kernel
+    element by element. The math is identical to floating-point tolerance, so the aggregate
+    equivalence ``contributions.sum(axis=1) == SocialForce()`` is preserved while the seam
+    scales to benchmark-size populations without per-pair Python/njit call overhead. The
+    change is behavior-preserving and stays diagnostic/prototype; it makes no default-model
+    or calibrated-realism claim. (Issue #3481; mirrors the earlier TTC weight-path
+    vectorization.)
 
     Args:
         positions: Pedestrian positions with shape ``(N, 2)``.
@@ -410,11 +488,6 @@ def pairwise_social_force_contributions(
     Returns:
         Per-pair force array with shape ``(N, N, 2)``; the diagonal is zero.
     """
-    # Deferred import keeps this module numpy-pure at import time so importing the
-    # broadly-used ``SimulationSettings`` config never pays numba's import cost; the
-    # numba kernel only loads when this opt-in seam is actually exercised.
-    from pysocialforce.forces import social_force_ped_ped  # noqa: PLC0415
-
     position_array, velocity_array = _validate_social_force_inputs(
         positions,
         velocities,
@@ -426,27 +499,29 @@ def pairwise_social_force_contributions(
     if pedestrian_count <= 1:
         return contributions
 
+    # PySocialForce convention: position diff is p_i - p_j, velocity diff is v_j - v_i
+    # (see ``social_force`` in pysocialforce.forces). Build both ``(N, N, 2)`` pair stacks
+    # once and evaluate the whole force matrix in closed NumPy form.
+    pos_diff = position_array[:, np.newaxis, :] - position_array[np.newaxis, :, :]
+    vel_diff = velocity_array[np.newaxis, :, :] - velocity_array[:, np.newaxis, :]
+    forces = _pairwise_social_force_kernel(
+        pos_diff,
+        vel_diff,
+        n=n,
+        n_prime=n_prime,
+        lambda_importance=lambda_importance,
+        gamma=gamma,
+    )
+
+    # Reproduce the scalar loop's masking exactly: pairs strictly beyond the activation
+    # threshold and the diagonal (self-interaction) contribute zero. Assigning through the
+    # boolean mask leaves those entries at their initialized zero, so the earlier loop's
+    # ``continue`` branches and the vectorized path are byte-for-byte equivalent there.
     threshold_sq = float(activation_threshold) ** 2
-    for i in range(pedestrian_count):
-        for j in range(pedestrian_count):
-            if i == j:
-                continue
-            # PySocialForce convention: position diff is p_i - p_j, velocity diff is
-            # v_j - v_i (see ``social_force`` in pysocialforce.forces).
-            pos_diff = position_array[i] - position_array[j]
-            if float(pos_diff[0] ** 2 + pos_diff[1] ** 2) > threshold_sq:
-                continue
-            vel_diff = velocity_array[j] - velocity_array[i]
-            force_x, force_y = social_force_ped_ped(
-                (float(pos_diff[0]), float(pos_diff[1])),
-                (float(vel_diff[0]), float(vel_diff[1])),
-                n,
-                n_prime,
-                lambda_importance,
-                gamma,
-            )
-            contributions[i, j, 0] = float(factor) * float(force_x)
-            contributions[i, j, 1] = float(factor) * float(force_y)
+    dist_sq = pos_diff[..., 0] ** 2 + pos_diff[..., 1] ** 2
+    active = dist_sq <= threshold_sq
+    np.fill_diagonal(active, False)
+    contributions[active] = float(factor) * forces[active]
     return contributions
 
 

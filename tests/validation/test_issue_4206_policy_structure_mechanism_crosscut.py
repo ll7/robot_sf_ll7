@@ -12,6 +12,13 @@ from pathlib import Path
 
 import yaml
 
+from robot_sf.benchmark.failure_mechanism_taxonomy import (
+    GEOMETRY_ONLY_FIELDS,
+    MECHANISM_SCHEMA_VERSION,
+    REQUIRED_MECHANISM_FIELDS,
+    TRACE_VERIFIED_EVIDENCE_MODES,
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts/validation/build_issue_4206_policy_structure_mechanism_crosscut.py"
 CONFIG = REPO_ROOT / "configs/analysis/issue_4206_policy_structure_mechanism_crosscut.yaml"
@@ -21,6 +28,14 @@ assert _SPEC is not None
 assert _SPEC.loader is not None
 _MODULE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MODULE)
+
+
+def test_builder_uses_canonical_failure_mechanism_taxonomy_contract() -> None:
+    """Builder and trace-capable pre-registration validator share one schema owner."""
+    assert _MODULE.MECHANISM_SCHEMA_VERSION == MECHANISM_SCHEMA_VERSION
+    assert _MODULE.REQUIRED_MECHANISM_FIELDS == REQUIRED_MECHANISM_FIELDS
+    assert _MODULE.TRACE_VERIFIED_EVIDENCE_MODES == TRACE_VERIFIED_EVIDENCE_MODES
+    assert set(_MODULE.GEOMETRY_ONLY_FIELDS) == GEOMETRY_ONLY_FIELDS
 
 
 def _write_rows(root: Path, rows: list[dict[str, object]]) -> None:
@@ -53,6 +68,8 @@ def _base_row(planner_key: str, success: float, collision: float = 0.0) -> dict[
         "mechanism_confidence": "observed_mechanism",
         "mechanism_evidence_mode": "paired_trace",
         "mechanism_evidence_uri": "docs/context/issue_2220_failure_mechanism_taxonomy.md",
+        "mechanism_case_id": f"fixture-{planner_key}",
+        "mechanism_caveat": "",
     }
 
 
@@ -120,7 +137,7 @@ def test_missing_mechanism_label_blocks_f_c4ii_tables(tmp_path: Path) -> None:
     extended = tmp_path / "extended"
     row = _base_row("prediction_planner", 1.0)
     for field in _MODULE.REQUIRED_MECHANISM_FIELDS:
-        row.pop(field)
+        row.pop(field, None)
     _write_rows(confirm, [row])
     _write_rows(extended, [row])
     output = tmp_path / "evidence"
@@ -150,7 +167,7 @@ def test_geometry_bucket_labels_are_rejected_as_substitutes(tmp_path: Path) -> N
     extended = tmp_path / "extended"
     row = _base_row("prediction_planner", 1.0)
     for field in _MODULE.REQUIRED_MECHANISM_FIELDS:
-        row.pop(field)
+        row.pop(field, None)
     row["geometry_label"] = "static_deadlock_or_local_minimum"
     _write_rows(confirm, [row])
     _write_rows(extended, [row])
@@ -322,7 +339,7 @@ def test_sidecar_episode_id_only_does_not_attach_to_other_keys(tmp_path: Path) -
     row = _base_row("prediction_planner", 1.0)
     row["episode_id"] = "shared-episode"
     for field in _MODULE.REQUIRED_MECHANISM_FIELDS:
-        row.pop(field)
+        row.pop(field, None)
     _write_rows(confirm, [row])
     _write_rows(extended, [row])
     sidecar = _base_row("other_planner", 0.0)
@@ -448,7 +465,7 @@ def test_present_rows_missing_labels_stay_a_label_block(tmp_path: Path) -> None:
     extended = tmp_path / "extended"
     row = _base_row("prediction_planner", 1.0)
     for field in _MODULE.REQUIRED_MECHANISM_FIELDS:
-        row.pop(field)
+        row.pop(field, None)
     _write_rows(confirm, [row])
     _write_rows(extended, [row])
     output = tmp_path / "evidence"
@@ -482,6 +499,8 @@ def _native_writer_episode(
         "source": "trace_review_issue_2220",
         "trace_status": "trace_verified" if trace_verified else "geometry_only",
         "confidence": "observed_mechanism",
+        "case_id": f"fixture-{planner_key}-{seed}",
+        "caveat": "",
     }
     return {
         "episode_id": f"ep-{planner_key}-{seed}",
@@ -623,7 +642,7 @@ def _unlabeled_seed_rows(root: Path, planners: list[str]) -> list[dict[str, obje
     for planner in planners:
         row = _base_row(planner, 1.0)
         for field in _MODULE.REQUIRED_MECHANISM_FIELDS:
-            row.pop(field)
+            row.pop(field, None)
         rows.append(row)
     _write_rows(root, rows)
     return rows
@@ -695,6 +714,7 @@ def test_declared_sidecar_all_not_derivable_reports_predates_trace_capture_block
         "mechanism_confidence": "unknown",
         "mechanism_evidence_mode": "unknown",
         "mechanism_evidence_uri": "",
+        "mechanism_case_id": "",
         "mechanism_backfill_status": "not_derivable_missing_trace",
         "mechanism_caveat": "not_derivable_missing_trace",
     }
@@ -743,6 +763,8 @@ def test_declared_sidecar_supplies_trace_labels_unblocks_tables(tmp_path: Path) 
         "mechanism_confidence": "observed_mechanism",
         "mechanism_evidence_mode": "paired_trace",
         "mechanism_evidence_uri": "docs/context/issue_2220_failure_mechanism_taxonomy.md",
+        "mechanism_case_id": "fixture-trace-case",
+        "mechanism_caveat": "",
     }
     sidecar = tmp_path / "sidecar.csv"
     _write_sidecar_csv(sidecar, confirm_rows, trace_mechanism)

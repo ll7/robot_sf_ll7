@@ -33,6 +33,8 @@ This directory contains diagnostic-only h600 interpretation artifacts for jobs 1
 - Sign-off: the maintainer promoted F-C4 draft→supported (pillars (i)+(ii)) at exactly this guarded wording on 2026-07-03 (diss `0d853df`), closing the #4195 interpretation chain; pillar (iii) stays draft (outside #4195).
 - Validate the integration with `uv run python scripts/validation/check_issue_4195_f_c4_ii_gate.py` (fail-closed: SHA256SUMS coverage/digest match, required boundary sections, shared-matrix-hash agreement).
 
+- Terminality review: `issue_4195_terminality_review.md` records that the #4195 checklist and sign-off boundary are satisfied, with no new analysis, campaign, claim edit, or dissertation change.
+
 ## Notes
 
 - Metric rows: 80.

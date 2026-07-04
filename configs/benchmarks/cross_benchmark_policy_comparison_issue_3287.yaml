@@ -1,0 +1,105 @@
+schema_version: cross_benchmark_policy_comparison.issue_3287.v1
+issue: 3287
+status: blocked_prerequisite
+campaign_authorized: false
+direct_equivalence_claim_allowed: false
+limitations_template: docs/context/issue_3287_cross_benchmark_limitations_template.md
+
+prerequisite_gate:
+  converter:
+    status: ready
+    source_issue: 3285
+    evidence:
+      - robot_sf/benchmark/scenario_interop.py
+      - robot_sf/benchmark/schemas/scenario_interop_ir.v1.json
+      - scripts/tools/convert_scenario_interop.py
+  metric_wrapper:
+    status: ready
+    source_issue: 3286
+    evidence:
+      - robot_sf/benchmark/cross_benchmark_metrics.py
+      - configs/benchmarks/cross_benchmark_metric_mapping_v1.yaml
+  external_assets:
+    status: blocked
+    source_issues: [1456, 1498, 2414, 3161, 2918]
+    asset_ids:
+      - socnavbench-s3dis-eth
+      - socnavbench-control
+    blocker: licensed external assets must be staged out-of-band; none are committed here.
+  policy_compatibility:
+    status: blocked
+    blocker: choose one or two policies after external suite wrappers and assets are staged.
+
+policies:
+  - id: robot_sf_reference_policy_tbd
+    name: Robot SF reference policy
+    version: to_be_selected_when_unblocked
+    repository_path: null
+    compatibility_status: blocked_prerequisite
+    notes: Select after external assets and wrappers expose matching observation/action contracts.
+
+robot_sf_scenarios:
+  - id: robot_sf_alignment_smoke_tbd
+    suite: Robot SF
+    source_manifest: configs/scenarios/classic_interactions.yaml
+    selection_status: scaffold_only
+    notes: Replace with concrete Robot SF scenario IDs before campaign execution.
+
+external_benchmark_scenarios:
+  - id: external_social_nav_alignment_tbd
+    suite: external_social_nav
+    asset_status: blocked_external_input
+    asset_ids:
+      - socnavbench-s3dis-eth
+      - socnavbench-control
+    notes: Replace with concrete external benchmark scenario IDs after private asset staging.
+
+scenario_mapping_notes:
+  - robot_sf_scenario_id: robot_sf_alignment_smoke_tbd
+    external_scenario_id: external_social_nav_alignment_tbd
+    mapping_quality: unvalidated_scaffold
+    limitation: Scenario geometry, pedestrian scripts, and sensors are not yet validated as comparable.
+
+metric_mapping_notes:
+  - metric: collision_rate
+    robot_sf_source: robot_sf.benchmark.cross_benchmark_metrics
+    external_source: to_be_bound_after_asset_staging
+    denominator_relationship: preserve_suite_specific_denominators
+    mapping_quality: approximate_until_validated
+  - metric: path_efficiency
+    robot_sf_source: robot_sf.benchmark.cross_benchmark_metrics
+    external_source: to_be_bound_after_asset_staging
+    denominator_relationship: preserve_suite_specific_denominators
+    mapping_quality: approximate_until_validated
+
+seeds:
+  - 0
+  - 1
+  - 2
+
+observation_action_space_caveats:
+  - Observation tensors, sensor ranges, robot kinematics, and action semantics may differ across suites.
+  - Policy wrappers must record every adapter, projection, fallback, or unsupported action mode.
+
+pedestrian_model_and_dynamics_caveats:
+  - Robot SF and external suites may use different pedestrian dynamics, collision geometry, and update rates.
+  - Results must report suite-specific denominators and may not be treated as simulator-equivalent.
+
+external_asset_provenance:
+  - asset_id: socnavbench-s3dis-eth
+    public_distribution_status: downloadable_not_republishable
+    staged_location: private_ops_only
+    license_public_repo_action: do_not_commit_raw_asset
+  - asset_id: socnavbench-control
+    public_distribution_status: downloadable_not_republishable
+    staged_location: private_ops_only
+    license_public_repo_action: do_not_commit_raw_asset
+
+limitations_sections:
+  - scenario_mapping_quality
+  - metric_denominator_differences
+  - observation_space_differences
+  - action_space_differences
+  - dynamics_and_pedestrian_model_differences
+  - unsupported_direct_equivalence_claims
+  - valid_bounded_comparison_statements

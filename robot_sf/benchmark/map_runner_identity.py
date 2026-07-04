@@ -93,6 +93,7 @@ def _scenario_identity_payload(  # noqa: C901,PLR0913
     latency_stress_profile: dict[str, Any] | None = None,
     safety_wrapper: dict[str, Any] | None = None,
     cbf_safety_filter: dict[str, Any] | None = None,
+    record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
 ) -> dict[str, Any]:
     """Build the canonical scenario payload used for episode identity.
@@ -139,6 +140,7 @@ def _scenario_identity_payload(  # noqa: C901,PLR0913
         resolved_cbf_filter = cbf_runtime_config_from_mapping(cbf_safety_filter)
         if resolved_cbf_filter.enabled:
             payload["cbf_safety_filter"] = asdict(resolved_cbf_filter)
+    payload["record_planner_decision_trace"] = bool(record_planner_decision_trace)
     payload["record_simulation_step_trace"] = bool(record_simulation_step_trace)
     if horizon is not None and int(horizon) > 0:
         payload["run_horizon"] = int(horizon)

@@ -470,6 +470,35 @@ def test_scenario_identity_includes_observation_noise_hash() -> None:
     )
 
 
+def test_scenario_identity_includes_record_planner_decision_trace() -> None:
+    """Trace-enabled runs must not resume-reuse non-trace episode rows (issue #4425)."""
+    scenario = _minimal_map_scenario()
+
+    non_trace = map_runner._scenario_identity_payload(
+        scenario,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=None,
+        record_forces=True,
+    )
+    trace = map_runner._scenario_identity_payload(
+        scenario,
+        algo="goal",
+        algo_config={},
+        horizon=None,
+        dt=None,
+        record_forces=True,
+        record_planner_decision_trace=True,
+    )
+
+    assert non_trace["record_planner_decision_trace"] is False
+    assert trace["record_planner_decision_trace"] is True
+    assert map_runner._compute_map_episode_id(
+        non_trace, seed=1
+    ) != map_runner._compute_map_episode_id(trace, seed=1)
+
+
 def test_scenario_identity_includes_latency_stress_profile() -> None:
     """Resume identity should distinguish latency-stress profile variants."""
     scenario = _minimal_map_scenario()

@@ -19,7 +19,7 @@ uv run python scripts/tools/run_feasibility_diagnostics_issue_3484.py \
 
 ## Provenance
 
-- Source tree before committing this packet: `origin/main` at `d90c9cda7`.
+- Source tree before committing this packet refresh: `origin/main` at `4cc7cbd66`.
 - Report schema: `scenario_feasibility_diagnostics.v1`.
 - Classifier schema consumed in `family_verdicts`: `scenario_failure_cause.v1`.
 - Claim boundary: `diagnostic_only_not_benchmark_evidence`.
@@ -35,8 +35,20 @@ uv run python scripts/tools/run_feasibility_diagnostics_issue_3484.py \
 | `cross_trap` | `true` | `false` | `false` | `false` | `vehicle_infeasible` | `false` |
 | `head_on_corridor` | `true` | `true` | `false` | `false` | `dynamic_blocking_or_deadlock` | `false` |
 
+## Difficulty-Ramp Summary
+
+The refreshed packet includes a diagnostic-only `difficulty_ramp` summary built from the observed
+scenario variants already run in the packet. It does not run a new benchmark campaign.
+
+| Family | First actor-free failure | First oracle/scripted failure |
+| --- | --- | --- |
+| `bottleneck` | `medium` | `medium` |
+| `cross_trap` | `low` | `low` |
+| `head_on_corridor` | none observed | `medium` |
+
 ## Boundaries
 
 The verdicts are diagnostic proxy evidence for scenario-family closure triage. They do not change
 benchmark rankings, planner comparisons, leaderboard rows, manuscript claims, or dissertation
-claims. The run does not include a difficulty-ramp expansion or a full benchmark campaign.
+claims. The run does not include a full benchmark campaign, Slurm/GPU submission, or ranking or
+paper-facing interpretation.

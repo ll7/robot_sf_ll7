@@ -48,8 +48,17 @@ reruns the three target families with the optional extended-time lane enabled. T
 | `cross_trap` | `vehicle_infeasible` | `false` | diagnostic proxy evidence only |
 | `head_on_corridor` | `dynamic_blocking_or_deadlock` | `false` | diagnostic proxy evidence only |
 
-No full benchmark campaign, Slurm or GPU submission, difficulty-ramp expansion, benchmark-ranking
-change, or paper-facing claim update was made.
+The refreshed packet includes a diagnostic-only difficulty-ramp summary from observed scenario
+variants:
+
+| Family | First actor-free failure | First oracle/scripted failure |
+| --- | --- | --- |
+| `bottleneck` | `medium` | `medium` |
+| `cross_trap` | `low` | `low` |
+| `head_on_corridor` | none observed | `medium` |
+
+No full benchmark campaign, Slurm or GPU submission, benchmark-ranking change, or paper-facing
+claim update was made.
 
 ## Boundaries
 

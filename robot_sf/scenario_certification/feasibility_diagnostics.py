@@ -76,6 +76,7 @@ class ScenarioDiagnosticOutcome:
 
     scenario_id: str
     family_id: str
+    difficulty_level: str | None
     seed: int | None
     route_clearance: LaneResult
     actor_free: LaneResult
@@ -301,6 +302,7 @@ def _run_scenario_diagnostics(
     return ScenarioDiagnosticOutcome(
         scenario_id=scenario_id,
         family_id=family_id,
+        difficulty_level=_scenario_difficulty_level(scenario),
         seed=seed,
         route_clearance=route,
         actor_free=actor_free,
@@ -332,6 +334,7 @@ def _build_report(
         "scenario_rows": [_scenario_row_to_dict(row) for row in outcomes],
         "diagnostic_lane_rows": lane_rows,
         "family_verdicts": family_verdicts,
+        "difficulty_ramp": _difficulty_ramp_summary(outcomes),
     }
 
 
@@ -388,12 +391,63 @@ def _scenario_row_to_dict(outcome: ScenarioDiagnosticOutcome) -> dict[str, Any]:
     return {
         "scenario_id": outcome.scenario_id,
         "family_id": outcome.family_id,
+        "difficulty_level": outcome.difficulty_level,
         "seed": outcome.seed,
         "route_feasible": _lane_to_dict(outcome.route_clearance),
         "actor_free_solved": _lane_to_dict(outcome.actor_free),
         "oracle_solved": _lane_to_dict(outcome.oracle_trajectory),
         "extended_time_solved": _lane_to_dict(outcome.extended_time),
     }
+
+
+def _difficulty_ramp_summary(
+    outcomes: Sequence[ScenarioDiagnosticOutcome],
+) -> list[dict[str, Any]]:
+    summaries: list[dict[str, Any]] = []
+    for family_id in sorted({row.family_id for row in outcomes}):
+        family_rows = sorted(
+            [row for row in outcomes if row.family_id == family_id],
+            key=lambda row: (
+                _difficulty_sort_key(row.difficulty_level),
+                row.scenario_id,
+            ),
+        )
+        summaries.append(
+            {
+                "family_id": family_id,
+                "axis": "scenario_variant_difficulty",
+                "source": "scenario_metadata_or_name",
+                "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+                "levels": [
+                    {
+                        "scenario_id": row.scenario_id,
+                        "difficulty_level": row.difficulty_level,
+                        "route_feasible": row.route_clearance.passed,
+                        "actor_free_solved": row.actor_free.passed,
+                        "oracle_solved": row.oracle_trajectory.passed,
+                        "extended_time_solved": row.extended_time.passed,
+                    }
+                    for row in family_rows
+                ],
+                "first_actor_free_failure_level": _first_failure_level(
+                    family_rows, lane="actor_free"
+                ),
+                "first_oracle_failure_level": _first_failure_level(family_rows, lane="oracle"),
+            }
+        )
+    return summaries
+
+
+def _first_failure_level(
+    rows: Sequence[ScenarioDiagnosticOutcome],
+    *,
+    lane: str,
+) -> str | None:
+    for row in rows:
+        result = row.actor_free if lane == "actor_free" else row.oracle_trajectory
+        if result.passed is False:
+            return row.difficulty_level or row.scenario_id
+    return None
 
 
 def _lane_to_dict(result: LaneResult) -> dict[str, Any]:
@@ -521,6 +575,27 @@ def _scenario_family_id(scenario: Mapping[str, Any]) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return "unknown"
+
+
+def _scenario_difficulty_level(scenario: Mapping[str, Any]) -> str | None:
+    metadata = scenario.get("metadata")
+    metadata_map = metadata if isinstance(metadata, Mapping) else {}
+    for key in ("difficulty", "difficulty_level", "density_tier"):
+        value = metadata_map.get(key)
+        if value is not None:
+            return str(value)
+    scenario_id = _scenario_id(scenario)
+    suffix = scenario_id.rsplit("_", 1)[-1]
+    if suffix in {"low", "medium", "high"}:
+        return suffix
+    return None
+
+
+def _difficulty_sort_key(level: str | None) -> tuple[int, str]:
+    order = {"low": 0, "medium": 1, "high": 2}
+    if level is None:
+        return (99, "")
+    return (order.get(level, 50), level)
 
 
 def _scenario_id(scenario: Mapping[str, Any]) -> str:

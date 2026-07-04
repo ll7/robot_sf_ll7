@@ -39,3 +39,7 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run robot_sf_bench collision-scena
 Similarity distances are local to the input artifact descriptor fields. External labels, raw
 trajectory fields, and trajectory-derived metric fields are reported as descriptive validation
 context only; they are not treated as benchmark truth or a new metric.
+
+`validation_boundary_after_pr4410.md` records the integrated boundary after PRs #4371, #4386, and
+#4410: durable collision-similarity metrics remain diagnostic-only, and replay-level validation is
+still blocked until a durable source provides raw per-step trajectory arrays for the same records.

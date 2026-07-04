@@ -57,7 +57,11 @@ from robot_sf.benchmark.map_runner_batch_plan import (
     build_worker_fixed_params,
     resolve_batch_kinematics_tag,
 )
-from robot_sf.benchmark.map_runner_episode import _topology_guided_episode_diagnostics
+from robot_sf.benchmark.map_runner_episode import (
+    _CollisionEventContext,
+    _step_collision_events,
+    _topology_guided_episode_diagnostics,
+)
 from robot_sf.benchmark.map_runner_metrics import (
     _episode_collision_value,
     summarize_collision_metrics,
@@ -5742,3 +5746,53 @@ def test_map_episode_visibility_trace_feeds_occlusion_near_miss_predicate(monkey
     predicate = record["safety_predicates"]["occlusion_near_miss_predicate"]
     assert predicate["status"] == "true"
     assert predicate["occlusion_near_miss"] is True
+
+
+def test_step_collision_events_ignores_nonfinite_pedestrians() -> None:
+    """Padded NaN pedestrian slots must not propagate NaN into contact speed."""
+    context = _CollisionEventContext(
+        dt_seconds=0.1,
+        map_def=None,
+        robot_radius=0.5,
+        ped_radius=0.4,
+    )
+    ped_positions = np.array([[np.nan, np.nan], [1.2, 0.0]], dtype=float)
+    previous_ped_positions = np.array([[np.nan, np.nan], [1.5, 0.0]], dtype=float)
+    events = _step_collision_events(
+        step_idx=0,
+        robot_pos=np.array([1.0, 0.0], dtype=float),
+        previous_robot_pos=np.array([0.8, 0.0], dtype=float),
+        ped_positions=ped_positions,
+        previous_ped_positions=previous_ped_positions,
+        meta={"is_pedestrian_collision": True},
+        context=context,
+    )
+    assert len(events) == 1
+    event = events[0]
+    # The finite pedestrian (index 1) is selected, not the NaN-padded slot.
+    assert event["collision_partner_id"] == "1"
+    assert math.isfinite(event["relative_speed_at_contact"])
+
+
+def test_step_collision_events_all_nonfinite_pedestrians_stays_finite() -> None:
+    """When every pedestrian slot is non-finite, contact speed falls back to robot speed."""
+    context = _CollisionEventContext(
+        dt_seconds=0.1,
+        map_def=None,
+        robot_radius=0.5,
+        ped_radius=0.4,
+    )
+    ped_positions = np.array([[np.nan, np.nan]], dtype=float)
+    events = _step_collision_events(
+        step_idx=0,
+        robot_pos=np.array([1.0, 0.0], dtype=float),
+        previous_robot_pos=np.array([0.8, 0.0], dtype=float),
+        ped_positions=ped_positions,
+        previous_ped_positions=None,
+        meta={"is_pedestrian_collision": True},
+        context=context,
+    )
+    assert len(events) == 1
+    event = events[0]
+    assert event["collision_partner_id"] is None
+    assert math.isfinite(event["relative_speed_at_contact"])

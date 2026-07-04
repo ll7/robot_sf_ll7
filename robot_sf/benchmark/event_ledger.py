@@ -178,9 +178,7 @@ def _normalize_collision_partner_type(value: Any) -> str:
     partner_type = str(value).strip()
     if partner_type not in COLLISION_PARTNER_TYPES:
         allowed = ", ".join(COLLISION_PARTNER_TYPES)
-        raise ValueError(
-            f"collision_partner_type must be one of {allowed}; got {partner_type!r}"
-        )
+        raise ValueError(f"collision_partner_type must be one of {allowed}; got {partner_type!r}")
     return partner_type
 
 
@@ -206,7 +204,9 @@ def _normalize_collision_event_record(event: Mapping[str, Any]) -> CollisionEven
     if normalized_partner_id == "":
         normalized_partner_id = None
     return CollisionEventRecord(
-        collision_partner_type=_normalize_collision_partner_type(event.get("collision_partner_type")),
+        collision_partner_type=_normalize_collision_partner_type(
+            event.get("collision_partner_type")
+        ),
         collision_partner_id=normalized_partner_id,
         collision_time=collision_time,
         relative_speed_at_contact=_finite_float(event.get("relative_speed_at_contact")),

@@ -219,7 +219,8 @@ def _closest_segment_partner_id(
     if not segments:
         return None
     indexed_distances = [
-        (_point_to_segment_distance(point, segment), index) for index, segment in enumerate(segments)
+        (_point_to_segment_distance(point, segment), index)
+        for index, segment in enumerate(segments)
     ]
     finite = [(distance, index) for distance, index in indexed_distances if math.isfinite(distance)]
     if not finite:
@@ -274,20 +275,32 @@ def _step_collision_events(
         ped_array = np.asarray(ped_positions, dtype=float).reshape(-1, 2)
         partner_id: str | None = None
         relative_speed = float(np.linalg.norm(robot_velocity))
-        if ped_array.size:
-            ped_distances = np.linalg.norm(ped_array - robot_pos[np.newaxis, :], axis=1)
+        # Filter non-finite pedestrian slots (padded/absent pedestrians) before
+        # selecting the contact partner: np.argmin over a NaN-containing array
+        # returns a NaN index, which would propagate NaN into
+        # relative_speed_at_contact and violate the non-finite safety rule.
+        finite_indices = (
+            np.where(np.all(np.isfinite(ped_array), axis=1))[0]
+            if ped_array.size
+            else np.empty(0, dtype=int)
+        )
+        if finite_indices.size:
+            finite_positions = ped_array[finite_indices]
+            ped_distances = np.linalg.norm(finite_positions - robot_pos[np.newaxis, :], axis=1)
             contact_threshold = max(0.0, context.robot_radius + context.ped_radius) + 1.0e-6
             contact_candidates = np.where(ped_distances <= contact_threshold)[0]
             if contact_candidates.size:
-                ped_index = int(contact_candidates[np.argmin(ped_distances[contact_candidates])])
+                nearest = int(contact_candidates[np.argmin(ped_distances[contact_candidates])])
             else:
-                ped_index = int(np.argmin(ped_distances))
+                nearest = int(np.argmin(ped_distances))
+            ped_index = int(finite_indices[nearest])
             partner_id = str(ped_index)
             ped_velocity = np.zeros(2, dtype=float)
             if (
                 previous_ped_positions is not None
                 and previous_ped_positions.shape == ped_array.shape
                 and context.dt_seconds > 0.0
+                and np.all(np.isfinite(previous_ped_positions[ped_index]))
             ):
                 ped_velocity = (
                     ped_array[ped_index] - previous_ped_positions[ped_index]
@@ -1154,8 +1167,13 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
         initial_robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
         initial_goal_distance = float(np.linalg.norm(initial_robot_pos - goal_vec))
-        robot_radius = float(getattr(getattr(config, "robot_config", None), "radius", 1.0))
-        ped_radius = float(getattr(config.sim_config, "ped_radius", 0.4))
+        # Normalize optional radii before float(): getattr returns the default
+        # only when the attribute is absent, so an explicit None in config would
+        # otherwise raise TypeError in float(None).
+        robot_radius_val = getattr(getattr(config, "robot_config", None), "radius", 1.0)
+        robot_radius = float(robot_radius_val if robot_radius_val is not None else 1.0)
+        ped_radius_val = getattr(config.sim_config, "ped_radius", 0.4)
+        ped_radius = float(ped_radius_val if ped_radius_val is not None else 0.4)
         collision_event_context = _CollisionEventContext(
             dt_seconds=float(config.sim_config.time_per_step_in_secs),
             map_def=map_def,

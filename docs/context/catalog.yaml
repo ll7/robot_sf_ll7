@@ -17,6 +17,14 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+  - path: docs/context/evidence/issue_4164_closure_audit_2026-07-04.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_4164_state.yaml
+    status: current
+    freshness: dated
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4454_closure_audit_2026-07-04.md
     status: evidence
     freshness: evidence

@@ -1,0 +1,31 @@
+issue: 4164
+state_surface: goal_intention_closure_audit
+entries:
+  - recorded_at_utc: "2026-07-04T22:09:43Z"
+    status: not_ready_for_issue_closure
+    source:
+      issue_url: "https://github.com/ll7/robot_sf_ll7/issues/4164"
+      live_issue_state_checked: "open"
+      comments_checked: 4
+      latest_issue_comment_utc: "2026-07-03T12:18:51Z"
+    merged_prs_verified:
+      - pr: 4186
+        merged_at_utc: "2026-07-02T19:36:20Z"
+        role: "Bayesian goal-posterior module and synthetic posterior tests."
+      - pr: 4236
+        merged_at_utc: "2026-07-03T10:46:04Z"
+        role: "Default-off planner metadata exposure and diagnostic CPU smoke summary."
+      - pr: 4274
+        merged_at_utc: "2026-07-03T12:18:39Z"
+        role: "Default-off hybrid-rule planner consumption path and paired CPU smoke proxy."
+    propagation_surface: "tracked append-only state file because run authorization disallows issue comments"
+    closure_boundary:
+      delivered: "module, synthetic tests, opt-in metadata channel, one planner-consumption smoke"
+      diagnostic_only: "paired CPU crossing-conflict smoke proxy and tracked summary"
+      remaining: "broader benchmark campaign plus calibrated-intention claim boundary or explicit maintainer narrowing"
+    audit_artifact: "docs/context/evidence/issue_4164_closure_audit_2026-07-04.md"
+    forbidden_actions_confirmed:
+      full_benchmark_campaign: false
+      slurm_or_gpu_submission: false
+      paper_or_dissertation_claim_edits: false
+      issue_comment_posted: false

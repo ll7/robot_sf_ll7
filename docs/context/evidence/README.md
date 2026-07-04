@@ -120,6 +120,10 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_4454_closure_audit_2026-07-04.md`: closure-audit integration report for
+  issue #4454. Maps merged PR #4456 typed collision-event export evidence to the live issue
+  acceptance criteria, with the issue left for authorized closure/comment propagation.
+
 - `issue_4224_closure_audit_2026-07-04.md`: closure-audit integration report for issue #4224.
   Maps merged public registry, acquisition-doc, and skip-if-absent loader PRs for ATC, ETH/UCY,
   inD, CrowdBot, and SCAND, while preserving the remaining private acquisition, seeding, and

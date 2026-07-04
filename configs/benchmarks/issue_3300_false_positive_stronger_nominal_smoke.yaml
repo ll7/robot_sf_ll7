@@ -1,0 +1,17 @@
+name: issue_3300_false_positive_stronger_nominal_smoke
+scenario_matrix: configs/scenarios/sets/issue_3300_false_positive_stronger_structured_matrix.yaml
+workers: 1
+horizon: 20
+dt: 0.1
+record_forces: false
+record_planner_decision_trace: true
+resume: false
+export_publication_bundle: false
+seed_policy:
+  mode: fixed-list
+  seeds: [0, 3300]
+planners:
+  - key: goal
+    algo: goal
+    benchmark_profile: baseline-safe
+    observation_mode: socnav_state

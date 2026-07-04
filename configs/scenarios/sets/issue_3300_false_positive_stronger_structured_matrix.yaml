@@ -1,0 +1,11 @@
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - verified_simple_subset_v1.yaml
+  - ../single/issue_3233_near_field_observation_noise.yaml
+  - ../single/francis2023_intersection_wait.yaml
+select_scenarios:
+  - single_ped_crossing_orthogonal
+  - issue_3233_near_field_observation_noise
+  - francis2023_intersection_wait
+map_search_paths:
+  - ../../../maps/svg_maps

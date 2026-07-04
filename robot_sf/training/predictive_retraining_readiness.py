@@ -144,7 +144,7 @@ def _validate_static_contract(
     _require_existing_repo_path(inputs, "weighting_spec", packet_path, repo_root, blockers)
     _require_existing_repo_path(inputs, "pipeline_config", packet_path, repo_root, blockers)
     _validate_launch_packet_sections(payload, blockers)
-    _validate_pipeline_config(inputs, packet_path, repo_root, blockers)
+    _validate_pipeline_config(payload, inputs, packet_path, repo_root, blockers)
 
     prior_result = _mapping(payload.get("prior_result"))
     _require_non_empty_string(prior_result, "status", blockers, prefix="prior_result")
@@ -211,6 +211,7 @@ def _validate_launch_packet_sections(payload: dict[str, Any], blockers: list[str
 
 
 def _validate_pipeline_config(
+    packet: dict[str, Any],
     inputs: dict[str, Any],
     packet_path: Path,
     repo_root: Path,
@@ -230,6 +231,7 @@ def _validate_pipeline_config(
         return
 
     _validate_pipeline_output_contract(pipeline, blockers)
+    _validate_packet_pipeline_summary_contract(packet, pipeline, blockers)
     _validate_pipeline_scenario_paths(pipeline, pipeline_path, repo_root, blockers)
 
     for key in _REQUIRED_PIPELINE_COLLECTIONS:
@@ -270,6 +272,28 @@ def _validate_pipeline_output_contract(
     if provenance.get("status") != "expected_missing_until_training":
         blockers.append(
             "pipeline_config.output.provenance.status must be expected_missing_until_training"
+        )
+
+
+def _validate_packet_pipeline_summary_contract(
+    packet: dict[str, Any],
+    pipeline: dict[str, Any],
+    blockers: list[str],
+) -> None:
+    """Require packet and pipeline to point at the same hard-seed summary artifact."""
+
+    evaluation_config = _mapping(packet.get("evaluation_config"))
+    packet_summary = evaluation_config.get("summary_path")
+    provenance = _mapping(
+        _mapping(pipeline.get("output")).get("provenance") or pipeline.get("provenance")
+    )
+    pipeline_summary = provenance.get("hard_seed_evaluation_summary")
+    if not isinstance(packet_summary, str) or not isinstance(pipeline_summary, str):
+        return
+    if packet_summary != pipeline_summary:
+        blockers.append(
+            "evaluation_config.summary_path must match "
+            "pipeline_config.output.provenance.hard_seed_evaluation_summary"
         )
 
 

@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Added **typed collision-event export records** to new episode rows (issue #4454). The canonical
+  `event_ledger` block is now `EpisodeEventLedger.v2` and can carry per-collision records with
+  partner type/id, collision time, relative contact speed, clearance-series provenance, and exact
+  event provenance. `run_map_episode` now emits the ledger natively before JSONL validation, so the
+  camera-ready retention path keeps the typed events automatically. Behavioral note: the scalar
+  `collision` / `outcome.collision_event` flag remains a termination indicator; safety claims should
+  cite the typed `event_ledger.collision_events` records instead of inferring collisions from the
+  scalar flag alone.
 * **Vectorized the O(N²) pairwise pedestrian-pedestrian social-force contribution path** used by the
   opt-in `hsfm_anisotropic_fov_v1` runtime seam (issue #3481). `pairwise_social_force_contributions`
   (`robot_sf/sim/pedestrian_model_variants.py`) previously built its `(N, N, 2)` per-pair matrix with

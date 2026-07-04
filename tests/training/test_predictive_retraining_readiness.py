@@ -221,6 +221,27 @@ def test_missing_pipeline_retraining_prerequisites_fail_closed(tmp_path: Path) -
     )
 
 
+def test_packet_pipeline_summary_mismatch_fails_closed(tmp_path: Path) -> None:
+    """Divergent packet and pipeline hard-seed summary targets block launch readiness."""
+
+    payload = _complete_payload(tmp_path)
+    payload["evaluation_config"] = {
+        **payload["evaluation_config"],
+        "summary_path": "output/tmp/predictive_planner/pipeline/evaluation/stale/summary.json",
+    }
+    packet = _write_packet(tmp_path, payload)
+
+    report = evaluate_retraining_readiness(packet, repo_root=tmp_path)
+
+    assert report["packet_complete"] is False
+    assert report["launch_ready"] is False
+    assert any(
+        "evaluation_config.summary_path must match "
+        "pipeline_config.output.provenance.hard_seed_evaluation_summary" in blocker
+        for blocker in report["blockers"]
+    )
+
+
 def test_missing_retraining_prerequisites_fail_closed(tmp_path: Path) -> None:
     """Missing control-law/provenance prerequisites keep packet incomplete."""
 

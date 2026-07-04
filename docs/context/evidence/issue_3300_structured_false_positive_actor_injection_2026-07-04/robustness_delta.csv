@@ -1,0 +1,2 @@
+planner_key,scenario_id,seed,pedestrians_added,steps_with_noise,nominal_actor_count,perturbed_actor_count,changed_fields,metric_delta,selected_action_nominal,selected_action_perturbed
+goal,single_ped_crossing_orthogonal,0,5,5,,,,"{""route_complete"": 0.0}",,

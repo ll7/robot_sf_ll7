@@ -101,6 +101,87 @@ def test_observation_noise_applies_map_runner_top_level_pose_keys() -> None:
     assert stats["steps_with_noise"] == 1
 
 
+def test_observation_noise_adds_false_positive_to_flat_socnav_pedestrians() -> None:
+    """Flattened SocNav observations still expose structured pedestrian slots."""
+    spec = normalize_observation_noise_spec(
+        {
+            "profile": "flat_false_positive",
+            "seed": 3300,
+            "pedestrian_false_positive_prob": 1.0,
+            "pedestrian_false_positive_radius_m": 3.0,
+            "pedestrian_false_positive_radius": 0.35,
+        }
+    )
+    obs = {
+        "robot_position": np.array([1.0, 2.0], dtype=np.float32),
+        "pedestrians_positions": np.array([[2.0, 2.0], [0.0, 0.0], [0.0, 0.0]], dtype=np.float32),
+        "pedestrians_velocities": np.zeros((3, 2), dtype=np.float32),
+        "pedestrians_radius": np.array([0.35], dtype=np.float32),
+        "pedestrians_count": np.array([1.0], dtype=np.float32),
+    }
+    rng_a = make_observation_noise_rng(spec, seed=0, scenario_id="s1")
+    rng_b = make_observation_noise_rng(spec, seed=0, scenario_id="s1")
+
+    noisy_a, stats_a = apply_observation_noise(obs, spec, rng_a)
+    noisy_b, stats_b = apply_observation_noise(obs, spec, rng_b)
+
+    assert stats_a["pedestrians_added"] == 1
+    assert stats_a["steps_with_noise"] == 1
+    assert noisy_a["pedestrians_count"] == [2.0]
+    assert noisy_a["pedestrians_positions"][0] == [2.0, 2.0]
+    assert noisy_a["pedestrians_positions"][1] != [0.0, 0.0]
+    assert noisy_a["pedestrians_positions"] == noisy_b["pedestrians_positions"]
+    assert stats_a == stats_b
+
+
+def test_flat_socnav_pedestrian_noise_ignores_missing_or_empty_slots() -> None:
+    """Flat pedestrian noise remains a no-op when no structured slots exist."""
+    spec = normalize_observation_noise_spec(
+        {"profile": "flat_empty", "pedestrian_false_positive_prob": 1.0}
+    )
+    rng = make_observation_noise_rng(spec, seed=0, scenario_id="s1")
+
+    noisy_missing, stats_missing = apply_observation_noise(
+        {"robot_position": [1.0, 2.0]}, spec, rng
+    )
+    noisy_empty, stats_empty = apply_observation_noise(
+        {"pedestrians_positions": np.empty((0, 2), dtype=np.float32)}, spec, rng
+    )
+
+    assert noisy_missing == {"robot_position": [1.0, 2.0]}
+    assert all(value == 0 for value in stats_missing.values())
+    assert np.asarray(noisy_empty["pedestrians_positions"]).size == 0
+    assert all(value == 0 for value in stats_empty.values())
+
+
+def test_flat_socnav_pedestrian_noise_removes_and_uses_robot_fallback() -> None:
+    """Flat pedestrian false-negative and false-positive branches update active slots."""
+    spec = normalize_observation_noise_spec(
+        {
+            "profile": "flat_remove_add",
+            "pedestrian_false_negative_prob": 1.0,
+            "pedestrian_false_positive_prob": 1.0,
+            "pedestrian_false_positive_radius_m": 0.0,
+        }
+    )
+    obs = {
+        "robot": {"position": [3.0, 4.0]},
+        "pedestrians_positions": np.array([[2.0, 2.0], [0.0, 0.0]], dtype=np.float32),
+        "pedestrians_velocities": np.array([[0.1, 0.0]], dtype=np.float32),
+        "pedestrians_count": np.array([1.0], dtype=np.float32),
+    }
+    rng = make_observation_noise_rng(spec, seed=0, scenario_id="s1")
+
+    noisy, stats = apply_observation_noise(obs, spec, rng)
+
+    assert stats["pedestrians_removed"] == 1
+    assert stats["pedestrians_added"] == 1
+    assert stats["steps_with_noise"] == 1
+    assert noisy["pedestrians_count"] == [1.0]
+    assert noisy["pedestrians_positions"][0] == [3.0, 4.0]
+    assert noisy["pedestrians_velocities"][0] == [0.0, 0.0]
+
+
 def test_observation_noise_validates_probability_ranges() -> None:
     """Probability-like noise fields should reject invalid values."""
     with pytest.raises(ValueError, match="lidar_dropout_prob"):

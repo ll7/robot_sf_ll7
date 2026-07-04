@@ -27,7 +27,7 @@ from robot_sf.common.artifact_paths import get_repository_root
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from robot_sf.benchmark.camera_ready_campaign_config import CampaignConfig
+    from robot_sf.benchmark.camera_ready._config_types import CampaignConfig
 
 
 def _campaign_success_counters(

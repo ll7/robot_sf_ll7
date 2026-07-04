@@ -90,7 +90,7 @@ from robot_sf.common.artifact_paths import get_artifact_category_path, get_repos
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from robot_sf.benchmark.camera_ready_campaign_config import CampaignConfig
+    from robot_sf.benchmark.camera_ready._config_types import CampaignConfig
 
 CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
 DEFAULT_EPISODE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")

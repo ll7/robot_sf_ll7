@@ -137,6 +137,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3484_feasibility_diagnostics_2026-07-04/claim_boundary_synthesis.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3484_feasibility_diagnostics_2026-07-04/SHA256SUMS
     status: evidence
     freshness: evidence

@@ -13,8 +13,10 @@ from robot_sf.scenario_certification.failure_cause import (
 )
 from robot_sf.scenario_certification.feasibility_diagnostics import (
     DIAGNOSTIC_CLAIM_BOUNDARY,
+    FEASIBILITY_CLAIM_BOUNDARY_SYNTHESIS_SCHEMA,
     FEASIBILITY_DIAGNOSTICS_SCHEMA,
     FeasibilityDiagnosticConfig,
+    build_difficulty_ramp_claim_boundary_synthesis,
     make_actor_free_scenario,
     make_extended_time_scenario,
     route_clearance_lane,
@@ -407,3 +409,163 @@ def test_report_uses_metadata_difficulty_before_name_suffix(monkeypatch) -> None
 
     assert report["scenario_rows"][0]["difficulty_level"] == "custom"
     assert report["difficulty_ramp"][0]["levels"][0]["difficulty_level"] == "custom"
+
+
+def _synthesis_fixture_report() -> dict[str, Any]:
+    return {
+        "schema_version": FEASIBILITY_DIAGNOSTICS_SCHEMA,
+        "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+        "family_verdicts": [
+            {
+                "family_id": "bottleneck",
+                "failure_cause_verdict": {
+                    "cause": "vehicle_infeasible",
+                    "comparable_for_ranking": False,
+                    "evidence_complete": True,
+                    "inputs": {
+                        "route_feasible": True,
+                        "actor_free_solved": False,
+                        "extended_time_solved": False,
+                        "oracle_solved": False,
+                    },
+                },
+            },
+            {
+                "family_id": "cross_trap",
+                "failure_cause_verdict": {
+                    "cause": "vehicle_infeasible",
+                    "comparable_for_ranking": False,
+                    "evidence_complete": True,
+                    "inputs": {
+                        "route_feasible": True,
+                        "actor_free_solved": False,
+                        "extended_time_solved": False,
+                        "oracle_solved": False,
+                    },
+                },
+            },
+            {
+                "family_id": "head_on_corridor",
+                "failure_cause_verdict": {
+                    "cause": "dynamic_blocking_or_deadlock",
+                    "comparable_for_ranking": False,
+                    "evidence_complete": True,
+                    "inputs": {
+                        "route_feasible": True,
+                        "actor_free_solved": True,
+                        "extended_time_solved": False,
+                        "oracle_solved": False,
+                    },
+                },
+            },
+        ],
+        "difficulty_ramp": [
+            {
+                "family_id": "bottleneck",
+                "axis": "scenario_variant_difficulty",
+                "levels": [{"difficulty_level": "low"}, {"difficulty_level": "medium"}],
+                "first_actor_free_failure_level": "medium",
+                "first_oracle_failure_level": "medium",
+            },
+            {
+                "family_id": "cross_trap",
+                "axis": "scenario_variant_difficulty",
+                "levels": [{"difficulty_level": "low"}],
+                "first_actor_free_failure_level": "low",
+                "first_oracle_failure_level": "low",
+            },
+            {
+                "family_id": "head_on_corridor",
+                "axis": "scenario_variant_difficulty",
+                "levels": [{"difficulty_level": "low"}, {"difficulty_level": "medium"}],
+                "first_actor_free_failure_level": None,
+                "first_oracle_failure_level": "medium",
+            },
+        ],
+    }
+
+
+def test_claim_boundary_synthesis_classifies_retained_diagnostic_packet() -> None:
+    """Retained issue #3484 packet gets compact non-ranking claim boundary."""
+
+    synthesis = build_difficulty_ramp_claim_boundary_synthesis(
+        _synthesis_fixture_report(),
+        source_report="docs/context/evidence/issue_3484/diagnostic_report.json",
+    )
+
+    assert synthesis["schema_version"] == FEASIBILITY_CLAIM_BOUNDARY_SYNTHESIS_SCHEMA
+    assert synthesis["claim_boundary"] == "diagnostic_only_not_ranking_evidence"
+    assert synthesis["route_infeasible_families"] == []
+    assert synthesis["vehicle_infeasible_families"] == ["bottleneck", "cross_trap"]
+    assert synthesis["dynamic_blocked_families"] == ["head_on_corridor"]
+    assert synthesis["comparable_for_ranking_families"] == []
+    assert synthesis["not_comparable_for_ranking_families"] == [
+        "bottleneck",
+        "cross_trap",
+        "head_on_corridor",
+    ]
+    assert synthesis["still_unsupported_families"] == []
+
+
+def test_claim_boundary_synthesis_fails_closed_for_missing_ramp_family() -> None:
+    """Missing difficulty-ramp evidence stays unsupported instead of inferred."""
+
+    report = _synthesis_fixture_report()
+    report["difficulty_ramp"] = [
+        row for row in report["difficulty_ramp"] if row["family_id"] != "cross_trap"
+    ]
+
+    synthesis = build_difficulty_ramp_claim_boundary_synthesis(
+        report,
+        source_report="fixture://diagnostic_report.json",
+    )
+
+    assert synthesis["vehicle_infeasible_families"] == ["bottleneck"]
+    assert synthesis["still_unsupported_families"] == ["cross_trap"]
+    cross_trap = next(
+        row for row in synthesis["family_claim_boundaries"] if row["family_id"] == "cross_trap"
+    )
+    assert cross_trap["unsupported_reason"] == "missing_difficulty_ramp"
+    assert cross_trap["comparable_for_ranking"] is False
+
+
+def test_claim_boundary_synthesis_fails_closed_for_wrong_source_boundary() -> None:
+    """Non-diagnostic source reports are unsupported for every target family."""
+
+    report = _synthesis_fixture_report()
+    report["claim_boundary"] = "paper_facing_claim"
+
+    synthesis = build_difficulty_ramp_claim_boundary_synthesis(
+        report,
+        source_report="fixture://diagnostic_report.json",
+    )
+
+    assert synthesis["vehicle_infeasible_families"] == []
+    assert synthesis["dynamic_blocked_families"] == []
+    assert synthesis["still_unsupported_families"] == [
+        "bottleneck",
+        "cross_trap",
+        "head_on_corridor",
+    ]
+    assert {row["unsupported_reason"] for row in synthesis["family_claim_boundaries"]} == {
+        "unsupported_source_claim_boundary"
+    }
+
+
+def test_claim_boundary_synthesis_fails_closed_for_null_failure_cause_inputs() -> None:
+    """A null ``inputs`` block must fail closed rather than raise AttributeError."""
+
+    report = _synthesis_fixture_report()
+    report["family_verdicts"][0]["failure_cause_verdict"]["inputs"] = None
+
+    synthesis = build_difficulty_ramp_claim_boundary_synthesis(
+        report,
+        source_report="fixture://diagnostic_report.json",
+    )
+
+    assert "bottleneck" in synthesis["still_unsupported_families"]
+    bottleneck = next(
+        row for row in synthesis["family_claim_boundaries"] if row["family_id"] == "bottleneck"
+    )
+    assert bottleneck["unsupported_reason"] == "missing_failure_cause_inputs"
+    assert bottleneck["comparable_for_ranking"] is False

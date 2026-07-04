@@ -1,0 +1,77 @@
+{
+  "audit_date": "2026-07-04",
+  "claim_boundary": "diagnostic-only closure audit; issue #4163 is not complete because brute-force reference validation is missing",
+  "forbidden_actions_confirmed": {
+    "compute_submit": false,
+    "deleted": false,
+    "merged": false,
+    "released": false
+  },
+  "issue": 4163,
+  "issue_url": "https://github.com/ll7/robot_sf_ll7/issues/4163",
+  "linked_merged_prs": [
+    {
+      "merge_commit": "c0332f8cceb9fe519f6bd19d8d3b15553626a33e",
+      "merged_at": "2026-07-02T19:29:43Z",
+      "number": 4188,
+      "title": "feat: add rare-event sampling smoke harness (#4163)",
+      "url": "https://github.com/ll7/robot_sf_ll7/pull/4188"
+    },
+    {
+      "merge_commit": "bb674d86833fc8409f359adf93111e603fa27bb2",
+      "merged_at": "2026-07-03T08:54:57Z",
+      "number": 4233,
+      "title": "feat: apply rare-event smoke to static constriction (#4163)",
+      "url": "https://github.com/ll7/robot_sf_ll7/pull/4233"
+    },
+    {
+      "merge_commit": "82afa1658aecf29376695363b72586fd089b9997",
+      "merged_at": "2026-07-04T14:18:23Z",
+      "number": 4453,
+      "title": "Issue #4163: record rare-event reference blocker",
+      "url": "https://github.com/ll7/robot_sf_ll7/pull/4453"
+    }
+  ],
+  "acceptance_evidence": [
+    {
+      "criterion": "Add planner-agnostic rare-event estimation harness over scenario parameters.",
+      "evidence": "Delivered by PR #4188 via robot_sf/benchmark/rare_event_sampling.py, scripts/benchmark/run_rare_event_estimation_issue_4163.py, and issue_4163_crossing_smoke.yaml.",
+      "status": "delivered"
+    },
+    {
+      "criterion": "Log base probability, proposal probability, likelihood ratio, and sampled parameter hash for sampled rows.",
+      "evidence": "Delivered by PR #4188 via SampledScenarioRow payloads and tests/benchmark/test_rare_event_sampling.py.",
+      "status": "delivered"
+    },
+    {
+      "criterion": "Report estimated failure probability confidence interval and naive Monte Carlo comparison.",
+      "evidence": "Delivered diagnostically by PR #4188 crossing smoke summary and PR #4233 static-constriction per-arm summaries.",
+      "status": "delivered_diagnostic"
+    },
+    {
+      "criterion": "Apply the harness to one real failing family.",
+      "evidence": "Delivered diagnostically by PR #4233 using the static-constriction family.",
+      "status": "delivered_diagnostic"
+    },
+    {
+      "criterion": "Validate estimates against a larger brute-force reference on one cheap family.",
+      "evidence": "Blocked by missing empirical reference results; PR #4453 records explicit empirical_reference blocker fields and fail-closed validation.",
+      "status": "blocked"
+    }
+  ],
+  "closure_decision": "leave_issue_open",
+  "residual_risks": [
+    {
+      "risk": "No cheap-family brute-force reference comparison exists yet.",
+      "why_it_remains": "Producing it requires empirical run data beyond this closure audit and no compute submission was authorized."
+    },
+    {
+      "risk": "Diagnostic smoke estimates could be mistaken for benchmark-strength failure-rate evidence.",
+      "why_it_remains": "The merged summaries carry diagnostic claim boundaries, but the issue remains open until empirical reference validation exists."
+    }
+  ],
+  "state_propagation": {
+    "issue_comment_posted": false,
+    "reason": "comment_issue_or_pr authorization is false; this tracked audit packet and PR body are the durable propagation surfaces"
+  }
+}

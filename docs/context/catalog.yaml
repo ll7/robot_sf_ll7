@@ -17,6 +17,10 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+  - path: docs/context/evidence/issue_4163_closure_audit
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07
     status: evidence
     freshness: evidence
@@ -150,6 +154,10 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_3484_feasibility_diagnostics_2026-07-04/SHA256SUMS
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3484_closure_audit_2026-07-04/README.md
     status: evidence
     freshness: evidence
     area: benchmark_evidence
@@ -3131,3 +3139,19 @@ entries:
     status: evidence
     freshness: evidence
     area: predictive_planner
+  - path: docs/context/evidence/issue_3300_stronger_matrix_closure_audit_2026-07-04/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3300_stronger_matrix_closure_audit_2026-07-04/false_positive_replay_report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3300_stronger_matrix_closure_audit_2026-07-04/robustness_delta.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3300_stronger_matrix_closure_audit_2026-07-04/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

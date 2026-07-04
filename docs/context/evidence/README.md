@@ -124,6 +124,13 @@ Policy caveats:
   `blocked_not_closable`, and preserves the remaining blocker without running training, submitting
   compute, or promoting a benchmark or paper-facing claim.
 
+- `issue_3300_stronger_matrix_closure_audit_2026-07-04/`: smoke/diagnostic closure
+audit bundle for issue #3300 false-positive actor-injection replay. Runs the pre-registered
+stronger structured-pedestrian matrix as paired nominal-vs-perturbed executable CPU replay,
+records `scenario_too_weak` with `pedestrians_added=102`, and maps each issue acceptance
+criterion to merged PR/evidence without promoting robustness, hardware-sensor, benchmark,
+Slurm/GPU, or paper/dissertation claims.
+
 - `issue_1554_job_13198_constraints_first_analysis/`: diagnostic-only constraints-first artifact
   bundle for completed job 13198. Preserves public completed-job metadata, records missing retained
   private metrics/decision-packet inputs as blockers, fails closed SNQI adjacent-rank statements,

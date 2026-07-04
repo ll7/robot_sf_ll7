@@ -1,0 +1,7 @@
+planner_key,scenario_id,seed,pedestrians_added,steps_with_noise,nominal_actor_count,perturbed_actor_count,changed_fields,metric_delta,selected_action_nominal,selected_action_perturbed
+goal,francis2023_intersection_wait,0,20,20,,,,"{""route_complete"": 0.0}",,
+goal,francis2023_intersection_wait,3300,20,20,,,,"{""route_complete"": 0.0}",,
+goal,issue_3233_near_field_observation_noise,0,13,13,,,,"{""route_complete"": 0.0}",,
+goal,issue_3233_near_field_observation_noise,3300,9,9,,,,"{""route_complete"": 0.0}",,
+goal,single_ped_crossing_orthogonal,0,20,20,,,,"{""route_complete"": 0.0}",,
+goal,single_ped_crossing_orthogonal,3300,20,20,,,,"{""route_complete"": 0.0}",,

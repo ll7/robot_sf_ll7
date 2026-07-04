@@ -120,6 +120,11 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_3501_closure_audit_2026-07-04.md`: closure-audit integration report for
+  issue #3501. Maps merged PRs #3591, #4137, #4136, #4223, and #4298 planner-agnostic
+  safety wrapper and ablation/preregistration evidence to acceptance criteria
+  without promoting benchmark, Slurm, or paper-facing claims.
+
 - `issue_4245_closure_audit_2026-07-04.md`: closure-audit integration report for
   issue #4245. Maps merged PR #4257 standalone offline-pretraining checkpoint
   manifest and manifest-driven fine-tuning evidence to acceptance criteria

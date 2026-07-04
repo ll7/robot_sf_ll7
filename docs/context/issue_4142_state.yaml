@@ -1,0 +1,138 @@
+# Canonical high-churn state surface for issue #4142.
+#
+# Purpose: issue #4142 landed several small DPCBF dense-comparison slices in quick
+# succession. This append-only state surface records the closure audit against the
+# merged pull requests and keeps the remaining empirical action visible without
+# adding another guardrail/checker micro-slice.
+#
+# Scope discipline: this file tracks durable issue state only. It does not encode
+# transient ready-queue routing, target hosts, packet lineage pointers, campaign
+# launch state, benchmark results, paper/dissertation claims, or private ops state.
+issue: 4142
+state_surface: dpcbf_dense_comparison_closure_audit
+canonical_context_note: docs/context/issue_4142_dpcbf_dense_pipeline.md
+entries:
+  - recorded_at_utc: "2026-07-04T22:14:42Z"
+    host: imech156-u
+    lane: closure_audit_cpu_only
+    base_commit: "59a7487f9"
+    status: non_campaign_pipeline_delivered__authorized_dense_campaign_pending
+    claim_boundary: >-
+      Closure-audit and durable-state slice only. The merged pull request lineage
+      satisfies the versioned Dynamic Parabolic Control Barrier Function (DPCBF)
+      arm, fail-closed identity/readiness, packet-consuming runner, summarizer,
+      and cross-module pipeline contract criteria. Issue #4142 is not closeable
+      because the latest live owner comment keeps the authorized three-arm dense
+      comparison campaign as the only remaining forward step. No full benchmark
+      campaign, Slurm/GPU submission, issue comment, paper/dissertation claim edit,
+      release, merge, or deletion was performed.
+    fragmentation_guard: >-
+      Issue #4142 already has multiple guardrail/checker/packet-refresh pull
+      requests merged in a short window, including the consolidation slice in
+      pull request #4348. This entry is therefore a consolidation/state slice on
+      the single durable issue-state surface, not another behavioral checker.
+    live_issue_thread_reviewed:
+      issue_url: "https://github.com/ll7/robot_sf_ll7/issues/4142"
+      latest_comment_reviewed_at_utc: "2026-07-03T23:09:05Z"
+      latest_comment_summary: >-
+        Pull request #4348 merged the cross-slice pipeline contract test and
+        consolidation note. Remaining work is the authorized three-arm dense
+        comparison campaign itself; episodes/Slurm/GPU stay out of scope and
+        fail-closed until explicitly authorized.
+    open_pr_dedupe:
+      checked_at_utc: "2026-07-04T22:13:00Z"
+      result: "no open pull request found for issue #4142"
+    acceptance_evidence:
+      - criterion: "Full issue thread and linked/merged pull requests reviewed."
+        status: met
+        evidence: >-
+          Live issue comments through 2026-07-03T23:09:05Z identify the merged
+          lineage: #4168, #4231, #4299, #4318, #4345, and #4348. The final
+          comment states the sole remaining forward step is the authorized
+          three-arm dense comparison campaign.
+      - criterion: "DPCBF exists as a separate versioned arm."
+        status: met
+        evidence: >-
+          Pull request #4168 merged `cbf_dynamic_parabolic_v1_on` as a distinct
+          DPCBF arm with runtime/config/test coverage, separate from
+          `cbf_collision_cone_on`.
+      - criterion: "Already-feasible nominal DPCBF commands pass through and grid-search constants are cached."
+        status: met
+        evidence: >-
+          Pull request #4231 merged the campaign-gating regression slice that
+          strengthens exact feasible-nominal passthrough coverage and records the
+          canonical dense-comparison command in
+          `configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml`.
+      - criterion: "Dense comparison packet is predeclared, distinct, and fail-closed."
+        status: met
+        evidence: >-
+          Pull request #4299 merged the read-only readiness/pre-registration
+          surface over schema `robot_sf.issue_4142_dpcbf_dense_comparison.v1`,
+          validating the three required arms (`cbf_off`,
+          `cbf_collision_cone_on`, `cbf_dynamic_parabolic_v1_on`) and
+          fallback/degraded exclusion contracts without running episodes.
+      - criterion: "Packet-consuming runner resolves the dense-comparison plan."
+        status: met
+        evidence: >-
+          Pull request #4318 merged the run planner that consumes the issue #4142
+          packet and produces `robot_sf.issue_4142_dpcbf_dense_comparison_plan.v1`.
+          `execute_run_plan()` intentionally remains fail-closed.
+      - criterion: "Plan-consuming summarizer can report future per-arm results while caveating incomplete rows."
+        status: met
+        evidence: >-
+          Pull request #4345 merged
+          `robot_sf/benchmark/issue_4142_dpcbf_dense_summary.py`, the read-only
+          CLI, and tests. The summarizer reports `plan_blocked`,
+          `results_incomplete`, or `complete`; excluded/unknown/null-status rows
+          are caveats, never success evidence.
+      - criterion: "Cross-slice pipeline contract is schema-complete and integration-tested."
+        status: met
+        evidence: >-
+          Pull request #4348 merged the
+          `evaluate_readiness -> build_run_plan -> summarize_dense_comparison`
+          contract test plus `docs/context/issue_4142_dpcbf_dense_pipeline.md`.
+          The consolidation note records no new blocker beyond authorized
+          campaign execution.
+      - criterion: "Dense comparison against unfiltered and collision-cone arms is empirically reproducible."
+        status: blocked
+        evidence: >-
+          Not performed in this closure-audit lane. The latest live issue comment
+          keeps the authorized three-arm dense-comparison campaign as the only
+          remaining forward step, and this task did not authorize compute_submit
+          or Slurm/GPU work.
+      - criterion: "Degraded rows are explicit caveats and evidence tier is stated before interpretation."
+        status: partially_met
+        evidence: >-
+          The schema/readiness/runner/summarizer pipeline enforces fail-closed
+          fallback/degraded caveats and diagnostic-only status. Final evidence-tier
+          interpretation for empirical comparison remains blocked until the
+          authorized campaign produces per-arm outputs.
+    remaining_empirical_action:
+      item: "authorized_three_arm_dense_comparison_campaign"
+      why: >-
+        The pipeline is ready to consume outputs, but issue #4142's acceptance
+        requires actual dense dynamic-obstacle comparison evidence. That evidence
+        requires explicit human/Slurm authorization and was outside this task's
+        compute_submit=false lane.
+      expected_next_surface: >-
+        Run the resolved three-arm plan under explicit authorization, then rerun
+        the issue #4142 summarizer and append the resulting complete/incomplete
+        status here or to a successor evidence note.
+    residual_risks:
+      - risk: "Dense-comparison empirical outcome is unknown."
+        why_it_remains: >-
+          No campaign episodes were run in this CPU-only closure-audit lane, so
+          no collision, near-miss, intervention-count, or runtime-overhead
+          comparison can be interpreted.
+      - risk: "Issue #4142 cannot be closed from merged non-campaign slices alone."
+        why_it_remains: >-
+          The owner comments explicitly keep the issue open until the authorized
+          dense-comparison campaign completes.
+    out_of_scope_confirmed:
+      full_benchmark_campaign_run: false
+      slurm_or_gpu_submission: false
+      paper_or_dissertation_claim_edit: false
+      issue_comment: false
+      release: false
+      merge: false
+      deletion: false

@@ -288,3 +288,41 @@ def test_smoke_runner_rejects_available_reference_without_evidence(tmp_path: Pat
                 str(tmp_path / "evidence"),
             ]
         )
+
+
+@pytest.mark.parametrize("empty_path", [None, "", "   "])
+def test_smoke_runner_rejects_available_reference_with_empty_evidence_path(
+    tmp_path: Path, empty_path: object
+) -> None:
+    """A present-but-empty evidence_path must not bypass the available-reference gate."""
+
+    config_path = tmp_path / "rare_event_empty_reference.yaml"
+    payload = _toy_spec_payload(samples=2)
+    payload["parameters"] = {
+        "ped_density": {
+            "base": "uniform",
+            "low": 0.01,
+            "high": 0.08,
+            "proposal_low": 0.04,
+            "proposal_high": 0.08,
+        }
+    }
+    payload["objective_event"] = "collision_or_severe_intrusion"
+    payload["empirical_reference"] = {
+        "status": "available",
+        "comparison": "larger_bruteforce_reference",
+        "evidence_path": empty_path,
+    }
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="empirical_reference.evidence_path"):
+        run_smoke(
+            [
+                "--config",
+                str(config_path),
+                "--output-dir",
+                str(tmp_path / "output"),
+                "--evidence-dir",
+                str(tmp_path / "evidence"),
+            ]
+        )

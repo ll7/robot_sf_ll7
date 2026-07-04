@@ -172,7 +172,7 @@ def _empirical_reference(payload: dict[str, Any]) -> dict[str, Any]:
     for key in ("reason", "next_action", "evidence_path", "reference_samples", "reference_seed"):
         if key in reference:
             payload_reference[key] = reference[key]
-    if status == "available" and "evidence_path" not in payload_reference:
+    if status == "available" and not str(payload_reference.get("evidence_path") or "").strip():
         raise ValueError("empirical_reference.evidence_path is required when status is available")
     return payload_reference
 

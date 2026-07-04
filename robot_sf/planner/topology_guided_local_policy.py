@@ -118,6 +118,16 @@ class _RouteHypothesis:
     blocked_cell: tuple[int, int] | None = None
 
 
+@dataclass
+class RouteProgressState:
+    """State for topology route-progress and near-parity churn accounting."""
+
+    last_route_progress_m: float | None = None
+    stagnant_steps: int = 0
+    last_selected_candidate: str | None = None
+    candidate_switch_count: int = 0
+
+
 def _path_overlap(left: list[tuple[int, int]], right: list[tuple[int, int]]) -> float:
     """Return Jaccard overlap between two grid-cell paths."""
     left_cells = set(left)
@@ -592,6 +602,19 @@ def _non_negative_float_field(raw: dict[str, Any], key: str, default: float) -> 
     return value
 
 
+def _near_parity_threshold_metadata(config: TopologyGuidedLocalPolicyConfig) -> dict[str, Any]:
+    """Return explicit near-parity threshold metadata for diagnostics."""
+    return {
+        "schema_version": "topology_near_parity_thresholds.v1",
+        "enabled": bool(config.near_parity_diversity_gate_enabled),
+        "route_distance_slack_m": float(config.near_parity_route_distance_slack_m),
+        "route_distance_slack_ratio": float(config.near_parity_route_distance_slack_ratio),
+        "static_clearance_floor_m": float(config.near_parity_static_clearance_floor_m),
+        "diversity_bonus": float(config.near_parity_diversity_bonus),
+        "deterministic_tie_policy": "stable_first_max_score",
+    }
+
+
 def _topology_guided_payload(raw: dict[str, Any]) -> dict[str, Any]:
     """Return flat topology config with optional nested ``topology_guided`` overrides applied."""
     payload = dict(raw)
@@ -753,6 +776,7 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             maxlen=max(int(self.topology_config.primary_route_reuse_penalty_cooldown_steps), 1)
         )
         self._total_primary_selections: int = 0
+        self._topology_route_progress = RouteProgressState()
 
     def reset(self, *, seed: int | None = None) -> None:
         """Reset base planner state and topology-hypothesis diagnostics."""
@@ -764,6 +788,64 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             maxlen=max(int(self.topology_config.primary_route_reuse_penalty_cooldown_steps), 1)
         )
         self._total_primary_selections = 0
+        self._topology_route_progress = RouteProgressState()
+
+    def _update_topology_route_progress(
+        self,
+        *,
+        selected_id: str,
+        route_remaining_m: float | None,
+    ) -> dict[str, Any]:
+        """Update route-progress state and classify stalls versus near-parity churn.
+
+        Returns:
+            dict[str, Any]: Serializable progress-state metadata for this planner step.
+        """
+        state = self._topology_route_progress
+        previous_remaining = state.last_route_progress_m
+        previous_selected = state.last_selected_candidate
+        switched = previous_selected is not None and selected_id != previous_selected
+        if switched:
+            state.candidate_switch_count += 1
+
+        progress_delta: float | None = None
+        if route_remaining_m is None:
+            terminal_reason = "missing_route_progress"
+        elif previous_remaining is None:
+            state.last_route_progress_m = float(route_remaining_m)
+            terminal_reason = "insufficient_samples"
+        else:
+            progress_delta = float(previous_remaining - route_remaining_m)
+            state.last_route_progress_m = float(route_remaining_m)
+            if progress_delta >= float(self.topology_config.min_route_progress_delta_m):
+                state.stagnant_steps = 0
+                terminal_reason = "goal_progress"
+            elif switched:
+                state.stagnant_steps = 0
+                terminal_reason = "near_parity_churn"
+            else:
+                state.stagnant_steps += 1
+                terminal_reason = (
+                    "true_stall"
+                    if state.stagnant_steps >= int(self.topology_config.stall_window_steps)
+                    else "route_stagnant"
+                )
+
+        state.last_selected_candidate = selected_id
+        return {
+            "schema_version": "topology_route_progress_state.v1",
+            "selected_hypothesis_id": selected_id,
+            "previous_selected_hypothesis_id": previous_selected,
+            "candidate_switched": bool(switched),
+            "candidate_switch_count": int(state.candidate_switch_count),
+            "route_remaining_distance_m": route_remaining_m,
+            "previous_route_remaining_distance_m": previous_remaining,
+            "route_progress_delta_m": progress_delta,
+            "min_route_progress_delta_m": float(self.topology_config.min_route_progress_delta_m),
+            "stagnant_steps": int(state.stagnant_steps),
+            "stall_window_steps": int(self.topology_config.stall_window_steps),
+            "terminal_reason": terminal_reason,
+        }
 
     def _alternative_paths(
         self,
@@ -978,6 +1060,12 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
                 current_time=current_time,
                 current_distance=remaining,
             )
+        else:
+            remaining = None
+        route_corridor["topology_route_progress"] = self._update_topology_route_progress(
+            selected_id=selected_id,
+            route_remaining_m=remaining,
+        )
         route_corridor["topology_hypothesis"] = {
             key: value for key, value in selected.items() if key != "route_corridor"
         }
@@ -1020,6 +1108,7 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             "arbitration_weight": float(self.topology_config.arbitration_weight),
             "min_route_progress_delta_m": float(self.topology_config.min_route_progress_delta_m),
             "stall_window_steps": int(self.topology_config.stall_window_steps),
+            "near_parity_thresholds": _near_parity_threshold_metadata(self.topology_config),
         }
         return route_corridor
 
@@ -1267,6 +1356,15 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             "min_hypotheses": int(self.topology_config.min_hypotheses),
             "max_hypotheses": int(self.topology_config.max_hypotheses),
             "topology_command_enabled": bool(self.topology_config.topology_command_enabled),
+            "arbitration_weight": float(self.topology_config.arbitration_weight),
+            "route_progress_state": {
+                "schema_version": "topology_route_progress_state.v1",
+                "last_route_progress_m": self._topology_route_progress.last_route_progress_m,
+                "stagnant_steps": int(self._topology_route_progress.stagnant_steps),
+                "last_selected_candidate": self._topology_route_progress.last_selected_candidate,
+                "candidate_switch_count": int(self._topology_route_progress.candidate_switch_count),
+            },
+            "near_parity_thresholds": _near_parity_threshold_metadata(self.topology_config),
             "status_counts": dict(sorted(self._topology_status_counts.items())),
             "selected_hypothesis_counts": dict(sorted(self._selected_hypothesis_counts.items())),
             "last_topology_decision": self._last_topology_decision,
@@ -1275,7 +1373,9 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
 
 
 __all__ = [
+    "RouteProgressState",
     "TopologyGuidedHybridRulePlannerAdapter",
     "TopologyGuidedLocalPolicyConfig",
+    "blend_topology_command",
     "build_topology_guided_local_policy_config",
 ]

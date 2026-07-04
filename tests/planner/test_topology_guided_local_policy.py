@@ -1113,3 +1113,66 @@ def test_progress_accounting_mode_visible_in_decision_and_route_corridor() -> No
     reuse_penalty = route_corridor["topology_reuse_penalty"]
     assert reuse_penalty["primary_route_progress_accounting_mode"] == "monotone"
     assert reuse_penalty["primary_route_recent_progress_min_samples"] == 2
+
+
+def test_topology_route_progress_distinguishes_churn_from_true_stall() -> None:
+    """Candidate switches under low progress classify as churn, not true stall."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(
+        _config(min_route_progress_delta_m=0.1, stall_window_steps=2)
+    )
+    first = planner._update_topology_route_progress(
+        selected_id="primary_route",
+        route_remaining_m=10.0,
+    )
+    churn = planner._update_topology_route_progress(
+        selected_id="masked_cell_5_12",
+        route_remaining_m=9.99,
+    )
+    stagnant = planner._update_topology_route_progress(
+        selected_id="masked_cell_5_12",
+        route_remaining_m=9.98,
+    )
+    stall = planner._update_topology_route_progress(
+        selected_id="masked_cell_5_12",
+        route_remaining_m=9.97,
+    )
+
+    assert first["terminal_reason"] == "insufficient_samples"
+    assert churn["terminal_reason"] == "near_parity_churn"
+    assert churn["candidate_switch_count"] == 1
+    assert churn["stagnant_steps"] == 0
+    assert stagnant["terminal_reason"] == "route_stagnant"
+    assert stall["terminal_reason"] == "true_stall"
+
+
+def test_topology_guided_diagnostics_expose_threshold_and_progress_metadata() -> None:
+    """Aggregate diagnostics carry explicit arbitration and near-parity thresholds."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(
+        _config(
+            arbitration_weight=0.35,
+            near_parity_diversity_gate_enabled=True,
+            near_parity_route_distance_slack_m=0.7,
+            near_parity_route_distance_slack_ratio=0.05,
+            near_parity_static_clearance_floor_m=0.04,
+            near_parity_diversity_bonus=0.2,
+        )
+    )
+    planner._update_topology_route_progress(
+        selected_id="primary_route",
+        route_remaining_m=10.0,
+    )
+
+    diagnostics = planner.diagnostics()["topology_guided"]
+    thresholds = diagnostics["near_parity_thresholds"]
+
+    assert diagnostics["arbitration_weight"] == pytest.approx(0.35)
+    assert diagnostics["route_progress_state"]["last_selected_candidate"] == "primary_route"
+    assert thresholds == {
+        "schema_version": "topology_near_parity_thresholds.v1",
+        "enabled": True,
+        "route_distance_slack_m": pytest.approx(0.7),
+        "route_distance_slack_ratio": pytest.approx(0.05),
+        "static_clearance_floor_m": pytest.approx(0.04),
+        "diversity_bonus": pytest.approx(0.2),
+        "deterministic_tie_policy": "stable_first_max_score",
+    }

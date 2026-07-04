@@ -482,3 +482,78 @@ def test_summarize_hypotheses_counts_sources_progress_and_corrective_behavior() 
         "max_primary_route_recent_progress_sample_count": 2,
         "reason_counts": {"primary_route_selected_2_times_in_last_3_steps": 1},
     }
+
+
+def test_summarize_hypotheses_reports_route_progress_terminal_reasons() -> None:
+    """Diagnostic summary distinguishes route progress, churn, and true stalls."""
+    steps = [
+        {
+            "step": 0,
+            "topology_status": "ok",
+            "selected_local_command_source": "topology_hypothesis",
+            "planner_route_corridor": {
+                "topology_hypothesis": {"hypothesis_id": "primary_route"},
+                "topology_route_progress": {
+                    "terminal_reason": "goal_progress",
+                    "selected_hypothesis_id": "primary_route",
+                    "route_progress_delta_m": 0.2,
+                    "stagnant_steps": 0,
+                    "candidate_switch_count": 0,
+                },
+            },
+            "topology_hypotheses": [],
+            "topology_command_influence": {"selected_hypothesis_id": "primary_route"},
+        },
+        {
+            "step": 1,
+            "topology_status": "ok",
+            "selected_local_command_source": "topology_hypothesis",
+            "planner_route_corridor": {
+                "topology_hypothesis": {"hypothesis_id": "masked_cell_5_12"},
+                "topology_route_progress": {
+                    "terminal_reason": "near_parity_churn",
+                    "selected_hypothesis_id": "masked_cell_5_12",
+                    "previous_selected_hypothesis_id": "primary_route",
+                    "route_progress_delta_m": 0.01,
+                    "stagnant_steps": 0,
+                    "candidate_switch_count": 1,
+                },
+            },
+            "topology_hypotheses": [],
+            "topology_command_influence": {"selected_hypothesis_id": "masked_cell_5_12"},
+        },
+        {
+            "step": 2,
+            "topology_status": "ok",
+            "selected_local_command_source": "topology_hypothesis",
+            "planner_route_corridor": {
+                "topology_hypothesis": {"hypothesis_id": "masked_cell_5_12"},
+                "topology_route_progress": {
+                    "terminal_reason": "true_stall",
+                    "selected_hypothesis_id": "masked_cell_5_12",
+                    "route_progress_delta_m": 0.0,
+                    "stagnant_steps": 2,
+                    "candidate_switch_count": 1,
+                },
+            },
+            "topology_hypotheses": [],
+            "topology_command_influence": {"selected_hypothesis_id": "masked_cell_5_12"},
+        },
+    ]
+
+    summary = _summarize_hypotheses(steps, {"step": 2, "truncated": True})
+
+    assert summary["topology_route_progress"]["terminal_reason_counts"] == {
+        "goal_progress": 1,
+        "near_parity_churn": 1,
+        "true_stall": 1,
+    }
+    assert summary["topology_route_progress"]["near_parity_churn_steps"] == 1
+    assert summary["topology_route_progress"]["true_stall_steps"] == 1
+    assert summary["topology_route_progress"]["max_candidate_switch_count"] == 1
+    assert summary["topology_route_progress"]["max_stagnant_steps"] == 2
+    assert summary["corrective_behavior"]["route_progress_terminal_reason_counts"] == {
+        "goal_progress": 1,
+        "near_parity_churn": 1,
+        "true_stall": 1,
+    }

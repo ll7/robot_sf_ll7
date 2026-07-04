@@ -1,0 +1,52 @@
+# Append-only terminality ledger for issue #4200.
+#
+# Scope discipline: this file records durable issue state only. It does not
+# encode transient ready-queue routing, target hosts, packet lineage, campaign
+# launch state, benchmark results, or paper/dissertation claims.
+issue: 4200
+state_surface: guarded_ppo_workers1_tuning_compare_config
+entries:
+  - recorded_at_utc: "2026-07-04T03:34:00Z"
+    status: config_contract_delivered_by_pr_4208
+    summary: >-
+      Issue #4200 requested only the guarded-PPO tuning-compare workers=1
+      benchmark config plus a config-validation test. Merged PR #4208 added
+      the requested config and test on origin/main. The remaining tuning
+      comparison campaign execution is downstream work, not residual issue
+      #4200 implementation scope.
+    delivered_slice:
+      pr: 4208
+      merged_at_utc: "2026-07-03T04:29:37Z"
+      title: "Add guarded-PPO workers=1 tuning-compare config (#4200)"
+      files:
+        - configs/benchmarks/paper_experiment_matrix_v1_guarded_ppo_tuning_compare_workers1.yaml
+        - tests/benchmark/test_guarded_ppo_tuning_compare_workers1_config.py
+    acceptance_evidence:
+      issue_contract:
+        source: "https://github.com/ll7/robot_sf_ll7/issues/4200"
+        criterion: >-
+          Add a workers=1 guarded-PPO tuning-compare matrix and matching
+          config-validation test; do not run a campaign or promote claims.
+      merged_pr_validation:
+        source: "https://github.com/ll7/robot_sf_ll7/pull/4208"
+        result: >-
+          PR #4208 reports targeted config tests passing and explicitly limits
+          the claim boundary to config shape/loading.
+      origin_main_spot_check:
+        result: >-
+          The requested config and test paths are present on origin/main after
+          PR #4208 merged.
+    terminality_decision:
+      issue_status_recommendation: close_as_completed
+      why: >-
+        The issue's implementation contract was config + test only. Full
+        benchmark campaign execution, SLURM/GPU submission, and result
+        interpretation were explicitly out of scope in the issue and PR #4208.
+      remaining_work_is_separate:
+        - downstream benchmark campaign launch
+        - benchmark result interpretation
+        - paper or dissertation claim updates
+    out_of_scope_confirmed:
+      full_benchmark_campaign_run: false
+      slurm_or_gpu_submission: false
+      paper_or_dissertation_claim_edit: false

@@ -45,6 +45,7 @@ fixed_scope:
   planner_opt_ins:
     hybrid_rule_v0_minimal:
       allow_testing_algorithms: true
+      rationale: issue_4401_fixed_scope_prelaunch_opt_in
 
 ranking:
   metric: snqi

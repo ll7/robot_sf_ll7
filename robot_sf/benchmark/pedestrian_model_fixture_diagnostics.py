@@ -205,17 +205,16 @@ def compute_fixture_metrics(
     min_pairwise_distance = float(_minimum_pairwise_distance(positions))
     speeds = np.linalg.norm(velocities, axis=-1)
     interaction_center = np.asarray(spec.interaction_zone_center, dtype=float)
-    in_interaction_zone = (
-        np.linalg.norm(positions - interaction_center[np.newaxis, np.newaxis, :], axis=-1)
-        <= float(spec.interaction_zone_radius_m)
-    )
+    in_interaction_zone = np.linalg.norm(
+        positions - interaction_center[np.newaxis, np.newaxis, :], axis=-1
+    ) <= float(spec.interaction_zone_radius_m)
     slow_in_zone = in_interaction_zone & (speeds <= float(freeze_speed_threshold_mps))
-    interaction_zone_slow = (
-        np.count_nonzero(slow_in_zone, axis=1) >= int(spec.interaction_zone_min_pedestrians)
+    interaction_zone_slow = np.count_nonzero(slow_in_zone, axis=1) >= int(
+        spec.interaction_zone_min_pedestrians
     )
     max_consecutive_interaction_zone_slow_steps = int(_max_consecutive_true(interaction_zone_slow))
-    interaction_zone_slow_detected = (
-        max_consecutive_interaction_zone_slow_steps >= int(freeze_window_steps)
+    interaction_zone_slow_detected = max_consecutive_interaction_zone_slow_steps >= int(
+        freeze_window_steps
     )
 
     return {
@@ -223,7 +222,9 @@ def compute_fixture_metrics(
         "mean_max_lateral_displacement_m": mean_max_lateral_displacement,
         "mean_speed_mps": float(np.mean(speeds)),
         "entered_interaction_zone": bool(np.any(in_interaction_zone)),
-        "max_pedestrians_in_interaction_zone": int(np.max(np.count_nonzero(in_interaction_zone, axis=1))),
+        "max_pedestrians_in_interaction_zone": int(
+            np.max(np.count_nonzero(in_interaction_zone, axis=1))
+        ),
         "interaction_zone_slow_steps": int(np.count_nonzero(interaction_zone_slow)),
         "max_consecutive_interaction_zone_slow_steps": max_consecutive_interaction_zone_slow_steps,
         "interaction_zone_slow_detected": interaction_zone_slow_detected,
@@ -253,7 +254,8 @@ def run_pedestrian_model_fixture_diagnostics(
         raise ValueError(f"Unknown pedestrian-model fixture scenario(s): {unknown}")
 
     selected_models = tuple(
-        normalize_pedestrian_model(model) for model in (pedestrian_models or DEFAULT_PEDESTRIAN_MODELS)
+        normalize_pedestrian_model(model)
+        for model in (pedestrian_models or DEFAULT_PEDESTRIAN_MODELS)
     )
     per_run: list[dict[str, Any]] = []
     for scenario_id in selected_ids:

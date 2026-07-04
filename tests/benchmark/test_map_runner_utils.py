@@ -57,6 +57,7 @@ from robot_sf.benchmark.map_runner_batch_plan import (
     build_worker_fixed_params,
     resolve_batch_kinematics_tag,
 )
+from robot_sf.benchmark.map_runner_episode import _topology_guided_episode_diagnostics
 from robot_sf.benchmark.map_runner_metrics import (
     _episode_collision_value,
     summarize_collision_metrics,
@@ -4813,6 +4814,149 @@ def test_run_map_job_worker_forwards_metadata_params(monkeypatch: pytest.MonkeyP
     assert captured["track_schema_version"] == "track-v1"
     assert captured["record_simulation_step_trace"] is True
     assert record["algorithm_metadata"]["benchmark_track"]["benchmark_track"] == "lidar"
+
+
+def test_topology_guided_episode_diagnostics_records_available_candidate_contract() -> None:
+    """Episode summary exposes topology availability, config, and route-progress reason."""
+    summary = _topology_guided_episode_diagnostics(
+        [
+            {
+                "step": 0,
+                "route_progress_from_start_m": 0.0,
+                "topology_guided": {
+                    "status": "ok",
+                    "hypothesis_count": 2,
+                    "selected_hypothesis_id": "primary_route",
+                    "near_parity_gate_reason": "eligible_near_parity_alternative",
+                },
+                "topology_guided_config": {
+                    "schema_version": "topology_guided_hybrid_rule.v1",
+                    "diagnostic_only": True,
+                    "claim_boundary": "diagnostic_only",
+                    "arbitration_weight": 0.35,
+                    "near_parity_margin": 0.05,
+                    "min_route_progress_delta_m": 0.05,
+                    "stall_window_steps": 20,
+                },
+            },
+            {
+                "step": 1,
+                "route_progress_from_start_m": 0.2,
+                "topology_guided": {
+                    "status": "ok",
+                    "hypothesis_count": 3,
+                    "selected_hypothesis_id": "masked_cell_5_12",
+                    "near_parity_gate_reason": "selected_non_primary_near_parity",
+                },
+                "topology_command_influence": {"selected_hypothesis_id": "masked_cell_5_12"},
+                "topology_guided_config": {
+                    "diagnostic_only": True,
+                    "arbitration_weight": 0.35,
+                    "near_parity_margin": 0.05,
+                    "min_route_progress_delta_m": 0.05,
+                    "stall_window_steps": 20,
+                },
+            },
+        ]
+    )
+
+    assert summary is not None
+    assert summary["schema_version"] == "topology-guided-episode-diagnostics.v1"
+    assert summary["diagnostic_only"] is True
+    assert summary["hypothesis_available"] is True
+    assert summary["hypothesis_available_steps"] == 2
+    assert summary["fallback_used"] is False
+    assert summary["candidate_counts"] == {"observed_steps": 2, "min": 2, "max": 3, "last": 3}
+    assert summary["selected_candidate_counts"] == {
+        "masked_cell_5_12": 1,
+        "primary_route": 1,
+    }
+    assert summary["selected_candidate_switch_count"] == 1
+    assert summary["topology_command_influence_steps"] == 1
+    assert summary["arbitration_weight"] == pytest.approx(0.35)
+    assert summary["near_parity_margin"] == pytest.approx(0.05)
+    assert summary["near_parity_gate_reason_counts"] == {
+        "eligible_near_parity_alternative": 1,
+        "selected_non_primary_near_parity": 1,
+    }
+    assert summary["route_progress"]["delta_m"] == pytest.approx(0.2)
+    assert summary["route_progress"]["terminal_reason"] == "goal_progress"
+
+
+def test_topology_guided_episode_diagnostics_preserves_fallback_and_churn_reasons() -> None:
+    """Fallback-only and near-parity churn stay diagnostic blockers, not successes."""
+    fallback_summary = _topology_guided_episode_diagnostics(
+        [
+            {
+                "step": 0,
+                "route_progress_from_start_m": 0.0,
+                "topology_guided": {
+                    "status": "insufficient_hypotheses",
+                    "reason": "fewer_than_min_distinct_routes",
+                    "hypothesis_count": 1,
+                },
+                "topology_lane_status": "fallback_only",
+                "topology_fallback_reason": "fewer_than_min_distinct_routes",
+                "topology_guided_config": {
+                    "diagnostic_only": True,
+                    "fallback_on_no_candidate": True,
+                    "min_route_progress_delta_m": 0.05,
+                    "stall_window_steps": 2,
+                },
+            }
+        ]
+    )
+
+    assert fallback_summary is not None
+    assert fallback_summary["hypothesis_available"] is False
+    assert fallback_summary["fallback_used"] is True
+    assert fallback_summary["fallback_steps"] == 1
+    assert fallback_summary["no_candidate_reasons"] == {"fewer_than_min_distinct_routes": 1}
+    assert fallback_summary["fallback_reasons"] == {"fewer_than_min_distinct_routes": 1}
+    assert fallback_summary["route_progress"]["terminal_reason"] == "fallback_only"
+
+    churn_summary = _topology_guided_episode_diagnostics(
+        [
+            {
+                "step": 0,
+                "route_progress_from_start_m": 1.0,
+                "topology_guided": {
+                    "status": "ok",
+                    "hypothesis_count": 2,
+                    "selected_hypothesis_id": "primary_route",
+                },
+                "topology_guided_config": {
+                    "diagnostic_only": True,
+                    "min_route_progress_delta_m": 0.05,
+                    "stall_window_steps": 2,
+                },
+            },
+            {
+                "step": 1,
+                "route_progress_from_start_m": 1.01,
+                "topology_guided": {
+                    "status": "ok",
+                    "hypothesis_count": 2,
+                    "selected_hypothesis_id": "masked_cell_5_12",
+                },
+            },
+            {
+                "step": 2,
+                "route_progress_from_start_m": 1.02,
+                "topology_guided": {
+                    "status": "ok",
+                    "hypothesis_count": 2,
+                    "selected_hypothesis_id": "primary_route",
+                },
+            },
+        ]
+    )
+
+    assert churn_summary is not None
+    assert churn_summary["selected_candidate_switch_count"] == 2
+    assert churn_summary["fallback_used"] is False
+    assert churn_summary["route_progress"]["max_stagnant_steps"] == 2
+    assert churn_summary["route_progress"]["terminal_reason"] == "near_parity_churn"
 
 
 def test_run_map_job_worker_normalizes_optional_defaults(

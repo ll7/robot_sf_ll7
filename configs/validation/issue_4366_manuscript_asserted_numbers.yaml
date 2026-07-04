@@ -2,13 +2,13 @@ schema_version: manuscript-asserted-number-declarations.v1
 issue: 4366
 claim_boundary: >-
   Verification aid for dissertation/manuscript asserted implementation numbers only. This file
-  does not edit manuscript claims, promote benchmark evidence, run campaigns, or silently fix source
-  values.
+  does not edit manuscript claims, promote benchmark evidence, run campaigns, or silently fix
+  source values.
 selection_assumption: >-
   The tracked issue thread names number families, but it does not include the dissertation-side
-  audit table. These ten declarations seed the most likely high-risk implementation-number
-  assertions from those named families. Ambiguous heatmap source records are explicitly marked
-  not_verifiable.
+  audit table. These ten declarations remain the reviewed top-10 seed from PR #4375 because each
+  row maps to one requested family and no live issue comment replaced the selection. Ambiguous
+  heatmap source records are explicitly marked not_verifiable.
 entries:
   - id: snqi_camera_ready_v3_w_success
     manuscript_locator: "audit finding F / SNQI weight vector / camera_ready_v3 / w_success"
@@ -54,6 +54,11 @@ entries:
     source:
       path: configs/scenarios/archetypes/classic_bottleneck.yaml
       pointer: scenarios[name=classic_bottleneck_high].simulation_config.ped_density
+    source_locator_status: resolved
+    source_locator_note: >-
+      The 0.0 value is the checked source field for the scenario row. It is a marker-placement
+      placeholder, not evidence that the high-density bottleneck scene has no pedestrians; see
+      configs/scenarios/archetypes/classic_density_tier_index.yaml#spawn_modes.markers.note.
 
   - id: ppo_br06_v3_total_timesteps
     manuscript_locator: "audit finding F / reinforcement learning training budget"
@@ -79,7 +84,17 @@ entries:
   - id: heatmap_per_family_means_source
     manuscript_locator: "audit finding F / heatmap per-family means"
     expected_status: not_verifiable
+    source_locator_status: not_verifiable
+    candidate_sources_reviewed:
+      - docs/benchmark_camera_ready.md#per-planner-per-family-archetype-metric-means
+      - docs/context/evidence/
+      - output/
     not_verifiable_reason: >-
-      The issue names heatmap per-family means but does not identify one canonical source-of-record
-      table or locator. This declaration records the gap instead of guessing among generated
-      evidence packets.
+      The issue names heatmap per-family means but does not identify one canonical
+      source-of-record table or locator. Repository search found documentation for
+      per-planner/per-family metric means and generated evidence/output locations, but no stable
+      reviewed declaration table for the manuscript heatmap values. This declaration records the
+      gap instead of guessing among generated evidence packets.
+    source_locator_note: >-
+      No manuscript value is treated as matched until a stable source table or explicit locator is
+      declared.

@@ -846,7 +846,7 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
-  - path: docs/context/issue_2660_topology_successor_gate.md
+  - path: docs/context/archive/issue_2660_topology_successor_gate.md
     status: superseded
     replacement: docs/context/issue_2704_progress_gated_topology_successor.md
     freshness: evidence
@@ -1731,7 +1731,7 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
-  - path: docs/context/issue_2903_horizon_denominator_health.md
+  - path: docs/context/archive/issue_2903_horizon_denominator_health.md
     status: superseded
     replacement: docs/context/issue_2937_horizon_denominator_health.md
     freshness: evidence
@@ -1792,7 +1792,7 @@ entries:
     status: current
     freshness: maintained
     area: slurm
-  - path: docs/context/issue_1690_root_layout_inventory.md
+  - path: docs/context/archive/issue_1690_root_layout_inventory.md
     status: superseded
     freshness: dated
     area: root_layout
@@ -1809,12 +1809,12 @@ entries:
     status: historical
     freshness: dated
     area: root_layout
-  - path: docs/context/issue_1583_high_risk_root_boundaries.md
+  - path: docs/context/archive/issue_1583_high_risk_root_boundaries.md
     status: superseded
     freshness: dated
     area: root_layout
     replacement: docs/context/root_layout_structured_migration_2026-06-01.md
-  - path: docs/context/issue_1598_1599_root_compatibility_decisions.md
+  - path: docs/context/archive/issue_1598_1599_root_compatibility_decisions.md
     status: superseded
     freshness: dated
     area: root_layout

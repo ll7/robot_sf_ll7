@@ -22,7 +22,7 @@ move the blocker that matters: topology-command influence, route progress, or te
 | [#2530](issue_2530_topology_near_parity_corrective_smoke.md) | Corrective-behavior smoke for the near-parity gate | `revise` | The selector reached local-command arbitration, but the episode still ended `horizon_exhausted` with only `0.16812408921843236 m` route-progress delta. |
 | [#2540](issue_2540_topology_reuse_penalty_diagnostic.md) | Primary-route reuse-penalty implementation | diagnostic implementation only | Mechanism and candidate existed, but required a paired gate before any improvement claim. |
 | [#2624](issue_2624_topology_reuse_penalty_gate.md) | Paired reuse-penalty diagnostic | `revise` | Reuse penalty activated and reduced primary-route selections, but non-primary command influence stayed flat at 7, route progress regressed by `-0.9514718767541766 m`, and outcome stayed `horizon_exhausted`. |
-| [#2660](issue_2660_topology_successor_gate.md) | Successor decision after reuse-penalty regression | `revise` with named successor | Selected progress-gated primary-route reselection as the smallest remaining discriminating selector hypothesis. |
+| [#2660](archive/issue_2660_topology_successor_gate.md) | Successor decision after reuse-penalty regression | `revise` with named successor | Selected progress-gated primary-route reselection as the smallest remaining discriminating selector hypothesis. |
 | [#2704](issue_2704_progress_gated_topology_successor.md) | Progress-gated primary-route reselection | `revise` | The gate ran and suppressed six reuse penalties, but route progress stayed unchanged, non-primary command influence stayed flat, topology-command steps fell by one, and outcome stayed `horizon_exhausted`. |
 
 ## Lane Decision

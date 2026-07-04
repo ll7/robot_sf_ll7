@@ -3,7 +3,7 @@
 ## Scope
 
 This analysis-only bundle repairs the seven fixture gaps identified in
-[issue #2903](../issue_2903_horizon_denominator_health.md) and regenerates the
+[issue #2903](../../archive/issue_2903_horizon_denominator_health.md) and regenerates the
 denominator-health audit for the horizon x timestep ablation from issue #2837 /
 PR #2887. It classifies each missing `(horizon, dt_s, trace)` cell by reason,
 verifies the category totals sum to the expected 180-cell matrix, spot-checks

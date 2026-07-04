@@ -213,8 +213,8 @@ class _CampaignPlannerVariantRun:
     planner_dir: Path
     episodes_path: Path
     effective_workers: int
-    effective_horizon: int
-    effective_dt: float
+    effective_horizon: int | None
+    effective_dt: float | None
     scoped_scenarios: list[Any]
 
 

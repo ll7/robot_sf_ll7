@@ -7,7 +7,7 @@ paths, records the local evidence checked on this branch, and makes an explicit 
 each path without performing a bulk directory move.
 
 High-risk root path migration boundaries are now split to
-[issue_1583_high_risk_root_boundaries.md](issue_1583_high_risk_root_boundaries.md). That note keeps
+[issue_1583_high_risk_root_boundaries.md](archive/issue_1583_high_risk_root_boundaries.md). That note keeps
 `.agents/PLANS.md`, `model/pedestrian/`, `tests/pygame/`, and `CITATION.cff` at root, and delegates any future
 `specs/` or `tests/fixtures/scenarios/` migration to dedicated follow-up issues.
 

@@ -9,7 +9,7 @@ Related issue:
 Related context:
 
 - [root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md)
-- [issue_1690_root_layout_inventory.md](issue_1690_root_layout_inventory.md)
+- [issue_1690_root_layout_inventory.md](archive/issue_1690_root_layout_inventory.md)
 
 ## Scope
 

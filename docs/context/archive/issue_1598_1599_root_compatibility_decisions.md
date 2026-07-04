@@ -10,7 +10,7 @@ Issues:
 Predecessor: [issue_1583_high_risk_root_boundaries.md](issue_1583_high_risk_root_boundaries.md)
 
 Status: Superseded for `tests/fixtures/scenarios/` by
-[root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md).
+[root_layout_structured_migration_2026-06-01.md](../root_layout_structured_migration_2026-06-01.md).
 Keep this note as provenance for the earlier conservative decision.
 
 ## Decision

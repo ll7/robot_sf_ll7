@@ -1,6 +1,6 @@
 # Issue #2903: Prediction - Repair Horizon/Timestep Denominator Coverage 2026-06-16
 
-> **Status: Historical / superseded by [Issue #2937](issue_2937_horizon_denominator_health.md).**
+> **Status: Historical / superseded by [Issue #2937](../issue_2937_horizon_denominator_health.md).**
 > The fixture gaps identified here were repaired in Issue #2937; use the Issue #2937
 > evidence for current denominator-health coverage.
 
@@ -12,9 +12,9 @@ does not change forecast defaults.
 
 ## Evidence
 
-- Compact summary: [`docs/context/evidence/issue_2903_horizon_denominator_health_2026-06-16/summary.json`](evidence/issue_2903_horizon_denominator_health_2026-06-16/summary.json)
-- Full report: [`docs/context/evidence/issue_2903_horizon_denominator_health_2026-06-16/denominator_report.json`](evidence/issue_2903_horizon_denominator_health_2026-06-16/denominator_report.json)
-- Human-readable report: [`docs/context/evidence/issue_2903_horizon_denominator_health_2026-06-16/denominator_report.md`](evidence/issue_2903_horizon_denominator_health_2026-06-16/denominator_report.md)
+- Compact summary: [`docs/context/evidence/issue_2903_horizon_denominator_health_2026-06-16/summary.json`](../evidence/issue_2903_horizon_denominator_health_2026-06-16/summary.json)
+- Full report: [`docs/context/evidence/issue_2903_horizon_denominator_health_2026-06-16/denominator_report.json`](../evidence/issue_2903_horizon_denominator_health_2026-06-16/denominator_report.json)
+- Human-readable report: [`docs/context/evidence/issue_2903_horizon_denominator_health_2026-06-16/denominator_report.md`](../evidence/issue_2903_horizon_denominator_health_2026-06-16/denominator_report.md)
 
 ## Key Findings
 

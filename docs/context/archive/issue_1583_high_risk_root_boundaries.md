@@ -5,7 +5,7 @@ Date: 2026-05-28
 Issue: <https://github.com/ll7/robot_sf_ll7/issues/1583>
 
 Status: Superseded for root paths moved by
-[root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md).
+[root_layout_structured_migration_2026-06-01.md](../root_layout_structured_migration_2026-06-01.md).
 Keep this note as provenance for the earlier conservative decision.
 
 ## Decision

@@ -5,12 +5,12 @@ Date: 2026-05-30
 Issue: <https://github.com/ll7/robot_sf_ll7/issues/1690>
 
 Status: Superseded for the moved root paths by
-[root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md).
+[root_layout_structured_migration_2026-06-01.md](../root_layout_structured_migration_2026-06-01.md).
 Keep this note as historical inventory evidence.
 
 Predecessors:
 
-- [Issue #1573 root-layout inventory](issue_1573_root_layout_inventory.md)
+- [Issue #1573 root-layout inventory](../issue_1573_root_layout_inventory.md)
 - [Issue #1583 high-risk root path boundaries](issue_1583_high_risk_root_boundaries.md)
 - [Issues #1598 and #1599 root compatibility decisions](issue_1598_1599_root_compatibility_decisions.md)
 

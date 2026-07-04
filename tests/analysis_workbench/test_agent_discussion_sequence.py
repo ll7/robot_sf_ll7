@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -109,23 +110,29 @@ def test_validate_annotation_matches_trace_mismatch(tmp_path: Path) -> None:
     out_file = tmp_path / "debate.md"
     annotation_set = load_trace_annotation_set(ANNOTATION_FIXTURE_PATH)
 
-    # Modify trace ID to force mismatch
+    # Modify trace ID to force mismatch.
     payload = annotation_set.to_dict()
     payload["timeline"]["trace_id"] = "mismatching-trace-id"
 
-    mismatched_ann_file = ANNOTATION_FIXTURE_PATH.parent / "temp_mismatched_annotations.json"
+    # Stage the throwaway annotation entirely under tmp_path (never in the tracked
+    # fixtures directory). The loader resolves timeline.path relative to the annotation
+    # file, so mirror the fixture's "../simulation_trace_export_v1/<name>" layout here
+    # by copying the real trace into the sibling directory the annotation points at.
+    ann_dir = tmp_path / "annset"
+    ann_dir.mkdir()
+    referenced_trace = ann_dir / payload["timeline"]["path"]
+    referenced_trace.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(TRACE_FIXTURE_PATH, referenced_trace)
+
+    mismatched_ann_file = ann_dir / "temp_mismatched_annotations.json"
     mismatched_ann_file.write_text(json.dumps(payload), encoding="utf-8")
 
-    try:
-        with pytest.raises(TraceAnnotationSetValidationError, match="expected referenced trace_id"):
-            write_agent_discussion(
-                trace_path=TRACE_FIXTURE_PATH,
-                annotation_path=mismatched_ann_file,
-                output=out_file,
-            )
-    finally:
-        if mismatched_ann_file.exists():
-            mismatched_ann_file.unlink()
+    with pytest.raises(TraceAnnotationSetValidationError, match="expected referenced trace_id"):
+        write_agent_discussion(
+            trace_path=TRACE_FIXTURE_PATH,
+            annotation_path=mismatched_ann_file,
+            output=out_file,
+        )
 
 
 def test_main_cli_execution(tmp_path: Path) -> None:

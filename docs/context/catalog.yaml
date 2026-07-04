@@ -3155,3 +3155,7 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4400_closure_audit_2026-07-04.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

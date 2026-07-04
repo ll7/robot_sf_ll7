@@ -199,7 +199,8 @@ ASSETS: tuple[AssetSpec, ...] = (
         shared_root_subpath=Path("socnavbench"),
         source_url="https://github.com/CMU-TBD/SocNavBench",
         source_note=(
-            "SocNavBench wayptnav_data assets used by the control/waypoint navigation pipeline."
+            "SocNavBench wayptnav_data and S3DIS/SBPD assets used by the control/waypoint "
+            "navigation pipeline."
         ),
         license_note=(
             "External SocNavBench data assets are not redistributed by Robot SF; verify local "
@@ -207,13 +208,23 @@ ASSETS: tuple[AssetSpec, ...] = (
         ),
         access_note=(
             "License-gated/manual acquisition. Follow docs/socnav_assets_setup.md, then stage "
-            "wayptnav_data under third_party/socnavbench."
+            "wayptnav_data and S3DIS/SBPD data under third_party/socnavbench."
         ),
         required_paths=(
             RequiredPath(
                 pattern="wayptnav_data",
                 kind="directory",
                 description="Precomputed SocNavBench waypoint/control-pipeline data.",
+            ),
+            RequiredPath(
+                pattern="sd3dis/stanford_building_parser_dataset",
+                kind="directory",
+                description="S3DIS/SBPD dataset root used by the SocNav map loader.",
+            ),
+            RequiredPath(
+                pattern="sd3dis/stanford_building_parser_dataset/traversibles",
+                kind="directory",
+                description="Precomputed SocNavBench traversible grids.",
             ),
         ),
         related_issues=(1456, 562),

@@ -41,6 +41,16 @@ def _write_socnavbench_eth_fixture(path: Path) -> None:
     (traversible_dir / "data.pkl").write_bytes(b"synthetic fixture, not official data")
 
 
+def _write_socnavbench_control_fixture(path: Path) -> None:
+    """Create minimal SocNavBench control-pipeline fixture; not official data."""
+    wayptnav_dir = path / "wayptnav_data"
+    traversibles_dir = path / "sd3dis" / "stanford_building_parser_dataset" / "traversibles"
+    wayptnav_dir.mkdir(parents=True, exist_ok=True)
+    traversibles_dir.mkdir(parents=True, exist_ok=True)
+    (wayptnav_dir / "README.txt").write_text("Synthetic waypoint fixture.\n", encoding="utf-8")
+    (traversibles_dir / "data.pkl").write_bytes(b"synthetic traversible fixture")
+
+
 def _write_atc_fixture(path: Path) -> None:
     """Create minimal ATC-shaped fixture; not official data."""
     path.mkdir(parents=True, exist_ok=True)
@@ -127,6 +137,50 @@ def test_missing_license_gated_asset_fails_closed(tmp_path: Path) -> None:
     }
     assert report["auto_download_allowed"] is False
     assert "official acquisition" in report["action"]
+
+
+def test_socnavbench_control_requires_all_schematic_asset_groups(tmp_path: Path) -> None:
+    """#1456: wayptnav alone is not enough for SocNavBench control re-entry."""
+    source_root = tmp_path / "socnavbench"
+    wayptnav_dir = source_root / "wayptnav_data"
+    wayptnav_dir.mkdir(parents=True)
+    (wayptnav_dir / "README.txt").write_text("Synthetic waypoint fixture.\n", encoding="utf-8")
+
+    report = manage_external_data.check_asset("socnavbench-control", source_path=source_root)
+
+    assert report["ok"] is False
+    assert report["status"] == "incomplete"
+    assert "wayptnav_data" in report["matched_required_paths"]
+    assert "sd3dis/stanford_building_parser_dataset" in report["missing_required_paths"]
+    assert (
+        "sd3dis/stanford_building_parser_dataset/traversibles" in report["missing_required_paths"]
+    )
+
+
+def test_socnavbench_control_provenance_check_accepts_complete_manifest(tmp_path: Path) -> None:
+    """#1456: BYO control assets can be staged with complete path provenance."""
+    _init_git_repo(tmp_path, gitignore="external/socnavbench/\n")
+    source_root = tmp_path / "external" / "socnavbench"
+    _write_socnavbench_control_fixture(source_root)
+    manifest_path = tmp_path / "manifests" / "socnavbench-control.provenance.json"
+
+    manage_external_data.stage_asset(
+        "socnavbench-control",
+        source_path=source_root,
+        manifest_out=manifest_path,
+        repo_root=tmp_path,
+    )
+    report = manage_external_data.check_provenance_manifest("socnavbench-control", manifest_path)
+
+    assert report["ok"] is True
+    assert report["status"] == "ready"
+    assert report["missing_metadata"] == []
+    assert report["asset_id"] == "socnavbench-control"
+    assert report["matched_required_paths"] == [
+        "sd3dis/stanford_building_parser_dataset",
+        "sd3dis/stanford_building_parser_dataset/traversibles",
+        "wayptnav_data",
+    ]
 
 
 def test_unset_external_data_root_preserves_repo_default(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -620,15 +674,20 @@ def test_cli_provenance_check_reports_missing_socnavbench_eth_metadata(tmp_path:
     assert "tree_sha256" in payload["missing_metadata"]
 
 
-def test_socnavbench_control_check_accepts_wayptnav_layout(tmp_path: Path) -> None:
-    """Control-pipeline assets should validate from the expected wayptnav directory."""
+def test_socnavbench_control_check_rejects_wayptnav_only_layout(tmp_path: Path) -> None:
+    """Control-pipeline assets require wayptnav plus S3DIS/SBPD groups."""
     (tmp_path / "wayptnav_data").mkdir()
     (tmp_path / "wayptnav_data" / "README.md").write_text("local fixture\n", encoding="utf-8")
 
     report = manage_external_data.check_asset("socnavbench-control", source_path=tmp_path)
 
-    assert report["ok"] is True
+    assert report["ok"] is False
+    assert report["status"] == "incomplete"
     assert report["matched_required_paths"] == ["wayptnav_data"]
+    assert "sd3dis/stanford_building_parser_dataset" in report["missing_required_paths"]
+    assert (
+        "sd3dis/stanford_building_parser_dataset/traversibles" in report["missing_required_paths"]
+    )
 
 
 def test_socnavbench_s3dis_rejects_empty_required_mesh_directory(tmp_path: Path) -> None:

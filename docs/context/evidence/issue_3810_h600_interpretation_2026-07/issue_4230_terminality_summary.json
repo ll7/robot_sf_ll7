@@ -1,0 +1,55 @@
+{
+  "schema_version": "issue_terminality_review.v2",
+  "issue": 4230,
+  "review_date": "2026-07-04",
+  "status": "terminal_no_work_needed",
+  "reviewed_surfaces": [
+    "https://github.com/ll7/robot_sf_ll7/issues/4230",
+    "https://github.com/ll7/robot_sf_ll7/pull/4265",
+    "docs/context/evidence/issue_3810_h600_interpretation_2026-07/hybrid_roster_h600_transfer_packet.md",
+    "docs/context/evidence/issue_3810_h600_interpretation_2026-07/f_c4_ii_interpretation_gate.md",
+    "docs/context/evidence/issue_3810_h600_interpretation_2026-07/issue_4195_terminality_review.md"
+  ],
+  "completed_campaign": {
+    "job_id": "13282",
+    "evidence_packet": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/hybrid_roster_h600_transfer_packet.md",
+    "scenario_matrix_hash": "c10df617a87c",
+    "horizon": 600,
+    "seeds": [111, 112, 113],
+    "episodes_per_arm": 144
+  },
+  "integration_boundary": {
+    "gate_note": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/f_c4_ii_interpretation_gate.md",
+    "source_issue": 4195,
+    "author_signoff": "RECORDED",
+    "claim_boundary": "Guarded F-C4(ii) sign-off only; no new claim promotion by issue #4230 terminality review."
+  },
+  "dedupe": {
+    "open_pr_covering_issue_4230": false,
+    "open_pr_covering_exact_scope": false,
+    "checked_at": "2026-07-04T09:44:41Z"
+  },
+  "fragmentation_guard": {
+    "merged_issue_prs_last_24h": [4265],
+    "action": "terminality_consolidation_record",
+    "new_micro_guard": false
+  },
+  "implementation_remaining_in_issue_4230": false,
+  "remaining_work_out_of_scope": [
+    "S30 or equivalent hybrid-vs-ORCA follow-up for a separated success claim",
+    "pillar (iii) falsification-to-hardening documentation",
+    "paper or dissertation text edits"
+  ],
+  "state_propagation": {
+    "issue_comment_or_close_performed": false,
+    "reason": "comment_issue_or_pr authorization was false for this ready-queue run",
+    "authorized_surface": "pull request body"
+  },
+  "forbidden_actions_confirmed": {
+    "full_benchmark_campaign_run": false,
+    "slurm_or_gpu_submission": false,
+    "paper_or_dissertation_claim_edit": false,
+    "issue_or_pr_comment": false,
+    "issue_close": false
+  }
+}

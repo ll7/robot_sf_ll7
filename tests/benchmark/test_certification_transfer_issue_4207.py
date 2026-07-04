@@ -116,6 +116,62 @@ def test_arm_algo_configs_must_resolve(tmp_path: Path) -> None:
         validate_probe_config(config, base_dir=tmp_path)
 
 
+def test_learned_predictive_missing_checkpoint_excluded_from_trained_planner_claims(
+    tmp_path: Path,
+) -> None:
+    """Fallback or missing-checkpoint trained arms cannot support comparison claims."""
+
+    config_path, gate_path, config, gates = _write_config_pair(tmp_path)
+    config["arms"][1]["structural_class"] = "learned_policy"
+    config["arms"][1]["algo"] = "ppo"
+    config["arms"][2]["structural_class"] = "predictive"
+    config["arms"][2]["algo"] = "prediction_planner"
+    records = [
+        _record("stable", SOCIAL_FORCE_DEFAULT, collision_rate=0.0),
+        _record("fragile", SOCIAL_FORCE_DEFAULT, collision_rate=0.0),
+        _record("conservative", SOCIAL_FORCE_DEFAULT, collision_rate=0.0),
+    ]
+
+    report = build_certification_transfer_report(
+        records,
+        probe_config=config,
+        gate_spec=gates,
+        config_path=config_path,
+        gate_spec_path=gate_path,
+    )
+
+    arms = {arm["key"]: arm for arm in report["arms"]}
+    assert arms["stable"]["trained_planner_claim_status"] == "not_a_trained_planner"
+    assert (
+        arms["fragile"]["trained_planner_claim_status"] == "excluded_missing_checkpoint_or_config"
+    )
+    assert (
+        arms["conservative"]["trained_planner_claim_status"]
+        == "excluded_missing_checkpoint_or_config"
+    )
+    rows = {
+        row["planner_key"]: row
+        for row in report["certification_transfer_matrix"]
+        if row["evaluation_model"] == SOCIAL_FORCE_DEFAULT
+    }
+    assert rows["fragile"]["trained_planner_claim_exclusion"] == "missing_checkpoint_or_config"
+    assert rows["conservative"]["trained_planner_claim_exclusion"] == "missing_checkpoint_or_config"
+    assert report["trained_planner_claim_status_counts"]["excluded_missing_checkpoint_or_config"]
+
+
+def test_declared_fallback_execution_excluded_from_trained_planner_claims(tmp_path: Path) -> None:
+    """Declared fallback execution is distinct from checkpoint-backed eligibility."""
+
+    config_path, _gate_path, config, _gates = _write_config_pair(tmp_path)
+    config["arms"][0]["structural_class"] = "learned_policy"
+    config["arms"][0]["algo"] = "ppo"
+    config["arms"][0]["fallback_execution"] = True
+    normalized = validate_probe_config(config, base_dir=config_path.parent)
+    arm = normalized["arms"][0]
+    assert arm["trained_planner_claim_status"] == "excluded_fallback_execution"
+    assert arm["trained_planner_claim_exclusion"] == "fallback_execution"
+
+
 def test_provenance_separates_certification_evaluation_and_development(tmp_path: Path) -> None:
     """Certification model is separate from declared policy development provenance."""
 
@@ -405,6 +461,11 @@ def test_committed_physics_packet_records_real_near_field_contact() -> None:
     assert summary["issue"] == 4207
     assert summary["paper_facing"] is False
     assert summary["claim_boundary"] == CLAIM_BOUNDARY
+    assert summary["trained_planner_claim_policy"]["excluded_statuses"] == [
+        "excluded_missing_checkpoint_or_config",
+        "excluded_fallback_execution",
+    ]
+    assert summary["trained_planner_claim_status_counts"]["excluded_missing_checkpoint_or_config"]
     assert summary["model_sensitivity_exercised"] is True
     metric_summary = summary["interaction_metric_summary"]
     assert metric_summary["physics_near_field_confirmed"] is True

@@ -9,6 +9,7 @@ The provisional release gates are not deployment approval. Missing gate metrics 
 - Gate status counts: `{'fail': 4, 'pass': 4}`
 - Transfer status counts: `{'stable_fail': 8, 'stable_pass': 8}`
 - Interaction status counts: `{'interacting': 4, 'non_interacting': 12}`
+- Trained-planner claim status counts: `{'not_a_trained_planner': 4, 'excluded_missing_checkpoint_or_config': 12}`
 - Physics near-field confirmed: `True`
 - Max robot-pedestrian within-5m fraction: `0.10558655435990806`
 - Minimum clearance: `-0.024278621748445417`
@@ -17,6 +18,7 @@ The provisional release gates are not deployment approval. Missing gate metrics 
 - Flip cases: `0`
 
 If `Model sensitivity exercised` is `false`, every transfer cell is `non_interacting` or `unknown`: the robot never entered the pedestrian near field, so the stable statuses above are vacuous and do not demonstrate certification robustness.
+Learned or predictive arms with `excluded_missing_checkpoint_or_config` or `excluded_fallback_execution` trained-planner claim status are diagnostic certification-transfer rows only, not trained-planner comparison evidence.
 
 ## Files
 

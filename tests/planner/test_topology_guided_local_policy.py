@@ -5,6 +5,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from robot_sf.planner.hybrid_rule_local_planner import (
+    HybridRuleCandidate,
+    HybridRuleLocalPlannerAdapter,
+)
 from robot_sf.planner.topology_guided_local_policy import (
     TopologyGuidedHybridRulePlannerAdapter,
     _apply_primary_route_reuse_penalty,
@@ -374,7 +378,11 @@ def test_topology_guided_policy_records_selected_hypothesis_diagnostics() -> Non
     assert route_corridor["topology_guided_config"]["schema_version"] == (
         "topology_guided_hybrid_rule.v1"
     )
+    assert route_corridor["topology_guided_config"]["enabled"] is True
     assert route_corridor["topology_guided_config"]["arbitration_weight"] == pytest.approx(0.35)
+    assert route_corridor["topology_guided_config"]["near_parity_thresholds"]["schema_version"] == (
+        "topology_near_parity_thresholds.v1"
+    )
     assert len(route_corridor["topology_hypotheses"]) == 2
     assert all("score_components" in item for item in route_corridor["topology_hypotheses"])
     assert any(
@@ -423,11 +431,76 @@ def test_topology_hypothesis_can_select_local_command_source() -> None:
     influence = last_decision["topology_command_influence"]
     assert influence["schema_version"] == "topology-command-influence.v1"
     assert influence["arbitration_weight"] == pytest.approx(0.35)
-    assert influence["projected_command"] == last_decision["selected_command"]
+    assert influence["behavior_blended_command"] == last_decision["selected_command"]
     assert isinstance(influence["projection_applied"], bool)
     assert influence["command_limits"]["max_linear"] >= abs(influence["projected_command"][0])
     assert influence["command_limits"]["max_angular"] >= abs(influence["projected_command"][1])
     assert last_decision["topology_guided_config"]["arbitration_weight"] == pytest.approx(0.35)
+    assert last_decision["topology_guided_config"]["enabled"] is True
+    assert last_decision["topology_guided_config"]["near_parity_thresholds"]["schema_version"] == (
+        "topology_near_parity_thresholds.v1"
+    )
+
+
+def test_topology_command_influence_uses_dynamic_window_limits(monkeypatch) -> None:
+    """Diagnostic projection uses per-step bounds without changing the blended command."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(
+        _config(
+            arbitration_weight=1.0,
+            max_linear_accel=0.0,
+            max_angular_accel=0.0,
+            max_angular_speed=1.0,
+        )
+    )
+
+    def base_candidates(self, state, speed_cap, **kwargs):
+        return [
+            HybridRuleCandidate(
+                1.0,
+                0.5,
+                "corridor_subgoal",
+                ((float(self.config.rollout_horizon), 1.0, 0.5),),
+            )
+        ]
+
+    def topology_candidate(**kwargs):
+        return HybridRuleCandidate(
+            1.0,
+            0.5,
+            "topology_hypothesis",
+            ((float(planner.config.rollout_horizon), 1.0, 0.5),),
+        )
+
+    monkeypatch.setattr(HybridRuleLocalPlannerAdapter, "_generate_candidates", base_candidates)
+    monkeypatch.setattr(planner, "_topology_hypothesis_candidate", topology_candidate)
+
+    candidates = planner._generate_candidates(
+        {"current_speed": 0.0},
+        1.0,
+        route_corridor={"topology_hypothesis": {"hypothesis_id": "primary_route"}},
+    )
+
+    topology = next(
+        candidate for candidate in candidates if candidate.source == "topology_hypothesis"
+    )
+    influence = planner._last_topology_command_influence
+    assert topology.linear == pytest.approx(1.0)
+    assert topology.angular == pytest.approx(0.5)
+    assert influence is not None
+    assert influence["raw_blended_command"] == pytest.approx([1.0, 0.5])
+    assert influence["behavior_blended_command"] == pytest.approx([1.0, 0.5])
+    assert influence["projected_command"] == pytest.approx([0.0, 0.0])
+    assert influence["projection_applied"] is True
+    assert influence["command_limits"] == {
+        "min_linear": 0.0,
+        "max_linear": 0.0,
+        "min_angular": 0.0,
+        "max_angular": 0.0,
+    }
+    assert influence["behavior_command_limits"] == {
+        "max_linear": 1.0,
+        "max_angular": 1.0,
+    }
 
 
 def test_topology_hypothesis_command_blends_headings_across_pi_boundary() -> None:

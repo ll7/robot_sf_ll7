@@ -616,6 +616,51 @@ def _near_parity_threshold_metadata(config: TopologyGuidedLocalPolicyConfig) -> 
     }
 
 
+def _topology_guided_config_metadata(config: TopologyGuidedLocalPolicyConfig) -> dict[str, Any]:
+    """Return shared topology-guided config metadata for diagnostics."""
+    return {
+        "schema_version": config.schema_version,
+        "enabled": bool(config.enabled),
+        "diagnostic_only": bool(config.diagnostic_only),
+        "claim_boundary": config.claim_boundary,
+        "candidate_required": bool(config.candidate_required),
+        "fallback_on_no_candidate": bool(config.fallback_on_no_candidate),
+        "arbitration_weight": float(config.arbitration_weight),
+        "min_route_progress_delta_m": float(config.min_route_progress_delta_m),
+        "stall_window_steps": int(config.stall_window_steps),
+        "near_parity_thresholds": _near_parity_threshold_metadata(config),
+    }
+
+
+def _dynamic_window_limit_metadata(
+    bounds: tuple[float, float, float, float],
+) -> dict[str, float]:
+    """Return command limit metadata for one dynamic-window step."""
+    v_min, v_max, w_min, w_max = bounds
+    return {
+        "min_linear": float(v_min),
+        "max_linear": float(v_max),
+        "min_angular": float(w_min),
+        "max_angular": float(w_max),
+    }
+
+
+def _project_command_to_dynamic_window(
+    command: tuple[float, float],
+    bounds: tuple[float, float, float, float],
+) -> tuple[float, float]:
+    """Project a command onto dynamic-window bounds used for the topology command.
+
+    Returns:
+        tuple[float, float]: Projected linear and angular command.
+    """
+    v_min, v_max, w_min, w_max = bounds
+    return (
+        float(np.clip(float(command[0]), float(v_min), float(v_max))),
+        float(np.clip(float(command[1]), float(w_min), float(w_max))),
+    )
+
+
 def _topology_guided_payload(raw: dict[str, Any]) -> dict[str, Any]:
     """Return flat topology config with optional nested ``topology_guided`` overrides applied."""
     payload = dict(raw)
@@ -1103,18 +1148,9 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             ),
         }
         route_corridor["topology_status"] = "ok"
-        route_corridor["topology_guided_config"] = {
-            "schema_version": self.topology_config.schema_version,
-            "enabled": bool(self.topology_config.enabled),
-            "diagnostic_only": bool(self.topology_config.diagnostic_only),
-            "claim_boundary": self.topology_config.claim_boundary,
-            "candidate_required": bool(self.topology_config.candidate_required),
-            "fallback_on_no_candidate": bool(self.topology_config.fallback_on_no_candidate),
-            "arbitration_weight": float(self.topology_config.arbitration_weight),
-            "min_route_progress_delta_m": float(self.topology_config.min_route_progress_delta_m),
-            "stall_window_steps": int(self.topology_config.stall_window_steps),
-            "near_parity_thresholds": _near_parity_threshold_metadata(self.topology_config),
-        }
+        route_corridor["topology_guided_config"] = _topology_guided_config_metadata(
+            self.topology_config
+        )
         return route_corridor
 
     def _candidate_source_priority(self, source: str) -> int:
@@ -1220,16 +1256,17 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             corridor_subgoal=corridor_subgoal,
             goal_posterior=goal_posterior,
         )
+        dynamic_window_bounds = self._dynamic_window(state["current_speed"], speed_cap)
         topology_candidate = self._topology_hypothesis_candidate(
             state=state,
             speed_cap=speed_cap,
             route_corridor=route_corridor,
-            bounds=self._dynamic_window(state["current_speed"], speed_cap),
+            bounds=dynamic_window_bounds,
         )
         if topology_candidate is not None:
             if candidates:
                 baseline = candidates[0]
-                command_limits = {
+                behavior_command_limits = {
                     "max_linear": float(speed_cap),
                     "max_angular": float(self.config.max_angular_speed),
                 }
@@ -1244,7 +1281,11 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
                     (baseline.linear, baseline.angular),
                     (topology_candidate.linear, topology_candidate.angular),
                     weight=arbitration_weight,
-                    command_limits=command_limits,
+                    command_limits=behavior_command_limits,
+                )
+                projected_linear, projected_angular = _project_command_to_dynamic_window(
+                    (raw_blended_linear, raw_blended_angular),
+                    dynamic_window_bounds,
                 )
                 selected_hypothesis_id = None
                 if isinstance(route_corridor, dict):
@@ -1265,12 +1306,14 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
                         float(raw_blended_linear),
                         float(raw_blended_angular),
                     ],
-                    "projected_command": [float(blended_linear), float(blended_angular)],
-                    "command_limits": command_limits,
+                    "projected_command": [float(projected_linear), float(projected_angular)],
+                    "command_limits": _dynamic_window_limit_metadata(dynamic_window_bounds),
                     "projection_applied": not (
-                        np.isclose(raw_blended_linear, blended_linear)
-                        and np.isclose(raw_blended_angular, blended_angular)
+                        np.isclose(raw_blended_linear, projected_linear)
+                        and np.isclose(raw_blended_angular, projected_angular)
                     ),
+                    "behavior_command_limits": behavior_command_limits,
+                    "behavior_blended_command": [float(blended_linear), float(blended_angular)],
                     "linear_delta_from_baseline": float(blended_linear - baseline.linear),
                     "angular_delta_from_baseline": float(blended_angular - baseline.angular),
                 }
@@ -1368,22 +1411,13 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             return (0.0, 0.0)
         if self._last_decision:
             self._last_decision["topology_guided"] = topology
+            self._last_decision["topology_guided_config"] = _topology_guided_config_metadata(
+                self.topology_config
+            )
             if status != "ok":
                 self._last_decision["topology_lane_status"] = "fallback_only"
                 self._last_decision["topology_fallback_status"] = status
                 self._last_decision["topology_fallback_reason"] = topology.get("reason")
-            self._last_decision["topology_guided_config"] = {
-                "schema_version": self.topology_config.schema_version,
-                "diagnostic_only": bool(self.topology_config.diagnostic_only),
-                "claim_boundary": self.topology_config.claim_boundary,
-                "candidate_required": bool(self.topology_config.candidate_required),
-                "fallback_on_no_candidate": bool(self.topology_config.fallback_on_no_candidate),
-                "arbitration_weight": float(self.topology_config.arbitration_weight),
-                "min_route_progress_delta_m": float(
-                    self.topology_config.min_route_progress_delta_m
-                ),
-                "stall_window_steps": int(self.topology_config.stall_window_steps),
-            }
             if self._last_decision.get("selected_source") == "topology_hypothesis":
                 influence = deepcopy(self._last_topology_command_influence or {})
                 influence.update(

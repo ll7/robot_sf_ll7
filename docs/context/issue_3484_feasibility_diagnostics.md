@@ -36,6 +36,21 @@ The output includes per-scenario lane rows and a per-family verdict table genera
 `scenario_failure_cause.v1` classifier. Verdicts remain fail-closed when a lane is blocked or not
 run.
 
+## 2026-07-04 Evidence Packet
+
+`docs/context/evidence/issue_3484_feasibility_diagnostics_2026-07-04/diagnostic_report.json`
+reruns the three target families with the optional extended-time lane enabled. The packet contains
+9 scenario rows and classifier-consumable `scenario_failure_cause.v1` family verdicts:
+
+| Family | Diagnostic verdict | Ranking comparable | Boundary |
+| --- | --- | --- | --- |
+| `bottleneck` | `vehicle_infeasible` | `false` | diagnostic proxy evidence only |
+| `cross_trap` | `vehicle_infeasible` | `false` | diagnostic proxy evidence only |
+| `head_on_corridor` | `dynamic_blocking_or_deadlock` | `false` | diagnostic proxy evidence only |
+
+No full benchmark campaign, Slurm or GPU submission, difficulty-ramp expansion, benchmark-ranking
+change, or paper-facing claim update was made.
+
 ## Boundaries
 
 This is not a full benchmark campaign, not a planner ranking update, and not a paper or dissertation

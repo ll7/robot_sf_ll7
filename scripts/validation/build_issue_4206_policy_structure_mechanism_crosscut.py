@@ -16,11 +16,17 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from robot_sf.benchmark.failure_mechanism_taxonomy import (
+    GEOMETRY_ONLY_FIELDS,
+    MECHANISM_SCHEMA_VERSION,
+    REQUIRED_MECHANISM_FIELDS,
+    TRACE_VERIFIED_EVIDENCE_MODES,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
 CONFIG_SCHEMA_VERSION = "issue_4206_policy_structure_mechanism_crosscut_config.v1"
-MECHANISM_SCHEMA_VERSION = "failure_mechanism_taxonomy.v1"
 READY_STATUS = "analysis_ready_trace_verified"
 BLOCKED_STATUS = "blocked_missing_trace_verified_mechanism_labels"
 # The h600 run artifacts were never retrieved to this host, so no episode rows exist to inspect.
@@ -41,13 +47,6 @@ BLOCKER_KIND_LABEL = "missing_mechanism_labels"
 BLOCKER_KIND_NOT_DERIVABLE = "mechanism_labels_not_derivable_predates_trace_capture"
 REPORT_SCHEMA_VERSION = "issue_4206_policy_structure_mechanism_crosscut_report.v1"
 
-REQUIRED_MECHANISM_FIELDS = (
-    "mechanism_schema_version",
-    "mechanism_label",
-    "mechanism_confidence",
-    "mechanism_evidence_mode",
-    "mechanism_evidence_uri",
-)
 LEGACY_MECHANISM_FIELD_ALIASES = (
     ("failure_mechanism_taxonomy_schema", "mechanism_schema_version"),
     ("failure_mechanism_label", "mechanism_label"),
@@ -65,12 +64,6 @@ MECHANISM_MARKER_FIELDS = ("mechanism_backfill_status", "mechanism_caveat")
 # (`not_derivable_non_trace_verified_mechanism`) is a different gap (a label was asserted without a
 # trace) and stays a plain missing-trace-verified-label block, so match the marker exactly.
 NOT_DERIVABLE_MISSING_TRACE_MARKER = "not_derivable_missing_trace"
-GEOMETRY_ONLY_FIELDS = (
-    "geometry_bucket",
-    "scenario_geometry_bucket",
-    "geometry_label",
-    "scenario_family",
-)
 SIDECAR_NAMES = (
     "mechanism_labels.csv",
     "failure_mechanism_labels.csv",
@@ -241,7 +234,7 @@ def _merge_mechanism_fields(
     row: Mapping[str, Any], sidecar_index: Mapping[tuple[str, ...], Mapping[str, Any]]
 ) -> dict[str, Any]:
     merged = _normalize_mechanism_fields(row)
-    if all(str(merged.get(field, "")) for field in REQUIRED_MECHANISM_FIELDS):
+    if all(field in merged for field in REQUIRED_MECHANISM_FIELDS):
         return merged
     for key in _sidecar_keys(row):
         sidecar = sidecar_index.get(key)
@@ -249,7 +242,7 @@ def _merge_mechanism_fields(
             continue
         sidecar = _normalize_mechanism_fields(sidecar)
         for field in REQUIRED_MECHANISM_FIELDS:
-            if not merged.get(field) and sidecar.get(field):
+            if (field not in merged or not merged.get(field)) and field in sidecar:
                 merged[field] = sidecar[field]
         for field in MECHANISM_MARKER_FIELDS:
             if not merged.get(field) and sidecar.get(field):
@@ -361,15 +354,8 @@ def _load_run_rows(
         row = _merge_mechanism_fields(raw, sidecar_index)
         row["source_run"] = run_name
         row["source_root"] = str(root)
-        missing_fields = [
-            field for field in REQUIRED_MECHANISM_FIELDS if not str(row.get(field, ""))
-        ]
-        if row.get("mechanism_evidence_mode") not in {
-            "paired_trace",
-            "deterministic_replay",
-            "direct_probe",
-            "root_cause",
-        }:
+        missing_fields = [field for field in REQUIRED_MECHANISM_FIELDS if field not in row]
+        if row.get("mechanism_evidence_mode") not in TRACE_VERIFIED_EVIDENCE_MODES:
             missing_fields.append("mechanism_evidence_mode=trace_verified_source")
         if missing_fields:
             not_derivable = _is_not_derivable_row(row)

@@ -448,6 +448,15 @@ def test_real_archive_with_independent_outcomes_becomes_diagnostic_only(
     assert report["planner_performance_claim"] is False
     assert report["result_classification"] == "held_out_diagnostic_only"
     assert report["comparison"]["interpretation"] == "independent_planner_execution_outcomes"
+    assert report["issue_2921_stop_rule"] == {
+        "status": "continue",
+        "reason": "diagnostic held-out deltas are positive; run the next predeclared proof step",
+        "evidence_tier": "diagnostic_only",
+        "claim_boundary": (
+            "issue #2921 stop-rule classification from held-out diagnostic evidence only; "
+            "not benchmark, paper, or planner-performance evidence"
+        ),
+    }
     assert report["archive_evaluation_provenance"]["held_out_evidence_status"] == (
         "eligible_held_out_diagnostic"
     )
@@ -518,6 +527,8 @@ def test_real_archive_seed_overlap_cannot_be_held_out_evidence(tmp_path: Path, m
     assert report["comparison"]["interpretation"] == (
         "independent_outcomes_rejected_by_held_out_gate"
     )
+    assert report["issue_2921_stop_rule"]["status"] == "blocked"
+    assert report["issue_2921_stop_rule"]["reason"] == "not_available_no_disjoint_split"
     assert provenance["held_out_evidence_status"] == "not_available_no_disjoint_split"
     assert provenance["disjointness_checks_passed"] is False
     assert provenance["seed_overlap"] == [100, 101, 102]
@@ -580,4 +591,8 @@ def test_real_archive_with_circular_outcomes_stays_fail_closed(tmp_path: Path, m
     )
     assert report["independent_outcome_evaluation"]["status"] == (
         "blocked_invalid_independent_outcomes"
+    )
+    assert report["issue_2921_stop_rule"]["status"] == "blocked"
+    assert report["issue_2921_stop_rule"]["reason"] == (
+        "not_available_requires_independent_planner_outcomes"
     )

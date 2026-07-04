@@ -43,6 +43,7 @@ DEFAULT_RESEARCH_CONFIG = (
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "output/benchmarks/issue_4205_codesign_loop_campaign"
 DEFAULT_EPISODE_SCHEMA = REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json"
 CAMPAIGN_SCHEMA = "robot_sf.issue_4205.static_constriction_codesign_campaign.v1"
+DEFAULT_BENCHMARK_PROFILE = "experimental"
 PER_EPISODE_FIELDS = [
     "arm_key",
     "scenario_id",
@@ -437,12 +438,13 @@ def _write_outputs(
     return {key: _repo_relative(path) for key, path in output_paths.items()}
 
 
-def _run_arm(
+def _run_arm(  # noqa: PLR0913
     *,
     arm_key: str,
     arm_runtime: dict[str, Any],
     scenarios: list[dict[str, Any]],
     output_root: Path,
+    benchmark_profile: str,
     workers: int,
     horizon: int | None,
     dt: float | None,
@@ -459,6 +461,7 @@ def _run_arm(
         record_forces=True,
         algo=arm_runtime["algo"],
         algo_config_path=arm_runtime["algo_config"],
+        benchmark_profile=benchmark_profile,
         safety_wrapper=arm_runtime["safety_wrapper"],
         cbf_safety_filter=arm_runtime["cbf_safety_filter"],
         record_simulation_step_trace=True,
@@ -512,6 +515,7 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
             arm_runtime=arm_runtime[arm_key],
             scenarios=scenarios,
             output_root=output_root,
+            benchmark_profile=args.benchmark_profile,
             workers=args.workers,
             horizon=args.horizon,
             dt=args.dt,
@@ -535,6 +539,7 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
         "source_issue": 4205,
         "loop_id": research_report["loop_id"],
         "mode": "smoke" if args.smoke else "full",
+        "benchmark_profile": args.benchmark_profile,
         "benchmark_evidence": bool(full_grid_completed),
         "claim_boundary": (
             "Campaign execution table only; no Slurm/GPU submission, retraining, interpretation, "
@@ -584,6 +589,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--smoke", action="store_true", help="Run one seed x one scenario per arm.")
     parser.add_argument("--workers", type=int, default=1, help="Map-runner worker count.")
+    parser.add_argument(
+        "--benchmark-profile",
+        default=DEFAULT_BENCHMARK_PROFILE,
+        help=(
+            "Benchmark readiness profile for the episode runner. Defaults to experimental "
+            "because #4205 pre-registered PPO arms are exploratory diagnostic evidence."
+        ),
+    )
     parser.add_argument(
         "--horizon", type=int, default=None, help="Optional episode horizon override."
     )

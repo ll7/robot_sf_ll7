@@ -90,7 +90,8 @@ from robot_sf.common.artifact_paths import get_artifact_category_path, get_repos
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from robot_sf.benchmark.camera_ready._config_types import CampaignConfig
+    from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, PlannerSpec
+
 
 CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
 DEFAULT_EPISODE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
@@ -178,7 +179,389 @@ def run_campaign(  # noqa: PLR0913
     )
 
 
-def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
+@dataclass(frozen=True)
+class _CampaignPlannerRunResults:
+    run_entries: list[dict[str, Any]]
+    planner_rows: list[dict[str, Any]]
+    warnings: list[str]
+    seed_variability_records: list[dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class _CampaignPlannerMatrixContext:
+    cfg: CampaignConfig
+    scenarios: list[Any]
+    snqi_weights: dict[str, Any] | None
+    snqi_baseline: dict[str, Any] | None
+    runs_dir: Path
+    dependencies: _CampaignRuntimeDependencies
+
+
+@dataclass(frozen=True)
+class _CampaignPlannerVariantResult:
+    run_entries: list[dict[str, Any]]
+    planner_rows: list[dict[str, Any]]
+    warnings: list[str]
+    seed_variability_records: list[dict[str, Any]]
+    stop_requested: bool
+
+
+@dataclass(frozen=True)
+class _CampaignPlannerVariantRun:
+    kinematics: str
+    active_observation_mode: str
+    planner_dir: Path
+    episodes_path: Path
+    effective_workers: int
+    effective_horizon: int
+    effective_dt: float
+    scoped_scenarios: list[Any]
+
+
+@dataclass(frozen=True)
+class _CampaignPlannerBatchResult:
+    status: str
+    summary: dict[str, Any]
+    warnings: list[str]
+
+
+def _execute_campaign_planner_batch(
+    context: _CampaignPlannerMatrixContext,
+    planner: PlannerSpec,
+    run: _CampaignPlannerVariantRun,
+) -> _CampaignPlannerBatchResult:
+    cfg = context.cfg
+    dependencies = context.dependencies
+    status = "ok"
+    warnings: list[str] = []
+    try:
+        summary = dependencies.run_batch(
+            run.scoped_scenarios,
+            out_path=run.episodes_path,
+            schema_path=DEFAULT_EPISODE_SCHEMA_PATH,
+            horizon=run.effective_horizon if run.effective_horizon is not None else 0,
+            dt=run.effective_dt if run.effective_dt is not None else 0.0,
+            record_forces=cfg.record_forces,
+            record_planner_decision_trace=cfg.record_planner_decision_trace,
+            record_simulation_step_trace=cfg.record_simulation_step_trace,
+            snqi_weights=context.snqi_weights,
+            snqi_baseline=context.snqi_baseline,
+            algo=planner.algo,
+            algo_config_path=(
+                str(planner.algo_config_path) if planner.algo_config_path is not None else None
+            ),
+            benchmark_profile=planner.benchmark_profile,
+            socnav_missing_prereq_policy=planner.socnav_missing_prereq_policy,
+            adapter_impact_eval=planner.adapter_impact_eval,
+            observation_mode=run.active_observation_mode,
+            observation_noise=cfg.observation_noise,
+            synthetic_actuation_profile=_synthetic_actuation_metadata(
+                cfg.synthetic_actuation_profile
+            ),
+            latency_stress_profile=_latency_stress_metadata(
+                cfg.latency_stress_profile,
+                dt=run.effective_dt,
+            ),
+            workers=run.effective_workers,
+            resume=cfg.resume,
+        )
+        availability = summarize_benchmark_availability(summary)
+        if availability.availability_status == "not_available":
+            status = "not_available"
+        elif availability.availability_status == "partial-failure":
+            status = "partial-failure"
+        elif availability.availability_status == "failed":
+            status = "failed"
+    except Exception as exc:
+        status = "failed"
+        summary = {
+            "status": "failed",
+            "error": repr(exc),
+            "total_jobs": 0,
+            "written": 0,
+            "failed_jobs": 0,
+            "failures": [],
+        }
+        warnings.append(f"Planner '{planner.key}' failed for kinematics '{run.kinematics}': {exc}")
+    return _CampaignPlannerBatchResult(status=status, summary=summary, warnings=warnings)
+
+
+def _prepare_campaign_planner_variant_run(
+    context: _CampaignPlannerMatrixContext,
+    *,
+    planner: PlannerSpec,
+    kinematics: str,
+    active_observation_mode: str,
+) -> _CampaignPlannerVariantRun:
+    cfg = context.cfg
+    planner_run_key = f"{_sanitize_name(planner.key)}__{_sanitize_name(kinematics)}"
+    planner_dir = context.runs_dir / planner_run_key
+    planner_dir.mkdir(parents=True, exist_ok=True)
+    episodes_path = planner_dir / "episodes.jsonl"
+    effective_workers = (
+        planner.workers_override if planner.workers_override is not None else cfg.workers
+    )
+    effective_horizon = (
+        planner.horizon_override if planner.horizon_override is not None else cfg.horizon
+    )
+    effective_dt = planner.dt_override if planner.dt_override is not None else cfg.dt
+    logger.info(
+        "Running campaign planner key={} algo={} kinematics={} profile={} workers={}",
+        planner.key,
+        planner.algo,
+        kinematics,
+        planner.benchmark_profile,
+        effective_workers,
+    )
+    scoped_scenarios = [
+        _scenario_with_kinematics(
+            sc,
+            kinematics=kinematics,
+            holonomic_command_mode=cfg.holonomic_command_mode,
+        )
+        for sc in context.scenarios
+    ]
+    return _CampaignPlannerVariantRun(
+        kinematics=kinematics,
+        active_observation_mode=active_observation_mode,
+        planner_dir=planner_dir,
+        episodes_path=episodes_path,
+        effective_workers=effective_workers,
+        effective_horizon=effective_horizon,
+        effective_dt=effective_dt,
+        scoped_scenarios=scoped_scenarios,
+    )
+
+
+def _run_campaign_planner_variant(
+    context: _CampaignPlannerMatrixContext,
+    *,
+    planner: PlannerSpec,
+    kinematics: str,
+    active_observation_mode: str,
+) -> _CampaignPlannerVariantResult:
+    cfg = context.cfg
+    run_entries: list[dict[str, Any]] = []
+    planner_rows: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    seed_variability_records: list[dict[str, Any]] = []
+    stop_requested = False
+    run = _prepare_campaign_planner_variant_run(
+        context,
+        planner=planner,
+        kinematics=kinematics,
+        active_observation_mode=active_observation_mode,
+    )
+
+    planner_started_at_utc = _utc_now()
+    planner_start = time.perf_counter()
+    batch_result = _execute_campaign_planner_batch(context, planner, run)
+    status = batch_result.status
+    summary = batch_result.summary
+    warnings.extend(batch_result.warnings)
+    aggregates: dict[str, Any] | None = None
+
+    planner_finished_at_utc = _utc_now()
+    runtime_sec = float(max(1e-9, time.perf_counter() - planner_start))
+    episodes_written = int(summary.get("written", 0))
+    summary["status"] = status
+    summary["started_at_utc"] = planner_started_at_utc
+    summary["finished_at_utc"] = planner_finished_at_utc
+    summary["runtime_sec"] = runtime_sec
+    summary["episodes_per_second"] = (episodes_written / runtime_sec) if runtime_sec > 0 else 0.0
+    summary["kinematics"] = kinematics
+    summary["benchmark_availability"] = availability_payload(summary)
+    _write_json(run.planner_dir / "summary.json", summary)
+
+    records: list[dict[str, Any]] = []
+    if run.episodes_path.exists() and run.episodes_path.stat().st_size > 0:
+        records = read_jsonl(str(run.episodes_path))
+        summary["episodes_total"] = len(records)
+        if status == "ok":
+            for record in records:
+                annotated = dict(record)
+                annotated["planner_key"] = planner.key
+                annotated["planner_group"] = planner.planner_group
+                annotated["benchmark_profile"] = planner.benchmark_profile
+                annotated["kinematics"] = kinematics
+                seed_variability_records.append(annotated)
+        try:
+            aggregates = context.dependencies.compute_aggregates_with_ci(
+                records,
+                group_by="scenario_params.algo",
+                bootstrap_samples=cfg.bootstrap_samples,
+                bootstrap_confidence=cfg.bootstrap_confidence,
+                bootstrap_seed=cfg.bootstrap_seed,
+            )
+        except Exception as exc:
+            warnings.append(
+                f"Aggregation failed for planner '{planner.key}' ({kinematics}): {exc}",
+            )
+
+    row = _planner_report_row(
+        planner,
+        summary,
+        aggregates,
+        kinematics=kinematics,
+        synthetic_actuation_profile=cfg.synthetic_actuation_profile,
+        records=records,
+    )
+    planner_rows.append(row)
+
+    if status in {"failed", "partial-failure"}:
+        reason = str(row.get("most_likely_failure_reason", "")).strip() or "unspecified"
+        warnings.append(
+            "Planner failure recorded: "
+            f"planner='{planner.key}' kinematics='{kinematics}' status='{status}' "
+            f"most_likely_reason='{reason}'"
+        )
+    elif classify_planner_row_status(status) == "accepted_unavailable":
+        reason = str(row.get("availability_reason", "")).strip() or "unspecified"
+        warnings.append(
+            "Accepted unavailable planner row recorded: "
+            f"planner='{planner.key}' kinematics='{kinematics}' status='{status}' "
+            f"availability_reason='{reason}'"
+        )
+
+    run_entries.append(
+        {
+            "planner": {
+                "key": planner.key,
+                "algo": planner.algo,
+                "human_model_variant": planner.human_model_variant,
+                "human_model_source": planner.human_model_source,
+                "planner_group": planner.planner_group,
+                "benchmark_profile": planner.benchmark_profile,
+                "kinematics": kinematics,
+                "algo_config_path": (
+                    _repo_relative(planner.algo_config_path)
+                    if planner.algo_config_path is not None
+                    else None
+                ),
+                "socnav_missing_prereq_policy": planner.socnav_missing_prereq_policy,
+                "adapter_impact_eval": planner.adapter_impact_eval,
+                "observation_mode": active_observation_mode,
+                "workers": run.effective_workers,
+                "horizon": run.effective_horizon,
+                "dt": run.effective_dt,
+            },
+            "status": status,
+            "started_at_utc": planner_started_at_utc,
+            "finished_at_utc": planner_finished_at_utc,
+            "runtime_sec": runtime_sec,
+            "episodes_path": _repo_relative(run.episodes_path),
+            "summary_path": _repo_relative(run.planner_dir / "summary.json"),
+            "summary": summary,
+            "aggregates": aggregates,
+        },
+    )
+
+    if classify_planner_row_status(status) == "unexpected_failure" and cfg.stop_on_failure:
+        logger.warning(
+            "Campaign stop_on_failure triggered: planner key={} kinematics={} status={} "
+            "(halting remaining planners).",
+            planner.key,
+            kinematics,
+            status,
+        )
+        if status == "partial-failure":
+            warnings.append(
+                (
+                    "Campaign halted early: planner "
+                    f"'{planner.key}' ({kinematics}) had partial failures "
+                    f"({int(summary.get('failed_jobs', 0))} failed jobs); "
+                    "stop_on_failure=true"
+                ),
+            )
+        stop_requested = True
+    return _CampaignPlannerVariantResult(
+        run_entries=run_entries,
+        planner_rows=planner_rows,
+        warnings=warnings,
+        seed_variability_records=seed_variability_records,
+        stop_requested=stop_requested,
+    )
+
+
+def _run_campaign_planner_matrix(
+    *,
+    cfg: CampaignConfig,
+    scenarios: list[Any],
+    snqi_weights: dict[str, Any] | None,
+    snqi_baseline: dict[str, Any] | None,
+    runs_dir: Path,
+    dependencies: _CampaignRuntimeDependencies,
+) -> _CampaignPlannerRunResults:
+    run_entries: list[dict[str, Any]] = []
+    planner_rows: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    seed_variability_records: list[dict[str, Any]] = []
+    kinematics_matrix = _kinematics_matrix_or_default(cfg.kinematics_matrix)
+    context = _CampaignPlannerMatrixContext(
+        cfg=cfg,
+        scenarios=scenarios,
+        snqi_weights=snqi_weights,
+        snqi_baseline=snqi_baseline,
+        runs_dir=runs_dir,
+        dependencies=dependencies,
+    )
+    stop_requested = False
+
+    for planner in cfg.planners:
+        if not planner.enabled:
+            continue
+        active_observation_mode = planner.observation_mode or cfg.observation_mode
+        for kinematics in kinematics_matrix:
+            variant_result = _run_campaign_planner_variant(
+                context,
+                planner=planner,
+                kinematics=kinematics,
+                active_observation_mode=active_observation_mode,
+            )
+            run_entries.extend(variant_result.run_entries)
+            planner_rows.extend(variant_result.planner_rows)
+            warnings.extend(variant_result.warnings)
+            seed_variability_records.extend(variant_result.seed_variability_records)
+            if variant_result.stop_requested:
+                stop_requested = True
+                break
+        if stop_requested:
+            break
+    return _CampaignPlannerRunResults(
+        run_entries=run_entries,
+        planner_rows=planner_rows,
+        warnings=warnings,
+        seed_variability_records=seed_variability_records,
+    )
+
+
+def _build_skipped_combo_rows(run_entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    skipped_combo_rows: list[dict[str, Any]] = []
+    for entry in run_entries:
+        summary = entry.get("summary", {})
+        if not isinstance(summary, dict):
+            continue
+        preflight = summary.get("preflight")
+        if not isinstance(preflight, dict):
+            continue
+        if str(preflight.get("status", "")).lower() != "skipped":
+            continue
+        skipped_combo_rows.append(
+            {
+                "planner_key": str((entry.get("planner") or {}).get("key", "unknown")),
+                "algo": str((entry.get("planner") or {}).get("algo", "unknown")),
+                "kinematics": str((entry.get("planner") or {}).get("kinematics", "unknown")),
+                "reason": str(
+                    preflight.get("compatibility_reason")
+                    or preflight.get("error")
+                    or "unspecified skip reason"
+                ),
+            }
+        )
+    return skipped_combo_rows
+
+
+def _run_campaign_orchestrator(  # noqa: C901, PLR0915
     cfg: CampaignConfig,
     *,
     output_root: Path | None = None,
@@ -225,225 +608,19 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
     runs_dir = campaign_root / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
 
-    run_entries: list[dict[str, Any]] = []
-    planner_rows: list[dict[str, Any]] = []
-    warnings: list[str] = []
-    seed_variability_records: list[dict[str, Any]] = []
     kinematics_matrix = _kinematics_matrix_or_default(cfg.kinematics_matrix)
-    stop_requested = False
-
-    for planner in cfg.planners:
-        if not planner.enabled:
-            continue
-        active_observation_mode = planner.observation_mode or cfg.observation_mode
-        for kinematics in kinematics_matrix:
-            planner_run_key = f"{_sanitize_name(planner.key)}__{_sanitize_name(kinematics)}"
-            planner_dir = runs_dir / planner_run_key
-            planner_dir.mkdir(parents=True, exist_ok=True)
-            episodes_path = planner_dir / "episodes.jsonl"
-
-            effective_workers = (
-                planner.workers_override if planner.workers_override is not None else cfg.workers
-            )
-            effective_horizon = (
-                planner.horizon_override if planner.horizon_override is not None else cfg.horizon
-            )
-            effective_dt = planner.dt_override if planner.dt_override is not None else cfg.dt
-
-            logger.info(
-                "Running campaign planner key={} algo={} kinematics={} profile={} workers={}",
-                planner.key,
-                planner.algo,
-                kinematics,
-                planner.benchmark_profile,
-                effective_workers,
-            )
-
-            planner_started_at_utc = _utc_now()
-            planner_start = time.perf_counter()
-            status = "ok"
-            summary: dict[str, Any]
-            aggregates: dict[str, Any] | None = None
-            scoped_scenarios = [
-                _scenario_with_kinematics(
-                    sc,
-                    kinematics=kinematics,
-                    holonomic_command_mode=cfg.holonomic_command_mode,
-                )
-                for sc in scenarios
-            ]
-
-            try:
-                summary = dependencies.run_batch(
-                    scoped_scenarios,
-                    out_path=episodes_path,
-                    schema_path=DEFAULT_EPISODE_SCHEMA_PATH,
-                    horizon=effective_horizon if effective_horizon is not None else 0,
-                    dt=effective_dt if effective_dt is not None else 0.0,
-                    record_forces=cfg.record_forces,
-                    record_planner_decision_trace=cfg.record_planner_decision_trace,
-                    record_simulation_step_trace=cfg.record_simulation_step_trace,
-                    snqi_weights=snqi_weights,
-                    snqi_baseline=snqi_baseline,
-                    algo=planner.algo,
-                    algo_config_path=(
-                        str(planner.algo_config_path)
-                        if planner.algo_config_path is not None
-                        else None
-                    ),
-                    benchmark_profile=planner.benchmark_profile,
-                    socnav_missing_prereq_policy=planner.socnav_missing_prereq_policy,
-                    adapter_impact_eval=planner.adapter_impact_eval,
-                    observation_mode=active_observation_mode,
-                    observation_noise=cfg.observation_noise,
-                    synthetic_actuation_profile=_synthetic_actuation_metadata(
-                        cfg.synthetic_actuation_profile
-                    ),
-                    latency_stress_profile=_latency_stress_metadata(
-                        cfg.latency_stress_profile,
-                        dt=effective_dt,
-                    ),
-                    workers=effective_workers,
-                    resume=cfg.resume,
-                )
-                availability = summarize_benchmark_availability(summary)
-                if availability.availability_status == "not_available":
-                    status = "not_available"
-                elif availability.availability_status == "partial-failure":
-                    status = "partial-failure"
-                elif availability.availability_status == "failed":
-                    status = "failed"
-            except Exception as exc:
-                status = "failed"
-                summary = {
-                    "status": "failed",
-                    "error": repr(exc),
-                    "total_jobs": 0,
-                    "written": 0,
-                    "failed_jobs": 0,
-                    "failures": [],
-                }
-                warnings.append(
-                    f"Planner '{planner.key}' failed for kinematics '{kinematics}': {exc}"
-                )
-
-            planner_finished_at_utc = _utc_now()
-            runtime_sec = float(max(1e-9, time.perf_counter() - planner_start))
-            episodes_written = int(summary.get("written", 0))
-            summary["status"] = status
-            summary["started_at_utc"] = planner_started_at_utc
-            summary["finished_at_utc"] = planner_finished_at_utc
-            summary["runtime_sec"] = runtime_sec
-            summary["episodes_per_second"] = (
-                (episodes_written / runtime_sec) if runtime_sec > 0 else 0.0
-            )
-            summary["kinematics"] = kinematics
-            summary["benchmark_availability"] = availability_payload(summary)
-            _write_json(planner_dir / "summary.json", summary)
-
-            records: list[dict[str, Any]] = []
-            if episodes_path.exists() and episodes_path.stat().st_size > 0:
-                records = read_jsonl(str(episodes_path))
-                summary["episodes_total"] = len(records)
-                if status == "ok":
-                    for record in records:
-                        annotated = dict(record)
-                        annotated["planner_key"] = planner.key
-                        annotated["planner_group"] = planner.planner_group
-                        annotated["benchmark_profile"] = planner.benchmark_profile
-                        annotated["kinematics"] = kinematics
-                        seed_variability_records.append(annotated)
-                try:
-                    aggregates = dependencies.compute_aggregates_with_ci(
-                        records,
-                        group_by="scenario_params.algo",
-                        bootstrap_samples=cfg.bootstrap_samples,
-                        bootstrap_confidence=cfg.bootstrap_confidence,
-                        bootstrap_seed=cfg.bootstrap_seed,
-                    )
-                except Exception as exc:
-                    warnings.append(
-                        f"Aggregation failed for planner '{planner.key}' ({kinematics}): {exc}",
-                    )
-
-            row = _planner_report_row(
-                planner,
-                summary,
-                aggregates,
-                kinematics=kinematics,
-                synthetic_actuation_profile=cfg.synthetic_actuation_profile,
-                records=records,
-            )
-            planner_rows.append(row)
-
-            if status in {"failed", "partial-failure"}:
-                reason = str(row.get("most_likely_failure_reason", "")).strip() or "unspecified"
-                warnings.append(
-                    "Planner failure recorded: "
-                    f"planner='{planner.key}' kinematics='{kinematics}' status='{status}' "
-                    f"most_likely_reason='{reason}'"
-                )
-            elif classify_planner_row_status(status) == "accepted_unavailable":
-                reason = str(row.get("availability_reason", "")).strip() or "unspecified"
-                warnings.append(
-                    "Accepted unavailable planner row recorded: "
-                    f"planner='{planner.key}' kinematics='{kinematics}' status='{status}' "
-                    f"availability_reason='{reason}'"
-                )
-
-            run_entries.append(
-                {
-                    "planner": {
-                        "key": planner.key,
-                        "algo": planner.algo,
-                        "human_model_variant": planner.human_model_variant,
-                        "human_model_source": planner.human_model_source,
-                        "planner_group": planner.planner_group,
-                        "benchmark_profile": planner.benchmark_profile,
-                        "kinematics": kinematics,
-                        "algo_config_path": (
-                            _repo_relative(planner.algo_config_path)
-                            if planner.algo_config_path is not None
-                            else None
-                        ),
-                        "socnav_missing_prereq_policy": planner.socnav_missing_prereq_policy,
-                        "adapter_impact_eval": planner.adapter_impact_eval,
-                        "observation_mode": active_observation_mode,
-                        "workers": effective_workers,
-                        "horizon": effective_horizon,
-                        "dt": effective_dt,
-                    },
-                    "status": status,
-                    "started_at_utc": planner_started_at_utc,
-                    "finished_at_utc": planner_finished_at_utc,
-                    "runtime_sec": runtime_sec,
-                    "episodes_path": _repo_relative(episodes_path),
-                    "summary_path": _repo_relative(planner_dir / "summary.json"),
-                    "summary": summary,
-                    "aggregates": aggregates,
-                },
-            )
-
-            if classify_planner_row_status(status) == "unexpected_failure" and cfg.stop_on_failure:
-                logger.warning(
-                    "Campaign stop_on_failure triggered: planner key={} kinematics={} status={} (halting remaining planners).",
-                    planner.key,
-                    kinematics,
-                    status,
-                )
-                if status == "partial-failure":
-                    warnings.append(
-                        (
-                            "Campaign halted early: planner "
-                            f"'{planner.key}' ({kinematics}) had partial failures "
-                            f"({int(summary.get('failed_jobs', 0))} failed jobs); "
-                            "stop_on_failure=true"
-                        ),
-                    )
-                stop_requested = True
-                break
-        if stop_requested:
-            break
+    planner_run_results = _run_campaign_planner_matrix(
+        cfg=cfg,
+        scenarios=scenarios,
+        snqi_weights=snqi_weights,
+        snqi_baseline=snqi_baseline,
+        runs_dir=runs_dir,
+        dependencies=dependencies,
+    )
+    run_entries = planner_run_results.run_entries
+    planner_rows = planner_run_results.planner_rows
+    warnings = planner_run_results.warnings
+    seed_variability_records = planner_run_results.seed_variability_records
 
     planner_rows.sort(
         key=lambda row: (row.get("snqi_mean", "nan") == "nan", row.get("planner_key"))
@@ -670,28 +847,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
             "infeasible_rate",
         ),
     )
-    skipped_combo_rows: list[dict[str, Any]] = []
-    for entry in run_entries:
-        summary = entry.get("summary", {})
-        if not isinstance(summary, dict):
-            continue
-        preflight = summary.get("preflight")
-        if not isinstance(preflight, dict):
-            continue
-        if str(preflight.get("status", "")).lower() != "skipped":
-            continue
-        skipped_combo_rows.append(
-            {
-                "planner_key": str((entry.get("planner") or {}).get("key", "unknown")),
-                "algo": str((entry.get("planner") or {}).get("algo", "unknown")),
-                "kinematics": str((entry.get("planner") or {}).get("kinematics", "unknown")),
-                "reason": str(
-                    preflight.get("compatibility_reason")
-                    or preflight.get("error")
-                    or "unspecified skip reason"
-                ),
-            }
-        )
+    skipped_combo_rows = _build_skipped_combo_rows(run_entries)
     skipped_csv_path, skipped_md_path = _write_table_artifacts(
         reports_dir,
         "kinematics_skipped_combinations",

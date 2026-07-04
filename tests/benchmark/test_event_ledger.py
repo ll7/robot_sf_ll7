@@ -60,6 +60,18 @@ def _schema(path: Path) -> Path:
     return schema_path
 
 
+def _typed_collision_event(partner_type: str) -> dict[str, object]:
+    """Return one typed collision-event fixture for the supplied partner type."""
+    return {
+        "collision_partner_type": partner_type,
+        "collision_partner_id": f"{partner_type}:0",
+        "collision_time": 0.3,
+        "relative_speed_at_contact": 0.7,
+        "clearance_series_source": f"fixture.{partner_type}.clearance",
+        "exact_event_source": f"fixture.{partner_type}.exact",
+    }
+
+
 def test_build_event_ledger_records_exact_and_surrogate_events() -> None:
     """Ledger payloads should expose exact outcomes and derived event definitions."""
     ledger = build_event_ledger(_record(collision_event=True, collisions=1.0))
@@ -73,6 +85,38 @@ def test_build_event_ledger_records_exact_and_surrogate_events() -> None:
     assert ledger["exact_events"]["goal_reached"] is False
     assert ledger["surrogate_events"]["near_miss"] is True
     assert ledger["metric_definitions"]["collision_count"]["source"] == "metrics.collisions"
+    assert ledger["reconciliation"]["audit_result"] == "pass"
+
+
+@pytest.mark.parametrize(
+    ("partner_type", "partner_id"),
+    [
+        ("pedestrian", "pedestrian:0"),
+        ("static_geometry", "static_geometry:0"),
+        ("boundary", "boundary:0"),
+        ("goal_artifact", "goal_artifact:0"),
+    ],
+)
+def test_build_event_ledger_preserves_typed_collision_events(
+    partner_type: str,
+    partner_id: str,
+) -> None:
+    """Typed collision-event fixtures should survive normalization for every partner class."""
+    ledger = build_event_ledger(
+        _record(collision_event=True, collisions=1.0),
+        collision_events=[_typed_collision_event(partner_type)],
+    )
+
+    assert ledger["collision_events"] == [
+        {
+            "collision_partner_type": partner_type,
+            "collision_partner_id": partner_id,
+            "collision_time": pytest.approx(0.3),
+            "relative_speed_at_contact": pytest.approx(0.7),
+            "clearance_series_source": f"fixture.{partner_type}.clearance",
+            "exact_event_source": f"fixture.{partner_type}.exact",
+        }
+    ]
     assert ledger["reconciliation"]["audit_result"] == "pass"
 
 
@@ -176,6 +220,19 @@ def test_reconcile_event_ledger_requires_metric_definitions() -> None:
     del ledger["metric_definitions"]["ttc_breach"]
 
     assert reconcile_event_ledger(ledger) == ["missing metric definitions: ttc_breach"]
+
+
+def test_reconcile_event_ledger_rejects_malformed_collision_event() -> None:
+    """Manually supplied typed collision events must keep their source metadata populated."""
+    ledger = build_event_ledger(
+        _record(collision_event=True, collisions=1.0),
+        collision_events=[_typed_collision_event("boundary")],
+    )
+    ledger["collision_events"][0]["exact_event_source"] = ""
+
+    assert reconcile_event_ledger(ledger) == [
+        "collision_events[0].exact_event_source must be non-empty"
+    ]
 
 
 def test_validate_record_event_ledger_attaches_canonical_payload() -> None:

@@ -16,6 +16,7 @@ from robot_sf.benchmark.heterogeneous_population_ablation import (
     build_mean_matched_population_pair,
     build_per_archetype_ablation_report,
 )
+from robot_sf.benchmark.pedestrian_control_trace import PEDESTRIAN_CONTROL_TRACE_LABELS_KEY
 
 
 def _archetypes() -> dict[str, ArchetypePopulationSpec]:
@@ -73,6 +74,16 @@ def test_mean_matched_population_pair_preserves_weighted_speed_and_radius() -> N
     assert {record["archetype"] for record in homogeneous_records} == {"mean_matched_homogeneous"}
     assert {record["desired_speed_factor"] for record in homogeneous_records} == {1.025}
     assert {record["radius_m"] for record in homogeneous_records} == {0.3}
+    heterogeneous_labels = report["arms"]["heterogeneous"][PEDESTRIAN_CONTROL_TRACE_LABELS_KEY]
+    assert len(heterogeneous_labels) == 12
+    assert heterogeneous_labels[0]["simulator_index"] == 0
+    assert heterogeneous_labels[0]["source"] == "mean_matched_harness.heterogeneous_population"
+    assert {label["desired_speed_factor"] for label in heterogeneous_labels} == {0.7, 1.0, 1.4}
+    homogeneous_labels = report["arms"]["mean_matched_homogeneous"][
+        PEDESTRIAN_CONTROL_TRACE_LABELS_KEY
+    ]
+    assert {label["archetype"] for label in homogeneous_labels} == {"mean_matched_homogeneous"}
+    assert {label["desired_speed_factor"] for label in homogeneous_labels} == {1.025}
 
 
 def test_mean_matched_population_pair_rejects_unknown_archetype() -> None:
@@ -256,9 +267,15 @@ def test_mean_matched_harness_manifest_fails_closed_on_missing_control_trace_inp
     first_row = manifest["manifest_rows"][0]
     assert first_row["trace_readiness"]["ready"] is False
     assert (
+        f"scenario.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY}"
+        in first_row["expected_episode_output_keys"]
+    )
+    assert (
         "metadata.pedestrian_control_trace.pedestrians[].steps[].clearance_m"
         in first_row["expected_episode_output_keys"]
     )
+    assert PEDESTRIAN_CONTROL_TRACE_LABELS_KEY in first_row["arm_population"]
+    assert len(first_row["arm_population"][PEDESTRIAN_CONTROL_TRACE_LABELS_KEY]) == 4
 
 
 def test_mean_matched_harness_manifest_accepts_fixture_control_traces() -> None:

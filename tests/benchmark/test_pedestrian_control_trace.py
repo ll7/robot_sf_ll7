@@ -8,8 +8,10 @@ import numpy as np
 import pytest
 
 from robot_sf.benchmark.pedestrian_control_trace import (
+    PEDESTRIAN_CONTROL_TRACE_LABELS_KEY,
     PEDESTRIAN_CONTROL_TRACE_SCHEMA,
     attach_pedestrian_control_trace,
+    build_generated_population_control_trace_labels,
     build_pedestrian_control_trace,
     has_pedestrian_control_trace_metadata,
 )
@@ -68,6 +70,12 @@ def test_has_pedestrian_control_trace_metadata_detects_archetypes() -> None:
     """Episode integration should only attach the trace for explicitly labeled pedestrians."""
 
     assert has_pedestrian_control_trace_metadata(_scenario()) is True
+    assert (
+        has_pedestrian_control_trace_metadata(
+            {PEDESTRIAN_CONTROL_TRACE_LABELS_KEY: [{"simulator_index": 0, "archetype": "cautious"}]}
+        )
+        is True
+    )
     assert has_pedestrian_control_trace_metadata({"single_pedestrians": [{"id": "ped"}]}) is False
 
 
@@ -102,6 +110,190 @@ def test_attach_pedestrian_control_trace_skips_unlabeled_scenarios() -> None:
     )
 
     assert metadata == {"existing": True}
+
+
+def test_generated_population_trace_labels_feed_control_trace() -> None:
+    """Generated population records can label simulator-indexed trace rows."""
+
+    labels = build_generated_population_control_trace_labels(
+        [
+            {"simulator_index": 1, "archetype": "hurried", "desired_speed_factor": 1.4},
+            {"simulator_index": 0, "archetype": "cautious", "desired_speed_factor": 0.7},
+        ],
+        source="unit.generated_population",
+    )
+
+    trace = build_pedestrian_control_trace(
+        scenario={PEDESTRIAN_CONTROL_TRACE_LABELS_KEY: labels},
+        ped_positions=np.zeros((1, 2, 2), dtype=float),
+        ped_forces=None,
+        dt=0.1,
+    )
+
+    assert trace["archetype_source"] == f"scenario.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY}"
+    assert trace["pedestrians"][0]["archetype"] == "cautious"
+    assert trace["pedestrians"][0]["desired_speed_factor"] == pytest.approx(0.7)
+    assert trace["pedestrians"][0]["source"] == "unit.generated_population"
+    assert trace["pedestrians"][1]["archetype"] == "hurried"
+    assert trace["pedestrians"][1]["desired_speed_factor"] == pytest.approx(1.4)
+
+
+def test_generated_population_trace_labels_fail_closed_on_count_mismatch() -> None:
+    """Incomplete generated-label feeds report the exact label contract mismatch."""
+
+    labels = build_generated_population_control_trace_labels(
+        [{"simulator_index": 0, "archetype": "cautious"}],
+        source="unit.generated_population",
+    )
+
+    with pytest.raises(ValueError, match="pedestrian_control_trace_labels length"):
+        build_pedestrian_control_trace(
+            scenario={PEDESTRIAN_CONTROL_TRACE_LABELS_KEY: labels},
+            ped_positions=np.zeros((1, 2, 2), dtype=float),
+            ped_forces=None,
+            dt=0.1,
+        )
+
+
+def test_explicit_empty_generated_population_trace_labels_fail_closed() -> None:
+    """An explicit generated-label field is a contract, not an unlabeled scenario."""
+
+    with pytest.raises(ValueError, match="pedestrian_control_trace_labels length"):
+        build_pedestrian_control_trace(
+            scenario={PEDESTRIAN_CONTROL_TRACE_LABELS_KEY: []},
+            ped_positions=np.zeros((1, 1, 2), dtype=float),
+            ped_forces=None,
+            dt=0.1,
+        )
+
+
+def test_generated_population_trace_labels_accept_zero_pedestrian_trace() -> None:
+    """Empty generated-label feeds are valid only when simulator has no pedestrians."""
+
+    trace = build_pedestrian_control_trace(
+        scenario={PEDESTRIAN_CONTROL_TRACE_LABELS_KEY: []},
+        ped_positions=np.zeros((1, 0, 2), dtype=float),
+        ped_forces=None,
+        dt=0.1,
+    )
+
+    assert trace["pedestrian_count"] == 0
+    assert trace["pedestrians"] == []
+    # An explicit (empty) label feed must be attributed to the labels key, not to
+    # single_pedestrians metadata, even when it yields zero pedestrians.
+    assert trace["archetype_source"] == f"scenario.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY}"
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"dt": 0.0}, "dt must be positive"),
+        ({"ped_positions": np.zeros((1, 2), dtype=float)}, "ped_positions must have shape"),
+        (
+            {
+                "ped_forces": np.zeros((2, 1, 2), dtype=float),
+            },
+            "ped_forces must match",
+        ),
+    ],
+)
+def test_build_pedestrian_control_trace_rejects_invalid_trace_shape(
+    kwargs: dict[str, object],
+    message: str,
+) -> None:
+    """Trace shape and timing contracts fail before emitting partial labels."""
+
+    params = {
+        "scenario": {"single_pedestrians": [{"metadata": {"archetype": "cautious"}}]},
+        "ped_positions": np.zeros((1, 1, 2), dtype=float),
+        "ped_forces": None,
+        "dt": 0.1,
+    }
+    params.update(kwargs)
+
+    with pytest.raises(ValueError, match=message):
+        build_pedestrian_control_trace(**params)
+
+
+def test_build_pedestrian_control_trace_rejects_excess_single_metadata() -> None:
+    """Single-pedestrian metadata cannot exceed simulator pedestrian count."""
+
+    with pytest.raises(ValueError, match="metadata exceeds simulator pedestrian count"):
+        build_pedestrian_control_trace(
+            scenario={
+                "single_pedestrians": [
+                    {"metadata": {"archetype": "cautious"}},
+                    {"metadata": {"archetype": "hurried"}},
+                ]
+            },
+            ped_positions=np.zeros((1, 1, 2), dtype=float),
+            ped_forces=None,
+            dt=0.1,
+        )
+
+
+@pytest.mark.parametrize(
+    ("records", "source", "message"),
+    [
+        ([{"simulator_index": 0, "archetype": "cautious"}], "", "source must be non-empty"),
+        ([object()], "unit", "population_records\\[0\\] must be mapping"),
+        ([{"archetype": "cautious"}], "unit", "simulator_index missing"),
+        ([{"simulator_index": "bad", "archetype": "cautious"}], "unit", "must be integer"),
+        ([{"simulator_index": -1, "archetype": "cautious"}], "unit", "must be >= 0"),
+        (
+            [
+                {"simulator_index": 0, "archetype": "cautious"},
+                {"simulator_index": 0, "archetype": "hurried"},
+            ],
+            "unit",
+            "duplicate simulator_index 0",
+        ),
+        ([{"simulator_index": 0}], "unit", "missing archetype"),
+    ],
+)
+def test_build_generated_population_control_trace_labels_rejects_bad_records(
+    records: list[object],
+    source: str,
+    message: str,
+) -> None:
+    """Generated label construction fails closed on malformed population records."""
+
+    with pytest.raises(ValueError, match=message):
+        build_generated_population_control_trace_labels(records, source=source)
+
+
+@pytest.mark.parametrize(
+    ("labels", "pedestrian_count", "message"),
+    [
+        ("bad", 1, "must be sequence"),
+        ([object()], 1, "pedestrian_control_trace_labels\\[0\\] must be mapping"),
+        ([{"archetype": "cautious"}], 1, "simulator_index missing"),
+        ([{"simulator_index": "bad", "archetype": "cautious"}], 1, "must be integer"),
+        ([{"simulator_index": 2, "archetype": "cautious"}], 1, "out of range"),
+        (
+            [
+                {"simulator_index": 0, "archetype": "cautious"},
+                {"simulator_index": 0, "archetype": "hurried"},
+            ],
+            2,
+            "duplicate simulator_index 0",
+        ),
+    ],
+)
+def test_explicit_generated_population_trace_labels_reject_malformed_labels(
+    labels: object,
+    pedestrian_count: int,
+    message: str,
+) -> None:
+    """Scenario-provided generated labels report exact malformed label fields."""
+
+    with pytest.raises(ValueError, match=message):
+        build_pedestrian_control_trace(
+            scenario={PEDESTRIAN_CONTROL_TRACE_LABELS_KEY: labels},
+            ped_positions=np.zeros((1, pedestrian_count, 2), dtype=float),
+            ped_forces=None,
+            dt=0.1,
+        )
 
 
 @pytest.mark.parametrize("bad_value", [math.nan, math.inf])

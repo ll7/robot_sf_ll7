@@ -11,6 +11,8 @@ import numpy as np
 from robot_sf.benchmark.finite_checks import require_finite_array, require_finite_scalar
 
 PEDESTRIAN_CONTROL_TRACE_SCHEMA = "pedestrian-control-trace.v1"
+PEDESTRIAN_CONTROL_TRACE_LABELS_SCHEMA = "pedestrian-control-trace-labels.v1"
+PEDESTRIAN_CONTROL_TRACE_LABELS_KEY = "pedestrian_control_trace_labels"
 
 _ARCHETYPE_KEYS = (
     "archetype",
@@ -18,11 +20,15 @@ _ARCHETYPE_KEYS = (
     "behavior_archetype",
     "speed_archetype",
 )
+_OPTIONAL_LABEL_KEYS = ("desired_speed_factor", "response_law", "source")
 
 
 def has_pedestrian_control_trace_metadata(scenario: Mapping[str, Any]) -> bool:
     """Return true when a scenario carries explicit per-pedestrian archetype labels."""
 
+    if PEDESTRIAN_CONTROL_TRACE_LABELS_KEY in scenario:
+        trace_labels = _trace_label_records(scenario)
+        return any(_pedestrian_archetype(pedestrian) is not None for pedestrian in trace_labels)
     single_pedestrians = _single_pedestrians(scenario)
     return any(_pedestrian_archetype(pedestrian) is not None for pedestrian in single_pedestrians)
 
@@ -40,6 +46,8 @@ def attach_pedestrian_control_trace(
     Args:
         metadata: Mutable algorithm metadata payload receiving `pedestrian_control_trace`.
         scenario: Scenario dictionary containing optional `single_pedestrians` metadata.
+            Generated-population scenarios may instead provide
+            `pedestrian_control_trace_labels`.
         ped_positions: Simulator pedestrian positions shaped `(steps, pedestrians, 2)`.
         ped_forces: Optional simulator pedestrian force vectors with the same shape.
         dt: Episode time step in seconds.
@@ -138,24 +146,84 @@ def build_pedestrian_control_trace(
             pedestrian_steps.append(payload)
             previous_position = np.array(position, dtype=float, copy=True)
 
-        pedestrians.append(
-            {
-                "id": str(pedestrian_metadata.get("id") or f"pedestrian_{simulator_index}"),
-                "simulator_index": simulator_index,
-                "archetype": archetype,
-                "steps": pedestrian_steps,
-            }
-        )
+        pedestrian_payload: dict[str, Any] = {
+            "id": str(pedestrian_metadata.get("id") or f"pedestrian_{simulator_index}"),
+            "simulator_index": simulator_index,
+            "archetype": archetype,
+            "steps": pedestrian_steps,
+        }
+        _copy_optional_label_fields(pedestrian_payload, pedestrian_metadata)
+        pedestrians.append(pedestrian_payload)
 
+    archetype_source = (
+        f"scenario.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY}"
+        if PEDESTRIAN_CONTROL_TRACE_LABELS_KEY in scenario
+        else "scenario.single_pedestrians.metadata"
+    )
     return {
         "schema_version": PEDESTRIAN_CONTROL_TRACE_SCHEMA,
         "dt": dt_value,
         "source": "map_runner_episode",
-        "archetype_source": "scenario.single_pedestrians.metadata",
+        "archetype_source": archetype_source,
         "pedestrian_count": pedestrian_count,
         "step_count": step_count,
         "pedestrians": pedestrians,
     }
+
+
+def build_generated_population_control_trace_labels(
+    population_records: Sequence[Mapping[str, Any]],
+    *,
+    source: str,
+) -> list[dict[str, Any]]:
+    """Build stable simulator-index labels for generated heterogeneous populations.
+
+    Attach returned records to a benchmark scenario as
+    ``pedestrian_control_trace_labels`` before map-runner execution. The records
+    carry no metric values; they only label generated pedestrians so the
+    mean-matched harness can distinguish ready traces from exact missing fields.
+
+    Returns:
+        Stable label records sorted by simulator pedestrian index.
+    """
+
+    source_value = str(source).strip()
+    if not source_value:
+        raise ValueError("pedestrian_control_trace_labels source must be non-empty")
+    labels: list[dict[str, Any]] = []
+    seen_indices: set[int] = set()
+    for record_index, record in enumerate(population_records):
+        if not isinstance(record, Mapping):
+            raise ValueError(f"population_records[{record_index}] must be mapping")
+        try:
+            simulator_index = int(record["simulator_index"])
+        except KeyError as exc:
+            raise ValueError(f"population_records[{record_index}].simulator_index missing") from exc
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"population_records[{record_index}].simulator_index must be integer"
+            ) from exc
+        if simulator_index < 0:
+            raise ValueError(f"population_records[{record_index}].simulator_index must be >= 0")
+        if simulator_index in seen_indices:
+            raise ValueError(
+                f"pedestrian_control_trace_labels duplicate simulator_index {simulator_index}"
+            )
+        seen_indices.add(simulator_index)
+        archetype = _pedestrian_archetype(record)
+        if archetype is None:
+            raise ValueError(f"population_records[{record_index}] missing archetype")
+        label: dict[str, Any] = {
+            "schema_version": PEDESTRIAN_CONTROL_TRACE_LABELS_SCHEMA,
+            "id": str(record.get("id") or f"pedestrian_{simulator_index}"),
+            "simulator_index": simulator_index,
+            "archetype": archetype,
+            "source": source_value,
+        }
+        _copy_optional_label_fields(label, record)
+        labels.append(label)
+    labels.sort(key=lambda item: int(item["simulator_index"]))
+    return labels
 
 
 def _single_pedestrians(scenario: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -165,10 +233,30 @@ def _single_pedestrians(scenario: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     return [ped for ped in single_pedestrians if isinstance(ped, Mapping)]
 
 
+def _trace_label_records(scenario: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    if PEDESTRIAN_CONTROL_TRACE_LABELS_KEY not in scenario:
+        return []
+    labels = scenario.get(PEDESTRIAN_CONTROL_TRACE_LABELS_KEY)
+    if not isinstance(labels, Sequence) or isinstance(labels, str):
+        raise ValueError(f"scenario.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY} must be sequence")
+    trace_labels: list[Mapping[str, Any]] = []
+    for label_index, label in enumerate(labels):
+        if not isinstance(label, Mapping):
+            raise ValueError(
+                f"scenario.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY}[{label_index}] must be mapping"
+            )
+        trace_labels.append(label)
+    return trace_labels
+
+
 def _aligned_pedestrian_metadata(
     scenario: Mapping[str, Any],
     pedestrian_count: int,
 ) -> list[Mapping[str, Any]]:
+    if PEDESTRIAN_CONTROL_TRACE_LABELS_KEY in scenario:
+        trace_labels = _trace_label_records(scenario)
+        return _aligned_trace_label_metadata(trace_labels, pedestrian_count)
+
     single_pedestrians = _single_pedestrians(scenario)
     if pedestrian_count == 0:
         return []
@@ -182,6 +270,41 @@ def _aligned_pedestrian_metadata(
     metadata: list[Mapping[str, Any]] = [{} for _ in range(offset)]
     metadata.extend(single_pedestrians)
     return metadata
+
+
+def _aligned_trace_label_metadata(
+    trace_labels: Sequence[Mapping[str, Any]],
+    pedestrian_count: int,
+) -> list[Mapping[str, Any]]:
+    if pedestrian_count == 0:
+        return []
+    if len(trace_labels) != pedestrian_count:
+        raise ValueError(
+            "pedestrian_control_trace_labels length must equal simulator pedestrian count "
+            f"(got {len(trace_labels)}, expected {pedestrian_count})"
+        )
+    by_index: dict[int, Mapping[str, Any]] = {}
+    for label_index, label in enumerate(trace_labels):
+        try:
+            simulator_index = int(label["simulator_index"])
+        except KeyError as exc:
+            raise ValueError(
+                f"pedestrian_control_trace_labels[{label_index}].simulator_index missing"
+            ) from exc
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"pedestrian_control_trace_labels[{label_index}].simulator_index must be integer"
+            ) from exc
+        if not 0 <= simulator_index < pedestrian_count:
+            raise ValueError(
+                f"pedestrian_control_trace_labels[{label_index}].simulator_index out of range"
+            )
+        if simulator_index in by_index:
+            raise ValueError(
+                f"pedestrian_control_trace_labels duplicate simulator_index {simulator_index}"
+            )
+        by_index[simulator_index] = label
+    return [by_index[index] for index in range(pedestrian_count)]
 
 
 def _pedestrian_archetype(pedestrian: Mapping[str, Any]) -> str | None:
@@ -202,9 +325,18 @@ def _pedestrian_archetype(pedestrian: Mapping[str, Any]) -> str | None:
     return None
 
 
+def _copy_optional_label_fields(destination: dict[str, Any], source: Mapping[str, Any]) -> None:
+    for key in _OPTIONAL_LABEL_KEYS:
+        if key in source and source[key] is not None:
+            destination[key] = source[key]
+
+
 __all__ = [
+    "PEDESTRIAN_CONTROL_TRACE_LABELS_KEY",
+    "PEDESTRIAN_CONTROL_TRACE_LABELS_SCHEMA",
     "PEDESTRIAN_CONTROL_TRACE_SCHEMA",
     "attach_pedestrian_control_trace",
+    "build_generated_population_control_trace_labels",
     "build_pedestrian_control_trace",
     "has_pedestrian_control_trace_metadata",
 ]

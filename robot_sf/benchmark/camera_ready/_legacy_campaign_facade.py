@@ -8,8 +8,7 @@ wrappers here until downstream callers have moved to package imports.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import robot_sf.benchmark.camera_ready._route_clearance as _route_clearance_module
 from robot_sf.benchmark.aggregate import compute_aggregates_with_ci
@@ -144,6 +143,10 @@ from robot_sf.benchmark.camera_ready._util import (  # noqa: F401 - re-exported 
     _sha256_payload,
     _utc_now,
 )
+from robot_sf.benchmark.camera_ready.campaign import (  # noqa: F401 - re-exported for back-compat
+    CAMPAIGN_SCHEMA_VERSION,
+    DEFAULT_EPISODE_SCHEMA_PATH,
+)
 from robot_sf.benchmark.camera_ready.campaign import run_campaign as _run_campaign_impl
 from robot_sf.benchmark.runner import run_batch
 from robot_sf.benchmark.utils import (  # noqa: F401 - re-exported for back-compat / test patch surface
@@ -151,8 +154,9 @@ from robot_sf.benchmark.utils import (  # noqa: F401 - re-exported for back-comp
 )
 from robot_sf.nav.svg_map_parser import convert_map
 
-CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
-DEFAULT_EPISODE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
+if TYPE_CHECKING:
+    from pathlib import Path
+
 _normalized_kinematics_matrix = _kinematics_matrix_or_default
 
 
@@ -171,6 +175,10 @@ def _build_route_clearance_warnings(
     Returns:
         List of warning dictionaries for scenarios with low route-obstacle clearance.
     """
+    # Concurrency: temporarily rebinds the ``_route_clearance`` module global
+    # ``convert_map`` and restores it in ``finally``. Assumes single-process,
+    # non-concurrent execution (matches the campaign runner's ``workers: 1``
+    # dispatch); do not call from multiple threads sharing this module.
     original_convert_map = _route_clearance_module.convert_map
     _route_clearance_module.convert_map = convert_map
     try:

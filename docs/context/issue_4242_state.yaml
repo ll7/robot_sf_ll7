@@ -120,3 +120,80 @@ entries:
       - >-
         No full benchmark campaign run, no SLURM/GPU submission, and no
         paper/dissertation claim edits were made for this state update.
+  - recorded_at_utc: "2026-07-04T03:08:12Z"
+    status: schema_instrumentation_issue_terminality_verified
+    summary: >-
+      Ready-queue rank 211 asked whether issue #4242 still needs an
+      implementation slice. The full issue thread and merged PR threads show
+      the schema, sidecar/backfill, writer, builder-consumer, and consolidation
+      slices have already landed. No new schema fields, sidecar regeneration,
+      trace-label inference, geometry-bucket substitution, benchmark execution,
+      or claim promotion is needed to close the instrumentation contract.
+    terminality_decision: no_new_implementation_slice_needed
+    acceptance_criteria_evidence:
+      - criterion: 1
+        evidence: >-
+          PR #4255 added native failure-mechanism schema fields; PR #4278
+          added retained h600 sidecar/backfill helpers and explicit
+          not_derivable rows; PR #4305 taught consumers to accept native fields
+          and declared sidecars while preserving geometry-only rejection.
+      - criterion: 2
+        evidence: >-
+          PR #4301 added native map-runner episode writer failure_mechanism and
+          interaction_exposure blocks; PR #4255 kept seed episode rows
+          fail-closed with additive mechanism/exposure columns.
+      - criterion: 3
+        evidence: >-
+          PR #4278 backfilled retained h600 rows into sidecars and recorded
+          uniform not_derivable_missing_trace status instead of imputing values.
+      - criterion: 4
+        evidence: >-
+          PRs #4255, #4319, and #4321 refreshed the #4195/#4206 diagnostic
+          evidence surfaces where derivable; remaining evidence is explicitly
+          blocked by missing trace-verified exposure rather than schema absence.
+      - criterion: 5
+        evidence: >-
+          PRs #4255, #4301, and #4305 added and validated writer and consumer
+          contract coverage, including fail-closed behavior when native fields
+          or declared sidecars are absent.
+    merged_pr_threads_reviewed:
+      - pr: 4255
+        role: schema_fields_and_initial_builder_contract
+      - pr: 4278
+        role: retained_h600_sidecar_backfill_and_not_derivable_records
+      - pr: 4301
+        role: native_episode_writer_blocks
+      - pr: 4305
+        role: native_and_sidecar_consumer_contract
+      - pr: 4338
+        role: high_churn_state_surface_consolidation
+    residual_risk:
+      item: trace_verified_interaction_exposure_evidence
+      why: >-
+        This is an empirical data-production blocker, not a remaining schema
+        instrumentation task. F-C4(ii) and h600 exposure claims still require a
+        future mechanism-instrumented run with retained traces.
+    validation:
+      yaml_parse:
+        command: >-
+          uv run python -c "from pathlib import Path; import yaml;
+          data=yaml.safe_load(Path('docs/context/issue_4242_state.yaml').read_text());
+          assert data['issue'] == 4242 and len(data['entries']) >= 2"
+        result: passed
+        exit_code: 0
+      focused_contract_tests:
+        command: >-
+          scripts/dev/run_worktree_shared_venv.sh -- uv run pytest
+          tests/benchmark/test_failure_mechanism_taxonomy.py
+          tests/benchmark/test_interaction_exposure.py
+          tests/validation/test_issue_4242_h600_mechanism_exposure_sidecars.py
+          tests/validation/test_issue_4206_policy_structure_mechanism_crosscut.py
+          tests/analysis/test_build_issue_4195_h600_aggregation_artifact.py -q
+        result: 39 passed
+        exit_code: 0
+    out_of_scope_confirmed:
+      - no_full_benchmark_campaign_run
+      - no_slurm_or_gpu_submission
+      - no_paper_or_dissertation_claim_edits
+      - no_geometry_bucket_mechanism_substitution
+      - no_trace_label_inference_or_imputation

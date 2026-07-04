@@ -31,7 +31,7 @@ from loguru import logger
 from pysocialforce import Simulator as PySFSimulator
 from pysocialforce.config import SimulatorConfig as PySFSimConfig
 from pysocialforce.forces import Force as PySFForce
-from pysocialforce.forces import ObstacleForce
+from pysocialforce.forces import ObstacleForce, SocialForce
 from pysocialforce.simulator import make_forces as pysf_make_forces
 
 from robot_sf.common.types import Line2D, PedPose, RobotAction, RobotPose, Vec2D
@@ -55,8 +55,9 @@ from robot_sf.sim.pedestrian_model_variants import (
     HSFM_ANISOTROPIC_FOV_V1,
     HSFM_TOTAL_FORCE_V1,
     HSFM_TTC_PREDICTIVE_V1,
-    anisotropic_fov_total_force,
+    fov_attenuated_total_force,
     normalize_pedestrian_model,
+    pairwise_social_force_contributions,
     step_hsfm_total_force,
     ttc_predictive_repulsion,
 )
@@ -284,10 +285,16 @@ class Simulator:
                 )
         elif self.pedestrian_model == HSFM_ANISOTROPIC_FOV_V1:
             fov_config = self.config.anisotropic_fov
-            ped_forces = anisotropic_fov_total_force(
+            # Consume per-pair pedestrian-pedestrian contributions instead of the coarse
+            # ``np.min`` aggregate (issue #3481): isolate the social term, attenuate each
+            # neighbor's push by its own field-of-view weight, and leave the actor's
+            # goal/obstacle drive untouched.
+            pairwise_social = self._pairwise_social_force_contributions(current_state)
+            ped_forces = fov_attenuated_total_force(
+                np.asarray(ped_forces, dtype=float),
+                pairwise_social,
                 current_state[:, PYSF_POSITION_SLICE],
                 self.ped_headings,
-                ped_forces,
                 cone_half_angle_rad=fov_config.cone_half_angle_rad,
                 rear_weight=fov_config.rear_weight,
             )
@@ -300,6 +307,49 @@ class Simulator:
         )
         current_state[...] = next_state
         self.pysf_sim.peds.update(current_state, groups)
+
+    def _social_force_component(self) -> SocialForce:
+        """Return the active PySocialForce ped-ped ``SocialForce`` component.
+
+        The pairwise field-of-view model needs the social force's parameters
+        (activation threshold, factor, and interaction exponents) so its per-pair
+        reconstruction exactly matches the aggregate PySocialForce already sums into the
+        total force. Fail closed if the component is missing, mirroring the ``max_speeds``
+        guard, so the opt-in model never silently degrades to a different force law.
+
+        Returns:
+            The ``SocialForce`` instance from the physics engine's force list.
+        """
+        for force in self.pysf_sim.forces:
+            if isinstance(force, SocialForce):
+                return force
+        raise RuntimeError(
+            "PySocialForce SocialForce component is unavailable for the pairwise "
+            "field-of-view pedestrian model"
+        )
+
+    def _pairwise_social_force_contributions(self, state: np.ndarray) -> np.ndarray:
+        """Build the per-pair ped-ped social-force matrix for the current state.
+
+        Args:
+            state: PySocialForce state buffer whose columns expose positions and
+                velocities via ``PYSF_POSITION_SLICE`` / ``PYSF_VELOCITY_SLICE``.
+
+        Returns:
+            Per-pair contributions with shape ``(N, N, 2)`` matching the aggregate
+            ``SocialForce`` output when summed over neighbors.
+        """
+        social_config = self._social_force_component().config
+        return pairwise_social_force_contributions(
+            state[:, PYSF_POSITION_SLICE],
+            state[:, PYSF_VELOCITY_SLICE],
+            activation_threshold=social_config.activation_threshold,
+            n=social_config.n,
+            n_prime=social_config.n_prime,
+            lambda_importance=social_config.lambda_importance,
+            gamma=social_config.gamma,
+            factor=social_config.factor,
+        )
 
     def _reset_social_force_state(self) -> None:
         """Restore pedestrian physics state for a fresh deterministic episode reset."""

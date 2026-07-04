@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from pysocialforce.config import SocialForceConfig
+from pysocialforce.forces import SocialForce
 
 from robot_sf.sim.pedestrian_model_variants import (
     HSFM_ANISOTROPIC_FOV_V1,
@@ -14,13 +16,30 @@ from robot_sf.sim.pedestrian_model_variants import (
     SOCIAL_FORCE_DEFAULT,
     anisotropic_fov_total_force,
     anisotropic_fov_weights,
+    fov_attenuated_total_force,
     heading_from_total_force,
     normalize_pedestrian_model,
+    pairwise_social_force_contributions,
     step_hsfm_total_force,
 )
 from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.sim.simulator import Simulator
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario
+
+PYSF_POSITION_SLICE = slice(0, 2)
+PYSF_VELOCITY_SLICE = slice(2, 4)
+
+
+def _social_force_kwargs(config: SocialForceConfig) -> dict:
+    """Return the pairwise-contribution kwargs mirroring a ``SocialForceConfig``."""
+    return {
+        "activation_threshold": config.activation_threshold,
+        "n": config.n,
+        "n_prime": config.n_prime,
+        "lambda_importance": config.lambda_importance,
+        "gamma": config.gamma,
+        "factor": config.factor,
+    }
 
 
 class _FakePedState:
@@ -170,36 +189,138 @@ def test_scenario_anisotropic_fov_selector_marks_config_enabled(tmp_path) -> Non
     assert config.sim_config.anisotropic_fov.rear_weight == pytest.approx(0.25)
 
 
-def test_simulator_hsfm_anisotropic_fov_one_step_smoke_is_finite_and_deterministic() -> None:
-    """The FoV selector applies deterministic rear attenuation before HSFM stepping."""
+def _make_fov_simulator(
+    state: np.ndarray,
+    headings: np.ndarray,
+    social_config: SocialForceConfig,
+    *,
+    cone_half_angle_rad: float,
+    rear_weight: float,
+) -> tuple[Simulator, _FakePedState]:
+    """Build a bare FoV-model ``Simulator`` around a fake ped state and social force.
+
+    The seam only reads the ``SocialForce`` component for its config, so a stored-only
+    ``SocialForce`` instance is sufficient to exercise the runtime path.
+    """
+    peds = _FakePedState(state)
+    sim = object.__new__(Simulator)
+    sim.pedestrian_model = HSFM_ANISOTROPIC_FOV_V1
+    sim.pysf_sim = SimpleNamespace(peds=peds, forces=[SocialForce(social_config, None)])
+    sim.config = SimulationSettings(
+        pedestrian_model=HSFM_ANISOTROPIC_FOV_V1,
+        anisotropic_fov={
+            "cone_half_angle_rad": cone_half_angle_rad,
+            "rear_weight": rear_weight,
+        },
+        time_per_step_in_secs=0.1,
+    )
+    sim.ped_headings = headings.copy()
+    return sim, peds
+
+
+def test_simulator_hsfm_anisotropic_fov_one_step_matches_per_pair_composition() -> None:
+    """The FoV selector consumes per-pair ped-ped forces, not the ``np.min`` aggregate.
+
+    The runtime seam must isolate the pedestrian-pedestrian social component, attenuate it
+    per pair, and add it back to the untouched goal/obstacle drive. This pins the seam to
+    the pure :func:`fov_attenuated_total_force` composition (issue #3481).
+    """
     state = np.array(
         [
             [0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.5],
             [-1.0, 0.0, 0.0, 0.0, -10.0, 0.0, 0.5],
+            [1.2, 0.0, 0.0, 0.0, 10.0, 0.0, 0.5],
         ],
         dtype=float,
     )
+    headings = np.array([0.0, 0.0, np.pi], dtype=float)
+    social_config = SocialForceConfig()
+    total_forces = np.array([[2.0, 0.5], [2.0, 0.0], [-1.0, 0.3]], dtype=float)
+    cone_half_angle_rad = np.pi / 2
+    rear_weight = 0.25
+
+    # Independent reference: build the per-pair matrix and pure composition from a snapshot
+    # of the pre-step positions/velocities and the same social-force parameters.
+    positions = state[:, PYSF_POSITION_SLICE].copy()
+    velocities = state[:, PYSF_VELOCITY_SLICE].copy()
+    pairwise_social = pairwise_social_force_contributions(
+        positions, velocities, **_social_force_kwargs(social_config)
+    )
+    expected_forces = fov_attenuated_total_force(
+        total_forces,
+        pairwise_social,
+        positions,
+        headings,
+        cone_half_angle_rad=cone_half_angle_rad,
+        rear_weight=rear_weight,
+    )
+    expected_state, expected_headings = step_hsfm_total_force(
+        state.copy(),
+        expected_forces,
+        headings,
+        dt=0.1,
+        max_speeds=np.full(state.shape[0], 10.0, dtype=float),
+    )
+
+    sim, peds = _make_fov_simulator(
+        state,
+        headings,
+        social_config,
+        cone_half_angle_rad=cone_half_angle_rad,
+        rear_weight=rear_weight,
+    )
+    sim._step_pedestrians(total_forces.copy(), [[0], [1], [2]])
+
+    assert peds.updated_state is state
+    assert np.all(np.isfinite(state))
+    assert np.all(np.isfinite(sim.ped_headings))
+    np.testing.assert_allclose(state, expected_state, rtol=1e-9, atol=1e-9)
+    np.testing.assert_allclose(sim.ped_headings, expected_headings, rtol=1e-9, atol=1e-9)
+
+
+def test_simulator_hsfm_anisotropic_fov_step_is_deterministic() -> None:
+    """Repeated identical steps yield byte-identical state (deterministic opt-in path)."""
+    base_state = np.array(
+        [
+            [0.0, 0.0, 0.1, 0.0, 10.0, 0.0, 0.5],
+            [-0.8, 0.2, 0.0, 0.0, -10.0, 0.0, 0.5],
+        ],
+        dtype=float,
+    )
+    headings = np.array([0.0, np.pi], dtype=float)
+    forces = np.array([[1.5, 0.2], [1.0, -0.1]], dtype=float)
+
+    results = []
+    for _ in range(2):
+        sim, _ = _make_fov_simulator(
+            base_state.copy(),
+            headings,
+            SocialForceConfig(),
+            cone_half_angle_rad=np.pi / 2,
+            rear_weight=0.3,
+        )
+        sim._step_pedestrians(forces.copy(), [[0], [1]])
+        results.append(sim.pysf_sim.peds.state.copy())
+
+    np.testing.assert_array_equal(results[0], results[1])
+
+
+def test_simulator_hsfm_anisotropic_fov_fails_closed_without_social_force() -> None:
+    """A missing ``SocialForce`` component fails closed instead of silently degrading."""
+    state = np.array([[0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.5]], dtype=float)
     peds = _FakePedState(state)
     sim = object.__new__(Simulator)
     sim.pedestrian_model = HSFM_ANISOTROPIC_FOV_V1
-    sim.pysf_sim = SimpleNamespace(peds=peds)
+    sim.pysf_sim = SimpleNamespace(peds=peds, forces=[])
     sim.config = SimulationSettings(
         pedestrian_model=HSFM_ANISOTROPIC_FOV_V1,
         anisotropic_fov={"cone_half_angle_rad": np.pi / 2, "rear_weight": 0.25},
         time_per_step_in_secs=0.1,
     )
-    sim.ped_headings = np.array([0.0, 0.0], dtype=float)
+    sim.ped_headings = np.array([0.0], dtype=float)
 
-    sim._step_pedestrians(np.array([[2.0, 0.0], [2.0, 0.0]], dtype=float), [[0], [1]])
-
-    assert peds.updated_groups == [[0], [1]]
-    assert peds.updated_state is state
-    assert np.all(np.isfinite(state))
-    assert np.all(np.isfinite(sim.ped_headings))
-    assert state[0, 2] == pytest.approx(0.05)
-    assert state[0, 0] == pytest.approx(0.005)
-    assert state[1, 2] == pytest.approx(0.2)
-    assert state[1, 0] == pytest.approx(-0.98)
+    with pytest.raises(RuntimeError, match="SocialForce component is unavailable"):
+        sim._step_pedestrians(np.array([[2.0, 0.0]], dtype=float), [[0]])
 
 
 def test_anisotropic_fov_weights_match_nested_loop_oracle() -> None:

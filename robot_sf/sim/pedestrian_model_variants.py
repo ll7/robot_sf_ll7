@@ -341,6 +341,178 @@ def pairwise_fov_attenuated_forces(
     return attenuated.sum(axis=1)
 
 
+def _validate_social_force_inputs(
+    positions: np.ndarray,
+    velocities: np.ndarray,
+    *,
+    activation_threshold: float,
+    factor: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return finite social-force input arrays or raise a clear validation error."""
+    position_array = np.asarray(positions, dtype=float)
+    velocity_array = np.asarray(velocities, dtype=float)
+    if position_array.ndim != 2 or position_array.shape[1] != 2:
+        raise ValueError("positions must have shape (N, 2)")
+    if velocity_array.shape != position_array.shape:
+        raise ValueError("velocities must have shape (N, 2) matching positions")
+    if not (np.all(np.isfinite(position_array)) and np.all(np.isfinite(velocity_array))):
+        raise ValueError("positions and velocities must be finite")
+    if not np.isfinite(activation_threshold) or activation_threshold < 0:
+        raise ValueError("activation_threshold must be finite and >= 0")
+    if not np.isfinite(factor):
+        raise ValueError("factor must be finite")
+    return position_array, velocity_array
+
+
+def pairwise_social_force_contributions(
+    positions: np.ndarray,
+    velocities: np.ndarray,
+    *,
+    activation_threshold: float,
+    n: int,
+    n_prime: int,
+    lambda_importance: float,
+    gamma: float,
+    factor: float,
+) -> np.ndarray:
+    """Return per-pair pedestrian-pedestrian social-force contributions ``(N, N, 2)``.
+
+    Entry ``[i, j]`` is the social repulsion neighbor ``j`` exerts on actor ``i``. The
+    contribution reuses PySocialForce's own pairwise force law (``social_force_ped_ped``)
+    with the same activation threshold and ``factor`` scaling, so summing over neighbors
+    reproduces the aggregate ``SocialForce`` output PySocialForce already computes:
+
+        ``contributions.sum(axis=1) == SocialForce()`` (to floating-point tolerance).
+
+    This is the seam that the runtime needs to consume *per-pair* pedestrian-pedestrian
+    forces (issue #3481). Once the pairwise decomposition is available, a downstream
+    anisotropic field-of-view attenuation can down-weight a single rear neighbor without
+    disturbing an in-cone neighbor, instead of collapsing to the coarse ``np.min``
+    aggregate mode in :func:`anisotropic_fov_total_force`.
+
+    The layer stays independent of simulator objects so it is unit-testable without a full
+    environment; it only depends on the pure pairwise force kernel. The current
+    implementation is an ``O(N^2)`` Python loop over the njit kernel and is
+    diagnostic/prototype: vectorizing this matrix is a named follow-up before
+    benchmark-scale use, mirroring the earlier TTC weight-path vectorization.
+
+    Args:
+        positions: Pedestrian positions with shape ``(N, 2)``.
+        velocities: Pedestrian velocities with shape ``(N, 2)``.
+        activation_threshold: Max interaction distance in metres; pairs beyond it
+            contribute zero, matching PySocialForce's ``SocialForce`` masking.
+        n: Angular decay-shape parameter for the lateral (angle) interaction component.
+        n_prime: Angular decay-shape parameter for the velocity-aligned component.
+        lambda_importance: Weight of relative velocity in the interaction direction.
+        gamma: Scale factor for the interaction range parameter.
+        factor: Global scaling factor applied to every pairwise contribution.
+
+    Returns:
+        Per-pair force array with shape ``(N, N, 2)``; the diagonal is zero.
+    """
+    # Deferred import keeps this module numpy-pure at import time so importing the
+    # broadly-used ``SimulationSettings`` config never pays numba's import cost; the
+    # numba kernel only loads when this opt-in seam is actually exercised.
+    from pysocialforce.forces import social_force_ped_ped  # noqa: PLC0415
+
+    position_array, velocity_array = _validate_social_force_inputs(
+        positions,
+        velocities,
+        activation_threshold=activation_threshold,
+        factor=factor,
+    )
+    pedestrian_count = position_array.shape[0]
+    contributions = np.zeros((pedestrian_count, pedestrian_count, 2), dtype=float)
+    if pedestrian_count <= 1:
+        return contributions
+
+    threshold_sq = float(activation_threshold) ** 2
+    for i in range(pedestrian_count):
+        for j in range(pedestrian_count):
+            if i == j:
+                continue
+            # PySocialForce convention: position diff is p_i - p_j, velocity diff is
+            # v_j - v_i (see ``social_force`` in pysocialforce.forces).
+            pos_diff = position_array[i] - position_array[j]
+            if float(pos_diff[0] ** 2 + pos_diff[1] ** 2) > threshold_sq:
+                continue
+            vel_diff = velocity_array[j] - velocity_array[i]
+            force_x, force_y = social_force_ped_ped(
+                (float(pos_diff[0]), float(pos_diff[1])),
+                (float(vel_diff[0]), float(vel_diff[1])),
+                n,
+                n_prime,
+                lambda_importance,
+                gamma,
+            )
+            contributions[i, j, 0] = float(factor) * float(force_x)
+            contributions[i, j, 1] = float(factor) * float(force_y)
+    return contributions
+
+
+def fov_attenuated_total_force(
+    total_forces: np.ndarray,
+    pairwise_social_forces: np.ndarray,
+    positions: np.ndarray,
+    headings: np.ndarray,
+    *,
+    cone_half_angle_rad: float,
+    rear_weight: float,
+    epsilon: float = 1e-9,
+) -> np.ndarray:
+    """Replace the aggregate ped-ped social term with its per-pair FoV-attenuated form.
+
+    Given a fully aggregated total force per actor (desired + social + obstacle + robot
+    coupling, as PySocialForce sums it) and the per-pair pedestrian-pedestrian social
+    contributions that produced its social component, this isolates only that social term
+    and re-attenuates it *per pair* through the field-of-view weights:
+
+        ``result = total_forces - pairwise_social.sum(axis=1) + attenuated_social``
+
+    where ``attenuated_social`` comes from :func:`pairwise_fov_attenuated_forces`. Unlike
+    :func:`anisotropic_fov_total_force`, this neither scales the non-social forces nor
+    collapses the pairwise weights to a single ``np.min`` factor per actor, so a rear
+    neighbor is down-weighted without disturbing an in-cone neighbor's push or the actor's
+    goal/obstacle drive. Evidence tier stays diagnostic/prototype.
+
+    Args:
+        total_forces: Aggregated per-actor force with shape ``(N, 2)``.
+        pairwise_social_forces: Per-pair ped-ped contributions with shape ``(N, N, 2)``;
+            ``[i, j]`` is neighbor ``j``'s social force on actor ``i``.
+        positions: Pedestrian positions with shape ``(N, 2)``.
+        headings: Per-pedestrian heading angles with shape ``(N,)``.
+        cone_half_angle_rad: Half-angle of the forward field-of-view cone in radians.
+        rear_weight: Attenuation factor in ``[0, 1]`` applied outside the cone.
+        epsilon: Small positive tolerance for degenerate zero-distance pairs.
+
+    Returns:
+        Per-actor attenuated total force with shape ``(N, 2)``.
+    """
+    total_array = np.asarray(total_forces, dtype=float)
+    social_array = np.asarray(pairwise_social_forces, dtype=float)
+    position_array = np.asarray(positions, dtype=float)
+    pedestrian_count = position_array.shape[0]
+    if total_array.shape != (pedestrian_count, 2):
+        raise ValueError("total_forces must have shape (N, 2) matching positions")
+    if social_array.shape != (pedestrian_count, pedestrian_count, 2):
+        raise ValueError("pairwise_social_forces must have shape (N, N, 2) matching positions")
+    if not np.all(np.isfinite(total_array)):
+        raise ValueError("total_forces must be finite")
+    if pedestrian_count == 0:
+        return total_array.copy()
+
+    social_aggregate = social_array.sum(axis=1)
+    attenuated_social = pairwise_fov_attenuated_forces(
+        social_array,
+        position_array,
+        headings,
+        cone_half_angle_rad=cone_half_angle_rad,
+        rear_weight=rear_weight,
+        epsilon=epsilon,
+    )
+    return total_array - social_aggregate + attenuated_social
+
+
 def ttc_predictive_repulsion(
     positions: np.ndarray,
     velocities: np.ndarray,

@@ -13,9 +13,11 @@ pytest.importorskip("torch")
 from robot_sf.benchmark.map_runner import _build_policy
 from robot_sf.training.diffusion_policy import (
     DIAGNOSTIC_PACKET_SCHEMA_VERSION,
+    MULTIMODAL_PROBE_SCHEMA_VERSION,
     SMOKE_MANIFEST_SCHEMA_VERSION,
     DiffusionPolicyTrainingSmokeConfig,
     build_diagnostic_packet,
+    build_multimodal_probe,
     load_smoke_config,
     run_training_smoke,
 )
@@ -179,6 +181,76 @@ def test_training_script_can_write_diagnostic_packet(tmp_path) -> None:
     assert packet["acceptance_status"]["benchmark_campaign_run"] is False
     assert packet["acceptance_status"]["slurm_or_gpu_submission"] is False
     assert packet["acceptance_status"]["paper_or_dissertation_claim"] is False
+
+
+def test_multimodal_probe_records_fixed_conflict_modes(tmp_path) -> None:
+    """Fixed-conflict probe records diagnostic action-mode diversity."""
+    config = DiffusionPolicyTrainingSmokeConfig(
+        training_steps=2,
+        batch_size=4,
+        max_pedestrians=2,
+        artifact_prefix="multimodal_probe",
+    )
+    artifacts = run_training_smoke(config, output_dir=tmp_path)
+
+    probe = build_multimodal_probe(
+        artifacts.manifest,
+        artifact_dir=artifacts.manifest_path.parent,
+        sample_count=48,
+    )
+    packet = build_diagnostic_packet(artifacts.manifest, multimodal_probe=probe)
+
+    assert probe["schema_version"] == MULTIMODAL_PROBE_SCHEMA_VERSION
+    assert probe["evidence_tier"] == "diagnostic-only"
+    assert probe["sample_count"] == 48
+    assert probe["passed"] is True
+    assert probe["distinct_core_mode_count"] >= 2
+    assert packet["acceptance_status"]["multimodal_action_probe"] is True
+    assert "multimodal_action_probe" not in {item["id"] for item in packet["remaining_blockers"]}
+
+
+def test_training_script_can_write_multimodal_probe_and_packet(tmp_path) -> None:
+    """Canonical command writes fixed-conflict probe and packet together."""
+    config_path = tmp_path / "smoke.yaml"
+    output_dir = tmp_path / "artifacts"
+    config_path.write_text(
+        "diffusion_policy_training_smoke:\n"
+        "  schema_version: diffusion_policy_training_smoke.v1\n"
+        "  training_steps: 2\n"
+        "  batch_size: 4\n"
+        "  max_pedestrians: 2\n"
+        "  artifact_prefix: cli_multimodal\n",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/training/train_diffusion_policy.py",
+            "--config",
+            str(config_path),
+            "--output-dir",
+            str(output_dir),
+            "--write-multimodal-probe",
+            "--multimodal-samples",
+            "48",
+            "--write-diagnostic-packet",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(completed.stdout)
+    probe_path = output_dir / "cli_multimodal.manifest.multimodal_probe.json"
+    packet_path = output_dir / "cli_multimodal.manifest.diagnostic_packet.json"
+    assert payload["multimodal_probe_path"] == str(probe_path)
+    assert payload["diagnostic_packet_path"] == str(packet_path)
+    probe = json.loads(probe_path.read_text(encoding="utf-8"))
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    assert probe["schema_version"] == MULTIMODAL_PROBE_SCHEMA_VERSION
+    assert probe["passed"] is True
+    assert packet["multimodal_probe"]["passed"] is True
 
 
 def test_diagnostic_packet_records_checkpoint_backed_integration(tmp_path) -> None:

@@ -1,0 +1,84 @@
+{
+  "claim_boundary": "diagnostic_only_not_ranking_evidence",
+  "comparable_for_ranking_families": [],
+  "dynamic_blocked_families": [
+    "head_on_corridor"
+  ],
+  "family_claim_boundaries": [
+    {
+      "actor_free_solved": false,
+      "claim_state": "vehicle_infeasible",
+      "comparable_for_ranking": false,
+      "difficulty_ramp": {
+        "axis": "scenario_variant_difficulty",
+        "first_actor_free_failure_level": "medium",
+        "first_oracle_failure_level": "medium",
+        "level_count": 4
+      },
+      "evidence_complete": true,
+      "extended_time_solved": false,
+      "failure_cause": "vehicle_infeasible",
+      "family_id": "bottleneck",
+      "oracle_solved": false,
+      "route_feasible": true,
+      "unsupported_reason": null
+    },
+    {
+      "actor_free_solved": false,
+      "claim_state": "vehicle_infeasible",
+      "comparable_for_ranking": false,
+      "difficulty_ramp": {
+        "axis": "scenario_variant_difficulty",
+        "first_actor_free_failure_level": "low",
+        "first_oracle_failure_level": "low",
+        "level_count": 3
+      },
+      "evidence_complete": true,
+      "extended_time_solved": false,
+      "failure_cause": "vehicle_infeasible",
+      "family_id": "cross_trap",
+      "oracle_solved": false,
+      "route_feasible": true,
+      "unsupported_reason": null
+    },
+    {
+      "actor_free_solved": true,
+      "claim_state": "dynamic_blocked",
+      "comparable_for_ranking": false,
+      "difficulty_ramp": {
+        "axis": "scenario_variant_difficulty",
+        "first_actor_free_failure_level": null,
+        "first_oracle_failure_level": "medium",
+        "level_count": 2
+      },
+      "evidence_complete": true,
+      "extended_time_solved": false,
+      "failure_cause": "dynamic_blocking_or_deadlock",
+      "family_id": "head_on_corridor",
+      "oracle_solved": false,
+      "route_feasible": true,
+      "unsupported_reason": null
+    }
+  ],
+  "issue": "3484",
+  "not_comparable_for_ranking_families": [
+    "bottleneck",
+    "cross_trap",
+    "head_on_corridor"
+  ],
+  "route_infeasible_families": [],
+  "schema_version": "scenario_feasibility_claim_boundary_synthesis.v1",
+  "source_report": "docs/context/evidence/issue_3484_feasibility_diagnostics_2026-07-04/diagnostic_report.json",
+  "source_report_claim_boundary": "diagnostic_only_not_benchmark_evidence",
+  "source_report_schema": "scenario_feasibility_diagnostics.v1",
+  "still_unsupported_families": [],
+  "target_families": [
+    "bottleneck",
+    "cross_trap",
+    "head_on_corridor"
+  ],
+  "vehicle_infeasible_families": [
+    "bottleneck",
+    "cross_trap"
+  ]
+}

@@ -32,6 +32,7 @@ from robot_sf.scenario_certification.v1 import (
 from robot_sf.training.scenario_loader import load_scenarios
 
 FEASIBILITY_DIAGNOSTICS_SCHEMA = "scenario_feasibility_diagnostics.v1"
+FEASIBILITY_CLAIM_BOUNDARY_SYNTHESIS_SCHEMA = "scenario_feasibility_claim_boundary_synthesis.v1"
 DIAGNOSTIC_CLAIM_BOUNDARY = "diagnostic_only_not_benchmark_evidence"
 DEFAULT_FAMILIES = ("bottleneck", "cross_trap", "head_on_corridor")
 SOLVABLE_ROUTE_CLASSES = {VALID, KNIFE_EDGE, HARD_BUT_SOLVABLE}
@@ -114,6 +115,62 @@ def run_feasibility_diagnostics(
         for scenario in scenarios
     ]
     return _build_report(config=config, scenario_count=len(scenarios), outcomes=outcomes)
+
+
+def build_difficulty_ramp_claim_boundary_synthesis(
+    report: Mapping[str, Any],
+    *,
+    source_report: str,
+    target_families: Sequence[str] = DEFAULT_FAMILIES,
+) -> dict[str, Any]:
+    """Synthesize retained diagnostics into a fail-closed claim boundary.
+
+    The synthesis consumes an existing ``scenario_feasibility_diagnostics.v1`` report;
+    it does not rerun scenarios or promote diagnostic proxy evidence into ranking evidence.
+
+    Returns:
+        Versioned summary of vehicle-infeasible, dynamic-blocked, rank-comparable, and
+        still-unsupported family states.
+    """
+
+    unsupported_all_reason = _unsupported_report_reason(report)
+    target = tuple(target_families)
+    if unsupported_all_reason is not None:
+        family_rows = [
+            _unsupported_synthesis_row(family_id, unsupported_all_reason) for family_id in target
+        ]
+    else:
+        verdicts = _family_verdicts_by_id(report)
+        ramps = _difficulty_ramps_by_id(report)
+        family_rows = [
+            _synthesize_family_claim_boundary(
+                family_id,
+                verdict=verdicts.get(family_id),
+                difficulty_ramp=ramps.get(family_id),
+            )
+            for family_id in target
+        ]
+
+    return {
+        "schema_version": FEASIBILITY_CLAIM_BOUNDARY_SYNTHESIS_SCHEMA,
+        "issue": "3484",
+        "claim_boundary": "diagnostic_only_not_ranking_evidence",
+        "source_report": source_report,
+        "source_report_schema": report.get("schema_version"),
+        "source_report_claim_boundary": report.get("claim_boundary"),
+        "target_families": list(target),
+        "route_infeasible_families": _families_in_category(family_rows, "route_infeasible"),
+        "vehicle_infeasible_families": _families_in_category(family_rows, "vehicle_infeasible"),
+        "dynamic_blocked_families": _families_in_category(family_rows, "dynamic_blocked"),
+        "comparable_for_ranking_families": [
+            row["family_id"] for row in family_rows if row["comparable_for_ranking"] is True
+        ],
+        "not_comparable_for_ranking_families": [
+            row["family_id"] for row in family_rows if row["comparable_for_ranking"] is False
+        ],
+        "still_unsupported_families": _families_in_category(family_rows, "still_unsupported"),
+        "family_claim_boundaries": family_rows,
+    }
 
 
 def make_actor_free_scenario(scenario: Mapping[str, Any]) -> dict[str, Any]:
@@ -336,6 +393,112 @@ def _build_report(
         "family_verdicts": family_verdicts,
         "difficulty_ramp": _difficulty_ramp_summary(outcomes),
     }
+
+
+def _unsupported_report_reason(report: Mapping[str, Any]) -> str | None:
+    if report.get("schema_version") != FEASIBILITY_DIAGNOSTICS_SCHEMA:
+        return "unsupported_source_report_schema"
+    if report.get("claim_boundary") != DIAGNOSTIC_CLAIM_BOUNDARY:
+        return "unsupported_source_claim_boundary"
+    return None
+
+
+def _family_verdicts_by_id(report: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    rows = report.get("family_verdicts") or []
+    if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
+        return {}
+    return {
+        str(row.get("family_id")): row
+        for row in rows
+        if isinstance(row, Mapping) and row.get("family_id") is not None
+    }
+
+
+def _difficulty_ramps_by_id(report: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    rows = report.get("difficulty_ramp") or []
+    if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
+        return {}
+    return {
+        str(row.get("family_id")): row
+        for row in rows
+        if isinstance(row, Mapping) and row.get("family_id") is not None
+    }
+
+
+def _synthesize_family_claim_boundary(
+    family_id: str,
+    *,
+    verdict: Mapping[str, Any] | None,
+    difficulty_ramp: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if verdict is None:
+        return _unsupported_synthesis_row(family_id, "missing_family_verdict")
+    if difficulty_ramp is None:
+        return _unsupported_synthesis_row(family_id, "missing_difficulty_ramp")
+
+    failure_verdict = verdict.get("failure_cause_verdict")
+    if not isinstance(failure_verdict, Mapping):
+        return _unsupported_synthesis_row(family_id, "missing_failure_cause_verdict")
+
+    if failure_verdict.get("evidence_complete") is not True:
+        return _unsupported_synthesis_row(family_id, "incomplete_diagnostic_evidence")
+
+    ramp_levels = difficulty_ramp.get("levels")
+    if not isinstance(ramp_levels, Sequence) or isinstance(ramp_levels, (str, bytes)):
+        return _unsupported_synthesis_row(family_id, "missing_difficulty_ramp_levels")
+    if len(ramp_levels) == 0:
+        return _unsupported_synthesis_row(family_id, "empty_difficulty_ramp_levels")
+
+    cause = str(failure_verdict.get("cause") or "")
+    category = {
+        "infeasible_route": "route_infeasible",
+        "vehicle_infeasible": "vehicle_infeasible",
+        "dynamic_blocking_or_deadlock": "dynamic_blocked",
+        "planner_limited": "planner_limited",
+        "time_limited": "time_limited",
+    }.get(cause, "still_unsupported")
+    if category == "still_unsupported":
+        return _unsupported_synthesis_row(family_id, f"unsupported_verdict:{cause or 'missing'}")
+
+    comparable = failure_verdict.get("comparable_for_ranking") is True
+    return {
+        "family_id": family_id,
+        "claim_state": category,
+        "failure_cause": cause,
+        "comparable_for_ranking": comparable,
+        "evidence_complete": True,
+        "route_feasible": failure_verdict.get("inputs", {}).get("route_feasible"),
+        "actor_free_solved": failure_verdict.get("inputs", {}).get("actor_free_solved"),
+        "extended_time_solved": failure_verdict.get("inputs", {}).get("extended_time_solved"),
+        "oracle_solved": failure_verdict.get("inputs", {}).get("oracle_solved"),
+        "difficulty_ramp": {
+            "axis": difficulty_ramp.get("axis"),
+            "level_count": len(ramp_levels),
+            "first_actor_free_failure_level": difficulty_ramp.get("first_actor_free_failure_level"),
+            "first_oracle_failure_level": difficulty_ramp.get("first_oracle_failure_level"),
+        },
+        "unsupported_reason": None,
+    }
+
+
+def _unsupported_synthesis_row(family_id: str, reason: str) -> dict[str, Any]:
+    return {
+        "family_id": family_id,
+        "claim_state": "still_unsupported",
+        "failure_cause": None,
+        "comparable_for_ranking": False,
+        "evidence_complete": False,
+        "route_feasible": None,
+        "actor_free_solved": None,
+        "extended_time_solved": None,
+        "oracle_solved": None,
+        "difficulty_ramp": None,
+        "unsupported_reason": reason,
+    }
+
+
+def _families_in_category(rows: Sequence[Mapping[str, Any]], category: str) -> list[str]:
+    return [str(row["family_id"]) for row in rows if row.get("claim_state") == category]
 
 
 def _family_verdict(

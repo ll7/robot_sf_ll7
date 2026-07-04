@@ -1,0 +1,3416 @@
+{
+  "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+  "diagnostic_lane_rows": [
+    {
+      "evidence_ref": "scenario_rows/classic_bottleneck_low/route_clearance",
+      "family_id": "bottleneck",
+      "lane": "route_clearance",
+      "notes": "passed",
+      "passed": true,
+      "scenario_id": "classic_bottleneck_low",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "passed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_bottleneck_low/actor_free_run",
+      "family_id": "bottleneck",
+      "lane": "actor_free_run",
+      "notes": "passed",
+      "passed": true,
+      "scenario_id": "classic_bottleneck_low",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "passed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_bottleneck_low/oracle_or_scripted_controller",
+      "family_id": "bottleneck",
+      "lane": "oracle_or_scripted_controller",
+      "notes": "passed",
+      "passed": true,
+      "scenario_id": "classic_bottleneck_low",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "passed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_bottleneck_low/extended_time_run",
+      "family_id": "bottleneck",
+      "lane": "extended_time_run",
+      "notes": "passed",
+      "passed": true,
+      "scenario_id": "classic_bottleneck_low",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "passed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_bottleneck_medium/route_clearance",
+      "family_id": "bottleneck",
+      "lane": "route_clearance",
+      "notes": "passed",
+      "passed": true,
+      "scenario_id": "classic_bottleneck_medium",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "passed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_bottleneck_medium/actor_free_run",
+      "family_id": "bottleneck",
+      "lane": "actor_free_run",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_bottleneck_medium",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_bottleneck_medium/oracle_or_scripted_controller",
+      "family_id": "bottleneck",
+      "lane": "oracle_or_scripted_controller",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_bottleneck_medium",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_bottleneck_medium/extended_time_run",
+      "family_id": "bottleneck",
+      "lane": "extended_time_run",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_bottleneck_medium",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_bottleneck_high/route_clearance",
+      "family_id": "bottleneck",
+      "lane": "route_clearance",
+      "notes": "passed",
+      "passed": true,
+      "scenario_id": "classic_bottleneck_high",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "passed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_bottleneck_high/actor_free_run",
+      "family_id": "bottleneck",
+      "lane": "actor_free_run",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_bottleneck_high",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_bottleneck_high/oracle_or_scripted_controller",
+      "family_id": "bottleneck",
+      "lane": "oracle_or_scripted_controller",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_bottleneck_high",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_bottleneck_high/extended_time_run",
+      "family_id": "bottleneck",
+      "lane": "extended_time_run",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_bottleneck_high",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_realworld_double_bottleneck_high/route_clearance",
+      "family_id": "bottleneck",
+      "lane": "route_clearance",
+      "notes": "passed",
+      "passed": true,
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "passed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_realworld_double_bottleneck_high/actor_free_run",
+      "family_id": "bottleneck",
+      "lane": "actor_free_run",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_realworld_double_bottleneck_high/oracle_or_scripted_controller",
+      "family_id": "bottleneck",
+      "lane": "oracle_or_scripted_controller",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_realworld_double_bottleneck_high/extended_time_run",
+      "family_id": "bottleneck",
+      "lane": "extended_time_run",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_cross_trap_low/route_clearance",
+      "family_id": "cross_trap",
+      "lane": "route_clearance",
+      "notes": "passed",
+      "passed": true,
+      "scenario_id": "classic_cross_trap_low",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "passed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_cross_trap_low/actor_free_run",
+      "family_id": "cross_trap",
+      "lane": "actor_free_run",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_cross_trap_low",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_cross_trap_low/oracle_or_scripted_controller",
+      "family_id": "cross_trap",
+      "lane": "oracle_or_scripted_controller",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_cross_trap_low",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_cross_trap_low/extended_time_run",
+      "family_id": "cross_trap",
+      "lane": "extended_time_run",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_cross_trap_low",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_cross_trap_medium/route_clearance",
+      "family_id": "cross_trap",
+      "lane": "route_clearance",
+      "notes": "passed",
+      "passed": true,
+      "scenario_id": "classic_cross_trap_medium",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "passed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_cross_trap_medium/actor_free_run",
+      "family_id": "cross_trap",
+      "lane": "actor_free_run",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_cross_trap_medium",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_cross_trap_medium/oracle_or_scripted_controller",
+      "family_id": "cross_trap",
+      "lane": "oracle_or_scripted_controller",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_cross_trap_medium",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_cross_trap_medium/extended_time_run",
+      "family_id": "cross_trap",
+      "lane": "extended_time_run",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_cross_trap_medium",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_cross_trap_high/route_clearance",
+      "family_id": "cross_trap",
+      "lane": "route_clearance",
+      "notes": "passed",
+      "passed": true,
+      "scenario_id": "classic_cross_trap_high",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "passed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_cross_trap_high/actor_free_run",
+      "family_id": "cross_trap",
+      "lane": "actor_free_run",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_cross_trap_high",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_cross_trap_high/oracle_or_scripted_controller",
+      "family_id": "cross_trap",
+      "lane": "oracle_or_scripted_controller",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_cross_trap_high",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_cross_trap_high/extended_time_run",
+      "family_id": "cross_trap",
+      "lane": "extended_time_run",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_cross_trap_high",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_head_on_corridor_low/route_clearance",
+      "family_id": "head_on_corridor",
+      "lane": "route_clearance",
+      "notes": "passed",
+      "passed": true,
+      "scenario_id": "classic_head_on_corridor_low",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "passed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_head_on_corridor_low/actor_free_run",
+      "family_id": "head_on_corridor",
+      "lane": "actor_free_run",
+      "notes": "passed",
+      "passed": true,
+      "scenario_id": "classic_head_on_corridor_low",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "passed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_head_on_corridor_low/oracle_or_scripted_controller",
+      "family_id": "head_on_corridor",
+      "lane": "oracle_or_scripted_controller",
+      "notes": "passed",
+      "passed": true,
+      "scenario_id": "classic_head_on_corridor_low",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "passed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_head_on_corridor_low/extended_time_run",
+      "family_id": "head_on_corridor",
+      "lane": "extended_time_run",
+      "notes": "passed",
+      "passed": true,
+      "scenario_id": "classic_head_on_corridor_low",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "passed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_head_on_corridor_medium/route_clearance",
+      "family_id": "head_on_corridor",
+      "lane": "route_clearance",
+      "notes": "passed",
+      "passed": true,
+      "scenario_id": "classic_head_on_corridor_medium",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "passed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_head_on_corridor_medium/actor_free_run",
+      "family_id": "head_on_corridor",
+      "lane": "actor_free_run",
+      "notes": "passed",
+      "passed": true,
+      "scenario_id": "classic_head_on_corridor_medium",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "passed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_head_on_corridor_medium/oracle_or_scripted_controller",
+      "family_id": "head_on_corridor",
+      "lane": "oracle_or_scripted_controller",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_head_on_corridor_medium",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    },
+    {
+      "evidence_ref": "scenario_rows/classic_head_on_corridor_medium/extended_time_run",
+      "family_id": "head_on_corridor",
+      "lane": "extended_time_run",
+      "notes": "failed",
+      "passed": false,
+      "scenario_id": "classic_head_on_corridor_medium",
+      "schema_version": "scenario_feasibility_diagnostic_evidence.v1",
+      "source": "configs/scenarios/classic_interactions.yaml",
+      "status": "failed"
+    }
+  ],
+  "families": [
+    "bottleneck",
+    "cross_trap",
+    "head_on_corridor"
+  ],
+  "family_verdicts": [
+    {
+      "actor_free_solved": false,
+      "extended_time_solved": false,
+      "failure_cause_verdict": {
+        "cause": "vehicle_infeasible",
+        "comparable_for_ranking": false,
+        "diagnostic_only_family_aggregation": {
+          "rule": "false_if_any_false_true_only_if_all_observed_true_null_if_unobserved",
+          "scenario_count": 4
+        },
+        "evidence_complete": true,
+        "evidence_kind": "diagnostic_proxy",
+        "inputs": {
+          "actor_free_solved": false,
+          "any_planner_succeeded": false,
+          "extended_time_solved": false,
+          "oracle_solved": false,
+          "route_feasible": true
+        },
+        "rationale": "The vehicle cannot reach goal even with no pedestrians; vehicle-level defect.",
+        "schema_version": "scenario_failure_cause.v1"
+      },
+      "family_id": "bottleneck",
+      "oracle_solved": false,
+      "route_feasible": true
+    },
+    {
+      "actor_free_solved": false,
+      "extended_time_solved": false,
+      "failure_cause_verdict": {
+        "cause": "vehicle_infeasible",
+        "comparable_for_ranking": false,
+        "diagnostic_only_family_aggregation": {
+          "rule": "false_if_any_false_true_only_if_all_observed_true_null_if_unobserved",
+          "scenario_count": 3
+        },
+        "evidence_complete": true,
+        "evidence_kind": "diagnostic_proxy",
+        "inputs": {
+          "actor_free_solved": false,
+          "any_planner_succeeded": false,
+          "extended_time_solved": false,
+          "oracle_solved": false,
+          "route_feasible": true
+        },
+        "rationale": "The vehicle cannot reach goal even with no pedestrians; vehicle-level defect.",
+        "schema_version": "scenario_failure_cause.v1"
+      },
+      "family_id": "cross_trap",
+      "oracle_solved": false,
+      "route_feasible": true
+    },
+    {
+      "actor_free_solved": true,
+      "extended_time_solved": false,
+      "failure_cause_verdict": {
+        "cause": "dynamic_blocking_or_deadlock",
+        "comparable_for_ranking": false,
+        "diagnostic_only_family_aggregation": {
+          "rule": "false_if_any_false_true_only_if_all_observed_true_null_if_unobserved",
+          "scenario_count": 2
+        },
+        "evidence_complete": true,
+        "evidence_kind": "diagnostic_proxy",
+        "inputs": {
+          "actor_free_solved": true,
+          "any_planner_succeeded": false,
+          "extended_time_solved": false,
+          "oracle_solved": false,
+          "route_feasible": true
+        },
+        "rationale": "Route and actor-free runs succeed but even an oracle fails with reactive pedestrians; reciprocal deadlock or unrealistic blocking.",
+        "schema_version": "scenario_failure_cause.v1"
+      },
+      "family_id": "head_on_corridor",
+      "oracle_solved": false,
+      "route_feasible": true
+    }
+  ],
+  "issue": "3484",
+  "scenario_count": 9,
+  "scenario_rows": [
+    {
+      "actor_free_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 500,
+          "record_excerpt": {
+            "scenario_id": "classic_bottleneck_low",
+            "seed": 131,
+            "termination_reason": "success"
+          },
+          "seed": 131,
+          "success_reason": "metrics_success_true",
+          "termination_reason": "success"
+        },
+        "passed": true,
+        "status": "passed"
+      },
+      "extended_time_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 1000,
+          "record_excerpt": {
+            "scenario_id": "classic_bottleneck_low",
+            "seed": 131,
+            "termination_reason": "success"
+          },
+          "seed": 131,
+          "success_reason": "metrics_success_true",
+          "termination_reason": "success"
+        },
+        "passed": true,
+        "status": "passed"
+      },
+      "family_id": "bottleneck",
+      "oracle_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 500,
+          "record_excerpt": {
+            "scenario_id": "classic_bottleneck_low",
+            "seed": 131,
+            "termination_reason": "success"
+          },
+          "seed": 131,
+          "success_reason": "metrics_success_true",
+          "termination_reason": "success"
+        },
+        "passed": true,
+        "status": "passed"
+      },
+      "route_feasible": {
+        "blocker": null,
+        "evidence": {
+          "benchmark_eligibility": "eligible",
+          "certificate": {
+            "benchmark_eligibility": "eligible",
+            "checks": {
+              "all_routes_benchmark_eligible": true,
+              "route_count": 1,
+              "settings": {
+                "hard_clearance_margin_m": 0.35,
+                "hard_path_length_ratio": 1.5,
+                "hard_turn_count": 3,
+                "knife_edge_clearance_margin_m": 0.15,
+                "knife_edge_path_length_ratio": 2.5,
+                "planner_cells_per_meter": 2.0
+              }
+            },
+            "classification": "valid",
+            "evidence": {
+              "archetype": "bottleneck",
+              "difficulty_analysis": {
+                "role": "optional_diagnostic_evidence_only",
+                "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+              },
+              "plausibility": {
+                "method": null,
+                "metrics": {
+                  "force_q95": null,
+                  "mean_distance": null,
+                  "min_distance": null,
+                  "ped_force_mean": null,
+                  "robot_ped_within_5m_frac": null
+                },
+                "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00",
+                "notes": "ped_density=0.0; use map single_ped markers to control count.",
+                "status": "verified",
+                "verified_by": "ll7",
+                "verified_on": "2026-01-29"
+              },
+              "scenario_fingerprint": "aed349447e560b4d"
+            },
+            "reasons": [
+              "inflated_path_found_with_nominal_clearance"
+            ],
+            "route_certificates": [
+              {
+                "benchmark_eligibility": "eligible",
+                "checks": {
+                  "authored_route_length_m": 18.556494615045878,
+                  "direct_start_goal_distance_m": 18.55634890350023,
+                  "dynamic": {
+                    "single_pedestrian_count": 0,
+                    "static_blocking_pedestrian_ids": []
+                  },
+                  "goal": [
+                    20.015639,
+                    10.650377
+                  ],
+                  "inflated_collision_free_path": true,
+                  "infrastructure": {
+                    "illegal_amv_zone_ids": [],
+                    "intersected_zone_ids": [],
+                    "zone_count": 0
+                  },
+                  "kinodynamic": {
+                    "command_limits_valid": true,
+                    "controller_semantics": "can_rotate_in_place",
+                    "minimum_turning_radius_m": 0.0,
+                    "robot_model": "DifferentialDriveSettings"
+                  },
+                  "map_name": "classic_bottleneck",
+                  "minimum_static_clearance_m": 1.07696410750152,
+                  "path_length_ratio": 0.9969633625777752,
+                  "ped_radius_m": 0.4,
+                  "planned_turn_count": 0,
+                  "planned_waypoint_count": 38,
+                  "planner": {
+                    "algorithm": "a_star",
+                    "cells_per_meter": 2.0,
+                    "inflation_fallback": false,
+                    "inflation_radius_m": 1.0,
+                    "raw_info": {
+                      "cost": 37.0,
+                      "expand": {
+                        "(40, 21)": "Node((40, 21), None, 0, 37.0)",
+                        "(40, 22)": "Node((40, 22), (40, 21), 1.0, 36.0)",
+                        "(40, 23)": "Node((40, 23), (40, 22), 2.0, 35.0)",
+                        "(40, 24)": "Node((40, 24), (40, 23), 3.0, 34.0)",
+                        "(40, 25)": "Node((40, 25), (40, 24), 4.0, 33.0)",
+                        "(40, 26)": "Node((40, 26), (40, 25), 5.0, 32.0)",
+                        "(40, 27)": "Node((40, 27), (40, 26), 6.0, 31.0)",
+                        "(40, 28)": "Node((40, 28), (40, 27), 7.0, 30.0)",
+                        "(40, 29)": "Node((40, 29), (40, 28), 8.0, 29.0)",
+                        "(40, 30)": "Node((40, 30), (40, 29), 9.0, 28.0)",
+                        "(40, 31)": "Node((40, 31), (40, 30), 10.0, 27.0)",
+                        "(40, 32)": "Node((40, 32), (40, 31), 11.0, 26.0)",
+                        "(40, 33)": "Node((40, 33), (40, 32), 12.0, 25.0)",
+                        "(40, 34)": "Node((40, 34), (40, 33), 13.0, 24.0)",
+                        "(40, 35)": "Node((40, 35), (40, 34), 14.0, 23.0)",
+                        "(40, 36)": "Node((40, 36), (40, 35), 15.0, 22.0)",
+                        "(40, 37)": "Node((40, 37), (40, 36), 16.0, 21.0)",
+                        "(40, 38)": "Node((40, 38), (40, 37), 17.0, 20.0)",
+                        "(40, 39)": "Node((40, 39), (40, 38), 18.0, 19.0)",
+                        "(40, 40)": "Node((40, 40), (40, 39), 19.0, 18.0)",
+                        "(40, 41)": "Node((40, 41), (40, 40), 20.0, 17.0)",
+                        "(40, 42)": "Node((40, 42), (40, 41), 21.0, 16.0)",
+                        "(40, 43)": "Node((40, 43), (40, 42), 22.0, 15.0)",
+                        "(40, 44)": "Node((40, 44), (40, 43), 23.0, 14.0)",
+                        "(40, 45)": "Node((40, 45), (40, 44), 24.0, 13.0)",
+                        "(40, 46)": "Node((40, 46), (40, 45), 25.0, 12.0)",
+                        "(40, 47)": "Node((40, 47), (40, 46), 26.0, 11.0)",
+                        "(40, 48)": "Node((40, 48), (40, 47), 27.0, 10.0)",
+                        "(40, 49)": "Node((40, 49), (40, 48), 28.0, 9.0)",
+                        "(40, 50)": "Node((40, 50), (40, 49), 29.0, 8.0)",
+                        "(40, 51)": "Node((40, 51), (40, 50), 30.0, 7.0)",
+                        "(40, 52)": "Node((40, 52), (40, 51), 31.0, 6.0)",
+                        "(40, 53)": "Node((40, 53), (40, 52), 32.0, 5.0)",
+                        "(40, 54)": "Node((40, 54), (40, 53), 33.0, 4.0)",
+                        "(40, 55)": "Node((40, 55), (40, 54), 34.0, 3.0)",
+                        "(40, 56)": "Node((40, 56), (40, 55), 35.0, 2.0)",
+                        "(40, 57)": "Node((40, 57), (40, 56), 36.0, 1.0)",
+                        "(40, 58)": "Node((40, 58), (40, 57), 37.0, 0.0)"
+                      },
+                      "goal": [
+                        40,
+                        58
+                      ],
+                      "inflation_cells": 2,
+                      "inflation_meters": 1.0,
+                      "length": 18.5,
+                      "start": [
+                        40,
+                        21
+                      ],
+                      "success": true
+                    }
+                  },
+                  "robot_radius_m": 1.0,
+                  "shortest_path_length_m": 18.5,
+                  "start": [
+                    20.024044,
+                    29.206724
+                  ],
+                  "waypoint_count": 3
+                },
+                "classification": "valid",
+                "evidence": {
+                  "difficulty_analysis": {
+                    "role": "optional_diagnostic_evidence_only",
+                    "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+                  }
+                },
+                "goal_id": 0,
+                "reasons": [
+                  "inflated_path_found_with_nominal_clearance"
+                ],
+                "route_id": "robot_route_0_0",
+                "spawn_id": 0
+              }
+            ],
+            "scenario_id": "classic_bottleneck_low",
+            "schema_version": "scenario_cert.v1",
+            "source": "configs/scenarios/classic_interactions.yaml"
+          },
+          "certificate_schema_version": "scenario_cert.v1",
+          "classification": "valid",
+          "reasons": [
+            "inflated_path_found_with_nominal_clearance"
+          ]
+        },
+        "passed": true,
+        "status": "passed"
+      },
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 131
+    },
+    {
+      "actor_free_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 500,
+          "record_excerpt": {
+            "scenario_id": "classic_bottleneck_medium",
+            "seed": 131,
+            "termination_reason": "collision"
+          },
+          "seed": 131,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "extended_time_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 1000,
+          "record_excerpt": {
+            "scenario_id": "classic_bottleneck_medium",
+            "seed": 131,
+            "termination_reason": "collision"
+          },
+          "seed": 131,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "family_id": "bottleneck",
+      "oracle_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 500,
+          "record_excerpt": {
+            "scenario_id": "classic_bottleneck_medium",
+            "seed": 131,
+            "termination_reason": "collision"
+          },
+          "seed": 131,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "route_feasible": {
+        "blocker": null,
+        "evidence": {
+          "benchmark_eligibility": "eligible",
+          "certificate": {
+            "benchmark_eligibility": "eligible",
+            "checks": {
+              "all_routes_benchmark_eligible": true,
+              "route_count": 1,
+              "settings": {
+                "hard_clearance_margin_m": 0.35,
+                "hard_path_length_ratio": 1.5,
+                "hard_turn_count": 3,
+                "knife_edge_clearance_margin_m": 0.15,
+                "knife_edge_path_length_ratio": 2.5,
+                "planner_cells_per_meter": 2.0
+              }
+            },
+            "classification": "hard_but_solvable",
+            "evidence": {
+              "archetype": "bottleneck",
+              "difficulty_analysis": {
+                "role": "optional_diagnostic_evidence_only",
+                "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+              },
+              "plausibility": {
+                "method": null,
+                "metrics": {
+                  "force_q95": 0.36515309739568574,
+                  "mean_distance": 10.304393328176037,
+                  "min_distance": 1.3568504232890768,
+                  "ped_force_mean": 0.0977117812274009,
+                  "robot_ped_within_5m_frac": 0.20673702551886897
+                },
+                "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00",
+                "notes": "ped_density=0.0; use map single_ped markers to control count.",
+                "status": "verified",
+                "verified_by": "ll7",
+                "verified_on": "2026-01-29"
+              },
+              "scenario_fingerprint": "30fa8153ea7b320a"
+            },
+            "reasons": [
+              "dynamic_interaction_present"
+            ],
+            "route_certificates": [
+              {
+                "benchmark_eligibility": "eligible",
+                "checks": {
+                  "authored_route_length_m": 18.556494615045878,
+                  "direct_start_goal_distance_m": 18.55634890350023,
+                  "dynamic": {
+                    "dynamic_interaction_count": 1,
+                    "single_pedestrian_count": 1,
+                    "static_blocking_pedestrian_ids": []
+                  },
+                  "goal": [
+                    20.015639,
+                    10.650377
+                  ],
+                  "inflated_collision_free_path": true,
+                  "infrastructure": {
+                    "illegal_amv_zone_ids": [],
+                    "intersected_zone_ids": [],
+                    "zone_count": 0
+                  },
+                  "kinodynamic": {
+                    "command_limits_valid": true,
+                    "controller_semantics": "can_rotate_in_place",
+                    "minimum_turning_radius_m": 0.0,
+                    "robot_model": "DifferentialDriveSettings"
+                  },
+                  "map_name": "classic_bottleneck_medium",
+                  "minimum_static_clearance_m": 1.07696410750152,
+                  "path_length_ratio": 0.9969633625777752,
+                  "ped_radius_m": 0.4,
+                  "planned_turn_count": 0,
+                  "planned_waypoint_count": 38,
+                  "planner": {
+                    "algorithm": "a_star",
+                    "cells_per_meter": 2.0,
+                    "inflation_fallback": false,
+                    "inflation_radius_m": 1.0,
+                    "raw_info": {
+                      "cost": 37.0,
+                      "expand": {
+                        "(40, 21)": "Node((40, 21), None, 0, 37.0)",
+                        "(40, 22)": "Node((40, 22), (40, 21), 1.0, 36.0)",
+                        "(40, 23)": "Node((40, 23), (40, 22), 2.0, 35.0)",
+                        "(40, 24)": "Node((40, 24), (40, 23), 3.0, 34.0)",
+                        "(40, 25)": "Node((40, 25), (40, 24), 4.0, 33.0)",
+                        "(40, 26)": "Node((40, 26), (40, 25), 5.0, 32.0)",
+                        "(40, 27)": "Node((40, 27), (40, 26), 6.0, 31.0)",
+                        "(40, 28)": "Node((40, 28), (40, 27), 7.0, 30.0)",
+                        "(40, 29)": "Node((40, 29), (40, 28), 8.0, 29.0)",
+                        "(40, 30)": "Node((40, 30), (40, 29), 9.0, 28.0)",
+                        "(40, 31)": "Node((40, 31), (40, 30), 10.0, 27.0)",
+                        "(40, 32)": "Node((40, 32), (40, 31), 11.0, 26.0)",
+                        "(40, 33)": "Node((40, 33), (40, 32), 12.0, 25.0)",
+                        "(40, 34)": "Node((40, 34), (40, 33), 13.0, 24.0)",
+                        "(40, 35)": "Node((40, 35), (40, 34), 14.0, 23.0)",
+                        "(40, 36)": "Node((40, 36), (40, 35), 15.0, 22.0)",
+                        "(40, 37)": "Node((40, 37), (40, 36), 16.0, 21.0)",
+                        "(40, 38)": "Node((40, 38), (40, 37), 17.0, 20.0)",
+                        "(40, 39)": "Node((40, 39), (40, 38), 18.0, 19.0)",
+                        "(40, 40)": "Node((40, 40), (40, 39), 19.0, 18.0)",
+                        "(40, 41)": "Node((40, 41), (40, 40), 20.0, 17.0)",
+                        "(40, 42)": "Node((40, 42), (40, 41), 21.0, 16.0)",
+                        "(40, 43)": "Node((40, 43), (40, 42), 22.0, 15.0)",
+                        "(40, 44)": "Node((40, 44), (40, 43), 23.0, 14.0)",
+                        "(40, 45)": "Node((40, 45), (40, 44), 24.0, 13.0)",
+                        "(40, 46)": "Node((40, 46), (40, 45), 25.0, 12.0)",
+                        "(40, 47)": "Node((40, 47), (40, 46), 26.0, 11.0)",
+                        "(40, 48)": "Node((40, 48), (40, 47), 27.0, 10.0)",
+                        "(40, 49)": "Node((40, 49), (40, 48), 28.0, 9.0)",
+                        "(40, 50)": "Node((40, 50), (40, 49), 29.0, 8.0)",
+                        "(40, 51)": "Node((40, 51), (40, 50), 30.0, 7.0)",
+                        "(40, 52)": "Node((40, 52), (40, 51), 31.0, 6.0)",
+                        "(40, 53)": "Node((40, 53), (40, 52), 32.0, 5.0)",
+                        "(40, 54)": "Node((40, 54), (40, 53), 33.0, 4.0)",
+                        "(40, 55)": "Node((40, 55), (40, 54), 34.0, 3.0)",
+                        "(40, 56)": "Node((40, 56), (40, 55), 35.0, 2.0)",
+                        "(40, 57)": "Node((40, 57), (40, 56), 36.0, 1.0)",
+                        "(40, 58)": "Node((40, 58), (40, 57), 37.0, 0.0)"
+                      },
+                      "goal": [
+                        40,
+                        58
+                      ],
+                      "inflation_cells": 2,
+                      "inflation_meters": 1.0,
+                      "length": 18.5,
+                      "start": [
+                        40,
+                        21
+                      ],
+                      "success": true
+                    }
+                  },
+                  "robot_radius_m": 1.0,
+                  "shortest_path_length_m": 18.5,
+                  "start": [
+                    20.024044,
+                    29.206724
+                  ],
+                  "waypoint_count": 3
+                },
+                "classification": "hard_but_solvable",
+                "evidence": {
+                  "difficulty_analysis": {
+                    "role": "optional_diagnostic_evidence_only",
+                    "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+                  }
+                },
+                "goal_id": 0,
+                "reasons": [
+                  "dynamic_interaction_present"
+                ],
+                "route_id": "robot_route_0_0",
+                "spawn_id": 0
+              }
+            ],
+            "scenario_id": "classic_bottleneck_medium",
+            "schema_version": "scenario_cert.v1",
+            "source": "configs/scenarios/classic_interactions.yaml"
+          },
+          "certificate_schema_version": "scenario_cert.v1",
+          "classification": "hard_but_solvable",
+          "reasons": [
+            "dynamic_interaction_present"
+          ]
+        },
+        "passed": true,
+        "status": "passed"
+      },
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 131
+    },
+    {
+      "actor_free_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 500,
+          "record_excerpt": {
+            "scenario_id": "classic_bottleneck_high",
+            "seed": 131,
+            "termination_reason": "collision"
+          },
+          "seed": 131,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "extended_time_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 1000,
+          "record_excerpt": {
+            "scenario_id": "classic_bottleneck_high",
+            "seed": 131,
+            "termination_reason": "collision"
+          },
+          "seed": 131,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "family_id": "bottleneck",
+      "oracle_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 500,
+          "record_excerpt": {
+            "scenario_id": "classic_bottleneck_high",
+            "seed": 131,
+            "termination_reason": "collision"
+          },
+          "seed": 131,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "route_feasible": {
+        "blocker": null,
+        "evidence": {
+          "benchmark_eligibility": "eligible",
+          "certificate": {
+            "benchmark_eligibility": "eligible",
+            "checks": {
+              "all_routes_benchmark_eligible": true,
+              "route_count": 1,
+              "settings": {
+                "hard_clearance_margin_m": 0.35,
+                "hard_path_length_ratio": 1.5,
+                "hard_turn_count": 3,
+                "knife_edge_clearance_margin_m": 0.15,
+                "knife_edge_path_length_ratio": 2.5,
+                "planner_cells_per_meter": 2.0
+              }
+            },
+            "classification": "hard_but_solvable",
+            "evidence": {
+              "archetype": "bottleneck",
+              "difficulty_analysis": {
+                "role": "optional_diagnostic_evidence_only",
+                "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+              },
+              "plausibility": {
+                "method": null,
+                "metrics": {
+                  "force_q95": 0.21743377704570035,
+                  "mean_distance": 10.098522314775332,
+                  "min_distance": 1.3151934686291786,
+                  "ped_force_mean": 0.08291461806394115,
+                  "robot_ped_within_5m_frac": 0.21322846692018266
+                },
+                "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00",
+                "notes": "ped_density=0.0; use map single_ped markers to control count.",
+                "status": "verified",
+                "verified_by": "ll7",
+                "verified_on": "2026-01-29"
+              },
+              "scenario_fingerprint": "8e9da6d967800b5f"
+            },
+            "reasons": [
+              "dynamic_interaction_present"
+            ],
+            "route_certificates": [
+              {
+                "benchmark_eligibility": "eligible",
+                "checks": {
+                  "authored_route_length_m": 18.556494615045878,
+                  "direct_start_goal_distance_m": 18.55634890350023,
+                  "dynamic": {
+                    "dynamic_interaction_count": 3,
+                    "single_pedestrian_count": 3,
+                    "static_blocking_pedestrian_ids": []
+                  },
+                  "goal": [
+                    20.015639,
+                    10.650377
+                  ],
+                  "inflated_collision_free_path": true,
+                  "infrastructure": {
+                    "illegal_amv_zone_ids": [],
+                    "intersected_zone_ids": [],
+                    "zone_count": 0
+                  },
+                  "kinodynamic": {
+                    "command_limits_valid": true,
+                    "controller_semantics": "can_rotate_in_place",
+                    "minimum_turning_radius_m": 0.0,
+                    "robot_model": "DifferentialDriveSettings"
+                  },
+                  "map_name": "classic_bottleneck_high",
+                  "minimum_static_clearance_m": 1.07696410750152,
+                  "path_length_ratio": 0.9969633625777752,
+                  "ped_radius_m": 0.4,
+                  "planned_turn_count": 0,
+                  "planned_waypoint_count": 38,
+                  "planner": {
+                    "algorithm": "a_star",
+                    "cells_per_meter": 2.0,
+                    "inflation_fallback": false,
+                    "inflation_radius_m": 1.0,
+                    "raw_info": {
+                      "cost": 37.0,
+                      "expand": {
+                        "(40, 21)": "Node((40, 21), None, 0, 37.0)",
+                        "(40, 22)": "Node((40, 22), (40, 21), 1.0, 36.0)",
+                        "(40, 23)": "Node((40, 23), (40, 22), 2.0, 35.0)",
+                        "(40, 24)": "Node((40, 24), (40, 23), 3.0, 34.0)",
+                        "(40, 25)": "Node((40, 25), (40, 24), 4.0, 33.0)",
+                        "(40, 26)": "Node((40, 26), (40, 25), 5.0, 32.0)",
+                        "(40, 27)": "Node((40, 27), (40, 26), 6.0, 31.0)",
+                        "(40, 28)": "Node((40, 28), (40, 27), 7.0, 30.0)",
+                        "(40, 29)": "Node((40, 29), (40, 28), 8.0, 29.0)",
+                        "(40, 30)": "Node((40, 30), (40, 29), 9.0, 28.0)",
+                        "(40, 31)": "Node((40, 31), (40, 30), 10.0, 27.0)",
+                        "(40, 32)": "Node((40, 32), (40, 31), 11.0, 26.0)",
+                        "(40, 33)": "Node((40, 33), (40, 32), 12.0, 25.0)",
+                        "(40, 34)": "Node((40, 34), (40, 33), 13.0, 24.0)",
+                        "(40, 35)": "Node((40, 35), (40, 34), 14.0, 23.0)",
+                        "(40, 36)": "Node((40, 36), (40, 35), 15.0, 22.0)",
+                        "(40, 37)": "Node((40, 37), (40, 36), 16.0, 21.0)",
+                        "(40, 38)": "Node((40, 38), (40, 37), 17.0, 20.0)",
+                        "(40, 39)": "Node((40, 39), (40, 38), 18.0, 19.0)",
+                        "(40, 40)": "Node((40, 40), (40, 39), 19.0, 18.0)",
+                        "(40, 41)": "Node((40, 41), (40, 40), 20.0, 17.0)",
+                        "(40, 42)": "Node((40, 42), (40, 41), 21.0, 16.0)",
+                        "(40, 43)": "Node((40, 43), (40, 42), 22.0, 15.0)",
+                        "(40, 44)": "Node((40, 44), (40, 43), 23.0, 14.0)",
+                        "(40, 45)": "Node((40, 45), (40, 44), 24.0, 13.0)",
+                        "(40, 46)": "Node((40, 46), (40, 45), 25.0, 12.0)",
+                        "(40, 47)": "Node((40, 47), (40, 46), 26.0, 11.0)",
+                        "(40, 48)": "Node((40, 48), (40, 47), 27.0, 10.0)",
+                        "(40, 49)": "Node((40, 49), (40, 48), 28.0, 9.0)",
+                        "(40, 50)": "Node((40, 50), (40, 49), 29.0, 8.0)",
+                        "(40, 51)": "Node((40, 51), (40, 50), 30.0, 7.0)",
+                        "(40, 52)": "Node((40, 52), (40, 51), 31.0, 6.0)",
+                        "(40, 53)": "Node((40, 53), (40, 52), 32.0, 5.0)",
+                        "(40, 54)": "Node((40, 54), (40, 53), 33.0, 4.0)",
+                        "(40, 55)": "Node((40, 55), (40, 54), 34.0, 3.0)",
+                        "(40, 56)": "Node((40, 56), (40, 55), 35.0, 2.0)",
+                        "(40, 57)": "Node((40, 57), (40, 56), 36.0, 1.0)",
+                        "(40, 58)": "Node((40, 58), (40, 57), 37.0, 0.0)"
+                      },
+                      "goal": [
+                        40,
+                        58
+                      ],
+                      "inflation_cells": 2,
+                      "inflation_meters": 1.0,
+                      "length": 18.5,
+                      "start": [
+                        40,
+                        21
+                      ],
+                      "success": true
+                    }
+                  },
+                  "robot_radius_m": 1.0,
+                  "shortest_path_length_m": 18.5,
+                  "start": [
+                    20.024044,
+                    29.206724
+                  ],
+                  "waypoint_count": 3
+                },
+                "classification": "hard_but_solvable",
+                "evidence": {
+                  "difficulty_analysis": {
+                    "role": "optional_diagnostic_evidence_only",
+                    "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+                  }
+                },
+                "goal_id": 0,
+                "reasons": [
+                  "dynamic_interaction_present"
+                ],
+                "route_id": "robot_route_0_0",
+                "spawn_id": 0
+              }
+            ],
+            "scenario_id": "classic_bottleneck_high",
+            "schema_version": "scenario_cert.v1",
+            "source": "configs/scenarios/classic_interactions.yaml"
+          },
+          "certificate_schema_version": "scenario_cert.v1",
+          "classification": "hard_but_solvable",
+          "reasons": [
+            "dynamic_interaction_present"
+          ]
+        },
+        "passed": true,
+        "status": "passed"
+      },
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 131
+    },
+    {
+      "actor_free_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 700,
+          "record_excerpt": {
+            "scenario_id": "classic_realworld_double_bottleneck_high",
+            "seed": 201,
+            "termination_reason": "collision"
+          },
+          "seed": 201,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "extended_time_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 1400,
+          "record_excerpt": {
+            "scenario_id": "classic_realworld_double_bottleneck_high",
+            "seed": 201,
+            "termination_reason": "collision"
+          },
+          "seed": 201,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "family_id": "bottleneck",
+      "oracle_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 700,
+          "record_excerpt": {
+            "scenario_id": "classic_realworld_double_bottleneck_high",
+            "seed": 201,
+            "termination_reason": "collision"
+          },
+          "seed": 201,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "route_feasible": {
+        "blocker": null,
+        "evidence": {
+          "benchmark_eligibility": "eligible",
+          "certificate": {
+            "benchmark_eligibility": "eligible",
+            "checks": {
+              "all_routes_benchmark_eligible": true,
+              "route_count": 1,
+              "settings": {
+                "hard_clearance_margin_m": 0.35,
+                "hard_path_length_ratio": 1.5,
+                "hard_turn_count": 3,
+                "knife_edge_clearance_margin_m": 0.15,
+                "knife_edge_path_length_ratio": 2.5,
+                "planner_cells_per_meter": 2.0
+              }
+            },
+            "classification": "hard_but_solvable",
+            "evidence": {
+              "archetype": "bottleneck",
+              "difficulty_analysis": {
+                "role": "optional_diagnostic_evidence_only",
+                "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+              },
+              "scenario_fingerprint": "e01a1dcf84c76874"
+            },
+            "reasons": [
+              "dynamic_interaction_present"
+            ],
+            "route_certificates": [
+              {
+                "benchmark_eligibility": "eligible",
+                "checks": {
+                  "authored_route_length_m": 46.0,
+                  "direct_start_goal_distance_m": 46.0,
+                  "dynamic": {
+                    "dynamic_interaction_count": 8,
+                    "single_pedestrian_count": 8,
+                    "static_blocking_pedestrian_ids": []
+                  },
+                  "goal": [
+                    53.0,
+                    15.0
+                  ],
+                  "inflated_collision_free_path": true,
+                  "infrastructure": {
+                    "illegal_amv_zone_ids": [],
+                    "intersected_zone_ids": [],
+                    "zone_count": 0
+                  },
+                  "kinodynamic": {
+                    "command_limits_valid": true,
+                    "controller_semantics": "can_rotate_in_place",
+                    "minimum_turning_radius_m": 0.0,
+                    "robot_model": "DifferentialDriveSettings"
+                  },
+                  "map_name": "classic_realworld_bottleneck",
+                  "minimum_static_clearance_m": 1.0,
+                  "path_length_ratio": 1.0,
+                  "ped_radius_m": 0.4,
+                  "planned_turn_count": 0,
+                  "planned_waypoint_count": 93,
+                  "planner": {
+                    "algorithm": "a_star",
+                    "cells_per_meter": 2.0,
+                    "inflation_fallback": false,
+                    "inflation_radius_m": 1.0,
+                    "raw_info": {
+                      "cost": 92.0,
+                      "expand": {
+                        "(100, 29)": "Node((100, 29), (99, 29), 86.0, 6.0)",
+                        "(101, 29)": "Node((101, 29), (100, 29), 87.0, 5.0)",
+                        "(102, 29)": "Node((102, 29), (101, 29), 88.0, 4.0)",
+                        "(103, 29)": "Node((103, 29), (102, 29), 89.0, 3.0)",
+                        "(104, 29)": "Node((104, 29), (103, 29), 90.0, 2.0)",
+                        "(105, 29)": "Node((105, 29), (104, 29), 91.0, 1.0)",
+                        "(106, 29)": "Node((106, 29), (105, 29), 92.0, 0.0)",
+                        "(14, 29)": "Node((14, 29), None, 0, 92.0)",
+                        "(15, 29)": "Node((15, 29), (14, 29), 1.0, 91.0)",
+                        "(16, 29)": "Node((16, 29), (15, 29), 2.0, 90.0)",
+                        "(17, 29)": "Node((17, 29), (16, 29), 3.0, 89.0)",
+                        "(18, 29)": "Node((18, 29), (17, 29), 4.0, 88.0)",
+                        "(19, 29)": "Node((19, 29), (18, 29), 5.0, 87.0)",
+                        "(20, 29)": "Node((20, 29), (19, 29), 6.0, 86.0)",
+                        "(21, 29)": "Node((21, 29), (20, 29), 7.0, 85.0)",
+                        "(22, 29)": "Node((22, 29), (21, 29), 8.0, 84.0)",
+                        "(23, 29)": "Node((23, 29), (22, 29), 9.0, 83.0)",
+                        "(24, 29)": "Node((24, 29), (23, 29), 10.0, 82.0)",
+                        "(25, 29)": "Node((25, 29), (24, 29), 11.0, 81.0)",
+                        "(26, 29)": "Node((26, 29), (25, 29), 12.0, 80.0)",
+                        "(27, 29)": "Node((27, 29), (26, 29), 13.0, 79.0)",
+                        "(28, 29)": "Node((28, 29), (27, 29), 14.0, 78.0)",
+                        "(29, 29)": "Node((29, 29), (28, 29), 15.0, 77.0)",
+                        "(30, 29)": "Node((30, 29), (29, 29), 16.0, 76.0)",
+                        "(31, 29)": "Node((31, 29), (30, 29), 17.0, 75.0)",
+                        "(32, 29)": "Node((32, 29), (31, 29), 18.0, 74.0)",
+                        "(33, 29)": "Node((33, 29), (32, 29), 19.0, 73.0)",
+                        "(34, 29)": "Node((34, 29), (33, 29), 20.0, 72.0)",
+                        "(35, 29)": "Node((35, 29), (34, 29), 21.0, 71.0)",
+                        "(36, 29)": "Node((36, 29), (35, 29), 22.0, 70.0)",
+                        "(37, 29)": "Node((37, 29), (36, 29), 23.0, 69.0)",
+                        "(38, 29)": "Node((38, 29), (37, 29), 24.0, 68.0)",
+                        "(39, 29)": "Node((39, 29), (38, 29), 25.0, 67.0)",
+                        "(40, 29)": "Node((40, 29), (39, 29), 26.0, 66.0)",
+                        "(41, 29)": "Node((41, 29), (40, 29), 27.0, 65.0)",
+                        "(42, 29)": "Node((42, 29), (41, 29), 28.0, 64.0)",
+                        "(43, 29)": "Node((43, 29), (42, 29), 29.0, 63.0)",
+                        "(44, 29)": "Node((44, 29), (43, 29), 30.0, 62.0)",
+                        "(45, 29)": "Node((45, 29), (44, 29), 31.0, 61.0)",
+                        "(46, 29)": "Node((46, 29), (45, 29), 32.0, 60.0)",
+                        "(47, 29)": "Node((47, 29), (46, 29), 33.0, 59.0)",
+                        "(48, 29)": "Node((48, 29), (47, 29), 34.0, 58.0)",
+                        "(49, 29)": "Node((49, 29), (48, 29), 35.0, 57.0)",
+                        "(50, 29)": "Node((50, 29), (49, 29), 36.0, 56.0)",
+                        "(51, 29)": "Node((51, 29), (50, 29), 37.0, 55.0)",
+                        "(52, 29)": "Node((52, 29), (51, 29), 38.0, 54.0)",
+                        "(53, 29)": "Node((53, 29), (52, 29), 39.0, 53.0)",
+                        "(54, 29)": "Node((54, 29), (53, 29), 40.0, 52.0)",
+                        "(55, 29)": "Node((55, 29), (54, 29), 41.0, 51.0)",
+                        "(56, 29)": "Node((56, 29), (55, 29), 42.0, 50.0)",
+                        "(57, 29)": "Node((57, 29), (56, 29), 43.0, 49.0)",
+                        "(58, 29)": "Node((58, 29), (57, 29), 44.0, 48.0)",
+                        "(59, 29)": "Node((59, 29), (58, 29), 45.0, 47.0)",
+                        "(60, 29)": "Node((60, 29), (59, 29), 46.0, 46.0)",
+                        "(61, 29)": "Node((61, 29), (60, 29), 47.0, 45.0)",
+                        "(62, 29)": "Node((62, 29), (61, 29), 48.0, 44.0)",
+                        "(63, 29)": "Node((63, 29), (62, 29), 49.0, 43.0)",
+                        "(64, 29)": "Node((64, 29), (63, 29), 50.0, 42.0)",
+                        "(65, 29)": "Node((65, 29), (64, 29), 51.0, 41.0)",
+                        "(66, 29)": "Node((66, 29), (65, 29), 52.0, 40.0)",
+                        "(67, 29)": "Node((67, 29), (66, 29), 53.0, 39.0)",
+                        "(68, 29)": "Node((68, 29), (67, 29), 54.0, 38.0)",
+                        "(69, 29)": "Node((69, 29), (68, 29), 55.0, 37.0)",
+                        "(70, 29)": "Node((70, 29), (69, 29), 56.0, 36.0)",
+                        "(71, 29)": "Node((71, 29), (70, 29), 57.0, 35.0)",
+                        "(72, 29)": "Node((72, 29), (71, 29), 58.0, 34.0)",
+                        "(73, 29)": "Node((73, 29), (72, 29), 59.0, 33.0)",
+                        "(74, 29)": "Node((74, 29), (73, 29), 60.0, 32.0)",
+                        "(75, 29)": "Node((75, 29), (74, 29), 61.0, 31.0)",
+                        "(76, 29)": "Node((76, 29), (75, 29), 62.0, 30.0)",
+                        "(77, 29)": "Node((77, 29), (76, 29), 63.0, 29.0)",
+                        "(78, 29)": "Node((78, 29), (77, 29), 64.0, 28.0)",
+                        "(79, 29)": "Node((79, 29), (78, 29), 65.0, 27.0)",
+                        "(80, 29)": "Node((80, 29), (79, 29), 66.0, 26.0)",
+                        "(81, 29)": "Node((81, 29), (80, 29), 67.0, 25.0)",
+                        "(82, 29)": "Node((82, 29), (81, 29), 68.0, 24.0)",
+                        "(83, 29)": "Node((83, 29), (82, 29), 69.0, 23.0)",
+                        "(84, 29)": "Node((84, 29), (83, 29), 70.0, 22.0)",
+                        "(85, 29)": "Node((85, 29), (84, 29), 71.0, 21.0)",
+                        "(86, 29)": "Node((86, 29), (85, 29), 72.0, 20.0)",
+                        "(87, 29)": "Node((87, 29), (86, 29), 73.0, 19.0)",
+                        "(88, 29)": "Node((88, 29), (87, 29), 74.0, 18.0)",
+                        "(89, 29)": "Node((89, 29), (88, 29), 75.0, 17.0)",
+                        "(90, 29)": "Node((90, 29), (89, 29), 76.0, 16.0)",
+                        "(91, 29)": "Node((91, 29), (90, 29), 77.0, 15.0)",
+                        "(92, 29)": "Node((92, 29), (91, 29), 78.0, 14.0)",
+                        "(93, 29)": "Node((93, 29), (92, 29), 79.0, 13.0)",
+                        "(94, 29)": "Node((94, 29), (93, 29), 80.0, 12.0)",
+                        "(95, 29)": "Node((95, 29), (94, 29), 81.0, 11.0)",
+                        "(96, 29)": "Node((96, 29), (95, 29), 82.0, 10.0)",
+                        "(97, 29)": "Node((97, 29), (96, 29), 83.0, 9.0)",
+                        "(98, 29)": "Node((98, 29), (97, 29), 84.0, 8.0)",
+                        "(99, 29)": "Node((99, 29), (98, 29), 85.0, 7.0)"
+                      },
+                      "goal": [
+                        106,
+                        29
+                      ],
+                      "inflation_cells": 2,
+                      "inflation_meters": 1.0,
+                      "length": 46.0,
+                      "start": [
+                        14,
+                        29
+                      ],
+                      "success": true
+                    }
+                  },
+                  "robot_radius_m": 1.0,
+                  "shortest_path_length_m": 46.0,
+                  "start": [
+                    7.0,
+                    15.0
+                  ],
+                  "waypoint_count": 6
+                },
+                "classification": "hard_but_solvable",
+                "evidence": {
+                  "difficulty_analysis": {
+                    "role": "optional_diagnostic_evidence_only",
+                    "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+                  }
+                },
+                "goal_id": 0,
+                "reasons": [
+                  "dynamic_interaction_present"
+                ],
+                "route_id": "robot_route_0_0",
+                "spawn_id": 0
+              }
+            ],
+            "scenario_id": "classic_realworld_double_bottleneck_high",
+            "schema_version": "scenario_cert.v1",
+            "source": "configs/scenarios/classic_interactions.yaml"
+          },
+          "certificate_schema_version": "scenario_cert.v1",
+          "classification": "hard_but_solvable",
+          "reasons": [
+            "dynamic_interaction_present"
+          ]
+        },
+        "passed": true,
+        "status": "passed"
+      },
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seed": 201
+    },
+    {
+      "actor_free_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 600,
+          "record_excerpt": {
+            "scenario_id": "classic_cross_trap_low",
+            "seed": 101,
+            "termination_reason": "collision"
+          },
+          "seed": 101,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "extended_time_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 1200,
+          "record_excerpt": {
+            "scenario_id": "classic_cross_trap_low",
+            "seed": 101,
+            "termination_reason": "collision"
+          },
+          "seed": 101,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "family_id": "cross_trap",
+      "oracle_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 600,
+          "record_excerpt": {
+            "scenario_id": "classic_cross_trap_low",
+            "seed": 101,
+            "termination_reason": "collision"
+          },
+          "seed": 101,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "route_feasible": {
+        "blocker": null,
+        "evidence": {
+          "benchmark_eligibility": "stress_only",
+          "certificate": {
+            "benchmark_eligibility": "stress_only",
+            "checks": {
+              "all_routes_benchmark_eligible": false,
+              "route_count": 1,
+              "settings": {
+                "hard_clearance_margin_m": 0.35,
+                "hard_path_length_ratio": 1.5,
+                "hard_turn_count": 3,
+                "knife_edge_clearance_margin_m": 0.15,
+                "knife_edge_path_length_ratio": 2.5,
+                "planner_cells_per_meter": 2.0
+              }
+            },
+            "classification": "knife_edge",
+            "evidence": {
+              "archetype": "cross_trap",
+              "difficulty_analysis": {
+                "role": "optional_diagnostic_evidence_only",
+                "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+              },
+              "plausibility": {
+                "method": null,
+                "metrics": {
+                  "force_q95": 0.9427403086029689,
+                  "mean_distance": 5.9319317460258425,
+                  "min_distance": 1.8367418245009373,
+                  "ped_force_mean": 0.2749112167516942,
+                  "robot_ped_within_5m_frac": 0.4599224586174748
+                },
+                "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00",
+                "notes": null,
+                "status": "verified",
+                "verified_by": "ll7",
+                "verified_on": "2026-01-29"
+              },
+              "scenario_fingerprint": "46cb9a78c4658964"
+            },
+            "reasons": [
+              "solvable_but_near_certification_threshold"
+            ],
+            "route_certificates": [
+              {
+                "benchmark_eligibility": "stress_only",
+                "checks": {
+                  "authored_route_length_m": 11.682097414420067,
+                  "direct_start_goal_distance_m": 11.682097414420067,
+                  "dynamic": {
+                    "single_pedestrian_count": 0,
+                    "static_blocking_pedestrian_ids": []
+                  },
+                  "goal": [
+                    18.86,
+                    29.46
+                  ],
+                  "inflated_collision_free_path": true,
+                  "infrastructure": {
+                    "illegal_amv_zone_ids": [],
+                    "intersected_zone_ids": [],
+                    "zone_count": 0
+                  },
+                  "kinodynamic": {
+                    "command_limits_valid": true,
+                    "controller_semantics": "can_rotate_in_place",
+                    "minimum_turning_radius_m": 0.0,
+                    "robot_model": "DifferentialDriveSettings"
+                  },
+                  "map_name": "classic_cross_trap",
+                  "minimum_static_clearance_m": 0.01327694677399971,
+                  "path_length_ratio": 0.9684655158772623,
+                  "ped_radius_m": 0.4,
+                  "planned_turn_count": 0,
+                  "planned_waypoint_count": 17,
+                  "planner": {
+                    "algorithm": "a_star",
+                    "cells_per_meter": 2.0,
+                    "inflation_fallback": false,
+                    "inflation_radius_m": 1.0,
+                    "raw_info": {
+                      "cost": 22.62741699796953,
+                      "expand": {
+                        "(21, 37)": "Node((21, 37), None, 0, 22.627416997969522)",
+                        "(22, 36)": "Node((22, 36), (21, 37), 1.4142135623730951, 21.213203435596427)",
+                        "(23, 35)": "Node((23, 35), (22, 36), 2.8284271247461903, 19.79898987322333)",
+                        "(24, 34)": "Node((24, 34), (23, 35), 4.242640687119286, 18.384776310850235)",
+                        "(25, 33)": "Node((25, 33), (24, 34), 5.656854249492381, 16.97056274847714)",
+                        "(26, 32)": "Node((26, 32), (25, 33), 7.0710678118654755, 15.556349186104045)",
+                        "(27, 31)": "Node((27, 31), (26, 32), 8.485281374238571, 14.142135623730951)",
+                        "(28, 30)": "Node((28, 30), (27, 31), 9.899494936611667, 12.727922061357855)",
+                        "(29, 29)": "Node((29, 29), (28, 30), 11.313708498984763, 11.313708498984761)",
+                        "(30, 28)": "Node((30, 28), (29, 29), 12.727922061357859, 9.899494936611665)",
+                        "(31, 27)": "Node((31, 27), (30, 28), 14.142135623730955, 8.48528137423857)",
+                        "(32, 26)": "Node((32, 26), (31, 27), 15.55634918610405, 7.0710678118654755)",
+                        "(33, 25)": "Node((33, 25), (32, 26), 16.970562748477146, 5.656854249492381)",
+                        "(34, 24)": "Node((34, 24), (33, 25), 18.384776310850242, 4.242640687119285)",
+                        "(35, 23)": "Node((35, 23), (34, 24), 19.798989873223338, 2.8284271247461903)",
+                        "(36, 22)": "Node((36, 22), (35, 23), 21.213203435596434, 1.4142135623730951)",
+                        "(37, 21)": "Node((37, 21), (36, 22), 22.62741699796953, 0.0)"
+                      },
+                      "goal": [
+                        37,
+                        21
+                      ],
+                      "inflation_cells": 2,
+                      "inflation_meters": 1.0,
+                      "length": 11.313708498984765,
+                      "start": [
+                        21,
+                        37
+                      ],
+                      "success": true
+                    }
+                  },
+                  "robot_radius_m": 1.0,
+                  "shortest_path_length_m": 11.313708498984761,
+                  "start": [
+                    10.69,
+                    21.11
+                  ],
+                  "waypoint_count": 2
+                },
+                "classification": "knife_edge",
+                "evidence": {
+                  "difficulty_analysis": {
+                    "role": "optional_diagnostic_evidence_only",
+                    "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+                  }
+                },
+                "goal_id": 0,
+                "reasons": [
+                  "solvable_but_near_certification_threshold"
+                ],
+                "route_id": "robot_route_0_0",
+                "spawn_id": 0
+              }
+            ],
+            "scenario_id": "classic_cross_trap_low",
+            "schema_version": "scenario_cert.v1",
+            "source": "configs/scenarios/classic_interactions.yaml"
+          },
+          "certificate_schema_version": "scenario_cert.v1",
+          "classification": "knife_edge",
+          "reasons": [
+            "solvable_but_near_certification_threshold"
+          ]
+        },
+        "passed": true,
+        "status": "passed"
+      },
+      "scenario_id": "classic_cross_trap_low",
+      "seed": 101
+    },
+    {
+      "actor_free_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 600,
+          "record_excerpt": {
+            "scenario_id": "classic_cross_trap_medium",
+            "seed": 101,
+            "termination_reason": "collision"
+          },
+          "seed": 101,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "extended_time_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 1200,
+          "record_excerpt": {
+            "scenario_id": "classic_cross_trap_medium",
+            "seed": 101,
+            "termination_reason": "collision"
+          },
+          "seed": 101,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "family_id": "cross_trap",
+      "oracle_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 600,
+          "record_excerpt": {
+            "scenario_id": "classic_cross_trap_medium",
+            "seed": 101,
+            "termination_reason": "collision"
+          },
+          "seed": 101,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "route_feasible": {
+        "blocker": null,
+        "evidence": {
+          "benchmark_eligibility": "stress_only",
+          "certificate": {
+            "benchmark_eligibility": "stress_only",
+            "checks": {
+              "all_routes_benchmark_eligible": false,
+              "route_count": 1,
+              "settings": {
+                "hard_clearance_margin_m": 0.35,
+                "hard_path_length_ratio": 1.5,
+                "hard_turn_count": 3,
+                "knife_edge_clearance_margin_m": 0.15,
+                "knife_edge_path_length_ratio": 2.5,
+                "planner_cells_per_meter": 2.0
+              }
+            },
+            "classification": "knife_edge",
+            "evidence": {
+              "archetype": "cross_trap",
+              "difficulty_analysis": {
+                "role": "optional_diagnostic_evidence_only",
+                "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+              },
+              "plausibility": {
+                "method": null,
+                "metrics": {
+                  "force_q95": 0.6445198830160026,
+                  "mean_distance": 10.950417011157608,
+                  "min_distance": 4.789576152795328,
+                  "ped_force_mean": 0.18424997393839726,
+                  "robot_ped_within_5m_frac": 0.06629362880886427
+                },
+                "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00",
+                "notes": null,
+                "status": "verified",
+                "verified_by": "ll7",
+                "verified_on": "2026-01-29"
+              },
+              "scenario_fingerprint": "c5714af64df1a8d9"
+            },
+            "reasons": [
+              "solvable_but_near_certification_threshold"
+            ],
+            "route_certificates": [
+              {
+                "benchmark_eligibility": "stress_only",
+                "checks": {
+                  "authored_route_length_m": 11.682097414420067,
+                  "direct_start_goal_distance_m": 11.682097414420067,
+                  "dynamic": {
+                    "single_pedestrian_count": 0,
+                    "static_blocking_pedestrian_ids": []
+                  },
+                  "goal": [
+                    18.86,
+                    29.46
+                  ],
+                  "inflated_collision_free_path": true,
+                  "infrastructure": {
+                    "illegal_amv_zone_ids": [],
+                    "intersected_zone_ids": [],
+                    "zone_count": 0
+                  },
+                  "kinodynamic": {
+                    "command_limits_valid": true,
+                    "controller_semantics": "can_rotate_in_place",
+                    "minimum_turning_radius_m": 0.0,
+                    "robot_model": "DifferentialDriveSettings"
+                  },
+                  "map_name": "classic_cross_trap",
+                  "minimum_static_clearance_m": 0.01327694677399971,
+                  "path_length_ratio": 0.9684655158772623,
+                  "ped_radius_m": 0.4,
+                  "planned_turn_count": 0,
+                  "planned_waypoint_count": 17,
+                  "planner": {
+                    "algorithm": "a_star",
+                    "cells_per_meter": 2.0,
+                    "inflation_fallback": false,
+                    "inflation_radius_m": 1.0,
+                    "raw_info": {
+                      "cost": 22.62741699796953,
+                      "expand": {
+                        "(21, 37)": "Node((21, 37), None, 0, 22.627416997969522)",
+                        "(22, 36)": "Node((22, 36), (21, 37), 1.4142135623730951, 21.213203435596427)",
+                        "(23, 35)": "Node((23, 35), (22, 36), 2.8284271247461903, 19.79898987322333)",
+                        "(24, 34)": "Node((24, 34), (23, 35), 4.242640687119286, 18.384776310850235)",
+                        "(25, 33)": "Node((25, 33), (24, 34), 5.656854249492381, 16.97056274847714)",
+                        "(26, 32)": "Node((26, 32), (25, 33), 7.0710678118654755, 15.556349186104045)",
+                        "(27, 31)": "Node((27, 31), (26, 32), 8.485281374238571, 14.142135623730951)",
+                        "(28, 30)": "Node((28, 30), (27, 31), 9.899494936611667, 12.727922061357855)",
+                        "(29, 29)": "Node((29, 29), (28, 30), 11.313708498984763, 11.313708498984761)",
+                        "(30, 28)": "Node((30, 28), (29, 29), 12.727922061357859, 9.899494936611665)",
+                        "(31, 27)": "Node((31, 27), (30, 28), 14.142135623730955, 8.48528137423857)",
+                        "(32, 26)": "Node((32, 26), (31, 27), 15.55634918610405, 7.0710678118654755)",
+                        "(33, 25)": "Node((33, 25), (32, 26), 16.970562748477146, 5.656854249492381)",
+                        "(34, 24)": "Node((34, 24), (33, 25), 18.384776310850242, 4.242640687119285)",
+                        "(35, 23)": "Node((35, 23), (34, 24), 19.798989873223338, 2.8284271247461903)",
+                        "(36, 22)": "Node((36, 22), (35, 23), 21.213203435596434, 1.4142135623730951)",
+                        "(37, 21)": "Node((37, 21), (36, 22), 22.62741699796953, 0.0)"
+                      },
+                      "goal": [
+                        37,
+                        21
+                      ],
+                      "inflation_cells": 2,
+                      "inflation_meters": 1.0,
+                      "length": 11.313708498984765,
+                      "start": [
+                        21,
+                        37
+                      ],
+                      "success": true
+                    }
+                  },
+                  "robot_radius_m": 1.0,
+                  "shortest_path_length_m": 11.313708498984761,
+                  "start": [
+                    10.69,
+                    21.11
+                  ],
+                  "waypoint_count": 2
+                },
+                "classification": "knife_edge",
+                "evidence": {
+                  "difficulty_analysis": {
+                    "role": "optional_diagnostic_evidence_only",
+                    "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+                  }
+                },
+                "goal_id": 0,
+                "reasons": [
+                  "solvable_but_near_certification_threshold"
+                ],
+                "route_id": "robot_route_0_0",
+                "spawn_id": 0
+              }
+            ],
+            "scenario_id": "classic_cross_trap_medium",
+            "schema_version": "scenario_cert.v1",
+            "source": "configs/scenarios/classic_interactions.yaml"
+          },
+          "certificate_schema_version": "scenario_cert.v1",
+          "classification": "knife_edge",
+          "reasons": [
+            "solvable_but_near_certification_threshold"
+          ]
+        },
+        "passed": true,
+        "status": "passed"
+      },
+      "scenario_id": "classic_cross_trap_medium",
+      "seed": 101
+    },
+    {
+      "actor_free_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 600,
+          "record_excerpt": {
+            "scenario_id": "classic_cross_trap_high",
+            "seed": 101,
+            "termination_reason": "collision"
+          },
+          "seed": 101,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "extended_time_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 1200,
+          "record_excerpt": {
+            "scenario_id": "classic_cross_trap_high",
+            "seed": 101,
+            "termination_reason": "collision"
+          },
+          "seed": 101,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "family_id": "cross_trap",
+      "oracle_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 600,
+          "record_excerpt": {
+            "scenario_id": "classic_cross_trap_high",
+            "seed": 101,
+            "termination_reason": "collision"
+          },
+          "seed": 101,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "route_feasible": {
+        "blocker": null,
+        "evidence": {
+          "benchmark_eligibility": "stress_only",
+          "certificate": {
+            "benchmark_eligibility": "stress_only",
+            "checks": {
+              "all_routes_benchmark_eligible": false,
+              "route_count": 1,
+              "settings": {
+                "hard_clearance_margin_m": 0.35,
+                "hard_path_length_ratio": 1.5,
+                "hard_turn_count": 3,
+                "knife_edge_clearance_margin_m": 0.15,
+                "knife_edge_path_length_ratio": 2.5,
+                "planner_cells_per_meter": 2.0
+              }
+            },
+            "classification": "knife_edge",
+            "evidence": {
+              "archetype": "cross_trap",
+              "difficulty_analysis": {
+                "role": "optional_diagnostic_evidence_only",
+                "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+              },
+              "plausibility": {
+                "method": null,
+                "metrics": {
+                  "force_q95": 0.739349157779526,
+                  "mean_distance": 10.02981557058951,
+                  "min_distance": 2.8766785893771702,
+                  "ped_force_mean": 0.19881092600791625,
+                  "robot_ped_within_5m_frac": 0.17466666666666666
+                },
+                "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00",
+                "notes": null,
+                "status": "verified",
+                "verified_by": "ll7",
+                "verified_on": "2026-01-29"
+              },
+              "scenario_fingerprint": "e87ee4e045cae194"
+            },
+            "reasons": [
+              "solvable_but_near_certification_threshold"
+            ],
+            "route_certificates": [
+              {
+                "benchmark_eligibility": "stress_only",
+                "checks": {
+                  "authored_route_length_m": 11.682097414420067,
+                  "direct_start_goal_distance_m": 11.682097414420067,
+                  "dynamic": {
+                    "single_pedestrian_count": 0,
+                    "static_blocking_pedestrian_ids": []
+                  },
+                  "goal": [
+                    18.86,
+                    29.46
+                  ],
+                  "inflated_collision_free_path": true,
+                  "infrastructure": {
+                    "illegal_amv_zone_ids": [],
+                    "intersected_zone_ids": [],
+                    "zone_count": 0
+                  },
+                  "kinodynamic": {
+                    "command_limits_valid": true,
+                    "controller_semantics": "can_rotate_in_place",
+                    "minimum_turning_radius_m": 0.0,
+                    "robot_model": "DifferentialDriveSettings"
+                  },
+                  "map_name": "classic_cross_trap",
+                  "minimum_static_clearance_m": 0.01327694677399971,
+                  "path_length_ratio": 0.9684655158772623,
+                  "ped_radius_m": 0.4,
+                  "planned_turn_count": 0,
+                  "planned_waypoint_count": 17,
+                  "planner": {
+                    "algorithm": "a_star",
+                    "cells_per_meter": 2.0,
+                    "inflation_fallback": false,
+                    "inflation_radius_m": 1.0,
+                    "raw_info": {
+                      "cost": 22.62741699796953,
+                      "expand": {
+                        "(21, 37)": "Node((21, 37), None, 0, 22.627416997969522)",
+                        "(22, 36)": "Node((22, 36), (21, 37), 1.4142135623730951, 21.213203435596427)",
+                        "(23, 35)": "Node((23, 35), (22, 36), 2.8284271247461903, 19.79898987322333)",
+                        "(24, 34)": "Node((24, 34), (23, 35), 4.242640687119286, 18.384776310850235)",
+                        "(25, 33)": "Node((25, 33), (24, 34), 5.656854249492381, 16.97056274847714)",
+                        "(26, 32)": "Node((26, 32), (25, 33), 7.0710678118654755, 15.556349186104045)",
+                        "(27, 31)": "Node((27, 31), (26, 32), 8.485281374238571, 14.142135623730951)",
+                        "(28, 30)": "Node((28, 30), (27, 31), 9.899494936611667, 12.727922061357855)",
+                        "(29, 29)": "Node((29, 29), (28, 30), 11.313708498984763, 11.313708498984761)",
+                        "(30, 28)": "Node((30, 28), (29, 29), 12.727922061357859, 9.899494936611665)",
+                        "(31, 27)": "Node((31, 27), (30, 28), 14.142135623730955, 8.48528137423857)",
+                        "(32, 26)": "Node((32, 26), (31, 27), 15.55634918610405, 7.0710678118654755)",
+                        "(33, 25)": "Node((33, 25), (32, 26), 16.970562748477146, 5.656854249492381)",
+                        "(34, 24)": "Node((34, 24), (33, 25), 18.384776310850242, 4.242640687119285)",
+                        "(35, 23)": "Node((35, 23), (34, 24), 19.798989873223338, 2.8284271247461903)",
+                        "(36, 22)": "Node((36, 22), (35, 23), 21.213203435596434, 1.4142135623730951)",
+                        "(37, 21)": "Node((37, 21), (36, 22), 22.62741699796953, 0.0)"
+                      },
+                      "goal": [
+                        37,
+                        21
+                      ],
+                      "inflation_cells": 2,
+                      "inflation_meters": 1.0,
+                      "length": 11.313708498984765,
+                      "start": [
+                        21,
+                        37
+                      ],
+                      "success": true
+                    }
+                  },
+                  "robot_radius_m": 1.0,
+                  "shortest_path_length_m": 11.313708498984761,
+                  "start": [
+                    10.69,
+                    21.11
+                  ],
+                  "waypoint_count": 2
+                },
+                "classification": "knife_edge",
+                "evidence": {
+                  "difficulty_analysis": {
+                    "role": "optional_diagnostic_evidence_only",
+                    "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+                  }
+                },
+                "goal_id": 0,
+                "reasons": [
+                  "solvable_but_near_certification_threshold"
+                ],
+                "route_id": "robot_route_0_0",
+                "spawn_id": 0
+              }
+            ],
+            "scenario_id": "classic_cross_trap_high",
+            "schema_version": "scenario_cert.v1",
+            "source": "configs/scenarios/classic_interactions.yaml"
+          },
+          "certificate_schema_version": "scenario_cert.v1",
+          "classification": "knife_edge",
+          "reasons": [
+            "solvable_but_near_certification_threshold"
+          ]
+        },
+        "passed": true,
+        "status": "passed"
+      },
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 101
+    },
+    {
+      "actor_free_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 500,
+          "record_excerpt": {
+            "scenario_id": "classic_head_on_corridor_low",
+            "seed": 111,
+            "termination_reason": "success"
+          },
+          "seed": 111,
+          "success_reason": "metrics_success_true",
+          "termination_reason": "success"
+        },
+        "passed": true,
+        "status": "passed"
+      },
+      "extended_time_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 1000,
+          "record_excerpt": {
+            "scenario_id": "classic_head_on_corridor_low",
+            "seed": 111,
+            "termination_reason": "success"
+          },
+          "seed": 111,
+          "success_reason": "metrics_success_true",
+          "termination_reason": "success"
+        },
+        "passed": true,
+        "status": "passed"
+      },
+      "family_id": "head_on_corridor",
+      "oracle_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 500,
+          "record_excerpt": {
+            "scenario_id": "classic_head_on_corridor_low",
+            "seed": 111,
+            "termination_reason": "success"
+          },
+          "seed": 111,
+          "success_reason": "metrics_success_true",
+          "termination_reason": "success"
+        },
+        "passed": true,
+        "status": "passed"
+      },
+      "route_feasible": {
+        "blocker": null,
+        "evidence": {
+          "benchmark_eligibility": "eligible",
+          "certificate": {
+            "benchmark_eligibility": "eligible",
+            "checks": {
+              "all_routes_benchmark_eligible": true,
+              "route_count": 1,
+              "settings": {
+                "hard_clearance_margin_m": 0.35,
+                "hard_path_length_ratio": 1.5,
+                "hard_turn_count": 3,
+                "knife_edge_clearance_margin_m": 0.15,
+                "knife_edge_path_length_ratio": 2.5,
+                "planner_cells_per_meter": 2.0
+              }
+            },
+            "classification": "hard_but_solvable",
+            "evidence": {
+              "archetype": "head_on_corridor",
+              "difficulty_analysis": {
+                "role": "optional_diagnostic_evidence_only",
+                "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+              },
+              "plausibility": {
+                "method": null,
+                "metrics": {
+                  "force_q95": 0.44534841830005495,
+                  "mean_distance": 8.148975829981278,
+                  "min_distance": 2.0121961320698123,
+                  "ped_force_mean": 0.13192844736924741,
+                  "robot_ped_within_5m_frac": 0.403654650834825
+                },
+                "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00",
+                "notes": null,
+                "status": "verified",
+                "verified_by": "ll7",
+                "verified_on": "2026-01-30"
+              },
+              "scenario_fingerprint": "6e6bb99139b496e6"
+            },
+            "reasons": [
+              "solvable_with_hardness_caveat"
+            ],
+            "route_certificates": [
+              {
+                "benchmark_eligibility": "eligible",
+                "checks": {
+                  "authored_route_length_m": 24.05469207267486,
+                  "direct_start_goal_distance_m": 24.05469207267486,
+                  "dynamic": {
+                    "single_pedestrian_count": 0,
+                    "static_blocking_pedestrian_ids": []
+                  },
+                  "goal": [
+                    19.179178,
+                    31.825107
+                  ],
+                  "inflated_collision_free_path": true,
+                  "infrastructure": {
+                    "illegal_amv_zone_ids": [],
+                    "intersected_zone_ids": [],
+                    "zone_count": 0
+                  },
+                  "kinodynamic": {
+                    "command_limits_valid": true,
+                    "controller_semantics": "can_rotate_in_place",
+                    "minimum_turning_radius_m": 0.0,
+                    "robot_model": "DifferentialDriveSettings"
+                  },
+                  "map_name": "classic_head_on_corridor",
+                  "minimum_static_clearance_m": 5.174893000000002,
+                  "path_length_ratio": 1.0630386676582384,
+                  "ped_radius_m": 0.4,
+                  "planned_turn_count": 8,
+                  "planned_waypoint_count": 48,
+                  "planner": {
+                    "algorithm": "a_star",
+                    "cells_per_meter": 2.0,
+                    "inflation_fallback": false,
+                    "inflation_radius_m": 1.0,
+                    "raw_info": {
+                      "cost": 51.14213562373095,
+                      "expand": {
+                        "(24, 55)": "Node((24, 55), (24, 56), 9.65685424949238, 41.43669871020132)",
+                        "(24, 56)": "Node((24, 56), (25, 57), 8.65685424949238, 42.37924020083418)",
+                        "(24, 57)": "Node((24, 57), (25, 58), 7.65685424949238, 43.32435804486894)",
+                        "(24, 58)": "Node((24, 58), (24, 59), 6.656854249492381, 44.27188724235731)",
+                        "(24, 59)": "Node((24, 59), (25, 60), 5.656854249492381, 45.221676218380054)",
+                        "(25, 44)": "Node((25, 44), (25, 45), 20.242640687119284, 30.870698080866262)",
+                        "(25, 45)": "Node((25, 45), (25, 46), 19.242640687119284, 31.78049716414141)",
+                        "(25, 46)": "Node((25, 46), (25, 47), 18.242640687119284, 32.69556544854363)",
+                        "(25, 47)": "Node((25, 47), (25, 48), 17.242640687119284, 33.61547262794322)",
+                        "(25, 48)": "Node((25, 48), (25, 49), 16.242640687119284, 34.539832078341085)",
+                        "(25, 49)": "Node((25, 49), (25, 50), 15.242640687119286, 35.4682957019364)",
+                        "(25, 50)": "Node((25, 50), (25, 51), 14.242640687119286, 36.40054944640259)",
+                        "(25, 51)": "Node((25, 51), (25, 52), 13.242640687119286, 37.33630940518894)",
+                        "(25, 52)": "Node((25, 52), (26, 53), 12.242640687119286, 38.27531841800928)",
+                        "(25, 53)": "Node((25, 53), (26, 54), 11.242640687119286, 39.21734310225516)",
+                        "(25, 54)": "Node((25, 54), (26, 55), 10.242640687119286, 40.162171256046406)",
+                        "(25, 55)": "Node((25, 55), (26, 56), 9.242640687119286, 41.10960958218893)",
+                        "(25, 56)": "Node((25, 56), (26, 57), 8.242640687119286, 42.05948168962618)",
+                        "(25, 57)": "Node((25, 57), (26, 58), 7.242640687119285, 43.01162633521314)",
+                        "(25, 58)": "Node((25, 58), (26, 59), 6.242640687119285, 43.965895873961216)",
+                        "(25, 59)": "Node((25, 59), (26, 60), 5.242640687119286, 44.9221548904324)",
+                        "(25, 60)": "Node((25, 60), (26, 61), 4.242640687119286, 45.880278987817846)",
+                        "(25, 61)": "Node((25, 61), (26, 61), 3.8284271247461903, 46.84015371452148)",
+                        "(26, 37)": "Node((26, 37), (26, 38), 26.82842712474619, 24.186773244895647)",
+                        "(26, 38)": "Node((26, 38), (26, 39), 25.82842712474619, 25.059928172283335)",
+                        "(26, 39)": "Node((26, 39), (26, 40), 24.82842712474619, 25.942243542145693)",
+                        "(26, 40)": "Node((26, 40), (27, 41), 23.82842712474619, 26.832815729997478)",
+                        "(26, 41)": "Node((26, 41), (27, 42), 22.82842712474619, 27.730849247724095)",
+                        "(26, 42)": "Node((26, 42), (27, 43), 21.82842712474619, 28.635642126552707)",
+                        "(26, 43)": "Node((26, 43), (27, 44), 20.82842712474619, 29.546573405388315)",
+                        "(26, 44)": "Node((26, 44), (27, 45), 19.82842712474619, 30.463092423455635)",
+                        "(26, 45)": "Node((26, 45), (27, 46), 18.82842712474619, 31.38470965295043)",
+                        "(26, 46)": "Node((26, 46), (27, 47), 17.82842712474619, 32.31098884280702)",
+                        "(26, 47)": "Node((26, 47), (27, 48), 16.82842712474619, 33.24154027718932)",
+                        "(26, 48)": "Node((26, 48), (27, 49), 15.828427124746192, 34.17601498127012)",
+                        "(26, 49)": "Node((26, 49), (27, 50), 14.828427124746192, 35.11409973215888)",
+                        "(26, 50)": "Node((26, 50), (27, 51), 13.828427124746192, 36.05551275463989)",
+                        "(26, 51)": "Node((26, 51), (27, 52), 12.828427124746192, 37.0)",
+                        "(26, 52)": "Node((26, 52), (26, 53), 11.82842712474619, 37.94733192202055)",
+                        "(26, 53)": "Node((26, 53), (26, 54), 10.82842712474619, 38.897300677553446)",
+                        "(26, 54)": "Node((26, 54), (26, 55), 9.82842712474619, 39.84971769034255)",
+                        "(26, 55)": "Node((26, 55), (27, 56), 8.82842712474619, 40.80441152620633)",
+                        "(26, 56)": "Node((26, 56), (27, 57), 7.82842712474619, 41.7612260356422)",
+                        "(26, 57)": "Node((26, 57), (27, 58), 6.82842712474619, 42.720018726587654)",
+                        "(26, 58)": "Node((26, 58), (26, 59), 5.82842712474619, 43.68065933568311)",
+                        "(26, 59)": "Node((26, 59), (26, 60), 4.82842712474619, 44.64302857109943)",
+                        "(26, 60)": "Node((26, 60), (26, 61), 3.8284271247461903, 45.60701700396552)",
+                        "(26, 61)": "Node((26, 61), (27, 62), 2.8284271247461903, 46.57252408878007)",
+                        "(26, 62)": "Node((26, 62), (27, 63), 2.414213562373095, 47.53945729601885)",
+                        "(26, 63)": "Node((26, 63), (27, 63), 2.0, 48.507731342539614)",
+                        "(27, 31)": "Node((27, 31), (27, 32), 32.41421356237309, 18.601075237738275)",
+                        "(27, 32)": "Node((27, 32), (28, 33), 31.414213562373096, 19.4164878389476)",
+                        "(27, 33)": "Node((27, 33), (28, 34), 30.414213562373096, 20.248456731316587)",
+                        "(27, 34)": "Node((27, 34), (28, 35), 29.414213562373096, 21.095023109728988)",
+                        "(27, 35)": "Node((27, 35), (28, 36), 28.414213562373096, 21.95449840010015)",
+                        "(27, 36)": "Node((27, 36), (28, 37), 27.414213562373096, 22.825424421026653)",
+                        "(27, 37)": "Node((27, 37), (28, 38), 26.414213562373096, 23.706539182259394)",
+                        "(27, 38)": "Node((27, 38), (28, 39), 25.414213562373096, 24.596747752497688)",
+                        "(27, 39)": "Node((27, 39), (28, 40), 24.414213562373096, 25.495097567963924)",
+                        "(27, 40)": "Node((27, 40), (27, 41), 23.414213562373096, 26.40075756488817)",
+                        "(27, 41)": "Node((27, 41), (27, 42), 22.414213562373096, 27.313000567495326)",
+                        "(27, 42)": "Node((27, 42), (27, 43), 21.414213562373096, 28.231188426986208)",
+                        "(27, 43)": "Node((27, 43), (27, 44), 20.414213562373096, 29.154759474226502)",
+                        "(27, 44)": "Node((27, 44), (27, 45), 19.414213562373096, 30.083217912982647)",
+                        "(27, 45)": "Node((27, 45), (27, 46), 18.414213562373096, 31.016124838541646)",
+                        "(27, 46)": "Node((27, 46), (27, 47), 17.414213562373096, 31.953090617340916)",
+                        "(27, 47)": "Node((27, 47), (28, 48), 16.414213562373096, 32.89376840679705)",
+                        "(27, 48)": "Node((27, 48), (28, 49), 15.414213562373096, 33.83784863137726)",
+                        "(27, 49)": "Node((27, 49), (28, 50), 14.414213562373096, 34.785054261852174)",
+                        "(27, 50)": "Node((27, 50), (28, 51), 13.414213562373096, 35.73513677041127)",
+                        "(27, 51)": "Node((27, 51), (28, 52), 12.414213562373096, 36.68787265568828)",
+                        "(27, 52)": "Node((27, 52), (27, 53), 11.414213562373096, 37.64306044943742)",
+                        "(27, 53)": "Node((27, 53), (28, 54), 10.414213562373096, 38.600518131237564)",
+                        "(27, 54)": "Node((27, 54), (28, 55), 9.414213562373096, 39.56008088970496)",
+                        "(27, 55)": "Node((27, 55), (27, 56), 8.414213562373096, 40.52159917870962)",
+                        "(27, 56)": "Node((27, 56), (27, 57), 7.414213562373095, 41.48493702538308)",
+                        "(27, 57)": "Node((27, 57), (27, 58), 6.414213562373095, 42.44997055358225)",
+                        "(27, 58)": "Node((27, 58), (27, 59), 5.414213562373095, 43.41658669218482)",
+                        "(27, 59)": "Node((27, 59), (27, 60), 4.414213562373095, 44.384682042344295)",
+                        "(27, 60)": "Node((27, 60), (28, 61), 3.414213562373095, 45.35416188179427)",
+                        "(27, 61)": "Node((27, 61), (27, 62), 2.414213562373095, 46.32493928760188)",
+                        "(27, 62)": "Node((27, 62), (28, 63), 1.4142135623730951, 47.29693436154187)",
+                        "(27, 63)": "Node((27, 63), (28, 63), 1.0, 48.27007354458868)",
+                        "(27, 64)": "Node((27, 64), (28, 63), 1.4142135623730951, 49.24428900898052)",
+                        "(28, 27)": "Node((28, 27), (28, 28), 36.0, 14.866068747318506)",
+                        "(28, 28)": "Node((28, 28), (28, 29), 35.0, 15.620499351813308)",
+                        "(28, 29)": "Node((28, 29), (28, 30), 34.0, 16.401219466856727)",
+                        "(28, 30)": "Node((28, 30), (28, 31), 33.0, 17.204650534085253)",
+                        "(28, 31)": "Node((28, 31), (28, 32), 32.0, 18.027756377319946)",
+                        "(28, 32)": "Node((28, 32), (28, 33), 31.0, 18.867962264113206)",
+                        "(28, 33)": "Node((28, 33), (28, 34), 30.0, 19.72308292331602)",
+                        "(28, 34)": "Node((28, 34), (28, 35), 29.0, 20.591260281974)",
+                        "(28, 35)": "Node((28, 35), (28, 36), 28.0, 21.470910553583888)",
+                        "(28, 36)": "Node((28, 36), (28, 37), 27.0, 22.360679774997898)",
+                        "(28, 37)": "Node((28, 37), (28, 38), 26.0, 23.259406699226016)",
+                        "(28, 38)": "Node((28, 38), (28, 39), 25.0, 24.166091947189145)",
+                        "(28, 39)": "Node((28, 39), (28, 40), 24.0, 25.079872407968907)",
+                        "(28, 40)": "Node((28, 40), (28, 41), 23.0, 26.0)",
+                        "(28, 41)": "Node((28, 41), (28, 42), 22.0, 26.92582403567252)",
+                        "(28, 42)": "Node((28, 42), (28, 43), 21.0, 27.85677655436824)",
+                        "(28, 43)": "Node((28, 43), (28, 44), 20.0, 28.792360097775937)",
+                        "(28, 44)": "Node((28, 44), (28, 45), 19.0, 29.732137494637012)",
+                        "(28, 45)": "Node((28, 45), (28, 46), 18.0, 30.675723300355934)",
+                        "(28, 46)": "Node((28, 46), (28, 47), 17.0, 31.622776601683793)",
+                        "(28, 47)": "Node((28, 47), (28, 48), 16.0, 32.57299494980466)",
+                        "(28, 48)": "Node((28, 48), (28, 49), 15.0, 33.52610922848042)",
+                        "(28, 49)": "Node((28, 49), (28, 50), 14.0, 34.48187929913333)",
+                        "(28, 50)": "Node((28, 50), (28, 51), 13.0, 35.4400902933387)",
+                        "(28, 51)": "Node((28, 51), (28, 52), 12.0, 36.40054944640259)",
+                        "(28, 52)": "Node((28, 52), (28, 53), 11.0, 37.36308338453881)",
+                        "(28, 53)": "Node((28, 53), (28, 54), 10.0, 38.3275357934736)",
+                        "(28, 54)": "Node((28, 54), (28, 55), 9.0, 39.293765408777)",
+                        "(28, 55)": "Node((28, 55), (28, 56), 8.0, 40.26164427839479)",
+                        "(28, 56)": "Node((28, 56), (28, 57), 7.0, 41.23105625617661)",
+                        "(28, 57)": "Node((28, 57), (28, 58), 6.0, 42.20189569201838)",
+                        "(28, 58)": "Node((28, 58), (28, 59), 5.0, 43.174066289845804)",
+                        "(28, 59)": "Node((28, 59), (28, 60), 4.0, 44.14748010928823)",
+                        "(28, 60)": "Node((28, 60), (28, 61), 3.0, 45.12205669071391)",
+                        "(28, 61)": "Node((28, 61), (28, 62), 2.0, 46.09772228646444)",
+                        "(28, 62)": "Node((28, 62), (28, 63), 1.0, 47.07440918375928)",
+                        "(28, 63)": "Node((28, 63), None, 0, 48.05205510693585)",
+                        "(28, 64)": "Node((28, 64), (28, 63), 1.0, 49.03060268852505)",
+                        "(29, 26)": "Node((29, 26), (29, 27), 37.41421356237309, 13.45362404707371)",
+                        "(29, 27)": "Node((29, 27), (29, 28), 36.41421356237309, 14.212670403551895)",
+                        "(29, 28)": "Node((29, 28), (29, 29), 35.41421356237309, 15.0)",
+                        "(29, 29)": "Node((29, 29), (28, 30), 34.41421356237309, 15.811388300841896)",
+                        "(29, 30)": "Node((29, 30), (28, 31), 33.41421356237309, 16.64331697709324)",
+                        "(29, 31)": "Node((29, 31), (28, 32), 32.41421356237309, 17.4928556845359)",
+                        "(29, 32)": "Node((29, 32), (28, 33), 31.414213562373096, 18.35755975068582)",
+                        "(29, 33)": "Node((29, 33), (28, 34), 30.414213562373096, 19.235384061671343)",
+                        "(29, 34)": "Node((29, 34), (28, 35), 29.414213562373096, 20.12461179749811)",
+                        "(29, 35)": "Node((29, 35), (28, 36), 28.414213562373096, 21.02379604162864)",
+                        "(29, 36)": "Node((29, 36), (28, 37), 27.414213562373096, 21.93171219946131)",
+                        "(29, 37)": "Node((29, 37), (29, 38), 26.414213562373096, 22.847319317591726)",
+                        "(29, 38)": "Node((29, 38), (29, 39), 25.414213562373096, 23.769728648009426)",
+                        "(29, 39)": "Node((29, 39), (29, 40), 24.414213562373096, 24.698178070456937)",
+                        "(29, 40)": "Node((29, 40), (28, 41), 23.414213562373096, 25.632011235952593)",
+                        "(29, 41)": "Node((29, 41), (29, 42), 22.414213562373096, 26.570660511172846)",
+                        "(29, 42)": "Node((29, 42), (29, 43), 21.414213562373096, 27.51363298439521)",
+                        "(29, 43)": "Node((29, 43), (29, 44), 20.414213562373096, 28.460498941515414)",
+                        "(29, 44)": "Node((29, 44), (29, 45), 19.414213562373096, 29.410882339705484)",
+                        "(29, 45)": "Node((29, 45), (29, 46), 18.414213562373096, 30.364452901377952)",
+                        "(29, 46)": "Node((29, 46), (29, 47), 17.414213562373096, 31.32091952673165)",
+                        "(29, 47)": "Node((29, 47), (28, 48), 16.414213562373096, 32.28002478313795)",
+                        "(29, 48)": "Node((29, 48), (28, 49), 15.414213562373096, 33.24154027718932)",
+                        "(29, 49)": "Node((29, 49), (28, 50), 14.414213562373096, 34.20526275297414)",
+                        "(29, 50)": "Node((29, 50), (28, 51), 13.414213562373096, 35.17101079013795)",
+                        "(29, 51)": "Node((29, 51), (29, 52), 12.414213562373096, 36.138621999185304)",
+                        "(29, 52)": "Node((29, 52), (29, 53), 11.414213562373096, 37.107950630558946)",
+                        "(29, 53)": "Node((29, 53), (29, 54), 10.414213562373096, 38.07886552931954)",
+                        "(29, 54)": "Node((29, 54), (28, 55), 9.414213562373096, 39.05124837953327)",
+                        "(29, 55)": "Node((29, 55), (28, 56), 8.414213562373096, 40.024992192379)",
+                        "(29, 56)": "Node((29, 56), (28, 57), 7.414213562373095, 41.0)",
+                        "(29, 57)": "Node((29, 57), (28, 58), 6.414213562373095, 41.97618372363071)",
+                        "(29, 58)": "Node((29, 58), (28, 59), 5.414213562373095, 42.95346318982906)",
+                        "(29, 59)": "Node((29, 59), (28, 60), 4.414213562373095, 43.93176527297759)",
+                        "(29, 60)": "Node((29, 60), (28, 61), 3.414213562373095, 44.91102314577124)",
+                        "(29, 61)": "Node((29, 61), (28, 62), 2.414213562373095, 45.89117562233506)",
+                        "(29, 62)": "Node((29, 62), (28, 63), 1.4142135623730951, 46.87216658103186)",
+                        "(29, 63)": "Node((29, 63), (28, 63), 1.0, 47.853944456021594)",
+                        "(29, 64)": "Node((29, 64), (28, 63), 1.4142135623730951, 48.83646178829912)",
+                        "(30, 25)": "Node((30, 25), (29, 26), 38.828427124746185, 12.041594578792296)",
+                        "(30, 26)": "Node((30, 26), (30, 27), 37.828427124746185, 12.806248474865697)",
+                        "(30, 27)": "Node((30, 27), (29, 28), 36.828427124746185, 13.601470508735444)",
+                        "(30, 28)": "Node((30, 28), (29, 29), 35.828427124746185, 14.422205101855956)",
+                        "(30, 29)": "Node((30, 29), (29, 30), 34.828427124746185, 15.264337522473747)",
+                        "(30, 30)": "Node((30, 30), (29, 31), 33.828427124746185, 16.1245154965971)",
+                        "(30, 31)": "Node((30, 31), (30, 32), 32.82842712474619, 17.0)",
+                        "(30, 32)": "Node((30, 32), (29, 33), 31.82842712474619, 17.88854381999832)",
+                        "(30, 33)": "Node((30, 33), (29, 34), 30.82842712474619, 18.788294228055936)",
+                        "(30, 34)": "Node((30, 34), (29, 35), 29.82842712474619, 19.697715603592208)",
+                        "(30, 35)": "Node((30, 35), (30, 36), 28.82842712474619, 20.615528128088304)",
+                        "(30, 36)": "Node((30, 36), (30, 37), 27.82842712474619, 21.540659228538015)",
+                        "(30, 37)": "Node((30, 37), (30, 38), 26.82842712474619, 22.47220505424423)",
+                        "(30, 38)": "Node((30, 38), (30, 39), 25.82842712474619, 23.40939982143925)",
+                        "(30, 39)": "Node((30, 39), (30, 40), 24.82842712474619, 24.351591323771842)",
+                        "(30, 40)": "Node((30, 40), (30, 41), 23.82842712474619, 25.298221281347036)",
+                        "(30, 41)": "Node((30, 41), (30, 42), 22.82842712474619, 26.248809496813376)",
+                        "(30, 42)": "Node((30, 42), (29, 43), 21.82842712474619, 27.202941017470888)",
+                        "(30, 43)": "Node((30, 43), (29, 44), 20.82842712474619, 28.160255680657446)",
+                        "(30, 44)": "Node((30, 44), (30, 45), 19.82842712474619, 29.120439557122072)",
+                        "(30, 45)": "Node((30, 45), (30, 46), 18.82842712474619, 30.083217912982647)",
+                        "(30, 46)": "Node((30, 46), (30, 47), 17.82842712474619, 31.04834939252005)",
+                        "(30, 47)": "Node((30, 47), (30, 48), 16.82842712474619, 32.01562118716424)",
+                        "(30, 48)": "Node((30, 48), (30, 49), 15.828427124746192, 32.984845004941285)",
+                        "(30, 49)": "Node((30, 49), (30, 50), 14.828427124746192, 33.95585369269929)",
+                        "(30, 50)": "Node((30, 50), (30, 51), 13.828427124746192, 34.92849839314596)",
+                        "(30, 51)": "Node((30, 51), (29, 52), 12.828427124746192, 35.90264614203248)",
+                        "(30, 52)": "Node((30, 52), (29, 53), 11.828427124746192, 36.87817782917155)",
+                        "(30, 53)": "Node((30, 53), (29, 54), 10.828427124746192, 37.8549864614954)",
+                        "(30, 54)": "Node((30, 54), (29, 55), 9.828427124746192, 38.8329756778952)",
+                        "(30, 55)": "Node((30, 55), (29, 56), 8.82842712474619, 39.81205847478876)",
+                        "(30, 56)": "Node((30, 56), (29, 57), 7.82842712474619, 40.792156108742276)",
+                        "(30, 57)": "Node((30, 57), (29, 58), 6.82842712474619, 41.773197148410844)",
+                        "(30, 58)": "Node((30, 58), (29, 59), 5.82842712474619, 42.7551166528639)",
+                        "(30, 59)": "Node((30, 59), (30, 60), 4.82842712474619, 43.73785545725808)",
+                        "(30, 60)": "Node((30, 60), (29, 61), 3.82842712474619, 44.721359549995796)",
+                        "(30, 61)": "Node((30, 61), (29, 62), 2.8284271247461903, 45.70557952810576)",
+                        "(30, 62)": "Node((30, 62), (29, 62), 2.414213562373095, 46.69047011971501)",
+                        "(30, 63)": "Node((30, 63), (29, 63), 2.0, 47.67598976424087)",
+                        "(30, 64)": "Node((30, 64), (29, 63), 2.414213562373095, 48.662100242385755)",
+                        "(31, 24)": "Node((31, 24), (31, 25), 40.24264068711928, 10.63014581273465)",
+                        "(31, 25)": "Node((31, 25), (31, 26), 39.24264068711928, 11.40175425099138)",
+                        "(31, 26)": "Node((31, 26), (31, 27), 38.24264068711928, 12.206555615733702)",
+                        "(31, 27)": "Node((31, 27), (30, 28), 37.24264068711928, 13.038404810405298)",
+                        "(31, 28)": "Node((31, 28), (30, 29), 36.24264068711928, 13.892443989449804)",
+                        "(31, 29)": "Node((31, 29), (30, 30), 35.24264068711928, 14.7648230602334)",
+                        "(31, 30)": "Node((31, 30), (30, 31), 34.242640687119284, 15.652475842498529)",
+                        "(31, 31)": "Node((31, 31), (31, 32), 33.242640687119284, 16.55294535724685)",
+                        "(31, 32)": "Node((31, 32), (30, 33), 32.242640687119284, 17.46424919657298)",
+                        "(31, 33)": "Node((31, 33), (31, 34), 31.242640687119287, 18.384776310850235)",
+                        "(31, 34)": "Node((31, 34), (31, 35), 30.242640687119287, 19.313207915827967)",
+                        "(31, 35)": "Node((31, 35), (31, 36), 29.242640687119287, 20.248456731316587)",
+                        "(31, 36)": "Node((31, 36), (31, 37), 28.242640687119287, 21.18962010041709)",
+                        "(31, 37)": "Node((31, 37), (31, 38), 27.242640687119287, 22.135943621178654)",
+                        "(31, 38)": "Node((31, 38), (31, 39), 26.242640687119287, 23.08679276123039)",
+                        "(31, 39)": "Node((31, 39), (31, 40), 25.242640687119287, 24.041630560342615)",
+                        "(31, 40)": "Node((31, 40), (31, 41), 24.242640687119287, 25.0)",
+                        "(31, 41)": "Node((31, 41), (31, 42), 23.242640687119287, 25.96150997149434)",
+                        "(31, 42)": "Node((31, 42), (31, 43), 22.242640687119287, 26.92582403567252)",
+                        "(31, 43)": "Node((31, 43), (31, 44), 21.242640687119287, 27.892651361962706)",
+                        "(31, 44)": "Node((31, 44), (30, 45), 20.242640687119287, 28.861739379323623)",
+                        "(31, 45)": "Node((31, 45), (30, 46), 19.242640687119287, 29.832867780352597)",
+                        "(31, 46)": "Node((31, 46), (30, 47), 18.242640687119287, 30.805843601498726)",
+                        "(31, 47)": "Node((31, 47), (30, 48), 17.242640687119287, 31.78049716414141)",
+                        "(31, 48)": "Node((31, 48), (30, 49), 16.242640687119287, 32.7566787083184)",
+                        "(31, 49)": "Node((31, 49), (31, 50), 15.242640687119284, 33.734255586866)",
+                        "(31, 50)": "Node((31, 50), (31, 51), 14.242640687119284, 34.713109915419565)",
+                        "(31, 51)": "Node((31, 51), (31, 52), 13.242640687119284, 35.6931365951495)",
+                        "(31, 52)": "Node((31, 52), (31, 53), 12.242640687119284, 36.6742416417845)",
+                        "(31, 53)": "Node((31, 53), (31, 54), 11.242640687119284, 37.656340767525464)",
+                        "(31, 54)": "Node((31, 54), (31, 55), 10.242640687119284, 38.63935817272331)",
+                        "(31, 55)": "Node((31, 55), (31, 56), 9.242640687119284, 39.6232255123179)",
+                        "(31, 56)": "Node((31, 56), (31, 57), 8.242640687119284, 40.607881008493905)",
+                        "(31, 57)": "Node((31, 57), (31, 58), 7.242640687119285, 41.593268686170845)",
+                        "(31, 58)": "Node((31, 58), (31, 59), 6.242640687119285, 42.579337712087536)",
+                        "(31, 59)": "Node((31, 59), (30, 60), 5.242640687119285, 43.56604182158393)",
+                        "(31, 60)": "Node((31, 60), (30, 61), 4.242640687119286, 44.553338819890925)",
+                        "(31, 61)": "Node((31, 61), (30, 61), 3.8284271247461903, 45.5411901469428)",
+                        "(31, 62)": "Node((31, 62), (30, 63), 3.414213562373095, 46.52956049652737)",
+                        "(31, 63)": "Node((31, 63), (30, 63), 3.0, 47.51841748206689)",
+                        "(32, 23)": "Node((32, 23), (32, 24), 41.65685424949237, 9.219544457292887)",
+                        "(32, 24)": "Node((32, 24), (32, 25), 40.65685424949237, 10.0)",
+                        "(32, 25)": "Node((32, 25), (31, 26), 39.65685424949237, 10.816653826391969)",
+                        "(32, 26)": "Node((32, 26), (31, 27), 38.65685424949237, 11.661903789690601)",
+                        "(32, 27)": "Node((32, 27), (31, 28), 37.65685424949237, 12.529964086141668)",
+                        "(32, 28)": "Node((32, 28), (31, 29), 36.65685424949237, 13.416407864998739)",
+                        "(32, 29)": "Node((32, 29), (31, 30), 35.656854249492376, 14.317821063276353)",
+                        "(32, 30)": "Node((32, 30), (32, 31), 34.656854249492376, 15.231546211727817)",
+                        "(32, 31)": "Node((32, 31), (31, 32), 33.656854249492376, 16.15549442140351)",
+                        "(32, 32)": "Node((32, 32), (32, 33), 32.65685424949238, 17.08800749063506)",
+                        "(32, 33)": "Node((32, 33), (32, 34), 31.65685424949238, 18.027756377319946)",
+                        "(32, 34)": "Node((32, 34), (32, 35), 30.65685424949238, 18.973665961010276)",
+                        "(32, 35)": "Node((32, 35), (32, 36), 29.65685424949238, 19.924858845171276)",
+                        "(32, 36)": "Node((32, 36), (32, 37), 28.65685424949238, 20.8806130178211)",
+                        "(32, 37)": "Node((32, 37), (32, 38), 27.65685424949238, 21.840329667841555)",
+                        "(32, 38)": "Node((32, 38), (32, 39), 26.65685424949238, 22.80350850198276)",
+                        "(32, 39)": "Node((32, 39), (32, 40), 25.65685424949238, 23.769728648009426)",
+                        "(32, 40)": "Node((32, 40), (32, 41), 24.65685424949238, 24.73863375370596)",
+                        "(32, 41)": "Node((32, 41), (32, 42), 23.65685424949238, 25.709920264364882)",
+                        "(32, 42)": "Node((32, 42), (32, 43), 22.65685424949238, 26.68332812825267)",
+                        "(32, 43)": "Node((32, 43), (32, 44), 21.65685424949238, 27.65863337187866)",
+                        "(32, 44)": "Node((32, 44), (32, 45), 20.65685424949238, 28.635642126552707)",
+                        "(32, 45)": "Node((32, 45), (32, 46), 19.65685424949238, 29.614185789921695)",
+                        "(32, 46)": "Node((32, 46), (32, 47), 18.65685424949238, 30.59411708155671)",
+                        "(32, 47)": "Node((32, 47), (32, 48), 17.65685424949238, 31.575306807693888)",
+                        "(32, 48)": "Node((32, 48), (32, 49), 16.65685424949238, 32.55764119219941)",
+                        "(32, 49)": "Node((32, 49), (32, 50), 15.65685424949238, 33.54101966249684)",
+                        "(32, 50)": "Node((32, 50), (32, 51), 14.65685424949238, 34.52535300326414)",
+                        "(32, 51)": "Node((32, 51), (31, 52), 13.65685424949238, 35.510561809129406)",
+                        "(32, 52)": "Node((32, 52), (31, 53), 12.65685424949238, 36.49657518178932)",
+                        "(32, 53)": "Node((32, 53), (31, 54), 11.65685424949238, 37.48332962798263)",
+                        "(32, 54)": "Node((32, 54), (31, 55), 10.65685424949238, 38.47076812334269)",
+                        "(32, 55)": "Node((32, 55), (31, 56), 9.65685424949238, 39.45883931389772)",
+                        "(32, 56)": "Node((32, 56), (31, 57), 8.65685424949238, 40.44749683231337)",
+                        "(32, 57)": "Node((32, 57), (31, 58), 7.65685424949238, 41.43669871020132)",
+                        "(32, 58)": "Node((32, 58), (31, 59), 6.65685424949238, 42.42640687119285)",
+                        "(32, 59)": "Node((32, 59), (31, 60), 5.656854249492381, 43.41658669218482)",
+                        "(32, 60)": "Node((32, 60), (31, 60), 5.242640687119286, 44.40720662234904)",
+                        "(32, 61)": "Node((32, 61), (31, 61), 4.82842712474619, 45.39823785126467)",
+                        "(32, 62)": "Node((32, 62), (31, 63), 4.414213562373095, 46.389654018972806)",
+                        "(33, 22)": "Node((33, 22), (32, 23), 43.07106781186546, 7.810249675906654)",
+                        "(33, 23)": "Node((33, 23), (32, 24), 42.07106781186546, 8.602325267042627)",
+                        "(33, 24)": "Node((33, 24), (32, 25), 41.07106781186546, 9.433981132056603)",
+                        "(33, 25)": "Node((33, 25), (33, 26), 40.07106781186546, 10.295630140987)",
+                        "(33, 26)": "Node((33, 26), (32, 27), 39.07106781186546, 11.180339887498949)",
+                        "(33, 27)": "Node((33, 27), (32, 28), 38.07106781186546, 12.083045973594572)",
+                        "(33, 28)": "Node((33, 28), (32, 29), 37.07106781186547, 13.0)",
+                        "(33, 29)": "Node((33, 29), (33, 30), 36.07106781186547, 13.92838827718412)",
+                        "(33, 30)": "Node((33, 30), (32, 31), 35.07106781186547, 14.866068747318506)",
+                        "(33, 31)": "Node((33, 31), (32, 32), 34.071067811865476, 15.811388300841896)",
+                        "(33, 32)": "Node((33, 32), (32, 33), 33.071067811865476, 16.76305461424021)",
+                        "(33, 33)": "Node((33, 33), (33, 34), 32.071067811865476, 17.72004514666935)",
+                        "(33, 34)": "Node((33, 34), (33, 35), 31.071067811865476, 18.681541692269406)",
+                        "(33, 35)": "Node((33, 35), (33, 36), 30.071067811865476, 19.6468827043885)",
+                        "(33, 36)": "Node((33, 36), (33, 37), 29.071067811865476, 20.615528128088304)",
+                        "(33, 37)": "Node((33, 37), (33, 38), 28.071067811865476, 21.587033144922902)",
+                        "(33, 38)": "Node((33, 38), (33, 39), 27.071067811865476, 22.561028345356956)",
+                        "(33, 39)": "Node((33, 39), (33, 40), 26.071067811865476, 23.53720459187964)",
+                        "(33, 40)": "Node((33, 40), (33, 41), 25.071067811865476, 24.515301344262525)",
+                        "(33, 41)": "Node((33, 41), (33, 42), 24.071067811865476, 25.495097567963924)",
+                        "(33, 42)": "Node((33, 42), (33, 43), 23.071067811865476, 26.476404589747453)",
+                        "(33, 43)": "Node((33, 43), (33, 44), 22.071067811865476, 27.459060435491963)",
+                        "(33, 44)": "Node((33, 44), (33, 45), 21.071067811865476, 28.442925306655784)",
+                        "(33, 45)": "Node((33, 45), (33, 46), 20.071067811865476, 29.427877939124322)",
+                        "(33, 46)": "Node((33, 46), (33, 47), 19.071067811865476, 30.4138126514911)",
+                        "(33, 47)": "Node((33, 47), (33, 48), 18.071067811865476, 31.400636936215164)",
+                        "(33, 48)": "Node((33, 48), (33, 49), 17.071067811865476, 32.38826948140329)",
+                        "(33, 49)": "Node((33, 49), (33, 50), 16.071067811865476, 33.37663853655727)",
+                        "(33, 50)": "Node((33, 50), (33, 51), 15.071067811865476, 34.36568055487916)",
+                        "(33, 51)": "Node((33, 51), (33, 52), 14.071067811865476, 35.35533905932738)",
+                        "(33, 52)": "Node((33, 52), (33, 53), 13.071067811865476, 36.345563690772494)",
+                        "(33, 53)": "Node((33, 53), (33, 54), 12.071067811865476, 37.33630940518894)",
+                        "(33, 54)": "Node((33, 54), (33, 55), 11.071067811865476, 38.3275357934736)",
+                        "(33, 55)": "Node((33, 55), (33, 56), 10.071067811865476, 39.319206502675)",
+                        "(33, 56)": "Node((33, 56), (33, 57), 9.071067811865476, 40.311288741492746)",
+                        "(33, 57)": "Node((33, 57), (33, 58), 8.071067811865476, 41.30375285612676)",
+                        "(33, 58)": "Node((33, 58), (32, 59), 7.0710678118654755, 42.2965719651132)",
+                        "(33, 59)": "Node((33, 59), (32, 60), 6.656854249492381, 43.289721643826724)",
+                        "(33, 60)": "Node((33, 60), (32, 60), 6.242640687119286, 44.28317965096906)",
+                        "(33, 61)": "Node((33, 61), (32, 62), 5.82842712474619, 45.27692569068709)",
+                        "(34, 21)": "Node((34, 21), (34, 22), 44.485281374238554, 6.4031242374328485)",
+                        "(34, 22)": "Node((34, 22), (34, 23), 43.485281374238554, 7.211102550927978)",
+                        "(34, 23)": "Node((34, 23), (33, 24), 42.485281374238554, 8.06225774829855)",
+                        "(34, 24)": "Node((34, 24), (33, 25), 41.485281374238554, 8.94427190999916)",
+                        "(34, 25)": "Node((34, 25), (34, 26), 40.485281374238554, 9.848857801796104)",
+                        "(34, 26)": "Node((34, 26), (33, 27), 39.485281374238554, 10.770329614269007)",
+                        "(34, 27)": "Node((34, 27), (34, 28), 38.48528137423856, 11.704699910719626)",
+                        "(34, 28)": "Node((34, 28), (34, 29), 37.48528137423856, 12.649110640673518)",
+                        "(34, 29)": "Node((34, 29), (33, 30), 36.48528137423856, 13.601470508735444)",
+                        "(34, 30)": "Node((34, 30), (34, 31), 35.48528137423857, 14.560219778561036)",
+                        "(34, 31)": "Node((34, 31), (34, 32), 34.48528137423857, 15.524174696260024)",
+                        "(34, 32)": "Node((34, 32), (34, 33), 33.48528137423857, 16.492422502470642)",
+                        "(34, 33)": "Node((34, 33), (34, 34), 32.48528137423857, 17.46424919657298)",
+                        "(34, 34)": "Node((34, 34), (33, 35), 31.48528137423857, 18.439088914585774)",
+                        "(34, 35)": "Node((34, 35), (33, 36), 30.48528137423857, 19.4164878389476)",
+                        "(34, 36)": "Node((34, 36), (33, 37), 29.48528137423857, 20.396078054371138)",
+                        "(34, 37)": "Node((34, 37), (33, 38), 28.48528137423857, 21.37755832643195)",
+                        "(34, 38)": "Node((34, 38), (33, 39), 27.48528137423857, 22.360679774997898)",
+                        "(34, 39)": "Node((34, 39), (33, 40), 26.48528137423857, 23.345235059857504)",
+                        "(34, 40)": "Node((34, 40), (33, 41), 25.48528137423857, 24.331050121192877)",
+                        "(34, 41)": "Node((34, 41), (33, 42), 24.48528137423857, 25.317977802344327)",
+                        "(34, 42)": "Node((34, 42), (33, 43), 23.48528137423857, 26.30589287593181)",
+                        "(34, 43)": "Node((34, 43), (34, 44), 22.48528137423857, 27.294688127912362)",
+                        "(34, 44)": "Node((34, 44), (33, 45), 21.48528137423857, 28.284271247461902)",
+                        "(34, 45)": "Node((34, 45), (34, 46), 20.48528137423857, 29.274562336608895)",
+                        "(34, 46)": "Node((34, 46), (34, 47), 19.48528137423857, 30.265491900843113)",
+                        "(34, 47)": "Node((34, 47), (34, 48), 18.48528137423857, 31.25699921617557)",
+                        "(34, 48)": "Node((34, 48), (34, 49), 17.48528137423857, 32.2490309931942)",
+                        "(34, 49)": "Node((34, 49), (34, 50), 16.48528137423857, 33.24154027718932)",
+                        "(34, 50)": "Node((34, 50), (34, 51), 15.485281374238571, 34.23448553724738)",
+                        "(34, 51)": "Node((34, 51), (34, 52), 14.485281374238571, 35.22782990761707)",
+                        "(34, 52)": "Node((34, 52), (34, 53), 13.485281374238571, 36.22154055254967)",
+                        "(34, 53)": "Node((34, 53), (33, 54), 12.485281374238571, 37.21558813185679)",
+                        "(34, 54)": "Node((34, 54), (34, 55), 11.485281374238571, 38.2099463490856)",
+                        "(34, 55)": "Node((34, 55), (34, 56), 10.485281374238571, 39.20459156782532)",
+                        "(34, 56)": "Node((34, 56), (34, 57), 9.485281374238571, 40.19950248448356)",
+                        "(34, 57)": "Node((34, 57), (33, 58), 8.485281374238571, 41.19465984809196)",
+                        "(34, 58)": "Node((34, 58), (33, 58), 8.071067811865476, 42.190046219457976)",
+                        "(34, 59)": "Node((34, 59), (33, 60), 7.656854249492381, 43.18564576337837)",
+                        "(35, 20)": "Node((35, 20), (34, 21), 45.899494936611646, 5.0)",
+                        "(35, 21)": "Node((35, 21), (35, 22), 44.899494936611646, 5.830951894845301)",
+                        "(35, 22)": "Node((35, 22), (35, 23), 43.899494936611646, 6.708203932499369)",
+                        "(35, 23)": "Node((35, 23), (34, 24), 42.899494936611646, 7.615773105863909)",
+                        "(35, 24)": "Node((35, 24), (34, 25), 41.899494936611646, 8.54400374531753)",
+                        "(35, 25)": "Node((35, 25), (35, 26), 40.89949493661165, 9.486832980505138)",
+                        "(35, 26)": "Node((35, 26), (35, 27), 39.89949493661165, 10.44030650891055)",
+                        "(35, 27)": "Node((35, 27), (35, 28), 38.89949493661165, 11.40175425099138)",
+                        "(35, 28)": "Node((35, 28), (34, 29), 37.89949493661165, 12.36931687685298)",
+                        "(35, 29)": "Node((35, 29), (35, 30), 36.89949493661166, 13.341664064126334)",
+                        "(35, 30)": "Node((35, 30), (35, 31), 35.89949493661166, 14.317821063276353)",
+                        "(35, 31)": "Node((35, 31), (35, 32), 34.89949493661166, 15.297058540778355)",
+                        "(35, 32)": "Node((35, 32), (34, 33), 33.89949493661166, 16.278820596099706)",
+                        "(35, 33)": "Node((35, 33), (34, 34), 32.89949493661167, 17.26267650163207)",
+                        "(35, 34)": "Node((35, 34), (35, 35), 31.899494936611667, 18.24828759089466)",
+                        "(35, 35)": "Node((35, 35), (35, 36), 30.899494936611667, 19.235384061671343)",
+                        "(35, 36)": "Node((35, 36), (35, 37), 29.899494936611667, 20.223748416156685)",
+                        "(35, 37)": "Node((35, 37), (34, 38), 28.899494936611667, 21.213203435596427)",
+                        "(35, 38)": "Node((35, 38), (34, 39), 27.899494936611667, 22.20360331117452)",
+                        "(35, 39)": "Node((35, 39), (35, 40), 26.899494936611667, 23.194827009486403)",
+                        "(35, 40)": "Node((35, 40), (35, 41), 25.899494936611667, 24.186773244895647)",
+                        "(35, 41)": "Node((35, 41), (35, 42), 24.899494936611667, 25.179356624028344)",
+                        "(35, 42)": "Node((35, 42), (35, 43), 23.899494936611667, 26.1725046566048)",
+                        "(35, 43)": "Node((35, 43), (34, 44), 22.899494936611667, 27.16615541441225)",
+                        "(35, 44)": "Node((35, 44), (35, 45), 21.899494936611667, 28.160255680657446)",
+                        "(35, 45)": "Node((35, 45), (34, 46), 20.899494936611667, 29.154759474226502)",
+                        "(35, 46)": "Node((35, 46), (34, 47), 19.899494936611667, 30.14962686336267)",
+                        "(35, 47)": "Node((35, 47), (34, 48), 18.899494936611667, 31.144823004794873)",
+                        "(35, 48)": "Node((35, 48), (34, 49), 17.899494936611667, 32.14031735997639)",
+                        "(35, 49)": "Node((35, 49), (34, 50), 16.899494936611667, 33.13608305156178)",
+                        "(35, 50)": "Node((35, 50), (34, 51), 15.899494936611667, 34.132096331752024)",
+                        "(35, 51)": "Node((35, 51), (34, 52), 14.899494936611667, 35.12833614050059)",
+                        "(35, 52)": "Node((35, 52), (34, 53), 13.899494936611667, 36.124783736376884)",
+                        "(35, 53)": "Node((35, 53), (34, 54), 12.899494936611667, 37.12142238654117)",
+                        "(35, 54)": "Node((35, 54), (34, 55), 11.899494936611667, 38.118237105091836)",
+                        "(35, 55)": "Node((35, 55), (34, 56), 10.899494936611667, 39.11521443121589)",
+                        "(35, 56)": "Node((35, 56), (34, 57), 9.899494936611667, 40.11234224026316)",
+                        "(35, 57)": "Node((35, 57), (34, 57), 9.485281374238571, 41.10960958218893)",
+                        "(36, 19)": "Node((36, 19), (36, 20), 47.31370849898474, 3.605551275463989)",
+                        "(36, 20)": "Node((36, 20), (36, 21), 46.31370849898474, 4.47213595499958)",
+                        "(36, 21)": "Node((36, 21), (35, 22), 45.31370849898474, 5.385164807134504)",
+                        "(36, 22)": "Node((36, 22), (35, 23), 44.31370849898474, 6.324555320336759)",
+                        "(36, 23)": "Node((36, 23), (35, 24), 43.31370849898474, 7.280109889280518)",
+                        "(36, 24)": "Node((36, 24), (36, 25), 42.313708498984745, 8.246211251235321)",
+                        "(36, 25)": "Node((36, 25), (35, 26), 41.313708498984745, 9.219544457292887)",
+                        "(36, 26)": "Node((36, 26), (36, 27), 40.313708498984745, 10.198039027185569)",
+                        "(36, 27)": "Node((36, 27), (35, 28), 39.313708498984745, 11.180339887498949)",
+                        "(36, 28)": "Node((36, 28), (36, 29), 38.31370849898475, 12.165525060596439)",
+                        "(36, 29)": "Node((36, 29), (36, 30), 37.31370849898475, 13.152946437965905)",
+                        "(36, 30)": "Node((36, 30), (36, 31), 36.31370849898475, 14.142135623730951)",
+                        "(36, 31)": "Node((36, 31), (35, 32), 35.31370849898475, 15.132745950421556)",
+                        "(36, 32)": "Node((36, 32), (35, 33), 34.31370849898476, 16.1245154965971)",
+                        "(36, 33)": "Node((36, 33), (36, 34), 33.31370849898476, 17.11724276862369)",
+                        "(36, 34)": "Node((36, 34), (35, 35), 32.31370849898476, 18.110770276274835)",
+                        "(36, 35)": "Node((36, 35), (36, 36), 31.313708498984763, 19.1049731745428)",
+                        "(36, 36)": "Node((36, 36), (35, 37), 30.313708498984763, 20.09975124224178)",
+                        "(36, 37)": "Node((36, 37), (36, 38), 29.313708498984763, 21.095023109728988)",
+                        "(36, 38)": "Node((36, 38), (36, 39), 28.313708498984763, 22.090722034374522)",
+                        "(36, 39)": "Node((36, 39), (35, 40), 27.313708498984763, 23.08679276123039)",
+                        "(36, 40)": "Node((36, 40), (35, 41), 26.313708498984763, 24.08318915758459)",
+                        "(36, 41)": "Node((36, 41), (35, 42), 25.313708498984763, 25.079872407968907)",
+                        "(36, 42)": "Node((36, 42), (36, 43), 24.313708498984763, 26.076809620810597)",
+                        "(36, 43)": "Node((36, 43), (36, 44), 23.313708498984763, 27.073972741361768)",
+                        "(36, 44)": "Node((36, 44), (35, 45), 22.313708498984763, 28.071337695236398)",
+                        "(36, 45)": "Node((36, 45), (35, 46), 21.313708498984763, 29.068883707497267)",
+                        "(36, 46)": "Node((36, 46), (35, 47), 20.313708498984763, 30.066592756745816)",
+                        "(36, 47)": "Node((36, 47), (35, 48), 19.313708498984763, 31.064449134018133)",
+                        "(36, 48)": "Node((36, 48), (36, 49), 18.313708498984763, 32.0624390837628)",
+                        "(36, 49)": "Node((36, 49), (35, 50), 17.313708498984763, 33.06055050963308)",
+                        "(36, 50)": "Node((36, 50), (35, 51), 16.313708498984763, 34.058772731852805)",
+                        "(36, 51)": "Node((36, 51), (35, 52), 15.313708498984763, 35.05709628591621)",
+                        "(36, 52)": "Node((36, 52), (35, 53), 14.313708498984763, 36.05551275463989)",
+                        "(36, 53)": "Node((36, 53), (36, 54), 13.313708498984763, 37.05401462729781)",
+                        "(36, 54)": "Node((36, 54), (35, 55), 12.313708498984763, 38.05259518088089)",
+                        "(36, 55)": "Node((36, 55), (35, 56), 11.313708498984763, 39.05124837953327)",
+                        "(36, 56)": "Node((36, 56), (35, 57), 10.899494936611667, 40.049968789001575)",
+                        "(37, 18)": "Node((37, 18), (36, 19), 48.72792206135783, 2.23606797749979)",
+                        "(37, 19)": "Node((37, 19), (36, 20), 47.72792206135783, 3.1622776601683795)",
+                        "(37, 20)": "Node((37, 20), (37, 21), 46.72792206135783, 4.123105625617661)",
+                        "(37, 21)": "Node((37, 21), (36, 22), 45.72792206135783, 5.0990195135927845)",
+                        "(37, 22)": "Node((37, 22), (36, 23), 44.72792206135783, 6.082762530298219)",
+                        "(37, 23)": "Node((37, 23), (37, 24), 43.72792206135784, 7.0710678118654755)",
+                        "(37, 24)": "Node((37, 24), (37, 25), 42.72792206135784, 8.06225774829855)",
+                        "(37, 25)": "Node((37, 25), (37, 26), 41.72792206135784, 9.055385138137417)",
+                        "(37, 26)": "Node((37, 26), (36, 27), 40.72792206135784, 10.04987562112089)",
+                        "(37, 27)": "Node((37, 27), (36, 28), 39.727922061357845, 11.045361017187261)",
+                        "(37, 28)": "Node((37, 28), (36, 29), 38.727922061357845, 12.041594578792296)",
+                        "(37, 29)": "Node((37, 29), (36, 30), 37.727922061357845, 13.038404810405298)",
+                        "(37, 30)": "Node((37, 30), (36, 31), 36.727922061357845, 14.035668847618199)",
+                        "(37, 31)": "Node((37, 31), (36, 32), 35.72792206135785, 15.033296378372908)",
+                        "(37, 32)": "Node((37, 32), (36, 33), 34.72792206135785, 16.0312195418814)",
+                        "(37, 33)": "Node((37, 33), (36, 34), 33.72792206135785, 17.029386365926403)",
+                        "(37, 34)": "Node((37, 34), (36, 35), 32.72792206135786, 18.027756377319946)",
+                        "(37, 35)": "Node((37, 35), (36, 36), 31.72792206135786, 19.026297590440446)",
+                        "(37, 36)": "Node((37, 36), (36, 37), 30.72792206135786, 20.024984394500787)",
+                        "(37, 37)": "Node((37, 37), (36, 38), 29.72792206135786, 21.02379604162864)",
+                        "(37, 38)": "Node((37, 38), (36, 39), 28.72792206135786, 22.02271554554524)",
+                        "(37, 39)": "Node((37, 39), (36, 40), 27.72792206135786, 23.021728866442675)",
+                        "(37, 40)": "Node((37, 40), (36, 41), 26.72792206135786, 24.020824298928627)",
+                        "(37, 41)": "Node((37, 41), (36, 42), 25.72792206135786, 25.019992006393608)",
+                        "(37, 42)": "Node((37, 42), (36, 43), 24.72792206135786, 26.019223662515376)",
+                        "(37, 43)": "Node((37, 43), (36, 44), 23.72792206135786, 27.018512172212592)",
+                        "(37, 44)": "Node((37, 44), (36, 45), 22.72792206135786, 28.0178514522438)",
+                        "(37, 45)": "Node((37, 45), (36, 46), 21.72792206135786, 29.017236257093817)",
+                        "(37, 46)": "Node((37, 46), (36, 47), 20.72792206135786, 30.01666203960727)",
+                        "(37, 47)": "Node((37, 47), (36, 48), 19.72792206135786, 31.016124838541646)",
+                        "(37, 48)": "Node((37, 48), (36, 49), 18.72792206135786, 32.01562118716424)",
+                        "(37, 49)": "Node((37, 49), (36, 50), 17.72792206135786, 33.015148038438355)",
+                        "(37, 50)": "Node((37, 50), (36, 51), 16.72792206135786, 34.0147027033899)",
+                        "(37, 51)": "Node((37, 51), (36, 52), 15.727922061357859, 35.014282800023196)",
+                        "(37, 52)": "Node((37, 52), (36, 53), 14.727922061357859, 36.013886210738214)",
+                        "(37, 53)": "Node((37, 53), (36, 54), 13.727922061357859, 37.013511046643494)",
+                        "(37, 54)": "Node((37, 54), (36, 55), 12.727922061357859, 38.01315561749642)",
+                        "(38, 16)": "Node((38, 16), (38, 17), 51.14213562373092, 0.0)",
+                        "(38, 17)": "Node((38, 17), (37, 18), 50.14213562373092, 1.0)"
+                      },
+                      "goal": [
+                        38,
+                        16
+                      ],
+                      "inflation_cells": 2,
+                      "inflation_meters": 1.0,
+                      "length": 25.571067811865476,
+                      "start": [
+                        28,
+                        63
+                      ],
+                      "success": true
+                    }
+                  },
+                  "robot_radius_m": 1.0,
+                  "shortest_path_length_m": 25.571067811865476,
+                  "start": [
+                    14.254944,
+                    8.2798287
+                  ],
+                  "waypoint_count": 2
+                },
+                "classification": "hard_but_solvable",
+                "evidence": {
+                  "difficulty_analysis": {
+                    "role": "optional_diagnostic_evidence_only",
+                    "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+                  }
+                },
+                "goal_id": 0,
+                "reasons": [
+                  "solvable_with_hardness_caveat"
+                ],
+                "route_id": "robot_route_0_0",
+                "spawn_id": 0
+              }
+            ],
+            "scenario_id": "classic_head_on_corridor_low",
+            "schema_version": "scenario_cert.v1",
+            "source": "configs/scenarios/classic_interactions.yaml"
+          },
+          "certificate_schema_version": "scenario_cert.v1",
+          "classification": "hard_but_solvable",
+          "reasons": [
+            "solvable_with_hardness_caveat"
+          ]
+        },
+        "passed": true,
+        "status": "passed"
+      },
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 111
+    },
+    {
+      "actor_free_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 500,
+          "record_excerpt": {
+            "scenario_id": "classic_head_on_corridor_medium",
+            "seed": 111,
+            "termination_reason": "success"
+          },
+          "seed": 111,
+          "success_reason": "metrics_success_true",
+          "termination_reason": "success"
+        },
+        "passed": true,
+        "status": "passed"
+      },
+      "extended_time_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 1000,
+          "record_excerpt": {
+            "scenario_id": "classic_head_on_corridor_medium",
+            "seed": 111,
+            "termination_reason": "collision"
+          },
+          "seed": 111,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "family_id": "head_on_corridor",
+      "oracle_solved": {
+        "blocker": null,
+        "evidence": {
+          "algo": "goal",
+          "horizon": 500,
+          "record_excerpt": {
+            "scenario_id": "classic_head_on_corridor_medium",
+            "seed": 111,
+            "termination_reason": "collision"
+          },
+          "seed": 111,
+          "success_reason": "metrics_success_false",
+          "termination_reason": "collision"
+        },
+        "passed": false,
+        "status": "failed"
+      },
+      "route_feasible": {
+        "blocker": null,
+        "evidence": {
+          "benchmark_eligibility": "eligible",
+          "certificate": {
+            "benchmark_eligibility": "eligible",
+            "checks": {
+              "all_routes_benchmark_eligible": true,
+              "route_count": 1,
+              "settings": {
+                "hard_clearance_margin_m": 0.35,
+                "hard_path_length_ratio": 1.5,
+                "hard_turn_count": 3,
+                "knife_edge_clearance_margin_m": 0.15,
+                "knife_edge_path_length_ratio": 2.5,
+                "planner_cells_per_meter": 2.0
+              }
+            },
+            "classification": "hard_but_solvable",
+            "evidence": {
+              "archetype": "head_on_corridor",
+              "difficulty_analysis": {
+                "role": "optional_diagnostic_evidence_only",
+                "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+              },
+              "plausibility": {
+                "method": null,
+                "metrics": {
+                  "force_q95": 0.7102478906368666,
+                  "mean_distance": 5.656425184742342,
+                  "min_distance": 0.9419324712080861,
+                  "ped_force_mean": 0.17172482282263632,
+                  "robot_ped_within_5m_frac": 0.48393629580805386
+                },
+                "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00",
+                "notes": null,
+                "status": "verified",
+                "verified_by": "ll7",
+                "verified_on": "2026-01-30"
+              },
+              "scenario_fingerprint": "69f8a1e77ea05b9e"
+            },
+            "reasons": [
+              "solvable_with_hardness_caveat"
+            ],
+            "route_certificates": [
+              {
+                "benchmark_eligibility": "eligible",
+                "checks": {
+                  "authored_route_length_m": 24.05469207267486,
+                  "direct_start_goal_distance_m": 24.05469207267486,
+                  "dynamic": {
+                    "single_pedestrian_count": 0,
+                    "static_blocking_pedestrian_ids": []
+                  },
+                  "goal": [
+                    19.179178,
+                    31.825107
+                  ],
+                  "inflated_collision_free_path": true,
+                  "infrastructure": {
+                    "illegal_amv_zone_ids": [],
+                    "intersected_zone_ids": [],
+                    "zone_count": 0
+                  },
+                  "kinodynamic": {
+                    "command_limits_valid": true,
+                    "controller_semantics": "can_rotate_in_place",
+                    "minimum_turning_radius_m": 0.0,
+                    "robot_model": "DifferentialDriveSettings"
+                  },
+                  "map_name": "classic_head_on_corridor",
+                  "minimum_static_clearance_m": 5.174893000000002,
+                  "path_length_ratio": 1.0630386676582384,
+                  "ped_radius_m": 0.4,
+                  "planned_turn_count": 8,
+                  "planned_waypoint_count": 48,
+                  "planner": {
+                    "algorithm": "a_star",
+                    "cells_per_meter": 2.0,
+                    "inflation_fallback": false,
+                    "inflation_radius_m": 1.0,
+                    "raw_info": {
+                      "cost": 51.14213562373095,
+                      "expand": {
+                        "(24, 55)": "Node((24, 55), (24, 56), 9.65685424949238, 41.43669871020132)",
+                        "(24, 56)": "Node((24, 56), (25, 57), 8.65685424949238, 42.37924020083418)",
+                        "(24, 57)": "Node((24, 57), (25, 58), 7.65685424949238, 43.32435804486894)",
+                        "(24, 58)": "Node((24, 58), (24, 59), 6.656854249492381, 44.27188724235731)",
+                        "(24, 59)": "Node((24, 59), (25, 60), 5.656854249492381, 45.221676218380054)",
+                        "(25, 44)": "Node((25, 44), (25, 45), 20.242640687119284, 30.870698080866262)",
+                        "(25, 45)": "Node((25, 45), (25, 46), 19.242640687119284, 31.78049716414141)",
+                        "(25, 46)": "Node((25, 46), (25, 47), 18.242640687119284, 32.69556544854363)",
+                        "(25, 47)": "Node((25, 47), (25, 48), 17.242640687119284, 33.61547262794322)",
+                        "(25, 48)": "Node((25, 48), (25, 49), 16.242640687119284, 34.539832078341085)",
+                        "(25, 49)": "Node((25, 49), (25, 50), 15.242640687119286, 35.4682957019364)",
+                        "(25, 50)": "Node((25, 50), (25, 51), 14.242640687119286, 36.40054944640259)",
+                        "(25, 51)": "Node((25, 51), (25, 52), 13.242640687119286, 37.33630940518894)",
+                        "(25, 52)": "Node((25, 52), (26, 53), 12.242640687119286, 38.27531841800928)",
+                        "(25, 53)": "Node((25, 53), (26, 54), 11.242640687119286, 39.21734310225516)",
+                        "(25, 54)": "Node((25, 54), (26, 55), 10.242640687119286, 40.162171256046406)",
+                        "(25, 55)": "Node((25, 55), (26, 56), 9.242640687119286, 41.10960958218893)",
+                        "(25, 56)": "Node((25, 56), (26, 57), 8.242640687119286, 42.05948168962618)",
+                        "(25, 57)": "Node((25, 57), (26, 58), 7.242640687119285, 43.01162633521314)",
+                        "(25, 58)": "Node((25, 58), (26, 59), 6.242640687119285, 43.965895873961216)",
+                        "(25, 59)": "Node((25, 59), (26, 60), 5.242640687119286, 44.9221548904324)",
+                        "(25, 60)": "Node((25, 60), (26, 61), 4.242640687119286, 45.880278987817846)",
+                        "(25, 61)": "Node((25, 61), (26, 61), 3.8284271247461903, 46.84015371452148)",
+                        "(26, 37)": "Node((26, 37), (26, 38), 26.82842712474619, 24.186773244895647)",
+                        "(26, 38)": "Node((26, 38), (26, 39), 25.82842712474619, 25.059928172283335)",
+                        "(26, 39)": "Node((26, 39), (26, 40), 24.82842712474619, 25.942243542145693)",
+                        "(26, 40)": "Node((26, 40), (27, 41), 23.82842712474619, 26.832815729997478)",
+                        "(26, 41)": "Node((26, 41), (27, 42), 22.82842712474619, 27.730849247724095)",
+                        "(26, 42)": "Node((26, 42), (27, 43), 21.82842712474619, 28.635642126552707)",
+                        "(26, 43)": "Node((26, 43), (27, 44), 20.82842712474619, 29.546573405388315)",
+                        "(26, 44)": "Node((26, 44), (27, 45), 19.82842712474619, 30.463092423455635)",
+                        "(26, 45)": "Node((26, 45), (27, 46), 18.82842712474619, 31.38470965295043)",
+                        "(26, 46)": "Node((26, 46), (27, 47), 17.82842712474619, 32.31098884280702)",
+                        "(26, 47)": "Node((26, 47), (27, 48), 16.82842712474619, 33.24154027718932)",
+                        "(26, 48)": "Node((26, 48), (27, 49), 15.828427124746192, 34.17601498127012)",
+                        "(26, 49)": "Node((26, 49), (27, 50), 14.828427124746192, 35.11409973215888)",
+                        "(26, 50)": "Node((26, 50), (27, 51), 13.828427124746192, 36.05551275463989)",
+                        "(26, 51)": "Node((26, 51), (27, 52), 12.828427124746192, 37.0)",
+                        "(26, 52)": "Node((26, 52), (26, 53), 11.82842712474619, 37.94733192202055)",
+                        "(26, 53)": "Node((26, 53), (26, 54), 10.82842712474619, 38.897300677553446)",
+                        "(26, 54)": "Node((26, 54), (26, 55), 9.82842712474619, 39.84971769034255)",
+                        "(26, 55)": "Node((26, 55), (27, 56), 8.82842712474619, 40.80441152620633)",
+                        "(26, 56)": "Node((26, 56), (27, 57), 7.82842712474619, 41.7612260356422)",
+                        "(26, 57)": "Node((26, 57), (27, 58), 6.82842712474619, 42.720018726587654)",
+                        "(26, 58)": "Node((26, 58), (26, 59), 5.82842712474619, 43.68065933568311)",
+                        "(26, 59)": "Node((26, 59), (26, 60), 4.82842712474619, 44.64302857109943)",
+                        "(26, 60)": "Node((26, 60), (26, 61), 3.8284271247461903, 45.60701700396552)",
+                        "(26, 61)": "Node((26, 61), (27, 62), 2.8284271247461903, 46.57252408878007)",
+                        "(26, 62)": "Node((26, 62), (27, 63), 2.414213562373095, 47.53945729601885)",
+                        "(26, 63)": "Node((26, 63), (27, 63), 2.0, 48.507731342539614)",
+                        "(27, 31)": "Node((27, 31), (27, 32), 32.41421356237309, 18.601075237738275)",
+                        "(27, 32)": "Node((27, 32), (28, 33), 31.414213562373096, 19.4164878389476)",
+                        "(27, 33)": "Node((27, 33), (28, 34), 30.414213562373096, 20.248456731316587)",
+                        "(27, 34)": "Node((27, 34), (28, 35), 29.414213562373096, 21.095023109728988)",
+                        "(27, 35)": "Node((27, 35), (28, 36), 28.414213562373096, 21.95449840010015)",
+                        "(27, 36)": "Node((27, 36), (28, 37), 27.414213562373096, 22.825424421026653)",
+                        "(27, 37)": "Node((27, 37), (28, 38), 26.414213562373096, 23.706539182259394)",
+                        "(27, 38)": "Node((27, 38), (28, 39), 25.414213562373096, 24.596747752497688)",
+                        "(27, 39)": "Node((27, 39), (28, 40), 24.414213562373096, 25.495097567963924)",
+                        "(27, 40)": "Node((27, 40), (27, 41), 23.414213562373096, 26.40075756488817)",
+                        "(27, 41)": "Node((27, 41), (27, 42), 22.414213562373096, 27.313000567495326)",
+                        "(27, 42)": "Node((27, 42), (27, 43), 21.414213562373096, 28.231188426986208)",
+                        "(27, 43)": "Node((27, 43), (27, 44), 20.414213562373096, 29.154759474226502)",
+                        "(27, 44)": "Node((27, 44), (27, 45), 19.414213562373096, 30.083217912982647)",
+                        "(27, 45)": "Node((27, 45), (27, 46), 18.414213562373096, 31.016124838541646)",
+                        "(27, 46)": "Node((27, 46), (27, 47), 17.414213562373096, 31.953090617340916)",
+                        "(27, 47)": "Node((27, 47), (28, 48), 16.414213562373096, 32.89376840679705)",
+                        "(27, 48)": "Node((27, 48), (28, 49), 15.414213562373096, 33.83784863137726)",
+                        "(27, 49)": "Node((27, 49), (28, 50), 14.414213562373096, 34.785054261852174)",
+                        "(27, 50)": "Node((27, 50), (28, 51), 13.414213562373096, 35.73513677041127)",
+                        "(27, 51)": "Node((27, 51), (28, 52), 12.414213562373096, 36.68787265568828)",
+                        "(27, 52)": "Node((27, 52), (27, 53), 11.414213562373096, 37.64306044943742)",
+                        "(27, 53)": "Node((27, 53), (28, 54), 10.414213562373096, 38.600518131237564)",
+                        "(27, 54)": "Node((27, 54), (28, 55), 9.414213562373096, 39.56008088970496)",
+                        "(27, 55)": "Node((27, 55), (27, 56), 8.414213562373096, 40.52159917870962)",
+                        "(27, 56)": "Node((27, 56), (27, 57), 7.414213562373095, 41.48493702538308)",
+                        "(27, 57)": "Node((27, 57), (27, 58), 6.414213562373095, 42.44997055358225)",
+                        "(27, 58)": "Node((27, 58), (27, 59), 5.414213562373095, 43.41658669218482)",
+                        "(27, 59)": "Node((27, 59), (27, 60), 4.414213562373095, 44.384682042344295)",
+                        "(27, 60)": "Node((27, 60), (28, 61), 3.414213562373095, 45.35416188179427)",
+                        "(27, 61)": "Node((27, 61), (27, 62), 2.414213562373095, 46.32493928760188)",
+                        "(27, 62)": "Node((27, 62), (28, 63), 1.4142135623730951, 47.29693436154187)",
+                        "(27, 63)": "Node((27, 63), (28, 63), 1.0, 48.27007354458868)",
+                        "(27, 64)": "Node((27, 64), (28, 63), 1.4142135623730951, 49.24428900898052)",
+                        "(28, 27)": "Node((28, 27), (28, 28), 36.0, 14.866068747318506)",
+                        "(28, 28)": "Node((28, 28), (28, 29), 35.0, 15.620499351813308)",
+                        "(28, 29)": "Node((28, 29), (28, 30), 34.0, 16.401219466856727)",
+                        "(28, 30)": "Node((28, 30), (28, 31), 33.0, 17.204650534085253)",
+                        "(28, 31)": "Node((28, 31), (28, 32), 32.0, 18.027756377319946)",
+                        "(28, 32)": "Node((28, 32), (28, 33), 31.0, 18.867962264113206)",
+                        "(28, 33)": "Node((28, 33), (28, 34), 30.0, 19.72308292331602)",
+                        "(28, 34)": "Node((28, 34), (28, 35), 29.0, 20.591260281974)",
+                        "(28, 35)": "Node((28, 35), (28, 36), 28.0, 21.470910553583888)",
+                        "(28, 36)": "Node((28, 36), (28, 37), 27.0, 22.360679774997898)",
+                        "(28, 37)": "Node((28, 37), (28, 38), 26.0, 23.259406699226016)",
+                        "(28, 38)": "Node((28, 38), (28, 39), 25.0, 24.166091947189145)",
+                        "(28, 39)": "Node((28, 39), (28, 40), 24.0, 25.079872407968907)",
+                        "(28, 40)": "Node((28, 40), (28, 41), 23.0, 26.0)",
+                        "(28, 41)": "Node((28, 41), (28, 42), 22.0, 26.92582403567252)",
+                        "(28, 42)": "Node((28, 42), (28, 43), 21.0, 27.85677655436824)",
+                        "(28, 43)": "Node((28, 43), (28, 44), 20.0, 28.792360097775937)",
+                        "(28, 44)": "Node((28, 44), (28, 45), 19.0, 29.732137494637012)",
+                        "(28, 45)": "Node((28, 45), (28, 46), 18.0, 30.675723300355934)",
+                        "(28, 46)": "Node((28, 46), (28, 47), 17.0, 31.622776601683793)",
+                        "(28, 47)": "Node((28, 47), (28, 48), 16.0, 32.57299494980466)",
+                        "(28, 48)": "Node((28, 48), (28, 49), 15.0, 33.52610922848042)",
+                        "(28, 49)": "Node((28, 49), (28, 50), 14.0, 34.48187929913333)",
+                        "(28, 50)": "Node((28, 50), (28, 51), 13.0, 35.4400902933387)",
+                        "(28, 51)": "Node((28, 51), (28, 52), 12.0, 36.40054944640259)",
+                        "(28, 52)": "Node((28, 52), (28, 53), 11.0, 37.36308338453881)",
+                        "(28, 53)": "Node((28, 53), (28, 54), 10.0, 38.3275357934736)",
+                        "(28, 54)": "Node((28, 54), (28, 55), 9.0, 39.293765408777)",
+                        "(28, 55)": "Node((28, 55), (28, 56), 8.0, 40.26164427839479)",
+                        "(28, 56)": "Node((28, 56), (28, 57), 7.0, 41.23105625617661)",
+                        "(28, 57)": "Node((28, 57), (28, 58), 6.0, 42.20189569201838)",
+                        "(28, 58)": "Node((28, 58), (28, 59), 5.0, 43.174066289845804)",
+                        "(28, 59)": "Node((28, 59), (28, 60), 4.0, 44.14748010928823)",
+                        "(28, 60)": "Node((28, 60), (28, 61), 3.0, 45.12205669071391)",
+                        "(28, 61)": "Node((28, 61), (28, 62), 2.0, 46.09772228646444)",
+                        "(28, 62)": "Node((28, 62), (28, 63), 1.0, 47.07440918375928)",
+                        "(28, 63)": "Node((28, 63), None, 0, 48.05205510693585)",
+                        "(28, 64)": "Node((28, 64), (28, 63), 1.0, 49.03060268852505)",
+                        "(29, 26)": "Node((29, 26), (29, 27), 37.41421356237309, 13.45362404707371)",
+                        "(29, 27)": "Node((29, 27), (29, 28), 36.41421356237309, 14.212670403551895)",
+                        "(29, 28)": "Node((29, 28), (29, 29), 35.41421356237309, 15.0)",
+                        "(29, 29)": "Node((29, 29), (28, 30), 34.41421356237309, 15.811388300841896)",
+                        "(29, 30)": "Node((29, 30), (28, 31), 33.41421356237309, 16.64331697709324)",
+                        "(29, 31)": "Node((29, 31), (28, 32), 32.41421356237309, 17.4928556845359)",
+                        "(29, 32)": "Node((29, 32), (28, 33), 31.414213562373096, 18.35755975068582)",
+                        "(29, 33)": "Node((29, 33), (28, 34), 30.414213562373096, 19.235384061671343)",
+                        "(29, 34)": "Node((29, 34), (28, 35), 29.414213562373096, 20.12461179749811)",
+                        "(29, 35)": "Node((29, 35), (28, 36), 28.414213562373096, 21.02379604162864)",
+                        "(29, 36)": "Node((29, 36), (28, 37), 27.414213562373096, 21.93171219946131)",
+                        "(29, 37)": "Node((29, 37), (29, 38), 26.414213562373096, 22.847319317591726)",
+                        "(29, 38)": "Node((29, 38), (29, 39), 25.414213562373096, 23.769728648009426)",
+                        "(29, 39)": "Node((29, 39), (29, 40), 24.414213562373096, 24.698178070456937)",
+                        "(29, 40)": "Node((29, 40), (28, 41), 23.414213562373096, 25.632011235952593)",
+                        "(29, 41)": "Node((29, 41), (29, 42), 22.414213562373096, 26.570660511172846)",
+                        "(29, 42)": "Node((29, 42), (29, 43), 21.414213562373096, 27.51363298439521)",
+                        "(29, 43)": "Node((29, 43), (29, 44), 20.414213562373096, 28.460498941515414)",
+                        "(29, 44)": "Node((29, 44), (29, 45), 19.414213562373096, 29.410882339705484)",
+                        "(29, 45)": "Node((29, 45), (29, 46), 18.414213562373096, 30.364452901377952)",
+                        "(29, 46)": "Node((29, 46), (29, 47), 17.414213562373096, 31.32091952673165)",
+                        "(29, 47)": "Node((29, 47), (28, 48), 16.414213562373096, 32.28002478313795)",
+                        "(29, 48)": "Node((29, 48), (28, 49), 15.414213562373096, 33.24154027718932)",
+                        "(29, 49)": "Node((29, 49), (28, 50), 14.414213562373096, 34.20526275297414)",
+                        "(29, 50)": "Node((29, 50), (28, 51), 13.414213562373096, 35.17101079013795)",
+                        "(29, 51)": "Node((29, 51), (29, 52), 12.414213562373096, 36.138621999185304)",
+                        "(29, 52)": "Node((29, 52), (29, 53), 11.414213562373096, 37.107950630558946)",
+                        "(29, 53)": "Node((29, 53), (29, 54), 10.414213562373096, 38.07886552931954)",
+                        "(29, 54)": "Node((29, 54), (28, 55), 9.414213562373096, 39.05124837953327)",
+                        "(29, 55)": "Node((29, 55), (28, 56), 8.414213562373096, 40.024992192379)",
+                        "(29, 56)": "Node((29, 56), (28, 57), 7.414213562373095, 41.0)",
+                        "(29, 57)": "Node((29, 57), (28, 58), 6.414213562373095, 41.97618372363071)",
+                        "(29, 58)": "Node((29, 58), (28, 59), 5.414213562373095, 42.95346318982906)",
+                        "(29, 59)": "Node((29, 59), (28, 60), 4.414213562373095, 43.93176527297759)",
+                        "(29, 60)": "Node((29, 60), (28, 61), 3.414213562373095, 44.91102314577124)",
+                        "(29, 61)": "Node((29, 61), (28, 62), 2.414213562373095, 45.89117562233506)",
+                        "(29, 62)": "Node((29, 62), (28, 63), 1.4142135623730951, 46.87216658103186)",
+                        "(29, 63)": "Node((29, 63), (28, 63), 1.0, 47.853944456021594)",
+                        "(29, 64)": "Node((29, 64), (28, 63), 1.4142135623730951, 48.83646178829912)",
+                        "(30, 25)": "Node((30, 25), (29, 26), 38.828427124746185, 12.041594578792296)",
+                        "(30, 26)": "Node((30, 26), (30, 27), 37.828427124746185, 12.806248474865697)",
+                        "(30, 27)": "Node((30, 27), (29, 28), 36.828427124746185, 13.601470508735444)",
+                        "(30, 28)": "Node((30, 28), (29, 29), 35.828427124746185, 14.422205101855956)",
+                        "(30, 29)": "Node((30, 29), (29, 30), 34.828427124746185, 15.264337522473747)",
+                        "(30, 30)": "Node((30, 30), (29, 31), 33.828427124746185, 16.1245154965971)",
+                        "(30, 31)": "Node((30, 31), (30, 32), 32.82842712474619, 17.0)",
+                        "(30, 32)": "Node((30, 32), (29, 33), 31.82842712474619, 17.88854381999832)",
+                        "(30, 33)": "Node((30, 33), (29, 34), 30.82842712474619, 18.788294228055936)",
+                        "(30, 34)": "Node((30, 34), (29, 35), 29.82842712474619, 19.697715603592208)",
+                        "(30, 35)": "Node((30, 35), (30, 36), 28.82842712474619, 20.615528128088304)",
+                        "(30, 36)": "Node((30, 36), (30, 37), 27.82842712474619, 21.540659228538015)",
+                        "(30, 37)": "Node((30, 37), (30, 38), 26.82842712474619, 22.47220505424423)",
+                        "(30, 38)": "Node((30, 38), (30, 39), 25.82842712474619, 23.40939982143925)",
+                        "(30, 39)": "Node((30, 39), (30, 40), 24.82842712474619, 24.351591323771842)",
+                        "(30, 40)": "Node((30, 40), (30, 41), 23.82842712474619, 25.298221281347036)",
+                        "(30, 41)": "Node((30, 41), (30, 42), 22.82842712474619, 26.248809496813376)",
+                        "(30, 42)": "Node((30, 42), (29, 43), 21.82842712474619, 27.202941017470888)",
+                        "(30, 43)": "Node((30, 43), (29, 44), 20.82842712474619, 28.160255680657446)",
+                        "(30, 44)": "Node((30, 44), (30, 45), 19.82842712474619, 29.120439557122072)",
+                        "(30, 45)": "Node((30, 45), (30, 46), 18.82842712474619, 30.083217912982647)",
+                        "(30, 46)": "Node((30, 46), (30, 47), 17.82842712474619, 31.04834939252005)",
+                        "(30, 47)": "Node((30, 47), (30, 48), 16.82842712474619, 32.01562118716424)",
+                        "(30, 48)": "Node((30, 48), (30, 49), 15.828427124746192, 32.984845004941285)",
+                        "(30, 49)": "Node((30, 49), (30, 50), 14.828427124746192, 33.95585369269929)",
+                        "(30, 50)": "Node((30, 50), (30, 51), 13.828427124746192, 34.92849839314596)",
+                        "(30, 51)": "Node((30, 51), (29, 52), 12.828427124746192, 35.90264614203248)",
+                        "(30, 52)": "Node((30, 52), (29, 53), 11.828427124746192, 36.87817782917155)",
+                        "(30, 53)": "Node((30, 53), (29, 54), 10.828427124746192, 37.8549864614954)",
+                        "(30, 54)": "Node((30, 54), (29, 55), 9.828427124746192, 38.8329756778952)",
+                        "(30, 55)": "Node((30, 55), (29, 56), 8.82842712474619, 39.81205847478876)",
+                        "(30, 56)": "Node((30, 56), (29, 57), 7.82842712474619, 40.792156108742276)",
+                        "(30, 57)": "Node((30, 57), (29, 58), 6.82842712474619, 41.773197148410844)",
+                        "(30, 58)": "Node((30, 58), (29, 59), 5.82842712474619, 42.7551166528639)",
+                        "(30, 59)": "Node((30, 59), (30, 60), 4.82842712474619, 43.73785545725808)",
+                        "(30, 60)": "Node((30, 60), (29, 61), 3.82842712474619, 44.721359549995796)",
+                        "(30, 61)": "Node((30, 61), (29, 62), 2.8284271247461903, 45.70557952810576)",
+                        "(30, 62)": "Node((30, 62), (29, 62), 2.414213562373095, 46.69047011971501)",
+                        "(30, 63)": "Node((30, 63), (29, 63), 2.0, 47.67598976424087)",
+                        "(30, 64)": "Node((30, 64), (29, 63), 2.414213562373095, 48.662100242385755)",
+                        "(31, 24)": "Node((31, 24), (31, 25), 40.24264068711928, 10.63014581273465)",
+                        "(31, 25)": "Node((31, 25), (31, 26), 39.24264068711928, 11.40175425099138)",
+                        "(31, 26)": "Node((31, 26), (31, 27), 38.24264068711928, 12.206555615733702)",
+                        "(31, 27)": "Node((31, 27), (30, 28), 37.24264068711928, 13.038404810405298)",
+                        "(31, 28)": "Node((31, 28), (30, 29), 36.24264068711928, 13.892443989449804)",
+                        "(31, 29)": "Node((31, 29), (30, 30), 35.24264068711928, 14.7648230602334)",
+                        "(31, 30)": "Node((31, 30), (30, 31), 34.242640687119284, 15.652475842498529)",
+                        "(31, 31)": "Node((31, 31), (31, 32), 33.242640687119284, 16.55294535724685)",
+                        "(31, 32)": "Node((31, 32), (30, 33), 32.242640687119284, 17.46424919657298)",
+                        "(31, 33)": "Node((31, 33), (31, 34), 31.242640687119287, 18.384776310850235)",
+                        "(31, 34)": "Node((31, 34), (31, 35), 30.242640687119287, 19.313207915827967)",
+                        "(31, 35)": "Node((31, 35), (31, 36), 29.242640687119287, 20.248456731316587)",
+                        "(31, 36)": "Node((31, 36), (31, 37), 28.242640687119287, 21.18962010041709)",
+                        "(31, 37)": "Node((31, 37), (31, 38), 27.242640687119287, 22.135943621178654)",
+                        "(31, 38)": "Node((31, 38), (31, 39), 26.242640687119287, 23.08679276123039)",
+                        "(31, 39)": "Node((31, 39), (31, 40), 25.242640687119287, 24.041630560342615)",
+                        "(31, 40)": "Node((31, 40), (31, 41), 24.242640687119287, 25.0)",
+                        "(31, 41)": "Node((31, 41), (31, 42), 23.242640687119287, 25.96150997149434)",
+                        "(31, 42)": "Node((31, 42), (31, 43), 22.242640687119287, 26.92582403567252)",
+                        "(31, 43)": "Node((31, 43), (31, 44), 21.242640687119287, 27.892651361962706)",
+                        "(31, 44)": "Node((31, 44), (30, 45), 20.242640687119287, 28.861739379323623)",
+                        "(31, 45)": "Node((31, 45), (30, 46), 19.242640687119287, 29.832867780352597)",
+                        "(31, 46)": "Node((31, 46), (30, 47), 18.242640687119287, 30.805843601498726)",
+                        "(31, 47)": "Node((31, 47), (30, 48), 17.242640687119287, 31.78049716414141)",
+                        "(31, 48)": "Node((31, 48), (30, 49), 16.242640687119287, 32.7566787083184)",
+                        "(31, 49)": "Node((31, 49), (31, 50), 15.242640687119284, 33.734255586866)",
+                        "(31, 50)": "Node((31, 50), (31, 51), 14.242640687119284, 34.713109915419565)",
+                        "(31, 51)": "Node((31, 51), (31, 52), 13.242640687119284, 35.6931365951495)",
+                        "(31, 52)": "Node((31, 52), (31, 53), 12.242640687119284, 36.6742416417845)",
+                        "(31, 53)": "Node((31, 53), (31, 54), 11.242640687119284, 37.656340767525464)",
+                        "(31, 54)": "Node((31, 54), (31, 55), 10.242640687119284, 38.63935817272331)",
+                        "(31, 55)": "Node((31, 55), (31, 56), 9.242640687119284, 39.6232255123179)",
+                        "(31, 56)": "Node((31, 56), (31, 57), 8.242640687119284, 40.607881008493905)",
+                        "(31, 57)": "Node((31, 57), (31, 58), 7.242640687119285, 41.593268686170845)",
+                        "(31, 58)": "Node((31, 58), (31, 59), 6.242640687119285, 42.579337712087536)",
+                        "(31, 59)": "Node((31, 59), (30, 60), 5.242640687119285, 43.56604182158393)",
+                        "(31, 60)": "Node((31, 60), (30, 61), 4.242640687119286, 44.553338819890925)",
+                        "(31, 61)": "Node((31, 61), (30, 61), 3.8284271247461903, 45.5411901469428)",
+                        "(31, 62)": "Node((31, 62), (30, 63), 3.414213562373095, 46.52956049652737)",
+                        "(31, 63)": "Node((31, 63), (30, 63), 3.0, 47.51841748206689)",
+                        "(32, 23)": "Node((32, 23), (32, 24), 41.65685424949237, 9.219544457292887)",
+                        "(32, 24)": "Node((32, 24), (32, 25), 40.65685424949237, 10.0)",
+                        "(32, 25)": "Node((32, 25), (31, 26), 39.65685424949237, 10.816653826391969)",
+                        "(32, 26)": "Node((32, 26), (31, 27), 38.65685424949237, 11.661903789690601)",
+                        "(32, 27)": "Node((32, 27), (31, 28), 37.65685424949237, 12.529964086141668)",
+                        "(32, 28)": "Node((32, 28), (31, 29), 36.65685424949237, 13.416407864998739)",
+                        "(32, 29)": "Node((32, 29), (31, 30), 35.656854249492376, 14.317821063276353)",
+                        "(32, 30)": "Node((32, 30), (32, 31), 34.656854249492376, 15.231546211727817)",
+                        "(32, 31)": "Node((32, 31), (31, 32), 33.656854249492376, 16.15549442140351)",
+                        "(32, 32)": "Node((32, 32), (32, 33), 32.65685424949238, 17.08800749063506)",
+                        "(32, 33)": "Node((32, 33), (32, 34), 31.65685424949238, 18.027756377319946)",
+                        "(32, 34)": "Node((32, 34), (32, 35), 30.65685424949238, 18.973665961010276)",
+                        "(32, 35)": "Node((32, 35), (32, 36), 29.65685424949238, 19.924858845171276)",
+                        "(32, 36)": "Node((32, 36), (32, 37), 28.65685424949238, 20.8806130178211)",
+                        "(32, 37)": "Node((32, 37), (32, 38), 27.65685424949238, 21.840329667841555)",
+                        "(32, 38)": "Node((32, 38), (32, 39), 26.65685424949238, 22.80350850198276)",
+                        "(32, 39)": "Node((32, 39), (32, 40), 25.65685424949238, 23.769728648009426)",
+                        "(32, 40)": "Node((32, 40), (32, 41), 24.65685424949238, 24.73863375370596)",
+                        "(32, 41)": "Node((32, 41), (32, 42), 23.65685424949238, 25.709920264364882)",
+                        "(32, 42)": "Node((32, 42), (32, 43), 22.65685424949238, 26.68332812825267)",
+                        "(32, 43)": "Node((32, 43), (32, 44), 21.65685424949238, 27.65863337187866)",
+                        "(32, 44)": "Node((32, 44), (32, 45), 20.65685424949238, 28.635642126552707)",
+                        "(32, 45)": "Node((32, 45), (32, 46), 19.65685424949238, 29.614185789921695)",
+                        "(32, 46)": "Node((32, 46), (32, 47), 18.65685424949238, 30.59411708155671)",
+                        "(32, 47)": "Node((32, 47), (32, 48), 17.65685424949238, 31.575306807693888)",
+                        "(32, 48)": "Node((32, 48), (32, 49), 16.65685424949238, 32.55764119219941)",
+                        "(32, 49)": "Node((32, 49), (32, 50), 15.65685424949238, 33.54101966249684)",
+                        "(32, 50)": "Node((32, 50), (32, 51), 14.65685424949238, 34.52535300326414)",
+                        "(32, 51)": "Node((32, 51), (31, 52), 13.65685424949238, 35.510561809129406)",
+                        "(32, 52)": "Node((32, 52), (31, 53), 12.65685424949238, 36.49657518178932)",
+                        "(32, 53)": "Node((32, 53), (31, 54), 11.65685424949238, 37.48332962798263)",
+                        "(32, 54)": "Node((32, 54), (31, 55), 10.65685424949238, 38.47076812334269)",
+                        "(32, 55)": "Node((32, 55), (31, 56), 9.65685424949238, 39.45883931389772)",
+                        "(32, 56)": "Node((32, 56), (31, 57), 8.65685424949238, 40.44749683231337)",
+                        "(32, 57)": "Node((32, 57), (31, 58), 7.65685424949238, 41.43669871020132)",
+                        "(32, 58)": "Node((32, 58), (31, 59), 6.65685424949238, 42.42640687119285)",
+                        "(32, 59)": "Node((32, 59), (31, 60), 5.656854249492381, 43.41658669218482)",
+                        "(32, 60)": "Node((32, 60), (31, 60), 5.242640687119286, 44.40720662234904)",
+                        "(32, 61)": "Node((32, 61), (31, 61), 4.82842712474619, 45.39823785126467)",
+                        "(32, 62)": "Node((32, 62), (31, 63), 4.414213562373095, 46.389654018972806)",
+                        "(33, 22)": "Node((33, 22), (32, 23), 43.07106781186546, 7.810249675906654)",
+                        "(33, 23)": "Node((33, 23), (32, 24), 42.07106781186546, 8.602325267042627)",
+                        "(33, 24)": "Node((33, 24), (32, 25), 41.07106781186546, 9.433981132056603)",
+                        "(33, 25)": "Node((33, 25), (33, 26), 40.07106781186546, 10.295630140987)",
+                        "(33, 26)": "Node((33, 26), (32, 27), 39.07106781186546, 11.180339887498949)",
+                        "(33, 27)": "Node((33, 27), (32, 28), 38.07106781186546, 12.083045973594572)",
+                        "(33, 28)": "Node((33, 28), (32, 29), 37.07106781186547, 13.0)",
+                        "(33, 29)": "Node((33, 29), (33, 30), 36.07106781186547, 13.92838827718412)",
+                        "(33, 30)": "Node((33, 30), (32, 31), 35.07106781186547, 14.866068747318506)",
+                        "(33, 31)": "Node((33, 31), (32, 32), 34.071067811865476, 15.811388300841896)",
+                        "(33, 32)": "Node((33, 32), (32, 33), 33.071067811865476, 16.76305461424021)",
+                        "(33, 33)": "Node((33, 33), (33, 34), 32.071067811865476, 17.72004514666935)",
+                        "(33, 34)": "Node((33, 34), (33, 35), 31.071067811865476, 18.681541692269406)",
+                        "(33, 35)": "Node((33, 35), (33, 36), 30.071067811865476, 19.6468827043885)",
+                        "(33, 36)": "Node((33, 36), (33, 37), 29.071067811865476, 20.615528128088304)",
+                        "(33, 37)": "Node((33, 37), (33, 38), 28.071067811865476, 21.587033144922902)",
+                        "(33, 38)": "Node((33, 38), (33, 39), 27.071067811865476, 22.561028345356956)",
+                        "(33, 39)": "Node((33, 39), (33, 40), 26.071067811865476, 23.53720459187964)",
+                        "(33, 40)": "Node((33, 40), (33, 41), 25.071067811865476, 24.515301344262525)",
+                        "(33, 41)": "Node((33, 41), (33, 42), 24.071067811865476, 25.495097567963924)",
+                        "(33, 42)": "Node((33, 42), (33, 43), 23.071067811865476, 26.476404589747453)",
+                        "(33, 43)": "Node((33, 43), (33, 44), 22.071067811865476, 27.459060435491963)",
+                        "(33, 44)": "Node((33, 44), (33, 45), 21.071067811865476, 28.442925306655784)",
+                        "(33, 45)": "Node((33, 45), (33, 46), 20.071067811865476, 29.427877939124322)",
+                        "(33, 46)": "Node((33, 46), (33, 47), 19.071067811865476, 30.4138126514911)",
+                        "(33, 47)": "Node((33, 47), (33, 48), 18.071067811865476, 31.400636936215164)",
+                        "(33, 48)": "Node((33, 48), (33, 49), 17.071067811865476, 32.38826948140329)",
+                        "(33, 49)": "Node((33, 49), (33, 50), 16.071067811865476, 33.37663853655727)",
+                        "(33, 50)": "Node((33, 50), (33, 51), 15.071067811865476, 34.36568055487916)",
+                        "(33, 51)": "Node((33, 51), (33, 52), 14.071067811865476, 35.35533905932738)",
+                        "(33, 52)": "Node((33, 52), (33, 53), 13.071067811865476, 36.345563690772494)",
+                        "(33, 53)": "Node((33, 53), (33, 54), 12.071067811865476, 37.33630940518894)",
+                        "(33, 54)": "Node((33, 54), (33, 55), 11.071067811865476, 38.3275357934736)",
+                        "(33, 55)": "Node((33, 55), (33, 56), 10.071067811865476, 39.319206502675)",
+                        "(33, 56)": "Node((33, 56), (33, 57), 9.071067811865476, 40.311288741492746)",
+                        "(33, 57)": "Node((33, 57), (33, 58), 8.071067811865476, 41.30375285612676)",
+                        "(33, 58)": "Node((33, 58), (32, 59), 7.0710678118654755, 42.2965719651132)",
+                        "(33, 59)": "Node((33, 59), (32, 60), 6.656854249492381, 43.289721643826724)",
+                        "(33, 60)": "Node((33, 60), (32, 60), 6.242640687119286, 44.28317965096906)",
+                        "(33, 61)": "Node((33, 61), (32, 62), 5.82842712474619, 45.27692569068709)",
+                        "(34, 21)": "Node((34, 21), (34, 22), 44.485281374238554, 6.4031242374328485)",
+                        "(34, 22)": "Node((34, 22), (34, 23), 43.485281374238554, 7.211102550927978)",
+                        "(34, 23)": "Node((34, 23), (33, 24), 42.485281374238554, 8.06225774829855)",
+                        "(34, 24)": "Node((34, 24), (33, 25), 41.485281374238554, 8.94427190999916)",
+                        "(34, 25)": "Node((34, 25), (34, 26), 40.485281374238554, 9.848857801796104)",
+                        "(34, 26)": "Node((34, 26), (33, 27), 39.485281374238554, 10.770329614269007)",
+                        "(34, 27)": "Node((34, 27), (34, 28), 38.48528137423856, 11.704699910719626)",
+                        "(34, 28)": "Node((34, 28), (34, 29), 37.48528137423856, 12.649110640673518)",
+                        "(34, 29)": "Node((34, 29), (33, 30), 36.48528137423856, 13.601470508735444)",
+                        "(34, 30)": "Node((34, 30), (34, 31), 35.48528137423857, 14.560219778561036)",
+                        "(34, 31)": "Node((34, 31), (34, 32), 34.48528137423857, 15.524174696260024)",
+                        "(34, 32)": "Node((34, 32), (34, 33), 33.48528137423857, 16.492422502470642)",
+                        "(34, 33)": "Node((34, 33), (34, 34), 32.48528137423857, 17.46424919657298)",
+                        "(34, 34)": "Node((34, 34), (33, 35), 31.48528137423857, 18.439088914585774)",
+                        "(34, 35)": "Node((34, 35), (33, 36), 30.48528137423857, 19.4164878389476)",
+                        "(34, 36)": "Node((34, 36), (33, 37), 29.48528137423857, 20.396078054371138)",
+                        "(34, 37)": "Node((34, 37), (33, 38), 28.48528137423857, 21.37755832643195)",
+                        "(34, 38)": "Node((34, 38), (33, 39), 27.48528137423857, 22.360679774997898)",
+                        "(34, 39)": "Node((34, 39), (33, 40), 26.48528137423857, 23.345235059857504)",
+                        "(34, 40)": "Node((34, 40), (33, 41), 25.48528137423857, 24.331050121192877)",
+                        "(34, 41)": "Node((34, 41), (33, 42), 24.48528137423857, 25.317977802344327)",
+                        "(34, 42)": "Node((34, 42), (33, 43), 23.48528137423857, 26.30589287593181)",
+                        "(34, 43)": "Node((34, 43), (34, 44), 22.48528137423857, 27.294688127912362)",
+                        "(34, 44)": "Node((34, 44), (33, 45), 21.48528137423857, 28.284271247461902)",
+                        "(34, 45)": "Node((34, 45), (34, 46), 20.48528137423857, 29.274562336608895)",
+                        "(34, 46)": "Node((34, 46), (34, 47), 19.48528137423857, 30.265491900843113)",
+                        "(34, 47)": "Node((34, 47), (34, 48), 18.48528137423857, 31.25699921617557)",
+                        "(34, 48)": "Node((34, 48), (34, 49), 17.48528137423857, 32.2490309931942)",
+                        "(34, 49)": "Node((34, 49), (34, 50), 16.48528137423857, 33.24154027718932)",
+                        "(34, 50)": "Node((34, 50), (34, 51), 15.485281374238571, 34.23448553724738)",
+                        "(34, 51)": "Node((34, 51), (34, 52), 14.485281374238571, 35.22782990761707)",
+                        "(34, 52)": "Node((34, 52), (34, 53), 13.485281374238571, 36.22154055254967)",
+                        "(34, 53)": "Node((34, 53), (33, 54), 12.485281374238571, 37.21558813185679)",
+                        "(34, 54)": "Node((34, 54), (34, 55), 11.485281374238571, 38.2099463490856)",
+                        "(34, 55)": "Node((34, 55), (34, 56), 10.485281374238571, 39.20459156782532)",
+                        "(34, 56)": "Node((34, 56), (34, 57), 9.485281374238571, 40.19950248448356)",
+                        "(34, 57)": "Node((34, 57), (33, 58), 8.485281374238571, 41.19465984809196)",
+                        "(34, 58)": "Node((34, 58), (33, 58), 8.071067811865476, 42.190046219457976)",
+                        "(34, 59)": "Node((34, 59), (33, 60), 7.656854249492381, 43.18564576337837)",
+                        "(35, 20)": "Node((35, 20), (34, 21), 45.899494936611646, 5.0)",
+                        "(35, 21)": "Node((35, 21), (35, 22), 44.899494936611646, 5.830951894845301)",
+                        "(35, 22)": "Node((35, 22), (35, 23), 43.899494936611646, 6.708203932499369)",
+                        "(35, 23)": "Node((35, 23), (34, 24), 42.899494936611646, 7.615773105863909)",
+                        "(35, 24)": "Node((35, 24), (34, 25), 41.899494936611646, 8.54400374531753)",
+                        "(35, 25)": "Node((35, 25), (35, 26), 40.89949493661165, 9.486832980505138)",
+                        "(35, 26)": "Node((35, 26), (35, 27), 39.89949493661165, 10.44030650891055)",
+                        "(35, 27)": "Node((35, 27), (35, 28), 38.89949493661165, 11.40175425099138)",
+                        "(35, 28)": "Node((35, 28), (34, 29), 37.89949493661165, 12.36931687685298)",
+                        "(35, 29)": "Node((35, 29), (35, 30), 36.89949493661166, 13.341664064126334)",
+                        "(35, 30)": "Node((35, 30), (35, 31), 35.89949493661166, 14.317821063276353)",
+                        "(35, 31)": "Node((35, 31), (35, 32), 34.89949493661166, 15.297058540778355)",
+                        "(35, 32)": "Node((35, 32), (34, 33), 33.89949493661166, 16.278820596099706)",
+                        "(35, 33)": "Node((35, 33), (34, 34), 32.89949493661167, 17.26267650163207)",
+                        "(35, 34)": "Node((35, 34), (35, 35), 31.899494936611667, 18.24828759089466)",
+                        "(35, 35)": "Node((35, 35), (35, 36), 30.899494936611667, 19.235384061671343)",
+                        "(35, 36)": "Node((35, 36), (35, 37), 29.899494936611667, 20.223748416156685)",
+                        "(35, 37)": "Node((35, 37), (34, 38), 28.899494936611667, 21.213203435596427)",
+                        "(35, 38)": "Node((35, 38), (34, 39), 27.899494936611667, 22.20360331117452)",
+                        "(35, 39)": "Node((35, 39), (35, 40), 26.899494936611667, 23.194827009486403)",
+                        "(35, 40)": "Node((35, 40), (35, 41), 25.899494936611667, 24.186773244895647)",
+                        "(35, 41)": "Node((35, 41), (35, 42), 24.899494936611667, 25.179356624028344)",
+                        "(35, 42)": "Node((35, 42), (35, 43), 23.899494936611667, 26.1725046566048)",
+                        "(35, 43)": "Node((35, 43), (34, 44), 22.899494936611667, 27.16615541441225)",
+                        "(35, 44)": "Node((35, 44), (35, 45), 21.899494936611667, 28.160255680657446)",
+                        "(35, 45)": "Node((35, 45), (34, 46), 20.899494936611667, 29.154759474226502)",
+                        "(35, 46)": "Node((35, 46), (34, 47), 19.899494936611667, 30.14962686336267)",
+                        "(35, 47)": "Node((35, 47), (34, 48), 18.899494936611667, 31.144823004794873)",
+                        "(35, 48)": "Node((35, 48), (34, 49), 17.899494936611667, 32.14031735997639)",
+                        "(35, 49)": "Node((35, 49), (34, 50), 16.899494936611667, 33.13608305156178)",
+                        "(35, 50)": "Node((35, 50), (34, 51), 15.899494936611667, 34.132096331752024)",
+                        "(35, 51)": "Node((35, 51), (34, 52), 14.899494936611667, 35.12833614050059)",
+                        "(35, 52)": "Node((35, 52), (34, 53), 13.899494936611667, 36.124783736376884)",
+                        "(35, 53)": "Node((35, 53), (34, 54), 12.899494936611667, 37.12142238654117)",
+                        "(35, 54)": "Node((35, 54), (34, 55), 11.899494936611667, 38.118237105091836)",
+                        "(35, 55)": "Node((35, 55), (34, 56), 10.899494936611667, 39.11521443121589)",
+                        "(35, 56)": "Node((35, 56), (34, 57), 9.899494936611667, 40.11234224026316)",
+                        "(35, 57)": "Node((35, 57), (34, 57), 9.485281374238571, 41.10960958218893)",
+                        "(36, 19)": "Node((36, 19), (36, 20), 47.31370849898474, 3.605551275463989)",
+                        "(36, 20)": "Node((36, 20), (36, 21), 46.31370849898474, 4.47213595499958)",
+                        "(36, 21)": "Node((36, 21), (35, 22), 45.31370849898474, 5.385164807134504)",
+                        "(36, 22)": "Node((36, 22), (35, 23), 44.31370849898474, 6.324555320336759)",
+                        "(36, 23)": "Node((36, 23), (35, 24), 43.31370849898474, 7.280109889280518)",
+                        "(36, 24)": "Node((36, 24), (36, 25), 42.313708498984745, 8.246211251235321)",
+                        "(36, 25)": "Node((36, 25), (35, 26), 41.313708498984745, 9.219544457292887)",
+                        "(36, 26)": "Node((36, 26), (36, 27), 40.313708498984745, 10.198039027185569)",
+                        "(36, 27)": "Node((36, 27), (35, 28), 39.313708498984745, 11.180339887498949)",
+                        "(36, 28)": "Node((36, 28), (36, 29), 38.31370849898475, 12.165525060596439)",
+                        "(36, 29)": "Node((36, 29), (36, 30), 37.31370849898475, 13.152946437965905)",
+                        "(36, 30)": "Node((36, 30), (36, 31), 36.31370849898475, 14.142135623730951)",
+                        "(36, 31)": "Node((36, 31), (35, 32), 35.31370849898475, 15.132745950421556)",
+                        "(36, 32)": "Node((36, 32), (35, 33), 34.31370849898476, 16.1245154965971)",
+                        "(36, 33)": "Node((36, 33), (36, 34), 33.31370849898476, 17.11724276862369)",
+                        "(36, 34)": "Node((36, 34), (35, 35), 32.31370849898476, 18.110770276274835)",
+                        "(36, 35)": "Node((36, 35), (36, 36), 31.313708498984763, 19.1049731745428)",
+                        "(36, 36)": "Node((36, 36), (35, 37), 30.313708498984763, 20.09975124224178)",
+                        "(36, 37)": "Node((36, 37), (36, 38), 29.313708498984763, 21.095023109728988)",
+                        "(36, 38)": "Node((36, 38), (36, 39), 28.313708498984763, 22.090722034374522)",
+                        "(36, 39)": "Node((36, 39), (35, 40), 27.313708498984763, 23.08679276123039)",
+                        "(36, 40)": "Node((36, 40), (35, 41), 26.313708498984763, 24.08318915758459)",
+                        "(36, 41)": "Node((36, 41), (35, 42), 25.313708498984763, 25.079872407968907)",
+                        "(36, 42)": "Node((36, 42), (36, 43), 24.313708498984763, 26.076809620810597)",
+                        "(36, 43)": "Node((36, 43), (36, 44), 23.313708498984763, 27.073972741361768)",
+                        "(36, 44)": "Node((36, 44), (35, 45), 22.313708498984763, 28.071337695236398)",
+                        "(36, 45)": "Node((36, 45), (35, 46), 21.313708498984763, 29.068883707497267)",
+                        "(36, 46)": "Node((36, 46), (35, 47), 20.313708498984763, 30.066592756745816)",
+                        "(36, 47)": "Node((36, 47), (35, 48), 19.313708498984763, 31.064449134018133)",
+                        "(36, 48)": "Node((36, 48), (36, 49), 18.313708498984763, 32.0624390837628)",
+                        "(36, 49)": "Node((36, 49), (35, 50), 17.313708498984763, 33.06055050963308)",
+                        "(36, 50)": "Node((36, 50), (35, 51), 16.313708498984763, 34.058772731852805)",
+                        "(36, 51)": "Node((36, 51), (35, 52), 15.313708498984763, 35.05709628591621)",
+                        "(36, 52)": "Node((36, 52), (35, 53), 14.313708498984763, 36.05551275463989)",
+                        "(36, 53)": "Node((36, 53), (36, 54), 13.313708498984763, 37.05401462729781)",
+                        "(36, 54)": "Node((36, 54), (35, 55), 12.313708498984763, 38.05259518088089)",
+                        "(36, 55)": "Node((36, 55), (35, 56), 11.313708498984763, 39.05124837953327)",
+                        "(36, 56)": "Node((36, 56), (35, 57), 10.899494936611667, 40.049968789001575)",
+                        "(37, 18)": "Node((37, 18), (36, 19), 48.72792206135783, 2.23606797749979)",
+                        "(37, 19)": "Node((37, 19), (36, 20), 47.72792206135783, 3.1622776601683795)",
+                        "(37, 20)": "Node((37, 20), (37, 21), 46.72792206135783, 4.123105625617661)",
+                        "(37, 21)": "Node((37, 21), (36, 22), 45.72792206135783, 5.0990195135927845)",
+                        "(37, 22)": "Node((37, 22), (36, 23), 44.72792206135783, 6.082762530298219)",
+                        "(37, 23)": "Node((37, 23), (37, 24), 43.72792206135784, 7.0710678118654755)",
+                        "(37, 24)": "Node((37, 24), (37, 25), 42.72792206135784, 8.06225774829855)",
+                        "(37, 25)": "Node((37, 25), (37, 26), 41.72792206135784, 9.055385138137417)",
+                        "(37, 26)": "Node((37, 26), (36, 27), 40.72792206135784, 10.04987562112089)",
+                        "(37, 27)": "Node((37, 27), (36, 28), 39.727922061357845, 11.045361017187261)",
+                        "(37, 28)": "Node((37, 28), (36, 29), 38.727922061357845, 12.041594578792296)",
+                        "(37, 29)": "Node((37, 29), (36, 30), 37.727922061357845, 13.038404810405298)",
+                        "(37, 30)": "Node((37, 30), (36, 31), 36.727922061357845, 14.035668847618199)",
+                        "(37, 31)": "Node((37, 31), (36, 32), 35.72792206135785, 15.033296378372908)",
+                        "(37, 32)": "Node((37, 32), (36, 33), 34.72792206135785, 16.0312195418814)",
+                        "(37, 33)": "Node((37, 33), (36, 34), 33.72792206135785, 17.029386365926403)",
+                        "(37, 34)": "Node((37, 34), (36, 35), 32.72792206135786, 18.027756377319946)",
+                        "(37, 35)": "Node((37, 35), (36, 36), 31.72792206135786, 19.026297590440446)",
+                        "(37, 36)": "Node((37, 36), (36, 37), 30.72792206135786, 20.024984394500787)",
+                        "(37, 37)": "Node((37, 37), (36, 38), 29.72792206135786, 21.02379604162864)",
+                        "(37, 38)": "Node((37, 38), (36, 39), 28.72792206135786, 22.02271554554524)",
+                        "(37, 39)": "Node((37, 39), (36, 40), 27.72792206135786, 23.021728866442675)",
+                        "(37, 40)": "Node((37, 40), (36, 41), 26.72792206135786, 24.020824298928627)",
+                        "(37, 41)": "Node((37, 41), (36, 42), 25.72792206135786, 25.019992006393608)",
+                        "(37, 42)": "Node((37, 42), (36, 43), 24.72792206135786, 26.019223662515376)",
+                        "(37, 43)": "Node((37, 43), (36, 44), 23.72792206135786, 27.018512172212592)",
+                        "(37, 44)": "Node((37, 44), (36, 45), 22.72792206135786, 28.0178514522438)",
+                        "(37, 45)": "Node((37, 45), (36, 46), 21.72792206135786, 29.017236257093817)",
+                        "(37, 46)": "Node((37, 46), (36, 47), 20.72792206135786, 30.01666203960727)",
+                        "(37, 47)": "Node((37, 47), (36, 48), 19.72792206135786, 31.016124838541646)",
+                        "(37, 48)": "Node((37, 48), (36, 49), 18.72792206135786, 32.01562118716424)",
+                        "(37, 49)": "Node((37, 49), (36, 50), 17.72792206135786, 33.015148038438355)",
+                        "(37, 50)": "Node((37, 50), (36, 51), 16.72792206135786, 34.0147027033899)",
+                        "(37, 51)": "Node((37, 51), (36, 52), 15.727922061357859, 35.014282800023196)",
+                        "(37, 52)": "Node((37, 52), (36, 53), 14.727922061357859, 36.013886210738214)",
+                        "(37, 53)": "Node((37, 53), (36, 54), 13.727922061357859, 37.013511046643494)",
+                        "(37, 54)": "Node((37, 54), (36, 55), 12.727922061357859, 38.01315561749642)",
+                        "(38, 16)": "Node((38, 16), (38, 17), 51.14213562373092, 0.0)",
+                        "(38, 17)": "Node((38, 17), (37, 18), 50.14213562373092, 1.0)"
+                      },
+                      "goal": [
+                        38,
+                        16
+                      ],
+                      "inflation_cells": 2,
+                      "inflation_meters": 1.0,
+                      "length": 25.571067811865476,
+                      "start": [
+                        28,
+                        63
+                      ],
+                      "success": true
+                    }
+                  },
+                  "robot_radius_m": 1.0,
+                  "shortest_path_length_m": 25.571067811865476,
+                  "start": [
+                    14.254944,
+                    8.2798287
+                  ],
+                  "waypoint_count": 2
+                },
+                "classification": "hard_but_solvable",
+                "evidence": {
+                  "difficulty_analysis": {
+                    "role": "optional_diagnostic_evidence_only",
+                    "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+                  }
+                },
+                "goal_id": 0,
+                "reasons": [
+                  "solvable_with_hardness_caveat"
+                ],
+                "route_id": "robot_route_0_0",
+                "spawn_id": 0
+              }
+            ],
+            "scenario_id": "classic_head_on_corridor_medium",
+            "schema_version": "scenario_cert.v1",
+            "source": "configs/scenarios/classic_interactions.yaml"
+          },
+          "certificate_schema_version": "scenario_cert.v1",
+          "classification": "hard_but_solvable",
+          "reasons": [
+            "solvable_with_hardness_caveat"
+          ]
+        },
+        "passed": true,
+        "status": "passed"
+      },
+      "scenario_id": "classic_head_on_corridor_medium",
+      "seed": 111
+    }
+  ],
+  "schema_version": "scenario_feasibility_diagnostics.v1",
+  "source": "configs/scenarios/classic_interactions.yaml"
+}

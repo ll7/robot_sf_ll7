@@ -1,0 +1,153 @@
+{
+  "descriptors": [
+    {
+      "categorical": {
+        "planner": "hybrid_rule_local_planner",
+        "termination_reason": "collision"
+      },
+      "event": {
+        "collisions": 1,
+        "min_separation": null,
+        "near_misses": 0,
+        "scenario_id": "classic_head_on_corridor_low",
+        "seed": 202,
+        "termination_reason": "collision"
+      },
+      "numeric": {
+        "collisions": 1.0,
+        "comfort_exposure": 0.0,
+        "near_misses": 0.0
+      },
+      "record_id": "classic_head_on_corridor_low--202--93c37d658b16890f",
+      "source_index": 0
+    },
+    {
+      "categorical": {
+        "planner": "hybrid_rule_local_planner",
+        "termination_reason": "success"
+      },
+      "event": {
+        "collisions": 0,
+        "min_separation": null,
+        "near_misses": 24,
+        "scenario_id": "classic_doorway_low",
+        "seed": 204,
+        "termination_reason": "success"
+      },
+      "numeric": {
+        "collisions": 0.0,
+        "comfort_exposure": 0.015151515151515152,
+        "near_misses": 24.0
+      },
+      "record_id": "classic_doorway_low--204--2040272edb778cb5",
+      "source_index": 2
+    }
+  ],
+  "feature_sets": {
+    "categorical": [
+      "map",
+      "scenario_family",
+      "planner",
+      "termination_reason"
+    ],
+    "numeric": [
+      "collisions",
+      "near_misses",
+      "min_separation",
+      "time_to_conflict",
+      "comfort_exposure",
+      "time_to_goal",
+      "num_pedestrians",
+      "mean_speed"
+    ]
+  },
+  "groups": [
+    {
+      "group_id": "group-1",
+      "record_ids": [
+        "classic_doorway_low--204--2040272edb778cb5"
+      ],
+      "representative_record_id": "classic_doorway_low--204--2040272edb778cb5",
+      "size": 1
+    },
+    {
+      "group_id": "group-2",
+      "record_ids": [
+        "classic_head_on_corridor_low--202--93c37d658b16890f"
+      ],
+      "representative_record_id": "classic_head_on_corridor_low--202--93c37d658b16890f",
+      "size": 1
+    }
+  ],
+  "inputs": {
+    "episodes_jsonl": "docs/context/evidence/issue_1470_oracle_imitation_traces_12911_2026-06-17/oracle_imitation/issue1470_train_candidate_traces/train__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl",
+    "record_count": 6
+  },
+  "issue": "https://github.com/ll7/robot_sf_ll7/issues/4359",
+  "limitations": [
+    "Scenario similarity is an analysis aid, not benchmark evidence by itself.",
+    "Distances depend on logged descriptor fields and do not validate external labels.",
+    "Missing trajectory-level fields are excluded rather than imputed.",
+    "External labels and trajectory fields, when present, are descriptive validation context only."
+  ],
+  "nearest_neighbors": [
+    {
+      "neighbors": [
+        {
+          "distance": 0.8,
+          "record_id": "classic_doorway_low--204--2040272edb778cb5",
+          "shared_features": [
+            "collisions",
+            "near_misses",
+            "comfort_exposure",
+            "planner",
+            "termination_reason"
+          ]
+        }
+      ],
+      "record_id": "classic_head_on_corridor_low--202--93c37d658b16890f"
+    },
+    {
+      "neighbors": [
+        {
+          "distance": 0.8,
+          "record_id": "classic_head_on_corridor_low--202--93c37d658b16890f",
+          "shared_features": [
+            "collisions",
+            "near_misses",
+            "comfort_exposure",
+            "planner",
+            "termination_reason"
+          ]
+        }
+      ],
+      "record_id": "classic_doorway_low--204--2040272edb778cb5"
+    }
+  ],
+  "schema_version": "collision_scenario_similarity.v1",
+  "selection": {
+    "collision_threshold": 1.0,
+    "comfort_threshold": 0.2,
+    "near_miss_threshold": 0.0,
+    "selected_count": 2
+  },
+  "validation": {
+    "external_labels": {
+      "interpretation": "Descriptive alignment check only; labels are not treated as benchmark truth.",
+      "records_with_labels": 6,
+      "selected_label_conflicts": [
+        "classic_doorway_low--204--2040272edb778cb5"
+      ],
+      "selected_positive_labels": 1,
+      "selected_with_labels": 2,
+      "status": "available"
+    },
+    "trajectory_fields": {
+      "interpretation": "Trajectory fields are reported for reviewer inspection and are not a new metric.",
+      "records_with_trajectory_fields": 0,
+      "selected_fields_observed": [],
+      "selected_with_trajectory_fields": 0,
+      "status": "unavailable"
+    }
+  }
+}

@@ -358,8 +358,8 @@ def _aggregate_per_arm(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         trace_rows = sum(
             1
             for row in arm_rows
-            if row.get("low_progress_window") not in {"", None}
-            or row.get("local_minimum_indicator") not in {"", None}
+            if row.get("low_progress_window") not in ("", None)
+            or row.get("local_minimum_indicator") not in ("", None)
         )
         row_status_counts = Counter(str(row.get("row_status") or "completed") for row in arm_rows)
         output.append(

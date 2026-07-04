@@ -15,7 +15,7 @@ SDL_VIDEODRIVER=dummy MPLBACKEND=Agg DISPLAY= \
     --config configs/benchmarks/issue_4207_interacting_physics_probe.yaml \
     --gate-spec configs/benchmarks/release_gates/issue_4207_interacting_smoke_gates.yaml \
     --output-dir docs/context/evidence/issue_4207_interacting_physics_2026-07 \
-    --generated-at 2026-07-03T00:00:00+00:00
+    --generated-at 2026-07-04T00:00:00+00:00
 ```
 
 - Probe config: `configs/benchmarks/issue_4207_interacting_physics_probe.yaml` (physics; `horizon: 400`)
@@ -30,10 +30,11 @@ not fixture design choices.
 
 - **Near-field contact is real, from simulation.** The route-following `goal` baseline reaches the
   blind corner and makes near-field contact with the crossing pedestrian:
-  `robot_ped_within_5m_frac = 0.106` and `min_clearance_m = -0.024` (a collision). This confirms the
-  issue #4207 acceptance criterion — nonzero near-field interaction (`robot_ped_within_5m_frac > 0`)
-  from physics, not from fixture design. `model_sensitivity_exercised = true` is therefore backed by
-  a real interacting cell for the first time.
+  packet-level `max_robot_ped_within_5m_frac = 0.10558655435990806`,
+  `min_clearance_m = -0.024278621748445417`, and `physics_near_field_confirmed = true`. This
+  confirms the issue #4207 acceptance criterion — nonzero near-field interaction
+  (`robot_ped_within_5m_frac > 0`) from physics, not from fixture design.
+  `model_sensitivity_exercised = true` is therefore backed by a real interacting cell.
 - **The interacting geometry needs a long-enough horizon.** At the smoke config's `horizon: 60`
   (6 s) every real cell stayed `non_interacting` (robot ~24 m away): the robot cannot traverse the
   L-route in 6 s. `horizon: 400` (matching the scenario's `max_episode_steps`) is required for

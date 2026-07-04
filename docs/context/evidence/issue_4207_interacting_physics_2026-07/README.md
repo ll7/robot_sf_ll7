@@ -9,6 +9,10 @@ The provisional release gates are not deployment approval. Missing gate metrics 
 - Gate status counts: `{'fail': 4, 'pass': 4}`
 - Transfer status counts: `{'stable_fail': 8, 'stable_pass': 8}`
 - Interaction status counts: `{'interacting': 4, 'non_interacting': 12}`
+- Physics near-field confirmed: `True`
+- Max robot-pedestrian within-5m fraction: `0.10558655435990806`
+- Minimum clearance: `-0.024278621748445417`
+- Interacting gate cells: `2` of `8`
 - Model sensitivity exercised: `True`
 - Flip cases: `0`
 

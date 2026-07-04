@@ -40,7 +40,22 @@
     "schema_version": "benchmark_release_gate_spec.v1",
     "sha256": "03e036c2cf7eea467e19870a04649764beb57432c0fcf6290933f7d7c5e71d4d"
   },
-  "generated_at_utc": "2026-07-03T00:00:00+00:00",
+  "generated_at_utc": "2026-07-04T00:00:00+00:00",
+  "interaction_metric_summary": {
+    "cell_count": 8,
+    "interacting_cell_count": 2,
+    "interacting_evaluation_models": [
+      "hsfm_total_force_v1",
+      "social_force_default"
+    ],
+    "interacting_planner_keys": [
+      "goal"
+    ],
+    "max_robot_ped_within_5m_frac": 0.10558655435990806,
+    "min_clearance_m": -0.024278621748445417,
+    "min_robot_ped_within_5m_frac": 0.0,
+    "physics_near_field_confirmed": true
+  },
   "interaction_status_counts": {
     "interacting": 4,
     "non_interacting": 12

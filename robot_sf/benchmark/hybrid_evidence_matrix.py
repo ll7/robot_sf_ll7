@@ -40,6 +40,13 @@ PRE_RUNTIME_TIERS = frozenset({"launch_packet", "failed", "not_available"})
 # #1489 synthesis gate opens. The umbrella contract requires at least two
 # component campaigns with durable comparable outputs.
 DEFAULT_SYNTHESIS_PREREQUISITE_COUNT = 2
+ISSUE_1489_INTEGRATION_NEXT_ACTIONS = {
+    "blocked": ("Keep #1489 blocked; finish component campaign evidence before synthesis."),
+    "ready": ("Integrate ready lanes into comparable durable component rows before synthesis."),
+    "ready_for_synthesis": (
+        "Run the conservative #1489 synthesis over the complete durable lanes."
+    ),
+}
 ROW_REQUIRED_FIELDS = frozenset(
     {
         "component",
@@ -281,6 +288,12 @@ def build_hybrid_prerequisite_matrix(
         state_counts[lane["state"]] += 1
     complete_count = state_counts["complete"]
     prerequisite_met = complete_count >= prerequisite_count
+    integration_status = summarize_issue_1489_integration_status(
+        state_counts=state_counts,
+        prerequisite_count=prerequisite_count,
+        rows_valid=validation["status"] == "valid",
+        invalid_row_count=validation["invalid_row_count"],
+    )
     return {
         "gate": "ready_for_synthesis" if prerequisite_met else "blocked",
         "prerequisite_met": prerequisite_met,
@@ -291,7 +304,64 @@ def build_hybrid_prerequisite_matrix(
         "rows_valid": validation["status"] == "valid",
         "invalid_row_count": validation["invalid_row_count"],
         "provenance_validation": validation["provenance_validation"],
+        "integration_status": integration_status,
         "lanes": lanes,
+    }
+
+
+def summarize_issue_1489_integration_status(
+    *,
+    state_counts: dict[str, int],
+    prerequisite_count: int,
+    rows_valid: bool,
+    invalid_row_count: int,
+) -> dict[str, Any]:
+    """Summarize #1489 synthesis readiness without promoting weak evidence.
+
+    The report names the blocker class and next empirical action while keeping
+    the prerequisite gate fail-closed: only complete durable lanes can open the
+    synthesis gate.
+
+    Returns:
+        Compact integration report for issue/PR state propagation.
+    """
+    complete_count = state_counts.get("complete", 0)
+    ready_count = state_counts.get("ready", 0)
+    blocked_count = state_counts.get("blocked", 0)
+    missing_count = state_counts.get("missing", 0)
+    remaining_complete_count = max(prerequisite_count - complete_count, 0)
+
+    if rows_valid and remaining_complete_count == 0:
+        status = "ready_for_synthesis"
+        blockers: list[str] = []
+    else:
+        status = "blocked"
+        blockers = []
+        if not rows_valid:
+            blockers.append(f"{invalid_row_count} invalid row(s)")
+        if remaining_complete_count:
+            blockers.append(f"{remaining_complete_count} more complete lane(s) required")
+        if blocked_count:
+            blockers.append(f"{blocked_count} blocked lane(s)")
+        if missing_count:
+            blockers.append(f"{missing_count} missing expected lane(s)")
+        if ready_count:
+            blockers.append(f"{ready_count} ready but not synthesis-complete lane(s)")
+
+    if status == "blocked" and ready_count and not blocked_count and not missing_count:
+        next_action = ISSUE_1489_INTEGRATION_NEXT_ACTIONS["ready"]
+    else:
+        next_action = ISSUE_1489_INTEGRATION_NEXT_ACTIONS[status]
+
+    return {
+        "issue": "#1489",
+        "status": status,
+        "claim_boundary": "not benchmark evidence; prerequisite/status integration only",
+        "complete_count": complete_count,
+        "required_complete_count": prerequisite_count,
+        "remaining_complete_count": remaining_complete_count,
+        "blockers": blockers,
+        "next_empirical_action": next_action,
     }
 
 

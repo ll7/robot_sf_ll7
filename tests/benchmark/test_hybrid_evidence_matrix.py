@@ -8,7 +8,9 @@ import subprocess
 from pathlib import Path
 
 from robot_sf.benchmark.hybrid_evidence_matrix import (
+    build_hybrid_prerequisite_matrix,
     load_hybrid_evidence_input,
+    summarize_issue_1489_integration_status,
     validate_hybrid_evidence_file,
     validate_hybrid_evidence_rows,
 )
@@ -236,6 +238,106 @@ def test_cli_check_git_history_emits_json_for_unknown_sha(tmp_path: Path, capsys
     assert payload["status"] == "invalid"
     assert payload["provenance_validation"] == "git_history"
     assert payload["rows"][0]["errors"][0]["field"] == "commit_artifact"
+
+
+def test_issue_1489_integration_status_keeps_parent_blocked_for_incomplete_lanes() -> None:
+    """Prerequisite matrix reports the #1489 blocker and next empirical action."""
+    _input_format, rows = load_hybrid_evidence_input(FIXTURE_ROOT / "valid_rows.yaml")
+
+    report = build_hybrid_prerequisite_matrix(
+        rows,
+        expected_components=[
+            "learned_risk_model_v1",
+            "oracle_imitation_v1",
+            "shielded_ppo_repair_v1",
+        ],
+    )
+
+    assert report["gate"] == "blocked"
+    assert report["state_counts"] == {
+        "missing": 1,
+        "blocked": 1,
+        "ready": 0,
+        "complete": 1,
+    }
+    assert report["integration_status"] == {
+        "issue": "#1489",
+        "status": "blocked",
+        "claim_boundary": "not benchmark evidence; prerequisite/status integration only",
+        "complete_count": 1,
+        "required_complete_count": 2,
+        "remaining_complete_count": 1,
+        "blockers": [
+            "1 more complete lane(s) required",
+            "1 blocked lane(s)",
+            "1 missing expected lane(s)",
+        ],
+        "next_empirical_action": (
+            "Keep #1489 blocked; finish component campaign evidence before synthesis."
+        ),
+    }
+
+
+def test_issue_1489_cli_prerequisite_matrix_includes_integration_status(capsys) -> None:
+    """CLI prerequisite matrix exposes the same compact integration report."""
+    exit_code = validate_cli_main(
+        [
+            "--input",
+            str(FIXTURE_ROOT / "valid_rows.yaml"),
+            "--prerequisite-matrix",
+            "--expected-component",
+            "learned_risk_model_v1",
+            "--expected-component",
+            "oracle_imitation_v1",
+            "--expected-component",
+            "shielded_ppo_repair_v1",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["integration_status"]["status"] == "blocked"
+    assert payload["integration_status"]["blockers"] == [
+        "1 more complete lane(s) required",
+        "1 blocked lane(s)",
+        "1 missing expected lane(s)",
+    ]
+
+
+def test_issue_1489_integration_status_distinguishes_ready_non_synthesis_lanes() -> None:
+    """Rows with runtime evidence but non-comparable tiers remain integration work."""
+    report = summarize_issue_1489_integration_status(
+        state_counts={"missing": 0, "blocked": 0, "ready": 2, "complete": 0},
+        prerequisite_count=2,
+        rows_valid=True,
+        invalid_row_count=0,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["blockers"] == [
+        "2 more complete lane(s) required",
+        "2 ready but not synthesis-complete lane(s)",
+    ]
+    assert report["next_empirical_action"] == (
+        "Integrate ready lanes into comparable durable component rows before synthesis."
+    )
+
+
+def test_issue_1489_integration_status_opens_only_with_complete_lanes() -> None:
+    """The integration summary opens when enough durable complete lanes exist."""
+    report = summarize_issue_1489_integration_status(
+        state_counts={"missing": 0, "blocked": 0, "ready": 1, "complete": 2},
+        prerequisite_count=2,
+        rows_valid=True,
+        invalid_row_count=0,
+    )
+
+    assert report["status"] == "ready_for_synthesis"
+    assert report["blockers"] == []
+    assert report["remaining_complete_count"] == 0
+    assert report["next_empirical_action"] == (
+        "Run the conservative #1489 synthesis over the complete durable lanes."
+    )
 
 
 def _create_temp_git_repo(tmp_path: Path) -> tuple[Path, str]:

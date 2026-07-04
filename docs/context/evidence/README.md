@@ -119,6 +119,11 @@ Policy caveats:
 - fallback/degraded/diagnostic status must be preserved in `claim_boundary` or a payload note.
 
 ## Current Bundles
+- `issue_4401_closure_audit_2026-07-04.md`: closure-audit integration report for the
+  fixed-scope fidelity-sensitivity launch prerequisites in issue #4401. Maps the hybrid opt-in,
+  ORCA `rvo2` remediation, plan-mode launchability, and rank-identifiability contract criteria to
+  merged PR evidence while preserving the remaining empirical campaign action as out of scope.
+
 - `issue_1490_closure_audit_2026-07-04/`: closure-audit evidence for predictive planner v2
   Issue #1490. Maps parent acceptance criteria to merged PR/comment evidence, classifies the issue
   `blocked_not_closable`, and preserves the remaining blocker without running training, submitting

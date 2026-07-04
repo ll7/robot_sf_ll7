@@ -188,6 +188,8 @@ def run_campaign(
     horizon: int,
     dt: float,
     workers: int,
+    study_issue: int = ISSUE,
+    evidence_tier: str = "diagnostic",
 ) -> dict[str, Any]:
     """Run the paired reactive-vs-replay ablation across planners and assemble the report.
 
@@ -214,11 +216,12 @@ def run_campaign(
         contrasts.append(build_contrast(planner, reactive, replay))
 
     assessment = assess_reactivity_ablation(contrasts) if contrasts else None
-    return {
+    report: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "quantifier_schema": REACTIVITY_ABLATION_SCHEMA,
-        "issue": ISSUE,
-        "evidence_tier": "diagnostic",
+        "issue": study_issue,
+        "source_mechanism_issue": ISSUE,
+        "evidence_tier": evidence_tier,
         "claim_boundary": (
             "Real-runner reactive-vs-replay result on a bounded family at small N. 'Replay' = "
             "robot->ped force disabled in a live social-force sim (not pre-recorded playback); the "
@@ -235,6 +238,7 @@ def run_campaign(
         "per_planner": per_planner,
         "assessment": assessment,
     }
+    return report
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -250,6 +254,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--dt", type=float, default=0.1)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--report-json", type=Path, default=None)
+    parser.add_argument(
+        "--study-issue",
+        type=int,
+        default=ISSUE,
+        help="issue number for report (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--evidence-tier",
+        type=str,
+        default="diagnostic",
+        help="evidence tier label for report (default: %(default)s)",
+    )
     return parser.parse_args(argv)
 
 
@@ -264,6 +280,8 @@ def main(argv: list[str] | None = None) -> int:
         horizon=args.horizon,
         dt=args.dt,
         workers=args.workers,
+        study_issue=args.study_issue,
+        evidence_tier=args.evidence_tier,
     )
     report["generated_at_utc"] = datetime.now(UTC).isoformat()
     print(json.dumps(report, indent=2, sort_keys=True))

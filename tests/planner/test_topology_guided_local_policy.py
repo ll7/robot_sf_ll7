@@ -433,8 +433,22 @@ def test_topology_hypothesis_can_select_local_command_source() -> None:
     assert influence["arbitration_weight"] == pytest.approx(0.35)
     assert influence["behavior_blended_command"] == last_decision["selected_command"]
     assert isinstance(influence["projection_applied"], bool)
-    assert influence["command_limits"]["max_linear"] >= abs(influence["projected_command"][0])
-    assert influence["command_limits"]["max_angular"] >= abs(influence["projected_command"][1])
+    assert (
+        influence["command_limits"]["min_linear"]
+        <= influence["projected_command"][0]
+        <= influence["command_limits"]["max_linear"]
+    ), (
+        f"Linear command {influence['projected_command'][0]} out of dynamic-window bounds "
+        f"[{influence['command_limits']['min_linear']}, {influence['command_limits']['max_linear']}]"
+    )
+    assert (
+        influence["command_limits"]["min_angular"]
+        <= influence["projected_command"][1]
+        <= influence["command_limits"]["max_angular"]
+    ), (
+        f"Angular command {influence['projected_command'][1]} out of dynamic-window bounds "
+        f"[{influence['command_limits']['min_angular']}, {influence['command_limits']['max_angular']}]"
+    )
     assert last_decision["topology_guided_config"]["arbitration_weight"] == pytest.approx(0.35)
     assert last_decision["topology_guided_config"]["enabled"] is True
     assert last_decision["topology_guided_config"]["near_parity_thresholds"]["schema_version"] == (

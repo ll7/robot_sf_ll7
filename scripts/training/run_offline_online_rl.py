@@ -27,17 +27,35 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
+class OfflineOnlineArmSummary:
+    """One arm result in the diagnostic-only offline-online comparison."""
+
+    status: str
+    config: str
+    checkpoint: str | None
+    blocker: str | None
+    online_timesteps: int
+    offline_online_enabled: bool
+
+
+@dataclass(frozen=True, slots=True)
 class OfflineOnlineRunSummary:
     """Diagnostic-only summary for one offline-online smoke comparison."""
 
     schema_version: str
+    issue: int
+    status: str
     evidence_tier: str
     eligible_for_claim: bool
+    claim_boundary: str
     seed: int | None
     offline_online_checkpoint: str
     scratch_checkpoint: str
     offline_online_config: str
     scratch_config: str
+    arms: dict[str, OfflineOnlineArmSummary]
+    remaining_blockers: tuple[str, ...]
+    next_empirical_action: str
     caveats: tuple[str, ...]
 
 
@@ -87,18 +105,44 @@ def run_offline_online_experiment(config_path: Path | str) -> OfflineOnlineRunSu
 
     _materialize_smoke_dataset_if_missing(offline_config)
 
-    offline_checkpoint = run_sac_training(offline_config)
-    scratch_checkpoint = run_sac_training(scratch_config)
+    offline_arm = _run_arm(
+        "offline_online",
+        config=offline_config,
+        config_path=offline_config_path,
+    )
+    scratch_arm = _run_arm(
+        "scratch",
+        config=scratch_config,
+        config_path=scratch_config_path,
+    )
+    remaining_blockers = tuple(
+        blocker
+        for blocker in (
+            offline_arm.blocker,
+            scratch_arm.blocker,
+        )
+        if blocker is not None
+    )
+    status = "completed" if not remaining_blockers else "blocked"
 
     summary = OfflineOnlineRunSummary(
         schema_version="offline_online_rl_comparison.v1",
+        issue=4012,
+        status=status,
         evidence_tier="diagnostic-smoke-only",
         eligible_for_claim=False,
+        claim_boundary="Pipeline execution only; not benchmark evidence.",
         seed=offline_config.seed,
-        offline_online_checkpoint=str(offline_checkpoint),
-        scratch_checkpoint=str(scratch_checkpoint),
+        offline_online_checkpoint=offline_arm.checkpoint or "",
+        scratch_checkpoint=scratch_arm.checkpoint or "",
         offline_online_config=str(offline_config_path),
         scratch_config=str(scratch_config_path),
+        arms={"offline_online": offline_arm, "scratch": scratch_arm},
+        remaining_blockers=remaining_blockers,
+        next_empirical_action=(
+            "Run the paired smoke on a durable compatible RLTrajectoryDataset.v1 artifact before "
+            "making any benchmark or paper-facing claim."
+        ),
         caveats=(
             "No full benchmark campaign run.",
             "No Slurm or GPU submission.",
@@ -110,6 +154,30 @@ def run_offline_online_experiment(config_path: Path | str) -> OfflineOnlineRunSu
     summary_json.write_text(json.dumps(asdict(summary), indent=2, sort_keys=True) + "\n")
     summary_markdown.write_text(_summary_markdown(summary), encoding="utf-8")
     return summary
+
+
+def _run_arm(label: str, *, config: Any, config_path: Path) -> OfflineOnlineArmSummary:
+    """Run one SAC arm and return a fail-closed diagnostic summary."""
+
+    try:
+        checkpoint = run_sac_training(config)
+    except (RuntimeError, ValueError, OSError) as exc:
+        return OfflineOnlineArmSummary(
+            status="blocked",
+            config=str(config_path),
+            checkpoint=None,
+            blocker=f"{label} arm failed: {type(exc).__name__}: {exc}",
+            online_timesteps=int(config.total_timesteps),
+            offline_online_enabled=bool(config.offline_online.enabled),
+        )
+    return OfflineOnlineArmSummary(
+        status="completed",
+        config=str(config_path),
+        checkpoint=str(checkpoint),
+        blocker=None,
+        online_timesteps=int(config.total_timesteps),
+        offline_online_enabled=bool(config.offline_online.enabled),
+    )
 
 
 def _required_config_path(raw: dict[str, Any], key: str, *, base_dir: Path) -> Path:
@@ -228,14 +296,25 @@ def _jsonable(value: Any) -> Any:
 
 
 def _summary_markdown(summary: OfflineOnlineRunSummary) -> str:
+    arm_lines = "\n".join(
+        "- "
+        f"{name}: status={arm.status}, checkpoint={arm.checkpoint or 'none'}, "
+        f"blocker={arm.blocker or 'none'}"
+        for name, arm in summary.arms.items()
+    )
+    blockers = "\n".join(f"- {blocker}" for blocker in summary.remaining_blockers) or "- none"
     return (
         "# Issue #4012 Offline-to-Online RL Smoke\n\n"
-        "Claim boundary: diagnostic implementation lane only; not benchmark evidence and not "
-        "paper-facing.\n\n"
+        f"Claim boundary: {summary.claim_boundary} This is not paper-facing.\n\n"
+        f"- Overall status: {summary.status}\n"
         f"- Evidence tier: {summary.evidence_tier}\n"
-        f"- Eligible for claim: {summary.eligible_for_claim}\n"
-        f"- Offline-online checkpoint: `{summary.offline_online_checkpoint}`\n"
-        f"- Scratch checkpoint: `{summary.scratch_checkpoint}`\n"
+        f"- Eligible claim: {summary.eligible_for_claim}\n"
+        "\n## Arms\n\n"
+        f"{arm_lines}\n"
+        "\n## Remaining Blockers\n\n"
+        f"{blockers}\n"
+        "\n## Next Empirical Action\n\n"
+        f"{summary.next_empirical_action}\n"
     )
 
 
@@ -248,11 +327,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """CLI entry point."""
+    """CLI entry point.
+
+    Returns a non-zero exit code when the run is blocked so non-Python callers
+    (CI, Slurm) never read a fallback/degraded run as success.
+    """
 
     args = build_arg_parser().parse_args(argv)
-    run_offline_online_experiment(args.config)
-    return 0
+    summary = run_offline_online_experiment(args.config)
+    print(_summary_markdown(summary))
+    return 0 if summary.status == "completed" else 1
 
 
 if __name__ == "__main__":  # pragma: no cover

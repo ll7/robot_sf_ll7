@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import math
 import time
+from collections import Counter
 from collections.abc import Callable, Mapping
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -557,6 +558,223 @@ def _episode_evidence_fields(
     return {"failure_mechanism": mechanism, "interaction_exposure": exposure}
 
 
+def _finite_trace_float(value: Any) -> float | None:
+    """Return a finite float for compact episode diagnostics."""
+    if isinstance(value, int | float | np.integer | np.floating):
+        candidate = float(value)
+        if math.isfinite(candidate):
+            return candidate
+    return None
+
+
+@dataclass(slots=True)
+class _TopologyGuidedEpisodeAccumulator:
+    """Mutable accumulator for compact topology-guided episode diagnostics."""
+
+    topology_steps: int = 0
+    status_counts: Counter[str] = field(default_factory=Counter)
+    fallback_reason_counts: Counter[str] = field(default_factory=Counter)
+    no_candidate_reason_counts: Counter[str] = field(default_factory=Counter)
+    selected_counts: Counter[str] = field(default_factory=Counter)
+    near_parity_reason_counts: Counter[str] = field(default_factory=Counter)
+    lane_status_counts: Counter[str] = field(default_factory=Counter)
+    candidate_counts: list[int] = field(default_factory=list)
+    route_progress_values: list[float] = field(default_factory=list)
+    selected_sequence: list[str] = field(default_factory=list)
+    config: dict[str, Any] = field(default_factory=dict)
+    topology_command_influence_steps: int = 0
+
+
+def _update_topology_guided_episode_fields(
+    accumulator: _TopologyGuidedEpisodeAccumulator,
+    *,
+    step: dict[str, Any],
+    topology: dict[str, Any],
+) -> None:
+    """Fold one topology-guided planner-step row into the episode accumulator."""
+    accumulator.topology_steps += 1
+    status = str(topology.get("status", "unknown"))
+    accumulator.status_counts[status] += 1
+
+    reason = topology.get("reason")
+    if status != "ok" and reason is not None:
+        accumulator.no_candidate_reason_counts[str(reason)] += 1
+    fallback_reason = step.get("topology_fallback_reason")
+    if fallback_reason is not None:
+        accumulator.fallback_reason_counts[str(fallback_reason)] += 1
+
+    lane_status = step.get("topology_lane_status")
+    if lane_status is not None:
+        accumulator.lane_status_counts[str(lane_status)] += 1
+    count = topology.get("hypothesis_count")
+    if isinstance(count, int | np.integer):
+        accumulator.candidate_counts.append(int(count))
+
+    selected = topology.get("selected_hypothesis_id")
+    if selected is not None:
+        selected_key = str(selected)
+        accumulator.selected_counts[selected_key] += 1
+        accumulator.selected_sequence.append(selected_key)
+    near_parity_reason = topology.get("near_parity_gate_reason")
+    if near_parity_reason is not None:
+        accumulator.near_parity_reason_counts[str(near_parity_reason)] += 1
+
+    progress = _finite_trace_float(step.get("route_progress_from_start_m"))
+    if progress is not None:
+        accumulator.route_progress_values.append(progress)
+    step_config = step.get("topology_guided_config")
+    if isinstance(step_config, dict):
+        accumulator.config.update(step_config)
+    if isinstance(step.get("topology_command_influence"), dict):
+        accumulator.topology_command_influence_steps += 1
+
+
+def _collect_topology_guided_episode_fields(
+    planner_decision_trace: list[dict[str, Any]],
+) -> _TopologyGuidedEpisodeAccumulator | None:
+    """Collect topology-guided fields from reduced planner-step rows.
+
+    Returns:
+        Accumulated topology fields, or ``None`` when the trace contains no topology lane rows.
+    """
+    accumulator = _TopologyGuidedEpisodeAccumulator()
+    for step in planner_decision_trace:
+        topology = step.get("topology_guided")
+        if not isinstance(topology, dict):
+            continue
+        _update_topology_guided_episode_fields(accumulator, step=step, topology=topology)
+
+    if accumulator.topology_steps == 0:
+        return None
+    return accumulator
+
+
+def _topology_route_progress_summary(
+    *,
+    route_progress_values: list[float],
+    selected_switch_count: int,
+    min_progress_delta: float,
+    stall_window_steps: int,
+    fallback_only: bool,
+) -> dict[str, Any]:
+    """Summarize route progress and classify terminal stall/progress reason.
+
+    Returns:
+        Route-progress fields for the topology-guided episode diagnostic block.
+    """
+    stagnant_steps = 0
+    max_stagnant_steps = 0
+    previous_progress: float | None = None
+    for progress in route_progress_values:
+        if previous_progress is None or progress - previous_progress >= min_progress_delta:
+            stagnant_steps = 0
+        else:
+            stagnant_steps += 1
+            max_stagnant_steps = max(max_stagnant_steps, stagnant_steps)
+        previous_progress = progress
+
+    route_progress_delta = (
+        route_progress_values[-1] - route_progress_values[0]
+        if len(route_progress_values) >= 2
+        else 0.0
+    )
+    if fallback_only:
+        terminal_reason = "fallback_only"
+    elif route_progress_delta >= min_progress_delta:
+        terminal_reason = "goal_progress"
+    elif max_stagnant_steps >= stall_window_steps and selected_switch_count > 0:
+        terminal_reason = "near_parity_churn"
+    elif max_stagnant_steps >= stall_window_steps:
+        terminal_reason = "true_stall"
+    else:
+        terminal_reason = "no_stall_observed"
+
+    return {
+        "observed_steps": len(route_progress_values),
+        "initial_m": route_progress_values[0] if route_progress_values else None,
+        "final_m": route_progress_values[-1] if route_progress_values else None,
+        "delta_m": float(route_progress_delta),
+        "min_progress_delta_m": float(min_progress_delta),
+        "stall_window_steps": int(stall_window_steps),
+        "max_stagnant_steps": int(max_stagnant_steps),
+        "terminal_reason": terminal_reason,
+    }
+
+
+def _topology_guided_episode_diagnostics(
+    planner_decision_trace: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Aggregate topology-guided lane diagnostics from reduced planner-step rows.
+
+    The block is diagnostic-only by construction: fallback-only operation remains explicit and
+    cannot be confused with benchmark-strength topology-lane success.
+
+    Returns:
+        Compact episode-level topology diagnostics, or ``None`` when no topology rows exist.
+    """
+    accumulator = _collect_topology_guided_episode_fields(planner_decision_trace)
+    if accumulator is None:
+        return None
+    selected_switch_count = sum(
+        1
+        for previous, current in zip(
+            accumulator.selected_sequence, accumulator.selected_sequence[1:], strict=False
+        )
+        if previous != current
+    )
+    min_progress_delta = _finite_trace_float(accumulator.config.get("min_route_progress_delta_m"))
+    if min_progress_delta is None:
+        min_progress_delta = 0.05
+    stall_window_steps = int(accumulator.config.get("stall_window_steps", 20) or 20)
+    fallback_steps = sum(
+        count for status, count in accumulator.status_counts.items() if status != "ok"
+    )
+    fallback_used = fallback_steps > 0 or bool(
+        accumulator.lane_status_counts.get("fallback_only", 0)
+    )
+    route_progress = _topology_route_progress_summary(
+        route_progress_values=accumulator.route_progress_values,
+        selected_switch_count=selected_switch_count,
+        min_progress_delta=min_progress_delta,
+        stall_window_steps=stall_window_steps,
+        fallback_only=accumulator.topology_steps == fallback_steps,
+    )
+
+    return {
+        "schema_version": "topology-guided-episode-diagnostics.v1",
+        "claim_boundary": str(accumulator.config.get("claim_boundary", "diagnostic_only")),
+        "diagnostic_only": bool(accumulator.config.get("diagnostic_only", True)),
+        "hypothesis_available": bool(accumulator.status_counts.get("ok", 0)),
+        "hypothesis_available_steps": int(accumulator.status_counts.get("ok", 0)),
+        "fallback_used": bool(fallback_used),
+        "fallback_steps": int(fallback_steps),
+        "status_counts": dict(sorted(accumulator.status_counts.items())),
+        "lane_status_counts": dict(sorted(accumulator.lane_status_counts.items())),
+        "no_candidate_reasons": dict(sorted(accumulator.no_candidate_reason_counts.items())),
+        "fallback_reasons": dict(sorted(accumulator.fallback_reason_counts.items())),
+        "candidate_counts": {
+            "observed_steps": len(accumulator.candidate_counts),
+            "min": min(accumulator.candidate_counts) if accumulator.candidate_counts else None,
+            "max": max(accumulator.candidate_counts) if accumulator.candidate_counts else None,
+            "last": accumulator.candidate_counts[-1] if accumulator.candidate_counts else None,
+        },
+        "selected_candidate_counts": dict(sorted(accumulator.selected_counts.items())),
+        "selected_candidate_switch_count": int(selected_switch_count),
+        "topology_command_influence_steps": int(accumulator.topology_command_influence_steps),
+        "arbitration_weight": _finite_trace_float(accumulator.config.get("arbitration_weight")),
+        "near_parity_margin": _finite_trace_float(
+            accumulator.config.get(
+                "near_parity_margin",
+                accumulator.config.get("near_parity_route_distance_slack_ratio"),
+            )
+        ),
+        "near_parity_gate_reason_counts": dict(
+            sorted(accumulator.near_parity_reason_counts.items())
+        ),
+        "route_progress": route_progress,
+    }
+
+
 def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     scenario: dict[str, Any],
     seed: int,
@@ -1088,40 +1306,58 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 selected_command = planner_step_decision.get("selected_command")
                 selected_command = selected_command if isinstance(selected_command, list) else []
                 distance_to_goal = float(np.linalg.norm(robot_pos - goal_vec))
-                planner_decision_trace.append(
-                    {
-                        "step": int(step_idx),
-                        "selected_source": str(
-                            planner_step_decision.get("selected_source", "unknown")
-                        ),
-                        "selected_command": [
-                            float(value)
-                            for value in selected_command[:2]
-                            if isinstance(value, int | float | np.integer | np.floating)
-                        ],
-                        "selected_score": float(planner_step_decision["selected_score"])
-                        if isinstance(
-                            planner_step_decision.get("selected_score"),
-                            int | float | np.integer | np.floating,
-                        )
-                        and math.isfinite(float(planner_step_decision["selected_score"]))
-                        else None,
-                        "static_recenter": float(selected_terms.get("static_recenter", 0.0)),
-                        "route_arc_progress": float(selected_terms.get("route_arc_progress", 0.0)),
-                        "goal_progress": float(selected_terms.get("goal_progress", 0.0)),
-                        "progress_windows": {
-                            str(key): float(value)
-                            for key, value in progress_windows.items()
-                            if isinstance(value, int | float | np.integer | np.floating)
-                        },
-                        "distance_to_goal_m": distance_to_goal,
-                        "route_progress_from_start_m": float(
-                            initial_goal_distance - distance_to_goal
-                        ),
-                        "robot_x_m": float(robot_pos[0]),
-                        "robot_y_m": float(robot_pos[1]),
-                    }
-                )
+                step_decision = {
+                    "step": int(step_idx),
+                    "selected_source": str(planner_step_decision.get("selected_source", "unknown")),
+                    "selected_command": [
+                        float(value)
+                        for value in selected_command[:2]
+                        if isinstance(value, int | float | np.integer | np.floating)
+                    ],
+                    "selected_score": float(planner_step_decision["selected_score"])
+                    if isinstance(
+                        planner_step_decision.get("selected_score"),
+                        int | float | np.integer | np.floating,
+                    )
+                    and math.isfinite(float(planner_step_decision["selected_score"]))
+                    else None,
+                    "static_recenter": float(selected_terms.get("static_recenter", 0.0)),
+                    "route_arc_progress": float(selected_terms.get("route_arc_progress", 0.0)),
+                    "goal_progress": float(selected_terms.get("goal_progress", 0.0)),
+                    "progress_windows": {
+                        str(key): float(value)
+                        for key, value in progress_windows.items()
+                        if isinstance(value, int | float | np.integer | np.floating)
+                    },
+                    "distance_to_goal_m": distance_to_goal,
+                    "route_progress_from_start_m": float(initial_goal_distance - distance_to_goal),
+                    "robot_x_m": float(robot_pos[0]),
+                    "robot_y_m": float(robot_pos[1]),
+                }
+                for key in (
+                    "topology_guided",
+                    "topology_guided_config",
+                    "topology_lane_status",
+                    "topology_fallback_status",
+                    "topology_fallback_reason",
+                    "topology_command_influence",
+                ):
+                    value = planner_step_decision.get(key)
+                    if value is not None:
+                        step_decision[key] = deepcopy(value)
+                topology_guided = step_decision.get("topology_guided")
+                if isinstance(topology_guided, dict):
+                    corridor = planner_step_decision.get("planner_route_corridor")
+                    if isinstance(corridor, dict):
+                        config_payload = corridor.get("topology_guided_config")
+                        if isinstance(config_payload, dict):
+                            step_decision["topology_guided_config"] = deepcopy(config_payload)
+                    fallback_config = planner_step_decision.get("topology_guided_config")
+                    if "topology_guided_config" not in step_decision and isinstance(
+                        fallback_config, dict
+                    ):
+                        step_decision["topology_guided_config"] = deepcopy(fallback_config)
+                planner_decision_trace.append(step_decision)
 
             meta = info.get("meta", {}) if isinstance(info, dict) else {}
             step_collision = collision_event(info)
@@ -1307,6 +1543,9 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             "initial_goal_distance_m": initial_goal_distance,
             "steps": planner_decision_trace,
         }
+        topology_episode = _topology_guided_episode_diagnostics(planner_decision_trace)
+        if topology_episode is not None:
+            algo_meta["topology_guided_episode"] = topology_episode
     if record_simulation_step_trace:
         algo_meta["simulation_step_trace"] = {
             "schema_version": "simulation-step-trace.v1",

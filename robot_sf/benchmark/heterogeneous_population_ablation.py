@@ -18,6 +18,10 @@ from robot_sf.benchmark.heterogeneous_population_metrics import (
     assess_control_trace_readiness,
     per_archetype_metrics_from_control_trace,
 )
+from robot_sf.benchmark.pedestrian_control_trace import (
+    PEDESTRIAN_CONTROL_TRACE_LABELS_KEY,
+    build_generated_population_control_trace_labels,
+)
 from robot_sf.ped_npc.ped_archetypes import allocate_archetype_counts, assign_archetype_labels
 
 HETEROGENEOUS_POPULATION_ABLATION_SCHEMA = "heterogeneous_population_ablation_harness.v1"
@@ -115,11 +119,19 @@ def build_mean_matched_population_pair(
                 "composition": dict(sorted(composition_values.items())),
                 "counts": dict(sorted(heterogeneous_counts.items())),
                 "records": heterogeneous_records,
+                PEDESTRIAN_CONTROL_TRACE_LABELS_KEY: build_generated_population_control_trace_labels(
+                    heterogeneous_records,
+                    source="mean_matched_harness.heterogeneous_population",
+                ),
             },
             "mean_matched_homogeneous": {
                 "composition": {homogeneous_archetype: 1.0},
                 "counts": {homogeneous_archetype: population_size},
                 "records": homogeneous_records,
+                PEDESTRIAN_CONTROL_TRACE_LABELS_KEY: build_generated_population_control_trace_labels(
+                    homogeneous_records,
+                    source="mean_matched_harness.mean_matched_homogeneous_population",
+                ),
             },
         },
     }
@@ -236,6 +248,7 @@ def build_mean_matched_harness_manifest(
         "seed_rows": seed_rows,
         "trace_metric_keys": metric_keys,
         "expected_episode_output_keys": [
+            f"scenario.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY}",
             "metadata.pedestrian_control_trace",
             "metadata.pedestrian_control_trace.pedestrians[].archetype",
             "metadata.pedestrian_control_trace.pedestrians[].steps[]",
@@ -425,6 +438,7 @@ def _manifest_scenario_rows(
                         ),
                         "population_composition_hash": composition_hash,
                         "expected_episode_output_keys": [
+                            f"scenario.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY}",
                             "metadata.pedestrian_control_trace",
                             "metadata.pedestrian_control_trace.pedestrians[].archetype",
                             *[

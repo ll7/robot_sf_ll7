@@ -8,6 +8,12 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 EPISODE_EVENT_LEDGER_SCHEMA_VERSION = "EpisodeEventLedger.v2"
+SUPPORTED_EVENT_LEDGER_SCHEMA_VERSIONS = frozenset(
+    {
+        "EpisodeEventLedger.v1",
+        EPISODE_EVENT_LEDGER_SCHEMA_VERSION,
+    }
+)
 COLLISION_PARTNER_TYPES = (
     "pedestrian",
     "static_geometry",
@@ -444,6 +450,7 @@ def validate_record_event_ledger(record: dict[str, Any]) -> list[str]:
 __all__ = [
     "COLLISION_PARTNER_TYPES",
     "EPISODE_EVENT_LEDGER_SCHEMA_VERSION",
+    "SUPPORTED_EVENT_LEDGER_SCHEMA_VERSIONS",
     "CollisionEventRecord",
     "EpisodeEventLedger",
     "ExactEvents",

@@ -16,6 +16,13 @@ paired-horizon executable classifier and
 [issue_2220_failure_mechanism_taxonomy.md](issue_2220_failure_mechanism_taxonomy.md) for the
 mechanism-level interpretation vocabulary and confidence classes.
 
+## Archive
+
+`docs/context/archive/` preserves historical notes that are no longer active retrieval entry
+points. Do not delete archived notes unless a maintainer explicitly removes that provenance; keep
+catalog rows as `historical` or `superseded` with `replacement` pointers when a current successor
+exists.
+
 ## When To Update An Existing Note
 
 Prefer updating an existing note when:
@@ -274,7 +281,7 @@ knowledge, not every transient iteration detail.
   [issue_2624_topology_reuse_penalty_gate.md](issue_2624_topology_reuse_penalty_gate.md)
   ([summary](evidence/issue_2624_topology_reuse_penalty_gate/summary.json))
 * Issue #2660 Topology Successor Gate After Reuse-Penalty Regression (superseded by Issue #2704):
-  [issue_2660_topology_successor_gate.md](issue_2660_topology_successor_gate.md)
+  [issue_2660_topology_successor_gate.md](archive/issue_2660_topology_successor_gate.md)
 * Issue #2704 Progress-Gated Topology Successor Diagnostic:
   [issue_2704_progress_gated_topology_successor.md](issue_2704_progress_gated_topology_successor.md)
   ([summary](evidence/issue_2704_progress_gated_topology_successor/summary.json))
@@ -324,7 +331,7 @@ knowledge, not every transient iteration detail.
 * Issue #1583 High-Risk Root Path Boundaries (superseded by
   [root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md);
   provenance only):
-  [issue_1583_high_risk_root_boundaries.md](issue_1583_high_risk_root_boundaries.md)
+  [issue_1583_high_risk_root_boundaries.md](archive/issue_1583_high_risk_root_boundaries.md)
 * Issue #1636 benchmark metric semantics:
   [issue_1636_benchmark_metric_semantics.md](issue_1636_benchmark_metric_semantics.md)
 * Issue #1634 SocNav Module Split Plan (2026-05-28):
@@ -332,7 +339,7 @@ knowledge, not every transient iteration detail.
 * Issues #1598/#1599 Root Compatibility Decisions (2026-05-28) (superseded by
   [root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md);
   provenance only):
-  [issue_1598_1599_root_compatibility_decisions.md](issue_1598_1599_root_compatibility_decisions.md)
+  [issue_1598_1599_root_compatibility_decisions.md](archive/issue_1598_1599_root_compatibility_decisions.md)
 * Issue #1504 ego-conditioned feature contract:
   [issue_1504_ego_feature_contract.md](issue_1504_ego_feature_contract.md)
 * Issue #1543 predictive v2 negative audit:
@@ -655,7 +662,7 @@ knowledge, not every transient iteration detail.
 * Issue #1690 Root Layout Inventory (superseded by
   [root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md);
   provenance only):
-  [issue_1690_root_layout_inventory.md](issue_1690_root_layout_inventory.md)
+  [issue_1690_root_layout_inventory.md](archive/issue_1690_root_layout_inventory.md)
 * Issue #1613 LiDAR Observation Track Setup (2026-05-29):
   [issue_1613_lidar_observation_track.md](issue_1613_lidar_observation_track.md)
 * Issue #1614 LiDAR Planner Compatibility Audit (2026-05-29):
@@ -983,7 +990,7 @@ knowledge, not every transient iteration detail.
   [issue_2624_topology_reuse_penalty_gate.md](issue_2624_topology_reuse_penalty_gate.md)
   ([summary](evidence/issue_2624_topology_reuse_penalty_gate/summary.json))
 * Issue #2660 Topology Successor Gate After Reuse-Penalty Regression (superseded by Issue #2704):
-  [issue_2660_topology_successor_gate.md](issue_2660_topology_successor_gate.md)
+  [issue_2660_topology_successor_gate.md](archive/issue_2660_topology_successor_gate.md)
 * Issue #2704 Progress-Gated Topology Successor Diagnostic:
   [issue_2704_progress_gated_topology_successor.md](issue_2704_progress_gated_topology_successor.md)
   ([summary](evidence/issue_2704_progress_gated_topology_successor/summary.json))

@@ -4,7 +4,7 @@
 
 This note records the fixture repair and regenerated denominator-health audit
 for the horizon x timestep ablation introduced in issue #2837 / PR #2887. It
-builds on the gap analysis from [issue #2903](issue_2903_horizon_denominator_health.md)
+builds on the gap analysis from [issue #2903](archive/issue_2903_horizon_denominator_health.md)
 and is analysis-only: it does not change forecast defaults.
 
 ## Evidence

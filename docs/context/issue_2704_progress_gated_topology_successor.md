@@ -7,7 +7,7 @@ Status: current, diagnostic-only evidence.
 
 This note records the implementation and one paired smoke for the
 `primary_route_reselection_requires_route_progress` successor selected by
-[Issue #2660](issue_2660_topology_successor_gate.md). It does not promote
+[Issue #2660](archive/issue_2660_topology_successor_gate.md). It does not promote
 `topology_guided_hybrid_rule_v0_progress_gated_reselection`, establish benchmark evidence, or claim
 a planner improvement.
 

@@ -3,7 +3,7 @@
 ## Scope
 
 This analysis-only bundle repairs the seven fixture gaps identified in
-[issue #2903](../issue_2903_horizon_denominator_health.md) and regenerates the
+[issue #2903](../../archive/issue_2903_horizon_denominator_health.md) and regenerates the
 denominator-health audit for the horizon x timestep ablation from issue #2837 /
 PR #2887. It classifies each missing `(horizon, dt_s, trace)` cell by reason,
 verifies the category totals sum to the expected 180-cell matrix, spot-checks
@@ -13,7 +13,7 @@ blockers.
 ## Evidence status
 
 - `schema`: `HorizonTimestepDenominatorHealth.v1`
-- `claim_boundary`: `analysis_only_not_navigation_evidence`
+- `claim_boundary`: `analysis_only_not_navigation_evidence: this report measures denominator coverage of the horizon x timestep ablation matrix. It does not change forecast defaults, prove navigation value, closed-loop benefit, safety improvement, or benchmark-strength predictor quality.`
 - `forecast_defaults_unchanged`: `true`
 - `reason`: the report only diagnoses why ablation cells are unevaluable on the
   repaired durable fixture set. It does not change forecast defaults, simulator

@@ -3,12 +3,12 @@
 Issue: [#2660](https://github.com/ll7/robot_sf_ll7/issues/2660)
 Status: historical successor-selection decision. The selected child implementation and paired
 diagnostic result are now recorded in
-[issue_2704_progress_gated_topology_successor.md](issue_2704_progress_gated_topology_successor.md).
+[issue_2704_progress_gated_topology_successor.md](../issue_2704_progress_gated_topology_successor.md).
 
 ## Claim Boundary
 
 This note records the successor decision after the
-[Issue #2624 reuse-penalty paired diagnostic](issue_2624_topology_reuse_penalty_gate.md). It does
+[Issue #2624 reuse-penalty paired diagnostic](../issue_2624_topology_reuse_penalty_gate.md). It does
 not promote `topology_guided_hybrid_rule_v0_reuse_penalty`, add benchmark evidence, or claim a
 planner improvement.
 

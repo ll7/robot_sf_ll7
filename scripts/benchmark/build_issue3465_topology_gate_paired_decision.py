@@ -131,7 +131,7 @@ def build_decision_report(  # noqa: C901
             with open(campaign_summary_path, encoding="utf-8") as f:
                 data = json.load(f)
             rows = data.get("planner_rows", [])
-        except Exception as e:  # noqa: BLE001
+        except (OSError, ValueError) as e:
             return {
                 "status": "blocked",
                 "reason": "campaign_summary_invalid",
@@ -187,12 +187,14 @@ def build_decision_report(  # noqa: C901
 
     relies_on_fallback = disabled_status in BLOCKED_STATUSES or enabled_status in BLOCKED_STATUSES
 
-    # In mock mode, we use mock parameters. In real mode we assume significance based on statistical calculations
-    # or look for a paired_significant field in campaign_summary if available.
+    # In mock mode, use the mock parameter. In real mode read the explicit
+    # ``campaign.paired_significant`` field; default to False (fail-closed) so a
+    # campaign summary that omits paired-significance evidence can never yield a
+    # promotable verdict.
     paired_sig = (
         mock_paired_significant
         if mock
-        else bool(data.get("campaign", {}).get("paired_significant", True))
+        else bool(data.get("campaign", {}).get("paired_significant", False))
     )
 
     comparison = NearParityComparison(

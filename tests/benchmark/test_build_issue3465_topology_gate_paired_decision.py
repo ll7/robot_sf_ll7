@@ -237,3 +237,58 @@ def test_cli_execution_with_mock_flag(tmp_path: Path) -> None:
     assert (out_dir / "summary.json").is_file()
     assert (out_dir / "README.md").is_file()
     assert (out_dir / "paired_deltas.csv").is_file()
+
+
+def _write_valid_campaign_summary(tmp_path: Path, *, paired_significant: bool | None) -> None:
+    """Write a real (non-mock) campaign summary with a measurable native improvement.
+
+    ``paired_significant=None`` omits the field entirely, exercising the fail-closed
+    default in real mode.
+    """
+    campaign: dict = {}
+    if paired_significant is not None:
+        campaign["paired_significant"] = paired_significant
+    summary = {
+        "campaign": campaign,
+        "planner_rows": [
+            {
+                "planner_key": "topology_gate_disabled",
+                "collisions_mean": 0.10,
+                "path_efficiency_mean": 0.90,
+                "status": "ok",
+            },
+            {
+                "planner_key": "topology_gate_enabled",
+                "collisions_mean": 0.05,
+                "path_efficiency_mean": 0.95,
+                "status": "ok",
+            },
+        ],
+    }
+    (tmp_path / "campaign_summary.json").write_text(json.dumps(summary), encoding="utf-8")
+
+
+def test_real_mode_missing_paired_significant_is_fail_closed(
+    temp_config_file: Path, tmp_path: Path
+) -> None:
+    """A real campaign summary that omits paired_significant must not promote (fail-closed)."""
+    _write_valid_campaign_summary(tmp_path, paired_significant=None)
+
+    report = decision_builder.build_decision_report(temp_config_file, tmp_path)
+    assert report["status"] == "ready"
+    assert report["deltas"]["paired_significant"] is False
+    assert report["verdict"]["verdict"] == REVISE
+    assert report["verdict"]["promote"] is False
+
+
+def test_real_mode_explicit_paired_significant_promotes(
+    temp_config_file: Path, tmp_path: Path
+) -> None:
+    """An explicit paired_significant=true with a measurable improvement is promotable."""
+    _write_valid_campaign_summary(tmp_path, paired_significant=True)
+
+    report = decision_builder.build_decision_report(temp_config_file, tmp_path)
+    assert report["status"] == "ready"
+    assert report["deltas"]["paired_significant"] is True
+    assert report["verdict"]["verdict"] == ELIGIBLE_FOR_PROMOTION
+    assert report["verdict"]["promote"] is True

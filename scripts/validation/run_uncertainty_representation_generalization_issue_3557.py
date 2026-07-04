@@ -35,6 +35,10 @@ DEFAULT_OUTPUT_DIR = Path(
     "docs/context/evidence/issue_3557_uncertainty_representation_generalization"
 )
 DEFAULT_REPRESENTATIONS = ("belief_drop", "conformal_radius", "envelope_inflation")
+NEXT_EMPIRICAL_ACTION = (
+    "Promote the same retained-vs-dropped contrast into a full benchmark campaign runner "
+    "with provenance, fallback/degraded exclusions, and per-source/per-representation decisions."
+)
 CLAIM_BOUNDARY = (
     "Controlled #3471 crossing scenario using the real stream_gap planner and "
     "ScenarioBelief uncertainty gate. This is diagnostic-tier representation "
@@ -132,8 +136,91 @@ def build_report(
         "generalization": assessment["generalization"],
         "decision_layer": assessment,
         "per_representation": per_representation,
+        "campaign_promotion_state": {
+            "delivered_contract": (
+                "CPU-only controlled-scenario diagnostic across registered uncertainty "
+                "representations."
+            ),
+            "remaining_blockers": [
+                "No full benchmark campaign has been run for issue #3557.",
+                "Diagnostic rows are not benchmark evidence and must not be used for paper or "
+                "dissertation claim promotion.",
+            ],
+            "new_blockers": [],
+            "intentional_boundaries": [
+                "No Slurm/GPU submission.",
+                "No fallback or degraded benchmark outcome is counted as success.",
+                "No tracked transient queue-routing state is encoded.",
+            ],
+            "next_empirical_action": NEXT_EMPIRICAL_ACTION,
+        },
         "representation_reports": representation_reports,
     }
+
+
+def _write_integration_report(report: dict[str, Any], output_path: Path) -> None:
+    """Write the issue #3557 consolidation handoff for the next empirical action."""
+
+    state = report["campaign_promotion_state"]
+    blockers = "\n".join(f"- {item}" for item in state["remaining_blockers"])
+    new_blockers = "\n".join(f"- {item}" for item in state["new_blockers"]) or "- None."
+    boundaries = "\n".join(f"- {item}" for item in state["intentional_boundaries"])
+    rows = "\n".join(
+        "| {representation} | {harness_decision} | {generalization_verdict} | "
+        "{unsafe_commit_rate_delta_dropped_minus_retained} | "
+        "{min_separation_delta_dropped_minus_retained_m} |".format(**row)
+        for row in report["per_representation"]
+    )
+
+    output_path.write_text(
+        "\n".join(
+            [
+                "# Issue #3557 Integration Report",
+                "",
+                "Plain-language summary: this report connects the CPU-only diagnostic "
+                "uncertainty-representation result to the still-open full-campaign promotion "
+                "work. It records what is delivered, what remains blocked, and the next "
+                "empirical action without promoting the diagnostic result into a benchmark "
+                "claim.",
+                "",
+                f"- Issue: #{ISSUE}",
+                f"- Schema: `{SCHEMA_VERSION}`",
+                f"- Generalization verdict: `{report['generalization']}`",
+                f"- Delivered contract: {state['delivered_contract']}",
+                "",
+                "## Contract Delta",
+                "",
+                "- Adds `campaign_promotion_state` to `summary.json`.",
+                "- Adds this `integration_report.md` handoff artifact.",
+                "- Does not change the episode harness, benchmark runner, or decision thresholds.",
+                "",
+                "## Remaining Blockers",
+                "",
+                blockers,
+                "",
+                "## New Blockers",
+                "",
+                new_blockers,
+                "",
+                "## Intentional Boundaries",
+                "",
+                boundaries,
+                "",
+                "## Next Empirical Action",
+                "",
+                state["next_empirical_action"],
+                "",
+                "## Diagnostic Decision Rows",
+                "",
+                "| Representation | Harness decision | Generalization verdict | "
+                "Unsafe-rate delta | Min-separation delta (m) |",
+                "| --- | --- | --- | ---: | ---: |",
+                rows,
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
 
 def write_report_artifacts(report: dict[str, Any], output_dir: Path, command: str) -> None:
@@ -142,6 +229,7 @@ def write_report_artifacts(report: dict[str, Any], output_dir: Path, command: st
     summary_path = output_dir / "summary.json"
     csv_path = output_dir / "per_representation_decisions.csv"
     readme_path = output_dir / "README.md"
+    integration_path = output_dir / "integration_report.md"
 
     persisted_report = {
         key: value for key, value in report.items() if key != "representation_reports"
@@ -196,10 +284,13 @@ def write_report_artifacts(report: dict[str, Any], output_dir: Path, command: st
                 "",
                 "- `summary.json`",
                 "- `per_representation_decisions.csv`",
+                "- `integration_report.md`",
                 "",
             ]
-        )
+        ),
+        encoding="utf-8",
     )
+    _write_integration_report(report, integration_path)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

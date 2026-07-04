@@ -81,6 +81,8 @@ def test_write_report_artifacts(tmp_path) -> None:
     summary = json.loads((tmp_path / "summary.json").read_text())
     assert summary["schema_version"] == SCHEMA_VERSION
     assert summary["claim_boundary"] == CLAIM_BOUNDARY
+    assert summary["campaign_promotion_state"]["new_blockers"] == []
+    assert "full benchmark campaign" in summary["campaign_promotion_state"]["next_empirical_action"]
     assert (
         (tmp_path / "per_representation_decisions.csv")
         .read_text()
@@ -89,3 +91,6 @@ def test_write_report_artifacts(tmp_path) -> None:
     readme = (tmp_path / "README.md").read_text()
     assert "Issue #3557" in readme
     assert "not a full benchmark campaign" in readme
+    integration_report = (tmp_path / "integration_report.md").read_text()
+    assert "Remaining Blockers" in integration_report
+    assert "No full benchmark campaign" in integration_report

@@ -1,4 +1,18 @@
 {
+  "campaign_promotion_state": {
+    "delivered_contract": "CPU-only controlled-scenario diagnostic across registered uncertainty representations.",
+    "intentional_boundaries": [
+      "No Slurm/GPU submission.",
+      "No fallback or degraded benchmark outcome is counted as success.",
+      "No tracked transient queue-routing state is encoded."
+    ],
+    "new_blockers": [],
+    "next_empirical_action": "Promote the same retained-vs-dropped contrast into a full benchmark campaign runner with provenance, fallback/degraded exclusions, and per-source/per-representation decisions.",
+    "remaining_blockers": [
+      "No full benchmark campaign has been run for issue #3557.",
+      "Diagnostic rows are not benchmark evidence and must not be used for paper or dissertation claim promotion."
+    ]
+  },
   "claim_boundary": "Controlled #3471 crossing scenario using the real stream_gap planner and ScenarioBelief uncertainty gate. This is diagnostic-tier representation generalization evidence only: no full benchmark campaign, no Slurm/GPU submission, and no paper/dissertation claim edit.",
   "decision_layer": {
     "evidence_kind": "diagnostic_proxy",

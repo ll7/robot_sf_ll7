@@ -282,6 +282,7 @@ def _apply_pedestrian_noise(
 ) -> None:
     pedestrians = obs.get("pedestrians")
     if not isinstance(pedestrians, dict):
+        _apply_flat_pedestrian_noise(obs, spec, rng, stats)
         return
     positions = np.asarray(pedestrians.get("positions", []), dtype=float).reshape(-1, 2)
     velocities = np.asarray(pedestrians.get("velocities", []), dtype=float).reshape(-1, 2)
@@ -320,6 +321,69 @@ def _apply_pedestrian_noise(
     pedestrians["velocities"] = velocities.tolist()
     pedestrians["radius"] = radii.tolist()
     pedestrians["count"] = int(positions.shape[0])
+
+
+def _apply_flat_pedestrian_noise(
+    obs: dict[str, Any],
+    spec: dict[str, Any],
+    rng: np.random.Generator,
+    stats: dict[str, int],
+) -> None:
+    """Apply pedestrian noise to flattened SocNav structured observations."""
+    if "pedestrians_positions" not in obs:
+        return
+    positions_buf = np.asarray(obs.get("pedestrians_positions", []), dtype=float).reshape(-1, 2)
+    if positions_buf.size == 0:
+        return
+    velocities_buf = np.asarray(obs.get("pedestrians_velocities", []), dtype=float).reshape(-1, 2)
+    if velocities_buf.shape[0] != positions_buf.shape[0]:
+        velocities_buf = np.zeros_like(positions_buf)
+    count_arr = np.asarray(
+        obs.get("pedestrians_count", [positions_buf.shape[0]]), dtype=float
+    ).reshape(-1)
+    active_count = int(count_arr[0]) if count_arr.size else int(positions_buf.shape[0])
+    active_count = max(0, min(active_count, positions_buf.shape[0]))
+    positions = positions_buf[:active_count].copy()
+    velocities = velocities_buf[:active_count].copy()
+
+    fn_prob = float(spec.get("pedestrian_false_negative_prob", 0.0))
+    if fn_prob > 0.0 and positions.shape[0] > 0:
+        keep = rng.random(positions.shape[0]) >= fn_prob
+        removed = int(positions.shape[0] - np.count_nonzero(keep))
+        positions = positions[keep]
+        velocities = velocities[keep]
+        stats["pedestrians_removed"] += removed
+
+    fp_prob = float(spec.get("pedestrian_false_positive_prob", 0.0))
+    if (
+        fp_prob > 0.0
+        and positions.shape[0] < positions_buf.shape[0]
+        and float(rng.random()) < fp_prob
+    ):
+        robot_pos = _as_xy_array(obs.get("robot_position"))
+        if robot_pos is None:
+            robot = obs.get("robot") if isinstance(obs.get("robot"), dict) else {}
+            robot_pos = _as_xy_array(robot.get("position", [0.0, 0.0]))
+        if robot_pos is None:
+            robot_pos = np.zeros(2, dtype=float)
+        angle = float(rng.uniform(0.0, 2.0 * np.pi))
+        radius_m = float(rng.uniform(0.0, spec.get("pedestrian_false_positive_radius_m", 4.0)))
+        fp_pos = robot_pos + np.array([np.cos(angle), np.sin(angle)], dtype=float) * radius_m
+        positions = np.vstack([positions, fp_pos.reshape(1, 2)])
+        velocities = np.vstack([velocities, np.zeros((1, 2), dtype=float)])
+        stats["pedestrians_added"] += 1
+
+    out_positions = np.array(positions_buf, copy=True)
+    out_velocities = np.array(velocities_buf, copy=True)
+    out_positions[:] = 0.0
+    out_velocities[:] = 0.0
+    out_count = min(positions.shape[0], out_positions.shape[0])
+    if out_count:
+        out_positions[:out_count] = positions[:out_count]
+        out_velocities[:out_count] = velocities[:out_count]
+    obs["pedestrians_positions"] = out_positions.tolist()
+    obs["pedestrians_velocities"] = out_velocities.tolist()
+    obs["pedestrians_count"] = np.array([float(out_count)], dtype=float).tolist()
 
 
 def merge_observation_noise_stats(

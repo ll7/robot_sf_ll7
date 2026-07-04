@@ -13,3 +13,4 @@ planners:
   - key: goal
     algo: goal
     benchmark_profile: baseline-safe
+    observation_mode: socnav_state

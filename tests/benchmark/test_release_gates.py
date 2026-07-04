@@ -507,6 +507,56 @@ def test_shipped_current_roster_spec_loads_with_coverage_gates() -> None:
     assert {gate.category for gate in gates} == {"safety", "comfort"}
 
 
+def test_instrumented_gate_metrics_make_coverage_gaps_evaluable() -> None:
+    """Recording min_clearance_m/proxemic_intrusion_rate flips coverage gaps evaluable (#4166).
+
+    Once a campaign summary row carries the release-gate-aligned metric fields
+    (`min_clearance_m`, `proxemic_intrusion_rate`) — which `_planner_report_row`
+    now emits on `origin/main` after #4326/#4334 — the shipped current-roster
+    coverage-gap gates must evaluate to pass/fail instead of ``not_evaluable``. A
+    row that omits those fields must still fail closed as ``not_evaluable``.
+
+    This is an end-to-end evaluability guard for issue #4166: it exercises
+    ``evaluate_release_gates`` with explicit row values, so it is independent of
+    how the emitter computes ``min_clearance_m`` (mean vs. worst-case) and stays
+    valid against the worst-case implementation retained on main.
+    """
+
+    gates = load_release_gate_spec(_CURRENT_ROSTER_SPEC)
+    rows = [
+        # Instrumented row: both gate-aligned metrics recorded -> gates evaluable.
+        {
+            "planner_key": "instrumented",
+            "scenario_family": "all",
+            "collisions_mean": "0.02",
+            "near_misses_mean": "1.0",
+            "jerk_mean": "0.5",
+            "comfort_exposure_mean": "0.02",
+            "min_clearance_m": "0.40",  # >= 0.25 floor -> pass
+            "proxemic_intrusion_rate": "0.20",  # > 0.10 limit -> fail
+        },
+        # Uninstrumented row: gate metrics absent -> coverage gaps stay not_evaluable.
+        {
+            "planner_key": "legacy",
+            "scenario_family": "all",
+            "collisions_mean": "0.02",
+            "near_misses_mean": "1.0",
+            "jerk_mean": "0.5",
+            "comfort_exposure_mean": "0.02",
+        },
+    ]
+    report = evaluate_release_gates(rows, gates)
+    detail = {row["planner_key"]: row for row in report["results"]}
+
+    instrumented_gates = {gate["gate_id"]: gate for gate in detail["instrumented"]["gate_results"]}
+    assert instrumented_gates["min_clearance_floor_coverage_gap"]["status"] == "pass"
+    assert instrumented_gates["proxemic_intrusion_rate_coverage_gap"]["status"] == "fail"
+
+    legacy_gates = {gate["gate_id"]: gate for gate in detail["legacy"]["gate_results"]}
+    assert legacy_gates["min_clearance_floor_coverage_gap"]["status"] == "not_evaluable"
+    assert legacy_gates["proxemic_intrusion_rate_coverage_gap"]["status"] == "not_evaluable"
+
+
 def test_current_roster_evidence_matches_retained_campaign() -> None:
     """Rebuilding from the retained campaign reproduces the committed evidence packet."""
 

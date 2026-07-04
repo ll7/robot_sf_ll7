@@ -50,6 +50,10 @@ from robot_sf.benchmark.canonical_table_export import (
     export_canonical_table as _export_canonical_table,
 )
 from robot_sf.benchmark.canonical_table_export import load_rows_json as _load_canonical_rows_json
+from robot_sf.benchmark.collision_scenario_similarity import (
+    build_collision_scenario_similarity_report,
+    write_collision_scenario_similarity_report,
+)
 from robot_sf.benchmark.distributions import collect_grouped_values as _dist_collect
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
 from robot_sf.benchmark.doctor import collect_doctor_report, doctor_exit_code
@@ -667,6 +671,37 @@ def _handle_classify_failure_mechanisms(args) -> int:
         return 0
     except Exception:
         logging.exception("Failure mechanism classification failed")
+        return 2
+
+
+def _handle_collision_scenario_similarity(args) -> int:
+    """Build collision-scenario similarity report from episode JSONL records.
+
+    Returns:
+        Process exit code.
+    """
+    try:
+        report = build_collision_scenario_similarity_report(
+            args.episodes_jsonl,
+            nearest_k=args.nearest_k,
+            group_threshold=args.group_threshold,
+            collision_threshold=args.collision_threshold,
+            near_miss_threshold=args.near_miss_threshold,
+            comfort_threshold=args.comfort_threshold,
+        )
+        write_collision_scenario_similarity_report(
+            report,
+            args.out_json,
+            out_markdown=args.out_markdown,
+        )
+        logging.info(
+            "Collision scenario similarity report wrote %d selected records to %s",
+            report["selection"]["selected_count"],
+            args.out_json,
+        )
+        return 0
+    except (EpisodeRecordInputError, OSError, TypeError, ValueError):
+        logging.exception("Collision scenario similarity report failed")
         return 2
 
 
@@ -1983,6 +2018,47 @@ def _add_classify_failure_mechanisms_subparser(
     p.set_defaults(cmd="classify-failure-mechanisms")
 
 
+def _add_collision_scenario_similarity_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register collision-scenario-similarity subcommand parser."""
+    p = subparsers.add_parser(
+        "collision-scenario-similarity",
+        help="Build nearest-neighbor groups for collision and near-collision episodes.",
+    )
+    p.add_argument("--episodes-jsonl", required=True, help="Input benchmark episode JSONL path.")
+    p.add_argument("--out-json", required=True, help="Output similarity report JSON path.")
+    p.add_argument("--out-markdown", default=None, help="Optional Markdown inspection report path.")
+    p.add_argument(
+        "--nearest-k", type=int, default=3, help="Neighbors to list per selected record."
+    )
+    p.add_argument(
+        "--group-threshold",
+        type=float,
+        default=0.35,
+        help="Maximum normalized distance linking records into a group.",
+    )
+    p.add_argument(
+        "--collision-threshold",
+        type=float,
+        default=1.0,
+        help="Minimum collisions for selection.",
+    )
+    p.add_argument(
+        "--near-miss-threshold",
+        type=float,
+        default=0.0,
+        help="Strict lower bound for near_misses selection.",
+    )
+    p.add_argument(
+        "--comfort-threshold",
+        type=float,
+        default=0.2,
+        help="Minimum comfort_exposure for selection.",
+    )
+    p.set_defaults(cmd="collision-scenario-similarity")
+
+
 def _add_validate_row_claims_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -2582,6 +2658,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_metric_layers_subparser(subparsers)
     _add_stress_coverage_report_subparser(subparsers)
     _add_classify_failure_mechanisms_subparser(subparsers)
+    _add_collision_scenario_similarity_subparser(subparsers)
     _add_claim_subparser(subparsers)
     _add_validate_row_claims_subparser(subparsers)
     _add_export_parquet_subparser(subparsers)
@@ -3088,6 +3165,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         "metric-layers": _handle_metric_layers,
         "stress-coverage-report": _handle_stress_coverage_report,
         "classify-failure-mechanisms": _handle_classify_failure_mechanisms,
+        "collision-scenario-similarity": _handle_collision_scenario_similarity,
         "claim": _handle_claim,
         "validate-row-claims": _handle_validate_row_claims,
         "export-parquet": _handle_export_parquet,

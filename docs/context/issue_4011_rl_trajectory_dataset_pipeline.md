@@ -17,6 +17,24 @@ scenario provenance, deterministic split assignment, and a manifest with leakage
   under `output/` remain worktree-local until promoted to a durable artifact store with an explicit
   URI and checksum.
 
+## Terminal Closure Status
+
+Issue #4011 is ready for terminal closure as of 2026-07-04. PR #4145 delivered the
+`RLTrajectoryDataset.v1` recorder, loader, manifest, split checks, and validation surfaces.
+PR #4311 added the evidence-closure regression guard for the committed smoke bundle under
+`docs/context/evidence/issue_4011_rl_trajectory_dataset_smoke_2026-07-02/`.
+
+The remaining offline reinforcement learning policy-consumption work is intentionally outside
+Issue #4011. It belongs to downstream training or offline-to-online research issues, not to the
+dataset pipeline closure contract.
+
+GitHub state checked before this closure note:
+
+- Issue #4011 remained open;
+- PR #4145 was merged on 2026-07-02;
+- PR #4311 was merged on 2026-07-03;
+- no open pull request covered the same terminal-closure slice.
+
 ## Entry Points
 
 - `robot_sf/benchmark/rl_trajectory_dataset.py` loads, validates, flattens, and writes the dataset.

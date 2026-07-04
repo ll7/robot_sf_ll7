@@ -1,0 +1,5 @@
+# Issue #4455 canonical preregistration path requested by maintainer comment.
+# Keep this wrapper small so the detailed manifest has one canonical owner.
+include: perception_degradation/issue_4455_ladder_v1.yaml
+submit_in_this_pr: false
+claim_boundary: enablement_only_no_campaign_no_paper_claim

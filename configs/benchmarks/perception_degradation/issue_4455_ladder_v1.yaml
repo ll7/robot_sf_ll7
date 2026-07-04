@@ -1,0 +1,72 @@
+schema_version: perception-degradation-ladder.v1
+issue: 4455
+study_id: issue_4455_perception_degradation_ladder_v1
+status: preregistered_enablement_config
+claim_boundary: >
+  Enablement-only preregistration for a bounded planner-input perception-degradation
+  ladder. This config is not benchmark evidence, not a full campaign result, and
+  not a paper-facing claim until the generated configs are run and promoted with
+  provenance.
+scenario_matrix: configs/scenarios/planner_sanity_matrix_v1.yaml
+seed_policy:
+  mode: fixed-list
+  seeds: [111, 112]
+cpu_smoke_defaults:
+  workers: 1
+  horizon: 5
+  dt: 0.1
+  record_forces: false
+  resume: false
+  export_publication_bundle: false
+planners:
+  - key: hybrid_rule_v0_minimal
+    algo: hybrid_rule_local_planner
+    algo_config: configs/algos/hybrid_rule_v0_minimal.yaml
+    planner_group: experimental
+    benchmark_profile: experimental
+  - key: ppo_baseline
+    algo: ppo
+    algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
+    planner_group: experimental
+    benchmark_profile: experimental
+    adapter_impact_eval: true
+  - key: orca_baseline
+    algo: orca
+    planner_group: core
+    benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fail-fast
+profiles:
+  - key: nominal_oracle
+    profile_hash: 0a5609f0b2b1
+    description: Current oracle-grade planner input; baseline for ladder comparisons.
+    observation_noise:
+      enabled: false
+      profile: none
+  - key: gaussian_track_noise_low
+    profile_hash: fc9abd0c2c88
+    description: Low synthetic Gaussian pedestrian-track noise on planner input.
+    observation_noise:
+      profile: gaussian_track_noise_low
+      seed: 445501
+      pedestrian_position_noise_std_m: 0.05
+  - key: fixed_detection_delay_1
+    profile_hash: 55e7ff4d05c0
+    description: One-step fixed pedestrian detection delay on planner input.
+    observation_noise:
+      profile: fixed_detection_delay_1
+      seed: 445502
+      observation_delay_steps: 1
+  - key: false_negative_pedestrian_drop_10pct
+    profile_hash: c76cf85c757d
+    description: Ten percent pedestrian false-negative drops on planner input.
+    observation_noise:
+      profile: false_negative_pedestrian_drop_10pct
+      seed: 445503
+      pedestrian_false_negative_prob: 0.10
+  - key: occlusion_range_4m
+    profile_hash: 600086b5b447
+    description: Range-limited pedestrian visibility proxy on planner input.
+    observation_noise:
+      profile: occlusion_range_4m
+      seed: 445504
+      pedestrian_occlusion_max_range_m: 4.0

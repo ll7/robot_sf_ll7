@@ -12,6 +12,8 @@ import yaml
 from scripts.training.run_comparison_matrix_preregistration import (
     EXPECTED_ARM_IDS,
     FINETUNE_MANIFEST_SCHEMA,
+    MECHANISM_BREAKDOWN_REQUIRED_FIELDS,
+    MECHANISM_BREAKDOWN_SCHEMA_ISSUE,
     PRETRAIN_MANIFEST_SCHEMA,
     SAC_GATE,
     SAC_GATE_REQUIRED_ISSUE,
@@ -46,6 +48,22 @@ def test_issue_4244_matrix_uses_identical_budget_refs_for_every_arm() -> None:
     assert set(budgets.values()) == {"shared_budget"}
     assert matrix.shared_budget["seeds"] == [123, 231, 777, 992, 1337]
     assert matrix.shared_budget["total_timesteps"] == 15000000
+
+
+def test_issue_4244_analysis_plan_points_to_landed_mechanism_schema() -> None:
+    """Rank table, confidence intervals, and mechanism breakdown schema are preregistered."""
+    matrix = load_matrix(CONFIG_PATH)
+    analysis_plan = matrix.payload["comparison"]["analysis_plan"]
+
+    assert analysis_plan["rank_table"] is True
+    assert analysis_plan["confidence_intervals"] == "bootstrap_95"
+    assert analysis_plan["mechanism_breakdown_schema_issue"] == MECHANISM_BREAKDOWN_SCHEMA_ISSUE
+    assert analysis_plan["mechanism_breakdown_schema_note"] == (
+        "docs/context/issue_4242_episode_mechanism_exposure_schema.md"
+    )
+    assert set(analysis_plan["mechanism_breakdown_required_fields"]) >= (
+        MECHANISM_BREAKDOWN_REQUIRED_FIELDS
+    )
 
 
 def test_issue_4244_matrix_has_no_placeholder_training_configs() -> None:
@@ -219,6 +237,18 @@ def test_issue_4244_matrix_requires_sac_gate_evidence_pointers(tmp_path: Path) -
         load_matrix(edited_path)
 
 
+def test_issue_4244_matrix_rejects_wrong_mechanism_schema_issue(tmp_path: Path) -> None:
+    """Mechanism breakdown must reference landed issue #4242, not SAC gate issue #4245."""
+    payload = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+    edited = copy.deepcopy(payload)
+    edited["comparison"]["analysis_plan"]["mechanism_breakdown_schema_issue"] = 4245
+    edited_path = tmp_path / "wrong_mechanism_issue_matrix.yaml"
+    edited_path.write_text(yaml.safe_dump(edited), encoding="utf-8")
+
+    with pytest.raises(MatrixValidationError, match="mechanism_breakdown_schema_issue"):
+        load_matrix(edited_path)
+
+
 def _write_sac_gate_evidence(
     tmp_path: Path, *, offline_sha_in_chain: str = "offline-sha"
 ) -> dict[str, str]:
@@ -261,6 +291,9 @@ def _temp_matrix_payload(tmp_path: Path) -> dict[str, object]:
     scenario_path = tmp_path / payload["comparison"]["shared_budget"]["scenario_config"]
     scenario_path.parent.mkdir(parents=True, exist_ok=True)
     scenario_path.write_text("scenario: unit\n", encoding="utf-8")
+    note_path = tmp_path / payload["comparison"]["analysis_plan"]["mechanism_breakdown_schema_note"]
+    note_path.parent.mkdir(parents=True, exist_ok=True)
+    note_path.write_text("# Mechanism schema fixture\n", encoding="utf-8")
     for arm in payload["arms"]:
         training_config = arm["training_config"]
         if "/placeholders/" in training_config:

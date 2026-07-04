@@ -123,6 +123,13 @@ def test_nested_topology_guided_config_does_not_mutate_caller_mapping() -> None:
     }
 
 
+def test_topology_arbitration_default_is_explicit_issue_3463_value() -> None:
+    """Missing legacy config uses the explicit topology arbitration default."""
+    config = build_topology_guided_local_policy_config({})
+
+    assert config.arbitration_weight == pytest.approx(0.35)
+
+
 def test_blend_topology_command_respects_weight_and_limits() -> None:
     """Explicit arbitration should be finite, monotone, and clipped to command limits."""
     limits = {"max_linear": 1.0, "max_angular": 0.5}
@@ -150,6 +157,13 @@ def test_blend_topology_command_rejects_invalid_weight() -> None:
             weight=1.5,
             command_limits={"max_linear": 1.0, "max_angular": 1.0},
         )
+
+
+@pytest.mark.parametrize("weight", [-0.1, 1.1, float("nan")])
+def test_topology_arbitration_config_rejects_invalid_weight(weight: float) -> None:
+    """The config parser validates topology arbitration strength fail-closed."""
+    with pytest.raises(ValueError, match="arbitration_weight"):
+        _config(arbitration_weight=weight)
 
 
 def test_topology_guided_selector_finds_two_distinct_route_hypotheses() -> None:
@@ -360,7 +374,7 @@ def test_topology_guided_policy_records_selected_hypothesis_diagnostics() -> Non
     assert route_corridor["topology_guided_config"]["schema_version"] == (
         "topology_guided_hybrid_rule.v1"
     )
-    assert route_corridor["topology_guided_config"]["arbitration_weight"] == pytest.approx(1.0)
+    assert route_corridor["topology_guided_config"]["arbitration_weight"] == pytest.approx(0.35)
     assert len(route_corridor["topology_hypotheses"]) == 2
     assert all("score_components" in item for item in route_corridor["topology_hypotheses"])
     assert any(
@@ -406,6 +420,14 @@ def test_topology_hypothesis_can_select_local_command_source() -> None:
         last_decision["topology_command_influence"]["selected_hypothesis_id"]
         == last_decision["route_corridor"]["topology_hypothesis"]["hypothesis_id"]
     )
+    influence = last_decision["topology_command_influence"]
+    assert influence["schema_version"] == "topology-command-influence.v1"
+    assert influence["arbitration_weight"] == pytest.approx(0.35)
+    assert influence["projected_command"] == last_decision["selected_command"]
+    assert isinstance(influence["projection_applied"], bool)
+    assert influence["command_limits"]["max_linear"] >= abs(influence["projected_command"][0])
+    assert influence["command_limits"]["max_angular"] >= abs(influence["projected_command"][1])
+    assert last_decision["topology_guided_config"]["arbitration_weight"] == pytest.approx(0.35)
 
 
 def test_topology_hypothesis_command_blends_headings_across_pi_boundary() -> None:

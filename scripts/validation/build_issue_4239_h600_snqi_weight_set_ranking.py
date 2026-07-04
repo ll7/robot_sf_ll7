@@ -731,6 +731,15 @@ def _update_source_manifest(path: Path, generated_paths: list[Path], *, status: 
         "status": status,
         "artifacts": [_rel(path) for path in generated_paths],
         "claim_boundary": "diagnostic-only; no canonical weight decision or claim edit",
+        "provenance_portability": {
+            "path_policy": "repo_relative",
+            "source_manifest_paths": "repo_relative",
+            "checksum_manifest": _rel(path.parent / "SHA256SUMS"),
+            "review_gate": (
+                "diss#331 posting remains authorization-gated; this builder only "
+                "refreshes the local review snippet"
+            ),
+        },
     }
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 

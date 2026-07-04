@@ -1,0 +1,85 @@
+schema_version: manuscript-asserted-number-declarations.v1
+issue: 4366
+claim_boundary: >-
+  Verification aid for dissertation/manuscript asserted implementation numbers only. This file
+  does not edit manuscript claims, promote benchmark evidence, run campaigns, or silently fix source
+  values.
+selection_assumption: >-
+  The tracked issue thread names number families, but it does not include the dissertation-side
+  audit table. These ten declarations seed the most likely high-risk implementation-number
+  assertions from those named families. Ambiguous heatmap source records are explicitly marked
+  not_verifiable.
+entries:
+  - id: snqi_camera_ready_v3_w_success
+    manuscript_locator: "audit finding F / SNQI weight vector / camera_ready_v3 / w_success"
+    expected: 0.19045845847432735
+    source:
+      path: configs/benchmarks/snqi_weights_camera_ready_v3.json
+      pointer: w_success
+
+  - id: snqi_camera_ready_v3_w_near
+    manuscript_locator: "audit finding F / SNQI weight vector / camera_ready_v3 / w_near"
+    expected: 0.30825830332144416
+    source:
+      path: configs/benchmarks/snqi_weights_camera_ready_v3.json
+      pointer: w_near
+
+  - id: snqi_canonical_weight_set_id
+    manuscript_locator: "audit finding F / SNQI canonical set identifier"
+    expected: camera_ready_v3
+    source:
+      path: configs/benchmarks/snqi_weight_sets_camera_ready.yaml
+      pointer: canonical_set
+
+  - id: scenario_density_tier_labels
+    manuscript_locator: "audit finding F / scenario-catalog density tiers"
+    expected:
+      - low
+      - medium
+      - high
+    source:
+      path: configs/scenarios/archetypes/classic_density_tier_index.yaml
+      pointer: density_tiers
+
+  - id: classic_crossing_high_ped_density
+    manuscript_locator: "audit finding F / scenario-catalog density / classic_crossing_high"
+    expected: 0.08
+    source:
+      path: configs/scenarios/archetypes/classic_crossing.yaml
+      pointer: scenarios[name=classic_crossing_high].simulation_config.ped_density
+
+  - id: classic_bottleneck_high_ped_density
+    manuscript_locator: "audit finding F / scenario-catalog density / classic_bottleneck_high"
+    expected: 0.0
+    source:
+      path: configs/scenarios/archetypes/classic_bottleneck.yaml
+      pointer: scenarios[name=classic_bottleneck_high].simulation_config.ped_density
+
+  - id: ppo_br06_v3_total_timesteps
+    manuscript_locator: "audit finding F / reinforcement learning training budget"
+    expected: 15000000
+    source:
+      path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+      pointer: total_timesteps
+
+  - id: ppo_br06_v3_grid_resolution_m
+    manuscript_locator: "audit finding F / reinforcement learning observation grid resolution"
+    expected: 0.2
+    source:
+      path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+      pointer: env_overrides.grid_config.resolution
+
+  - id: ppo_br06_v3_max_peds_per_group
+    manuscript_locator: "audit finding F / pedestrian-module group-size cap"
+    expected: 3
+    source:
+      path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+      pointer: env_overrides.sim_config.max_peds_per_group
+
+  - id: heatmap_per_family_means_source
+    manuscript_locator: "audit finding F / heatmap per-family means"
+    expected_status: not_verifiable
+    not_verifiable_reason: >-
+      The issue names heatmap per-family means but does not identify one canonical source-of-record
+      table or locator. This declaration records the gap instead of guessing among generated
+      evidence packets.

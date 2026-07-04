@@ -1,0 +1,42 @@
+{
+  "schema_version": "scenario_horizon_table_reexport_readiness_packet.v1",
+  "issue": 3203,
+  "created_date": "2026-07-04",
+  "claim_boundary": "scenario_horizon_table_reexport_only",
+  "paper_facing": false,
+  "benchmark_results_claim": false,
+  "snqi_validity_claim": false,
+  "source_artifact": {
+    "path": "docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-07-01/reports/campaign_summary.json",
+    "sha256": "3ecb0af9156c12bf0811b2866b99df3202d6841401ab4375b90f18ef8218135b"
+  },
+  "required_observations": {
+    "exit_code": 0,
+    "benchmark_success": true,
+    "evidence_status": "valid",
+    "unexpected_failed_runs": 0,
+    "accepted_unavailable_runs": 0,
+    "non_success_runs": 0,
+    "successful_runs": 9,
+    "total_runs": 9,
+    "total_episodes": 1296,
+    "ppo_status": "ok",
+    "ppo_execution_mode": "native",
+    "ppo_learned_policy_contract_status": "pass"
+  },
+  "snqi_exclusion": {
+    "predeclared": true,
+    "excluded_from_claim": true,
+    "observed_status": "fail",
+    "reason": "Issue #3203 table re-export closure is limited to payload/provenance readiness. The July 1, 2026 rerun repaired row execution and PPO readiness but left the SNQI rank-alignment contract failed, so SNQI validity, ranking, benchmark Results, and paper/dissertation claims remain out of scope."
+  },
+  "allowed_use": [
+    "Verify the tracked July 1, 2026 scenario-horizon table re-export payload is reproducible and row-complete.",
+    "Support diagnostic/provenance wording about the re-export packet."
+  ],
+  "forbidden_use": [
+    "Benchmark-success promotion for the scenario-horizon table.",
+    "SNQI-valid ranking or Results-chapter claims.",
+    "Paper or dissertation claim edits."
+  ]
+}

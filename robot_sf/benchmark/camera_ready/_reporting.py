@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING, Any
 
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.camera_ready._artifacts import _escape_markdown_cell
+from robot_sf.benchmark.camera_ready._config_types import _AMV_DIMENSIONS, PlannerSpec
 from robot_sf.benchmark.camera_ready._summaries import _extract_amv_taxonomy
-from robot_sf.benchmark.camera_ready_campaign_config import _AMV_DIMENSIONS, PlannerSpec
 from robot_sf.benchmark.fallback_policy import (
     classify_planner_row_status,
     summarize_benchmark_availability,

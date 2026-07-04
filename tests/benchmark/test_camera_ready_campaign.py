@@ -17,8 +17,10 @@ from loguru import logger
 
 import robot_sf.benchmark.camera_ready._artifacts as camera_ready_artifacts_module
 import robot_sf.benchmark.camera_ready._config as camera_ready_config_module
+import robot_sf.benchmark.camera_ready._config_types as camera_ready_config_types_module
 import robot_sf.benchmark.camera_ready._run_state as camera_ready_run_state_module
 import robot_sf.benchmark.camera_ready_campaign as camera_ready_campaign_module
+import robot_sf.benchmark.camera_ready_campaign_config as camera_ready_campaign_config_module
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
 from robot_sf.benchmark.camera_ready._artifacts import (
     _write_csv,
@@ -103,6 +105,27 @@ def test_camera_ready_campaign_reexports_package_config_loader() -> None:
     for helper_name in helper_names:
         assert getattr(camera_ready_campaign_module, helper_name) is getattr(
             camera_ready_config_module, helper_name
+        )
+
+
+def test_camera_ready_config_types_keep_legacy_import_identity() -> None:
+    """Config dataclass extraction keeps legacy import paths object-identical."""
+    public_names = (
+        "DEFAULT_SEED_SETS_PATH",
+        "AmvProfileConfig",
+        "CampaignConfig",
+        "PlannerSpec",
+        "ScenarioCandidateSelection",
+        "SeedPolicy",
+        "SnqiContractConfig",
+    )
+
+    for name in public_names:
+        assert getattr(camera_ready_campaign_config_module, name) is getattr(
+            camera_ready_config_types_module, name
+        )
+        assert getattr(camera_ready_campaign_module, name) is getattr(
+            camera_ready_config_types_module, name
         )
 
 

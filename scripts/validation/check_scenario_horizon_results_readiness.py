@@ -8,7 +8,7 @@ evidence.
 
 Exit codes:
 
-- ``0`` -- artifact is valid benchmark evidence.
+- ``0`` -- artifact is valid benchmark evidence or satisfies a predeclared narrow claim boundary.
 - ``2`` -- artifact is diagnostic-only (non-success rows or unresolved SNQI caveat).
 - ``3`` -- artifact is blocked (missing or unparseable).
 
@@ -26,12 +26,14 @@ import sys
 
 from robot_sf.benchmark.scenario_horizon_readiness import (
     BLOCKED,
+    TABLE_REEXPORT_READY,
     VALID,
     classify_scenario_horizon_readiness,
+    classify_scenario_horizon_table_reexport_readiness,
 )
 
 #: Map readiness verdicts to canonical fail-closed exit codes.
-_EXIT_CODES = {VALID: 0, BLOCKED: 3}
+_EXIT_CODES = {VALID: 0, TABLE_REEXPORT_READY: 0, BLOCKED: 3}
 _DIAGNOSTIC_EXIT_CODE = 2
 
 
@@ -53,6 +55,13 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Emit the verdict as JSON instead of human-readable text.",
     )
+    parser.add_argument(
+        "--claim-boundary-packet",
+        help=(
+            "Predeclared JSON packet for a narrow non-Results claim boundary. "
+            "Without this option, SNQI failures remain diagnostic-only."
+        ),
+    )
     return parser
 
 
@@ -63,13 +72,22 @@ def main(argv: list[str] | None = None) -> int:
         ``0`` for valid, ``2`` for diagnostic-only, ``3`` for blocked.
     """
     args = _build_parser().parse_args(argv)
-    readiness = classify_scenario_horizon_readiness(args.artifact)
+    if args.claim_boundary_packet:
+        readiness = classify_scenario_horizon_table_reexport_readiness(
+            args.artifact,
+            args.claim_boundary_packet,
+        )
+    else:
+        readiness = classify_scenario_horizon_readiness(args.artifact)
 
     if args.json:
         print(json.dumps(readiness.to_payload(), indent=2, sort_keys=True))
     else:
         print(f"scenario-horizon Results readiness: {readiness.status}")
+        print(f"  claim_boundary: {readiness.claim_boundary}")
         print(f"  artifact: {readiness.artifact}")
+        if readiness.readiness_packet:
+            print(f"  readiness_packet: {readiness.readiness_packet}")
         print(f"  planner_rows: {readiness.planner_rows}")
         print(f"  ppo_status: {readiness.ppo_status}")
         print(f"  snqi_contract_status: {readiness.snqi_contract_status}")
@@ -77,6 +95,10 @@ def main(argv: list[str] | None = None) -> int:
             print("  blockers:")
             for blocker in readiness.blockers:
                 print(f"    - {blocker}")
+        if readiness.notes:
+            print("  notes:")
+            for note in readiness.notes:
+                print(f"    - {note}")
 
     return _EXIT_CODES.get(readiness.status, _DIAGNOSTIC_EXIT_CODE)
 

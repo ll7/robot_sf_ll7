@@ -1,0 +1,50 @@
+issue: 4279
+state_surface: socnavbench_eth_shape_contract_closure_audit
+entries:
+  - recorded_at_utc: "2026-07-04T22:30:20Z"
+    status: not_ready_for_issue_closure
+    source:
+      issue_url: "https://github.com/ll7/robot_sf_ll7/issues/4279"
+      live_issue_state_checked: "open"
+      comments_checked: 2
+      latest_issue_comment_utc: "2026-07-03T13:24:48Z"
+      open_pr_dedupe_checked: true
+      merged_prs_verified:
+        - pr: 4286
+          url: "https://github.com/ll7/robot_sf_ll7/pull/4286"
+          merged_at_utc: "2026-07-03T13:24:23Z"
+          role: "SocNavBench ETH shape-contract loader, skip-if-absent tests, and acquisition/layout documentation."
+    propagation_surface: "tracked append-only state file because run authorization disallows issue comments"
+    closure_boundary:
+      claim_boundary: "Closure audit only; no dataset bytes, no download path, no benchmark campaign, and no paper or dissertation claim edits."
+      delivered: "Public repository exemplar loader/accessor, docs, skip-if-absent tests, deterministic registry path, malformed-data fail-closed behavior."
+      remaining: "Maintainer/private-side acquisition and staging of license-gated official ETH bytes before staged-data pass can be recorded."
+    acceptance_mapping:
+      - criterion: "Add SocNavBench ETH loader/accessor module."
+        status: met
+        evidence: "Merged PR #4286 added robot_sf/data/external/socnavbench_eth.py with is_available, require_available, expected_layout, and load_shape_contract."
+      - criterion: "Resolve staged path through the external-data registry and ROBOT_SF_EXTERNAL_DATA_ROOT."
+        status: met
+        evidence: "PR #4286 loader uses asset id socnavbench-s3dis-eth via scripts.tools.manage_external_data; docs describe the shared-root override under ROBOT_SF_EXTERNAL_DATA_ROOT/socnavbench."
+      - criterion: "Keep continuous integration green when external data is absent."
+        status: met
+        evidence: "PR #4286 added tests/data/external/test_socnavbench_eth_shape.py with skip-if-absent behavior; PR review comment on 2026-07-03 recorded 2 passed, 1 skipped, and all CI green before merge."
+      - criterion: "Malformed staged data fails closed with an actionable SocNavBench ETH error and acquisition/layout doc pointer."
+        status: met
+        evidence: "PR #4286 loader raises SocNavBenchEthDataError for absent or malformed layout/pickle data and names docs/datasets/socnavbench-s3dis-eth.md; focused tests cover malformed pickle rejection."
+      - criterion: "Add acquisition/layout documentation and link it from external-data setup docs."
+        status: met
+        evidence: "PR #4286 added docs/datasets/socnavbench-s3dis-eth.md and updated docs/external_data_setup.md."
+      - criterion: "Do not add raw SocNavBench/S3DIS bytes, public download code, benchmark claims, or paper/dissertation claims."
+        status: met
+        evidence: "PR #4286 changed only loader, tests, package exports, and docs; PR review and issue propagation state no bytes, no download path, and no benchmark or paper-facing claim."
+      - criterion: "Run staged-data validation on locally staged official ETH bytes."
+        status: blocked_not_public_repo
+        evidence: "Issue comment on 2026-07-03T13:24:48Z states #4279 remains open because official license-gated ETH bytes still need acquisition/staging before staged-data pass."
+    forbidden_actions_confirmed:
+      full_benchmark_campaign: false
+      slurm_or_gpu_submission: false
+      dataset_download_or_raw_bytes: false
+      issue_comment_posted: false
+      merge_or_release: false
+      deletion: false

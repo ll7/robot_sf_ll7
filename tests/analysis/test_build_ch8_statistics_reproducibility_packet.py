@@ -66,3 +66,39 @@ def test_default_manifest_fails_closed_until_ch8_sources_are_registered(tmp_path
     packet = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
     assert packet["overall_status"] == "blocked"
     assert {row["status"] for row in packet["statistics"]} == {"blocked_missing_source_data"}
+
+
+def test_manifest_with_non_dict_statistic_entry_fails_closed(tmp_path: Path) -> None:
+    """A malformed statistics entry raises a clear manifest error, not an opaque crash."""
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "issue_4445.ch8_statistics_reproducibility.v1",
+                "issue": 4445,
+                "title": "malformed entry",
+                "source_status": "unavailable",
+                "statistics": ["not-a-dict"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--manifest",
+            str(manifest_path),
+            "--output-dir",
+            str(tmp_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode != 0
+    assert "must be a JSON object" in completed.stderr

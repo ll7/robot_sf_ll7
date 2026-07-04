@@ -207,3 +207,56 @@ def test_finite_sequence_validation_rejects_non_finite_values() -> None:
 
     with pytest.raises(ValueError, match="non-finite"):
         spearman_rho([1.0, float("nan")], [1.0, 2.0])
+
+
+def test_evaluate_statistic_fails_closed_on_malformed_expected_block() -> None:
+    """A non-numeric expected value fails closed instead of raising unhandled."""
+
+    result = evaluate_statistic(
+        {
+            "id": "eta",
+            "statistic_kind": "partial_eta_squared",
+            "expected": {"value": "not-a-number"},
+            "data": {"groups": {"a": [1.0, 2.0], "b": [4.0, 5.0]}},
+        }
+    )
+
+    assert result.status == "blocked_invalid_source_data"
+    assert result.computed["value"] == pytest.approx(0.9)
+    assert "invalid expected block" in result.blockers[0]
+
+
+def test_evaluate_statistic_fails_closed_on_non_list_expected_ci() -> None:
+    """A scalar expected ci is reported as a blocker rather than raising TypeError."""
+
+    result = evaluate_statistic(
+        {
+            "id": "ci",
+            "statistic_kind": "bootstrap_mean_ci",
+            "expected": {"ci": 5},
+            "data": {
+                "values": [1.0, 2.0, 3.0, 4.0],
+                "samples": 32,
+                "confidence_level": 0.95,
+                "seed": 7,
+            },
+        }
+    )
+
+    assert result.status == "computed_mismatch"
+    assert any("expected ci must contain two values" in blocker for blocker in result.blockers)
+
+
+def test_validate_sequence_rejects_multidimensional_input() -> None:
+    """Two-dimensional group values fail closed instead of silently reshaping."""
+
+    result = evaluate_statistic(
+        {
+            "id": "eta",
+            "statistic_kind": "partial_eta_squared",
+            "data": {"groups": {"a": [[1.0, 2.0], [3.0, 4.0]], "b": [5.0, 6.0]}},
+        }
+    )
+
+    assert result.status == "blocked_invalid_source_data"
+    assert any("1D sequence" in blocker for blocker in result.blockers)

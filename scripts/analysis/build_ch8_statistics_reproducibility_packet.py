@@ -66,6 +66,9 @@ def _load_manifest(path: Path) -> dict[str, Any]:
     statistics = payload.get("statistics")
     if not isinstance(statistics, list) or not statistics:
         raise ValueError("manifest statistics must be a non-empty list")
+    for index, entry in enumerate(statistics):
+        if not isinstance(entry, dict):
+            raise ValueError(f"manifest statistics[{index}] must be a JSON object")
     for field in ("title", "source_status"):
         if not isinstance(payload.get(field), str) or not payload[field]:
             raise ValueError(f"manifest requires non-empty {field}")

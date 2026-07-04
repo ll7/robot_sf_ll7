@@ -152,7 +152,17 @@ def evaluate_statistic(spec: dict[str, Any]) -> StatisticResult:
 
     status = "recomputed"
     if expected:
-        blockers.extend(_expected_blockers(computed, expected))
+        try:
+            blockers.extend(_expected_blockers(computed, expected))
+        except (KeyError, TypeError, ValueError) as exc:
+            return StatisticResult(
+                statistic_id=statistic_id,
+                statistic_kind=statistic_kind,
+                status="blocked_invalid_source_data",
+                computed=computed,
+                expected=expected,
+                blockers=(f"invalid expected block: {exc}",),
+            )
         status = "matches_expected" if not blockers else "computed_mismatch"
     else:
         status = "computed_expected_value_missing"
@@ -201,7 +211,7 @@ def _expected_blockers(computed: dict[str, Any], expected: dict[str, Any]) -> li
         expected_ci = expected["ci"]
         if not isinstance(computed_ci, list) or len(computed_ci) != 2:
             blockers.append("computed ci is missing")
-        elif len(expected_ci) != 2:
+        elif not isinstance(expected_ci, list) or len(expected_ci) != 2:
             blockers.append("expected ci must contain two values")
         else:
             for index, (actual, target) in enumerate(zip(computed_ci, expected_ci, strict=True)):
@@ -240,6 +250,8 @@ def _validate_sequence(values: list[float], *, name: str, min_length: int) -> np
     if not isinstance(values, list) or len(values) < min_length:
         raise ValueError(f"{name} must contain at least {min_length} values")
     array = np.asarray(values, dtype=float)
+    if array.ndim != 1:
+        raise ValueError(f"{name} must be a 1D sequence")
     if not np.all(np.isfinite(array)):
         raise ValueError(f"{name} contains non-finite values")
     return array

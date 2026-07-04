@@ -167,20 +167,20 @@
       "source": "except Exception as exc:  # pragma: no cover - defensive CLI path"
     },
     {
-      "col_offset": 12,
-      "context": "_run_campaign_orchestrator",
-      "fingerprint": "b57306be9066573d",
+      "col_offset": 4,
+      "context": "_execute_campaign_planner_batch",
+      "fingerprint": "ba3cb2a07fb0c63c",
       "handler": "Exception",
-      "lineno": 316,
+      "lineno": 275,
       "path": "robot_sf/benchmark/camera_ready/campaign.py",
       "source": "except Exception as exc:"
     },
     {
-      "col_offset": 16,
-      "context": "_run_campaign_orchestrator",
-      "fingerprint": "b57306be9066573d",
+      "col_offset": 8,
+      "context": "_run_campaign_planner_variant",
+      "fingerprint": "e573b4742776e204",
       "handler": "Exception",
-      "lineno": 364,
+      "lineno": 396,
       "path": "robot_sf/benchmark/camera_ready/campaign.py",
       "source": "except Exception as exc:"
     },
@@ -189,7 +189,7 @@
       "context": "_run_campaign_orchestrator",
       "fingerprint": "b57306be9066573d",
       "handler": "Exception",
-      "lineno": 1269,
+      "lineno": 1425,
       "path": "robot_sf/benchmark/camera_ready/campaign.py",
       "source": "except Exception as exc:"
     },

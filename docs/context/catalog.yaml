@@ -3163,3 +3163,7 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4425_closure_audit_2026-07-04/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

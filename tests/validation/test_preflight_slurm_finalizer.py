@@ -114,6 +114,21 @@ def test_ready_when_all_inputs_present(tmp_path: Path) -> None:
     assert statuses["claim_decision_present"] == "ready"
 
 
+def test_ready_accepts_wandb_artifact_durable_pointer(tmp_path: Path) -> None:
+    """Weights & Biases artifact URIs are durable pointers for finalizer evidence."""
+    inputs = _ready_inputs(tmp_path)
+    _write_finalizer(
+        tmp_path / "finalizer.json",
+        durable_uri="wandb-artifact://robot-sf/finalizer/job-12345:latest",
+    )
+
+    report = gate.preflight(**inputs)
+
+    assert report["ready"] is True
+    statuses = {check["name"]: check["status"] for check in report["checks"]}
+    assert statuses["durable_pointer_present"] == "ready"
+
+
 def test_blocks_when_durable_pointer_missing(tmp_path: Path) -> None:
     """A successful finalizer without a durable pointer fails closed."""
     inputs = _ready_inputs(tmp_path)

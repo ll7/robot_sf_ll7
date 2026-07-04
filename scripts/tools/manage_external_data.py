@@ -25,6 +25,9 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST_DIR = REPO_ROOT / "output" / "external_data" / "manifests"
 EXTERNAL_DATA_ROOT_ENV = "ROBOT_SF_EXTERNAL_DATA_ROOT"
+DEFAULT_AMV_COMMAND_RESPONSE_MANIFEST = (
+    REPO_ROOT / "configs" / "research" / "amv_command_response_trace_manifest_issue_2415.yaml"
+)
 
 # Canonical SDD staging manifest. This is the single editable provenance contract for the SDD
 # asset (issues #2657, #3473): maintainers pin `expected_tree_sha256` and tune the disk-check size
@@ -1837,6 +1840,12 @@ def parse_args() -> argparse.Namespace:
     )
     sdd_mode.add_argument("--manifest", type=Path, default=None)
 
+    amv_status = subparsers.add_parser(
+        "amv-calibration-status",
+        help="Report AMV command-response calibration admission status; fails closed.",
+    )
+    amv_status.add_argument("--manifest", type=Path, default=None)
+
     sdd_download = subparsers.add_parser(
         "sdd-download", help="Guarded SDD staging: requires explicit confirmation; fails closed."
     )
@@ -1982,6 +1991,92 @@ def _handle_sdd_mode(args: argparse.Namespace) -> int:
     return 0 if gate["dataset_backed"] else 2
 
 
+def build_amv_calibration_status(manifest_path: Path | None = None) -> dict[str, Any]:
+    """Return AMV calibration admission status from asset presence plus trace manifest.
+
+    The report is intentionally fail-closed: it never admits AMV command-response calibration
+    unless the issue #2415 manifest is structurally clean and a declared staged trace reconciles
+    with the live ``amv-calibration`` external-data asset status.
+    """
+    from robot_sf.benchmark.synthetic_actuation import actuation_variability_fields
+    from robot_sf.research.amv_command_response_trace_manifest import (
+        AmvTraceManifestError,
+        check_amv_trace_manifest,
+        load_amv_trace_manifest,
+    )
+
+    asset_report = check_asset("amv-calibration")
+    manifest_source = manifest_path or DEFAULT_AMV_COMMAND_RESPONSE_MANIFEST
+    try:
+        manifest = load_amv_trace_manifest(manifest_source)
+        asset_ids = {
+            str(trace["asset_id"])
+            for trace in manifest["traces"]
+            if trace.get("asset_id") is not None
+        }
+        live_status = {
+            asset_id: (
+                str(asset_report["status"])
+                if asset_id == "amv-calibration"
+                else str(check_asset(asset_id)["status"])
+            )
+            for asset_id in sorted(asset_ids)
+        }
+        trace_report = check_amv_trace_manifest(
+            manifest,
+            allowed_calibration_targets=set(actuation_variability_fields()),
+            live_staging_status=live_status,
+            source=manifest_source,
+        )
+        trace_payload = trace_report.to_dict()
+        blocker_details = trace_report.blockers
+    except (AmvTraceManifestError, ValueError) as exc:
+        trace_payload = {
+            "manifest_status": "invalid",
+            "calibration_ingest_allowed": False,
+            "error": str(exc),
+        }
+        live_status = {"amv-calibration": str(asset_report["status"])}
+        blocker_details = [str(exc)]
+
+    ready = asset_report["status"] == "available" and trace_payload["calibration_ingest_allowed"]
+    blocker_keys: list[str] = []
+    if asset_report["status"] != "available":
+        blocker_keys.append("amv_calibration_asset_missing")
+    if not trace_payload["calibration_ingest_allowed"]:
+        blocker_keys.append("command_response_trace_manifest_not_ready")
+
+    return {
+        "schema": "amv_calibration_status.v1",
+        "issue": 2415,
+        "asset_id": "amv-calibration",
+        "ready": ready,
+        "blocked_external_input": not ready,
+        "blockers": blocker_keys,
+        "blocker_details": blocker_details,
+        "asset_status": asset_report,
+        "manifest_path": str(manifest_source),
+        "live_staging_status": live_status,
+        "trace_manifest_report": trace_payload,
+        "evidence_boundary": (
+            "asset_presence_plus_manifest_contract_only_no_trace_ingest_no_calibration_run"
+        ),
+        "next_step": (
+            "Stage a maintainer-accepted real AMV command-response trace bundle through "
+            "`manage_external_data.py stage amv-calibration`, then rerun this status check."
+            if not ready
+            else "AMV command-response trace bundle is staged and manifest-clean for calibration ingest."
+        ),
+    }
+
+
+def _handle_amv_calibration_status(args: argparse.Namespace) -> int:
+    """Handle amv-calibration-status subcommand."""
+    payload = build_amv_calibration_status(args.manifest)
+    _print_json(payload)
+    return 0 if payload["ready"] else 2
+
+
 def _handle_sdd_download(args: argparse.Namespace) -> int:
     """Handle the sdd-download subcommand."""
     spec = load_sdd_staging_spec(args.manifest)
@@ -2014,6 +2109,7 @@ def main() -> int:
         "sdd-status": _handle_sdd_status,
         "sdd-validate": _handle_sdd_validate,
         "sdd-mode": _handle_sdd_mode,
+        "amv-calibration-status": _handle_amv_calibration_status,
         "sdd-download": _handle_sdd_download,
     }
     try:

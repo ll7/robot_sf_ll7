@@ -14,7 +14,7 @@ actor-injection comparison for issue #3300 and classified the result as `blocked
 ## Inputs
 
 - Issue: <https://github.com/ll7/robot_sf_ll7/issues/3300>
-- Commit: `d90c9cda73f073f3b08201a366c18044c85dc552`
+- Replay command commit: `9f5da13b9b2b6f7e968baf0d3ec8ced61b8d406f`
 - Scenario matrix:
   `configs/scenarios/sets/issue_3300_false_positive_single_ped_smoke.yaml`
 - Scenario: `single_ped_crossing_orthogonal`

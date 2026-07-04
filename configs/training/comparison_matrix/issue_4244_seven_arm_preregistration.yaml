@@ -95,7 +95,8 @@ arms:
     display_name: PPO-Mamba
     algorithm_family: ppo_mamba
     lineage_issue: 4162
-    training_config: configs/training/comparison_matrix/placeholders/ppo_mamba_issue_4162.yaml
+    supporting_issue: 4014
+    training_config: configs/training/ppo/issue_4014_ppo_mamba_smoke.yaml
     smoke_contract_manifest: output/training/smoke_contracts/ppo_mamba_issue_4162.json
     budget_ref: shared_budget
     required_gates:

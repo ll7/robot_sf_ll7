@@ -48,14 +48,17 @@ def test_issue_4244_matrix_uses_identical_budget_refs_for_every_arm() -> None:
     assert matrix.shared_budget["total_timesteps"] == 15000000
 
 
-def test_issue_4244_matrix_bounds_placeholder_training_config() -> None:
-    """Only PPO-Mamba lacks a checked-in training config on origin/main."""
+def test_issue_4244_matrix_has_no_placeholder_training_configs() -> None:
+    """All matrix arms point at executable training configs after the PPO-Mamba slice."""
     matrix = load_matrix(CONFIG_PATH)
 
     placeholder_arms = {
         arm.arm_id for arm in matrix.arms if "/placeholders/" in arm.training_config
     }
-    assert placeholder_arms == {"ppo_mamba"}
+    assert placeholder_arms == set()
+
+    ppo_mamba = next(arm for arm in matrix.arms if arm.arm_id == "ppo_mamba")
+    assert ppo_mamba.training_config == "configs/training/ppo/issue_4014_ppo_mamba_smoke.yaml"
 
 
 def test_issue_4244_matrix_requires_sac_after_issue_4245_gate() -> None:

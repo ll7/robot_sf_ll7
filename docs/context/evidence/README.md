@@ -124,6 +124,11 @@ Policy caveats:
   `blocked_not_closable`, and preserves the remaining blocker without running training, submitting
   compute, or promoting a benchmark or paper-facing claim.
 
+- `issue_4425_closure_audit_2026-07-04/`: closure-audit evidence for Issue #4425.
+Maps the trace-capture flag-plumbing criteria to merged PR #4428, its CPU smoke proof,
+and the remaining issue-closure propagation step without running a benchmark campaign or
+submitting compute.
+
 - `issue_3300_stronger_matrix_closure_audit_2026-07-04/`: smoke/diagnostic closure
 audit bundle for issue #3300 false-positive actor-injection replay. Runs the pre-registered
 stronger structured-pedestrian matrix as paired nominal-vs-perturbed executable CPU replay,

@@ -6,6 +6,7 @@
 # exit-code rerun on the GPU/compute-submit lane -- is deterministic and appendable.
 # This file tracks state only; behavior/schema changes live in the referenced PRs.
 # Append new entries; do not rewrite history.
+
 issue: 4216
 state_surface: licca_full_suite_env_conditional_closure
 evidence_dir: docs/context/evidence/issue_4216_licca_full_suite_env_failures
@@ -65,6 +66,81 @@ entries:
     notes:
       - "Reproduces PR #4340's decisive CPU runs on the current merged HEAD; no source change in this entry -- verification-and-consolidation only."
       - "This entry adds no new guard/checker code; per the fragmentation guard it is a consolidation/state slice, not another micro-guard."
+  - recorded_at_utc: "2026-07-04T21:49:05Z"
+    host: imech039
+    lane: closure_audit_cpu_only
+    base_commit: "30415bf5f"
+    status: acceptance_audit_complete__gpu_full_suite_rerun_still_pending
+    claim_boundary: >-
+      Closure-audit slice only. The merged PR lineage satisfies the CPU-only
+      implementation and mechanism-fix criteria, but #4216 is not closeable until
+      the compute-submit lane appends a LiCCA/shared-HPC full-suite exit-code
+      rerun. No full benchmark campaign, Slurm/GPU submission, paper/dissertation
+      claim edit, issue comment, release, merge, or deletion was performed.
+    fragmentation_guard: >-
+      Five issue #4216 PRs merged on 2026-07-03, so this entry is a
+      consolidation/integration audit against the single canonical state surface,
+      not another guardrail or checker micro-slice.
+    acceptance_evidence:
+      - criterion: "Full issue thread and linked/merged PRs reviewed."
+        status: met
+        evidence: >-
+          Live issue comments through 2026-07-03T20:20:10Z identify PRs #4237,
+          #4276, #4320, #4340, and #4343 as the merged gate lineage and state the
+          single remaining close blocker.
+      - criterion: "All 15 job-9858988 failures classified in a compact inventory."
+        status: met
+        evidence: "PR #4237 merged docs/context/evidence/issue_4216_licca_full_suite_env_failures/failure_inventory.json."
+      - criterion: "Shared environment guard helper exists and preserves GitHub Actions coverage."
+        status: met
+        evidence: >-
+          PR #4237 merged tests/support/environment_guards.py and paired guard
+          tests; the PR body records simulated LiCCA and simulated GitHub Actions
+          validation.
+      - criterion: "Each failing node has an environment-agnostic rewrite or a narrow guard."
+        status: met
+        evidence: >-
+          PR #4237 updated tests/dev/test_pr_ready_preflight.py,
+          tests/dev/test_ci_uv_sync_diag.py, and
+          tests/test_visualization_performance.py; the merged inventory maps each
+          residue node to env_agnostic_rewrite or explicit_skip_guard.
+      - criterion: "Post-guard full-suite residue was probed fail-closed."
+        status: met
+        evidence: >-
+          PR #4276 merged post_guard_closure_20260703.json, recording that the
+          original 15 residue nodes no longer produced a failure summary, but the
+          run hung after 100% and was not closure evidence.
+      - criterion: "Nested-pytest teardown hang mechanism is bounded/reaped on the CPU lane."
+        status: met
+        evidence: >-
+          PR #4320 merged tests/support/process_teardown.py and updated
+          tests/perf_utils/test_enforce_mode.py; PRs #4340 and #4343 recorded fresh
+          CPU verification that the affected call site exits 0 under default and
+          simulated-LiCCA environments.
+      - criterion: "Canonical issue-state surface records the closure chain and next empirical action."
+        status: met
+        evidence: >-
+          PR #4343 merged this append-only docs/context/issue_4216_state.yaml file
+          with gate lineage, CPU closure verification, and the exact remaining
+          LiCCA/shared-HPC rerun command and fail-closed classifications.
+      - criterion: "A new LiCCA/shared-HPC full-suite exit-code rerun confirms closure."
+        status: blocked
+        evidence: >-
+          Not performed in this closure-audit lane because compute_submit=false.
+          remaining_empirical_action below remains the single close blocker:
+          PYTEST_NUM_WORKERS=8 ROBOT_SF_TEST_ENV=licca uv run pytest -q on the
+          GPU/shared-HPC compute-submit lane, with exit code and final summary
+          appended here.
+    residual_risks:
+      - risk: "The GPU/shared-HPC full-suite rerun may still report residue or a hang regression."
+        why_it_remains: >-
+          CPU evidence verifies the bounded nested-pytest mechanism, but the
+          original post-guard hang involved the LiCCA/GPU shared-HPC lane and was
+          intentionally not re-submitted by this authorized CPU-only task.
+      - risk: "The issue cannot be closed from this PR alone."
+        why_it_remains: >-
+          The latest maintainer comments explicitly keep #4216 open until the
+          compute-submit lane appends the full-suite result.
 
 # The single remaining action that blocks closing issue #4216.
 remaining_empirical_action:

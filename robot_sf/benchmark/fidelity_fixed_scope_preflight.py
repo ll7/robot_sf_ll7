@@ -36,6 +36,10 @@ from robot_sf.benchmark.fidelity_rank_stability import PRIMARY_METRIC_ZERO_VARIA
 from robot_sf.benchmark.fidelity_sensitivity import validate_fidelity_sensitivity_config
 
 SCHEMA_VERSION = "fidelity-fixed-scope-preflight.v1"
+RVO2_REMEDIATION = (
+    "install orca extra `uv sync --all-extras`; if stale local CMake build remains, "
+    "remove `third_party/python-rvo2/build` first, retry."
+)
 
 DECISION_READY = "preflight_ready"
 DECISION_BLOCKED = "blocked"
@@ -95,6 +99,17 @@ def build_fixed_scope_preflight(
         "runtime_rank_identifiability_recheck_required: measured primary-metric variance is "
         "re-validated post-run via robot_sf/benchmark/fidelity_rank_stability.py"
     ]
+    post_run_contract_specs = [
+        {
+            "id": "runtime_rank_identifiability_recheck",
+            "report": "fidelity_rank_stability_report.json",
+            "builder": "robot_sf/benchmark/fidelity_rank_stability.py",
+            "metric": primary_metric["metric"],
+            "threshold": "non_zero_variance_and_rank_identifiable",
+            "output_path": ("output/fidelity_sensitivity/<campaign>/rank_identifiability.json"),
+            "blocks_claims_when_failed": True,
+        }
+    ]
 
     decision = DECISION_BLOCKED if blockers else DECISION_READY
 
@@ -115,6 +130,7 @@ def build_fixed_scope_preflight(
         "blockers": blockers,
         "launch_prerequisites": launch_prerequisites,
         "post_run_contracts": post_run_contracts,
+        "post_run_contract_specs": post_run_contract_specs,
         "next_command_template": (
             "uv run python scripts/benchmark/run_fidelity_sensitivity_campaign.py --config "
             f"{config_path} --out output/fidelity_sensitivity/"
@@ -248,7 +264,9 @@ def _resolve_planner_groups(
                 )
             if readiness.canonical_name == "orca":
                 if not _rvo2_importable():
-                    launch_prerequisites.append(f"planner_requires_rvo2:{group_name}")
+                    launch_prerequisites.append(
+                        f"planner_requires_rvo2:{group_name} — {RVO2_REMEDIATION}"
+                    )
         resolution.append(record)
     return resolution
 
@@ -346,6 +364,7 @@ __all__ = [
     "EVIDENCE_STATUS",
     "PREFLIGHT_CLAIM_BOUNDARY",
     "REQUIRED_CLAIM_BOUNDARY_PHRASES",
+    "RVO2_REMEDIATION",
     "SCHEMA_VERSION",
     "build_fixed_scope_preflight",
     "write_fixed_scope_preflight",

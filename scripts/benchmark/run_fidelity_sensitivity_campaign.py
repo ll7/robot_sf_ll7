@@ -180,9 +180,10 @@ def build_fixed_scope_run_plan(
     the preflight owns the launch/readiness gate, while this function turns the
     materialized scope into the concrete run cells the campaign runner would
     iterate. It runs no episode. ``executable`` is only ``True`` when the
-    preflight is ready and *all* launch prerequisites and blockers are cleared,
-    so the shipped config (which still lists rvo2/opt-in/runner-not-wired
-    prerequisites) yields a fail-closed, non-executable plan.
+    preflight is ready and *all* launch prerequisites and blockers are cleared.
+    The shipped config carries the fixed-scope hybrid-rule opt-in and structured
+    post-run rank-identifiability contract, while ORCA/rvo2 remains
+    runtime-checked.
 
     Args:
         config: Raw fidelity-sensitivity study config mapping.
@@ -239,6 +240,7 @@ def build_fixed_scope_run_plan(
         "blockers": blockers,
         "launch_prerequisites": launch_prerequisites,
         "post_run_contracts": preflight["post_run_contracts"],
+        "post_run_contract_specs": preflight["post_run_contract_specs"],
         "gate_reasons": gate_reasons,
         "run_cells": [asdict(cell) for cell in cells],
     }
@@ -1170,9 +1172,9 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--require-launchable",
         action="store_true",
         help=(
-            "With --fixed-scope-plan-only, exit non-zero (fail closed) unless every launch "
-            "prerequisite is cleared. The bounded slice runner leaves ORCA/rvo2, hybrid opt-in, "
-            "and the post-run rank-identifiability recheck unmet, so this fails closed."
+            "With --fixed-scope-plan-only, exit non-zero (fail closed) if any launch "
+            "prerequisite remains. The fixed-scope packet records residual gates such "
+            "as ORCA/rvo2 runtime availability."
         ),
     )
     parser.add_argument(

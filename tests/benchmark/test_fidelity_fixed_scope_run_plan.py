@@ -103,7 +103,24 @@ def test_shipped_config_plan_is_launchable_when_prerequisites_are_bound() -> Non
     assert plan["executable"] is True
     assert plan["launched"] is False
     assert plan["gate_reasons"] == []
+    hybrid_resolution = next(
+        record
+        for record in plan["planner_resolution"]
+        if record["planner_group"] == "hybrid_rule_v0_minimal"
+    )
+    assert hybrid_resolution["explicit_opt_in_satisfied"] is True
+    assert hybrid_resolution["requires_explicit_opt_in"] is False
     assert "runtime_rank_identifiability_recheck_required" in " ".join(plan["post_run_contracts"])
+    rank_contract = plan["post_run_contract_specs"][0]
+    assert rank_contract == {
+        "id": "runtime_rank_identifiability_recheck",
+        "report": "fidelity_rank_stability_report.json",
+        "builder": "robot_sf/benchmark/fidelity_rank_stability.py",
+        "metric": "snqi",
+        "threshold": "non_zero_variance_and_rank_identifiable",
+        "output_path": "output/fidelity_sensitivity/<campaign>/rank_identifiability.json",
+        "blocks_claims_when_failed": True,
+    }
 
 
 def test_shipped_config_plan_fails_closed_without_rvo2(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -114,7 +131,11 @@ def test_shipped_config_plan_fails_closed_without_rvo2(monkeypatch: pytest.Monke
     )
     plan = _plan()
     assert plan["executable"] is False
-    assert "planner_requires_rvo2:orca" in plan["gate_reasons"]
+    assert plan["gate_reasons"] == [
+        "planner_requires_rvo2:orca — install orca extra `uv sync --all-extras`; "
+        "if stale local CMake build remains, remove `third_party/python-rvo2/build` "
+        "first, retry."
+    ]
 
 
 def test_ensure_launchable_raises_when_gated(monkeypatch: pytest.MonkeyPatch) -> None:

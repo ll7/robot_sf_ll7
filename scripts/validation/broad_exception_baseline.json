@@ -78,6 +78,7 @@
       "scripts/tools/classify_observation_noise_mechanisms.py": 1,
       "scripts/tools/compare_holonomic_vs_differential_rollout.py": 1,
       "scripts/tools/compile_benchmark_artifacts.py": 1,
+      "scripts/tools/convert_socnavbench_traversible_to_svg.py": 1,
       "scripts/tools/generate_next_issue_shortlist.py": 1,
       "scripts/tools/generate_odd_hazard_coverage_matrix.py": 1,
       "scripts/tools/generate_scenario_atlas.py": 1,
@@ -126,7 +127,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 285
+    "total": 286
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -1965,6 +1966,15 @@
       "lineno": 455,
       "path": "scripts/tools/compile_benchmark_artifacts.py",
       "source": "except Exception as exc:"
+    },
+    {
+      "col_offset": 4,
+      "context": "load_traversible",
+      "fingerprint": "49bd66ffcc64c649",
+      "handler": "Exception",
+      "lineno": 101,
+      "path": "scripts/tools/convert_socnavbench_traversible_to_svg.py",
+      "source": "except Exception as exc:  # pragma: no cover - exact pickle failure varies."
     },
     {
       "col_offset": 4,

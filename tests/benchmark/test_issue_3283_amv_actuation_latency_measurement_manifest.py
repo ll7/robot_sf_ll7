@@ -18,6 +18,7 @@ from robot_sf.benchmark.actuation_latency_measurement_manifest import (
     PROPOSED_RIDER_COUPLING_PROFILE_FIELDS,
     REQUIRED_MEASUREMENT_QUANTITIES,
     AmvActuationLatencyManifestError,
+    build_amv_actuation_latency_decision_packet,
     check_amv_actuation_latency_measurement_manifest,
     load_amv_actuation_latency_measurement_manifest,
 )
@@ -250,6 +251,51 @@ def test_example_manifest_loads_and_is_blocked_external_input() -> None:
     assert report.measured_value_claim_allowed is False
     # Example ships a complete plan: only the external data is missing.
     assert report.blockers == []
+
+
+def test_blocked_plan_decision_packet_names_required_external_input() -> None:
+    """Decision packet converts a complete blocked plan into next empirical action."""
+    manifest = load_amv_actuation_latency_measurement_manifest(EXAMPLE_MANIFEST_PATH)
+    packet = build_amv_actuation_latency_decision_packet(manifest)
+
+    assert packet.issue == 3283
+    assert packet.contract_status == CONTRACT_STATUS_BLOCKED
+    assert packet.blocked_state == "blocked-external-input"
+    assert packet.measured_value_claim_allowed is False
+    assert packet.required_input == "accepted real AMV command-response data"
+    assert packet.remaining_blockers == [
+        "real AMV command-response data not staged or provenance-reviewed"
+    ]
+    assert "locate or collect real AMV command-response traces" in packet.next_empirical_action
+    assert packet.unrelated_calibration_work_blocked is False
+    assert packet.to_dict()["claim_boundary"] == "no measured AMV latency or rider-coupling claim"
+
+
+def test_decision_packet_preserves_manifest_blockers() -> None:
+    """Malformed blocked plan keeps concrete blockers instead of generic data blocker."""
+    manifest = _manifest("blocked-external-input", "pending")
+    manifest["sensor_channels"] = [
+        channel for channel in manifest["sensor_channels"] if channel["quantity"] != "yaw_response"
+    ]
+
+    packet = build_amv_actuation_latency_decision_packet(manifest)
+
+    assert packet.blocked_state == "blocked-external-input"
+    assert any("yaw_response" in blocker for blocker in packet.remaining_blockers)
+    assert packet.required_input == "accepted real AMV command-response data"
+
+
+def test_ready_measured_decision_packet_not_marked_external_blocked() -> None:
+    """Ready measured manifests remain ready and do not inherit issue hard-block state."""
+    packet = build_amv_actuation_latency_decision_packet(_measured_manifest())
+
+    assert packet.contract_status == CONTRACT_STATUS_READY
+    assert packet.blocked_state is None
+    assert packet.measured_value_claim_allowed is True
+    assert packet.remaining_blockers == []
+    assert packet.required_input is None
+    assert packet.next_empirical_action is None
+    assert packet.revival_condition is None
 
 
 def test_example_manifest_yaml_is_well_formed() -> None:

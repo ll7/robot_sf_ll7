@@ -53,6 +53,11 @@ def test_decision_blocked_when_corrective_not_complete(
     assert report["reason"] == "corrective_incomplete"
     assert report["verdict"]["verdict"] == DIAGNOSTIC
     assert report["verdict"]["promote"] is False
+    # The corrective-gate criterion must reflect the incomplete state, not a static "met".
+    corrective = next(
+        c for c in report["acceptance_evidence"] if c["criterion"].startswith("Corrective #3463")
+    )
+    assert corrective["status"] == "not_met"
 
 
 def test_decision_blocked_when_campaign_summary_missing(
@@ -132,6 +137,13 @@ def test_decision_ready_with_mock_promotion_verdict(temp_config_file: Path, tmp_
     assert report["verdict"]["promote"] is True
     assert report["deltas"]["safety_improvement"] == pytest.approx(0.05)
     assert report["deltas"]["efficiency_improvement"] == pytest.approx(0.05)
+    # With a loaded, classified campaign the conservative-classification criterion is met.
+    classification = next(
+        c
+        for c in report["acceptance_evidence"]
+        if c["criterion"].startswith("Result classification is recorded")
+    )
+    assert classification["status"] == "met"
 
 
 def test_decision_ready_with_mock_regression_verdict(

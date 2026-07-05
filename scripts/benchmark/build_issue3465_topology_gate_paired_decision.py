@@ -90,6 +90,23 @@ def _display_path(path: Path) -> str:
         return str(path)
 
 
+def _set_criterion_status(
+    evidence: list[dict[str, str]], criterion_prefix: str, status: str
+) -> None:
+    """Update one acceptance criterion's status in place.
+
+    The acceptance-evidence template carries static default statuses; the actual
+    decision state (corrective-gate completion, campaign availability) must be
+    reflected dynamically so the generated report never claims a criterion is met
+    or blocked in a state where that is untrue.
+    """
+
+    for item in evidence:
+        if item["criterion"].startswith(criterion_prefix):
+            item["status"] = status
+            return
+
+
 def _get_metric(row: Mapping[str, Any], aliases: tuple[str, ...]) -> float | None:
     for alias in aliases:
         if alias in row and row[alias] is not None:
@@ -135,6 +152,7 @@ def build_decision_report(  # noqa: C901
             corrective_complete=False,
         )
         verdict = classify_near_parity_promotion(comparison)
+        _set_criterion_status(acceptance_evidence, "Corrective #3463", "not_met")
         return {
             "status": "blocked",
             "reason": "corrective_incomplete",
@@ -272,6 +290,9 @@ def build_decision_report(  # noqa: C901
     # Read config metadata for provenance
     config_data = config_path.read_bytes()
     config_sha256 = hashlib.sha256(config_data).hexdigest()
+
+    # Campaign loaded and classified: the conservative-classification criterion is now met.
+    _set_criterion_status(acceptance_evidence, "Result classification is recorded", "met")
 
     return {
         "status": "ready",

@@ -829,6 +829,42 @@ class TrainingOutputs:
     per_checkpoint_perf: list[dict[str, float | int]]
 
 
+def _count_parameters(module: object, *, trainable_only: bool) -> int | None:
+    """Count parameters exposed by a PyTorch-style module."""
+    parameters_fn = getattr(module, "parameters", None)
+    if not callable(parameters_fn):
+        return None
+    total = 0
+    for parameter in parameters_fn():
+        if trainable_only and not bool(getattr(parameter, "requires_grad", False)):
+            continue
+        numel_fn = getattr(parameter, "numel", None)
+        if not callable(numel_fn):
+            continue
+        total += int(numel_fn())
+    return total
+
+
+def _model_parameter_summary(model: object | None) -> dict[str, int | bool | None]:
+    """Return policy/model parameter counts for training comparison reports."""
+    if model is None:
+        return {
+            "available": False,
+            "policy_parameter_count": None,
+            "policy_trainable_parameter_count": None,
+            "model_parameter_count": None,
+            "model_trainable_parameter_count": None,
+        }
+    policy = getattr(model, "policy", None)
+    return {
+        "available": True,
+        "policy_parameter_count": _count_parameters(policy, trainable_only=False),
+        "policy_trainable_parameter_count": _count_parameters(policy, trainable_only=True),
+        "model_parameter_count": _count_parameters(model, trainable_only=False),
+        "model_trainable_parameter_count": _count_parameters(model, trainable_only=True),
+    }
+
+
 def _resolve_optional_path(path: Path, raw: object, *, field_name: str) -> Path | None:
     """Resolve an optional path field relative to the config file location."""
     if raw is None:
@@ -2029,6 +2065,7 @@ def _write_perf_summary(
     startup_sec: float,
     per_checkpoint_perf: Sequence[Mapping[str, float | int]],
     total_wall_clock_sec: float,
+    parameter_summary: Mapping[str, int | bool | None] | None = None,
 ) -> Path:
     """Write machine-readable performance summary for the training run."""
     perf_dir = get_imitation_report_dir() / "perf"
@@ -2042,6 +2079,9 @@ def _write_perf_summary(
         "total_wall_clock_sec": float(total_wall_clock_sec),
         "train_env_steps_per_sec_mean": float(np.mean(train_speeds)) if train_speeds else 0.0,
         "eval_sec_per_checkpoint": float(np.mean(eval_secs)) if eval_secs else 0.0,
+        "parameter_summary": dict(
+            parameter_summary if parameter_summary is not None else _model_parameter_summary(None)
+        ),
         "per_checkpoint_perf": list(per_checkpoint_perf),
     }
     json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -2891,6 +2931,10 @@ def _build_training_notes(
             )
         )
         notes.append(f"train_env_steps_per_sec_mean={mean_train_speed:.3f}")
+    parameter_summary = _model_parameter_summary(outputs.model)
+    policy_parameter_count = parameter_summary.get("policy_parameter_count")
+    if policy_parameter_count is not None:
+        notes.append(f"policy_parameter_count={policy_parameter_count}")
     if scenario_coverage:
         notes.append(f"scenario_coverage={scenario_coverage}")
     density_curriculum = build_density_curriculum_schedule(config.density_curriculum)
@@ -3067,6 +3111,7 @@ def run_expert_training(
         startup_sec=outputs.startup_sec,
         per_checkpoint_perf=outputs.per_checkpoint_perf,
         total_wall_clock_sec=wall_clock_seconds,
+        parameter_summary=_model_parameter_summary(outputs.model),
     )
     wall_clock_hours = wall_clock_seconds / 3600.0
     input_artifacts = [str(config.scenario_config)]

@@ -264,12 +264,15 @@ def test_behavioral_metrics_detected_as_observed_change(tmp_path: Path) -> None:
     perturbed = tmp_path / "perturbed.jsonl"
     clean = _row()
     noisy = _row(noise=True, pedestrians_added=20)
-    clean["metrics"]["avg_speed"] = 0.98
-    clean["metrics"]["curvature_mean"] = 0.06
-    clean["metrics"]["jerk_mean"] = 0.07
-    noisy["metrics"]["avg_speed"] = 0.74
-    noisy["metrics"]["curvature_mean"] = 0.18
-    noisy["metrics"]["jerk_mean"] = 0.12
+    clean_metrics = clean["metrics"]
+    noisy_metrics = noisy["metrics"]
+    assert isinstance(clean_metrics, dict) and isinstance(noisy_metrics, dict)
+    clean_metrics["avg_speed"] = 0.98
+    clean_metrics["curvature_mean"] = 0.06
+    clean_metrics["jerk_mean"] = 0.07
+    noisy_metrics["avg_speed"] = 0.74
+    noisy_metrics["curvature_mean"] = 0.18
+    noisy_metrics["jerk_mean"] = 0.12
     _write_jsonl(nominal, [clean])
     _write_jsonl(perturbed, [noisy])
 
@@ -290,8 +293,11 @@ def test_near_miss_delta_detected(tmp_path: Path) -> None:
     perturbed = tmp_path / "perturbed.jsonl"
     clean = _row()
     noisy = _row(noise=True, pedestrians_added=9)
-    clean["metrics"]["near_misses"] = 19
-    noisy["metrics"]["near_misses"] = 8
+    clean_metrics = clean["metrics"]
+    noisy_metrics = noisy["metrics"]
+    assert isinstance(clean_metrics, dict) and isinstance(noisy_metrics, dict)
+    clean_metrics["near_misses"] = 19
+    noisy_metrics["near_misses"] = 8
     _write_jsonl(nominal, [clean])
     _write_jsonl(perturbed, [noisy])
 

@@ -233,3 +233,53 @@ def test_parent_ledger_lists_completed_slices() -> None:
     assert "#501" in body
     assert "slice A" in body
     assert "slice B" in body
+
+
+def test_classify_and_build_actions_with_close_issues_override() -> None:
+    """Issues specified in close_issues override are marked for closure."""
+    report = _audit_report(
+        [
+            _candidate(12, "add checker", prs=[_pr_entry(99, "fix #12")]),
+            _candidate(
+                15,
+                "epic roadmap",
+                classification="parent_or_roadmap",
+                prs=[_pr_entry(101, "pr #15")],
+            ),
+        ]
+    )
+    actions = closure_mechanics.classify_and_build_actions(report, close_issues={12, 15})
+
+    assert len(actions) == 2
+    assert actions[0].issue_number == 12
+    assert actions[0].action_type == "close_fully_covered"
+    assert actions[0].should_close is True
+    assert "#99" in actions[0].comment_body
+    assert "Closing as completed" in actions[0].comment_body
+
+    assert actions[1].issue_number == 15
+    assert actions[1].action_type == "close_fully_covered"
+    assert actions[1].should_close is True
+    assert "#101" in actions[1].comment_body
+    assert "Closing as completed" in actions[1].comment_body
+
+
+def test_main_parses_close_issues_cli_argument(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Main parses --close-issues CLI parameter and applies it."""
+    report = _audit_report([_candidate(12, "add checker", prs=[_pr_entry(99, "fix #12")])])
+    import io
+
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(report)))
+    exit_code = closure_mechanics.main(["--close-issues", "12,#15,invalid"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["action_count"] == 1
+    # Check that issue 12 action is close_fully_covered
+    assert payload["results"][0]["issue_number"] == 12
+    # In dry-run, should_close is True for the action, let's verify classification in actions
+    # Wait, the main outputs results which have "should_close" and "action_type"
+    assert payload["results"][0]["action_type"] == "close_fully_covered"
+    assert payload["results"][0]["should_close"] is True

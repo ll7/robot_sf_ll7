@@ -1,0 +1,68 @@
+# Append-only execution-state ledger for issue #4224.
+# Schema/behavior changes live in PR diffs. This file records the durable
+# issue-state surface when issue comments are unavailable or too noisy.
+schema_version: issue-state.v1
+issue: 4224
+state_surface: external_dataset_registry_closure_audit
+entries:
+  - recorded_at_utc: "2026-07-05T04:40:00Z"
+    status: public_repo_scope_met_private_staging_blocked
+    source:
+      issue_url: "https://github.com/ll7/robot_sf_ll7/issues/4224"
+      live_issue_state_checked: "open"
+      latest_issue_comment_utc: "2026-07-03T20:53:07Z"
+      comments_checked: 4
+    acceptance_evidence:
+      - criterion: "Five Alyassi Table 7 assets registered with source, license/access, shared paths, related issues, disabled auto-download, and checksum-pending metadata."
+        status: "met_public_repo"
+        evidence: "PR #4238 registered ATC, ETH/UCY, inD, CrowdBot, and SCAND in scripts/tools/manage_external_data.py; PRs #4287, #4314, #4363, and #4501 tightened family docs and traceability."
+      - criterion: "License-safe public repository boundary: no raw bytes, no redistribution, and no automated download without explicit terms support."
+        status: "met_public_repo"
+        evidence: "PR #4238 set auto_download_allowed=false for the cohort and docs/external_data_setup.md keeps license-gated download paths fail-closed."
+      - criterion: "Per-family acquisition and expected-layout documentation."
+        status: "met_public_repo"
+        evidence: "PRs #4287, #4295, #4314, and #4363 added or wired ETH/UCY, ATC, inD, CrowdBot, and SCAND documentation."
+      - criterion: "License-safe shape-contract loaders and skip-if-absent tests for all five families."
+        status: "met_public_repo"
+        evidence: "PRs #4300, #4316, #4322, and #4346 added ETH/UCY, ATC, inD, CrowdBot, and SCAND loaders/tests."
+      - criterion: "No benchmark, prediction-comparability, paper, or dissertation claim promoted by registry or shape-contract readiness."
+        status: "met_public_repo"
+        evidence: "docs/context/issue_4224_external_dataset_registry.md and docs/context/evidence/issue_4224_closure_audit_2026-07-04.md preserve the structural-only claim boundary."
+      - criterion: "Maintainer/private acquisition, seeding, provenance-check, and trusted expected_tree_sha256 pinning."
+        status: "not_met_private_follow_up"
+        evidence: "Maintainer comments on 2026-07-03 state this remains private-side work after public slice (b) landed."
+    merged_prs_verified:
+      - pr: 4238
+        role: "Initial five-asset registry, checksum-pending fields, tests, and #4224 registry note."
+      - pr: 4287
+        role: "ETH/UCY public acquisition docs and registry/doc alignment."
+      - pr: 4295
+        role: "ATC public acquisition/layout docs."
+      - pr: 4300
+        role: "ETH/UCY shape-contract loader and skip-if-absent tests."
+      - pr: 4314
+        role: "inD public acquisition docs."
+      - pr: 4316
+        role: "ATC shape-contract loader and skip-if-absent tests."
+      - pr: 4322
+        role: "inD shape-contract loader and skip-if-absent tests."
+      - pr: 4346
+        role: "CrowdBot and SCAND shape-contract loaders/tests plus acquisition docs."
+      - pr: 4363
+        role: "CrowdBot and SCAND docs navigation and registry traceability."
+      - pr: 4501
+        role: "ATC registry related-issue provenance link."
+      - pr: 4507
+        role: "Closure-audit evidence report mapping #4224 criteria to merged PRs."
+    closure_boundary:
+      public_scope: "Met for registry, public acquisition docs, fail-closed manual access, and shape-contract loaders."
+      remaining: "Private-side dataset acquisition/seeding, provenance-check, and trusted expected_tree_sha256 pinning under upstream terms."
+      issue_closable_by_this_lane: false
+    propagation_surface: "tracked append-only state file because comment_issue_or_pr=false and the issue has high recent PR churn"
+    audit_artifact: "docs/context/evidence/issue_4224_closure_audit_2026-07-04.md"
+    forbidden_actions_confirmed:
+      full_benchmark_campaign: false
+      slurm_or_gpu_submission: false
+      raw_dataset_download_or_staging: false
+      paper_or_dissertation_claim_edits: false
+      issue_comment_posted: false

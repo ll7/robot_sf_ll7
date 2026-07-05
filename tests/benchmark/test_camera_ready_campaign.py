@@ -3144,6 +3144,115 @@ def test_run_campaign_continues_after_not_available_when_stop_enabled(
     assert not any("Campaign halted early" in warning for warning in summary_payload["warnings"])
 
 
+def test_run_campaign_skips_dependency_gated_planner_before_execution(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Dependency-gated planners should become accepted-unavailable rows without calling run_batch."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+
+    guarded_config = get_repository_root() / "configs/algos/orca_prior_guarded_ppo_v1.yaml"
+    config_path = tmp_path / "campaign_dependency_gated.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: dependency_gated_campaign",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "stop_on_failure: true",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+                "    benchmark_profile: baseline-safe",
+                "  - key: guarded_ppo",
+                "    algo: guarded_ppo",
+                "    planner_group: experimental",
+                "    benchmark_profile: experimental",
+                f"    algo_config: {guarded_config.as_posix()}",
+                "    availability_gate: dependency_gated",
+                "    fail_closed_reason: guarded_ppo_checkpoint_observation_contract_missing",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    call_order: list[str] = []
+
+    def _fake_run_batch(
+        scenarios_or_path,
+        out_path,
+        schema_path,
+        *,
+        algo,
+        benchmark_profile,
+        **kwargs,
+    ):
+        del scenarios_or_path, schema_path, benchmark_profile, kwargs
+        call_order.append(algo)
+        if algo != "goal":
+            raise AssertionError("run_batch should not be called for dependency-gated guarded_ppo")
+        Path(out_path).write_text(
+            json.dumps(
+                {
+                    "episode_id": "e-goal-0",
+                    "scenario_id": "mock",
+                    "seed": 111,
+                    "scenario_params": {
+                        "algo": "goal",
+                        "metadata": {"archetype": "crossing"},
+                    },
+                    "metrics": {"success": 1.0, "collisions": 0.0, "near_misses": 0.0},
+                    "algorithm_metadata": {"algorithm": "goal", "status": "ok"},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "total_jobs": 1,
+            "written": 1,
+            "failed_jobs": 0,
+            "failures": [],
+            "algorithm_readiness": {
+                "name": "goal",
+                "tier": "baseline-ready",
+                "profile": "baseline-safe",
+            },
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="dependency_gated")
+    summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
+    rows = {row["planner_key"]: row for row in summary_payload["planner_rows"]}
+
+    assert call_order == ["goal"]
+    assert rows["goal"]["status"] == "ok"
+    assert rows["guarded_ppo"]["status"] == "not_available"
+    assert rows["guarded_ppo"]["availability_status"] == "not_available"
+    assert rows["guarded_ppo"]["availability_reason"] == (
+        "guarded_ppo_checkpoint_observation_contract_missing"
+    )
+    assert rows["guarded_ppo"]["preflight_status"] == "skipped"
+    assert summary_payload["campaign"]["status"] == "accepted_unavailable_only"
+    assert summary_payload["campaign"]["unexpected_failed_runs"] == 0
+    assert result["status"] == "accepted_unavailable_only"
+    assert result["exit_code"] == 3
+    assert not any(
+        "Planner 'guarded_ppo' failed" in warning for warning in summary_payload["warnings"]
+    )
+
+
 def test_run_campaign_continues_after_failure_when_stop_disabled(
     tmp_path: Path,
     monkeypatch,

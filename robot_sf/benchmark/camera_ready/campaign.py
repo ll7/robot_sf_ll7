@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from robot_sf.benchmark.aggregate import read_jsonl
+from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
 from robot_sf.benchmark.camera_ready._artifacts import (
     _write_actuation_envelope_artifacts,
     _write_json,
@@ -292,6 +293,7 @@ def _prepare_campaign_planner_variant_run(
     planner: PlannerSpec,
     kinematics: str,
     active_observation_mode: str,
+    log_run: bool = True,
 ) -> _CampaignPlannerVariantRun:
     cfg = context.cfg
     planner_run_key = f"{_sanitize_name(planner.key)}__{_sanitize_name(kinematics)}"
@@ -305,14 +307,15 @@ def _prepare_campaign_planner_variant_run(
         planner.horizon_override if planner.horizon_override is not None else cfg.horizon
     )
     effective_dt = planner.dt_override if planner.dt_override is not None else cfg.dt
-    logger.info(
-        "Running campaign planner key={} algo={} kinematics={} profile={} workers={}",
-        planner.key,
-        planner.algo,
-        kinematics,
-        planner.benchmark_profile,
-        effective_workers,
-    )
+    if log_run:
+        logger.info(
+            "Running campaign planner key={} algo={} kinematics={} profile={} workers={}",
+            planner.key,
+            planner.algo,
+            kinematics,
+            planner.benchmark_profile,
+            effective_workers,
+        )
     scoped_scenarios = [
         _scenario_with_kinematics(
             sc,
@@ -333,6 +336,61 @@ def _prepare_campaign_planner_variant_run(
     )
 
 
+def _dependency_gated_planner_summary(
+    context: _CampaignPlannerMatrixContext,
+    *,
+    planner: PlannerSpec,
+    run: _CampaignPlannerVariantRun,
+) -> dict[str, Any]:
+    readiness = get_algorithm_readiness(planner.algo)
+    reason = str(planner.fail_closed_reason or "").strip() or (
+        f"{planner.key} blocked by availability_gate={planner.availability_gate!r}"
+    )
+    logger.info(
+        "Skipping dependency-gated planner key={} algo={} kinematics={} reason={}",
+        planner.key,
+        planner.algo,
+        run.kinematics,
+        reason,
+    )
+    return {
+        "status": "not_available",
+        "total_jobs": 0,
+        "written": 0,
+        "successful_jobs": 0,
+        "failed_jobs": 0,
+        "skipped_jobs": len(run.scoped_scenarios),
+        "failures": [],
+        "out_path": str(run.episodes_path),
+        "algorithm_readiness": {
+            "name": readiness.canonical_name if readiness is not None else planner.algo,
+            "tier": readiness.tier if readiness is not None else "unknown",
+            "profile": planner.benchmark_profile,
+        },
+        "algorithm_metadata_contract": {"planner_kinematics": {"execution_mode": "unknown"}},
+        "preflight": {
+            "status": "skipped",
+            "compatibility_status": "dependency_gated",
+            "compatibility_reason": reason,
+            "availability_gate": planner.availability_gate,
+            "learned_policy_contract": {"status": "not_applicable"},
+        },
+        "latency_stress_profile": (
+            _latency_stress_metadata(
+                context.cfg.latency_stress_profile,
+                dt=run.effective_dt,
+            )
+            if context.cfg.latency_stress_profile is not None
+            else None
+        ),
+        "latency_stress_metrics": (
+            not_available_latency_metrics()
+            if context.cfg.latency_stress_profile is not None
+            else None
+        ),
+    }
+
+
 def _run_campaign_planner_variant(
     context: _CampaignPlannerMatrixContext,
     *,
@@ -351,14 +409,19 @@ def _run_campaign_planner_variant(
         planner=planner,
         kinematics=kinematics,
         active_observation_mode=active_observation_mode,
+        log_run=planner.availability_gate != "dependency_gated",
     )
 
     planner_started_at_utc = _utc_now()
     planner_start = time.perf_counter()
-    batch_result = _execute_campaign_planner_batch(context, planner, run)
-    status = batch_result.status
-    summary = batch_result.summary
-    warnings.extend(batch_result.warnings)
+    if planner.availability_gate == "dependency_gated":
+        status = "not_available"
+        summary = _dependency_gated_planner_summary(context, planner=planner, run=run)
+    else:
+        batch_result = _execute_campaign_planner_batch(context, planner, run)
+        status = batch_result.status
+        summary = batch_result.summary
+        warnings.extend(batch_result.warnings)
     aggregates: dict[str, Any] | None = None
 
     planner_finished_at_utc = _utc_now()

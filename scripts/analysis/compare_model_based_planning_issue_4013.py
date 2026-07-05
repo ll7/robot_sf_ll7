@@ -257,7 +257,11 @@ def _algorithm_metadata(record: Mapping[str, Any]) -> Mapping[str, Any]:
 
 
 def _episode_key(record: Mapping[str, Any]) -> str:
-    return f"{record.get('scenario_id')}::{record.get('seed')}"
+    scenario_id = record.get("scenario_id")
+    seed = record.get("seed")
+    if scenario_id is None or seed is None:
+        raise ValueError("episode record is missing required 'scenario_id' or 'seed'")
+    return f"{scenario_id}::{seed}"
 
 
 def _boolish_rate(value: Any) -> float:
@@ -268,7 +272,7 @@ def _boolish_rate(value: Any) -> float:
 
 
 def _mean(values: Iterable[float | None]) -> float | None:
-    finite = [float(value) for value in values if value is not None and math.isfinite(float(value))]
+    finite = [value for value in values if value is not None and math.isfinite(value)]
     if not finite:
         return None
     return sum(finite) / len(finite)
@@ -297,7 +301,10 @@ def _read_jsonl_objects(path: Path) -> list[dict[str, Any]]:
             line = line.strip()
             if not line:
                 continue
-            payload = json.loads(line)
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError as err:
+                raise ValueError(f"{path}:{line_number} contains malformed JSON: {err}") from err
             if not isinstance(payload, dict):
                 raise ValueError(f"{path}:{line_number} must contain a JSON object")
             records.append(payload)
@@ -360,7 +367,10 @@ def _format_markdown(report: Mapping[str, Any]) -> str:
     blockers = report["blockers"]
     assert isinstance(blockers, Sequence)
     lines.extend(["", "## Blockers"])
-    lines.extend(f"- {blocker}" for blocker in blockers) if blockers else lines.append("- none")
+    if blockers:
+        lines.extend(f"- {blocker}" for blocker in blockers)
+    else:
+        lines.append("- none")
     lines.extend(["", "## Closure Criteria"])
     criteria = report["closure_criteria"]
     assert isinstance(criteria, Sequence)

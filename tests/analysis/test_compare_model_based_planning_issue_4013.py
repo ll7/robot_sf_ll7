@@ -120,6 +120,32 @@ def test_report_excludes_fallback_rows_and_blocks_claim(tmp_path: Path) -> None:
     assert report["roles"]["learned_prediction_mpc"]["evidence_episodes"] == 0
 
 
+def test_report_fails_closed_on_episode_missing_scenario_or_seed(tmp_path: Path) -> None:
+    """A record missing scenario_id or seed must raise, not silently key on 'None::None'."""
+    bad = _episode("learned_prediction_mpc", "learned_prediction_mpc")
+    del bad["seed"]
+    learned = _write_episodes(tmp_path / "learned.jsonl", [bad])
+    cv = _write_episodes(
+        tmp_path / "cv.jsonl",
+        [_episode("cv_prediction_mpc", "cv_prediction_mpc")],
+    )
+    model_free = _write_episodes(
+        tmp_path / "goal.jsonl",
+        [_episode("model_free_baseline", "goal")],
+    )
+    config = _write_config(
+        tmp_path,
+        runs={
+            "learned_prediction_mpc": learned,
+            "cv_prediction_mpc": cv,
+            "model_free_baseline": model_free,
+        },
+    )
+
+    with pytest.raises(ValueError, match="scenario_id"):
+        build_report_from_config(config)
+
+
 def _episode(
     role: str,
     algo: str,

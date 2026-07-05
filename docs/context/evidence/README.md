@@ -120,6 +120,12 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_3463_topology_reselection_cross_slice_2026-07-05/`: diagnostic-only
+  CPU cross-slice packet for topology near-parity corrective Issue #3463. The
+  run completed 20 rows and classified `blocked` because all `doorway_transfer`
+  rows were `not_available`; no benchmark, planner-promotion, paper, or
+  dissertation claim is supported.
+
 - `issue_3637_closure_audit_2026-07-05.md`: closure-audit integration report for Issue #3637.
   Maps reactivity-vs-replay mechanism, preflight, frozen packet, analyzer, and runner-metadata PRs
   Issue #3594, Issue #3612, Issue #3696, Issue #3853, Issue #3860, Issue #3876, Issue #4150,

@@ -69,12 +69,15 @@ def _row_id(row: dict[str, Any], index: int) -> str:
     return str(row.get("row_id") or f"row:{index:03d}")
 
 
-def _path_exists(repo_root: Path, value: object) -> bool:
-    """Return whether a repository-relative file path exists."""
+def _repo_relative_file_exists(repo_root: Path, value: object) -> bool:
+    """Return whether ``value`` is a repository-relative regular file."""
 
-    if not isinstance(value, str) or not value or value.startswith("output/"):
+    if not isinstance(value, str) or not value:
         return False
-    return (repo_root / value).is_file()
+    path = Path(value)
+    if path.is_absolute() or ".." in path.parts or path.parts[0] == "output":
+        return False
+    return (repo_root / path).is_file()
 
 
 def _check_benchmark_evidence_row(
@@ -106,13 +109,13 @@ def _check_benchmark_evidence_row(
                 next_action="Refresh the release evidence snapshot or exclude the row.",
             )
         )
-    if not _path_exists(repo_root, row.get("artifact_uri")):
+    if not _repo_relative_file_exists(repo_root, row.get("artifact_uri")):
         blockers.append(
             GateBlocker(
                 row_id=row_id,
                 check="artifact_uri",
                 severity="blocker",
-                reason="artifact_uri is missing, non-file, or points under output/",
+                reason="artifact_uri is missing, non-file, absolute, escaping, or under output/",
                 next_action="Promote a durable artifact pointer before publication.",
             )
         )
@@ -138,7 +141,7 @@ def _check_benchmark_evidence_row(
                 next_action="Record tracked provenance sources for the row.",
             )
         )
-    elif any(not _path_exists(repo_root, source_ref) for source_ref in source_refs):
+    elif any(not _repo_relative_file_exists(repo_root, source_ref) for source_ref in source_refs):
         blockers.append(
             GateBlocker(
                 row_id=row_id,

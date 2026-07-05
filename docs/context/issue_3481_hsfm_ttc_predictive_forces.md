@@ -248,3 +248,20 @@ fixtures.
 The harness writes compact JSON / Markdown artifacts via
 `write_pedestrian_model_fixture_report(...)` and is covered by
 `tests/benchmark/test_pedestrian_model_fixture_diagnostics.py`.
+
+## Geometric Fixture Diagnostic Slice
+
+Issue #3481's shared-throat harness was a precursor and explicitly did not satisfy the
+narrow-passage lateral-sliding or bottleneck freeze/deadlock fixture blockers. The diagnostic
+harness now includes two geometric fixtures:
+
+- `narrow_passage_lateral_sliding`: wall-bounded opposing pedestrian passage with a local
+  `mean_max_lateral_displacement_m` diagnostic threshold.
+- `bottleneck_freeze_deadlock`: pinched-neck opposing flow with a local
+  `max_consecutive_interaction_zone_slow_steps` diagnostic threshold.
+
+The report status sets `thresholds_applied=True`, but these thresholds are local diagnostic fixture
+assertions only. They are not benchmark, calibration, planner-ranking, paper-facing, or dissertation
+claims. Remaining evidence work for any issue closure beyond diagnostic/prototype status is a
+seed-controlled campaign or equivalent benchmark-strength synthesis and any calibrated-realism
+claim support.

@@ -24,6 +24,8 @@ DEFAULT_MATRIX_PATH = Path(
 )
 SCHEMA_VERSION = "release-claim-matrix-publication-gate.v1"
 EXPECTED_MATRIX_SCHEMA = "release_claim_matrix_issue_3294.v1"
+BENCHMARK_EVIDENCE_CLASSIFICATION = "benchmark evidence"
+KNOWN_NON_BENCHMARK_CLASSIFICATIONS = frozenset({"diagnostic evidence", "non-claim"})
 NOT_CERTIFIED_VALUES = {
     "",
     "missing",
@@ -169,10 +171,10 @@ def build_gate_report(matrix: dict[str, Any], *, repo_root: Path) -> dict[str, A
             raise ValueError(f"Matrix row {index} must be an object")
         row_id = _row_id(row, index)
         classification = str(row.get("classification", "")).strip().lower()
-        if classification == "benchmark evidence":
+        if classification == BENCHMARK_EVIDENCE_CLASSIFICATION:
             benchmark_rows += 1
             blockers.extend(_check_benchmark_evidence_row(row, row_id=row_id, repo_root=repo_root))
-        else:
+        elif classification in KNOWN_NON_BENCHMARK_CLASSIFICATIONS:
             diagnostic_or_non_claim_rows += 1
             if row.get("benchmark_success") is True:
                 blockers.append(
@@ -184,6 +186,19 @@ def build_gate_report(matrix: dict[str, Any], *, repo_root: Path) -> dict[str, A
                         next_action="Downgrade benchmark_success or reclassify with full evidence.",
                     )
                 )
+        else:
+            blockers.append(
+                GateBlocker(
+                    row_id=row_id,
+                    check="classification",
+                    severity="blocker",
+                    reason=f"unrecognized classification {classification or 'missing'}",
+                    next_action=(
+                        "Use benchmark evidence or a known non-benchmark classification before "
+                        "publication."
+                    ),
+                )
+            )
 
     return {
         "schema_version": SCHEMA_VERSION,

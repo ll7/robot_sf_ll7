@@ -382,6 +382,57 @@ def _build_issue_1475_decision_packet(
     }
 
 
+def _build_integration_report(
+    *,
+    overall_status: str,
+    prerequisites: list[PrerequisiteResult],
+    errors: list[str],
+) -> dict[str, Any]:
+    """Build a compact parent-level integration report for issue #1358.
+
+    The report is intentionally derived from the same readiness primitives as the
+    preflight checker. It gives reviewers and routing agents one coherent status
+    surface without turning this parent issue into a local training or benchmark
+    execution path.
+
+    Returns:
+        JSON-serializable parent integration status.
+    """
+    missing_or_invalid = [p.key for p in prerequisites if p.messages]
+    local_handoff_ready = overall_status == "blocked_on_followup"
+    return {
+        "issue": 1358,
+        "integration_status": (
+            "local_handoff_ready_parent_blocked"
+            if local_handoff_ready
+            else "local_contract_incomplete"
+        ),
+        "new_capability": "parent_integration_status_report",
+        "local_contract": {
+            "prerequisites_total": len(prerequisites),
+            "prerequisites_ready": sum(1 for p in prerequisites if p.present and not p.messages),
+            "missing_or_invalid_prerequisites": missing_or_invalid,
+        },
+        "remaining_blocker_keys": [b.key for b in LANE_BLOCKERS],
+        "next_empirical_action": (
+            "Use child #1475 to collect one bounded smoke training/evaluation artifact "
+            "set on an approved SLURM worker, then classify continue/revise/stop before "
+            "any nominal escalation."
+        ),
+        "non_claims": [
+            "no local training was run",
+            "no SLURM job was submitted",
+            "no benchmark campaign was run",
+            "no paper or dissertation claim is promoted",
+        ],
+        "claim_boundary": (
+            "Integration report only. A handoff-ready local contract is not learned-residual "
+            "evidence and does not unblock parent #1358 without child smoke/nominal artifacts."
+        ),
+        "errors": errors,
+    }
+
+
 def assess_lane_readiness(
     repo_root: Path,
     *,
@@ -465,6 +516,11 @@ def assess_lane_readiness(
         ],
         "issue_1475_decision_packet": _build_issue_1475_decision_packet(
             overall_status=overall_status,
+            errors=errors,
+        ),
+        "integration_report": _build_integration_report(
+            overall_status=overall_status,
+            prerequisites=prerequisites,
             errors=errors,
         ),
         "errors": errors,

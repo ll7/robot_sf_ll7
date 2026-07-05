@@ -100,6 +100,36 @@ def test_gate_rejects_non_benchmark_success_promotion(tmp_path) -> None:
     assert report["blockers"][0]["check"] == "non_benchmark_promotion"
 
 
+def test_gate_fails_closed_for_unknown_classification(tmp_path) -> None:
+    """Unknown classification labels must not silently bypass strict checks."""
+
+    report = build_gate_report(
+        _matrix(
+            [
+                {
+                    "row_id": "release_artifact:unknown-classification",
+                    "classification": "nominal benchmark evidence",
+                    "benchmark_success": False,
+                }
+            ]
+        ),
+        repo_root=tmp_path,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["blockers"] == [
+        {
+            "row_id": "release_artifact:unknown-classification",
+            "check": "classification",
+            "severity": "blocker",
+            "reason": "unrecognized classification nominal benchmark evidence",
+            "next_action": (
+                "Use benchmark evidence or a known non-benchmark classification before publication."
+            ),
+        }
+    ]
+
+
 def test_committed_matrix_remains_blocked_until_certification_is_attached() -> None:
     """Current tracked matrix is an integration surface, not a publication-ready claim."""
 

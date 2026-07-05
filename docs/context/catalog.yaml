@@ -85,6 +85,10 @@ entries:
     status: evidence
     freshness: evidence
     area: workflow_evidence
+  - path: docs/context/evidence/issue_3425_closure_audit_2026-07-05.md
+    status: evidence
+    freshness: evidence
+    area: workflow_evidence
   - path: docs/context/evidence/issue_4164_goal_intention_smoke_summary.json
     status: evidence
     freshness: evidence

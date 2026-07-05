@@ -6,6 +6,14 @@ Status: blocked on SLURM-capable execution from the current machine. This note i
 evidence and does not demonstrate the requested submission -> finalizer -> durable evidence ->
 summary -> claim-decision chain.
 
+Supersession note, 2026-07-05: this note records the pre-execution blocker state from
+PR #3429. Later merged evidence in
+[`evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/README.md`](evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/README.md)
+and the closure audit in
+[`evidence/issue_3425_closure_audit_2026-07-05.md`](evidence/issue_3425_closure_audit_2026-07-05.md)
+supersede the blocker for the workflow/tooling trace boundary. Keep this page only as historical
+provenance for why non-SLURM hosts must not simulate success.
+
 ## Goal
 
 Issue #3425 asks for one complete vertical research slice through the SLURM finalizer bridge and

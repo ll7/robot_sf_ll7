@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 from datetime import UTC, datetime
@@ -24,12 +25,53 @@ BOUNDARIES = (
 )
 
 
+def _hydrate_statistic_data(spec: dict[str, Any], manifest_dir: Path) -> None:
+    source_query = spec.get("source_query")
+    if not isinstance(source_query, dict) or "input_file" not in source_query:
+        return
+
+    input_file_name = Path(source_query["input_file"]).name
+    input_file_path = manifest_dir / input_file_name
+
+    if not input_file_path.is_file():
+        spec["data"] = {}
+        return
+
+    try:
+        if input_file_name.endswith(".csv"):
+            rows = []
+            with input_file_path.open(encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    rows.append(dict(row))
+            spec["data"] = {
+                "rows": rows,
+                "metric": source_query.get("metric"),
+                "x_field": source_query.get("x_field"),
+                "y_field": source_query.get("y_field"),
+                "samples": source_query.get("bootstrap_samples"),
+                "seed": source_query.get("seed"),
+                "planner": source_query.get("planner"),
+            }
+        elif input_file_name.endswith(".json"):
+            with input_file_path.open(encoding="utf-8") as f:
+                payload = json.load(f)
+            spec["data"] = {"json_payload": payload}
+    except (OSError, ValueError, KeyError, csv.Error):
+        spec["data"] = {}
+
+
 def build_packet(manifest_path: Path, output_dir: Path) -> dict[str, Any]:
     """Build JSON and Markdown packet outputs from ``manifest_path``."""
 
     manifest_path = manifest_path.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest = _load_manifest(manifest_path)
+
+    manifest_dir = manifest_path.parent
+    for spec in manifest["statistics"]:
+        _hydrate_statistic_data(spec, manifest_dir)
+
     results = [evaluate_statistic(spec).to_json() for spec in manifest["statistics"]]
     packet = {
         "schema_version": SCHEMA_VERSION,
@@ -52,14 +94,21 @@ def build_packet(manifest_path: Path, output_dir: Path) -> dict[str, Any]:
     report_text = _render_markdown(packet)
     report_path.write_text(report_text, encoding="utf-8")
     readme_path.write_text(report_text, encoding="utf-8")
+
+    checksum_files = [
+        summary_path,
+        report_path,
+        readme_path,
+        manifest_path,
+    ]
+    for name in ("campaign_table.csv", "scenario_family_breakdown.csv"):
+        path = manifest_dir / name
+        if path.is_file():
+            checksum_files.append(path)
+
     _write_checksums(
         checksums_path,
-        [
-            summary_path,
-            report_path,
-            readme_path,
-            manifest_path,
-        ],
+        checksum_files,
     )
     packet["outputs"] = {
         "summary_json": _public_path(summary_path),

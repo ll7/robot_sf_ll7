@@ -112,9 +112,12 @@ def _build_parent_ledger_comment(candidate: dict[str, object]) -> str:
     )
 
 
-def classify_and_build_actions(report: dict[str, Any]) -> list[ClosureAction]:
+def classify_and_build_actions(
+    report: dict[str, Any], *, close_issues: set[int] | None = None
+) -> list[ClosureAction]:
     """Classify audit candidates and build closure actions."""
     actions: list[ClosureAction] = []
+    close_set = close_issues or set()
     for candidate in report.get("candidates", []):
         assert isinstance(candidate, dict)
         number = candidate.get("number")
@@ -127,7 +130,17 @@ def classify_and_build_actions(report: dict[str, Any]) -> list[ClosureAction]:
             int(pr["number"]) for pr in pr_entries if isinstance(pr.get("number"), int)
         )
 
-        if classification == "parent_or_roadmap":
+        if number in close_set:
+            actions.append(
+                ClosureAction(
+                    issue_number=number,
+                    action_type="close_fully_covered",
+                    comment_body=_build_close_comment(candidate),
+                    should_close=True,
+                    pr_numbers=pr_numbers,
+                )
+            )
+        elif classification == "parent_or_roadmap":
             actions.append(
                 ClosureAction(
                     issue_number=number,
@@ -252,6 +265,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=False,
         help="Actually post comments and close issues (default is dry-run).",
     )
+    parser.add_argument(
+        "--close-issues",
+        type=str,
+        default=None,
+        help="Comma-separated list of issue numbers to classify as fully covered and close.",
+    )
     return parser
 
 
@@ -277,7 +296,18 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    actions = classify_and_build_actions(report)
+    close_issues_set = set()
+    if args.close_issues:
+        for part in args.close_issues.split(","):
+            part = part.strip()
+            if part.isdigit():
+                close_issues_set.add(int(part))
+            elif part.startswith("#") and part[1:].isdigit():
+                close_issues_set.add(int(part[1:]))
+            elif part:
+                print(f"Warning: ignored invalid issue number format: {part}", file=sys.stderr)
+
+    actions = classify_and_build_actions(report, close_issues=close_issues_set)
     result = execute_actions(actions, repo=args.repo, dry_run=dry_run)
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0

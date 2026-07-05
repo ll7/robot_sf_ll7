@@ -208,6 +208,19 @@ def _episode_row_status(record: Mapping[str, Any], *, default_status: str) -> st
     return default_status
 
 
+def _planner_runtime(record: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """Return planner runtime diagnostics from compact or map-runner episode records."""
+    planner_runtime = record.get("planner_runtime")
+    if isinstance(planner_runtime, Mapping):
+        return planner_runtime
+    algorithm_metadata = record.get("algorithm_metadata")
+    if isinstance(algorithm_metadata, Mapping):
+        planner_runtime = algorithm_metadata.get("planner_runtime")
+        if isinstance(planner_runtime, Mapping):
+            return planner_runtime
+    return None
+
+
 def _activation_diagnostics(
     record: Mapping[str, Any], *, arm: Mapping[str, Any], row_status: str
 ) -> dict[str, Any]:
@@ -218,8 +231,8 @@ def _activation_diagnostics(
         "envelope_activation_count": None,
         "effective_radius_used_by_planner": None,
     }
-    planner_runtime = record.get("planner_runtime")
-    if not isinstance(planner_runtime, Mapping):
+    planner_runtime = _planner_runtime(record)
+    if planner_runtime is None:
         return diagnostics
     raw_envelope = planner_runtime.get("pedestrian_uncertainty_envelope")
     if not isinstance(raw_envelope, Mapping):

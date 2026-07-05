@@ -120,6 +120,11 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_1489_closure_audit_2026-07-05.md`: closure-audit evidence for Issue #1489.
+  Maps schema/checker/status/integration PRs #1516, #1535, #1547, #2286,
+  PR #2419, PR #3736, and PR #4452 to the synthesis parent acceptance criteria and keeps
+  the issue blocked on missing durable comparable component campaign outputs.
+
 - `issue_3501_closure_audit_2026-07-04.md`: closure-audit integration report for
   issue #3501. Maps merged PRs #3591, #4137, #4136, #4223, and #4298 planner-agnostic
   safety wrapper and ablation/preregistration evidence to acceptance criteria

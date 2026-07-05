@@ -1,5 +1,8 @@
 # Context Retrieval Index
 
+Recent hard-guarded hybrid-learning synthesis closure audit:
+[issue_1489_closure_audit_2026-07-05.md](evidence/issue_1489_closure_audit_2026-07-05.md).
+
 Recent camera-ready decomposition closure audit:
 [issue_3385_closure_audit_2026_07_04.md](issue_3385_closure_audit_2026_07_04.md).
 Recent predictive-v2 closure audit: [issue_1490_closure_audit.md](issue_1490_closure_audit.md).

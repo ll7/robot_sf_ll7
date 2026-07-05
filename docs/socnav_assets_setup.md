@@ -172,8 +172,16 @@ uv run python scripts/tools/generate_socnavbench_traversible.py --map ETH
 - **Output (derived, never committed):**
   `sd3dis/stanford_building_parser_dataset/traversibles/ETH/data.pkl`, written **into the data root**
   (honors `ROBOT_SF_EXTERNAL_DATA_ROOT`, otherwise `third_party/socnavbench`).
-- The command prints the SHA-256 of the produced `data.pkl` so the external-data registry pin can be
-  updated after the maintainer re-seeds the internal store.
+- The command prints the SHA-256 of the produced `data.pkl` plus registry-style tree checksum
+  metadata. After `data.pkl` exists, write the maintainer-review pin sidecar with:
+
+```bash
+uv run python scripts/tools/generate_socnavbench_traversible.py --map ETH --dry-run \
+  --pin-report-json output/maps/issue_4291_socnavbench_eth_pin_report.json
+```
+
+  The sidecar includes `expected_tree_sha256` and the registry owner field needed for the
+  post-review external-data registry pin; it does not commit or publish generated data.
 
 The build is idempotent: it skips when `data.pkl` already exists unless `--force` is passed. This
 step produces the exact `eth_traversible_pickle` input that
@@ -209,6 +217,19 @@ uv run python scripts/tools/stage_socnavbench_eth_traversible_svg.py \
 The wrapper composes the same license-safe asset registry, ETH traversible generator, SVG converter,
 and Robot SF SVG parser smoke check. Missing licensed source assets fail closed with exit `2` and a
 JSON report; the command never downloads data or writes placeholder maps.
+
+Derived SVG artifact policy for issue #4546:
+
+- Commit `maps/svg_maps/socnavbench/socnavbench_eth.svg` only after the wrapper succeeds on the
+  official/user-supplied ETH source data and the report records both input `data.pkl` SHA-256 and
+  output SVG SHA-256.
+- Record the conversion report or a compact evidence note under `docs/context/evidence/` so reviewers
+  can verify the source hash, output hash, parser smoke result, and command used to regenerate the
+  SVG.
+- Do not commit placeholder, dry-run, or fixture-generated SVG output. Until official source data is
+  staged and smoke validation is green, the derived SVG remains absent and issue #4546 stays blocked.
+- Regenerate and review the committed SVG whenever the official traversible hash, converter settings,
+  or SVG parser contract changes.
 
 ## Licensing and Repository Hygiene
 

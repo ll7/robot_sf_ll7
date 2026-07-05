@@ -158,6 +158,36 @@ def output_tree_checksum(paths: TraversiblePaths) -> dict[str, Any]:
     }
 
 
+def registry_pin_report(paths: TraversiblePaths, report: dict[str, Any]) -> dict[str, Any]:
+    """Return maintainer-review metadata for pinning the generated traversible tree."""
+    tree_sha256 = report.get("output_tree_sha256")
+    if not isinstance(tree_sha256, str) or not tree_sha256:
+        raise TraversibleGenerationError(
+            "Cannot write registry pin report before traversible data.pkl exists."
+        )
+    return {
+        "asset_id": SOCNAV_ASSET_ID,
+        "map_name": paths.map_name,
+        "status": "ready_for_trusted_pin_review",
+        "expected_tree_sha256": tree_sha256,
+        "expected_tree_sha256_status_after_pin": "pinned",
+        "output_tree_file_count": report["output_tree_file_count"],
+        "output_tree_total_size_bytes": report["output_tree_total_size_bytes"],
+        "output_sha256": report["output_sha256"],
+        "output_pkl": str(paths.output_pkl),
+        "registry_owner": "scripts/tools/manage_external_data.py",
+        "manual_review_required": True,
+        "next_action": (
+            "After maintainer verifies the trusted generated artifact and reseeds durable "
+            "storage, copy expected_tree_sha256 into the socnavbench-s3dis-eth registry entry."
+        ),
+        "forbidden_actions": {
+            "commit_generated_data": False,
+            "treat_as_benchmark_evidence": False,
+        },
+    }
+
+
 def preflight(map_name: str, *, root: Path | None = None) -> dict[str, Any]:
     """Inspect staged inputs and existing output for one map without building anything.
 
@@ -329,6 +359,16 @@ def _emit(report: dict[str, Any], report_json: Path | None) -> None:
     print(json.dumps(report, indent=2))
 
 
+def _write_pin_report(report: dict[str, Any], args: argparse.Namespace) -> None:
+    """Write optional registry-pin sidecar for already-present/generated output."""
+    if args.pin_report_json is None:
+        return
+    paths = resolve_paths(args.map, root=args.root)
+    pin_report = registry_pin_report(paths, report)
+    args.pin_report_json.parent.mkdir(parents=True, exist_ok=True)
+    args.pin_report_json.write_text(json.dumps(pin_report, indent=2) + "\n", encoding="utf-8")
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -357,6 +397,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Rebuild even if the traversible data.pkl already exists.",
     )
     parser.add_argument("--report-json", type=Path, default=None)
+    parser.add_argument(
+        "--pin-report-json",
+        type=Path,
+        default=None,
+        help=(
+            "Write a maintainer-review JSON sidecar with expected_tree_sha256 fields for "
+            "registry pinning. Requires an existing or newly generated data.pkl."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -367,6 +416,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.dry_run:
         report["dry_run"] = True
+        if args.pin_report_json is not None:
+            try:
+                _write_pin_report(report, args)
+            except TraversibleGenerationError as exc:
+                report.update({"status": "blocked_missing_output", "error": str(exc)})
+                _emit(report, args.report_json)
+                return EXIT_BLOCKED
         _emit(report, args.report_json)
         return EXIT_BLOCKED if report["blocked"] else 0
 
@@ -384,6 +440,12 @@ def main(argv: list[str] | None = None) -> int:
 
     # Merge the resolved preflight context with the build outcome for a complete record.
     merged = {**{k: report[k] for k in ("map_name", "socnav_root", "mesh_dir")}, **build_report}
+    try:
+        _write_pin_report(merged, args)
+    except TraversibleGenerationError as exc:
+        merged.update({"status": "blocked_missing_output", "error": str(exc)})
+        _emit(merged, args.report_json)
+        return EXIT_BLOCKED
     _emit(merged, args.report_json)
     return 0
 

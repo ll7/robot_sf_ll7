@@ -110,6 +110,28 @@ def test_preflight_blocks_missing_checkpoint(tmp_path: Path) -> None:
     assert any("blocked_missing_learned_checkpoint" in error for error in report["errors"])
 
 
+def test_preflight_blocks_missing_registry_entry(tmp_path: Path) -> None:
+    """A stale model_id fails closed with a registry-specific error."""
+
+    route_payload = yaml.safe_load(ROUTE_CONFIG.read_text(encoding="utf-8"))
+    baseline_payload = yaml.safe_load(BASELINE_CONFIG.read_text(encoding="utf-8"))
+    route_payload["issue_4183_diagnostic"]["learned_policy_model_id"] = "missing_issue_4183_model"
+    baseline_payload["issue_4183_diagnostic"][
+        "learned_policy_model_id"
+    ] = "missing_issue_4183_model"
+    route_path = tmp_path / "route.yaml"
+    baseline_path = tmp_path / "baseline.yaml"
+    route_path.write_text(yaml.safe_dump(route_payload), encoding="utf-8")
+    baseline_path.write_text(yaml.safe_dump(baseline_payload), encoding="utf-8")
+    repo_root = _repo_root_with_issue_inputs(tmp_path / "repo", include_checkpoint=False)
+
+    report = preflight_configs(route_path, baseline_path, repo_root=repo_root)
+
+    assert report["status"] == "blocked_missing_learned_checkpoint"
+    assert report["checkpoint_reference"]["status"] == "missing_registry_entry"
+    assert "missing_model_registry_entry: missing_issue_4183_model" in report["errors"]
+
+
 def test_build_report_pairs_rows_and_excludes_fallback(tmp_path: Path) -> None:
     """Report copies adapter diagnostics and excludes fallback rows from effect evidence."""
 

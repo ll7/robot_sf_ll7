@@ -9,6 +9,7 @@ imported by any of these paths.
 from __future__ import annotations
 
 import hashlib
+import json
 from typing import TYPE_CHECKING
 
 import pytest
@@ -26,6 +27,7 @@ from scripts.tools.generate_socnavbench_traversible import (
     main,
     output_tree_checksum,
     preflight,
+    registry_pin_report,
     resolve_paths,
     sha256_file,
 )
@@ -134,6 +136,31 @@ def test_output_tree_checksum_missing_output_reports_empty_tree(tmp_path: Path) 
     }
 
 
+def test_registry_pin_report_requires_existing_output(tmp_path: Path) -> None:
+    """Registry pin sidecar refuses placeholder checksums."""
+    paths = resolve_paths("ETH", root=tmp_path)
+    with pytest.raises(TraversibleGenerationError, match="before traversible data.pkl exists"):
+        registry_pin_report(paths, output_tree_checksum(paths))
+
+
+def test_registry_pin_report_surfaces_expected_tree_sha256(tmp_path: Path) -> None:
+    """Registry pin sidecar names the trusted-review fields maintainers need."""
+    _stage_mesh(tmp_path)
+    out = _output_pkl(tmp_path)
+    out.parent.mkdir(parents=True)
+    out.write_bytes(b"fake-traversible")
+
+    report = preflight("ETH", root=tmp_path)
+    pin = registry_pin_report(resolve_paths("ETH", root=tmp_path), report)
+
+    assert pin["asset_id"] == "socnavbench-s3dis-eth"
+    assert pin["status"] == "ready_for_trusted_pin_review"
+    assert pin["expected_tree_sha256"] == report["output_tree_sha256"]
+    assert pin["expected_tree_sha256_status_after_pin"] == "pinned"
+    assert pin["manual_review_required"] is True
+    assert pin["forbidden_actions"]["commit_generated_data"] is False
+
+
 def test_dry_run_absent_mesh_exits_blocked(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     """--dry-run with no mesh exits with the blocked code and does not build."""
     code = main(["--map", "ETH", "--root", str(tmp_path), "--dry-run"])
@@ -153,6 +180,54 @@ def test_dry_run_staged_mesh_exits_ok_without_building(
     assert not _output_pkl(tmp_path).exists()
     out = capsys.readouterr().out
     assert '"dry_run": true' in out.lower()
+
+
+def test_dry_run_pin_report_requires_existing_output(tmp_path: Path) -> None:
+    """--pin-report-json fails closed when no output checksum can be reviewed."""
+    _stage_mesh(tmp_path)
+    pin_report = tmp_path / "pin.json"
+
+    code = main(
+        [
+            "--map",
+            "ETH",
+            "--root",
+            str(tmp_path),
+            "--dry-run",
+            "--pin-report-json",
+            str(pin_report),
+        ]
+    )
+
+    assert code == EXIT_BLOCKED
+    assert not pin_report.exists()
+
+
+def test_dry_run_pin_report_writes_existing_output_metadata(tmp_path: Path) -> None:
+    """Existing traversible output can produce a maintainer pin-review sidecar."""
+    _stage_mesh(tmp_path)
+    out = _output_pkl(tmp_path)
+    out.parent.mkdir(parents=True)
+    out.write_bytes(b"fake-traversible")
+    pin_report = tmp_path / "pin.json"
+
+    code = main(
+        [
+            "--map",
+            "ETH",
+            "--root",
+            str(tmp_path),
+            "--dry-run",
+            "--pin-report-json",
+            str(pin_report),
+        ]
+    )
+
+    assert code == 0
+    payload = json.loads(pin_report.read_text(encoding="utf-8"))
+    assert payload["expected_tree_sha256"] == _expected_single_file_tree_hash(out, root=out.parent)
+    assert payload["output_sha256"] == sha256_file(out)
+    assert payload["registry_owner"] == "scripts/tools/manage_external_data.py"
 
 
 def test_dry_run_writes_report_json(tmp_path: Path) -> None:

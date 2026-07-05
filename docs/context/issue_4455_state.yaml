@@ -1,0 +1,94 @@
+# Append-only durable state surface for issue #4455.
+# Records public-repository acceptance evidence and the remaining empirical action
+# without encoding transient host, queue, packet-lineage, or private-ops routing state.
+schema_version: issue-state.v1
+issue: 4455
+title: "benchmark: perception-degradation ladder profiles"
+source_issue: "https://github.com/ll7/robot_sf_ll7/issues/4455"
+state_surface: perception_degradation_ladder_closure_audit
+state_entries:
+  - recorded_at_utc: "2026-07-05T05:05:00Z"
+    recorded_by: codex
+    kind: closure_audit_state
+    status: public_repo_acceptance_met_empirical_campaign_pending
+    latest_issue_comment_reviewed_utc: "2026-07-05T04:08:08Z"
+    summary: >-
+      Merged PRs #4458, #4506, and #4558 satisfy the public CPU-only
+      implementation, validation, and closure-audit evidence criteria for issue
+      #4455. The live issue remains open only for empirical ladder execution and
+      ranking/failure-mode synthesis, which requires campaign authorization.
+    claim_boundary: >-
+      Enablement and closure-audit state only. This is not benchmark evidence,
+      does not rank planners, does not assert failure-mode survival under
+      perception degradation, and does not update paper or dissertation claims.
+    merged_prs:
+      - pr: 4458
+        url: "https://github.com/ll7/robot_sf_ll7/pull/4458"
+        merged_at_utc: "2026-07-04T15:18:39Z"
+        role: >-
+          Delivered perception-degradation profile schema/configs, planner-input
+          observation degradation behavior, preregistration files, builder/checker,
+          context note, and focused tests.
+      - pr: 4506
+        url: "https://github.com/ll7/robot_sf_ll7/pull/4506"
+        merged_at_utc: "2026-07-04T20:56:17Z"
+        role: >-
+          Added the first tracked closure-audit criterion-to-evidence note and
+          kept issue #4455 open for the empirical campaign.
+      - pr: 4558
+        url: "https://github.com/ll7/robot_sf_ll7/pull/4558"
+        merged_at_utc: "2026-07-05T01:48:27Z"
+        role: >-
+          Integrated the closure-audit evidence with the canonical
+          perception-degradation context note after the high-churn PR sequence.
+    acceptance_evidence:
+      - criterion: "Degradation profiles config-declared and validated."
+        evidence: >-
+          PR #4458 added
+          configs/benchmarks/perception_degradation_profiles_v1.yaml,
+          configs/benchmarks/perception_degradation/issue_4455_ladder_v1.yaml,
+          and scripts/benchmark/build_perception_degradation_ladder_issue_4455.py.
+      - criterion: "Degradation applies only to planner input."
+        evidence: >-
+          PR #4458 applied observation corruption before planner invocation and
+          recorded the planner-input-only boundary in the issue context note.
+      - criterion: "Gaussian noise, fixed delay, track dropout, and range-limited visibility supported."
+        evidence: >-
+          PR #4458 extended robot_sf/benchmark/observation_noise.py and covered
+          the behavior with tests/benchmark/test_observation_noise.py.
+      - criterion: "Episode rows include profile key/hash/counters."
+        evidence: >-
+          PR #4458 recorded per-profile observation-noise metadata and stats and
+          generated per-profile camera-ready CPU smoke configs.
+      - criterion: "Pre-registration config pins planners, scenarios, seeds, and profile ladder."
+        evidence: >-
+          PR #4458 added
+          configs/benchmarks/issue_4455_perception_degradation_ladder_preregistration.yaml
+          and tests/benchmark/test_perception_degradation_ladder_issue_4455.py.
+      - criterion: "CPU smoke proves plumbing."
+        evidence: >-
+          PR #4458 reported targeted tests plus ladder validation/generation
+          commands; PR #4506 and PR #4558 preserved that validation boundary.
+      - criterion: "No full campaign submission or claim edit included."
+        evidence: >-
+          PRs #4458, #4506, and #4558 stayed enablement/audit-only and changed
+          no paper or dissertation claim text.
+    remaining:
+      - >-
+        Run the preregistered perception-degradation ladder campaign when
+        compute submission is authorized.
+      - >-
+        Synthesize whether planner ranking and failure modes survive the
+        planner-input degradation ladder using campaign artifacts and provenance.
+    next_empirical_action: >-
+      Execute the generated configs from
+      scripts/benchmark/build_perception_degradation_ladder_issue_4455.py,
+      preserve row/artifact provenance, and update the issue only after the
+      campaign result exists or fails closed.
+    forbidden_actions_confirmed:
+      compute_submit: false
+      full_benchmark_campaign_run: false
+      slurm_or_gpu_submission: false
+      paper_or_dissertation_claim_edited: false
+      planner_ranking_claim_promoted: false
+      transient_queue_or_host_state_recorded: false

@@ -66,6 +66,21 @@ class ArmSpec:
     notes: str = ""
 
 
+@dataclass(frozen=True)
+class ProgressionSpec:
+    """Static definition for the next #3215 progression packet."""
+
+    packet_id: str
+    display_name: str
+    description: str
+    required_paths: tuple[Path, ...]
+    expected_output_path: Path
+    forecast_arms: tuple[str, ...]
+    outcomes: tuple[str, ...]
+    evidence_tier: str
+    notes: str = ""
+
+
 ARMS: tuple[ArmSpec, ...] = (
     ArmSpec(
         arm_id="selection",
@@ -117,6 +132,38 @@ ARMS: tuple[ArmSpec, ...] = (
             "Checks the frozen #3254 weighted crossing-conflict config for the #3214 "
             "model arm; retraining itself remains compute-gated."
         ),
+    ),
+)
+
+
+NEXT_PROGRESSION = ProgressionSpec(
+    packet_id="scenario_family_oracle_arm",
+    display_name="Scenario-family promotion packet with oracle forecast arm",
+    description=(
+        "Post-synthesis progression from the #3215 negative result: promote the "
+        "forecast-risk gate from a single fixture to a scenario-family packet and "
+        "include an oracle future-trajectory arm so later runs can separate planner "
+        "limits from prediction limits and scenario infeasibility."
+    ),
+    required_paths=(
+        Path("configs/scenarios/sets/predictive_hardcase_portfolio_v1.yaml"),
+        Path("scripts/benchmark/run_forecast_risk_coupling_gate.py"),
+        Path("robot_sf/benchmark/forecast_risk_adapter.py"),
+    ),
+    expected_output_path=Path("output/tmp/predictive_planner/campaigns/scenario_family_oracle_arm"),
+    forecast_arms=("none", "constant_velocity", "interaction_aware", "oracle_future"),
+    outcomes=(
+        "collision_rate",
+        "near_miss_rate",
+        "false_positive_stop_rate",
+        "progress_loss",
+        "stop_timing",
+        "forecast_risk_calibration",
+    ),
+    evidence_tier="diagnostic-only",
+    notes=(
+        "Presence-only packet readiness; does not generate the scenario family, "
+        "run paired seeds, or promote dissertation/paper claims."
     ),
 )
 
@@ -192,6 +239,30 @@ def evaluate_arm(repo_root: Path, arm: ArmSpec) -> ComponentReadiness:
     )
 
 
+def evaluate_next_progression(repo_root: Path) -> dict:
+    """Classify post-synthesis scenario-family/oracle-arm packet readiness."""
+    statuses, missing = _classify_paths(repo_root, NEXT_PROGRESSION.required_paths)
+    return {
+        "id": NEXT_PROGRESSION.packet_id,
+        "display_name": NEXT_PROGRESSION.display_name,
+        "status": "ready" if not missing else "blocked",
+        "paths": [{"path": p.path, "exists": p.exists} for p in statuses],
+        "expected_configs": [p.path for p in statuses if p.path.startswith("configs/")],
+        "blockers": [
+            {"path": path, "reason": "required scenario-family packet input is missing"}
+            for path in missing
+        ],
+        "missing_paths": missing,
+        "description": NEXT_PROGRESSION.description,
+        "expected_output_path": NEXT_PROGRESSION.expected_output_path.as_posix(),
+        "expected_output_paths": [NEXT_PROGRESSION.expected_output_path.as_posix()],
+        "forecast_arms": list(NEXT_PROGRESSION.forecast_arms),
+        "outcomes": list(NEXT_PROGRESSION.outcomes),
+        "evidence_tier": NEXT_PROGRESSION.evidence_tier,
+        "notes": NEXT_PROGRESSION.notes,
+    }
+
+
 def evaluate_readiness(repo_root: Path = REPO_ROOT) -> dict:
     """Build the full presence-only readiness report for the #3215 tournament.
 
@@ -201,6 +272,7 @@ def evaluate_readiness(repo_root: Path = REPO_ROOT) -> dict:
     """
     shared = evaluate_shared_protocol(repo_root)
     arms = [evaluate_arm(repo_root, arm) for arm in ARMS]
+    next_progression = evaluate_next_progression(repo_root)
 
     components_ready = shared.status == "ready" and all(a.status == "ready" for a in arms)
     prerequisites_status = "ready" if components_ready else "blocked"
@@ -214,6 +286,7 @@ def evaluate_readiness(repo_root: Path = REPO_ROOT) -> dict:
         "run_gates": list(RUN_GATES),
         "shared_protocol": _component_to_dict(shared),
         "arms": [_component_to_dict(a) for a in arms],
+        "next_progression": next_progression,
     }
 
 
@@ -268,6 +341,23 @@ def render_text(report: dict) -> str:
         if arm["missing_paths"]:
             lines.append(f"    blockers: {', '.join(arm['missing_paths'])}")
         lines.append("")
+
+    progression = report["next_progression"]
+    lines.append(
+        f"[next progression] {progression['display_name']}: {progression['status'].upper()}"
+    )
+    lines.append(f"  evidence tier: {progression['evidence_tier']}")
+    lines.append(f"  forecast arms: {', '.join(progression['forecast_arms'])}")
+    lines.append(f"  outcomes: {', '.join(progression['outcomes'])}")
+    for path in progression["paths"]:
+        mark = "ok " if path["exists"] else "MISS"
+        lines.append(f"  [{mark}] {path['path']}")
+    lines.append(f"  expected output: {progression['expected_output_path']}")
+    if progression["missing_paths"]:
+        lines.append(f"  blockers: {', '.join(progression['missing_paths'])}")
+    if progression.get("notes"):
+        lines.append(f"  note: {progression['notes']}")
+    lines.append("")
 
     lines.append("Run gates (must clear before launching; out of scope for this helper):")
     for gate in report["run_gates"]:

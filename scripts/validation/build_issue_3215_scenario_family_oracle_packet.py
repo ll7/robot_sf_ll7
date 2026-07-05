@@ -51,14 +51,19 @@ class Check:
 
 def _git_head() -> str:
     """Return current Git head SHA when available."""
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=REPO_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=REPO_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        # git binary missing/unavailable or the call timed out: this SHA is
+        # best-effort provenance, so degrade to "unknown" rather than crashing.
+        return "unknown"
     return result.stdout.strip() if result.returncode == 0 else "unknown"
 
 

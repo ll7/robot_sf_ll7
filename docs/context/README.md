@@ -167,6 +167,12 @@ knowledge, not every transient iteration detail.
   [issue_3425_slurm_to_claim_blocker.md](issue_3425_slurm_to_claim_blocker.md)
   records why the requested vertical slice cannot be submitted from the current local machine and
   the smallest valid external action.
+* Issue #4520 serial benchmark graphics processing unit (GPU) memory closure audit:
+
+  [issue_4520_gpu_memory_closure_audit_2026-07-05.md](issue_4520_gpu_memory_closure_audit_2026-07-05.md)
+
+  records that merged PR #4528 delivered CPU-testable serial-arm teardown; no GPU
+  campaign, Slurm submission, or benchmark claim was run by audit.
 * Issue #2232 planner mechanism transfer benchmark protocol:
   [issue_2232_planner_mechanism_transfer_benchmark.md](issue_2232_planner_mechanism_transfer_benchmark.md)
 * Issue #3064 behavior-variant inventory:

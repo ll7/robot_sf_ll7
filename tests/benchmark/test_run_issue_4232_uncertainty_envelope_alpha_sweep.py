@@ -181,6 +181,32 @@ def test_activation_diagnostics_preserve_valid_runtime_telemetry() -> None:
     }
 
 
+def test_activation_diagnostics_read_map_runner_algorithm_metadata() -> None:
+    """Real episode rows carry planner runtime diagnostics under algorithm_metadata."""
+    diagnostics = _MODULE._activation_diagnostics(
+        {
+            "algorithm_metadata": {
+                "planner_runtime": {
+                    "pedestrian_uncertainty_envelope": {
+                        "effective_radius_used_by_planner": True,
+                        "envelope_activation_count": 4,
+                    }
+                }
+            }
+        },
+        arm={
+            "pedestrian_uncertainty_alpha_mps": 0.1,
+            "pedestrian_uncertainty_envelope_enabled": True,
+        },
+        row_status="diagnostic_only",
+    )
+
+    assert diagnostics == {
+        "envelope_activation_count": 4,
+        "effective_radius_used_by_planner": True,
+    }
+
+
 def test_activation_diagnostics_keep_malformed_fields_unknown() -> None:
     """Malformed telemetry fields remain unknown while valid telemetry stays preserved."""
     diagnostics = _MODULE._activation_diagnostics(

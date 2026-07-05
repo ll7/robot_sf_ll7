@@ -1,0 +1,92 @@
+{
+  "artifact_inventory": {
+    "generated_ignored_files": [
+      {
+        "path": "output/issue_4012_offline_online_rl_smoke/issue_4012_smoke.jsonl",
+        "sha256": "26e9c6b94a40ce2777f1e449cb71071993f655670b03974fe0fbd4eacd3dab88",
+        "size_bytes": 16216
+      },
+      {
+        "path": "output/issue_4012_offline_online_rl_smoke/issue_4012_smoke.manifest.json",
+        "sha256": "c83593110bbc42628af942bc614f9b8ff09ceaac6f04326d4a20a46c0ea83b54",
+        "size_bytes": 405
+      },
+      {
+        "path": "output/issue_4012_offline_online_rl_smoke/issue_4012_offline_online_summary.json",
+        "sha256": "0aa3b9e259a45565b8a6ede1172f1dc1b0823b3897ee6679bdb3c52e24499141",
+        "size_bytes": 2807
+      },
+      {
+        "path": "output/issue_4012_offline_online_rl_smoke/issue_4012_offline_online_report.md",
+        "sha256": "1db768a22ff444a8e85aaa2117f294ed198173b6b34d4f921471382ab1bdaee8",
+        "size_bytes": 956
+      },
+      {
+        "path": "output/issue_4012_offline_online_rl_smoke/offline_online/issue_4012_sac_offline_online.zip",
+        "sha256": "d852acc97d5712e3f7eb6dd9b913cc2e17d92b23cf2b9bce8430f65cd0b1678c",
+        "size_bytes": 12385659
+      },
+      {
+        "path": "output/issue_4012_offline_online_rl_smoke/scratch/issue_4012_sac_scratch.zip",
+        "sha256": "58218485287d0411c5373824663333e4f5f1f4a92a67fae73fb1ce50bcb463d2",
+        "size_bytes": 12385639
+      }
+    ],
+    "tracked_policy": "Only this compact summary is tracked. Generated output/ files and checkpoints remain ignored diagnostic artifacts."
+  },
+  "claim_boundary": "Pipeline execution only; not benchmark evidence.",
+  "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run --extra training python scripts/training/run_offline_online_rl.py --config configs/training/offline_online_rl/issue_4012_sac_smoke.yaml",
+  "evidence_tier": "diagnostic-smoke-only",
+  "forbidden_actions_confirmed": {
+    "compute_submit": false,
+    "deleted": false,
+    "merged": false,
+    "released": false
+  },
+  "issue": 4012,
+  "result": {
+    "arms": {
+      "offline_online": {
+        "blocker": null,
+        "offline_online_enabled": true,
+        "online_timesteps": 256,
+        "status": "completed"
+      },
+      "scratch": {
+        "blocker": null,
+        "offline_online_enabled": false,
+        "online_timesteps": 256,
+        "status": "completed"
+      }
+    },
+    "eligible_for_claim": false,
+    "remaining_blockers": [],
+    "seed": 4012,
+    "status": "completed"
+  },
+  "schema_version": "issue_4012_offline_online_smoke_evidence.v1",
+  "source_prs": [
+    {
+      "merged_at": "2026-07-03T05:46:15Z",
+      "pr": 4170,
+      "summary": "Added config-gated offline-to-online SAC smoke lane, transition loading, hybrid replay, and scratch comparator."
+    },
+    {
+      "merged_at": "2026-07-04T18:34:36Z",
+      "pr": 4472,
+      "summary": "Added fail-closed paired-arm integration reporting for the smoke orchestrator."
+    }
+  ],
+  "validation": [
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/training/test_offline_online_rl.py tests/training/test_hybrid_replay_buffer.py tests/training/test_train_sac_sb3_offline_online.py tests/training/test_run_offline_online_rl.py -q",
+      "exit_code": 0,
+      "result": "24 passed"
+    },
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run --extra training python scripts/training/run_offline_online_rl.py --config configs/training/offline_online_rl/issue_4012_sac_smoke.yaml",
+      "exit_code": 0,
+      "result": "Completed offline_online and scratch arms at diagnostic-smoke-only tier"
+    }
+  ]
+}

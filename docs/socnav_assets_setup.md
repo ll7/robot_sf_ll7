@@ -197,6 +197,19 @@ official `traversibles/ETH/data.pkl` is absent or malformed, the converter exits
 placeholder map. This is conversion tooling only; it is not benchmark evidence until the generated
 SVG passes parser and smoke validation on staged source assets.
 
+For the full local issue #4546 stage/generate/convert/smoke path:
+
+```bash
+uv run python scripts/tools/stage_socnavbench_eth_traversible_svg.py \
+  --socnav-root /path/to/socnavbench \
+  --output-svg maps/svg_maps/socnavbench/socnavbench_eth.svg \
+  --report-json output/maps/issue_4546_socnavbench_eth_stage_svg_smoke.json
+```
+
+The wrapper composes the same license-safe asset registry, ETH traversible generator, SVG converter,
+and Robot SF SVG parser smoke check. Missing licensed source assets fail closed with exit `2` and a
+JSON report; the command never downloads data or writes placeholder maps.
+
 ## Licensing and Repository Hygiene
 
 - Do not commit downloaded dataset assets.

@@ -3243,6 +3243,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_4455_state.yaml
+    status: current
+    freshness: dated
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4232_uncertainty_envelope_diagnostic_smoke_2026-07
     status: evidence
     freshness: evidence

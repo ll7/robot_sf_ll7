@@ -878,7 +878,7 @@ def run_comparison(
     dataset_staging_contract: Path | None = DEFAULT_DATASET_STAGING_CONTRACT_PATH,
     require_dataset_backed_ready: bool = False,
 ) -> dict[str, Any]:
-    """Run Issue #2919 comparison write evidence files."""
+    """Run the Issue #2919 comparison and write evidence files."""
 
     repo_root = repo_root or repository_root()
     registry_path = (repo_root / registry_path).resolve()
@@ -901,7 +901,9 @@ def run_comparison(
     samples, skipped_sources = collect_samples(registry_path, repo_root)
     rows = build_comparison_rows(samples)
     if not rows:
-        raise ScenarioPriorComparisonError("no comparable authored trace-derived parameters found")
+        raise ScenarioPriorComparisonError(
+            "no comparable authored and trace-derived parameters found"
+        )
     write_csv(rows, output_dir / CSV_NAME)
     write_markdown_report(
         rows=rows,

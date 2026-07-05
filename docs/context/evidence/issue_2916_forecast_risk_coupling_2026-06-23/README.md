@@ -17,9 +17,9 @@ At least one forecast-risk row reduced safety events vs the control without a fa
 ## Reproducibility
 
 - Issue: #2916
-- Generated (UTC): 2026-06-23T07:34:20.813118+00:00
-- Command: `uv run python scripts/benchmark/run_forecast_risk_coupling_gate.py --config configs/research/forecast_risk_coupling_issue_2916.yaml --output-dir output/issue_2916_coupling_gate`
-- Repo HEAD: `566d820e`
+- Generated (UTC): 2026-07-05T01:04:08.184361+00:00
+- Command: `uv run python scripts/benchmark/run_forecast_risk_coupling_gate.py --config configs/research/forecast_risk_coupling_issue_2916.yaml --output-dir docs/context/evidence/issue_2916_forecast_risk_coupling_2026-06-23`
+- Repo HEAD: `816976e44`
 - Config: `configs/research/forecast_risk_coupling_issue_2916.yaml`
 - Fixture: `tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_episode_0000.json`
 - Seed: 111
@@ -28,10 +28,10 @@ At least one forecast-risk row reduced safety events vs the control without a fa
 
 | row | class | collision | near_miss | safety_events | progress_m | stop_step | FP_stops | runtime_s | SNQI |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| no_forecast | ok | False | True | 1 | 0.82 | None | 0 | 0.000115 | 0.273333 |
-| cv_risk | ok | False | False | 0 | 0.45 | 5 | 0 | 0.000756 | 0.65 |
-| semantic_risk | ok | False | False | 0 | 0.45 | 5 | 0 | 0.000602 | 0.65 |
-| interaction_risk | ok | False | False | 0 | 0.45 | 5 | 0 | 0.000603 | 0.65 |
+| no_forecast | ok | False | True | 1 | 0.82 | None | 0 | 0.000303 | 0.273333 |
+| cv_risk | ok | False | False | 0 | 0.45 | 5 | 0 | 0.001496 | 0.65 |
+| semantic_risk | ok | False | False | 0 | 0.45 | 5 | 0 | 0.001337 | 0.65 |
+| interaction_risk | ok | False | False | 0 | 0.45 | 5 | 0 | 0.001342 | 0.65 |
 
 ## Safety-benefit vs false-positive-stopping trade-off
 

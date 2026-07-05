@@ -7,9 +7,9 @@
   "claim_boundary_text": "Diagnostic-only forecast-risk closed-loop coupling gate on a single deterministic occluded-emergence fixture. Not paper-facing benchmark evidence. Tests whether forecast-derived risk changes navigation outcomes, not whether any predictor is accurate. No learned predictor is promoted.",
   "reproducibility": {
     "issue": 2916,
-    "generated_at_utc": "2026-06-23T07:34:20.813118+00:00",
-    "command": "uv run python scripts/benchmark/run_forecast_risk_coupling_gate.py --config configs/research/forecast_risk_coupling_issue_2916.yaml --output-dir output/issue_2916_coupling_gate",
-    "repo_head": "566d820e",
+    "generated_at_utc": "2026-07-05T01:04:08.184361+00:00",
+    "command": "uv run python scripts/benchmark/run_forecast_risk_coupling_gate.py --config configs/research/forecast_risk_coupling_issue_2916.yaml --output-dir docs/context/evidence/issue_2916_forecast_risk_coupling_2026-06-23",
+    "repo_head": "816976e44",
     "config_path": "configs/research/forecast_risk_coupling_issue_2916.yaml"
   },
   "config": {
@@ -50,7 +50,7 @@
         "stop_yield_timing_steps": null,
         "false_positive_stops": 0,
         "true_positive_stops": 0,
-        "runtime_s": 0.000115,
+        "runtime_s": 0.000303,
         "snqi": 0.273333
       },
       "diagnostics": {
@@ -74,7 +74,9 @@
           "go",
           "go"
         ]
-      }
+      },
+      "seed": 111,
+      "scenario_id": "issue_2756_occluded_emergence"
     },
     {
       "row": "cv_risk",
@@ -93,7 +95,7 @@
         "stop_yield_timing_steps": 5,
         "false_positive_stops": 0,
         "true_positive_stops": 9,
-        "runtime_s": 0.000756,
+        "runtime_s": 0.001496,
         "snqi": 0.65
       },
       "diagnostics": {
@@ -117,7 +119,9 @@
           "yield",
           "yield"
         ]
-      }
+      },
+      "seed": 111,
+      "scenario_id": "issue_2756_occluded_emergence"
     },
     {
       "row": "semantic_risk",
@@ -136,7 +140,7 @@
         "stop_yield_timing_steps": 5,
         "false_positive_stops": 0,
         "true_positive_stops": 9,
-        "runtime_s": 0.000602,
+        "runtime_s": 0.001337,
         "snqi": 0.65
       },
       "diagnostics": {
@@ -160,7 +164,9 @@
           "yield",
           "yield"
         ]
-      }
+      },
+      "seed": 111,
+      "scenario_id": "issue_2756_occluded_emergence"
     },
     {
       "row": "interaction_risk",
@@ -179,7 +185,7 @@
         "stop_yield_timing_steps": 5,
         "false_positive_stops": 0,
         "true_positive_stops": 9,
-        "runtime_s": 0.000603,
+        "runtime_s": 0.001342,
         "snqi": 0.65
       },
       "diagnostics": {
@@ -203,7 +209,9 @@
           "yield",
           "yield"
         ]
-      }
+      },
+      "seed": 111,
+      "scenario_id": "issue_2756_occluded_emergence"
     }
   ],
   "verdict": {
@@ -220,7 +228,7 @@
         "safety_event_reduction_vs_control": 1,
         "false_positive_stops": 0,
         "false_positive_stop_ratio_vs_control": 1.0,
-        "runtime_s": 0.000756,
+        "runtime_s": 0.001496,
         "is_safety_benefit": true,
         "fp_regression": false,
         "runtime_regression": false,
@@ -233,7 +241,7 @@
         "safety_event_reduction_vs_control": 1,
         "false_positive_stops": 0,
         "false_positive_stop_ratio_vs_control": 1.0,
-        "runtime_s": 0.000602,
+        "runtime_s": 0.001337,
         "is_safety_benefit": true,
         "fp_regression": false,
         "runtime_regression": false,
@@ -246,7 +254,7 @@
         "safety_event_reduction_vs_control": 1,
         "false_positive_stops": 0,
         "false_positive_stop_ratio_vs_control": 1.0,
-        "runtime_s": 0.000603,
+        "runtime_s": 0.001342,
         "is_safety_benefit": true,
         "fp_regression": false,
         "runtime_regression": false,

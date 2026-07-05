@@ -23,6 +23,39 @@ def _write_packet(tmp_path: Path, packet: dict[str, object]) -> Path:
     return path
 
 
+def _write_trace_uri_registry(
+    tmp_path: Path,
+    *,
+    retrieval_status: str = "resolvable",
+    sha256: str | None = None,
+) -> Path:
+    digest = sha256 or ("a" * 64)
+    traces = []
+    for split in ("train", "validation", "evaluation"):
+        traces.append(
+            {
+                "split": split,
+                "trace_id": f"{split}__demo_oracle_imitation",
+                "uri": f"wandb-artifact://robot-sf/oracle-imitation/{split}:v1",
+                "sha256": digest if retrieval_status == "resolvable" else "pending",
+                "retrieval_status": retrieval_status,
+            }
+        )
+    path = tmp_path / "trace_registry.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "oracle-trace-uri-registry.v1",
+                "dataset_id": "demo_oracle_imitation",
+                "traces": traces,
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
 def _valid_packet(tmp_path: Path) -> dict[str, object]:
     fixture = tmp_path / "fixture.json"
     fixture.write_text('{"status": "dry-run"}\n', encoding="utf-8")
@@ -203,6 +236,50 @@ def test_validate_launch_packet_accepts_training_ready_trace_artifacts(tmp_path:
     )
 
     assert report["training_ready"] is True
+
+
+def test_validate_launch_packet_accepts_training_ready_trace_uri_registry(tmp_path: Path) -> None:
+    """A valid trace URI registry can satisfy the downstream training gate."""
+    packet = _valid_packet(tmp_path)
+    packet["trace_uri_registry"] = str(_write_trace_uri_registry(tmp_path))
+
+    report = validate_launch_packet(
+        _write_packet(tmp_path, packet),
+        require_training_ready=True,
+    )
+
+    assert report["training_ready"] is True
+    assert report["trace_uri_registry"]["training_ready"] is True
+    assert report["trace_uri_registry"]["splits"] == {
+        "train": ["train__demo_oracle_imitation"],
+        "validation": ["validation__demo_oracle_imitation"],
+        "evaluation": ["evaluation__demo_oracle_imitation"],
+    }
+
+
+def test_validate_launch_packet_rejects_pending_trace_uri_registry(tmp_path: Path) -> None:
+    """Strict launch-packet readiness fails closed on pending registry traces."""
+    packet = _valid_packet(tmp_path)
+    packet["trace_uri_registry"] = str(
+        _write_trace_uri_registry(tmp_path, retrieval_status="pending")
+    )
+
+    with pytest.raises(LaunchPacketError, match="trace_uri_registry failed validation"):
+        validate_launch_packet(
+            _write_packet(tmp_path, packet),
+            require_training_ready=True,
+        )
+
+
+def test_validate_launch_packet_rejects_invalid_trace_uri_registry_path(
+    tmp_path: Path,
+) -> None:
+    """Registry pointers must resolve to a valid registry file when present."""
+    packet = _valid_packet(tmp_path)
+    packet["trace_uri_registry"] = "missing/trace_registry.yaml"
+
+    with pytest.raises(LaunchPacketError, match="trace_uri_registry failed validation"):
+        validate_launch_packet(_write_packet(tmp_path, packet), require_training_ready=True)
 
 
 def test_validate_launch_packet_rejects_pending_training_artifacts(tmp_path: Path) -> None:

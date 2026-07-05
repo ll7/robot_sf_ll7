@@ -1,0 +1,35 @@
+schema_version: pedestrian_prior_fixture.v1
+source_id: issue_2918_proxy_fixture
+bounds:
+  min_x: 0.0
+  max_x: 10.0
+  min_y: 0.0
+  max_y: 10.0
+provenance:
+  source_kind: fixture
+  license: repository-test-fixture
+observations:
+  - pedestrian_id: p1
+    time: 0.0
+    x: 0.0
+    y: 0.0
+  - pedestrian_id: p1
+    time: 1.0
+    x: 1.0
+    y: 0.0
+  - pedestrian_id: p1
+    time: 2.0
+    x: 1.0
+    y: 0.0
+  - pedestrian_id: p2
+    time: 0.0
+    x: 0.0
+    y: 2.0
+  - pedestrian_id: p2
+    time: 1.0
+    x: 0.0
+    y: 3.0
+  - pedestrian_id: p2
+    time: 2.0
+    x: 0.0
+    y: 4.0

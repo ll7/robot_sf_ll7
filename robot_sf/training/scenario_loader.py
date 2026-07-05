@@ -2155,6 +2155,9 @@ def _apply_simulation_overrides(
         "archetype_composition",
         "archetype_speed_factors",
         "archetype_seed",
+        "response_law_composition",
+        "response_law_seed",
+        "population_size",
     ):
         if attr in overrides:
             _set_simulation_override_attr(config, attr, overrides)

@@ -147,6 +147,9 @@ class PedSpawnConfig:
     archetype_composition: dict[str, float] | None = None
     archetype_speed_factors: dict[str, float] | None = None
     archetype_seed: int | None = None
+    response_law_composition: dict[str, float] | None = None
+    response_law_seed: int | None = None
+    force_population_size: int | None = None
 
     def __post_init__(self):
         """
@@ -410,7 +413,7 @@ class RoutePointsGenerator:
         return spawn_pos, route_id, sec_id
 
 
-def populate_ped_routes(  # noqa: PLR0915
+def populate_ped_routes(  # noqa: C901,PLR0915
     config: PedSpawnConfig,
     routes: list[GlobalRoute],
     obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
@@ -442,7 +445,10 @@ def populate_ped_routes(  # noqa: PLR0915
         config.sidewalk_width,
         obstacle_polygons=obstacle_polygons,
     )
-    total_num_peds = ceil(proportional_spawn_gen.total_sidewalks_area * config.peds_per_area_m2)
+    if config.force_population_size is not None:
+        total_num_peds = config.force_population_size
+    else:
+        total_num_peds = ceil(proportional_spawn_gen.total_sidewalks_area * config.peds_per_area_m2)
     ped_states, groups = np.zeros((total_num_peds, 6)), []
     num_unassigned_peds = total_num_peds
     # Dictionary to hold assignments of groups to routes
@@ -577,8 +583,13 @@ def populate_crowded_zones(
             - groups: List of sets containing pedestrian IDs in each group.
             - zone_assignments: Dict mapping pedestrian ID to zone index.
     """
+    if not crowded_zones:
+        return np.zeros((0, 6)), [], {}
     proportional_spawn_gen = ZonePointsGenerator(crowded_zones, obstacle_polygons=obstacle_polygons)
-    total_num_peds = ceil(sum(proportional_spawn_gen.zone_areas) * config.peds_per_area_m2)
+    if config.force_population_size is not None:
+        total_num_peds = config.force_population_size
+    else:
+        total_num_peds = ceil(sum(proportional_spawn_gen.zone_areas) * config.peds_per_area_m2)
     ped_states, groups = np.zeros((total_num_peds, 6)), []
     num_unassigned_peds = total_num_peds
     zone_assignments = {}

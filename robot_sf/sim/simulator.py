@@ -45,6 +45,7 @@ from robot_sf.ped_npc.adversial_ped_force import (
     AdversarialPedForce,
     AdversarialPedForceConfig,
 )
+from robot_sf.ped_npc.ped_archetypes import assign_archetype_labels
 from robot_sf.ped_npc.ped_behavior import PedestrianBehavior, SinglePedestrianBehavior
 from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
 from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_simulation
@@ -86,6 +87,7 @@ def _make_ped_forces(
     peds_have_obstacle_forces: bool,
     prf_config: PedRobotForceConfig,
     apf_config: AdversarialPedForceConfig,
+    pedestrian_response_multipliers: np.ndarray | None = None,
 ) -> list[PySFForce]:
     """Configure pedestrian forces for the physics engine.
 
@@ -99,6 +101,7 @@ def _make_ped_forces(
         peds_have_obstacle_forces: Whether to keep obstacle forces.
         prf_config: Ped-robot force config (repulsion).
         apf_config: Adversarial ped force config.
+        pedestrian_response_multipliers: Optional array of response multipliers.
 
     Returns:
         List of Force objects including social, goal attraction, obstacle
@@ -114,7 +117,12 @@ def _make_ped_forces(
         for robot in robots:
             robot_prf_config = replace(prf_config, robot_radius=robot.config.radius)
             forces.append(
-                PedRobotForce(robot_prf_config, sim.peds, lambda robot=robot: robot.pos),
+                PedRobotForce(
+                    robot_prf_config,
+                    sim.peds,
+                    lambda robot=robot: robot.pos,
+                    get_ped_response_multipliers=lambda: pedestrian_response_multipliers,
+                ),
             )
 
     if apf_config.is_active:
@@ -169,7 +177,7 @@ class Simulator:
     _initial_ped_headings: np.ndarray = field(init=False, repr=False)
     pedestrian_model: str = field(init=False)
 
-    def __post_init__(self):
+    def __post_init__(self):  # noqa: C901
         """Initialize simulator components after dataclass construction.
 
         Sets up pedestrian spawn locations, groups, and behaviors; configures
@@ -188,6 +196,9 @@ class Simulator:
             archetype_composition=self.config.archetype_composition,
             archetype_speed_factors=self.config.archetype_speed_factors,
             archetype_seed=self.config.archetype_seed,
+            response_law_composition=self.config.response_law_composition,
+            response_law_seed=self.config.response_law_seed,
+            force_population_size=self.config.population_size,
         )
         self.pysf_state, self.groups, self.peds_behaviors = populate_simulation(
             pysf_config.scene_config.tau,
@@ -211,6 +222,30 @@ class Simulator:
             )
             self.peds_have_obstacle_forces = False
 
+        # Determine per-pedestrian response multipliers for PedRobotForce (issue #3574)
+        num_peds = self.pysf_state.pysf_states().shape[0]
+        multipliers = np.ones(num_peds, dtype=float)
+
+        labels = getattr(self.config, "pedestrian_control_trace_labels", None)
+        if labels and num_peds > 0:
+            for label in labels:
+                sim_idx = label.get("simulator_index")
+                resp_law = label.get("response_law")
+                if sim_idx is not None and 0 <= sim_idx < num_peds:
+                    if resp_law in ("non_reactive", "non_yielding"):
+                        multipliers[sim_idx] = 0.0
+        elif getattr(self.config, "response_law_composition", None) and num_peds > 0:
+            response_laws = assign_archetype_labels(
+                num_peds,
+                self.config.response_law_composition,
+                seed=self.config.response_law_seed,
+            )
+            for idx, law in enumerate(response_laws):
+                if law in ("non_reactive", "non_yielding"):
+                    multipliers[idx] = 0.0
+
+        self.pedestrian_response_multipliers = multipliers
+
         self.pysf_sim = PySFSimulator(
             self.pysf_state.pysf_states(),
             self.groups.groups_as_lists,
@@ -223,6 +258,7 @@ class Simulator:
                 self.peds_have_obstacle_forces,
                 self.config.prf_config,
                 self.config.apf_config,
+                self.pedestrian_response_multipliers,
             ),
         )
         self.pysf_sim.peds.step_width = self.config.time_per_step_in_secs

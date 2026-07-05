@@ -179,6 +179,12 @@ class SimulationSettings:
     """Optional archetype desired-speed factors used with ``archetype_composition``."""
     archetype_seed: int | None = None
     """Optional RNG seed for deterministic archetype assignment."""
+    response_law_composition: dict[str, float] | None = None
+    """Optional pedestrian response-law composition for route/crowd spawning."""
+    response_law_seed: int | None = None
+    """Optional RNG seed for deterministic response-law assignment."""
+    population_size: int | None = None
+    """Optional override to force exact population size spawned (issue #3574)."""
 
     peds_reset_follow_route_at_start: bool = False
     """Whether pedestrians following routes should reset to the start of their routes"""

@@ -1,7 +1,7 @@
-"""Focused tests for the evidence-stream integration contract inventory (issue #3293).
+"""Focused tests for the evidence-stream integration contract inventory.
 
-All inputs are synthetic metadata; no real data is ingested and no calibration/safety claim
-is made. Tests cover the inventory contract, the presence-only checker, and the CLI.
+All inputs are synthetic metadata; no real data is ingested and no calibration/safety claim is
+made. Tests cover the inventory contract, presence-only checker, integration report, and CLI.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from robot_sf.research.evidence_integration_inventory import (
     BASE_UNCERTAINTY_FIELDS,
     EvidenceCategory,
     FeasibilityStatus,
+    build_integration_report,
     check_stream_metadata,
     get_stream,
     list_streams,
@@ -23,7 +24,7 @@ from scripts.tools.check_evidence_integration_inventory import main as cli_main
 
 
 def _complete_metadata(stream_id: str) -> dict[str, object]:
-    """Build a synthetic metadata record that satisfies a stream's full contract."""
+    """Build a synthetic metadata record that satisfies the stream contract."""
     spec = get_stream(stream_id)
     provenance = {field: f"synthetic_{field}" for field in spec.required_provenance_fields}
     uncertainty = {field: f"synthetic_{field}" for field in spec.required_uncertainty_fields}
@@ -32,12 +33,11 @@ def _complete_metadata(stream_id: str) -> dict[str, object]:
 
 
 def test_inventory_is_non_empty_and_unique() -> None:
-    """The inventory exposes the issue's streams with unique ids."""
+    """The inventory exposes issue #3293 stream ids exactly once."""
     streams = list_streams()
     assert streams, "inventory must not be empty"
     ids = [spec.stream_id for spec in streams]
     assert len(ids) == len(set(ids)), "stream ids must be unique"
-    # All four evidence streams named in issue #3293 must be representable.
     assert {
         "simulation_trace",
         "amv_command_response",
@@ -54,32 +54,27 @@ def test_categories_cover_calibration_benchmark_operational() -> None:
     assert EvidenceCategory.OPERATIONAL in categories
 
 
-def test_blocked_streams_declare_unblock_condition() -> None:
-    """Every externally-blocked stream names its blocked_until unblock condition."""
-    for spec in list_streams():
-        if spec.feasibility is FeasibilityStatus.BLOCKED_EXTERNAL:
-            assert spec.blocked_until, f"{spec.stream_id} must declare blocked_until"
+def test_external_streams_are_marked_blocked_or_partial() -> None:
+    """Real/external data streams cannot silently become feasible in-repo evidence."""
+    amv = get_stream("amv_command_response")
+    assert amv.feasibility is FeasibilityStatus.BLOCKED_EXTERNAL
+    assert amv.blocked_until
+
+    external_traj = get_stream("external_pedestrian_trajectory")
+    assert external_traj.feasibility is FeasibilityStatus.PARTIAL_EXTERNAL
+    assert external_traj.blocked_until
 
 
-def test_amv_stream_is_blocked_and_calibration() -> None:
-    """The AMV command-response stream reflects the maintainer hard-block decision."""
-    spec = get_stream("amv_command_response")
-    assert spec.feasibility is FeasibilityStatus.BLOCKED_EXTERNAL
-    assert spec.category is EvidenceCategory.CALIBRATION
-    assert spec.blocked_until
-
-
-def test_required_fields_include_base_fields() -> None:
-    """Each stream's required fields include the mandatory base provenance/uncertainty keys."""
+def test_each_stream_requires_base_fields_and_calibration_status() -> None:
+    """Every stream requires mandatory base provenance/uncertainty keys."""
     for spec in list_streams():
         assert set(BASE_PROVENANCE_FIELDS) <= set(spec.required_provenance_fields)
         assert set(BASE_UNCERTAINTY_FIELDS) <= set(spec.required_uncertainty_fields)
-        # calibration_status is mandatory so synthetic envelopes cannot pass as calibrated.
         assert "calibration_status" in spec.required_uncertainty_fields
 
 
 def test_check_passes_on_complete_metadata() -> None:
-    """A synthetic record with all required keys passes the presence check."""
+    """A synthetic record with all keys passes presence check."""
     result = check_stream_metadata("simulation_trace", _complete_metadata("simulation_trace"))
     assert result.ok
     assert result.exit_code == 0
@@ -88,10 +83,15 @@ def test_check_passes_on_complete_metadata() -> None:
 
 
 def test_check_reports_missing_fields() -> None:
-    """Missing provenance and uncertainty keys are reported, not silently accepted."""
+    """Missing provenance and uncertainty keys are reported."""
     metadata = _complete_metadata("simulation_trace")
-    metadata["provenance"].pop("denominator")
-    metadata["uncertainty"].pop("sample_size")
+    provenance = metadata["provenance"]
+    uncertainty = metadata["uncertainty"]
+    assert isinstance(provenance, dict)
+    assert isinstance(uncertainty, dict)
+    provenance.pop("denominator")
+    uncertainty.pop("sample_size")
+
     result = check_stream_metadata("simulation_trace", metadata)
     assert not result.ok
     assert result.exit_code == 1
@@ -100,7 +100,7 @@ def test_check_reports_missing_fields() -> None:
 
 
 def test_check_accepts_top_level_fields() -> None:
-    """Fields may live at the top level instead of nested provenance/uncertainty blocks."""
+    """Fields may live at top level instead of nested provenance/uncertainty blocks."""
     spec = get_stream("simulation_trace")
     flat: dict[str, object] = dict.fromkeys(spec.required_provenance_fields, "x")
     flat.update(dict.fromkeys(spec.required_uncertainty_fields, "x"))
@@ -109,12 +109,31 @@ def test_check_accepts_top_level_fields() -> None:
 
 
 def test_check_handles_non_dict_metadata() -> None:
-    """A non-dict record (e.g. None) is treated as all-fields-missing, not a crash."""
+    """A non-dict record is treated as all-fields-missing, not a crash."""
     result = check_stream_metadata("simulation_trace", None)  # type: ignore[arg-type]
     assert not result.ok
     assert set(result.missing_provenance_fields) == set(
         get_stream("simulation_trace").required_provenance_fields
     )
+
+
+def test_integration_report_preserves_blockers_and_denominator_rule() -> None:
+    """The consolidation report exposes blockers and rejects denominator pooling."""
+    report = build_integration_report()
+    assert report["status"] == "design_stage_external_data_blocked"
+    assert "not benchmark evidence" in report["claim_boundary"]
+    assert report["categories"]["calibration"] == [
+        "amv_command_response",
+        "external_pedestrian_trajectory",
+    ]
+    blocked_ids = {blocker["stream_id"] for blocker in report["blockers_remaining"]}
+    assert "amv_command_response" in blocked_ids
+    assert "pilot_fleet_operational" in blocked_ids
+    rules = {item["rule"] for item in report["invalid_combinations"]}
+    assert "do_not_pool_denominators" in rules
+    assert "amv_command_response_required_for_calibration" in rules
+    assert report["next_empirical_action"]["status"] == "blocked_schema_or_data_prereq"
+    assert "non-calibrated" in report["next_empirical_action"]["allowed_claim"]
 
 
 def test_get_stream_unknown_raises() -> None:
@@ -124,16 +143,26 @@ def test_get_stream_unknown_raises() -> None:
 
 
 def test_cli_list(capsys: pytest.CaptureFixture[str]) -> None:
-    """--list prints the inventory as JSON and exits 0."""
+    """--list prints inventory JSON and exits 0."""
     rc = cli_main(["--list"])
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
-    ids = {s["stream_id"] for s in payload["streams"]}
+    ids = {stream["stream_id"] for stream in payload["streams"]}
     assert "amv_command_response" in ids
 
 
+def test_cli_report(capsys: pytest.CaptureFixture[str]) -> None:
+    """--report prints integration-report JSON and exits 0."""
+    rc = cli_main(["--report"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["issue"] == 3293
+    assert payload["status"] == "design_stage_external_data_blocked"
+    assert payload["next_empirical_action"]["status"] == "blocked_schema_or_data_prereq"
+
+
 def test_cli_check_pass(tmp_path, capsys: pytest.CaptureFixture[str]) -> None:
-    """--check on a complete synthetic record exits 0."""
+    """--check on complete synthetic record exits 0."""
     meta_path = tmp_path / "meta.json"
     meta_path.write_text(json.dumps(_complete_metadata("simulation_trace")), encoding="utf-8")
     rc = cli_main(["--check", "simulation_trace", "--metadata", str(meta_path)])
@@ -154,13 +183,13 @@ def test_cli_check_fail(tmp_path, capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_cli_check_requires_metadata(capsys: pytest.CaptureFixture[str]) -> None:
-    """--check without --metadata is a usage error (exit 2)."""
+    """--check without --metadata is a usage error."""
     rc = cli_main(["--check", "simulation_trace"])
     assert rc == 2
 
 
 def test_cli_check_unknown_stream(tmp_path, capsys: pytest.CaptureFixture[str]) -> None:
-    """--check on an unknown stream id is an input error (exit 2)."""
+    """--check on an unknown stream id is an input error."""
     meta_path = tmp_path / "meta.json"
     meta_path.write_text(json.dumps({}), encoding="utf-8")
     rc = cli_main(["--check", "nope", "--metadata", str(meta_path)])

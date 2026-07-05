@@ -38,6 +38,7 @@ __all__ = [
     "EvidenceStreamSpec",
     "FeasibilityStatus",
     "StreamCheckResult",
+    "build_integration_report",
     "check_stream_metadata",
     "get_stream",
     "list_streams",
@@ -242,6 +243,80 @@ class StreamCheckResult:
 def list_streams() -> tuple[EvidenceStreamSpec, ...]:
     """Return the canonical inventory of evidence-stream contracts."""
     return EVIDENCE_STREAMS
+
+
+def build_integration_report() -> dict[str, object]:
+    """Build issue #3293 consolidation report from the stream inventory.
+
+    The report is intentionally derived from static contracts only: it does not ingest external
+    data, run campaigns, compute calibration, or combine denominators. It gives downstream agents
+    one compact contract view of blockers, invalid evidence combinations, and the next empirical
+    action that remains non-calibrated.
+
+    Returns:
+        JSON-serializable integration report dictionary.
+    """
+    streams = list_streams()
+    categories: dict[str, list[str]] = {category.value: [] for category in EvidenceCategory}
+    for spec in streams:
+        categories[spec.category.value].append(spec.stream_id)
+
+    blockers = [
+        {
+            "stream_id": spec.stream_id,
+            "feasibility": spec.feasibility.value,
+            "blocked_until": spec.blocked_until,
+        }
+        for spec in streams
+        if spec.feasibility is not FeasibilityStatus.FEASIBLE_NOW
+    ]
+
+    return {
+        "issue": 3293,
+        "status": "design_stage_external_data_blocked",
+        "claim_boundary": (
+            "Inventory-derived integration report only; not benchmark evidence, not calibration "
+            "evidence, not operational evidence, and not a paper-facing claim."
+        ),
+        "streams": [spec.to_dict() for spec in streams],
+        "categories": categories,
+        "blockers_remaining": blockers,
+        "invalid_combinations": [
+            {
+                "rule": "do_not_pool_denominators",
+                "reason": (
+                    "Calibration residuals, benchmark episode rates, and operational incident "
+                    "rates use incompatible denominators and must remain separate."
+                ),
+                "categories": [
+                    EvidenceCategory.CALIBRATION.value,
+                    EvidenceCategory.BENCHMARK.value,
+                    EvidenceCategory.OPERATIONAL.value,
+                ],
+            },
+            {
+                "rule": "amv_command_response_required_for_calibration",
+                "reason": (
+                    "Synthetic AMV envelopes or public pedestrian trajectories cannot support "
+                    "hardware-calibrated AMV actuation claims without real command-response data."
+                ),
+                "blocked_stream": "amv_command_response",
+            },
+        ],
+        "next_empirical_action": {
+            "status": "blocked_schema_or_data_prereq",
+            "action": (
+                "After the real-trajectory ingestion contract stages a license-cleared public "
+                "trajectory dataset, run a non-calibrated bounded side-by-side comparison against "
+                "simulation_trace metadata using this inventory as the presence gate."
+            ),
+            "depends_on": ["issue #3065 external trajectory staging contract"],
+            "allowed_claim": (
+                "Diagnostic non-calibrated comparison of distributions; no AMV calibration, "
+                "operational safety, planner ranking, benchmark, or paper-facing claim."
+            ),
+        },
+    }
 
 
 def get_stream(stream_id: str) -> EvidenceStreamSpec:

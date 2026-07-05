@@ -1,4 +1,4 @@
-# Issue 3463 Topology Reselection Cross-Slice Diagnostic
+# Issue #3463 — Topology Reselection Cross-Slice Diagnostic
 
 Claim boundary: `diagnostic_only_not_benchmark_or_paper_evidence`.
 Classification: `blocked`.

@@ -154,6 +154,43 @@ def validate_trace_manifest(
     }
 
 
+def build_trace_manifest_status_packet(
+    report: dict[str, Any],
+    *,
+    manifest_path: Path | str,
+) -> dict[str, Any]:
+    """Build a compact handoff packet from a trace-manifest validation report.
+
+    The packet is intentionally derived from ``validate_trace_manifest`` output
+    rather than re-reading the manifest. That keeps downstream state propagation
+    tied to the same fail-closed decision #1472 training uses.
+
+    Returns:
+        Compact ``learned-risk-trace-status.v1`` packet suitable for handoff or
+        durable issue-state propagation.
+    """
+    decision = report.get("training_readiness_decision")
+    if decision == DECISION_READY:
+        next_action = "handoff_to_training_gate"
+    else:
+        next_action = "materialize_durable_trace_and_baseline_artifacts"
+
+    return {
+        "schema_version": "learned-risk-trace-status.v1",
+        "source_issue": report.get("source_issue"),
+        "parent_issue": report.get("parent_issue"),
+        "candidate_id": report.get("candidate_id"),
+        "manifest_path": str(manifest_path),
+        "training_readiness_decision": decision,
+        "training_ready": bool(report.get("training_ready")),
+        "baseline_artifact_uri": report.get("baseline_artifact_uri"),
+        "split_ids": list(report.get("split_ids", [])),
+        "label_availability": dict(report.get("label_availability", {})),
+        "blockers": list(report.get("blockers", [])),
+        "next_action": next_action,
+    }
+
+
 def _validate_structure(
     manifest: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -315,6 +352,7 @@ __all__ = [
     "DECISION_READY",
     "SCHEMA_VERSION",
     "LearnedRiskTraceManifestError",
+    "build_trace_manifest_status_packet",
     "load_trace_manifest",
     "validate_trace_manifest",
 ]

@@ -17,6 +17,7 @@ from robot_sf.training.learned_risk_trace_manifest import (
     DECISION_BLOCKED,
     DECISION_READY,
     LearnedRiskTraceManifestError,
+    build_trace_manifest_status_packet,
     validate_trace_manifest,
 )
 from scripts.validation.validate_learned_risk_trace_manifest import main as validate_cli_main
@@ -245,3 +246,29 @@ def test_cli_ready_manifest_returns_exit_zero(tmp_path: Path) -> None:
     exit_code = validate_cli_main(["--config", str(path), "--json"])
 
     assert exit_code == 0
+
+
+def test_status_packet_summarizes_blocked_manifest_for_handoff() -> None:
+    """Status packet preserves the fail-closed decision for #1472 handoff."""
+    report = validate_trace_manifest(_CHECKED_IN_MANIFEST, repo_root=_REPO_ROOT)
+
+    packet = build_trace_manifest_status_packet(
+        report, manifest_path="configs/training/learned_risk_trace_manifest_issue_2312.yaml"
+    )
+
+    assert packet["schema_version"] == "learned-risk-trace-status.v1"
+    assert packet["source_issue"] == 2312
+    assert packet["parent_issue"] == 1472
+    assert packet["training_ready"] is False
+    assert packet["training_readiness_decision"] == DECISION_BLOCKED
+    assert packet["next_action"] == "materialize_durable_trace_and_baseline_artifacts"
+    assert packet["blockers"] == report["blockers"]
+
+
+def test_cli_status_json_preserves_blocked_exit_code() -> None:
+    """The compact status output keeps the same fail-closed exit code."""
+    exit_code = validate_cli_main(
+        ["--config", str(_CHECKED_IN_MANIFEST), "--repo-root", str(_REPO_ROOT), "--status-json"]
+    )
+
+    assert exit_code == 3

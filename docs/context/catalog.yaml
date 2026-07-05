@@ -3311,3 +3311,11 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3204_closure_audit_20260705.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3204_closure_audit_20260705.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

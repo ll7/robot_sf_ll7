@@ -297,7 +297,9 @@ def test_issue_4232_diagnostic_runner_keeps_missing_activation_telemetry_unknown
         ).read_text(encoding="utf-8")
     )
     assert activation["status_counts"]["unknown_mechanism_activation"] == 1
-    activation_by_arm = {row["alpha_arm_key"]: row["activation_status"] for row in activation["rows"]}
+    activation_by_arm = {
+        row["alpha_arm_key"]: row["activation_status"] for row in activation["rows"]
+    }
     assert activation_by_arm["envelope_on_alpha_0p10"] == "unknown_mechanism_activation"
 
 

@@ -59,10 +59,14 @@ def test_decision_blocked_when_campaign_summary_missing(
     temp_config_file: Path, tmp_path: Path
 ) -> None:
     """If campaign_summary.json is missing, decision report status is blocked."""
-    report = decision_builder.build_decision_report(temp_config_file, tmp_path)
+    report = decision_builder.build_decision_report(CONFIG_PATH, tmp_path)
     assert report["status"] == "blocked"
     assert report["reason"] == "campaign_summary_missing"
     assert "Campaign summary JSON not found" in report["blocked_reasons"][0]
+    assert str(_REPO_ROOT) not in report["blocked_reasons"][0]
+    assert report["config_path"] == "configs/benchmarks/issue_3465_topology_gate_paired.yaml"
+    assert report["acceptance_evidence"]
+    assert report["acceptance_evidence"][-1]["status"] == "blocked_pending_campaign"
 
 
 def test_decision_blocked_when_campaign_summary_invalid(
@@ -198,6 +202,7 @@ def test_write_decision_artifacts(temp_config_file: Path, tmp_path: Path) -> Non
     summary = json.loads((out_dir / "summary.json").read_text(encoding="utf-8"))
     assert summary["status"] == "ready"
     assert summary["verdict"]["verdict"] == ELIGIBLE_FOR_PROMOTION
+    assert summary["acceptance_evidence"][0]["criterion"].startswith("Paired enabled/disabled")
 
     csv_lines = (out_dir / "paired_deltas.csv").read_text(encoding="utf-8").splitlines()
     assert csv_lines[0] == "metric,disabled_val,enabled_val,delta"
@@ -208,6 +213,8 @@ def test_write_decision_artifacts(temp_config_file: Path, tmp_path: Path) -> Non
     assert "# Issue #3465" in readme
     assert "**Decision Status:** `ready`" in readme
     assert "eligible_for_promotion" in readme
+    assert "## Acceptance Evidence" in readme
+    assert "PR #4487" in readme
 
 
 def test_cli_execution_with_mock_flag(tmp_path: Path) -> None:

@@ -96,8 +96,23 @@ packages:
     # until #3081 publishes it (rather than reusing an upstream package's artifact and
     # reporting the release as ready before it is produced).
     required_artifacts:
-      - docs/context/issue_3081_july_2026_release_manifest.md
+    - docs/context/issue_3081_july_2026_release_manifest.md
+    flow_stages:
+    - id: campaign_manifest
+      artifact: docs/benchmark_campaign_manifest.md
+    - id: scenario_seed_expansion
+      artifact: configs/benchmarks/issue_3059_research_engine_suite_v0.yaml
+    - id: local_or_slurm_execution_packet
+      artifact: configs/benchmarks/issue_3078_package_a_readiness.yaml
+    - id: episode_rows_result_store
+      artifact: docs/context/issue_3076_campaign_result_store_contract.md
+    - id: social_compliance_metrics
+      artifact: configs/benchmarks/social_compliance_metric_contract_v1.yaml
+    - id: comparison_report
+      artifact: scripts/tools/build_campaign_comparison_report.py
+    - id: claim_card_durable_manifest
+      artifact: docs/context/issue_3081_july_2026_release_manifest.md
     prerequisites:
-      - package_a_rank_stability
-      - package_b_adversarial
-      - package_c_prediction
+    - package_a_rank_stability
+    - package_b_adversarial
+    - package_c_prediction

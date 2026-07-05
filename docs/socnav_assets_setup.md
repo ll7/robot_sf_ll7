@@ -218,6 +218,19 @@ The wrapper composes the same license-safe asset registry, ETH traversible gener
 and Robot SF SVG parser smoke check. Missing licensed source assets fail closed with exit `2` and a
 JSON report; the command never downloads data or writes placeholder maps.
 
+Derived SVG artifact policy for issue #4546:
+
+- Commit `maps/svg_maps/socnavbench/socnavbench_eth.svg` only after the wrapper succeeds on the
+  official/user-supplied ETH source data and the report records both input `data.pkl` SHA-256 and
+  output SVG SHA-256.
+- Record the conversion report or a compact evidence note under `docs/context/evidence/` so reviewers
+  can verify the source hash, output hash, parser smoke result, and command used to regenerate the
+  SVG.
+- Do not commit placeholder, dry-run, or fixture-generated SVG output. Until official source data is
+  staged and smoke validation is green, the derived SVG remains absent and issue #4546 stays blocked.
+- Regenerate and review the committed SVG whenever the official traversible hash, converter settings,
+  or SVG parser contract changes.
+
 ## Licensing and Repository Hygiene
 
 - Do not commit downloaded dataset assets.

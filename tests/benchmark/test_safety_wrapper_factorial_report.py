@@ -53,6 +53,12 @@ def _row(
             }
         )
     if metrics:
+        unknown = sorted(k for k in metrics if k not in base_metrics)
+        if unknown:
+            raise KeyError(
+                f"_row() metrics override contains unknown primary-outcome keys {unknown}; "
+                "check for typos against the base metric set."
+            )
         base_metrics.update(metrics)
     return {
         "study_id": "issue_3501_safety_wrapper_ablation_v1",

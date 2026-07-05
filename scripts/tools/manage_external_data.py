@@ -28,6 +28,24 @@ EXTERNAL_DATA_ROOT_ENV = "ROBOT_SF_EXTERNAL_DATA_ROOT"
 DEFAULT_AMV_COMMAND_RESPONSE_MANIFEST = (
     REPO_ROOT / "configs" / "research" / "amv_command_response_trace_manifest_issue_2415.yaml"
 )
+AMV_COMMAND_RESPONSE_SOURCE_REQUIREMENTS = {
+    "source_classes": [
+        "online_dataset",
+        "collaborator_vehicle_trace",
+        "field_measurement_bundle",
+        "controller_log_or_ros_bag",
+    ],
+    "required_consent": [
+        "owner_or_operator_consent",
+        "redistribution_or_local_only_access_terms",
+        "no_personal_data_or_private_trace_publication",
+    ],
+    "required_channels": {
+        "command": ["linear_velocity_command_mps", "yaw_rate_command_rad_s"],
+        "response": ["measured_linear_velocity_mps", "measured_yaw_rate_rad_s"],
+        "timing": ["timestamp_s", "control_latency_s", "sample_rate_hz"],
+    },
+}
 
 # Canonical SDD staging manifest. This is the single editable provenance contract for the SDD
 # asset (issues #2657, #3473): maintainers pin `expected_tree_sha256` and tune the disk-check size
@@ -1857,6 +1875,12 @@ def parse_args() -> argparse.Namespace:
     )
     amv_status.add_argument("--manifest", type=Path, default=None)
 
+    amv_source_status = subparsers.add_parser(
+        "amv-command-response-source-status",
+        help="Report issue #2000 AMV command-response trace acquisition readiness.",
+    )
+    amv_source_status.add_argument("--manifest", type=Path, default=None)
+
     sdd_download = subparsers.add_parser(
         "sdd-download", help="Guarded SDD staging: requires explicit confirmation; fails closed."
     )
@@ -2081,9 +2105,99 @@ def build_amv_calibration_status(manifest_path: Path | None = None) -> dict[str,
     }
 
 
+def build_amv_command_response_source_status(
+    manifest_path: Path | None = None,
+) -> dict[str, Any]:
+    """Return issue #2000 AMV command-response source acquisition status.
+
+    This is a source-readiness gate only. It does not ingest trace samples, derive
+    actuation values, or promote calibration claims.
+    """
+    asset_report = check_asset("amv-calibration")
+    manifest_source = manifest_path or DEFAULT_AMV_COMMAND_RESPONSE_MANIFEST
+
+    try:
+        manifest_payload = yaml.safe_load(manifest_source.read_text(encoding="utf-8")) or {}
+    except OSError as exc:
+        manifest_payload = {}
+        manifest_error = str(exc)
+    else:
+        manifest_error = None
+
+    traces = manifest_payload.get("traces", [])
+    trace = next(
+        (item for item in traces if item.get("asset_id") == "amv-calibration"),
+        {},
+    )
+    provenance = trace.get("provenance", {}) if isinstance(trace, dict) else {}
+    channel_fields = {
+        "command": trace.get("command_channels", []) if isinstance(trace, dict) else [],
+        "response": trace.get("response_channels", []) if isinstance(trace, dict) else [],
+        "timing": trace.get("timing_fields", []) if isinstance(trace, dict) else [],
+    }
+    missing_channels = {
+        group: sorted(set(required) - set(channel_fields.get(group, [])))
+        for group, required in AMV_COMMAND_RESPONSE_SOURCE_REQUIREMENTS["required_channels"].items()
+    }
+    missing_channels = {group: fields for group, fields in missing_channels.items() if fields}
+
+    blocker_keys: list[str] = []
+    if manifest_error is not None:
+        blocker_keys.append("source_manifest_unreadable")
+    if not trace:
+        blocker_keys.append("command_response_trace_manifest_missing")
+    if asset_report["status"] != "available":
+        blocker_keys.append("amv_command_response_asset_missing")
+    if trace.get("staging_status") != "staged":
+        blocker_keys.append("command_response_trace_not_staged")
+    if trace.get("blocker_issues"):
+        blocker_keys.append("source_blocker_issues_open")
+    if provenance.get("license_status") in {None, "", "unknown", "pending"}:
+        blocker_keys.append("source_license_or_access_terms_unknown")
+    if missing_channels:
+        blocker_keys.append("required_signal_inventory_incomplete")
+
+    ready = not blocker_keys
+    return {
+        "schema": "amv_command_response_source_status.v1",
+        "issue": 2000,
+        "asset_id": "amv-calibration",
+        "ready": ready,
+        "blocked_external_input": not ready,
+        "blockers": blocker_keys,
+        "manifest_path": str(manifest_source),
+        "manifest_error": manifest_error,
+        "asset_status": asset_report,
+        "trace_staging_status": trace.get("staging_status"),
+        "trace_blocker_issues": trace.get("blocker_issues", []),
+        "source_url": provenance.get("source_url"),
+        "license_status": provenance.get("license_status"),
+        "required_source_contract": AMV_COMMAND_RESPONSE_SOURCE_REQUIREMENTS,
+        "available_signal_inventory": channel_fields,
+        "missing_signal_inventory": missing_channels,
+        "evidence_boundary": (
+            "source_acquisition_contract_only_no_trace_ingest_no_calibration_run"
+        ),
+        "next_step": (
+            "Stage maintainer-accepted real AMV command-response trace bundle "
+            "with source consent/access terms through `manage_external_data.py "
+            "stage amv-calibration`, then rerun source status."
+            if not ready
+            else "AMV command-response source bundle is locally staged and contract-ready."
+        ),
+    }
+
+
 def _handle_amv_calibration_status(args: argparse.Namespace) -> int:
     """Handle amv-calibration-status subcommand."""
     payload = build_amv_calibration_status(args.manifest)
+    _print_json(payload)
+    return 0 if payload["ready"] else 2
+
+
+def _handle_amv_command_response_source_status(args: argparse.Namespace) -> int:
+    """Handle amv-command-response-source-status subcommand."""
+    payload = build_amv_command_response_source_status(args.manifest)
     _print_json(payload)
     return 0 if payload["ready"] else 2
 
@@ -2121,6 +2235,7 @@ def main() -> int:
         "sdd-validate": _handle_sdd_validate,
         "sdd-mode": _handle_sdd_mode,
         "amv-calibration-status": _handle_amv_calibration_status,
+        "amv-command-response-source-status": _handle_amv_command_response_source_status,
         "sdd-download": _handle_sdd_download,
     }
     try:

@@ -32,15 +32,21 @@ def _write_trace_uri_registry(
     digest = sha256 or ("a" * 64)
     traces = []
     for split in ("train", "validation", "evaluation"):
-        traces.append(
-            {
-                "split": split,
-                "trace_id": f"{split}__demo_oracle_imitation",
-                "uri": f"wandb-artifact://robot-sf/oracle-imitation/{split}:v1",
-                "sha256": digest if retrieval_status == "resolvable" else "pending",
-                "retrieval_status": retrieval_status,
-            }
-        )
+        trace = {
+            "split": split,
+            "trace_id": f"{split}__demo_oracle_imitation",
+            "uri": f"wandb-artifact://robot-sf/oracle-imitation/{split}:v1",
+            "sha256": digest if retrieval_status == "resolvable" else "pending",
+            "retrieval_status": retrieval_status,
+        }
+        if retrieval_status == "resolvable":
+            # Resolvable traces must bind JSONL bytes to source-manifest
+            # provenance (oracle-trace-uri-registry.v1 contract, issue #1470).
+            trace["source_manifest_uri"] = (
+                f"wandb-artifact://robot-sf/oracle-imitation/{split}_manifest:v1"
+            )
+            trace["source_manifest_sha256"] = digest
+        traces.append(trace)
     path = tmp_path / "trace_registry.yaml"
     path.write_text(
         yaml.safe_dump(

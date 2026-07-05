@@ -103,8 +103,11 @@ uv run python scripts/research/check_forecast_heavy_model_inventory.py
 # Machine-readable report / static inventory
 uv run python scripts/research/check_forecast_heavy_model_inventory.py --json
 uv run python scripts/research/check_forecast_heavy_model_inventory.py --list
+# Fail-closed revival decision packet
+uv run python scripts/research/check_forecast_heavy_model_inventory.py --decision-packet
+uv run python scripts/research/check_forecast_heavy_model_inventory.py --decision-packet --json
 # Tests
-uv run python -m pytest tests/research/test_forecast_heavy_model_inventory.py -q
+uv run python -m pytest tests/research/test_forecast_heavy_model_inventory.py tests/prediction/test_forecast_heavy_model_decision_packet.py -q
 ```
 
 ## Related

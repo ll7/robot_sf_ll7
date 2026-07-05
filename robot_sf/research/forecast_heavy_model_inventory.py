@@ -45,6 +45,7 @@ __all__ = [
     "MODEL_FAMILIES",
     "CostTier",
     "EntryPointSpec",
+    "HeavyModelRevivalDecisionPacket",
     "InventoryReport",
     "MinimumExperimentStatus",
     "ModelFamilySpec",
@@ -52,9 +53,11 @@ __all__ = [
     "PrerequisiteStatus",
     "SurfaceStatus",
     "build_inventory_report",
+    "build_revival_decision_packet",
     "probe_entry_point",
     "probe_prerequisite",
     "render_markdown",
+    "render_revival_decision_packet_markdown",
     "repo_root",
 ]
 
@@ -775,4 +778,154 @@ def render_markdown(report: InventoryReport) -> str:
         for blocked in p.spec.blocks:
             lines.append(f"  - blocks: {blocked}")
 
+    return "\n".join(lines)
+
+
+@dataclass(frozen=True)
+class HeavyModelRevivalDecisionPacket:
+    """Fail-closed decision packet for reviving issue #2845 beyond assessment.
+
+    The packet is deliberately derived from the inventory report so it cannot drift
+    into a separate issue-state ledger. It does not authorize training, Slurm/GPU
+    submission, dependency adoption, or planner integration.
+    """
+
+    issue: int
+    evidence_status: str
+    revival_status: str
+    recommendation: str
+    blockers: tuple[str, ...]
+    next_local_action: str
+    allowed_actions: tuple[str, ...]
+    forbidden_actions: tuple[str, ...]
+    required_before_offline_run: tuple[str, ...]
+    inventory: InventoryReport
+
+    def to_dict(self) -> dict[str, object]:
+        """Return JSON-safe decision packet representation."""
+        return {
+            "issue": self.issue,
+            "evidence_status": self.evidence_status,
+            "revival_status": self.revival_status,
+            "recommendation": self.recommendation,
+            "blockers": list(self.blockers),
+            "next_local_action": self.next_local_action,
+            "allowed_actions": list(self.allowed_actions),
+            "forbidden_actions": list(self.forbidden_actions),
+            "required_before_offline_run": list(self.required_before_offline_run),
+            "inventory": self.inventory.to_dict(),
+        }
+
+
+def _format_prerequisite_blocker(result: PrerequisiteProbeResult) -> str:
+    """Return one compact human-readable blocker from a prerequisite probe."""
+    scope = "external" if result.status is PrerequisiteStatus.EXTERNAL else "local"
+    return f"{result.spec.key} ({scope}): {result.spec.title}"
+
+
+def build_revival_decision_packet(
+    report: InventoryReport | None = None,
+) -> HeavyModelRevivalDecisionPacket:
+    """Build the #2845 fail-closed revival decision packet.
+
+    The packet answers whether the heavy predictor lane may move from
+    assessment-only inventory to an offline experiment. It is intentionally
+    conservative: broken required surfaces or missing local prerequisites keep the
+    status blocked, and external decisions/checkpoints are listed as required
+    before any actual offline run.
+
+    Returns:
+        Structured decision packet derived from the inventory report.
+    """
+    inventory = report if report is not None else build_inventory_report()
+    surface_blockers = tuple(
+        f"{surface.spec.key}: {surface.detail or surface.status.value}"
+        for surface in inventory.surface_blockers
+    )
+    prerequisite_blockers = tuple(
+        _format_prerequisite_blocker(prerequisite)
+        for prerequisite in inventory.pending_prerequisites
+    )
+    blockers = surface_blockers + prerequisite_blockers
+
+    local_ready = inventory.minimum_experiment_status is MinimumExperimentStatus.READY
+    external_pending = tuple(
+        prerequisite
+        for prerequisite in inventory.prerequisites
+        if prerequisite.status is PrerequisiteStatus.EXTERNAL
+    )
+
+    if not inventory.ok:
+        revival_status = "blocked_surface_contract"
+        recommendation = "repair offline-evaluation surfaces before any experiment planning"
+        next_local_action = "Restore the required forecast metric/calibration/dataset surfaces."
+    elif not local_ready:
+        revival_status = "deferred_blocked"
+        recommendation = "continue assessment only; do not implement or train a heavy model"
+        next_local_action = (
+            "Stage a bounded held-out forecast dataset manifest, then add the CPU budget config."
+        )
+    elif external_pending:
+        revival_status = "local_ready_external_blocked"
+        recommendation = "seek explicit dependency/checkpoint decision before offline run"
+        next_local_action = (
+            "Prepare the dependency/checkpoint decision record; do not submit compute."
+        )
+    else:
+        revival_status = "ready_for_cpu_offline_smoke"
+        recommendation = "run the CPU-only offline evaluator smoke, not a campaign"
+        next_local_action = "Run the config-first CPU smoke and record runtime/calibration/metrics."
+
+    return HeavyModelRevivalDecisionPacket(
+        issue=ISSUE,
+        evidence_status="analysis_only",
+        revival_status=revival_status,
+        recommendation=recommendation,
+        blockers=blockers,
+        next_local_action=next_local_action,
+        allowed_actions=(
+            "inventory/preflight maintenance",
+            "bounded held-out dataset manifest work",
+            "CPU-only evaluator smoke after prerequisites clear",
+        ),
+        forbidden_actions=(
+            "full benchmark campaign",
+            "Slurm/GPU submission",
+            "heavy model training",
+            "default planner integration",
+            "paper/dissertation claim promotion",
+        ),
+        required_before_offline_run=tuple(
+            _format_prerequisite_blocker(prerequisite)
+            for prerequisite in inventory.pending_prerequisites
+        ),
+        inventory=inventory,
+    )
+
+
+def render_revival_decision_packet_markdown(packet: HeavyModelRevivalDecisionPacket) -> str:
+    """Render a compact Markdown handoff packet for issue/PR review.
+
+    Returns:
+        Markdown text suitable for a review handoff or issue state note.
+    """
+    lines = [
+        f"# Issue #{packet.issue} heavy predictor revival decision packet",
+        "",
+        f"- Evidence status: `{packet.evidence_status}`",
+        f"- Revival status: `{packet.revival_status}`",
+        f"- Recommendation: {packet.recommendation}",
+        f"- Next local action: {packet.next_local_action}",
+        "",
+        "## Blockers",
+    ]
+    if packet.blockers:
+        lines.extend(f"- {blocker}" for blocker in packet.blockers)
+    else:
+        lines.append("- none")
+
+    lines.extend(["", "## Allowed actions"])
+    lines.extend(f"- {action}" for action in packet.allowed_actions)
+    lines.extend(["", "## Forbidden actions"])
+    lines.extend(f"- {action}" for action in packet.forbidden_actions)
     return "\n".join(lines)

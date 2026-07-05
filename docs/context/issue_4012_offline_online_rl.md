@@ -1,7 +1,9 @@
 # Issue #4012 Offline-to-Online Reinforcement Learning Fine-Tuning
 
 Plain-language summary: issue #4012 now has a CPU-only diagnostic smoke path that loads a local
-`RLTrajectoryDataset.v1` input, runs the offline-to-online Soft Actor-Critic arm, and runs the
+`RLTrajectoryDataset.v1` input (the versioned JSONL schema for recorded RL trajectory rows —
+observation, action, reward, and next-observation transitions — consumed as offline training
+data), runs the offline-to-online Soft Actor-Critic arm, and runs the
 matched from-scratch Soft Actor-Critic arm. This is workflow evidence only; it is not benchmark
 evidence and makes no paper-facing performance or robustness claim.
 

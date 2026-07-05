@@ -1,24 +1,10 @@
 #!/usr/bin/env python3
-"""Preflight the heavy forecast-model families / offline-experiment surface (#2845).
+"""Preflight heavy forecast-model families / offline-experiment surface (#2845).
 
-Read-only inventory CLI. It documents the candidate heavy predictor families
-(AgentFormer-like / transformer / CVAE / diffusion) with their planning-stage compute cost,
-inference latency, uncertainty quality, and repository integration burden; probes that the
-offline-evaluation entry-point surfaces such an experiment would touch are importable
-(fail-closed); and lists the still-missing minimum-offline-experiment prerequisites (a staged
-held-out dataset, a heavy-model -> ForecastBatch adapter, a CPU runtime budget, the study
-report, plus external dependency/checkpoint decisions) as explicit blockers.
-
-Modes:
-
-- default: render a compact Markdown report and exit non-zero only if a *required*
-  offline-evaluation surface is missing.
-- ``--json``: emit the machine-readable report instead of Markdown.
-- ``--list``: print the static inventory (families, surfaces, prerequisites) without probing.
-
-This tool trains nothing, runs no inference, adds no dependency, runs no benchmark, and makes no
-model-quality claim. The per-family tiers are literature-derived planning estimates, not
-repository measurements. See ``robot_sf/research/forecast_heavy_model_inventory.py``.
+This read-only CLI documents candidate heavy predictor families, probes the
+offline evaluation surfaces needed by a future experiment, and reports the
+minimum-experiment blockers. It trains nothing, runs no inference, adds no
+dependency, runs no benchmark, and makes no model-quality claim.
 """
 
 from __future__ import annotations
@@ -31,30 +17,36 @@ from robot_sf.research.forecast_heavy_model_inventory import (
     EXPERIMENT_PREREQUISITES,
     MODEL_FAMILIES,
     build_inventory_report,
+    build_revival_decision_packet,
     render_markdown,
+    render_revival_decision_packet_markdown,
 )
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    """Build the command-line parser."""
+    """Build command-line parser."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--json",
         action="store_true",
-        help="Emit the machine-readable inventory report as JSON.",
+        help="Emit machine-readable inventory report JSON.",
     )
     parser.add_argument(
         "--list",
         action="store_true",
-        help="Print the static inventory (no checkout probing) as JSON and exit 0.",
+        help="Print static inventory (no checkout probing) JSON and exit 0.",
+    )
+    parser.add_argument(
+        "--decision-packet",
+        action="store_true",
+        help="Emit the fail-closed issue #2845 revival decision packet.",
     )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the inventory preflight CLI and return a shell-friendly exit code."""
+    """Run inventory preflight CLI and return shell-friendly exit code."""
     args = build_arg_parser().parse_args(argv)
-
     if args.list:
         payload = {
             "issue": 2845,
@@ -66,6 +58,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     report = build_inventory_report()
+    if args.decision_packet:
+        packet = build_revival_decision_packet(report)
+        if args.json:
+            print(json.dumps(packet.to_dict(), indent=2, sort_keys=True))
+        else:
+            print(render_revival_decision_packet_markdown(packet))
+        return report.exit_code()
+
     if args.json:
         print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
     else:

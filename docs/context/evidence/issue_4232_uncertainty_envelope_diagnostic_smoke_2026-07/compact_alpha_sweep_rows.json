@@ -37,8 +37,8 @@
     {
       "alpha_arm_key": "envelope_on_alpha_0p10",
       "diagnostics": {
-        "effective_radius_used_by_planner": null,
-        "envelope_activation_count": null
+        "effective_radius_used_by_planner": false,
+        "envelope_activation_count": 0
       },
       "metrics": {
         "collision_rate": 0.0,

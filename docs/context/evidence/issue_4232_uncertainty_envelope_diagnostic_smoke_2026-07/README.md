@@ -20,7 +20,8 @@ caches are intentionally excluded. The compact row input is tracked as
 
 ## Claim Boundary
 
-This evidence does not establish a full benchmark campaign result, conformal calibration, real-world
-safety, deployment readiness, generalized planner superiority, paper claims, or dissertation claims.
-The nonzero-alpha row has `unknown_mechanism_activation`, so alpha-effect mechanism interpretation
-remains blocked until the planner emits measured envelope activation diagnostics.
+This evidence does not establish a full benchmark campaign result, conformal calibration,
+real-world safety, deployment readiness, generalized planner superiority, paper claims, or
+dissertation claims. The nonzero-alpha row now has measured activation telemetry with
+`no_mechanism_activation`, so alpha-effect mechanism interpretation remains blocked until a
+follow-up diagnostic slice observes actual envelope activation on a suitable scenario/planner row.

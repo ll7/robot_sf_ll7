@@ -276,6 +276,34 @@ def test_prediction_mpc_uncertainty_positive_alpha_tightens_later_constraints() 
     assert inflated_vals[-1] < base_vals[-1]
 
 
+def test_prediction_mpc_reports_measured_uncertainty_envelope_activation() -> None:
+    """Diagnostics report when inflated pedestrian radii were actually evaluated."""
+    obs = _obs(ped_positions=[(0.6, 0.0)], ped_velocities=[(0.0, 0.0)])
+    horizon = 3
+    planner = PredictionMPCPlannerAdapter(
+        PredictionMPCConfig(
+            horizon_steps=horizon,
+            pedestrian_uncertainty_envelope_enabled=True,
+            pedestrian_uncertainty_alpha_mps=0.2,
+        )
+    )
+    futures = planner._future_predictor.predict(
+        obs,
+        horizon_steps=horizon,
+        dt=planner.config.rollout_dt,
+    )
+
+    planner._pedestrian_clearance_constraints(
+        np.zeros(2 * horizon, dtype=float),
+        context=_clearance_context(planner, obs),
+        predicted_futures=futures,
+    )
+
+    envelope = planner.diagnostics()["pedestrian_uncertainty_envelope"]
+    assert envelope["effective_radius_used_by_planner"] is True
+    assert envelope["envelope_activation_count"] == 2
+
+
 def test_prediction_mpc_config_rejects_negative_uncertainty_alpha() -> None:
     """A negative conservatism rate fails closed at config construction."""
     with pytest.raises(ValueError):

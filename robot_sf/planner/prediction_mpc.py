@@ -166,6 +166,12 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         self._future_predictor = predictor or ConstantVelocityPedestrianPredictor()
         super().__init__(_to_nmpc_config(self.prediction_config))
 
+    def reset(self) -> None:
+        """Clear optimizer state and measured uncertainty-envelope telemetry."""
+        super().reset()
+        self._envelope_activation_count = 0
+        self._effective_radius_used_by_planner = False
+
     def _optimizer_constraints(self, context: _RolloutContext) -> tuple[NonlinearConstraint, ...]:
         """Enforce hard time-varying pedestrian-future clearance constraints.
 
@@ -217,6 +223,7 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         base_ped_radius = float(context.ped_radius)
         values: list[float] = []
         future_horizon = predicted_futures.positions_world.shape[1]
+        active_pedestrian_count = int(np.count_nonzero(active))
         for step_idx in range(robot_xy.shape[0]):
             ped_k = predicted_futures.positions_world[active, min(step_idx, future_horizon - 1), :]
             d2 = np.sum((ped_k - robot_xy[step_idx][None, :]) ** 2, axis=1)
@@ -226,6 +233,9 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
             ped_eff_radius = base_ped_radius + (
                 alpha * float(step_idx) * dt if use_inflation else 0.0
             )
+            if use_inflation and ped_eff_radius > base_ped_radius:
+                self._effective_radius_used_by_planner = True
+                self._envelope_activation_count += active_pedestrian_count
             r_safe = (
                 float(context.robot_radius)
                 + ped_eff_radius
@@ -257,6 +267,12 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
             enabled=bool(self.prediction_config.pedestrian_uncertainty_envelope_enabled),
             alpha=float(self.prediction_config.pedestrian_uncertainty_alpha_mps),
             dt=float(self.prediction_config.rollout_dt),
+        )
+        payload["pedestrian_uncertainty_envelope"].update(
+            {
+                "effective_radius_used_by_planner": bool(self._effective_radius_used_by_planner),
+                "envelope_activation_count": int(self._envelope_activation_count),
+            }
         )
         return payload
 

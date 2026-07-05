@@ -315,15 +315,13 @@ def test_bootstrap_ch8_sample_count_and_determinism() -> None:
 def test_ch8_statistics_edge_cases() -> None:
     """Exercise edge cases, helper functions, and error checking for coverage."""
     from robot_sf.research.ch8_statistics import (
-        _parse_float,
-        _pearson_ch8,
-        _spearman_ch8,
         _check_ci,
         _check_rank_ci,
         _check_rank_ci_by_planner,
-        _check_value,
-        _check_eta_squared,
         _expected_blockers,
+        _parse_float,
+        _pearson_ch8,
+        _spearman_ch8,
     )
 
     # 1. _parse_float
@@ -364,11 +362,15 @@ def test_ch8_statistics_edge_cases() -> None:
 
     # 6. _check_rank_ci_by_planner
     blockers = []
-    _check_rank_ci_by_planner({"rank_ci_by_planner": None}, {"rank_ci_by_planner": {"p1": [1, 2]}}, blockers)
+    _check_rank_ci_by_planner(
+        {"rank_ci_by_planner": None}, {"rank_ci_by_planner": {"p1": [1, 2]}}, blockers
+    )
     assert "computed rank_ci_by_planner is missing or invalid" in blockers
 
     blockers = []
-    _check_rank_ci_by_planner({"rank_ci_by_planner": {"p1": None}}, {"rank_ci_by_planner": {"p1": [1, 2]}}, blockers)
+    _check_rank_ci_by_planner(
+        {"rank_ci_by_planner": {"p1": None}}, {"rank_ci_by_planner": {"p1": [1, 2]}}, blockers
+    )
     assert "computed rank_ci for p1 is missing or invalid" in blockers
 
     # 7. _expected_blockers integration

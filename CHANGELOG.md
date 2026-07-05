@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Added a compact **learned-risk trace status packet** for issue #2312. The existing
+  `scripts/validation/validate_learned_risk_trace_manifest.py` validator now supports
+  `--status-json`, and `robot_sf/training/learned_risk_trace_manifest.py` exposes
+  `build_trace_manifest_status_packet()` so #1472 handoff/state propagation can reuse the same
+  fail-closed manifest decision without re-reading or reinterpreting the manifest. This is
+  data-preflight status only: no trace materialization, external-data copy, training run, SLURM
+  (Simple Linux Utility for Resource Management) submission, or research claim.
 * Added **typed collision-event export records** to new episode rows (issue #4454). The canonical
   `event_ledger` block is now `EpisodeEventLedger.v2` and can carry per-collision records with
   partner type/id, collision time, relative contact speed, clearance-series provenance, and exact

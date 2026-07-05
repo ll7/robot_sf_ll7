@@ -34,7 +34,7 @@ SCRIPT_OBSERVATION_REPLAY = "scripts/benchmark/run_observation_noise_envelope.py
 DEFAULT_OBSERVATION_REPLAY_OUTPUT_ROOT = (
     "docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13"
 )
-DEFAULT_CLOSED_LOOP_OUTPUT_ROOT = "output/issue_2916_coupling_gate"
+DEFAULT_CLOSED_LOOP_OUTPUT_ROOT = "docs/context/evidence/issue_2916_forecast_risk_coupling_2026-06-23"
 
 REQUIRED_CODE: tuple[str, ...] = (
     "robot_sf/benchmark/forecast_metrics.py",
@@ -544,6 +544,21 @@ def render_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def write_report_outputs(
+    report: dict[str, Any],
+    *,
+    output_json: Path | None = None,
+    output_markdown: Path | None = None,
+) -> None:
+    """Persist the readiness report to the requested durable output paths."""
+    if output_json is not None:
+        output_json.parent.mkdir(parents=True, exist_ok=True)
+        output_json.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    if output_markdown is not None:
+        output_markdown.parent.mkdir(parents=True, exist_ok=True)
+        output_markdown.write_text(render_markdown(report) + "\n", encoding="utf-8")
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -566,6 +581,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Optional path to write readiness report JSON.",
     )
     parser.add_argument(
+        "--output-markdown",
+        type=Path,
+        default=None,
+        help="Optional path to write readiness report Markdown.",
+    )
+    parser.add_argument(
         "--markdown",
         action="store_true",
         help="Print Markdown summary instead of JSON.",
@@ -581,9 +602,11 @@ def main(argv: list[str] | None = None) -> int:
         coupling_report=args.coupling_report,
     )
 
-    if args.output_json is not None:
-        args.output_json.parent.mkdir(parents=True, exist_ok=True)
-        args.output_json.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    write_report_outputs(
+        report,
+        output_json=args.output_json,
+        output_markdown=args.output_markdown,
+    )
 
     if args.markdown:
         print(render_markdown(report))

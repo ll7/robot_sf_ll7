@@ -409,5 +409,7 @@ def test_runner_rows_share_seed_and_scenario(tmp_path):
     assert fixture["scenario_id"] == "issue_2756_occluded_emergence"
     row_names = {row["row"] for row in report["rows"]}
     assert row_names == {"no_forecast", "cv_risk", "semantic_risk", "interaction_risk"}
+    assert {row["seed"] for row in report["rows"]} == {fixture["seed"]}
+    assert {row["scenario_id"] for row in report["rows"]} == {fixture["scenario_id"]}
     # The verdict is one of the three allowed branches.
     assert report["verdict"]["decision"] in {"continue", "revise", "stop"}

@@ -594,6 +594,15 @@ def build_report(
     Returns:
         The complete report mapping.
     """
+    fixture = cfg["fixture"]
+    rows = [
+        {
+            **row,
+            "seed": int(fixture["seed"]),
+            "scenario_id": fixture["scenario_id"],
+        }
+        for row in results
+    ]
     return {
         "schema_version": "forecast_risk_coupling_gate.v1",
         "issue": 2916,
@@ -610,11 +619,11 @@ def build_report(
         "reproducibility": repro,
         "config": {
             "config_path": repro["config_path"],
-            "fixture": cfg["fixture"],
+            "fixture": fixture,
             "risk_gate": cfg["risk_gate"],
             "verdict_thresholds": cfg["verdict"],
         },
-        "rows": results,
+        "rows": rows,
         "verdict": verdict,
         "caveats": [
             "Single deterministic fixture (seed=111), single occluded-emergence scenario.",

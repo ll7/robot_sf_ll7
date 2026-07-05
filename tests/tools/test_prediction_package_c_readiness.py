@@ -9,10 +9,12 @@ from scripts.tools.prediction_package_c_readiness import (
     ARMS,
     DEFAULT_CLOSED_LOOP_OUTPUT_ROOT,
     DEFAULT_OBSERVATION_REPLAY_OUTPUT_ROOT,
+    REPO_ROOT,
     REQUIRED_CODE,
     REQUIRED_CONFIGS,
     assess_package_c_readiness,
     render_markdown,
+    write_report_outputs,
 )
 
 if TYPE_CHECKING:
@@ -250,6 +252,29 @@ def test_markdown_renders_status_report_and_blockers(tmp_path: Path) -> None:
     assert "#2916" in markdown
 
 
+def test_write_report_outputs_persists_json_and_markdown(tmp_path: Path) -> None:
+    """Durable rerun outputs can be written directly from a validated readiness report."""
+    _write_wired_repo(tmp_path)
+    report_path = _write_coupling_report(tmp_path)
+    report = assess_package_c_readiness(tmp_path, coupling_report=report_path)
+    output_dir = tmp_path / "docs/context/evidence/issue_3080_package_c_readiness"
+    output_json = output_dir / "package_c_readiness_report.json"
+    output_markdown = output_dir / "README.md"
+
+    write_report_outputs(
+        report,
+        output_json=output_json,
+        output_markdown=output_markdown,
+    )
+
+    assert json.loads(output_json.read_text(encoding="utf-8")) == report
+    markdown = output_markdown.read_text(encoding="utf-8")
+    assert markdown.endswith("\n")
+    assert "Prediction Package C Readiness Preflight" in markdown
+    assert "`ready`" in markdown
+    assert str(report_path) in markdown
+
+
 def test_real_repo_preflight_is_wired_and_fails_closed() -> None:
     """Real repo inputs resolve; default remains blocked without supplied artifact."""
     report = assess_package_c_readiness()
@@ -263,3 +288,18 @@ def test_real_repo_preflight_is_wired_and_fails_closed() -> None:
         DEFAULT_OBSERVATION_REPLAY_OUTPUT_ROOT,
         DEFAULT_CLOSED_LOOP_OUTPUT_ROOT,
     ]
+
+
+def test_real_repo_coupling_report_clears_package_c_blocker() -> None:
+    """The committed #2916 report should satisfy the current Package C contract."""
+    report = assess_package_c_readiness(
+        coupling_report=(
+            REPO_ROOT
+            / "docs/context/evidence/issue_2916_forecast_risk_coupling_2026-06-23"
+            / "forecast_risk_coupling_gate_report.json"
+        )
+    )
+
+    assert report["overall_status"] == "ready"
+    assert report["coupling_report_available"] is True
+    assert all(arm["status"] == "ready" for arm in report["arms"])

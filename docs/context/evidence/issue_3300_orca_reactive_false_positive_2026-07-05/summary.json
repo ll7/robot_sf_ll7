@@ -1,0 +1,313 @@
+{
+  "claim_boundary": "CPU-local observation-quality replay smoke for false-positive actor injection. Diagnostic only; not a full benchmark campaign, hardware sensor model, or paper-facing claim.",
+  "classification": {
+    "label": "observed",
+    "reason": "false-positive injection changed at least one predeclared replay outcome"
+  },
+  "injection_summary": {
+    "hashes": [
+      "1c77dd478a6b"
+    ],
+    "pedestrians_added": 101,
+    "profiles": [
+      "issue_3300_false_positive_orca_close_v1"
+    ],
+    "steps_with_noise": 101
+  },
+  "inputs": {
+    "nominal_jsonl": "output/benchmarks/issue_3300_orca/issue_3300_orca_nominal/runs/orca__differential_drive/episodes.jsonl",
+    "perturbed_jsonl": "output/benchmarks/issue_3300_orca/issue_3300_orca_perturbed/runs/orca__differential_drive/episodes.jsonl"
+  },
+  "issue": 3300,
+  "pairing": {
+    "pair_keys": [
+      "planner_identity",
+      "algo",
+      "scenario_id",
+      "seed",
+      "observation_mode",
+      "observation_level"
+    ],
+    "paired_rows": 6,
+    "unmatched_nominal_keys": [],
+    "unmatched_nominal_rows": 0,
+    "unmatched_perturbed_keys": [],
+    "unmatched_perturbed_rows": 0
+  },
+  "per_episode_deltas": [
+    {
+      "changed_fields": [
+        "avg_speed",
+        "clearing_distance_min",
+        "curvature_mean",
+        "jerk_mean",
+        "min_clearance",
+        "min_distance",
+        "socnavbench_path_irregularity"
+      ],
+      "metric_delta": {
+        "avg_speed": -2.725857142438226e-05,
+        "clearing_distance_min": 0.00013574460434795377,
+        "collisions": 0.0,
+        "curvature_mean": 0.0936382747434382,
+        "jerk_mean": 0.02434544989864494,
+        "min_clearance": -0.1554230805814374,
+        "min_distance": -0.1554230805814374,
+        "near_misses": 0.0,
+        "path_efficiency": 0.0,
+        "route_complete": 0.0,
+        "socnavbench_path_irregularity": 0.09782868650588789,
+        "stalled_time": 0.0,
+        "total_collision_count": 0.0
+      },
+      "observed_actor_counts": {
+        "nominal": null,
+        "perturbed": null
+      },
+      "pedestrians_added": 20,
+      "planner_key": "orca",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 0,
+      "selected_action": {
+        "changed": false,
+        "nominal": null,
+        "perturbed": null
+      },
+      "steps_with_noise": 20
+    },
+    {
+      "changed_fields": [
+        "avg_speed",
+        "clearing_distance_min",
+        "curvature_mean",
+        "jerk_mean",
+        "min_clearance",
+        "min_distance",
+        "socnavbench_path_irregularity"
+      ],
+      "metric_delta": {
+        "avg_speed": -0.07922292044486712,
+        "clearing_distance_min": 0.0015598842514625844,
+        "collisions": 0.0,
+        "curvature_mean": 0.14758845982830882,
+        "jerk_mean": 0.07675336363122783,
+        "min_clearance": -0.026788651751758152,
+        "min_distance": -0.026788651751758152,
+        "near_misses": 0.0,
+        "path_efficiency": 0.0,
+        "route_complete": 0.0,
+        "socnavbench_path_irregularity": 0.1225757247583582,
+        "stalled_time": 0.0,
+        "total_collision_count": 0.0
+      },
+      "observed_actor_counts": {
+        "nominal": null,
+        "perturbed": null
+      },
+      "pedestrians_added": 20,
+      "planner_key": "orca",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 3300,
+      "selected_action": {
+        "changed": false,
+        "nominal": null,
+        "perturbed": null
+      },
+      "steps_with_noise": 20
+    },
+    {
+      "changed_fields": [
+        "avg_speed",
+        "clearing_distance_min",
+        "curvature_mean",
+        "jerk_mean",
+        "min_clearance",
+        "min_distance",
+        "near_misses",
+        "socnavbench_path_irregularity"
+      ],
+      "metric_delta": {
+        "avg_speed": -0.020785723079388307,
+        "clearing_distance_min": 0.0002715215596917897,
+        "collisions": 0.0,
+        "curvature_mean": -0.5400132622243762,
+        "jerk_mean": 0.04067029435263336,
+        "min_clearance": -0.004199244640739508,
+        "min_distance": -0.004199244640739508,
+        "near_misses": -1.0,
+        "path_efficiency": 0.0,
+        "route_complete": 0.0,
+        "socnavbench_path_irregularity": -0.2401439951635866,
+        "stalled_time": 0.0,
+        "total_collision_count": 0.0
+      },
+      "observed_actor_counts": {
+        "nominal": null,
+        "perturbed": null
+      },
+      "pedestrians_added": 12,
+      "planner_key": "orca",
+      "scenario_id": "issue_3233_near_field_observation_noise",
+      "seed": 0,
+      "selected_action": {
+        "changed": false,
+        "nominal": null,
+        "perturbed": null
+      },
+      "steps_with_noise": 12
+    },
+    {
+      "changed_fields": [
+        "avg_speed",
+        "clearing_distance_min",
+        "curvature_mean",
+        "jerk_mean",
+        "min_clearance",
+        "min_distance",
+        "near_misses",
+        "socnavbench_path_irregularity"
+      ],
+      "metric_delta": {
+        "avg_speed": 0.14133785113854075,
+        "clearing_distance_min": 0.0036653475474301977,
+        "collisions": 0.0,
+        "curvature_mean": -1.252531021623398,
+        "jerk_mean": -0.007690218710450378,
+        "min_clearance": 0.04370242485052889,
+        "min_distance": 0.04370242485052889,
+        "near_misses": -11.0,
+        "path_efficiency": 0.0,
+        "route_complete": 0.0,
+        "socnavbench_path_irregularity": -0.05584235558654167,
+        "stalled_time": 0.0,
+        "total_collision_count": 0.0
+      },
+      "observed_actor_counts": {
+        "nominal": null,
+        "perturbed": null
+      },
+      "pedestrians_added": 9,
+      "planner_key": "orca",
+      "scenario_id": "issue_3233_near_field_observation_noise",
+      "seed": 3300,
+      "selected_action": {
+        "changed": false,
+        "nominal": null,
+        "perturbed": null
+      },
+      "steps_with_noise": 9
+    },
+    {
+      "changed_fields": [
+        "avg_speed",
+        "clearing_distance_min",
+        "curvature_mean",
+        "jerk_mean",
+        "min_clearance",
+        "min_distance",
+        "socnavbench_path_irregularity"
+      ],
+      "metric_delta": {
+        "avg_speed": -0.23932526344091265,
+        "clearing_distance_min": -0.14071720746393757,
+        "collisions": 0.0,
+        "curvature_mean": 0.11905207803420406,
+        "jerk_mean": 0.05087298962953618,
+        "min_clearance": 0.5116059373376061,
+        "min_distance": 0.5116059373376061,
+        "near_misses": 0.0,
+        "path_efficiency": 0.0,
+        "route_complete": 0.0,
+        "socnavbench_path_irregularity": 0.04555137028006592,
+        "stalled_time": 0.0,
+        "total_collision_count": 0.0
+      },
+      "observed_actor_counts": {
+        "nominal": null,
+        "perturbed": null
+      },
+      "pedestrians_added": 20,
+      "planner_key": "orca",
+      "scenario_id": "single_ped_crossing_orthogonal",
+      "seed": 0,
+      "selected_action": {
+        "changed": false,
+        "nominal": null,
+        "perturbed": null
+      },
+      "steps_with_noise": 20
+    },
+    {
+      "changed_fields": [
+        "avg_speed",
+        "clearing_distance_min",
+        "curvature_mean",
+        "jerk_mean",
+        "min_clearance",
+        "min_distance",
+        "socnavbench_path_irregularity"
+      ],
+      "metric_delta": {
+        "avg_speed": -0.05054037802132694,
+        "clearing_distance_min": 0.0017148619849143287,
+        "collisions": 0.0,
+        "curvature_mean": 0.11749618576261839,
+        "jerk_mean": 0.06842171988871688,
+        "min_clearance": -0.06890521758692358,
+        "min_distance": -0.06890521758692358,
+        "near_misses": 0.0,
+        "path_efficiency": 0.0,
+        "route_complete": 0.0,
+        "socnavbench_path_irregularity": 0.11687723489225438,
+        "stalled_time": 0.0,
+        "total_collision_count": 0.0
+      },
+      "observed_actor_counts": {
+        "nominal": null,
+        "perturbed": null
+      },
+      "pedestrians_added": 20,
+      "planner_key": "orca",
+      "scenario_id": "single_ped_crossing_orthogonal",
+      "seed": 3300,
+      "selected_action": {
+        "changed": false,
+        "nominal": null,
+        "perturbed": null
+      },
+      "steps_with_noise": 20
+    }
+  ],
+  "planner_rows": [
+    {
+      "algo": "orca",
+      "collision_delta": 0.0,
+      "noise_stats_sum": {
+        "heading_noise_applied": 0,
+        "lidar_values_dropped": 0,
+        "observation_delay_applied": 0,
+        "pedestrian_position_noise_applied": 0,
+        "pedestrians_added": 101,
+        "pedestrians_occluded": 0,
+        "pedestrians_removed": 0,
+        "pose_noise_applied": 0,
+        "steps_with_noise": 101
+      },
+      "nominal_collision_incidence": 0.3333333333333333,
+      "nominal_success_incidence": 0.0,
+      "paired_episodes": 6,
+      "perturbation_hashes": [
+        "1c77dd478a6b"
+      ],
+      "perturbation_profiles": [
+        "issue_3300_false_positive_orca_close_v1"
+      ],
+      "perturbed_collision_incidence": 0.3333333333333333,
+      "perturbed_success_incidence": 0.0,
+      "planner_key": "orca",
+      "success_delta": 0.0
+    }
+  ],
+  "replay_mode": "executable",
+  "schema_version": "false_positive_actor_injection_replay.v1"
+}

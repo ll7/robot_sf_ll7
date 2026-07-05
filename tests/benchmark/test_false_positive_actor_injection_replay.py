@@ -6,6 +6,8 @@ import json
 import runpy
 from pathlib import Path
 
+import pytest
+
 from robot_sf.benchmark.false_positive_replay_report import (
     CLASS_BLOCKED_UNAVAILABLE,
     CLASS_OBSERVED,
@@ -254,3 +256,48 @@ def test_report_uses_algo_as_episode_display_planner_when_key_missing(tmp_path: 
     report = build_false_positive_replay_report(nominal_jsonl=nominal, perturbed_jsonl=perturbed)
 
     assert report["per_episode_deltas"][0]["planner_key"] == "goal"
+
+
+def test_behavioral_metrics_detected_as_observed_change(tmp_path: Path) -> None:
+    """ORCA-style behavioral metric changes (avg_speed, curvature) classify as observed."""
+    nominal = tmp_path / "nominal.jsonl"
+    perturbed = tmp_path / "perturbed.jsonl"
+    clean = _row()
+    noisy = _row(noise=True, pedestrians_added=20)
+    clean["metrics"]["avg_speed"] = 0.98
+    clean["metrics"]["curvature_mean"] = 0.06
+    clean["metrics"]["jerk_mean"] = 0.07
+    noisy["metrics"]["avg_speed"] = 0.74
+    noisy["metrics"]["curvature_mean"] = 0.18
+    noisy["metrics"]["jerk_mean"] = 0.12
+    _write_jsonl(nominal, [clean])
+    _write_jsonl(perturbed, [noisy])
+
+    report = build_false_positive_replay_report(nominal_jsonl=nominal, perturbed_jsonl=perturbed)
+
+    assert report["classification"]["label"] == CLASS_OBSERVED
+    episode = report["per_episode_deltas"][0]
+    assert "avg_speed" in episode["changed_fields"]
+    assert "curvature_mean" in episode["changed_fields"]
+    assert "jerk_mean" in episode["changed_fields"]
+    assert episode["metric_delta"]["avg_speed"] == pytest.approx(-0.24, abs=0.01)
+    assert episode["pedestrians_added"] == 20
+
+
+def test_near_miss_delta_detected(tmp_path: Path) -> None:
+    """Near-miss count changes detect correctly in replay report."""
+    nominal = tmp_path / "nominal.jsonl"
+    perturbed = tmp_path / "perturbed.jsonl"
+    clean = _row()
+    noisy = _row(noise=True, pedestrians_added=9)
+    clean["metrics"]["near_misses"] = 19
+    noisy["metrics"]["near_misses"] = 8
+    _write_jsonl(nominal, [clean])
+    _write_jsonl(perturbed, [noisy])
+
+    report = build_false_positive_replay_report(nominal_jsonl=nominal, perturbed_jsonl=perturbed)
+
+    assert report["classification"]["label"] == CLASS_OBSERVED
+    episode = report["per_episode_deltas"][0]
+    assert "near_misses" in episode["changed_fields"]
+    assert episode["metric_delta"]["near_misses"] == pytest.approx(-11.0)

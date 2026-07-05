@@ -212,6 +212,36 @@ def test_real_repo_lane_is_blocked_on_followup() -> None:
     assert report["errors"] == []
 
 
+def test_integration_report_summarizes_parent_blocked_handoff() -> None:
+    """Real repo report gives one coherent parent status without claiming evidence."""
+    report = assess_lane_readiness(REPO_ROOT, validate_packet=True)
+
+    integration = report["integration_report"]
+    assert integration["issue"] == 1358
+    assert integration["new_capability"] == "parent_integration_status_report"
+    assert integration["integration_status"] == "local_handoff_ready_parent_blocked"
+    assert integration["local_contract"]["prerequisites_total"] == len(REQUIRED_PREREQUISITES)
+    assert integration["local_contract"]["missing_or_invalid_prerequisites"] == []
+    assert integration["remaining_blocker_keys"] == [b.key for b in LANE_BLOCKERS]
+    assert "child #1475" in integration["next_empirical_action"]
+    assert "no SLURM job was submitted" in integration["non_claims"]
+    assert "not learned-residual evidence" in integration["claim_boundary"]
+
+
+def test_integration_report_reflects_incomplete_local_contract(tmp_path: pathlib.Path) -> None:
+    """Incomplete local scaffolding is visible in parent integration status."""
+    _write_synthetic_lane(tmp_path)
+    (tmp_path / "configs/policy_search/candidates/orca_residual_guarded_ppo_v0.yaml").unlink()
+
+    report = assess_lane_readiness(tmp_path, validate_packet=False)
+
+    integration = report["integration_report"]
+    assert integration["integration_status"] == "local_contract_incomplete"
+    assert integration["local_contract"]["missing_or_invalid_prerequisites"] == ["candidate_v0"]
+    assert integration["errors"] == report["errors"]
+    assert integration["remaining_blocker_keys"] == [b.key for b in LANE_BLOCKERS]
+
+
 def test_cli_exit_codes(tmp_path: pathlib.Path) -> None:
     """CLI returns 0 when handoff-complete and 2 when a prerequisite is missing."""
     from scripts.tools.orca_residual_lane_readiness import main as cli_main

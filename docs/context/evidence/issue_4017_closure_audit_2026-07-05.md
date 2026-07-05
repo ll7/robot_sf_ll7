@@ -34,12 +34,15 @@ Audit timestamp: 2026-07-05
 
 ## Closure Call
 
-Close #4017 through the closure-audit pull request because the repository now has
-the complete CPU-side diagnostic constrained-RL lane requested by the issue
-implementation plan, and the only remaining item is a broader empirical campaign
-that this worker is explicitly not authorized to run. Any later benchmark-strength
-or paper-facing safety claim should be tracked as a separate compute-authorized
-campaign with its own provenance and validation boundary.
+This audit does NOT close #4017. The repository now has the complete CPU-side
+diagnostic constrained-RL lane requested by the issue implementation plan, and the
+only remaining item is a broader empirical campaign that this worker is explicitly
+not authorized to run. The maintainer gate updates on issue #4017 (after PR #4259
+and PR #4477, and the 2026-07-05 BLOCKED note) keep the issue OPEN and track that
+GPU/Slurm benchmark-strength campaign as its remaining Definition of Done. This PR
+therefore lands as `Refs #4017` durable evidence, not a closure. Any later
+benchmark-strength or paper-facing safety claim should be tracked under that
+remaining #4017 campaign DoD with its own provenance and validation boundary.
 
 Forbidden actions confirmed: no Slurm submission, no GPU/full benchmark campaign,
 no merge, no release, no deletion, and no paper/dissertation claim edit.

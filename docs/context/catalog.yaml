@@ -21,6 +21,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4017_closure_audit_2026-07-05.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_1489_closure_audit_2026-07-05.md
     status: evidence
     freshness: evidence

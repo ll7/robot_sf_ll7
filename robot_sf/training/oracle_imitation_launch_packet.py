@@ -9,6 +9,11 @@ from typing import Any
 
 import yaml
 
+from robot_sf.training.oracle_trace_uri_registry import (
+    OracleTraceUriRegistryError,
+    validate_trace_uri_registry,
+)
+
 _SCHEMA_VERSION = "oracle-imitation-launch-packet.v1"
 _SPLITS = ("train", "validation", "evaluation")
 _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -87,8 +92,15 @@ def validate_launch_packet(
     _validate_generating_commit(packet, errors)
     artifact_paths = _validate_artifacts(packet, root, errors)
     collection_roots = _validate_collection_roots(packet, errors)
+    trace_uri_registry = _validate_trace_uri_registry_pointer(
+        packet,
+        root,
+        require_training_ready=require_training_ready,
+        errors=errors,
+    )
     training_ready = _validate_training_artifact_gate(
         artifact_paths,
+        trace_uri_registry=trace_uri_registry,
         require_training_ready=require_training_ready,
         errors=errors,
     )
@@ -107,6 +119,7 @@ def validate_launch_packet(
         "seeds_by_split": {split: list(packet["seeds_by_split"][split]) for split in _SPLITS},
         "artifact_paths": artifact_paths,
         "collection_roots": collection_roots,
+        "trace_uri_registry": trace_uri_registry,
         "training_ready": training_ready,
     }
 
@@ -378,9 +391,16 @@ def _validate_artifacts(
 def _validate_training_artifact_gate(
     artifact_paths: dict[str, str],
     *,
+    trace_uri_registry: dict[str, Any] | None,
     require_training_ready: bool,
     errors: list[str],
 ) -> bool:
+    if trace_uri_registry is not None:
+        training_ready = bool(trace_uri_registry.get("training_ready", False))
+        if require_training_ready and not training_ready:
+            errors.append("trace_uri_registry must be training_ready when --require-training-ready")
+        return training_ready
+
     required_trace_artifacts = {
         "train_trace_jsonl_uri",
         "validation_trace_jsonl_uri",
@@ -418,6 +438,53 @@ def _validate_training_artifact_gate(
             f"{', '.join(non_durable_required)}"
         )
     return training_ready
+
+
+def _validate_trace_uri_registry_pointer(
+    packet: dict[str, Any],
+    repo_root: Path,
+    *,
+    require_training_ready: bool,
+    errors: list[str],
+) -> dict[str, Any] | None:
+    registry_path = packet.get("trace_uri_registry")
+    if registry_path is None:
+        return None
+    if not isinstance(registry_path, str) or not registry_path.strip():
+        errors.append("trace_uri_registry must be non-empty path string when provided")
+        return None
+
+    try:
+        report = validate_trace_uri_registry(
+            _resolve_path(registry_path, repo_root),
+            repo_root=repo_root,
+            require_training_ready=require_training_ready,
+        )
+    except OracleTraceUriRegistryError as exc:
+        errors.append(f"trace_uri_registry failed validation: {_first_error_line(exc)}")
+        return {
+            "path": registry_path,
+            "status": "invalid",
+            "training_ready": False,
+        }
+
+    return {
+        "path": registry_path,
+        "status": report["status"],
+        "dataset_id": report["dataset_id"],
+        "splits": report["splits"],
+        "retrieval_status": report["retrieval_status"],
+        "training_ready": report["training_ready"],
+    }
+
+
+def _first_error_line(exc: Exception) -> str:
+    for line in str(exc).splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.endswith("failed validation:"):
+            continue
+        return stripped.removeprefix("- ").strip()
+    return str(exc)
 
 
 def _validate_collection_roots(packet: dict[str, Any], errors: list[str]) -> dict[str, str]:

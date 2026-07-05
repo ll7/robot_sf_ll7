@@ -1,0 +1,58 @@
+{
+  "rows": [
+    {
+      "alpha_arm_key": "envelope_off_alpha_0",
+      "diagnostics": {},
+      "metrics": {
+        "collision_rate": 0.0,
+        "min_clearance_m": null,
+        "near_miss_rate": 0.0,
+        "path_efficiency": 1.0,
+        "runtime_seconds": null,
+        "success_rate": 1.0
+      },
+      "planner_id": "prediction_mpc",
+      "row_status": "diagnostic_only",
+      "scenario_family": "classic_bottleneck_low",
+      "scenario_id": "classic_bottleneck_low__issue4232__envelope_off_alpha_0",
+      "seed": 111
+    },
+    {
+      "alpha_arm_key": "envelope_on_alpha_0",
+      "diagnostics": {},
+      "metrics": {
+        "collision_rate": 0.0,
+        "min_clearance_m": null,
+        "near_miss_rate": 0.0,
+        "path_efficiency": 1.0,
+        "runtime_seconds": null,
+        "success_rate": 1.0
+      },
+      "planner_id": "prediction_mpc",
+      "row_status": "diagnostic_only",
+      "scenario_family": "classic_bottleneck_low",
+      "scenario_id": "classic_bottleneck_low__issue4232__envelope_on_alpha_0",
+      "seed": 111
+    },
+    {
+      "alpha_arm_key": "envelope_on_alpha_0p10",
+      "diagnostics": {
+        "effective_radius_used_by_planner": null,
+        "envelope_activation_count": null
+      },
+      "metrics": {
+        "collision_rate": 0.0,
+        "min_clearance_m": null,
+        "near_miss_rate": 0.0,
+        "path_efficiency": 1.0,
+        "runtime_seconds": null,
+        "success_rate": 1.0
+      },
+      "planner_id": "prediction_mpc",
+      "row_status": "diagnostic_only",
+      "scenario_family": "classic_bottleneck_low",
+      "scenario_id": "classic_bottleneck_low__issue4232__envelope_on_alpha_0p10",
+      "seed": 111
+    }
+  ]
+}

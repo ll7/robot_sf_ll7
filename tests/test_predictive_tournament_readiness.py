@@ -13,9 +13,11 @@ import pytest
 
 from scripts.tools.predictive_tournament_readiness import (
     ARMS,
+    NEXT_PROGRESSION,
     RUN_GATES,
     SHARED_PROTOCOL_PATHS,
     evaluate_arm,
+    evaluate_next_progression,
     evaluate_readiness,
     main,
     render_text,
@@ -43,6 +45,8 @@ def _stage_all_prerequisites(repo_root: Path) -> None:
                 _touch(repo_root, rel)
             else:
                 (repo_root / rel).mkdir(parents=True, exist_ok=True)
+    for rel in NEXT_PROGRESSION.required_paths:
+        _touch(repo_root, rel)
 
 
 def test_all_present_reports_ready(tmp_path: Path) -> None:
@@ -100,6 +104,42 @@ def test_report_surfaces_expected_configs_and_output_paths(tmp_path: Path) -> No
         in model["expected_configs"]
     )
     assert selection["expected_output_paths"] == [selection["expected_output_path"]]
+
+
+def test_next_progression_reports_scenario_family_oracle_packet(tmp_path: Path) -> None:
+    """Report names the post-synthesis scenario-family/oracle-arm progression."""
+    _stage_all_prerequisites(tmp_path)
+
+    progression = evaluate_readiness(tmp_path)["next_progression"]
+
+    assert progression["id"] == "scenario_family_oracle_arm"
+    assert progression["status"] == "ready"
+    assert progression["evidence_tier"] == "diagnostic-only"
+    assert "oracle_future" in progression["forecast_arms"]
+    assert "collision_rate" in progression["outcomes"]
+    assert (
+        "configs/scenarios/sets/predictive_hardcase_portfolio_v1.yaml"
+        in progression["expected_configs"]
+    )
+    assert progression["expected_output_paths"] == [progression["expected_output_path"]]
+
+
+def test_next_progression_blocks_on_missing_packet_input(tmp_path: Path) -> None:
+    """Scenario-family packet readiness fails closed when an input is absent."""
+    _stage_all_prerequisites(tmp_path)
+    missing = NEXT_PROGRESSION.required_paths[0]
+    (tmp_path / missing).unlink()
+
+    progression = evaluate_next_progression(tmp_path)
+
+    assert progression["status"] == "blocked"
+    assert progression["missing_paths"] == [missing.as_posix()]
+    assert progression["blockers"] == [
+        {
+            "path": missing.as_posix(),
+            "reason": "required scenario-family packet input is missing",
+        }
+    ]
 
 
 def test_missing_shared_protocol_blocks_overall(tmp_path: Path) -> None:
@@ -171,6 +211,8 @@ def test_render_text_runs_and_mentions_status(tmp_path: Path) -> None:
 
     assert "tournament readiness" in text.lower()
     assert "READY" in text
+    assert "oracle_future" in text
+    assert "diagnostic-only" in text
 
 
 def test_main_exit_code_reflects_prerequisite_status(tmp_path: Path, capsys) -> None:

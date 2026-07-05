@@ -214,28 +214,24 @@ def _activation_diagnostics(
     alpha = float(arm["pedestrian_uncertainty_alpha_mps"])
     if alpha == 0.0:
         return {}
+    diagnostics = {
+        "envelope_activation_count": None,
+        "effective_radius_used_by_planner": None,
+    }
     planner_runtime = record.get("planner_runtime")
-    envelope = {}
-    if isinstance(planner_runtime, Mapping):
-        raw_envelope = planner_runtime.get("pedestrian_uncertainty_envelope")
-        if isinstance(raw_envelope, Mapping):
-            envelope = dict(raw_envelope)
+    if not isinstance(planner_runtime, Mapping):
+        return diagnostics
+    raw_envelope = planner_runtime.get("pedestrian_uncertainty_envelope")
+    if not isinstance(raw_envelope, Mapping):
+        return diagnostics
+    envelope = dict(raw_envelope)
     used = envelope.get("effective_radius_used_by_planner")
     if isinstance(used, bool):
-        effective_used = used
-    else:
-        effective_used = bool(
-            envelope.get("enabled", arm["pedestrian_uncertainty_envelope_enabled"])
-        )
+        diagnostics["effective_radius_used_by_planner"] = used
     count = envelope.get("envelope_activation_count")
-    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
-        count = (
-            1 if effective_used and row_status not in {"failed", "blocked", "not_available"} else 0
-        )
-    return {
-        "envelope_activation_count": count,
-        "effective_radius_used_by_planner": effective_used,
-    }
+    if isinstance(count, int) and not isinstance(count, bool) and count >= 0:
+        diagnostics["envelope_activation_count"] = count
+    return diagnostics
 
 
 def _record_identity(

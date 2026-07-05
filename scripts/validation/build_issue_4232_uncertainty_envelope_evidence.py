@@ -257,9 +257,11 @@ def _activation_status(row: Mapping[str, Any]) -> tuple[str, int | None, bool | 
         raise EvidenceBuildError(f"{_row_id(row)}: diagnostics must be a mapping")
     if float(row["alpha_mps"]) == 0.0:
         return "not_applicable_alpha_zero", None, None
+    count_present = "envelope_activation_count" in diagnostics
+    used_present = "effective_radius_used_by_planner" in diagnostics
     count = diagnostics.get("envelope_activation_count")
     used = diagnostics.get("effective_radius_used_by_planner")
-    if count is None and used is None:
+    if not count_present and not used_present:
         raise EvidenceBuildError(f"{_row_id(row)}: missing envelope activation diagnostics")
     if count is not None:
         if isinstance(count, bool) or not isinstance(count, int) or count < 0:
@@ -268,6 +270,8 @@ def _activation_status(row: Mapping[str, Any]) -> tuple[str, int | None, bool | 
         raise EvidenceBuildError(
             f"{_row_id(row)}: effective_radius_used_by_planner must be boolean"
         )
+    if count is None and used is None:
+        return "unknown_mechanism_activation", None, None
     activated = (count or 0) > 0 or bool(used)
     return ("activated" if activated else "no_mechanism_activation", count, used)
 

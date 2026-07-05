@@ -28,8 +28,12 @@ EXTERNAL_DATA_ROOT_ENV = "ROBOT_SF_EXTERNAL_DATA_ROOT"
 DEFAULT_AMV_COMMAND_RESPONSE_MANIFEST = (
     REPO_ROOT / "configs" / "research" / "amv_command_response_trace_manifest_issue_2415.yaml"
 )
+DEFAULT_AMV_CALIBRATION_SOURCE_MANIFEST = (
+    REPO_ROOT / "configs" / "benchmarks" / "issue_1585_amv_calibration_source_manifest.yaml"
+)
 AMV_COMMAND_RESPONSE_SOURCE_REQUIREMENTS = {
     "source_classes": [
+        "hardware_trace",
         "online_dataset",
         "collaborator_vehicle_trace",
         "field_measurement_bundle",
@@ -1874,12 +1878,24 @@ def parse_args() -> argparse.Namespace:
         help="Report AMV command-response calibration admission status; fails closed.",
     )
     amv_status.add_argument("--manifest", type=Path, default=None)
+    amv_status.add_argument(
+        "--source-manifest",
+        type=Path,
+        default=None,
+        help="Path to amv_calibration_source_manifest.v1 provenance manifest.",
+    )
 
     amv_source_status = subparsers.add_parser(
         "amv-command-response-source-status",
         help="Report issue #2000 AMV command-response trace acquisition readiness.",
     )
     amv_source_status.add_argument("--manifest", type=Path, default=None)
+    amv_source_status.add_argument(
+        "--source-manifest",
+        type=Path,
+        default=None,
+        help="Path to amv_calibration_source_manifest.v1 provenance manifest.",
+    )
 
     sdd_download = subparsers.add_parser(
         "sdd-download", help="Guarded SDD staging: requires explicit confirmation; fails closed."
@@ -2026,13 +2042,22 @@ def _handle_sdd_mode(args: argparse.Namespace) -> int:
     return 0 if gate["dataset_backed"] else 2
 
 
-def build_amv_calibration_status(manifest_path: Path | None = None) -> dict[str, Any]:
-    """Return AMV calibration admission status from asset presence plus trace manifest.
+def build_amv_calibration_status(
+    manifest_path: Path | None = None,
+    source_manifest_path: Path | None = None,
+) -> dict[str, Any]:
+    """Return AMV calibration admission status from asset, trace, and source provenance.
 
     The report is intentionally fail-closed: it never admits AMV command-response calibration
-    unless the issue #2415 manifest is structurally clean and a declared staged trace reconciles
-    with the live ``amv-calibration`` external-data asset status.
+    unless the issue #2415 trace manifest is structurally clean, a declared staged trace reconciles
+    with live ``amv-calibration`` external-data asset status, and issue #1585 source provenance
+    is accepted for hardware-calibrated AMV claims.
     """
+    from robot_sf.benchmark.amv_calibration_source_manifest import (
+        AmvCalibrationSourceManifestError,
+        check_amv_calibration_source_manifest,
+        load_amv_calibration_source_manifest,
+    )
     from robot_sf.benchmark.synthetic_actuation import actuation_variability_fields
     from robot_sf.research.amv_command_response_trace_manifest import (
         AmvTraceManifestError,
@@ -2074,12 +2099,43 @@ def build_amv_calibration_status(manifest_path: Path | None = None) -> dict[str,
         live_status = {"amv-calibration": str(asset_report["status"])}
         blocker_details = [str(exc)]
 
-    ready = asset_report["status"] == "available" and trace_payload["calibration_ingest_allowed"]
+    source_manifest_source = source_manifest_path or DEFAULT_AMV_CALIBRATION_SOURCE_MANIFEST
+    try:
+        source_manifest = load_amv_calibration_source_manifest(source_manifest_source)
+        source_report = check_amv_calibration_source_manifest(
+            source_manifest,
+            allowed_calibration_fields=set(actuation_variability_fields()),
+        )
+        source_payload = source_report.to_dict()
+        source_ready = source_report.is_ready
+        hardware_source_ready = source_report.hardware_calibration_claim_allowed
+        if not source_ready:
+            blocker_details.extend(source_report.blockers)
+        if source_ready and not hardware_source_ready:
+            blocker_details.append(
+                "AMV calibration source must allow hardware-calibrated claims; "
+                "platform-class proxy sources are insufficient"
+            )
+    except (AmvCalibrationSourceManifestError, ValueError) as exc:
+        source_payload = {
+            "source_status": "invalid",
+            "hardware_calibration_claim_allowed": False,
+            "error": str(exc),
+        }
+        source_ready = False
+        hardware_source_ready = False
+        blocker_details.append(str(exc))
+
     blocker_keys: list[str] = []
     if asset_report["status"] != "available":
         blocker_keys.append("amv_calibration_asset_missing")
     if not trace_payload["calibration_ingest_allowed"]:
         blocker_keys.append("command_response_trace_manifest_not_ready")
+    if not source_ready:
+        blocker_keys.append("amv_calibration_source_manifest_not_ready")
+    if source_ready and not hardware_source_ready:
+        blocker_keys.append("amv_calibration_source_not_hardware_calibrated")
+    ready = not blocker_keys
 
     return {
         "schema": "amv_calibration_status.v1",
@@ -2091,45 +2147,42 @@ def build_amv_calibration_status(manifest_path: Path | None = None) -> dict[str,
         "blocker_details": blocker_details,
         "asset_status": asset_report,
         "manifest_path": str(manifest_source),
+        "source_manifest_path": str(source_manifest_source),
         "live_staging_status": live_status,
         "trace_manifest_report": trace_payload,
+        "source_manifest_report": source_payload,
         "evidence_boundary": (
-            "asset_presence_plus_manifest_contract_only_no_trace_ingest_no_calibration_run"
+            "asset_presence_plus_trace_and_source_manifest_contracts_only_"
+            "no_trace_ingest_no_calibration_run"
         ),
         "next_step": (
-            "Stage a maintainer-accepted real AMV command-response trace bundle through "
-            "`manage_external_data.py stage amv-calibration`, then rerun this status check."
+            "Stage maintainer-accepted real AMV command-response trace bundle and accepted "
+            "hardware-calibrated source provenance, then rerun this status check."
             if not ready
-            else "AMV command-response trace bundle is staged and manifest-clean for calibration ingest."
+            else "AMV command-response trace bundle is staged and manifest-clean; calibration ingest allowed."
         ),
     }
 
 
-def build_amv_command_response_source_status(
-    manifest_path: Path | None = None,
-) -> dict[str, Any]:
-    """Return issue #2000 AMV command-response source acquisition status.
-
-    This is a source-readiness gate only. It does not ingest trace samples, derive
-    actuation values, or promote calibration claims.
-    """
-    asset_report = check_asset("amv-calibration")
-    manifest_source = manifest_path or DEFAULT_AMV_COMMAND_RESPONSE_MANIFEST
-
+def _load_amv_source_trace_payload(
+    manifest_source: Path,
+) -> tuple[dict[str, Any], dict[str, Any] | None, str | None]:
     try:
         manifest_payload = yaml.safe_load(manifest_source.read_text(encoding="utf-8")) or {}
-    except OSError as exc:
-        manifest_payload = {}
-        manifest_error = str(exc)
-    else:
-        manifest_error = None
+    except (OSError, yaml.YAMLError) as exc:
+        return {}, None, str(exc)
 
     traces = manifest_payload.get("traces", [])
     trace = next(
         (item for item in traces if item.get("asset_id") == "amv-calibration"),
         {},
     )
-    provenance = trace.get("provenance", {}) if isinstance(trace, dict) else {}
+    return manifest_payload, trace, None
+
+
+def _amv_trace_signal_inventory(
+    trace: dict[str, Any] | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     channel_fields = {
         "command": trace.get("command_channels", []) if isinstance(trace, dict) else [],
         "response": trace.get("response_channels", []) if isinstance(trace, dict) else [],
@@ -2139,7 +2192,62 @@ def build_amv_command_response_source_status(
         group: sorted(set(required) - set(channel_fields.get(group, [])))
         for group, required in AMV_COMMAND_RESPONSE_SOURCE_REQUIREMENTS["required_channels"].items()
     }
-    missing_channels = {group: fields for group, fields in missing_channels.items() if fields}
+    return channel_fields, {group: fields for group, fields in missing_channels.items() if fields}
+
+
+def _check_amv_source_manifest_status(
+    source_manifest_source: Path,
+) -> tuple[dict[str, Any], bool, bool]:
+    from robot_sf.benchmark.amv_calibration_source_manifest import (
+        AmvCalibrationSourceManifestError,
+        check_amv_calibration_source_manifest,
+        load_amv_calibration_source_manifest,
+    )
+    from robot_sf.benchmark.synthetic_actuation import actuation_variability_fields
+
+    try:
+        source_manifest = load_amv_calibration_source_manifest(source_manifest_source)
+        source_report = check_amv_calibration_source_manifest(
+            source_manifest,
+            allowed_calibration_fields=set(actuation_variability_fields()),
+        )
+    except (AmvCalibrationSourceManifestError, ValueError) as exc:
+        return (
+            {
+                "source_status": "invalid",
+                "hardware_calibration_claim_allowed": False,
+                "error": str(exc),
+            },
+            False,
+            False,
+        )
+
+    return (
+        source_report.to_dict(),
+        source_report.is_ready,
+        source_report.hardware_calibration_claim_allowed,
+    )
+
+
+def build_amv_command_response_source_status(
+    manifest_path: Path | None = None,
+    source_manifest_path: Path | None = None,
+) -> dict[str, Any]:
+    """Return issue #2000 AMV command-response source acquisition status.
+
+    This integrates the trace staging manifest with the #1585 source-provenance
+    manifest. It does not ingest trace samples, derive actuation values, or
+    promote calibration claims.
+    """
+    asset_report = check_asset("amv-calibration")
+    manifest_source = manifest_path or DEFAULT_AMV_COMMAND_RESPONSE_MANIFEST
+    source_manifest_source = source_manifest_path or DEFAULT_AMV_CALIBRATION_SOURCE_MANIFEST
+
+    _, trace, manifest_error = _load_amv_source_trace_payload(manifest_source)
+    channel_fields, missing_channels = _amv_trace_signal_inventory(trace)
+    source_payload, source_ready, hardware_source_ready = _check_amv_source_manifest_status(
+        source_manifest_source
+    )
 
     blocker_keys: list[str] = []
     if manifest_error is not None:
@@ -2151,9 +2259,11 @@ def build_amv_command_response_source_status(
     if trace.get("staging_status") != "staged":
         blocker_keys.append("command_response_trace_not_staged")
     if trace.get("blocker_issues"):
-        blocker_keys.append("source_blocker_issues_open")
-    if provenance.get("license_status") in {None, "", "unknown", "pending"}:
-        blocker_keys.append("source_license_or_access_terms_unknown")
+        blocker_keys.append("trace_blocker_issues_open")
+    if not source_ready:
+        blocker_keys.append("amv_calibration_source_manifest_not_ready")
+    if source_ready and not hardware_source_ready:
+        blocker_keys.append("amv_calibration_source_not_hardware_calibrated")
     if missing_channels:
         blocker_keys.append("required_signal_inventory_incomplete")
 
@@ -2166,12 +2276,12 @@ def build_amv_command_response_source_status(
         "blocked_external_input": not ready,
         "blockers": blocker_keys,
         "manifest_path": str(manifest_source),
+        "source_manifest_path": str(source_manifest_source),
         "manifest_error": manifest_error,
         "asset_status": asset_report,
         "trace_staging_status": trace.get("staging_status"),
         "trace_blocker_issues": trace.get("blocker_issues", []),
-        "source_url": provenance.get("source_url"),
-        "license_status": provenance.get("license_status"),
+        "source_manifest_report": source_payload,
         "required_source_contract": AMV_COMMAND_RESPONSE_SOURCE_REQUIREMENTS,
         "available_signal_inventory": channel_fields,
         "missing_signal_inventory": missing_channels,
@@ -2179,9 +2289,8 @@ def build_amv_command_response_source_status(
             "source_acquisition_contract_only_no_trace_ingest_no_calibration_run"
         ),
         "next_step": (
-            "Stage maintainer-accepted real AMV command-response trace bundle "
-            "with source consent/access terms through `manage_external_data.py "
-            "stage amv-calibration`, then rerun source status."
+            "Stage maintainer-accepted real AMV command-response trace bundle with "
+            "source consent/access terms, then rerun source status."
             if not ready
             else "AMV command-response source bundle is locally staged and contract-ready."
         ),
@@ -2190,14 +2299,14 @@ def build_amv_command_response_source_status(
 
 def _handle_amv_calibration_status(args: argparse.Namespace) -> int:
     """Handle amv-calibration-status subcommand."""
-    payload = build_amv_calibration_status(args.manifest)
+    payload = build_amv_calibration_status(args.manifest, args.source_manifest)
     _print_json(payload)
     return 0 if payload["ready"] else 2
 
 
 def _handle_amv_command_response_source_status(args: argparse.Namespace) -> int:
     """Handle amv-command-response-source-status subcommand."""
-    payload = build_amv_command_response_source_status(args.manifest)
+    payload = build_amv_command_response_source_status(args.manifest, args.source_manifest)
     _print_json(payload)
     return 0 if payload["ready"] else 2
 

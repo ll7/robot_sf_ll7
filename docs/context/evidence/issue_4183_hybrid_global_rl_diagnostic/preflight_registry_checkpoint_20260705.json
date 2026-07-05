@@ -1,0 +1,29 @@
+{
+  "baseline_config": "configs/benchmarks/issue_4183_learned_local_unconditioned.yaml",
+  "checkpoint_reference": {
+    "claim_boundary": "benchmark_promoted",
+    "local_path": "output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip",
+    "model_id": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417",
+    "observation_mode": "dict",
+    "type": "model_id"
+  },
+  "checkpoint_sha256": null,
+  "claim_boundary": "diagnostic-only paired route/occupancy comparison; not benchmark-improvement or paper-facing evidence",
+  "dt": 0.1,
+  "errors": [
+    "blocked_missing_learned_checkpoint: output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip"
+  ],
+  "horizon": 120,
+  "issue": 4183,
+  "learned_policy_checkpoint": "output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip",
+  "learned_policy_model_id": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417",
+  "route_config": "configs/benchmarks/issue_4183_hybrid_global_rl_route_conditioned.yaml",
+  "scenario_matrix": "configs/scenarios/single/francis2023_intersection_wait.yaml",
+  "schema_version": "issue-4183-hybrid-global-rl-diagnostic.v1",
+  "seeds": [
+    4183,
+    4184,
+    4185
+  ],
+  "status": "blocked_missing_learned_checkpoint"
+}

@@ -82,6 +82,41 @@ def _mini_registry(tmp_path: Path) -> Path:
     )
 
 
+def _dataset_staging_contract(
+    tmp_path: Path, staging_status: str = "blocked-external-input"
+) -> Path:
+    """Write a minimal Issue #3161 dataset-backed staging contract."""
+
+    return _write_yaml(
+        tmp_path / "configs" / "research" / "scenario_prior_staging_contract_issue_3161.yaml",
+        {
+            "schema_version": "scenario_prior_staging_contract.v1",
+            "contract_id": "scenario_prior_staging_contract_issue_3161",
+            "issue": 3161,
+            "claim_boundary": "metadata-only staging readiness; no dataset-backed claim",
+            "authored_baseline": "configs/research/scenario_prior_cards_issue_2917.yaml",
+            "comparison_harness": "scripts/analysis/compare_scenario_priors_issue_2919.py",
+            "datasets": [
+                {
+                    "dataset_id": "sdd",
+                    "asset_id": "sdd",
+                    "title": "Stanford Drone Dataset annotations",
+                    "staging_status": staging_status,
+                    "redistribution": "none",
+                    "blocker_issues": [3065],
+                    "provenance": {
+                        "source_url": "https://cvgl.stanford.edu/projects/uav_data/",
+                        "license": "BYO local copy",
+                        "license_status": "license-gated",
+                        "citation": "Robicquet et al., ECCV 2016.",
+                    },
+                    "distribution_fields": ["pedestrian_speed", "pedestrian_density"],
+                }
+            ],
+        },
+    )
+
+
 def test_extract_parameter_samples_groups_ranges_and_scalars(tmp_path: Path) -> None:
     """Extractor should group supported scalar and range keys under canonical parameters."""
 
@@ -173,6 +208,7 @@ def test_run_comparison_writes_report_csv_and_summary(tmp_path: Path) -> None:
         registry_path=registry.relative_to(tmp_path),
         output_dir=output_dir.relative_to(tmp_path),
         repo_root=tmp_path,
+        dataset_staging_contract=None,
     )
 
     report_path = output_dir / comparator.REPORT_NAME
@@ -217,4 +253,46 @@ def test_run_comparison_fails_when_no_common_parameters(tmp_path: Path) -> None:
             registry_path=registry.relative_to(tmp_path),
             output_dir=Path("out"),
             repo_root=tmp_path,
+            dataset_staging_contract=None,
+        )
+
+
+def test_run_comparison_records_dataset_staging_blocker(tmp_path: Path) -> None:
+    """Runner should include Issue #3161 staging readiness without claiming dataset comparison."""
+
+    registry = _mini_registry(tmp_path)
+    contract = _dataset_staging_contract(tmp_path)
+    output_dir = tmp_path / "out"
+
+    summary = comparator.run_comparison(
+        registry_path=registry.relative_to(tmp_path),
+        output_dir=output_dir.relative_to(tmp_path),
+        repo_root=tmp_path,
+        dataset_staging_contract=contract.relative_to(tmp_path),
+    )
+
+    staging = summary["dataset_backed_staging"]
+    assert staging["contract_status"] == "blocked-external-input"
+    assert staging["dataset_backed_comparison_allowed"] is False
+    assert staging["comparison_ready_datasets"] == []
+
+    report = (output_dir / comparator.REPORT_NAME).read_text(encoding="utf-8")
+    assert "## Dataset-Backed Readiness" in report
+    assert "Contract status: `blocked-external-input`" in report
+    assert "Dataset-backed comparison allowed: `False`" in report
+
+
+def test_run_comparison_require_dataset_ready_fails_closed(tmp_path: Path) -> None:
+    """Require-ready mode should stop before producing dataset-backed comparison claims."""
+
+    registry = _mini_registry(tmp_path)
+    contract = _dataset_staging_contract(tmp_path)
+
+    with pytest.raises(comparator.ScenarioPriorComparisonError, match="staging contract"):
+        comparator.run_comparison(
+            registry_path=registry.relative_to(tmp_path),
+            output_dir=Path("out"),
+            repo_root=tmp_path,
+            dataset_staging_contract=contract.relative_to(tmp_path),
+            require_dataset_backed_ready=True,
         )

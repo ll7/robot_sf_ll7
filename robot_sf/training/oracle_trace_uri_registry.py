@@ -95,7 +95,9 @@ def validate_trace_uri_registry(
     _require_non_empty_string(registry, "dataset_id", errors)
 
     traces = _validate_traces(registry, root, errors)
-    splits_to_trace_ids, retrieval_status, resolvable_required = _summarize_traces(traces)
+    splits_to_trace_ids, retrieval_status, resolvable_required, source_manifests = (
+        _summarize_traces(traces)
+    )
     training_ready = _validate_training_ready_gate(
         splits_to_trace_ids,
         resolvable_required,
@@ -116,6 +118,7 @@ def validate_trace_uri_registry(
         "trace_count": len(traces),
         "splits": {split: splits_to_trace_ids.get(split, []) for split in _REQUIRED_SPLITS},
         "retrieval_status": retrieval_status,
+        "source_manifests": source_manifests,
         "training_ready": training_ready,
     }
 
@@ -175,6 +178,7 @@ def _validate_single_trace(
     uri = _validate_trace_uri(label, trace.get("uri"), errors)
     _validate_trace_checksum(label, trace.get("sha256"), status, errors)
     _validate_local_mirror(label, trace.get("local_mirror"), trace.get("sha256"), repo_root, errors)
+    _validate_source_manifest_metadata(label, trace, status, repo_root, errors)
     # Mark the concrete-durable check result so the gate logic can reuse it.
     trace["_uri_is_concrete_durable"] = uri is not None and _is_concrete_durable_uri(uri)
 
@@ -271,9 +275,43 @@ def _validate_local_mirror(
         )
 
 
+def _validate_source_manifest_metadata(
+    label: str,
+    trace: dict[str, Any],
+    status: Any,
+    repo_root: Path,
+    errors: list[str],
+) -> None:
+    """Validate provenance metadata for the source manifest behind a trace JSONL."""
+    raw_uri = trace.get("source_manifest_uri")
+    raw_sha = trace.get("source_manifest_sha256")
+    raw_mirror = trace.get("source_manifest_local_mirror")
+
+    if status == "resolvable":
+        if raw_uri is None:
+            errors.append(f"{label}.source_manifest_uri required retrieval_status 'resolvable'")
+        if raw_sha is None:
+            errors.append(f"{label}.source_manifest_sha256 required retrieval_status 'resolvable'")
+
+    uri = None
+    if raw_uri is not None:
+        uri = _validate_trace_uri(f"{label}.source_manifest", raw_uri, errors)
+    _validate_trace_checksum(f"{label}.source_manifest", raw_sha, status, errors)
+    _validate_local_mirror(
+        f"{label}.source_manifest",
+        raw_mirror,
+        raw_sha,
+        repo_root,
+        errors,
+    )
+    trace["_source_manifest_is_concrete_durable"] = uri is not None and _is_concrete_durable_uri(
+        uri
+    )
+
+
 def _summarize_traces(
     traces: list[dict[str, Any]],
-) -> tuple[dict[str, list[str]], dict[str, str], dict[str, bool]]:
+) -> tuple[dict[str, list[str]], dict[str, str], dict[str, bool], dict[str, str]]:
     """Build per-split trace-id lists, a trace-id->status map, and resolvable-required flags.
 
     Returns:
@@ -283,6 +321,7 @@ def _summarize_traces(
     splits_to_trace_ids: dict[str, list[str]] = {}
     retrieval_status: dict[str, str] = {}
     resolvable_required: dict[str, bool] = dict.fromkeys(_REQUIRED_SPLITS, False)
+    source_manifests: dict[str, str] = {}
     for trace in traces:
         split = trace.get("split")
         trace_id = trace.get("trace_id")
@@ -294,13 +333,17 @@ def _summarize_traces(
             splits_to_trace_ids.setdefault(split, []).append(trace_id)
         if isinstance(status, str):
             retrieval_status[trace_id] = status
+        source_manifest_uri = trace.get("source_manifest_uri")
+        if isinstance(source_manifest_uri, str) and source_manifest_uri.strip():
+            source_manifests[trace_id] = source_manifest_uri.strip()
         if (
             split in _REQUIRED_SPLITS
             and status == "resolvable"
             and trace.get("_uri_is_concrete_durable", False)
+            and trace.get("_source_manifest_is_concrete_durable", False)
         ):
             resolvable_required[split] = True
-    return splits_to_trace_ids, retrieval_status, resolvable_required
+    return splits_to_trace_ids, retrieval_status, resolvable_required, source_manifests
 
 
 def _validate_training_ready_gate(

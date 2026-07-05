@@ -40,6 +40,8 @@ def _training_ready_registry() -> dict[str, object]:
                 "uri": "wandb-artifact://robot-sf/oracle-imitation/train:v1",
                 "sha256": "a" * 64,
                 "retrieval_status": "resolvable",
+                "source_manifest_uri": "wandb-artifact://robot-sf/oracle-imitation/train_manifest:v1",
+                "source_manifest_sha256": "1" * 64,
             },
             {
                 "split": "validation",
@@ -47,6 +49,8 @@ def _training_ready_registry() -> dict[str, object]:
                 "uri": "wandb-artifact://robot-sf/oracle-imitation/val:v1",
                 "sha256": "b" * 64,
                 "retrieval_status": "resolvable",
+                "source_manifest_uri": "wandb-artifact://robot-sf/oracle-imitation/val_manifest:v1",
+                "source_manifest_sha256": "2" * 64,
             },
             {
                 "split": "evaluation",
@@ -54,6 +58,8 @@ def _training_ready_registry() -> dict[str, object]:
                 "uri": "wandb-artifact://robot-sf/oracle-imitation/eval:v1",
                 "sha256": "c" * 64,
                 "retrieval_status": "resolvable",
+                "source_manifest_uri": "wandb-artifact://robot-sf/oracle-imitation/eval_manifest:v1",
+                "source_manifest_sha256": "3" * 64,
             },
         ],
     }
@@ -71,6 +77,7 @@ def test_complete_registry_is_training_ready(tmp_path: Path) -> None:
     assert report["training_ready"] is True
     assert report["trace_count"] == 3
     assert report["retrieval_status"]["train__demo_v1"] == "resolvable"
+    assert report["source_manifests"]["train__demo_v1"].endswith("/train_manifest:v1")
 
 
 def test_missing_uri_fails_closed(tmp_path: Path) -> None:
@@ -90,6 +97,18 @@ def test_missing_checksum_for_resolvable_fails_closed(tmp_path: Path) -> None:
     with pytest.raises(
         OracleTraceUriRegistryError,
         match="sha256 is required when retrieval_status is 'resolvable'",
+    ):
+        validate_trace_uri_registry(_write_registry(tmp_path, registry))
+
+
+def test_missing_source_manifest_for_resolvable_fails_closed(tmp_path: Path) -> None:
+    """A resolvable trace must bind JSONL bytes to source manifest provenance."""
+    registry = _training_ready_registry()
+    del registry["traces"][0]["source_manifest_uri"]
+
+    with pytest.raises(
+        OracleTraceUriRegistryError,
+        match="source_manifest_uri required retrieval_status 'resolvable'",
     ):
         validate_trace_uri_registry(_write_registry(tmp_path, registry))
 

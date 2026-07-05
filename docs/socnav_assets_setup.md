@@ -180,6 +180,23 @@ step produces the exact `eth_traversible_pickle` input that
 `scripts/tools/validate_socnav_map_batch.py --batch-id eth_first --preflight` reports as missing,
 so generating it unblocks the ETH map conversion (issue #1134).
 
+## 8. Convert ETH Traversible to Robot SF SVG
+
+After `eth_first` source assets pass preflight, convert the staged ETH traversible into the planned
+Robot SF SVG map with:
+
+```bash
+uv run python scripts/tools/convert_socnavbench_traversible_to_svg.py \
+  --socnav-root /path/to/socnavbench \
+  --output-svg maps/svg_maps/socnavbench/socnavbench_eth.svg \
+  --report-json output/maps/issue_1134_socnavbench_eth_conversion.json
+```
+
+Use `--dry-run` to validate the source pickle and conversion shape without writing the SVG. If the
+official `traversibles/ETH/data.pkl` is absent or malformed, the converter exits `2` and writes no
+placeholder map. This is conversion tooling only; it is not benchmark evidence until the generated
+SVG passes parser and smoke validation on staged source assets.
+
 ## Licensing and Repository Hygiene
 
 - Do not commit downloaded dataset assets.

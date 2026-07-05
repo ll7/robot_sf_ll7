@@ -1,5 +1,8 @@
 # Context Retrieval Index
 
+Recent reactivity-vs-replay rank-study closure audit:
+[issue_3637_closure_audit_2026-07-05.md](evidence/issue_3637_closure_audit_2026-07-05.md).
+
 Recent serial benchmark GPU memory closure audit:
 [issue_4520_gpu_memory_closure_audit_2026-07-05.md](issue_4520_gpu_memory_closure_audit_2026-07-05.md).
 

@@ -14,10 +14,12 @@ from robot_sf.benchmark.map_runner import _build_policy
 from robot_sf.training.diffusion_policy import (
     DIAGNOSTIC_PACKET_SCHEMA_VERSION,
     MULTIMODAL_PROBE_SCHEMA_VERSION,
+    REPRESENTATIVE_ROLLOUT_SCHEMA_VERSION,
     SMOKE_MANIFEST_SCHEMA_VERSION,
     DiffusionPolicyTrainingSmokeConfig,
     build_diagnostic_packet,
     build_multimodal_probe,
+    build_representative_rollout,
     load_smoke_config,
     run_training_smoke,
 )
@@ -209,6 +211,35 @@ def test_multimodal_probe_records_fixed_conflict_modes(tmp_path) -> None:
     assert "multimodal_action_probe" not in {item["id"] for item in packet["remaining_blockers"]}
 
 
+def test_representative_rollout_records_checkpoint_backed_trajectory(tmp_path) -> None:
+    """Representative rollout records finite bounded diagnostic scenario commands."""
+    config = DiffusionPolicyTrainingSmokeConfig(
+        training_steps=2,
+        batch_size=4,
+        max_pedestrians=2,
+        artifact_prefix="representative_rollout",
+    )
+    artifacts = run_training_smoke(config, output_dir=tmp_path)
+
+    rollout = build_representative_rollout(
+        artifacts.manifest,
+        artifact_dir=artifacts.manifest_path.parent,
+        step_count=6,
+    )
+    packet = build_diagnostic_packet(artifacts.manifest, representative_rollout=rollout)
+
+    assert rollout["schema_version"] == REPRESENTATIVE_ROLLOUT_SCHEMA_VERSION
+    assert rollout["evidence_tier"] == "diagnostic-only"
+    assert rollout["scenario_family"] == "crossing"
+    assert rollout["passed"] is True
+    assert rollout["finite_command_count"] == 6
+    assert rollout["commands_within_limits"] is True
+    assert rollout["runtime_loaded_checkpoint"] is True
+    assert len(rollout["trajectory"]) == 6
+    assert packet["acceptance_status"]["representative_rollout"] is True
+    assert "representative_rollout" not in {item["id"] for item in packet["remaining_blockers"]}
+
+
 def test_training_script_can_write_multimodal_probe_and_packet(tmp_path) -> None:
     """Canonical command writes fixed-conflict probe and packet together."""
     config_path = tmp_path / "smoke.yaml"
@@ -251,6 +282,50 @@ def test_training_script_can_write_multimodal_probe_and_packet(tmp_path) -> None
     assert probe["schema_version"] == MULTIMODAL_PROBE_SCHEMA_VERSION
     assert probe["passed"] is True
     assert packet["multimodal_probe"]["passed"] is True
+
+
+def test_training_script_can_write_representative_rollout_and_packet(tmp_path) -> None:
+    """Canonical command writes representative rollout into packet."""
+    config_path = tmp_path / "smoke.yaml"
+    output_dir = tmp_path / "artifacts"
+    config_path.write_text(
+        "diffusion_policy_training_smoke:\n"
+        "  schema_version: diffusion_policy_training_smoke.v1\n"
+        "  training_steps: 2\n"
+        "  batch_size: 4\n"
+        "  max_pedestrians: 2\n"
+        "  artifact_prefix: cli_rollout\n",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/training/train_diffusion_policy.py",
+            "--config",
+            str(config_path),
+            "--output-dir",
+            str(output_dir),
+            "--write-representative-rollout",
+            "--rollout-steps",
+            "6",
+            "--write-diagnostic-packet",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(completed.stdout)
+    rollout_path = output_dir / "cli_rollout.manifest.representative_rollout.json"
+    packet_path = output_dir / "cli_rollout.manifest.diagnostic_packet.json"
+    assert payload["representative_rollout_path"] == str(rollout_path)
+    assert payload["diagnostic_packet_path"] == str(packet_path)
+    rollout = json.loads(rollout_path.read_text(encoding="utf-8"))
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    assert rollout["schema_version"] == REPRESENTATIVE_ROLLOUT_SCHEMA_VERSION
+    assert rollout["passed"] is True
+    assert packet["representative_rollout"]["passed"] is True
 
 
 def test_diagnostic_packet_records_checkpoint_backed_integration(tmp_path) -> None:

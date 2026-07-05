@@ -1,0 +1,277 @@
+{
+  "alpha_arms": [
+    {
+      "applies_to_planner_families": "all_declared_mpc_families",
+      "dt": 0.1,
+      "key": "envelope_off_alpha_0",
+      "kinematics_matrix": [
+        "differential_drive"
+      ],
+      "max_episode_steps": 600,
+      "pedestrian_uncertainty_alpha_mps": 0.0,
+      "pedestrian_uncertainty_envelope_enabled": false,
+      "purpose": "control_baseline",
+      "scenario_surface_ref": "scenario_surface",
+      "seed_set_ref": "seed_policy"
+    },
+    {
+      "applies_to_planner_families": "all_declared_mpc_families",
+      "dt": 0.1,
+      "key": "envelope_on_alpha_0",
+      "kinematics_matrix": [
+        "differential_drive"
+      ],
+      "max_episode_steps": 600,
+      "pedestrian_uncertainty_alpha_mps": 0.0,
+      "pedestrian_uncertainty_envelope_enabled": true,
+      "purpose": "regression_equivalence",
+      "scenario_surface_ref": "scenario_surface",
+      "seed_set_ref": "seed_policy"
+    },
+    {
+      "applies_to_planner_families": "all_declared_mpc_families",
+      "dt": 0.1,
+      "key": "envelope_on_alpha_0p05",
+      "kinematics_matrix": [
+        "differential_drive"
+      ],
+      "max_episode_steps": 600,
+      "pedestrian_uncertainty_alpha_mps": 0.05,
+      "pedestrian_uncertainty_envelope_enabled": true,
+      "purpose": "diagnostic_nonzero_alpha_low",
+      "scenario_surface_ref": "scenario_surface",
+      "seed_set_ref": "seed_policy"
+    },
+    {
+      "applies_to_planner_families": "all_declared_mpc_families",
+      "dt": 0.1,
+      "key": "envelope_on_alpha_0p10",
+      "kinematics_matrix": [
+        "differential_drive"
+      ],
+      "max_episode_steps": 600,
+      "pedestrian_uncertainty_alpha_mps": 0.1,
+      "pedestrian_uncertainty_envelope_enabled": true,
+      "purpose": "diagnostic_nonzero_alpha_mid",
+      "scenario_surface_ref": "scenario_surface",
+      "seed_set_ref": "seed_policy"
+    },
+    {
+      "applies_to_planner_families": "all_declared_mpc_families",
+      "dt": 0.1,
+      "key": "envelope_on_alpha_0p20",
+      "kinematics_matrix": [
+        "differential_drive"
+      ],
+      "max_episode_steps": 600,
+      "pedestrian_uncertainty_alpha_mps": 0.2,
+      "pedestrian_uncertainty_envelope_enabled": true,
+      "purpose": "diagnostic_nonzero_alpha_high",
+      "scenario_surface_ref": "scenario_surface",
+      "seed_set_ref": "seed_policy"
+    }
+  ],
+  "artifact_provenance": {
+    "raw_artifacts_git_policy": "keep_out_of_git",
+    "require_packet_sha256": true,
+    "require_planner_alpha_roster": true,
+    "require_public_commit_hash": true,
+    "require_resolved_seed_manifest": true,
+    "require_row_status_audit": true,
+    "require_scenario_matrix_sha256": true
+  },
+  "claim_boundary": "Benchmark evidence planning packet only. Runtime support exists from PR #4229, but this packet does not establish safety, performance, conformal-calibration, dissertation, paper, real-world, deployment, or generalized planner-superiority claims.",
+  "claim_modes": {
+    "allowed_after_evidence": [
+      "diagnostic_alpha_effect",
+      "bounded_mpc_family_safety_tradeoff"
+    ],
+    "forbidden_without_followup": [
+      "conformal_coverage_guarantee",
+      "real_world_safety_claim",
+      "deployment_certification",
+      "generalized_planner_superiority",
+      "paper_or_dissertation_claim"
+    ]
+  },
+  "claim_update_conditions": {
+    "benchmark_report_update_allowed": "after_tier2_evidence_and_row_status_audit",
+    "claim_map_update_allowed": "after_tier2_evidence_and_maintainer_claim_boundary_review",
+    "conformal_calibration_claim_allowed": false,
+    "paper_or_dissertation_update_allowed": "separate_pr_after_explicit_maintainer_signoff"
+  },
+  "diagnostic_runner": {
+    "claim_boundary": "CPU-local diagnostic smoke runner only. Outputs are ignored by default and remain ineligible for benchmark-strength, paper, dissertation, conformal, deployment, or real-world safety claims unless a later reviewed evidence PR explicitly promotes bounded claim support.",
+    "default_output_dir": "output/issue_4232_uncertainty_envelope_diagnostic_smoke",
+    "default_row_status": "diagnostic_only",
+    "path": "scripts/benchmark/run_issue_4232_uncertainty_envelope_alpha_sweep.py",
+    "phase": "diagnostic-smoke"
+  },
+  "evidence_status": "pre_registered_no_evidence",
+  "evidence_tiers": {
+    "tier0_runtime_smoke": {
+      "claim_allowed": false,
+      "source_pr": 4229,
+      "status": "implementation_integrity_only"
+    },
+    "tier1_cpu_diagnostic_alpha_sweep": {
+      "claim_allowed": false,
+      "status": "diagnostic_effect_size_screening_only"
+    },
+    "tier2_private_slurm_benchmark_campaign": {
+      "claim_allowed": "bounded_after_review",
+      "status": "candidate_benchmark_evidence_if_row_status_denominators_pass"
+    },
+    "tier3_claim_map_or_paper_integration": {
+      "claim_allowed": "bounded_after_explicit_claim_boundary_review",
+      "status": "maintainer_signoff_required"
+    }
+  },
+  "execution_boundary": {
+    "compute_submit_authorized": false,
+    "local_submission_allowed": false,
+    "run_benchmark": false,
+    "slurm_job_id": "not_submitted",
+    "target_host": "not_applicable"
+  },
+  "issue": 4232,
+  "metrics": {
+    "primary": [
+      "collision_rate",
+      "near_miss_rate",
+      "minimum_clearance",
+      "social_proxemic_minimum_clearance",
+      "success_rate",
+      "timeout_share",
+      "progress_to_goal",
+      "path_efficiency",
+      "planner_infeasible_rate",
+      "fallback_rate",
+      "projection_rate",
+      "runtime_per_episode"
+    ],
+    "secondary_diagnostic": [
+      "snqi_diagnostic_only",
+      "comfort_exposure",
+      "social_proxemic_intrusion_fraction",
+      "pedestrian_impact_proxy",
+      "envelope_activation_count",
+      "effective_radius_used_by_planner"
+    ]
+  },
+  "name": "issue_4232_uncertainty_envelope_claim_packet",
+  "outputs": {
+    "compact_review_bundle": "docs/context/evidence/issue_4232_uncertainty_envelope_claim_evidence_2026-07",
+    "prohibited_git_artifacts": [
+      "raw_episode_jsonl",
+      "videos",
+      "slurm_logs",
+      "checkpoints",
+      "model_caches"
+    ],
+    "required_review_artifacts": [
+      "README.md",
+      "metadata.json",
+      "pre_registration_packet.json",
+      "alpha_arm_metric_table.csv",
+      "paired_alpha_delta_table.csv",
+      "row_status_audit.csv",
+      "envelope_activation_diagnostics.json",
+      "envelope_activation_diagnostics.md",
+      "runtime_cost_report.csv",
+      "claim_boundary.md",
+      "claim_readiness.md",
+      "SHA256SUMS"
+    ]
+  },
+  "parent_runtime_issue": 4141,
+  "planner_families": [
+    {
+      "base_config_path": "configs/algos/prediction_mpc_cv_uncertainty_envelope.yaml",
+      "claim_modes": [
+        "envelope_effect"
+      ],
+      "family": "mpc",
+      "planner_id": "prediction_mpc"
+    },
+    {
+      "base_config_path": "configs/algos/prediction_mpc_cv_cbf_dynamic_parabolic_v1.yaml",
+      "claim_modes": [
+        "envelope_effect"
+      ],
+      "family": "mpc",
+      "planner_id": "prediction_mpc_cbf"
+    },
+    {
+      "base_config_path": "configs/algos/nmpc_social_exploratory.yaml",
+      "claim_modes": [
+        "envelope_effect"
+      ],
+      "family": "mpc",
+      "planner_id": "nmpc_social"
+    }
+  ],
+  "row_status_policy": {
+    "allowed_values": [
+      "successful_evidence",
+      "diagnostic_only",
+      "fallback",
+      "degraded",
+      "not_available",
+      "failed",
+      "blocked"
+    ],
+    "benchmark_strength_success_values": [
+      "successful_evidence"
+    ],
+    "fallback_policy": "Fallback, degraded, adapter-unavailable, diagnostic-only, failed, and blocked rows remain visible in denominator reports but cannot count as successful benchmark-strength evidence.",
+    "ineligible_benchmark_strength_values": [
+      "diagnostic_only",
+      "fallback",
+      "degraded",
+      "not_available",
+      "failed",
+      "blocked"
+    ]
+  },
+  "runtime_completion_pr": 4229,
+  "scenario_surface": {
+    "dt": 0.1,
+    "kinematics_matrix": [
+      "differential_drive"
+    ],
+    "matrix_path": "configs/scenarios/classic_interactions_francis2023.yaml",
+    "max_episode_steps": 600,
+    "scope": "pedestrian_interaction_safety_sensitive_subset_or_full_matrix",
+    "selection_policy": "predeclared_before_run"
+  },
+  "schema_version": "uncertainty-envelope-claim-packet.v1",
+  "seed_policy": {
+    "mode": "fixed-list",
+    "repeat_policy": "every_planner_scenario_alpha_arm_pair",
+    "seed_set_name": "issue_4232_eval_s3_diagnostic_seed_set",
+    "seeds": [
+      111,
+      112,
+      113
+    ]
+  },
+  "stop_rules": [
+    {
+      "id": "alpha_zero_equivalence",
+      "rule": "Stop if envelope_on_alpha_0 differs materially from envelope_off_alpha_0 under identical seeds unless the difference is explained by known identity or plumbing behavior."
+    },
+    {
+      "id": "nonzero_alpha_fallback_only",
+      "rule": "Stop if nonzero alpha produces only fallback, degraded, failed, or unavailable rows."
+    },
+    {
+      "id": "safety_runtime_tradeoff_revision",
+      "rule": "Revise if alpha improves clearance but collapses success or runtime beyond a predeclared tolerance."
+    },
+    {
+      "id": "claim_review_entry",
+      "rule": "Continue to claim review only if paired nonzero-alpha arms show interpretable safety or comfort changes with row-status-valid denominators."
+    }
+  ]
+}

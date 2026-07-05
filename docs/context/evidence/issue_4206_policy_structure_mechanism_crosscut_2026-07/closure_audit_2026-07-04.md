@@ -15,6 +15,17 @@ execution, not another tracked checker.
 - Out of scope: no benchmark campaign run, no Slurm/GPU submission, no paper or dissertation claim
   edits, no causal claim promotion.
 
+## July 5 Live-Issue Reconciliation
+
+The live issue thread was re-read on 2026-07-05 after PR #4495 merged. The newest owner
+guidance says the actual trace-capable h600 private-queue campaign has not yet run, so this
+issue remains blocked until that campaign emits trace-verified mechanism labels. This confirms
+the July 4 closure audit decision and does not authorize another checker-only micro-slice.
+
+Because more than two #4206-related guardrail, checker, packet-refresh, or audit PRs merged in
+the last 24 hours, this file is the canonical tracked consolidation surface for this PR. No
+transient queue-routing state is encoded here.
+
 ## Acceptance Evidence
 
 | Acceptance criterion | Delivered evidence | Status |

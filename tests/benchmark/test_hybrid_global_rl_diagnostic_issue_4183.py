@@ -116,9 +116,9 @@ def test_preflight_blocks_missing_registry_entry(tmp_path: Path) -> None:
     route_payload = yaml.safe_load(ROUTE_CONFIG.read_text(encoding="utf-8"))
     baseline_payload = yaml.safe_load(BASELINE_CONFIG.read_text(encoding="utf-8"))
     route_payload["issue_4183_diagnostic"]["learned_policy_model_id"] = "missing_issue_4183_model"
-    baseline_payload["issue_4183_diagnostic"][
-        "learned_policy_model_id"
-    ] = "missing_issue_4183_model"
+    baseline_payload["issue_4183_diagnostic"]["learned_policy_model_id"] = (
+        "missing_issue_4183_model"
+    )
     route_path = tmp_path / "route.yaml"
     baseline_path = tmp_path / "baseline.yaml"
     route_path.write_text(yaml.safe_dump(route_payload), encoding="utf-8")

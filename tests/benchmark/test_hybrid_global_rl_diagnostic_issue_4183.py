@@ -19,6 +19,23 @@ from robot_sf.benchmark.hybrid_global_rl_diagnostic import (
 
 ROUTE_CONFIG = Path("configs/benchmarks/issue_4183_hybrid_global_rl_route_conditioned.yaml")
 BASELINE_CONFIG = Path("configs/benchmarks/issue_4183_learned_local_unconditioned.yaml")
+REGISTRY_MODEL_ID = "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
+REGISTRY_CHECKPOINT = (
+    "output/model_cache/"
+    "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip"
+)
+
+
+def _repo_root_with_issue_inputs(tmp_path: Path, *, include_checkpoint: bool = True) -> Path:
+    """Create the repo-relative files #4183 preflight requires."""
+    scenario_path = tmp_path / "configs/scenarios/single/francis2023_intersection_wait.yaml"
+    scenario_path.parent.mkdir(parents=True, exist_ok=True)
+    scenario_path.write_text("scenarios: []\n", encoding="utf-8")
+    checkpoint_path = tmp_path / REGISTRY_CHECKPOINT
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    if include_checkpoint:
+        checkpoint_path.write_text("fake checkpoint for preflight hashing\n", encoding="utf-8")
+    return tmp_path
 
 
 def _record(  # noqa: PLR0913 - test fixture helper keeps row variations explicit.
@@ -62,14 +79,17 @@ def _record(  # noqa: PLR0913 - test fixture helper keeps row variations explici
     }
 
 
-def test_preflight_configs_require_matching_checkpoint_and_existing_paths() -> None:
+def test_preflight_configs_require_matching_checkpoint_and_existing_paths(tmp_path: Path) -> None:
     """The two issue configs declare the same scenario, seeds, horizon, and checkpoint."""
 
-    report = preflight_configs(ROUTE_CONFIG, BASELINE_CONFIG)
+    repo_root = _repo_root_with_issue_inputs(tmp_path)
+    report = preflight_configs(ROUTE_CONFIG, BASELINE_CONFIG, repo_root=repo_root)
     assert report["status"] == "valid"
     assert report["route_config"] == str(ROUTE_CONFIG)
     assert report["baseline_config"] == str(BASELINE_CONFIG)
-    assert report["learned_policy_checkpoint"] == "model/ppo_model_retrained_10m_2025-02-01.zip"
+    assert report["learned_policy_model_id"] == REGISTRY_MODEL_ID
+    assert report["learned_policy_checkpoint"] == REGISTRY_CHECKPOINT
+    assert report["checkpoint_reference"]["type"] == "model_id"
     assert report["checkpoint_sha256"]
 
 
@@ -78,14 +98,13 @@ def test_preflight_blocks_missing_checkpoint(tmp_path: Path) -> None:
 
     route_payload = yaml.safe_load(ROUTE_CONFIG.read_text(encoding="utf-8"))
     baseline_payload = yaml.safe_load(BASELINE_CONFIG.read_text(encoding="utf-8"))
-    route_payload["issue_4183_diagnostic"]["learned_policy_checkpoint"] = "model/missing.zip"
-    baseline_payload["issue_4183_diagnostic"]["learned_policy_checkpoint"] = "model/missing.zip"
     route_path = tmp_path / "route.yaml"
     baseline_path = tmp_path / "baseline.yaml"
     route_path.write_text(yaml.safe_dump(route_payload), encoding="utf-8")
     baseline_path.write_text(yaml.safe_dump(baseline_payload), encoding="utf-8")
 
-    report = preflight_configs(route_path, baseline_path)
+    repo_root = _repo_root_with_issue_inputs(tmp_path / "repo", include_checkpoint=False)
+    report = preflight_configs(route_path, baseline_path, repo_root=repo_root)
 
     assert report["status"] == "blocked_missing_learned_checkpoint"
     assert any("blocked_missing_learned_checkpoint" in error for error in report["errors"])
@@ -109,12 +128,14 @@ def test_build_report_pairs_rows_and_excludes_fallback(tmp_path: Path) -> None:
         _record(algo="ppo", seed=4184, route_progress=0.5),
     ]
 
+    repo_root = _repo_root_with_issue_inputs(tmp_path / "repo")
     summary = build_diagnostic_report(
         route_records=route_records,
         baseline_records=baseline_records,
         route_config_path=ROUTE_CONFIG,
         baseline_config_path=BASELINE_CONFIG,
         output_dir=tmp_path,
+        repo_root=repo_root,
         generated_at="2026-07-03T00:00:00+00:00",
     )
 
@@ -138,12 +159,14 @@ def test_build_report_pairs_rows_and_excludes_fallback(tmp_path: Path) -> None:
 def test_build_report_rejects_unpaired_rows(tmp_path: Path) -> None:
     """Rows without same scenario/seed/checkpoint partner are excluded as pairing errors."""
 
+    repo_root = _repo_root_with_issue_inputs(tmp_path / "repo")
     summary = build_diagnostic_report(
         route_records=[_record(algo="hybrid_global_rl", seed=4183)],
         baseline_records=[_record(algo="ppo", seed=4184)],
         route_config_path=ROUTE_CONFIG,
         baseline_config_path=BASELINE_CONFIG,
         output_dir=tmp_path,
+        repo_root=repo_root,
         generated_at="2026-07-03T00:00:00+00:00",
     )
 
@@ -155,12 +178,14 @@ def test_build_report_rejects_unpaired_rows(tmp_path: Path) -> None:
 def test_build_report_records_blocked_fail_closed_run(tmp_path: Path) -> None:
     """A run that produces no episode rows records blocker reasons instead of evidence."""
 
+    repo_root = _repo_root_with_issue_inputs(tmp_path / "repo")
     summary = build_diagnostic_report(
         route_records=[],
         baseline_records=[],
         route_config_path=ROUTE_CONFIG,
         baseline_config_path=BASELINE_CONFIG,
         output_dir=tmp_path,
+        repo_root=repo_root,
         generated_at="2026-07-03T00:00:00+00:00",
         run_failures=[
             {
@@ -213,3 +238,17 @@ def test_issue_configs_declare_only_route_conditioning_delta() -> None:
     assert baseline_payload["issue_4183_diagnostic"]["arm"] == BASELINE_ARM
     assert route_payload["issue_4183_diagnostic"]["route_conditioning_enabled"] is True
     assert baseline_payload["issue_4183_diagnostic"]["route_conditioning_enabled"] is False
+    assert route_payload["planners"][0]["config"]["local_policy_config"]["obs_mode"] == "dict"
+    assert baseline_payload["planners"][0]["config"]["obs_mode"] == "dict"
+    assert (
+        route_payload["issue_4183_diagnostic"]["learned_policy_model_id"]
+        == baseline_payload["issue_4183_diagnostic"]["learned_policy_model_id"]
+    )
+    assert (
+        route_payload["planners"][0]["config"]["local_policy_config"]["model_id"]
+        == route_payload["issue_4183_diagnostic"]["learned_policy_model_id"]
+    )
+    assert (
+        baseline_payload["planners"][0]["config"]["model_id"]
+        == baseline_payload["issue_4183_diagnostic"]["learned_policy_model_id"]
+    )

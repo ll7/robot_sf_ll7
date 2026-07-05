@@ -65,3 +65,16 @@ benchmark-ready. `--require-benchmark-ready` exits non-zero (3) so callers fail 
 
 No SDD download/ingestion, no real curation run, no benchmark campaign, no Slurm/GPU submission, and
 no paper/dissertation claim edits.
+
+## Decision Packet Slice (2026-07-05)
+
+The preflight CLI can now write a metadata-only decision packet:
+
+```bash
+uv run python scripts/tools/sdd_curation_preflight.py \
+  --annotation <staged>/annotations.txt \
+  --write-decision-packet output/sdd_curation/issue_1126/decision_packet.json \
+  --json
+```
+
+The packet records the readiness report, selected annotation path, curation parameters, next preflight/import commands, and raw-data policy. It deliberately does not write scenario/map outputs, does not commit raw SDD files, and does not promote proxy or fixture runs as benchmark evidence.

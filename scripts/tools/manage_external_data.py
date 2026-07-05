@@ -28,6 +28,9 @@ EXTERNAL_DATA_ROOT_ENV = "ROBOT_SF_EXTERNAL_DATA_ROOT"
 DEFAULT_AMV_COMMAND_RESPONSE_MANIFEST = (
     REPO_ROOT / "configs" / "research" / "amv_command_response_trace_manifest_issue_2415.yaml"
 )
+DEFAULT_AMV_CALIBRATION_SOURCE_MANIFEST = (
+    REPO_ROOT / "configs" / "benchmarks" / "issue_1585_amv_calibration_source_manifest.yaml"
+)
 
 # Canonical SDD staging manifest. This is the single editable provenance contract for the SDD
 # asset (issues #2657, #3473): maintainers pin `expected_tree_sha256` and tune the disk-check size
@@ -1856,6 +1859,12 @@ def parse_args() -> argparse.Namespace:
         help="Report AMV command-response calibration admission status; fails closed.",
     )
     amv_status.add_argument("--manifest", type=Path, default=None)
+    amv_status.add_argument(
+        "--source-manifest",
+        type=Path,
+        default=None,
+        help="Path to amv_calibration_source_manifest.v1 provenance manifest.",
+    )
 
     sdd_download = subparsers.add_parser(
         "sdd-download", help="Guarded SDD staging: requires explicit confirmation; fails closed."
@@ -2002,13 +2011,22 @@ def _handle_sdd_mode(args: argparse.Namespace) -> int:
     return 0 if gate["dataset_backed"] else 2
 
 
-def build_amv_calibration_status(manifest_path: Path | None = None) -> dict[str, Any]:
-    """Return AMV calibration admission status from asset presence plus trace manifest.
+def build_amv_calibration_status(
+    manifest_path: Path | None = None,
+    source_manifest_path: Path | None = None,
+) -> dict[str, Any]:
+    """Return AMV calibration admission status from asset, trace, and source provenance.
 
     The report is intentionally fail-closed: it never admits AMV command-response calibration
-    unless the issue #2415 manifest is structurally clean and a declared staged trace reconciles
-    with the live ``amv-calibration`` external-data asset status.
+    unless the issue #2415 trace manifest is structurally clean, a declared staged trace reconciles
+    with live ``amv-calibration`` external-data asset status, and issue #1585 source provenance
+    is accepted for hardware-calibrated AMV claims.
     """
+    from robot_sf.benchmark.amv_calibration_source_manifest import (
+        AmvCalibrationSourceManifestError,
+        check_amv_calibration_source_manifest,
+        load_amv_calibration_source_manifest,
+    )
     from robot_sf.benchmark.synthetic_actuation import actuation_variability_fields
     from robot_sf.research.amv_command_response_trace_manifest import (
         AmvTraceManifestError,
@@ -2050,12 +2068,43 @@ def build_amv_calibration_status(manifest_path: Path | None = None) -> dict[str,
         live_status = {"amv-calibration": str(asset_report["status"])}
         blocker_details = [str(exc)]
 
-    ready = asset_report["status"] == "available" and trace_payload["calibration_ingest_allowed"]
+    source_manifest_source = source_manifest_path or DEFAULT_AMV_CALIBRATION_SOURCE_MANIFEST
+    try:
+        source_manifest = load_amv_calibration_source_manifest(source_manifest_source)
+        source_report = check_amv_calibration_source_manifest(
+            source_manifest,
+            allowed_calibration_fields=set(actuation_variability_fields()),
+        )
+        source_payload = source_report.to_dict()
+        source_ready = source_report.is_ready
+        hardware_source_ready = source_report.hardware_calibration_claim_allowed
+        if not source_ready:
+            blocker_details.extend(source_report.blockers)
+        if source_ready and not hardware_source_ready:
+            blocker_details.append(
+                "AMV calibration source must allow hardware-calibrated claims; "
+                "platform-class proxy sources are insufficient"
+            )
+    except (AmvCalibrationSourceManifestError, ValueError) as exc:
+        source_payload = {
+            "source_status": "invalid",
+            "hardware_calibration_claim_allowed": False,
+            "error": str(exc),
+        }
+        source_ready = False
+        hardware_source_ready = False
+        blocker_details.append(str(exc))
+
     blocker_keys: list[str] = []
     if asset_report["status"] != "available":
         blocker_keys.append("amv_calibration_asset_missing")
     if not trace_payload["calibration_ingest_allowed"]:
         blocker_keys.append("command_response_trace_manifest_not_ready")
+    if not source_ready:
+        blocker_keys.append("amv_calibration_source_manifest_not_ready")
+    if source_ready and not hardware_source_ready:
+        blocker_keys.append("amv_calibration_source_not_hardware_calibrated")
+    ready = not blocker_keys
 
     return {
         "schema": "amv_calibration_status.v1",
@@ -2067,23 +2116,26 @@ def build_amv_calibration_status(manifest_path: Path | None = None) -> dict[str,
         "blocker_details": blocker_details,
         "asset_status": asset_report,
         "manifest_path": str(manifest_source),
+        "source_manifest_path": str(source_manifest_source),
         "live_staging_status": live_status,
         "trace_manifest_report": trace_payload,
+        "source_manifest_report": source_payload,
         "evidence_boundary": (
-            "asset_presence_plus_manifest_contract_only_no_trace_ingest_no_calibration_run"
+            "asset_presence_plus_trace_and_source_manifest_contracts_only_"
+            "no_trace_ingest_no_calibration_run"
         ),
         "next_step": (
-            "Stage a maintainer-accepted real AMV command-response trace bundle through "
-            "`manage_external_data.py stage amv-calibration`, then rerun this status check."
+            "Stage maintainer-accepted real AMV command-response trace bundle and accepted "
+            "hardware-calibrated source provenance, then rerun this status check."
             if not ready
-            else "AMV command-response trace bundle is staged and manifest-clean for calibration ingest."
+            else "AMV command-response trace bundle is staged and manifest-clean; calibration ingest allowed."
         ),
     }
 
 
 def _handle_amv_calibration_status(args: argparse.Namespace) -> int:
     """Handle amv-calibration-status subcommand."""
-    payload = build_amv_calibration_status(args.manifest)
+    payload = build_amv_calibration_status(args.manifest, args.source_manifest)
     _print_json(payload)
     return 0 if payload["ready"] else 2
 

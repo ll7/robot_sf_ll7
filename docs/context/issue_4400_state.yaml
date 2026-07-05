@@ -1,0 +1,76 @@
+# Append-only durable state surface for issue #4400.
+# Records public-repository acceptance evidence and the remaining
+# private-side empirical action without encoding transient host,
+# queue, packet-lineage, or private-ops routing state.
+issue: 4400
+title: "bench: fresh current-roster release-gate campaign config social-proxemic group ON"
+state_surface: release_gate_current_roster_social_proxemic
+entries:
+  - recorded_at_utc: "2026-07-05T02:55:00Z"
+    status: public_repo_acceptance_met_private_campaign_pending
+    summary: >-
+      Merged PRs #4419 and #4498 satisfy the public-repository config,
+      documentation, test, and closure-audit evidence criteria. Issue #4400
+      remains open because closure still needs private-side campaign submission
+      and rerunning the issue #4313 release-gate evaluator on fresh rows.
+    claim_boundary: >-
+      Gate-evaluability preparation only. This state does not certify a release,
+      rank planners, change thresholds, regenerate release-gate results, or make
+      paper/dissertation claims.
+    merged_prs:
+      - pr: 4419
+        url: "https://github.com/ll7/robot_sf_ll7/pull/4419"
+        merged_at_utc: "2026-07-04T07:35:26Z"
+        merge_commit: "8aa36bbe3fbc38908c161472344830a78bef9c42"
+        delivered:
+          - "configs/benchmarks/release_gate_current_roster_social_proxemic_issue_4400.yaml"
+          - "docs/context/issue_4400_release_gate_current_roster_social_proxemic.md"
+          - "tests/benchmark/test_release_gate_current_roster_config_issue_4400.py"
+      - pr: 4498
+        url: "https://github.com/ll7/robot_sf_ll7/pull/4498"
+        merged_at_utc: "2026-07-04T20:04:52Z"
+        merge_commit: "d58da305e26815e614a1052ce0a1157926147a6d"
+        delivered:
+          - "docs/context/evidence/issue_4400_closure_audit_2026-07-04.md"
+          - "docs/context/catalog.yaml"
+          - "docs/context/issue_4400_release_gate_current_roster_social_proxemic.md"
+    acceptance_audit:
+      - criterion: "Fresh deterministic current-roster campaign config exists under configs/benchmarks/."
+        status: met
+        evidence: "PR #4419 added configs/benchmarks/release_gate_current_roster_social_proxemic_issue_4400.yaml."
+      - criterion: "Current 8-planner roster matches the issue #4313 evaluation surface."
+        status: met
+        evidence: "PR #4419 test compares the new config roster with configs/benchmarks/camera_ready_all_planners.yaml."
+      - criterion: "Social-proxemic metric group is explicitly enabled, not inherited from defaults."
+        status: met
+        evidence: "Config declares metric_groups.social_proxemic.enabled: true and PR #4419 test asserts it."
+      - criterion: "Retained-summary contract requires min_clearance_m and proxemic_intrusion_rate."
+        status: met
+        evidence: "Config declares both fields and PR #4419 test asserts exactly that set."
+      - criterion: "Tests pin roster, metric flags, retained fields, and no-submit boundary."
+        status: met
+        evidence: "PR #4419 added tests/benchmark/test_release_gate_current_roster_config_issue_4400.py."
+      - criterion: "Pre-registration note records purpose, retained baseline packet, gate spec, fresh-campaign rationale, and no-certification boundary."
+        status: met
+        evidence: "PR #4419 added docs/context/issue_4400_release_gate_current_roster_social_proxemic.md."
+      - criterion: "Closure audit maps issue #4400 criteria to merged evidence."
+        status: met
+        evidence: "PR #4498 added docs/context/evidence/issue_4400_closure_audit_2026-07-04.md and registered it in docs/context/catalog.yaml."
+      - criterion: "Private-side campaign submission and issue #4313 release-gate evaluator rerun on fresh rows."
+        status: blocked_out_of_scope
+        evidence: >-
+          Issue comments from 2026-07-04 explicitly keep #4400 open for this
+          action. This run has compute_submit: false and did not submit jobs,
+          retrieve fresh rows, or rerun release-gate evaluation.
+    remaining:
+      - "Queue the private-side current-roster campaign from the issue #4400 config."
+      - "Rerun the issue #4313 release-gate evaluator on retrieved fresh rows."
+      - "Close #4400 only after fresh rows make the formerly not_evaluable gates evaluable, or record a fail-closed blocker if they do not."
+    forbidden_actions_confirmed:
+      compute_submit: false
+      benchmark_campaign_run: false
+      release_gate_result_regenerated: false
+      threshold_changed: false
+      release_certified: false
+      paper_or_dissertation_claim_edited: false
+      transient_queue_or_host_state_recorded: false

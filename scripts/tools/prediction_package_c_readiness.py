@@ -34,7 +34,9 @@ SCRIPT_OBSERVATION_REPLAY = "scripts/benchmark/run_observation_noise_envelope.py
 DEFAULT_OBSERVATION_REPLAY_OUTPUT_ROOT = (
     "docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13"
 )
-DEFAULT_CLOSED_LOOP_OUTPUT_ROOT = "docs/context/evidence/issue_2916_forecast_risk_coupling_2026-06-23"
+DEFAULT_CLOSED_LOOP_OUTPUT_ROOT = (
+    "docs/context/evidence/issue_2916_forecast_risk_coupling_2026-06-23"
+)
 
 REQUIRED_CODE: tuple[str, ...] = (
     "robot_sf/benchmark/forecast_metrics.py",

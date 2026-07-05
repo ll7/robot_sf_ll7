@@ -1,0 +1,24 @@
+schema_version: issue-state.v1
+issue: 4207
+source_issue: https://github.com/ll7/robot_sf_ll7/issues/4207
+last_reviewed_issue_update_utc: "2026-07-04T20:38:42Z"
+state_entries:
+  - recorded_at_utc: "2026-07-05T04:25:00Z"
+    recorded_by: codex
+    kind: closure_audit
+    status: open_blocked_on_trained_arm_artifacts
+    evidence_packet: docs/context/evidence/issue_4207_closure_audit_2026-07/
+    summary: >
+      Acceptance criteria for the diagnostic certification-transfer probe, interaction-positive
+      proof, fail-closed gate preflight, and trained-planner claim exclusion/readiness contracts are
+      covered by merged PRs. Issue #4207 should remain open until checkpoint-backed learned or
+      predictive planner arms are attached and the CPU certification-transfer probe is rerun without
+      fallback execution.
+    next_empirical_action: >
+      Attach resolved algo_config, checkpoint, and training_manifest provenance for at least one
+      learned or predictive arm, then rerun the CPU certification-transfer probe and verify a
+      trained-planner row is eligible rather than excluded.
+    no_claims:
+      - no deployment or real-world safety certificate
+      - no paper or dissertation claim promotion
+      - no full benchmark campaign or Slurm submission

@@ -7,6 +7,7 @@ benchmark evidence regardless of whether the importer could parse a candidate fi
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 from scripts.tools import manage_external_data, sdd_curation_preflight
@@ -261,3 +262,75 @@ def test_cli_require_benchmark_ready_fails_closed_when_unstaged(
     assert exit_code == 3
     out = capsys.readouterr().out
     assert '"benchmark_promotion_allowed": false' in out
+
+
+def test_decision_packet_preserves_proxy_blocker(tmp_path: Path) -> None:
+    """Decision packet records proxy-only ceiling, not benchmark readiness."""
+    annotations = tmp_path / "annotations.txt"
+    _write_sdd_fixture(annotations)
+    proxy_gate = {
+        "mode": manage_external_data.SDD_MODE_PROXY,
+        "dataset_backed": False,
+        "availability": {"state": "missing"},
+        "reason": "SDD not staged.",
+        "staging_dir": str(tmp_path),
+    }
+    probe = sdd_curation_preflight.probe_annotation_file(
+        annotations, label="Pedestrian", min_track_points=4, max_pedestrians=4
+    )
+    report = sdd_curation_preflight.classify_curation_readiness(proxy_gate, probe)
+
+    packet = sdd_curation_preflight.build_decision_packet(
+        report,
+        annotation=annotations,
+        label="Pedestrian",
+        min_track_points=4,
+        max_pedestrians=4,
+        dataset_id="sdd_test_scene",
+        output_dir=tmp_path / "derived",
+    )
+
+    assert packet["schema"] == sdd_curation_preflight.DECISION_PACKET_SCHEMA
+    assert packet["readiness"]["benchmark_promotion_allowed"] is False
+    assert packet["readiness"]["output_classification"] == sdd_curation_preflight.OUTPUT_PROXY_ONLY
+    assert packet["raw_data_policy"]["raw_sdd_committed"] is False
+    assert "--dataset-id sdd_test_scene" in packet["required_next_commands"]["import"]
+
+
+def test_cli_writes_decision_packet_without_benchmark_claim(tmp_path: Path, monkeypatch) -> None:
+    """CLI packet output is metadata-only and keeps missing SDD fail-closed."""
+    annotations = tmp_path / "annotations.txt"
+    packet_path = tmp_path / "packet.json"
+    _write_sdd_fixture(annotations)
+    monkeypatch.setattr(
+        manage_external_data,
+        "resolve_sdd_scenario_prior_mode",
+        lambda *, manifest_path=None: {
+            "mode": manage_external_data.SDD_MODE_PROXY,
+            "dataset_backed": False,
+            "availability": {"state": "missing"},
+            "reason": "SDD not staged.",
+            "staging_dir": str(tmp_path),
+        },
+    )
+
+    exit_code = sdd_curation_preflight.main(
+        [
+            "--annotation",
+            str(annotations),
+            "--min-track-points",
+            "4",
+            "--decision-dataset-id",
+            "sdd_test_scene",
+            "--write-decision-packet",
+            str(packet_path),
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    assert packet["claim_boundary"].startswith("decision packet only")
+    assert packet["readiness"]["evidence_status"] == sdd_curation_preflight.EVIDENCE_PROXY
+    assert packet["readiness"]["benchmark_promotion_allowed"] is False
+    assert not (tmp_path / "derived").exists()

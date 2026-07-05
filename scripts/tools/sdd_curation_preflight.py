@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import sys
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,7 @@ from typing import Any
 from scripts.tools import import_sdd_scenarios, manage_external_data
 
 PREFLIGHT_SCHEMA = "sdd_curation_preflight.v1"
+DECISION_PACKET_SCHEMA = "robot_sf_sdd_curation_decision_packet.v1"
 ISSUE = 1126
 
 # Curation evidence states (kept strictly distinct so a proxy run can never read as benchmark).
@@ -218,6 +220,90 @@ def run_preflight(
     return classify_curation_readiness(staging_gate, probe)
 
 
+def _shell_arg(value: str | Path) -> str:
+    """Return a conservative single-token shell representation for packet commands."""
+    return shlex.quote(str(value))
+
+
+def build_decision_packet(
+    report: dict[str, Any],
+    *,
+    annotation: Path | None,
+    label: str,
+    min_track_points: int,
+    max_pedestrians: int,
+    dataset_id: str,
+    output_dir: Path,
+) -> dict[str, Any]:
+    """Build a metadata-only handoff packet for the first real SDD curation run."""
+    annotation_placeholder = "<staged-sdd>/<scene>/<video>/annotations.txt"
+    annotation_command_arg: str | Path = (
+        annotation if annotation is not None else annotation_placeholder
+    )
+    import_command = " ".join(
+        [
+            "uv run python scripts/tools/import_sdd_scenarios.py",
+            "--annotation",
+            _shell_arg(annotation_command_arg),
+            "--dataset-id",
+            _shell_arg(dataset_id),
+            "--output-dir",
+            _shell_arg(output_dir),
+            "--label",
+            _shell_arg(label),
+            "--min-track-points",
+            str(min_track_points),
+            "--max-pedestrians",
+            str(max_pedestrians),
+        ]
+    )
+    preflight_command = " ".join(
+        [
+            "uv run python scripts/tools/sdd_curation_preflight.py",
+            "--annotation",
+            _shell_arg(annotation_command_arg),
+            "--label",
+            _shell_arg(label),
+            "--min-track-points",
+            str(min_track_points),
+            "--max-pedestrians",
+            str(max_pedestrians),
+            "--require-benchmark-ready",
+            "--json",
+        ]
+    )
+    return {
+        "schema": DECISION_PACKET_SCHEMA,
+        "issue": ISSUE,
+        "claim_boundary": (
+            "decision packet only; no real SDD curation run, benchmark campaign, "
+            "or paper-facing claim"
+        ),
+        "readiness": report,
+        "selected_annotation": str(annotation) if annotation is not None else None,
+        "curation_parameters": {
+            "dataset_id": dataset_id,
+            "label": import_sdd_scenarios.normalize_sdd_label(label),
+            "min_track_points": min_track_points,
+            "max_pedestrians": max_pedestrians,
+            "output_dir": str(output_dir),
+        },
+        "required_next_commands": {
+            "preflight": preflight_command,
+            "import": import_command,
+            "smoke_validation": (
+                "load generated scenario/map and run one CPU smoke path before marking "
+                "benchmark_ready; otherwise record exploratory_only or blocked reason"
+            ),
+        },
+        "raw_data_policy": {
+            "raw_sdd_committed": False,
+            "requires_dataset_backed_gate": True,
+            "requires_source_checksum_and_license_provenance": True,
+        },
+    }
+
+
 def _format_human(report: dict[str, Any]) -> str:
     """Render a compact human-readable summary of the readiness report."""
     lines = [
@@ -263,6 +349,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-pedestrians", type=int, default=4)
     parser.add_argument("--json", action="store_true", help="Emit the report as JSON.")
     parser.add_argument(
+        "--write-decision-packet",
+        type=Path,
+        default=None,
+        help="Write a JSON handoff packet for the first real SDD curation run.",
+    )
+    parser.add_argument(
+        "--decision-dataset-id",
+        default="sdd_first_real_candidate",
+        help="Dataset ID to place in the decision packet import command.",
+    )
+    parser.add_argument(
+        "--decision-output-dir",
+        type=Path,
+        default=Path("output/sdd_curation/issue_1126"),
+        help="Output directory to place in the decision packet import command.",
+    )
+    parser.add_argument(
         "--require-benchmark-ready",
         action="store_true",
         help="Exit non-zero unless curation output may be promoted as benchmark evidence.",
@@ -293,6 +396,21 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
         print(_format_human(report))
+    if args.write_decision_packet is not None:
+        packet = build_decision_packet(
+            report,
+            annotation=args.annotation,
+            label=args.label,
+            min_track_points=args.min_track_points,
+            max_pedestrians=args.max_pedestrians,
+            dataset_id=args.decision_dataset_id,
+            output_dir=args.decision_output_dir,
+        )
+        args.write_decision_packet.parent.mkdir(parents=True, exist_ok=True)
+        args.write_decision_packet.write_text(
+            json.dumps(packet, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     if args.require_benchmark_ready and not report["benchmark_promotion_allowed"]:
         return 3
     return 0

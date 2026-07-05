@@ -4,20 +4,22 @@
     "no paper or dissertation claim is established by this script alone",
     "missing source data or expected targets produce blocked status"
   ],
-  "created_at_utc": "2026-07-04T20:38:21.371116Z",
+  "created_at_utc": "2026-07-05T04:16:31.041752Z",
   "evidence_tier": "diagnostic-only",
   "issue": 4445,
   "manifest_path": "docs/context/evidence/issue_4445_ch8_statistics_reproducibility/source_manifest.json",
-  "manifest_sha256": "849c76b9af0018c1d9951866d4ffcccd5cd85d1ce3f25581629fbd9797687f30",
-  "overall_status": "blocked",
+  "manifest_sha256": "eae05e943f7789e50cd372b191414ea99a612d8f873299877f1b1a6980945052",
+  "overall_status": "reproducible",
   "schema_version": "issue_4445.ch8_statistics_reproducibility.v1",
-  "source_status": "blocked: diss#337 now provides audited expected values and frozen-release provenance, but this Robot SF packet still lacks repo-local source rows for recomputation.",
+  "source_status": "reproducible: Zenodo DOI 10.5281/zenodo.19563812 release 0.0.2 table bundle source rows registered repo-locally",
   "statistics": [
     {
-      "blockers": [
-        "data block is missing or empty"
-      ],
-      "computed": {},
+      "blockers": [],
+      "computed": {
+        "interaction_eta_squared": 0.46203158470290495,
+        "planner_eta_squared": 0.15007190373169396,
+        "scenario_family_eta_squared": 0.38789651156540106
+      },
       "expected": {
         "interaction_eta_squared": 0.462,
         "planner_eta_squared": 0.15,
@@ -26,13 +28,15 @@
       },
       "id": "ch8_eta_squared_success_mean",
       "kind": "partial_eta_squared",
-      "status": "blocked_missing_source_data"
+      "status": "matches_expected"
     },
     {
-      "blockers": [
-        "data block is missing or empty"
-      ],
-      "computed": {},
+      "blockers": [],
+      "computed": {
+        "interaction_eta_squared": 0.45580654590187186,
+        "planner_eta_squared": 0.089945369502653,
+        "scenario_family_eta_squared": 0.4542480845954751
+      },
       "expected": {
         "interaction_eta_squared": 0.456,
         "planner_eta_squared": 0.09,
@@ -41,13 +45,15 @@
       },
       "id": "ch8_eta_squared_near_misses_mean",
       "kind": "partial_eta_squared",
-      "status": "blocked_missing_source_data"
+      "status": "matches_expected"
     },
     {
-      "blockers": [
-        "data block is missing or empty"
-      ],
-      "computed": {},
+      "blockers": [],
+      "computed": {
+        "interaction_eta_squared": 0.5115646587748238,
+        "planner_eta_squared": 0.11337201627804212,
+        "scenario_family_eta_squared": 0.37506332494713407
+      },
       "expected": {
         "interaction_eta_squared": 0.512,
         "planner_eta_squared": 0.113,
@@ -56,13 +62,13 @@
       },
       "id": "ch8_eta_squared_time_to_goal_norm_mean",
       "kind": "partial_eta_squared",
-      "status": "blocked_missing_source_data"
+      "status": "matches_expected"
     },
     {
-      "blockers": [
-        "data block is missing or empty"
-      ],
-      "computed": {},
+      "blockers": [],
+      "computed": {
+        "value": -0.998398476564385
+      },
       "expected": {
         "n": 238,
         "tolerance": 0.0005,
@@ -70,13 +76,13 @@
       },
       "id": "ch8_spearman_success_time_to_goal_minus_0_998",
       "kind": "spearman_rho",
-      "status": "blocked_missing_source_data"
+      "status": "matches_expected"
     },
     {
-      "blockers": [
-        "data block is missing or empty"
-      ],
-      "computed": {},
+      "blockers": [],
+      "computed": {
+        "value": 0.02377355264928945
+      },
       "expected": {
         "n": 238,
         "tolerance": 0.0005,
@@ -84,13 +90,19 @@
       },
       "id": "ch8_spearman_success_near_misses_plus_0_024",
       "kind": "spearman_rho",
-      "status": "blocked_missing_source_data"
+      "status": "matches_expected"
     },
     {
-      "blockers": [
-        "data block is missing or empty"
-      ],
-      "computed": {},
+      "blockers": [],
+      "computed": {
+        "observed_rank": 1,
+        "rank_ci": [
+          1,
+          1
+        ],
+        "samples": 10000,
+        "seed": 42
+      },
       "expected": {
         "rank_ci": [
           1,
@@ -101,13 +113,40 @@
       },
       "id": "ch8_bootstrap_ppo_rank_1_ci",
       "kind": "bootstrap_mean_ci",
-      "status": "blocked_missing_source_data"
+      "status": "matches_expected"
     },
     {
-      "blockers": [
-        "data block is missing or empty"
-      ],
-      "computed": {},
+      "blockers": [],
+      "computed": {
+        "rank_ci_by_planner": {
+          "goal": [
+            5,
+            5
+          ],
+          "orca": [
+            2,
+            3
+          ],
+          "prediction_planner": [
+            4,
+            4
+          ],
+          "sacadrl": [
+            6,
+            6
+          ],
+          "social_force": [
+            7,
+            7
+          ],
+          "socnav_sampling": [
+            2,
+            3
+          ]
+        },
+        "samples": 10000,
+        "seed": 42
+      },
       "expected": {
         "rank_ci_by_planner": {
           "goal": [
@@ -140,7 +179,7 @@
       },
       "id": "ch8_bootstrap_rank_swap_bounds",
       "kind": "bootstrap_mean_ci",
-      "status": "blocked_missing_source_data"
+      "status": "matches_expected"
     }
   ],
   "title": "Chapter 8 statistics reproducibility registration packet"

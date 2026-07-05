@@ -2,7 +2,7 @@
   "schema_version": "issue_4445.ch8_statistics_reproducibility.v1",
   "issue": 4445,
   "title": "Chapter 8 statistics reproducibility registration packet",
-  "source_status": "blocked: diss#337 now provides audited expected values and frozen-release provenance, but this Robot SF packet still lacks repo-local source rows for recomputation.",
+  "source_status": "reproducible: Zenodo DOI 10.5281/zenodo.19563812 release 0.0.2 table bundle source rows registered repo-locally",
   "upstream_audit": {
     "repository": "ll7/diss",
     "issue": 337,
@@ -37,7 +37,7 @@
     {
       "id": "ch8_eta_squared_success_mean",
       "statistic_kind": "partial_eta_squared",
-      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports success_mean eta^2 from scenario_family_breakdown.csv; raw rows are not yet registered in this repo.",
+      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports success_mean eta^2 from scenario_family_breakdown.csv; raw rows are registered locally.",
       "source_query": {
         "input_file": "payload/reports/scenario_family_breakdown.csv",
         "metric": "success_mean",
@@ -56,7 +56,7 @@
     {
       "id": "ch8_eta_squared_near_misses_mean",
       "statistic_kind": "partial_eta_squared",
-      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports near_misses_mean eta^2 from scenario_family_breakdown.csv; raw rows are not yet registered in this repo.",
+      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports near_misses_mean eta^2 from scenario_family_breakdown.csv; raw rows are registered locally.",
       "source_query": {
         "input_file": "payload/reports/scenario_family_breakdown.csv",
         "metric": "near_misses_mean",
@@ -75,7 +75,7 @@
     {
       "id": "ch8_eta_squared_time_to_goal_norm_mean",
       "statistic_kind": "partial_eta_squared",
-      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports time_to_goal_norm_mean eta^2 from scenario_family_breakdown.csv; raw rows are not yet registered in this repo.",
+      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports time_to_goal_norm_mean eta^2 from scenario_family_breakdown.csv; raw rows are registered locally.",
       "source_query": {
         "input_file": "payload/reports/scenario_family_breakdown.csv",
         "metric": "time_to_goal_norm_mean",
@@ -94,9 +94,9 @@
     {
       "id": "ch8_spearman_success_time_to_goal_minus_0_998",
       "statistic_kind": "spearman_rho",
-      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports the Chapter 8 metric-panel correlation audit from campaign_table.csv; raw paired rows are not yet registered in this repo.",
+      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports the Chapter 8 metric-panel correlation audit from campaign_table.csv; raw paired rows are registered locally.",
       "source_query": {
-        "input_file": "payload/reports/campaign_table.csv",
+        "input_file": "payload/reports/scenario_family_breakdown.csv",
         "x_field": "success_mean",
         "y_field": "time_to_goal_norm_mean",
         "n": 238
@@ -111,9 +111,9 @@
     {
       "id": "ch8_spearman_success_near_misses_plus_0_024",
       "statistic_kind": "spearman_rho",
-      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports the Chapter 8 metric-panel correlation audit from campaign_table.csv; raw paired rows are not yet registered in this repo.",
+      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports the Chapter 8 metric-panel correlation audit from campaign_table.csv; raw paired rows are registered locally.",
       "source_query": {
-        "input_file": "payload/reports/campaign_table.csv",
+        "input_file": "payload/reports/scenario_family_breakdown.csv",
         "x_field": "success_mean",
         "y_field": "near_misses_mean",
         "n": 238
@@ -128,7 +128,7 @@
     {
       "id": "ch8_bootstrap_ppo_rank_1_ci",
       "statistic_kind": "bootstrap_mean_ci",
-      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports the Chapter 8 family-resampling rank-stability bootstrap; raw family rows are not yet registered in this repo.",
+      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports the Chapter 8 family-resampling rank-stability bootstrap; raw family rows are registered locally.",
       "source_query": {
         "input_file": "payload/reports/scenario_family_breakdown.csv",
         "method": "family_resampling_rank_stability",
@@ -150,7 +150,7 @@
     {
       "id": "ch8_bootstrap_rank_swap_bounds",
       "statistic_kind": "bootstrap_mean_ci",
-      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports fixed ranks 4-7 and socnav/orca swap bounds; raw family rows are not yet registered in this repo.",
+      "source_artifact": "ll7/diss E-FROZEN002-DIAG-01 reports fixed ranks 4-7 and socnav/orca swap bounds; raw family rows are registered locally.",
       "source_query": {
         "input_file": "payload/reports/scenario_family_breakdown.csv",
         "method": "family_resampling_rank_stability",

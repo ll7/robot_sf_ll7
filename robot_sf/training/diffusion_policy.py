@@ -323,15 +323,25 @@ def build_representative_rollout(
     robot_x = 0.0
     robot_y = 0.0
     heading = 0.0
+    robot_vx = 0.0
+    robot_vy = 0.0
     trajectory: list[dict[str, Any]] = []
     finite_command_count = 0
     for step in range(step_count):
-        obs = _representative_rollout_observation(step, robot_x, robot_y, heading, dt)
+        obs = _representative_rollout_observation(
+            step, robot_x, robot_y, heading, dt, robot_vx, robot_vy
+        )
         linear, angular = policy(obs)
         linear = float(linear)
         angular = float(angular)
-        if np.isfinite(linear) and np.isfinite(angular):
+        command_finite = np.isfinite(linear) and np.isfinite(angular)
+        if command_finite:
             finite_command_count += 1
+        # Record the true (possibly non-finite) command for honest evidence, but
+        # integrate the kinematic state with safe zeros when a command is not
+        # finite so NaN/Inf cannot corrupt subsequent observations. A non-finite
+        # command still fails the rollout closed via finite_command_count and the
+        # commands_within_limits check below.
         trajectory.append(
             {
                 "step": step,
@@ -339,9 +349,13 @@ def build_representative_rollout(
                 "command": [linear, angular],
             }
         )
-        heading += angular * dt
-        robot_x += linear * np.cos(heading) * dt
-        robot_y += linear * np.sin(heading) * dt
+        step_linear = linear if command_finite else 0.0
+        step_angular = angular if command_finite else 0.0
+        heading += step_angular * dt
+        robot_x += step_linear * np.cos(heading) * dt
+        robot_y += step_linear * np.sin(heading) * dt
+        robot_vx = step_linear * np.cos(heading)
+        robot_vy = step_linear * np.sin(heading)
 
     close = getattr(policy, "_planner_close", None)
     if callable(close):
@@ -515,22 +529,35 @@ def _fixed_conflict_observation() -> dict[str, Any]:
 
 
 def _representative_rollout_observation(
-    step: int, robot_x: float, robot_y: float, heading: float, dt: float
+    step: int,
+    robot_x: float,
+    robot_y: float,
+    heading: float,
+    dt: float,
+    robot_vx: float = 0.0,
+    robot_vy: float = 0.0,
 ) -> dict[str, Any]:
     """Return map-runner style crossing observation for a short diagnostic rollout."""
-    ped_a_y = 0.45 - 0.06 * step
-    ped_b_y = -0.45 + 0.06 * step
+    # Pedestrian position deltas must match the declared velocities so the encoder
+    # receives an internally consistent kinematic description: at speed 0.25 and
+    # step dt, the per-step |y| delta is 0.25 * dt (not a hardcoded 0.06).
+    ped_speed = 0.25
+    ped_a_y = 0.45 - ped_speed * dt * step
+    ped_b_y = -0.45 + ped_speed * dt * step
     return {
         "robot": {
             "position": [robot_x, robot_y],
-            "velocity": [0.0, 0.0],
+            # Robot velocity reflects the motion integrated in the caller's loop
+            # rather than a hardcoded rest state, keeping the observation
+            # kinematically consistent with the recorded trajectory.
+            "velocity": [robot_vx, robot_vy],
             "goal": [2.0, 0.0],
             "heading": [heading],
             "radius": [0.3],
         },
         "pedestrians": {
             "positions": [[0.9, ped_a_y], [1.1, ped_b_y]],
-            "velocities": [[0.0, -0.25], [0.0, 0.25]],
+            "velocities": [[0.0, -ped_speed], [0.0, ped_speed]],
             "radii": [0.25, 0.25],
             "count": [2],
         },

@@ -1,0 +1,135 @@
+{
+  "schema_version": "closure-audit.v1",
+  "issue": 4207,
+  "source_issue_url": "https://github.com/ll7/robot_sf_ll7/issues/4207",
+  "source_issue_updated_at_utc": "2026-07-04T20:38:42Z",
+  "audit_generated_at_utc": "2026-07-05T04:25:00Z",
+  "claim_boundary": "diagnostic_closure_audit_no_deployment_or_paper_claim",
+  "closure_recommendation": "keep_open",
+  "fragmentation_guard": {
+    "applies": true,
+    "reason": "More than two issue #4207 pull requests merged in the previous 24 hours.",
+    "action": "consolidation_integration_audit"
+  },
+  "linked_merged_prs": [
+    {
+      "number": 4221,
+      "merged_at_utc": "2026-07-03T07:01:13Z",
+      "evidence": "Initial certification-transfer probe config, gate spec, runner, report writer, tests, and compact evidence packet."
+    },
+    {
+      "number": 4308,
+      "merged_at_utc": "2026-07-03T15:30:41Z",
+      "evidence": "Interaction-validity guard and model_sensitivity_exercised fields."
+    },
+    {
+      "number": 4315,
+      "merged_at_utc": "2026-07-03T18:08:27Z",
+      "evidence": "Interacting synthetic smoke fixture that exercises transfer flip and interaction-positive paths."
+    },
+    {
+      "number": 4332,
+      "merged_at_utc": "2026-07-03T19:16:09Z",
+      "evidence": "Repository-relative evidence provenance and absolute-path guard."
+    },
+    {
+      "number": 4337,
+      "merged_at_utc": "2026-07-03T19:54:03Z",
+      "evidence": "Physics-verified interacting certification-transfer probe setup."
+    },
+    {
+      "number": 4380,
+      "merged_at_utc": "2026-07-04T03:54:55Z",
+      "evidence": "Terminality note for issue #4327 physics verification follow-through."
+    },
+    {
+      "number": 4412,
+      "merged_at_utc": "2026-07-04T07:19:39Z",
+      "evidence": "Physics-verified compact packet with near-field proof and model_sensitivity_exercised=true."
+    },
+    {
+      "number": 4433,
+      "merged_at_utc": "2026-07-04T10:47:16Z",
+      "evidence": "Trained-planner claim exclusions for fallback and missing checkpoint/config rows."
+    },
+    {
+      "number": 4480,
+      "merged_at_utc": "2026-07-04T17:50:46Z",
+      "evidence": "Trained-planner readiness contract requiring algo_config, checkpoint, and training_manifest."
+    },
+    {
+      "number": 4502,
+      "merged_at_utc": "2026-07-04T20:38:14Z",
+      "evidence": "Plan-named preflight gate evaluability and --validate-only runner mode."
+    }
+  ],
+  "acceptance_evidence": [
+    {
+      "criterion": "Pre-registered probe config and release-gate spec",
+      "evidence": "PR #4221 plus PR #4502 validate-only preflight",
+      "status": "met"
+    },
+    {
+      "criterion": "Pedestrian-model provenance separates certification, evaluation, and development identities",
+      "evidence": "PR #4221 report fields and focused tests",
+      "status": "met"
+    },
+    {
+      "criterion": "Diagnostic evidence artifact with no deployment or paper claim",
+      "evidence": "PR #4221 and PR #4412 compact evidence packets",
+      "status": "met"
+    },
+    {
+      "criterion": "Transfer flips reported as model-assumption fragility results",
+      "evidence": "PR #4221 transfer matrix and PR #4315 smoke fixture",
+      "status": "met"
+    },
+    {
+      "criterion": "Missing gate metrics are not_evaluable, never pass",
+      "evidence": "PR #4221 evaluator tests and PR #4502 fail-closed preflight",
+      "status": "met"
+    },
+    {
+      "criterion": "Interaction-positive proof avoids vacuous stable transfer rows",
+      "evidence": "PR #4308, PR #4315, and PR #4412 physics packet",
+      "status": "met"
+    },
+    {
+      "criterion": "Fallback or missing-checkpoint learned/predictive rows excluded from trained-planner comparison claims",
+      "evidence": "PR #4433 and PR #4480 contracts; current packet has 12 excluded_missing_checkpoint_or_config rows",
+      "status": "met_fail_closed"
+    },
+    {
+      "criterion": "Real checkpoint-backed trained-planner comparison rerun",
+      "evidence": "Issue comments after PR #4412, PR #4433, and PR #4480 keep this blocker open; no checkpoint/training-manifest provenance is present",
+      "status": "not_met"
+    }
+  ],
+  "current_physics_packet": {
+    "path": "docs/context/evidence/issue_4207_interacting_physics_2026-07",
+    "model_sensitivity_exercised": true,
+    "physics_near_field_confirmed": true,
+    "max_robot_ped_within_5m_frac": 0.10558655435990806,
+    "trained_planner_claim_status_counts": {
+      "excluded_missing_checkpoint_or_config": 12,
+      "not_a_trained_planner": 4
+    }
+  },
+  "residual_risks": [
+    {
+      "risk": "No trained learned/predictive arm is eligible for a trained-planner comparison claim.",
+      "why_it_remains": "Current configs and packet do not provide checkpoint and training_manifest provenance for learned/predictive arms."
+    },
+    {
+      "risk": "No fresh trained-arm CPU rerun was performed by this audit.",
+      "why_it_remains": "The missing artifact inputs make the rerun a blocked empirical slice rather than a closure action."
+    }
+  ],
+  "forbidden_actions_confirmed": {
+    "full_benchmark_campaign_run": false,
+    "slurm_or_gpu_submission": false,
+    "paper_or_dissertation_claim_edit": false,
+    "issue_closed": false
+  }
+}
+

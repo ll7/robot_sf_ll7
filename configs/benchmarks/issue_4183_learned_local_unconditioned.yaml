@@ -17,7 +17,8 @@ overwrite_publication_bundle: true
 issue_4183_diagnostic:
   arm: learned_local_no_route_conditioning
   route_conditioning_enabled: false
-  learned_policy_checkpoint: model/ppo_model_retrained_10m_2025-02-01.zip
+  learned_policy_model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
+  learned_policy_checkpoint: output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip
   learned_policy_algo: ppo
   row_inclusion_rule: exclude fallback/degraded/unavailable/missing-pair rows from route-conditioned effect evidence
   linked_work:
@@ -28,9 +29,9 @@ planners:
     algo: ppo
     benchmark_profile: diagnostic-only
     config:
-      model_path: model/ppo_model_retrained_10m_2025-02-01.zip
+      model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
       device: cpu
       deterministic: true
-      obs_mode: vector
+      obs_mode: dict
       action_space: unicycle
       fallback_to_goal: false

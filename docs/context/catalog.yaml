@@ -157,6 +157,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4207_closure_audit_2026-07
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4359_collision_similarity_durable_artifact_2026-07-04
     status: evidence
     freshness: evidence
@@ -166,6 +170,10 @@ entries:
     freshness: dated
     area: benchmark_evidence
   - path: docs/context/evidence/issue_4183_hybrid_global_rl_diagnostic/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4183_hybrid_global_rl_diagnostic/preflight_registry_checkpoint_20260705.json
     status: evidence
     freshness: evidence
     area: benchmark_evidence

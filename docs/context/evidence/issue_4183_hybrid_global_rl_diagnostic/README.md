@@ -9,6 +9,9 @@ This packet records a diagnostic-only paired route/occupancy comparison for `hyb
 - Fallback/degraded rows excluded: 0
 - Invalid pair rows: 0
 - Linked work: #4161 and #4015
+- Registry preflight: `preflight_registry_checkpoint_20260705.json` records the durable
+  `ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417` checkpoint
+  reference and the current `blocked_missing_learned_checkpoint` cache state.
 
 Rows marked fallback, degraded, unavailable, or missing-pair are not evidence for a route-conditioned effect. They remain diagnostic rows only.
 

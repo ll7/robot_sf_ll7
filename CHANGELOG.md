@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Added `--pin-report-json` to `scripts/tools/generate_socnavbench_traversible.py` for issue #4291.
+  The generator can now write a maintainer-review sidecar with `expected_tree_sha256`,
+  registry-owner, and no-raw-data guardrails after `traversibles/ETH/data.pkl` exists, keeping the
+  trusted registry pin step explicit without committing generated SocNavBench data.
 * Added a compact **learned-risk trace status packet** for issue #2312. The existing
   `scripts/validation/validate_learned_risk_trace_manifest.py` validator now supports
   `--status-json`, and `robot_sf/training/learned_risk_trace_manifest.py` exposes

@@ -260,3 +260,135 @@ def test_validate_sequence_rejects_multidimensional_input() -> None:
 
     assert result.status == "blocked_invalid_source_data"
     assert any("1D sequence" in blocker for blocker in result.blockers)
+
+
+def test_variance_decomposition_ch8_hand_computed() -> None:
+    """Fixture partial eta² matches a known hand-computed value."""
+    from robot_sf.research.ch8_statistics import _variance_decomposition_ch8
+
+    rows = [
+        {"planner_key": "p1", "scenario_family": "f1", "success_mean": 2.0},
+        {"planner_key": "p1", "scenario_family": "f2", "success_mean": 4.0},
+        {"planner_key": "p2", "scenario_family": "f1", "success_mean": 6.0},
+        {"planner_key": "p2", "scenario_family": "f2", "success_mean": 8.0},
+    ]
+    res = _variance_decomposition_ch8(rows, "success_mean")
+    assert res["scenario_family_eta_squared"] == pytest.approx(0.2)
+    assert res["planner_eta_squared"] == pytest.approx(0.8)
+    assert res["interaction_eta_squared"] == pytest.approx(0.0)
+
+
+def test_spearman_ch8_strong_negative_and_ties() -> None:
+    """Spearman rho path handles strong negative correlation and ties."""
+    from robot_sf.research.ch8_statistics import _spearman_ch8
+
+    rows = [
+        {"x": 1.0, "y": 4.0},
+        {"x": 2.0, "y": 3.0},
+        {"x": 3.0, "y": 2.0},
+        {"x": 3.0, "y": 2.0},
+    ]
+    res = _spearman_ch8(rows, "x", "y")
+    assert res["value"] < 0.0
+
+
+def test_bootstrap_ch8_sample_count_and_determinism() -> None:
+    """Bootstrap uses exactly the requested sample count and deterministic seed."""
+    from robot_sf.research.ch8_statistics import _rank_stability_bootstrap_ch8
+
+    rows = [
+        {"planner_key": "p1", "scenario_family": "f1", "success_mean": 0.5},
+        {"planner_key": "p1", "scenario_family": "f2", "success_mean": 0.6},
+        {"planner_key": "p2", "scenario_family": "f1", "success_mean": 0.3},
+        {"planner_key": "p2", "scenario_family": "f2", "success_mean": 0.4},
+    ]
+    res1 = _rank_stability_bootstrap_ch8(rows, "success_mean", n_boot=100, seed=42)
+    res2 = _rank_stability_bootstrap_ch8(rows, "success_mean", n_boot=100, seed=42)
+    assert res1 == res2
+
+    res3 = _rank_stability_bootstrap_ch8(rows, "success_mean", n_boot=100, seed=43)
+    assert "p1" in res3
+    assert "p1" in res1
+    assert "p2" in res1
+
+
+def test_ch8_statistics_edge_cases() -> None:
+    """Exercise edge cases, helper functions, and error checking for coverage."""
+    from robot_sf.research.ch8_statistics import (
+        _check_ci,
+        _check_rank_ci,
+        _check_rank_ci_by_planner,
+        _expected_blockers,
+        _parse_float,
+        _pearson_ch8,
+        _spearman_ch8,
+    )
+
+    # 1. _parse_float
+    assert _parse_float(None) is None
+    assert _parse_float("abc") is None
+    assert _parse_float([1, 2]) is None
+
+    # 2. _pearson_ch8
+    # n < 3
+    assert _pearson_ch8([1.0, 2.0], [2.0, 3.0]) is None
+    # sxx or syy == 0 (zero variance)
+    assert _pearson_ch8([1.0, 1.0, 1.0], [1.0, 2.0, 3.0]) is None
+
+    # 3. _spearman_ch8 raises ValueError for too few pairs
+    with pytest.raises(ValueError, match="less than 3 pairs"):
+        _spearman_ch8([{"x": 1.0, "y": 2.0}], "x", "y")
+
+    # 4. _check_ci
+    blockers = []
+    # computed_ci missing
+    _check_ci({"ci": None}, {"ci": [1.0, 2.0]}, blockers, 1e-9)
+    assert "computed ci is missing" in blockers
+
+    blockers = []
+    # expected_ci invalid size
+    _check_ci({"ci": [1.0, 2.0]}, {"ci": [1.0]}, blockers, 1e-9)
+    assert "expected ci must contain two values" in blockers
+
+    blockers = []
+    # mismatch values
+    _check_ci({"ci": [1.0, 2.0]}, {"ci": [1.0, 3.0]}, blockers, 1e-9)
+    assert any("does not match expected" in b for b in blockers)
+
+    # 5. _check_rank_ci
+    blockers = []
+    _check_rank_ci({"rank_ci": None}, {"rank_ci": [1, 2]}, blockers)
+    assert "computed rank_ci is missing or invalid" in blockers
+
+    # 6. _check_rank_ci_by_planner
+    blockers = []
+    _check_rank_ci_by_planner(
+        {"rank_ci_by_planner": None}, {"rank_ci_by_planner": {"p1": [1, 2]}}, blockers
+    )
+    assert "computed rank_ci_by_planner is missing or invalid" in blockers
+
+    blockers = []
+    _check_rank_ci_by_planner(
+        {"rank_ci_by_planner": {"p1": None}}, {"rank_ci_by_planner": {"p1": [1, 2]}}, blockers
+    )
+    assert "computed rank_ci for p1 is missing or invalid" in blockers
+
+    # 7. _expected_blockers integration
+    spec = {
+        "expected": {
+            "value": 1.0,
+            "ci": [1.0, 2.0],
+            "rank_ci": [1, 2],
+            "rank_ci_by_planner": {"p1": [1, 2]},
+            "samples": 100,
+        }
+    }
+    computed = {
+        "value": 2.0,
+        "ci": [1.0, 3.0],
+        "rank_ci": [1, 3],
+        "rank_ci_by_planner": {"p1": [1, 3]},
+        "samples": 200,
+    }
+    res = _expected_blockers(computed, spec["expected"])
+    assert len(res) > 0

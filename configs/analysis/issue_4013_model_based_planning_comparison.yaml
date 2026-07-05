@@ -1,0 +1,13 @@
+schema_version: issue_4013.model_based_planning_comparison.v1
+issue: 4013
+evidence_tier: diagnostic-only
+claim_boundary: diagnostic matched-scenario comparison; not paper-grade benchmark evidence
+output_json: ../../output/analysis/issue_4013/model_based_planning_comparison.json
+output_markdown: ../../output/analysis/issue_4013/model_based_planning_comparison.md
+runs:
+  - role: learned_prediction_mpc
+    episodes_jsonl: ../../output/benchmarks/issue4013/learned_prediction_mpc/episodes.jsonl
+  - role: cv_prediction_mpc
+    episodes_jsonl: ../../output/benchmarks/issue4013/cv_prediction_mpc/episodes.jsonl
+  - role: model_free_baseline
+    episodes_jsonl: ../../output/benchmarks/issue4013/model_free_baseline/episodes.jsonl

@@ -31,11 +31,80 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = "configs/benchmarks/issue_3465_topology_gate_paired.yaml"
 DEFAULT_OUTPUT_DIR = "docs/context/evidence/issue_3465_topology_gate_paired"
 
+ACCEPTANCE_EVIDENCE: tuple[dict[str, str], ...] = (
+    {
+        "criterion": "Paired enabled/disabled config exists and is reproducible.",
+        "evidence": (
+            "PR #4246 added configs/benchmarks/issue_3465_topology_gate_paired.yaml "
+            "and the fail-closed preregistration validator."
+        ),
+        "status": "met",
+    },
+    {
+        "criterion": "Same scenario/seed/planner contract is used across arms.",
+        "evidence": (
+            "PR #4246 validates topology_gate_disabled and topology_gate_enabled differ "
+            "only by near_parity_diversity_gate_enabled while preserving planner, scenario, "
+            "seed, and horizon pairing."
+        ),
+        "status": "met",
+    },
+    {
+        "criterion": "Corrective #3463 gate completed or waived before paired interpretation.",
+        "evidence": (
+            "PR #4465 integrated corrective packets #4388, #4411, #4426, #4435, and #4444 "
+            "into the readiness contract and reports ready_for_paired_run."
+        ),
+        "status": "met",
+    },
+    {
+        "criterion": "Degraded or fallback rows are excluded or caveated.",
+        "evidence": (
+            "PR #4487 added the paired decision builder, excludes fallback/degraded arms "
+            "from promotion evidence, and defaults missing paired_significant to False in real mode."
+        ),
+        "status": "met",
+    },
+    {
+        "criterion": "Result classification is recorded conservatively.",
+        "evidence": (
+            "PR #3602 added near_parity_promotion_gate.v1. This packet remains blocked until "
+            "a real campaign_summary.json exists; then it writes summary.json, paired_deltas.csv, "
+            "and README.md with the conservative decision."
+        ),
+        "status": "blocked_pending_campaign",
+    },
+)
+
 _SAFETY_ALIASES = ("collisions_mean", "collision_rate", "collision_rate_mean", "collisions")
 _EFFICIENCY_ALIASES = ("path_efficiency_mean", "path_efficiency", "efficiency", "efficiency_mean")
 _STATUS_ALIASES = ("readiness_status", "status", "execution_mode", "availability_status")
 
 BLOCKED_STATUSES = {"fallback", "degraded", "failed", "not_available", "blocked"}
+
+
+def _display_path(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
+def _set_criterion_status(
+    evidence: list[dict[str, str]], criterion_prefix: str, status: str
+) -> None:
+    """Update one acceptance criterion's status in place.
+
+    The acceptance-evidence template carries static default statuses; the actual
+    decision state (corrective-gate completion, campaign availability) must be
+    reflected dynamically so the generated report never claims a criterion is met
+    or blocked in a state where that is untrue.
+    """
+
+    for item in evidence:
+        if item["criterion"].startswith(criterion_prefix):
+            item["status"] = status
+            return
 
 
 def _get_metric(row: Mapping[str, Any], aliases: tuple[str, ...]) -> float | None:
@@ -71,6 +140,7 @@ def build_decision_report(  # noqa: C901
     """Build the issue #3465 decision report."""
 
     config = load_topology_gate_paired_config(config_path)
+    acceptance_evidence = [dict(item) for item in ACCEPTANCE_EVIDENCE]
     corrective_complete = config.get("readiness", {}).get("corrective_complete", False)
 
     if not corrective_complete:
@@ -82,12 +152,14 @@ def build_decision_report(  # noqa: C901
             corrective_complete=False,
         )
         verdict = classify_near_parity_promotion(comparison)
+        _set_criterion_status(acceptance_evidence, "Corrective #3463", "not_met")
         return {
             "status": "blocked",
             "reason": "corrective_incomplete",
             "verdict": verdict,
             "blocked_reasons": ["Corrective implementation (#3463) is not complete."],
-            "config_path": str(config_path),
+            "acceptance_evidence": acceptance_evidence,
+            "config_path": _display_path(config_path),
         }
 
     # Load campaign results
@@ -123,8 +195,11 @@ def build_decision_report(  # noqa: C901
             return {
                 "status": "blocked",
                 "reason": "campaign_summary_missing",
-                "blocked_reasons": [f"Campaign summary JSON not found at {campaign_summary_path}."],
-                "config_path": str(config_path),
+                "blocked_reasons": [
+                    f"Campaign summary JSON not found at {_display_path(campaign_summary_path)}."
+                ],
+                "acceptance_evidence": acceptance_evidence,
+                "config_path": _display_path(config_path),
             }
 
         try:
@@ -135,8 +210,11 @@ def build_decision_report(  # noqa: C901
             return {
                 "status": "blocked",
                 "reason": "campaign_summary_invalid",
-                "blocked_reasons": [f"Failed to read/parse {campaign_summary_path}: {e}"],
-                "config_path": str(config_path),
+                "blocked_reasons": [
+                    f"Failed to read/parse {_display_path(campaign_summary_path)}: {e}"
+                ],
+                "acceptance_evidence": acceptance_evidence,
+                "config_path": _display_path(config_path),
             }
 
     disabled_row = None
@@ -156,7 +234,8 @@ def build_decision_report(  # noqa: C901
             "status": "blocked",
             "reason": "arms_not_found",
             "blocked_reasons": blockers,
-            "config_path": str(config_path),
+            "acceptance_evidence": acceptance_evidence,
+            "config_path": _display_path(config_path),
         }
 
     # Extract metrics
@@ -178,7 +257,8 @@ def build_decision_report(  # noqa: C901
             "status": "blocked",
             "reason": "metrics_missing",
             "blocked_reasons": blockers,
-            "config_path": str(config_path),
+            "acceptance_evidence": acceptance_evidence,
+            "config_path": _display_path(config_path),
         }
 
     # Paired calculations
@@ -211,11 +291,15 @@ def build_decision_report(  # noqa: C901
     config_data = config_path.read_bytes()
     config_sha256 = hashlib.sha256(config_data).hexdigest()
 
+    # Campaign loaded and classified: the conservative-classification criterion is now met.
+    _set_criterion_status(acceptance_evidence, "Result classification is recorded", "met")
+
     return {
         "status": "ready",
         "verdict": verdict,
+        "acceptance_evidence": acceptance_evidence,
         "config_provenance": {
-            "path": str(config_path),
+            "path": _display_path(config_path),
             "sha256": config_sha256,
         },
         "arms": {
@@ -254,7 +338,7 @@ def write_decision_artifacts(report: Mapping[str, Any], output_dir: Path) -> Non
     # Write paired_deltas.csv
     csv_path = output_dir / "paired_deltas.csv"
     with open(csv_path, "w", encoding="utf-8", newline="") as f:
-        writer = csv.writer(f)
+        writer = csv.writer(f, lineterminator="\n")
         writer.writerow(["metric", "disabled_val", "enabled_val", "delta"])
         if report.get("status") == "ready":
             deltas = report["deltas"]
@@ -327,6 +411,20 @@ def format_markdown_report(report: Mapping[str, Any]) -> str:
                 "",
             ]
         )
+
+    lines.extend(
+        [
+            "## Acceptance Evidence",
+            "",
+            "| Criterion | Status | Evidence |",
+            "| --- | --- | --- |",
+        ]
+    )
+    for item in report.get("acceptance_evidence", []):
+        lines.append(f"| {item['criterion']} | `{item['status']}` | {item['evidence']} |")
+    if not report.get("acceptance_evidence"):
+        lines.append("| none | `missing` | No acceptance evidence recorded. |")
+    lines.append("")
 
     lines.append("## Blockers")
     lines.append("")

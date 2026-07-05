@@ -17,6 +17,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.models import get_registry_entry
+
 SCHEMA_VERSION = "issue-4183-hybrid-global-rl-diagnostic.v1"
 ISSUE = 4183
 ROUTE_ARM = "route_conditioned_hybrid_global_rl"
@@ -61,6 +63,7 @@ class DiagnosticConfig:
     horizon: int
     dt: float
     learned_policy_checkpoint: str
+    learned_policy_model_id: str | None
     route_conditioning_enabled: bool
     row_inclusion_rule: str
 
@@ -92,6 +95,7 @@ def load_diagnostic_config(path: str | Path) -> DiagnosticConfig:
         horizon=int(payload["horizon"]),
         dt=float(payload["dt"]),
         learned_policy_checkpoint=str(issue_block["learned_policy_checkpoint"]),
+        learned_policy_model_id=str(issue_block.get("learned_policy_model_id") or "") or None,
         route_conditioning_enabled=bool(issue_block["route_conditioning_enabled"]),
         row_inclusion_rule=str(issue_block["row_inclusion_rule"]),
     )
@@ -125,6 +129,10 @@ def preflight_configs(
             route_config.learned_policy_checkpoint,
             baseline_config.learned_policy_checkpoint,
         ),
+        "learned_policy_model_id": (
+            route_config.learned_policy_model_id,
+            baseline_config.learned_policy_model_id,
+        ),
     }
     for field, (left, right) in shared_fields.items():
         if left != right:
@@ -134,7 +142,10 @@ def preflight_configs(
     if baseline_config.route_conditioning_enabled:
         errors.append("baseline config must disable route conditioning")
 
-    checkpoint_path = Path(repo_root) / route_config.learned_policy_checkpoint
+    checkpoint_path, checkpoint_reference, checkpoint_errors = _resolve_checkpoint_reference(
+        route_config, repo_root=Path(repo_root)
+    )
+    errors.extend(checkpoint_errors)
     if not checkpoint_path.exists():
         errors.append(f"blocked_missing_learned_checkpoint: {checkpoint_path}")
     scenario_path = Path(repo_root) / route_config.scenario_matrix
@@ -160,9 +171,59 @@ def preflight_configs(
         "horizon": route_config.horizon,
         "dt": route_config.dt,
         "learned_policy_checkpoint": route_config.learned_policy_checkpoint,
+        "learned_policy_model_id": route_config.learned_policy_model_id,
+        "checkpoint_reference": checkpoint_reference,
         "checkpoint_sha256": _sha256_file(checkpoint_path) if checkpoint_path.exists() else None,
         "claim_boundary": CLAIM_BOUNDARY,
     }
+
+
+def _resolve_checkpoint_reference(
+    config: DiagnosticConfig, *, repo_root: Path
+) -> tuple[Path, dict[str, Any], list[str]]:
+    """Resolve the learned checkpoint reference without downloading remote artifacts.
+
+    Returns:
+        tuple[Path, dict[str, Any], list[str]]: Local checkpoint path, metadata, and errors.
+    """
+    if config.learned_policy_model_id:
+        try:
+            entry = get_registry_entry(config.learned_policy_model_id)
+        except KeyError:
+            fallback_path = Path(config.learned_policy_checkpoint)
+            return (
+                fallback_path if fallback_path.is_absolute() else repo_root / fallback_path,
+                {
+                    "type": "model_id",
+                    "model_id": config.learned_policy_model_id,
+                    "status": "missing_registry_entry",
+                },
+                [f"missing_model_registry_entry: {config.learned_policy_model_id}"],
+            )
+        local_path = Path(str(entry.get("local_path", "")))
+        promotion = entry.get("benchmark_promotion")
+        checkpoint_path = local_path if local_path.is_absolute() else repo_root / local_path
+        return (
+            checkpoint_path,
+            {
+                "type": "model_id",
+                "model_id": config.learned_policy_model_id,
+                "local_path": str(local_path),
+                "claim_boundary": (
+                    promotion.get("claim_boundary") if isinstance(promotion, dict) else None
+                ),
+                "observation_mode": (
+                    promotion.get("observation_mode") if isinstance(promotion, dict) else None
+                ),
+            },
+            [],
+        )
+    checkpoint_path = Path(config.learned_policy_checkpoint)
+    return (
+        checkpoint_path if checkpoint_path.is_absolute() else repo_root / checkpoint_path,
+        {"type": "local_path", "path": config.learned_policy_checkpoint},
+        [],
+    )
 
 
 def load_jsonl_records(path: str | Path) -> list[dict[str, Any]]:

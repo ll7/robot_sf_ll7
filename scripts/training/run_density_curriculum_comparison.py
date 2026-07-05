@@ -73,6 +73,16 @@ def main() -> int:
             ],
             check=True,
         )
+
+    # Update manifest with completed artifacts
+    manifest["artifacts"] = {
+        "curriculum_checkpoint": f"output/benchmarks/expert_policies/{curriculum['policy_id']}.zip",
+        "baseline_checkpoint": f"output/benchmarks/expert_policies/{baseline['policy_id']}.zip",
+    }
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    print(f"updated {manifest_path} with completed checkpoint artifacts")
     return 0
 
 

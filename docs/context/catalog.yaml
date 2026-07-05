@@ -17,7 +17,31 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+  - path: docs/context/evidence/issue_3465_topology_gate_paired/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3465_topology_gate_paired/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3465_topology_gate_paired/paired_deltas.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3557_uncertainty_representation_generalization/closure_audit.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3637_closure_audit_2026-07-05.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3214_closure_audit_2026-07-05.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4017_closure_audit_2026-07-05.md
     status: evidence
     freshness: evidence
     area: benchmark_evidence
@@ -37,6 +61,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4012_offline_online_smoke_2026-07-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: workflow_evidence
   - path: docs/context/issue_4164_state.yaml
     status: current
     freshness: dated
@@ -77,6 +105,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4013_learned_model_based_planning/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4445_ch8_statistics_reproducibility/source_manifest.json
     status: evidence
     freshness: evidence
@@ -94,6 +126,14 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_4445_ch8_statistics_reproducibility/SHA256SUMS
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4445_ch8_statistics_reproducibility/campaign_table.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4445_ch8_statistics_reproducibility/scenario_family_breakdown.csv
     status: evidence
     freshness: evidence
     area: benchmark_evidence
@@ -170,6 +210,10 @@ entries:
     freshness: dated
     area: benchmark_evidence
   - path: docs/context/evidence/issue_4183_hybrid_global_rl_diagnostic/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4183_hybrid_global_rl_diagnostic/preflight_registry_checkpoint_20260705.json
     status: evidence
     freshness: evidence
     area: benchmark_evidence
@@ -3238,6 +3282,10 @@ entries:
   - path: docs/context/evidence/issue_4455_closure_audit_2026-07-04.md
     status: evidence
     freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_4455_state.yaml
+    status: current
+    freshness: dated
     area: benchmark_evidence
   - path: docs/context/evidence/issue_4232_uncertainty_envelope_diagnostic_smoke_2026-07
     status: evidence

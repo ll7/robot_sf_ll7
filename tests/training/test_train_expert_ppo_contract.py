@@ -457,6 +457,13 @@ def test_write_perf_summary_writes_expected_keys(tmp_path: Path, monkeypatch) ->
             }
         ],
         total_wall_clock_sec=12.0,
+        parameter_summary={
+            "available": True,
+            "policy_parameter_count": 1234,
+            "policy_trainable_parameter_count": 1200,
+            "model_parameter_count": None,
+            "model_trainable_parameter_count": None,
+        },
     )
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["run_id"] == "demo_run"
@@ -464,6 +471,43 @@ def test_write_perf_summary_writes_expected_keys(tmp_path: Path, monkeypatch) ->
     assert payload["total_wall_clock_sec"] == 12.0
     assert payload["train_env_steps_per_sec_mean"] == 100.0
     assert payload["eval_sec_per_checkpoint"] == 3.0
+    assert payload["parameter_summary"] == {
+        "available": True,
+        "policy_parameter_count": 1234,
+        "policy_trainable_parameter_count": 1200,
+        "model_parameter_count": None,
+        "model_trainable_parameter_count": None,
+    }
+
+
+def test_model_parameter_summary_counts_policy_parameters() -> None:
+    """Parameter summary should count total and trainable policy parameters."""
+
+    class _Parameter:
+        def __init__(self, count: int, *, requires_grad: bool) -> None:
+            self._count = count
+            self.requires_grad = requires_grad
+
+        def numel(self) -> int:
+            return self._count
+
+    class _Policy:
+        def parameters(self) -> list[_Parameter]:
+            return [
+                _Parameter(3, requires_grad=True),
+                _Parameter(5, requires_grad=False),
+            ]
+
+    class _Model:
+        policy = _Policy()
+
+    assert train_ppo._model_parameter_summary(_Model()) == {
+        "available": True,
+        "policy_parameter_count": 8,
+        "policy_trainable_parameter_count": 3,
+        "model_parameter_count": None,
+        "model_trainable_parameter_count": None,
+    }
 
 
 def _capture_evaluate_policy_info_logs(monkeypatch, tmp_path: Path, *, episodes: int) -> list[str]:

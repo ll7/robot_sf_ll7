@@ -120,6 +120,13 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_3637_closure_audit_2026-07-05.md`: closure-audit integration report for Issue #3637.
+  Maps reactivity-vs-replay mechanism, preflight, frozen packet, analyzer, and runner-metadata PRs
+  Issue #3594, Issue #3612, Issue #3696, Issue #3853, Issue #3860, Issue #3876, Issue #4150,
+  Issue #4462, and Issue #4492 to acceptance criteria, and
+  keeps the issue open on missing durable >=3-planner S20 campaign output plus seed-sufficiency
+  analysis.
+
 - `issue_3214_closure_audit_2026-07-05.md`: closure-audit evidence for Issue #3214.
   Maps hard-case predictive retraining acceptance criteria to merged PRs #3255,
   PR #3515, PR #3869, and PR #4467 plus follow-up Issue #3254, and keeps the issue

@@ -39,6 +39,7 @@ SMOKE_MANIFEST_SCHEMA_VERSION = "diffusion_policy_smoke_manifest.v1"
 SMOKE_CONFIG_SCHEMA_VERSION = "diffusion_policy_training_smoke.v1"
 DIAGNOSTIC_PACKET_SCHEMA_VERSION = "diffusion_policy_diagnostic_packet.v1"
 MULTIMODAL_PROBE_SCHEMA_VERSION = "diffusion_policy_multimodal_probe.v1"
+REPRESENTATIVE_ROLLOUT_SCHEMA_VERSION = "diffusion_policy_representative_rollout.v1"
 
 
 @dataclass(frozen=True)
@@ -97,6 +98,7 @@ def build_diagnostic_packet(
     *,
     map_runner_metadata: dict[str, Any] | None = None,
     multimodal_probe: dict[str, Any] | None = None,
+    representative_rollout: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Summarize issue #4010 smoke/runtime artifacts as diagnostic-only evidence.
 
@@ -117,8 +119,14 @@ def build_diagnostic_packet(
     diffusion_metadata = metadata.get("diffusion_policy", {})
     checkpoint_status = diffusion_metadata.get("checkpoint_status", "unknown")
     normalizer_status = diffusion_metadata.get("normalizer_status", "unknown")
-    runtime_loaded = checkpoint_status == "checkpoint_loaded" and normalizer_status == "loaded"
     multimodal_probe_status = _multimodal_probe_status(multimodal_probe)
+    representative_rollout_status = _representative_rollout_status(representative_rollout)
+    rollout_runtime_loaded = bool(
+        (representative_rollout_status["summary"] or {}).get("runtime_loaded_checkpoint")
+    )
+    runtime_loaded = (
+        checkpoint_status == "checkpoint_loaded" and normalizer_status == "loaded"
+    ) or rollout_runtime_loaded
     remaining_blockers: list[dict[str, str]] = []
     if not runtime_loaded:
         remaining_blockers.append(
@@ -128,13 +136,14 @@ def build_diagnostic_packet(
                 "reason": "map-runner metadata does not prove checkpoint and normalizer loaded",
             }
         )
-    remaining_blockers.append(
-        {
-            "id": "representative_rollout",
-            "status": "remaining",
-            "reason": "no representative scenario rollout is recorded in this diagnostic packet",
-        }
-    )
+    if not representative_rollout_status["passed"]:
+        remaining_blockers.append(
+            {
+                "id": "representative_rollout",
+                "status": "remaining",
+                "reason": str(representative_rollout_status["reason"]),
+            }
+        )
     if not multimodal_probe_status["passed"]:
         remaining_blockers.append(
             {
@@ -175,11 +184,13 @@ def build_diagnostic_packet(
         "acceptance_status": {
             "smoke_manifest_present": True,
             "checkpoint_backed_map_runner_load": runtime_loaded,
+            "representative_rollout": representative_rollout_status["passed"],
             "multimodal_action_probe": multimodal_probe_status["passed"],
             "benchmark_campaign_run": False,
             "slurm_or_gpu_submission": False,
             "paper_or_dissertation_claim": False,
         },
+        "representative_rollout": representative_rollout_status["summary"],
         "multimodal_probe": multimodal_probe_status["summary"],
         "remaining_blockers": remaining_blockers,
     }
@@ -262,6 +273,117 @@ def build_multimodal_probe(
     }
 
 
+def build_representative_rollout(
+    manifest: dict[str, Any],
+    *,
+    artifact_dir: Path | None = None,
+    step_count: int = 12,
+    seed: int = 4010,
+) -> dict[str, Any]:
+    """Run a short checkpoint-backed crossing rollout and record diagnostic provenance.
+
+    Returns:
+        JSON-serializable representative rollout report for issue #4010.
+    """
+    if step_count <= 0:
+        raise ValueError("step_count must be positive")
+    artifacts = _validated_smoke_artifacts(manifest)
+    artifact_base = Path(".") if artifact_dir is None else artifact_dir
+    checkpoint_path = _resolve_manifest_artifact(artifact_base, artifacts["checkpoint_path"])
+    normalizer_path = _resolve_manifest_artifact(artifact_base, artifacts["normalizer_path"])
+    config_payload = manifest.get("config", {})
+    if not isinstance(config_payload, dict):
+        raise ValueError("Diffusion policy smoke manifest config must be a mapping")
+
+    from robot_sf.benchmark.map_runner import _build_policy  # noqa: PLC0415
+
+    max_linear_speed = float(config_payload.get("max_linear_speed", 1.0))
+    max_angular_speed = float(config_payload.get("max_angular_speed", 1.0))
+    policy, metadata = _build_policy(
+        "diffusion_policy",
+        {
+            "checkpoint_path": str(checkpoint_path),
+            "normalizer_path": str(normalizer_path),
+            "seed": seed,
+            "deterministic": True,
+            "allow_untrained_smoke": False,
+            "max_pedestrians": int(config_payload.get("max_pedestrians", 4)),
+            "max_linear_speed": max_linear_speed,
+            "max_angular_speed": max_angular_speed,
+            "denoising_steps": int(config_payload.get("denoising_steps", 4)),
+            "num_action_samples": int(config_payload.get("num_action_samples", 4)),
+        },
+        robot_kinematics="differential_drive",
+    )
+    reset = getattr(policy, "_planner_reset", None)
+    if callable(reset):
+        reset(seed=seed)
+
+    dt = 0.1
+    robot_x = 0.0
+    robot_y = 0.0
+    heading = 0.0
+    trajectory: list[dict[str, Any]] = []
+    finite_command_count = 0
+    for step in range(step_count):
+        obs = _representative_rollout_observation(step, robot_x, robot_y, heading, dt)
+        linear, angular = policy(obs)
+        linear = float(linear)
+        angular = float(angular)
+        if np.isfinite(linear) and np.isfinite(angular):
+            finite_command_count += 1
+        trajectory.append(
+            {
+                "step": step,
+                "robot_position": [robot_x, robot_y],
+                "command": [linear, angular],
+            }
+        )
+        heading += angular * dt
+        robot_x += linear * np.cos(heading) * dt
+        robot_y += linear * np.sin(heading) * dt
+
+    close = getattr(policy, "_planner_close", None)
+    if callable(close):
+        close()
+
+    commands_valid = all(
+        0.0 <= row["command"][0] <= max_linear_speed and abs(row["command"][1]) <= max_angular_speed
+        for row in trajectory
+    )
+    runtime_loaded = (
+        metadata.get("diffusion_policy", {}).get("checkpoint_status") == "checkpoint_loaded"
+        and metadata.get("diffusion_policy", {}).get("normalizer_status") == "loaded"
+    )
+    passed = runtime_loaded and finite_command_count == step_count and commands_valid
+    return {
+        "schema_version": REPRESENTATIVE_ROLLOUT_SCHEMA_VERSION,
+        "issue": 4010,
+        "evidence_tier": EVIDENCE_TIER,
+        "claim_boundary": (
+            "diagnostic representative crossing rollout only; not benchmark campaign, "
+            "COLSON reproduction, navigation-quality result, or paper evidence"
+        ),
+        "scenario_id": "issue_4010_representative_crossing_smoke",
+        "scenario_family": "crossing",
+        "step_count": step_count,
+        "seed": seed,
+        "finite_command_count": finite_command_count,
+        "commands_within_limits": commands_valid,
+        "runtime_loaded_checkpoint": runtime_loaded,
+        "final_robot_position": [robot_x, robot_y],
+        "trajectory": trajectory,
+        "runtime_metadata": metadata.get("diffusion_policy", {}),
+        "passed": passed,
+        "out_of_scope": [
+            "no full benchmark campaign",
+            "no Slurm/GPU submission",
+            "no baseline performance comparison claim",
+            "no paper/dissertation claim",
+        ],
+    }
+
+
 def _validated_smoke_artifacts(manifest: dict[str, Any]) -> dict[str, str]:
     """Return required smoke artifact paths or fail closed."""
     if manifest.get("schema_version") != SMOKE_MANIFEST_SCHEMA_VERSION:
@@ -333,6 +455,46 @@ def _multimodal_probe_status(probe: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+def _representative_rollout_status(rollout: dict[str, Any] | None) -> dict[str, Any]:
+    """Normalize optional representative rollout payload diagnostic packet status.
+
+    Returns:
+        Compact status payload consumed by the integration diagnostic packet.
+    """
+    if rollout is None:
+        return {
+            "passed": False,
+            "reason": "representative checkpoint-backed scenario rollout not yet recorded",
+            "summary": None,
+        }
+    if rollout.get("schema_version") != REPRESENTATIVE_ROLLOUT_SCHEMA_VERSION:
+        return {
+            "passed": False,
+            "reason": "representative rollout schema not recognized",
+            "summary": {"schema_version": rollout.get("schema_version"), "passed": False},
+        }
+    passed = bool(rollout.get("passed"))
+    return {
+        "passed": passed,
+        "reason": (
+            "representative rollout produced finite bounded checkpoint-backed commands"
+            if passed
+            else "representative rollout did not prove finite bounded checkpoint-backed commands"
+        ),
+        "summary": {
+            "schema_version": rollout.get("schema_version"),
+            "scenario_id": rollout.get("scenario_id"),
+            "scenario_family": rollout.get("scenario_family"),
+            "step_count": rollout.get("step_count"),
+            "finite_command_count": rollout.get("finite_command_count"),
+            "commands_within_limits": rollout.get("commands_within_limits"),
+            "runtime_loaded_checkpoint": rollout.get("runtime_loaded_checkpoint"),
+            "passed": passed,
+            "claim_boundary": rollout.get("claim_boundary"),
+        },
+    }
+
+
 def _fixed_conflict_observation() -> dict[str, Any]:
     """Return deterministic symmetric conflict observation for action diversity probe."""
     return {
@@ -349,6 +511,30 @@ def _fixed_conflict_observation() -> dict[str, Any]:
         ],
         "obstacles": [],
         "dt": 0.1,
+    }
+
+
+def _representative_rollout_observation(
+    step: int, robot_x: float, robot_y: float, heading: float, dt: float
+) -> dict[str, Any]:
+    """Return map-runner style crossing observation for a short diagnostic rollout."""
+    ped_a_y = 0.45 - 0.06 * step
+    ped_b_y = -0.45 + 0.06 * step
+    return {
+        "robot": {
+            "position": [robot_x, robot_y],
+            "velocity": [0.0, 0.0],
+            "goal": [2.0, 0.0],
+            "heading": [heading],
+            "radius": [0.3],
+        },
+        "pedestrians": {
+            "positions": [[0.9, ped_a_y], [1.1, ped_b_y]],
+            "velocities": [[0.0, -0.25], [0.0, 0.25]],
+            "radii": [0.25, 0.25],
+            "count": [2],
+        },
+        "dt": [dt],
     }
 
 
@@ -676,15 +862,27 @@ def main(argv: list[str] | None = None) -> int:
         help="Also write a diagnostic-only fixed-conflict multimodal action probe.",
     )
     parser.add_argument(
+        "--write-representative-rollout",
+        action="store_true",
+        help="Also write a diagnostic-only checkpoint-backed representative rollout.",
+    )
+    parser.add_argument(
         "--multimodal-samples",
         type=int,
         default=64,
         help="Number of fixed-conflict candidate actions to classify.",
     )
+    parser.add_argument(
+        "--rollout-steps",
+        type=int,
+        default=12,
+        help="Number of representative rollout steps to execute.",
+    )
     args = parser.parse_args(argv)
     artifacts = run_training_smoke(load_smoke_config(args.config), output_dir=args.output_dir)
     payload = {"manifest_path": str(artifacts.manifest_path)}
     multimodal_probe = None
+    representative_rollout = None
     if args.write_multimodal_probe:
         probe_path = artifacts.manifest_path.with_suffix(".multimodal_probe.json")
         multimodal_probe = build_multimodal_probe(
@@ -696,9 +894,24 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(multimodal_probe, indent=2, sort_keys=True), encoding="utf-8"
         )
         payload["multimodal_probe_path"] = str(probe_path)
+    if args.write_representative_rollout:
+        rollout_path = artifacts.manifest_path.with_suffix(".representative_rollout.json")
+        representative_rollout = build_representative_rollout(
+            artifacts.manifest,
+            artifact_dir=artifacts.manifest_path.parent,
+            step_count=args.rollout_steps,
+        )
+        rollout_path.write_text(
+            json.dumps(representative_rollout, indent=2, sort_keys=True), encoding="utf-8"
+        )
+        payload["representative_rollout_path"] = str(rollout_path)
     if args.write_diagnostic_packet:
         packet_path = artifacts.manifest_path.with_suffix(".diagnostic_packet.json")
-        packet = build_diagnostic_packet(artifacts.manifest, multimodal_probe=multimodal_probe)
+        packet = build_diagnostic_packet(
+            artifacts.manifest,
+            multimodal_probe=multimodal_probe,
+            representative_rollout=representative_rollout,
+        )
         packet_path.write_text(json.dumps(packet, indent=2, sort_keys=True), encoding="utf-8")
         payload["diagnostic_packet_path"] = str(packet_path)
     sys.stdout.write(json.dumps(payload, sort_keys=True))

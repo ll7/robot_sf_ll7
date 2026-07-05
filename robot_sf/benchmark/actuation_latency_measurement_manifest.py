@@ -129,6 +129,16 @@ CONTRACT_STATUS_READY = "ready"
 CONTRACT_STATUS_BLOCKED = "blocked"
 CONTRACT_STATUS_SYNTHETIC_ONLY = "synthetic-only"
 
+ISSUE_3283_BLOCKED_STATE = "blocked-external-input"
+ISSUE_3283_REVIVAL_CONDITION = (
+    "real AMV command-response collection method becomes available and staged data "
+    "passes provenance review"
+)
+ISSUE_3283_NEXT_EMPIRICAL_ACTION = (
+    "locate or collect real AMV command-response traces with synchronized command, "
+    "mechanical/yaw response, braking, acceleration, rider-load, and rider-response channels"
+)
+
 
 class AmvActuationLatencyManifestError(ValueError):
     """Raised when an AMV actuation-latency measurement manifest fails schema checks."""
@@ -174,6 +184,29 @@ class AmvActuationLatencyManifestReport:
             + self.separation_blockers
             + self.proposed_field_blockers
         )
+
+
+@dataclass(frozen=True, slots=True)
+class AmvActuationLatencyDecisionPacket:
+    """Machine-readable issue #3283 decision state derived from an intake report."""
+
+    issue: int
+    manifest_id: str
+    contract_status: str
+    measurement_status: str
+    blocked_state: str | None
+    evidence_boundary: str
+    measured_value_claim_allowed: bool
+    claim_boundary: str
+    remaining_blockers: list[str]
+    required_input: str | None
+    next_empirical_action: str | None
+    unrelated_calibration_work_blocked: bool
+    revival_condition: str | None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return JSON-safe dictionary representation."""
+        return asdict(self)
 
 
 @lru_cache(maxsize=1)
@@ -307,6 +340,55 @@ def check_amv_actuation_latency_measurement_manifest(
             "contract_status": contract_status,
             "measured_value_claim_allowed": claim_allowed,
         }
+    )
+
+
+def build_amv_actuation_latency_decision_packet(
+    manifest: Mapping[str, Any],
+    *,
+    source: str | Path | None = None,
+) -> AmvActuationLatencyDecisionPacket:
+    """Build a reviewer-facing decision packet for issue #3283.
+
+    The packet intentionally consumes only metadata already accepted by the
+    manifest checker. It does not read, stage, or infer real command-response
+    data, and it never upgrades synthetic or blocked manifests into measured
+    autonomous-micromobility-vehicle (AMV) evidence.
+
+    Returns:
+        Decision packet with claim boundary, blockers, and next empirical action.
+    """
+    report = check_amv_actuation_latency_measurement_manifest(manifest, source=source)
+    blocked_on_external_input = (
+        report.contract_status == CONTRACT_STATUS_BLOCKED
+        and report.measurement_status == ISSUE_3283_BLOCKED_STATE
+    )
+    remaining_blockers = report.blockers
+    if blocked_on_external_input and not remaining_blockers:
+        remaining_blockers = ["real AMV command-response data not staged or provenance-reviewed"]
+
+    return AmvActuationLatencyDecisionPacket(
+        issue=3283,
+        manifest_id=report.manifest_id,
+        contract_status=report.contract_status,
+        measurement_status=report.measurement_status,
+        blocked_state=ISSUE_3283_BLOCKED_STATE if blocked_on_external_input else None,
+        evidence_boundary=report.evidence_boundary,
+        measured_value_claim_allowed=report.measured_value_claim_allowed,
+        claim_boundary=(
+            "no measured AMV latency or rider-coupling claim"
+            if not report.measured_value_claim_allowed
+            else "measured manifest ready for downstream claim review"
+        ),
+        remaining_blockers=remaining_blockers,
+        required_input=(
+            "accepted real AMV command-response data" if blocked_on_external_input else None
+        ),
+        next_empirical_action=(
+            ISSUE_3283_NEXT_EMPIRICAL_ACTION if blocked_on_external_input else None
+        ),
+        unrelated_calibration_work_blocked=False,
+        revival_condition=ISSUE_3283_REVIVAL_CONDITION if blocked_on_external_input else None,
     )
 
 

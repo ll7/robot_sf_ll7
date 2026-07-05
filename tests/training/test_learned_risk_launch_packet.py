@@ -40,6 +40,25 @@ def _valid_packet(tmp_path: Path) -> dict[str, object]:
         "candidate_id": "learned_risk_model_v1",
         "generating_commit": "e14e2f8bc2058d9f0e071219629915dd5b5dd5a8",
         "slurm_handoff": "docs/context/policy_search/SLURM/001_learned_risk_model_v1.md",
+        "slurm_execution": {
+            "entrypoint": "scripts/training/train_learned_risk_model.py",
+            "config": "configs/training/learned_risk_model_v1.yaml",
+            "command": [
+                "uv",
+                "run",
+                "python",
+                "scripts/training/train_learned_risk_model.py",
+                "--config",
+                "configs/training/learned_risk_model_v1.yaml",
+            ],
+            "expected_output_root": (
+                "wandb-artifact://robot-sf/learned-risk/learned_risk_model_v1:pending"
+            ),
+            "expected_log_path": "slurm://learned-risk-model-v1/logs/%j.out",
+            "status_artifact_path": (
+                "wandb-artifact://robot-sf/learned-risk/learned_risk_model_v1_status:pending"
+            ),
+        },
         "trace_input_contract": {
             "required_episode_fields": [
                 "scenario_id",
@@ -99,6 +118,30 @@ def test_issue_1395_launch_packet_validates() -> None:
     assert report["baseline_comparison"]["candidate_id"] == (
         "hybrid_rule_v3_static_margin0_waypoint2"
     )
+    assert report["slurm_execution"]["entrypoint"] == (
+        "scripts/training/train_learned_risk_model.py"
+    )
+    assert report["slurm_execution"]["expected_log_path"].startswith("slurm://")
+
+
+def test_validate_launch_packet_rejects_missing_slurm_execution(tmp_path: Path) -> None:
+    """Launch packets must name the Slurm execution/log artifact contract."""
+    packet = _valid_packet(tmp_path)
+    broken = copy.deepcopy(packet)
+    broken.pop("slurm_execution")
+
+    with pytest.raises(LearnedRiskLaunchPacketError, match="slurm_execution"):
+        validate_launch_packet(_write_packet(tmp_path, broken))
+
+
+def test_validate_launch_packet_rejects_local_slurm_execution_output(tmp_path: Path) -> None:
+    """Slurm execution outputs must point to durable or scheduler-managed locations."""
+    packet = _valid_packet(tmp_path)
+    broken = copy.deepcopy(packet)
+    broken["slurm_execution"]["expected_output_root"] = "output/learned-risk/local"
+
+    with pytest.raises(LearnedRiskLaunchPacketError, match="worktree-local output"):
+        validate_launch_packet(_write_packet(tmp_path, broken))
 
 
 def test_validate_launch_packet_rejects_missing_trace_fields(tmp_path: Path) -> None:

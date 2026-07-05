@@ -2,6 +2,19 @@ schema_version: learned-risk-launch-packet.v1
 candidate_id: learned_risk_model_v1
 generating_commit: e14e2f8bc2058d9f0e071219629915dd5b5dd5a8
 slurm_handoff: docs/context/policy_search/SLURM/001_learned_risk_model_v1.md
+slurm_execution:
+  entrypoint: scripts/training/train_learned_risk_model.py
+  config: configs/training/learned_risk_model_v1.yaml
+  command:
+    - uv
+    - run
+    - python
+    - scripts/training/train_learned_risk_model.py
+    - --config
+    - configs/training/learned_risk_model_v1.yaml
+  expected_output_root: wandb-artifact://robot-sf/learned-risk/learned_risk_model_v1:pending
+  expected_log_path: slurm://learned-risk-model-v1/logs/%j.out
+  status_artifact_path: wandb-artifact://robot-sf/learned-risk/learned_risk_model_v1_status:pending
 trace_input_contract:
   required_episode_fields:
     - scenario_id

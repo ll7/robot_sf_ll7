@@ -16,6 +16,17 @@ model, run stress/full-matrix evaluation, submit SLURM jobs, or promote a learne
 - Evidence fixture:
   `docs/context/evidence/issue_1395_learned_risk_launch_packet_2026-05-24/`
 
+## Slurm Execution Contract
+
+The launch packet records the planned Slurm execution surface for issue #1472:
+`slurm_execution.entrypoint`, `slurm_execution.config`, `slurm_execution.command`,
+`slurm_execution.expected_output_root`, `slurm_execution.expected_log_path`, and
+`slurm_execution.status_artifact_path`.
+
+The validator requires those fields and rejects worktree-local `output/` paths for execution
+artifacts. These fields are pre-submit contract metadata only; they do not launch training,
+resolve private trace assets, or turn pending artifact aliases into evidence.
+
 ## Frozen Baseline
 
 The launch packet freezes `hybrid_rule_v3_static_margin0_waypoint2` as the non-learning baseline

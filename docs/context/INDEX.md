@@ -1,5 +1,8 @@
 # Context Retrieval Index
 
+Recent serial benchmark GPU memory closure audit:
+[issue_4520_gpu_memory_closure_audit_2026-07-05.md](issue_4520_gpu_memory_closure_audit_2026-07-05.md).
+
 Recent hard-guarded hybrid-learning synthesis closure audit:
 [issue_1489_closure_audit_2026-07-05.md](evidence/issue_1489_closure_audit_2026-07-05.md).
 

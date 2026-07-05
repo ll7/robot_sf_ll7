@@ -40,6 +40,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Extended the **Package C readiness helper** so issue #4547 can commit the real rerun artifact from
+  the retained #2916 coupling report. `scripts/tools/prediction_package_c_readiness.py` now accepts
+  `--output-markdown` alongside `--output-json`, which lets the cheap local lane write the durable
+  JSON + Markdown readiness bundle directly under `docs/context/evidence/` instead of relying on
+  shell redirection around stdout. No campaign, Slurm, or paper-facing claim was added; this is
+  coordination-proof only.
 * Added **metadata-only public-source discovery ledger checker** for real micromobility trace
   collection issue #3278. New schema `real_trace_source_discovery.v1`, module
   `robot_sf.analysis_workbench.real_trace_source_discovery`, CLI

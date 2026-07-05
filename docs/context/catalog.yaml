@@ -2940,6 +2940,10 @@ entries:
     freshness: evidence
     area: predictive_planner
     legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_3080_package_c_readiness_2026-07-05
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
   - path: docs/context/evidence/issue_2921_first_use/report.json
     status: evidence
     freshness: evidence

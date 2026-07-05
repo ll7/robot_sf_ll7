@@ -1,0 +1,113 @@
+{
+  "schema_version": "prediction-package-c-readiness.v1",
+  "issue": 3080,
+  "claim_boundary": "coordination preflight only; no benchmark campaign executed and no forecast or paper-facing performance claim made",
+  "overall_status": "ready",
+  "seed_plan": [
+    111,
+    2868
+  ],
+  "output_roots": [
+    "docs/context/evidence/issue_2915_forecast_baselines_2026-06-20",
+    "docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13",
+    "docs/context/evidence/issue_2916_forecast_risk_coupling_2026-06-23"
+  ],
+  "coupling_result_store_available": false,
+  "coupling_report_available": true,
+  "coupling_report_path": "docs/context/evidence/issue_2916_forecast_risk_coupling_2026-06-23/forecast_risk_coupling_gate_report.json",
+  "coupling_report_blockers": [],
+  "required_configs": [
+    "configs/research/forecast_baseline_comparison_issue_2915.yaml",
+    "configs/research/forecast_risk_coupling_issue_2916.yaml"
+  ],
+  "required_code": [
+    "robot_sf/benchmark/forecast_metrics.py",
+    "robot_sf/benchmark/forecast_batch.py",
+    "robot_sf/benchmark/pedestrian_forecast.py",
+    "robot_sf/benchmark/runner.py",
+    "scripts/benchmark/run_observation_noise_envelope.py",
+    "scripts/tools/campaign_result_store.py"
+  ],
+  "arms": [
+    {
+      "arm": "no_forecast",
+      "forecast_variant": "none",
+      "risk_source": "none",
+      "baseline_id": null,
+      "status": "ready",
+      "reason": "inputs wired and validated #2916 coupling report present",
+      "present_inputs": [
+        "configs/research/forecast_baseline_comparison_issue_2915.yaml",
+        "configs/research/forecast_risk_coupling_issue_2916.yaml",
+        "robot_sf/benchmark/forecast_batch.py",
+        "robot_sf/benchmark/forecast_metrics.py",
+        "robot_sf/benchmark/pedestrian_forecast.py",
+        "robot_sf/benchmark/runner.py",
+        "scripts/benchmark/run_observation_noise_envelope.py",
+        "scripts/tools/campaign_result_store.py"
+      ],
+      "missing_inputs": [],
+      "blockers": []
+    },
+    {
+      "arm": "cv",
+      "forecast_variant": "cv",
+      "risk_source": "constant_velocity",
+      "baseline_id": "constant_velocity_gaussian_baseline",
+      "status": "ready",
+      "reason": "inputs wired and validated #2916 coupling report present",
+      "present_inputs": [
+        "configs/research/forecast_baseline_comparison_issue_2915.yaml",
+        "configs/research/forecast_risk_coupling_issue_2916.yaml",
+        "robot_sf/benchmark/forecast_batch.py",
+        "robot_sf/benchmark/forecast_metrics.py",
+        "robot_sf/benchmark/pedestrian_forecast.py",
+        "robot_sf/benchmark/runner.py",
+        "scripts/benchmark/run_observation_noise_envelope.py",
+        "scripts/tools/campaign_result_store.py"
+      ],
+      "missing_inputs": [],
+      "blockers": []
+    },
+    {
+      "arm": "semantic_cv",
+      "forecast_variant": "semantic",
+      "risk_source": "semantic_cv",
+      "baseline_id": "semantic_cv_baseline",
+      "status": "ready",
+      "reason": "inputs wired and validated #2916 coupling report present",
+      "present_inputs": [
+        "configs/research/forecast_baseline_comparison_issue_2915.yaml",
+        "configs/research/forecast_risk_coupling_issue_2916.yaml",
+        "robot_sf/benchmark/forecast_batch.py",
+        "robot_sf/benchmark/forecast_metrics.py",
+        "robot_sf/benchmark/pedestrian_forecast.py",
+        "robot_sf/benchmark/runner.py",
+        "scripts/benchmark/run_observation_noise_envelope.py",
+        "scripts/tools/campaign_result_store.py"
+      ],
+      "missing_inputs": [],
+      "blockers": []
+    },
+    {
+      "arm": "interaction_aware",
+      "forecast_variant": "interaction_aware",
+      "risk_source": "interaction_aware_cv",
+      "baseline_id": "interaction_aware_cv_baseline",
+      "status": "ready",
+      "reason": "inputs wired and validated #2916 coupling report present",
+      "present_inputs": [
+        "configs/research/forecast_baseline_comparison_issue_2915.yaml",
+        "configs/research/forecast_risk_coupling_issue_2916.yaml",
+        "robot_sf/benchmark/forecast_batch.py",
+        "robot_sf/benchmark/forecast_metrics.py",
+        "robot_sf/benchmark/pedestrian_forecast.py",
+        "robot_sf/benchmark/runner.py",
+        "scripts/benchmark/run_observation_noise_envelope.py",
+        "scripts/tools/campaign_result_store.py"
+      ],
+      "missing_inputs": [],
+      "blockers": []
+    }
+  ]
+}

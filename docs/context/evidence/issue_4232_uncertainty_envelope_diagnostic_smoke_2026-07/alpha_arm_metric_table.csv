@@ -1,0 +1,4 @@
+planner_id,scenario_family,scenario_id,seed,alpha_arm_key,envelope_enabled,alpha_mps,row_status,benchmark_evidence,success_rate,collision_rate,near_miss_rate,min_clearance_m,path_efficiency,runtime_seconds
+prediction_mpc,classic_bottleneck_low,classic_bottleneck_low__issue4232__envelope_off_alpha_0,111,envelope_off_alpha_0,False,0.0,diagnostic_only,excluded,1.0,0.0,0.0,,1.0,
+prediction_mpc,classic_bottleneck_low,classic_bottleneck_low__issue4232__envelope_on_alpha_0,111,envelope_on_alpha_0,True,0.0,diagnostic_only,excluded,1.0,0.0,0.0,,1.0,
+prediction_mpc,classic_bottleneck_low,classic_bottleneck_low__issue4232__envelope_on_alpha_0p10,111,envelope_on_alpha_0p10,True,0.1,diagnostic_only,excluded,1.0,0.0,0.0,,1.0,

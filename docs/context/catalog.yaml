@@ -3227,6 +3227,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4232_uncertainty_envelope_diagnostic_smoke_2026-07
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4245_closure_audit_2026-07-04.md
     status: evidence
     freshness: evidence

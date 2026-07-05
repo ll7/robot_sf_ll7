@@ -26,6 +26,7 @@ import numpy as np
 
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
+from robot_sf.nav.obstacle import Obstacle
 from robot_sf.sim.pedestrian_model_variants import (
     HSFM_ANISOTROPIC_FOV_V1,
     HSFM_TOTAL_FORCE_V1,
@@ -38,14 +39,13 @@ from robot_sf.sim.simulator import Simulator
 
 if TYPE_CHECKING:
     from robot_sf.common.types import Rect
-    from robot_sf.nav.obstacle import Obstacle
 
 Axis = Literal["x", "y"]
 
 PED_MODEL_FIXTURE_REPORT_SCHEMA_VERSION = "pedestrian_model_fixture_diagnostics.v1"
 CLAIM_BOUNDARY = (
-    "diagnostic-only synthetic no-robot fixture comparison for issue #3481; "
-    "no benchmark-strength, calibration, or paper-facing claim"
+    "diagnostic-only synthetic no-robot geometric fixture comparison for issue #3481; "
+    "no benchmark-strength, calibration, planner-ranking, or paper-facing claim"
 )
 DEFAULT_PEDESTRIAN_MODELS = (
     SOCIAL_FORCE_DEFAULT,
@@ -67,6 +67,7 @@ class PedestrianModelFixtureSpec:
     interaction_zone_min_pedestrians: int
     lane_axis: Axis = "x"
     lateral_axis: Axis = "y"
+    metric_thresholds: dict[str, float] = field(default_factory=dict)
     diagnostic_metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -121,7 +122,12 @@ def _require_finite_number(
 def build_pedestrian_model_fixture_scenarios() -> dict[str, PedestrianModelFixtureSpec]:
     """Return the issue #3481 local diagnostic fixture scenarios."""
 
-    scenarios = (_build_shared_throat_sliding_spec(), _build_shared_throat_congestion_spec())
+    scenarios = (
+        _build_shared_throat_sliding_spec(),
+        _build_shared_throat_congestion_spec(),
+        _build_narrow_passage_lateral_sliding_spec(),
+        _build_bottleneck_freeze_deadlock_spec(),
+    )
     return {scenario.scenario_id: scenario for scenario in scenarios}
 
 
@@ -216,6 +222,16 @@ def compute_fixture_metrics(
     interaction_zone_slow_detected = max_consecutive_interaction_zone_slow_steps >= int(
         freeze_window_steps
     )
+    threshold_checks = _evaluate_metric_thresholds(
+        {
+            "minimum_pairwise_distance_m": min_pairwise_distance,
+            "mean_max_lateral_displacement_m": mean_max_lateral_displacement,
+            "max_consecutive_interaction_zone_slow_steps": float(
+                max_consecutive_interaction_zone_slow_steps
+            ),
+        },
+        spec.metric_thresholds,
+    )
 
     return {
         "minimum_pairwise_distance_m": min_pairwise_distance,
@@ -231,7 +247,31 @@ def compute_fixture_metrics(
         "finite_positions": bool(np.all(np.isfinite(positions))),
         "finite_velocities": bool(np.all(np.isfinite(velocities))),
         "pedestrian_count": int(positions.shape[1]),
+        "diagnostic_thresholds": threshold_checks,
     }
+
+
+def _evaluate_metric_thresholds(
+    metrics: dict[str, float], thresholds: dict[str, float]
+) -> dict[str, dict[str, float | bool]]:
+    """Evaluate local diagnostic thresholds without promoting benchmark claims.
+
+    Returns:
+        JSON-safe threshold verdicts keyed by metric name.
+    """
+
+    checks: dict[str, dict[str, float | bool]] = {}
+    for metric_name, threshold in thresholds.items():
+        if metric_name not in metrics:
+            raise ValueError(f"Unknown diagnostic threshold metric: {metric_name}")
+        _require_finite_number(threshold, f"threshold {metric_name}", non_negative=True)
+        observed = float(metrics[metric_name])
+        checks[metric_name] = {
+            "observed": observed,
+            "threshold": float(threshold),
+            "meets_or_exceeds": observed >= float(threshold),
+        }
+    return checks
 
 
 def run_pedestrian_model_fixture_diagnostics(
@@ -290,7 +330,7 @@ def run_pedestrian_model_fixture_diagnostics(
         "evidence_tier": "diagnostic-only",
         "diagnostic_only_not_benchmark_gate": run_config.diagnostic_only_not_benchmark_gate,
         "status": {
-            "thresholds_applied": False,
+            "thresholds_applied": True,
             "build_gate": False,
             "slurm_or_gpu_used": False,
             "robot_inserted": False,
@@ -337,6 +377,11 @@ def render_pedestrian_model_fixture_markdown(report: dict[str, Any]) -> str:
             f"{metrics['max_consecutive_interaction_zone_slow_steps']} | "
             f"{metrics['interaction_zone_slow_detected']} |"
         )
+    lines.append("")
+    lines.append(
+        "Diagnostic thresholds are local fixture assertions only; they are not benchmark, "
+        "calibration, planner-ranking, or paper-facing success criteria."
+    )
     lines.append("")
     return "\n".join(lines)
 
@@ -450,6 +495,103 @@ def _build_shared_throat_congestion_spec() -> PedestrianModelFixtureSpec:
         diagnostic_metadata={
             "diagnostic_only_not_benchmark_gate": True,
             "synthetic_shared_throat": True,
+        },
+    )
+
+
+def _build_narrow_passage_lateral_sliding_spec() -> PedestrianModelFixtureSpec:
+    """Build narrow-passage geometric fixture for lateral-sliding diagnostics.
+
+    Returns:
+        Scenario spec for local narrow-passage diagnostic evidence.
+    """
+
+    obstacles = [
+        Obstacle([(0.0, 0.0), (10.0, 0.0), (10.0, 1.55), (0.0, 1.55)]),
+        Obstacle([(0.0, 2.45), (10.0, 2.45), (10.0, 4.0), (0.0, 4.0)]),
+    ]
+    map_def = _base_map(
+        "narrow_passage_lateral_sliding", width=10.0, height=4.0, obstacles=obstacles
+    )
+    single_pedestrians = (
+        SinglePedestrianDefinition(
+            id="narrow_passage_left",
+            start=(2.7, 1.82),
+            trajectory=[(5.0, 1.82), (7.4, 1.82)],
+            speed_m_s=0.95,
+            metadata={"diagnostic_only_not_benchmark_gate": True},
+        ),
+        SinglePedestrianDefinition(
+            id="narrow_passage_right",
+            start=(7.3, 2.18),
+            trajectory=[(5.0, 2.18), (2.6, 2.18)],
+            speed_m_s=0.95,
+            start_delay_s=0.1,
+            metadata={"diagnostic_only_not_benchmark_gate": True},
+        ),
+    )
+    return PedestrianModelFixtureSpec(
+        scenario_id="narrow_passage_lateral_sliding",
+        map_def=map_def,
+        single_pedestrians=single_pedestrians,
+        interaction_zone_center=(5.0, 2.0),
+        interaction_zone_radius_m=0.85,
+        interaction_zone_min_pedestrians=2,
+        metric_thresholds={"mean_max_lateral_displacement_m": 0.04},
+        diagnostic_metadata={
+            "diagnostic_only_not_benchmark_gate": True,
+            "geometric_fixture": "narrow_passage_lateral_sliding",
+            "wall_gap_m": 0.9,
+        },
+    )
+
+
+def _build_bottleneck_freeze_deadlock_spec() -> PedestrianModelFixtureSpec:
+    """Build pinched bottleneck geometric fixture for freeze/deadlock diagnostics.
+
+    Returns:
+        Scenario spec for local bottleneck freeze/deadlock diagnostic evidence.
+    """
+
+    obstacles = [
+        Obstacle([(4.55, 0.0), (5.45, 0.0), (5.45, 1.35), (4.55, 1.35)]),
+        Obstacle([(4.55, 2.65), (5.45, 2.65), (5.45, 4.0), (4.55, 4.0)]),
+    ]
+    map_def = _base_map("bottleneck_freeze_deadlock", width=10.0, height=4.0, obstacles=obstacles)
+    y_offsets = (1.35, 2.0, 2.65)
+    left = tuple(
+        SinglePedestrianDefinition(
+            id=f"geometric_bottleneck_left_{idx}",
+            start=(2.7, y),
+            trajectory=[(5.0, 2.0), (7.5, y)],
+            speed_m_s=0.9,
+            metadata={"diagnostic_only_not_benchmark_gate": True},
+        )
+        for idx, y in enumerate(y_offsets)
+    )
+    right = tuple(
+        SinglePedestrianDefinition(
+            id=f"geometric_bottleneck_right_{idx}",
+            start=(7.3, y),
+            trajectory=[(5.0, 2.0), (2.5, y)],
+            speed_m_s=0.9,
+            start_delay_s=0.15,
+            metadata={"diagnostic_only_not_benchmark_gate": True},
+        )
+        for idx, y in enumerate(reversed(y_offsets))
+    )
+    return PedestrianModelFixtureSpec(
+        scenario_id="bottleneck_freeze_deadlock",
+        map_def=map_def,
+        single_pedestrians=left + right,
+        interaction_zone_center=(2.8, 2.0),
+        interaction_zone_radius_m=1.1,
+        interaction_zone_min_pedestrians=3,
+        metric_thresholds={"max_consecutive_interaction_zone_slow_steps": 2.0},
+        diagnostic_metadata={
+            "diagnostic_only_not_benchmark_gate": True,
+            "geometric_fixture": "bottleneck_freeze_deadlock",
+            "neck_width_m": 1.3,
         },
     )
 

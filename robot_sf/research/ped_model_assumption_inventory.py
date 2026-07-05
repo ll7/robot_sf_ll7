@@ -415,8 +415,8 @@ EXPERIMENT_PREREQUISITES: tuple[PrerequisiteSpec, ...] = (
         ),
         blocks=("DoD: fixture proving reduced lateral sliding",),
         probe_paths=(
-            "tests/ped_npc/test_hsfm_narrow_passage.py",
-            "tests/fixtures/ped_npc/narrow_passage_sliding.yaml",
+            "robot_sf/benchmark/pedestrian_model_fixture_diagnostics.py",
+            "tests/benchmark/test_pedestrian_model_fixture_diagnostics.py",
         ),
         related_issues=(3206,),
     ),
@@ -430,8 +430,8 @@ EXPERIMENT_PREREQUISITES: tuple[PrerequisiteSpec, ...] = (
         ),
         blocks=("DoD: fixture proving reduced mutual-freeze/deadlock rate",),
         probe_paths=(
-            "tests/ped_npc/test_hsfm_bottleneck.py",
-            "tests/fixtures/ped_npc/bottleneck_freeze.yaml",
+            "robot_sf/benchmark/pedestrian_model_fixture_diagnostics.py",
+            "tests/benchmark/test_pedestrian_model_fixture_diagnostics.py",
         ),
     ),
     PrerequisiteSpec(

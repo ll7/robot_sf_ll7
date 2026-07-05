@@ -142,6 +142,87 @@ entries:
           The latest maintainer comments explicitly keep #4216 open until the
           compute-submit lane appends the full-suite result.
 
+  - recorded_at_utc: "2026-07-05T04:05:31Z"
+    host: imech036
+    lane: closure_audit_cpu_only
+    base_commit: "b53bd47c4"
+    status: acceptance_audit_current__single_empirical_rerun_still_pending
+    claim_boundary: >-
+      Closure audit against the full live issue thread through
+      2026-07-04T22:01:12Z and merged PRs #4237, #4276, #4320, #4340,
+      #4343, and #4513. This entry adds no guard, checker, schema change,
+      benchmark result, full-suite rerun, Slurm/GPU submission, release,
+      merge, deletion, paper/dissertation claim edit, or issue comment.
+    fragmentation_guard: >-
+      Six issue #4216 PRs were already merged between 2026-07-03 and
+      2026-07-04, so this is a consolidation/integration state update in
+      the single canonical surface rather than another micro-guard.
+    acceptance_evidence:
+    - criterion: "Full issue thread and linked/merged PRs reviewed."
+      status: met
+      evidence: >-
+        Live issue comments through 2026-07-04T22:01:12Z identify merged
+        PRs #4237, #4276, #4320, #4340, #4343, and #4513; the latest
+        comment records 7 of 8 criteria met and keeps #4216 open only for
+        the LiCCA/shared-HPC full-suite rerun.
+    - criterion: "All 15 job-9858988 failures classified in compact inventory."
+      status: met
+      evidence: >-
+        PR #4237 merged
+        docs/context/evidence/issue_4216_licca_full_suite_env_failures/failure_inventory.json
+        from source job 9858988.
+    - criterion: "Shared environment guard helper preserves GitHub Actions coverage."
+      status: met
+      evidence: >-
+        PR #4237 merged tests/support/environment_guards.py and
+        tests/support/test_environment_guards.py with simulated LiCCA and
+        GitHub Actions checks.
+    - criterion: "Each failing node has an environment-agnostic rewrite or narrow guard."
+      status: met
+      evidence: >-
+        PR #4237 updated tests/dev/test_pr_ready_preflight.py,
+        tests/dev/test_ci_uv_sync_diag.py, and
+        tests/test_visualization_performance.py; the merged inventory maps
+        each residue node to env_agnostic_rewrite or explicit_skip_guard.
+    - criterion: "Post-guard full-suite residue was probed fail-closed."
+      status: met
+      evidence: >-
+        PR #4276 merged post_guard_closure_20260703.json, which records
+        that the original 15 residue nodes no longer produced the failure
+        summary, but the run hung at 100 percent and was not closure
+        evidence.
+    - criterion: "Nested-pytest teardown hang mechanism is bounded/reaped on CPU lane."
+      status: met
+      evidence: >-
+        PR #4320 merged tests/support/process_teardown.py and the affected
+        tests/perf_utils/test_enforce_mode.py call site; PRs #4340 and
+        #4343 recorded CPU verification that the bounded subprocess path
+        exits 0 under default and simulated-LiCCA environments.
+    - criterion: "Canonical issue-state surface records the closure chain and next empirical action."
+      status: met
+      evidence: >-
+        PR #4343 created this append-only state surface and PR #4513
+        appended the prior closure audit with the same single remaining
+        close blocker.
+    - criterion: "A new LiCCA/shared-HPC full-suite exit-code rerun confirms closure."
+      status: blocked
+      evidence: >-
+        Still not performed in this authorized lane. The required command
+        remains PYTEST_NUM_WORKERS=8 ROBOT_SF_TEST_ENV=licca uv run pytest
+        -q on the LiCCA/shared-HPC lane, with exit code and final pytest
+        summary appended here.
+    residual_risks:
+    - risk: "The full-suite rerun may still fail or hang on LiCCA/shared-HPC."
+      why_it_remains: >-
+        CPU-only mechanism evidence does not prove the original GPU/shared-HPC
+        teardown path; the issue must stay open until the empirical rerun
+        records green_gate, residue_remaining, or hang_regression.
+    - risk: "No issue-state comment was posted."
+      why_it_remains: >-
+        This run is not authorized to comment on issues or PRs; propagation
+        is intentionally through this single canonical state file and the PR
+        body.
+
 # The single remaining action that blocks closing issue #4216.
 remaining_empirical_action:
   action: "Run the LiCCA/shared-HPC full test suite (the job-9858988 entry point) after the #4320 fix and record the actual exit code + final pytest summary line."

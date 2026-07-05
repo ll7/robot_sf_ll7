@@ -10,6 +10,7 @@ import yaml
 from robot_sf.training.orca_residual_lineage_packet import (
     OrcaResidualLineagePacketError,
     validate_launch_packet,
+    validate_smoke_nominal_gate,
 )
 
 REPO_ROOT = Path(__file__).parents[2]
@@ -137,6 +138,50 @@ def test_packet_keeps_slurm_execution_deferred(tmp_path: Path) -> None:
 
     with pytest.raises(OrcaResidualLineagePacketError, match="submit_slurm_from_this_issue"):
         validate_launch_packet(bad_config, repo_root=REPO_ROOT)
+
+
+def test_smoke_nominal_gate_accepts_complete_clear_summary() -> None:
+    """A complete smoke summary may unlock nominal escalation."""
+    report = validate_smoke_nominal_gate(_passing_smoke_summary())
+
+    assert report["status"] == "valid"
+    assert report["gate"] == "issue_1475_smoke_to_nominal"
+    assert report["nominal_escalation_allowed"] is True
+
+
+def test_smoke_nominal_gate_requires_issue_1475_evidence_fields() -> None:
+    """Missing smoke telemetry keeps nominal blocked fail-closed."""
+    summary = _passing_smoke_summary()
+    summary.pop("guard_veto_rate")
+
+    with pytest.raises(OrcaResidualLineagePacketError, match="guard_veto_rate"):
+        validate_smoke_nominal_gate(summary)
+
+
+def test_smoke_nominal_gate_rejects_degraded_or_pending_artifacts() -> None:
+    """Fallback/degraded execution and pending artifacts are not success evidence."""
+    summary = _passing_smoke_summary()
+    summary["fallback_degraded_status"] = "degraded"
+    summary["artifact_pointer_status"] = "pending"
+    summary["nominal_escalation_allowed"] = True
+
+    with pytest.raises(OrcaResidualLineagePacketError) as exc_info:
+        validate_smoke_nominal_gate(summary)
+    message = str(exc_info.value)
+    assert "fallback_degraded_status" in message
+    assert "artifact_pointer_status" in message
+
+
+def _passing_smoke_summary() -> dict:
+    return {
+        "success_rate": 0.80,
+        "collision_rate": 0.02,
+        "residual_clipping_rate": 0.10,
+        "guard_veto_rate": 0.0,
+        "fallback_degraded_status": "clear",
+        "artifact_pointer_status": "durable",
+        "nominal_escalation_allowed": True,
+    }
 
 
 def _load_packet() -> dict:

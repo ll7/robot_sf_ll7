@@ -117,6 +117,8 @@ def _write_training_ready_trace_registry(tmp_path: Path) -> Path:
                 "uri": "wandb-artifact://robot-sf/oracle-imitation/train:v1",
                 "sha256": "a" * 64,
                 "retrieval_status": "resolvable",
+                "source_manifest_uri": "wandb-artifact://robot-sf/oracle-imitation/train_manifest:v1",
+                "source_manifest_sha256": "1" * 64,
             },
             {
                 "split": "validation",
@@ -124,6 +126,8 @@ def _write_training_ready_trace_registry(tmp_path: Path) -> Path:
                 "uri": "wandb-artifact://robot-sf/oracle-imitation/validation:v1",
                 "sha256": "b" * 64,
                 "retrieval_status": "resolvable",
+                "source_manifest_uri": "wandb-artifact://robot-sf/oracle-imitation/validation_manifest:v1",
+                "source_manifest_sha256": "2" * 64,
             },
             {
                 "split": "evaluation",
@@ -131,6 +135,8 @@ def _write_training_ready_trace_registry(tmp_path: Path) -> Path:
                 "uri": "wandb-artifact://robot-sf/oracle-imitation/evaluation:v1",
                 "sha256": "c" * 64,
                 "retrieval_status": "resolvable",
+                "source_manifest_uri": "wandb-artifact://robot-sf/oracle-imitation/evaluation_manifest:v1",
+                "source_manifest_sha256": "3" * 64,
             },
         ],
     }

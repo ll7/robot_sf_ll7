@@ -70,6 +70,31 @@ class ForecastCapabilitySpec:
     note: str = ""
 
 
+@dataclass(frozen=True)
+class ForecastLaneStatusSpec:
+    """One checked-progress row for the forecast research lane epic."""
+
+    requirement_id: str
+    requirement: str
+    current_artifacts: tuple[str, ...]
+    status: str
+    remaining_blocker: str
+    next_action: str
+    learned_predictor_gate: bool = False
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return JSON-serializable status row."""
+        return {
+            "requirement_id": self.requirement_id,
+            "requirement": self.requirement,
+            "current_artifacts": list(self.current_artifacts),
+            "status": self.status,
+            "remaining_blocker": self.remaining_blocker,
+            "next_action": self.next_action,
+            "learned_predictor_gate": self.learned_predictor_gate,
+        }
+
+
 # Canonical forecast-lane registry. Each entry points at an existing owner module
 # under robot_sf/benchmark/; this inventory never reimplements those surfaces.
 _FORECAST_CAPABILITIES: tuple[ForecastCapabilitySpec, ...] = (
@@ -219,6 +244,95 @@ _FORECAST_CAPABILITIES: tuple[ForecastCapabilitySpec, ...] = (
 )
 
 
+_VALID_LANE_STATUSES = frozenset({"done", "partial", "unresolved", "blocked"})
+
+
+# Checked-progress ledger requested on issue #2835. This is deliberately durable
+# research-lane state, not transient queue routing state or campaign lineage.
+_FORECAST_LANE_STATUS_ROWS: tuple[ForecastLaneStatusSpec, ...] = (
+    ForecastLaneStatusSpec(
+        requirement_id="forecast_batch_v1",
+        requirement="ForecastBatch.v1 artifact contract",
+        current_artifacts=("#2836", "#2849", "robot_sf/benchmark/forecast_batch.py"),
+        status="done",
+        remaining_blocker="None for the schema/provenance contract.",
+        next_action="Keep downstream forecast artifacts on ForecastBatch.v1.",
+    ),
+    ForecastLaneStatusSpec(
+        requirement_id="observation_adapters",
+        requirement="Observation-level forecast adapters",
+        current_artifacts=("#2838", "#2860", "robot_sf/benchmark/forecast_observation_adapters.py"),
+        status="done",
+        remaining_blocker="None for oracle/full-state/tracked observation separation.",
+        next_action="Extend only when a new deployable observation tier lands.",
+    ),
+    ForecastLaneStatusSpec(
+        requirement_id="motion_rich_traces",
+        requirement="Motion-rich forecast-evaluable trace families",
+        current_artifacts=("#2774", "#2853", "#2884"),
+        status="partial",
+        remaining_blocker="Coverage is useful but not a final transfer-aware scenario matrix.",
+        next_action="Use fixture gaps from transferability rows to choose the next trace family.",
+    ),
+    ForecastLaneStatusSpec(
+        requirement_id="baseline_ladder",
+        requirement="CV, semantic-CV, and interaction-aware baseline ladder",
+        current_artifacts=("#2758", "#2781", "#2915"),
+        status="partial",
+        remaining_blocker="Baseline comparison is diagnostic until same-seed planner consumption is proven.",
+        next_action="Keep learned predictors gated until closed-loop rows compare these baselines.",
+        learned_predictor_gate=True,
+    ),
+    ForecastLaneStatusSpec(
+        requirement_id="calibration_and_risk",
+        requirement="Calibration, reliability, and forecast-risk readiness",
+        current_artifacts=("#2841", "#2865", "#2869"),
+        status="blocked",
+        remaining_blocker="Forecast-risk scoring rows are gated by eligible risk-filtered planner evidence.",
+        next_action="Populate risk-scoring-eligible rows through the closed-loop coupling path first.",
+        learned_predictor_gate=True,
+    ),
+    ForecastLaneStatusSpec(
+        requirement_id="transferability_matrix",
+        requirement="Transferability stress matrix",
+        current_artifacts=("#2847", "#2866", "#2887"),
+        status="partial",
+        remaining_blocker="Some matrix cells remain explicitly unavailable or diagnostic-only.",
+        next_action="Fill high-value blocked cells after observation, metric, and fixture owners are ready.",
+        learned_predictor_gate=True,
+    ),
+    ForecastLaneStatusSpec(
+        requirement_id="closed_loop_gate",
+        requirement="Same-seed closed-loop planner coupling gate",
+        current_artifacts=("#2843", "#2902", "#2916", "#2966"),
+        status="unresolved",
+        remaining_blocker=(
+            "Forecast improvement alone has not established non-regressive planner safety/progress."
+        ),
+        next_action="Run CPU/local gate slices only; no learned-heavy expansion until verdict is continue.",
+        learned_predictor_gate=True,
+    ),
+    ForecastLaneStatusSpec(
+        requirement_id="learned_predictor",
+        requirement="Learned probabilistic predictor expansion",
+        current_artifacts=("#2844", "#2845"),
+        status="blocked",
+        remaining_blocker="Requires closed-loop gate continue verdict plus calibration/transfer readiness.",
+        next_action="Keep to spec/scoping work; do not launch training from this epic.",
+        learned_predictor_gate=True,
+    ),
+    ForecastLaneStatusSpec(
+        requirement_id="final_synthesis",
+        requirement="Final forecast-lane synthesis",
+        current_artifacts=("#2864", "#2881", "#2929"),
+        status="partial",
+        remaining_blocker="Needs updated synthesis after gate and transfer rows settle.",
+        next_action="Consolidate blockers and next empirical action before any claim promotion.",
+        learned_predictor_gate=True,
+    ),
+)
+
+
 @dataclass
 class CapabilityProbeResult:
     """Outcome of probing a single forecast capability.
@@ -346,6 +460,73 @@ def build_forecast_lane_inventory(*, repo_root: Path | None = None) -> dict[str,
     }
 
 
+def build_forecast_lane_status() -> dict[str, Any]:
+    """Return the checked-progress ledger for forecast-lane issue #2835.
+
+    The status report answers a different question than the capability inventory:
+    not "does this module import?", but "which epic requirements are complete
+    enough to unblock learned-predictor work?". It remains read-only and does not
+    execute campaigns, training, predictors, or benchmark evaluation.
+    """
+    rows = list(_FORECAST_LANE_STATUS_ROWS)
+    invalid_rows = [row for row in rows if row.status not in _VALID_LANE_STATUSES]
+    learned_gate_blockers = [
+        row
+        for row in rows
+        if row.learned_predictor_gate and row.status in {"partial", "unresolved", "blocked"}
+    ]
+    status_counts = {
+        status: sum(row.status == status for row in rows) for status in _VALID_LANE_STATUSES
+    }
+    return {
+        "schema": "forecast_lane_status.v1",
+        "ok": not invalid_rows,
+        "learned_predictor_unblocked": not learned_gate_blockers,
+        "issue": 2835,
+        "claim_boundary": (
+            "Forecast-lane infrastructure is diagnostic until same-seed closed-loop "
+            "planner evidence establishes non-regressive safety/progress under explicit "
+            "fallback/degraded accounting."
+        ),
+        "requirements": [row.as_dict() for row in rows],
+        "summary": {
+            "total": len(rows),
+            "status_counts": status_counts,
+            "invalid_status_ids": [row.requirement_id for row in invalid_rows],
+            "learned_predictor_blocker_ids": [row.requirement_id for row in learned_gate_blockers],
+        },
+    }
+
+
+def format_status_markdown(report: dict[str, Any]) -> str:
+    """Render compact Markdown for the forecast-lane checked-progress ledger.
+
+    Returns:
+        Markdown status table plus learned-predictor blockers when present.
+    """
+    lines: list[str] = []
+    verdict = "UNBLOCKED" if report["learned_predictor_unblocked"] else "BLOCKED"
+    lines.append(f"# Forecast lane checked-progress ledger: learned predictor {verdict}")
+    lines.append("")
+    lines.append(report["claim_boundary"])
+    lines.append("")
+    lines.append("| Requirement | Status | Current artifact | Remaining blocker | Next action |")
+    lines.append("| --- | --- | --- | --- | --- |")
+    for row in report["requirements"]:
+        artifacts = ", ".join(row["current_artifacts"])
+        lines.append(
+            f"| {row['requirement']} | {row['status']} | {artifacts} | "
+            f"{row['remaining_blocker']} | {row['next_action']} |"
+        )
+    blocker_ids = report["summary"]["learned_predictor_blocker_ids"]
+    if blocker_ids:
+        lines.append("")
+        lines.append("## Learned-predictor blockers")
+        for blocker_id in blocker_ids:
+            lines.append(f"- `{blocker_id}`")
+    return "\n".join(lines)
+
+
 def format_inventory_markdown(report: dict[str, Any]) -> str:
     """Render a compact human-readable inventory report.
 
@@ -386,29 +567,39 @@ def format_inventory_markdown(report: dict[str, Any]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point: print the inventory report and return an exit code.
+    """CLI entry point: print inventory or status report and return exit code.
 
     Returns:
-        ``0`` when every required capability is present, otherwise ``1``.
+        In default inventory mode, ``0`` if required capability is present,
+        otherwise ``1``. In status mode, ``0`` if the ledger itself is valid;
+        learned-predictor blockers are reported in the payload but do not make
+        the command fail because they are expected issue state.
     """
 
     parser = argparse.ArgumentParser(
         description=(
-            "Read-only forecast-lane capability inventory / preflight. "
-            "Reports missing forecast components as explicit blockers; does not "
-            "run predictors, training, or benchmarks."
+            "Read-only forecast-lane capability inventory / status preflight. "
+            "Reports missing forecast components and epic blockers explicitly; "
+            "does not run predictors, training, or benchmarks."
         )
     )
     parser.add_argument(
         "--json",
         action="store_true",
-        help="Emit the machine-readable inventory report as JSON.",
+        help="Emit the machine-readable report as JSON.",
+    )
+    parser.add_argument(
+        "--status",
+        action="store_true",
+        help="Emit checked-progress ledger for issue #2835 instead of import inventory.",
     )
     args = parser.parse_args(argv)
 
-    report = build_forecast_lane_inventory()
+    report = build_forecast_lane_status() if args.status else build_forecast_lane_inventory()
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))  # noqa: T201 - CLI output
+    elif args.status:
+        print(format_status_markdown(report))  # noqa: T201 - CLI output
     else:
         print(format_inventory_markdown(report))  # noqa: T201 - CLI output
 

@@ -173,5 +173,65 @@ def test_module_invocation_matches_script(monkeypatch):
     assert fli.main(["--json"]) == 0
 
 
+def test_status_report_preserves_learned_predictor_gate():
+    """Status ledger keeps learned predictors blocked while gate rows remain unresolved."""
+    report = fli.build_forecast_lane_status()
+
+    assert report["schema"] == "forecast_lane_status.v1"
+    assert report["ok"] is True
+    assert report["issue"] == 2835
+    assert report["learned_predictor_unblocked"] is False
+    assert "closed_loop_gate" in report["summary"]["learned_predictor_blocker_ids"]
+    assert "learned_predictor" in report["summary"]["learned_predictor_blocker_ids"]
+
+
+def test_status_rows_are_unique_and_valid():
+    """Ledger rows have stable ids, valid statuses, and actionable blockers."""
+    report = fli.build_forecast_lane_status()
+    rows = report["requirements"]
+    ids = [row["requirement_id"] for row in rows]
+
+    assert len(ids) == len(set(ids))
+    assert report["summary"]["invalid_status_ids"] == []
+    for row in rows:
+        assert row["status"] in fli._VALID_LANE_STATUSES
+        assert row["current_artifacts"]
+        assert row["remaining_blocker"]
+        assert row["next_action"]
+
+
+def test_status_markdown_lists_blockers():
+    """Markdown status view exposes learned-predictor blockers."""
+    report = fli.build_forecast_lane_status()
+    text = fli.format_status_markdown(report)
+
+    assert "learned predictor BLOCKED" in text
+    assert "Learned-predictor blockers" in text
+    assert "closed_loop_gate" in text
+
+
+def test_cli_status_json_reports_expected_blocker():
+    """The runnable script emits status JSON without running forecast workloads."""
+    proc = subprocess.run(
+        [sys.executable, "scripts/benchmark/forecast_lane_preflight.py", "--status", "--json"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["schema"] == "forecast_lane_status.v1"
+    assert payload["learned_predictor_unblocked"] is False
+    assert "closed_loop_gate" in payload["summary"]["learned_predictor_blocker_ids"]
+
+
+def test_module_status_invocation_succeeds():
+    """Status mode succeeds because blockers are issue state, not CLI failure."""
+    assert fli.main(["--status"]) == 0
+    assert fli.main(["--status", "--json"]) == 0
+
+
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(pytest.main([__file__, "-v"]))

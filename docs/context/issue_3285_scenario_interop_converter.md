@@ -20,7 +20,22 @@ does **not** require external assets and does **not** emit any SocNavBench or Hu
 - IR schema: `robot_sf/benchmark/schemas/scenario_interop_ir.v1.json`
   (`robot_sf.scenario_interop_ir.v1`).
 - Dry-run CLI: `scripts/tools/convert_scenario_interop.py`.
-- Tests: `tests/benchmark/test_scenario_interop.py`.
+- Tests: `tests/benchmark/test_scenario_interop.py`,
+  `tests/benchmark/test_scenario_interop_target_compatibility.py`.
+
+## Target Compatibility Report
+
+The converter also emits an asset-free target compatibility report
+(`robot_sf.scenario_interop_target_compatibility.v1`) for `socnavbench` and `hunavsim`.
+This is a fail-closed readiness projection, not a target artifact exporter.
+
+- `ready`: false until target assets/adapters are staged and required IR fields are present.
+- `blockers`: explicit missing asset, adapter, map, agent, flow, or unsupported-field blockers.
+- `warnings`: non-blocking provenance or target-semantics gaps, such as missing seeds or HuNavSim
+  ROS/Gazebo launch semantics outside the target-neutral IR.
+
+Use `--target socnavbench` or `--target hunavsim` on the dry-run CLI to include a selected target
+report in the stderr summary. Omitting `--target` reports both targets.
 
 ## IR contract
 

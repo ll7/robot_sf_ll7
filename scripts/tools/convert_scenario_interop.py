@@ -30,7 +30,12 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.scenario_interop import convert_scenario_to_ir, dump_ir
+from robot_sf.benchmark.scenario_interop import (
+    SUPPORTED_TARGETS,
+    build_target_compatibility_report,
+    convert_scenario_to_ir,
+    dump_ir,
+)
 
 
 def _load_scenarios(path: Path) -> list[dict[str, Any]]:
@@ -78,6 +83,16 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Optional directory to write one <scenario_id>.ir.json file per scenario.",
     )
+    parser.add_argument(
+        "--target",
+        action="append",
+        choices=SUPPORTED_TARGETS,
+        default=[],
+        help=(
+            "Include fail-closed compatibility report for target exporter. "
+            "May be passed more than once."
+        ),
+    )
     args = parser.parse_args(argv)
 
     scenarios = _load_scenarios(args.matrix)
@@ -97,6 +112,10 @@ def main(argv: list[str] | None = None) -> int:
                 "ir_valid": result.is_valid,
                 "unsupported_field_count": len(result.unsupported_fields),
                 "schema_errors": result.schema_errors,
+                "target_compatibility": build_target_compatibility_report(
+                    result.ir,
+                    targets=args.target or SUPPORTED_TARGETS,
+                ),
             }
         )
         if args.out_dir is not None:

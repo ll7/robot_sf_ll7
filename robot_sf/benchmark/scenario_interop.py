@@ -45,6 +45,8 @@ from robot_sf.common.json_pointer import json_pointer
 IR_SCHEMA_VERSION = "robot_sf.scenario_interop_ir.v1"
 CONVERTER_NAME = "robot_sf.scenario_interop"
 CONVERTER_VERSION = "1"
+TARGET_COMPATIBILITY_SCHEMA_VERSION = "robot_sf.scenario_interop_target_compatibility.v1"
+SUPPORTED_TARGETS = ("socnavbench", "hunavsim")
 IR_SCHEMA_FILE = Path(__file__).with_name("schemas") / "scenario_interop_ir.v1.json"
 
 # Source keys that map directly into IR sections. Anything not in this set is
@@ -89,6 +91,23 @@ _ENVIRONMENT_TYPE_BY_OBSTACLE: dict[str, str] = {
     "open": "open_space",
     "bottleneck": "constrained_passage",
     "maze": "cluttered",
+}
+
+_TARGET_ASSET_BLOCKERS: dict[str, tuple[dict[str, str], ...]] = {
+    "socnavbench": (
+        {
+            "code": "socnavbench_assets_not_staged",
+            "field": "target_assets",
+            "reason": "SocNavBench scenario export requires staged external assets (#1456/#1498/#1134).",
+        },
+    ),
+    "hunavsim": (
+        {
+            "code": "hunavsim_adapter_not_staged",
+            "field": "target_adapter",
+            "reason": "HuNavSim export requires a staged adapter/schema fixture (#2414).",
+        },
+    ),
 }
 
 
@@ -355,6 +374,113 @@ def _collect_unsupported(scenario: Mapping[str, Any]) -> list[dict[str, str]]:
     return sorted(reports, key=lambda item: item["field"])
 
 
+def build_target_compatibility_report(
+    ir: Mapping[str, Any],
+    *,
+    targets: Sequence[str] = SUPPORTED_TARGETS,
+) -> list[dict[str, Any]]:
+    """Build fail-closed target-readiness reports for downstream converters.
+
+    The report is a dry-run projection only: it does not emit SocNavBench or
+    HuNavSim files and intentionally keeps external asset/adapter gaps as
+    explicit blockers.
+
+    Returns:
+        One target compatibility report per requested target.
+    """
+    reports: list[dict[str, Any]] = []
+    for target in targets:
+        if target not in SUPPORTED_TARGETS:
+            raise ValueError(
+                f"unsupported target {target!r}; expected one of {', '.join(SUPPORTED_TARGETS)}"
+            )
+        blockers = _target_blockers(ir, target=target)
+        reports.append(
+            {
+                "schema_version": TARGET_COMPATIBILITY_SCHEMA_VERSION,
+                "target": target,
+                "source_scenario_id": _ir_source_id(ir),
+                "ready": not blockers,
+                "blockers": blockers,
+                "warnings": _target_warnings(ir, target=target),
+            }
+        )
+    return reports
+
+
+def _target_blockers(ir: Mapping[str, Any], *, target: str) -> list[dict[str, str]]:
+    blockers: list[dict[str, str]] = [dict(item) for item in _TARGET_ASSET_BLOCKERS[target]]
+    geometry = ir.get("geometry") if isinstance(ir.get("geometry"), Mapping) else {}
+    environment = ir.get("environment") if isinstance(ir.get("environment"), Mapping) else {}
+    agents = ir.get("agents") if isinstance(ir.get("agents"), Sequence) else []
+    unsupported = ir.get("unsupported_fields")
+
+    if not geometry.get("map_file"):
+        blockers.append(
+            {
+                "code": "map_file_missing",
+                "field": "geometry.map_file",
+                "reason": "Target scenario export needs an explicit source map reference.",
+            }
+        )
+    if not agents:
+        blockers.append(
+            {
+                "code": "agents_missing",
+                "field": "agents",
+                "reason": "Target scenario export needs explicit pedestrian agents or trajectories.",
+            }
+        )
+    if not environment.get("flow"):
+        blockers.append(
+            {
+                "code": "flow_missing",
+                "field": "environment.flow",
+                "reason": "Target scenario export needs explicit pedestrian-flow semantics.",
+            }
+        )
+    if unsupported:
+        blockers.append(
+            {
+                "code": "unsupported_fields_present",
+                "field": "unsupported_fields",
+                "reason": "Target-specific exporter must resolve or intentionally ignore unsupported fields.",
+            }
+        )
+    return blockers
+
+
+def _target_warnings(ir: Mapping[str, Any], *, target: str) -> list[dict[str, str]]:
+    warnings: list[dict[str, str]] = []
+    timing = ir.get("timing") if isinstance(ir.get("timing"), Mapping) else {}
+    if not timing.get("seeds"):
+        warnings.append(
+            {
+                "code": "seeds_missing",
+                "field": "timing.seeds",
+                "reason": "Converted dry-run artifact would not preserve explicit seed provenance.",
+            }
+        )
+    if target == "hunavsim":
+        warnings.append(
+            {
+                "code": "ros_semantics_unmapped",
+                "field": "target_adapter",
+                "reason": "HuNavSim ROS/Gazebo launch semantics are outside the target-neutral IR.",
+            }
+        )
+    return warnings
+
+
+def _ir_source_id(ir: Mapping[str, Any]) -> str | None:
+    provenance = ir.get("provenance")
+    if isinstance(provenance, Mapping):
+        source_id = provenance.get("source_scenario_id")
+        if isinstance(source_id, str):
+            return source_id
+    return None
+
+
 def _opt_str(value: Any) -> str | None:
     """Return ``value`` when it is a non-empty string, else ``None``.
 
@@ -370,7 +496,10 @@ __all__ = [
     "CONVERTER_VERSION",
     "IR_SCHEMA_FILE",
     "IR_SCHEMA_VERSION",
+    "SUPPORTED_TARGETS",
+    "TARGET_COMPATIBILITY_SCHEMA_VERSION",
     "ScenarioInteropResult",
+    "build_target_compatibility_report",
     "convert_scenario_to_ir",
     "dump_ir",
     "load_interop_ir_schema",

@@ -55,6 +55,15 @@ REQUIRED_ORCA_RESIDUAL_SMOKE_FIELDS = (
     *_SMOKE_DERIVED_DIAGNOSTIC_FIELDS,
     "artifact_pointer_status",
 )
+_SMOKE_NOMINAL_REQUIRED_SUMMARY_FIELDS = REQUIRED_ORCA_RESIDUAL_SMOKE_FIELDS + (
+    "success_rate",
+    "collision_rate",
+    "nominal_escalation_allowed",
+)
+_SMOKE_ARTIFACT_POINTER_OK = {"durable", "complete"}
+_SMOKE_FALLBACK_DEGRADED_OK = {"clear", False}
+_SMOKE_GATE_MIN_SUCCESS_RATE = 0.80
+_SMOKE_GATE_MAX_COLLISION_RATE = 0.02
 
 _REQUIRED_COMPARISONS = ("orca", "ppo_leader", "orca_residual_guarded_ppo_v0")
 _REQUIRED_OUTPUTS = (
@@ -144,6 +153,97 @@ def validate_launch_packet(
         "comparison_references": comparisons,
         "expected_outputs": outputs,
     }
+
+
+def validate_smoke_nominal_gate(summary: dict[str, Any]) -> dict[str, Any]:
+    """Validate issue #1475 smoke evidence before nominal escalation.
+
+    This CPU-only gate checks completed smoke summaries. It fails closed for
+    fallback/degraded execution, missing telemetry, missing durable artifacts,
+    and smoke metrics that do not satisfy the nominal-escalation thresholds.
+
+    Returns:
+        Compact validation report for the issue #1475 smoke-to-nominal gate.
+    """
+    if not isinstance(summary, dict):
+        raise OrcaResidualLineagePacketError("smoke summary must be a mapping")
+
+    errors: list[str] = []
+    missing = [
+        field
+        for field in _SMOKE_NOMINAL_REQUIRED_SUMMARY_FIELDS
+        if summary.get(field) in (None, "")
+    ]
+    if missing:
+        errors.append(f"smoke summary missing required entries: {missing}")
+
+    success_rate = _coerce_rate(summary.get("success_rate"), "success_rate", errors)
+    collision_rate = _coerce_rate(summary.get("collision_rate"), "collision_rate", errors)
+    residual_clipping_rate = _coerce_rate(
+        summary.get("residual_clipping_rate"), "residual_clipping_rate", errors
+    )
+    guard_veto_rate = _coerce_rate(summary.get("guard_veto_rate"), "guard_veto_rate", errors)
+
+    fallback_status = summary.get("fallback_degraded_status")
+    if fallback_status not in _SMOKE_FALLBACK_DEGRADED_OK:
+        errors.append(
+            "fallback_degraded_status must be 'clear' before nominal escalation "
+            f"(got {fallback_status!r})"
+        )
+
+    artifact_status = summary.get("artifact_pointer_status")
+    if artifact_status not in _SMOKE_ARTIFACT_POINTER_OK:
+        errors.append(
+            "artifact_pointer_status must be durable/complete before nominal escalation "
+            f"(got {artifact_status!r})"
+        )
+
+    if summary.get("nominal_escalation_allowed") is not True:
+        errors.append("nominal_escalation_allowed must be true")
+
+    if success_rate is not None and success_rate < _SMOKE_GATE_MIN_SUCCESS_RATE:
+        errors.append(
+            "success_rate below nominal smoke gate: "
+            f"{success_rate:.4f} < {_SMOKE_GATE_MIN_SUCCESS_RATE:.4f}"
+        )
+    if collision_rate is not None and collision_rate > _SMOKE_GATE_MAX_COLLISION_RATE:
+        errors.append(
+            "collision_rate above nominal smoke gate: "
+            f"{collision_rate:.4f} > {_SMOKE_GATE_MAX_COLLISION_RATE:.4f}"
+        )
+
+    if errors:
+        joined = "\n- ".join(errors)
+        raise OrcaResidualLineagePacketError(
+            f"ORCA-residual smoke nominal gate failed:\n- {joined}"
+        )
+
+    return {
+        "status": "valid",
+        "gate": "issue_1475_smoke_to_nominal",
+        "min_success_rate": _SMOKE_GATE_MIN_SUCCESS_RATE,
+        "max_collision_rate": _SMOKE_GATE_MAX_COLLISION_RATE,
+        "success_rate": success_rate,
+        "collision_rate": collision_rate,
+        "residual_clipping_rate": residual_clipping_rate,
+        "guard_veto_rate": guard_veto_rate,
+        "fallback_degraded_status": fallback_status,
+        "artifact_pointer_status": artifact_status,
+        "nominal_escalation_allowed": True,
+    }
+
+
+def _coerce_rate(value: Any, label: str, errors: list[str]) -> float | None:
+    """Return a finite rate in [0, 1], appending an error when invalid."""
+    try:
+        rate = float(value)
+    except (TypeError, ValueError):
+        errors.append(f"{label} must be numeric rate")
+        return None
+    if not 0.0 <= rate <= 1.0:
+        errors.append(f"{label} must be between 0 and 1")
+        return None
+    return rate
 
 
 def _resolve_path(path: Path | str, repo_root: Path) -> Path:

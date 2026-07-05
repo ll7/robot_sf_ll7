@@ -45,9 +45,10 @@ regardless.
 
 ## Post-Merge (maintainer steps, out of scope here)
 
-1. Stage the ETH mesh, run the generation in the SocNavBench environment, capture the printed
-   SHA-256.
-2. Re-seed the internal hub store and update the external-data registry pin with that hash.
+1. Stage the ETH mesh, run the generation in the SocNavBench environment, and capture the printed
+   SHA-256 plus registry-style tree checksum metadata.
+2. Write the maintainer-review pin sidecar with `--pin-report-json`, then re-seed the internal hub
+   store and update the external-data registry pin from its `expected_tree_sha256` after review.
 3. Proceed with #1134 ETH map conversion (`validate_socnav_map_batch.py --batch-id eth_first
    --preflight` should then report `ready`).
 

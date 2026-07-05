@@ -75,7 +75,10 @@ def _repo_relative_file_exists(repo_root: Path, value: object) -> bool:
     if not isinstance(value, str) or not value:
         return False
     path = Path(value)
-    if path.is_absolute() or ".." in path.parts or path.parts[0] == "output":
+    # ``Path(".").parts`` is empty, so guard the index before the ``output`` check
+    # to keep pathological values (for example ``"."``) fail-closed instead of
+    # raising ``IndexError`` inside the publication gate.
+    if path.is_absolute() or ".." in path.parts or (path.parts and path.parts[0] == "output"):
         return False
     return (repo_root / path).is_file()
 

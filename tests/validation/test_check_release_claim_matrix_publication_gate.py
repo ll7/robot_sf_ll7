@@ -140,6 +140,33 @@ def test_gate_rejects_source_refs_with_parent_directory_components(tmp_path) -> 
     assert [blocker["check"] for blocker in report["blockers"]] == ["source_refs"]
 
 
+def test_gate_fails_closed_for_dot_artifact_uri_without_crashing(tmp_path) -> None:
+    """A ``"."`` path must block rather than raise ``IndexError`` on empty parts."""
+
+    source = tmp_path / "source.json"
+    source.write_text("{}", encoding="utf-8")
+
+    report = build_gate_report(
+        _matrix(
+            [
+                {
+                    "row_id": "release_artifact:dot-path",
+                    "classification": "benchmark evidence",
+                    "availability_status": "available",
+                    "artifact_match": True,
+                    "artifact_uri": ".",
+                    "scenario_certification": "accepted",
+                    "source_refs": ["source.json"],
+                }
+            ]
+        ),
+        repo_root=tmp_path,
+    )
+
+    assert report["status"] == "blocked"
+    assert [blocker["check"] for blocker in report["blockers"]] == ["artifact_uri"]
+
+
 def test_gate_rejects_non_benchmark_success_promotion(tmp_path) -> None:
     """Diagnostic and non-claim rows must not set benchmark_success true."""
 

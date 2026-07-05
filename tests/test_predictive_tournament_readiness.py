@@ -118,6 +118,10 @@ def test_next_progression_reports_scenario_family_oracle_packet(tmp_path: Path) 
     assert "oracle_future" in progression["forecast_arms"]
     assert "collision_rate" in progression["outcomes"]
     assert (
+        "configs/benchmarks/predictive_scenario_family_oracle_arm_issue_3215.yaml"
+        in progression["expected_configs"]
+    )
+    assert (
         "configs/scenarios/sets/predictive_hardcase_portfolio_v1.yaml"
         in progression["expected_configs"]
     )

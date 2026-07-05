@@ -120,6 +120,12 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_3214_closure_audit_2026-07-05.md`: closure-audit evidence for Issue #3214.
+  Maps hard-case predictive retraining acceptance criteria to merged PRs #3255,
+  PR #3515, PR #3869, and PR #4467 plus follow-up Issue #3254, and keeps the issue
+  `blocked_not_closable` until the public control-law change and
+  checkpoint/evaluation provenance plan exist.
+
 - `issue_1489_closure_audit_2026-07-05.md`: closure-audit evidence for Issue #1489.
   Maps schema/checker/status/integration PRs #1516, #1535, #1547, #2286,
   PR #2419, PR #3736, and PR #4452 to the synthesis parent acceptance criteria and keeps

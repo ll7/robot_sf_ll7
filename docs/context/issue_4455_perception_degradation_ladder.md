@@ -2,22 +2,22 @@
 
 Issue: [#4455](https://github.com/ll7/robot_sf_ll7/issues/4455)
 
-This note records the enablement contract for a bounded perception-degradation
-ladder requested after external dissertation review. The current benchmark
-campaigns use oracle-grade planner input; this slice pre-registers diagnostic,
-non-calibrated stress profiles so a later campaign can measure whether planner
-ranking and failure modes survive degraded planner input.
+Plain-language summary: this note records the enablement contract for a bounded
+perception-degradation ladder requested by external dissertation review. Current
+benchmark campaigns use oracle-grade planner input; the preregistered profiles
+let a later campaign test whether planner ranking and failure modes survive
+degraded planner input.
 
 ## Claim Boundary
 
-This is an enablement and pre-registration surface only. It is not benchmark
+This is an enablement and preregistration surface only. It is not benchmark
 evidence, not a full campaign result, and not a paper or dissertation claim.
 
 All degradation profiles apply to planner input only. Simulator ground truth,
 collision detection, termination logic, trajectory recording, and metric
-computation remain unchanged. Episode rows retain the normalized
+computation remain unchanged. Episode rows retain normalized
 `observation_noise` block, `observation_noise_hash`, and
-`observation_noise_stats` counters for provenance.
+`observation_noise_stats` counter provenance.
 
 ## Profile Table
 
@@ -37,6 +37,21 @@ The preregistered ladder manifest is
 maintainer-requested wrapper path is
 `configs/benchmarks/issue_4455_perception_degradation_ladder_preregistration.yaml`.
 
+## Current Integration Status
+
+Implementation and closure-audit slices have merged:
+
+| Source | Status | Evidence boundary |
+| --- | --- | --- |
+| PR #4458, merge commit `c002413ec7be6c3e89165f477c12fa5cffe55a41` | Delivered enablement | Profile schema/configs, planner-input degradation behavior, preregistration, builder/checker, focused tests. |
+| PR #4506, merge commit `01b820995906be0f7c9fca90106e9b737715e568` | Delivered audit note | Criterion-to-evidence mapping only; issue remains open for empirical campaign execution. |
+
+The parent issue is not closable yet because the ladder campaign and
+ranking/failure-mode synthesis have not run. That residual requires authorized
+compute or an explicit decision to park the empirical result as unavailable. No
+target host, queue-routing state, or private packet lineage is recorded in this
+tracked note.
+
 ## Handoff
 
 Use
@@ -44,9 +59,9 @@ Use
 for a cheap profile/config check. Use the same script with `--out-dir` to
 generate one camera-ready CPU smoke config per profile under local `output/`.
 Those generated configs are disposable local validation artifacts unless a later
-campaign promotes them with provenance.
+campaign promotes provenance.
 
-Private-queue or Slurm submission is intentionally out of scope for this PR.
-The next empirical action remains under issue #4455: run the generated configs
-or a capacity-appropriate campaign, then synthesize whether rank stability and
+Private-queue Slurm submission is intentionally out of scope for this note. The
+next empirical action remains under issue #4455: run generated configs or a
+capacity-appropriate campaign, then synthesize whether rank stability and
 failure-mode stability survive the degradation ladder.

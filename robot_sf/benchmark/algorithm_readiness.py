@@ -449,7 +449,12 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
     AlgorithmReadiness(
         canonical_name="prediction_mpc",
         tier="experimental",
-        aliases=("prediction_mpc", "prediction_aware_mpc", "cv_prediction_mpc"),
+        aliases=(
+            "prediction_mpc",
+            "prediction_mpc_cbf",
+            "prediction_aware_mpc",
+            "cv_prediction_mpc",
+        ),
         note=(
             "Prediction-aware MPC local planner with constant-velocity pedestrian futures "
             "as hard time-varying collision constraints."

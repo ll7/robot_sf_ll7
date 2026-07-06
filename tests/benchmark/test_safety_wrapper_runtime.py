@@ -672,3 +672,202 @@ def test_summary_proxy_unsupported_when_dt_missing() -> None:
     assert summary["false_stop_analysis_supported"] is False
     assert summary["false_stop_proxy_supported"] is False
     assert summary["false_stop_diagnostic"]["supported"] is False
+
+
+# --- Fourth wrapper stage: deadlock-recovery runtime wiring (issue #3501) -------------------
+
+from robot_sf.benchmark.safety_wrapper_runtime import (  # noqa: E402
+    deadlock_recovery_config,
+    make_deadlock_recovery_monitor,
+)
+from robot_sf.robot.safety_wrapper import (  # noqa: E402
+    DEADLOCK_RECOVERY_SCHEMA,
+    DeadlockRecoveryConfig,
+    DeadlockRecoveryMonitor,
+)
+
+
+def test_deadlock_recovery_disabled_by_default_is_a_no_op_monitor() -> None:
+    """The fourth stage stays off unless explicitly opted in on the wrapper_on arm."""
+
+    runtime = runtime_config_from_mapping({"enabled": True, "arm_key": "wrapper_on"})
+
+    config = deadlock_recovery_config(runtime)
+    monitor = make_deadlock_recovery_monitor(runtime)
+
+    assert config.enabled is False
+    assert isinstance(monitor, DeadlockRecoveryMonitor)
+    assert monitor.config.enabled is False
+
+
+def test_deadlock_recovery_enabled_maps_predeclared_thresholds() -> None:
+    """Opt-in deadlock recovery threads the fixed predeclared thresholds into the pure config."""
+
+    runtime = runtime_config_from_mapping(
+        {"enabled": True, "arm_key": "wrapper_on", "deadlock_recovery_enabled": True}
+    )
+
+    config = deadlock_recovery_config(runtime)
+
+    assert config.enabled is True
+    assert config.patience_steps == 20
+    assert config.recovery_steps == 10
+    assert config.recovery_angular_velocity_rad_s == 0.5
+    assert config.recovery_turn_sign == 1
+
+
+@pytest.mark.parametrize(
+    "payload,match",
+    [
+        (
+            {"enabled": False, "arm_key": "wrapper_off", "deadlock_recovery_enabled": True},
+            "requires enabled=True",
+        ),
+        (
+            {
+                "enabled": True,
+                "arm_key": "wrapper_on",
+                "deadlock_recovery_enabled": True,
+                "deadlock_patience_steps": 3,
+            },
+            "predeclared ablation config",
+        ),
+    ],
+)
+def test_deadlock_recovery_config_fails_closed_for_arm_or_threshold_drift(
+    payload: dict[str, object], match: str
+) -> None:
+    """Deadlock recovery is a wrapper_on stage with locked, predeclared thresholds."""
+
+    with pytest.raises(ValueError, match=match):
+        runtime_config_from_mapping(payload)
+
+
+def test_apply_runtime_wrapper_without_monitor_omits_deadlock_record() -> None:
+    """The deadlock sub-record only appears when an enabled monitor is supplied."""
+
+    runtime = runtime_config_from_mapping({"enabled": True, "arm_key": "wrapper_on"})
+
+    _corrected, record = apply_runtime_safety_wrapper(
+        command=(1.0, 0.25),
+        env=_Env(),
+        config=_config(),
+        runtime=runtime,
+        previous_ped_positions=None,
+        step_idx=0,
+    )
+
+    assert "deadlock_recovery" not in record
+
+
+def test_apply_runtime_wrapper_engages_recovery_after_patience_window() -> None:
+    """A persistent hazard freeze eventually rotates in place while forward speed stays zeroed."""
+
+    runtime = runtime_config_from_mapping({"enabled": True, "arm_key": "wrapper_on"})
+    # Direct monitor construction with a short patience keeps the unit test cheap; the
+    # runtime-level threshold lock (covered above) governs the ablation contract.
+    monitor = DeadlockRecoveryMonitor(
+        DeadlockRecoveryConfig(
+            enabled=True,
+            patience_steps=2,
+            recovery_steps=2,
+            hazard_proximity_m=2.0,
+            hazard_clearance_m=0.5,
+        )
+    )
+
+    records: list[dict[str, object]] = []
+    corrected = (0.0, 0.0)
+    for step_idx in range(2):
+        corrected, record = apply_runtime_safety_wrapper(
+            command=(1.0, 0.25),
+            env=_Env(),
+            config=_config(),
+            runtime=runtime,
+            previous_ped_positions=None,
+            step_idx=step_idx,
+            deadlock_monitor=monitor,
+        )
+        records.append(record)
+
+    # A very close pedestrian forces the hard-stop veto every step, so each step is frozen.
+    assert records[0]["intervention"] == INTERVENTION_HARD_STOP
+    assert records[0]["deadlock_recovery"]["recovery_active"] is False
+    # Second frozen step reaches patience and rotates in place; forward speed stays zeroed.
+    assert records[1]["deadlock_recovery"]["schema_version"] == DEADLOCK_RECOVERY_SCHEMA
+    assert records[1]["deadlock_recovery"]["recovery_active"] is True
+    assert corrected == (0.0, 0.5)
+
+
+def test_summary_embeds_deadlock_recovery_block() -> None:
+    """Episode summary aggregates deadlock detection and recovery activity per arm."""
+
+    runtime = runtime_config_from_mapping(
+        {"enabled": True, "arm_key": "wrapper_on", "deadlock_recovery_enabled": True}
+    )
+    trace = [
+        {
+            "step": 0,
+            "intervention": INTERVENTION_HARD_STOP,
+            "intervened": True,
+            "context": {
+                "min_pedestrian_distance_m": 0.5,
+                "min_clearance_m": -0.1,
+                "min_ttc_s": 0.5,
+            },
+            "deadlock_recovery": {
+                "frozen": True,
+                "deadlock_detected": False,
+                "recovery_active": False,
+            },
+        },
+        {
+            "step": 1,
+            "intervention": INTERVENTION_HARD_STOP,
+            "intervened": True,
+            "context": {
+                "min_pedestrian_distance_m": 0.5,
+                "min_clearance_m": -0.1,
+                "min_ttc_s": 0.5,
+            },
+            "deadlock_recovery": {
+                "frozen": True,
+                "deadlock_detected": True,
+                "recovery_active": True,
+            },
+        },
+    ]
+
+    summary = summarize_safety_wrapper_trace(trace, runtime=runtime, time_per_step_s=0.1)
+    block = summary["deadlock_recovery"]
+
+    assert block["schema_version"] == DEADLOCK_RECOVERY_SCHEMA
+    assert block["enabled"] is True
+    assert block["monitored_step_count"] == 2
+    assert block["frozen_step_count"] == 2
+    assert block["deadlock_detected_step_count"] == 1
+    assert block["recovery_active_step_count"] == 1
+    assert block["first_recovery_step"] == 1
+
+
+def test_run_map_episode_threads_deadlock_monitor_and_emits_block(monkeypatch) -> None:
+    """The episode step loop wires the fourth stage: its summary block is emitted per step."""
+
+    record = _run_episode_with_policy(
+        monkeypatch,
+        _policy_builder,
+        safety_wrapper={
+            "enabled": True,
+            "arm_key": "wrapper_on",
+            "deadlock_recovery_enabled": True,
+            "record_step_trace": True,
+        },
+    )
+
+    summary = record["algorithm_metadata"]["safety_wrapper"]
+    block = summary["deadlock_recovery"]
+    assert block["schema_version"] == DEADLOCK_RECOVERY_SCHEMA
+    assert block["enabled"] is True
+    # One executed step means the monitor saw exactly one eligible command.
+    assert block["monitored_step_count"] == 1
+    assert "deadlock_recovery" in summary["step_trace"][0]

@@ -61,6 +61,48 @@ SMOKE_EXPLORATORY_ONLY = "exploratory_only"
 SMOKE_BLOCKED = "blocked"
 
 
+def build_benchmark_ready_next_plan(
+    *, classification: str, smoke_summary: dict[str, Any], generated_artifacts_load: bool
+) -> dict[str, Any]:
+    """Return a deterministic next empirical action for #1126 smoke decisions."""
+    blockers: list[str] = []
+    primary_action = "promote_benchmark_ready_candidate"
+    next_checks = [
+        "record benchmark-ready scenario/map/provenance pointer",
+        "open closure only after reviewer confirms benchmark-ready evidence boundary",
+    ]
+
+    if classification == SMOKE_BLOCKED:
+        primary_action = "fix_import_or_smoke_execution"
+        if not generated_artifacts_load:
+            blockers.append("generated artifacts did not load")
+        if not smoke_summary["executed"]:
+            blockers.append("representative smoke did not execute cleanly")
+        next_checks = [
+            "repair import/load/smoke execution failure",
+            "rerun one CPU representative smoke before classifying benchmark readiness",
+        ]
+    elif classification == SMOKE_EXPLORATORY_ONLY:
+        primary_action = "tune_current_candidate_or_select_alternate_scene"
+        if smoke_summary["timeouts"]:
+            blockers.append("timeout_before_goal")
+        if not smoke_summary["reached_goal"]:
+            blockers.append("goal_not_reached")
+        if smoke_summary["collisions"]:
+            blockers.append("collision_observed")
+        next_checks = [
+            "first try a CPU-only horizon/scale calibration on the current selected scene",
+            "if it still times out, select another SDD scene/video through the same preflight gate",
+            "record exploratory_only again unless smoke reaches the goal without timeout or collision",
+        ]
+
+    return {
+        "primary_action": primary_action,
+        "blockers": blockers,
+        "next_checks": next_checks,
+    }
+
+
 def probe_annotation_file(
     path: Path,
     *,
@@ -434,11 +476,18 @@ def classify_smoke_decision(
         if smoke_summary["collisions"]:
             reasons.append("recorded smoke run included collisions")
 
+    next_plan = build_benchmark_ready_next_plan(
+        classification=classification,
+        smoke_summary=smoke_summary,
+        generated_artifacts_load=generated_artifacts_load,
+    )
+
     return {
         "schema": "robot_sf_sdd_smoke_decision.v1",
         "issue": ISSUE,
         "classification": classification,
         "recommended_next_action": recommended_next_action,
+        "benchmark_ready_next_plan": next_plan,
         "benchmark_ready": classification == SMOKE_BENCHMARK_READY,
         "exploratory_only": classification == SMOKE_EXPLORATORY_ONLY,
         "generated_artifacts_load": generated_artifacts_load,

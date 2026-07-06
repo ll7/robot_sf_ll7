@@ -539,6 +539,11 @@ def test_smoke_decision_rejects_timeout_candidate_for_closure() -> None:
 
     assert decision["classification"] == sdd_curation_preflight.SMOKE_EXPLORATORY_ONLY
     assert decision["recommended_next_action"] == "tune_or_select_benchmark_ready_candidate"
+    assert decision["benchmark_ready_next_plan"]["primary_action"] == (
+        "tune_current_candidate_or_select_alternate_scene"
+    )
+    assert "timeout_before_goal" in decision["benchmark_ready_next_plan"]["blockers"]
+    assert "goal_not_reached" in decision["benchmark_ready_next_plan"]["blockers"]
     assert decision["exploratory_only"] is True
     assert decision["benchmark_ready"] is False
     assert any("timed out" in reason for reason in decision["reasons"])
@@ -563,6 +568,10 @@ def test_smoke_decision_promotes_clean_success_candidate() -> None:
 
     assert decision["classification"] == sdd_curation_preflight.SMOKE_BENCHMARK_READY
     assert decision["recommended_next_action"] == "promote_benchmark_ready_candidate"
+    assert decision["benchmark_ready_next_plan"]["primary_action"] == (
+        "promote_benchmark_ready_candidate"
+    )
+    assert decision["benchmark_ready_next_plan"]["blockers"] == []
     assert decision["benchmark_ready"] is True
 
 
@@ -585,4 +594,8 @@ def test_smoke_decision_fails_closed_when_artifacts_do_not_load() -> None:
 
     assert decision["classification"] == sdd_curation_preflight.SMOKE_BLOCKED
     assert decision["recommended_next_action"] == "fix_import_or_smoke_execution"
+    assert (
+        decision["benchmark_ready_next_plan"]["primary_action"] == "fix_import_or_smoke_execution"
+    )
+    assert "generated artifacts did not load" in decision["benchmark_ready_next_plan"]["blockers"]
     assert any("did not load" in reason for reason in decision["reasons"])

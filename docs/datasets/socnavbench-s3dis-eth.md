@@ -55,3 +55,14 @@ uv run pytest tests/data/external/test_socnavbench_eth_shape.py
 With locally staged official assets, the same test loads `data.pkl` and checks the cheap structural
 contract. A successful pass is only local staging evidence; it is not a full benchmark campaign, a
 SocNavBench ETH map conversion, or a dissertation claim.
+
+To write a reviewable local audit artifact after staging official assets:
+
+```bash
+uv run python scripts/validation/check_socnavbench_eth_shape_contract.py \
+  --json-out output/validation/issue_4279/socnavbench_eth_shape_contract_audit.json
+```
+
+The command exits `0` only when the staged ETH mesh directory and traversible pickle satisfy the
+loader shape contract. Missing or malformed staged data exits `2` with a JSON report that names the
+missing path or malformed contract.

@@ -233,3 +233,46 @@ def test_export_camera_campaign_bundle_includes_preflight_seed_policy(tmp_path: 
     assert provenance["seed_policy"]["mode"] == "fixed-list"
     assert provenance["seed_policy"]["resolved_seeds"] == [1, 2]
     assert provenance["preflight_artifacts"]["validate_config"] == "preflight/validate_config.json"
+
+
+def test_export_publication_bundle_includes_artifact_badging(tmp_path: Path) -> None:
+    """Export bundle manifest should carry artifact badging metadata when provided."""
+    run_dir = tmp_path / "benchmarks" / "run_badging"
+    _make_run(run_dir, with_video=False)
+    out_dir = tmp_path / "publication"
+
+    badging = {
+        "claimed_level": "functional",
+        "checklist_path": "docs/context/evidence/checklist.md",
+        "claim_boundary": "reproducible-smoke-run",
+        "functional_smoke_status": "passed",
+        "reproduction_status": "not_run",
+        "known_nondeterminism": ["Thread scheduling"],
+    }
+
+    result = export_publication_bundle(
+        run_dir,
+        out_dir,
+        bundle_name="run_badging_bundle",
+        include_videos=False,
+        artifact_badging=badging,
+    )
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["artifact_badging"]["claimed_level"] == "functional"
+    assert manifest["artifact_badging"]["functional_smoke_status"] == "passed"
+    assert manifest["artifact_badging"]["known_nondeterminism"] == ["Thread scheduling"]
+
+    # Test invalid configuration raises ValueError
+    invalid_badging = {
+        "claimed_level": "super-reproduced",  # invalid
+    }
+    with pytest.raises(ValueError, match="Invalid claimed_level"):
+        export_publication_bundle(
+            run_dir,
+            out_dir,
+            bundle_name="run_invalid_badging_bundle",
+            include_videos=False,
+            overwrite=True,
+            artifact_badging=invalid_badging,
+        )

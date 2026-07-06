@@ -1,0 +1,71 @@
+{
+  "acceptance_evidence": [
+    {
+      "criterion": "Resolve trace-manifest artifact aliases, or provide one precise blocked comment when private artifacts are not materialized.",
+      "evidence": [
+        "Issue comment https://github.com/ll7/robot_sf_ll7/issues/4586#issuecomment-4893620288 records the exact pending baseline artifact URI and both pending learned-risk trace artifact URIs.",
+        "Merged PR #4660 committed docs/context/evidence/issue_4586_learned_risk_readiness_blocked_2026-07-06.json with the same unresolved :pending aliases in checker output.",
+        "The blocker remains private-side artifact materialization, not repository code ambiguity."
+      ],
+      "status": "met_by_blocked_fallback"
+    },
+    {
+      "criterion": "Provide pending labels, marking them present only after materialized traces prove the labels exist.",
+      "evidence": [
+        "Issue comment https://github.com/ll7/robot_sf_ll7/issues/4586#issuecomment-4893620288 states collision, near_miss, and low_progress cannot be confirmed and remain pending.",
+        "Merged PR #4660's evidence JSON records checker blockers for all three labels as not present.",
+        "No PR marked labels present without artifact verification."
+      ],
+      "status": "met_by_blocked_fallback"
+    },
+    {
+      "criterion": "Set retrieval_status to available only when the durable trace and baseline artifact contract is complete.",
+      "evidence": [
+        "Issue comment https://github.com/ll7/robot_sf_ll7/issues/4586#issuecomment-4893620288 says retrieval remains blocked pending private-ops cluster action.",
+        "Merged PR #4660's evidence JSON records retrieval_status not available.",
+        "configs/training/learned_risk_trace_manifest_issue_2312.yaml remains fail-closed rather than falsely setting available."
+      ],
+      "status": "met_by_blocked_fallback"
+    },
+    {
+      "criterion": "Rerun check_learned_risk_campaign_readiness.py --json and commit passing or precisely-blocked readiness output evidence.",
+      "evidence": [
+        "Merged PR #4660 added --json PATH support in scripts/validation/check_learned_risk_campaign_readiness.py and committed docs/context/evidence/issue_4586_learned_risk_readiness_blocked_2026-07-06.json.",
+        "Merged PR #4660 registered the evidence JSON in docs/context/catalog.yaml.",
+        "Merged PR #4660 PR body records targeted tests, readiness command exit code 3 for expected campaign_blocked, JSON parse validation, ruff, and full pr_ready_check passing."
+      ],
+      "status": "met"
+    },
+    {
+      "criterion": "No campaign run or Slurm submission performed.",
+      "evidence": [
+        "Merged PR #4660 PR body states no training, Slurm/GPU jobs, artifact fetches, or paper/dissertation claims.",
+        "The committed readiness checker and this closure audit are CPU-only repository evidence; they do not submit compute."
+      ],
+      "status": "met"
+    }
+  ],
+  "audited_at_utc": "2026-07-06T16:28:05Z",
+  "closure_call": "close_issue_4586",
+  "issue": 4586,
+  "linked_prs": [
+    {
+      "merged_at": "2026-07-06T16:09:25Z",
+      "number": 4660,
+      "title": "fix: write learned-risk readiness JSON reports (#4586)",
+      "url": "https://github.com/ll7/robot_sf_ll7/pull/4660"
+    }
+  ],
+  "out_of_scope": [
+    "No full benchmark campaign run.",
+    "No Slurm or GPU submission.",
+    "No artifact retrieval, private-ops state mutation, or W&B upload.",
+    "No paper or dissertation claim edits."
+  ],
+  "residual_risks": [
+    {
+      "risk": "Private artifacts for parent #1472 remain unavailable.",
+      "why_it_remains": "Issue #4586 explicitly allowed the precise blocked-comment fallback when private-side retrieval had not happened. The campaign execution remains a separate gated step after artifact materialization."
+    }
+  ]
+}

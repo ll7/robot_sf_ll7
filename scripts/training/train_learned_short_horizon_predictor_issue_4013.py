@@ -57,7 +57,10 @@ def _load_config(config_path: Path) -> ShortHorizonTrainerConfig:
             f"trainer config must be a YAML mapping, got {type(loaded).__name__}: {config_path}"
         )
     allowed = {f.name for f in fields(ShortHorizonTrainerConfig)}
-    kwargs = {key: value for key, value in loaded.items() if key in allowed}
+    # Drop explicit ``null``/None values so the dataclass default applies instead of
+    # nullifying a required field (e.g. ``output_dir: null`` -> Path(None) crash,
+    # ``device: null`` -> unintended device); keys are still normalized to defaults.
+    kwargs = {key: value for key, value in loaded.items() if key in allowed and value is not None}
     return ShortHorizonTrainerConfig(**kwargs)
 
 

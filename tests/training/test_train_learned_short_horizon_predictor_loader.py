@@ -52,3 +52,14 @@ def test_load_config_valid_mapping_parses_and_ignores_unknown(tmp_path: Path) ->
     cfg = _load_config(good)
     assert cfg.epochs == 3
     assert not hasattr(cfg, "unknown_key")
+
+
+def test_load_config_null_value_falls_back_to_default(tmp_path: Path) -> None:
+    """An explicit ``null`` value keeps the dataclass default (no nullification)."""
+    default = _load_config.__globals__["ShortHorizonTrainerConfig"]()
+    cfg_file = tmp_path / "nulls.yaml"
+    cfg_file.write_text("output_dir: null\ndevice: null\nepochs: 5\n", encoding="utf-8")
+    cfg = _load_config(cfg_file)
+    assert cfg.output_dir == default.output_dir
+    assert cfg.device == default.device
+    assert cfg.epochs == 5

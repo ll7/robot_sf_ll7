@@ -426,7 +426,7 @@ def classify_smoke_decision(
         reasons.append("all recorded smoke runs reached goal without timeout or collision")
     else:
         classification = SMOKE_EXPLORATORY_ONLY
-        recommended_next_action = "accept_exploratory_only"
+        recommended_next_action = "tune_or_select_benchmark_ready_candidate"
         if smoke_summary["timeouts"]:
             reasons.append("recorded smoke run timed out before reaching the goal")
         if not smoke_summary["reached_goal"]:

@@ -512,8 +512,8 @@ def _benchmark_candidate_readiness() -> dict[str, object]:
     }
 
 
-def test_smoke_decision_accepts_timeout_candidate_as_exploratory_only() -> None:
-    """#1126 real-data smoke timeouts resolve to exploratory-only, not a vague blocker."""
+def test_smoke_decision_rejects_timeout_candidate_for_closure() -> None:
+    """#1126 timeout smoke stays exploratory-only and requests benchmark-ready follow-up."""
     decision = sdd_curation_preflight.classify_smoke_decision(
         _benchmark_candidate_readiness(),
         [
@@ -538,7 +538,7 @@ def test_smoke_decision_accepts_timeout_candidate_as_exploratory_only() -> None:
     )
 
     assert decision["classification"] == sdd_curation_preflight.SMOKE_EXPLORATORY_ONLY
-    assert decision["recommended_next_action"] == "accept_exploratory_only"
+    assert decision["recommended_next_action"] == "tune_or_select_benchmark_ready_candidate"
     assert decision["exploratory_only"] is True
     assert decision["benchmark_ready"] is False
     assert any("timed out" in reason for reason in decision["reasons"])

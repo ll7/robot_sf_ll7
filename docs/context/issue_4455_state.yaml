@@ -92,3 +92,50 @@ state_entries:
       paper_or_dissertation_claim_edited: false
       planner_ranking_claim_promoted: false
       transient_queue_or_host_state_recorded: false
+  - recorded_at_utc: "2026-07-06T00:00:00Z"
+    recorded_by: claude
+    kind: closure_decision
+    status: acceptance_met_closing_campaign_out_of_scope
+    latest_issue_comment_reviewed_utc: "2026-07-05T04:08:08Z"
+    supersedes_status: public_repo_acceptance_met_empirical_campaign_pending
+    summary: >-
+      Closure call for issue #4455. All seven acceptance criteria from the
+      maintainer implementation plan are met by merged PR #4458 and were
+      independently re-verified on origin/main (16 focused tests pass; ladder
+      builder --validate-only succeeds). The issue's own scope is
+      enablement-only ("one PR: config + runner support, no campaign") and its
+      claim boundary defers the campaign to post-freeze. The sole remainder is
+      the empirical campaign RUN, which requires compute submission. Per the
+      2026-07-05 COMPLETE-FIRST maintainer directive, an issue whose only
+      remainder is a campaign RUN counts as complete, so this issue is closed
+      via the PR closure keyword. Prior closure-audit PRs (#4506, #4558, #4583)
+      documented the acceptance mapping but each kept the issue open, producing
+      a merge-driven closure re-admit loop; this entry makes the terminal
+      closure decision the loop was missing.
+    closure_mechanism: >-
+      PR carries "Closes #4455"; the merge gate ratifies or demotes the keyword.
+      No direct issue close or comment was performed by this worker
+      (comment_issue_or_pr and close authorizations are off in this lane).
+    claim_boundary: >-
+      Enablement complete and closure decision only. Not benchmark evidence;
+      does not rank planners, does not assert failure-mode survival under
+      perception degradation, and edits no paper or dissertation claim.
+    independent_verification:
+      - command: "uv run pytest tests/benchmark/test_observation_noise.py tests/benchmark/test_perception_degradation_ladder_issue_4455.py -q"
+        result: "16 passed"
+      - command: "uv run python scripts/benchmark/build_perception_degradation_ladder_issue_4455.py --validate-only"
+        result: "validated configs/benchmarks/perception_degradation/issue_4455_ladder_v1.yaml"
+    deferred_followup: >-
+      The post-freeze empirical campaign (run the preregistered ladder, preserve
+      row/artifact provenance, synthesize rank/failure-mode survival) is out of
+      scope for closure and should be tracked as a dedicated campaign issue when
+      compute is authorized. This worker did not open that issue (GitHub-write
+      authorization is minimal in this lane); the next_empirical_action above
+      remains the canonical handoff.
+    forbidden_actions_confirmed:
+      compute_submit: false
+      full_benchmark_campaign_run: false
+      slurm_or_gpu_submission: false
+      paper_or_dissertation_claim_edited: false
+      planner_ranking_claim_promoted: false
+      transient_queue_or_host_state_recorded: false

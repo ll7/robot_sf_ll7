@@ -3095,6 +3095,14 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_2910_publication_suite_certification_report/report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2910_publication_suite_certification_report/report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4586_learned_risk_readiness_blocked_2026-07-06.json
     status: evidence
     freshness: evidence

@@ -1,0 +1,43 @@
+# Checkpoint-backed learned short-horizon prediction MPC config for issue #4013.
+#
+# Unlike learned_prediction_mpc_issue_4013_smoke.yaml (which loads the untrained
+# zero-initialized smoke model), this config loads the trained checkpoint produced
+# by the diagnostic Phase 2 trainer so the model-based arm runs on real learned
+# weights (evidence_tier=checkpoint_loaded) with NO fallback.
+#
+# Fail-closed: allow_untrained_smoke=false and fallback_to_constant_velocity=false,
+# so a missing/mismatched checkpoint raises instead of silently degrading. The
+# predictor dimensions below (max_pedestrians, horizon_steps, rollout_dt,
+# hidden_dim, model_type, history_steps) MUST match the trainer config
+# configs/training/learned_short_horizon_predictor_issue_4013_smoke.yaml or the
+# checkpoint load fails on a shape mismatch.
+#
+# Generate the checkpoint first (CPU, git-ignored output/):
+#   uv run python scripts/training/train_learned_short_horizon_predictor_issue_4013.py \
+#     --config configs/training/learned_short_horizon_predictor_issue_4013_smoke.yaml
+#
+# Claim boundary: diagnostic-only. The checkpoint is smoke evidence that the
+# predictor trains and loads without fallback; it is NOT benchmark, navigation-
+# quality, or paper-facing evidence. Running the paired 3-arm smoke comparison
+# (learned_prediction_mpc vs cv_prediction_mpc vs a model-free baseline) and
+# Phase 3 real-trajectory training remain open (see issue #4013).
+allow_testing_algorithms: true
+allow_untrained_smoke: false
+fallback_to_constant_velocity: false
+checkpoint_path: output/models/issue_4013/short_horizon_predictor/short_horizon_predictor.pt
+model_id: null
+normalizer_path: null
+device: cpu
+model_type: mlp
+max_pedestrians: 16
+history_steps: 4
+horizon_steps: 4
+rollout_dt: 0.2
+hidden_dim: 64
+max_linear_speed: 0.9
+max_angular_speed: 1.1
+goal_tolerance: 0.25
+pedestrian_safety_margin: 0.35
+solver_max_iterations: 16
+warm_start: true
+fallback_to_stop: true

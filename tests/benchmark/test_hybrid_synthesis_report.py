@@ -12,6 +12,7 @@ each case is focused and deterministic.
 from __future__ import annotations
 
 import copy
+import json
 from pathlib import Path
 
 from robot_sf.benchmark.hybrid_evidence_matrix import (
@@ -21,6 +22,7 @@ from robot_sf.benchmark.hybrid_evidence_matrix import (
     build_hybrid_synthesis_report_file,
     load_hybrid_evidence_input,
 )
+from scripts.validation.validate_hybrid_evidence_matrix import main as validate_cli_main
 
 FIXTURE_ROOT = Path("tests/fixtures/hybrid_evidence_matrix/v1")
 
@@ -171,3 +173,38 @@ def test_file_helper_attaches_input_metadata() -> None:
     assert report["eligible"] is False
     assert isinstance(report["input_format"], str) and report["input_format"]
     assert report["input_path"].endswith("valid_rows.yaml")
+
+
+def test_report_echoes_rows_valid_signal() -> None:
+    """The report echoes ``rows_valid`` so consumers can tell blocked-valid from invalid."""
+    valid = _synthesis_from_rows([_complete_row(), _second_complete_row()])
+    assert valid["rows_valid"] is True
+
+    invalid = _complete_row()
+    invalid.pop("outcomes")  # drop a required field -> invalid row
+    report = _synthesis_from_rows([_complete_row(), _second_complete_row(), invalid])
+    assert report["rows_valid"] is False
+
+
+def test_cli_synthesis_report_emits_blocked_recommendation(capsys) -> None:
+    """The CLI synthesis mode emits the per-mechanism report and a clean exit code."""
+    exit_code = validate_cli_main(
+        [
+            "--input",
+            str(FIXTURE_ROOT / "valid_rows.yaml"),
+            "--synthesis-report",
+        ]
+    )
+
+    # A blocked-but-valid gate is a successful emission (exit 0), not a hard error.
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["issue"] == "#1489"
+    assert payload["status"] == "blocked"
+    assert payload["eligible"] is False
+    assert payload["promoted_verdict_count"] == 0
+    assert payload["rows_valid"] is True
+    assert payload["input_path"].endswith("valid_rows.yaml")
+    for mechanism in payload["mechanisms"]:
+        assert mechanism["recommendation"] in SYNTHESIS_RECOMMENDATIONS
+        assert mechanism["synthesis_verdict_promoted"] is False

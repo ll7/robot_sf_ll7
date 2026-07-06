@@ -1,0 +1,60 @@
+{
+  "blockers": [
+    "2 more complete lane(s) required",
+    "4 blocked lane(s)",
+    "1 ready but not synthesis-complete lane(s)"
+  ],
+  "claim_boundary": "conservative per-mechanism synthesis recommendation; a verdict is authoritative only when synthesis_verdict_promoted is true (gate open). Not benchmark evidence on its own.",
+  "complete_count": 0,
+  "eligible": false,
+  "input_format": "rows",
+  "input_path": "docs/context/evidence/issue_2274_hybrid_component_matrix_2026-06-05/matrix.yaml",
+  "issue": "#1489",
+  "mechanisms": [
+    {
+      "component": "learned_risk_model_v1",
+      "recommendation": "gather_more_evidence",
+      "recommendation_basis": "pre_runtime_or_invalid",
+      "source_issue": "#1472",
+      "state": "blocked",
+      "synthesis_verdict_promoted": false
+    },
+    {
+      "component": "orca_residual_bc_v1",
+      "recommendation": "gather_more_evidence",
+      "recommendation_basis": "pre_runtime_or_invalid",
+      "source_issue": "#1475",
+      "state": "blocked",
+      "synthesis_verdict_promoted": false
+    },
+    {
+      "component": "oracle_imitation_v1",
+      "recommendation": "gather_more_evidence",
+      "recommendation_basis": "pre_runtime_or_invalid",
+      "source_issue": "#1470",
+      "state": "blocked",
+      "synthesis_verdict_promoted": false
+    },
+    {
+      "component": "shielded_ppo_repair_v1",
+      "recommendation": "gather_more_evidence",
+      "recommendation_basis": "executed_non_synthesis",
+      "source_issue": "#1474",
+      "state": "ready",
+      "synthesis_verdict_promoted": false
+    },
+    {
+      "component": "bc_warm_start_ppo_v10",
+      "recommendation": "gather_more_evidence",
+      "recommendation_basis": "pre_runtime_or_invalid",
+      "source_issue": "#1977",
+      "state": "blocked",
+      "synthesis_verdict_promoted": false
+    }
+  ],
+  "next_empirical_action": "Keep #1489 blocked; finish component campaign evidence before synthesis.",
+  "prerequisite_count": 2,
+  "promoted_verdict_count": 0,
+  "rows_valid": true,
+  "status": "blocked"
+}

@@ -1,7 +1,8 @@
 # Issue #1475 Closure Audit
 
 Plain-language summary: issue #1475 asked a Slurm-capable owner to run a bounded
-ORCA-residual behavior-cloning (BC) smoke job and, if it passed, escalate to a
+ORCA (Optimal Reciprocal Collision Avoidance)-residual behavior-cloning (BC)
+smoke job and, if it passed, escalate to a
 nominal job producing a durable learned-residual dataset and checkpoint. **This
 audit recommends keeping #1475 open.** All CPU-implementable enabling criteria
 (launch packet, runtime observation-contract adapter, residual telemetry
@@ -47,6 +48,9 @@ names the exact next empirical action rather than closing the issue.
   - PR #2989, `5b94970458f72f4bfb9104931370a3ef7e0caf0f`,
     <https://github.com/ll7/robot_sf_ll7/pull/2989> — promoted Slurm closeout
     evidence for #1470 and #1475 (job-12913 smoke bundle).
+  - PR #2998, `48c01ed40d178de53986ca80ed2fb26587432b9e`,
+    <https://github.com/ll7/robot_sf_ll7/pull/2998> — emit ORCA residual smoke
+    evidence fields (the missing-telemetry population fix paired with #3502).
   - PR #3502, `332ffe4e6cbe5cf4bd6ee06944831e84db4e2a45`,
     <https://github.com/ll7/robot_sf_ll7/pull/3502> — emit `residual_clipped`
     on no-residual GuardedPPO decisions (resolves the #2445 missing-telemetry

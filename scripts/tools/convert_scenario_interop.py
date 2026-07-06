@@ -33,6 +33,7 @@ import yaml
 from robot_sf.benchmark.scenario_interop import (
     SUPPORTED_TARGETS,
     build_target_compatibility_report,
+    build_target_export_manifest,
     convert_scenario_to_ir,
     dump_ir,
 )
@@ -84,6 +85,15 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional directory to write one <scenario_id>.ir.json file per scenario.",
     )
     parser.add_argument(
+        "--target-out-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Optional directory to write one <scenario_id>.<target>.export_manifest.json "
+            "fail-closed target export manifest per scenario and requested target."
+        ),
+    )
+    parser.add_argument(
         "--target",
         action="append",
         choices=SUPPORTED_TARGETS,
@@ -98,12 +108,19 @@ def main(argv: list[str] | None = None) -> int:
     scenarios = _load_scenarios(args.matrix)
     if args.out_dir is not None:
         args.out_dir.mkdir(parents=True, exist_ok=True)
+    if args.target_out_dir is not None:
+        args.target_out_dir.mkdir(parents=True, exist_ok=True)
 
     exit_code = 0
     summary: list[dict[str, Any]] = []
     for scenario in scenarios:
         result = convert_scenario_to_ir(scenario, source_file=str(args.matrix))
         scenario_id = result.ir["provenance"]["source_scenario_id"]
+        targets = args.target or SUPPORTED_TARGETS
+        target_compatibility = build_target_compatibility_report(
+            result.ir,
+            targets=targets,
+        )
         if not result.is_valid:
             exit_code = 1
         summary.append(
@@ -112,16 +129,20 @@ def main(argv: list[str] | None = None) -> int:
                 "ir_valid": result.is_valid,
                 "unsupported_field_count": len(result.unsupported_fields),
                 "schema_errors": result.schema_errors,
-                "target_compatibility": build_target_compatibility_report(
-                    result.ir,
-                    targets=args.target or SUPPORTED_TARGETS,
-                ),
+                "target_compatibility": target_compatibility,
             }
         )
         if args.out_dir is not None:
             out_path = args.out_dir / f"{scenario_id}.ir.json"
             out_path.write_text(dump_ir(result.ir), encoding="utf-8")
-        else:
+        if args.target_out_dir is not None:
+            for target in targets:
+                manifest = build_target_export_manifest(result.ir, target=target)
+                manifest_path = args.target_out_dir / (
+                    f"{scenario_id}.{target}.export_manifest.json"
+                )
+                manifest_path.write_text(dump_ir(manifest), encoding="utf-8")
+        if args.out_dir is None and args.target_out_dir is None:
             sys.stdout.write(dump_ir(result.ir))
 
     sys.stderr.write(json.dumps({"dry_run_summary": summary}, indent=2) + "\n")

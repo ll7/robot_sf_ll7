@@ -6,8 +6,11 @@ import pytest
 
 from robot_sf.benchmark.scenario_interop import (
     TARGET_COMPATIBILITY_SCHEMA_VERSION,
+    TARGET_EXPORT_MANIFEST_SCHEMA_VERSION,
     build_target_compatibility_report,
+    build_target_export_manifest,
     convert_scenario_to_ir,
+    dump_ir,
 )
 
 
@@ -72,6 +75,40 @@ def test_target_compatibility_report_names_axis_scenario_export_gaps() -> None:
     assert "map_file_missing" in blocker_codes
     assert "agents_missing" in blocker_codes
     assert report["warnings"] == []
+
+
+def test_target_export_manifest_records_blocked_artifact_contract() -> None:
+    """Export manifest preserves blockers without claiming target artifact readiness."""
+    result = convert_scenario_to_ir(_explicit_map_scenario())
+
+    manifest = build_target_export_manifest(result.ir, target="socnavbench")
+
+    assert manifest["schema_version"] == TARGET_EXPORT_MANIFEST_SCHEMA_VERSION
+    assert manifest["artifact_kind"] == "socnavbench_scenario_export_manifest"
+    assert manifest["target"] == "socnavbench"
+    assert manifest["source_scenario_id"] == "corridor-handoff"
+    assert manifest["source_ir_schema_version"] == result.ir["schema_version"]
+    assert manifest["status"] == "blocked"
+    assert manifest["ready"] is False
+    assert manifest["compatibility_report_schema_version"] == TARGET_COMPATIBILITY_SCHEMA_VERSION
+    assert {blocker["code"] for blocker in manifest["blockers"]} >= {
+        "socnavbench_assets_not_staged",
+        "unsupported_fields_present",
+    }
+
+
+def test_target_export_manifest_is_deterministic() -> None:
+    """Identical target manifest inputs serialize byte-identically."""
+    first = build_target_export_manifest(
+        convert_scenario_to_ir(_explicit_map_scenario()).ir,
+        target="hunavsim",
+    )
+    second = build_target_export_manifest(
+        convert_scenario_to_ir(_explicit_map_scenario()).ir,
+        target="hunavsim",
+    )
+
+    assert dump_ir(first) == dump_ir(second)
 
 
 def test_target_compatibility_report_rejects_unknown_target() -> None:

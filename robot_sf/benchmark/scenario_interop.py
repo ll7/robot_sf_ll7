@@ -46,6 +46,7 @@ IR_SCHEMA_VERSION = "robot_sf.scenario_interop_ir.v1"
 CONVERTER_NAME = "robot_sf.scenario_interop"
 CONVERTER_VERSION = "1"
 TARGET_COMPATIBILITY_SCHEMA_VERSION = "robot_sf.scenario_interop_target_compatibility.v1"
+TARGET_EXPORT_MANIFEST_SCHEMA_VERSION = "robot_sf.scenario_interop_target_export_manifest.v1"
 SUPPORTED_TARGETS = ("socnavbench", "hunavsim")
 IR_SCHEMA_FILE = Path(__file__).with_name("schemas") / "scenario_interop_ir.v1.json"
 
@@ -406,6 +407,33 @@ def build_target_compatibility_report(
             }
         )
     return reports
+
+
+def build_target_export_manifest(ir: Mapping[str, Any], *, target: str) -> dict[str, Any]:
+    """Build a deterministic, fail-closed target export manifest.
+
+    The manifest is the asset-free artifact contract for downstream target exporters. It is not a
+    SocNavBench or HuNavSim scenario file; when target prerequisites are missing, it records the
+    named blockers that prevented real export.
+
+    Returns:
+        JSON-safe target export manifest with readiness status, blockers, and warnings.
+    """
+
+    report = build_target_compatibility_report(ir, targets=(target,))[0]
+    status = "ready" if report["ready"] else "blocked"
+    return {
+        "schema_version": TARGET_EXPORT_MANIFEST_SCHEMA_VERSION,
+        "artifact_kind": f"{target}_scenario_export_manifest",
+        "target": target,
+        "source_scenario_id": report["source_scenario_id"],
+        "source_ir_schema_version": ir.get("schema_version"),
+        "status": status,
+        "ready": report["ready"],
+        "blockers": report["blockers"],
+        "warnings": report["warnings"],
+        "compatibility_report_schema_version": report["schema_version"],
+    }
 
 
 def _target_blockers(ir: Mapping[str, Any], *, target: str) -> list[dict[str, str]]:

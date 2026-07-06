@@ -36,19 +36,50 @@ class LearnedShortHorizonPredictorConfig:
     allow_untrained_smoke: bool = False
 
 
+def build_predictor_module(*, input_dim: int, output_dim: int, hidden_dim: int, device: str) -> Any:
+    """Build the canonical short-horizon predictor network.
+
+    This is the single source of truth for the predictor architecture so the
+    inference wrapper and any offline trainer stay checkpoint-compatible.
+
+    Returns:
+        Any: A ``torch.nn.Sequential`` module on the requested device.
+    """
+
+    _, nn = _load_torch()
+    return nn.Sequential(
+        nn.Linear(input_dim, hidden_dim),
+        nn.Tanh(),
+        nn.Linear(hidden_dim, output_dim),
+    ).to(device)
+
+
+def predictor_io_dims(config: LearnedShortHorizonPredictorConfig) -> tuple[int, int]:
+    """Return the ``(input_dim, output_dim)`` implied by a predictor config.
+
+    Returns:
+        tuple[int, int]: Feature vector length and flattened prediction length.
+    """
+
+    input_dim = 4 + 2 + int(config.max_pedestrians) * 4
+    output_dim = int(config.max_pedestrians) * int(config.horizon_steps) * 2
+    return input_dim, output_dim
+
+
 class _TinyMlp:
     """Lazy PyTorch MLP wrapper so module import remains cheap."""
 
     def __init__(self, *, input_dim: int, output_dim: int, hidden_dim: int, device: str) -> None:
         """Initialize the tiny state predictor network."""
 
-        torch, nn = _load_torch()
+        torch, _ = _load_torch()
         self.torch = torch
-        self.module = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.Tanh(),
-            nn.Linear(hidden_dim, output_dim),
-        ).to(device)
+        self.module = build_predictor_module(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            hidden_dim=hidden_dim,
+            device=device,
+        )
 
     def zero_initialize(self) -> None:
         """Make untrained-smoke predictions deterministic and stationary."""
@@ -212,8 +243,7 @@ class LearnedShortHorizonPedestrianPredictor:
             raise ValueError(
                 "learned short-horizon predictor currently supports model_type='mlp' only"
             )
-        input_dim = 4 + 2 + int(self.config.max_pedestrians) * 4
-        output_dim = int(self.config.max_pedestrians) * int(self.config.horizon_steps) * 2
+        input_dim, output_dim = predictor_io_dims(self.config)
         return _TinyMlp(
             input_dim=input_dim,
             output_dim=output_dim,
@@ -245,23 +275,12 @@ class LearnedShortHorizonPedestrianPredictor:
             np.ndarray: Fixed-width predictor feature vector.
         """
 
-        robot = observation.get("robot", {})
-        goal = observation.get("goal", {})
-        robot_pos = _as_xy(robot.get("position", [0.0, 0.0]))
-        heading = float(_as_1d(robot.get("heading", [0.0]), pad=1)[0])
-        speed = float(_as_1d(robot.get("speed", [0.0]), pad=1)[0])
-        goal_pos = _as_xy(goal.get("current", goal.get("next", [0.0, 0.0])))
-
-        features = np.zeros((4 + 2 + int(self.config.max_pedestrians) * 4,), dtype=float)
-        features[:4] = np.asarray([robot_pos[0], robot_pos[1], heading, speed], dtype=float)
-        features[4:6] = goal_pos - robot_pos
-        offset = 6
-        count = min(ped_positions.shape[0], int(self.config.max_pedestrians))
-        for idx in range(count):
-            features[offset : offset + 2] = ped_positions[idx] - robot_pos
-            features[offset + 2 : offset + 4] = ped_velocities_world[idx]
-            offset += 4
-        return features
+        return encode_predictor_features(
+            observation,
+            ped_positions,
+            ped_velocities_world,
+            max_pedestrians=int(self.config.max_pedestrians),
+        )
 
     def _pedestrian_state_world(self, observation: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
         """Extract pedestrian positions and rotate ego-frame velocities into world frame.
@@ -270,24 +289,69 @@ class LearnedShortHorizonPedestrianPredictor:
             tuple[np.ndarray, np.ndarray]: Pedestrian positions and world-frame velocities.
         """
 
-        ped_state = observation.get("pedestrians", {})
-        robot = observation.get("robot", {})
-        robot_heading = float(_as_1d(robot.get("heading", [0.0]), pad=1)[0])
-        positions = _as_xy_matrix(ped_state.get("positions", []))
-        velocities_ego = _as_xy_matrix(ped_state.get("velocities", []))
-        count = int(_as_1d(ped_state.get("count", [positions.shape[0]]), pad=1)[0])
-        count = max(0, min(count, positions.shape[0]))
-        positions = positions[:count]
-        if velocities_ego.shape[0] < count:
-            velocities_ego = np.zeros_like(positions)
-        else:
-            velocities_ego = velocities_ego[:count]
-        cos_h = float(np.cos(robot_heading))
-        sin_h = float(np.sin(robot_heading))
-        velocities_world = np.empty_like(velocities_ego)
-        velocities_world[:, 0] = cos_h * velocities_ego[:, 0] - sin_h * velocities_ego[:, 1]
-        velocities_world[:, 1] = sin_h * velocities_ego[:, 0] + cos_h * velocities_ego[:, 1]
-        return positions, velocities_world
+        return pedestrian_world_state(observation)
+
+
+def encode_predictor_features(
+    observation: dict[str, Any],
+    ped_positions: np.ndarray,
+    ped_velocities_world: np.ndarray,
+    *,
+    max_pedestrians: int,
+) -> np.ndarray:
+    """Encode observation and world-frame pedestrian state into a feature vector.
+
+    Shared by the inference wrapper and the offline trainer so both encode
+    features identically.
+
+    Returns:
+        np.ndarray: Fixed-width predictor feature vector.
+    """
+
+    robot = observation.get("robot", {})
+    goal = observation.get("goal", {})
+    robot_pos = _as_xy(robot.get("position", [0.0, 0.0]))
+    heading = float(_as_1d(robot.get("heading", [0.0]), pad=1)[0])
+    speed = float(_as_1d(robot.get("speed", [0.0]), pad=1)[0])
+    goal_pos = _as_xy(goal.get("current", goal.get("next", [0.0, 0.0])))
+
+    features = np.zeros((4 + 2 + int(max_pedestrians) * 4,), dtype=float)
+    features[:4] = np.asarray([robot_pos[0], robot_pos[1], heading, speed], dtype=float)
+    features[4:6] = goal_pos - robot_pos
+    offset = 6
+    count = min(ped_positions.shape[0], int(max_pedestrians))
+    for idx in range(count):
+        features[offset : offset + 2] = ped_positions[idx] - robot_pos
+        features[offset + 2 : offset + 4] = ped_velocities_world[idx]
+        offset += 4
+    return features
+
+
+def pedestrian_world_state(observation: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
+    """Extract pedestrian positions and rotate ego-frame velocities into world frame.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: Pedestrian positions and world-frame velocities.
+    """
+
+    ped_state = observation.get("pedestrians", {})
+    robot = observation.get("robot", {})
+    robot_heading = float(_as_1d(robot.get("heading", [0.0]), pad=1)[0])
+    positions = _as_xy_matrix(ped_state.get("positions", []))
+    velocities_ego = _as_xy_matrix(ped_state.get("velocities", []))
+    count = int(_as_1d(ped_state.get("count", [positions.shape[0]]), pad=1)[0])
+    count = max(0, min(count, positions.shape[0]))
+    positions = positions[:count]
+    if velocities_ego.shape[0] < count:
+        velocities_ego = np.zeros_like(positions)
+    else:
+        velocities_ego = velocities_ego[:count]
+    cos_h = float(np.cos(robot_heading))
+    sin_h = float(np.sin(robot_heading))
+    velocities_world = np.empty_like(velocities_ego)
+    velocities_world[:, 0] = cos_h * velocities_ego[:, 0] - sin_h * velocities_ego[:, 1]
+    velocities_world[:, 1] = sin_h * velocities_ego[:, 0] + cos_h * velocities_ego[:, 1]
+    return positions, velocities_world
 
 
 def build_learned_short_horizon_predictor_config(

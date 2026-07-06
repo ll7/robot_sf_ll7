@@ -3452,3 +3452,11 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3481_closure_audit_2026-07-06/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3481_closure_audit_2026-07-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

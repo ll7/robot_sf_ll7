@@ -24,6 +24,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scenario/single seed diagnostic smoke — not benchmark, navigation-quality, or paper-facing
   evidence, and not a large generative world model. Covered by
   `tests/benchmark/test_run_issue_4013_model_based_comparison.py`.
+* **issue #4627 behavior-token motion-prior diagnostics (experimental, offline).** New
+  `experiments/behavior_tokens/` namespace with an offline, read-only prototype that turns saved
+  benchmark interaction traces into discrete "behavior tokens" for diagnostics. `extract_windows.py`
+  slides fixed-size windows over `algorithm_metadata.simulation_step_trace.steps` and converts each
+  into a documented, interpretable feature vector (clearance, time-to-contact proxy, robot-speed
+  statistics, stop/yield and oscillation proxies, near-conflict recovery); `quantize_trace_windows.py`
+  standardizes the finite feature columns and assigns each valid window a deterministic discrete
+  token id via k-means (scikit-learn with a NumPy-only fallback, token ids canonicalized by cluster
+  center so runs and libraries agree); `inspect_token_motifs.py` summarizes token distributions by
+  scenario/planner/outcome and exports heuristic *candidate* motif labels plus bounded example
+  windows. `schemas.py` holds the shared feature vocabulary and schema-version constants. Rows without
+  a usable trace are skipped with an explicit reason; non-derivable features are recorded as `null`
+  (never fabricated zeros). Covered by `tests/experiments/test_behavior_tokens.py`. Claim boundary:
+  very low priority, exploratory, diagnostic-only tooling — not validated metrics, benchmark evidence,
+  release-gate input, or paper/dissertation claim support, and no safety decision may depend on the
+  tokens. No new controller training, no transformer dependency, no benchmark pipeline integration,
+  no benchmark campaign run, and no SLURM/GPU submission.
 * **issue #4013 checkpoint-backed model-based action selection (diagnostic).** New
   `configs/algos/learned_prediction_mpc_issue_4013_checkpoint.yaml` wires the trained short-horizon
   predictor checkpoint into the `learned_prediction_mpc` adapter fail-closed (`allow_untrained_smoke`
@@ -68,6 +85,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   providing the machinery that emits it; the issue stays open (`Refs #1489`), blocked on component
   campaigns producing ≥2 durable comparable `complete` lanes (#1470/#1472/#1474/#1475/#1358). No
   benchmark campaign run, no SLURM/GPU submission, no paper/dissertation claim edits.
+* **issue #1489 synthesis-report CLI + first durable artifact.**
+  `scripts/validation/validate_hybrid_evidence_matrix.py` now accepts `--synthesis-report`, exposing
+  the #4628 `build_hybrid_synthesis_report()` machinery through a reproducible command (previously it
+  was Python/tests-only). The synthesis report now also echoes `rows_valid` so a consumer can
+  distinguish a fail-closed "blocked but valid" gate from a matrix whose rows failed validation. The
+  flag was run once on the committed component matrix
+  (`docs/context/evidence/issue_2274_hybrid_component_matrix_2026-06-05/matrix.yaml`) to emit the
+  first durable synthesis-report artifact,
+  `docs/context/evidence/issue_1489_synthesis_report_2026-07-06/synthesis_report.json`: `status:
+  blocked`, all five mechanisms `gather_more_evidence`, `promoted_verdict_count: 0` — the correct
+  conservative fail-closed result while component campaigns remain incomplete. Focused CLI + echo
+  tests added to `tests/benchmark/test_hybrid_synthesis_report.py`. Issue stays open (`Refs #1489`),
+  still blocked on ≥2 durable comparable `complete` component lanes. No benchmark campaign run, no
+  SLURM/GPU submission, no paper/dissertation claim edits.
 
 ### Fixed
 

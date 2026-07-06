@@ -47,6 +47,19 @@ ISSUE_1489_INTEGRATION_NEXT_ACTIONS = {
         "Run the conservative #1489 synthesis over the complete durable lanes."
     ),
 }
+# Per-mechanism recommendations the #1489 synthesis report can emit. ``continue``
+# and ``revise`` are promoted only from durable ``complete`` lanes when the gate
+# is open; ``stop`` is a terminal negative decision from a full-slice lane; every
+# other lane state maps to ``gather_more_evidence`` (fail-closed default).
+SYNTHESIS_RECOMMENDATIONS = frozenset({"continue", "revise", "stop", "gather_more_evidence"})
+# Human-readable basis for each per-mechanism recommendation, keyed by the
+# campaign-lifecycle state from :func:`classify_component_campaign_state`.
+_SYNTHESIS_BASIS_BY_STATE = {
+    "complete": "durable_complete_lane",
+    "ready": "executed_non_synthesis",
+    "blocked": "pre_runtime_or_invalid",
+    "missing": "no_campaign_row",
+}
 ROW_REQUIRED_FIELDS = frozenset(
     {
         "component",
@@ -399,6 +412,120 @@ def build_hybrid_prerequisite_matrix_file(
     report["input_path"] = _repo_relative_or_absolute(
         path.resolve(), root=(repo_root or get_repository_root())
     )
+    return report
+
+
+def build_hybrid_synthesis_report(matrix_report: dict[str, Any]) -> dict[str, Any]:
+    """Assemble the #1489 per-mechanism synthesis recommendation from a matrix.
+
+    This is the synthesis-deliverable half of the #1489 contract. It turns the
+    campaign-lifecycle matrix produced by :func:`build_hybrid_prerequisite_matrix`
+    into an explicit per-mechanism recommendation
+    (``continue``/``revise``/``stop``/``gather_more_evidence``) while staying
+    fail-closed:
+
+    - A ``continue``/``revise`` verdict is *promoted* (marked authoritative) only
+      when the prerequisite gate is open — at least ``prerequisite_count`` durable
+      ``complete`` lanes and no invalid rows. No single pre-result lane, launch
+      packet, smoke run, or fallback/degraded row can open the gate, so none can
+      promote a synthesis verdict.
+    - A ``stop`` recommendation is surfaced only for a lane that actually executed
+      a synthesis-tier slice (``stress``/``full_matrix``) and concluded ``stop``.
+      It is a terminal negative decision, never a promoted synthesis verdict.
+    - Every other lane (missing, blocked, executed-but-not-synthesis-grade) maps to
+      ``gather_more_evidence``.
+
+    Args:
+        matrix_report: The report returned by
+            :func:`build_hybrid_prerequisite_matrix` or
+            :func:`build_hybrid_prerequisite_matrix_file`.
+
+    Returns:
+        Compact synthesis report with the overall eligibility decision and a
+        per-mechanism recommendation list. When the gate is blocked the report
+        echoes the integration-status blockers and next empirical action so no
+        weak lane is silently promoted.
+    """
+    integration = matrix_report.get("integration_status", {})
+    prerequisite_met = bool(matrix_report.get("prerequisite_met"))
+    rows_valid = bool(matrix_report.get("rows_valid", True))
+    gate_open = prerequisite_met and rows_valid
+
+    mechanisms: list[dict[str, Any]] = []
+    promoted_verdict_count = 0
+    for lane in matrix_report.get("lanes", []):
+        state = lane.get("state")
+        verdict = lane.get("verdict")
+        if state == "complete" and verdict in SYNTHESIS_VERDICTS:
+            recommendation = verdict
+        elif verdict == "stop" and lane.get("evidence_tier") in SYNTHESIS_TIERS:
+            recommendation = "stop"
+        else:
+            recommendation = "gather_more_evidence"
+        promoted = gate_open and state == "complete" and recommendation in SYNTHESIS_VERDICTS
+        if promoted:
+            promoted_verdict_count += 1
+        mechanisms.append(
+            {
+                "component": lane.get("component"),
+                "source_issue": lane.get("source_issue"),
+                "state": state,
+                "recommendation": recommendation,
+                "recommendation_basis": _SYNTHESIS_BASIS_BY_STATE.get(state, "unknown"),
+                "synthesis_verdict_promoted": promoted,
+            }
+        )
+
+    return {
+        "issue": "#1489",
+        "status": "ready_for_synthesis" if gate_open else "blocked",
+        "eligible": gate_open,
+        "claim_boundary": (
+            "conservative per-mechanism synthesis recommendation; a verdict is "
+            "authoritative only when synthesis_verdict_promoted is true (gate open). "
+            "Not benchmark evidence on its own."
+        ),
+        "prerequisite_count": matrix_report.get("prerequisite_count"),
+        "complete_count": matrix_report.get("complete_count"),
+        "promoted_verdict_count": promoted_verdict_count,
+        "blockers": list(integration.get("blockers", [])),
+        "next_empirical_action": integration.get("next_empirical_action"),
+        "mechanisms": mechanisms,
+    }
+
+
+def build_hybrid_synthesis_report_file(
+    path: Path,
+    *,
+    expected_components: list[str] | None = None,
+    repo_root: Path | None = None,
+    check_git_history: bool = False,
+    prerequisite_count: int = DEFAULT_SYNTHESIS_PREREQUISITE_COUNT,
+) -> dict[str, Any]:
+    """Load a matrix file and build its #1489 synthesis recommendation report.
+
+    Args:
+        path: YAML/JSON evidence-matrix file accepted by
+            :func:`load_hybrid_evidence_input`.
+        expected_components: Optional expected component names (see
+            :func:`build_hybrid_prerequisite_matrix`).
+        repo_root: Repository root for provenance-path resolution.
+        check_git_history: Forwarded to the row validator to verify git SHAs.
+        prerequisite_count: Minimum ``complete`` lanes that open the gate.
+
+    Returns:
+        The synthesis report with the input format and path attached.
+    """
+    matrix_report = build_hybrid_prerequisite_matrix_file(
+        path,
+        expected_components=expected_components,
+        repo_root=repo_root,
+        check_git_history=check_git_history,
+        prerequisite_count=prerequisite_count,
+    )
+    report = build_hybrid_synthesis_report(matrix_report)
+    report["input_format"] = matrix_report.get("input_format")
+    report["input_path"] = matrix_report.get("input_path")
     return report
 
 
@@ -1074,9 +1201,12 @@ __all__ = [
     "COMPONENT_CAMPAIGN_STATES",
     "DEFAULT_SYNTHESIS_PREREQUISITE_COUNT",
     "PRE_RUNTIME_TIERS",
+    "SYNTHESIS_RECOMMENDATIONS",
     "HybridEvidenceMatrixValidationError",
     "build_hybrid_prerequisite_matrix",
     "build_hybrid_prerequisite_matrix_file",
+    "build_hybrid_synthesis_report",
+    "build_hybrid_synthesis_report_file",
     "classify_component_campaign_state",
     "load_hybrid_evidence_input",
     "validate_hybrid_evidence_file",

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* **issue #1489 hybrid-learning synthesis recommendation builder.**
+  `robot_sf/benchmark/hybrid_evidence_matrix.py` now exposes
+  `build_hybrid_synthesis_report()` / `build_hybrid_synthesis_report_file()`, the synthesis-
+  deliverable half of the #1489 contract. Given the existing prerequisite/status matrix, it emits an
+  explicit per-mechanism recommendation (`continue`/`revise`/`stop`/`gather_more_evidence`) while
+  staying fail-closed: a `continue`/`revise` verdict is *promoted* (marked authoritative via
+  `synthesis_verdict_promoted`) only when the synthesis gate is open (≥2 durable `complete` lanes and
+  no invalid rows), so no single pre-result lane, launch packet, smoke run, fallback/degraded row, or
+  invalid row can promote a synthesis verdict. Terminal `stop` decisions on an executed
+  stress/full-matrix slice are surfaced but never promoted. Focused tests cover the blocked, single-
+  complete, two-complete (gate opens), terminal-stop, invalid-row, and missing-lane paths
+  (`tests/benchmark/test_hybrid_synthesis_report.py`, 8 pass). This advances the #1489 acceptance
+  criterion *"synthesis recommends continue/revise/stop/gather-more-evidence for each mechanism"* by
+  providing the machinery that emits it; the issue stays open (`Refs #1489`), blocked on component
+  campaigns producing ≥2 durable comparable `complete` lanes (#1470/#1472/#1474/#1475/#1358). No
+  benchmark campaign run, no SLURM/GPU submission, no paper/dissertation claim edits.
+
 ### Fixed
 
 * **issue #1126 SDD curation decision packet — runnable import command.**

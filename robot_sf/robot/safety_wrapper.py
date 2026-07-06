@@ -12,8 +12,14 @@ stages:
 
 The wrapper is **off by default** and opt-in per run, with **fixed, predeclared thresholds** (no
 per-planner tuning), so a factorial ``planner × {wrapper off, wrapper on}`` ablation can quantify
-its effect. This module is the pure per-step transform; the ablation campaign, live wiring into the
-action adapters, and a stateful deadlock-recovery stage are deliberate follow-ups.
+its effect. :func:`apply_safety_wrapper` is the pure per-step transform.
+
+The fourth predeclared stage, **deadlock recovery**, is stateful (it needs a run of frozen steps
+to detect a stall), so it lives in :class:`DeadlockRecoveryMonitor` — an opt-in, disabled-by-default
+monitor that composes *around* the per-step transform. It only ever overrides angular velocity to
+rotate free of a freeze; it never adds forward speed, so it cannot override the hard stop/yield veto
+or worsen a collision. Wiring the monitor into the benchmark runtime step loop and running the
+paired ablation campaign remain deliberate follow-ups.
 
 Thresholds are predeclared modeling choices, diagnostic until durable evidence.
 """
@@ -25,6 +31,7 @@ from dataclasses import dataclass
 from typing import Any
 
 SAFETY_WRAPPER_SCHEMA = "safety_wrapper.v1"
+DEADLOCK_RECOVERY_SCHEMA = "safety_wrapper_deadlock_recovery.v1"
 
 # Intervention labels (stable vocabulary).
 INTERVENTION_DISABLED = "disabled"
@@ -152,12 +159,203 @@ def _record(
     }
 
 
+@dataclass(frozen=True, slots=True)
+class DeadlockRecoveryConfig:
+    """Fixed, predeclared deadlock-recovery thresholds (planner-agnostic).
+
+    Deadlock recovery is the stateful fourth safety stage: it breaks the *frozen robot* failure
+    mode (the planner keeps commanding near-zero forward speed while a nearby pedestrian or
+    obstacle blocks progress, so the episode stalls without a collision) by permitting a bounded
+    in-place rotation to search for a new heading. It is a modeling choice, predeclared and fixed
+    (no per-planner tuning), and diagnostic until durable evidence.
+
+    Attributes:
+        enabled: Whether the monitor is active. **Off by default** (opt-in per run).
+        patience_steps: Consecutive frozen steps required before recovery engages.
+        recovery_steps: Maximum steps a single recovery maneuver persists before re-evaluating.
+        recovery_angular_velocity_rad_s: In-place rotation magnitude applied during recovery.
+        recovery_turn_sign: Fixed rotation direction (+1 or -1); predeclared, not tuned per run.
+        frozen_speed_eps_m_s: Executed forward-speed magnitude at/below which a step counts frozen.
+        hazard_proximity_m: A frozen step counts as a deadlock only when the nearest pedestrian is
+            within this distance (so a legitimate goal-reached stop is not treated as a deadlock).
+        hazard_clearance_m: Alternatively, a finite predicted clearance at/below this also marks the
+            step as hazard-blocked (obstacle-driven freeze without a nearby pedestrian).
+    """
+
+    enabled: bool = False
+    patience_steps: int = 20
+    recovery_steps: int = 10
+    recovery_angular_velocity_rad_s: float = 0.5
+    recovery_turn_sign: int = 1
+    frozen_speed_eps_m_s: float = 0.05
+    hazard_proximity_m: float = 2.0
+    hazard_clearance_m: float = 0.5
+
+    def __post_init__(self) -> None:
+        """Validate that the recovery thresholds are physically usable."""
+        if self.patience_steps < 1:
+            raise ValueError(
+                f"DeadlockRecoveryConfig.patience_steps must be >= 1, got {self.patience_steps!r}"
+            )
+        if self.recovery_steps < 1:
+            raise ValueError(
+                f"DeadlockRecoveryConfig.recovery_steps must be >= 1, got {self.recovery_steps!r}"
+            )
+        if self.recovery_turn_sign not in (-1, 1):
+            raise ValueError(
+                "DeadlockRecoveryConfig.recovery_turn_sign must be -1 or 1, "
+                f"got {self.recovery_turn_sign!r}"
+            )
+        if not (self.recovery_angular_velocity_rad_s > 0.0):
+            raise ValueError(
+                "DeadlockRecoveryConfig.recovery_angular_velocity_rad_s must be > 0, "
+                f"got {self.recovery_angular_velocity_rad_s!r}"
+            )
+        for name in ("frozen_speed_eps_m_s", "hazard_proximity_m", "hazard_clearance_m"):
+            value = getattr(self, name)
+            if not (value >= 0.0):
+                raise ValueError(f"DeadlockRecoveryConfig.{name} must be >= 0, got {value!r}")
+
+
+def _is_hazard_blocked(context: SafetyContext, config: DeadlockRecoveryConfig) -> bool:
+    """Return whether the step is blocked by a nearby pedestrian or obstacle.
+
+    Used to distinguish a genuine deadlock (frozen while blocked) from a legitimate stop with
+    clear surroundings (e.g. goal reached), which must not trigger recovery.
+    """
+    near_pedestrian = context.min_pedestrian_distance_m <= config.hazard_proximity_m
+    near_obstacle = (
+        math.isfinite(context.min_clearance_m)
+        and context.min_clearance_m <= config.hazard_clearance_m
+    )
+    return bool(near_pedestrian or near_obstacle)
+
+
+class DeadlockRecoveryMonitor:
+    """Stateful, opt-in deadlock-recovery stage composed around the per-step transform.
+
+    Call :meth:`step` once per simulation step with the *executed* (post-:func:`apply_safety_wrapper`)
+    command and the same :class:`SafetyContext`. The monitor tracks a run of frozen steps and, once
+    ``patience_steps`` is reached, overrides the angular velocity with a bounded in-place rotation
+    for up to ``recovery_steps`` steps to break the stall. **Forward speed is passed through
+    unchanged**, so any upstream hard stop/yield veto (which zeroes forward speed) is preserved and
+    recovery can never inject forward motion into a hazard.
+
+    The monitor is deterministic and holds only integer counters, so a fresh instance per episode
+    yields reproducible behavior.
+    """
+
+    def __init__(self, config: DeadlockRecoveryConfig | None = None) -> None:
+        """Initialize a monitor with predeclared thresholds and a cleared counter state."""
+        self._config = config or DeadlockRecoveryConfig()
+        self.reset()
+
+    @property
+    def config(self) -> DeadlockRecoveryConfig:
+        """Return the predeclared recovery configuration."""
+        return self._config
+
+    def reset(self) -> None:
+        """Clear the frozen-run and recovery counters (call once per episode)."""
+        self._frozen_run = 0
+        self._recovery_remaining = 0
+
+    def step(
+        self,
+        corrected_linear_velocity: float,
+        corrected_angular_velocity: float,
+        context: SafetyContext,
+    ) -> dict[str, Any]:
+        """Advance the monitor one step and return the (possibly recovery-adjusted) command record.
+
+        Args:
+            corrected_linear_velocity: Forward speed already produced by the per-step transform.
+            corrected_angular_velocity: Angular velocity already produced by the transform.
+            context: The per-step safety signals (same context passed to the transform).
+
+        Returns:
+            dict[str, Any]: Versioned record with the deadlock state and the final command. Forward
+            speed always equals ``corrected_linear_velocity``; angular velocity is overridden only
+            while a recovery maneuver is active.
+        """
+        config = self._config
+        original = (float(corrected_linear_velocity), float(corrected_angular_velocity))
+
+        if not config.enabled:
+            return self._record(config, original, original, frozen=False, recovery_applied=False)
+
+        frozen = abs(
+            float(corrected_linear_velocity)
+        ) <= config.frozen_speed_eps_m_s and _is_hazard_blocked(context, config)
+        if frozen:
+            self._frozen_run += 1
+        else:
+            # Progress resumed (or surroundings cleared): the stall is over.
+            self._frozen_run = 0
+            self._recovery_remaining = 0
+
+        # Engage a new maneuver once the frozen run crosses patience and none is in flight.
+        if self._recovery_remaining <= 0 and self._frozen_run >= config.patience_steps:
+            self._recovery_remaining = config.recovery_steps
+
+        recovery_applied = frozen and self._recovery_remaining > 0
+        if recovery_applied:
+            self._recovery_remaining -= 1
+            final = (
+                float(corrected_linear_velocity),  # forward speed preserved; never increased
+                config.recovery_turn_sign * config.recovery_angular_velocity_rad_s,
+            )
+        else:
+            final = original
+        record = self._record(
+            config, original, final, frozen=frozen, recovery_applied=recovery_applied
+        )
+        # A maneuver that just used its last step re-arms the patience window: reset the frozen run
+        # so a still-stuck robot pauses for one patience cycle (giving the planner a fresh chance)
+        # before rotating again, rather than overriding angular velocity on every frozen step.
+        if recovery_applied and self._recovery_remaining == 0:
+            self._frozen_run = 0
+        return record
+
+    def _record(
+        self,
+        config: DeadlockRecoveryConfig,
+        original: tuple[float, float],
+        final: tuple[float, float],
+        *,
+        frozen: bool,
+        recovery_applied: bool,
+    ) -> dict[str, Any]:
+        """Build the versioned deadlock-recovery record.
+
+        Returns:
+            dict[str, Any]: The schema-tagged deadlock-recovery output record.
+        """
+        return {
+            "schema_version": DEADLOCK_RECOVERY_SCHEMA,
+            "evidence_kind": "diagnostic_proxy",
+            "enabled": config.enabled,
+            "frozen": bool(frozen),
+            "frozen_run": int(self._frozen_run),
+            "deadlock_detected": bool(config.enabled and self._frozen_run >= config.patience_steps),
+            "recovery_active": bool(recovery_applied),
+            "recovery_steps_remaining": int(self._recovery_remaining),
+            "input_linear_velocity": original[0],
+            "input_angular_velocity": original[1],
+            "final_linear_velocity": final[0],
+            "final_angular_velocity": final[1],
+        }
+
+
 __all__ = [
+    "DEADLOCK_RECOVERY_SCHEMA",
     "INTERVENTION_DISABLED",
     "INTERVENTION_HARD_STOP",
     "INTERVENTION_NONE",
     "INTERVENTION_SPEED_CAP",
     "SAFETY_WRAPPER_SCHEMA",
+    "DeadlockRecoveryConfig",
+    "DeadlockRecoveryMonitor",
     "SafetyContext",
     "SafetyWrapperConfig",
     "apply_safety_wrapper",

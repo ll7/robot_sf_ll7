@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* **issue #1489 hybrid-learning synthesis recommendation builder.**
+  `robot_sf/benchmark/hybrid_evidence_matrix.py` now exposes
+  `build_hybrid_synthesis_report()` / `build_hybrid_synthesis_report_file()`, the synthesis-
+  deliverable half of the #1489 contract. Given the existing prerequisite/status matrix, it emits an
+  explicit per-mechanism recommendation (`continue`/`revise`/`stop`/`gather_more_evidence`) while
+  staying fail-closed: a `continue`/`revise` verdict is *promoted* (marked authoritative via
+  `synthesis_verdict_promoted`) only when the synthesis gate is open (≥2 durable `complete` lanes and
+  no invalid rows), so no single pre-result lane, launch packet, smoke run, fallback/degraded row, or
+  invalid row can promote a synthesis verdict. Terminal `stop` decisions on an executed
+  stress/full-matrix slice are surfaced but never promoted. Focused tests cover the blocked, single-
+  complete, two-complete (gate opens), terminal-stop, invalid-row, and missing-lane paths
+  (`tests/benchmark/test_hybrid_synthesis_report.py`, 8 pass). This advances the #1489 acceptance
+  criterion *"synthesis recommends continue/revise/stop/gather-more-evidence for each mechanism"* by
+  providing the machinery that emits it; the issue stays open (`Refs #1489`), blocked on component
+  campaigns producing ≥2 durable comparable `complete` lanes (#1470/#1472/#1474/#1475/#1358). No
+  benchmark campaign run, no SLURM/GPU submission, no paper/dissertation claim edits.
+
 ### Fixed
 
 * **issue #1126 SDD curation decision packet — runnable import command.**
@@ -37,6 +56,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dataset-backed prior smoke from real staged trajectories — is gated on a license-compatible
   external dataset the project does not hold and stays tracked by #3065/#2657/#1498. Docs-only; no
   external-data ingest, no calibrated/representative prior claim, no benchmark/SLURM run.
+* Recorded the **issue #4437 closure audit** at
+  `docs/context/evidence/issue_4437_closure_audit_2026-07-06.md` (indexed in
+  `docs/context/catalog.yaml`). It maps each acceptance criterion of the closure-audit hygiene lane
+  to merged-PR evidence: the read-only candidate/classification tool (#4440
+  `open_issue_closure_audit.py`), the comment templates + dry-run mechanics (#4503
+  `closure_mechanics.py`), and the human-gated close path requiring both `--close-issues` and
+  `--apply` (#4571). The **enablement tooling is complete and validated** (24 focused tests pass; a
+  live read-only run fails closed with a schema-valid packet on the GitHub search rate-limit), but
+  two acceptance criteria remain open — the audit **execution** write pass and the final #4437
+  **summary comment** — both requiring GitHub issue comment/close authority. The audit therefore
+  keeps #4437 open with a dispatchable residual checklist (`Refs #4437`). Docs-only; no queue edits,
+  new issues, benchmark execution, Slurm/GPU submission, or research claim.
 * Recorded the **issue #1126 SDD-curation closure audit** at
   `docs/context/evidence/issue_1126_closure_audit_2026-07-06.md` (linked from the #1126 context
   note). It maps each acceptance criterion to merged-PR evidence (#1091 importer, #3765 fail-closed

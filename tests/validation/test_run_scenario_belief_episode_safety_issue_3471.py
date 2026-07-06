@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from robot_sf.planner.scenario_belief_adapter import project_scenario_belief_for_planner
+from robot_sf.representation import VisibilityState
 from scripts.validation.run_scenario_belief_episode_safety_issue_3471 import (
     MODES,
     UNCERTAINTY_REPRESENTATIONS,
+    UNCERTAINTY_SOURCES,
     EpisodeParams,
     _is_commit,
     build_belief_for_mode,
@@ -88,6 +91,45 @@ def test_unknown_uncertainty_representation_fails_closed():
         raise AssertionError("unknown uncertainty representation was accepted")
 
 
+def test_each_uncertainty_source_runs_and_is_reported():
+    """Issue #3557 harness parameterizes source and reports the selected contract."""
+    for source in UNCERTAINTY_SOURCES:
+        row = run_episode(
+            "uncertain_dropped",
+            seed=101,
+            params=_FAST,
+            uncertainty_source=source,
+        )
+        assert row["uncertainty_source"] == source
+
+        report = run_matrix([101], _FAST, uncertainty_source=source)
+        assert report["followup_issue"] == 3557
+        assert report["uncertainty_source"] == source
+        assert report["uncertainty_source_contract"]["selected"]["condition_builder"]
+        assert (
+            "controlled #3471 episode contrast"
+            in (report["uncertainty_source_contract"]["claim_boundary"])
+        )
+        assert set(report["by_mode"]) == set(MODES)
+
+
+def test_unknown_uncertainty_source_fails_closed():
+    """Unknown uncertainty-source names fail closed instead silently using default."""
+    with pytest.raises(ValueError, match="unknown uncertainty source"):
+        run_matrix([101], _FAST, uncertainty_source="unknown")
+
+
+def test_mixed_non_default_representation_and_source_fails_closed():
+    """The harness does not produce ambiguous mixed representation/source evidence."""
+    with pytest.raises(ValueError, match="non-default uncertainty_source"):
+        run_matrix(
+            [101],
+            _FAST,
+            uncertainty_representation="conformal_radius",
+            uncertainty_source="visibility_occlusion",
+        )
+
+
 def test_retained_matches_oracle():
     """Retaining uncertain agents (gate off) is behaviorally identical to oracle.
 
@@ -131,6 +173,43 @@ def test_degraded_mode_lowers_corridor_existence():
     min_dropped = min(a.existence_probability for a in dropped.agents)
     assert min_dropped < min_oracle
     assert min_dropped < 0.5
+
+
+def test_uncertainty_source_conditions_mutate_corridor_belief():
+    """Registered source conditions reuse #2546-style belief perturbations."""
+    state = build_initial_state(101, _FAST)
+
+    occluded = build_belief_for_mode(
+        state,
+        "uncertain_dropped",
+        _FAST,
+        uncertainty_source="visibility_occlusion",
+    )
+    assert any(agent.visibility_state == VisibilityState.OCCLUDED for agent in occluded.agents)
+
+    covariance = build_belief_for_mode(
+        state,
+        "uncertain_dropped",
+        _FAST,
+        uncertainty_source="covariance_inflation",
+    )
+    assert max(float(np.max(agent.position.covariance_xy)) for agent in covariance.agents) > 1.0
+
+    class_probability = build_belief_for_mode(
+        state,
+        "uncertain_dropped",
+        _FAST,
+        uncertainty_source="class_probability",
+    )
+    assert any(len(agent.class_probabilities) > 1 for agent in class_probability.agents)
+
+    tracking = build_belief_for_mode(
+        state,
+        "uncertain_dropped",
+        _FAST,
+        uncertainty_source="tracking_noise",
+    )
+    assert any("fresh_track" in agent.missing_fields for agent in tracking.agents)
 
 
 def test_is_commit_detects_commit_speed():

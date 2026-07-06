@@ -168,27 +168,24 @@ def _canonicalize_labels(labels: np.ndarray, centers: np.ndarray) -> tuple[np.nd
     return new_labels, centers[order]
 
 
+def _assign_to_centers(data: np.ndarray, centers: np.ndarray) -> np.ndarray:
+    """Assign rows to canonical centers with deterministic tie-breaking."""
+    distances = np.linalg.norm(data[:, None, :] - centers[None, :, :], axis=2)
+    return distances.argmin(axis=1).astype(int)
+
+
 def quantize(data: np.ndarray, num_tokens: int, seed: int) -> tuple[np.ndarray, np.ndarray, str]:
     """Cluster standardized ``data`` into ``num_tokens`` tokens.
 
     Returns ``(labels, centers, algorithm)`` with deterministically canonicalized
-    token ids. Prefers scikit-learn KMeans; falls back to a deterministic NumPy
-    implementation when scikit-learn is not importable.
+    token ids. Uses the in-module NumPy implementation so repeated seeded runs
+    do not depend on scikit-learn/OpenMP tie behavior on degenerate inputs.
     """
     effective_k = min(num_tokens, data.shape[0])
-    try:
-        from sklearn.cluster import KMeans
-
-        model = KMeans(n_clusters=effective_k, random_state=seed, n_init=10)
-        labels = model.fit_predict(data)
-        canon_labels, canon_centers = _canonicalize_labels(
-            labels.astype(int), model.cluster_centers_
-        )
-        return canon_labels, canon_centers, "sklearn.KMeans"
-    except ImportError:
-        labels, centers = _numpy_kmeans(data, effective_k, seed)
-        canon_labels, canon_centers = _canonicalize_labels(labels, centers)
-        return canon_labels, canon_centers, "numpy_kmeans_fallback"
+    labels, centers = _numpy_kmeans(data, effective_k, seed)
+    _, canon_centers = _canonicalize_labels(labels, centers)
+    canon_labels = _assign_to_centers(data, canon_centers)
+    return canon_labels, canon_centers, "numpy_kmeans"
 
 
 def _write_outputs(

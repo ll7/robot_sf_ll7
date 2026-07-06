@@ -1,0 +1,35 @@
+{
+  "schema": "robot_sf.issue_4216.full_suite_green_gate.v1",
+  "issue": 4216,
+  "recorded_at_utc": "2026-07-06T19:29:00Z",
+  "host": "imech036",
+  "lane": "local_validation_simulated_licca",
+  "base_commit": "ac309f874",
+  "head_branch": "issue-4216-closure-audit-20260706",
+  "classification": "green_gate",
+  "claim_boundary": "CPU/local validation on imech036 with ROBOT_SF_TEST_ENV=licca; no Slurm/GPU submission, full benchmark campaign, release, merge, deletion, or paper/dissertation claim edit.",
+  "command": "PYTEST_NUM_WORKERS=8 ROBOT_SF_TEST_ENV=licca scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -q",
+  "exit_code": 0,
+  "timed_out": false,
+  "cleanup_status": "not_needed",
+  "elapsed_seconds": 1249.98,
+  "final_summary": "11941 passed, 16 skipped, 11 warnings in 1243.30s (0:20:43)",
+  "failing_node_ids": [],
+  "private_artifacts": {
+    "summary_path": ".git/codex-agent-runs/active/issue-4216/full-suite-licca-rebased-final-20260706/validation-20260706T190808Z-596409.summary.json",
+    "summary_sha256": "7749a8bd6e91708406783daa92b11554db1ad222a458a0f867dd1ca920891eb6",
+    "log_path": ".git/codex-agent-runs/active/issue-4216/full-suite-licca-rebased-final-20260706/validation-20260706T190808Z-596409.log",
+    "log_sha256": "432375d533c08fa0e7f259bb698d8a6920341a1c7f374f5bda75956d1f3ea894"
+  },
+  "acceptance_delta": {
+    "prior_status": "acceptance_audit_current__single_empirical_rerun_still_pending",
+    "new_status": "green_gate",
+    "new_capabilities": [
+      "LiCCA/simulated-LiCCA pytest session-finish cleanup reaps leaked nested pytest descendants so the suite emits a final summary instead of hanging after 100%.",
+      "Behavior-token quantization uses deterministic NumPy k-means so seeded assignments are stable under ROBOT_SF_TEST_ENV=licca."
+    ]
+  },
+  "validation_base_commit": "ac309f874",
+  "final_pr_base_commit": "972ea8235",
+  "post_rebase_focused_validation": "Focused Ruff, simulated-LiCCA process teardown and behavior-token tests, docs evidence catalog, and YAML/JSON parse checks passed after rebasing onto 972ea8235."
+}

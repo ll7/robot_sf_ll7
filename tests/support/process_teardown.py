@@ -31,6 +31,7 @@ from __future__ import annotations
 import os
 import signal
 import subprocess
+import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -116,8 +117,128 @@ def terminate_process_group(
         except OSError:
             process.kill()
             cleanup_status = "direct_process_killed_and_waited"
-        process.wait()
+    process.wait()
     return cleanup_status
+
+
+def _direct_child_pids(parent_pid: int) -> list[int]:
+    """Return Linux direct child PIDs for *parent_pid* using procfs."""
+    children_path = f"/proc/{parent_pid}/task/{parent_pid}/children"
+    try:
+        with open(children_path, encoding="ascii") as children_file:
+            raw_children = children_file.read().strip()
+    except OSError:
+        return []
+    if not raw_children:
+        return []
+    return [int(pid_text) for pid_text in raw_children.split()]
+
+
+def _descendant_pids(parent_pid: int) -> list[int]:
+    """Return descendants of *parent_pid*, parents before children."""
+    descendants: list[int] = []
+    pending = _direct_child_pids(parent_pid)
+    while pending:
+        pid = pending.pop(0)
+        descendants.append(pid)
+        pending.extend(_direct_child_pids(pid))
+    return descendants
+
+
+def _cmdline(pid: int) -> str:
+    """Return a process command line as a space-separated string."""
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as cmdline_file:
+            raw_cmdline = cmdline_file.read()
+    except OSError:
+        return ""
+    return raw_cmdline.replace(b"\0", b" ").decode("utf-8", errors="replace").strip()
+
+
+def _pid_alive(pid: int) -> bool:
+    """Return whether *pid* still exists."""
+    try:
+        # /proc/<pid>/stat is "pid (comm) state ..."; comm can contain spaces
+        # and parentheses, so parse the state char after the final ")".
+        with open(f"/proc/{pid}/stat", encoding="ascii") as stat_file:
+            state = stat_file.read().rsplit(")", 1)[1].split()[0]
+    except (OSError, IndexError):
+        state = ""
+    if state == "Z":
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:  # pragma: no cover - exists but not owned by this user
+        return True
+    return True
+
+
+def _terminate_pids(pids: list[int], *, grace_seconds: float) -> None:
+    """Terminate *pids* with SIGTERM, then SIGKILL remaining live processes."""
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        except OSError:  # pragma: no cover - e.g. PermissionError on foreign pid
+            pass
+
+    deadline = time.monotonic() + grace_seconds
+    while any(_pid_alive(pid) for pid in pids) and time.monotonic() < deadline:
+        time.sleep(0.05)
+
+    for pid in pids:
+        if _pid_alive(pid):
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            except OSError:  # pragma: no cover - e.g. PermissionError on foreign pid
+                pass
+
+    deadline = time.monotonic() + max(grace_seconds, 0.5)
+    while any(_pid_alive(pid) for pid in pids) and time.monotonic() < deadline:
+        time.sleep(0.05)
+
+
+def reap_matching_descendants(
+    *,
+    parent_pid: int | None = None,
+    command_substrings: tuple[str, ...] = ("pytest",),
+    grace_seconds: float = DEFAULT_GROUP_KILL_GRACE_SECONDS,
+) -> list[int]:
+    """Terminate leaked descendant processes matching command substrings.
+
+    This is a fail-closed cleanup for issue #4216's full-suite teardown hang:
+    pytest can reach 100% but not exit because a nested pytest child is still
+    alive and holding GPU device handles. It intentionally targets only current
+    process descendants whose command line matches an expected nested test
+    runner, then also terminates their descendants.
+    """
+    if not _POSIX:
+        return []
+    if grace_seconds < 0:
+        raise ValueError("grace_seconds must be non-negative")
+
+    root_pid = os.getpid() if parent_pid is None else parent_pid
+    matching_roots = [
+        pid
+        for pid in _descendant_pids(root_pid)
+        if any(token in _cmdline(pid) for token in command_substrings)
+    ]
+    if not matching_roots:
+        return []
+
+    pids_to_reap: set[int] = set()
+    for pid in matching_roots:
+        pids_to_reap.add(pid)
+        pids_to_reap.update(_descendant_pids(pid))
+
+    reaped = sorted(pids_to_reap)
+    _terminate_pids(reaped, grace_seconds=grace_seconds)
+    return reaped
 
 
 def run_bounded_subprocess(

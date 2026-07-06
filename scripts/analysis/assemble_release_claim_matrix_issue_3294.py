@@ -29,6 +29,9 @@ DEFAULT_RELEASE_CONFIG = Path(
 DEFAULT_ODD_COVERAGE = Path(
     "docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json"
 )
+DEFAULT_SCENARIO_CERTIFICATION_SUMMARY = Path(
+    "docs/context/evidence/issue_2910_release_scenario_certification/summary.json"
+)
 DEFAULT_LEADERBOARD_GLOB = "docs/leaderboards/*.rows.json"
 
 CLAIM_BOUNDARY = (
@@ -47,6 +50,7 @@ class SourcePaths:
     artifact_manifest: Path
     release_config: Path
     odd_coverage: Path
+    scenario_certification_summary: Path
     leaderboard_sidecars: tuple[Path, ...]
 
 
@@ -117,11 +121,48 @@ def _classify_odd_row(row: dict[str, Any]) -> str:
     return "non-claim"
 
 
+def _scenario_certification_status(summary: dict[str, Any]) -> str:
+    """Return publication-gate scenario-certification status from summary."""
+    status = str(summary.get("publication_gate_status", "")).strip()
+    if status:
+        return status
+    eligibility_counts = summary.get("benchmark_eligibility_counts", {})
+    if (
+        isinstance(eligibility_counts, dict)
+        and int(eligibility_counts.get("excluded", 0)) == 0
+        and int(eligibility_counts.get("stress_only", 0)) == 0
+    ):
+        return "scenario_cert.v1:accepted"
+    return "scenario_cert.v1:blocked"
+
+
+def _scenario_certification_prerequisites(summary: dict[str, Any]) -> list[str]:
+    """Return compact missing-prerequisite text for non-accepted certification."""
+    status = _scenario_certification_status(summary)
+    if status in {"scenario_cert.v1:accepted", "scenario_cert.v1:accepted_reviewed"}:
+        return []
+    blocker = str(summary.get("publication_blocker", "")).strip()
+    if blocker:
+        return [blocker]
+    eligibility_counts = summary.get("benchmark_eligibility_counts", {})
+    if isinstance(eligibility_counts, dict):
+        excluded = int(eligibility_counts.get("excluded", 0))
+        stress_only = int(eligibility_counts.get("stress_only", 0))
+        return [
+            (
+                "scenario_cert.v1 summary is not publication-accepted "
+                f"({excluded} excluded, {stress_only} stress-only)"
+            )
+        ]
+    return ["scenario_cert.v1 summary is not publication-accepted"]
+
+
 def _release_artifact_rows(
     *,
     snapshot: dict[str, Any],
     artifact_manifest: dict[str, Any],
     release_config: dict[str, Any],
+    scenario_certification_summary: dict[str, Any],
     source_paths: SourcePaths,
 ) -> list[dict[str, Any]]:
     """Build matrix rows from the release artifact manifest and release evidence gate snapshot."""
@@ -138,6 +179,10 @@ def _release_artifact_rows(
         "seed_sets_path": seed_policy.get("seed_sets_path", "unknown"),
         "seeds": seed_policy.get("seeds", []),
     }
+    scenario_certification_status = _scenario_certification_status(scenario_certification_summary)
+    scenario_certification_prerequisites = _scenario_certification_prerequisites(
+        scenario_certification_summary
+    )
     rows: list[dict[str, Any]] = []
     for artifact in artifact_manifest.get("artifacts", []):
         if not isinstance(artifact, dict):
@@ -166,7 +211,17 @@ def _release_artifact_rows(
                 "scenario_contract_ref": str(
                     release_config.get("scenario", {}).get("matrix_path", "unknown")
                 ),
-                "scenario_certification": "not_available_in_manifest",
+                "scenario_certification": scenario_certification_status,
+                "scenario_certification_summary": {
+                    "summary_ref": _repo_relative(source_paths.scenario_certification_summary),
+                    "scenario_count": scenario_certification_summary.get("scenario_count"),
+                    "classification_counts": scenario_certification_summary.get(
+                        "classification_counts", {}
+                    ),
+                    "benchmark_eligibility_counts": scenario_certification_summary.get(
+                        "benchmark_eligibility_counts", {}
+                    ),
+                },
                 "artifact_uri": _repo_relative(source_paths.artifact_manifest),
                 "artifact_sha256": artifact.get("sha256") or snapshot_row.get("tracked_sha256"),
                 "artifact_match": sha_match,
@@ -181,10 +236,16 @@ def _release_artifact_rows(
                     _repo_relative(source_paths.release_snapshot),
                     _repo_relative(source_paths.artifact_manifest),
                     _repo_relative(source_paths.release_config),
+                    _repo_relative(source_paths.scenario_certification_summary),
                 ],
-                "missing_prerequisites": []
-                if sha_match
-                else ["release evidence snapshot did not verify this artifact"],
+                "missing_prerequisites": [
+                    *scenario_certification_prerequisites,
+                    *(
+                        []
+                        if sha_match
+                        else ["release evidence snapshot did not verify this artifact"]
+                    ),
+                ],
             }
         )
     return rows
@@ -291,11 +352,13 @@ def build_matrix(source_paths: SourcePaths) -> dict[str, Any]:
     artifact_manifest = _load_json(source_paths.artifact_manifest)
     release_config = _load_yaml(source_paths.release_config)
     odd_coverage = _load_json(source_paths.odd_coverage)
+    scenario_certification_summary = _load_json(source_paths.scenario_certification_summary)
     rows = [
         *_release_artifact_rows(
             snapshot=release_snapshot,
             artifact_manifest=artifact_manifest,
             release_config=release_config,
+            scenario_certification_summary=scenario_certification_summary,
             source_paths=source_paths,
         ),
         *_leaderboard_rows(source_paths),
@@ -315,6 +378,9 @@ def build_matrix(source_paths: SourcePaths) -> dict[str, Any]:
             "artifact_manifest": _repo_relative(source_paths.artifact_manifest),
             "release_config": _repo_relative(source_paths.release_config),
             "odd_coverage": _repo_relative(source_paths.odd_coverage),
+            "scenario_certification_summary": _repo_relative(
+                source_paths.scenario_certification_summary
+            ),
             "leaderboard_sidecars": [
                 _repo_relative(path) for path in source_paths.leaderboard_sidecars
             ],
@@ -377,7 +443,10 @@ def render_markdown(matrix: dict[str, Any]) -> str:
     )
     for row in matrix["rows"]:
         scenario_hazard = f"{_markdown_cell(row.get('scenario_family'))} / {_markdown_cell(row.get('hazard_class'))}"
-        caveats = row.get("exclusions") or row.get("missing_prerequisites") or []
+        caveats = [
+            *(row.get("exclusions") or []),
+            *(row.get("missing_prerequisites") or []),
+        ]
         lines.append(
             "| "
             + " | ".join(
@@ -415,6 +484,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--artifact-manifest", type=Path, default=DEFAULT_ARTIFACT_MANIFEST)
     parser.add_argument("--release-config", type=Path, default=DEFAULT_RELEASE_CONFIG)
     parser.add_argument("--odd-coverage", type=Path, default=DEFAULT_ODD_COVERAGE)
+    parser.add_argument(
+        "--scenario-certification-summary",
+        type=Path,
+        default=DEFAULT_SCENARIO_CERTIFICATION_SUMMARY,
+    )
     parser.add_argument("--leaderboard-glob", default=DEFAULT_LEADERBOARD_GLOB)
     return parser.parse_args()
 
@@ -427,6 +501,7 @@ def main() -> int:
         artifact_manifest=args.artifact_manifest,
         release_config=args.release_config,
         odd_coverage=args.odd_coverage,
+        scenario_certification_summary=args.scenario_certification_summary,
         leaderboard_sidecars=tuple(sorted(Path().glob(args.leaderboard_glob))),
     )
     matrix = build_matrix(source_paths)

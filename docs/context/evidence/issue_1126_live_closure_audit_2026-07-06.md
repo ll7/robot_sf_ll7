@@ -61,15 +61,13 @@ Fresh isolated worktree:
 scripts/dev/run_worktree_shared_venv.sh -- python scripts/tools/manage_external_data.py list
 # sdd: status missing
 # expected path:
-# /home/luttkule/git/robot_sf_ll7.worktrees/issue-1126-closure-audit-verify-acceptance-criteria-v2/output/external_data/sdd
+# /home/luttkule/git/robot_sf_ll7.worktrees/issue-1126-closure-audit-verify-acceptance-criteria-v2/output/external_data/sdd # allow-abs-path: historical machine-local closure-audit evidence path
 ```
 
 Pinned-tree root probe against the primary checkout output root also failed closed in this session:
 
 ```bash
-ROBOT_SF_EXTERNAL_DATA_ROOT=/home/luttkule/git/robot_sf_ll7/output/external_data \
-  scripts/dev/run_worktree_shared_venv.sh -- \
-  python scripts/tools/sdd_curation_preflight.py --json
+ROBOT_SF_EXTERNAL_DATA_ROOT=/home/luttkule/git/robot_sf_ll7/output/external_data scripts/dev/run_worktree_shared_venv.sh -- python scripts/tools/sdd_curation_preflight.py --json # allow-abs-path: historical machine-local closure-audit probe root
 # staging_mode=proxy_schema_smoke
 # dataset_backed=false
 # benchmark_promotion_allowed=false

@@ -100,6 +100,7 @@ _ADAPTER_POLICY_BUILDERS: dict[str, Callable[[dict[str, Any]], AdapterPolicySpec
     "cv_prediction_mpc": _build_prediction_mpc_policy_spec,
     "prediction_aware_mpc": _build_prediction_mpc_policy_spec,
     "prediction_mpc": _build_prediction_mpc_policy_spec,
+    "prediction_mpc_cbf": _build_prediction_mpc_policy_spec,
     "risk_dwa": _build_risk_dwa_policy_spec,
     "teb": _build_teb_policy_spec,
 }

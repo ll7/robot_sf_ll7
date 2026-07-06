@@ -237,6 +237,30 @@ def test_runnable_h600_config_loads_trace_capture_flags() -> None:
     ]
 
 
+def test_prediction_mpc_cbf_trace_campaign_arm_builds_map_runner_policy() -> None:
+    """The trace-capable campaign path accepts the prediction_mpc_cbf roster arm."""
+    from robot_sf.benchmark.camera_ready._config import load_campaign_config
+    from robot_sf.benchmark.map_runner import _build_policy
+
+    cfg = load_campaign_config(RUN_CONFIG_PATH)
+    planner = next(planner for planner in cfg.planners if planner.key == "prediction_mpc_cbf")
+    assert planner.algo == "prediction_mpc_cbf"
+    assert planner.algo_config_path is not None
+
+    algo_config = yaml.safe_load(planner.algo_config_path.read_text(encoding="utf-8"))
+    policy, meta = _build_policy(
+        planner.algo,
+        algo_config,
+        robot_kinematics="differential_drive",
+        robot_command_mode="unicycle",
+    )
+
+    assert policy._planner_adapter.__class__.__name__ == "PredictionMPCPlannerAdapter"
+    assert meta["algorithm"] == "prediction_mpc"
+    assert meta["cbf_safety_filter"]["status"] == "enabled"
+    assert meta["planner_kinematics"]["planner_command_space"] == "unicycle_vw"
+
+
 def test_runnable_h600_preflight_reports_guarded_ppo_accepted_unavailable(
     tmp_path: Path,
 ) -> None:

@@ -48,8 +48,7 @@ def _valid_packet(tmp_path: Path) -> dict[str, object]:
                 "run",
                 "python",
                 "scripts/training/train_learned_risk_model.py",
-                "--config",
-                "configs/training/learned_risk_model_v1.yaml",
+                "--config=configs/training/learned_risk_model_v1.yaml",
             ],
             "expected_output_root": (
                 "wandb-artifact://robot-sf/learned-risk/learned_risk_model_v1:pending"

@@ -10,8 +10,7 @@ slurm_execution:
     - run
     - python
     - scripts/training/train_learned_risk_model.py
-    - --config
-    - configs/training/learned_risk_model_v1.yaml
+    - --config=configs/training/learned_risk_model_v1.yaml
   expected_output_root: wandb-artifact://robot-sf/learned-risk/learned_risk_model_v1:pending
   expected_log_path: slurm://learned-risk-model-v1/logs/%j.out
   status_artifact_path: wandb-artifact://robot-sf/learned-risk/learned_risk_model_v1_status:pending

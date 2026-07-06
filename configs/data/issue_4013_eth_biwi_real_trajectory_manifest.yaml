@@ -28,7 +28,7 @@ retrieval:
     checksum, set checksums.tree_sha256 and expected_tree_sha256, and change
     availability to validated before using the data for #4013 real-trajectory
     training or representative evaluation.
-  download_url: null
+  download_url: https://ethz.ch/content/dam/ethz/special-interest/itet/cvl/vision-dam/documents/ewap_dataset_light.tgz
   fail_closed: true
 checksums:
   algorithm: SHA-256

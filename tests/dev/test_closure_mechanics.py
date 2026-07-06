@@ -166,7 +166,7 @@ def test_execute_actions_apply_calls_subprocess(monkeypatch: pytest.MonkeyPatch)
     assert "12" in calls[0]
     # execute_actions must route through build_comment_command so the executed
     # command is repo-scoped (single source of truth; guards the --repo drift).
-    body = calls[0][-1]
+    body = calls[0][calls[0].index("--body") + 1]
     assert calls[0] == closure_mechanics.build_comment_command(
         issue_number=12, body=body, repo="ll7/robot_sf_ll7"
     )

@@ -13,6 +13,7 @@ import json
 import mimetypes
 import shutil
 import tarfile
+import tempfile
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -944,6 +945,111 @@ def export_evidence_bundle(  # noqa: PLR0913, C901
     )
 
 
+def _compute_and_emit_badging_artifacts(
+    bundle_dir: Path,
+    manifest_payload: dict[str, Any],
+    badging_block: dict[str, Any],
+) -> tuple[dict[str, Any], str]:
+    """Compute achieved badge level, write/update manifest and README.md in bundle_dir.
+
+    Returns:
+        Tuple of computed badging block dict and achieved level string.
+    """
+    # 1. Start by copying existing values
+    computed_badging = {
+        "checklist_path": badging_block.get("checklist_path", "docs/RELEASE.md"),
+        "claim_boundary": badging_block.get("claim_boundary", "reproducible-smoke-run"),
+        "functional_smoke_status": badging_block.get("functional_smoke_status", "not_run"),
+        "reproduction_status": badging_block.get("reproduction_status", "not_run"),
+        "known_nondeterminism": badging_block.get("known_nondeterminism", []),
+    }
+
+    # 2. Check "available" criteria
+    pub_channels = manifest_payload.get("publication_channels", {})
+    doi = pub_channels.get("doi")
+    rel_url = pub_channels.get("release_url")
+
+    def is_valid_durable_id(val: str | None) -> bool:
+        if not val:
+            return False
+        v = val.strip().lower()
+        return (
+            not any(v.startswith(prefix) for prefix in ("output/", "file://", "./", "../"))
+            and "localhost" not in v
+        )
+
+    has_durable_id = is_valid_durable_id(doi) or is_valid_durable_id(rel_url)
+    is_available = has_durable_id and len(manifest_payload.get("files", [])) > 0
+
+    # 3. Check "functional" criteria by actually running the re-derivation/comparison check
+    payload_dir = bundle_dir / "payload"
+    campaign_summary_files = list(payload_dir.glob("**/campaign_summary.json"))
+    campaign_report_files = list(payload_dir.glob("**/campaign_report.md"))
+
+    is_functional = False
+    if is_available and campaign_summary_files and campaign_report_files:
+        summary_path = campaign_summary_files[0]
+        report_path = campaign_report_files[0]
+        try:
+            from robot_sf.benchmark.camera_ready._reporting import (  # noqa: PLC0415
+                write_campaign_report,
+            )
+
+            payload_data = json.loads(summary_path.read_text(encoding="utf-8"))
+            with tempfile.TemporaryDirectory() as tmpdir:
+                temp_report_path = Path(tmpdir) / "campaign_report.md"
+                write_campaign_report(temp_report_path, payload_data)
+
+                shipped_content = report_path.read_text(encoding="utf-8").replace("\r\n", "\n")
+                derived_content = temp_report_path.read_text(encoding="utf-8").replace("\r\n", "\n")
+
+                if shipped_content == derived_content:
+                    is_functional = True
+                    computed_badging["functional_smoke_status"] = "passed"
+                else:
+                    computed_badging["functional_smoke_status"] = "failed"
+        except (OSError, ValueError, json.JSONDecodeError):
+            computed_badging["functional_smoke_status"] = "failed"
+    elif computed_badging["functional_smoke_status"] == "passed":
+        is_functional = True
+
+    # Determine achieved badge level
+    if not is_available:
+        achieved_level = "none"
+    elif not is_functional:
+        achieved_level = "available"
+    elif computed_badging["reproduction_status"] == "passed":
+        achieved_level = "reproduced"
+    else:
+        achieved_level = "functional"
+
+    computed_badging["claimed_level"] = achieved_level
+
+    # 4. Write README.md into bundle_dir
+    readme_path = bundle_dir / "README.md"
+    readme_content = f"""# Release Bundle: {manifest_payload.get("bundle_name", "bundle")}
+
+## Achieved Reproducibility Badge: **{achieved_level}**
+
+This release bundle has been automatically validated and badge-certified:
+- **Badge Level**: `{achieved_level}`
+- **Durable DOI**: `{doi or "None"}`
+- **Release Tag**: `{pub_channels.get("release_tag", "None")}`
+- **Created at (UTC)**: `{manifest_payload.get("created_at_utc", "unknown")}`
+
+### Reproducibility Rubric Definitions
+- **available**: Bundle is published, hash-pinned, and the manifest is complete.
+- **functional**: Bundle is self-sufficient. A CI job has successfully re-derived the headline tables from the bundle's summary JSON.
+- **reproduced**: Benchmark results are reproduced within tolerance.
+
+---
+For details on verification, see [release_artifact_badging.md](docs/release_artifact_badging.md) or the repository documentation.
+"""
+    readme_path.write_text(readme_content, encoding="utf-8")
+
+    return computed_badging, achieved_level
+
+
 def export_publication_bundle(  # noqa: PLR0913
     run_dir: Path,
     out_dir: Path,
@@ -1034,9 +1140,17 @@ def export_publication_bundle(  # noqa: PLR0913
         "totals": {"file_count": len(entries), "total_bytes": total_bytes},
         "files": [asdict(entry) for entry in entries],
     }
+
+    # Dynamically compute badging block and emit README
     if artifact_badging is not None:
         validate_artifact_badging_block(artifact_badging)
-        manifest_payload["artifact_badging"] = artifact_badging
+    badging_block = dict(artifact_badging) if artifact_badging else {}
+    computed_badging, _achieved_level = _compute_and_emit_badging_artifacts(
+        bundle_dir, manifest_payload, badging_block
+    )
+    validate_artifact_badging_block(computed_badging)
+    manifest_payload["artifact_badging"] = computed_badging
+
     manifest_path = bundle_dir / "publication_manifest.json"
     manifest_path.write_text(json.dumps(manifest_payload, indent=2) + "\n", encoding="utf-8")
 

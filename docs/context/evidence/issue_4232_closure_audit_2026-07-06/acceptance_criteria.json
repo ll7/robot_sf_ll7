@@ -52,7 +52,7 @@
       "criterion": "Submit private benchmark campaign if justified.",
       "status": "not_met_authorization_blocked",
       "evidence": ["Issue #4232 owner comment 2026-07-06T11:25:53Z"],
-      "residual_blocker": "compute_submit=false for this run; benchmark-strength campaign remains a later authorized claim-promotion task."
+      "residual_blocker": "compute_submit_authorized=false for this run; benchmark-strength campaign remains a later authorized claim-promotion task."
     },
     {
       "criterion": "Build compact benchmark evidence with provenance and checksums if benchmark is run.",

@@ -1,0 +1,82 @@
+{
+  "schema_version": "issue-4232-closure-audit.v1",
+  "issue": 4232,
+  "audit_date": "2026-07-06",
+  "verdict": "partial",
+  "claim_boundary": "Closure audit only. Diagnostic evidence is mapped to merged PRs, but no benchmark-strength campaign, Slurm/GPU submission, paper claim, dissertation claim, conformal claim, deployment claim, real-world safety claim, or generalized planner-superiority claim is made.",
+  "criteria": [
+    {
+      "criterion": "Preserve #4229 as runtime integrity only.",
+      "status": "met",
+      "evidence": ["PR #4256", "PR #4559", "PR #4626"]
+    },
+    {
+      "criterion": "Pre-register packet with tiers, claim modes, forbidden claims, and execution boundary.",
+      "status": "met",
+      "evidence": ["PR #4256", "configs/benchmarks/issue_4232_uncertainty_envelope_claim_packet.yaml"]
+    },
+    {
+      "criterion": "Predeclare paired alpha/control benchmark scope.",
+      "status": "met",
+      "evidence": ["PR #4256"]
+    },
+    {
+      "criterion": "Provide visible campaign-arm configuration or deterministic runner inputs.",
+      "status": "met",
+      "evidence": ["PR #4256", "PR #4521"]
+    },
+    {
+      "criterion": "Static validation and tests pass before campaign execution.",
+      "status": "met",
+      "evidence": ["PR #4256", "scripts/validation/check_issue_4232_uncertainty_envelope_claim_packet.py"]
+    },
+    {
+      "criterion": "Predeclare metrics and stop or revise rules.",
+      "status": "met",
+      "evidence": ["PR #4256"]
+    },
+    {
+      "criterion": "Run CPU diagnostic alpha slice first.",
+      "status": "met",
+      "evidence": ["PR #4521", "PR #4559", "PR #4576", "PR #4626"]
+    },
+    {
+      "criterion": "Resolve measured mechanism-activation blocker.",
+      "status": "met",
+      "evidence": [
+        "PR #4626",
+        "docs/context/evidence/issue_4232_uncertainty_envelope_activation_probe_2026-07/envelope_activation_diagnostics.json"
+      ]
+    },
+    {
+      "criterion": "Submit private benchmark campaign if justified.",
+      "status": "not_met_authorization_blocked",
+      "evidence": ["Issue #4232 owner comment 2026-07-06T11:25:53Z"],
+      "residual_blocker": "compute_submit=false for this run; benchmark-strength campaign remains a later authorized claim-promotion task."
+    },
+    {
+      "criterion": "Build compact benchmark evidence with provenance and checksums if benchmark is run.",
+      "status": "partial",
+      "evidence": ["PR #4281", "PR #4559", "PR #4626"],
+      "residual_blocker": "Diagnostic compact evidence exists; benchmark-strength compact evidence cannot exist until benchmark campaign runs."
+    },
+    {
+      "criterion": "Exclude fallback, degraded, not-available, failed, blocked, and diagnostic-only rows from benchmark-strength evidence.",
+      "status": "met",
+      "evidence": ["PR #4256", "PR #4281", "PR #4559", "PR #4626"]
+    },
+    {
+      "criterion": "Gate claim-map, report, paper, or dissertation edits on supported evidence and maintainer sign-off.",
+      "status": "met_for_current_slices",
+      "evidence": ["PR #4559", "PR #4626"]
+    },
+    {
+      "criterion": "Avoid conformal, deployment, real-world safety, and generalized planner-superiority claims.",
+      "status": "met",
+      "evidence": ["PR #4256", "PR #4559", "PR #4626"]
+    }
+  ],
+  "reviewed_prs": [4229, 4256, 4281, 4521, 4559, 4576, 4626],
+  "closure_call": "Refs #4232; do not close until benchmark-strength campaign evidence is produced or a maintainer explicitly closes at diagnostic-only status."
+}
+

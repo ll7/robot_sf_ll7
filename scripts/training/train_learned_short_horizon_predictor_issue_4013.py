@@ -20,7 +20,6 @@ import argparse
 import json
 from dataclasses import fields
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -35,17 +34,30 @@ DEFAULT_CONFIG = Path("configs/training/learned_short_horizon_predictor_issue_40
 def _load_config(config_path: Path) -> ShortHorizonTrainerConfig:
     """Build a trainer config from YAML, ignoring unknown keys.
 
+    Fail-closed: a missing config path, a directory instead of a file, malformed
+    YAML, or a non-mapping YAML document raises instead of silently falling back
+    to all-default values (which would mask a mistyped ``--config`` path).
+
     Returns:
         ShortHorizonTrainerConfig: Parsed trainer configuration.
+
+    Raises:
+        FileNotFoundError: if ``config_path`` does not exist or is not a file.
+        ValueError: if the YAML is malformed or is not a top-level mapping.
     """
 
-    raw: dict[str, Any] = {}
-    if config_path is not None:
+    if config_path is None or not config_path.is_file():
+        raise FileNotFoundError(f"trainer config not found or not a file: {config_path}")
+    try:
         loaded = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-        if isinstance(loaded, dict):
-            raw = loaded
+    except yaml.YAMLError as exc:  # malformed YAML must fail loudly, not vacuously pass
+        raise ValueError(f"malformed trainer config YAML: {config_path}: {exc}") from exc
+    if not isinstance(loaded, dict):
+        raise ValueError(
+            f"trainer config must be a YAML mapping, got {type(loaded).__name__}: {config_path}"
+        )
     allowed = {f.name for f in fields(ShortHorizonTrainerConfig)}
-    kwargs = {key: value for key, value in raw.items() if key in allowed}
+    kwargs = {key: value for key, value in loaded.items() if key in allowed}
     return ShortHorizonTrainerConfig(**kwargs)
 
 

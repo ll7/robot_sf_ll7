@@ -87,3 +87,10 @@ status is rejected at the JSON-schema layer.
 - [ ] One **dataset-backed** prior smoke from real staged data — still blocked on
       #3065/#2657/#1498 (external-data staging). This PR delivers the extraction LOGIC +
       contract only; the dataset-backed run is gated on staged data.
+
+**Closure audit (2026-07-06):** the agent-executable slice is now complete across #3754
+(staging/preflight contract) and #4566 (fixture extraction pipeline + CLI). Every
+agent-executable acceptance criterion is met and reproducibly validated; the only residual is
+the external-data-gated dataset-backed smoke, tracked by #3065/#2657/#1498. See the
+criterion→PR evidence table and reproduced validation in
+[`evidence/issue_2918_closure_audit.md`](evidence/issue_2918_closure_audit.md).

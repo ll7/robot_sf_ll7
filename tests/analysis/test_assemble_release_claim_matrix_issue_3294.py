@@ -13,6 +13,8 @@ from scripts.analysis.assemble_release_claim_matrix_issue_3294 import (
     DEFAULT_RELEASE_SNAPSHOT,
     DEFAULT_SCENARIO_CERTIFICATION_SUMMARY,
     SourcePaths,
+    _scenario_certification_prerequisites,
+    _scenario_certification_status,
     build_matrix,
     main,
     render_markdown,
@@ -92,3 +94,40 @@ def test_render_markdown_keeps_matrix_table_rows_single_line() -> None:
         if line == "":
             break
         assert line.startswith("| ")
+
+
+def test_scenario_certification_status_fails_closed_on_null_and_missing_counts() -> None:
+    """Explicit-null status and absent counts must never certify as accepted."""
+    # Explicit null publication_gate_status must not coerce to the string "None".
+    assert (
+        _scenario_certification_status({"publication_gate_status": None})
+        == "scenario_cert.v1:blocked"
+    )
+    # Missing eligibility counts must fail closed (no vacuous accepted).
+    assert _scenario_certification_status({}) == "scenario_cert.v1:blocked"
+    # Incomplete counts (only one key present) must also fail closed.
+    assert (
+        _scenario_certification_status({"benchmark_eligibility_counts": {"excluded": 0}})
+        == "scenario_cert.v1:blocked"
+    )
+    # Complete, all-zero counts certify accepted.
+    assert (
+        _scenario_certification_status(
+            {"benchmark_eligibility_counts": {"excluded": 0, "stress_only": 0}}
+        )
+        == "scenario_cert.v1:accepted"
+    )
+
+
+def test_scenario_certification_prerequisites_normalizes_null_and_missing() -> None:
+    """Null blocker must not surface as "None"; missing counts report unavailable."""
+    # Explicit-null blocker with missing counts: no "None", explicit unavailable text.
+    prereqs = _scenario_certification_prerequisites({"publication_blocker": None})
+    assert prereqs == [
+        "scenario_cert.v1 summary is not publication-accepted "
+        "(benchmark_eligibility_counts missing or incomplete)"
+    ]
+    # A real blocker string passes through verbatim.
+    assert _scenario_certification_prerequisites(
+        {"publication_blocker": "2 excluded scenarios remain"}
+    ) == ["2 excluded scenarios remain"]

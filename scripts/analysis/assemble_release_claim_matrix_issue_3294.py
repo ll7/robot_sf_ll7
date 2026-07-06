@@ -122,39 +122,61 @@ def _classify_odd_row(row: dict[str, Any]) -> str:
 
 
 def _scenario_certification_status(summary: dict[str, Any]) -> str:
-    """Return publication-gate scenario-certification status from summary."""
-    status = str(summary.get("publication_gate_status", "")).strip()
+    """Return publication-gate scenario-certification status from summary.
+
+    Fail-closed: an explicit-``null`` status is treated as absent (not the
+    string ``"None"``), and a missing or incomplete ``benchmark_eligibility_counts``
+    block never certifies as accepted — accepted requires both ``excluded`` and
+    ``stress_only`` to be present and zero.
+    """
+    raw_status = summary.get("publication_gate_status")
+    status = str(raw_status).strip() if raw_status is not None else ""
     if status:
         return status
-    eligibility_counts = summary.get("benchmark_eligibility_counts", {})
+    eligibility_counts = summary.get("benchmark_eligibility_counts")
     if (
         isinstance(eligibility_counts, dict)
-        and int(eligibility_counts.get("excluded", 0)) == 0
-        and int(eligibility_counts.get("stress_only", 0)) == 0
+        and "excluded" in eligibility_counts
+        and "stress_only" in eligibility_counts
+        and int(eligibility_counts["excluded"]) == 0
+        and int(eligibility_counts["stress_only"]) == 0
     ):
         return "scenario_cert.v1:accepted"
     return "scenario_cert.v1:blocked"
 
 
 def _scenario_certification_prerequisites(summary: dict[str, Any]) -> list[str]:
-    """Return compact missing-prerequisite text for non-accepted certification."""
+    """Return compact missing-prerequisite text for non-accepted certification.
+
+    Fail-closed: an explicit-``null`` blocker is treated as absent, and missing
+    eligibility counts are reported as unavailable rather than a misleading
+    ``(0 excluded, 0 stress-only)``.
+    """
     status = _scenario_certification_status(summary)
     if status in {"scenario_cert.v1:accepted", "scenario_cert.v1:accepted_reviewed"}:
         return []
-    blocker = str(summary.get("publication_blocker", "")).strip()
+    raw_blocker = summary.get("publication_blocker")
+    blocker = str(raw_blocker).strip() if raw_blocker is not None else ""
     if blocker:
         return [blocker]
-    eligibility_counts = summary.get("benchmark_eligibility_counts", {})
-    if isinstance(eligibility_counts, dict):
-        excluded = int(eligibility_counts.get("excluded", 0))
-        stress_only = int(eligibility_counts.get("stress_only", 0))
+    eligibility_counts = summary.get("benchmark_eligibility_counts")
+    if (
+        isinstance(eligibility_counts, dict)
+        and "excluded" in eligibility_counts
+        and "stress_only" in eligibility_counts
+    ):
+        excluded = int(eligibility_counts["excluded"])
+        stress_only = int(eligibility_counts["stress_only"])
         return [
             (
                 "scenario_cert.v1 summary is not publication-accepted "
                 f"({excluded} excluded, {stress_only} stress-only)"
             )
         ]
-    return ["scenario_cert.v1 summary is not publication-accepted"]
+    return [
+        "scenario_cert.v1 summary is not publication-accepted "
+        "(benchmark_eligibility_counts missing or incomplete)"
+    ]
 
 
 def _release_artifact_rows(

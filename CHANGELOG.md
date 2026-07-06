@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Recorded the **issue #1470 closure audit** at
+  `docs/context/evidence/issue_1470_closure_audit_2026-07-06.md` (linked from the #1397 launch
+  note). It maps each acceptance criterion for the oracle-imitation dataset-collection lane to its
+  merged/closed evidence (#1469 launch packet + validator, #2441 completed Slurm collection, #2989
+  durable git-tracked trace bundle) and to a reproduced validation run
+  (`validate_oracle_imitation_launch_packet.py` → `status=valid`, 6 scenarios, 12 episodes; 54
+  focused imitation tests pass). The lane's trace-collection scope is complete (closeout state
+  `dataset_ready`); the residual durable trace-URI registry (`training_ready=true`) is owned by
+  #2655 and the imitation-training benchmark by #1496, both out of #1470's scope. Docs-only; no
+  trace/NPZ materialization, training run, Slurm/GPU submission, or research claim.
 * Recorded the **issue #2312 closure audit** at
   `docs/context/evidence/issue_2312_closure_audit.md` (linked from the #2312 context note). It maps
   each acceptance criterion to its merged PR (#3762 manifest+validator, #3772 #1472 campaign gate,

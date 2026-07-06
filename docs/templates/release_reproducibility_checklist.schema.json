@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ReleaseReproducibilityChecklist",
+  "type": "object",
+  "properties": {
+    "release_tag": {
+      "type": "string"
+    },
+    "release_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "artifact_bundle": {
+      "type": "object",
+      "properties": {
+        "archive_path": {
+          "type": "string"
+        },
+        "doi": {
+          "type": "string"
+        },
+        "checksum_manifest_path": {
+          "type": "string"
+        }
+      },
+      "required": ["archive_path"]
+    },
+    "scenario_matrix": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "hash": {
+          "type": "string"
+        }
+      }
+    },
+    "seed_policy": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string"
+        },
+        "seed_set": {
+          "type": "string"
+        },
+        "seeds": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "reproduction": {
+      "type": "object",
+      "properties": {
+        "environment_setup_command": {
+          "type": "string"
+        },
+        "functional_smoke_command": {
+          "type": "string"
+        },
+        "headline_reproduction_command": {
+          "type": "string"
+        },
+        "tolerances": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "known_nondeterminism": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "expected_unavailable_degraded_rows": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "claimed_badge_level": {
+      "type": "string",
+      "enum": ["none", "available", "functional", "reproduced"]
+    },
+    "justification": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "release_tag",
+    "release_commit",
+    "artifact_bundle",
+    "claimed_badge_level"
+  ]
+}

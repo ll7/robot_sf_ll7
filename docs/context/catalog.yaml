@@ -85,6 +85,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3300_orca_reactive_false_positive_2026-07-05
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07
     status: evidence
     freshness: evidence

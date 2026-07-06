@@ -51,6 +51,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   records readiness status `ready_diagnostic_smoke`, and keeps the claim boundary diagnostic-only:
   not benchmark evidence, not a training-result quality claim, and not a paper or dissertation
   claim.
+* Recorded the **issue #2918 closure audit** at
+  `docs/context/evidence/issue_2918_closure_audit.md` (linked from the #2918 preflight context
+  note). It maps each acceptance criterion to its merged PR (#3754 staging/preflight contract,
+  #4566 fixture extraction pipeline + CLI) and to a reproduced validation run (23 focused tests
+  pass; fixture smoke emits bounded proxy-placeholder priors; the manifest checker fails closed
+  with `contract_status: blocked` and `manage_external_data.py list` shows all external datasets
+  `missing`/`incomplete`). The agent-executable slice is complete; the only residual — a
+  dataset-backed prior smoke from real staged trajectories — is gated on a license-compatible
+  external dataset the project does not hold and stays tracked by #3065/#2657/#1498. Docs-only; no
+  external-data ingest, no calibrated/representative prior claim, no benchmark/SLURM run.
 * Recorded the **issue #4437 closure audit** at
   `docs/context/evidence/issue_4437_closure_audit_2026-07-06.md` (indexed in
   `docs/context/catalog.yaml`). It maps each acceptance criterion of the closure-audit hygiene lane

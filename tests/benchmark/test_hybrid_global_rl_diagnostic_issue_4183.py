@@ -110,6 +110,32 @@ def test_preflight_blocks_missing_checkpoint(tmp_path: Path) -> None:
     assert any("blocked_missing_learned_checkpoint" in error for error in report["errors"])
 
 
+def test_preflight_recognizes_hydrated_github_release_asset(tmp_path: Path) -> None:
+    """A hydrated public-release checkpoint passes preflight even when its cached file name
+    differs from the registry ``local_path``.
+
+    ``resolve_model_path`` caches a GitHub-release artifact under
+    ``output/model_cache/<model_id>/<asset_name>``. That name does not match the registry
+    ``local_path`` (``model.zip``), so a bare ``local_path`` existence check would wrongly report
+    ``blocked_missing_learned_checkpoint``. Preflight must recognize the hydrated asset instead.
+    """
+    from robot_sf.models import get_registry_entry
+
+    repo_root = _repo_root_with_issue_inputs(tmp_path, include_checkpoint=False)
+    asset_name = str(get_registry_entry(REGISTRY_MODEL_ID)["github_release"]["asset_name"])
+    asset_path = repo_root / "output/model_cache" / REGISTRY_MODEL_ID / asset_name
+    asset_path.parent.mkdir(parents=True, exist_ok=True)
+    asset_path.write_text("hydrated release asset\n", encoding="utf-8")
+    # The registry local_path (``model.zip``) intentionally does not exist for this test.
+    assert not (repo_root / REGISTRY_CHECKPOINT).exists()
+
+    report = preflight_configs(ROUTE_CONFIG, BASELINE_CONFIG, repo_root=repo_root)
+
+    assert report["status"] == "valid"
+    assert str(report["checkpoint_reference"]["resolved_path"]).endswith(asset_name)
+    assert report["checkpoint_sha256"]
+
+
 def test_preflight_blocks_missing_registry_entry(tmp_path: Path) -> None:
     """A stale model_id fails closed with a registry-specific error."""
 

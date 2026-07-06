@@ -1,1 +1,4 @@
 scenario_id,seed,checkpoint,pair_status,row_inclusion,route_progress_route_conditioned,route_progress_unconditioned,success_route_conditioned,success_unconditioned,safety_event_route_conditioned,safety_event_unconditioned,route_conditioning_status,waypoint_status,waypoint_reason,fallback_status,exclusion_reason
+francis2023_intersection_wait,4183,ppo_model_retrained_10m_2025-02-01.zip,missing_pair,excluded_pairing_error,,,,,,,,,,,missing_route_conditioned_hybrid_global_rl
+francis2023_intersection_wait,4184,ppo_model_retrained_10m_2025-02-01.zip,missing_pair,excluded_pairing_error,,,,,,,,,,,missing_route_conditioned_hybrid_global_rl
+francis2023_intersection_wait,4185,ppo_model_retrained_10m_2025-02-01.zip,missing_pair,excluded_pairing_error,,,,,,,,,,,missing_route_conditioned_hybrid_global_rl

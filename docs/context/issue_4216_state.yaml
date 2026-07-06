@@ -290,7 +290,7 @@ entries:
         evidence: >-
           PYTEST_NUM_WORKERS=8 ROBOT_SF_TEST_ENV=licca
           scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -q exited 0;
-          final summary 11912 passed, 16 skipped, 11 warnings in 1224.36s.
+          final summary 11941 passed, 16 skipped, 11 warnings in 1243.30s.
     residual_risks:
       - risk: "This is simulated-LiCCA local validation, not a Slurm-submitted GPU campaign."
         why_it_remains: >-

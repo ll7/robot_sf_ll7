@@ -125,7 +125,8 @@ def _direct_child_pids(parent_pid: int) -> list[int]:
     """Return Linux direct child PIDs for *parent_pid* using procfs."""
     children_path = f"/proc/{parent_pid}/task/{parent_pid}/children"
     try:
-        raw_children = open(children_path, encoding="ascii").read().strip()
+        with open(children_path, encoding="ascii") as children_file:
+            raw_children = children_file.read().strip()
     except OSError:
         return []
     if not raw_children:
@@ -147,7 +148,8 @@ def _descendant_pids(parent_pid: int) -> list[int]:
 def _cmdline(pid: int) -> str:
     """Return a process command line as a space-separated string."""
     try:
-        raw_cmdline = open(f"/proc/{pid}/cmdline", "rb").read()
+        with open(f"/proc/{pid}/cmdline", "rb") as cmdline_file:
+            raw_cmdline = cmdline_file.read()
     except OSError:
         return ""
     return raw_cmdline.replace(b"\0", b" ").decode("utf-8", errors="replace").strip()
@@ -156,8 +158,11 @@ def _cmdline(pid: int) -> str:
 def _pid_alive(pid: int) -> bool:
     """Return whether *pid* still exists."""
     try:
-        state = open(f"/proc/{pid}/stat", encoding="ascii").read().split()[2]
-    except OSError:
+        # /proc/<pid>/stat is "pid (comm) state ..."; comm can contain spaces
+        # and parentheses, so parse the state char after the final ")".
+        with open(f"/proc/{pid}/stat", encoding="ascii") as stat_file:
+            state = stat_file.read().rsplit(")", 1)[1].split()[0]
+    except (OSError, IndexError):
         state = ""
     if state == "Z":
         return False
@@ -177,6 +182,8 @@ def _terminate_pids(pids: list[int], *, grace_seconds: float) -> None:
             os.kill(pid, signal.SIGTERM)
         except ProcessLookupError:
             pass
+        except OSError:  # pragma: no cover - e.g. PermissionError on foreign pid
+            pass
 
     deadline = time.monotonic() + grace_seconds
     while any(_pid_alive(pid) for pid in pids) and time.monotonic() < deadline:
@@ -187,6 +194,8 @@ def _terminate_pids(pids: list[int], *, grace_seconds: float) -> None:
             try:
                 os.kill(pid, signal.SIGKILL)
             except ProcessLookupError:
+                pass
+            except OSError:  # pragma: no cover - e.g. PermissionError on foreign pid
                 pass
 
     deadline = time.monotonic() + max(grace_seconds, 0.5)

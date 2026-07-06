@@ -35,8 +35,9 @@ pytestmark = pytest.mark.skipif(
 def _pid_alive(pid: int) -> bool:
     """Return whether *pid* still exists (signal 0 probes without delivering)."""
     try:
-        state = open(f"/proc/{pid}/stat", encoding="ascii").read().split()[2]
-    except OSError:
+        with open(f"/proc/{pid}/stat", encoding="ascii") as stat_file:
+            state = stat_file.read().rsplit(")", 1)[1].split()[0]
+    except (OSError, IndexError):
         state = ""
     if state == "Z":
         return False
@@ -125,11 +126,19 @@ def test_reap_matching_descendants_terminates_leaked_child(tmp_path: Path) -> No
     child = subprocess.Popen([sys.executable, "-c", child_source])
     grandchild_pid = 0
     try:
+        # Poll until the pid file exists AND holds a fully-written integer:
+        # pid_file.exists() can become true after open() but before the pid is
+        # written, so read the content rather than trusting existence alone.
         deadline = time.monotonic() + 10.0
-        while not pid_file.exists() and time.monotonic() < deadline:
+        pid_text = ""
+        while time.monotonic() < deadline:
+            if pid_file.exists():
+                pid_text = pid_file.read_text(encoding="utf-8").strip()
+                if pid_text.isdigit():
+                    break
             time.sleep(0.1)
-        assert pid_file.exists(), "child did not start descendant"
-        grandchild_pid = int(pid_file.read_text(encoding="utf-8"))
+        assert pid_text.isdigit(), "child did not record a descendant pid"
+        grandchild_pid = int(pid_text)
 
         reaped = reap_matching_descendants(
             parent_pid=os.getpid(),

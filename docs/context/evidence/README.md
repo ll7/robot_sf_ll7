@@ -120,6 +120,13 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_3215_scenario_family_oracle_packet_2026-07-05/`: diagnostic-only
+CPU launch packet for Issue #3215's post-synthesis scenario-family promotion
+step. Defines the oracle future-trajectory forecast arm, paired-seed floor,
+scenario-factor matrix, outcome surfaces, and stop rules; no paired-seed
+campaign, Slurm/GPU submission, planner promotion, or paper/dissertation claim
+is included.
+
 - `issue_3463_topology_reselection_cross_slice_2026-07-05/`: diagnostic-only
   CPU cross-slice packet for topology near-parity corrective Issue #3463. The
   run completed 20 rows and classified `blocked` because all `doorway_transfer`

@@ -3049,6 +3049,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3215_scenario_family_oracle_packet_2026-07-05
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3266_ppo_snqi_smoke_2026-06-23
     status: evidence
     freshness: evidence

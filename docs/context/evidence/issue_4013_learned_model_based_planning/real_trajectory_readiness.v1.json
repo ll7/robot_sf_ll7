@@ -1,0 +1,40 @@
+{
+  "acceptance_evidence": [
+    {
+      "criterion": "short-horizon predictor trained",
+      "evidence": "Met at diagnostic tier by PR #4629 using seeded synthetic data; Phase 3 real-trajectory retraining remains blocked until this report reaches ready_for_real_trajectory_training."
+    },
+    {
+      "criterion": "model-based action selection runs on a smoke scenario",
+      "evidence": "Met at diagnostic tier by PR #4644 and PR #4655."
+    },
+    {
+      "criterion": "comparison against cv_prediction_mpc and one model-free baseline",
+      "evidence": "Met at diagnostic tier by PR #4655 with paired seed count 1; representative real-trajectory evaluation remains blocked by dataset readiness."
+    },
+    {
+      "criterion": "fallback/degraded rows are non-evidence",
+      "evidence": "Met by PR #4587 report contract and PR #4655 diagnostic report."
+    },
+    {
+      "criterion": "claim boundary excludes world-model and paper-grade claims",
+      "evidence": "Met in existing #4013 design/evidence docs; this report preserves that boundary."
+    }
+  ],
+  "availability": "missing",
+  "benchmark_eligibility": "diagnostic_only",
+  "blockers": [
+    {
+      "code": "real_trajectory.availability_not_validated",
+      "message": "Phase 3 requires a checksum-validated real trajectory dataset; manifest availability is 'missing'."
+    }
+  ],
+  "claim_boundary": "Real-trajectory readiness only. No raw data is staged by this checker; no benchmark, navigation-quality, paper, or dissertation claim is made.",
+  "dataset_id": "issue_4013_eth_biwi",
+  "issue": 4013,
+  "manifest_path": "configs/data/issue_4013_eth_biwi_real_trajectory_manifest.yaml",
+  "next_action": "Stage ETH/BIWI or another approved real pedestrian trajectory dataset under $ROBOT_SF_EXTERNAL_DATA_ROOT, validate its checksum, update the manifest, then run real-trajectory training and representative evaluation.",
+  "preflight_issues": [],
+  "schema_version": "issue_4013.real_trajectory_readiness.v1",
+  "status": "blocked_real_trajectory_data_unavailable"
+}

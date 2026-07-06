@@ -1,0 +1,60 @@
+# Issue #4013 real-trajectory training manifest.
+#
+# This is a bring-your-own-data provenance contract for the ETH/BIWI walking
+# pedestrians annotations used by many ETH/UCY-style trajectory-prediction
+# baselines. It intentionally does not download, stage, or redistribute raw
+# external data. The #4013 readiness checker keeps Phase 3 blocked until a
+# local copy is checksum-validated.
+schema: robot_sf_real_trajectory_ingestion_manifest.v1
+dataset_id: issue_4013_eth_biwi
+title: ETH/BIWI walking pedestrians annotations for #4013 real-trajectory smoke
+source:
+  url: https://vision.ee.ethz.ch/datsets.html
+  version: BIWI Walking Pedestrians annotations
+  citation: "Pellegrini et al., You'll Never Walk Alone: Modeling Social Behavior for Multi-target Tracking, ICCV 2009."
+  access_date: "2026-07-06"
+license:
+  name: upstream research dataset terms; local supplier must verify rights
+  url: null
+  posture: bring-your-own
+  supplier_acknowledgment: true
+  redistribution: false
+retrieval:
+  instructions: >-
+    Obtain the ETH/BIWI walking pedestrians annotation archive from the official
+    ETH Computer Vision Lab datasets page under its current terms. Extract the
+    raw annotation files into staging_dir. Do not commit raw annotations or
+    converted trajectory files. After staging, compute the aggregate SHA-256 tree
+    checksum, set checksums.tree_sha256 and expected_tree_sha256, and change
+    availability to validated before using the data for #4013 real-trajectory
+    training or representative evaluation.
+  download_url: null
+  fail_closed: true
+checksums:
+  algorithm: SHA-256
+  tree_sha256: null
+  expected_tree_sha256: null
+conversion:
+  frame_rate_hz: 2.5
+  length_unit: meters
+  coordinate_frame: world_meters_xy
+  timestamp_field: frame
+  agent_id_field: pedestrian_id
+  position_fields: [x, y]
+  map_context_field: scene
+  missing_data_behavior: fail_closed
+splits:
+  naming: scene
+  members: [eth, hotel]
+staging:
+  staging_dir: ${ROBOT_SF_EXTERNAL_DATA_ROOT}/issue_4013_eth_biwi
+  local_only_raw: true
+  durable_storage_target: local-only-byo
+privacy:
+  pii_reviewed: false
+  notes: >-
+    Public overhead pedestrian trajectories; local supplier must review current
+    upstream terms and privacy posture before marking availability validated.
+availability: missing
+benchmark_eligibility: diagnostic_only
+related_issues: [4013, 3065, 3973]

@@ -226,6 +226,14 @@ entries:
     status: evidence
     freshness: evidence
     area: training
+  - path: docs/context/evidence/issue_4013_learned_model_based_planning/real_trajectory_readiness.v1.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4013_learned_model_based_planning/real_trajectory_readiness.v1.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4445_ch8_statistics_reproducibility/source_manifest.json
     status: evidence
     freshness: evidence
@@ -3136,6 +3144,10 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_4586_learned_risk_readiness_blocked_2026-07-06.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4586_closure_audit_2026-07-06.json
     status: evidence
     freshness: evidence
     area: benchmark_evidence

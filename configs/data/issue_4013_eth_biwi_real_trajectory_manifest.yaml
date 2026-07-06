@@ -32,6 +32,10 @@ retrieval:
   fail_closed: true
 checksums:
   algorithm: SHA-256
+  # Supplier-computed aggregate tree hash from the hub staging (2026-07-06). The
+  # upstream ETH lab publishes no reference checksum, so expected == computed is a
+  # first-observed pin: future re-staging must reproduce it, but it is not an
+  # independent third-party anchor.
   tree_sha256: ed89c16580185a07b46a27f30e01288a30a9e2d786379f6d8173931879431a0d
   expected_tree_sha256: ed89c16580185a07b46a27f30e01288a30a9e2d786379f6d8173931879431a0d
 conversion:
@@ -53,8 +57,10 @@ staging:
 privacy:
   pii_reviewed: true
   notes: >-
-    Public overhead pedestrian trajectories. Verified Pellegrini et al. (ICCV 2009)
-    terms permit research use. Overhead perspective contains no PII.
+    Public overhead pedestrian trajectories from Pellegrini et al. (ICCV 2009).
+    Supplier (bring-your-own posture) reviewed the upstream terms as permitting
+    research use and assessed the overhead-only annotations as containing no PII;
+    this is a supplier acknowledgment, not an independent legal or ethics ruling.
 availability: validated
 benchmark_eligibility: research_only
 related_issues: [4013, 3065, 3973]

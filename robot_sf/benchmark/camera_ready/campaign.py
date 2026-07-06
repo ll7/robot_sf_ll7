@@ -39,6 +39,7 @@ from robot_sf.benchmark.camera_ready._reporting import (
     _build_breakdown_rows,
     _build_scenario_amv_lookup,
     _planner_report_row,
+    build_campaign_credibility_scorecard,
     write_campaign_report,
 )
 from robot_sf.benchmark.camera_ready._run_state import _campaign_success_counters
@@ -691,6 +692,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0915
 
     summary_json_path = reports_dir / "campaign_summary.json"
     report_md_path = reports_dir / "campaign_report.md"
+    credibility_scorecard_json_path = reports_dir / "campaign_credibility_scorecard.json"
 
     csv_path, md_table_path = _write_table_artifacts(
         reports_dir,
@@ -1268,6 +1270,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0915
         "artifacts": {
             "campaign_manifest": _repo_relative(campaign_root / "campaign_manifest.json"),
             "campaign_summary_json": _repo_relative(summary_json_path),
+            "campaign_credibility_scorecard_json": _repo_relative(credibility_scorecard_json_path),
             "campaign_table_csv": _repo_relative(csv_path),
             "campaign_table_md": _repo_relative(md_table_path),
             "campaign_table_core_csv": _repo_relative(core_csv_path),
@@ -1495,6 +1498,10 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0915
     ):
         warnings.append("Publication bundle export skipped because benchmark_success=false.")
 
+    campaign_summary["credibility_scorecard"] = build_campaign_credibility_scorecard(
+        campaign_summary
+    )
+    _write_json(credibility_scorecard_json_path, campaign_summary["credibility_scorecard"])
     _write_json(summary_json_path, campaign_summary)
     write_campaign_report(report_md_path, campaign_summary)
 

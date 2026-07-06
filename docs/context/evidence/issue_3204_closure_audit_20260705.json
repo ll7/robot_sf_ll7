@@ -1,0 +1,59 @@
+{
+  "schema_version": "issue_3204.closure_audit.v1",
+  "issue": 3204,
+  "audit_date": "2026-07-05",
+  "issue_url": "https://github.com/ll7/robot_sf_ll7/issues/3204",
+  "conclusion": "keep_open_blocked",
+  "current_readiness": {
+    "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/research/check_predictive_checkpoint_proxy_readiness.py --config configs/research/predictive_checkpoint_proxy_v1.yaml --json",
+    "exit_code": 2,
+    "status": "blocked",
+    "schema_version": "predictive-checkpoint-proxy-readiness-report.v1",
+    "predictive_checkpoint_candidates": 8,
+    "locally_resolvable_predictive_checkpoints": 0,
+    "minimum_required_locally_resolvable_checkpoints": 6,
+    "candidate_checkpoints_with_proxy_training_run_id": 0,
+    "known_blockers": [
+      "missing_durable_predictive_checkpoints",
+      "degenerate_hardcase_proxy_probe_v1"
+    ]
+  },
+  "acceptance_evidence": [
+    {
+      "criterion": "Proxy scoring config plus script path produce per-checkpoint proxy scores on the hard-seed fixture.",
+      "evidence": "Analyzer and readiness paths exist via #3307 and #3759, with later readiness tightening through #3990, #4026, #4066, #4086, #4132, and #4483.",
+      "status": "partial",
+      "remaining": "Current readiness checker reports 0 of 8 predictive checkpoints resolve locally, below the required 6."
+    },
+    {
+      "criterion": "Spearman rank correlations reported for candidate proxy and val_ade or val_fde versus hard-set success across at least six checkpoints.",
+      "evidence": "#3307 added Spearman-capable proxy-history analysis, but no valid input set is available.",
+      "status": "not_met",
+      "remaining": "Need at least six checkpoints from one real training run plus non-degenerate proxy-enabled hard-seed success spread."
+    },
+    {
+      "criterion": "A/B proxy-selected versus ADE-selected checkpoint on predictive_hard_seeds_v1.",
+      "evidence": "No merged PR or current readiness output contains this benchmark result; #4483 records it as remaining work.",
+      "status": "not_met",
+      "remaining": "Run hard-seed A/B only after durable or hydrated checkpoints and proxy history exist."
+    },
+    {
+      "criterion": "Outcome classified as adopt, negative result, or diagnostic with next step recorded.",
+      "evidence": "#4483 integration_report records diagnostic blocked state and next empirical action.",
+      "status": "met_for_blocked_diagnostic",
+      "remaining": "Final adopt or negative result classification requires the empirical proxy-vs-ADE and A/B evidence."
+    },
+    {
+      "criterion": "Durable artifact policy followed; do not rely on worktree-local output/tmp.",
+      "evidence": "Current readiness checker reports blocked_by_artifact_scope.worktree_local_output = 8 and keeps the issue fail-closed.",
+      "status": "met_for_blocker_detection",
+      "remaining": "Hydrate or promote the required checkpoint artifacts to a durable, locally resolvable source."
+    }
+  ],
+  "forbidden_actions_confirmed": {
+    "compute_submit": false,
+    "merged": false,
+    "released": false,
+    "deleted": false
+  }
+}

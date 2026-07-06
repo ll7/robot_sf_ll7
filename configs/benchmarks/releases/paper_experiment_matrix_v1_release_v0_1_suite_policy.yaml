@@ -1,0 +1,46 @@
+schema_version: publication-suite-policy.v1
+issue: 2910
+release_id: paper_experiment_matrix_v1_v0_1_0
+source_scenario_matrix: ../../scenarios/classic_interactions_francis2023.yaml
+claim_boundary: >
+  CPU-only v0.1 publication-suite policy. This policy selects the nominal
+  publication scenario set from the durable scenario_cert.v1 summary; it does
+  not run a benchmark campaign, publish a release, or promote stress-only
+  scenarios as nominal benchmark evidence.
+nominal_release_suite:
+  certification_status: scenario_cert.v1:accepted_reviewed
+  included_eligibility: eligible
+  excluded_scenarios:
+    - scenario_id: francis2023_exiting_elevator
+      action: exclude_from_nominal_publication
+      reason: >
+        scenario_cert.v1 classifies this scenario as geometrically infeasible:
+        start/goal lies in an inflated invalid cell.
+    - scenario_id: francis2023_narrow_doorway
+      action: exclude_from_nominal_publication
+      reason: >
+        scenario_cert.v1 classifies this scenario as geometrically infeasible:
+        no inflated collision-free path exists for the certified geometry.
+  routed_stress_only_scenarios:
+    - scenario_id: classic_cross_trap_high
+      action: route_to_stress_suite_only
+    - scenario_id: classic_cross_trap_low
+      action: route_to_stress_suite_only
+    - scenario_id: classic_cross_trap_medium
+      action: route_to_stress_suite_only
+    - scenario_id: classic_doorway_high
+      action: route_to_stress_suite_only
+    - scenario_id: classic_doorway_low
+      action: route_to_stress_suite_only
+    - scenario_id: classic_doorway_medium
+      action: route_to_stress_suite_only
+    - scenario_id: francis2023_entering_elevator
+      action: route_to_stress_suite_only
+    - scenario_id: francis2023_entering_room
+      action: route_to_stress_suite_only
+    - scenario_id: francis2023_exiting_room
+      action: route_to_stress_suite_only
+stress_suite_claim_boundary: >
+  Routed stress-only scenarios may support diagnostic or falsification claims
+  only after a separately versioned stress-suite result exists. They are not
+  part of the nominal v0.1 publication benchmark set.

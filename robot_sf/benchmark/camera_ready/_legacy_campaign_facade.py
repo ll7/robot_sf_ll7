@@ -86,6 +86,7 @@ from robot_sf.benchmark.camera_ready._reporting import (  # noqa: F401 - re-expo
     _safe_float,
     _scenario_family,
     _strict_vs_fallback_comparisons,
+    build_campaign_credibility_scorecard,
     write_campaign_report,
 )
 from robot_sf.benchmark.camera_ready._route_clearance import (  # noqa: F401 - re-exported for back-compat
@@ -263,6 +264,7 @@ __all__ = [
     "RouteClearanceError",
     "SeedPolicy",
     "SnqiContractConfig",
+    "build_campaign_credibility_scorecard",
     "load_campaign_config",
     "prepare_campaign_preflight",
     "run_campaign",

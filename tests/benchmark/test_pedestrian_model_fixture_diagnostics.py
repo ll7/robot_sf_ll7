@@ -12,6 +12,7 @@ from robot_sf.benchmark.pedestrian_model_fixture_diagnostics import (
     HSFM_TTC_PREDICTIVE_V1,
     PED_MODEL_FIXTURE_REPORT_SCHEMA_VERSION,
     SOCIAL_FORCE_DEFAULT,
+    DiagnosticThreshold,
     PedestrianModelFixtureRunConfig,
     PedestrianModelFixtureSpec,
     PedestrianModelFixtureTrace,
@@ -73,15 +74,100 @@ def test_geometric_fixtures_emit_diagnostic_threshold_checks() -> None:
         "diagnostic_thresholds"
     ]
     assert "mean_max_lateral_displacement_m" in sliding_thresholds
-    assert sliding_thresholds["mean_max_lateral_displacement_m"]["threshold"] == pytest.approx(0.04)
+    sliding_check = sliding_thresholds["mean_max_lateral_displacement_m"]
+    assert sliding_check["threshold"] == pytest.approx(0.04)
+    assert sliding_check["direction"] == "max_allowed"
+    assert "meets_or_exceeds" not in sliding_check
 
     bottleneck_thresholds = by_scenario["bottleneck_freeze_deadlock"]["metrics"][
         "diagnostic_thresholds"
     ]
     assert "max_consecutive_interaction_zone_slow_steps" in bottleneck_thresholds
-    assert bottleneck_thresholds["max_consecutive_interaction_zone_slow_steps"][
-        "threshold"
-    ] == pytest.approx(2.0)
+    bottleneck_check = bottleneck_thresholds["max_consecutive_interaction_zone_slow_steps"]
+    assert bottleneck_check["threshold"] == pytest.approx(2.0)
+    assert bottleneck_check["direction"] == "max_allowed"
+    assert "meets_or_exceeds" not in bottleneck_check
+
+
+def test_diagnostic_thresholds_support_min_required_and_max_allowed() -> None:
+    """Direction-aware threshold checks use honest pass criteria."""
+
+    spec = PedestrianModelFixtureSpec(
+        scenario_id="unit",
+        map_def=build_pedestrian_model_fixture_scenarios()["shared_throat_sliding"].map_def,
+        single_pedestrians=(),
+        interaction_zone_center=(0.5, 0.0),
+        interaction_zone_radius_m=1.0,
+        interaction_zone_min_pedestrians=2,
+        metric_thresholds={
+            "minimum_pairwise_distance_m": DiagnosticThreshold(
+                value=0.4,
+                direction="min_required",
+            ),
+            "mean_max_lateral_displacement_m": DiagnosticThreshold(
+                value=0.4,
+                direction="max_allowed",
+            ),
+        },
+    )
+    trace = PedestrianModelFixtureTrace(
+        scenario_id="unit",
+        pedestrian_model="unit",
+        seed=1,
+        dt_s=0.1,
+        duration_s=0.1,
+        positions=np.asarray(
+            [
+                [[0.0, 0.0], [1.0, 0.0]],
+                [[0.0, 0.3], [1.0, -0.3]],
+            ],
+            dtype=float,
+        ),
+        velocities=np.zeros((2, 2, 2), dtype=float),
+    )
+
+    thresholds = compute_fixture_metrics(
+        trace,
+        spec,
+        freeze_speed_threshold_mps=0.05,
+        freeze_window_steps=1,
+    )["diagnostic_thresholds"]
+
+    distance_check = thresholds["minimum_pairwise_distance_m"]
+    assert distance_check["direction"] == "min_required"
+    assert distance_check["criterion_met"] is True
+    assert distance_check["meets_or_exceeds"] is True
+
+    sliding_check = thresholds["mean_max_lateral_displacement_m"]
+    assert sliding_check["direction"] == "max_allowed"
+    assert sliding_check["criterion_met"] is True
+    assert "meets_or_exceeds" not in sliding_check
+
+
+def test_bottleneck_fixture_interaction_zone_measures_neck_cooccurrence() -> None:
+    """Bottleneck diagnostic zone is centered on the neck with opposing flows present."""
+
+    scenarios = build_pedestrian_model_fixture_scenarios()
+    spec = scenarios["bottleneck_freeze_deadlock"]
+    assert spec.interaction_zone_center == (5.0, 2.0)
+
+    trace = run_pedestrian_model_fixture_trace(
+        spec,
+        pedestrian_model=SOCIAL_FORCE_DEFAULT,
+        config=PedestrianModelFixtureRunConfig(duration_s=4.0, dt_s=0.1),
+    )
+    metrics = compute_fixture_metrics(
+        trace,
+        spec,
+        freeze_speed_threshold_mps=0.6,
+        freeze_window_steps=3,
+    )
+
+    assert metrics["entered_interaction_zone"] is True
+    assert metrics["opposing_origins_cooccurred_in_interaction_zone"] is True
+    assert metrics["max_left_origin_pedestrians_in_interaction_zone"] >= 1
+    assert metrics["max_right_origin_pedestrians_in_interaction_zone"] >= 1
+    assert metrics["max_pedestrians_in_interaction_zone"] >= spec.interaction_zone_min_pedestrians
 
 
 def test_fixture_trace_is_deterministic_for_fixed_seed() -> None:

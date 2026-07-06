@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from robot_sf.training.orca_residual_lineage_packet import (
     OrcaResidualLineagePacketError,
     validate_smoke_nominal_gate,
@@ -25,6 +27,7 @@ DEFAULT_SOURCE_CHECKSUMS = Path(
 )
 DEFAULT_CLOSURE_AUDIT = Path("docs/context/evidence/issue_1475_closure_audit_2026-07-06.md")
 DEFAULT_OUTPUT = Path("docs/context/evidence/issue_1475_acceptance_audit_2026-07-06.json")
+DEFAULT_STATE_SURFACE = Path("docs/context/issue_1475_state.yaml")
 
 
 @dataclass(frozen=True)
@@ -57,6 +60,18 @@ def _load_json(path: Path) -> dict[str, Any]:
         raise SystemExit(f"failed to parse {path}: {exc}") from exc
     if not isinstance(data, dict):
         raise SystemExit(f"{path} must contain a JSON object")
+    return data
+
+
+def _load_yaml(path: Path) -> dict[str, Any]:
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise SystemExit(f"failed read {path}: {exc}") from exc
+    except yaml.YAMLError as exc:
+        raise SystemExit(f"failed parse {path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise SystemExit(f"{path} must contain a YAML mapping")
     return data
 
 
@@ -101,12 +116,60 @@ def _smoke_gate_input(summary: dict[str, Any]) -> dict[str, Any]:
     return gate_summary
 
 
+def _state_surface_check(
+    *,
+    repo_root: Path,
+    state_surface_path: Path,
+    acceptance_evidence: list[CriterionAudit],
+    closure_call: str,
+) -> dict[str, Any]:
+    """Check the append-only high-churn state row matches this audit."""
+
+    state_surface = _load_yaml(repo_root / state_surface_path)
+    entries = state_surface.get("entries")
+    if not isinstance(entries, list) or not entries:
+        return {
+            "path": str(state_surface_path),
+            "status": "invalid",
+            "errors": ["state surface has no entries"],
+        }
+    latest = entries[-1]
+    errors: list[str] = []
+    if state_surface.get("issue") != 1475:
+        errors.append(f"issue must be 1475, got {state_surface.get('issue')!r}")
+    closure_boundary = latest.get("closure_boundary", {})
+    if closure_boundary.get("closure_call_for_this_pr") != closure_call:
+        errors.append(
+            "latest entry closure_call_for_this_pr "
+            f"{closure_boundary.get('closure_call_for_this_pr')!r} != {closure_call!r}"
+        )
+    state_by_criterion = {
+        item.get("criterion"): item.get("status")
+        for item in latest.get("acceptance_evidence", [])
+        if isinstance(item, dict)
+    }
+    for item in acceptance_evidence:
+        if state_by_criterion.get(item.criterion) != item.status:
+            errors.append(
+                f"{item.criterion!r} status "
+                f"{state_by_criterion.get(item.criterion)!r} != {item.status!r}"
+            )
+    return {
+        "path": str(state_surface_path),
+        "status": "valid" if not errors else "invalid",
+        "latest_recorded_at_utc": latest.get("recorded_at_utc"),
+        "entry_status": latest.get("status"),
+        "errors": errors,
+    }
+
+
 def build_audit(
     *,
     repo_root: Path,
     smoke_summary_path: Path = DEFAULT_SMOKE_SUMMARY,
     source_checksums_path: Path = DEFAULT_SOURCE_CHECKSUMS,
     closure_audit_path: Path = DEFAULT_CLOSURE_AUDIT,
+    state_surface_path: Path = DEFAULT_STATE_SURFACE,
 ) -> dict[str, Any]:
     """Build a fail-closed issue #1475 acceptance audit."""
 
@@ -203,12 +266,19 @@ def build_audit(
 
     unmet_statuses = {"not_met", "partially_met"}
     status = "complete" if all(item.status == "met" for item in criteria) else "blocked"
+    closure_call = "close" if status == "complete" else "keep_open"
+    state_surface = _state_surface_check(
+        repo_root=repo_root,
+        state_surface_path=state_surface_path,
+        acceptance_evidence=criteria,
+        closure_call=closure_call,
+    )
 
     return {
         "schema_version": SCHEMA_VERSION,
         "issue": 1475,
         "status": status,
-        "closure_call": "close" if status == "complete" else "keep_open",
+        "closure_call": closure_call,
         "claim_boundary": (
             "CPU-only acceptance audit over tracked evidence; no Slurm/GPU submission, "
             "benchmark campaign, training run, or paper-facing claim."
@@ -217,6 +287,7 @@ def build_audit(
             str(smoke_summary_path),
             str(source_checksums_path),
             str(closure_audit_path),
+            str(state_surface_path),
         ],
         "smoke_gate": {
             "status": smoke_gate_status,
@@ -226,6 +297,7 @@ def build_audit(
         "remaining_criteria": [
             item.to_dict() for item in criteria if item.status in unmet_statuses
         ],
+        "state_surface": state_surface,
         "next_empirical_action": (
             "Run one bounded ORCA-residual BC smoke rerun on a Slurm-capable host; only if "
             "validate_smoke_nominal_gate passes, escalate nominal and classify #1358 "
@@ -249,6 +321,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--smoke-summary", type=Path, default=DEFAULT_SMOKE_SUMMARY)
     parser.add_argument("--source-checksums", type=Path, default=DEFAULT_SOURCE_CHECKSUMS)
     parser.add_argument("--closure-audit", type=Path, default=DEFAULT_CLOSURE_AUDIT)
+    parser.add_argument("--state-surface", type=Path, default=DEFAULT_STATE_SURFACE)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--write", action="store_true", help="Write the JSON artifact to --output.")
     return parser
@@ -264,6 +337,7 @@ def main() -> int:
         smoke_summary_path=args.smoke_summary,
         source_checksums_path=args.source_checksums,
         closure_audit_path=args.closure_audit,
+        state_surface_path=args.state_surface,
     )
 
     payload = json.dumps(report, indent=2, sort_keys=True) + "\n"

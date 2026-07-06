@@ -17,6 +17,18 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+  - path: docs/context/evidence/issue_4018_density_curriculum_matched_smoke_2026-07-06/README.md
+    status: evidence
+    freshness: evidence
+    area: training
+  - path: docs/context/evidence/issue_4018_density_curriculum_matched_smoke_2026-07-06/comparison_report.json
+    status: evidence
+    freshness: evidence
+    area: training
+  - path: docs/context/evidence/issue_4018_density_curriculum_matched_smoke_2026-07-06/readiness.json
+    status: evidence
+    freshness: evidence
+    area: training
   - path: docs/context/evidence/issue_3465_topology_gate_paired/README.md
     status: evidence
     freshness: evidence

@@ -348,6 +348,8 @@ max-statements = 60
 ]
 # One-off scripts / notebook exports: allow prints, local imports, optional deps.
 "scripts/**/*.py" = ["T201", "PLC0415", "TC001", "TC002", "D417", "DOC201"]
+# Experimental, offline CLI prototypes (issue #4627): same allowances as one-off scripts.
+"experiments/**/*.py" = ["T201", "PLC0415", "TC001", "TC002", "D417", "DOC201"]
 # Existing broad script exception handlers are ratcheted by
 # scripts/validation/check_broad_exceptions.py; keep BLE001 scoped current files.
 "scripts/analysis/amv_timeout_trace_analyzer.py" = ["BLE001"]

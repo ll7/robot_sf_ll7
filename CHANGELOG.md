@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #4627 behavior-token motion-prior diagnostics (experimental, offline).** New
+  `experiments/behavior_tokens/` namespace with an offline, read-only prototype that turns saved
+  benchmark interaction traces into discrete "behavior tokens" for diagnostics. `extract_windows.py`
+  slides fixed-size windows over `algorithm_metadata.simulation_step_trace.steps` and converts each
+  into a documented, interpretable feature vector (clearance, time-to-contact proxy, robot-speed
+  statistics, stop/yield and oscillation proxies, near-conflict recovery); `quantize_trace_windows.py`
+  standardizes the finite feature columns and assigns each valid window a deterministic discrete
+  token id via k-means (scikit-learn with a NumPy-only fallback, token ids canonicalized by cluster
+  center so runs and libraries agree); `inspect_token_motifs.py` summarizes token distributions by
+  scenario/planner/outcome and exports heuristic *candidate* motif labels plus bounded example
+  windows. `schemas.py` holds the shared feature vocabulary and schema-version constants. Rows without
+  a usable trace are skipped with an explicit reason; non-derivable features are recorded as `null`
+  (never fabricated zeros). Covered by `tests/experiments/test_behavior_tokens.py`. Claim boundary:
+  very low priority, exploratory, diagnostic-only tooling — not validated metrics, benchmark evidence,
+  release-gate input, or paper/dissertation claim support, and no safety decision may depend on the
+  tokens. No new controller training, no transformer dependency, no benchmark pipeline integration,
+  no benchmark campaign run, and no SLURM/GPU submission.
 * **issue #4013 checkpoint-backed model-based action selection (diagnostic).** New
   `configs/algos/learned_prediction_mpc_issue_4013_checkpoint.yaml` wires the trained short-horizon
   predictor checkpoint into the `learned_prediction_mpc` adapter fail-closed (`allow_untrained_smoke`

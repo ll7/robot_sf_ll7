@@ -1,0 +1,80 @@
+{
+  "issue": 3481,
+  "audit_date": "2026-07-06",
+  "evidence_tier": "diagnostic-prototype",
+  "closure_decision": "close",
+  "closure_rationale": "All Definition-of-Done items implementable without a benchmark campaign are met by merged PRs 4144, 4202, 4258, 4297, 4352, 4354, 4482, 4593, and 4634. The only remainder is a seed-controlled benchmark campaign, which the issue puts out of scope and which COMPLETE-FIRST treats as complete for CPU-only work.",
+  "claim_boundary": {
+    "evidence_status": "CPU-local diagnostic/prototype only",
+    "not_promoted": [
+      "calibrated behavioral realism",
+      "default-model replacement",
+      "planner ranking",
+      "benchmark-strength or paper/dissertation claims"
+    ]
+  },
+  "acceptance_evidence": [
+    {
+      "criterion": "Anisotropic FoV weight prototyped on the vectorized force evaluation (in-cone full strength, ~0.1 behind heading).",
+      "status": "met",
+      "evidence": "hsfm_anisotropic_fov_v1 selector: PR 4258 (surface/fixtures), PR 4297 (pairwise isolation + vectorized weight), PR 4352 (per-pair seam consumption), PR 4354 (vectorized O(N^2) loop pinned to PySocialForce). Tests tests/sim/test_hsfm_fov_pairwise_isolation.py."
+    },
+    {
+      "criterion": "HSFM heading state + alignment-torque term decoupling heading from instantaneous velocity.",
+      "status": "met",
+      "evidence": "Heading state via hsfm_total_force_v1 (PR 4144); damped alignment torque hsfm_alignment_torque_v1 (PR 4634) replaces instant heading snap. Note docs/context/issue_3481_hsfm_alignment_torque.md; tests tests/sim/test_hsfm_alignment_torque_model.py."
+    },
+    {
+      "criterion": "Opt-in TTC-scaled predictive repulsion available as an alternative to Euclidean-distance repulsion.",
+      "status": "met",
+      "evidence": "hsfm_ttc_predictive_v1 selector + bounded pp-TTC repulsion + validated ttc_predictive_force config (PR 4202). Tests tests/sim/test_ttc_predictive_pedestrian_model.py."
+    },
+    {
+      "criterion": "Scoping/design note describing the force-law changes and modeling assumptions.",
+      "status": "met",
+      "evidence": "docs/context/issue_3481_hsfm_ttc_predictive_forces.md and docs/context/issue_3481_hsfm_alignment_torque.md."
+    },
+    {
+      "criterion": "Fixtures for narrow-passage lateral sliding and bottleneck freeze/deadlock across selector variants.",
+      "status": "met-diagnostic",
+      "evidence": "narrow_passage_lateral_sliding and bottleneck_freeze_deadlock geometric fixtures in robot_sf/benchmark/pedestrian_model_fixture_diagnostics.py with local threshold emission (thresholds_applied=True = local assertions, not benchmark gates). PRs 4482, 4593. Tests tests/benchmark/test_pedestrian_model_fixture_diagnostics.py."
+    },
+    {
+      "criterion": "HSFM/TTC parameters versioned; evidence_tier kept honest.",
+      "status": "met",
+      "evidence": "Frozen fail-closed config dataclasses wired through SimulationSettings; all notes/reports carry diagnostic/prototype boundary; no calibrated-realism or paper claim promoted."
+    }
+  ],
+  "evidence_trail": [
+    {"pr": 4144, "merged": "2026-07-02", "contribution": "Phase 1 pedestrian_model selector + hsfm_total_force_v1 heading state"},
+    {"pr": 4202, "merged": "2026-07-03", "contribution": "hsfm_ttc_predictive_v1 selector + bounded TTC repulsion + config"},
+    {"pr": 4258, "merged": "2026-07-03", "contribution": "hsfm_anisotropic_fov_v1 FoV-attenuation surface + fixtures"},
+    {"pr": 4297, "merged": "2026-07-03", "contribution": "pairwise-isolated + vectorized FoV/TTC weight helpers"},
+    {"pr": 4352, "merged": "2026-07-04", "contribution": "per-pair FoV force consumption at simulator seam"},
+    {"pr": 4354, "merged": "2026-07-04", "contribution": "vectorized O(N^2) social-force contribution kernel"},
+    {"pr": 4482, "merged": "2026-07-04", "contribution": "shared-throat diagnostic fixture harness"},
+    {"pr": 4593, "merged": "2026-07-05", "contribution": "narrow_passage_lateral_sliding + bottleneck_freeze_deadlock geometric fixtures"},
+    {"pr": 4634, "merged": "2026-07-06", "contribution": "hsfm_alignment_torque_v1 body-orientation alignment torque"}
+  ],
+  "validation": [
+    {
+      "command": "uv run pytest tests/sim/test_hsfm_total_force_model.py tests/sim/test_ttc_predictive_pedestrian_model.py tests/sim/test_hsfm_fov_pairwise_isolation.py tests/sim/test_hsfm_alignment_torque_model.py tests/benchmark/test_pedestrian_model_fixture_diagnostics.py -q",
+      "result": "71 passed"
+    }
+  ],
+  "residual_risks": [
+    {
+      "risk": "No seed-controlled benchmark campaign demonstrating reduced lateral sliding / freeze rate at benchmark strength.",
+      "why_it_remains": "Campaign/Slurm runs are out of scope for this CPU-only closure audit; the issue defers benchmarked comparison and evidence-tier upgrade to a separate claim-promotion task."
+    },
+    {
+      "risk": "Fixture proxies are local diagnostic assertions, not calibrated realism metrics.",
+      "why_it_remains": "The issue explicitly keeps evidence_tier at idea/diagnostic until durable in-repo benchmark evidence exists; the fixtures intentionally emit descriptive proxies only."
+    }
+  ],
+  "out_of_scope": [
+    "full benchmark campaign run",
+    "Slurm/GPU submission",
+    "paper/dissertation claim edits"
+  ]
+}

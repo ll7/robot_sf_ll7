@@ -57,6 +57,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     _sanitize_name,
     _scenario_with_kinematics,
     _sha256_file,
+    build_campaign_credibility_scorecard,
     load_campaign_config,
     prepare_campaign_preflight,
     run_campaign,
@@ -2497,6 +2498,7 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert (campaign_root / "reports" / "kinematics_skipped_combinations.csv").exists()
     assert (campaign_root / "reports" / "kinematics_skipped_combinations.md").exists()
     assert (campaign_root / "reports" / "campaign_report.md").exists()
+    assert (campaign_root / "reports" / "campaign_credibility_scorecard.json").exists()
     assert (campaign_root / "preflight" / "validate_config.json").exists()
     assert (campaign_root / "preflight" / "preview_scenarios.json").exists()
     preview_payload = json.loads(
@@ -2576,6 +2578,12 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert ppo_row["availability_status"] == "not_available"
     assert ppo_row["benchmark_success"] == "false"
     assert summary_payload["campaign"]["paper_interpretation_profile"] == "baseline-ready-core"
+    assert summary_payload["artifacts"]["campaign_credibility_scorecard_json"].endswith(
+        "reports/campaign_credibility_scorecard.json"
+    )
+    assert summary_payload["credibility_scorecard"]["schema_version"] == (
+        "campaign_credibility_scorecard.v1"
+    )
     assert summary_payload["artifacts"]["matrix_summary_json"].endswith(
         "reports/matrix_summary.json"
     )
@@ -3469,6 +3477,55 @@ def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:
     assert "## Unexpected Failed/Partial Planners" in report_text
     assert "No accepted unavailable/excluded planners." in report_text
     assert "No unexpected failed/partial planners." in report_text
+
+
+def test_campaign_credibility_scorecard_fail_closed_defaults() -> None:
+    """Credibility scorecard includes every factor and fails closed when evidence is absent."""
+    scorecard = build_campaign_credibility_scorecard(
+        {"campaign": {"campaign_id": "c1"}, "planner_rows": [], "artifacts": {}}
+    )
+
+    assert scorecard["schema_version"] == "campaign_credibility_scorecard.v1"
+    assert scorecard["overall_status"] == "not_assessed"
+    assert scorecard["overall_score"] is None
+    assert [factor["factor_id"] for factor in scorecard["factors"]] == [
+        "verification",
+        "validation",
+        "input_pedigree",
+        "uncertainty_characterization",
+        "results_robustness",
+        "use_history",
+    ]
+    assert all(factor["status"] == "not_assessed" for factor in scorecard["factors"])
+    assert all(factor["score"] is None for factor in scorecard["factors"])
+
+
+def test_write_campaign_report_renders_credibility_scorecard(tmp_path: Path) -> None:
+    """Markdown report renders assessed and not-assessed credibility factors."""
+    report_path = tmp_path / "campaign_report.md"
+    payload = {
+        "campaign": {
+            "campaign_id": "c1",
+            "git_hash": "abc123",
+            "scenario_matrix_hash": "sha256:matrix",
+            "seed_count": 3,
+        },
+        "planner_rows": [{"planner_key": "p1", "status": "ok"}],
+        "artifacts": {
+            "campaign_manifest": "campaign_manifest.json",
+            "campaign_summary_json": "reports/campaign_summary.json",
+            "campaign_table_csv": "reports/campaign_table.csv",
+            "seed_variability_json": "reports/seed_variability_by_scenario.json",
+        },
+    }
+
+    write_campaign_report(report_path, payload)
+    report_text = report_path.read_text(encoding="utf-8")
+
+    assert "## Credibility Scorecard" in report_text
+    assert "`campaign_credibility_scorecard.v1`" in report_text
+    assert "| Input pedigree | partial | 2 |" in report_text
+    assert "| Validation | not_assessed |  |" in report_text
 
 
 @pytest.mark.parametrize("unexpected_status", ["failed", "partial-failure"])

@@ -45,6 +45,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4539_closure_audit_2026-07-06.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_1475_closure_audit_2026-07-06.md
     status: evidence
     freshness: evidence
@@ -54,6 +58,11 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_3214_closure_audit_2026-07-05.md
+    status: superseded
+    replacement: docs/context/evidence/issue_3214_closure_audit_2026-07-06.md
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3214_closure_audit_2026-07-06.md
     status: evidence
     freshness: evidence
     area: benchmark_evidence
@@ -572,6 +581,10 @@ entries:
     area: benchmark_evidence
   - path: docs/context/issue_2397_socnavbench_control_status_2026-06-06.md
     status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1456_closure_audit.md
+    status: evidence
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/research_lane_states.md
@@ -3323,6 +3336,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4232_uncertainty_envelope_activation_probe_2026-07
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4245_closure_audit_2026-07-04.md
     status: evidence
     freshness: evidence
@@ -3344,6 +3361,10 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_2312_closure_audit.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1126_closure_audit_2026-07-06.md
     status: evidence
     freshness: evidence
     area: benchmark_evidence

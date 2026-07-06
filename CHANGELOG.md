@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* **issue #1126 SDD curation decision packet — runnable import command.**
+  `scripts/tools/sdd_curation_preflight.py::build_decision_packet` now emits an `import` handoff
+  command that actually parses against the canonical importer
+  `scripts/tools/import_sdd_scenarios.py`: it uses the importer's real flags `--annotations` and
+  `--out-dir` (previously `--annotation`/`--output-dir`, which the importer rejects with exit `2`)
+  and includes the *required* `--meters-per-pixel` scale assumption (previously omitted). A new
+  `--decision-meters-per-pixel` CLI flag records the scene scale in `curation_parameters`
+  (`meters_per_pixel`); when unset the command carries an explicit `<meters-per-pixel>` placeholder
+  the curator must fill from the selected scene's calibration. Regression tests parse the generated
+  command with the importer's own parser so the handoff cannot silently drift again
+  (`tests/tools/test_sdd_curation_preflight.py`, 15 pass; 75 pass across the SDD suite). This closes
+  a gap in an acceptance criterion of #1126 (record import command + scale assumptions); the issue
+  itself stays open, blocked on BYO real SDD annotation staging (raw-data + checksum/license
+  provenance). No real SDD data touched, no benchmark campaign, no SLURM/GPU submission, no
+  paper/dissertation claim edits.
+
 ### Changed
 
 * Recorded the **issue #4437 closure audit** at
@@ -21,6 +39,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **summary comment** — both requiring GitHub issue comment/close authority. The audit therefore
   keeps #4437 open with a dispatchable residual checklist (`Refs #4437`). Docs-only; no queue edits,
   new issues, benchmark execution, Slurm/GPU submission, or research claim.
+* Recorded the **issue #1126 SDD-curation closure audit** at
+  `docs/context/evidence/issue_1126_closure_audit_2026-07-06.md` (linked from the #1126 context
+  note). It maps each acceptance criterion to merged-PR evidence (#1091 importer, #3765 fail-closed
+  preflight, #4564 decision packet, plus this PR's import-command fix) and to freshly reproduced
+  fail-closed validation, then records the closure decision: **keep open**, blocked on BYO licensed
+  SDD annotation staging (the only remaining criteria require real staged data, which does not exist
+  locally). Docs + support-tooling only.
+* Recorded the **issue #1456 closure audit** at
+  `docs/context/evidence/issue_1456_closure_audit.md` (registered in `docs/context/catalog.yaml`).
+  It maps every acceptance criterion — original issue body plus the appended `agent-exec-spec:v1`
+  slice — to merged-PR evidence (#1924 external-data assistant, #2400 status note, #1596 row policy,
+  #3755 fail-closed readiness vs placeholder shells, #4526 tightened `socnavbench-control` contract)
+  and to a reproduced fail-closed validation (`manage_external_data.py --json check
+  socnavbench-control` / `socnavbench-s3dis-eth` exit `2`, `prepare_socnav_assets.py` exit `2`
+  `MISSING_REQUIRED_ASSETS`, 43 focused socnav map/asset tests pass). Decision: **keep #1456 open,
+  `state:blocked-external-input`** — all agent-executable tooling/inventory/row-policy criteria are
+  met; the three core asset criteria remain blocked on maintainer-staged licensed external data
+  (not compute-gated, so `COMPLETE-FIRST` does not apply). Docs-only; no asset staging, benchmark
+  run, SLURM submission, or research claim.
 * Recorded the **issue #1470 closure audit** at
   `docs/context/evidence/issue_1470_closure_audit_2026-07-06.md` (linked from the #1397 launch
   note). It maps each acceptance criterion for the oracle-imitation dataset-collection lane to its

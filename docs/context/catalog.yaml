@@ -358,6 +358,42 @@ entries:
     status: evidence
     freshness: evidence
     area: training_evidence
+  - path: docs/context/evidence/issue_4014_closure_audit/README.md
+    status: evidence
+    freshness: evidence
+    area: training_evidence
+  - path: docs/context/evidence/issue_4014_closure_audit/summary.json
+    status: evidence
+    freshness: evidence
+    area: training_evidence
+  - path: docs/context/evidence/issue_4585_matched_ppo_sequence_smoke_comparison/README.md
+    status: evidence
+    freshness: evidence
+    area: training_evidence
+  - path: docs/context/evidence/issue_4585_matched_ppo_sequence_smoke_comparison/summary.json
+    status: evidence
+    freshness: evidence
+    area: training_evidence
+  - path: docs/context/evidence/issue_4585_matched_ppo_sequence_smoke_comparison/throughput.csv
+    status: evidence
+    freshness: evidence
+    area: training_evidence
+  - path: docs/context/evidence/issue_4585_matched_ppo_sequence_smoke_comparison/SHA256SUMS
+    status: evidence
+    freshness: evidence
+    area: training_evidence
+  - path: docs/context/evidence/issue_4585_matched_ppo_sequence_smoke_comparison/source_perf/ppo.json
+    status: evidence
+    freshness: evidence
+    area: training_evidence
+  - path: docs/context/evidence/issue_4585_matched_ppo_sequence_smoke_comparison/source_perf/recurrent_ppo_lstm.json
+    status: evidence
+    freshness: evidence
+    area: training_evidence
+  - path: docs/context/evidence/issue_4585_matched_ppo_sequence_smoke_comparison/source_perf/ppo_mamba.json
+    status: evidence
+    freshness: evidence
+    area: training_evidence
   - path: docs/context/evidence/issue_3978_snqi_v1_recalibration/README.md
     status: evidence
     freshness: evidence

@@ -37,6 +37,17 @@ This is a fail-closed readiness projection, not a target artifact exporter.
 Use `--target socnavbench` or `--target hunavsim` on the dry-run CLI to include a selected target
 report in the stderr summary. Omitting `--target` reports both targets.
 
+## Target Export Manifest
+
+The converter can also write a deterministic, asset-free target export manifest
+(`robot_sf.scenario_interop_target_export_manifest.v1`) through `--target-out-dir`. This is a real
+JSON artifact contract for downstream adapters, but it is **not** a runnable SocNavBench or
+HuNavSim scenario file. When prerequisites are missing, the manifest remains fail-closed with
+`status: blocked`, `ready: false`, named blockers and warnings, and source scenario plus IR schema
+provenance.
+
+Generated files under `output/` remain worktree-local evidence unless promoted separately.
+
 ## IR contract
 
 The IR captures the scenario fields that are common across social-navigation testbeds:
@@ -70,23 +81,31 @@ uv run python scripts/tools/convert_scenario_interop.py --matrix configs/baselin
 
 # Write one <scenario_id>.ir.json per scenario
 uv run python scripts/tools/convert_scenario_interop.py \
-    --matrix configs/baselines/example_matrix.yaml --out-dir output/interop_ir
+  --matrix configs/baselines/example_matrix.yaml --out-dir output/interop_ir
+
+# Write fail-closed target export manifests
+uv run python scripts/tools/convert_scenario_interop.py \
+  --matrix configs/baselines/example_matrix.yaml \
+  --target socnavbench \
+  --target-out-dir output/issue_3285_target_export_manifest_smoke
 ```
 
-The CLI prints the IR to stdout and a `{"dry_run_summary": [...]}` block (scenario id, IR validity,
-unsupported-field count) to stderr. Exit code is non-zero if any scenario IR fails schema validation.
+The CLI prints the IR to stdout only when no output directory is requested and writes a
+`{"dry_run_summary": [...]}` block (scenario id, IR validity, unsupported-field count, target
+compatibility) to stderr. Exit code is non-zero if any scenario IR fails schema validation.
 
 ## Validation
 
 ```bash
 uv run python -m pytest tests/benchmark/test_scenario_interop.py -q          # 10 passed
 uv run python -m pytest tests/benchmark -k "scenario or convert or socnav" -q # 239 passed (issue cmd)
+uv run python scripts/tools/convert_scenario_interop.py --matrix configs/baselines/example_matrix.yaml --target socnavbench --target-out-dir output/issue_3285_target_export_manifest_smoke # 3 blocked manifests written
 ```
 
 ## Claim boundary / blocked-until
 
-- This is a **dry-run + IR validation** slice only. It makes no claim of simulator equivalence,
-  planner transferability, or benchmark-score parity (see the boundary in
+- This is a **dry-run + IR validation + target export manifest** slice only. It makes no claim of
+  simulator equivalence, planner transferability, or benchmark-score parity (see the boundary in
   [`issue_2928_...`](issue_2928_socnavbench_hunavsim_metric_correspondence.md)).
-- Emitting real SocNavBench/HuNavSim assets and running them is **blocked** on staged external
-  assets (#1456 / #1498 / #2414 / #1134) and is intentionally out of scope here.
+- Emitting real runnable SocNavBench/HuNavSim scenario assets and running them is **blocked** on
+  staged external assets (#1456 / #1498 / #2414 / #1134) and is intentionally out of scope here.

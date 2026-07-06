@@ -18,8 +18,9 @@ The fourth predeclared stage, **deadlock recovery**, is stateful (it needs a run
 to detect a stall), so it lives in :class:`DeadlockRecoveryMonitor` — an opt-in, disabled-by-default
 monitor that composes *around* the per-step transform. It only ever overrides angular velocity to
 rotate free of a freeze; it never adds forward speed, so it cannot override the hard stop/yield veto
-or worsen a collision. Wiring the monitor into the benchmark runtime step loop and running the
-paired ablation campaign remain deliberate follow-ups.
+or worsen a collision. The monitor is wired into the benchmark runtime step loop via
+:func:`robot_sf.benchmark.safety_wrapper_runtime.make_deadlock_recovery_monitor` (opt-in on the
+wrapper_on arm); running the paired ablation campaign remains a deliberate follow-up.
 
 Thresholds are predeclared modeling choices, diagnostic until durable evidence.
 """

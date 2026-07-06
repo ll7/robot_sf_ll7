@@ -132,6 +132,7 @@ from robot_sf.benchmark.safety_predicates import (
 from robot_sf.benchmark.safety_wrapper_runtime import (
     apply_runtime_safety_wrapper,
     ineligible_safety_wrapper_step_record,
+    make_deadlock_recovery_monitor,
     runtime_config_from_mapping,
     summarize_safety_wrapper_trace,
 )
@@ -1023,6 +1024,8 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         )
     tracking_precision_records: list[dict[str, Any]] = []
     safety_wrapper_trace: list[dict[str, Any]] = []
+    # Stateful fourth wrapper stage; one monitor per episode (no-op while disabled).
+    safety_wrapper_deadlock_monitor = make_deadlock_recovery_monitor(safety_wrapper_runtime)
     cbf_filter_trace: list[dict[str, Any]] = []
     min_separation_corrupted_values: list[float] = []
     config = _build_env_config(scenario, scenario_path=scenario_path)
@@ -1312,6 +1315,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                         runtime=safety_wrapper_runtime,
                         previous_ped_positions=previous_trace_ped_pos,
                         step_idx=step_idx,
+                        deadlock_monitor=safety_wrapper_deadlock_monitor,
                     )
                     policy_command = (
                         corrected_command[0],

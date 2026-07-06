@@ -17,10 +17,13 @@ from typing import Any
 import numpy as np
 
 from robot_sf.robot.safety_wrapper import (
+    DEADLOCK_RECOVERY_SCHEMA,
     INTERVENTION_DISABLED,
     INTERVENTION_HARD_STOP,
     INTERVENTION_NONE,
     INTERVENTION_SPEED_CAP,
+    DeadlockRecoveryConfig,
+    DeadlockRecoveryMonitor,
     SafetyContext,
     SafetyWrapperConfig,
     apply_safety_wrapper,
@@ -38,6 +41,17 @@ _PREDECLARED_THRESHOLD_FIELDS = (
     "ttc_veto_threshold_s",
     "clearance_veto_m",
 )
+_PREDECLARED_DEADLOCK_CONFIG = DeadlockRecoveryConfig()
+# Runtime field name (``deadlock_`` prefixed) -> pure DeadlockRecoveryConfig field name.
+_PREDECLARED_DEADLOCK_THRESHOLD_FIELDS = (
+    "patience_steps",
+    "recovery_steps",
+    "recovery_angular_velocity_rad_s",
+    "recovery_turn_sign",
+    "frozen_speed_eps_m_s",
+    "hazard_proximity_m",
+    "hazard_clearance_m",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +68,18 @@ class SafetyWrapperRuntimeConfig:
     fail_on_unsupported_command: bool = True
     record_step_trace: bool = False
     false_stop_lookahead_s: float = 2.0
+    # Fourth predeclared wrapper stage: stateful deadlock recovery (issue #3501).
+    # Off by default and only valid on the wrapper_on arm; thresholds are fixed and
+    # predeclared (locked to DeadlockRecoveryConfig defaults) so no per-planner tuning
+    # leaks into the ablation.
+    deadlock_recovery_enabled: bool = False
+    deadlock_patience_steps: int = 20
+    deadlock_recovery_steps: int = 10
+    deadlock_recovery_angular_velocity_rad_s: float = 0.5
+    deadlock_recovery_turn_sign: int = 1
+    deadlock_frozen_speed_eps_m_s: float = 0.05
+    deadlock_hazard_proximity_m: float = 2.0
+    deadlock_hazard_clearance_m: float = 0.5
 
 
 def runtime_config_from_mapping(
@@ -107,7 +133,29 @@ def validate_runtime_config(runtime: SafetyWrapperRuntimeConfig) -> SafetyWrappe
                     "safety_wrapper.wrapper_on thresholds must match "
                     f"predeclared ablation config: {field_name}={expected}"
                 )
+    _validate_deadlock_recovery(runtime)
     return runtime
+
+
+def _validate_deadlock_recovery(runtime: SafetyWrapperRuntimeConfig) -> None:
+    """Validate the opt-in fourth-stage deadlock-recovery arm and its predeclared thresholds."""
+
+    if bool(runtime.deadlock_recovery_enabled):
+        if not bool(runtime.enabled):
+            raise ValueError(
+                "safety_wrapper.deadlock_recovery_enabled=True requires enabled=True "
+                "(wrapper_on arm); deadlock recovery is the fourth wrapper stage"
+            )
+        for field_name in _PREDECLARED_DEADLOCK_THRESHOLD_FIELDS:
+            observed = float(getattr(runtime, f"deadlock_{field_name}"))
+            expected = float(getattr(_PREDECLARED_DEADLOCK_CONFIG, field_name))
+            if not math.isclose(observed, expected, rel_tol=0.0, abs_tol=1.0e-12):
+                raise ValueError(
+                    "safety_wrapper deadlock-recovery thresholds must match "
+                    f"predeclared ablation config: deadlock_{field_name}={expected}"
+                )
+    # Construct the pure config so invalid threshold ranges fail closed at validation time.
+    deadlock_recovery_config(runtime)
 
 
 def safety_wrapper_config(runtime: SafetyWrapperRuntimeConfig) -> SafetyWrapperConfig:
@@ -120,6 +168,37 @@ def safety_wrapper_config(runtime: SafetyWrapperRuntimeConfig) -> SafetyWrapperC
         ttc_veto_threshold_s=float(runtime.ttc_veto_threshold_s),
         clearance_veto_m=float(runtime.clearance_veto_m),
     )
+
+
+def deadlock_recovery_config(runtime: SafetyWrapperRuntimeConfig) -> DeadlockRecoveryConfig:
+    """Return the pure fourth-stage deadlock-recovery config with fixed predeclared thresholds."""
+
+    return DeadlockRecoveryConfig(
+        enabled=bool(runtime.deadlock_recovery_enabled),
+        patience_steps=int(runtime.deadlock_patience_steps),
+        recovery_steps=int(runtime.deadlock_recovery_steps),
+        recovery_angular_velocity_rad_s=float(runtime.deadlock_recovery_angular_velocity_rad_s),
+        recovery_turn_sign=int(runtime.deadlock_recovery_turn_sign),
+        frozen_speed_eps_m_s=float(runtime.deadlock_frozen_speed_eps_m_s),
+        hazard_proximity_m=float(runtime.deadlock_hazard_proximity_m),
+        hazard_clearance_m=float(runtime.deadlock_hazard_clearance_m),
+    )
+
+
+def make_deadlock_recovery_monitor(
+    runtime: SafetyWrapperRuntimeConfig,
+) -> DeadlockRecoveryMonitor:
+    """Build a fresh per-episode deadlock-recovery monitor.
+
+    The monitor is stateful (it counts frozen steps), so callers must build one per episode
+    and pass it to :func:`apply_runtime_safety_wrapper`. It is a no-op while the config is
+    disabled, so the caller can construct it unconditionally.
+
+    Returns:
+        A reset :class:`DeadlockRecoveryMonitor` bound to the predeclared recovery config.
+    """
+
+    return DeadlockRecoveryMonitor(deadlock_recovery_config(runtime))
 
 
 def _xy_rows(value: Any) -> np.ndarray:
@@ -322,11 +401,18 @@ def apply_runtime_safety_wrapper(
     runtime: SafetyWrapperRuntimeConfig,
     previous_ped_positions: np.ndarray | None,
     step_idx: int,
+    deadlock_monitor: DeadlockRecoveryMonitor | None = None,
 ) -> tuple[tuple[float, float], dict[str, Any]]:
     """Apply the opt-in wrapper to a two-component absolute command.
 
+    When ``deadlock_monitor`` is supplied and its config is enabled, the stateful fourth
+    stage runs after the pure per-step transform: it may override angular velocity to break a
+    frozen-robot stall, but never adds forward speed (so any upstream hard-stop veto holds).
+    Pass one monitor instance per episode (see :func:`make_deadlock_recovery_monitor`).
+
     Returns:
-        Corrected ``(linear, angular)`` command plus schema-tagged step record.
+        Corrected ``(linear, angular)`` command plus schema-tagged step record. The record
+        carries a ``deadlock_recovery`` sub-record whenever the monitor stage is active.
     """
 
     context, context_provenance = compute_safety_context_from_env(
@@ -357,6 +443,14 @@ def apply_runtime_safety_wrapper(
         float(wrapper_record["corrected_linear_velocity"]),
         float(wrapper_record["corrected_angular_velocity"]),
     )
+    if deadlock_monitor is not None and deadlock_monitor.config.enabled:
+        deadlock_record = deadlock_monitor.step(corrected[0], corrected[1], context)
+        # Forward speed is preserved by the monitor; only angular velocity may change.
+        corrected = (
+            float(deadlock_record["final_linear_velocity"]),
+            float(deadlock_record["final_angular_velocity"]),
+        )
+        step_record["deadlock_recovery"] = deadlock_record
     return corrected, step_record
 
 
@@ -578,6 +672,38 @@ def summarize_safety_wrapper_trace(
     false_stop_diagnostic = analyze_false_stop_diagnostic(
         trace, runtime=runtime, time_per_step_s=time_per_step_s
     )
+    deadlock_records = [
+        record["deadlock_recovery"]
+        for record in trace
+        if isinstance(record.get("deadlock_recovery"), Mapping)
+    ]
+    deadlock_detected_steps = [
+        int(record["step"])
+        for record in trace
+        if isinstance(record.get("deadlock_recovery"), Mapping)
+        and bool(record["deadlock_recovery"].get("deadlock_detected", False))
+        and "step" in record
+    ]
+    recovery_active_steps = [
+        int(record["step"])
+        for record in trace
+        if isinstance(record.get("deadlock_recovery"), Mapping)
+        and bool(record["deadlock_recovery"].get("recovery_active", False))
+        and "step" in record
+    ]
+    deadlock_summary = {
+        "schema_version": DEADLOCK_RECOVERY_SCHEMA,
+        "evidence_kind": "diagnostic_proxy",
+        "enabled": bool(deadlock_recovery_config(runtime).enabled),
+        "monitored_step_count": len(deadlock_records),
+        "frozen_step_count": sum(
+            1 for record in deadlock_records if bool(record.get("frozen", False))
+        ),
+        "deadlock_detected_step_count": len(deadlock_detected_steps),
+        "recovery_active_step_count": len(recovery_active_steps),
+        "first_deadlock_step": (min(deadlock_detected_steps) if deadlock_detected_steps else None),
+        "first_recovery_step": (min(recovery_active_steps) if recovery_active_steps else None),
+    }
     summary: dict[str, Any] = {
         "schema_version": SAFETY_WRAPPER_EPISODE_SUMMARY_SCHEMA,
         "arm_key": str(runtime.arm_key),
@@ -591,6 +717,7 @@ def summarize_safety_wrapper_trace(
         "false_stop_analysis_supported": False,
         "false_stop_proxy_supported": bool(false_stop_diagnostic.get("supported", False)),
         "false_stop_diagnostic": false_stop_diagnostic,
+        "deadlock_recovery": deadlock_summary,
         "step_count": int(step_count),
         "eligible_step_count": int(eligible_step_count),
         "intervention_counts": {
@@ -622,7 +749,9 @@ __all__ = [
     "analyze_false_stop_diagnostic",
     "apply_runtime_safety_wrapper",
     "compute_safety_context_from_env",
+    "deadlock_recovery_config",
     "ineligible_safety_wrapper_step_record",
+    "make_deadlock_recovery_monitor",
     "runtime_config_from_mapping",
     "safety_wrapper_config",
     "summarize_safety_wrapper_trace",

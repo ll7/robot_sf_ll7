@@ -101,3 +101,44 @@ def test_insufficient_seeds_blocks() -> None:
     )
     assert result["status"] == "blocked"
     assert "Insufficient paired seeds" in result["blockers"][0]
+
+
+def test_rank_sensitivity_preserves_falsy_fields_and_none_scenario_params() -> None:
+    """Regression for issue #4618 R1: keep seed=0 and do not crash on null params."""
+    records = []
+    for seed, metric in [(0, 1.0), (1, 2.0)]:
+        records.extend(
+            [
+                {
+                    "population_arm": "",
+                    "planner": "A",
+                    "seed": seed,
+                    "scenario_params": None,
+                    "metrics": {"clearance_m": metric},
+                },
+                {
+                    "population_arm": "",
+                    "planner": "B",
+                    "seed": seed,
+                    "scenario_params": {
+                        "population_arm": "fallback_arm",
+                        "planner": "fallback_planner",
+                        "seed": 99,
+                    },
+                    "metrics": {"clearance_m": metric - 0.5},
+                },
+            ]
+        )
+
+    result = compute_bootstrap_rank_sensitivity(
+        records,
+        metric_key="clearance_m",
+        planners=["A", "B"],
+        higher_is_safer=True,
+        num_bootstrap=10,
+        seed=42,
+    )
+
+    assert result["status"] == "ready"
+    assert result["common_seeds_count"] == 2
+    assert list(result["arms"]) == [""]

@@ -45,10 +45,16 @@ def compute_bootstrap_rank_sensitivity(  # noqa: C901,PLR0912,PLR0915
         # ``scenario_params`` may be absent or explicitly ``None`` (issue #4618 R1);
         # coerce to an empty mapping so the fallback lookups never raise AttributeError.
         scenario_params = rec.get("scenario_params") or {}
-        arm = rec.get("population_arm") or scenario_params.get("population_arm")
-        planner = rec.get("planner") or scenario_params.get("planner")
+        arm = rec.get("population_arm")
+        if arm is None:
+            arm = scenario_params.get("population_arm")
+        planner = rec.get("planner")
+        if planner is None:
+            planner = scenario_params.get("planner")
         # coerce to int seed
-        s_val = rec.get("seed") or scenario_params.get("seed")
+        s_val = rec.get("seed")
+        if s_val is None:
+            s_val = scenario_params.get("seed")
         if arm is None or planner is None or s_val is None:
             continue
         try:

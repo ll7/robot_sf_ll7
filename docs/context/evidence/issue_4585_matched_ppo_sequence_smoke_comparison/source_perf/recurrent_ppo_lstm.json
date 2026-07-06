@@ -1,0 +1,15 @@
+{
+  "eval_sec_per_checkpoint": 0.0,
+  "parameter_summary": {
+    "available": true,
+    "model_parameter_count": null,
+    "model_trainable_parameter_count": null,
+    "policy_parameter_count": 1009093,
+    "policy_trainable_parameter_count": 1009093
+  },
+  "per_checkpoint_perf": [],
+  "run_id": "recurrent_ppo_lstm_issue_4014_smoke_matched_20260706T114904Z",
+  "startup_sec": 0.0,
+  "total_wall_clock_sec": 10.4530933979986,
+  "train_env_steps_per_sec_mean": 195.92286436397094
+}

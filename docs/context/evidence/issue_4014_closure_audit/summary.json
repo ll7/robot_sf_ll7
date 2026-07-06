@@ -1,0 +1,47 @@
+{
+  "schema_version": "issue_4014.closure_audit.v1",
+  "issue": "ll7/robot_sf_ll7#4014",
+  "audit_date": "2026-07-06",
+  "claim_boundary": "closure audit only; no benchmark, paper, or dissertation claim promotion",
+  "status": "smoke_acceptance_met",
+  "acceptance_evidence": [
+    {
+      "criterion": "Mamba feature-extractor primitive exists with CPU-safe backend and fail-closed exact-backend behavior.",
+      "status": "met",
+      "evidence": "Merged PR #4162 added robot_sf/feature_extractors/mamba_extractor.py, exports, config surface, tests/test_mamba_feature_extractor.py, and design note docs/context/issue_4014_mamba_encoder_design.md."
+    },
+    {
+      "criterion": "True RecurrentPPO-LSTM lane exists rather than treating the bounded-observation LSTM extractor as recurrent PPO.",
+      "status": "met",
+      "evidence": "Merged PR #4234 added scripts/training/train_recurrent_ppo.py, issue_4014_ppo_lstm_recurrent_smoke.yaml, and dry-run/config tests. This PR adds matched MultiInputLstmPolicy smoke config and performance-summary emission; local validation produced recurrent_ppo_lstm_issue_4014_smoke_matched_20260706T114904Z.json with available policy parameter counts and throughput."
+    },
+    {
+      "criterion": "PPO-Mamba smoke lane registered.",
+      "status": "met",
+      "evidence": "Merged PR #4475 added configs/training/ppo/issue_4014_ppo_mamba_smoke.yaml plus config-parse/policy-selection/dry-run tests. This PR adds matched default_gym PPO-Mamba smoke config and local validation produced ppo_mamba_issue_4014_smoke_matched_20260706T114815.json with available policy parameter counts and throughput."
+    },
+    {
+      "criterion": "Parameter-count metadata populated for real PPO summaries.",
+      "status": "met",
+      "evidence": "Merged PR #4581 added parameter_summary emission in scripts/training/train_ppo.py and tests asserting dry-run placeholders. This PR extends the RecurrentPPO lane to emit the same summary shape after real training."
+    },
+    {
+      "criterion": "PPO, PPO-LSTM, and PPO-Mamba train under identical smoke settings with throughput and parameter counts.",
+      "status": "met",
+      "evidence": "This PR added matched configs and ran all three smoke rows locally: PPO ppo_issue_4014_smoke_matched_20260706T114711.json, RecurrentPPO-LSTM recurrent_ppo_lstm_issue_4014_smoke_matched_20260706T114904Z.json, and PPO-Mamba ppo_mamba_issue_4014_smoke_matched_20260706T114815.json. All three summaries have parameter_summary.available=true, policy parameter counts, total_wall_clock_sec, and train_env_steps_per_sec_mean."
+    },
+    {
+      "criterion": "Controlled diagnostic comparison artifact over fixed scenario set with explicit claim boundary.",
+      "status": "met",
+      "evidence": "This PR adds scripts/training/compare_issue_4014_ppo_sequence_models.py and generated docs/context/evidence/issue_4585_matched_ppo_sequence_smoke_comparison/{summary.json,throughput.csv,README.md,SHA256SUMS} from the three real smoke summaries."
+    }
+  ],
+  "closure_decision": "Close #4014 when this PR merges. The issue's diagnostic smoke acceptance criteria are met; no full benchmark campaign, Slurm/GPU submission, or paper/dissertation claim promotion was performed.",
+  "remaining_smallest_slice": "None for #4014 smoke acceptance. Longer campaign-scale runs remain outside this PR and should stay separate if needed.",
+  "forbidden_actions_confirmed": {
+    "compute_submit": false,
+    "merge": false,
+    "release": false,
+    "delete": false
+  }
+}

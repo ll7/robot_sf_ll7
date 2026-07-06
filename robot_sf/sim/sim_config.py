@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field, replace
 from math import ceil, isfinite
+from typing import Any
 
 from robot_sf.ped_npc.adversial_ped_force import AdversarialPedForceConfig
 from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
@@ -185,6 +186,14 @@ class SimulationSettings:
     """Optional RNG seed for deterministic response-law assignment."""
     population_size: int | None = None
     """Optional override to force exact population size spawned (issue #3574)."""
+    pedestrian_control_trace_labels: list[dict[str, Any]] | None = None
+    """Optional per-pedestrian response-law labels (issue #3574).
+
+    Each entry maps a ``simulator_index`` to a ``response_law`` (e.g. ``non_yielding``)
+    consumed by the simulator to build ``PedRobotForce`` response multipliers. Declared
+    as a first-class field (issue #4618 R3) instead of being attached dynamically so the
+    attribute is type-checked and discoverable on ``SimulationSettings``.
+    """
 
     peds_reset_follow_route_at_start: bool = False
     """Whether pedestrians following routes should reset to the start of their routes"""

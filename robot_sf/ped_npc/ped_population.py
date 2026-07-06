@@ -30,7 +30,7 @@ Example:
     ... )
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from math import atan2, ceil, cos, dist, sin
 
 import numpy as np
@@ -751,13 +751,26 @@ def populate_simulation(  # noqa: PLR0913
     """
     prepared_obstacles = prepare_obstacle_polygons(obstacle_polygons or [])
 
+    # ``force_population_size`` sets the EXACT total pedestrian count. Both the crowded-zone
+    # and route spawners honor the field independently, so when a scenario declares both
+    # routes and crowded zones a naive pass would spawn ``2 * force_population_size`` peds
+    # (issue #4618 R4). Split the forced total between the two active spawners so the merged
+    # population matches the requested size; any odd remainder is assigned to routes.
+    crowd_spawn_config = spawn_config
+    route_spawn_config = spawn_config
+    if spawn_config.force_population_size is not None and ped_crowded_zones and ped_routes:
+        zone_share = spawn_config.force_population_size // 2
+        route_share = spawn_config.force_population_size - zone_share
+        crowd_spawn_config = replace(spawn_config, force_population_size=zone_share)
+        route_spawn_config = replace(spawn_config, force_population_size=route_share)
+
     crowd_ped_states_np, crowd_groups, zone_assignments = populate_crowded_zones(
-        spawn_config,
+        crowd_spawn_config,
         ped_crowded_zones,
         obstacle_polygons=prepared_obstacles,
     )
     route_ped_states_np, route_groups, route_assignments, initial_sections = populate_ped_routes(
-        spawn_config,
+        route_spawn_config,
         ped_routes,
         obstacle_polygons=prepared_obstacles,
     )

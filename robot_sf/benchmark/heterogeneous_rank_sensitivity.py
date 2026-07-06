@@ -42,10 +42,13 @@ def compute_bootstrap_rank_sensitivity(  # noqa: C901,PLR0912,PLR0915
     # Group records by (arm, planner, seed)
     data: dict[str, dict[str, dict[int, float]]] = {}
     for rec in records:
-        arm = rec.get("population_arm") or rec.get("scenario_params", {}).get("population_arm")
-        planner = rec.get("planner") or rec.get("scenario_params", {}).get("planner")
+        # ``scenario_params`` may be absent or explicitly ``None`` (issue #4618 R1);
+        # coerce to an empty mapping so the fallback lookups never raise AttributeError.
+        scenario_params = rec.get("scenario_params") or {}
+        arm = rec.get("population_arm") or scenario_params.get("population_arm")
+        planner = rec.get("planner") or scenario_params.get("planner")
         # coerce to int seed
-        s_val = rec.get("seed") or rec.get("scenario_params", {}).get("seed")
+        s_val = rec.get("seed") or scenario_params.get("seed")
         if arm is None or planner is None or s_val is None:
             continue
         try:

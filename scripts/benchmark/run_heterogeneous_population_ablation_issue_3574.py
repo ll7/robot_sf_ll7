@@ -132,8 +132,11 @@ def main() -> int:
             rec["scenario_params"]["scenario_id"] = scenario_id
 
             records.append(rec)
-        except Exception as e:
-            print(f"Exception during simulation: {e}")
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as e:
+            # Narrow the handler (issue #4618 CI-B) to the runtime/config failures a
+            # simulation run can plausibly raise; annotate with the failing arm/planner/seed
+            # before re-raising so the traceback identifies the offending row.
+            print(f"Exception during simulation (arm={arm}, planner={planner}, seed={seed}): {e}")
             raise
 
     # Write out JSONL

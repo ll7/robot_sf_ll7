@@ -38,8 +38,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--durable-dir",
-        default="docs/context/evidence/issue_3574_mean_matched_heterogeneous_population",
-        help="Directory to write durable evidence files.",
+        default="output/issue_3574_mean_matched_harness/durable_evidence",
+        help=(
+            "Directory to write the (smoke-grade) report copy. Defaults to a git-ignored "
+            "output/ path (issue #4618 CI-C). Promoting these files into "
+            "docs/context/evidence/ requires catalog.yaml registration and honest, "
+            "smoke-evidence claim language; an 8-row CPU sweep does not prove rank stability."
+        ),
     )
     return parser.parse_args()
 
@@ -67,6 +72,23 @@ def main() -> int:  # noqa: C901,PLR0912,PLR0915
 
     records = load_jsonl(records_path)
     print(f"Loaded {len(records)} episode records.")
+
+    # Validate/skip incomplete rows (issue #4618 R5): downstream tabulation reads
+    # ``planner``/``seed``/``scenario_id``/``population_arm`` directly, so drop any record
+    # missing (or null in) those keys instead of raising a raw KeyError mid-report.
+    required_keys = ("planner", "seed", "scenario_id", "population_arm")
+    complete_records = [
+        rec for rec in records if all(rec.get(key) is not None for key in required_keys)
+    ]
+    skipped = len(records) - len(complete_records)
+    if skipped:
+        print(
+            f"Skipped {skipped} incomplete episode record(s) missing required keys {required_keys}."
+        )
+    records = complete_records
+    if not records:
+        print("Error: no complete episode records with required keys; nothing to report.")
+        return 1
 
     # Find planners and seeds
     planners = sorted({rec["planner"] for rec in records})
@@ -141,7 +163,9 @@ def main() -> int:  # noqa: C901,PLR0912,PLR0915
                 if vals:
                     mean_val = f"{sum(vals) / len(vals):.4f}"
                     cvar_val = f"{cvar(vals, 0.2, higher_is_safer=True):.4f}"
-            except Exception:  # noqa: BLE001
+            except (KeyError, ValueError, TypeError, ZeroDivisionError):
+                # Narrowed from a blind ``except`` (issue #4618 CI-B): a malformed or empty
+                # control trace leaves the CSV clearance cells blank rather than aborting.
                 pass
 
         csv_rows.append(

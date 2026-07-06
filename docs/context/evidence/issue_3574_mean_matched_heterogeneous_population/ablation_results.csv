@@ -1,9 +1,0 @@
-scenario_id,seed,planner,arm,mean_clearance_m,cvar_clearance_m
-issue_3574_classic_crossing_density_002,101,goal,heterogeneous,17.4056,4.6504
-issue_3574_classic_crossing_density_002,101,goal,mean_matched_homogeneous,16.5518,4.1272
-issue_3574_classic_crossing_density_002,102,goal,heterogeneous,12.7987,2.5869
-issue_3574_classic_crossing_density_002,102,goal,mean_matched_homogeneous,12.7987,2.5814
-issue_3574_classic_crossing_density_002,101,social_force,heterogeneous,13.4339,5.6183
-issue_3574_classic_crossing_density_002,101,social_force,mean_matched_homogeneous,12.3913,8.2494
-issue_3574_classic_crossing_density_002,102,social_force,heterogeneous,12.7980,2.5865
-issue_3574_classic_crossing_density_002,102,social_force,mean_matched_homogeneous,12.7980,2.5809

@@ -639,6 +639,12 @@ class PedSimulator(Simulator):
             if isinstance(behavior, SinglePedestrianBehavior):
                 behavior.set_robot_pose_provider(lambda: self.robot_poses)
 
+        # Pedestrian response-law multipliers (issue #3574) are intentionally NOT wired
+        # into the pedestrian-centric simulator (issue #4618 R2): the heterogeneous
+        # population ablation targets the robot-only benchmark simulator, and the ego
+        # pedestrian row would misalign the per-pedestrian multiplier vector. Pass
+        # ``None`` explicitly so PedRobotForce falls back to unscaled robot repulsion.
+        self.pedestrian_response_multipliers = None
         self.pysf_sim = PySFSimulator(
             self.pysf_state.pysf_states(),
             self.groups.groups_as_lists,
@@ -651,6 +657,7 @@ class PedSimulator(Simulator):
                 self.peds_have_obstacle_forces,
                 self.config.prf_config,
                 self.config.apf_config,
+                pedestrian_response_multipliers=None,
             ),
         )
         self.pysf_sim.peds.step_width = self.config.time_per_step_in_secs

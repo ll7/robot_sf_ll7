@@ -69,7 +69,12 @@ class PedRobotForce:
         if self.get_ped_response_multipliers is not None:
             multipliers = self.get_ped_response_multipliers()
             if multipliers is not None:
-                forces = forces * multipliers[:, np.newaxis]
+                multipliers = np.asarray(multipliers, dtype=float)
+                # Guard against a stale/mismatched multiplier vector (issue #4618 R6):
+                # the pedestrian count can change (e.g. an appended ego row), so only
+                # scale when the per-pedestrian multipliers line up with the force rows.
+                if multipliers.shape[0] == forces.shape[0]:
+                    forces = forces * multipliers[:, np.newaxis]
         self.last_forces = forces
         return forces
 

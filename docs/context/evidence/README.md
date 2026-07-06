@@ -176,9 +176,10 @@ is included.
   the issue blocked on missing durable comparable component campaign outputs.
 
 - `issue_3501_closure_audit_2026-07-04.md`: closure-audit integration report for
-  issue #3501. Maps merged PRs #3591, #4137, #4136, #4223, and #4298 planner-agnostic
-  safety wrapper and ablation/preregistration evidence to acceptance criteria
-  without promoting benchmark, Slurm, or paper-facing claims.
+  issue #3501 (reconciled 2026-07-06), mapping the merged safety-wrapper PRs and the
+  new deadlock-recovery stage to acceptance criteria. Records honestly that the two
+  remaining criteria are compute-gated (the paired ablation RUN and its report on
+  executed rows). No benchmark, Slurm, or paper-facing claims are promoted.
 
 - `issue_4245_closure_audit_2026-07-04.md`: closure-audit integration report for
   issue #4245. Maps merged PR #4257 standalone offline-pretraining checkpoint

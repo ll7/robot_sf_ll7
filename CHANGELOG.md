@@ -7,8 +7,177 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* **issue #4627 behavior-token motion-prior diagnostics (experimental, offline).** New
+  `experiments/behavior_tokens/` namespace with an offline, read-only prototype that turns saved
+  benchmark interaction traces into discrete "behavior tokens" for diagnostics. `extract_windows.py`
+  slides fixed-size windows over `algorithm_metadata.simulation_step_trace.steps` and converts each
+  into a documented, interpretable feature vector (clearance, time-to-contact proxy, robot-speed
+  statistics, stop/yield and oscillation proxies, near-conflict recovery); `quantize_trace_windows.py`
+  standardizes the finite feature columns and assigns each valid window a deterministic discrete
+  token id via k-means (scikit-learn with a NumPy-only fallback, token ids canonicalized by cluster
+  center so runs and libraries agree); `inspect_token_motifs.py` summarizes token distributions by
+  scenario/planner/outcome and exports heuristic *candidate* motif labels plus bounded example
+  windows. `schemas.py` holds the shared feature vocabulary and schema-version constants. Rows without
+  a usable trace are skipped with an explicit reason; non-derivable features are recorded as `null`
+  (never fabricated zeros). Covered by `tests/experiments/test_behavior_tokens.py`. Claim boundary:
+  very low priority, exploratory, diagnostic-only tooling — not validated metrics, benchmark evidence,
+  release-gate input, or paper/dissertation claim support, and no safety decision may depend on the
+  tokens. No new controller training, no transformer dependency, no benchmark pipeline integration,
+  no benchmark campaign run, and no SLURM/GPU submission.
+* **issue #4013 checkpoint-backed model-based action selection (diagnostic).** New
+  `configs/algos/learned_prediction_mpc_issue_4013_checkpoint.yaml` wires the trained short-horizon
+  predictor checkpoint into the `learned_prediction_mpc` adapter fail-closed (`allow_untrained_smoke`
+  and `fallback_to_constant_velocity` both false), and `tests/planner/test_learned_prediction_mpc_checkpoint.py`
+  proves the adapter's `plan()` emits a finite, bounded, goal-directed unicycle command from the
+  loaded checkpoint — in open space and with a pedestrian in the path — with the predictor reporting
+  `evidence_tier=checkpoint_loaded` (no fallback), plus a fail-closed check for a missing checkpoint.
+  This exercises the "model-based action selection runs on a smoke scenario" acceptance criterion of
+  #4013 end to end (previously only the predictor `predict()` path and metadata registration were
+  tested). Claim boundary: diagnostic-only path execution; not benchmark, navigation-quality, or
+  paper/dissertation evidence. The paired 3-arm smoke comparison (learned vs `cv_prediction_mpc` vs a
+  model-free baseline) and Phase 3 real-trajectory training remain open on #4013. No benchmark
+  campaign, no SLURM/GPU submission, no paper/dissertation claim edits.
+* **issue #4013 trained short-horizon pedestrian predictor (diagnostic).** New
+  `robot_sf/planner/learned_short_horizon_trainer.py` plus
+  `scripts/training/train_learned_short_horizon_predictor_issue_4013.py`
+  (`configs/training/learned_short_horizon_predictor_issue_4013_smoke.yaml`) train the small
+  state-based predictor from `robot_sf/planner/learned_short_horizon_predictor.py` on a seeded
+  synthetic robot-repulsion residual task and publish a checkpoint, training manifest, and metrics.
+  The trainer reuses the predictor's own architecture and feature encoding (newly exposed as
+  `build_predictor_module`, `predictor_io_dims`, `encode_predictor_features`, `pedestrian_world_state`)
+  so the checkpoint loads without shape drift. Loading the checkpoint yields
+  `evidence_tier=checkpoint_loaded` (not `diagnostic_untrained_smoke`), unblocking the "predictor
+  trained; model-based action selection runs" acceptance criterion of #4013. Local CPU run (seed
+  4013, 512 samples, 400 epochs): training loss `0.0987 -> 0.00044`. Claim boundary: the synthetic
+  task is a reproducible learnability probe, not real pedestrian data; `smoke evidence` only, not
+  benchmark, navigation-quality, or paper/dissertation evidence. No benchmark campaign, no SLURM/GPU
+  submission, no paper/dissertation claim edits. See `tests/planner/test_learned_short_horizon_trainer.py`.
+* **issue #1489 hybrid-learning synthesis recommendation builder.**
+  `robot_sf/benchmark/hybrid_evidence_matrix.py` now exposes
+  `build_hybrid_synthesis_report()` / `build_hybrid_synthesis_report_file()`, the synthesis-
+  deliverable half of the #1489 contract. Given the existing prerequisite/status matrix, it emits an
+  explicit per-mechanism recommendation (`continue`/`revise`/`stop`/`gather_more_evidence`) while
+  staying fail-closed: a `continue`/`revise` verdict is *promoted* (marked authoritative via
+  `synthesis_verdict_promoted`) only when the synthesis gate is open (≥2 durable `complete` lanes and
+  no invalid rows), so no single pre-result lane, launch packet, smoke run, fallback/degraded row, or
+  invalid row can promote a synthesis verdict. Terminal `stop` decisions on an executed
+  stress/full-matrix slice are surfaced but never promoted. Focused tests cover the blocked, single-
+  complete, two-complete (gate opens), terminal-stop, invalid-row, and missing-lane paths
+  (`tests/benchmark/test_hybrid_synthesis_report.py`, 8 pass). This advances the #1489 acceptance
+  criterion *"synthesis recommends continue/revise/stop/gather-more-evidence for each mechanism"* by
+  providing the machinery that emits it; the issue stays open (`Refs #1489`), blocked on component
+  campaigns producing ≥2 durable comparable `complete` lanes (#1470/#1472/#1474/#1475/#1358). No
+  benchmark campaign run, no SLURM/GPU submission, no paper/dissertation claim edits.
+* **issue #1489 synthesis-report CLI + first durable artifact.**
+  `scripts/validation/validate_hybrid_evidence_matrix.py` now accepts `--synthesis-report`, exposing
+  the #4628 `build_hybrid_synthesis_report()` machinery through a reproducible command (previously it
+  was Python/tests-only). The synthesis report now also echoes `rows_valid` so a consumer can
+  distinguish a fail-closed "blocked but valid" gate from a matrix whose rows failed validation. The
+  flag was run once on the committed component matrix
+  (`docs/context/evidence/issue_2274_hybrid_component_matrix_2026-06-05/matrix.yaml`) to emit the
+  first durable synthesis-report artifact,
+  `docs/context/evidence/issue_1489_synthesis_report_2026-07-06/synthesis_report.json`: `status:
+  blocked`, all five mechanisms `gather_more_evidence`, `promoted_verdict_count: 0` — the correct
+  conservative fail-closed result while component campaigns remain incomplete. Focused CLI + echo
+  tests added to `tests/benchmark/test_hybrid_synthesis_report.py`. Issue stays open (`Refs #1489`),
+  still blocked on ≥2 durable comparable `complete` component lanes. No benchmark campaign run, no
+  SLURM/GPU submission, no paper/dissertation claim edits.
+
+### Fixed
+
+* **issue #4183 hybrid_global_rl diagnostic runner — executable baseline arm.**
+  The paired diagnostic runner `scripts/benchmark/run_hybrid_global_rl_diagnostic_issue_4183.py` now
+  (a) validates episodes against the canonical `robot_sf/benchmark/schemas/episode.schema.v1.json`
+  instead of a stale strict schema that rejected native PPO episode records with
+  `additionalProperties` errors, and (b) hydrates the benchmark-promoted learned checkpoint from its
+  public GitHub release before preflight (`--no-hydrate` to skip). The #4183 preflight
+  (`robot_sf/benchmark/hybrid_global_rl_diagnostic.py`) also recognizes a hydrated release asset
+  whose cached file name (`<model_id>-model.zip`) differs from the registry `local_path`
+  (`model.zip`), so a present-and-loadable checkpoint no longer reports
+  `blocked_missing_learned_checkpoint`. With these fixes the unconditioned (baseline) arm produces
+  native episode rows (3/3 seeds) and the packet advances from `blocked_no_valid_episode_rows` to
+  `completed_with_fail_closed_exclusions`. Diagnostic-tier only; the route-conditioned arm remains
+  fail-closed because the benchmark observation carries no `occupancy_grid` channel for the
+  grid-route waypoint provider, so route-conditioned effect evidence stays blocked (see #4183).
+  New regression tests: `tests/benchmark/test_hybrid_global_rl_diagnostic_issue_4183.py` and
+  `tests/benchmark/test_issue_4183_paired_runner.py` (30 pass). No benchmark campaign, no SLURM/GPU
+  submission, no paper/dissertation claim edits.
+* **issue #1126 SDD curation decision packet — runnable import command.**
+  `scripts/tools/sdd_curation_preflight.py::build_decision_packet` now emits an `import` handoff
+  command that actually parses against the canonical importer
+  `scripts/tools/import_sdd_scenarios.py`: it uses the importer's real flags `--annotations` and
+  `--out-dir` (previously `--annotation`/`--output-dir`, which the importer rejects with exit `2`)
+  and includes the *required* `--meters-per-pixel` scale assumption (previously omitted). A new
+  `--decision-meters-per-pixel` CLI flag records the scene scale in `curation_parameters`
+  (`meters_per_pixel`); when unset the command carries an explicit `<meters-per-pixel>` placeholder
+  the curator must fill from the selected scene's calibration. Regression tests parse the generated
+  command with the importer's own parser so the handoff cannot silently drift again
+  (`tests/tools/test_sdd_curation_preflight.py`, 15 pass; 75 pass across the SDD suite). This closes
+  a gap in an acceptance criterion of #1126 (record import command + scale assumptions); the issue
+  itself stays open, blocked on BYO real SDD annotation staging (raw-data + checksum/license
+  provenance). No real SDD data touched, no benchmark campaign, no SLURM/GPU submission, no
+  paper/dissertation claim edits.
+
 ### Changed
 
+* Added the issue #4018 density-curriculum closure audit and matched 96-timestep CPU diagnostic
+  smoke evidence bundle. The note maps acceptance criteria to merged PRs #4169, #4478, and #4580,
+  records readiness status `ready_diagnostic_smoke`, and keeps the claim boundary diagnostic-only:
+  not benchmark evidence, not a training-result quality claim, and not a paper or dissertation
+  claim.
+* Recorded the **issue #2918 closure audit** at
+  `docs/context/evidence/issue_2918_closure_audit.md` (linked from the #2918 preflight context
+  note). It maps each acceptance criterion to its merged PR (#3754 staging/preflight contract,
+  #4566 fixture extraction pipeline + CLI) and to a reproduced validation run (23 focused tests
+  pass; fixture smoke emits bounded proxy-placeholder priors; the manifest checker fails closed
+  with `contract_status: blocked` and `manage_external_data.py list` shows all external datasets
+  `missing`/`incomplete`). The agent-executable slice is complete; the only residual — a
+  dataset-backed prior smoke from real staged trajectories — is gated on a license-compatible
+  external dataset the project does not hold and stays tracked by #3065/#2657/#1498. Docs-only; no
+  external-data ingest, no calibrated/representative prior claim, no benchmark/SLURM run.
+* Recorded the **issue #4437 closure audit** at
+  `docs/context/evidence/issue_4437_closure_audit_2026-07-06.md` (indexed in
+  `docs/context/catalog.yaml`). It maps each acceptance criterion of the closure-audit hygiene lane
+  to merged-PR evidence: the read-only candidate/classification tool (#4440
+  `open_issue_closure_audit.py`), the comment templates + dry-run mechanics (#4503
+  `closure_mechanics.py`), and the human-gated close path requiring both `--close-issues` and
+  `--apply` (#4571). The **enablement tooling is complete and validated** (24 focused tests pass; a
+  live read-only run fails closed with a schema-valid packet on the GitHub search rate-limit), but
+  two acceptance criteria remain open — the audit **execution** write pass and the final #4437
+  **summary comment** — both requiring GitHub issue comment/close authority. The audit therefore
+  keeps #4437 open with a dispatchable residual checklist (`Refs #4437`). Docs-only; no queue edits,
+  new issues, benchmark execution, Slurm/GPU submission, or research claim.
+* Recorded the **issue #1126 SDD-curation closure audit** at
+  `docs/context/evidence/issue_1126_closure_audit_2026-07-06.md` (linked from the #1126 context
+  note). It maps each acceptance criterion to merged-PR evidence (#1091 importer, #3765 fail-closed
+  preflight, #4564 decision packet, plus this PR's import-command fix) and to freshly reproduced
+  fail-closed validation, then records the closure decision: **keep open**, blocked on BYO licensed
+  SDD annotation staging (the only remaining criteria require real staged data, which does not exist
+  locally). Docs + support-tooling only.
+* Recorded the **issue #1456 closure audit** at
+  `docs/context/evidence/issue_1456_closure_audit.md` (registered in `docs/context/catalog.yaml`).
+  It maps every acceptance criterion — original issue body plus the appended `agent-exec-spec:v1`
+  slice — to merged-PR evidence (#1924 external-data assistant, #2400 status note, #1596 row policy,
+  #3755 fail-closed readiness vs placeholder shells, #4526 tightened `socnavbench-control` contract)
+  and to a reproduced fail-closed validation (`manage_external_data.py --json check
+  socnavbench-control` / `socnavbench-s3dis-eth` exit `2`, `prepare_socnav_assets.py` exit `2`
+  `MISSING_REQUIRED_ASSETS`, 43 focused socnav map/asset tests pass). Decision: **keep #1456 open,
+  `state:blocked-external-input`** — all agent-executable tooling/inventory/row-policy criteria are
+  met; the three core asset criteria remain blocked on maintainer-staged licensed external data
+  (not compute-gated, so `COMPLETE-FIRST` does not apply). Docs-only; no asset staging, benchmark
+  run, SLURM submission, or research claim.
+* Recorded the **issue #1470 closure audit** at
+  `docs/context/evidence/issue_1470_closure_audit_2026-07-06.md` (linked from the #1397 launch
+  note). It maps each acceptance criterion for the oracle-imitation dataset-collection lane to its
+  merged/closed evidence (#1469 launch packet + validator, #2441 completed Slurm collection, #2989
+  durable git-tracked trace bundle) and to a reproduced validation run
+  (`validate_oracle_imitation_launch_packet.py` → `status=valid`, 6 scenarios, 12 episodes; 54
+  focused imitation tests pass). The lane's trace-collection scope is complete (closeout state
+  `dataset_ready`); the residual durable trace-URI registry (`training_ready=true`) is owned by
+  #2655 and the imitation-training benchmark by #1496, both out of #1470's scope. Docs-only; no
+  trace/NPZ materialization, training run, Slurm/GPU submission, or research claim.
 * Recorded the **issue #2312 closure audit** at
   `docs/context/evidence/issue_2312_closure_audit.md` (linked from the #2312 context note). It maps
   each acceptance criterion to its merged PR (#3762 manifest+validator, #3772 #1472 campaign gate,
@@ -65,6 +234,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `scripts/benchmark/preflight_campaign_checkpoints.py --config <campaign> [--stage]` before `sbatch`
   (exit `0` resolvable/staged, `2` config error, `3` unresolvable → do not submit). Provisioning
   preflight only: it runs no benchmark, submits no Slurm job, and is not benchmark evidence.
+* **issue #3481 — opt-in HSFM body-orientation alignment torque (`hsfm_alignment_torque_v1`).**
+  A new pedestrian-model selector that decouples pedestrian body orientation `phi` from the
+  instantaneous total-force direction: instead of snapping the heading each step (as
+  `hsfm_total_force_v1` does), the orientation relaxes toward the desired direction via a damped
+  second-order alignment torque (`k_theta` stiffness, `k_omega` damping, bounded turn rate). Adds the
+  pure helpers `wrap_to_pi` and `step_alignment_torque_heading` in
+  `robot_sf/sim/pedestrian_model_variants.py`, an `AlignmentTorqueConfig` opt-in surface on
+  `SimulationSettings` (validated fail-closed), scenario-config selection, and simulator-seam
+  angular-velocity state. Default pedestrian model and all prior selectors are unchanged. This
+  delivers the maintainer-named remaining code prerequisite for #3481 (the HSFM
+  heading-state/alignment-torque Definition-of-Done bullet); evidence tier stays
+  diagnostic/prototype — no calibrated-realism, benchmark, or paper claim. See
+  `docs/context/issue_3481_hsfm_alignment_torque.md`.
 * Extended the **Package C readiness helper** so issue #4547 can commit the real rerun artifact from
   the retained #2916 coupling report. `scripts/tools/prediction_package_c_readiness.py` now accepts
   `--output-markdown` alongside `--output-json`, which lets the cheap local lane write the durable

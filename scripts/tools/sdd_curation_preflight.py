@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import shlex
 import sys
 from pathlib import Path
@@ -137,10 +138,15 @@ def classify_curation_readiness(
             "as benchmark evidence (forced to proxy_schema_smoke)."
         )
 
-    probe_satisfiable = True
+    probe_satisfiable = False
     if annotation_probe is not None:
         probe_satisfiable = bool(annotation_probe.get("selection_satisfiable", False))
         blockers.extend(annotation_probe.get("blockers", []))
+    elif dataset_backed:
+        blockers.append(
+            "SDD is dataset-backed, but no candidate annotation was probed; select a scene/video "
+            "annotation before promoting curation output as benchmark evidence."
+        )
 
     # Evidence status: dataset-backed + probe-clean is the only benchmark-candidate path.
     if dataset_backed:
@@ -234,23 +240,53 @@ def build_decision_packet(
     max_pedestrians: int,
     dataset_id: str,
     output_dir: Path,
+    meters_per_pixel: float | None = None,
 ) -> dict[str, Any]:
-    """Build a metadata-only handoff packet for the first real SDD curation run."""
+    """Build a metadata-only handoff packet for the first real SDD curation run.
+
+    The generated ``import`` command must be *runnable* against the canonical importer
+    ``scripts/tools/import_sdd_scenarios.py`` so a future curator can copy it verbatim once real
+    SDD annotations are staged. That importer requires ``--annotations`` (not ``--annotation``),
+    ``--out-dir`` (not ``--output-dir``), and a ``--meters-per-pixel`` scale assumption; emitting
+    the wrong flags or omitting the required scale makes the handoff command fail closed at argparse
+    before any data is touched.
+
+    ``meters_per_pixel`` records the scene scale assumption required by the issue acceptance
+    criteria. It is scene-dependent and unknown until real BYO annotations are staged, so when it is
+    ``None`` the command carries an explicit ``<meters-per-pixel>`` placeholder the curator must fill
+    from the selected scene's calibration, and the packet records ``meters_per_pixel: null``.
+    """
+    # Fail closed on an invalid scale rather than emitting a command the importer rejects (or, for
+    # NaN/inf, silently accepts and turns into garbage geometry). The importer requires
+    # ``--meters-per-pixel > 0``; mirror that here and additionally reject non-finite values so the
+    # generated handoff command stays runnable. ``None`` is the intended "unknown scale" case and
+    # is preserved as a fill-in placeholder below.
+    if meters_per_pixel is not None and (
+        not math.isfinite(meters_per_pixel) or meters_per_pixel <= 0
+    ):
+        raise ValueError(f"meters_per_pixel must be a finite value > 0, got {meters_per_pixel!r}")
     annotation_placeholder = "<staged-sdd>/<scene>/<video>/annotations.txt"
     annotation_command_arg: str | Path = (
         annotation if annotation is not None else annotation_placeholder
     )
+    # meters-per-pixel is a *required* importer argument but is scene-specific, so keep a fill-in
+    # placeholder token until the curator records the selected scene's calibrated scale.
+    meters_per_pixel_arg = (
+        repr(meters_per_pixel) if meters_per_pixel is not None else "<meters-per-pixel>"
+    )
     import_command = " ".join(
         [
             "uv run python scripts/tools/import_sdd_scenarios.py",
-            "--annotation",
+            "--annotations",
             _shell_arg(annotation_command_arg),
+            "--out-dir",
+            _shell_arg(output_dir),
             "--dataset-id",
             _shell_arg(dataset_id),
-            "--output-dir",
-            _shell_arg(output_dir),
             "--label",
             _shell_arg(label),
+            "--meters-per-pixel",
+            meters_per_pixel_arg,
             "--min-track-points",
             str(min_track_points),
             "--max-pedestrians",
@@ -284,6 +320,7 @@ def build_decision_packet(
         "curation_parameters": {
             "dataset_id": dataset_id,
             "label": import_sdd_scenarios.normalize_sdd_label(label),
+            "meters_per_pixel": meters_per_pixel,
             "min_track_points": min_track_points,
             "max_pedestrians": max_pedestrians,
             "output_dir": str(output_dir),
@@ -366,6 +403,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Output directory to place in the decision packet import command.",
     )
     parser.add_argument(
+        "--decision-meters-per-pixel",
+        type=float,
+        default=None,
+        help=(
+            "Scene meters-per-pixel scale assumption to record in the decision packet import "
+            "command. Scene-specific; when omitted the command carries a <meters-per-pixel> "
+            "placeholder the curator must fill from the selected scene's calibration."
+        ),
+    )
+    parser.add_argument(
         "--require-benchmark-ready",
         action="store_true",
         help="Exit non-zero unless curation output may be promoted as benchmark evidence.",
@@ -405,6 +452,7 @@ def main(argv: list[str] | None = None) -> int:
             max_pedestrians=args.max_pedestrians,
             dataset_id=args.decision_dataset_id,
             output_dir=args.decision_output_dir,
+            meters_per_pixel=args.decision_meters_per_pixel,
         )
         args.write_decision_packet.parent.mkdir(parents=True, exist_ok=True)
         args.write_decision_packet.write_text(

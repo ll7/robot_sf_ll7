@@ -25,6 +25,8 @@ import json
 import sys
 from pathlib import Path
 
+import yaml
+
 from robot_sf.benchmark.campaign_checkpoint_preflight import (
     CampaignCheckpointPreflightError,
     check_campaign_arm_checkpoints_preflight_from_config,
@@ -99,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.json:
             print(json.dumps({"status": "blocked", "arms": list(exc.arms)}, indent=2))
         return EXIT_BLOCKED
-    except (FileNotFoundError, TypeError, ValueError) as exc:
+    except (FileNotFoundError, TypeError, ValueError, yaml.YAMLError) as exc:
         print(f"error: could not evaluate campaign config: {exc}", file=sys.stderr)
         return EXIT_CONFIG_ERROR
 

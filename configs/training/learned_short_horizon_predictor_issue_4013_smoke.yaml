@@ -1,0 +1,23 @@
+# Issue #4013 diagnostic short-horizon predictor training config.
+#
+# Diagnostic-only: trains the small state-based pedestrian predictor on a seeded
+# synthetic robot-repulsion task so the learned-prediction MPC smoke lane can load
+# real learned weights (evidence_tier=checkpoint_loaded) instead of the untrained
+# zero-initialized smoke model. This is CPU-only, is NOT real pedestrian data, and
+# is NOT benchmark or paper-facing evidence.
+#
+# Predictor-facing dimensions (max_pedestrians, horizon_steps, rollout_dt,
+# hidden_dim) match configs/algos/learned_prediction_mpc_issue_4013_smoke.yaml so
+# the produced checkpoint loads without any shape mismatch.
+max_pedestrians: 16
+horizon_steps: 4
+rollout_dt: 0.2
+hidden_dim: 64
+device: cpu
+seed: 4013
+num_samples: 512
+epochs: 400
+learning_rate: 0.001
+repulsion_gain: 1.0
+scene_radius: 4.0
+output_dir: output/models/issue_4013/short_horizon_predictor

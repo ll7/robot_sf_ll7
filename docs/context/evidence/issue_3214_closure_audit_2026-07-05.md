@@ -1,8 +1,14 @@
 # Issue #3214 Closure Audit
 
+> **Superseded by [`issue_3214_closure_audit_2026-07-06.md`](issue_3214_closure_audit_2026-07-06.md).**
+> The 2026-07-06 audit revises this `blocked_not_closable` reading to **closable as a completed
+> negative result**: registry promotion of the gate-failing checkpoint is prohibited by fail-closed
+> policy (not an unmet criterion), and the control-law-side change is a distinct out-of-scope
+> follow-up rather than a #3214 acceptance criterion. Retained here for the decision trail.
+
 Issue: [#3214](https://github.com/ll7/robot_sf_ll7/issues/3214)
 
-Status on 2026-07-05: `blocked_not_closable`.
+Status on 2026-07-05: `blocked_not_closable` (revised 2026-07-06 — see supersede pointer above).
 
 This audit maps the issue acceptance criteria to merged evidence and explains why the issue should
 not be closed yet. It is a closure-audit artifact only: no Slurm scheduler or GPU job was

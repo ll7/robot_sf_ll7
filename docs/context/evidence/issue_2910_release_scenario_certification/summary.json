@@ -1,0 +1,46 @@
+{
+  "schema_version": "release_scenario_certification_summary.v1",
+  "issue": 2910,
+  "created_at_utc": "2026-07-06T12:56:00Z",
+  "source_scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+  "certification_schema": "scenario_cert.v1",
+  "generation_command": "uv run python - <<'PY' ... certify_scenario_file(Path('configs/scenarios/classic_interactions_francis2023.yaml')) ... PY",
+  "scenario_count": 48,
+  "classification_counts": {
+    "geometrically_infeasible": 2,
+    "hard_but_solvable": 27,
+    "knife_edge": 9,
+    "valid": 10
+  },
+  "benchmark_eligibility_counts": {
+    "eligible": 37,
+    "excluded": 2,
+    "stress_only": 9
+  },
+  "publication_gate_status": "scenario_cert.v1:blocked",
+  "publication_blocker": "scenario_cert.v1 summary is not publication-accepted: 2 excluded scenarios and 9 stress-only scenarios remain in configs/scenarios/classic_interactions_francis2023.yaml.",
+  "excluded_scenarios": [
+    {
+      "scenario_id": "francis2023_narrow_doorway",
+      "classification": "geometrically_infeasible",
+      "reason": "no_inflated_collision_free_path: Planning failed after trying inflation radii [2]"
+    },
+    {
+      "scenario_id": "francis2023_exiting_elevator",
+      "classification": "geometrically_infeasible",
+      "reason": "no_inflated_collision_free_path: Planning aborted start/goal is in invalid cell; resample start/goal retry.; last error: start at (12.25, 10.25) is in invalid cell (inflated area); choose free/start/goal cell."
+    }
+  ],
+  "stress_only_scenarios": [
+    "classic_cross_trap_low",
+    "classic_cross_trap_medium",
+    "classic_cross_trap_high",
+    "classic_doorway_low",
+    "classic_doorway_medium",
+    "classic_doorway_high",
+    "francis2023_entering_room",
+    "francis2023_exiting_room",
+    "francis2023_entering_elevator"
+  ],
+  "claim_boundary": "CPU-only scenario_cert.v1 summary for the v0.1 release scenario matrix. This is fail-closed publication-gate evidence only; it does not run a benchmark campaign or promote release 0.0.2 table rows to publication-ready benchmark claims."
+}

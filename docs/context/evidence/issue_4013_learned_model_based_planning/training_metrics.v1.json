@@ -1,0 +1,7 @@
+{
+  "epochs": 400,
+  "final_loss": 0.00043628268758766353,
+  "initial_loss": 0.0987299382686615,
+  "loss_reduction": 0.09829365558107384,
+  "num_samples": 512
+}

@@ -1,0 +1,75 @@
+{
+  "artifact_dir": "docs/context/evidence/issue_4585_matched_ppo_sequence_smoke_comparison",
+  "claim_boundary": "diagnostic-only matched smoke comparison; not benchmark-strength, paper-grade, or dissertation claim evidence",
+  "closure_eligible": true,
+  "closure_note": "All three smoke rows supplied real parameter and throughput summaries. This supports #4014 closure at diagnostic smoke tier only.",
+  "evidence_tier": "diagnostic-only",
+  "follow_up_issue": "ll7/robot_sf_ll7#4585",
+  "issue": "ll7/robot_sf_ll7#4014",
+  "required_models": [
+    "ppo",
+    "recurrent_ppo_lstm",
+    "ppo_mamba"
+  ],
+  "rows": {
+    "ppo": {
+      "config_path": "configs/training/ppo/issue_4014_ppo_smoke_matched.yaml",
+      "config_sha256": "10eb8a03592446af51355b3b0b7ac61f521f416743f4d20e0bced6e7d8766888",
+      "fallback_degraded_status": "not_reported",
+      "model_key": "ppo",
+      "parameter_summary": {
+        "model_parameter_count": null,
+        "model_trainable_parameter_count": null,
+        "policy_parameter_count": 115013,
+        "policy_trainable_parameter_count": 115013
+      },
+      "perf_summary_path": "docs/context/evidence/issue_4585_matched_ppo_sequence_smoke_comparison/source_perf/ppo.json",
+      "perf_summary_sha256": "50a76a192671f8f0d3f569619a1fd30eafe9846cdf4d6be676303699d0aa4e7e",
+      "run_id": "ppo_issue_4014_smoke_matched_20260706T114711",
+      "throughput": {
+        "total_wall_clock_sec": 10.72521736699855,
+        "train_env_steps_per_sec_mean": 509.5395786006907
+      }
+    },
+    "ppo_mamba": {
+      "config_path": "configs/training/ppo/issue_4014_ppo_mamba_smoke_matched.yaml",
+      "config_sha256": "7f075da1ea471c889659d032ff29beb3c5a57e72ffa6046e488d35e0d9e752fb",
+      "fallback_degraded_status": "not_reported",
+      "model_key": "ppo_mamba",
+      "parameter_summary": {
+        "model_parameter_count": null,
+        "model_trainable_parameter_count": null,
+        "policy_parameter_count": 53781,
+        "policy_trainable_parameter_count": 53781
+      },
+      "perf_summary_path": "docs/context/evidence/issue_4585_matched_ppo_sequence_smoke_comparison/source_perf/ppo_mamba.json",
+      "perf_summary_sha256": "a4f68c707872f9386ca5d3187c49c5ee445d86cd69a15716f67cd257e596893f",
+      "run_id": "ppo_mamba_issue_4014_smoke_matched_20260706T114815",
+      "throughput": {
+        "total_wall_clock_sec": 15.94840798000223,
+        "train_env_steps_per_sec_mean": 308.8973486366601
+      }
+    },
+    "recurrent_ppo_lstm": {
+      "config_path": "configs/training/ppo/issue_4014_recurrent_ppo_lstm_smoke_matched.yaml",
+      "config_sha256": "6d9351ba9e0ef988b33fca6196848d3398259dfc34df854ec1b652f49b308fde",
+      "fallback_degraded_status": "not_reported",
+      "model_key": "recurrent_ppo_lstm",
+      "parameter_summary": {
+        "model_parameter_count": null,
+        "model_trainable_parameter_count": null,
+        "policy_parameter_count": 1009093,
+        "policy_trainable_parameter_count": 1009093
+      },
+      "perf_summary_path": "docs/context/evidence/issue_4585_matched_ppo_sequence_smoke_comparison/source_perf/recurrent_ppo_lstm.json",
+      "perf_summary_sha256": "f3beac994e1d526d311fd2192bd0a8ca5a6cddd6642c4716aeb7d3eacd6b4259",
+      "run_id": "recurrent_ppo_lstm_issue_4014_smoke_matched_20260706T114904Z",
+      "throughput": {
+        "total_wall_clock_sec": 10.4530933979986,
+        "train_env_steps_per_sec_mean": 195.92286436397094
+      }
+    }
+  },
+  "schema_version": "issue_4014.ppo_sequence_smoke_comparison.v1",
+  "smoke_not_campaign_evidence": true
+}

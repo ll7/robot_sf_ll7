@@ -1,0 +1,24 @@
+{
+    "baseline": {
+        "collision_rate": 0.0,
+        "eval_return": -1.6966123857833315,
+        "final_stage_reached": "N/A (Disabled)",
+        "policy_id": "issue_4018_fixed_density_smoke",
+        "runtime_hours": 0.0017510780386106085,
+        "success_rate": 0.0,
+        "timesteps_to_convergence": 96.0,
+        "total_timesteps_executed": 96
+    },
+    "claim_boundary": "diagnostic comparison only; not benchmark evidence",
+    "curriculum": {
+        "collision_rate": 0.0,
+        "eval_return": -0.8845595174481995,
+        "final_stage_reached": "dense",
+        "policy_id": "issue_4018_density_curriculum_smoke",
+        "runtime_hours": 0.0017741499397258547,
+        "success_rate": 0.0,
+        "timesteps_to_convergence": 96.0,
+        "total_timesteps_executed": 96
+    },
+    "schema_version": "density_curriculum_comparison_report.v1"
+}

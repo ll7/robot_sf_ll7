@@ -1,0 +1,25 @@
+{
+    "blockers": [],
+    "claim_boundary": "comparison readiness only; not benchmark evidence or a training-result claim",
+    "comparison": {
+        "baseline": {
+            "density_curriculum_enabled": false,
+            "path": "configs/training/ppo/ablations/issue_4018_fixed_density_smoke.yaml",
+            "policy_id": "issue_4018_fixed_density_smoke",
+            "total_timesteps": 96
+        },
+        "curriculum": {
+            "density_curriculum_enabled": true,
+            "path": "configs/training/ppo/ablations/issue_4018_density_curriculum_smoke.yaml",
+            "policy_id": "issue_4018_density_curriculum_smoke",
+            "total_timesteps": 96
+        },
+        "dry_run": false
+    },
+    "issue": "ll7/robot_sf_ll7#4018",
+    "manifest_path": "<ignored local validation directory>/comparison_manifest.json",
+    "next_empirical_action": "No issue-4018 diagnostic-smoke blocker remains. Any longer run or benchmark campaign must be launched under a separate campaign/provenance lane before performance claims.",
+    "notes": ["paired manifest is ready for diagnostic smoke comparison review"],
+    "schema_version": "issue_4018.density_curriculum_readiness.v1",
+    "status": "ready_diagnostic_smoke"
+}

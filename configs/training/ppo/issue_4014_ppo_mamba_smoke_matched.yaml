@@ -1,0 +1,41 @@
+policy_id: ppo_mamba_issue_4014_smoke_matched
+scenario_config: ../../scenarios/sets/classic_cross_trap_subset.yaml
+total_timesteps: 2048
+seeds: [4014]
+randomize_seeds: false
+num_envs: 1
+worker_mode: dummy
+tracking:
+  tensorboard: false
+feature_extractor: mamba
+feature_extractor_kwargs:
+  backend: torch_ssm_lite
+  d_model: 64
+  d_state: 16
+  d_conv: 4
+  expand: 2
+  num_layers: 1
+  dropout_rate: 0.0
+  sequence_source: rays
+  drive_hidden_dims: [32, 16]
+env_overrides:
+  observation_mode: default_gym
+env_factory_kwargs:
+  reward_name: route_completion_v2
+convergence:
+  success_rate: 0.8
+  collision_rate: 0.1
+  plateau_window: 512
+evaluation:
+  frequency_episodes: 0
+  evaluation_episodes: 3
+  randomize_seeds: false
+  step_schedule:
+    - every_steps: 1024
+ppo_hyperparams:
+  learning_rate: 0.0001
+  n_steps: 128
+  batch_size: 64
+  n_epochs: 2
+  gamma: 0.99
+  gae_lambda: 0.95

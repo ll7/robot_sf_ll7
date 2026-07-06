@@ -44,3 +44,13 @@ def test_recurrent_ppo_dry_run_writes_manifest(tmp_path: Path) -> None:
         "shared_lstm": False,
     }
     assert "Slurm or GPU submission" in payload["out_of_scope"]
+
+
+def test_recurrent_ppo_config_uses_multi_input_lstm_policy() -> None:
+    """Matched smoke config uses the non-nested dict RecurrentPPO policy."""
+    config = train_recurrent_ppo.load_recurrent_ppo_config(
+        "configs/training/ppo/issue_4014_recurrent_ppo_lstm_smoke_matched.yaml"
+    )
+
+    assert config.recurrent_policy == "MultiInputLstmPolicy"
+    assert config.base.policy_id == "recurrent_ppo_lstm_issue_4014_smoke_matched"

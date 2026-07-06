@@ -203,12 +203,23 @@ def _resolve_checkpoint_reference(
         local_path = Path(str(entry.get("local_path", "")))
         promotion = entry.get("benchmark_promotion")
         checkpoint_path = local_path if local_path.is_absolute() else repo_root / local_path
+        # A benchmark-promoted checkpoint is hydrated from its public GitHub release into
+        # ``output/model_cache/<model_id>/<asset_name>``. That cached file name does not match
+        # the registry ``local_path`` (``model.zip``), so a bare ``local_path`` existence check
+        # would wrongly report ``blocked_missing_learned_checkpoint`` even when the checkpoint is
+        # present and loadable via ``resolve_model_path``. Recognize the hydrated release asset so
+        # preflight stays download-free but consistent with how the policy actually loads.
+        if not checkpoint_path.exists():
+            hydrated_path = _github_release_cache_path(entry, repo_root=repo_root)
+            if hydrated_path is not None and hydrated_path.exists():
+                checkpoint_path = hydrated_path
         return (
             checkpoint_path,
             {
                 "type": "model_id",
                 "model_id": config.learned_policy_model_id,
                 "local_path": str(local_path),
+                "resolved_path": str(checkpoint_path),
                 "claim_boundary": (
                     promotion.get("claim_boundary") if isinstance(promotion, dict) else None
                 ),
@@ -224,6 +235,26 @@ def _resolve_checkpoint_reference(
         {"type": "local_path", "path": config.learned_policy_checkpoint},
         [],
     )
+
+
+def _github_release_cache_path(entry: dict[str, Any], *, repo_root: Path) -> Path | None:
+    """Return the canonical model-cache path for a github-release artifact, if declared.
+
+    This mirrors ``robot_sf.models.registry._download_from_github_release`` which caches the
+    asset under ``output/model_cache/<model_id>/<asset_name>``.
+
+    Returns:
+        Path | None: Expected hydrated artifact path, or ``None`` when no github release is set.
+    """
+
+    release = entry.get("github_release")
+    if not isinstance(release, dict):
+        return None
+    asset_name = str(release.get("asset_name") or "").strip()
+    model_id = str(entry.get("model_id") or "").strip()
+    if not asset_name or not model_id:
+        return None
+    return repo_root / "output" / "model_cache" / model_id / asset_name
 
 
 def load_jsonl_records(path: str | Path) -> list[dict[str, Any]]:

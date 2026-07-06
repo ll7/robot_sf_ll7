@@ -1,0 +1,95 @@
+{
+  "audit_date": "2026-07-06",
+  "claim_boundary": {
+    "evidence_status": "cpu_local_smoke_diagnostic",
+    "replay_mode": "executable",
+    "scope": "false-positive actor-injection observation-quality replay",
+    "closure_call": "accepted_for_issue_3300_smoke_diagnostic_scope",
+    "excluded": [
+      "full_benchmark_campaign",
+      "slurm_or_gpu_submission",
+      "hardware_calibrated_sensor_realism",
+      "robustness_promotion",
+      "paper_or_dissertation_claim_edit"
+    ]
+  },
+  "issue": 3300,
+  "issue_title": "perception: evaluate false-positive actor-injection observation-quality replay",
+  "merged_prs": [
+    {
+      "number": 4390,
+      "role": "first executable replay evidence path; blocked_unavailable classification"
+    },
+    {
+      "number": 4413,
+      "role": "fail-closed readiness checks for incompatible structured-pedestrian views"
+    },
+    {
+      "number": 4431,
+      "role": "structured SocNav pedestrian-slot injection support and paired smoke evidence"
+    },
+    {
+      "number": 4439,
+      "role": "pre-registered stronger structured false-positive replay matrix"
+    },
+    {
+      "number": 4486,
+      "role": "stronger-matrix executable replay evidence classified scenario_too_weak"
+    },
+    {
+      "number": 4601,
+      "role": "ORCA reactive executable replay evidence classified observed"
+    }
+  ],
+  "acceptance_evidence": [
+    {
+      "criterion": "Executable false-positive actor-injection replay command exists or fails closed with an actionable blocker.",
+      "status": "met",
+      "evidence": "PRs #4390, #4413, #4431, #4486, and #4601."
+    },
+    {
+      "criterion": "Report distinguishes executable replay evidence from trace-derived diagnostics.",
+      "status": "met",
+      "evidence": "PR #4486 and PR #4601 evidence bundles record executable replay mode and CPU-smoke caveats."
+    },
+    {
+      "criterion": "False-positive effects are reported separately from false-negative/noise effects.",
+      "status": "met",
+      "evidence": "Issue-specific false-positive actor-injection reports and profiles from PR #4431 and PR #4601."
+    },
+    {
+      "criterion": "Scenario, seed, planner mode, perturbation family, execution mode, fallback/degraded status, and caveats are recorded.",
+      "status": "met",
+      "evidence": "PR #4486 and PR #4601 README, summary.json, and robustness_delta.csv artifacts."
+    },
+    {
+      "criterion": "Unavailable actor injection records exact prerequisite and next proof step.",
+      "status": "superseded_by_met_replay",
+      "evidence": "PR #4390 and PR #4413 recorded blockers; PR #4431 and PR #4601 removed them for structured replay."
+    },
+    {
+      "criterion": "Bounded result exists for missing false-positive acceptance dimension.",
+      "status": "met",
+      "evidence": "PR #4601 classified ORCA replay as observed after 101 injected pedestrians changed predeclared replay outcomes."
+    },
+    {
+      "criterion": "No hardware sensor realism, robustness-promotion, paper, or dissertation claim is made.",
+      "status": "met",
+      "evidence": "Merged evidence bundles and this audit keep the result CPU-smoke/diagnostic only."
+    }
+  ],
+  "closure_decision": {
+    "close_issue": true,
+    "reason": "Original acceptance criteria are met by merged PRs; the only live remainder is a broader full replay campaign, which is outside this CPU-only closure-audit scope and should be tracked separately if pursued."
+  },
+  "residual_risks": [
+    {
+      "risk": "No full benchmark campaign was run.",
+      "why_it_remains": "Compute campaign execution is outside the task authorization and is not promoted as issue #3300 acceptance evidence."
+    },
+    {
+      "risk": "Observed ORCA replay is smoke/diagnostic evidence only.",
+      "why_it_remains": "The evidence is six paired CPU-local rows, sufficient for the issue acceptance dimension but not for benchmark-strength or paper-facing claims."
+    }
+  ]
+}

@@ -187,7 +187,7 @@ def _resolve_model_path_reference(
     path = Path(reference.value)
     if not path.is_absolute():
         path = (Path.cwd() / path).resolve()
-    if path.exists():
+    if path.is_file():
         return ArmCheckpointResolution(
             reference=reference,
             resolvable=True,
@@ -235,7 +235,7 @@ def _resolve_model_id_reference_cheap(
         resolved = Path(local_path)
         if not resolved.is_absolute():
             resolved = (Path.cwd() / resolved).resolve()
-        if resolved.exists():
+        if resolved.is_file():
             return ArmCheckpointResolution(
                 reference=reference,
                 resolvable=True,

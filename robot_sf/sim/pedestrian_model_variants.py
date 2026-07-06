@@ -10,12 +10,14 @@ SOCIAL_FORCE_DEFAULT = "social_force_default"
 HSFM_TOTAL_FORCE_V1 = "hsfm_total_force_v1"
 HSFM_TTC_PREDICTIVE_V1 = "hsfm_ttc_predictive_v1"
 HSFM_ANISOTROPIC_FOV_V1 = "hsfm_anisotropic_fov_v1"
+HSFM_ALIGNMENT_TORQUE_V1 = "hsfm_alignment_torque_v1"
 SUPPORTED_PEDESTRIAN_MODELS = frozenset(
     {
         SOCIAL_FORCE_DEFAULT,
         HSFM_TOTAL_FORCE_V1,
         HSFM_TTC_PREDICTIVE_V1,
         HSFM_ANISOTROPIC_FOV_V1,
+        HSFM_ALIGNMENT_TORQUE_V1,
     }
 )
 
@@ -689,3 +691,95 @@ def step_hsfm_total_force(
     force_headings = np.arctan2(force_array[:, 1], force_array[:, 0])
     next_headings = np.where(force_norms <= epsilon, previous_headings, force_headings)
     return next_state, next_headings
+
+
+def wrap_to_pi(angle: np.ndarray | float) -> np.ndarray:
+    """Wrap angle(s) in radians to the ``(-pi, pi]`` interval.
+
+    Returns:
+        The angle(s) wrapped to a single canonical turn, as a float array.
+    """
+    wrapped = np.mod(np.asarray(angle, dtype=float) + np.pi, 2.0 * np.pi) - np.pi
+    # ``np.mod`` maps the -pi boundary to -pi; fold it to +pi so the interval is (-pi, pi].
+    wrapped = np.where(wrapped <= -np.pi, np.pi, wrapped)
+    return wrapped
+
+
+def step_alignment_torque_heading(
+    headings: np.ndarray,
+    angular_velocities: np.ndarray,
+    target_headings: np.ndarray,
+    *,
+    dt: float,
+    k_theta: float,
+    k_omega: float,
+    max_angular_speed: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Advance body orientation via a damped second-order alignment torque (HSFM).
+
+    In the Headed Social Force Model the pedestrian body orientation ``phi_i`` is a state
+    variable that is *decoupled* from the instantaneous velocity/force direction: rather than
+    snapping to the desired direction each step (as :func:`step_hsfm_total_force` does), the
+    orientation is driven toward a target by a restoring torque with angular inertia and
+    damping. This removes the instantaneous heading snap and produces a physically bounded
+    turn rate.
+
+    The per-pedestrian dynamics integrate
+
+        ``omega' = omega + dt * (k_theta * e - k_omega * omega)``  (semi-implicit Euler)
+        ``phi'   = wrap(phi + dt * omega')``
+
+    where ``e = wrap(target - phi)`` is the shortest signed angular error. ``k_omega`` is the
+    angular damping; critical damping corresponds to ``k_omega = 2 * sqrt(k_theta)``. The
+    updated angular speed is clipped to ``[-max_angular_speed, max_angular_speed]`` so a large
+    error cannot produce an unbounded spin. The layer is independent of simulator objects so it
+    is unit-testable in isolation; it is diagnostic/prototype and makes no calibrated-realism
+    claim.
+
+    Args:
+        headings: Current body orientations ``phi`` with shape ``(N,)`` in radians.
+        angular_velocities: Current angular velocities ``omega`` with shape ``(N,)`` in rad/s.
+        target_headings: Desired orientations with shape ``(N,)`` in radians (typically the
+            total-force / desired direction of motion).
+        dt: Positive integration timestep in seconds.
+        k_theta: Positive angular stiffness (restoring gain toward the target).
+        k_omega: Non-negative angular damping gain.
+        max_angular_speed: Positive cap on ``|omega|`` in rad/s.
+
+    Returns:
+        Tuple of updated ``(headings, angular_velocities)``, each with shape ``(N,)``.
+    """
+    heading_array = np.asarray(headings, dtype=float)
+    angular_velocity_array = np.asarray(angular_velocities, dtype=float)
+    target_array = np.asarray(target_headings, dtype=float)
+
+    if heading_array.ndim != 1:
+        raise ValueError("headings must have shape (N,)")
+    if angular_velocity_array.shape != heading_array.shape:
+        raise ValueError("angular_velocities must have shape (N,) matching headings")
+    if target_array.shape != heading_array.shape:
+        raise ValueError("target_headings must have shape (N,) matching headings")
+    if not (
+        np.all(np.isfinite(heading_array))
+        and np.all(np.isfinite(angular_velocity_array))
+        and np.all(np.isfinite(target_array))
+    ):
+        raise ValueError("headings, angular_velocities, and target_headings must be finite")
+    if not np.isfinite(dt) or dt <= 0:
+        raise ValueError("dt must be finite and > 0")
+    if not np.isfinite(k_theta) or k_theta <= 0:
+        raise ValueError("k_theta must be finite and > 0")
+    if not np.isfinite(k_omega) or k_omega < 0:
+        raise ValueError("k_omega must be finite and >= 0")
+    if not np.isfinite(max_angular_speed) or max_angular_speed <= 0:
+        raise ValueError("max_angular_speed must be finite and > 0")
+
+    error = wrap_to_pi(target_array - heading_array)
+    next_angular_velocity = angular_velocity_array + float(dt) * (
+        float(k_theta) * error - float(k_omega) * angular_velocity_array
+    )
+    next_angular_velocity = np.clip(
+        next_angular_velocity, -float(max_angular_speed), float(max_angular_speed)
+    )
+    next_heading = wrap_to_pi(heading_array + float(dt) * next_angular_velocity)
+    return next_heading, next_angular_velocity

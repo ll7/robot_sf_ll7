@@ -37,18 +37,47 @@ reporting), and the original action + context.
 | `ttc_veto_threshold_s` | 1.0 | hard-stop TTC gate |
 | `clearance_veto_m` | 0.3 | hard-stop clearance gate |
 
+## Deadlock recovery (`safety_wrapper_deadlock_recovery.v1`)
+
+The stateful fourth stage lives in `DeadlockRecoveryMonitor` (same module), an **opt-in,
+disabled-by-default** monitor composed *around* `apply_safety_wrapper`. Call `monitor.step(...)`
+once per simulation step with the executed (post-transform) command and the same `SafetyContext`.
+It breaks the *frozen robot* failure mode (planner keeps commanding near-zero forward speed while a
+nearby pedestrian/obstacle blocks progress, so the episode stalls without a collision):
+
+1. a step counts **frozen** when `|executed forward speed| ≤ frozen_speed_eps_m_s` **and** the step
+   is hazard-blocked (nearest pedestrian within `hazard_proximity_m`, or finite predicted clearance
+   ≤ `hazard_clearance_m`) — a legitimate goal-reached stop with clear surroundings is *not* a
+   deadlock;
+2. once the frozen run reaches `patience_steps`, a bounded in-place rotation
+   (`recovery_turn_sign · recovery_angular_velocity_rad_s`) is applied for up to `recovery_steps`
+   steps; a completed maneuver re-arms the patience window so a still-stuck robot pauses one cycle
+   (letting the planner react) before rotating again.
+
+**Safety property:** recovery only ever overrides *angular* velocity — forward speed is passed
+through unchanged — so it never overrides the hard stop/yield veto and can never inject forward
+motion into a hazard. Predeclared defaults: `patience_steps=20`, `recovery_steps=10`,
+`recovery_angular_velocity_rad_s=0.5`, `recovery_turn_sign=+1`, `frozen_speed_eps_m_s=0.05`,
+`hazard_proximity_m=2.0`, `hazard_clearance_m=0.5`.
+
 ## Scope boundary
 
-Pure per-step transform, **off by default** — changes no runtime/benchmark behavior. Deferred
-follow-ups: the factorial `planner × {off, on}` **ablation campaign** (SLURM runs over a fixed
-scenario set + paired seeds, emitting into the #3482 ledger), live wiring into
-`robot_sf/robot/action_adapters.py`, and a stateful deadlock-recovery stage.
+`apply_safety_wrapper` is a pure per-step transform and `DeadlockRecoveryMonitor` is off by default,
+so the wrapper **changes no runtime/benchmark behavior** unless explicitly opted in. Deferred
+follow-ups: **wiring `DeadlockRecoveryMonitor` into the benchmark runtime step loop**
+(`robot_sf/benchmark/safety_wrapper_runtime.py` + `map_runner_episode.py`, currently stateless), the
+factorial `planner × {off, on}` **ablation campaign** (runs over a fixed scenario set + paired
+seeds, emitting into the #3482 ledger), and live wiring into `robot_sf/robot/action_adapters.py`.
 
 ## Tests
 
 `tests/test_safety_wrapper.py` (12 tests): disabled pass-through, safe pass-through, speed cap
 near pedestrians (and no-cap when already slow), hard stop on low TTC and on low clearance, veto
 precedence over the speed cap, schema/record contract, and config validation.
+`tests/test_safety_wrapper_deadlock.py` (11 tests): disabled pass-through, no-recovery-before-patience,
+recovery engages at patience and rotates in place, cyclic maneuver/patience re-arm, turn sign,
+movement resets the frozen run, clear-surroundings-is-not-a-deadlock, forward speed never added under
+a persistent hard stop, obstacle-only freeze, counter reset, and config validation.
 
 ## Related
 

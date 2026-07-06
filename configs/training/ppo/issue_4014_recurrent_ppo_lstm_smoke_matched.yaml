@@ -1,0 +1,37 @@
+policy_id: recurrent_ppo_lstm_issue_4014_smoke_matched
+algorithm: recurrent_ppo
+recurrent_policy: MultiInputLstmPolicy
+scenario_config: ../../scenarios/sets/classic_cross_trap_subset.yaml
+total_timesteps: 2048
+seeds: [4014]
+randomize_seeds: false
+num_envs: 1
+worker_mode: dummy
+tracking:
+  tensorboard: false
+env_overrides:
+  observation_mode: default_gym
+env_factory_kwargs:
+  reward_name: route_completion_v2
+convergence:
+  success_rate: 0.8
+  collision_rate: 0.1
+  plateau_window: 512
+evaluation:
+  frequency_episodes: 0
+  evaluation_episodes: 3
+  randomize_seeds: false
+  step_schedule:
+    - every_steps: 1024
+recurrent_ppo_hyperparams:
+  learning_rate: 0.0001
+  n_steps: 128
+  batch_size: 64
+  n_epochs: 2
+  gamma: 0.99
+  gae_lambda: 0.95
+  policy_kwargs:
+    lstm_hidden_size: 128
+    n_lstm_layers: 1
+    shared_lstm: false
+    enable_critic_lstm: true

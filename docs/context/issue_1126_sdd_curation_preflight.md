@@ -1,80 +1,58 @@
-# Issue #1126 SDD Curation Readiness Preflight (2026-06-27)
+# Issue #1126 SDD Curation Readiness Preflight
 
-Status: Current. Scope: the *curation-step* readiness gate only. This note does **not** record a
-real-data curation run; issue #1126 stays `state:blocked-external-input` until licensed SDD
-annotations are staged (issue #1497, validated by #2413).
+Status: Current. Scope: curation-step readiness for the first real Stanford Drone Dataset (SDD)
+derived scenario set. This note does not record a benchmark campaign or paper-facing claim.
 
-## Why this exists
+## Current State
 
-Issue #1126 curates the first real SDD-derived benchmark scenario set *after* a licensed annotation
-source is staged. While external data is blocked, the only safe work is a **manifest/schema
-preflight** that decides whether a curation run may be promoted as benchmark evidence, and that fails
-closed otherwise. This preflight is the curation-step gate; it is distinct from:
+PR #3765 added the fail-closed SDD curation preflight. PR #4564 added a metadata-only decision
+packet. PR #4616 fixed the packet's generated importer command so it uses the importer's real
+`--annotations`, `--out-dir`, and `--meters-per-pixel` arguments.
 
-- the SDD **staging** gate — owned by `scripts/tools/manage_external_data.py`
-  (`load_sdd_staging_spec`, `validate_sdd_staging`, `resolve_sdd_scenario_prior_mode`), manifest
-  `configs/data/sdd_staging_manifest.yaml` (issues #1497 / #2413 / #3473);
-- the SDD **importer** — `scripts/tools/import_sdd_scenarios.py` (issue #1091).
+This update pins the reviewed BYO SDD annotation tree in
+`configs/data/sdd_staging_manifest.yaml`:
 
-## What landed
+- `expected_tree_sha256`: `66dec2c82b0a01b23bf9fa9acef352af86549e7ea749811ea4ef9c47003d4acf`
+- matched files: 60 `annotations.txt` files
+- total size: 444959624 bytes
 
-- `scripts/tools/sdd_curation_preflight.py` — a thin per-issue runner that *composes* the canonical
-  owners (it does not re-derive staging or parsing):
-  - `resolve_sdd_scenario_prior_mode(...)` decides `dataset_backed_prior` vs `proxy_schema_smoke`;
-  - `import_sdd_scenarios.load_sdd_points(...)` probes a candidate annotation file against the
-    deterministic curation selection rule (enough usable tracks after `lost`/label filtering) with
-    **no** scenario/map output written.
-- `tests/tools/test_sdd_curation_preflight.py` — fixture-backed unit tests for the fail-closed
-  contract.
+The pin lets `scripts/tools/manage_external_data.py sdd-mode` report `dataset_backed_prior` when
+that exact local tree is available under an approved external-data root. It does not commit raw SDD
+files and does not commit a local license acknowledgment.
 
-## Hard contract (fail-closed)
+The first real import/smoke slice is recorded in
+[`evidence/issue_1126_real_sdd_smoke_2026-07-06.md`](evidence/issue_1126_real_sdd_smoke_2026-07-06.md).
+It selects `annotations/bookstore/video0/annotations.txt`, imports a four-pedestrian generated
+scenario into ignored `output/`, and runs two CPU `simple_policy` smoke jobs. The candidate is
+classified `exploratory_only` because both smoke horizons timed out.
 
-- `benchmark_promotion_allowed` is True **only** when SDD is staged AND checksum-validated
-  (`dataset_backed_prior`) AND the candidate annotation satisfies the selection rule.
-- A parseable **fixture** or an unpinned/unvalidated staged copy can be *probed* (`curation_runnable`
-  may be True for a schema smoke), but its evidence stays `proxy_schema_smoke` and
-  `output_classification` never reaches `benchmark_ready_candidate`. Synthetic/fixture rows are never
-  promoted as benchmark evidence.
-- `proxy_schema_smoke` and `dataset_backed_prior` remain strictly distinct in the report.
+## Owners
 
-## Validation (this checkout, no SDD staged)
+- SDD staging gate: `scripts/tools/manage_external_data.py`
+  (`load_sdd_staging_spec`, `validate_sdd_staging`, `resolve_sdd_scenario_prior_mode`) and
+  `configs/data/sdd_staging_manifest.yaml`.
+- SDD importer: `scripts/tools/import_sdd_scenarios.py`.
+- Curation readiness gate: `scripts/tools/sdd_curation_preflight.py`.
 
-```bash
-uv run python scripts/tools/import_sdd_scenarios.py --help
-uv run python scripts/tools/sdd_curation_preflight.py            # -> proxy_schema_smoke, promotion False
-uv run python -m pytest tests/tools/test_sdd_curation_preflight.py -q   # 8 passed
-uv run python -m pytest tests/ -k "sdd or import_scenarios" -q          # 53 passed
-```
+## Validation
 
-The CLI on this checkout reports `staging mode: proxy_schema_smoke`, `dataset_backed: False`,
-`benchmark promotion: False` — i.e. it correctly refuses to treat the blocked state as
-benchmark-ready. `--require-benchmark-ready` exits non-zero (3) so callers fail closed.
-
-## Real-data path (when #1497 stages licensed annotations)
-
-1. Stage licensed SDD annotations and validate via `manage_external_data.py` (`sdd-validate`) so
-   `resolve_sdd_scenario_prior_mode` reports `dataset_backed_prior`.
-2. Run the preflight against the selected staged annotation file:
-   `uv run python scripts/tools/sdd_curation_preflight.py --annotation <staged>/annotations.txt
-   --label Pedestrian --min-track-points 8 --require-benchmark-ready` (probe must be satisfiable).
-3. Only then run `scripts/tools/import_sdd_scenarios.py` and decide `benchmark_ready` vs
-   `exploratory_only` after the smoke run, recording source identity, checksums, license/URL, scale
-   assumptions, and command (per the issue acceptance criteria).
-
-## Out of scope here
-
-No SDD download/ingestion, no real curation run, no benchmark campaign, no Slurm/GPU submission, and
-no paper/dissertation claim edits.
-
-## Decision Packet Slice (2026-07-05)
-
-The preflight CLI can now write a metadata-only decision packet:
+With `ROBOT_SF_EXTERNAL_DATA_ROOT` pointing at the reviewed local BYO data tree:
 
 ```bash
-uv run python scripts/tools/sdd_curation_preflight.py \
-  --annotation <staged>/annotations.txt \
-  --write-decision-packet output/sdd_curation/issue_1126/decision_packet.json \
-  --json
+scripts/dev/run_worktree_shared_venv.sh -- python scripts/tools/manage_external_data.py --json sdd-mode
+# dataset_backed_prior, dataset_backed true
+
+scripts/dev/run_worktree_shared_venv.sh -- python scripts/tools/sdd_curation_preflight.py --json
+# dataset_backed_prior, benchmark_promotion_allowed false until selected annotation probe passes
 ```
 
-The packet records the readiness report, selected annotation path, curation parameters, next preflight/import commands, and raw-data policy. It deliberately does not write scenario/map outputs, does not commit raw SDD files, and does not promote proxy or fixture runs as benchmark evidence.
+Without the pinned tree present, the same commands still fail closed to `proxy_schema_smoke` and
+must not be treated as benchmark evidence.
+
+## Remaining Real-Curation Step
+
+Decide the next benchmark-ready action: tune or choose another selected scene, calibrate scale, or
+intentionally accept this candidate as exploratory-only evidence.
+
+Out of scope here: raw SDD commits, benchmark campaign runs, Slurm/GPU submission, and
+paper/dissertation claim edits.

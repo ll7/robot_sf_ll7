@@ -15,14 +15,19 @@ from robot_sf.benchmark.hybrid_global_rl_diagnostic import (
     BASELINE_ARM,
     ROUTE_ARM,
     build_diagnostic_report,
+    load_diagnostic_config,
     load_jsonl_records,
     preflight_configs,
 )
 from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.models.registry import resolve_model_path
 
 DEFAULT_ROUTE_CONFIG = Path("configs/benchmarks/issue_4183_hybrid_global_rl_route_conditioned.yaml")
 DEFAULT_BASELINE_CONFIG = Path("configs/benchmarks/issue_4183_learned_local_unconditioned.yaml")
-DEFAULT_SCHEMA = Path("docs/dev/issues/social-navigation-benchmark/episode_schema.json")
+# Use the canonical benchmark episode schema (as every other map-runner entry point does). The
+# previous per-issue pointer to the stale strict schema rejected native PPO episode records with
+# additionalProperties errors and left the baseline arm without valid rows.
+DEFAULT_SCHEMA = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
 DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_4183_hybrid_global_rl_diagnostic")
 
 
@@ -38,7 +43,45 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--horizon", type=int, help="Optional smoke horizon override.")
     parser.add_argument("--repo-root", type=Path, default=Path("."))
+    parser.add_argument(
+        "--no-hydrate",
+        action="store_true",
+        help=(
+            "Skip public-release hydration of the promoted learned checkpoint. Use in offline/CI "
+            "contexts where the model cache is already populated."
+        ),
+    )
     return parser.parse_args(argv)
+
+
+def _hydrate_checkpoints(*config_paths: Path, repo_root: Path = Path(".")) -> list[str]:
+    """Hydrate promoted learned checkpoints referenced by the paired configs.
+
+    Downloads the public benchmark-promoted checkpoint into the canonical model cache when a
+    ``learned_policy_model_id`` is declared, so the download-free preflight can find it. The
+    registry and cache are resolved under ``repo_root`` so hydration lands where
+    ``preflight_configs`` (and ``_github_release_cache_path``) look for the asset when
+    ``--repo-root`` differs from the current working directory.
+
+    Returns:
+        list[str]: Human-readable notes describing each hydration attempt.
+    """
+
+    notes: list[str] = []
+    seen: set[str] = set()
+    for config_path in config_paths:
+        model_id = load_diagnostic_config(config_path).learned_policy_model_id
+        if not model_id or model_id in seen:
+            continue
+        seen.add(model_id)
+        resolved = resolve_model_path(
+            model_id,
+            allow_download=True,
+            registry_path=repo_root / "model" / "registry.yaml",
+            cache_dir=repo_root / "output" / "model_cache",
+        )
+        notes.append(f"hydrated {model_id} -> {resolved}")
+    return notes
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -146,9 +189,18 @@ def _run_arm(
 def main(argv: list[str] | None = None) -> int:
     """Run both issue #4183 arms and rebuild the diagnostic packet."""
     args = parse_args(argv)
+    hydration_notes: list[str] = []
+    if not args.no_hydrate:
+        hydration_notes = _hydrate_checkpoints(
+            args.route_config, args.baseline_config, repo_root=args.repo_root
+        )
     preflight = preflight_configs(args.route_config, args.baseline_config, repo_root=args.repo_root)
     if preflight["status"] != "valid":
-        print(json.dumps({"preflight": preflight}, indent=2, sort_keys=True))
+        print(
+            json.dumps(
+                {"preflight": preflight, "hydration": hydration_notes}, indent=2, sort_keys=True
+            )
+        )
         return 2
 
     args.work_dir.mkdir(parents=True, exist_ok=True)

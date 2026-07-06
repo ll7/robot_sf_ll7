@@ -62,6 +62,11 @@ _ALLOWED_POLICY_KWARGS = {
     "shared_lstm",
 }
 
+_ALLOWED_RECURRENT_POLICIES = {
+    "MlpLstmPolicy",
+    "MultiInputLstmPolicy",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class RecurrentPPOConfig:
@@ -69,6 +74,7 @@ class RecurrentPPOConfig:
 
     base: train_ppo.ExpertTrainingConfig
     algorithm: str
+    recurrent_policy: str
     recurrent_ppo_hyperparams: dict[str, Any]
     policy_kwargs: dict[str, Any]
 
@@ -89,6 +95,10 @@ def load_recurrent_ppo_config(config_path: str | Path) -> RecurrentPPOConfig:
     algorithm = str(raw.get("algorithm", "")).strip().lower()
     if algorithm != "recurrent_ppo":
         raise ValueError("algorithm must be 'recurrent_ppo' for train_recurrent_ppo.py")
+    recurrent_policy = str(raw.get("recurrent_policy", "MultiInputLstmPolicy")).strip()
+    if recurrent_policy not in _ALLOWED_RECURRENT_POLICIES:
+        allowed = ", ".join(sorted(_ALLOWED_RECURRENT_POLICIES))
+        raise ValueError(f"recurrent_policy must be one of: {allowed}")
 
     hyperparams = dict(raw.get("recurrent_ppo_hyperparams", {}) or {})
     unknown = set(hyperparams) - _ALLOWED_RECURRENT_PPO_HYPERPARAMS
@@ -116,6 +126,7 @@ def load_recurrent_ppo_config(config_path: str | Path) -> RecurrentPPOConfig:
     return RecurrentPPOConfig(
         base=base,
         algorithm=algorithm,
+        recurrent_policy=recurrent_policy,
         recurrent_ppo_hyperparams=hyperparams,
         policy_kwargs=policy_kwargs,
     )
@@ -152,7 +163,7 @@ def _manifest_payload(
         "run_id": run_id,
         "policy_id": config.base.policy_id,
         "algorithm": "recurrent_ppo",
-        "policy": "MultiInputLstmPolicy",
+        "policy": config.recurrent_policy,
         "dependency": {
             "package": "sb3-contrib",
             "required_for": "non_dry_run_training",
@@ -277,11 +288,31 @@ def run_training(
     vec_env = vec_env_cls(env_fns)
     try:
         hyperparams = dict(config.recurrent_ppo_hyperparams)
-        model = recurrent_ppo_cls("MultiInputLstmPolicy", vec_env, **hyperparams)
+        model = recurrent_ppo_cls(config.recurrent_policy, vec_env, **hyperparams)
         model.learn(total_timesteps=config.base.total_timesteps)
         target_dir = output_dir if output_dir is not None else ensure_run_tracker_tree(run_id)
         target_dir.mkdir(parents=True, exist_ok=True)
         model.save(target_dir / "model.zip")
+        total_wall_clock_sec = max(0.0, time.perf_counter() - start)
+        train_env_steps_per_sec_mean = (
+            float(config.base.total_timesteps) / total_wall_clock_sec
+            if total_wall_clock_sec > 0.0
+            else 0.0
+        )
+        perf_summary_path = train_ppo._write_perf_summary(
+            run_id=run_id,
+            startup_sec=0.0,
+            per_checkpoint_perf=[],
+            total_wall_clock_sec=total_wall_clock_sec,
+            parameter_summary=train_ppo._model_parameter_summary(model),
+        )
+        perf_payload = json.loads(perf_summary_path.read_text(encoding="utf-8"))
+        perf_payload["train_env_steps_per_sec_mean"] = train_env_steps_per_sec_mean
+        perf_payload["eval_sec_per_checkpoint"] = 0.0
+        perf_summary_path.write_text(
+            json.dumps(perf_payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     finally:
         vec_env.close()
 
@@ -293,6 +324,14 @@ def run_training(
         output_dir=target_dir,
         status=f"training_complete in {time.perf_counter() - start:.3f}s",
     )
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["perf_summary_path"] = str(perf_summary_path)
+    payload["performance_summary"] = {
+        "total_wall_clock_sec": total_wall_clock_sec,
+        "train_env_steps_per_sec_mean": train_env_steps_per_sec_mean,
+        "parameter_summary": train_ppo._model_parameter_summary(model),
+    }
+    manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     logger.info("RecurrentPPO training manifest written {}", manifest_path)
     return manifest_path
 

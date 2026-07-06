@@ -92,7 +92,7 @@ expected_total_size_bytes: 524288000  # ~500 MiB headroom for annotations + extr
 checksums:
   algorithm: SHA-256
   tree_sha256: null            # filled on real staging (aggregate over matched files)
-  expected_tree_sha256: null   # pin here after first trusted staging to detect drift
+  expected_tree_sha256: 66dec2c82b0a01b23bf9fa9acef352af86549e7ea749811ea4ef9c47003d4acf # pinned reviewed SDD annotations tree, 60 files, 444959624 bytes
 
 # --- Availability gate -----------------------------------------------------------------------
 # `missing` until the staging script validates a local copy. Scenario-prior generation reads this

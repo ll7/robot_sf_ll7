@@ -1,0 +1,32 @@
+{
+  "eval_sec_per_checkpoint": 0.6695768239951576,
+  "parameter_summary": {
+    "available": true,
+    "model_parameter_count": null,
+    "model_trainable_parameter_count": null,
+    "policy_parameter_count": 115013,
+    "policy_trainable_parameter_count": 115013
+  },
+  "per_checkpoint_perf": [
+    {
+      "eval_step": 1024,
+      "eval_wall_sec": 0.9965871689928463,
+      "num_envs": 1,
+      "train_env_steps_per_sec": 180.6000939569993,
+      "train_steps": 1024,
+      "train_wall_sec": 5.669985975997406
+    },
+    {
+      "eval_step": 2048,
+      "eval_wall_sec": 0.34256647899746895,
+      "num_envs": 1,
+      "train_env_steps_per_sec": 838.479063244382,
+      "train_steps": 1024,
+      "train_wall_sec": 1.221258877994842
+    }
+  ],
+  "run_id": "ppo_issue_4014_smoke_matched_20260706T114711",
+  "startup_sec": 2.4472094279917656,
+  "total_wall_clock_sec": 10.72521736699855,
+  "train_env_steps_per_sec_mean": 509.5395786006907
+}

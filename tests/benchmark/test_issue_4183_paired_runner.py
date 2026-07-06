@@ -103,3 +103,62 @@ def test_issue_4183_runner_honors_config_seed_policy(
             "source": "issue_4183_paired_runner",
         }
     ]
+
+
+def test_runner_uses_canonical_episode_schema() -> None:
+    """The paired runner validates episodes against the canonical benchmark schema.
+
+    The prior per-issue pointer to the stale strict schema rejected native PPO episode records
+    with ``additionalProperties`` errors and left the baseline arm without valid rows.
+    """
+    module = _load_issue_4183_runner()
+    assert module.DEFAULT_SCHEMA == Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
+    assert (_REPO_ROOT / module.DEFAULT_SCHEMA).exists()
+
+
+def test_runner_hydrates_declared_model_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``_hydrate_checkpoints`` resolves each declared learned-policy model id exactly once."""
+    module = _load_issue_4183_runner()
+
+    def _arm_config(arm: str, *, route: bool) -> Path:
+        path = tmp_path / f"{arm}.yaml"
+        path.write_text(
+            yaml.safe_dump(
+                {
+                    "scenario_matrix": "configs/scenarios/single/francis2023_intersection_wait.yaml",
+                    "seed_policy": {"mode": "fixed-list", "seeds": [4183]},
+                    "horizon": 120,
+                    "dt": 0.1,
+                    "issue_4183_diagnostic": {
+                        "arm": arm,
+                        "route_conditioning_enabled": route,
+                        "learned_policy_checkpoint": "output/model_cache/m/model.zip",
+                        "learned_policy_model_id": "shared_model_id",
+                        "row_inclusion_rule": "exclude fallback rows",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        return path
+
+    resolved: list[str] = []
+    kwargs_seen: list[dict] = []
+
+    def _fake_resolve(model_id, **kwargs):
+        resolved.append(model_id)
+        kwargs_seen.append(kwargs)
+        return Path(f"/cache/{model_id}")
+
+    monkeypatch.setattr(module, "resolve_model_path", _fake_resolve)
+    route_config = _arm_config("route_conditioned_hybrid_global_rl", route=True)
+    baseline_config = _arm_config("learned_local_no_route_conditioning", route=False)
+
+    notes = module._hydrate_checkpoints(route_config, baseline_config, repo_root=tmp_path)
+
+    # Both arms share one promoted checkpoint: hydrate it once, not per arm.
+    assert resolved == ["shared_model_id"]
+    assert notes == ["hydrated shared_model_id -> /cache/shared_model_id"]
+    # Hydration must honor ``repo_root`` so the asset lands where preflight looks for it.
+    assert kwargs_seen[0]["registry_path"] == tmp_path / "model" / "registry.yaml"
+    assert kwargs_seen[0]["cache_dir"] == tmp_path / "output" / "model_cache"

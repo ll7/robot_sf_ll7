@@ -566,6 +566,10 @@ entries:
     status: current
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_1456_closure_audit.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/research_lane_states.md
     status: current
     freshness: maintained

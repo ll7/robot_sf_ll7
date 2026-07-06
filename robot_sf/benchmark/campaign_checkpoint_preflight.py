@@ -125,11 +125,12 @@ def _load_algo_config(path: Path) -> dict[str, Any]:
         dict[str, Any]: Parsed config mapping (empty when the file is empty).
 
     Raises:
-        FileNotFoundError: When ``path`` does not exist.
+        FileNotFoundError: When ``path`` does not resolve to an existing file
+            (a missing path or a directory both fail closed here).
         TypeError: When the YAML document is not a mapping.
     """
-    if not path.exists():
-        raise FileNotFoundError(f"Planner algo_config not found: {path}")
+    if not path.is_file():
+        raise FileNotFoundError(f"Planner algo_config not found (or not a file): {path}")
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(data, dict):
         raise TypeError(f"Planner algo_config must be a mapping (YAML dict): {path}")
@@ -300,12 +301,12 @@ def _resolve_model_id_reference_staged(
             status="stage_failed",
             detail=f"could not stage model_id '{reference.value}': {type(exc).__name__}: {exc}",
         )
-    if not path.exists():
+    if not path.is_file():
         return ArmCheckpointResolution(
             reference=reference,
             resolvable=False,
             status="stage_missing",
-            detail=f"model_id '{reference.value}' resolved to {path} but the file is not present",
+            detail=f"model_id '{reference.value}' resolved to {path} but no checkpoint file is present",
         )
     return ArmCheckpointResolution(
         reference=reference,

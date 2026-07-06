@@ -1,0 +1,72 @@
+# Learned-risk model v1 training config (issue #4617, parent #1472).
+#
+# This is the training-side config that draft PR #4552's launch-packet
+# `slurm_execution` block cites as a must-exist path
+# (`configs/training/learned_risk_model_v1.yaml`). It is consumed by
+# `scripts/training/train_learned_risk_model.py`.
+#
+# Claim boundary: this config exists to make the trainer entrypoint runnable as a
+# CPU smoke and to keep real (Slurm) training fail-closed until the durable trace
+# manifest (issue #2312 / #4586) resolves. It does NOT submit Slurm, run a full
+# training campaign, publish checkpoints, or promote any learned-risk claim. Hard
+# guards remain authoritative; the learned model is auxiliary-cost-only.
+schema_version: learned-risk-model-training.v1
+candidate_id: learned_risk_model_v1
+
+# Canonical upstream contracts this training config binds to. The trainer
+# validates the launch packet and (in real mode) the campaign readiness gate
+# before it will train on durable traces.
+launch_packet: configs/training/learned_risk_model_issue_1395_launch_packet.yaml
+trace_manifest: configs/training/learned_risk_trace_manifest_issue_2312.yaml
+
+# Default destinations for a real (non-smoke) run. Kept off worktree-local
+# `output/` per the launch-packet artifact contract; a real Slurm run overrides
+# these with the durable URIs recorded in the launch packet `slurm_execution`
+# block. `--output-root` / `--status-out` override both for a local CPU smoke.
+output_root: artifacts/training/learned_risk_model_v1
+status_artifact_path: artifacts/training/learned_risk_model_v1/status.json
+
+# Per-episode binary risk labels, mirroring the #1472 launch-packet label_targets.
+labels:
+  - collision
+  - near_miss
+  - low_progress
+
+# Feature inputs, mirroring the launch-packet trace_input_contract.feature_inputs.
+# Plain names are read from each episode's `trajectory_features`; dotted names are
+# read as nested paths from the episode record root (e.g. `metrics.min_distance`).
+features:
+  - candidate_command_count
+  - min_rollout_clearance_m
+  - mean_pedestrian_distance_m
+  - route_progress_delta
+  - metrics.min_distance
+  - metrics.avg_speed
+  - metrics.goal_progress
+
+# Lightweight, dependency-free model exercised by the CPU smoke. A per-label
+# logistic head is fit with numpy so the smoke has no sklearn/torch requirement.
+model:
+  type: logistic_per_label
+  learning_rate: 0.1
+  l2: 0.001
+
+training:
+  max_epochs: 200
+  batch_size: 64
+  seed: 1472
+  # Number of synthetic episodes the CPU smoke fabricates when no real trace data
+  # is supplied. Real training ignores this and reads durable manifest traces.
+  smoke_rows: 48
+
+# Diagnostics the smoke computes on the synthetic fixture and that a real run must
+# also emit before any learned-risk claim can be considered.
+diagnostics:
+  required:
+    - auroc
+    - auprc
+    - brier
+    - false_negative_rate
+    - scenario_stratified_errors
+
+claim_boundary: launch_entrypoint_and_cpu_smoke_only_no_slurm_no_claim

@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #4617 learned-risk model v1 trainer entrypoint + config slice (parent #1472).** New
+  `scripts/training/train_learned_risk_model.py` (core logic in
+  `robot_sf/training/learned_risk_trainer.py`) and `configs/training/learned_risk_model_v1.yaml`
+  materialize the two paths draft PR #4552's launch-packet `slurm_execution` block cites as
+  must-exist. The entrypoint validates the #1472 launch packet, then either runs a dependency-light
+  CPU smoke (`--smoke`: fits one numpy logistic head per risk label on a tiny seeded synthetic
+  fixture, writes a `smoke_completed` status artifact with `auroc`/`auprc`/`brier`/
+  `false_negative_rate` diagnostics) or, in real mode, fails closed against the
+  `check_learned_risk_campaign_readiness` gate and writes a `blocked_trace_manifest` status while
+  the durable trace manifest (issue #2312 / #4586) stays unresolved. The training config mirrors the
+  launch-packet `label_targets`/`feature_inputs` and keeps declared artifact paths off worktree-local
+  `output/`. Claim boundary: launch entrypoint + CPU smoke only — no Slurm submission, no full
+  training campaign, no checkpoint publication, no learned-risk claim promotion; hard guards remain
+  authoritative and the learned output is auxiliary-cost-only. `smoke evidence` only. See
+  `tests/training/test_train_learned_risk_model.py`.
 * **issue #4013 paired diagnostic model-based planning comparison RUN (diagnostic).** New
   `scripts/benchmark/run_issue_4013_model_based_comparison.py` runs the end-to-end comparison that
   was deferred across the #4013 scaffolding PRs: it trains the short-horizon predictor checkpoint

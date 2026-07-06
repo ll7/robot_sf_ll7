@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -154,6 +155,13 @@ def test_checked_in_campaign_reports_blocked() -> None:
     assert report["campaign_state"] == CAMPAIGN_BLOCKED
     assert report["campaign_ready"] is False
     assert report["issue"] == 1472
+    assert (
+        report["launch_packet"]
+        == "configs/training/learned_risk_model_issue_1395_launch_packet.yaml"
+    )
+    assert (
+        report["trace_manifest"] == "configs/training/learned_risk_trace_manifest_issue_2312.yaml"
+    )
     # The launch packet is internally valid; the campaign is blocked on the
     # unresolved durable trace/baseline artifacts only.
     assert _gate(report, "launch_packet")["status"] == "passed"
@@ -254,6 +262,49 @@ def test_cli_ready_exit_code(tmp_path: Path) -> None:
         ]
     )
     assert exit_code == 0
+
+
+def test_cli_writes_ready_json_path(tmp_path: Path) -> None:
+    """The CLI can write a ready report to a requested JSON path."""
+    report_path = tmp_path / "reports" / "ready.json"
+    exit_code = readiness_cli_main(
+        [
+            "--launch-packet",
+            str(_valid_launch_packet(tmp_path)),
+            "--trace-manifest",
+            str(_ready_trace_manifest(tmp_path)),
+            "--repo-root",
+            str(_REPO_ROOT),
+            "--json",
+            str(report_path),
+        ]
+    )
+
+    assert exit_code == 0
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["campaign_state"] == CAMPAIGN_READY
+    assert report["campaign_ready"] is True
+
+
+def test_cli_writes_blocked_json_path(tmp_path: Path) -> None:
+    """The CLI preserves blocked exit code when writing report JSON."""
+    report_path = tmp_path / "blocked.json"
+    exit_code = readiness_cli_main(
+        [
+            "--repo-root",
+            str(_REPO_ROOT),
+            "--json",
+            str(report_path),
+        ]
+    )
+
+    assert exit_code == 3
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["campaign_state"] == CAMPAIGN_BLOCKED
+    assert report["campaign_ready"] is False
+    assert report["blocking_gates"] == ["trace_manifest"]
+    assert any(":pending" in blocker for blocker in report["blockers"])
+    assert any("retrieval_status" in blocker for blocker in report["blockers"])
 
 
 def test_cli_missing_file_exit_code(tmp_path: Path) -> None:

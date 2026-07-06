@@ -51,7 +51,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Repository root used to resolve relative paths.",
     )
-    parser.add_argument("--json", action="store_true", help="Emit a JSON readiness report.")
+    parser.add_argument(
+        "--json",
+        nargs="?",
+        const="-",
+        metavar="PATH",
+        help="Emit a JSON readiness report to stdout, or write it to PATH.",
+    )
     return parser
 
 
@@ -66,13 +72,13 @@ def main(argv: list[str] | None = None) -> int:
         )
     except LearnedRiskCampaignReadinessError as exc:
         if args.json:
-            print(json.dumps({"status": "invalid", "error": str(exc)}, indent=2, sort_keys=True))
+            _emit_json({"status": "invalid", "error": str(exc)}, args.json)
         else:
             print(str(exc))
         return 2
 
     if args.json:
-        print(json.dumps(report, indent=2, sort_keys=True))
+        _emit_json(report, args.json)
     else:
         print(f"learned-risk campaign decision: {report['campaign_state']}")
         for gate in report["gates"]:
@@ -80,6 +86,17 @@ def main(argv: list[str] | None = None) -> int:
         for blocker in report["blockers"]:
             print(f"    blocker: {blocker}")
     return 3 if report["campaign_state"] == CAMPAIGN_BLOCKED else 0
+
+
+def _emit_json(payload: dict[str, object], destination: str) -> None:
+    """Emit JSON to stdout or a requested path."""
+    text = json.dumps(payload, indent=2, sort_keys=True)
+    if destination == "-":
+        print(text)
+        return
+    path = Path(destination)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"{text}\n", encoding="utf-8")
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI guard

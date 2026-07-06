@@ -24,7 +24,9 @@ The first real import/smoke slice is recorded in
 [`evidence/issue_1126_real_sdd_smoke_2026-07-06.md`](evidence/issue_1126_real_sdd_smoke_2026-07-06.md).
 It selects `annotations/bookstore/video0/annotations.txt`, imports a four-pedestrian generated
 scenario into ignored `output/`, and runs two CPU `simple_policy` smoke jobs. The candidate is
-classified `exploratory_only` because both smoke horizons timed out.
+intentionally accepted as `exploratory_only` because both smoke horizons timed out. The final
+integration audit is
+[`evidence/issue_1126_final_integration_2026-07-06.md`](evidence/issue_1126_final_integration_2026-07-06.md).
 
 ## Owners
 
@@ -49,10 +51,10 @@ scripts/dev/run_worktree_shared_venv.sh -- python scripts/tools/sdd_curation_pre
 Without the pinned tree present, the same commands still fail closed to `proxy_schema_smoke` and
 must not be treated as benchmark evidence.
 
-## Remaining Real-Curation Step
+## Closure Boundary
 
-Decide the next benchmark-ready action: tune or choose another selected scene, calibrate scale, or
-intentionally accept this candidate as exploratory-only evidence.
+The first-real-SDD curation contract is complete as exploratory evidence. A future benchmark-ready
+follow-up should use a new issue to tune the selected candidate or compare alternate SDD scenes.
 
 Out of scope here: raw SDD commits, benchmark campaign runs, Slurm/GPU submission, and
 paper/dissertation claim edits.

@@ -254,6 +254,25 @@ Episode records include `observation_noise`, `observation_noise_hash`, and
 also record the profile/hash. Absent or all-zero settings normalize to `profile: none` and leave
 planner observations unchanged.
 
+## Campaign Credibility Scorecard
+
+Campaign reports include `reports/campaign_credibility_scorecard.json` and a matching Markdown
+table in `reports/campaign_report.md`. The schema is
+`campaign_credibility_scorecard.v1`, a lightweight credibility summary inspired by
+NASA-STD-7009B for model and simulation reporting. It helps readers see which trust dimensions are
+supported by campaign artifacts and which remain unassessed.
+
+Every scorecard contains the same six factors: `verification`, `validation`, `input_pedigree`,
+`uncertainty_characterization`, `results_robustness`, and `use_history`. Each factor has
+`factor_id`, `factor`, `description`, `status`, `score`, `scale`, `justification`, and `evidence`.
+Status uses the coarse scale `not_assessed`, `weak`, `partial`, `strong`, or `not_applicable`.
+Scores use a companion `0` to `3` numeric value when mechanically assessed. Missing evidence fails closed: the factor remains
+`status: not_assessed` with `score: null`, and the Markdown table renders the score cell blank
+instead of omitting the factor. Mechanically derived factors may be pre-filled from pinned campaign
+inputs, seed-variability artifacts, structured report artifacts, and planner-row status summaries.
+The scorecard is reporting metadata only; it is not benchmark proof, paper evidence, or real-world
+validation.
+
 ## Metrics: Definitions + Caveats (Summary)
 
 Full details live in

@@ -56,6 +56,9 @@ EVIDENCE_BENCHMARK_CANDIDATE = "benchmark_candidate"
 OUTPUT_BLOCKED = "blocked"
 OUTPUT_PROXY_ONLY = "proxy_only_exploratory"
 OUTPUT_BENCHMARK_READY_CANDIDATE = "benchmark_ready_candidate"
+SMOKE_BENCHMARK_READY = "benchmark_ready"
+SMOKE_EXPLORATORY_ONLY = "exploratory_only"
+SMOKE_BLOCKED = "blocked"
 
 
 def probe_annotation_file(
@@ -338,6 +341,109 @@ def build_decision_packet(
             "requires_dataset_backed_gate": True,
             "requires_source_checksum_and_license_provenance": True,
         },
+    }
+
+
+def _summarize_smoke_runs(smoke_runs: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return compact aggregate flags and reasons for recorded smoke runs."""
+    reasons: list[str] = []
+    executed = True
+    reached_goal = True
+    collisions = False
+    timeouts = False
+
+    if not smoke_runs:
+        reasons.append("no representative smoke run was recorded")
+
+    for run in smoke_runs:
+        horizon = run.get("horizon", "unknown")
+        successful_jobs = int(run.get("successful_jobs", 0) or 0)
+        failed_jobs = int(run.get("failed_jobs", 0) or 0)
+        success = bool(run.get("success", False))
+        timeout = bool(run.get("timeout", False))
+        collision_count = int(run.get("collisions", 0) or 0)
+
+        if successful_jobs <= 0 or failed_jobs > 0:
+            executed = False
+            reasons.append(
+                f"horizon {horizon} did not execute cleanly "
+                f"(successful_jobs={successful_jobs}, failed_jobs={failed_jobs})"
+            )
+        if timeout:
+            timeouts = True
+        if not success:
+            reached_goal = False
+        if collision_count > 0:
+            collisions = True
+            reasons.append(f"horizon {horizon} reported {collision_count} collision(s)")
+
+    return {
+        "executed": executed,
+        "reached_goal": reached_goal,
+        "collisions": collisions,
+        "timeouts": timeouts,
+        "reasons": reasons,
+    }
+
+
+def classify_smoke_decision(
+    readiness: dict[str, Any],
+    smoke_runs: list[dict[str, Any]],
+    *,
+    generated_artifacts_load: bool,
+) -> dict[str, Any]:
+    """Classify post-import SDD smoke evidence and select the next action.
+
+    This is the closure-side counterpart to the preflight gate. It does not run a benchmark or
+    inspect raw SDD data; callers pass compact smoke summaries already produced by the curation
+    run. The helper keeps the issue #1126 decision reproducible: timeouts/no-goal outcomes become
+    ``exploratory_only`` instead of lingering as an ambiguous open blocker, while failed execution
+    or unloaded generated artifacts remain fail-closed.
+    """
+    smoke_summary = _summarize_smoke_runs(smoke_runs)
+    reasons: list[str] = []
+    if not readiness.get("benchmark_promotion_allowed", False):
+        reasons.append("preflight did not allow benchmark promotion")
+    if not generated_artifacts_load:
+        reasons.append("generated scenario/map/provenance artifacts did not load")
+    reasons.extend(smoke_summary["reasons"])
+
+    if reasons and (
+        not smoke_summary["executed"] or not generated_artifacts_load or not smoke_runs
+    ):
+        classification = SMOKE_BLOCKED
+        recommended_next_action = "fix_import_or_smoke_execution"
+    elif not readiness.get("benchmark_promotion_allowed", False):
+        classification = SMOKE_BLOCKED
+        recommended_next_action = "restore_dataset_backed_preflight"
+    elif (
+        smoke_summary["reached_goal"]
+        and not smoke_summary["collisions"]
+        and not smoke_summary["timeouts"]
+    ):
+        classification = SMOKE_BENCHMARK_READY
+        recommended_next_action = "promote_benchmark_ready_candidate"
+        reasons.append("all recorded smoke runs reached goal without timeout or collision")
+    else:
+        classification = SMOKE_EXPLORATORY_ONLY
+        recommended_next_action = "accept_exploratory_only"
+        if smoke_summary["timeouts"]:
+            reasons.append("recorded smoke run timed out before reaching the goal")
+        if not smoke_summary["reached_goal"]:
+            reasons.append("recorded smoke run did not satisfy success criterion")
+        if smoke_summary["collisions"]:
+            reasons.append("recorded smoke run included collisions")
+
+    return {
+        "schema": "robot_sf_sdd_smoke_decision.v1",
+        "issue": ISSUE,
+        "classification": classification,
+        "recommended_next_action": recommended_next_action,
+        "benchmark_ready": classification == SMOKE_BENCHMARK_READY,
+        "exploratory_only": classification == SMOKE_EXPLORATORY_ONLY,
+        "generated_artifacts_load": generated_artifacts_load,
+        "smoke_runs": smoke_runs,
+        "reasons": reasons,
     }
 
 

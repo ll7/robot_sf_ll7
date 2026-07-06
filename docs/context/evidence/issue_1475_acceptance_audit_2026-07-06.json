@@ -1,0 +1,73 @@
+{
+  "acceptance_evidence": [
+    {
+      "criterion": "Residual dataset manifest NPZ recorded durable artifacts.",
+      "evidence": "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/source_slurm_checksum_manifest.sha256 records the smoke NPZ checksum; smoke artifact_pointer_status=None, so a durable pointer is still not proven by the tracked smoke summary.",
+      "status": "partially_met"
+    },
+    {
+      "criterion": "Learned residual checkpoint pointer durable included in completion update.",
+      "evidence": "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/source_slurm_checksum_manifest.sha256 records the smoke checkpoint checksum; smoke artifact_pointer_status=None, so durable checkpoint pointer completion remains unproven.",
+      "status": "partially_met"
+    },
+    {
+      "criterion": "Diagnostics report includes ORCA command, raw residual, bounded residual, final guarded command, residual clipping rate, guard veto rate, fallback/degraded status.",
+      "evidence": "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/summary.json missing required smoke evidence fields: ['residual_clipping_rate', 'guard_veto_rate', 'fallback_degraded_status', 'artifact_pointer_status'].",
+      "status": "not_met"
+    },
+    {
+      "criterion": "Fallback/degraded rows are not counted learned-residual success evidence.",
+      "evidence": "validate_smoke_nominal_gate status=invalid; tracked claim boundary is failed-closed smoke evidence only.",
+      "status": "met"
+    },
+    {
+      "criterion": "Smoke result recorded before nominal escalation.",
+      "evidence": "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/summary.json records status='failed_closed', success_rate=0.0, nominal_escalation_allowed=False.",
+      "status": "met"
+    },
+    {
+      "criterion": "Nominal result classified ready #1358 continuation, revise, stop.",
+      "evidence": "No nominal result exists in tracked evidence; smoke gate remains 'invalid'. Gate error: ORCA-residual smoke nominal gate failed:\n- smoke summary missing required entries: ['residual_clipping_rate', 'guard_veto_rate', 'fallback_degraded_status', 'artifact_pointer_status']\n- residual_clipping_rate must be numeric rate\n- guard_veto_rate must be numeric rate\n- fallback_degraded_status must be 'clear' before nominal escalation (got None)\n- artifact_pointer_status must be durable/complete before nominal escalation (got None)\n- nominal_escalation_allowed must be true\n- success_rate below nominal smoke gate: 0.0000 < 0.8000",
+      "status": "not_met"
+    }
+  ],
+  "checked_paths": [
+    "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/summary.json",
+    "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/source_slurm_checksum_manifest.sha256",
+    "docs/context/evidence/issue_1475_closure_audit_2026-07-06.md"
+  ],
+  "claim_boundary": "CPU-only acceptance audit over tracked evidence; no Slurm/GPU submission, benchmark campaign, training run, or paper-facing claim.",
+  "closure_audit_contains_issue_1475": true,
+  "closure_call": "keep_open",
+  "issue": 1475,
+  "next_empirical_action": "Run one bounded ORCA-residual BC smoke rerun on a Slurm-capable host; only if validate_smoke_nominal_gate passes, escalate nominal and classify #1358 continuation/revise/stop.",
+  "remaining_criteria": [
+    {
+      "criterion": "Residual dataset manifest NPZ recorded durable artifacts.",
+      "evidence": "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/source_slurm_checksum_manifest.sha256 records the smoke NPZ checksum; smoke artifact_pointer_status=None, so a durable pointer is still not proven by the tracked smoke summary.",
+      "status": "partially_met"
+    },
+    {
+      "criterion": "Learned residual checkpoint pointer durable included in completion update.",
+      "evidence": "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/source_slurm_checksum_manifest.sha256 records the smoke checkpoint checksum; smoke artifact_pointer_status=None, so durable checkpoint pointer completion remains unproven.",
+      "status": "partially_met"
+    },
+    {
+      "criterion": "Diagnostics report includes ORCA command, raw residual, bounded residual, final guarded command, residual clipping rate, guard veto rate, fallback/degraded status.",
+      "evidence": "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/summary.json missing required smoke evidence fields: ['residual_clipping_rate', 'guard_veto_rate', 'fallback_degraded_status', 'artifact_pointer_status'].",
+      "status": "not_met"
+    },
+    {
+      "criterion": "Nominal result classified ready #1358 continuation, revise, stop.",
+      "evidence": "No nominal result exists in tracked evidence; smoke gate remains 'invalid'. Gate error: ORCA-residual smoke nominal gate failed:\n- smoke summary missing required entries: ['residual_clipping_rate', 'guard_veto_rate', 'fallback_degraded_status', 'artifact_pointer_status']\n- residual_clipping_rate must be numeric rate\n- guard_veto_rate must be numeric rate\n- fallback_degraded_status must be 'clear' before nominal escalation (got None)\n- artifact_pointer_status must be durable/complete before nominal escalation (got None)\n- nominal_escalation_allowed must be true\n- success_rate below nominal smoke gate: 0.0000 < 0.8000",
+      "status": "not_met"
+    }
+  ],
+  "schema_version": "issue-1475-acceptance-audit.v1",
+  "smoke_gate": {
+    "error": "ORCA-residual smoke nominal gate failed:\n- smoke summary missing required entries: ['residual_clipping_rate', 'guard_veto_rate', 'fallback_degraded_status', 'artifact_pointer_status']\n- residual_clipping_rate must be numeric rate\n- guard_veto_rate must be numeric rate\n- fallback_degraded_status must be 'clear' before nominal escalation (got None)\n- artifact_pointer_status must be durable/complete before nominal escalation (got None)\n- nominal_escalation_allowed must be true\n- success_rate below nominal smoke gate: 0.0000 < 0.8000",
+    "status": "invalid"
+  },
+  "source_thread_summary": "Issue #1475 live thread reviewed via gh api on 2026-07-06; latest maintainer comment remains the 2026-07-05 post-PR #4561 gate update.",
+  "status": "blocked"
+}

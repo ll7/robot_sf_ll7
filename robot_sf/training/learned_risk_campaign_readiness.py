@@ -107,8 +107,8 @@ def evaluate_campaign_readiness(
         "status": "ok",
         "candidate_id": "learned_risk_model_v1",
         "issue": 1472,
-        "launch_packet": str(launch_packet_path),
-        "trace_manifest": str(trace_manifest_path),
+        "launch_packet": _display_path(launch_packet_path, root),
+        "trace_manifest": _display_path(trace_manifest_path, root),
         "gates": gates,
         "campaign_ready": not blocking_gates,
         "campaign_state": campaign_state,
@@ -131,6 +131,14 @@ def _resolve_existing(path: Path | str, repo_root: Path, label: str) -> Path:
     if not resolved.is_file():
         raise LearnedRiskCampaignReadinessError(f"{label} is not a file: {path}")
     return resolved
+
+
+def _display_path(path: Path, repo_root: Path) -> str:
+    """Return repo-relative paths when possible for portable readiness JSON."""
+    try:
+        return path.relative_to(repo_root).as_posix()
+    except ValueError:
+        return str(path)
 
 
 def _evaluate_launch_packet_gate(launch_packet_path: Path, root: Path) -> dict[str, Any]:

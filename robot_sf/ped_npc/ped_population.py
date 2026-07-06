@@ -30,7 +30,7 @@ Example:
     ... )
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from math import atan2, ceil, cos, dist, sin
 
 import numpy as np
@@ -147,6 +147,9 @@ class PedSpawnConfig:
     archetype_composition: dict[str, float] | None = None
     archetype_speed_factors: dict[str, float] | None = None
     archetype_seed: int | None = None
+    response_law_composition: dict[str, float] | None = None
+    response_law_seed: int | None = None
+    force_population_size: int | None = None
 
     def __post_init__(self):
         """
@@ -410,7 +413,7 @@ class RoutePointsGenerator:
         return spawn_pos, route_id, sec_id
 
 
-def populate_ped_routes(  # noqa: PLR0915
+def populate_ped_routes(  # noqa: C901,PLR0915
     config: PedSpawnConfig,
     routes: list[GlobalRoute],
     obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
@@ -442,7 +445,10 @@ def populate_ped_routes(  # noqa: PLR0915
         config.sidewalk_width,
         obstacle_polygons=obstacle_polygons,
     )
-    total_num_peds = ceil(proportional_spawn_gen.total_sidewalks_area * config.peds_per_area_m2)
+    if config.force_population_size is not None:
+        total_num_peds = config.force_population_size
+    else:
+        total_num_peds = ceil(proportional_spawn_gen.total_sidewalks_area * config.peds_per_area_m2)
     ped_states, groups = np.zeros((total_num_peds, 6)), []
     num_unassigned_peds = total_num_peds
     # Dictionary to hold assignments of groups to routes
@@ -577,8 +583,13 @@ def populate_crowded_zones(
             - groups: List of sets containing pedestrian IDs in each group.
             - zone_assignments: Dict mapping pedestrian ID to zone index.
     """
+    if not crowded_zones:
+        return np.zeros((0, 6)), [], {}
     proportional_spawn_gen = ZonePointsGenerator(crowded_zones, obstacle_polygons=obstacle_polygons)
-    total_num_peds = ceil(sum(proportional_spawn_gen.zone_areas) * config.peds_per_area_m2)
+    if config.force_population_size is not None:
+        total_num_peds = config.force_population_size
+    else:
+        total_num_peds = ceil(sum(proportional_spawn_gen.zone_areas) * config.peds_per_area_m2)
     ped_states, groups = np.zeros((total_num_peds, 6)), []
     num_unassigned_peds = total_num_peds
     zone_assignments = {}
@@ -740,13 +751,26 @@ def populate_simulation(  # noqa: PLR0913
     """
     prepared_obstacles = prepare_obstacle_polygons(obstacle_polygons or [])
 
+    # ``force_population_size`` sets the EXACT total pedestrian count. Both the crowded-zone
+    # and route spawners honor the field independently, so when a scenario declares both
+    # routes and crowded zones a naive pass would spawn ``2 * force_population_size`` peds
+    # (issue #4618 R4). Split the forced total between the two active spawners so the merged
+    # population matches the requested size; any odd remainder is assigned to routes.
+    crowd_spawn_config = spawn_config
+    route_spawn_config = spawn_config
+    if spawn_config.force_population_size is not None and ped_crowded_zones and ped_routes:
+        zone_share = spawn_config.force_population_size // 2
+        route_share = spawn_config.force_population_size - zone_share
+        crowd_spawn_config = replace(spawn_config, force_population_size=zone_share)
+        route_spawn_config = replace(spawn_config, force_population_size=route_share)
+
     crowd_ped_states_np, crowd_groups, zone_assignments = populate_crowded_zones(
-        spawn_config,
+        crowd_spawn_config,
         ped_crowded_zones,
         obstacle_polygons=prepared_obstacles,
     )
     route_ped_states_np, route_groups, route_assignments, initial_sections = populate_ped_routes(
-        spawn_config,
+        route_spawn_config,
         ped_routes,
         obstacle_polygons=prepared_obstacles,
     )

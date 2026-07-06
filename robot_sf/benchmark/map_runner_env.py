@@ -46,6 +46,10 @@ def build_env_config(
         center_on_robot=True,
     )
     apply_pedestrian_reactivity_to_env_config(config, scenario=scenario)
+    if "pedestrian_control_trace_labels" in scenario:
+        config.sim_config.pedestrian_control_trace_labels = scenario[
+            "pedestrian_control_trace_labels"
+        ]
     return config
 
 

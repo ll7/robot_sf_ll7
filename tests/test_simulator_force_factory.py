@@ -29,7 +29,11 @@ def test_make_ped_forces_binds_robot_specific_callbacks(monkeypatch) -> None:
     monkeypatch.setattr(
         simulator_module,
         "PedRobotForce",
-        lambda config, peds, get_robot_pos: _ForceStub("prf", config, peds, get_robot_pos),
+        # Accept the backward-compatible ``get_ped_response_multipliers`` kwarg (issue #4618
+        # CI-A) so the stub matches the real PedRobotForce signature used by _make_ped_forces.
+        lambda config, peds, get_robot_pos, get_ped_response_multipliers=None: _ForceStub(
+            "prf", config, peds, get_robot_pos
+        ),
     )
     monkeypatch.setattr(
         simulator_module,

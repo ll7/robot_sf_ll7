@@ -138,10 +138,15 @@ def classify_curation_readiness(
             "as benchmark evidence (forced to proxy_schema_smoke)."
         )
 
-    probe_satisfiable = True
+    probe_satisfiable = False
     if annotation_probe is not None:
         probe_satisfiable = bool(annotation_probe.get("selection_satisfiable", False))
         blockers.extend(annotation_probe.get("blockers", []))
+    elif dataset_backed:
+        blockers.append(
+            "SDD is dataset-backed, but no candidate annotation was probed; select a scene/video "
+            "annotation before promoting curation output as benchmark evidence."
+        )
 
     # Evidence status: dataset-backed + probe-clean is the only benchmark-candidate path.
     if dataset_backed:

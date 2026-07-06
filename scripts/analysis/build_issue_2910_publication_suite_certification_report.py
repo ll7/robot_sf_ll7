@@ -245,9 +245,9 @@ def build_report(
             },
         ],
         "next_empirical_action": (
-            "Apply a versioned v0.1 suite policy that excludes or repairs the 2 "
+            f"Apply a versioned v0.1 suite policy that excludes or repairs the {len(excluded)} "
             "geometrically infeasible scenarios and explicitly routes or removes "
-            "the 9 stress-only scenarios, then regenerate scenario_cert.v1 summary, "
+            f"the {len(stress_only)} stress-only scenarios, then regenerate scenario_cert.v1 summary, "
             "release claim matrix, and publication gate output."
         ),
     }

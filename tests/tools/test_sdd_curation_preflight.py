@@ -503,3 +503,86 @@ def test_decision_packet_rejects_invalid_meters_per_pixel(tmp_path: Path, bad_sc
             meters_per_pixel=bad_scale,
         )
     assert not math.isfinite(bad_scale) or bad_scale <= 0  # guards the parametrization intent
+
+
+def _benchmark_candidate_readiness() -> dict[str, object]:
+    return {
+        "benchmark_promotion_allowed": True,
+        "output_classification": sdd_curation_preflight.OUTPUT_BENCHMARK_READY_CANDIDATE,
+    }
+
+
+def test_smoke_decision_accepts_timeout_candidate_as_exploratory_only() -> None:
+    """#1126 real-data smoke timeouts resolve to exploratory-only, not a vague blocker."""
+    decision = sdd_curation_preflight.classify_smoke_decision(
+        _benchmark_candidate_readiness(),
+        [
+            {
+                "horizon": 80,
+                "successful_jobs": 1,
+                "failed_jobs": 0,
+                "success": False,
+                "timeout": True,
+                "collisions": 0,
+            },
+            {
+                "horizon": 384,
+                "successful_jobs": 1,
+                "failed_jobs": 0,
+                "success": False,
+                "timeout": True,
+                "collisions": 0,
+            },
+        ],
+        generated_artifacts_load=True,
+    )
+
+    assert decision["classification"] == sdd_curation_preflight.SMOKE_EXPLORATORY_ONLY
+    assert decision["recommended_next_action"] == "accept_exploratory_only"
+    assert decision["exploratory_only"] is True
+    assert decision["benchmark_ready"] is False
+    assert any("timed out" in reason for reason in decision["reasons"])
+
+
+def test_smoke_decision_promotes_clean_success_candidate() -> None:
+    """Cleanly loaded, successful smoke can be promoted as benchmark-ready candidate."""
+    decision = sdd_curation_preflight.classify_smoke_decision(
+        _benchmark_candidate_readiness(),
+        [
+            {
+                "horizon": 384,
+                "successful_jobs": 1,
+                "failed_jobs": 0,
+                "success": True,
+                "timeout": False,
+                "collisions": 0,
+            }
+        ],
+        generated_artifacts_load=True,
+    )
+
+    assert decision["classification"] == sdd_curation_preflight.SMOKE_BENCHMARK_READY
+    assert decision["recommended_next_action"] == "promote_benchmark_ready_candidate"
+    assert decision["benchmark_ready"] is True
+
+
+def test_smoke_decision_fails_closed_when_artifacts_do_not_load() -> None:
+    """Smoke classification must not hide generated artifact load failures."""
+    decision = sdd_curation_preflight.classify_smoke_decision(
+        _benchmark_candidate_readiness(),
+        [
+            {
+                "horizon": 384,
+                "successful_jobs": 1,
+                "failed_jobs": 0,
+                "success": True,
+                "timeout": False,
+                "collisions": 0,
+            }
+        ],
+        generated_artifacts_load=False,
+    )
+
+    assert decision["classification"] == sdd_curation_preflight.SMOKE_BLOCKED
+    assert decision["recommended_next_action"] == "fix_import_or_smoke_execution"
+    assert any("did not load" in reason for reason in decision["reasons"])

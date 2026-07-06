@@ -27,6 +27,8 @@ from typing import Any
 import jsonschema
 import yaml
 
+from robot_sf.common.artifact_paths import get_repository_root
+
 MANIFEST_SCHEMA_ID = "robot_sf_real_trajectory_ingestion_manifest.v1"
 
 _SCHEMA_PATH = (
@@ -46,10 +48,18 @@ _GITIGNORED_STAGING_PREFIXES = (
 def _resolved_staging_dir(staging_dir: str) -> Path:
     """Resolve a BYO staging directory after expanding environment variables.
 
+    Relative paths (for example the canonical ``output/`` artifact root) are
+    anchored to the repository root so validated-staging checks do not depend on
+    the current working directory. Paths that still contain an unresolved
+    environment variable are returned unexpanded so the caller can fail closed.
+
     Returns:
         Expanded local filesystem path.
     """
-    return Path(os.path.expandvars(staging_dir)).expanduser()
+    expanded = Path(os.path.expandvars(staging_dir)).expanduser()
+    if "$" in str(expanded) or expanded.is_absolute():
+        return expanded
+    return get_repository_root() / expanded
 
 
 def _validated_staging_issues(staging_dir: str) -> list[PreflightIssue]:

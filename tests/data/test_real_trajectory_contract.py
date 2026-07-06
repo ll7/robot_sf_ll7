@@ -234,6 +234,30 @@ def test_validated_staging_dir_must_be_non_empty(
     assert any(i.code == "staging.dir_empty_for_validated" for i in result.errors)
 
 
+def test_validated_output_relative_staging_is_cwd_independent(
+    valid_manifest: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An ``output/``-relative validated manifest resolves against the repo root, not cwd."""
+    from robot_sf.data_ingestion import real_trajectory_contract as contract
+
+    repo_root = tmp_path / "repo"
+    staging_dir = repo_root / "output" / "external_data" / "synthetic_byo"
+    staging_dir.mkdir(parents=True)
+    (staging_dir / "trajectories.csv").write_text("frame,ped_id,x,y\n0,1,0,0\n", encoding="utf-8")
+    monkeypatch.setattr(contract, "get_repository_root", lambda: repo_root)
+    valid_manifest["staging"]["staging_dir"] = "output/external_data/synthetic_byo"
+    valid_manifest["availability"] = "validated"
+    valid_manifest["checksums"]["tree_sha256"] = "a" * 64
+    valid_manifest["checksums"]["expected_tree_sha256"] = "a" * 64
+
+    # Run from an unrelated cwd; resolution must still find the repo-root staging dir.
+    other_cwd = tmp_path / "elsewhere"
+    other_cwd.mkdir()
+    monkeypatch.chdir(other_cwd)
+    result = run_preflight(valid_manifest)
+    assert result.ok, [f"{i.code}: {i.message}" for i in result.errors]
+
+
 def test_project_hosted_posture_warns(valid_manifest: dict) -> None:
     """The project-hosted posture produces an advisory warning, not a hard error."""
     valid_manifest["license"]["posture"] = "project-hosted"

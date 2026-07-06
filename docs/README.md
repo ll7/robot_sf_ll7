@@ -205,6 +205,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 
 * **[Benchmark Spec (Classic Interactions)](./benchmark_spec.md)** - Scenario split + seeds, baseline categories, reproducible commands, and metric caveats
 * **[Benchmark Scenario And Model Governance](./benchmark_governance.md)** - PR review contract for scenarios, metrics, model profiles, versioned schemas, release-bound evidence, and deprecated/superseded scenarios
+* **[Assurance Fragments](./assurance_fragments.md)** - Machine-readable claim-argument-evidence fragments for campaign artifacts, including release-gate to GSN argument-node mapping
 * **[Scenario Zoo Index](./scenario_zoo/index.md)** - Family-oriented scenario catalog with links to source configs, maps, benchmark surfaces, and caveats
 * **[Hazard Traceability](./hazard_traceability.md)** - `hazard_traceability.v1` schema, typed loader, fixture, and coverage summary for scenario-to-hazard evidence caveats
 * **[ODD Contracts](./odd_contracts.md)** - `odd_contract.v1` schema, typed loader, fixture, and boundary for benchmark and falsification evidence assumptions

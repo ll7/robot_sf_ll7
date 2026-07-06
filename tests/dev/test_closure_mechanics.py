@@ -100,15 +100,35 @@ def test_classify_and_build_actions_skips_candidates_without_number() -> None:
 
 
 def test_build_comment_command_format() -> None:
-    """Comment command targets the correct issue number."""
-    cmd = closure_mechanics.build_comment_command(issue_number=42, body="hello")
-    assert cmd == ["gh", "issue", "comment", "42", "--body", "hello"]
+    """Comment command targets the correct issue number and repo."""
+    cmd = closure_mechanics.build_comment_command(
+        issue_number=42, body="hello", repo="ll7/robot_sf_ll7"
+    )
+    assert cmd == [
+        "gh",
+        "issue",
+        "comment",
+        "42",
+        "--repo",
+        "ll7/robot_sf_ll7",
+        "--body",
+        "hello",
+    ]
 
 
 def test_build_close_command_format() -> None:
-    """Close command uses completed reason."""
-    cmd = closure_mechanics.build_close_command(issue_number=42)
-    assert cmd == ["gh", "issue", "close", "42", "--reason", "completed"]
+    """Close command uses completed reason and targets the repo."""
+    cmd = closure_mechanics.build_close_command(issue_number=42, repo="ll7/robot_sf_ll7")
+    assert cmd == [
+        "gh",
+        "issue",
+        "close",
+        "42",
+        "--repo",
+        "ll7/robot_sf_ll7",
+        "--reason",
+        "completed",
+    ]
 
 
 def test_execute_actions_dry_run_preview() -> None:
@@ -144,6 +164,38 @@ def test_execute_actions_apply_calls_subprocess(monkeypatch: pytest.MonkeyPatch)
     assert len(calls) == 1
     assert "comment" in calls[0]
     assert "12" in calls[0]
+    # execute_actions must route through build_comment_command so the executed
+    # command is repo-scoped (single source of truth; guards the --repo drift).
+    body = calls[0][calls[0].index("--body") + 1]
+    assert calls[0] == closure_mechanics.build_comment_command(
+        issue_number=12, body=body, repo="ll7/robot_sf_ll7"
+    )
+    assert calls[0][calls[0].index("--repo") + 1] == "ll7/robot_sf_ll7"
+
+
+def test_execute_actions_close_path_is_repo_scoped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Apply+close routes both gh commands through the repo-scoped builders."""
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(closure_mechanics.subprocess, "run", fake_run)
+
+    report = _audit_report([_candidate(12, "add checker", prs=[_pr_entry(99, "fix #12")])])
+    actions = closure_mechanics.classify_and_build_actions(report, close_issues={12})
+    result = closure_mechanics.execute_actions(actions, repo="ll7/robot_sf_ll7", dry_run=False)
+
+    assert result["results"][0]["comment_posted"] is True
+    assert result["results"][0]["closed"] is True
+    # One comment call + one close call, both repo-scoped via the builders.
+    assert len(calls) == 2
+    assert calls[1] == closure_mechanics.build_close_command(
+        issue_number=12, repo="ll7/robot_sf_ll7"
+    )
+    for cmd in calls:
+        assert cmd[cmd.index("--repo") + 1] == "ll7/robot_sf_ll7"
 
 
 def test_main_reads_stdin(

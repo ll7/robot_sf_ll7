@@ -165,14 +165,25 @@ def classify_and_build_actions(
     return actions
 
 
-def build_comment_command(*, issue_number: int, body: str) -> list[str]:
-    """Build a read-only-safe ``gh issue comment`` command."""
-    return ["gh", "issue", "comment", str(issue_number), "--body", body]
+def build_comment_command(*, issue_number: int, body: str, repo: str) -> list[str]:
+    """Build a ``gh issue comment`` command scoped to ``repo``.
+
+    ``--repo`` is required so the command targets the intended repository
+    regardless of the working directory (e.g. a linked worktree whose default
+    remote differs). This is the single source of truth for the comment
+    invocation used by :func:`execute_actions`.
+    """
+    return ["gh", "issue", "comment", str(issue_number), "--repo", repo, "--body", body]
 
 
-def build_close_command(*, issue_number: int) -> list[str]:
-    """Build a ``gh issue close`` command with ``completed`` reason."""
-    return ["gh", "issue", "close", str(issue_number), "--reason", "completed"]
+def build_close_command(*, issue_number: int, repo: str) -> list[str]:
+    """Build a ``gh issue close`` command (``completed`` reason) scoped to ``repo``.
+
+    ``--repo`` is required for the same repository-targeting reason as
+    :func:`build_comment_command`. This is the single source of truth for the
+    close invocation used by :func:`execute_actions`.
+    """
+    return ["gh", "issue", "close", str(issue_number), "--repo", repo, "--reason", "completed"]
 
 
 def execute_actions(
@@ -197,16 +208,9 @@ def execute_actions(
 
         try:
             subprocess.run(
-                [
-                    "gh",
-                    "issue",
-                    "comment",
-                    str(action.issue_number),
-                    "--repo",
-                    repo,
-                    "--body",
-                    action.comment_body,
-                ],
+                build_comment_command(
+                    issue_number=action.issue_number, body=action.comment_body, repo=repo
+                ),
                 check=True,
                 capture_output=True,
                 text=True,
@@ -220,16 +224,7 @@ def execute_actions(
         if action.should_close:
             try:
                 subprocess.run(
-                    [
-                        "gh",
-                        "issue",
-                        "close",
-                        str(action.issue_number),
-                        "--repo",
-                        repo,
-                        "--reason",
-                        "completed",
-                    ],
+                    build_close_command(issue_number=action.issue_number, repo=repo),
                     check=True,
                     capture_output=True,
                     text=True,

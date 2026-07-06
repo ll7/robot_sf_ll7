@@ -48,3 +48,60 @@ entries:
       issue_comment_posted: false
       merge_or_release: false
       deletion: false
+  - recorded_at_utc: "2026-07-06T22:33:28Z"
+    status: not_ready_for_issue_closure
+    source:
+      issue_url: "https://github.com/ll7/robot_sf_ll7/issues/4279"
+      live_issue_state_checked: open
+      comments_checked: 3
+      latest_issue_comment_utc: "2026-07-06T17:24:51Z"
+      open_pr_dedupe_checked: true
+      open_pr_dedupe_result: "No open PR matched #4279, SocNavBench, or ETH shape-contract scope."
+      merged_prs_verified:
+        - pr: 4286
+          url: "https://github.com/ll7/robot_sf_ll7/pull/4286"
+          merged_at_utc: "2026-07-03T13:24:23Z"
+          role: "Loader/accessor, skip-if-absent tests, acquisition/layout documentation."
+        - pr: 4670
+          url: "https://github.com/ll7/robot_sf_ll7/pull/4670"
+          merged_at_utc: "2026-07-06T17:24:10Z"
+          role: "CPU-only fail-closed staged-data checker, checker tests, and docs usage snippet."
+    propagation_surface: "tracked issue-state table because issue comments were not authorized and issue #4279 had multiple recent PRs."
+    closure_boundary:
+      claim_boundary: "Closure audit and integration-state record only; no dataset bytes, no public download path, no benchmark campaign, no paper or dissertation claim edits."
+      delivered: "Public repository now has the exemplar loader/accessor, skip-if-absent tests, acquisition/layout documentation, deterministic registry path, fail-closed malformed-data behavior, and a CPU-only staged-data checker."
+      remaining: "Acquire/stage official license-gated SocNavBench/S3DIS ETH assets on an authorized host, then run the checker green and record that staged-data evidence."
+      closure_call: "Do not close #4279 yet; the remaining acceptance item requires non-public license-gated data staging evidence."
+    acceptance_mapping:
+      - criterion: "Add loader, skip-if-absent tests, and docs page."
+        status: met
+        evidence: "PR #4286 added robot_sf/data/external/socnavbench_eth.py, tests/data/external/test_socnavbench_eth_shape.py, docs/datasets/socnavbench-s3dis-eth.md, and docs/external_data_setup.md links."
+      - criterion: "CI remains green without external data."
+        status: met
+        evidence: "PR #4286 gate comment records all CI green; PR #4670 gate comment records full CI matrix green with absent external data."
+      - criterion: "Staged-data path is deterministic through the registry and ROBOT_SF_EXTERNAL_DATA_ROOT."
+        status: met
+        evidence: "PR #4286 loader uses asset id socnavbench-s3dis-eth through scripts/tools/manage_external_data.py and documents ROBOT_SF_EXTERNAL_DATA_ROOT/socnavbench staging."
+      - criterion: "Malformed staged data fails closed with an actionable acquisition/layout doc."
+        status: met
+        evidence: "PR #4286 loader tests cover malformed data; PR #4670 checker returns exit 2 for missing or malformed staged data and points users to docs/datasets/socnavbench-s3dis-eth.md."
+      - criterion: "PR body documents absent-data and staged-data behavior."
+        status: met
+        evidence: "PR #4286 and PR #4670 bodies and gate comments both state absent-data CI behavior and staged-data expectations; #4670 explicitly keeps #4279 open for license-gated real-data staging."
+      - criterion: "No raw SocNavBench/S3DIS data, download path, benchmark claim, paper claim, or dissertation claim is added."
+        status: met
+        evidence: "PR #4286 and PR #4670 file lists are limited to loader/docs/tests/checker surfaces; both gate comments state no vendored bytes, no download behavior, and no benchmark or paper-facing claim."
+      - criterion: "Run staged-data validation on locally staged official ETH bytes."
+        status: blocked_external_input
+        evidence: "Issue comment on 2026-07-06T17:24:51Z states the remaining close blocker is acquiring/staging official license-gated SocNavBench/S3DIS ETH assets and running the checker green."
+    next_empirical_action:
+      command: "uv run python scripts/validation/check_socnavbench_eth_shape_contract.py --json-out output/validation/socnavbench_eth_shape_contract.json"
+      prerequisite: "Official SocNavBench/S3DIS ETH assets staged under the documented registry path on an authorized host."
+      expected_success_signal: "checker exits 0 and records no_download_performed: true with validated mesh/traversible paths."
+    forbidden_actions_confirmed:
+      full_benchmark_campaign: false
+      slurm_or_gpu_submission: false
+      dataset_download_or_raw_bytes: false
+      issue_comment_posted: false
+      merge_or_release: false
+      deletion: false

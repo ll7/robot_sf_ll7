@@ -187,6 +187,7 @@ def scan_annotation_candidates(
     min_track_points: int,
     max_pedestrians: int,
     limit: int = 5,
+    next_action_packet_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Rank staged SDD annotation candidates without writing derived artifacts."""
     annotations = sorted(root.rglob("annotations.txt")) if root.is_dir() else []
@@ -209,6 +210,14 @@ def scan_annotation_candidates(
         ),
     )
     selected = ranked[:limit] if limit > 0 else ranked
+    if next_action_packet_config is not None:
+        for index, candidate in enumerate(selected, start=1):
+            candidate["next_action_packet"] = build_scan_candidate_next_action_packet(
+                candidate,
+                scan_root=root,
+                rank=index,
+                config=next_action_packet_config,
+            )
     satisfiable_count = sum(1 for probe in probes if probe["selection_satisfiable"])
     blockers = []
     if not root.is_dir():
@@ -333,6 +342,7 @@ def run_preflight(
     label: str,
     min_track_points: int,
     max_pedestrians: int,
+    next_action_packet_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Resolve the staging gate, optionally probe an annotation, and classify readiness."""
     staging_gate = manage_external_data.resolve_sdd_scenario_prior_mode(manifest_path=manifest_path)
@@ -352,6 +362,7 @@ def run_preflight(
             min_track_points=min_track_points,
             max_pedestrians=max_pedestrians,
             limit=scan_limit,
+            next_action_packet_config=next_action_packet_config,
         )
     return report
 
@@ -359,6 +370,47 @@ def run_preflight(
 def _shell_arg(value: str | Path) -> str:
     """Return a conservative single-token shell representation for packet commands."""
     return shlex.quote(str(value))
+
+
+def _safe_dataset_suffix(path: Path, *, scan_root: Path) -> str:
+    """Build a stable dataset-id suffix from a scanned annotation path."""
+    try:
+        relative = path.relative_to(scan_root)
+    except ValueError:
+        relative = path
+    parts = list(relative.parts)
+    if parts and parts[-1] == "annotations.txt":
+        parts = parts[:-1]
+    raw_suffix = "_".join(parts) or path.stem
+    safe = "".join(char.lower() if char.isalnum() else "_" for char in raw_suffix)
+    safe = "_".join(part for part in safe.split("_") if part)
+    return safe or "annotation"
+
+
+def build_scan_candidate_next_action_packet(
+    candidate: dict[str, Any],
+    *,
+    scan_root: Path,
+    rank: int,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a runnable next-action packet for one ranked SDD scan candidate."""
+    annotation = Path(candidate["path"])
+    suffix = _safe_dataset_suffix(annotation, scan_root=scan_root)
+    output_dir = config.get("output_dir") or Path("output/sdd_curation/issue_1126_candidate_scan")
+    candidate_probe = {
+        key: value for key, value in candidate.items() if key != "next_action_packet"
+    }
+    return build_decision_packet(
+        {"candidate_scan_rank": rank, "candidate_probe": candidate_probe},
+        annotation=annotation,
+        label=config["label"],
+        min_track_points=config["min_track_points"],
+        max_pedestrians=config["max_pedestrians"],
+        dataset_id=f"{config['dataset_id_prefix']}_{suffix}",
+        output_dir=output_dir / f"{rank:02d}_{suffix}",
+        meters_per_pixel=config.get("meters_per_pixel"),
+    )
 
 
 def build_decision_packet(
@@ -795,6 +847,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=5,
         help="Maximum ranked scan candidates to include; use 0 to include all.",
     )
+    parser.add_argument(
+        "--scan-next-action-packets",
+        action="store_true",
+        help="Attach runnable preflight/import command packets to ranked scan candidates.",
+    )
     parser.add_argument("--label", default="Pedestrian", help="SDD label to probe for.")
     parser.add_argument("--min-track-points", type=int, default=8)
     parser.add_argument("--max-pedestrians", type=int, default=4)
@@ -852,6 +909,16 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("--min-track-points must be > 1")
     if args.max_pedestrians <= 0:
         raise SystemExit("--max-pedestrians must be > 0")
+    next_action_packet_config = None
+    if args.scan_next_action_packets:
+        next_action_packet_config = {
+            "label": args.label,
+            "min_track_points": args.min_track_points,
+            "max_pedestrians": args.max_pedestrians,
+            "dataset_id_prefix": args.decision_dataset_id,
+            "output_dir": args.decision_output_dir,
+            "meters_per_pixel": args.decision_meters_per_pixel,
+        }
     report = run_preflight(
         manifest_path=args.manifest,
         annotation=args.annotation,
@@ -860,6 +927,7 @@ def main(argv: list[str] | None = None) -> int:
         label=args.label,
         min_track_points=args.min_track_points,
         max_pedestrians=args.max_pedestrians,
+        next_action_packet_config=next_action_packet_config,
     )
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))

@@ -665,6 +665,90 @@ def test_scan_annotation_candidates_ranks_satisfiable_candidates(tmp_path: Path)
     assert scan["candidates"][0]["usable_track_count"] == 2
 
 
+def test_scan_annotation_candidates_can_attach_next_action_packets(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Ranked scan output can carry runnable next empirical action commands."""
+    annotations = tmp_path / "annotations" / "bookstore" / "video0" / "annotations.txt"
+    annotations.parent.mkdir(parents=True)
+    _write_sdd_fixture(annotations)
+
+    scan = sdd_curation_preflight.scan_annotation_candidates(
+        tmp_path,
+        label="Pedestrian",
+        min_track_points=4,
+        max_pedestrians=4,
+        limit=1,
+        next_action_packet_config={
+            "label": "Pedestrian",
+            "min_track_points": 4,
+            "max_pedestrians": 4,
+            "dataset_id_prefix": "sdd_scan",
+            "output_dir": tmp_path / "derived",
+            "meters_per_pixel": 0.0417,
+        },
+    )
+
+    packet = scan["candidates"][0]["next_action_packet"]
+    assert packet["selected_annotation"] == str(annotations)
+    assert packet["curation_parameters"]["meters_per_pixel"] == 0.0417
+    assert packet["required_next_commands"]["preflight"].endswith(
+        "--require-benchmark-ready --json"
+    )
+
+    parsed = _parse_importer_command(packet["required_next_commands"]["import"], monkeypatch)
+    assert parsed.annotations == annotations
+    assert parsed.dataset_id == "sdd_scan_annotations_bookstore_video0"
+    assert parsed.out_dir == tmp_path / "derived" / "01_annotations_bookstore_video0"
+    assert parsed.meters_per_pixel == 0.0417
+
+
+def test_cli_scan_next_action_packets_are_opt_in(tmp_path: Path, monkeypatch, capsys) -> None:
+    """CLI scan can emit copyable next-action packets without benchmark promotion."""
+    annotations = tmp_path / "annotations" / "bookstore" / "video0" / "annotations.txt"
+    annotations.parent.mkdir(parents=True)
+    _write_sdd_fixture(annotations)
+    monkeypatch.setattr(
+        manage_external_data,
+        "resolve_sdd_scenario_prior_mode",
+        lambda *, manifest_path=None: {
+            "mode": manage_external_data.SDD_MODE_PROXY,
+            "dataset_backed": False,
+            "availability": {"state": "missing"},
+            "reason": "SDD not staged.",
+            "staging_dir": str(tmp_path),
+        },
+    )
+
+    exit_code = sdd_curation_preflight.main(
+        [
+            "--scan-root",
+            str(tmp_path),
+            "--scan-limit",
+            "1",
+            "--scan-next-action-packets",
+            "--min-track-points",
+            "4",
+            "--decision-dataset-id",
+            "sdd_scan",
+            "--decision-output-dir",
+            str(tmp_path / "derived"),
+            "--decision-meters-per-pixel",
+            "0.0417",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    report = json.loads(capsys.readouterr().out)
+    packet = report["candidate_scan"]["candidates"][0]["next_action_packet"]
+    assert report["benchmark_promotion_allowed"] is False
+    assert packet["selected_annotation"] == str(annotations)
+    assert packet["required_next_commands"]["preflight"].endswith(
+        "--require-benchmark-ready --json"
+    )
+
+
 def test_cli_scan_root_reports_candidates_without_benchmark_claim(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:

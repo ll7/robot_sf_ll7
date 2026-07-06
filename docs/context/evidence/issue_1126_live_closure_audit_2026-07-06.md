@@ -61,13 +61,13 @@ Fresh isolated worktree:
 scripts/dev/run_worktree_shared_venv.sh -- python scripts/tools/manage_external_data.py list
 # sdd: status missing
 # expected path:
-# /home/luttkule/git/robot_sf_ll7.worktrees/issue-1126-closure-audit-verify-acceptance-criteria-v2/output/external_data/sdd
+# output/external_data/sdd
 ```
 
 Pinned-tree root probe against the primary checkout output root also failed closed in this session:
 
 ```bash
-ROBOT_SF_EXTERNAL_DATA_ROOT=/home/luttkule/git/robot_sf_ll7/output/external_data \
+ROBOT_SF_EXTERNAL_DATA_ROOT=output/external_data \
   scripts/dev/run_worktree_shared_venv.sh -- \
   python scripts/tools/sdd_curation_preflight.py --json
 # staging_mode=proxy_schema_smoke

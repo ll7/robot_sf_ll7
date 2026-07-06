@@ -1,6 +1,6 @@
 # Issue #4013 Real-Trajectory Readiness
 
-Status: `blocked_real_trajectory_data_unavailable`
+Status: `ready_for_real_trajectory_training`
 
 Claim boundary: real-trajectory readiness only. No raw data is staged, no full benchmark campaign is run, and no paper/dissertation claim is made.
 
@@ -8,14 +8,14 @@ Claim boundary: real-trajectory readiness only. No raw data is staged, no full b
 
 - Manifest: `configs/data/issue_4013_eth_biwi_real_trajectory_manifest.yaml`
 - Dataset: `issue_4013_eth_biwi`
-- Availability: `missing`
-- Benchmark eligibility: `diagnostic_only`
+- Availability: `validated`
+- Benchmark eligibility: `research_only`
 - Acquisition URL: `https://ethz.ch/content/dam/ethz/special-interest/itet/cvl/vision-dam/documents/ewap_dataset_light.tgz`
 - Acquisition fail-closed: `True`
 
 ## Blockers
 
-- `real_trajectory.availability_not_validated`: Phase 3 requires a checksum-validated real trajectory dataset; manifest availability is 'missing'.
+- None.
 
 ## Acceptance Evidence
 

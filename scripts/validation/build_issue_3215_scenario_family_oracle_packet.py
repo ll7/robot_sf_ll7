@@ -84,7 +84,13 @@ def _path_exists(payload: dict[str, Any], dotted_key: str) -> Check:
         value = value[part]
     if not isinstance(value, str) or not value:
         return Check(dotted_key, False, "field is not a non-empty string")
-    exists = (REPO_ROOT / value).exists()
+    # Fail closed if the tracked path escapes the repo root (defensive: the
+    # value comes from a versioned packet config, but resolve+containment keeps
+    # a stray "../" or symlink from silently validating an out-of-tree path).
+    resolved = (REPO_ROOT / value).resolve(strict=False)
+    if not resolved.is_relative_to(REPO_ROOT):
+        return Check(dotted_key, False, f"path escapes repository root: {value}")
+    exists = resolved.exists()
     return Check(dotted_key, exists, value if exists else f"missing path: {value}")
 
 

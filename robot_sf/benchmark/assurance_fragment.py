@@ -83,7 +83,9 @@ def build_assurance_fragment(  # noqa: C901, PLR0915
     # S_campaign: Decompose campaign by planners
     s_campaign_id = "S_campaign"
     planner_rows = campaign_summary.get("planner_rows", [])
-    planner_goal_ids = [f"G_{row.get('planner_key')}" for row in planner_rows if row.get("planner_key")]
+    planner_goal_ids = [
+        f"G_{row.get('planner_key')}" for row in planner_rows if row.get("planner_key")
+    ]
 
     # We also link the final summary JSON as a direct solution/evidence for this strategy
     s_campaign_children = list(planner_goal_ids) + ["Sn_campaign_summary"]
@@ -222,7 +224,10 @@ def build_assurance_fragment(  # noqa: C901, PLR0915
 
     # Add release gate report details if available
     if release_gate_report:
-        gate_rel = _repo_relative(Path(release_gate_report.get("provenance", {}).get("input", {}).get("path", "")), repo_root)
+        gate_rel = _repo_relative(
+            Path(release_gate_report.get("provenance", {}).get("input", {}).get("path", "")),
+            repo_root,
+        )
         gate_sha = release_gate_report.get("provenance", {}).get("input", {}).get("sha256", "")
 
         nodes["Sn_release_gates"] = {
@@ -261,7 +266,9 @@ def build_assurance_fragment(  # noqa: C901, PLR0915
 
 def validate_assurance_fragment(payload: dict[str, Any]) -> None:
     """Validate assurance fragment payload against JSON Schema."""
-    schema_path = get_repository_root() / "robot_sf/benchmark/schemas/assurance_fragment.schema.v1.json"
+    schema_path = (
+        get_repository_root() / "robot_sf/benchmark/schemas/assurance_fragment.schema.v1.json"
+    )
     if not schema_path.exists():
         return
     with schema_path.open("r", encoding="utf-8") as f:
@@ -319,12 +326,14 @@ def render_assurance_fragment_to_markdown(payload: dict[str, Any]) -> str:  # no
             if child_id in nodes:
                 lines.append(f"  {node_id} --> {child_id}")
 
-    lines.extend([
-        "```",
-        "",
-        "## GSN Hierarchical Text Tree",
-        "",
-    ])
+    lines.extend(
+        [
+            "```",
+            "",
+            "## GSN Hierarchical Text Tree",
+            "",
+        ]
+    )
 
     visited = set()
 
@@ -413,11 +422,11 @@ def render_assurance_fragment_to_svg(payload: dict[str, Any]) -> str:  # noqa: C
 
     svg_lines = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
-        '  <defs>',
+        "  <defs>",
         '    <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">',
         '      <path d="M 0 0 L 10 5 L 0 10 z" fill="#444" />',
-        '    </marker>',
-        '  </defs>',
+        "    </marker>",
+        "  </defs>",
         '  <rect width="100%" height="100%" fill="#fafafa" />',
     ]
 
@@ -463,7 +472,7 @@ def render_assurance_fragment_to_svg(payload: dict[str, Any]) -> str:  # noqa: C
             stroke_color = "#ffc107"
             fill_color = "#fff3cd"
             # Draw parallelogram
-            points = f"{x+15},{y} {x+box_width},{y} {x+box_width-15},{y+box_height} {x},{y+box_height}"
+            points = f"{x + 15},{y} {x + box_width},{y} {x + box_width - 15},{y + box_height} {x},{y + box_height}"
             box_shape = f'<polygon points="{points}" fill="{fill_color}" stroke="{stroke_color}" stroke-width="2" />'
         elif ntype == "assumption":
             stroke_color = "#007bff"
@@ -478,7 +487,7 @@ def render_assurance_fragment_to_svg(payload: dict[str, Any]) -> str:  # noqa: C
             stroke_color = "#6c757d"
             fill_color = "#e2e3e5"
             box_shape = f'<rect x="{x}" y="{y}" width="{box_width}" height="{box_height}" rx="15" ry="15" fill="{fill_color}" stroke="{stroke_color}" stroke-width="2" />'
-        else: # solution
+        else:  # solution
             stroke_color = "#dc3545"
             fill_color = "#f8d7da"
             box_shape = f'<rect x="{x}" y="{y}" width="{box_width}" height="{box_height}" rx="0" ry="0" fill="{fill_color}" stroke="{stroke_color}" stroke-width="2" />'
@@ -489,19 +498,19 @@ def render_assurance_fragment_to_svg(payload: dict[str, Any]) -> str:  # noqa: C
         # Add Node ID header text
         header_y = y + 16
         svg_lines.append(
-            f'  <text x="{x + box_width/2:.1f}" y="{header_y:.1f}" text-anchor="middle" '
+            f'  <text x="{x + box_width / 2:.1f}" y="{header_y:.1f}" text-anchor="middle" '
             f'font-family="sans-serif" font-size="10" font-weight="bold" fill="#333">'
-            f'{ntype.upper()} ({node_id})</text>'
+            f"{ntype.upper()} ({node_id})</text>"
         )
 
         # Wrap text and render lines
         wrapped_lines = _wrap_text(text, max_chars=22)
         start_text_y = y + 32
-        for line_idx, line in enumerate(wrapped_lines[:3]): # max 3 lines to fit box
+        for line_idx, line in enumerate(wrapped_lines[:3]):  # max 3 lines to fit box
             line_y = start_text_y + line_idx * 14
             escaped_line = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             svg_lines.append(
-                f'  <text x="{x + box_width/2:.1f}" y="{line_y:.1f}" text-anchor="middle" '
+                f'  <text x="{x + box_width / 2:.1f}" y="{line_y:.1f}" text-anchor="middle" '
                 f'font-family="sans-serif" font-size="10" fill="#333">{escaped_line}</text>'
             )
 

@@ -1531,7 +1531,6 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
     except Exception as exc:
         warnings.append(f"Assurance fragment export failed: {exc}")
 
-
     if snqi_hard_fail:
         raise RuntimeError(
             f"SNQI contract failed with enforcement={cfg.snqi_contract.enforcement}; "

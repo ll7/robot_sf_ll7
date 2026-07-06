@@ -6,6 +6,7 @@ import json
 
 import numpy as np
 import pytest
+import torch
 
 from robot_sf.planner.learned_short_horizon_predictor import (
     LearnedShortHorizonPedestrianPredictor,
@@ -210,6 +211,11 @@ def test_real_trajectory_manifest_batch_requires_validated_data(tmp_path, monkey
     assert manifest["evidence_tier"] == "real-trajectory-smoke"
     assert manifest["training_data_manifest_path"] == str(manifest_path)
     assert manifest["metrics"]["data_source"] == "real_trajectory_manifest"
+    # Regression: the checkpoint's evidence tier must match the manifest so a
+    # downstream consumer inspecting only the .pt does not misread a
+    # real-trajectory run as diagnostic-only synthetic data.
+    checkpoint = torch.load(result.checkpoint_path, weights_only=False)
+    assert checkpoint["evidence_tier"] == "real-trajectory-smoke"
 
 
 def test_real_trajectory_batch_fails_closed_when_not_validated(tmp_path) -> None:

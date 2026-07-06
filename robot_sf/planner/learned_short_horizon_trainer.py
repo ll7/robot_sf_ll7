@@ -458,13 +458,18 @@ def train_short_horizon_predictor(config: ShortHorizonTrainerConfig) -> Training
     manifest_path = output_dir / "training_manifest.json"
     metrics_path = output_dir / "training_metrics.json"
 
+    data_source = "real_trajectory_manifest" if config.training_data_manifest_path else "synthetic"
+    evidence_tier = (
+        REAL_TRAJECTORY_EVIDENCE_TIER if config.training_data_manifest_path else EVIDENCE_TIER
+    )
+
     module.eval()
     state_dict = {key: value.detach().cpu() for key, value in module.state_dict().items()}
     torch.save(
         {
             "state_dict": state_dict,
             "schema_version": SCHEMA_VERSION,
-            "evidence_tier": EVIDENCE_TIER,
+            "evidence_tier": evidence_tier,
             "input_dim": input_dim,
             "output_dim": output_dim,
         },
@@ -480,10 +485,6 @@ def train_short_horizon_predictor(config: ShortHorizonTrainerConfig) -> Training
             "statistics are provenance metadata only, not an applied normalizer."
         ),
     }
-    data_source = "real_trajectory_manifest" if config.training_data_manifest_path else "synthetic"
-    evidence_tier = (
-        REAL_TRAJECTORY_EVIDENCE_TIER if config.training_data_manifest_path else EVIDENCE_TIER
-    )
     metrics = {
         "initial_loss": initial_loss,
         "final_loss": final_loss,

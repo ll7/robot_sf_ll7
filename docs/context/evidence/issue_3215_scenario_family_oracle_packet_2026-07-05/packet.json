@@ -1,0 +1,148 @@
+{
+  "blocking_issues": [],
+  "checks": [
+    {
+      "detail": "predictive_scenario_family_oracle_packet.v1",
+      "name": "schema_version",
+      "passed": true
+    },
+    {
+      "detail": "3215",
+      "name": "issue",
+      "passed": true
+    },
+    {
+      "detail": "diagnostic-only",
+      "name": "evidence_tier",
+      "passed": true
+    },
+    {
+      "detail": "found=['constant_velocity', 'interaction_aware', 'none', 'oracle_future']",
+      "name": "forecast_arms",
+      "passed": true
+    },
+    {
+      "detail": "Oracle rows are diagnostic upper bounds only. They must not be mixed with deployable rows as planner success evidence.",
+      "name": "oracle_boundary",
+      "passed": true
+    },
+    {
+      "detail": "found=['collision_rate', 'false_positive_stop_rate', 'forecast_risk_calibration', 'near_miss_rate', 'progress_loss', 'stop_timing']",
+      "name": "outcomes",
+      "passed": true
+    },
+    {
+      "detail": "30",
+      "name": "paired_seed_count",
+      "passed": true
+    },
+    {
+      "detail": "factor_sizes={'occlusion_geometries': 3, 'approach_angles_deg': 3, 'actor_speeds_mps': 3, 'time_to_arrival_offsets_s': 3, 'sensor_latency_ms': 2, 'uncertainty_levels': 2}, rows_per_seed=324",
+      "name": "scenario_family_factorization",
+      "passed": true
+    },
+    {
+      "detail": "Launch packet only. This packet does not run paired seeds, establish a benchmark result, promote a planner, or support paper/dissertation claims.",
+      "name": "claim_boundary",
+      "passed": true
+    },
+    {
+      "detail": "configs/scenarios/sets/predictive_hardcase_portfolio_v1.yaml",
+      "name": "scenario_family.base_scenario_set",
+      "passed": true
+    },
+    {
+      "detail": "configs/benchmarks/predictive_hard_seeds_v1.yaml",
+      "name": "source_context.scenario_seed_manifest",
+      "passed": true
+    },
+    {
+      "detail": "configs/research/forecast_risk_coupling_issue_2916.yaml",
+      "name": "source_context.forecast_risk_gate",
+      "passed": true
+    },
+    {
+      "detail": "docs/context/evidence/issue_3215_hardcase_portfolio_synthesis_2026-06-21/README.md",
+      "name": "source_context.prerequisite_synthesis",
+      "passed": true
+    }
+  ],
+  "claim_boundary": "Launch packet only. This packet does not run paired seeds, establish a benchmark result, promote a planner, or support paper/dissertation claims.",
+  "evidence_tier": "diagnostic-only",
+  "forecast_arms": [
+    {
+      "forecast_source": "none",
+      "id": "none",
+      "oracle_state_allowed": false,
+      "role": "control"
+    },
+    {
+      "forecast_source": "constant_velocity",
+      "id": "constant_velocity",
+      "oracle_state_allowed": false,
+      "role": "deployable_baseline"
+    },
+    {
+      "forecast_source": "interaction_aware_cv",
+      "id": "interaction_aware",
+      "oracle_state_allowed": false,
+      "role": "deployable_interaction_model"
+    },
+    {
+      "forecast_source": "oracle_future_trajectory",
+      "id": "oracle_future",
+      "interpretation_boundary": "Oracle rows are diagnostic upper bounds only. They must not be mixed with deployable rows as planner success evidence.",
+      "oracle_state_allowed": true,
+      "role": "non_deployable_upper_bound"
+    }
+  ],
+  "git_head": "d768ab6c217263ef02917928cddd29b42315f3a1",
+  "issue": 3215,
+  "out_of_scope": [
+    "full benchmark campaign run",
+    "Slurm or GPU submission",
+    "planner promotion",
+    "paper or dissertation claim edit"
+  ],
+  "outcomes": {
+    "primary": [
+      "collision_rate",
+      "near_miss_rate"
+    ],
+    "secondary": [
+      "false_positive_stop_rate",
+      "progress_loss",
+      "stop_timing",
+      "forecast_risk_calibration"
+    ]
+  },
+  "packet": "configs/benchmarks/predictive_scenario_family_oracle_arm_issue_3215.yaml",
+  "scenario_family": {
+    "base_scenario_set": "configs/scenarios/sets/predictive_hardcase_portfolio_v1.yaml",
+    "factor_sizes": {
+      "actor_speeds_mps": 3,
+      "approach_angles_deg": 3,
+      "occlusion_geometries": 3,
+      "sensor_latency_ms": 2,
+      "time_to_arrival_offsets_s": 3,
+      "uncertainty_levels": 2
+    },
+    "name": "predictive_hardcase_forecast_risk_oracle_family_v1",
+    "paired_seed_count": 30,
+    "planned_arm_count": 4,
+    "planned_paired_rows": 38880,
+    "rows_per_seed": 324
+  },
+  "schema_version": "issue_3215_scenario_family_oracle_packet_evidence.v1",
+  "status": "ready",
+  "stop_rules": {
+    "blocked_if": [
+      "scenario-family rows cannot be generated from tracked inputs",
+      "any arm lacks paired rows for the full seed schedule",
+      "collision or near-miss metrics are unavailable",
+      "oracle rows are accidentally treated as deployable evidence"
+    ],
+    "continue_if": "A deployable forecast arm lowers collision or near-miss outcomes versus the no-forecast control without unacceptable false-positive stopping or progress loss, and the oracle arm shows remaining prediction headroom.",
+    "negative_if": "Oracle and deployable arms both fail to reduce safety events on paired seeds, indicating planner/control or scenario infeasibility rather than a forecast-quality bottleneck."
+  }
+}

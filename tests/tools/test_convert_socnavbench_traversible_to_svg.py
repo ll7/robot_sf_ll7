@@ -7,7 +7,10 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.maps.verification.svg_inspection import inspect_svg
+from robot_sf.nav.map_config import MapDefinitionPool
 from robot_sf.nav.svg_map_parser import convert_map
 from scripts.tools import convert_socnavbench_traversible_to_svg as converter
 
@@ -69,6 +72,62 @@ def test_fixture_traversible_converts_to_parser_valid_svg(tmp_path: Path) -> Non
     assert inspection.capability_metadata.has_pedestrian_runtime_routes is True
     assert inspection.capability_metadata.has_explicit_robot_runtime_zones is True
     assert inspection.capability_metadata.has_explicit_pedestrian_runtime_zones is True
+
+
+def test_converted_fixture_map_runs_headless_env_smoke(tmp_path: Path) -> None:
+    """The converted map should load into a Robot SF env and survive headless steps.
+
+    This exercises the acceptance criterion that the converted map runs through a
+    representative simulation path, not just static parser/SVG inspection. It uses a
+    synthetic room-shaped traversible fixture so the smoke stays CPU-only and needs no
+    licensed SocNavBench ETH asset. When the official ``data.pkl`` is staged, the same
+    converter output is proven runnable, not merely parseable.
+    """
+
+    pkl_path = tmp_path / "data.pkl"
+    output_svg = tmp_path / "socnavbench_eth.svg"
+
+    # A walled open room (32x24 free cells at 1 cell/unit -> ~32x24 map units) with one
+    # interior obstacle, giving the converter left-to-right routes and spawn/goal zones
+    # with enough space for the env to place the robot and pedestrians.
+    traversible = np.ones((24, 32), dtype=bool)
+    traversible[0, :] = False
+    traversible[-1, :] = False
+    traversible[:, 0] = False
+    traversible[:, -1] = False
+    traversible[9:15, 14:18] = False
+    _write_traversible(pkl_path, traversible, resolution=1.0)
+
+    exit_code = converter.main(
+        [
+            "--input-pkl",
+            str(pkl_path),
+            "--output-svg",
+            str(output_svg),
+        ]
+    )
+    assert exit_code == 0
+
+    map_def = convert_map(str(output_svg))
+    config = RobotSimulationConfig(
+        map_pool=MapDefinitionPool(map_defs={"socnavbench_eth": map_def}),
+        map_id="socnavbench_eth",
+    )
+    env = make_robot_env(config=config, seed=0)
+    try:
+        obs, info = env.reset(seed=0)
+        assert env.observation_space.contains(obs)
+        steps_taken = 0
+        for _ in range(3):
+            action = env.action_space.sample()
+            obs, _reward, terminated, truncated, info = env.step(action)
+            steps_taken += 1
+            if terminated or truncated:
+                break
+        assert steps_taken >= 1
+        assert isinstance(info, dict)
+    finally:
+        env.close()
 
 
 def test_dry_run_reports_ready_without_writing_svg(tmp_path: Path) -> None:

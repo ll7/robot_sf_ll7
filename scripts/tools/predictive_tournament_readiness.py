@@ -146,6 +146,7 @@ NEXT_PROGRESSION = ProgressionSpec(
         "limits from prediction limits and scenario infeasibility."
     ),
     required_paths=(
+        Path("configs/benchmarks/predictive_scenario_family_oracle_arm_issue_3215.yaml"),
         Path("configs/scenarios/sets/predictive_hardcase_portfolio_v1.yaml"),
         Path("scripts/benchmark/run_forecast_risk_coupling_gate.py"),
         Path("robot_sf/benchmark/forecast_risk_adapter.py"),

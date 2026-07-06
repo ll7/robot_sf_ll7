@@ -120,11 +120,55 @@ Policy caveats:
 
 ## Current Bundles
 
-- `issue_3214_closure_audit_2026-07-05.md`: closure-audit evidence for Issue #3214.
-  Maps hard-case predictive retraining acceptance criteria to merged PRs #3255,
-  PR #3515, PR #3869, and PR #4467 plus follow-up Issue #3254, and keeps the issue
-  `blocked_not_closable` until the public control-law change and
-  checkpoint/evaluation provenance plan exist.
+- `issue_3215_scenario_family_oracle_packet_2026-07-05/`: diagnostic-only
+CPU launch packet for Issue #3215's post-synthesis scenario-family promotion
+step. Defines the oracle future-trajectory forecast arm, paired-seed floor,
+scenario-factor matrix, outcome surfaces, and stop rules; no paired-seed
+campaign, Slurm/GPU submission, planner promotion, or paper/dissertation claim
+is included.
+
+- `issue_3463_topology_reselection_cross_slice_2026-07-05/`: diagnostic-only
+  CPU cross-slice packet for topology near-parity corrective Issue #3463. The
+  run completed 20 rows and classified `blocked` because all `doorway_transfer`
+  rows were `not_available`; no benchmark, planner-promotion, paper, or
+  dissertation claim is supported.
+
+- `issue_4539_closure_audit_2026-07-06.md`: closure-audit integration report for Issue #4539
+  (release-claim-matrix publication gate hardening). Maps the unknown-classification, positive
+  `scenario_certification` allowlist, and non-repo-path rejection criteria to merged PRs #4544,
+  PR #4569, and PR #4606, with each criterion backed by a focused test. Recommends closing the issue:
+  all three criteria (including the optional one) are delivered and the committed matrix still fails
+  closed by design.
+
+- `issue_3637_closure_audit_2026-07-05.md`: closure-audit integration report for Issue #3637.
+  Maps reactivity-vs-replay mechanism, preflight, frozen packet, analyzer, and runner-metadata PRs
+  Issue #3594, Issue #3612, Issue #3696, Issue #3853, Issue #3860, Issue #3876, Issue #4150,
+  Issue #4462, and Issue #4492 to acceptance criteria, and
+  keeps the issue open on missing durable >=3-planner S20 campaign output plus seed-sufficiency
+  analysis.
+
+- `issue_3214_closure_audit_2026-07-06.md`: closure-audit evidence for Issue #3214
+  (supersedes the 2026-07-05 note). Re-maps the hard-case predictive retraining
+  acceptance criteria to merged PRs #3255, #3515, #3869, #4467 plus follow-up
+  Issue #3254 and recommends **closing #3214 as a completed negative result**: the
+  model-side bet was tested (Slurm 13042, success 0.087 < 0.30 gate) and rejected,
+  registry promotion of a gate-failing checkpoint is prohibited by fail-closed
+  policy, and the control-law-side change is a distinct out-of-scope follow-up.
+
+- `issue_3214_closure_audit_2026-07-05.md`: closure-audit evidence for Issue #3214
+  (**superseded by** `issue_3214_closure_audit_2026-07-06.md`). Maps hard-case
+  predictive retraining acceptance criteria to merged PRs #3255, PR #3515, PR #3869,
+  and PR #4467 plus follow-up Issue #3254, and kept the issue `blocked_not_closable`;
+  the 2026-07-06 audit revises that reading to closable.
+
+- `issue_1475_closure_audit_2026-07-06.md`: closure-audit / integration report for
+  Issue #1475 (ORCA-residual BC smoke/nominal lineage job). Maps launch-packet,
+  adapter, telemetry-emission, and gate PRs #1875, #2989, #2998, #3502, #3844, and
+  PR #4561 plus the durably recorded failed-closed job-12913 smoke to the
+  acceptance criteria. Recommends keeping the issue open: CPU-side criteria are
+  delivered and the #2445 missing-telemetry stop trigger is resolved, but the
+  durable dataset/checkpoint and nominal classification criteria remain blocked on
+  a Slurm smoke rerun (revised objective) plus nominal escalation.
 
 - `issue_1489_closure_audit_2026-07-05.md`: closure-audit evidence for Issue #1489.
   Maps schema/checker/status/integration PRs #1516, #1535, #1547, #2286,

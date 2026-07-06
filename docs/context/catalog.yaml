@@ -17,7 +17,56 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+  - path: docs/context/evidence/issue_3465_topology_gate_paired/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3465_topology_gate_paired/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3465_topology_gate_paired/paired_deltas.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1470_closure_audit_2026-07-06.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3557_uncertainty_representation_generalization/closure_audit.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3463_topology_reselection_cross_slice_2026-07-05
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3637_closure_audit_2026-07-05.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4539_closure_audit_2026-07-06.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1475_closure_audit_2026-07-06.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3080_closure_audit_2026-07-05.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3214_closure_audit_2026-07-05.md
+    status: superseded
+    replacement: docs/context/evidence/issue_3214_closure_audit_2026-07-06.md
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3214_closure_audit_2026-07-06.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4017_closure_audit_2026-07-05.md
     status: evidence
     freshness: evidence
     area: benchmark_evidence
@@ -53,7 +102,15 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3300_orca_reactive_false_positive_2026-07-05
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07
+    status: evidence
+    freshness: evidence
+    area: workflow_evidence
+  - path: docs/context/evidence/issue_3425_closure_audit_2026-07-05.md
     status: evidence
     freshness: evidence
     area: workflow_evidence
@@ -520,6 +577,10 @@ entries:
     area: benchmark_evidence
   - path: docs/context/issue_2397_socnavbench_control_status_2026-06-06.md
     status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1456_closure_audit.md
+    status: evidence
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/research_lane_states.md
@@ -3013,6 +3074,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3215_scenario_family_oracle_packet_2026-07-05
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3266_ppo_snqi_smoke_2026-06-23
     status: evidence
     freshness: evidence
@@ -3267,6 +3332,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4232_uncertainty_envelope_activation_probe_2026-07
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4245_closure_audit_2026-07-04.md
     status: evidence
     freshness: evidence
@@ -3276,6 +3345,22 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_4448_closure_audit_2026-07-04.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3204_closure_audit_20260705.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3204_closure_audit_20260705.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2312_closure_audit.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1126_closure_audit_2026-07-06.md
     status: evidence
     freshness: evidence
     area: benchmark_evidence

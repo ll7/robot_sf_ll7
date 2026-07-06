@@ -98,7 +98,7 @@ def test_gate_rejects_absolute_artifact_uri_even_when_file_exists(tmp_path) -> N
                     "availability_status": "available",
                     "artifact_match": True,
                     "artifact_uri": str(artifact),
-                    "scenario_certification": "accepted",
+                    "scenario_certification": "scenario_cert.v1:accepted",
                     "source_refs": ["docs/context/source.json"],
                 }
             ]
@@ -128,7 +128,7 @@ def test_gate_rejects_source_refs_with_parent_directory_components(tmp_path) -> 
                     "availability_status": "available",
                     "artifact_match": True,
                     "artifact_uri": "docs/context/evidence/artifact.json",
-                    "scenario_certification": "accepted",
+                    "scenario_certification": "scenario_cert.v1:accepted",
                     "source_refs": ["docs/../source.json"],
                 }
             ]
@@ -143,7 +143,8 @@ def test_gate_rejects_source_refs_with_parent_directory_components(tmp_path) -> 
 def test_gate_fails_closed_for_dot_artifact_uri_without_crashing(tmp_path) -> None:
     """A ``"."`` path must block rather than raise ``IndexError`` on empty parts."""
 
-    source = tmp_path / "source.json"
+    source = tmp_path / "docs" / "source.json"
+    source.parent.mkdir(parents=True)
     source.write_text("{}", encoding="utf-8")
 
     report = build_gate_report(
@@ -155,8 +156,8 @@ def test_gate_fails_closed_for_dot_artifact_uri_without_crashing(tmp_path) -> No
                     "availability_status": "available",
                     "artifact_match": True,
                     "artifact_uri": ".",
-                    "scenario_certification": "accepted",
-                    "source_refs": ["source.json"],
+                    "scenario_certification": "scenario_cert.v1:accepted",
+                    "source_refs": ["docs/source.json"],
                 }
             ]
         ),
@@ -228,8 +229,9 @@ def test_committed_matrix_remains_blocked_until_certification_is_attached() -> N
 def test_cli_emits_json_report_for_synthetic_matrix(tmp_path, capsys) -> None:
     """CLI JSON output is deterministic enough for downstream wrappers."""
 
-    artifact = tmp_path / "artifact.json"
-    source = tmp_path / "source.json"
+    artifact = tmp_path / "docs" / "artifact.json"
+    source = tmp_path / "docs" / "source.json"
+    artifact.parent.mkdir(parents=True)
     artifact.write_text("{}", encoding="utf-8")
     source.write_text("{}", encoding="utf-8")
     matrix_path = tmp_path / "matrix.json"
@@ -242,9 +244,9 @@ def test_cli_emits_json_report_for_synthetic_matrix(tmp_path, capsys) -> None:
                         "classification": "benchmark evidence",
                         "availability_status": "available",
                         "artifact_match": True,
-                        "artifact_uri": "artifact.json",
-                        "scenario_certification": "accepted",
-                        "source_refs": ["source.json"],
+                        "artifact_uri": "docs/artifact.json",
+                        "scenario_certification": "scenario_cert.v1:accepted",
+                        "source_refs": ["docs/source.json"],
                     }
                 ]
             )
@@ -256,3 +258,64 @@ def test_cli_emits_json_report_for_synthetic_matrix(tmp_path, capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert payload["schema_version"] == "release-claim-matrix-publication-gate.v1"
     assert payload["status"] == "pass"
+
+
+def test_gate_blocks_benchmark_row_with_pending_certification(tmp_path) -> None:
+    """A benchmark row with scenario_certification='pending' blocks."""
+
+    artifact = tmp_path / "docs" / "artifact.json"
+    source = tmp_path / "docs" / "source.json"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text("{}", encoding="utf-8")
+    source.write_text("{}", encoding="utf-8")
+
+    report = build_gate_report(
+        _matrix(
+            [
+                {
+                    "row_id": "release_artifact:pending_cert",
+                    "classification": "benchmark evidence",
+                    "availability_status": "available",
+                    "artifact_match": True,
+                    "artifact_uri": "docs/artifact.json",
+                    "scenario_certification": "pending",
+                    "source_refs": ["docs/source.json"],
+                }
+            ]
+        ),
+        repo_root=tmp_path,
+    )
+
+    assert report["status"] == "blocked"
+    assert any(blocker["check"] == "scenario_certification" for blocker in report["blockers"])
+
+
+def test_gate_blocks_non_durable_prefix_path(tmp_path) -> None:
+    """Paths not starting with a durable prefix block."""
+
+    artifact = tmp_path / "other" / "artifact.json"
+    source = tmp_path / "docs" / "source.json"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    source.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text("{}", encoding="utf-8")
+    source.write_text("{}", encoding="utf-8")
+
+    report = build_gate_report(
+        _matrix(
+            [
+                {
+                    "row_id": "release_artifact:non_durable_path",
+                    "classification": "benchmark evidence",
+                    "availability_status": "available",
+                    "artifact_match": True,
+                    "artifact_uri": "other/artifact.json",
+                    "scenario_certification": "scenario_cert.v1:accepted",
+                    "source_refs": ["docs/source.json"],
+                }
+            ]
+        ),
+        repo_root=tmp_path,
+    )
+
+    assert report["status"] == "blocked"
+    assert any(blocker["check"] == "artifact_uri" for blocker in report["blockers"])

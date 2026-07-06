@@ -243,8 +243,8 @@ def test_real_checkout_inventory_passes_and_lists_pending_blockers():
     assert "hsfm_heading_state" in pending_keys
     assert "fov_attenuation" not in pending_keys
     assert "ttc_predictive_term" not in pending_keys
-    assert "narrow_passage_fixture" in pending_keys
-    assert "bottleneck_fixture" in pending_keys
+    assert "narrow_passage_fixture" not in pending_keys
+    assert "bottleneck_fixture" not in pending_keys
     assert "versioned_parameters" not in pending_keys
     assert "design_note" not in pending_keys
     # The calibration-data prerequisite is an external standing blocker.

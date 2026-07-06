@@ -76,3 +76,13 @@ uv run python -m pytest tests/training/test_learned_risk_trace_manifest.py \
 
 Data-preflight tooling only. It does not assert anything about the learned-risk model's quality; it
 makes the trace/baseline readiness for #1472 mechanically checkable and fail-closed.
+
+## Closure Audit (2026-07-06)
+
+The agent-executable slice for #2312 is complete: the trace-manifest/baseline-URI contract, the
+fail-closed validator, the #1472 campaign-readiness gate (PR #3772), and the
+`learned-risk-trace-status.v1` status packet (PR #4549) are all merged and reproducibly validated.
+The only residual — a resolvable baseline/trace URI with `retrieval_status: available` — is
+compute-gated on the #1472 / #2441 SLURM run and remains tracked by #1472. The criterion→PR
+evidence table and the reproduced validation run are recorded in
+[`evidence/issue_2312_closure_audit.md`](evidence/issue_2312_closure_audit.md).

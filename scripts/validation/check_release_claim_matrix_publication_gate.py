@@ -24,16 +24,23 @@ DEFAULT_MATRIX_PATH = Path(
 )
 SCHEMA_VERSION = "release-claim-matrix-publication-gate.v1"
 EXPECTED_MATRIX_SCHEMA = "release_claim_matrix_issue_3294.v1"
-BENCHMARK_EVIDENCE_CLASSIFICATION = "benchmark evidence"
-KNOWN_NON_BENCHMARK_CLASSIFICATIONS = frozenset({"diagnostic evidence", "non-claim"})
-NOT_CERTIFIED_VALUES = {
-    "",
-    "missing",
-    "not_available",
-    "not_available_in_manifest",
-    "not_recorded",
-    "unknown",
-}
+BENCHMARK_EVIDENCE_CLASSIFICATIONS = frozenset({"benchmark evidence"})
+NON_BENCHMARK_CLASSIFICATIONS = frozenset({"diagnostic evidence", "non-claim"})
+ACCEPTED_SCENARIO_CERTIFICATION_VALUES = frozenset(
+    {
+        "scenario_cert.v1:accepted",
+        "scenario_cert.v1:accepted_reviewed",
+    }
+)
+DURABLE_PREFIXES = frozenset(
+    {
+        "docs",
+        "configs",
+        "scripts",
+        "robot_sf",
+        "tests",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -80,6 +87,8 @@ def _repo_relative_file_exists(repo_root: Path, value: object) -> bool:
     # raising ``IndexError`` inside the publication gate.
     if path.is_absolute() or ".." in path.parts or (path.parts and path.parts[0] == "output"):
         return False
+    if not path.parts or path.parts[0] not in DURABLE_PREFIXES:
+        return False
     return (repo_root / path).is_file()
 
 
@@ -123,7 +132,7 @@ def _check_benchmark_evidence_row(
             )
         )
     certification = str(row.get("scenario_certification", "")).strip().lower()
-    if certification in NOT_CERTIFIED_VALUES:
+    if certification not in ACCEPTED_SCENARIO_CERTIFICATION_VALUES:
         blockers.append(
             GateBlocker(
                 row_id=row_id,
@@ -177,10 +186,10 @@ def build_gate_report(matrix: dict[str, Any], *, repo_root: Path) -> dict[str, A
             raise ValueError(f"Matrix row {index} must be an object")
         row_id = _row_id(row, index)
         classification = str(row.get("classification", "")).strip().lower()
-        if classification == BENCHMARK_EVIDENCE_CLASSIFICATION:
+        if classification in BENCHMARK_EVIDENCE_CLASSIFICATIONS:
             benchmark_rows += 1
             blockers.extend(_check_benchmark_evidence_row(row, row_id=row_id, repo_root=repo_root))
-        elif classification in KNOWN_NON_BENCHMARK_CLASSIFICATIONS:
+        elif classification in NON_BENCHMARK_CLASSIFICATIONS:
             diagnostic_or_non_claim_rows += 1
             if row.get("benchmark_success") is True:
                 blockers.append(

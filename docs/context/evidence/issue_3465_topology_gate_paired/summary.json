@@ -1,0 +1,35 @@
+{
+  "acceptance_evidence": [
+    {
+      "criterion": "Paired enabled/disabled config exists and is reproducible.",
+      "evidence": "PR #4246 added configs/benchmarks/issue_3465_topology_gate_paired.yaml and the fail-closed preregistration validator.",
+      "status": "met"
+    },
+    {
+      "criterion": "Same scenario/seed/planner contract is used across arms.",
+      "evidence": "PR #4246 validates topology_gate_disabled and topology_gate_enabled differ only by near_parity_diversity_gate_enabled while preserving planner, scenario, seed, and horizon pairing.",
+      "status": "met"
+    },
+    {
+      "criterion": "Corrective #3463 gate completed or waived before paired interpretation.",
+      "evidence": "PR #4465 integrated corrective packets #4388, #4411, #4426, #4435, and #4444 into the readiness contract and reports ready_for_paired_run.",
+      "status": "met"
+    },
+    {
+      "criterion": "Degraded or fallback rows are excluded or caveated.",
+      "evidence": "PR #4487 added the paired decision builder, excludes fallback/degraded arms from promotion evidence, and defaults missing paired_significant to False in real mode.",
+      "status": "met"
+    },
+    {
+      "criterion": "Result classification is recorded conservatively.",
+      "evidence": "PR #3602 added near_parity_promotion_gate.v1. This packet remains blocked until a real campaign_summary.json exists; then it writes summary.json, paired_deltas.csv, and README.md with the conservative decision.",
+      "status": "blocked_pending_campaign"
+    }
+  ],
+  "blocked_reasons": [
+    "Campaign summary JSON not found at output/benchmarks/issue_3465_topology_gate_paired/campaign_summary.json."
+  ],
+  "config_path": "configs/benchmarks/issue_3465_topology_gate_paired.yaml",
+  "reason": "campaign_summary_missing",
+  "status": "blocked"
+}

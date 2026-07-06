@@ -32,9 +32,14 @@ def test_fixture_harness_emits_expected_scenarios_and_metric_keys() -> None:
     )
 
     assert report["schema_version"] == PED_MODEL_FIXTURE_REPORT_SCHEMA_VERSION
-    assert set(report["scenario_ids"]) == {"shared_throat_sliding", "shared_throat_congestion"}
+    assert set(report["scenario_ids"]) == {
+        "shared_throat_sliding",
+        "shared_throat_congestion",
+        "narrow_passage_lateral_sliding",
+        "bottleneck_freeze_deadlock",
+    }
     assert report["status"]["robot_inserted"] is False
-    assert report["status"]["thresholds_applied"] is False
+    assert report["status"]["thresholds_applied"] is True
     seen_models = {run["pedestrian_model"] for run in report["runs"]}
     assert seen_models == {SOCIAL_FORCE_DEFAULT, HSFM_ANISOTROPIC_FOV_V1}
     for run in report["runs"]:
@@ -46,11 +51,37 @@ def test_fixture_harness_emits_expected_scenarios_and_metric_keys() -> None:
             "entered_interaction_zone",
             "max_consecutive_interaction_zone_slow_steps",
             "interaction_zone_slow_detected",
+            "diagnostic_thresholds",
         ):
             assert key in metrics
-        assert metrics["entered_interaction_zone"] is True
+        assert isinstance(metrics["entered_interaction_zone"], bool)
         assert metrics["finite_positions"] is True
         assert metrics["finite_velocities"] is True
+
+
+def test_geometric_fixtures_emit_diagnostic_threshold_checks() -> None:
+    """Issue #3481 geometric fixtures expose local thresholded diagnostics."""
+
+    report = run_pedestrian_model_fixture_diagnostics(
+        config=PedestrianModelFixtureRunConfig(duration_s=2.0, dt_s=0.1),
+        scenarios=("narrow_passage_lateral_sliding", "bottleneck_freeze_deadlock"),
+        pedestrian_models=(SOCIAL_FORCE_DEFAULT,),
+    )
+
+    by_scenario = {run["scenario_id"]: run for run in report["runs"]}
+    sliding_thresholds = by_scenario["narrow_passage_lateral_sliding"]["metrics"][
+        "diagnostic_thresholds"
+    ]
+    assert "mean_max_lateral_displacement_m" in sliding_thresholds
+    assert sliding_thresholds["mean_max_lateral_displacement_m"]["threshold"] == pytest.approx(0.04)
+
+    bottleneck_thresholds = by_scenario["bottleneck_freeze_deadlock"]["metrics"][
+        "diagnostic_thresholds"
+    ]
+    assert "max_consecutive_interaction_zone_slow_steps" in bottleneck_thresholds
+    assert bottleneck_thresholds["max_consecutive_interaction_zone_slow_steps"][
+        "threshold"
+    ] == pytest.approx(2.0)
 
 
 def test_fixture_trace_is_deterministic_for_fixed_seed() -> None:

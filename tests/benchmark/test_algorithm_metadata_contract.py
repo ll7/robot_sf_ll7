@@ -19,6 +19,7 @@ def test_canonical_algorithm_name_resolves_aliases() -> None:
     """Alias names should resolve to canonical benchmark algorithm names."""
     assert canonical_algorithm_name("simple_policy") == "goal"
     assert canonical_algorithm_name("sf") == "social_force"
+    assert canonical_algorithm_name("prediction_mpc_cbf") == "prediction_mpc"
     assert canonical_algorithm_name("unknown_algo") == "unknown_algo"
 
 
@@ -637,6 +638,25 @@ def test_prediction_mpc_metadata_exposes_constraint_mpc_contract() -> None:
         "pedestrians",
         "predicted_pedestrian_futures",
     ]
+
+
+def test_prediction_mpc_cbf_alias_reuses_supported_mpc_command_contract() -> None:
+    """Trace rosters may name the CBF arm without losing MPC command metadata."""
+    meta = enrich_algorithm_metadata(
+        algo="prediction_mpc_cbf",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+
+    planner = meta["planner_kinematics"]
+    action = meta["planner_contract"]["action_contract"]
+    assert meta["algorithm"] == "prediction_mpc_cbf"
+    assert meta["canonical_algorithm"] == "prediction_mpc"
+    assert planner["planner_command_space"] == "unicycle_vw"
+    assert planner["adapter_name"] == "PredictionMPCPlannerAdapter"
+    assert action["command_space"] == "unicycle_vw"
+    assert action["output_keys"] == ["v", "omega"]
 
 
 def test_infer_execution_mode_from_counts() -> None:

@@ -30,15 +30,23 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _PREDECLARED_METRICS = (
-    "min_distance_m",
-    "clearance_m",
-    "near_miss",
-    "collision",
+    "min_distance",
+    "min_clearance",
+    "clearing_distance_min",
+    "near_misses",
+    "collisions",
+    "total_collision_count",
     "route_progress",
     "route_complete",
     "runtime_s",
     "stop_step",
     "yield_step",
+    "avg_speed",
+    "curvature_mean",
+    "jerk_mean",
+    "socnavbench_path_irregularity",
+    "path_efficiency",
+    "stalled_time",
 )
 
 

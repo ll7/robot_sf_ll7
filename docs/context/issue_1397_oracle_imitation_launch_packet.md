@@ -60,3 +60,12 @@ The later dataset-collection issue should use this branch/commit, config path, v
 source candidate, split manifest, hard-slice rules, and durable artifact URI policy. It should
 replace the `:pending` W&B artifact aliases with concrete aliases or run ids before collection
 starts, then record generated dataset checksums before any imitation training issue begins.
+
+## Downstream closure
+
+The dataset-collection issue #1470 ran to completion on Slurm (#2441, job `12911`) and its traces +
+manifest + checksums are tracked at
+[`evidence/issue_1470_oracle_imitation_traces_12911_2026-06-17/`](evidence/issue_1470_oracle_imitation_traces_12911_2026-06-17/).
+See the [#1470 closure audit](evidence/issue_1470_closure_audit_2026-07-06.md) for the
+criterion→evidence mapping. The residual durable trace-URI registry (`training_ready=true`) is owned
+by #2655 and the imitation-training benchmark by #1496.

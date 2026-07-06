@@ -18,6 +18,7 @@ from robot_sf.common.artifact_paths import ensure_canonical_tree
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.planner import ClassicGlobalPlanner, ClassicPlannerConfig
+from tests.support.process_teardown import reap_matching_descendants
 
 try:
     from tests.perf_utils.policy import PerformanceBudgetPolicy
@@ -35,6 +36,24 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 root_str = str(PROJECT_ROOT)
 if root_str not in sys.path:
     sys.path.insert(0, root_str)
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """Reap leaked nested pytest children on LiCCA/simulated-LiCCA lanes."""
+    del session, exitstatus
+    enabled = (
+        os.environ.get("ROBOT_SF_TEST_ENV") == "licca"
+        or os.environ.get("ROBOT_SF_REAP_LEAKED_PYTEST_CHILDREN") == "1"
+    )
+    if not enabled:
+        return
+    reaped = reap_matching_descendants(command_substrings=("pytest",), grace_seconds=2.0)
+    if reaped:
+        print(
+            "robot_sf pytest teardown reaped leaked child processes: "
+            + ", ".join(str(pid) for pid in reaped),
+            file=sys.stderr,
+        )
 
 
 def _import_torch_optional():

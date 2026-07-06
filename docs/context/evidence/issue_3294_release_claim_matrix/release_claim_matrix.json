@@ -1,6 +1,6 @@
 {
   "claim_boundary": "Issue #3294 assembles a review matrix from existing tracked metadata and release artifacts. It does not run a new benchmark campaign, create scenario certification, or establish deployment-safety, real-world AMV, fallback, degraded, or unavailable rows as successful benchmark evidence.",
-  "generated_at_utc": "2026-07-01T15:34:43.886030Z",
+  "generated_at_utc": "2026-07-06T13:02:15.978613Z",
   "issue": 3294,
   "rows": [
     {
@@ -15,7 +15,9 @@
         "Use with the release 0.0.2 scoped-planner caveat and preserve unavailable/excluded planner limitations in surrounding prose. Do not use collision-count-derived rows as paper/dissertation evidence."
       ],
       "hazard_class": "mixed_release_table",
-      "missing_prerequisites": [],
+      "missing_prerequisites": [
+        "scenario_cert.v1 summary is not publication-accepted: 2 excluded scenarios and 9 stress-only scenarios remain in configs/scenarios/classic_interactions_francis2023.yaml."
+      ],
       "odd_condition": "low_speed_public_space_v1",
       "planner_id": null,
       "planner_mode": "mixed",
@@ -30,7 +32,22 @@
       ],
       "row_id": "release_artifact:tab_release_failure_count_slices",
       "row_status": "release_snapshot_pass",
-      "scenario_certification": "not_available_in_manifest",
+      "scenario_certification": "scenario_cert.v1:blocked",
+      "scenario_certification_summary": {
+        "benchmark_eligibility_counts": {
+          "eligible": 37,
+          "excluded": 2,
+          "stress_only": 9
+        },
+        "classification_counts": {
+          "geometrically_infeasible": 2,
+          "hard_but_solvable": 27,
+          "knife_edge": 9,
+          "valid": 10
+        },
+        "scenario_count": 48,
+        "summary_ref": "docs/context/evidence/issue_2910_release_scenario_certification/summary.json"
+      },
       "scenario_contract_ref": "../../scenarios/classic_interactions_francis2023.yaml",
       "scenario_family": "release_0_0_2_table_bundle",
       "section": "release_artifact",
@@ -43,7 +60,8 @@
       "source_refs": [
         "docs/context/evidence/issue_3205_release_evidence_gate/snapshot_0_0_2.json",
         "docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json",
-        "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml"
+        "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml",
+        "docs/context/evidence/issue_2910_release_scenario_certification/summary.json"
       ],
       "suite_or_surface": "paper_experiment_matrix_v1_v0_1_0"
     },
@@ -59,7 +77,9 @@
         "Release 0.0.2 is scoped to seven planners and excludes socnav_bench because licensed SocNavBench assets were not staged; fallback/degraded status must remain visible. Collision-count-derived claims are withdrawn by #3482."
       ],
       "hazard_class": "mixed_release_table",
-      "missing_prerequisites": [],
+      "missing_prerequisites": [
+        "scenario_cert.v1 summary is not publication-accepted: 2 excluded scenarios and 9 stress-only scenarios remain in configs/scenarios/classic_interactions_francis2023.yaml."
+      ],
       "odd_condition": "low_speed_public_space_v1",
       "planner_id": null,
       "planner_mode": "mixed",
@@ -74,7 +94,22 @@
       ],
       "row_id": "release_artifact:tab_results_overview",
       "row_status": "release_snapshot_pass",
-      "scenario_certification": "not_available_in_manifest",
+      "scenario_certification": "scenario_cert.v1:blocked",
+      "scenario_certification_summary": {
+        "benchmark_eligibility_counts": {
+          "eligible": 37,
+          "excluded": 2,
+          "stress_only": 9
+        },
+        "classification_counts": {
+          "geometrically_infeasible": 2,
+          "hard_but_solvable": 27,
+          "knife_edge": 9,
+          "valid": 10
+        },
+        "scenario_count": 48,
+        "summary_ref": "docs/context/evidence/issue_2910_release_scenario_certification/summary.json"
+      },
       "scenario_contract_ref": "../../scenarios/classic_interactions_francis2023.yaml",
       "scenario_family": "release_0_0_2_table_bundle",
       "section": "release_artifact",
@@ -87,7 +122,8 @@
       "source_refs": [
         "docs/context/evidence/issue_3205_release_evidence_gate/snapshot_0_0_2.json",
         "docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json",
-        "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml"
+        "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml",
+        "docs/context/evidence/issue_2910_release_scenario_certification/summary.json"
       ],
       "suite_or_surface": "paper_experiment_matrix_v1_v0_1_0"
     },
@@ -103,7 +139,9 @@
         "The scoped release excludes socnav_bench and records ORCA/SACADRL prerequisite policy as fallback while preserving readiness fields in the table. Collision-count-derived claims are withdrawn by #3482."
       ],
       "hazard_class": "mixed_release_table",
-      "missing_prerequisites": [],
+      "missing_prerequisites": [
+        "scenario_cert.v1 summary is not publication-accepted: 2 excluded scenarios and 9 stress-only scenarios remain in configs/scenarios/classic_interactions_francis2023.yaml."
+      ],
       "odd_condition": "low_speed_public_space_v1",
       "planner_id": null,
       "planner_mode": "mixed",
@@ -118,7 +156,22 @@
       ],
       "row_id": "release_artifact:tab_robot_sf_release_planner_results",
       "row_status": "release_snapshot_pass",
-      "scenario_certification": "not_available_in_manifest",
+      "scenario_certification": "scenario_cert.v1:blocked",
+      "scenario_certification_summary": {
+        "benchmark_eligibility_counts": {
+          "eligible": 37,
+          "excluded": 2,
+          "stress_only": 9
+        },
+        "classification_counts": {
+          "geometrically_infeasible": 2,
+          "hard_but_solvable": 27,
+          "knife_edge": 9,
+          "valid": 10
+        },
+        "scenario_count": 48,
+        "summary_ref": "docs/context/evidence/issue_2910_release_scenario_certification/summary.json"
+      },
       "scenario_contract_ref": "../../scenarios/classic_interactions_francis2023.yaml",
       "scenario_family": "release_0_0_2_table_bundle",
       "section": "release_artifact",
@@ -131,7 +184,8 @@
       "source_refs": [
         "docs/context/evidence/issue_3205_release_evidence_gate/snapshot_0_0_2.json",
         "docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json",
-        "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml"
+        "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml",
+        "docs/context/evidence/issue_2910_release_scenario_certification/summary.json"
       ],
       "suite_or_surface": "paper_experiment_matrix_v1_v0_1_0"
     },
@@ -1051,7 +1105,8 @@
     ],
     "odd_coverage": "docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json",
     "release_config": "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml",
-    "release_snapshot": "docs/context/evidence/issue_3205_release_evidence_gate/snapshot_0_0_2.json"
+    "release_snapshot": "docs/context/evidence/issue_3205_release_evidence_gate/snapshot_0_0_2.json",
+    "scenario_certification_summary": "docs/context/evidence/issue_2910_release_scenario_certification/summary.json"
   },
   "summary": {
     "classification_counts": {

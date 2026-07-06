@@ -33,6 +33,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3463_topology_reselection_cross_slice_2026-07-05
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3637_closure_audit_2026-07-05.md
     status: evidence
     freshness: evidence
@@ -82,6 +86,10 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07
+    status: evidence
+    freshness: evidence
+    area: workflow_evidence
+  - path: docs/context/evidence/issue_3425_closure_audit_2026-07-05.md
     status: evidence
     freshness: evidence
     area: workflow_evidence
@@ -3304,6 +3312,14 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_4448_closure_audit_2026-07-04.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3204_closure_audit_20260705.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3204_closure_audit_20260705.json
     status: evidence
     freshness: evidence
     area: benchmark_evidence

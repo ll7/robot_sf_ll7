@@ -1,5 +1,8 @@
 # Context Retrieval Index
 
+Recent Simple Linux Utility Resource Management (SLURM)-to-claim closure audit:
+[issue_3425_closure_audit_2026-07-05.md](evidence/issue_3425_closure_audit_2026-07-05.md).
+
 Recent uncertainty-representation generalization closure audit:
 [closure_audit.md](evidence/issue_3557_uncertainty_representation_generalization/closure_audit.md).
 

@@ -107,6 +107,7 @@ def _diagnostic_scenarios(
     *,
     max_scenarios: int,
     max_seeds: int,
+    scenario_ids: Sequence[str] | None = None,
 ) -> list[dict[str, Any]]:
     surface = packet["scenario_surface"]
     matrix_path = REPO_ROOT / str(surface["matrix_path"])
@@ -115,8 +116,20 @@ def _diagnostic_scenarios(
     if not seeds:
         raise DiagnosticRunError("diagnostic seed slice is empty")
 
+    if scenario_ids:
+        by_id = {
+            _scenario_identifier(scenario, index): scenario
+            for index, scenario in enumerate(scenarios)
+        }
+        missing = [scenario_id for scenario_id in scenario_ids if scenario_id not in by_id]
+        if missing:
+            raise DiagnosticRunError(f"unknown scenario id: {', '.join(missing)}")
+        selected_source = [by_id[scenario_id] for scenario_id in scenario_ids]
+    else:
+        selected_source = scenarios[:max_scenarios]
+
     selected: list[dict[str, Any]] = []
-    for index, scenario in enumerate(scenarios[:max_scenarios]):
+    for index, scenario in enumerate(selected_source):
         copied = copy.deepcopy(scenario)
         scenario_id = _scenario_identifier(copied, index)
         copied.setdefault("id", scenario_id)
@@ -333,6 +346,7 @@ def run_diagnostic(args: argparse.Namespace) -> dict[str, Any]:
         packet,
         max_scenarios=args.max_scenarios,
         max_seeds=args.max_seeds,
+        scenario_ids=args.scenario_id,
     )
     default_status = (
         "successful_evidence" if args.allow_benchmark_strength_status else "diagnostic_only"
@@ -420,13 +434,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--phase", default=DEFAULT_PHASE, choices=(DEFAULT_PHASE,))
     parser.add_argument(
-        "--planner", action="append", default=["prediction_mpc"], help="Planner id."
+        "--planner", action="append", default=None, help="Planner id."
     )
     parser.add_argument(
         "--alpha-arm",
         action="append",
-        default=list(DEFAULT_ALPHA_ARMS),
+        default=None,
         help="Alpha arm key from packet.",
+    )
+    parser.add_argument(
+        "--scenario-id",
+        action="append",
+        default=None,
+        help=(
+            "Named scenario id from the predeclared matrix. Repeat to run a bounded "
+            "diagnostic set without relying on matrix order."
+        ),
     )
     parser.add_argument("--max-scenarios", type=int, default=1, help="Bounded scenario slice size.")
     parser.add_argument("--max-seeds", type=int, default=1, help="Bounded seed slice size.")
@@ -436,7 +459,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Use successful_evidence row status for local rows. Default is diagnostic_only.",
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON report.")
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.planner is None:
+        args.planner = ["prediction_mpc"]
+    if args.alpha_arm is None:
+        args.alpha_arm = list(DEFAULT_ALPHA_ARMS)
+    return args
 
 
 def main(argv: list[str] | None = None) -> int:

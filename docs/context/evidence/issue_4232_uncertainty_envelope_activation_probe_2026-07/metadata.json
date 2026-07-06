@@ -1,0 +1,10 @@
+{
+  "claim_boundary": "Fixture-driven compact evidence builder output only. It does not run a full benchmark campaign, does not establish conformal calibration, real-world safety, deployment, generalized planner superiority, paper, or dissertation claims.",
+  "evidence_status": "diagnostic_only_fixture_summary",
+  "issue": 4232,
+  "packet": "configs/benchmarks/issue_4232_uncertainty_envelope_claim_packet.yaml",
+  "raw_artifact_policy": "raw JSONL, videos, logs, checkpoints, and model caches are not copied",
+  "row_count": 3,
+  "schema_version": "issue-4232-uncertainty-envelope-evidence.v1",
+  "source_results": "output/issue_4232_activation_francis_crowd/compact_alpha_sweep_rows.json"
+}

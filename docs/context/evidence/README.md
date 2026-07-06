@@ -146,6 +146,15 @@ is included.
   `blocked_not_closable` until the public control-law change and
   checkpoint/evaluation provenance plan exist.
 
+- `issue_1475_closure_audit_2026-07-06.md`: closure-audit / integration report for
+  Issue #1475 (ORCA-residual BC smoke/nominal lineage job). Maps launch-packet,
+  adapter, telemetry-emission, and gate PRs #1875, #2989, #3502, #3844, and
+  PR #4561 plus the durably recorded failed-closed job-12913 smoke to the
+  acceptance criteria. Recommends keeping the issue open: CPU-side criteria are
+  delivered and the #2445 missing-telemetry stop trigger is resolved, but the
+  durable dataset/checkpoint and nominal classification criteria remain blocked on
+  a Slurm smoke rerun (revised objective) plus nominal escalation.
+
 - `issue_1489_closure_audit_2026-07-05.md`: closure-audit evidence for Issue #1489.
   Maps schema/checker/status/integration PRs #1516, #1535, #1547, #2286,
   PR #2419, PR #3736, and PR #4452 to the synthesis parent acceptance criteria and keeps

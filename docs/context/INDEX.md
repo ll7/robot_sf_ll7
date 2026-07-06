@@ -18,6 +18,10 @@ Recent serial benchmark GPU memory closure audit:
 Recent hard-guarded hybrid-learning synthesis closure audit:
 [issue_1489_closure_audit_2026-07-05.md](evidence/issue_1489_closure_audit_2026-07-05.md).
 
+Recent ORCA-residual BC smoke/nominal lane closure audit (keep open; blocked on a
+Slurm smoke rerun + nominal escalation, CPU-side criteria delivered):
+[issue_1475_closure_audit_2026-07-06.md](evidence/issue_1475_closure_audit_2026-07-06.md).
+
 Recent camera-ready decomposition closure audit:
 [issue_3385_closure_audit_2026_07_04.md](issue_3385_closure_audit_2026_07_04.md).
 Recent predictive-v2 closure audit: [issue_1490_closure_audit.md](issue_1490_closure_audit.md).

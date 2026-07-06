@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from robot_sf.common.types import Rect
 
 Axis = Literal["x", "y"]
+ThresholdDirection = Literal["min_required", "max_allowed"]
 
 PED_MODEL_FIXTURE_REPORT_SCHEMA_VERSION = "pedestrian_model_fixture_diagnostics.v1"
 CLAIM_BOUNDARY = (
@@ -56,6 +57,20 @@ DEFAULT_PEDESTRIAN_MODELS = (
 
 
 @dataclass(frozen=True)
+class DiagnosticThreshold:
+    """Direction-aware local diagnostic threshold."""
+
+    value: float
+    direction: ThresholdDirection
+
+    def __post_init__(self) -> None:
+        """Validate threshold value and direction."""
+        _require_finite_number(self.value, "diagnostic threshold value", non_negative=True)
+        if self.direction not in ("min_required", "max_allowed"):
+            raise ValueError(f"Unsupported diagnostic threshold direction: {self.direction}")
+
+
+@dataclass(frozen=True)
 class PedestrianModelFixtureSpec:
     """Synthetic scenario spec for a fixed set of single pedestrians."""
 
@@ -67,7 +82,9 @@ class PedestrianModelFixtureSpec:
     interaction_zone_min_pedestrians: int
     lane_axis: Axis = "x"
     lateral_axis: Axis = "y"
-    metric_thresholds: dict[str, float] = field(default_factory=dict)
+    metric_thresholds: dict[str, float | DiagnosticThreshold | dict[str, Any]] = field(
+        default_factory=dict
+    )
     diagnostic_metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -214,6 +231,18 @@ def compute_fixture_metrics(
     in_interaction_zone = np.linalg.norm(
         positions - interaction_center[np.newaxis, np.newaxis, :], axis=-1
     ) <= float(spec.interaction_zone_radius_m)
+    origin_axis_index = _axis_index(spec.lane_axis)
+    if len(spec.single_pedestrians) == positions.shape[1]:
+        start_positions = np.asarray([ped.start for ped in spec.single_pedestrians], dtype=float)
+    else:
+        start_positions = positions[0]
+    left_origin_mask = start_positions[:, origin_axis_index] < interaction_center[origin_axis_index]
+    right_origin_mask = (
+        start_positions[:, origin_axis_index] > interaction_center[origin_axis_index]
+    )
+    left_origin_in_zone = np.count_nonzero(in_interaction_zone[:, left_origin_mask], axis=1)
+    right_origin_in_zone = np.count_nonzero(in_interaction_zone[:, right_origin_mask], axis=1)
+    opposing_origins_in_zone = (left_origin_in_zone > 0) & (right_origin_in_zone > 0)
     slow_in_zone = in_interaction_zone & (speeds <= float(freeze_speed_threshold_mps))
     interaction_zone_slow = np.count_nonzero(slow_in_zone, axis=1) >= int(
         spec.interaction_zone_min_pedestrians
@@ -241,6 +270,9 @@ def compute_fixture_metrics(
         "max_pedestrians_in_interaction_zone": int(
             np.max(np.count_nonzero(in_interaction_zone, axis=1))
         ),
+        "max_left_origin_pedestrians_in_interaction_zone": int(np.max(left_origin_in_zone)),
+        "max_right_origin_pedestrians_in_interaction_zone": int(np.max(right_origin_in_zone)),
+        "opposing_origins_cooccurred_in_interaction_zone": bool(np.any(opposing_origins_in_zone)),
         "interaction_zone_slow_steps": int(np.count_nonzero(interaction_zone_slow)),
         "max_consecutive_interaction_zone_slow_steps": max_consecutive_interaction_zone_slow_steps,
         "interaction_zone_slow_detected": interaction_zone_slow_detected,
@@ -252,26 +284,60 @@ def compute_fixture_metrics(
 
 
 def _evaluate_metric_thresholds(
-    metrics: dict[str, float], thresholds: dict[str, float]
-) -> dict[str, dict[str, float | bool]]:
+    metrics: dict[str, float],
+    thresholds: dict[str, float | DiagnosticThreshold | dict[str, Any]],
+) -> dict[str, dict[str, float | bool | str]]:
     """Evaluate local diagnostic thresholds without promoting benchmark claims.
 
     Returns:
         JSON-safe threshold verdicts keyed by metric name.
     """
 
-    checks: dict[str, dict[str, float | bool]] = {}
-    for metric_name, threshold in thresholds.items():
+    checks: dict[str, dict[str, float | bool | str]] = {}
+    for metric_name, raw_threshold in thresholds.items():
         if metric_name not in metrics:
             raise ValueError(f"Unknown diagnostic threshold metric: {metric_name}")
-        _require_finite_number(threshold, f"threshold {metric_name}", non_negative=True)
+        threshold = _normalize_diagnostic_threshold(raw_threshold, metric_name)
         observed = float(metrics[metric_name])
-        checks[metric_name] = {
+        criterion_met = (
+            observed >= threshold.value
+            if threshold.direction == "min_required"
+            else observed <= threshold.value
+        )
+        check: dict[str, float | bool | str] = {
             "observed": observed,
-            "threshold": float(threshold),
-            "meets_or_exceeds": observed >= float(threshold),
+            "threshold": threshold.value,
+            "direction": threshold.direction,
+            "criterion_met": criterion_met,
         }
+        if threshold.direction == "min_required":
+            check["meets_or_exceeds"] = criterion_met
+        checks[metric_name] = check
     return checks
+
+
+def _normalize_diagnostic_threshold(
+    threshold: float | DiagnosticThreshold | dict[str, Any],
+    metric_name: str,
+) -> DiagnosticThreshold:
+    """Normalize legacy and JSON-style diagnostic threshold specs.
+
+    Returns:
+        Direction-aware diagnostic threshold.
+    """
+    if isinstance(threshold, DiagnosticThreshold):
+        normalized = threshold
+    elif isinstance(threshold, dict):
+        if set(threshold) != {"value", "direction"}:
+            raise ValueError(f"threshold {metric_name} must contain exactly value and direction")
+        normalized = DiagnosticThreshold(
+            value=float(threshold["value"]),
+            direction=threshold["direction"],
+        )
+    else:
+        normalized = DiagnosticThreshold(value=float(threshold), direction="min_required")
+    _require_finite_number(normalized.value, f"threshold {metric_name}", non_negative=True)
+    return normalized
 
 
 def run_pedestrian_model_fixture_diagnostics(
@@ -537,7 +603,12 @@ def _build_narrow_passage_lateral_sliding_spec() -> PedestrianModelFixtureSpec:
         interaction_zone_center=(5.0, 2.0),
         interaction_zone_radius_m=0.85,
         interaction_zone_min_pedestrians=2,
-        metric_thresholds={"mean_max_lateral_displacement_m": 0.04},
+        metric_thresholds={
+            "mean_max_lateral_displacement_m": DiagnosticThreshold(
+                value=0.04,
+                direction="max_allowed",
+            )
+        },
         diagnostic_metadata={
             "diagnostic_only_not_benchmark_gate": True,
             "geometric_fixture": "narrow_passage_lateral_sliding",
@@ -558,12 +629,12 @@ def _build_bottleneck_freeze_deadlock_spec() -> PedestrianModelFixtureSpec:
         Obstacle([(4.55, 2.65), (5.45, 2.65), (5.45, 4.0), (4.55, 4.0)]),
     ]
     map_def = _base_map("bottleneck_freeze_deadlock", width=10.0, height=4.0, obstacles=obstacles)
-    y_offsets = (1.35, 2.0, 2.65)
+    y_offsets = (1.5, 2.0, 2.5)
     left = tuple(
         SinglePedestrianDefinition(
             id=f"geometric_bottleneck_left_{idx}",
-            start=(2.7, y),
-            trajectory=[(5.0, 2.0), (7.5, y)],
+            start=(4.2, y),
+            trajectory=[(5.0, 2.0), (5.8, y)],
             speed_m_s=0.9,
             metadata={"diagnostic_only_not_benchmark_gate": True},
         )
@@ -572,8 +643,8 @@ def _build_bottleneck_freeze_deadlock_spec() -> PedestrianModelFixtureSpec:
     right = tuple(
         SinglePedestrianDefinition(
             id=f"geometric_bottleneck_right_{idx}",
-            start=(7.3, y),
-            trajectory=[(5.0, 2.0), (2.5, y)],
+            start=(5.8, y),
+            trajectory=[(5.0, 2.0), (4.2, y)],
             speed_m_s=0.9,
             start_delay_s=0.15,
             metadata={"diagnostic_only_not_benchmark_gate": True},
@@ -584,10 +655,15 @@ def _build_bottleneck_freeze_deadlock_spec() -> PedestrianModelFixtureSpec:
         scenario_id="bottleneck_freeze_deadlock",
         map_def=map_def,
         single_pedestrians=left + right,
-        interaction_zone_center=(2.8, 2.0),
+        interaction_zone_center=(5.0, 2.0),
         interaction_zone_radius_m=1.1,
         interaction_zone_min_pedestrians=3,
-        metric_thresholds={"max_consecutive_interaction_zone_slow_steps": 2.0},
+        metric_thresholds={
+            "max_consecutive_interaction_zone_slow_steps": DiagnosticThreshold(
+                value=2.0,
+                direction="max_allowed",
+            )
+        },
         diagnostic_metadata={
             "diagnostic_only_not_benchmark_gate": True,
             "geometric_fixture": "bottleneck_freeze_deadlock",

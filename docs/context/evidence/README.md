@@ -133,6 +133,13 @@ is included.
   rows were `not_available`; no benchmark, planner-promotion, paper, or
   dissertation claim is supported.
 
+- `issue_4539_closure_audit_2026-07-06.md`: closure-audit integration report for Issue #4539
+  (release-claim-matrix publication gate hardening). Maps the unknown-classification, positive
+  `scenario_certification` allowlist, and non-repo-path rejection criteria to merged PRs #4544,
+  PR #4569, and PR #4606, with each criterion backed by a focused test. Recommends closing the issue:
+  all three criteria (including the optional one) are delivered and the committed matrix still fails
+  closed by design.
+
 - `issue_3637_closure_audit_2026-07-05.md`: closure-audit integration report for Issue #3637.
   Maps reactivity-vs-replay mechanism, preflight, frozen packet, analyzer, and runner-metadata PRs
   Issue #3594, Issue #3612, Issue #3696, Issue #3853, Issue #3860, Issue #3876, Issue #4150,

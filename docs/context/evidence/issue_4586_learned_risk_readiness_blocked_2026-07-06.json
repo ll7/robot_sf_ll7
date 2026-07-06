@@ -1,0 +1,43 @@
+{
+  "blockers": [
+    "trace_manifest: baseline_artifact_uri is an unresolved placeholder alias: wandb-artifact://robot-sf/policy-search/hybrid_rule_v3_static_margin0_waypoint2_baseline:pending",
+    "trace_manifest: trace_artifacts[0] is an unresolved placeholder alias: wandb-artifact://robot-sf/learned-risk/learned_risk_training_traces_stress_slice:pending",
+    "trace_manifest: trace_artifacts[1] is an unresolved placeholder alias: wandb-artifact://robot-sf/learned-risk/learned_risk_training_traces_full_matrix:pending",
+    "trace_manifest: label 'collision' is not 'present' (got 'pending')",
+    "trace_manifest: label 'near_miss' is not 'present' (got 'pending')",
+    "trace_manifest: label 'low_progress' is not 'present' (got 'pending')",
+    "trace_manifest: retrieval_status is not 'available'"
+  ],
+  "blocking_gates": [
+    "trace_manifest"
+  ],
+  "campaign_ready": false,
+  "campaign_state": "campaign_blocked",
+  "candidate_id": "learned_risk_model_v1",
+  "gates": [
+    {
+      "blockers": [],
+      "name": "launch_packet",
+      "status": "passed",
+      "summary": "launch packet valid for learned_risk_model_v1"
+    },
+    {
+      "blockers": [
+        "baseline_artifact_uri is an unresolved placeholder alias: wandb-artifact://robot-sf/policy-search/hybrid_rule_v3_static_margin0_waypoint2_baseline:pending",
+        "trace_artifacts[0] is an unresolved placeholder alias: wandb-artifact://robot-sf/learned-risk/learned_risk_training_traces_stress_slice:pending",
+        "trace_artifacts[1] is an unresolved placeholder alias: wandb-artifact://robot-sf/learned-risk/learned_risk_training_traces_full_matrix:pending",
+        "label 'collision' is not 'present' (got 'pending')",
+        "label 'near_miss' is not 'present' (got 'pending')",
+        "label 'low_progress' is not 'present' (got 'pending')",
+        "retrieval_status is not 'available'"
+      ],
+      "name": "trace_manifest",
+      "status": "blocked",
+      "summary": "trace manifest decision: artifact_retrieval_blocked"
+    }
+  ],
+  "issue": 1472,
+  "launch_packet": "configs/training/learned_risk_model_issue_1395_launch_packet.yaml",
+  "status": "ok",
+  "trace_manifest": "configs/training/learned_risk_trace_manifest_issue_2312.yaml"
+}

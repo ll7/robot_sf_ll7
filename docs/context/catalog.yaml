@@ -17,6 +17,10 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+  - path: docs/context/evidence/issue_1126_final_integration_2026-07-06.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_1134_closure_audit_2026-07-06.md
     status: evidence
     freshness: evidence
@@ -179,6 +183,14 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_4013_learned_model_based_planning/training_metrics.v1.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4013_learned_model_based_planning/comparison_report.v1.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4013_learned_model_based_planning/comparison_report.v1.md
     status: evidence
     freshness: evidence
     area: benchmark_evidence
@@ -3080,6 +3092,10 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_2273_learned_risk_trace_preflight_2026-06-05/trace_status.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4586_learned_risk_readiness_blocked_2026-07-06.json
     status: evidence
     freshness: evidence
     area: benchmark_evidence

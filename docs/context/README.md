@@ -175,9 +175,8 @@ knowledge, not every transient iteration detail.
   campaign, Slurm submission, or benchmark claim was run by audit.
 * Issue #4546 Social Navigation Benchmark (SocNavBench) ETH stage/SVG closure audit:
 [issue_4546_closure_audit_2026-07-06.md](issue_4546_closure_audit_2026-07-06.md)
-records merged PRs #4553/#4574 delivered wrapper and artifact policy while real
-source staging, converter hash evidence, and smoke-validated SVG remain blocked
-on licensed external input.
+records real external-root source staging, converter input/output hashes, and
+parser-smoke validation for `maps/svg_maps/socnavbench/socnavbench_eth.svg`.
 * Issue #2232 planner mechanism transfer benchmark protocol:
 [issue_2232_planner_mechanism_transfer_benchmark.md](issue_2232_planner_mechanism_transfer_benchmark.md)
 * Issue #3064 behavior-variant inventory:

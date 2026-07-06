@@ -114,7 +114,7 @@ a bounded pre-authorized overnight GPU tournament — is maintainer-gated and no
 epic's decision, because the diagnostic tournament already returned a consistent negative across all
 three levers. Any GPU rerun would be an optional paper-grade *confirmation* of an answered question,
 which belongs in the forecast-lane epic (#2835), not as a blocker on this epic. Recommended: close
-#3215 as a completed diagnostic-tier negative result, mirroring the #3213/#3214 child closures.
+issue #3215 as a completed diagnostic-tier negative result, mirroring the #3213/#3214 child closures.
 
 **Residual (non-blocking):** if a paper-grade confirmation of the negative result is later required,
 run the S20/S30 hard-seed tournament under a maintainer-set GPU budget and promote raw JSONL to a

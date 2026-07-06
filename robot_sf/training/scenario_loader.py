@@ -2108,7 +2108,14 @@ def _set_simulation_override_attr(
         # Nested opt-in force config given directly; auto-enable when its selector is active.
         config_cls, selector_model = config_spec
         sub_overrides = dict(overrides[attr])
-        if overrides.get("pedestrian_model") == selector_model:
+        # Auto-enable when the selector model is active either via this scenario's overrides or
+        # via the already-applied base config; checking only the overrides would silently reset
+        # ``enabled`` to False when the base config selects the model but the scenario omits
+        # ``pedestrian_model`` (provenance-loss regression flagged in review).
+        if (
+            overrides.get("pedestrian_model") == selector_model
+            or config.sim_config.pedestrian_model == selector_model
+        ):
             sub_overrides["enabled"] = True
         setattr(config.sim_config, attr, config_cls(**sub_overrides))
     elif attr == "pedestrian_model" and overrides[attr] in _PEDESTRIAN_MODEL_ENABLE_ATTR:

@@ -380,7 +380,13 @@ class Simulator:
         initial_headings = getattr(self, "_initial_ped_headings", None)
         if initial_headings is not None:
             self.ped_headings = initial_headings.copy()
-        self.ped_angular_velocities = np.zeros_like(self.ped_headings)
+        # Only (re)initialize angular velocities when headings exist. ``_reset_social_force_state``
+        # runs on the shared reset path, including partially-constructed ``PedSimulator`` stubs that
+        # never set ``ped_headings``; an unconditional ``zeros_like(self.ped_headings)`` regressed
+        # that path with an AttributeError.
+        existing_headings = getattr(self, "ped_headings", None)
+        if existing_headings is not None:
+            self.ped_angular_velocities = np.zeros_like(existing_headings)
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
         for behavior in getattr(self, "peds_behaviors", ()):
             behavior.reset()

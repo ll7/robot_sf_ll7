@@ -245,6 +245,25 @@ def test_scenario_alignment_torque_selector_marks_config_enabled(tmp_path) -> No
     assert config.sim_config.alignment_torque.k_omega == pytest.approx(6.0)
 
 
+def test_alignment_torque_override_preserves_enabled_when_model_active_in_base(tmp_path) -> None:
+    """A nested ``alignment_torque`` override must not silently reset ``enabled`` when the base
+    config already selects the model but the scenario omits ``pedestrian_model``."""
+    from robot_sf.training.scenario_loader import _apply_simulation_overrides
+
+    config = build_robot_config_from_scenario(
+        {"simulation_config": {"pedestrian_model": HSFM_ALIGNMENT_TORQUE_V1}},
+        scenario_path=tmp_path / "scenario.yaml",
+    )
+    assert config.sim_config.alignment_torque.enabled is True
+
+    # Second override tweaks a torque param but does NOT re-declare pedestrian_model.
+    _apply_simulation_overrides(config, {"alignment_torque": {"k_theta": 7.0}})
+
+    assert config.sim_config.pedestrian_model == HSFM_ALIGNMENT_TORQUE_V1
+    assert config.sim_config.alignment_torque.enabled is True
+    assert config.sim_config.alignment_torque.k_theta == pytest.approx(7.0)
+
+
 def _make_alignment_torque_sim(
     state: np.ndarray, headings: np.ndarray
 ) -> tuple[Simulator, _FakePedState]:

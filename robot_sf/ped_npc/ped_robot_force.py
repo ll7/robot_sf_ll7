@@ -40,6 +40,7 @@ class PedRobotForce:
         config: PedRobotForceConfig,
         peds: PedState,
         get_robot_pos: Callable[[], Vec2D],
+        get_ped_response_multipliers: Callable[[], np.ndarray] | None = None,
     ):
         """Create a robot-aware pedestrian force.
 
@@ -47,10 +48,12 @@ class PedRobotForce:
             config: Force activation, geometry, and scaling parameters.
             peds: PySocialForce pedestrian state backing the current simulation.
             get_robot_pos: Callback returning the robot position in world coordinates.
+            get_ped_response_multipliers: Callback returning a float array of shape (num_peds,)
         """
         self.config = config
         self.peds = peds
         self.get_robot_pos = get_robot_pos
+        self.get_ped_response_multipliers = get_ped_response_multipliers
         self.last_forces = 0.0
 
     def __call__(self) -> np.ndarray:
@@ -63,6 +66,15 @@ class PedRobotForce:
         forces = np.zeros((self.peds.size(), 2))
         ped_robot_force(forces, ped_positions, robot_pos, threshold)
         forces = forces * self.config.force_multiplier
+        if self.get_ped_response_multipliers is not None:
+            multipliers = self.get_ped_response_multipliers()
+            if multipliers is not None:
+                multipliers = np.asarray(multipliers, dtype=float)
+                # Guard against a stale/mismatched multiplier vector (issue #4618 R6):
+                # the pedestrian count can change (e.g. an appended ego row), so only
+                # scale when the per-pedestrian multipliers line up with the force rows.
+                if multipliers.shape[0] == forces.shape[0]:
+                    forces = forces * multipliers[:, np.newaxis]
         self.last_forces = forces
         return forces
 

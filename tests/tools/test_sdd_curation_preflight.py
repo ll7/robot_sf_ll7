@@ -8,8 +8,11 @@ benchmark evidence regardless of whether the importer could parse a candidate fi
 from __future__ import annotations
 
 import json
+import math
 import shlex
 from typing import TYPE_CHECKING
+
+import pytest
 
 from scripts.tools import import_sdd_scenarios, manage_external_data, sdd_curation_preflight
 
@@ -457,3 +460,28 @@ def test_cli_decision_meters_per_pixel_is_recorded(tmp_path: Path, monkeypatch) 
     packet = json.loads(packet_path.read_text(encoding="utf-8"))
     assert packet["curation_parameters"]["meters_per_pixel"] == 0.0417
     assert "--meters-per-pixel 0.0417" in packet["required_next_commands"]["import"]
+
+
+@pytest.mark.parametrize("bad_scale", [0.0, -0.05, float("nan"), float("inf")])
+def test_decision_packet_rejects_invalid_meters_per_pixel(tmp_path: Path, bad_scale: float) -> None:
+    """A non-positive or non-finite scale must fail closed at packet build (issue #1126).
+
+    The importer requires ``--meters-per-pixel > 0``; a NaN/inf slips past that ``<= 0`` guard and
+    would produce garbage geometry. Reject it here so the generated handoff command is never emitted
+    with an unrunnable/garbage scale.
+    """
+    report = sdd_curation_preflight.classify_curation_readiness(
+        {"mode": manage_external_data.SDD_MODE_PROXY, "dataset_backed": False}, None
+    )
+    with pytest.raises(ValueError, match="finite value > 0"):
+        sdd_curation_preflight.build_decision_packet(
+            report,
+            annotation=None,
+            label="Pedestrian",
+            min_track_points=8,
+            max_pedestrians=4,
+            dataset_id="sdd_first_real_candidate",
+            output_dir=tmp_path / "derived",
+            meters_per_pixel=bad_scale,
+        )
+    assert not math.isfinite(bad_scale) or bad_scale <= 0  # guards the parametrization intent

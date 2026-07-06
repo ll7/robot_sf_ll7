@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import shlex
 import sys
 from pathlib import Path
@@ -250,6 +251,15 @@ def build_decision_packet(
     ``None`` the command carries an explicit ``<meters-per-pixel>`` placeholder the curator must fill
     from the selected scene's calibration, and the packet records ``meters_per_pixel: null``.
     """
+    # Fail closed on an invalid scale rather than emitting a command the importer rejects (or, for
+    # NaN/inf, silently accepts and turns into garbage geometry). The importer requires
+    # ``--meters-per-pixel > 0``; mirror that here and additionally reject non-finite values so the
+    # generated handoff command stays runnable. ``None`` is the intended "unknown scale" case and
+    # is preserved as a fill-in placeholder below.
+    if meters_per_pixel is not None and (
+        not math.isfinite(meters_per_pixel) or meters_per_pixel <= 0
+    ):
+        raise ValueError(f"meters_per_pixel must be a finite value > 0, got {meters_per_pixel!r}")
     annotation_placeholder = "<staged-sdd>/<scene>/<video>/annotations.txt"
     annotation_command_arg: str | Path = (
         annotation if annotation is not None else annotation_placeholder

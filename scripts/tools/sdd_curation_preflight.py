@@ -62,7 +62,11 @@ SMOKE_BLOCKED = "blocked"
 
 
 def build_benchmark_ready_next_plan(
-    *, classification: str, smoke_summary: dict[str, Any], generated_artifacts_load: bool
+    *,
+    classification: str,
+    smoke_summary: dict[str, Any],
+    generated_artifacts_load: bool,
+    benchmark_promotion_allowed: bool = True,
 ) -> dict[str, Any]:
     """Return a deterministic next empirical action for #1126 smoke decisions."""
     blockers: list[str] = []
@@ -72,8 +76,24 @@ def build_benchmark_ready_next_plan(
         "open closure only after reviewer confirms benchmark-ready evidence boundary",
     ]
 
-    if classification == SMOKE_BLOCKED:
+    if (
+        classification == SMOKE_BLOCKED
+        and not benchmark_promotion_allowed
+        and (generated_artifacts_load and smoke_summary["executed"])
+    ):
+        # Smoke executed cleanly and artifacts loaded, but the preflight readiness gate
+        # withheld benchmark promotion (recommended_next_action=restore_dataset_backed_preflight).
+        # Reporting an import/execution repair here would contradict that decision.
+        primary_action = "restore_dataset_backed_preflight"
+        blockers.append("preflight did not allow benchmark promotion")
+        next_checks = [
+            "restore dataset-backed preflight before re-classifying",
+            "do not promote until preflight allows benchmark promotion",
+        ]
+    elif classification == SMOKE_BLOCKED:
         primary_action = "fix_import_or_smoke_execution"
+        if not benchmark_promotion_allowed:
+            blockers.append("preflight did not allow benchmark promotion")
         if not generated_artifacts_load:
             blockers.append("generated artifacts did not load")
         if not smoke_summary["executed"]:
@@ -480,6 +500,7 @@ def classify_smoke_decision(
         classification=classification,
         smoke_summary=smoke_summary,
         generated_artifacts_load=generated_artifacts_load,
+        benchmark_promotion_allowed=readiness.get("benchmark_promotion_allowed", False),
     )
 
     return {

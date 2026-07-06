@@ -575,6 +575,35 @@ def test_smoke_decision_promotes_clean_success_candidate() -> None:
     assert decision["benchmark_ready"] is True
 
 
+def test_smoke_decision_blocked_on_preflight_gate_reports_restore_plan() -> None:
+    """Clean smoke but withheld benchmark promotion yields a preflight-restore plan, not a repair plan."""
+    decision = sdd_curation_preflight.classify_smoke_decision(
+        {
+            "benchmark_promotion_allowed": False,
+            "output_classification": sdd_curation_preflight.OUTPUT_BENCHMARK_READY_CANDIDATE,
+        },
+        [
+            {
+                "horizon": 384,
+                "successful_jobs": 1,
+                "failed_jobs": 0,
+                "success": True,
+                "timeout": False,
+                "collisions": 0,
+            }
+        ],
+        generated_artifacts_load=True,
+    )
+
+    assert decision["classification"] == sdd_curation_preflight.SMOKE_BLOCKED
+    assert decision["recommended_next_action"] == "restore_dataset_backed_preflight"
+    plan = decision["benchmark_ready_next_plan"]
+    # Plan must agree with recommended_next_action, not misreport an import/execution failure.
+    assert plan["primary_action"] == "restore_dataset_backed_preflight"
+    assert "preflight did not allow benchmark promotion" in plan["blockers"]
+    assert plan["blockers"] != []
+
+
 def test_smoke_decision_fails_closed_when_artifacts_do_not_load() -> None:
     """Smoke classification must not hide generated artifact load failures."""
     decision = sdd_curation_preflight.classify_smoke_decision(

@@ -433,9 +433,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--output-dir", default=str(DEFAULT_OUTPUT_DIR), help="Ignored output root."
     )
     parser.add_argument("--phase", default=DEFAULT_PHASE, choices=(DEFAULT_PHASE,))
-    parser.add_argument(
-        "--planner", action="append", default=None, help="Planner id."
-    )
+    parser.add_argument("--planner", action="append", default=None, help="Planner id.")
     parser.add_argument(
         "--alpha-arm",
         action="append",

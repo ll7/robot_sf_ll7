@@ -82,6 +82,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4437_closure_audit_2026-07-06.md
+    status: evidence
+    freshness: evidence
+    area: repo_hygiene
   - path: docs/context/evidence/issue_1489_closure_audit_2026-07-05.md
     status: evidence
     freshness: evidence

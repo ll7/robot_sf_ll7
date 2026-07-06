@@ -23,18 +23,30 @@
   ],
   "availability": "validated",
   "benchmark_eligibility": "research_only",
-  "blockers": [],
+  "blockers": [
+    {
+      "code": "staging.env_unresolved_for_validated",
+      "message": "availability 'validated' requires staging.staging_dir to resolve to a local directory; set ROBOT_SF_EXTERNAL_DATA_ROOT or use an output/ path.",
+      "severity": "error"
+    }
+  ],
   "claim_boundary": "Real-trajectory readiness only. No raw data is staged by this checker; no benchmark, navigation-quality, paper, or dissertation claim is made.",
   "dataset_id": "issue_4013_eth_biwi",
   "issue": 4013,
   "manifest_path": "configs/data/issue_4013_eth_biwi_real_trajectory_manifest.yaml",
   "next_action": "Stage ETH/BIWI or another approved real pedestrian trajectory dataset under $ROBOT_SF_EXTERNAL_DATA_ROOT, validate its checksum, update the manifest, then run real-trajectory training and representative evaluation.",
-  "preflight_issues": [],
+  "preflight_issues": [
+    {
+      "code": "staging.env_unresolved_for_validated",
+      "message": "availability 'validated' requires staging.staging_dir to resolve to a local directory; set ROBOT_SF_EXTERNAL_DATA_ROOT or use an output/ path.",
+      "severity": "error"
+    }
+  ],
   "retrieval": {
     "download_url": "https://ethz.ch/content/dam/ethz/special-interest/itet/cvl/vision-dam/documents/ewap_dataset_light.tgz",
     "fail_closed": true,
     "instructions": "Obtain the ETH/BIWI walking pedestrians annotation archive from the official ETH Computer Vision Lab datasets page under its current terms. Extract the raw annotation files into staging_dir. Do not commit raw annotations or converted trajectory files. After staging, compute the aggregate SHA-256 tree checksum, set checksums.tree_sha256 and expected_tree_sha256, and change availability to validated before using the data for #4013 real-trajectory training or representative evaluation."
   },
   "schema_version": "issue_4013.real_trajectory_readiness.v1",
-  "status": "ready_for_real_trajectory_training"
+  "status": "blocked_manifest_contract"
 }

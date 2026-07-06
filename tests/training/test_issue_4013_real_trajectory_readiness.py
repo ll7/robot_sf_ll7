@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import TYPE_CHECKING
 
+import pytest
 import yaml
 
 from scripts.training.check_issue_4013_real_trajectory_readiness import (
@@ -83,8 +84,17 @@ def test_missing_real_dataset_blocks_phase3_without_contract_error(tmp_path: Pat
     assert report["preflight_issues"] == []
 
 
-def test_validated_research_manifest_is_ready_for_real_trajectory_training(tmp_path: Path) -> None:
-    """Checksum-validated research-eligible manifests unlock real-trajectory training."""
+def test_validated_research_manifest_is_ready_for_real_trajectory_training(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Checksum-validated staged research manifests unlock real-trajectory training."""
+    data_root = tmp_path / "external_data"
+    staging_dir = data_root / "issue_4013_test"
+    staging_dir.mkdir(parents=True)
+    (staging_dir / "trajectories.csv").write_text(
+        "scene,frame,pedestrian_id,x,y\neth,0,1,0,0\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("ROBOT_SF_EXTERNAL_DATA_ROOT", str(data_root))
     manifest = deepcopy(_manifest())
     manifest["availability"] = "validated"
     manifest["benchmark_eligibility"] = "research_only"

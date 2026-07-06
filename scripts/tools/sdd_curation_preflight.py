@@ -179,6 +179,59 @@ def probe_annotation_file(
     return report
 
 
+def scan_annotation_candidates(
+    root: Path,
+    *,
+    label: str,
+    min_track_points: int,
+    max_pedestrians: int,
+    limit: int = 5,
+) -> dict[str, Any]:
+    """Rank staged SDD annotation candidates without writing derived artifacts."""
+    annotations = sorted(root.rglob("annotations.txt")) if root.is_dir() else []
+    probes = [
+        probe_annotation_file(
+            path,
+            label=label,
+            min_track_points=min_track_points,
+            max_pedestrians=max_pedestrians,
+        )
+        for path in annotations
+    ]
+    ranked = sorted(
+        probes,
+        key=lambda probe: (
+            not probe["selection_satisfiable"],
+            -int(probe["usable_track_count"]),
+            -int(probe["usable_label_points"]),
+            probe["path"],
+        ),
+    )
+    selected = ranked[:limit] if limit > 0 else ranked
+    satisfiable_count = sum(1 for probe in probes if probe["selection_satisfiable"])
+    blockers = []
+    if not root.is_dir():
+        blockers.append(f"scan root is not a directory: {root}")
+    elif not annotations:
+        blockers.append(f"no annotations.txt files found below: {root}")
+    elif satisfiable_count == 0:
+        blockers.append(
+            f"no scanned annotation satisfies >= {min_track_points} usable "
+            f"'{import_sdd_scenarios.normalize_sdd_label(label)}' points"
+        )
+    return {
+        "root": str(root),
+        "label": import_sdd_scenarios.normalize_sdd_label(label),
+        "min_track_points": min_track_points,
+        "max_pedestrians": max_pedestrians,
+        "annotation_file_count": len(annotations),
+        "satisfiable_count": satisfiable_count,
+        "limit": limit,
+        "candidates": selected,
+        "blockers": blockers,
+    }
+
+
 def classify_curation_readiness(
     staging_gate: dict[str, Any],
     annotation_probe: dict[str, Any] | None = None,
@@ -274,6 +327,8 @@ def run_preflight(
     *,
     manifest_path: Path | None,
     annotation: Path | None,
+    scan_root: Path | None,
+    scan_limit: int,
     label: str,
     min_track_points: int,
     max_pedestrians: int,
@@ -288,7 +343,16 @@ def run_preflight(
             min_track_points=min_track_points,
             max_pedestrians=max_pedestrians,
         )
-    return classify_curation_readiness(staging_gate, probe)
+    report = classify_curation_readiness(staging_gate, probe)
+    if scan_root is not None:
+        report["candidate_scan"] = scan_annotation_candidates(
+            scan_root,
+            label=label,
+            min_track_points=min_track_points,
+            max_pedestrians=max_pedestrians,
+            limit=scan_limit,
+        )
+    return report
 
 
 def _shell_arg(value: str | Path) -> str:
@@ -557,6 +621,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Optional candidate SDD annotation file to probe against the curation selection rule.",
     )
+    parser.add_argument(
+        "--scan-root",
+        type=Path,
+        default=None,
+        help="Optional staged SDD root to scan for ranked annotations.txt curation candidates.",
+    )
+    parser.add_argument(
+        "--scan-limit",
+        type=int,
+        default=5,
+        help="Maximum ranked scan candidates to include; use 0 to include all.",
+    )
     parser.add_argument("--label", default="Pedestrian", help="SDD label to probe for.")
     parser.add_argument("--min-track-points", type=int, default=8)
     parser.add_argument("--max-pedestrians", type=int, default=4)
@@ -611,6 +687,8 @@ def main(argv: list[str] | None = None) -> int:
     report = run_preflight(
         manifest_path=args.manifest,
         annotation=args.annotation,
+        scan_root=args.scan_root,
+        scan_limit=args.scan_limit,
         label=args.label,
         min_track_points=args.min_track_points,
         max_pedestrians=args.max_pedestrians,

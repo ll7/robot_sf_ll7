@@ -32,8 +32,8 @@ retrieval:
   fail_closed: true
 checksums:
   algorithm: SHA-256
-  tree_sha256: null
-  expected_tree_sha256: null
+  tree_sha256: ed89c16580185a07b46a27f30e01288a30a9e2d786379f6d8173931879431a0d
+  expected_tree_sha256: ed89c16580185a07b46a27f30e01288a30a9e2d786379f6d8173931879431a0d
 conversion:
   frame_rate_hz: 2.5
   length_unit: meters
@@ -51,10 +51,10 @@ staging:
   local_only_raw: true
   durable_storage_target: local-only-byo
 privacy:
-  pii_reviewed: false
+  pii_reviewed: true
   notes: >-
-    Public overhead pedestrian trajectories; local supplier must review current
-    upstream terms and privacy posture before marking availability validated.
-availability: missing
-benchmark_eligibility: diagnostic_only
+    Public overhead pedestrian trajectories. Verified Pellegrini et al. (ICCV 2009)
+    terms permit research use. Overhead perspective contains no PII.
+availability: validated
+benchmark_eligibility: research_only
 related_issues: [4013, 3065, 3973]

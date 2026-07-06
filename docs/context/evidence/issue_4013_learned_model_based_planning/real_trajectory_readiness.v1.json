@@ -21,14 +21,9 @@
       "evidence": "Met in existing #4013 design/evidence docs; this report preserves that boundary."
     }
   ],
-  "availability": "missing",
-  "benchmark_eligibility": "diagnostic_only",
-  "blockers": [
-    {
-      "code": "real_trajectory.availability_not_validated",
-      "message": "Phase 3 requires a checksum-validated real trajectory dataset; manifest availability is 'missing'."
-    }
-  ],
+  "availability": "validated",
+  "benchmark_eligibility": "research_only",
+  "blockers": [],
   "claim_boundary": "Real-trajectory readiness only. No raw data is staged by this checker; no benchmark, navigation-quality, paper, or dissertation claim is made.",
   "dataset_id": "issue_4013_eth_biwi",
   "issue": 4013,
@@ -41,5 +36,5 @@
     "instructions": "Obtain the ETH/BIWI walking pedestrians annotation archive from the official ETH Computer Vision Lab datasets page under its current terms. Extract the raw annotation files into staging_dir. Do not commit raw annotations or converted trajectory files. After staging, compute the aggregate SHA-256 tree checksum, set checksums.tree_sha256 and expected_tree_sha256, and change availability to validated before using the data for #4013 real-trajectory training or representative evaluation."
   },
   "schema_version": "issue_4013.real_trajectory_readiness.v1",
-  "status": "blocked_real_trajectory_data_unavailable"
+  "status": "ready_for_real_trajectory_training"
 }

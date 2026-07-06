@@ -371,6 +371,192 @@ def _load_scenario_difficulty_analysis(
     )
 
 
+def _credibility_check(
+    *,
+    check_id: str,
+    label: str,
+    status: str,
+    score: float,
+    evidence: str,
+    blocker: str | None = None,
+) -> dict[str, Any]:
+    """Build one deterministic NASA-7009-style credibility check row."""
+    return {
+        "check_id": check_id,
+        "label": label,
+        "status": status,
+        "score": max(0.0, min(1.0, float(score))),
+        "evidence": evidence,
+        "blocker": blocker,
+    }
+
+
+def _status_from_score(score: float) -> str:
+    """Map a numeric credibility score to a conservative status."""
+    if score >= 0.8:
+        return "pass"
+    if score >= 0.5:
+        return "warning"
+    return "fail"
+
+
+def _build_credibility_scorecard(
+    *,
+    diagnostics: list[dict[str, Any]],
+    findings: list[str],
+    scenario_difficulty: dict[str, Any],
+    summary_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a per-campaign credibility scorecard from emitted analysis artifacts."""
+    planner_count = len(diagnostics)
+    episode_count = sum(int(item.get("episodes_file", 0) or 0) for item in diagnostics)
+    run_findings = sum(len(item.get("findings", []) or []) for item in diagnostics)
+    fallback_count = sum(
+        1
+        for item in diagnostics
+        if str(item.get("preflight_status", "")).lower() in {"fallback", "degraded"}
+    )
+    absolute_path_count = sum(
+        int(item.get("absolute_map_path_count", 0) or 0) for item in diagnostics
+    )
+    scenario_rows = scenario_difficulty.get("scenario_rows")
+    scenario_count = len(scenario_rows) if isinstance(scenario_rows, list) else 0
+    artifacts = summary_payload.get("artifacts")
+    seed_rows = artifacts.get("seed_variability_json") if isinstance(artifacts, dict) else None
+
+    checks: list[dict[str, Any]] = [
+        _credibility_check(
+            check_id="traceable_campaign_artifacts",
+            label="Traceable campaign artifacts",
+            status="pass" if planner_count and episode_count else "fail",
+            score=1.0 if planner_count and episode_count else 0.0,
+            evidence=f"{planner_count} planner runs with {episode_count} episode records",
+            blocker=None if planner_count and episode_count else "No episode evidence found.",
+        )
+    ]
+
+    verification_score = 1.0
+    blockers: list[str] = []
+    if run_findings:
+        verification_score -= 0.4
+        blockers.append(f"{run_findings} planner consistency finding(s)")
+    if absolute_path_count:
+        verification_score -= 0.2
+        blockers.append(f"{absolute_path_count} absolute map path reference(s)")
+    verification_score = max(0.0, verification_score)
+    checks.append(
+        _credibility_check(
+            check_id="verification_consistency",
+            label="Verification consistency",
+            status=_status_from_score(verification_score),
+            score=verification_score,
+            evidence="; ".join(blockers) if blockers else "No analyzer consistency findings.",
+            blocker="; ".join(blockers) if verification_score < 0.5 else None,
+        )
+    )
+    checks.append(
+        _credibility_check(
+            check_id="validation_coverage",
+            label="Validation coverage",
+            status="pass" if scenario_count else "warning",
+            score=1.0 if scenario_count else 0.5,
+            evidence=(
+                f"{scenario_count} scenario difficulty row(s)"
+                if scenario_count
+                else "Scenario difficulty artifact unavailable."
+            ),
+        )
+    )
+    checks.append(
+        _credibility_check(
+            check_id="uncertainty_characterization",
+            label="Uncertainty characterization",
+            status="pass" if seed_rows else "warning",
+            score=1.0 if seed_rows else 0.5,
+            evidence=(
+                f"Seed variability artifact declared: {seed_rows}"
+                if seed_rows
+                else "No seed variability artifact declared."
+            ),
+        )
+    )
+    limitation_score = 1.0 if not fallback_count and not findings else 0.5
+    checks.append(
+        _credibility_check(
+            check_id="limitations_explicit",
+            label="Limitations explicit",
+            status=_status_from_score(limitation_score),
+            score=limitation_score,
+            evidence=(
+                "No fallback/degraded planner rows and no campaign findings."
+                if limitation_score == 1.0
+                else f"{fallback_count} fallback/degraded run(s); {len(findings)} campaign finding(s)"
+            ),
+        )
+    )
+
+    score = round(sum(float(item["score"]) for item in checks) / len(checks), 4)
+    fail_closed_blockers = [
+        str(item["blocker"])
+        for item in checks
+        if item.get("status") == "fail" and item.get("blocker")
+    ]
+    if fallback_count:
+        fail_closed_blockers.append(
+            f"{fallback_count} planner run(s) used fallback or degraded execution."
+        )
+    status = "credible_diagnostic"
+    if fail_closed_blockers:
+        status = "fail_closed"
+    elif score < 0.8:
+        status = "limited_diagnostic"
+    return {
+        "schema_version": "nasa-7009-style-credibility-scorecard.v1",
+        "status": status,
+        "score": score,
+        "claim_boundary": (
+            "Diagnostic campaign-report credibility only; not paper-facing evidence and "
+            "not a benchmark-success promotion."
+        ),
+        "checks": checks,
+        "fail_closed_blockers": fail_closed_blockers,
+    }
+
+
+def _credibility_scorecard_markdown_lines(scorecard: Any) -> list[str]:
+    """Render credibility scorecard lines for the campaign analysis report."""
+    if not isinstance(scorecard, dict) or not scorecard:
+        return []
+    lines = [
+        "## Credibility Scorecard",
+        "",
+        f"- Status: `{scorecard.get('status', 'unknown')}`",
+        f"- Score: `{_format_float(scorecard.get('score'))}`",
+        f"- Claim boundary: {scorecard.get('claim_boundary', 'diagnostic only')}",
+        "",
+        "| check | status | score | evidence | blocker |",
+        "|---|---|---:|---|---|",
+    ]
+    checks = scorecard.get("checks", [])
+    if isinstance(checks, list):
+        for check in checks:
+            if not isinstance(check, dict):
+                continue
+            lines.append(
+                "| "
+                f"{check.get('label', check.get('check_id', 'unknown'))} | "
+                f"{check.get('status', 'unknown')} | "
+                f"{_format_float(check.get('score'))} | "
+                f"{check.get('evidence', '')} | "
+                f"{check.get('blocker') or '-'} |"
+            )
+    blockers = scorecard.get("fail_closed_blockers", [])
+    if isinstance(blockers, list) and blockers:
+        lines.extend(["", "Fail-closed blockers:"])
+        lines.extend(f"- {blocker}" for blocker in blockers)
+    return lines
+
+
 def _analyze_planner(  # noqa: C901, PLR0915
     run_entry: dict[str, Any],
     row_entry: dict[str, Any] | None,
@@ -677,6 +863,7 @@ def _build_markdown_report(payload: dict[str, Any]) -> str:
     planners = payload.get("planners", [])
     runtime_hotspots = payload.get("runtime_hotspots", {})
     scenario_difficulty = payload.get("scenario_difficulty", {})
+    credibility_scorecard = payload.get("credibility_scorecard", {})
     findings = payload.get("findings", [])
     lines = [
         "# Camera-Ready Campaign Analysis",
@@ -741,6 +928,8 @@ def _build_markdown_report(payload: dict[str, Any]) -> str:
         lines.extend(
             [""] + _scenario_difficulty_markdown_lines(scenario_difficulty, heading_prefix="##")
         )
+
+    lines.extend([""] + _credibility_scorecard_markdown_lines(credibility_scorecard))
 
     lines.extend(["", "## Findings", ""])
     if findings:
@@ -813,6 +1002,12 @@ def analyze_campaign(
     for finding in scenario_difficulty.get("findings", []):
         findings.append(f"scenario_difficulty: {finding}")
     findings = sorted(set(findings))
+    credibility_scorecard = _build_credibility_scorecard(
+        diagnostics=diagnostics_payload,
+        findings=findings,
+        scenario_difficulty=scenario_difficulty,
+        summary_payload=summary_payload,
+    )
 
     return {
         "campaign": {
@@ -827,6 +1022,7 @@ def analyze_campaign(
             "slowest_planners": slowest_planners,
         },
         "scenario_difficulty": scenario_difficulty,
+        "credibility_scorecard": credibility_scorecard,
         "findings": findings,
     }
 

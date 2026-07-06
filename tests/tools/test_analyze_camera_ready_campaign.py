@@ -11,6 +11,7 @@ import pytest
 
 from robot_sf.benchmark.scenario_difficulty import build_scenario_difficulty_analysis
 from scripts.tools.analyze_camera_ready_campaign import (
+    _build_markdown_report,
     _build_scenario_difficulty_markdown,
     analyze_campaign,
     main,
@@ -1136,3 +1137,33 @@ def test_analyze_campaign_cli_respects_output_overrides_for_difficulty_sidecars(
     }
     assert difficulty_json.exists()
     assert difficulty_md.exists()
+
+
+def test_analyze_campaign_emits_credibility_scorecard(tmp_path: Path) -> None:
+    """Campaign analysis emits a diagnostic credibility scorecard per campaign."""
+    campaign_root = tmp_path / "campaign"
+    _write_scenario_difficulty_campaign(campaign_root)
+
+    analysis = analyze_campaign(campaign_root)
+    scorecard = analysis["credibility_scorecard"]
+
+    assert scorecard["schema_version"] == "nasa-7009-style-credibility-scorecard.v1"
+    assert scorecard["status"] == "credible_diagnostic"
+    assert scorecard["score"] == pytest.approx(0.82)
+    assert "not paper-facing evidence" in scorecard["claim_boundary"]
+    assert {check["check_id"] for check in scorecard["checks"]} == {
+        "traceable_campaign_artifacts",
+        "verification_consistency",
+        "validation_coverage",
+        "uncertainty_characterization",
+        "limitations_explicit",
+    }
+    assert scorecard["fail_closed_blockers"] == []
+    checks_by_id = {check["check_id"]: check for check in scorecard["checks"]}
+    assert checks_by_id["verification_consistency"]["status"] == "warning"
+    assert checks_by_id["limitations_explicit"]["status"] == "warning"
+
+    markdown = _build_markdown_report(analysis)
+    assert "## Credibility Scorecard" in markdown
+    assert "| Traceable campaign artifacts | pass | 1.0000 |" in markdown
+    assert "not a benchmark-success promotion" in markdown

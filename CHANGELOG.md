@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #4013 paired diagnostic model-based planning comparison RUN (diagnostic).** New
+  `scripts/benchmark/run_issue_4013_model_based_comparison.py` runs the end-to-end comparison that
+  was deferred across the #4013 scaffolding PRs: it trains the short-horizon predictor checkpoint
+  (CPU, git-ignored `output/`) when missing, runs three arms through `map_runner.run_map_batch`
+  (`learned_prediction_mpc` on the trained checkpoint, `cv_prediction_mpc`, and a model-free `goal`
+  baseline via new `configs/benchmarks/issue_4013_model_based_checkpoint_smoke.yaml` and
+  `issue_4013_model_free_baseline_smoke.yaml`), then builds the diagnostic comparison report.
+  Observed local run (scenario `francis2023_blind_corner`, seed 4013, horizon 30): all three arms
+  produced one non-fallback evidence episode (`algorithm_metadata.status=ok`), the report reached
+  `status=diagnostic_ready` with `paired_seed_count=1`, zero blockers, and all five closure criteria
+  met. Promoted `comparison_report.v1.{json,md}` to
+  `docs/context/evidence/issue_4013_learned_model_based_planning/`. Claim boundary: single
+  scenario/single seed diagnostic smoke — not benchmark, navigation-quality, or paper-facing
+  evidence, and not a large generative world model. Covered by
+  `tests/benchmark/test_run_issue_4013_model_based_comparison.py`.
 * **issue #4013 checkpoint-backed model-based action selection (diagnostic).** New
   `configs/algos/learned_prediction_mpc_issue_4013_checkpoint.yaml` wires the trained short-horizon
   predictor checkpoint into the `learned_prediction_mpc` adapter fail-closed (`allow_untrained_smoke`

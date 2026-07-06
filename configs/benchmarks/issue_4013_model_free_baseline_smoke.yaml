@@ -1,0 +1,30 @@
+# Issue #4013 model-free baseline arm for the paired diagnostic comparison RUN.
+#
+# The third arm of the diagnostic triad. It uses the deterministic goal-seeking
+# planner (`goal`): a genuinely model-free baseline with NO learned model and NO
+# pedestrian prediction (inputs: robot_state, goal). It contrasts with:
+#   - learned_prediction_mpc  (learned short-horizon prediction + MPC)
+#   - cv_prediction_mpc       (constant-velocity prediction + MPC)
+#
+# This is the "model_free_baseline" role required by
+# configs/analysis/issue_4013_model_based_planning_comparison.yaml. Claim boundary:
+# diagnostic-only smoke; not benchmark or paper-facing evidence.
+name: issue_4013_model_free_baseline_smoke
+scenario_matrix: configs/scenarios/single/francis2023_blind_corner.yaml
+workers: 1
+horizon: 30
+dt: 0.1
+record_forces: true
+resume: false
+export_publication_bundle: false
+stop_on_failure: true
+seed_policy:
+  mode: fixed-list
+  seeds: [4013]
+planners:
+  - key: goal_model_free_baseline
+    algo: goal
+    algo_config: null
+    benchmark_profile: baseline-safe
+    issue_4013_role: model_free_baseline
+    claim_boundary: diagnostic_smoke_only

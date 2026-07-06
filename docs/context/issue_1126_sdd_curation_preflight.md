@@ -29,6 +29,12 @@ scenario into ignored `output/`, and runs two CPU `simple_policy` smoke jobs. Th
 benchmark-ready scenario-set criterion. The final integration audit is
 [`evidence/issue_1126_final_integration_2026-07-06.md`](evidence/issue_1126_final_integration_2026-07-06.md).
 
+PR #4685 added deterministic `benchmark_ready_next_plan` output to the smoke classifier. This
+candidate-scan slice adds `--scan-root` / `--scan-limit` to the preflight so the next CPU-only
+empirical action can rank staged `annotations.txt` files before import/smoke. The scan reuses the
+importer's parser, writes no derived artifacts, copies no raw SDD files, and still cannot promote a
+benchmark claim unless the external-data gate is dataset-backed.
+
 ## Owners
 
 - SDD staging gate: `scripts/tools/manage_external_data.py`
@@ -47,6 +53,9 @@ scripts/dev/run_worktree_shared_venv.sh -- python scripts/tools/manage_external_
 
 scripts/dev/run_worktree_shared_venv.sh -- python scripts/tools/sdd_curation_preflight.py --json
 # dataset_backed_prior, benchmark_promotion_allowed false until selected annotation probe passes
+
+scripts/dev/run_worktree_shared_venv.sh -- python scripts/tools/sdd_curation_preflight.py --scan-root output/external_data/sdd --scan-limit 5 --json
+# candidate_scan ranks satisfiable annotations.txt files; still proxy-only unless dataset-backed gate passes
 ```
 
 Without the pinned tree present, the same commands still fail closed as `proxy_schema_smoke` and

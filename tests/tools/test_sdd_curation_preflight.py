@@ -628,3 +628,77 @@ def test_smoke_decision_fails_closed_when_artifacts_do_not_load() -> None:
     )
     assert "generated artifacts did not load" in decision["benchmark_ready_next_plan"]["blockers"]
     assert any("did not load" in reason for reason in decision["reasons"])
+
+
+def test_scan_annotation_candidates_ranks_satisfiable_candidates(tmp_path: Path) -> None:
+    """Candidate scanner ranks usable staged annotations without writing derived artifacts."""
+    weak = tmp_path / "annotations" / "bookstore" / "video0" / "annotations.txt"
+    strong = tmp_path / "annotations" / "deathCircle" / "video0" / "annotations.txt"
+    weak.parent.mkdir(parents=True)
+    strong.parent.mkdir(parents=True)
+    weak.write_text(
+        "\n".join(
+            [
+                "1 0 0 10 10 0 0 0 0 Pedestrian",
+                "1 5 0 15 10 5 0 0 0 Pedestrian",
+                "1 10 0 20 10 10 0 0 0 Pedestrian",
+                "1 15 0 25 10 15 0 0 0 Pedestrian",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    _write_sdd_fixture(strong)
+
+    scan = sdd_curation_preflight.scan_annotation_candidates(
+        tmp_path,
+        label="Pedestrian",
+        min_track_points=4,
+        max_pedestrians=4,
+        limit=1,
+    )
+
+    assert scan["annotation_file_count"] == 2
+    assert scan["satisfiable_count"] == 2
+    assert scan["blockers"] == []
+    assert len(scan["candidates"]) == 1
+    assert scan["candidates"][0]["path"] == str(strong)
+    assert scan["candidates"][0]["usable_track_count"] == 2
+
+
+def test_cli_scan_root_reports_candidates_without_benchmark_claim(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """CLI scan output remains proxy-only unless external-data staging gate is dataset-backed."""
+    annotations = tmp_path / "annotations" / "bookstore" / "video0" / "annotations.txt"
+    annotations.parent.mkdir(parents=True)
+    _write_sdd_fixture(annotations)
+    monkeypatch.setattr(
+        manage_external_data,
+        "resolve_sdd_scenario_prior_mode",
+        lambda manifest_path=None: {
+            "mode": manage_external_data.SDD_MODE_PROXY,
+            "dataset_backed": False,
+            "availability": {"state": "missing"},
+            "reason": "SDD not staged.",
+            "staging_dir": str(tmp_path),
+        },
+    )
+
+    exit_code = sdd_curation_preflight.main(
+        [
+            "--scan-root",
+            str(tmp_path),
+            "--scan-limit",
+            "1",
+            "--min-track-points",
+            "4",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["benchmark_promotion_allowed"] is False
+    assert report["output_classification"] == sdd_curation_preflight.OUTPUT_BLOCKED
+    assert report["candidate_scan"]["satisfiable_count"] == 1
+    assert report["candidate_scan"]["candidates"][0]["path"] == str(annotations)

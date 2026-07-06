@@ -96,6 +96,7 @@ def validate_launch_packet(
     trace_report = _validate_trace_contract(packet, root, errors)
     baseline_report = _validate_baseline_packet(packet, root, errors)
     safety_report = _validate_safety_policy(packet, errors)
+    slurm_execution_report = _validate_slurm_execution(packet, errors)
     _validate_execution_boundary(packet, errors)
 
     if errors:
@@ -111,6 +112,7 @@ def validate_launch_packet(
         "trace_contract": trace_report,
         "baseline_comparison": baseline_report,
         "safety_policy": safety_report,
+        "slurm_execution": slurm_execution_report,
     }
 
 
@@ -224,6 +226,43 @@ def _validate_execution_boundary(packet: dict[str, Any], errors: list[str]) -> N
         errors.append("execution_boundary.full_training_in_this_issue must be false")
     _require_non_empty_string(execution, "slurm_command_shape", errors)
     _require_non_empty_string(execution, "local_preflight_command", errors)
+
+
+def _validate_slurm_execution(packet: dict[str, Any], errors: list[str]) -> dict[str, Any]:
+    slurm_execution = packet.get("slurm_execution")
+    if not isinstance(slurm_execution, dict):
+        errors.append("slurm_execution must be mapping")
+        return {}
+
+    required_keys = (
+        "entrypoint",
+        "config",
+        "expected_output_root",
+        "expected_log_path",
+        "status_artifact_path",
+    )
+    for key in required_keys:
+        _require_non_empty_string(slurm_execution, key, errors)
+
+    command = slurm_execution.get("command")
+    if not isinstance(command, list) or not command:
+        errors.append("slurm_execution.command must be non-empty list")
+    elif not all(isinstance(part, str) and part.strip() for part in command):
+        errors.append("slurm_execution.command entries must be non-empty strings")
+
+    for key in ("expected_output_root", "expected_log_path", "status_artifact_path"):
+        value = slurm_execution.get(key)
+        if isinstance(value, str) and "output" in Path(value).parts:
+            errors.append(f"slurm_execution.{key} must not depend on worktree-local output")
+
+    return {
+        "entrypoint": slurm_execution.get("entrypoint"),
+        "config": slurm_execution.get("config"),
+        "expected_output_root": slurm_execution.get("expected_output_root"),
+        "expected_log_path": slurm_execution.get("expected_log_path"),
+        "status_artifact_path": slurm_execution.get("status_artifact_path"),
+        "command": list(command) if isinstance(command, list) else [],
+    }
 
 
 def _validate_required_list(

@@ -7,8 +7,8 @@ entries:
     source_issue: "https://github.com/ll7/robot_sf_ll7/issues/4546"
     live_issue_updated_at_utc: "2026-07-05T04:13:05Z"
     conclusion: >-
-      Keep #4546 open; wrapper and runbook policy are merged, but real ETH source
-      assets are absent on this host, so conversion hash evidence and smoke-validated
+      Keep #4546 open; wrapper runbook policy merged, but real ETH source
+      assets absent on host, so conversion hash evidence smoke-validated
       generated SVG commit remain blocked.
     merged_pr_evidence:
       - pr: 4553
@@ -52,3 +52,44 @@ entries:
         missing_mesh: "$HOME/external_data/socnavbench/sd3dis/stanford_building_parser_dataset/mesh/ETH"
         conversion_ready: false
         smoke_ready: false
+  - recorded_at_utc: "2026-07-06T18:22:09Z"
+    status: ready_for_closure
+    report: "docs/context/issue_4546_closure_audit_2026-07-06.md"
+    evidence: "docs/context/issue_4546_closure_audit_2026-07-06.md"
+    source_issue: "https://github.com/ll7/robot_sf_ll7/issues/4546"
+    live_issue_updated_at_utc: "2026-07-05T04:13:05Z"
+    conclusion: >-
+      Keep the generated SocNavBench ETH SVG; issue #4546 acceptance criteria
+      are satisfied by real external-root staging, converter source/output
+      SHA-256 evidence, and parser smoke validation.
+    generated_artifact:
+      path: "maps/svg_maps/socnavbench/socnavbench_eth.svg"
+      sha256: "9fb9e126fac37b1c24c8849aeee47dfcccc5ef71fd7fc4e0fea7f78f19d1858d"
+    source_input:
+      path: "$ROBOT_SF_EXTERNAL_DATA_ROOT/socnavbench/sd3dis/stanford_building_parser_dataset/traversibles/ETH/data.pkl"
+      sha256: "02d450ee57bdab7aa357457085b3ddac6501ea8ec99324f2f02aecaed82562a6"
+      tree_sha256: "22bb5342c25385d20fd2b0cfce4a310fab4fc56cbe39fc4b4b0a0150f31018f8"
+      raw_data_committed: false
+    validation:
+      external_asset_check:
+        command: "uv run python scripts/tools/manage_external_data.py --json check socnavbench-s3dis-eth"
+        exit_code: 0
+        status: available
+        matched_required:
+          - "sd3dis/stanford_building_parser_dataset/mesh/ETH"
+          - "sd3dis/stanford_building_parser_dataset/traversibles/ETH/data.pkl"
+      eth_first_preflight:
+        command: "uv run python scripts/tools/validate_socnav_map_batch.py --socnav-root $ROBOT_SF_EXTERNAL_DATA_ROOT/socnavbench --batch-id eth_first --preflight"
+        exit_code: 0
+        status: ready
+        conversion_ready: true
+      stage_svg_wrapper:
+        command: "uv run python scripts/tools/stage_socnavbench_eth_traversible_svg.py --socnav-root $ROBOT_SF_EXTERNAL_DATA_ROOT/socnavbench --output-svg maps/svg_maps/socnavbench/socnavbench_eth.svg"
+        exit_code: 0
+        status: ready
+        conversion_ready: true
+        smoke_ready: true
+        parser_obstacle_count: 377
+        parser_robot_route_count: 1
+        parser_ped_route_count: 1
+    closure_call: "Closes #4546"

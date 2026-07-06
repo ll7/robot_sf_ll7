@@ -1,0 +1,15 @@
+# Diagnostic-only QR-DQN runtime adapter config for issue #4016 lower-tail selection.
+# Point checkpoint_path at the smoke checkpoint produced by
+# scripts/training/train_distributional_rl.py. Missing checkpoints fail closed
+# by default; fallback execution is not benchmark evidence.
+checkpoint_path: output/models/distributional_rl/issue_4016/qr_dqn_issue_4016_smoke.pt
+device: cpu
+obs_mode: dict
+obs_transform: ego
+risk_objective: cvar_lower
+risk_alpha: 0.2
+risk_blend_beta: 1.0
+deterministic: true
+fallback_to_goal: false
+record_quantile_diagnostics: true
+profile: experimental

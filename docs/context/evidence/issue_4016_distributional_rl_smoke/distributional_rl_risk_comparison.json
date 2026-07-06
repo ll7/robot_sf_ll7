@@ -1,0 +1,95 @@
+{
+  "blockers": [],
+  "claim_boundary": "risk-selection diagnostic only; not benchmark evidence",
+  "config_path": "docs/context/evidence/issue_4016_distributional_rl_smoke/compare_config.yaml",
+  "effect": {
+    "benchmark_safety_claim": false,
+    "comparison_status": "valid_diagnostic",
+    "interpretation": "diagnostic_only",
+    "metric_deltas": {
+      "collision_rate_delta": 0.0,
+      "mean_min_clearance_delta": 0.0,
+      "mean_path_efficiency_delta": -0.5,
+      "near_miss_rate_delta": 0.0,
+      "success_rate_delta": 0.0
+    },
+    "risk_selection": {
+      "mean_records": 8,
+      "risk_mean_disagreement_count": 0,
+      "risk_records": 8
+    }
+  },
+  "evidence_tier": "diagnostic-only",
+  "fallback_degraded_rows": {
+    "excluded": 0,
+    "included_as_non_evidence": 0
+  },
+  "generated_at": "2026-07-06T17:10:32.951990+00:00",
+  "inputs": {
+    "mean": {
+      "algorithm": "qr_dqn",
+      "checkpoint_path": "output/models/distributional_rl/issue_4016/qr_dqn_issue_4016_smoke.pt",
+      "claim_boundary": "risk-selection diagnostic only; not benchmark evidence",
+      "evidence_tier": "diagnostic-only",
+      "fallback_or_degraded": false,
+      "fallback_or_degraded_reason": null,
+      "manifest_path": "docs/context/evidence/issue_4016_distributional_rl_smoke/qr_dqn_mean_manifest.json",
+      "metrics": {
+        "collision_rate": 0.0,
+        "mean_min_clearance": 1.0,
+        "mean_path_efficiency": 0.5,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0
+      },
+      "missing_fields": [],
+      "policy_id": "qr_dqn_issue_4016_mean",
+      "risk_alpha": 0.2,
+      "risk_objective": "mean",
+      "risk_selection_diagnostics": {
+        "mean_risk_disagreement_count": 0,
+        "mean_selected_count": 8,
+        "record_count": 8,
+        "risk_selected_count": 0
+      },
+      "role": "mean",
+      "seed": 4016,
+      "total_timesteps": 128
+    },
+    "risk": {
+      "algorithm": "qr_dqn",
+      "checkpoint_path": "output/models/distributional_rl/issue_4016/qr_dqn_issue_4016_smoke.pt",
+      "claim_boundary": "risk-selection diagnostic only; not benchmark evidence",
+      "evidence_tier": "diagnostic-only",
+      "fallback_or_degraded": false,
+      "fallback_or_degraded_reason": null,
+      "manifest_path": "docs/context/evidence/issue_4016_distributional_rl_smoke/qr_dqn_cvar_manifest.json",
+      "metrics": {
+        "collision_rate": 0.0,
+        "mean_min_clearance": 1.0,
+        "mean_path_efficiency": 0.0,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0
+      },
+      "missing_fields": [],
+      "policy_id": "qr_dqn_issue_4016_risk",
+      "risk_alpha": 0.2,
+      "risk_objective": "cvar_lower",
+      "risk_selection_diagnostics": {
+        "mean_risk_disagreement_count": 0,
+        "mean_selected_count": 0,
+        "record_count": 8,
+        "risk_selected_count": 8
+      },
+      "role": "risk",
+      "seed": 4016,
+      "total_timesteps": 128
+    }
+  },
+  "issue": 4016,
+  "matched_context": {
+    "matched_checkpoint_path": true,
+    "matched_seed": true,
+    "matched_total_timesteps": true
+  },
+  "schema_version": "issue_4016.distributional_rl_risk_comparison.v1"
+}

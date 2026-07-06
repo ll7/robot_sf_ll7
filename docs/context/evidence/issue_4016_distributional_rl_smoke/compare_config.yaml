@@ -1,0 +1,8 @@
+schema_version: issue_4016.distributional_rl_risk_comparison.v1
+issue: 4016
+evidence_tier: diagnostic-only
+claim_boundary: risk-selection diagnostic only; not benchmark evidence
+mean_manifest: qr_dqn_mean_manifest.json
+risk_manifest: qr_dqn_cvar_manifest.json
+output_json: distributional_rl_risk_comparison.json
+output_markdown: distributional_rl_risk_comparison.md

@@ -64,7 +64,7 @@ def build_report_from_config(config_path: str | Path) -> dict[str, Any]:
         "evidence_tier": _EXPECTED_EVIDENCE_TIER,
         "claim_boundary": _EXPECTED_CLAIM_BOUNDARY,
         "generated_at": datetime.now(UTC).isoformat(),
-        "config_path": str(config_path),
+        "config_path": _portable_path(config_path),
         "inputs": {
             "mean": mean,
             "risk": risk,
@@ -126,7 +126,7 @@ def _summarize_manifest(
     fallback_or_degraded = bool(manifest.get("fallback_or_degraded", False))
     return {
         "role": role,
-        "manifest_path": str(manifest_path),
+        "manifest_path": _portable_path(manifest_path),
         "policy_id": manifest.get("policy_id"),
         "algorithm": manifest.get("algorithm"),
         "evidence_tier": manifest.get("evidence_tier"),
@@ -293,6 +293,14 @@ def _resolve_output_path(config_path: Path, raw: object) -> Path:
     if not path.is_absolute():
         path = (config_path.parent / path).resolve()
     return path
+
+
+def _portable_path(path: object) -> str:
+    raw_path = Path(str(path))
+    try:
+        return str(raw_path.resolve().relative_to(Path.cwd().resolve()))
+    except ValueError:
+        return str(raw_path)
 
 
 def _optional_finite_float(value: object) -> float | None:

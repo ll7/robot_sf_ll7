@@ -1,0 +1,47 @@
+name: Release Functional Badge Verification
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      bundle_archive:
+        description: 'Path to the release bundle archive to verify'
+        required: false
+        type: string
+
+jobs:
+  verify-badge:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          uv sync --all-extras
+
+      - name: Verify claimed level and run smoke test
+        run: |
+          # If archive is not specified, build a mock/test bundle to verify pipeline integrity
+          if [ -z "${{ github.event.inputs.bundle_archive }}" ]; then
+            echo "No custom bundle archive provided. Running verification with a test fixture bundle."
+            # We run the test suite to ensure the functional-badge verification logic is healthy
+            uv run pytest tests/benchmark/test_artifact_publication.py tests/validation/test_check_release_artifact_badging.py
+          else
+            echo "Verifying custom bundle: ${{ github.event.inputs.bundle_archive }}"
+            uv run python scripts/validation/run_release_functional_badge_smoke.py --bundle-archive "${{ github.event.inputs.bundle_archive }}"
+            uv run python scripts/validation/check_release_artifact_badging.py --manifest "${{ github.event.inputs.bundle_archive }}/publication_manifest.json"
+          fi

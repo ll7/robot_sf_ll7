@@ -399,6 +399,49 @@ def _build_provenance(run_dir: Path) -> dict[str, Any]:  # noqa: C901
     return provenance
 
 
+def validate_artifact_badging_block(block: dict[str, Any]) -> None:  # noqa: C901
+    """Validate the schema and values of an artifact_badging dictionary."""
+    if not isinstance(block, dict):
+        raise ValueError("artifact_badging must be a dictionary")
+
+    claimed_level = block.get("claimed_level")
+    valid_levels = {"available", "functional", "reproduced", "none"}
+    if claimed_level not in valid_levels:
+        raise ValueError(
+            f"Invalid claimed_level: {claimed_level!r}; expected one of {valid_levels}"
+        )
+
+    checklist_path = block.get("checklist_path")
+    if checklist_path is not None and not isinstance(checklist_path, str):
+        raise ValueError("checklist_path must be a string")
+
+    claim_boundary = block.get("claim_boundary")
+    if claim_boundary is not None and not isinstance(claim_boundary, str):
+        raise ValueError("claim_boundary must be a string")
+
+    smoke_status = block.get("functional_smoke_status")
+    valid_smoke_statuses = {"passed", "failed", "not_run", "not_applicable"}
+    if smoke_status is not None and smoke_status not in valid_smoke_statuses:
+        raise ValueError(
+            f"Invalid functional_smoke_status: {smoke_status!r}; expected one of {valid_smoke_statuses}"
+        )
+
+    reprod_status = block.get("reproduction_status")
+    valid_reprod_statuses = {"passed", "failed", "not_run", "not_applicable"}
+    if reprod_status is not None and reprod_status not in valid_reprod_statuses:
+        raise ValueError(
+            f"Invalid reproduction_status: {reprod_status!r}; expected one of {valid_reprod_statuses}"
+        )
+
+    nondet = block.get("known_nondeterminism")
+    if nondet is not None and not isinstance(nondet, list):
+        raise ValueError("known_nondeterminism must be a list")
+    if nondet is not None:
+        for item in nondet:
+            if not isinstance(item, str):
+                raise ValueError("known_nondeterminism items must be strings")
+
+
 def _validate_publication_requirements(run_root: Path, selected_files: list[Path]) -> None:
     """Validate bundle completeness requirements for publication-critical runs."""
     selected_set = {path.as_posix() for path in selected_files}
@@ -783,7 +826,7 @@ def export_dissertation_artifact_bundle(
     )
 
 
-def export_evidence_bundle(  # noqa: PLR0913
+def export_evidence_bundle(  # noqa: PLR0913, C901
     source_root: Path,
     out_dir: Path,
     *,
@@ -795,6 +838,7 @@ def export_evidence_bundle(  # noqa: PLR0913
     overwrite: bool = False,
     mirror_dry_run_base_uri: str | None = None,
     mirror_local_dir: Path | None = None,
+    artifact_badging: dict[str, Any] | None = None,
 ) -> EvidenceBundleResult:
     """Export a compact reproducible evidence bundle.
 
@@ -875,6 +919,9 @@ def export_evidence_bundle(  # noqa: PLR0913
         "totals": {"file_count": len(entries), "total_bytes": total_bytes},
         "files": [asdict(entry) for entry in entries],
     }
+    if artifact_badging is not None:
+        validate_artifact_badging_block(artifact_badging)
+        manifest_payload["artifact_badging"] = artifact_badging
     manifest_path = bundle_dir / "evidence_bundle_manifest.json"
     manifest_path.write_text(json.dumps(manifest_payload, indent=2) + "\n", encoding="utf-8")
     mirror_manifest_path = _write_evidence_mirror_manifest(
@@ -897,7 +944,7 @@ def export_evidence_bundle(  # noqa: PLR0913
     )
 
 
-def export_publication_bundle(
+def export_publication_bundle(  # noqa: PLR0913
     run_dir: Path,
     out_dir: Path,
     *,
@@ -907,6 +954,7 @@ def export_publication_bundle(
     release_tag: str = _DEFAULT_RELEASE_TAG_TEMPLATE,
     doi: str = _DEFAULT_DOI_TEMPLATE,
     overwrite: bool = False,
+    artifact_badging: dict[str, Any] | None = None,
 ) -> PublicationBundleResult:
     """Export a DOI-ready publication bundle for one benchmark run.
 
@@ -986,6 +1034,9 @@ def export_publication_bundle(
         "totals": {"file_count": len(entries), "total_bytes": total_bytes},
         "files": [asdict(entry) for entry in entries],
     }
+    if artifact_badging is not None:
+        validate_artifact_badging_block(artifact_badging)
+        manifest_payload["artifact_badging"] = artifact_badging
     manifest_path = bundle_dir / "publication_manifest.json"
     manifest_path.write_text(json.dumps(manifest_payload, indent=2) + "\n", encoding="utf-8")
 

@@ -62,3 +62,61 @@ manifests, and ran a local S20 diagnostic slice for `baseline`, `nearfield_turn`
 `nf_speedcap_only` across clean/noisy observation slices. That S20 result did not reproduce the
 near-field-turn signal and remains diagnostic-local, not benchmark or paper evidence. See
 `docs/context/evidence/issue_3342_nearfield_turn_budget_2026-06-21/`.
+
+## Closure audit (2026-07-06)
+
+**Status:** epic scope complete at `diagnostic` tier; recommended close as a completed negative
+result. All three child bets are now closed and the cross-bet portfolio decision is recorded above.
+
+### Child bet state
+
+| Bet | Issue | State | Outcome |
+|---|---|---|---|
+| Selection (proxy checkpoint) | #3204 | **CLOSED 2026-07-05** | negative — no checkpoint closes the hard gap |
+| Authority (action-lattice / turn budget) | #3213 | **CLOSED 2026-07-01** | marginal — only near-field turn budget helps, within n=7 noise |
+| Model (hard-case retraining) | #3214 | **CLOSED 2026-07-06** (PR #4621, negative result) | negative — retrained checkpoints do not beat sweeps on hard seeds |
+
+### Acceptance criterion → evidence
+
+Original body criteria:
+
+- **All three bets executed under the shared protocol** — met at `diagnostic` tier: 37 runs on LiCCA
+  CPU via #3306 tooling over `predictive_hardcase_portfolio_v1`; per-bet children #3204/#3213/#3214
+  all executed and closed. The pre-authorized overnight *GPU* budget was never granted, but the
+  diagnostic tournament already covered all three levers with a consistent negative, so the GPU
+  upgrade is a paper-grade *confirmation* follow-up, not a blocker for the portfolio decision.
+- **Per-bet classification with uncertainty** — met (`## Cross-bet classification` above): authority
+  marginal, selection negative, model negative, each with explicit n and noise caveats.
+- **Single portfolio decision** — met: the hard-case plateau is **not** closed by selection,
+  authority, or hard-case retraining alone (publishable negative result).
+- **Winning artifacts promoted durably; synthesis note + evidence summary recorded** — met for the
+  compact decision table (`portfolio_results.csv`, registered in `docs/context/catalog.yaml`); raw
+  cluster-scratch JSONL durability caveat retained above.
+- **Result classified on evidence ladder; honest limitation text drafted** — met: `diagnostic` tier,
+  limitations enumerated in `## Caveats`.
+
+Agent-executable slice criteria (`agent-exec-spec`):
+
+- **Shared protocol + per-bet caps + stop rules frozen and validated (dry-run)** — met:
+  `predictive_hard_seeds_v1` fixture + closed-loop gate flags in
+  `scripts/validation/run_predictive_success_campaign.py`; validated by
+  `tests/validation/test_predictive_success_campaign_tags.py` (2026-07-06: 20 passed).
+- **Synthesis harness produces the cross-bet decision table** — met: harness
+  (`run_predictive_success_campaign.py` `--help` exit 0; `scripts/tools/campaign_result_store.py`)
+  assembles the three bets into the decision table promoted here.
+- **All-flat outcome recorded as a publishable negative result** — met (this note + PR #3337).
+
+### Closure decision
+
+All agent-executable and synthesis criteria are met and validated; the portfolio decision is
+reached; all three children are closed (two explicitly as negative results). The only unmet item —
+a bounded pre-authorized overnight GPU tournament — is maintainer-gated and now **moot** for the
+epic's decision, because the diagnostic tournament already returned a consistent negative across all
+three levers. Any GPU rerun would be an optional paper-grade *confirmation* of an answered question,
+which belongs in the forecast-lane epic (#2835), not as a blocker on this epic. Recommended: close
+#3215 as a completed diagnostic-tier negative result, mirroring the #3213/#3214 child closures.
+
+**Residual (non-blocking):** if a paper-grade confirmation of the negative result is later required,
+run the S20/S30 hard-seed tournament under a maintainer-set GPU budget and promote raw JSONL to a
+durable store; carry the near-field-turn-budget carryover signal as the single lever worth a
+larger-sample isolation. This is optional follow-up, not remaining epic scope.

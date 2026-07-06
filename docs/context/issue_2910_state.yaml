@@ -1,0 +1,32 @@
+schema_version: issue_state.v1
+issue: 2910
+updated_at_utc: "2026-07-06T14:30:00Z"
+state_surface: high_churn_single_file
+claim_boundary: >
+  Durable issue-state propagation for benchmark v0.1 publication work. This file records
+  merged-slice and current-blocker state only; it does not encode target hosts, queue routing,
+  private packet lineage, benchmark results, release publication, or paper/dissertation claims.
+events:
+  - at_utc: "2026-07-06T13:47:16Z"
+    source: "PR #4639"
+    status: merged
+    summary: >
+      Attached durable scenario_cert.v1 summary and propagated scenario certification into the
+      #3294 release claim matrix as scenario_cert.v1:blocked.
+    remaining: >
+      v0.1 publication suite still needs a policy for 2 geometrically infeasible scenarios and
+      9 stress-only scenarios before matrix publication.
+  - at_utc: "2026-07-06T14:30:00Z"
+    source: "this PR"
+    status: proposed
+    summary: >
+      Adds a CPU-only publication-suite certification integration report that consumes the
+      durable scenario_cert.v1 summary and release claim matrix, lists the exact excluded and
+      stress-only scenario blockers, and keeps publication status blocked.
+    artifacts:
+      - docs/context/evidence/issue_2910_publication_suite_certification_report/report.json
+      - docs/context/evidence/issue_2910_publication_suite_certification_report/report.md
+    remaining: >
+      Apply a versioned v0.1 suite policy: exclude or repair the two geometrically infeasible
+      scenarios and explicitly route or remove the nine stress-only scenarios, then regenerate
+      scenario_cert.v1, release claim matrix, and publication gate output.

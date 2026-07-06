@@ -120,6 +120,13 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_2910_publication_suite_certification_report/`: CPU-only integration
+  report for Issue #2910 v0.1 publication-suite certification handling. Consumes
+  the tracked `scenario_cert.v1` summary and #3294 release claim matrix, keeps
+  publication `blocked`, and names the remaining 2 geometrically infeasible
+  scenarios plus 9 stress-only scenarios that must be excluded, repaired, or
+  routed before matrix publication.
+
 - `issue_3215_scenario_family_oracle_packet_2026-07-05/`: diagnostic-only
 CPU launch packet for Issue #3215's post-synthesis scenario-family promotion
 step. Defines the oracle future-trajectory forecast arm, paired-seed floor,

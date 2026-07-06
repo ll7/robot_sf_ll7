@@ -1,0 +1,54 @@
+issue: 4546
+state_surface: socnavbench_eth_stage_svg_smoke
+entries:
+  - recorded_at_utc: "2026-07-06T17:45:00Z"
+    status: blocked_external_input_not_closable
+    report: "docs/context/issue_4546_closure_audit_2026-07-06.md"
+    source_issue: "https://github.com/ll7/robot_sf_ll7/issues/4546"
+    live_issue_updated_at_utc: "2026-07-05T04:13:05Z"
+    conclusion: >-
+      Keep #4546 open; wrapper and runbook policy are merged, but real ETH source
+      assets are absent on this host, so conversion hash evidence and smoke-validated
+      generated SVG commit remain blocked.
+    merged_pr_evidence:
+      - pr: 4553
+        role: "fail-closed SocNavBench ETH stage/generate/convert/smoke wrapper"
+      - pr: 4574
+        role: "derived SVG artifact policy in docs/socnav_assets_setup.md"
+    current_host_validation:
+      repo_commit: "b8eb941f2"
+      default_asset_check:
+        command: "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/manage_external_data.py --json check socnavbench-s3dis-eth"
+        exit_code: 2
+        status: incomplete
+        missing_required:
+          - "sd3dis/stanford_building_parser_dataset/mesh/ETH"
+          - "sd3dis/stanford_building_parser_dataset/traversibles/ETH/data.pkl"
+      default_preflight:
+        command: "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/validate_socnav_map_batch.py --batch-id eth_first --preflight"
+        exit_code: 2
+        status: blocked_pending_source_assets
+        conversion_ready: false
+      default_stage_wrapper:
+        command: "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/stage_socnavbench_eth_traversible_svg.py --report-json <report-json> --output-svg <scratch-svg>"
+        exit_code: 2
+        status: blocked_missing_mesh
+        conversion_ready: false
+        smoke_ready: false
+      external_root_asset_check:
+        command: "ROBOT_SF_EXTERNAL_DATA_ROOT=$HOME/external_data scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/manage_external_data.py --json check socnavbench-s3dis-eth"
+        exit_code: 2
+        status: missing
+        source_path: "$HOME/external_data/socnavbench"
+      external_root_preflight:
+        command: "ROBOT_SF_EXTERNAL_DATA_ROOT=$HOME/external_data scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/validate_socnav_map_batch.py --socnav-root $HOME/external_data/socnavbench --batch-id eth_first --preflight"
+        exit_code: 2
+        status: blocked_pending_source_assets
+        conversion_ready: false
+      external_root_stage_wrapper:
+        command: "ROBOT_SF_EXTERNAL_DATA_ROOT=$HOME/external_data scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/stage_socnavbench_eth_traversible_svg.py --socnav-root $HOME/external_data/socnavbench --report-json <report-json> --output-svg <scratch-svg>"
+        exit_code: 2
+        status: blocked_missing_mesh
+        missing_mesh: "$HOME/external_data/socnavbench/sd3dis/stanford_building_parser_dataset/mesh/ETH"
+        conversion_ready: false
+        smoke_ready: false

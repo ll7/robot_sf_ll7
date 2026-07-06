@@ -489,6 +489,10 @@ def build_hybrid_synthesis_report(matrix_report: dict[str, Any]) -> dict[str, An
         ),
         "prerequisite_count": matrix_report.get("prerequisite_count"),
         "complete_count": matrix_report.get("complete_count"),
+        # Echo the row-validity signal so a consumer (or the CLI exit code) can
+        # distinguish a fail-closed "blocked but valid" gate from a matrix whose
+        # rows failed validation. Invalid rows never open the gate (see above).
+        "rows_valid": rows_valid,
         "promoted_verdict_count": promoted_verdict_count,
         "blockers": list(integration.get("blockers", [])),
         "next_empirical_action": integration.get("next_empirical_action"),

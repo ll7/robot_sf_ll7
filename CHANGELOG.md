@@ -252,6 +252,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **campaign arm checkpoint preflight** for issue #4613 so a missing or corrupt policy
+  checkpoint fails in seconds on the submit node instead of ~14h into compute (the S30 campaign
+  jobs 13296 and 13301 both failed identically on a missing PPO `output/model_cache` checkpoint).
+  `robot_sf/benchmark/campaign_checkpoint_preflight.py` inspects every enabled arm's `algo_config`
+  for `model_id` / `model_path` checkpoint references (recursively, covering nested prior policies)
+  and fails closed naming the arm. It runs in two modes: a cheap network-free resolvability guard
+  (present locally OR a durable remote source to stage from) now wired into
+  `prepare_campaign_preflight` before scenarios load, and an enforced pre-sbatch staging mode that
+  downloads and checksum-verifies each registry checkpoint into the durable cache. Ops runs the new
+  `scripts/benchmark/preflight_campaign_checkpoints.py --config <campaign> [--stage]` before `sbatch`
+  (exit `0` resolvable/staged, `2` config error, `3` unresolvable → do not submit). Provisioning
+  preflight only: it runs no benchmark, submits no Slurm job, and is not benchmark evidence.
 * **issue #3481 — opt-in HSFM body-orientation alignment torque (`hsfm_alignment_torque_v1`).**
   A new pedestrian-model selector that decouples pedestrian body orientation `phi` from the
   instantaneous total-force direction: instead of snapping the heading each step (as

@@ -38,6 +38,9 @@ from robot_sf.benchmark.camera_ready._util import (
     _synthetic_actuation_metadata,
     _utc_now,
 )
+from robot_sf.benchmark.campaign_checkpoint_preflight import (
+    check_campaign_arm_checkpoints_preflight,
+)
 from robot_sf.benchmark.latency_stress import not_available_latency_metrics
 from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
@@ -256,6 +259,11 @@ def prepare_campaign_preflight(
 
     validate_campaign_config(cfg)
     check_orca_rvo2_preflight(cfg)
+    # Fail fast when an enabled arm names a checkpoint that cannot be resolved (unknown/mistyped
+    # model_id, local_only-missing, or a missing model_path file) before any scenario loads. This
+    # is the cheap network-free guard; the enforced download+checksum staging step (stage=True) is
+    # run pre-sbatch by scripts/benchmark/preflight_campaign_checkpoints.py (issue #4613).
+    check_campaign_arm_checkpoints_preflight(cfg)
     ensure_canonical_tree(categories=("benchmarks",))
     campaign_id = _resolve_campaign_id(cfg, label=label, campaign_id=campaign_id)
     base_dir = (

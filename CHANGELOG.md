@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **issue #4183 hybrid_global_rl diagnostic runner — executable baseline arm.**
+  The paired diagnostic runner `scripts/benchmark/run_hybrid_global_rl_diagnostic_issue_4183.py` now
+  (a) validates episodes against the canonical `robot_sf/benchmark/schemas/episode.schema.v1.json`
+  instead of a stale strict schema that rejected native PPO episode records with
+  `additionalProperties` errors, and (b) hydrates the benchmark-promoted learned checkpoint from its
+  public GitHub release before preflight (`--no-hydrate` to skip). The #4183 preflight
+  (`robot_sf/benchmark/hybrid_global_rl_diagnostic.py`) also recognizes a hydrated release asset
+  whose cached file name (`<model_id>-model.zip`) differs from the registry `local_path`
+  (`model.zip`), so a present-and-loadable checkpoint no longer reports
+  `blocked_missing_learned_checkpoint`. With these fixes the unconditioned (baseline) arm produces
+  native episode rows (3/3 seeds) and the packet advances from `blocked_no_valid_episode_rows` to
+  `completed_with_fail_closed_exclusions`. Diagnostic-tier only; the route-conditioned arm remains
+  fail-closed because the benchmark observation carries no `occupancy_grid` channel for the
+  grid-route waypoint provider, so route-conditioned effect evidence stays blocked (see #4183).
+  New regression tests: `tests/benchmark/test_hybrid_global_rl_diagnostic_issue_4183.py` and
+  `tests/benchmark/test_issue_4183_paired_runner.py` (30 pass). No benchmark campaign, no SLURM/GPU
+  submission, no paper/dissertation claim edits.
 * **issue #1126 SDD curation decision packet — runnable import command.**
   `scripts/tools/sdd_curation_preflight.py::build_decision_packet` now emits an `import` handoff
   command that actually parses against the canonical importer

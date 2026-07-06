@@ -388,3 +388,34 @@ def test_blocking_mode_fails_on_problems(tmp_path: Path, monkeypatch: MonkeyPatc
     (tmp_path / "broken.json").write_text("{not valid}", encoding="utf-8")
 
     assert main(["--files", "broken.json"]) == 1
+
+
+def test_split_list_config_does_not_yield_phantom_dash(tmp_path: Path) -> None:
+    """A YAML or markdown document splitting --config and its value doesn't yield '-'."""
+    config_file = tmp_path / "configs/training/learned_risk_model_v1.yaml"
+    config_file.parent.mkdir(parents=True, exist_ok=True)
+    config_file.write_text("model: learned_risk\n", encoding="utf-8")
+
+    note = tmp_path / "docs/context/issue_4692.md"
+    note.parent.mkdir(parents=True, exist_ok=True)
+    note.write_text(
+        "command:\n  - --config\n  - configs/training/learned_risk_model_v1.yaml\n",
+        encoding="utf-8",
+    )
+
+    problems = check_files([note.relative_to(tmp_path).as_posix()], root=tmp_path)
+    assert problems == []
+
+
+def test_split_list_config_still_detects_genuine_missing_path(tmp_path: Path) -> None:
+    """A split-list config command still reports the config if it does not exist."""
+    note = tmp_path / "docs/context/issue_4692.md"
+    note.parent.mkdir(parents=True, exist_ok=True)
+    note.write_text(
+        "command:\n  - --config\n  - configs/training/missing_config_file.yaml\n",
+        encoding="utf-8",
+    )
+
+    problems = check_files([note.relative_to(tmp_path).as_posix()], root=tmp_path)
+    assert len(problems) == 1
+    assert "configs/training/missing_config_file.yaml" in problems[0]

@@ -222,6 +222,14 @@ entries:
     status: evidence
     freshness: evidence
     area: training
+  - path: docs/context/evidence/issue_4016_distributional_rl_smoke/acceptance_audit.json
+    status: evidence
+    freshness: evidence
+    area: training
+  - path: docs/context/evidence/issue_4016_distributional_rl_smoke/acceptance_audit.md
+    status: evidence
+    freshness: evidence
+    area: training
   - path: docs/context/evidence/issue_4016_distributional_rl_smoke/qr_dqn_cvar_manifest.json
     status: evidence
     freshness: evidence

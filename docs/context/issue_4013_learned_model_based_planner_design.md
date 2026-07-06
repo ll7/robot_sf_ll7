@@ -38,6 +38,13 @@ predictor and compare closed-loop navigation without reopening the retired large
   manifest records `feature_stats` as provenance metadata only, not an applied normalizer.
 - [x] Load the trained checkpoint without fallback. `LearnedShortHorizonPedestrianPredictor` loads the
   trained `.pt` and `predict()` returns `source="checkpoint_loaded"` on a smoke observation.
+- [x] Model-based action selection runs on a smoke scenario. The `learned_prediction_mpc` adapter,
+  built on the trained checkpoint via `configs/algos/learned_prediction_mpc_issue_4013_checkpoint.yaml`
+  (fail-closed: `allow_untrained_smoke=false`, `fallback_to_constant_velocity=false`), emits a finite,
+  bounded, goal-directed unicycle command from `plan()` — including with a pedestrian in the path —
+  with the predictor reporting `evidence_tier=checkpoint_loaded` (no fallback). Proven by
+  `tests/planner/test_learned_prediction_mpc_checkpoint.py`. This exercises the end-to-end
+  model-based selection *path*; it is not the paired multi-arm benchmark comparison below.
 - [ ] Run the paired smoke *scenario* (benchmark runner) for all three arms and produce episode JSONL.
 - [ ] Compare against `cv_prediction_mpc` and a model-free baseline with paired seeds using the
   existing `scripts/analysis/compare_model_based_planning_issue_4013.py` report contract.

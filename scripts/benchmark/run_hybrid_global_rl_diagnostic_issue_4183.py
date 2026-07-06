@@ -54,11 +54,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _hydrate_checkpoints(*config_paths: Path) -> list[str]:
+def _hydrate_checkpoints(*config_paths: Path, repo_root: Path = Path(".")) -> list[str]:
     """Hydrate promoted learned checkpoints referenced by the paired configs.
 
     Downloads the public benchmark-promoted checkpoint into the canonical model cache when a
-    ``learned_policy_model_id`` is declared, so the download-free preflight can find it.
+    ``learned_policy_model_id`` is declared, so the download-free preflight can find it. The
+    registry and cache are resolved under ``repo_root`` so hydration lands where
+    ``preflight_configs`` (and ``_github_release_cache_path``) look for the asset when
+    ``--repo-root`` differs from the current working directory.
 
     Returns:
         list[str]: Human-readable notes describing each hydration attempt.
@@ -71,7 +74,12 @@ def _hydrate_checkpoints(*config_paths: Path) -> list[str]:
         if not model_id or model_id in seen:
             continue
         seen.add(model_id)
-        resolved = resolve_model_path(model_id, allow_download=True)
+        resolved = resolve_model_path(
+            model_id,
+            allow_download=True,
+            registry_path=repo_root / "model" / "registry.yaml",
+            cache_dir=repo_root / "output" / "model_cache",
+        )
         notes.append(f"hydrated {model_id} -> {resolved}")
     return notes
 
@@ -183,7 +191,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     hydration_notes: list[str] = []
     if not args.no_hydrate:
-        hydration_notes = _hydrate_checkpoints(args.route_config, args.baseline_config)
+        hydration_notes = _hydrate_checkpoints(
+            args.route_config, args.baseline_config, repo_root=args.repo_root
+        )
     preflight = preflight_configs(args.route_config, args.baseline_config, repo_root=args.repo_root)
     if preflight["status"] != "valid":
         print(

@@ -143,16 +143,22 @@ def test_runner_hydrates_declared_model_id(tmp_path: Path, monkeypatch: pytest.M
         return path
 
     resolved: list[str] = []
-    monkeypatch.setattr(
-        module,
-        "resolve_model_path",
-        lambda model_id, **_kwargs: resolved.append(model_id) or Path(f"/cache/{model_id}"),
-    )
+    kwargs_seen: list[dict] = []
+
+    def _fake_resolve(model_id, **kwargs):
+        resolved.append(model_id)
+        kwargs_seen.append(kwargs)
+        return Path(f"/cache/{model_id}")
+
+    monkeypatch.setattr(module, "resolve_model_path", _fake_resolve)
     route_config = _arm_config("route_conditioned_hybrid_global_rl", route=True)
     baseline_config = _arm_config("learned_local_no_route_conditioning", route=False)
 
-    notes = module._hydrate_checkpoints(route_config, baseline_config)
+    notes = module._hydrate_checkpoints(route_config, baseline_config, repo_root=tmp_path)
 
     # Both arms share one promoted checkpoint: hydrate it once, not per arm.
     assert resolved == ["shared_model_id"]
     assert notes == ["hydrated shared_model_id -> /cache/shared_model_id"]
+    # Hydration must honor ``repo_root`` so the asset lands where preflight looks for it.
+    assert kwargs_seen[0]["registry_path"] == tmp_path / "model" / "registry.yaml"
+    assert kwargs_seen[0]["cache_dir"] == tmp_path / "output" / "model_cache"

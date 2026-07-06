@@ -38,7 +38,11 @@ import numpy as np
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.planner.scenario_belief_adapter import project_scenario_belief_for_planner
 from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, StreamGapPlannerConfig
-from robot_sf.representation import Estimate2D, scenario_belief_from_simulator_oracle
+from robot_sf.representation import (
+    Estimate2D,
+    VisibilityState,
+    scenario_belief_from_simulator_oracle,
+)
 
 SCHEMA_VERSION = "scenario-belief-episode-safety.v1"
 ISSUE = 3471
@@ -76,6 +80,35 @@ UNCERTAINTY_REPRESENTATIONS: dict[str, dict[str, str]] = {
     "envelope_inflation": {
         "gate_field": "uncertainty_max_position_variance",
         "description": "inflate corridor-agent position variance above the stream_gap envelope gate",
+    },
+}
+
+#: Issue #3557 uncertainty-source registry mapped to the existing #2546 condition owners.
+UNCERTAINTY_SOURCES: dict[str, dict[str, str]] = {
+    "existence_degradation": {
+        "condition_builder": "_condition_existence_degraded",
+        "gate_field": "uncertainty_min_existence_probability",
+        "description": "degrade corridor-agent existence confidence below stream_gap gate",
+    },
+    "visibility_occlusion": {
+        "condition_builder": "_condition_visibility_limited",
+        "gate_field": "visibility_filter",
+        "description": "mark corridor agent occluded with policy position and velocity missing",
+    },
+    "covariance_inflation": {
+        "condition_builder": "_condition_covariance_inflated",
+        "gate_field": "uncertainty_max_position_variance",
+        "description": "inflate corridor-agent position covariance above stream_gap gate",
+    },
+    "class_probability": {
+        "condition_builder": "_condition_class_probability",
+        "gate_field": "uncertainty_min_class_probability",
+        "description": "spread corridor-agent class probabilities below stream_gap gate",
+    },
+    "tracking_noise": {
+        "condition_builder": "_condition_tracking_noise",
+        "gate_field": "tracking_noise_proxy",
+        "description": "shift corridor-agent tracked position with stale observation metadata",
     },
 }
 
@@ -188,11 +221,58 @@ def _degrade_agent_for_representation(agent: Any, uncertainty_representation: st
     raise ValueError(f"unknown uncertainty representation: {uncertainty_representation}")
 
 
+def _degrade_agent_for_source(agent: Any, uncertainty_source: str) -> Any:
+    """Apply one issue #3557 uncertainty-source condition to the corridor agent."""
+    if uncertainty_source == "existence_degradation":
+        return replace(agent, existence_probability=_DEGRADED_EXISTENCE)
+    if uncertainty_source == "visibility_occlusion":
+        return replace(
+            agent,
+            visibility_state=VisibilityState.OCCLUDED,
+            last_observed_age_s=1.0,
+            missing_fields=("policy_position", "policy_velocity"),
+        )
+    if uncertainty_source == "covariance_inflation":
+        return replace(
+            agent,
+            position=Estimate2D.point(
+                agent.position.mean_xy,
+                confidence=agent.position.confidence,
+                variance=_INFLATED_POSITION_VARIANCE,
+                frame_id=agent.position.frame_id,
+                units=agent.position.units,
+                covariance_units=agent.position.covariance_units,
+            ),
+        )
+    if uncertainty_source == "class_probability":
+        return replace(
+            agent,
+            class_probabilities=(("pedestrian", 0.3), ("cyclist", 0.4), ("unknown", 0.3)),
+        )
+    if uncertainty_source == "tracking_noise":
+        shifted = np.asarray(agent.position.mean_xy, dtype=float) + np.array([0.35, -0.2])
+        return replace(
+            agent,
+            position=Estimate2D.point(
+                (float(shifted[0]), float(shifted[1])),
+                confidence=0.35,
+                variance=1.2,
+                frame_id=agent.position.frame_id,
+                units=agent.position.units,
+                covariance_units=agent.position.covariance_units,
+            ),
+            last_observed_age_s=1.0,
+            missing_fields=("fresh_track",),
+        )
+    raise ValueError(f"unknown uncertainty source: {uncertainty_source}")
+
+
 def build_belief_for_mode(
     state: ScenarioState,
     mode: str,
     params: EpisodeParams,
     uncertainty_representation: str = "belief_drop",
+    uncertainty_source: str = "existence_degradation",
 ) -> Any:
     """Build the ScenarioBelief for ``mode`` from the current ground-truth state.
 
@@ -201,6 +281,8 @@ def build_belief_for_mode(
     """
     if uncertainty_representation not in UNCERTAINTY_REPRESENTATIONS:
         raise ValueError(f"unknown uncertainty representation: {uncertainty_representation}")
+    if uncertainty_source not in UNCERTAINTY_SOURCES:
+        raise ValueError(f"unknown uncertainty source: {uncertainty_source}")
     simulator = _make_simulator(state, params)
     belief = scenario_belief_from_simulator_oracle(
         simulator, env_config=RobotSimulationConfig(), max_pedestrians=4
@@ -218,7 +300,19 @@ def build_belief_for_mode(
             np.linalg.norm(np.asarray(agents[i].position.mean_xy, dtype=float) - corridor_true)
         ),
     )
-    agents[idx] = _degrade_agent_for_representation(agents[idx], uncertainty_representation)
+    if (
+        uncertainty_representation != "belief_drop"
+        and uncertainty_source != "existence_degradation"
+    ):
+        raise ValueError(
+            "non-default uncertainty_source is only supported with belief_drop "
+            "uncertainty_representation"
+        )
+    agents[idx] = (
+        _degrade_agent_for_source(agents[idx], uncertainty_source)
+        if uncertainty_source != "existence_degradation"
+        else _degrade_agent_for_representation(agents[idx], uncertainty_representation)
+    )
     return replace(belief, agents=tuple(agents))
 
 
@@ -275,6 +369,7 @@ def run_episode(
     params: EpisodeParams,
     gate_thresholds: dict[str, float] | None = None,
     uncertainty_representation: str = "belief_drop",
+    uncertainty_source: str = "existence_degradation",
 ) -> dict[str, Any]:
     """Roll one controlled episode under ``mode`` and return episode-level safety metrics.
 
@@ -299,7 +394,13 @@ def run_episode(
     fail_closed = False
 
     for step in range(params.max_steps):
-        belief = build_belief_for_mode(state, mode, params, uncertainty_representation)
+        belief = build_belief_for_mode(
+            state,
+            mode,
+            params,
+            uncertainty_representation=uncertainty_representation,
+            uncertainty_source=uncertainty_source,
+        )
         projection = project_scenario_belief_for_planner(belief, planner_key=PLANNER_KEY)
         status = projection.compatibility.get("status")
         if status == "fail_closed":
@@ -338,6 +439,7 @@ def run_episode(
     return {
         "mode": mode,
         "uncertainty_representation": uncertainty_representation,
+        "uncertainty_source": uncertainty_source,
         "seed": seed,
         "collision": collision,
         "min_separation": round(min_sep, 4),
@@ -408,10 +510,21 @@ def run_matrix(
     seeds: list[int],
     params: EpisodeParams,
     uncertainty_representation: str = "belief_drop",
+    uncertainty_source: str = "existence_degradation",
 ) -> dict[str, Any]:
     """Run all modes across the seed matrix and assemble the classified report."""
     if uncertainty_representation not in UNCERTAINTY_REPRESENTATIONS:
         raise ValueError(f"unknown uncertainty representation: {uncertainty_representation}")
+    if uncertainty_source not in UNCERTAINTY_SOURCES:
+        raise ValueError(f"unknown uncertainty source: {uncertainty_source}")
+    if (
+        uncertainty_representation != "belief_drop"
+        and uncertainty_source != "existence_degradation"
+    ):
+        raise ValueError(
+            "non-default uncertainty_source is only supported with belief_drop "
+            "uncertainty_representation"
+        )
     episodes: dict[str, list[dict[str, Any]]] = {}
     by_mode: dict[str, dict[str, Any]] = {}
     for mode in MODES:
@@ -421,6 +534,7 @@ def run_matrix(
                 seed,
                 params,
                 uncertainty_representation=uncertainty_representation,
+                uncertainty_source=uncertainty_source,
             )
             for seed in seeds
         ]
@@ -432,6 +546,7 @@ def run_matrix(
         "followup_issue": 3557,
         "evidence_tier": "diagnostic",
         "uncertainty_representation": uncertainty_representation,
+        "uncertainty_source": uncertainty_source,
         "uncertainty_representation_contract": {
             "available_representations": sorted(UNCERTAINTY_REPRESENTATIONS),
             "selected": UNCERTAINTY_REPRESENTATIONS[uncertainty_representation],
@@ -439,6 +554,14 @@ def run_matrix(
                 "Harness-level representation parameterization only; each run remains a "
                 "controlled #3471 episode contrast and is not a cross-representation "
                 "generalization claim."
+            ),
+        },
+        "uncertainty_source_contract": {
+            "available_sources": sorted(UNCERTAINTY_SOURCES),
+            "selected": UNCERTAINTY_SOURCES[uncertainty_source],
+            "claim_boundary": (
+                "Harness-level source parameterization only; each run remains "
+                "controlled #3471 episode contrast and must be reported per source."
             ),
         },
         "claim_boundary": (
@@ -483,6 +606,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "representation applied to the corridor agent."
         ),
     )
+    parser.add_argument(
+        "--uncertainty-source",
+        choices=sorted(UNCERTAINTY_SOURCES),
+        default="existence_degradation",
+        help=(
+            "Issue #3557 harness parameter. Selects ScenarioBelief uncertainty "
+            "source condition for the corridor agent."
+        ),
+    )
     parser.add_argument("--output-json", type=Path, default=None)
     return parser.parse_args(argv)
 
@@ -502,6 +634,7 @@ def main(argv: list[str] | None = None) -> int:
         seeds,
         params,
         uncertainty_representation=args.uncertainty_representation,
+        uncertainty_source=args.uncertainty_source,
     )
     report["generated_at_utc"] = datetime.now(UTC).isoformat()
 

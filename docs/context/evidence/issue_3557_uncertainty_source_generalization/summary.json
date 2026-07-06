@@ -1,0 +1,175 @@
+{
+  "claim_boundary": "Controlled #3471 crossing scenario using real stream_gap planner and ScenarioBelief uncertainty gate. This is diagnostic-tier uncertainty-source generalization evidence only: no full benchmark campaign, no Slurm/GPU submission, no paper/dissertation claim.",
+  "decision_layer": {
+    "evidence_kind": "diagnostic_proxy",
+    "generalization": "generalizes",
+    "inconclusive_sources": [
+      "visibility_occlusion"
+    ],
+    "n_sources": 5,
+    "per_source": [
+      {
+        "min_separation_delta_m": -0.4518,
+        "n_episodes": 12,
+        "source": "existence_degradation",
+        "unsafe_commit_delta": 16.75,
+        "verdict": "reproduces_unsafe_dropping"
+      },
+      {
+        "min_separation_delta_m": 0.0,
+        "n_episodes": 12,
+        "source": "visibility_occlusion",
+        "unsafe_commit_delta": 0.0,
+        "verdict": "inconclusive"
+      },
+      {
+        "min_separation_delta_m": -0.4518,
+        "n_episodes": 12,
+        "source": "covariance_inflation",
+        "unsafe_commit_delta": 16.75,
+        "verdict": "reproduces_unsafe_dropping"
+      },
+      {
+        "min_separation_delta_m": -0.4518,
+        "n_episodes": 12,
+        "source": "class_probability",
+        "unsafe_commit_delta": 16.75,
+        "verdict": "reproduces_unsafe_dropping"
+      },
+      {
+        "min_separation_delta_m": -0.0713,
+        "n_episodes": 12,
+        "source": "tracking_noise",
+        "unsafe_commit_delta": 18.333333333333332,
+        "verdict": "reproduces_unsafe_dropping"
+      }
+    ],
+    "reproducing_sources": [
+      "class_probability",
+      "covariance_inflation",
+      "existence_degradation",
+      "tracking_noise"
+    ],
+    "schema_version": "uncertainty_source_generalization.v1"
+  },
+  "evidence_tier": "diagnostic",
+  "generalization": "generalizes",
+  "issue": 3557,
+  "params": {
+    "corridor_x": 5.0,
+    "dt": 0.1,
+    "goal_x": 9.0,
+    "max_steps": 120,
+    "near_miss_margin": 0.6,
+    "path_y": 5.0,
+    "ped_cross_speed": 0.7,
+    "ped_radius": 0.3,
+    "robot_radius": 0.4,
+    "start_x": 2.0
+  },
+  "per_source": [
+    {
+      "classifier_verdict": "reproduces_unsafe_dropping",
+      "condition_builder": "_condition_existence_degraded",
+      "dropped_unsafe_commit_rate": 20.5,
+      "dropped_worst_min_separation_m": -0.6212,
+      "episodes": 12,
+      "fail_closed_any": false,
+      "harness_decision": "revise",
+      "min_separation_delta_dropped_minus_retained_m": -0.4518,
+      "retained_unsafe_commit_rate": 3.75,
+      "retained_worst_min_separation_m": -0.1694,
+      "source": "existence_degradation",
+      "source_decision": "reproduces_unsafe_drop",
+      "uncertainty_consumed_any": true,
+      "unsafe_commit_rate_delta_dropped_minus_retained": 16.75
+    },
+    {
+      "classifier_verdict": "inconclusive",
+      "condition_builder": "_condition_visibility_limited",
+      "dropped_unsafe_commit_rate": 20.5,
+      "dropped_worst_min_separation_m": -0.6212,
+      "episodes": 12,
+      "fail_closed_any": false,
+      "harness_decision": "inconclusive",
+      "min_separation_delta_dropped_minus_retained_m": 0.0,
+      "retained_unsafe_commit_rate": 20.5,
+      "retained_worst_min_separation_m": -0.6212,
+      "source": "visibility_occlusion",
+      "source_decision": "inconclusive",
+      "uncertainty_consumed_any": true,
+      "unsafe_commit_rate_delta_dropped_minus_retained": 0.0
+    },
+    {
+      "classifier_verdict": "reproduces_unsafe_dropping",
+      "condition_builder": "_condition_covariance_inflated",
+      "dropped_unsafe_commit_rate": 20.5,
+      "dropped_worst_min_separation_m": -0.6212,
+      "episodes": 12,
+      "fail_closed_any": false,
+      "harness_decision": "revise",
+      "min_separation_delta_dropped_minus_retained_m": -0.4518,
+      "retained_unsafe_commit_rate": 3.75,
+      "retained_worst_min_separation_m": -0.1694,
+      "source": "covariance_inflation",
+      "source_decision": "reproduces_unsafe_drop",
+      "uncertainty_consumed_any": true,
+      "unsafe_commit_rate_delta_dropped_minus_retained": 16.75
+    },
+    {
+      "classifier_verdict": "reproduces_unsafe_dropping",
+      "condition_builder": "_condition_class_probability",
+      "dropped_unsafe_commit_rate": 20.5,
+      "dropped_worst_min_separation_m": -0.6212,
+      "episodes": 12,
+      "fail_closed_any": false,
+      "harness_decision": "revise",
+      "min_separation_delta_dropped_minus_retained_m": -0.4518,
+      "retained_unsafe_commit_rate": 3.75,
+      "retained_worst_min_separation_m": -0.1694,
+      "source": "class_probability",
+      "source_decision": "reproduces_unsafe_drop",
+      "uncertainty_consumed_any": true,
+      "unsafe_commit_rate_delta_dropped_minus_retained": 16.75
+    },
+    {
+      "classifier_verdict": "reproduces_unsafe_dropping",
+      "condition_builder": "_condition_tracking_noise",
+      "dropped_unsafe_commit_rate": 20.5,
+      "dropped_worst_min_separation_m": -0.6212,
+      "episodes": 12,
+      "fail_closed_any": false,
+      "harness_decision": "revise",
+      "min_separation_delta_dropped_minus_retained_m": -0.0713,
+      "retained_unsafe_commit_rate": 2.166667,
+      "retained_worst_min_separation_m": -0.5499,
+      "source": "tracking_noise",
+      "source_decision": "reproduces_unsafe_drop",
+      "uncertainty_consumed_any": true,
+      "unsafe_commit_rate_delta_dropped_minus_retained": 18.333333
+    }
+  ],
+  "schema_version": "uncertainty_source_generalization_report.v1",
+  "seed_count": 12,
+  "seeds": [
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109,
+    110,
+    111,
+    112
+  ],
+  "sources": [
+    "existence_degradation",
+    "visibility_occlusion",
+    "covariance_inflation",
+    "class_probability",
+    "tracking_noise"
+  ]
+}

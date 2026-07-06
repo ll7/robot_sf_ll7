@@ -12,6 +12,9 @@ Recent Package C prediction/observation closure audit:
 Recent uncertainty-representation generalization closure audit:
 [closure_audit.md](evidence/issue_3557_uncertainty_representation_generalization/closure_audit.md).
 
+Recent uncertainty-source generalization diagnostic evidence:
+[README.md](evidence/issue_3557_uncertainty_source_generalization/README.md).
+
 Recent reactivity-vs-replay rank-study closure audit:
 [issue_3637_closure_audit_2026-07-05.md](evidence/issue_3637_closure_audit_2026-07-05.md).
 

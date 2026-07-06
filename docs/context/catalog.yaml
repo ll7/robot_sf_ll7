@@ -65,6 +65,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3557_uncertainty_source_generalization
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3463_topology_reselection_cross_slice_2026-07-05
     status: evidence
     freshness: evidence

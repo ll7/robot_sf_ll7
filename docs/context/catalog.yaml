@@ -3099,6 +3099,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4586_closure_audit_2026-07-06.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_2444_ammv_divergence_2026-06-23/README.md
     status: evidence
     freshness: evidence

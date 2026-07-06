@@ -319,9 +319,8 @@ def test_real_registry_preflight_against_checkout() -> None:
     statuses = {p["package_id"]: p["status"] for p in report["packages"]}
     assert statuses["scenario_suite_v0"] == "ready"
     assert statuses["package_b_adversarial"] == "ready"
-    # The release gate points at a release-owned artifact that #3081 has not yet
-    # published, so it must fail closed to blocked rather than reporting ready.
-    assert statuses["release_july_2026"] == "blocked"
+    # The release gate is now ready since issue #3081 has published its release manifest.
+    assert statuses["release_july_2026"] == "ready"
     release = next(p for p in report["packages"] if p["package_id"] == "release_july_2026")
     stage_ids = {stage["stage_id"] for stage in release["flow_stages"]}
     assert stage_ids == {
@@ -333,7 +332,4 @@ def test_real_registry_preflight_against_checkout() -> None:
         "comparison_report",
         "claim_card_durable_manifest",
     }
-    assert any(
-        gap["gap_type"] == "missing_flow_stage" and "claim_card_durable_manifest" in gap["detail"]
-        for gap in release["gaps"]
-    )
+    assert not any(gap["package_id"] == "release_july_2026" for gap in report["gaps"])

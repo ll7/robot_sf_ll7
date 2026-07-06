@@ -21,6 +21,7 @@ Recent hard-guarded hybrid-learning synthesis closure audit:
 Recent ORCA-residual BC smoke/nominal lane closure audit (keep open; blocked on a
 Slurm smoke rerun + nominal escalation, CPU-side criteria delivered):
 [issue_1475_closure_audit_2026-07-06.md](evidence/issue_1475_closure_audit_2026-07-06.md).
+High-churn state propagation: [issue_1475_state.yaml](issue_1475_state.yaml).
 
 Recent camera-ready decomposition closure audit:
 [issue_3385_closure_audit_2026_07_04.md](issue_3385_closure_audit_2026_07_04.md).

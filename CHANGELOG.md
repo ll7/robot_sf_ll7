@@ -46,6 +46,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Added the issue #4018 density-curriculum closure audit and matched 96-timestep CPU diagnostic
+  smoke evidence bundle. The note maps acceptance criteria to merged PRs #4169, #4478, and #4580,
+  records readiness status `ready_diagnostic_smoke`, and keeps the claim boundary diagnostic-only:
+  not benchmark evidence, not a training-result quality claim, and not a paper or dissertation
+  claim.
 * Recorded the **issue #2918 closure audit** at
   `docs/context/evidence/issue_2918_closure_audit.md` (linked from the #2918 preflight context
   note). It maps each acceptance criterion to its merged PR (#3754 staging/preflight contract,

@@ -4,6 +4,11 @@ Status: Current. Scope: the *curation-step* readiness gate only. This note does 
 real-data curation run; issue #1126 stays `state:blocked-external-input` until licensed SDD
 annotations are staged (issue #1497, validated by #2413).
 
+**Closure audit (2026-07-06):** [`evidence/issue_1126_closure_audit_2026-07-06.md`](evidence/issue_1126_closure_audit_2026-07-06.md)
+maps every acceptance criterion to evidence and records the decision to keep #1126 open, blocked on
+BYO licensed SDD staging. That audit also fixed the #4564 decision packet's generated importer
+command (now `--annotations`/`--out-dir` + a recorded `--meters-per-pixel` scale assumption).
+
 ## Why this exists
 
 Issue #1126 curates the first real SDD-derived benchmark scenario set *after* a licensed annotation
@@ -42,8 +47,8 @@ closed otherwise. This preflight is the curation-step gate; it is distinct from:
 ```bash
 uv run python scripts/tools/import_sdd_scenarios.py --help
 uv run python scripts/tools/sdd_curation_preflight.py            # -> proxy_schema_smoke, promotion False
-uv run python -m pytest tests/tools/test_sdd_curation_preflight.py -q   # 8 passed
-uv run python -m pytest tests/ -k "sdd or import_scenarios" -q          # 53 passed
+uv run python -m pytest tests/tools/test_sdd_curation_preflight.py -q   # 15 passed (2026-07-06)
+uv run python -m pytest tests/ -k "sdd or import_scenarios" -q          # 75 passed (2026-07-06)
 ```
 
 The CLI on this checkout reports `staging mode: proxy_schema_smoke`, `dataset_backed: False`,

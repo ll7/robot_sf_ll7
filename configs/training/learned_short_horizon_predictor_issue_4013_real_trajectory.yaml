@@ -1,0 +1,17 @@
+# Real-trajectory smoke trainer config for issue #4013.
+#
+# This does not download or stage ETH/BIWI data. The trainer fails closed until
+# configs/data/issue_4013_eth_biwi_real_trajectory_manifest.yaml is updated to a
+# locally checksum-validated dataset copy.
+max_pedestrians: 16
+horizon_steps: 5
+rollout_dt: 0.4
+hidden_dim: 128
+device: cpu
+seed: 4013
+num_samples: 512
+epochs: 400
+learning_rate: 0.001
+training_data_manifest_path: configs/data/issue_4013_eth_biwi_real_trajectory_manifest.yaml
+real_trajectory_file_glob: "**/*"
+output_dir: output/models/issue_4013/short_horizon_predictor_real_trajectory

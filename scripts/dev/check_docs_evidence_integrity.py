@@ -492,7 +492,9 @@ def _extract_cited_paths(text: str) -> set[str]:
     for match in _CITED_REPO_PATH.finditer(text):
         paths.add(_clean_cited_path(match.group("path")))
     paths -= output_paths
-    return {path for path in paths if path and not _looks_dynamic(path)}
+    return {
+        path for path in paths if path and not _looks_dynamic(path) and not path.startswith("-")
+    }
 
 
 def _is_artifact_registry(path: Path) -> bool:

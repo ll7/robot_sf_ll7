@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #3501 safety-wrapper deadlock-recovery stage wired into benchmark runtime.** The stateful
+  fourth wrapper stage (`DeadlockRecoveryMonitor`) is now bound into the benchmark episode step loop
+  via `robot_sf/benchmark/safety_wrapper_runtime.py`. `SafetyWrapperRuntimeConfig` gains an opt-in
+  `deadlock_recovery_enabled` flag plus its fixed, predeclared thresholds; new
+  `deadlock_recovery_config()` / `make_deadlock_recovery_monitor()` helpers construct one monitor per
+  episode, and `apply_runtime_safety_wrapper()` accepts it and records a `deadlock_recovery`
+  sub-block per step. `summarize_safety_wrapper_trace()` aggregates a per-episode
+  `deadlock_recovery` summary (frozen/detected/recovery-active step counts). The stage is
+  **off by default** and only valid on the `wrapper_on` arm; when enabled its thresholds are locked
+  to the predeclared defaults (fail-closed, no per-planner tuning), and the monitor only ever
+  overrides angular velocity — forward speed is preserved so the hard-stop veto still holds. Claim
+  boundary: `diagnostic_proxy` evidence only; this closes the last CPU-only implementable criterion
+  of #3501. Remaining work is compute-gated (run the paired `planner × {wrapper_off, wrapper_on}`
+  ablation, then build the effect-size report). No benchmark campaign run, no SLURM/GPU submission,
+  no paper/dissertation claim edits. See `tests/benchmark/test_safety_wrapper_runtime.py`.
 * **issue #4617 learned-risk model v1 trainer entrypoint + config slice (parent #1472).** New
   `scripts/training/train_learned_risk_model.py` (core logic in
   `robot_sf/training/learned_risk_trainer.py`) and `configs/training/learned_risk_model_v1.yaml`

@@ -335,3 +335,75 @@ def test_main_parses_close_issues_cli_argument(
     # Wait, the main outputs results which have "should_close" and "action_type"
     assert payload["results"][0]["action_type"] == "close_fully_covered"
     assert payload["results"][0]["should_close"] is True
+
+
+def test_build_final_summary_comment_counts_completed_actions() -> None:
+    """Final #4437 summary counts only completed action results."""
+    result = {
+        "results": [
+            {
+                "issue_number": 12,
+                "action_type": "close_fully_covered",
+                "closed": True,
+                "comment_posted": True,
+                "error": None,
+            },
+            {
+                "issue_number": 13,
+                "action_type": "residual",
+                "closed": False,
+                "comment_posted": True,
+                "error": None,
+            },
+            {
+                "issue_number": 14,
+                "action_type": "parent_ledger",
+                "closed": False,
+                "comment_posted": True,
+                "error": None,
+            },
+            {
+                "issue_number": 15,
+                "action_type": "residual",
+                "closed": False,
+                "comment_posted": False,
+                "error": "permission denied",
+            },
+        ]
+    }
+
+    body = closure_mechanics.build_final_summary_comment(result)
+
+    assert "- closed as fully covered: 1" in body
+    assert "- residual annotated, kept open: 1" in body
+    assert "- parent ledgers updated, kept open: 1" in body
+    assert "- no action / skipped / failed: 1" in body
+    assert "- #12" in body
+    assert "- #13" in body
+    assert "- #14" in body
+    assert "- #15 residual not completed: permission denied" in body
+    assert "No code, queue edits, new issues" in body
+
+
+def test_main_writes_summary_comment_file(
+    tmp_path: object, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """CLI writes final summary Markdown from dry-run result without posting it."""
+    import pathlib
+
+    report = _audit_report([_candidate(20, "file test", prs=[_pr_entry(77, "fix #20")])])
+    report_path = pathlib.Path(str(tmp_path)) / "report.json"
+    summary_path = pathlib.Path(str(tmp_path)) / "summary.md"
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    exit_code = closure_mechanics.main(
+        ["--report-file", str(report_path), "--summary-comment-file", str(summary_path)]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    summary = summary_path.read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert payload["summary_comment_file"] == str(summary_path)
+    assert "- closed as fully covered: 0" in summary
+    assert "- no action / skipped / failed: 1" in summary
+    assert "- #20 residual not completed" in summary

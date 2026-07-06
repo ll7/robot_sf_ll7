@@ -16,6 +16,7 @@ import json
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 # Comment templates from the issue plan.
@@ -45,6 +46,31 @@ Still open / not yet evidenced:
 {remaining_items}
 
 Keeping this parent issue open by design because it coordinates multiple slices."""
+
+FINAL_SUMMARY_TEMPLATE = """\
+## Closure audit summary
+
+Scope: open issues with at least one merged title-linked PR reviewed through the #4437 closure mechanics.
+
+Counts:
+- closed as fully covered: {closed_count}
+- residual annotated, kept open: {residual_count}
+- parent ledgers updated, kept open: {parent_count}
+- no action / skipped / failed: {skipped_count}
+
+Closed:
+{closed_items}
+
+Residual annotated:
+{residual_items}
+
+Parent ledgers updated:
+{parent_items}
+
+No action / skipped / failed:
+{skipped_items}
+
+Boundary: issue hygiene only. No code, queue edits, new issues, benchmark execution, Slurm/GPU submission, or paper/dissertation claim changes were performed by the issue-write pass."""
 
 
 @dataclass(frozen=True)
@@ -186,6 +212,91 @@ def build_close_command(*, issue_number: int, repo: str) -> list[str]:
     return ["gh", "issue", "close", str(issue_number), "--repo", repo, "--reason", "completed"]
 
 
+def _summary_issue_rows(
+    results: list[dict[str, object]],
+    *,
+    action_type: str,
+    completed_field: str,
+) -> list[str]:
+    """Return summary rows for successfully applied actions of one type."""
+    rows: list[str] = []
+    for entry in results:
+        if entry.get("action_type") != action_type:
+            continue
+        if entry.get(completed_field) is not True:
+            continue
+        issue_number = entry.get("issue_number")
+        if isinstance(issue_number, int):
+            rows.append(f"- #{issue_number}")
+    return rows
+
+
+def _skipped_summary_rows(results: list[dict[str, object]]) -> list[str]:
+    """Return rows for actions that did not complete their intended mutation."""
+    rows: list[str] = []
+    for entry in results:
+        issue_number = entry.get("issue_number")
+        if not isinstance(issue_number, int):
+            continue
+        action_type = str(entry.get("action_type", "unknown"))
+        expected_field = "closed" if action_type == "close_fully_covered" else "comment_posted"
+        if action_type == "no_action":
+            rows.append(f"- #{issue_number} no action")
+        elif entry.get(expected_field) is not True:
+            error = entry.get("error")
+            reason = f"{action_type} not completed"
+            if error:
+                reason = f"{reason}: {error}"
+            rows.append(f"- #{issue_number} {reason}")
+    return rows
+
+
+def _format_summary_items(rows: list[str]) -> str:
+    """Render summary rows with an explicit empty marker."""
+    return "\n".join(rows) if rows else "- (none)"
+
+
+def build_final_summary_comment(execution_result: dict[str, Any]) -> str:
+    """Build the final #4437 audit summary comment from execution results.
+
+    The summary only counts mutations that actually completed in the execution result.
+    Dry-run previews therefore produce zero applied counts and list planned actions as
+    skipped, preventing a preview from being presented as a completed write pass.
+    """
+    raw_results = execution_result.get("results", [])
+    if not isinstance(raw_results, list):
+        raw_results = []
+    results = [entry for entry in raw_results if isinstance(entry, dict)]
+
+    closed_rows = _summary_issue_rows(
+        results,
+        action_type="close_fully_covered",
+        completed_field="closed",
+    )
+    residual_rows = _summary_issue_rows(
+        results,
+        action_type="residual",
+        completed_field="comment_posted",
+    )
+    parent_rows = _summary_issue_rows(
+        results,
+        action_type="parent_ledger",
+        completed_field="comment_posted",
+    )
+    skipped_rows = _skipped_summary_rows(results)
+
+    return FINAL_SUMMARY_TEMPLATE.format(
+        closed_count=len(closed_rows),
+        residual_count=len(residual_rows),
+        parent_count=len(parent_rows),
+        skipped_count=len(skipped_rows),
+        closed_items=_format_summary_items(closed_rows),
+        residual_items=_format_summary_items(residual_rows),
+        parent_items=_format_summary_items(parent_rows),
+        skipped_items=_format_summary_items(skipped_rows),
+    )
+
+
 def execute_actions(
     actions: list[ClosureAction], *, repo: str, dry_run: bool = True
 ) -> dict[str, Any]:
@@ -266,6 +377,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Comma-separated list of issue numbers to classify as fully covered and close.",
     )
+    parser.add_argument(
+        "--summary-comment-file",
+        type=str,
+        default=None,
+        help="Write final #4437 summary comment Markdown from the execution result.",
+    )
     return parser
 
 
@@ -304,6 +421,10 @@ def main(argv: list[str] | None = None) -> int:
 
     actions = classify_and_build_actions(report, close_issues=close_issues_set)
     result = execute_actions(actions, repo=args.repo, dry_run=dry_run)
+    if args.summary_comment_file:
+        summary_comment = build_final_summary_comment(result)
+        Path(args.summary_comment_file).write_text(summary_comment + "\n", encoding="utf-8")
+        result["summary_comment_file"] = args.summary_comment_file
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 

@@ -10,6 +10,8 @@ Claim boundary: real-trajectory readiness only. No raw data is staged, no full b
 - Dataset: `issue_4013_eth_biwi`
 - Availability: `missing`
 - Benchmark eligibility: `diagnostic_only`
+- Acquisition URL: `https://ethz.ch/content/dam/ethz/special-interest/itet/cvl/vision-dam/documents/ewap_dataset_light.tgz`
+- Acquisition fail-closed: `True`
 
 ## Blockers
 
@@ -26,3 +28,6 @@ Claim boundary: real-trajectory readiness only. No raw data is staged, no full b
 | claim boundary excludes world-model and paper-grade claims | Met in existing #4013 design/evidence docs; this report preserves that boundary. |
 
 Next action: Stage ETH/BIWI or another approved real pedestrian trajectory dataset under $ROBOT_SF_EXTERNAL_DATA_ROOT, validate its checksum, update the manifest, then run real-trajectory training and representative evaluation.
+
+Acquisition instructions:
+Obtain the ETH/BIWI walking pedestrians annotation archive from the official ETH Computer Vision Lab datasets page under its current terms. Extract the raw annotation files into staging_dir. Do not commit raw annotations or converted trajectory files. After staging, compute the aggregate SHA-256 tree checksum, set checksums.tree_sha256 and expected_tree_sha256, and change availability to validated before using the data for #4013 real-trajectory training or representative evaluation.

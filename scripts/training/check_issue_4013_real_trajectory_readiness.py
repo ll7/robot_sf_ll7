@@ -54,9 +54,11 @@ def build_report(manifest_path: Path) -> dict[str, Any]:
         dataset_id = None
         availability = "unknown"
         benchmark_eligibility = "unknown"
+        retrieval = {"download_url": None, "instructions": None, "fail_closed": True}
         issues: list[dict[str, str]] = []
     else:
         assert preflight is not None
+        retrieval = manifest["retrieval"]
         issues = [
             {"code": issue.code, "severity": issue.severity, "message": issue.message}
             for issue in preflight.issues
@@ -131,6 +133,11 @@ def build_report(manifest_path: Path) -> dict[str, Any]:
         "dataset_id": dataset_id,
         "availability": availability,
         "benchmark_eligibility": benchmark_eligibility,
+        "retrieval": {
+            "download_url": retrieval.get("download_url"),
+            "instructions": retrieval.get("instructions"),
+            "fail_closed": retrieval.get("fail_closed"),
+        },
         "preflight_issues": issues,
         "blockers": blockers,
         "acceptance_evidence": acceptance_evidence,
@@ -162,6 +169,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Dataset: `{report['dataset_id']}`",
         f"- Availability: `{report['availability']}`",
         f"- Benchmark eligibility: `{report['benchmark_eligibility']}`",
+        f"- Acquisition URL: `{report['retrieval']['download_url'] or 'manual/license-gated'}`",
+        f"- Acquisition fail-closed: `{report['retrieval']['fail_closed']}`",
         "",
         "## Blockers",
         "",
@@ -175,6 +184,9 @@ def render_markdown(report: dict[str, Any]) -> str:
     for item in report["acceptance_evidence"]:
         lines.append(f"| {item['criterion']} | {item['evidence']} |")
     lines.extend(["", f"Next action: {report['next_action']}", ""])
+    instructions = report["retrieval"].get("instructions")
+    if instructions:
+        lines.extend(["Acquisition instructions:", instructions, ""])
     return "\n".join(lines)
 
 

@@ -36,7 +36,7 @@ def _manifest() -> dict:
         },
         "retrieval": {
             "instructions": "Stage locally.",
-            "download_url": None,
+            "download_url": "https://example.org/trajectories.tgz",
             "fail_closed": True,
         },
         "checksums": {
@@ -78,6 +78,7 @@ def test_missing_real_dataset_blocks_phase3_without_contract_error(tmp_path: Pat
     report = build_report(_write_manifest(tmp_path, _manifest()))
 
     assert report["status"] == "blocked_real_trajectory_data_unavailable"
+    assert report["retrieval"]["download_url"] == "https://example.org/trajectories.tgz"
     assert report["blockers"][0]["code"] == "real_trajectory.availability_not_validated"
     assert report["preflight_issues"] == []
 
@@ -114,4 +115,6 @@ def test_markdown_contains_acceptance_evidence_and_claim_boundary(tmp_path: Path
 
     assert "Issue #4013 Real-Trajectory Readiness" in markdown
     assert "No raw data is staged" in markdown
+    assert "Acquisition URL: `https://example.org/trajectories.tgz`" in markdown
+    assert "Acquisition instructions:" in markdown
     assert "comparison against cv_prediction_mpc" in markdown

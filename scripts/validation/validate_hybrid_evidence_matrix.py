@@ -11,7 +11,7 @@ from robot_sf.benchmark.hybrid_evidence_matrix import (
     DEFAULT_SYNTHESIS_PREREQUISITE_COUNT,
     HybridEvidenceMatrixValidationError,
     build_hybrid_prerequisite_matrix_file,
-    build_hybrid_synthesis_report,
+    build_hybrid_synthesis_report_file,
     validate_hybrid_evidence_file,
 )
 from robot_sf.common.artifact_paths import get_repository_root
@@ -86,23 +86,24 @@ def main(argv: list[str] | None = None) -> int:
     args = build_arg_parser().parse_args(argv)
     try:
         if args.synthesis_report or args.prerequisite_matrix:
-            matrix_report = build_hybrid_prerequisite_matrix_file(
+            builder = (
+                build_hybrid_synthesis_report_file
+                if args.synthesis_report
+                else build_hybrid_prerequisite_matrix_file
+            )
+            report = builder(
                 args.input,
                 expected_components=args.expected_components,
                 repo_root=args.repo_root,
                 check_git_history=args.check_git_history,
                 prerequisite_count=args.prerequisite_count,
             )
-            if args.synthesis_report:
-                report = build_hybrid_synthesis_report(matrix_report)
-                report["input_format"] = matrix_report.get("input_format")
-                report["input_path"] = matrix_report.get("input_path")
-            else:
-                report = matrix_report
             print(json.dumps(report, indent=2, sort_keys=True))
             # Fail-closed exit code: a blocked-but-valid gate is a successful
             # emission (exit 0); only invalid rows are a hard error (exit 2).
-            return 0 if matrix_report["rows_valid"] else 2
+            # Both report shapes echo ``rows_valid`` (the synthesis report
+            # forwards the matrix signal), so invalid rows still exit 2.
+            return 0 if report["rows_valid"] else 2
         report = validate_hybrid_evidence_file(
             args.input,
             repo_root=args.repo_root,

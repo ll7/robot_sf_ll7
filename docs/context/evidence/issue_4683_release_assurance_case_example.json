@@ -1,0 +1,311 @@
+{
+  "arguments": [
+    {
+      "claim_id": "C_release_bundle_manifest",
+      "evidence_ids": [
+        "E_release_manifest",
+        "E_campaign_config",
+        "E_scenario_matrix",
+        "E_release_checklist",
+        "E_citation",
+        "E_snqi_weights",
+        "E_snqi_baseline"
+      ],
+      "id": "A_release_manifest_integrity",
+      "strategy": "manifest_integrity",
+      "text": "The release bundle is argued from a versioned manifest whose core files are present and, where the manifest pins a digest, checksum-matched."
+    },
+    {
+      "claim_id": "C_roster_seed_scope_context",
+      "evidence_ids": [
+        "E_release_manifest",
+        "E_campaign_config",
+        "E_scenario_matrix"
+      ],
+      "id": "A_roster_seed_scope",
+      "strategy": "manifest_context",
+      "text": "Planner roster, seed policy, scenario scope, and kinematic scope are taken from the release manifest rather than reconstructed from code."
+    },
+    {
+      "claim_id": "C_gate_collision_rate_zero",
+      "evidence_ids": [
+        "E_release_gate_spec"
+      ],
+      "gate": {
+        "category": "safety",
+        "direction": "max",
+        "gate_id": "collision_rate_zero",
+        "metric": "collision_rate",
+        "required": true,
+        "scope": {},
+        "threshold": 0.0
+      },
+      "id": "A_gate_collision_rate_zero",
+      "strategy": "threshold_gate_specification",
+      "text": "Gate claim is derived directly from the gate spec threshold, metric, category, requirement flag, and scope."
+    },
+    {
+      "claim_id": "C_gate_near_miss_rate_limit",
+      "evidence_ids": [
+        "E_release_gate_spec"
+      ],
+      "gate": {
+        "category": "safety",
+        "direction": "max",
+        "gate_id": "near_miss_rate_limit",
+        "metric": "near_miss_rate",
+        "required": true,
+        "scope": {},
+        "threshold": 0.05
+      },
+      "id": "A_gate_near_miss_rate_limit",
+      "strategy": "threshold_gate_specification",
+      "text": "Gate claim is derived directly from the gate spec threshold, metric, category, requirement flag, and scope."
+    },
+    {
+      "claim_id": "C_gate_min_clearance_floor",
+      "evidence_ids": [
+        "E_release_gate_spec"
+      ],
+      "gate": {
+        "category": "safety",
+        "direction": "min",
+        "gate_id": "min_clearance_floor",
+        "metric": "min_clearance_m",
+        "required": true,
+        "scope": {},
+        "threshold": 0.25
+      },
+      "id": "A_gate_min_clearance_floor",
+      "strategy": "threshold_gate_specification",
+      "text": "Gate claim is derived directly from the gate spec threshold, metric, category, requirement flag, and scope."
+    },
+    {
+      "claim_id": "C_gate_proxemic_intrusion_rate_limit",
+      "evidence_ids": [
+        "E_release_gate_spec"
+      ],
+      "gate": {
+        "category": "comfort",
+        "direction": "max",
+        "gate_id": "proxemic_intrusion_rate_limit",
+        "metric": "proxemic_intrusion_rate",
+        "required": true,
+        "scope": {},
+        "threshold": 0.1
+      },
+      "id": "A_gate_proxemic_intrusion_rate_limit",
+      "strategy": "threshold_gate_specification",
+      "text": "Gate claim is derived directly from the gate spec threshold, metric, category, requirement flag, and scope."
+    },
+    {
+      "claim_id": "C_gate_jerk_mean_limit",
+      "evidence_ids": [
+        "E_release_gate_spec"
+      ],
+      "gate": {
+        "category": "comfort",
+        "direction": "max",
+        "gate_id": "jerk_mean_limit",
+        "metric": "jerk_mean",
+        "required": true,
+        "scope": {},
+        "threshold": 2.0
+      },
+      "id": "A_gate_jerk_mean_limit",
+      "strategy": "threshold_gate_specification",
+      "text": "Gate claim is derived directly from the gate spec threshold, metric, category, requirement flag, and scope."
+    }
+  ],
+  "claim_boundary": "Machine-readable assurance export only. This document records release manifest, gate-spec, and evidence-reference integrity; it does not run a benchmark campaign or promote paper/dissertation claims.",
+  "claims": [
+    {
+      "argument_ids": [
+        "A_release_manifest_integrity"
+      ],
+      "id": "C_release_bundle_manifest",
+      "text": "Release `paper_experiment_matrix_v1_smoke_v0_1_0` is defined by a versioned release manifest with checksum-backed core inputs."
+    },
+    {
+      "argument_ids": [
+        "A_roster_seed_scope"
+      ],
+      "id": "C_roster_seed_scope_context",
+      "text": "Planner roster, seed policy, scenario matrix, and kinematic scope are explicit release context claims."
+    },
+    {
+      "argument_ids": [
+        "A_gate_collision_rate_zero"
+      ],
+      "id": "C_gate_collision_rate_zero",
+      "text": "safety gate `collision_rate_zero` requires `collision_rate` <= 0 (required)."
+    },
+    {
+      "argument_ids": [
+        "A_gate_near_miss_rate_limit"
+      ],
+      "id": "C_gate_near_miss_rate_limit",
+      "text": "safety gate `near_miss_rate_limit` requires `near_miss_rate` <= 0.05 (required)."
+    },
+    {
+      "argument_ids": [
+        "A_gate_min_clearance_floor"
+      ],
+      "id": "C_gate_min_clearance_floor",
+      "text": "safety gate `min_clearance_floor` requires `min_clearance_m` >= 0.25 (required)."
+    },
+    {
+      "argument_ids": [
+        "A_gate_proxemic_intrusion_rate_limit"
+      ],
+      "id": "C_gate_proxemic_intrusion_rate_limit",
+      "text": "comfort gate `proxemic_intrusion_rate_limit` requires `proxemic_intrusion_rate` <= 0.1 (required)."
+    },
+    {
+      "argument_ids": [
+        "A_gate_jerk_mean_limit"
+      ],
+      "id": "C_gate_jerk_mean_limit",
+      "text": "comfort gate `jerk_mean_limit` requires `jerk_mean` <= 2 (required)."
+    }
+  ],
+  "evidence": [
+    {
+      "description": "Release manifest that pins release identity, roster, scope, and artifacts.",
+      "id": "E_release_manifest",
+      "kind": "file",
+      "manifest_field": "release_manifest",
+      "path": "configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml",
+      "sha256": "ea0896e209828efd0edf3e8e50c8a7295594b393cb498f6e96cb23bb82a71701"
+    },
+    {
+      "description": "Canonical campaign config referenced by the release manifest.",
+      "expected_sha256": "60620b8f28ceb65b6468b343ab1988f87b1187c86ad534bdf2513d48d008ba5e",
+      "id": "E_campaign_config",
+      "kind": "file",
+      "manifest_field": "canonical_campaign_config",
+      "path": "configs/benchmarks/paper_experiment_matrix_v1_release_smoke.yaml",
+      "sha256": "60620b8f28ceb65b6468b343ab1988f87b1187c86ad534bdf2513d48d008ba5e"
+    },
+    {
+      "description": "Scenario matrix referenced by the release manifest.",
+      "expected_sha256": "5c5426d31859cdf69692b85fdade92c58e4379bd9d93963743d932d044c6f6fb",
+      "id": "E_scenario_matrix",
+      "kind": "file",
+      "manifest_field": "scenario.matrix_path",
+      "path": "configs/scenarios/single/francis2023_blind_corner.yaml",
+      "sha256": "5c5426d31859cdf69692b85fdade92c58e4379bd9d93963743d932d044c6f6fb"
+    },
+    {
+      "description": "Release checklist/preflight owner referenced by the release manifest.",
+      "id": "E_release_checklist",
+      "kind": "file",
+      "manifest_field": "release_checklist_path",
+      "path": "docs/RELEASE.md",
+      "sha256": "b38fbb18f5cab43bd23c4bbe44ecb46ad9a89f8dcac6e31eba63989d67b13a34"
+    },
+    {
+      "description": "Citation metadata referenced by the release manifest.",
+      "id": "E_citation",
+      "kind": "file",
+      "manifest_field": "citation_path",
+      "path": "CITATION.cff",
+      "sha256": "39725ab6c3cb7c21f294bc7a562056ef3293a647bbe770d905747662615249a8"
+    },
+    {
+      "description": "Social Navigation Quality Index weights referenced by the manifest.",
+      "expected_sha256": "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2",
+      "id": "E_snqi_weights",
+      "kind": "file",
+      "manifest_field": "metrics.snqi_weights_path",
+      "path": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+      "sha256": "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2"
+    },
+    {
+      "description": "Social Navigation Quality Index baseline referenced by the manifest.",
+      "expected_sha256": "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a",
+      "id": "E_snqi_baseline",
+      "kind": "file",
+      "manifest_field": "metrics.snqi_baseline_path",
+      "path": "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+      "sha256": "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a"
+    },
+    {
+      "description": "Release gate specification used as the claim layer.",
+      "id": "E_release_gate_spec",
+      "kind": "file",
+      "manifest_field": "release_gate_spec",
+      "path": "configs/benchmarks/release_gates/default_safety_comfort_gates.yaml",
+      "sha256": "5abed9ba523bc5cd1a1fd556089c1e7a8cfe1657fcdde9b6b6b55c3b1edc53a0"
+    }
+  ],
+  "generated_at_utc": "2026-07-06T00:00:00Z",
+  "release": {
+    "benchmark_protocol_version": "0.1.0",
+    "maturity": "pre-1.0",
+    "release_id": "paper_experiment_matrix_v1_smoke_v0_1_0",
+    "release_tag": "paper-benchmark-smoke-v0.1.0"
+  },
+  "release_context": {
+    "holonomic_command_mode": null,
+    "kinematics_matrix": [
+      "differential_drive"
+    ],
+    "planner_groups": {
+      "goal": "core",
+      "orca": "core",
+      "ppo": "experimental",
+      "prediction_planner": "experimental",
+      "sacadrl": "experimental",
+      "social_force": "core",
+      "socnav_sampling": "experimental"
+    },
+    "planner_keys": [
+      "prediction_planner",
+      "goal",
+      "social_force",
+      "orca",
+      "ppo",
+      "socnav_sampling",
+      "sacadrl"
+    ],
+    "required_artifact_paths": [
+      "campaign_manifest.json",
+      "manifest.json",
+      "run_meta.json",
+      "preflight/validate_config.json",
+      "preflight/preview_scenarios.json",
+      "reports/campaign_summary.json",
+      "reports/campaign_report.md",
+      "reports/matrix_summary.json",
+      "reports/campaign_table.md",
+      "reports/snqi_diagnostics.json"
+    ],
+    "seed_policy": {
+      "mode": "fixed-list",
+      "seed_sets_path": "../../benchmarks/seed_sets_v1.yaml",
+      "seeds": [
+        111
+      ]
+    }
+  },
+  "root_argument_ids": [
+    "A_release_manifest_integrity",
+    "A_roster_seed_scope",
+    "A_gate_collision_rate_zero",
+    "A_gate_near_miss_rate_limit",
+    "A_gate_min_clearance_floor",
+    "A_gate_proxemic_intrusion_rate_limit",
+    "A_gate_jerk_mean_limit"
+  ],
+  "root_claim_ids": [
+    "C_release_bundle_manifest",
+    "C_roster_seed_scope_context",
+    "C_gate_collision_rate_zero",
+    "C_gate_near_miss_rate_limit",
+    "C_gate_min_clearance_floor",
+    "C_gate_proxemic_intrusion_rate_limit",
+    "C_gate_jerk_mean_limit"
+  ],
+  "schema_version": "benchmark_release_assurance_case.v1"
+}

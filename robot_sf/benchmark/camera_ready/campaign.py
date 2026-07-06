@@ -16,6 +16,7 @@ circular import back onto the facade.
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -25,6 +26,11 @@ from loguru import logger
 
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
+from robot_sf.benchmark.assurance_fragment import (
+    build_assurance_fragment,
+    validate_assurance_fragment,
+    write_assurance_fragment,
+)
 from robot_sf.benchmark.camera_ready._artifacts import (
     _write_actuation_envelope_artifacts,
     _write_json,
@@ -625,7 +631,7 @@ def _build_skipped_combo_rows(run_entries: list[dict[str, Any]]) -> list[dict[st
     return skipped_combo_rows
 
 
-def _run_campaign_orchestrator(  # noqa: C901, PLR0915
+def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
     cfg: CampaignConfig,
     *,
     output_root: Path | None = None,
@@ -1319,6 +1325,9 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0915
             "snqi_diagnostics_json": _repo_relative(snqi_diagnostics_json_path),
             "snqi_diagnostics_md": _repo_relative(snqi_diagnostics_md_path),
             "snqi_sensitivity_csv": _repo_relative(snqi_sensitivity_csv_path),
+            "assurance_fragment_json": _repo_relative(reports_dir / "assurance_fragment.json"),
+            "assurance_fragment_md": _repo_relative(reports_dir / "assurance_fragment.md"),
+            "assurance_fragment_svg": _repo_relative(reports_dir / "assurance_fragment.svg"),
         },
     }
 
@@ -1452,6 +1461,9 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0915
                 "snqi_diagnostics_json": _repo_relative(snqi_diagnostics_json_path),
                 "snqi_diagnostics_md": _repo_relative(snqi_diagnostics_md_path),
                 "snqi_sensitivity_csv": _repo_relative(snqi_sensitivity_csv_path),
+                "assurance_fragment_json": _repo_relative(reports_dir / "assurance_fragment.json"),
+                "assurance_fragment_md": _repo_relative(reports_dir / "assurance_fragment.md"),
+                "assurance_fragment_svg": _repo_relative(reports_dir / "assurance_fragment.svg"),
             },
             "seed_variability": {
                 **dict(run_meta.get("seed_variability") or {}),
@@ -1505,6 +1517,27 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0915
     _write_json(summary_json_path, campaign_summary)
     write_campaign_report(report_md_path, campaign_summary)
 
+    # Export assurance fragment
+    try:
+        release_gate_report = None
+        for gate_report_path in reports_dir.glob("*release_gate*.json"):
+            try:
+                with gate_report_path.open("r", encoding="utf-8") as f:
+                    release_gate_report = json.load(f)
+                break
+            except (OSError, json.JSONDecodeError):
+                continue
+
+        fragment = build_assurance_fragment(
+            campaign_summary,
+            repo_root=get_repository_root(),
+            release_gate_report=release_gate_report,
+        )
+        validate_assurance_fragment(fragment)
+        write_assurance_fragment(reports_dir, fragment, repo_root=get_repository_root())
+    except Exception as exc:
+        warnings.append(f"Assurance fragment export failed: {exc}")
+
     if snqi_hard_fail:
         raise RuntimeError(
             f"SNQI contract failed with enforcement={cfg.snqi_contract.enforcement}; "
@@ -1531,6 +1564,9 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0915
         "snqi_diagnostics_json": str(snqi_diagnostics_json_path),
         "snqi_diagnostics_md": str(snqi_diagnostics_md_path),
         "snqi_sensitivity_csv": str(snqi_sensitivity_csv_path),
+        "assurance_fragment_json": str(reports_dir / "assurance_fragment.json"),
+        "assurance_fragment_md": str(reports_dir / "assurance_fragment.md"),
+        "assurance_fragment_svg": str(reports_dir / "assurance_fragment.svg"),
         "matrix_summary_json": str(matrix_summary_json_path),
         "matrix_summary_csv": str(matrix_summary_csv_path),
         "seed_variability_json": str(seed_variability_json_path),

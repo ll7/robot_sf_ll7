@@ -4,6 +4,13 @@ This module provides tools for running benchmarks, collecting metrics,
 and analyzing robot navigation performance in social environments.
 """
 
+from robot_sf.benchmark.assurance_fragment import (
+    build_assurance_fragment,
+    render_assurance_fragment_to_markdown,
+    render_assurance_fragment_to_svg,
+    validate_assurance_fragment,
+    write_assurance_fragment,
+)
 from robot_sf.benchmark.benchmark_protocol import (
     AMMV_BENCHMARK_PROTOCOL_PATH,
     BenchmarkProtocolError,
@@ -143,6 +150,7 @@ __all__ = [
     "ScenarioFailureCause",
     "ScenarioFailureDiagnostics",
     "TrackedAgentsForecastAdapter",
+    "build_assurance_fragment",
     "build_constant_velocity_forecast_batch",
     "build_forecast_calibration_report",
     "build_forecast_conformal_pilot_report",
@@ -160,11 +168,15 @@ __all__ = [
     "load_trained_policy",
     "prepare_classic_env",
     "record_forecast_dataset_from_trace_exports",
+    "render_assurance_fragment_to_markdown",
+    "render_assurance_fragment_to_svg",
     "run_episodes_with_recording",
     "save_forecast_batch",
+    "validate_assurance_fragment",
     "validate_benchmark_protocol_payload",
     "validate_forecast_batch",
     "validate_forecast_dataset_manifest",
+    "write_assurance_fragment",
     "write_forecast_calibration_report",
     "write_forecast_conformal_pilot_report",
     "write_forecast_transferability_stress_matrix",

@@ -34,6 +34,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fail-closed validation, then records the closure decision: **keep open**, blocked on BYO licensed
   SDD annotation staging (the only remaining criteria require real staged data, which does not exist
   locally). Docs + support-tooling only.
+* Recorded the **issue #1456 closure audit** at
+  `docs/context/evidence/issue_1456_closure_audit.md` (registered in `docs/context/catalog.yaml`).
+  It maps every acceptance criterion — original issue body plus the appended `agent-exec-spec:v1`
+  slice — to merged-PR evidence (#1924 external-data assistant, #2400 status note, #1596 row policy,
+  #3755 fail-closed readiness vs placeholder shells, #4526 tightened `socnavbench-control` contract)
+  and to a reproduced fail-closed validation (`manage_external_data.py --json check
+  socnavbench-control` / `socnavbench-s3dis-eth` exit `2`, `prepare_socnav_assets.py` exit `2`
+  `MISSING_REQUIRED_ASSETS`, 43 focused socnav map/asset tests pass). Decision: **keep #1456 open,
+  `state:blocked-external-input`** — all agent-executable tooling/inventory/row-policy criteria are
+  met; the three core asset criteria remain blocked on maintainer-staged licensed external data
+  (not compute-gated, so `COMPLETE-FIRST` does not apply). Docs-only; no asset staging, benchmark
+  run, SLURM submission, or research claim.
 * Recorded the **issue #1470 closure audit** at
   `docs/context/evidence/issue_1470_closure_audit_2026-07-06.md` (linked from the #1397 launch
   note). It maps each acceptance criterion for the oracle-imitation dataset-collection lane to its

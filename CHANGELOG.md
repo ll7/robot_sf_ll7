@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* **issue #4013 trained short-horizon pedestrian predictor (diagnostic).** New
+  `robot_sf/planner/learned_short_horizon_trainer.py` plus
+  `scripts/training/train_learned_short_horizon_predictor_issue_4013.py`
+  (`configs/training/learned_short_horizon_predictor_issue_4013_smoke.yaml`) train the small
+  state-based predictor from `robot_sf/planner/learned_short_horizon_predictor.py` on a seeded
+  synthetic robot-repulsion residual task and publish a checkpoint, training manifest, and metrics.
+  The trainer reuses the predictor's own architecture and feature encoding (newly exposed as
+  `build_predictor_module`, `predictor_io_dims`, `encode_predictor_features`, `pedestrian_world_state`)
+  so the checkpoint loads without shape drift. Loading the checkpoint yields
+  `evidence_tier=checkpoint_loaded` (not `diagnostic_untrained_smoke`), unblocking the "predictor
+  trained; model-based action selection runs" acceptance criterion of #4013. Local CPU run (seed
+  4013, 512 samples, 400 epochs): training loss `0.0987 -> 0.00044`. Claim boundary: the synthetic
+  task is a reproducible learnability probe, not real pedestrian data; `smoke evidence` only, not
+  benchmark, navigation-quality, or paper/dissertation evidence. No benchmark campaign, no SLURM/GPU
+  submission, no paper/dissertation claim edits. See `tests/planner/test_learned_short_horizon_trainer.py`.
+
 ### Fixed
 
 * **issue #1126 SDD curation decision packet — runnable import command.**

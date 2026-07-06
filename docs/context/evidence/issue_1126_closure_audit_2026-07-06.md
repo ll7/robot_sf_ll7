@@ -39,8 +39,8 @@ No raw SDD files are committed. No benchmark campaign, Slurm/GPU job, or paper-f
 
 ## Reproduced Validation
 
-Commands use `ROBOT_SF_EXTERNAL_DATA_ROOT=/home/luttkule/git/robot_sf_ll7/output/external_data`
-so the worktree reads the existing ignored local BYO data without copying it.
+Commands use `ROBOT_SF_EXTERNAL_DATA_ROOT=output/external_data` (repo-relative; run from the
+repo root) so the worktree reads the existing ignored local BYO data without copying it.
 
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- python scripts/tools/manage_external_data.py --json sdd-mode
@@ -50,7 +50,7 @@ scripts/dev/run_worktree_shared_venv.sh -- python scripts/tools/sdd_curation_pre
 # exit 0: staging mode dataset_backed_prior; benchmark_promotion_allowed false without annotation probe
 
 scripts/dev/run_worktree_shared_venv.sh -- python scripts/tools/sdd_curation_preflight.py \
-  --annotation /home/luttkule/git/robot_sf_ll7/output/external_data/sdd/annotations/bookstore/video0/annotations.txt \
+  --annotation "${ROBOT_SF_EXTERNAL_DATA_ROOT}/sdd/annotations/bookstore/video0/annotations.txt" \
   --min-track-points 8 \
   --require-benchmark-ready \
   --json

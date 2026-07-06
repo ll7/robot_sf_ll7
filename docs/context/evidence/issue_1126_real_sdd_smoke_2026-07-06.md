@@ -31,17 +31,20 @@ The annotation probe found 200021 usable `Pedestrian` points and 116 tracks meet
 ## Commands
 
 ```bash
-ROBOT_SF_EXTERNAL_DATA_ROOT=/home/luttkule/git/robot_sf_ll7/output/external_data \
-  scripts/dev/run_worktree_shared_venv.sh -- \
+# Repo-relative external-data root (run from the repo root); exported so both
+# commands below inherit it.
+export ROBOT_SF_EXTERNAL_DATA_ROOT=output/external_data
+
+scripts/dev/run_worktree_shared_venv.sh -- \
   python scripts/tools/sdd_curation_preflight.py \
-  --annotation /home/luttkule/git/robot_sf_ll7/output/external_data/sdd/annotations/bookstore/video0/annotations.txt \
+  --annotation "${ROBOT_SF_EXTERNAL_DATA_ROOT}/sdd/annotations/bookstore/video0/annotations.txt" \
   --min-track-points 8 \
   --require-benchmark-ready \
   --json
 
 scripts/dev/run_worktree_shared_venv.sh -- \
   python scripts/tools/import_sdd_scenarios.py \
-  --annotations /home/luttkule/git/robot_sf_ll7/output/external_data/sdd/annotations/bookstore/video0/annotations.txt \
+  --annotations "${ROBOT_SF_EXTERNAL_DATA_ROOT}/sdd/annotations/bookstore/video0/annotations.txt" \
   --out-dir output/sdd_curation/issue_1126_real_smoke \
   --dataset-id sdd_bookstore_video0_first_real \
   --label Pedestrian \

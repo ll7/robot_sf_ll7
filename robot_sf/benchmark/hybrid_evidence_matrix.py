@@ -448,7 +448,9 @@ def build_hybrid_synthesis_report(matrix_report: dict[str, Any]) -> dict[str, An
     """
     integration = matrix_report.get("integration_status", {})
     prerequisite_met = bool(matrix_report.get("prerequisite_met"))
-    rows_valid = bool(matrix_report.get("rows_valid", True))
+    # Fail-closed: a missing or None ``rows_valid`` must NOT open the gate. Only an
+    # explicit truthy value from a validated matrix report counts as valid rows.
+    rows_valid = bool(matrix_report.get("rows_valid", False))
     gate_open = prerequisite_met and rows_valid
 
     mechanisms: list[dict[str, Any]] = []

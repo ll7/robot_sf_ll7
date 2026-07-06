@@ -145,6 +145,22 @@ def test_all_recommendations_use_the_shared_vocabulary() -> None:
         assert lane["recommendation"] in SYNTHESIS_RECOMMENDATIONS
 
 
+def test_missing_or_none_rows_valid_keeps_gate_closed() -> None:
+    """A matrix report lacking (or None) ``rows_valid`` must not open the gate."""
+    matrix = build_hybrid_prerequisite_matrix([_complete_row(), _second_complete_row()])
+    assert matrix["prerequisite_met"] is True  # two complete lanes clears prereq
+
+    dropped = {k: v for k, v in matrix.items() if k != "rows_valid"}
+    none_valued = {**matrix, "rows_valid": None}
+
+    for degraded in (dropped, none_valued):
+        report = build_hybrid_synthesis_report(degraded)
+        assert report["eligible"] is False
+        assert report["status"] == "blocked"
+        assert report["promoted_verdict_count"] == 0
+        assert all(m["synthesis_verdict_promoted"] is False for m in report["mechanisms"])
+
+
 def test_file_helper_attaches_input_metadata() -> None:
     """The file helper classifies fixture rows and records the input path."""
     report = build_hybrid_synthesis_report_file(FIXTURE_ROOT / "valid_rows.yaml")

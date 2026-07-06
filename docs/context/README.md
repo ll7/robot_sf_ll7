@@ -173,8 +173,13 @@ knowledge, not every transient iteration detail.
 
   records that merged PR #4528 delivered CPU-testable serial-arm teardown; no GPU
   campaign, Slurm submission, or benchmark claim was run by audit.
+* Issue #4546 Social Navigation Benchmark (SocNavBench) ETH stage/SVG closure audit:
+[issue_4546_closure_audit_2026-07-06.md](issue_4546_closure_audit_2026-07-06.md)
+records merged PRs #4553/#4574 delivered wrapper and artifact policy while real
+source staging, converter hash evidence, and smoke-validated SVG remain blocked
+on licensed external input.
 * Issue #2232 planner mechanism transfer benchmark protocol:
-  [issue_2232_planner_mechanism_transfer_benchmark.md](issue_2232_planner_mechanism_transfer_benchmark.md)
+[issue_2232_planner_mechanism_transfer_benchmark.md](issue_2232_planner_mechanism_transfer_benchmark.md)
 * Issue #3064 behavior-variant inventory:
   [issue_3064_behavior_variants_inventory.md](issue_3064_behavior_variants_inventory.md)
   records the fail-closed classification of native Social Force, AMMV-aware Social Force, and

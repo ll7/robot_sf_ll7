@@ -1,5 +1,8 @@
 # Context Retrieval Index
 
+Recent SocNavBench ETH stage/SVG closure audit:
+[issue_4546_closure_audit_2026-07-06.md](issue_4546_closure_audit_2026-07-06.md).
+
 Recent Simple Linux Utility Resource Management (SLURM)-to-claim closure audit:
 [issue_3425_closure_audit_2026-07-05.md](evidence/issue_3425_closure_audit_2026-07-05.md).
 

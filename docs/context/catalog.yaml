@@ -3428,3 +3428,15 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4232_closure_audit_2026-07-06/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4232_closure_audit_2026-07-06/acceptance_criteria.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4232_closure_audit_2026-07-06/SHA256SUMS
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

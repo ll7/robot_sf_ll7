@@ -1,0 +1,44 @@
+# Canonical state surface for issue #4232.
+#
+# Purpose: avoid redispatching already-delivered packet/checker/runner/
+# diagnostic-activation slices while keeping the remaining benchmark-strength
+# blocker explicit. This file records durable integration state only. It does
+# not encode transient queue routing or claim-promotion approval.
+issue: 4232
+state_surface: uncertainty_envelope_claim_evidence
+entries:
+  - recorded_at_utc: "2026-07-06T12:20:00Z"
+    status: diagnostic_path_delivered_benchmark_campaign_remaining
+    summary: >-
+      Merged PRs #4256, #4281, #4521, #4559, #4576, and #4626 deliver the
+      pre-registration packet, static validator, compact evidence builder,
+      CPU-local diagnostic runner, measured activation telemetry, and tracked
+      activation probe. The nonzero-alpha diagnostic row now records actual
+      mechanism activation, but all rows remain diagnostic_only and excluded
+      from benchmark-strength evidence.
+    closure_audit: docs/context/evidence/issue_4232_closure_audit_2026-07-06/README.md
+    delivered_slices:
+      - pr: 4256
+        capability: pre_registration_packet_and_static_validator
+      - pr: 4281
+        capability: compact_uncertainty_envelope_evidence_builder
+      - pr: 4521
+        capability: cpu_local_diagnostic_alpha_sweep_runner
+      - pr: 4559
+        capability: tracked_diagnostic_smoke_evidence_bundle
+      - pr: 4576
+        capability: measured_uncertainty_envelope_activation_telemetry
+      - pr: 4626
+        capability: tracked_activation_probe_with_observed_nonzero_alpha_activation
+    remaining_blocker:
+      item: benchmark_strength_campaign_or_maintainer_diagnostic_only_closure_decision
+      why: >-
+        Issue #4232 definition of done includes benchmark campaign evidence and
+        claim gating before any performance, safety, paper, or dissertation
+        claim. The current run is not authorized to submit compute, and the
+        latest issue comment keeps the issue open for a later claim-promotion
+        task.
+    claim_boundary: >-
+      Diagnostic-only. No full benchmark campaign, Slurm/GPU submission,
+      conformal-calibration claim, deployment claim, real-world safety claim,
+      generalized planner-superiority claim, paper edit, or dissertation edit.

@@ -31,6 +31,49 @@ def _fake_scenarios(_path: Path) -> list[dict[str, object]]:
     ]
 
 
+def test_parse_args_explicit_alpha_arm_replaces_default_roster(tmp_path: Path) -> None:
+    """Explicit alpha-arm selection must not append the default diagnostic roster."""
+    args = _MODULE.parse_args(
+        [
+            "--packet",
+            str(PACKET),
+            "--output-dir",
+            str(tmp_path / "issue_4232"),
+            "--alpha-arm",
+            "envelope_on_alpha_0p20",
+        ]
+    )
+
+    assert args.alpha_arm == ["envelope_on_alpha_0p20"]
+
+
+def test_diagnostic_scenarios_select_named_matrix_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Scenario-id selection targets a named row instead of the first matrix row."""
+    packet = {
+        "scenario_surface": {
+            "matrix_path": "configs/scenarios/classic_interactions_francis2023.yaml",
+            "max_episode_steps": 12,
+        },
+        "seed_policy": {"seeds": [111]},
+    }
+    scenarios = [
+        {"id": "first", "name": "first", "metadata": {}, "simulation_config": {}},
+        {"id": "target", "name": "target", "metadata": {}, "simulation_config": {}},
+    ]
+    monkeypatch.setattr(_MODULE, "load_scenario_matrix", lambda _path: scenarios)
+
+    selected = _MODULE._diagnostic_scenarios(
+        packet,
+        max_scenarios=1,
+        max_seeds=1,
+        scenario_ids=["target"],
+    )
+
+    assert [scenario["id"] for scenario in selected] == ["target"]
+    assert selected[0]["seeds"] == [111]
+    assert selected[0]["simulation_config"]["max_episode_steps"] == 12
+
+
 def _fake_run_map_batch(
     scenarios: list[dict[str, object]],
     out_path: str | Path,

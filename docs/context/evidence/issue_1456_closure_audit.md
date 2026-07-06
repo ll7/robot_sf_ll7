@@ -106,5 +106,5 @@ loses no tracking trail.
   traversibles, ETH mesh/traversible) under `third_party/socnavbench` via the manual path in
   [`docs/socnav_assets_setup.md`](../../socnav_assets_setup.md), then rerun the `#562` focused re-entry
   probe. The issue should auto-unblock once the private data-distribution mechanism (tracked in the
-  #1456 thread) ships these assets to the compute hosts. No further agent-executable step exists until
+  issue #1456 thread) ships these assets to the compute hosts. No further agent-executable step exists until
   those bytes are present.

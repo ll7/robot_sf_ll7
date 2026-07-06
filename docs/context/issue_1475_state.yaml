@@ -1,0 +1,98 @@
+# Canonical high-churn state surface for issue #1475.
+#
+# Purpose: issue #1475 has had several audit/checker PRs in a short window.
+# This append-only state file records the durable closure-audit boundary so
+# future agents do not create another blocker-refresh PR or comment stream.
+#
+# Scope discipline: file tracks durable issue state only. It intentionally does
+# not encode transient ready-queue routing, packet lineage routing,
+# private ops state, campaign launch state, benchmark results, or paper claims.
+issue: 1475
+state_surface: orca_residual_bc_smoke_nominal_closure_audit
+canonical_evidence:
+  closure_audit: docs/context/evidence/issue_1475_closure_audit_2026-07-06.md
+  executable_acceptance_audit: docs/context/evidence/issue_1475_acceptance_audit_2026-07-06.json
+entries:
+  - recorded_at_utc: "2026-07-06T16:38:00Z"
+    status: cpu_contract_delivered__external_slurm_rerun_pending
+    source:
+      issue_url: "https://github.com/ll7/robot_sf_ll7/issues/1475"
+      live_issue_state_checked: "open"
+      comments_reviewed: 35
+      latest_maintainer_comment_utc: "2026-07-05T02:58:46Z"
+      latest_maintainer_comment_summary: >-
+        PR #4561 merged the CPU-only smoke-to-nominal gate. Remaining action is a
+        Slurm-capable owner running one bounded ORCA-residual BC smoke rerun and
+        passing that gate before nominal escalation.
+    fragmentation_guard: >-
+      Pull requests #4608, #4609, and #4661 already merged issue #1475
+      closure-audit, follow-up, and executable-audit surfaces in the last 24
+      hours. This entry is the single durable state propagation surface for the
+      high-churn issue, not another guardrail/checker slice.
+    closure_boundary:
+      closure_call_for_this_pr: "refs_not_closes"
+      reason: >-
+        The executable acceptance audit remains fail-closed over tracked evidence:
+        smoke evidence is recorded, fallback/degraded success is excluded, but
+        durable artifact-pointer status, required smoke telemetry fields, and
+        nominal classification still require a Slurm-capable rerun and possible
+        nominal escalation. The current run is not authorized to submit compute
+        or mutate the issue directly.
+      current_authorization_boundary: >-
+        No full benchmark campaign run, no Slurm/GPU submission, no paper or
+        dissertation claim edit, no issue comment, no merge, no release, and no
+        deletion.
+    acceptance_evidence:
+      - criterion: "Residual dataset manifest NPZ recorded durable artifacts."
+        status: partially_met
+        evidence: >-
+          The job-12913 source checksum manifest records the smoke NPZ checksum,
+          but the tracked smoke summary has no durable artifact_pointer_status,
+          so durable pointer completion is not proven.
+      - criterion: "Learned residual checkpoint pointer durable included in completion update."
+        status: partially_met
+        evidence: >-
+          The job-12913 source checksum manifest records the smoke checkpoint
+          checksum, but the tracked smoke summary has no durable
+          artifact_pointer_status, so checkpoint pointer completion is not
+          proven.
+      - criterion: "Diagnostics report includes required residual and fallback fields."
+        status: not_met
+        evidence: >-
+          The executable audit reports missing residual_clipping_rate,
+          guard_veto_rate, fallback_degraded_status, and artifact_pointer_status
+          in the tracked smoke summary.
+      - criterion: "Fallback/degraded rows are not counted learned-residual success evidence."
+        status: met
+        evidence: >-
+          PR #4561 added validate_smoke_nominal_gate(), which fails closed when
+          fallback/degraded status is not clear or artifact pointers are not
+          durable/complete.
+      - criterion: "Smoke result recorded before nominal escalation."
+        status: met
+        evidence: >-
+          The job-12913 smoke result is durably tracked as failed_closed with
+          nominal_escalation_allowed=false.
+      - criterion: "Nominal result classified ready for #1358 continuation, revise, or stop."
+        status: not_met
+        evidence: >-
+          No nominal result exists in tracked evidence. The smoke gate remains
+          invalid over the tracked job-12913 summary.
+    next_empirical_action: >-
+      On a Slurm-capable lane, run one bounded ORCA-residual BC smoke rerun
+      against the current post-gate code. Only if validate_smoke_nominal_gate()
+      passes, escalate the bounded nominal job and record the #1358
+      continuation/revise/stop classification.
+    validation:
+      - command: "gh api repos/ll7/robot_sf_ll7/issues/1475 and comments"
+        result: "Issue body and all 35 comments reviewed through REST API."
+      - command: "jq docs/context/evidence/issue_1475_acceptance_audit_2026-07-06.json"
+        result: "Executable audit reports status=blocked, closure_call=keep_open."
+    out_of_scope_confirmed:
+      full_benchmark_campaign_run: false
+      slurm_or_gpu_submission: false
+      paper_or_dissertation_claim_edit: false
+      issue_comment: false
+      release: false
+      merge: false
+      deletion: false

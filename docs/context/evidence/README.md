@@ -168,7 +168,8 @@ is included.
   acceptance criteria. Recommends keeping the issue open: CPU-side criteria are
   delivered and the #2445 missing-telemetry stop trigger is resolved, but the
   durable dataset/checkpoint and nominal classification criteria remain blocked on
-  a Slurm smoke rerun (revised objective) plus nominal escalation.
+  a Slurm smoke rerun (revised objective) plus nominal escalation. High-churn
+  state propagation is tracked in `../issue_1475_state.yaml`.
 
 - `issue_1489_closure_audit_2026-07-05.md`: closure-audit evidence for Issue #1489.
   Maps schema/checker/status/integration PRs #1516, #1535, #1547, #2286,

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* **issue #1126 SDD curation decision packet — runnable import command.**
+  `scripts/tools/sdd_curation_preflight.py::build_decision_packet` now emits an `import` handoff
+  command that actually parses against the canonical importer
+  `scripts/tools/import_sdd_scenarios.py`: it uses the importer's real flags `--annotations` and
+  `--out-dir` (previously `--annotation`/`--output-dir`, which the importer rejects with exit `2`)
+  and includes the *required* `--meters-per-pixel` scale assumption (previously omitted). A new
+  `--decision-meters-per-pixel` CLI flag records the scene scale in `curation_parameters`
+  (`meters_per_pixel`); when unset the command carries an explicit `<meters-per-pixel>` placeholder
+  the curator must fill from the selected scene's calibration. Regression tests parse the generated
+  command with the importer's own parser so the handoff cannot silently drift again
+  (`tests/tools/test_sdd_curation_preflight.py`, 15 pass; 75 pass across the SDD suite). This closes
+  a gap in an acceptance criterion of #1126 (record import command + scale assumptions); the issue
+  itself stays open, blocked on BYO real SDD annotation staging (raw-data + checksum/license
+  provenance). No real SDD data touched, no benchmark campaign, no SLURM/GPU submission, no
+  paper/dissertation claim edits.
+
 ### Changed
 
 * Added the issue #4018 density-curriculum closure audit and matched 96-timestep CPU diagnostic
@@ -14,6 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   records readiness status `ready_diagnostic_smoke`, and keeps the claim boundary diagnostic-only:
   not benchmark evidence, not a training-result quality claim, and not a paper or dissertation
   claim.
+* Recorded the **issue #1126 SDD-curation closure audit** at
+  `docs/context/evidence/issue_1126_closure_audit_2026-07-06.md` (linked from the #1126 context
+  note). It maps each acceptance criterion to merged-PR evidence (#1091 importer, #3765 fail-closed
+  preflight, #4564 decision packet, plus this PR's import-command fix) and to freshly reproduced
+  fail-closed validation, then records the closure decision: **keep open**, blocked on BYO licensed
+  SDD annotation staging (the only remaining criteria require real staged data, which does not exist
+  locally). Docs + support-tooling only.
 * Recorded the **issue #1456 closure audit** at
   `docs/context/evidence/issue_1456_closure_audit.md` (registered in `docs/context/catalog.yaml`).
   It maps every acceptance criterion — original issue body plus the appended `agent-exec-spec:v1`

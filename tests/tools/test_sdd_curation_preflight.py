@@ -8,9 +8,13 @@ benchmark evidence regardless of whether the importer could parse a candidate fi
 from __future__ import annotations
 
 import json
+import math
+import shlex
 from typing import TYPE_CHECKING
 
-from scripts.tools import manage_external_data, sdd_curation_preflight
+import pytest
+
+from scripts.tools import import_sdd_scenarios, manage_external_data, sdd_curation_preflight
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -334,3 +338,150 @@ def test_cli_writes_decision_packet_without_benchmark_claim(tmp_path: Path, monk
     assert packet["readiness"]["evidence_status"] == sdd_curation_preflight.EVIDENCE_PROXY
     assert packet["readiness"]["benchmark_promotion_allowed"] is False
     assert not (tmp_path / "derived").exists()
+
+
+def _parse_importer_command(import_command: str, monkeypatch) -> object:
+    """Parse the generated import command with the importer's own argparse parser.
+
+    ``import_sdd_scenarios.parse_args`` reads ``sys.argv`` directly, so we strip the
+    ``uv run python <script>`` prefix and stage the remaining tokens as argv.
+    """
+    tokens = shlex.split(import_command)
+    assert tokens[:3] == ["uv", "run", "python"]
+    assert tokens[3].endswith("import_sdd_scenarios.py")
+    monkeypatch.setattr("sys.argv", ["import_sdd_scenarios.py", *tokens[4:]])
+    return import_sdd_scenarios.parse_args()
+
+
+def test_decision_packet_import_command_is_runnable_by_importer(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The generated import command must parse against the real importer CLI (issue #1126).
+
+    Regression guard: the importer requires ``--annotations``/``--out-dir``/``--meters-per-pixel``.
+    An earlier packet emitted ``--annotation``/``--output-dir`` and omitted the scale, so the
+    handoff command failed closed at argparse. We parse the generated command with the importer's
+    own parser to prove a curator can run it verbatim.
+    """
+    annotations = tmp_path / "annotations.txt"
+    _write_sdd_fixture(annotations)
+    report = sdd_curation_preflight.classify_curation_readiness(
+        {"mode": manage_external_data.SDD_MODE_PROXY, "dataset_backed": False}, None
+    )
+
+    packet = sdd_curation_preflight.build_decision_packet(
+        report,
+        annotation=annotations,
+        label="Pedestrian",
+        min_track_points=8,
+        max_pedestrians=4,
+        dataset_id="sdd_test_scene",
+        output_dir=tmp_path / "derived",
+        meters_per_pixel=0.0417,
+    )
+
+    import_command = packet["required_next_commands"]["import"]
+    # Uses the importer's real flag names, not the earlier broken --annotation/--output-dir.
+    assert "--annotations" in import_command
+    assert "--out-dir" in import_command
+    assert "--annotation " not in import_command
+    assert "--output-dir" not in import_command
+
+    parsed = _parse_importer_command(import_command, monkeypatch)
+    assert str(parsed.annotations) == str(annotations)
+    assert str(parsed.out_dir) == str(tmp_path / "derived")
+    assert parsed.meters_per_pixel == 0.0417
+    assert parsed.dataset_id == "sdd_test_scene"
+    assert packet["curation_parameters"]["meters_per_pixel"] == 0.0417
+
+
+def test_decision_packet_records_scale_placeholder_when_unset(tmp_path: Path, monkeypatch) -> None:
+    """Without a scene scale the packet keeps a fill-in placeholder and records meters_per_pixel=None.
+
+    The scale is scene-specific and unknown until BYO annotations are staged, so the command must
+    surface an explicit ``<meters-per-pixel>`` token rather than silently dropping the required flag.
+    """
+    report = sdd_curation_preflight.classify_curation_readiness(
+        {"mode": manage_external_data.SDD_MODE_PROXY, "dataset_backed": False}, None
+    )
+
+    packet = sdd_curation_preflight.build_decision_packet(
+        report,
+        annotation=None,
+        label="Pedestrian",
+        min_track_points=8,
+        max_pedestrians=4,
+        dataset_id="sdd_first_real_candidate",
+        output_dir=tmp_path / "derived",
+    )
+
+    import_command = packet["required_next_commands"]["import"]
+    assert "--meters-per-pixel <meters-per-pixel>" in import_command
+    assert packet["curation_parameters"]["meters_per_pixel"] is None
+    # Once the curator fills the placeholder scale, the command parses as a valid float.
+    filled = import_command.replace("<meters-per-pixel>", "0.05").replace(
+        "<staged-sdd>/<scene>/<video>/annotations.txt", str(tmp_path / "a.txt")
+    )
+    parsed = _parse_importer_command(filled, monkeypatch)
+    assert parsed.meters_per_pixel == 0.05
+
+
+def test_cli_decision_meters_per_pixel_is_recorded(tmp_path: Path, monkeypatch) -> None:
+    """The --decision-meters-per-pixel flag threads the scene scale into the packet."""
+    annotations = tmp_path / "annotations.txt"
+    packet_path = tmp_path / "packet.json"
+    _write_sdd_fixture(annotations)
+    monkeypatch.setattr(
+        manage_external_data,
+        "resolve_sdd_scenario_prior_mode",
+        lambda *, manifest_path=None: {
+            "mode": manage_external_data.SDD_MODE_PROXY,
+            "dataset_backed": False,
+            "availability": {"state": "missing"},
+            "reason": "SDD not staged.",
+            "staging_dir": str(tmp_path),
+        },
+    )
+
+    exit_code = sdd_curation_preflight.main(
+        [
+            "--annotation",
+            str(annotations),
+            "--min-track-points",
+            "4",
+            "--write-decision-packet",
+            str(packet_path),
+            "--decision-meters-per-pixel",
+            "0.0417",
+        ]
+    )
+
+    assert exit_code == 0
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    assert packet["curation_parameters"]["meters_per_pixel"] == 0.0417
+    assert "--meters-per-pixel 0.0417" in packet["required_next_commands"]["import"]
+
+
+@pytest.mark.parametrize("bad_scale", [0.0, -0.05, float("nan"), float("inf")])
+def test_decision_packet_rejects_invalid_meters_per_pixel(tmp_path: Path, bad_scale: float) -> None:
+    """A non-positive or non-finite scale must fail closed at packet build (issue #1126).
+
+    The importer requires ``--meters-per-pixel > 0``; a NaN/inf slips past that ``<= 0`` guard and
+    would produce garbage geometry. Reject it here so the generated handoff command is never emitted
+    with an unrunnable/garbage scale.
+    """
+    report = sdd_curation_preflight.classify_curation_readiness(
+        {"mode": manage_external_data.SDD_MODE_PROXY, "dataset_backed": False}, None
+    )
+    with pytest.raises(ValueError, match="finite value > 0"):
+        sdd_curation_preflight.build_decision_packet(
+            report,
+            annotation=None,
+            label="Pedestrian",
+            min_track_points=8,
+            max_pedestrians=4,
+            dataset_id="sdd_first_real_candidate",
+            output_dir=tmp_path / "derived",
+            meters_per_pixel=bad_scale,
+        )
+    assert not math.isfinite(bad_scale) or bad_scale <= 0  # guards the parametrization intent

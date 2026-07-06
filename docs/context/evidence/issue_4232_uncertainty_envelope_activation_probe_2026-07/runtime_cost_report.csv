@@ -1,0 +1,4 @@
+planner_id,scenario_id,seed,alpha_arm_key,alpha_mps,runtime_seconds,runtime_delta_vs_off_alpha_0,row_status
+prediction_mpc,francis2023_crowd_navigation__issue4232__envelope_off_alpha_0,111,envelope_off_alpha_0,0.0,,,diagnostic_only
+prediction_mpc,francis2023_crowd_navigation__issue4232__envelope_on_alpha_0,111,envelope_on_alpha_0,0.0,,,diagnostic_only
+prediction_mpc,francis2023_crowd_navigation__issue4232__envelope_on_alpha_0p10,111,envelope_on_alpha_0p10,0.1,,,diagnostic_only

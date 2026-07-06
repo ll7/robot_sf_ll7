@@ -32,8 +32,16 @@ from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
-from robot_sf.sim.pedestrian_model_variants import HSFM_ANISOTROPIC_FOV_V1, HSFM_TTC_PREDICTIVE_V1
-from robot_sf.sim.sim_config import AnisotropicFovConfig, TtcPredictiveForceConfig
+from robot_sf.sim.pedestrian_model_variants import (
+    HSFM_ALIGNMENT_TORQUE_V1,
+    HSFM_ANISOTROPIC_FOV_V1,
+    HSFM_TTC_PREDICTIVE_V1,
+)
+from robot_sf.sim.sim_config import (
+    AlignmentTorqueConfig,
+    AnisotropicFovConfig,
+    TtcPredictiveForceConfig,
+)
 
 _MAP_REGISTRY_ENV = "ROBOT_SF_MAP_REGISTRY"
 _MAP_REGISTRY_PATH = Path("maps/registry.yaml")
@@ -2075,33 +2083,49 @@ def _apply_single_pedestrian_override(
     )
 
 
+# Opt-in pedestrian-model config attribute -> (config dataclass, activating model selector).
+# Each entry drives both the nested-mapping override path and the ``pedestrian_model``
+# selector path below, so adding a new opt-in force model is a single-line change here.
+_OPT_IN_PEDESTRIAN_MODEL_CONFIGS: dict[str, tuple[type, str]] = {
+    "ttc_predictive_force": (TtcPredictiveForceConfig, HSFM_TTC_PREDICTIVE_V1),
+    "anisotropic_fov": (AnisotropicFovConfig, HSFM_ANISOTROPIC_FOV_V1),
+    "alignment_torque": (AlignmentTorqueConfig, HSFM_ALIGNMENT_TORQUE_V1),
+}
+# Reverse lookup: activating model selector -> its opt-in config attribute name.
+_PEDESTRIAN_MODEL_ENABLE_ATTR: dict[str, str] = {
+    selector: attr for attr, (_, selector) in _OPT_IN_PEDESTRIAN_MODEL_CONFIGS.items()
+}
+
+
 def _set_simulation_override_attr(
     config: RobotSimulationConfig,
     attr: str,
     overrides: Mapping[str, Any],
 ) -> None:
     """Apply one scenario-level simulation override attribute."""
-    if attr == "ttc_predictive_force" and isinstance(overrides[attr], Mapping):
-        ttc_force_overrides = dict(overrides[attr])
-        if overrides.get("pedestrian_model") == HSFM_TTC_PREDICTIVE_V1:
-            ttc_force_overrides["enabled"] = True
-        setattr(config.sim_config, attr, TtcPredictiveForceConfig(**ttc_force_overrides))
-    elif attr == "anisotropic_fov" and isinstance(overrides[attr], Mapping):
-        fov_overrides = dict(overrides[attr])
-        if overrides.get("pedestrian_model") == HSFM_ANISOTROPIC_FOV_V1:
-            fov_overrides["enabled"] = True
-        setattr(config.sim_config, attr, AnisotropicFovConfig(**fov_overrides))
-    elif attr == "pedestrian_model" and overrides[attr] == HSFM_TTC_PREDICTIVE_V1:
+    config_spec = _OPT_IN_PEDESTRIAN_MODEL_CONFIGS.get(attr)
+    if config_spec is not None and isinstance(overrides[attr], Mapping):
+        # Nested opt-in force config given directly; auto-enable when its selector is active.
+        config_cls, selector_model = config_spec
+        sub_overrides = dict(overrides[attr])
+        # Auto-enable when the selector model is active either via this scenario's overrides or
+        # via the already-applied base config; checking only the overrides would silently reset
+        # ``enabled`` to False when the base config selects the model but the scenario omits
+        # ``pedestrian_model`` (provenance-loss regression flagged in review).
+        if (
+            overrides.get("pedestrian_model") == selector_model
+            or config.sim_config.pedestrian_model == selector_model
+        ):
+            sub_overrides["enabled"] = True
+        setattr(config.sim_config, attr, config_cls(**sub_overrides))
+    elif attr == "pedestrian_model" and overrides[attr] in _PEDESTRIAN_MODEL_ENABLE_ATTR:
+        # Selecting an opt-in model marks its companion config enabled for provenance.
         setattr(config.sim_config, attr, overrides[attr])
-        config.sim_config.ttc_predictive_force = replace(
-            config.sim_config.ttc_predictive_force,
-            enabled=True,
-        )
-    elif attr == "pedestrian_model" and overrides[attr] == HSFM_ANISOTROPIC_FOV_V1:
-        setattr(config.sim_config, attr, overrides[attr])
-        config.sim_config.anisotropic_fov = replace(
-            config.sim_config.anisotropic_fov,
-            enabled=True,
+        enable_attr = _PEDESTRIAN_MODEL_ENABLE_ATTR[overrides[attr]]
+        setattr(
+            config.sim_config,
+            enable_attr,
+            replace(getattr(config.sim_config, enable_attr), enabled=True),
         )
     elif attr == "pedestrian_uncertainty_envelope_enabled":
         setattr(
@@ -2149,6 +2173,7 @@ def _apply_simulation_overrides(
         "pedestrian_model",
         "ttc_predictive_force",
         "anisotropic_fov",
+        "alignment_torque",
         "route_spawn_distribution",
         "route_spawn_jitter_frac",
         "route_spawn_seed",

@@ -1518,8 +1518,8 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
                 with gate_report_path.open("r", encoding="utf-8") as f:
                     release_gate_report = json.load(f)
                 break
-            except Exception:
-                pass
+            except (OSError, json.JSONDecodeError):
+                continue
 
         fragment = build_assurance_fragment(
             campaign_summary,

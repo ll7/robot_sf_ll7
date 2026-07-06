@@ -4,7 +4,7 @@
       "robot_sf/benchmark/ablation.py": 1,
       "robot_sf/benchmark/aggregate.py": 2,
       "robot_sf/benchmark/artifact_catalog.py": 1,
-      "robot_sf/benchmark/camera_ready/campaign.py": 3,
+      "robot_sf/benchmark/camera_ready/campaign.py": 4,
       "robot_sf/benchmark/cli.py": 47,
       "robot_sf/benchmark/doctor.py": 1,
       "robot_sf/benchmark/figure_qa.py": 2,
@@ -127,7 +127,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 286
+    "total": 287
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -172,7 +172,7 @@
       "context": "_execute_campaign_planner_batch",
       "fingerprint": "ba3cb2a07fb0c63c",
       "handler": "Exception",
-      "lineno": 275,
+      "lineno": 282,
       "path": "robot_sf/benchmark/camera_ready/campaign.py",
       "source": "except Exception as exc:"
     },
@@ -181,7 +181,7 @@
       "context": "_run_campaign_planner_variant",
       "fingerprint": "e573b4742776e204",
       "handler": "Exception",
-      "lineno": 396,
+      "lineno": 465,
       "path": "robot_sf/benchmark/camera_ready/campaign.py",
       "source": "except Exception as exc:"
     },
@@ -190,7 +190,16 @@
       "context": "_run_campaign_orchestrator",
       "fingerprint": "b57306be9066573d",
       "handler": "Exception",
-      "lineno": 1425,
+      "lineno": 1500,
+      "path": "robot_sf/benchmark/camera_ready/campaign.py",
+      "source": "except Exception as exc:"
+    },
+    {
+      "col_offset": 4,
+      "context": "_run_campaign_orchestrator",
+      "fingerprint": "b57306be9066573d",
+      "handler": "Exception",
+      "lineno": 1531,
       "path": "robot_sf/benchmark/camera_ready/campaign.py",
       "source": "except Exception as exc:"
     },
@@ -649,7 +658,7 @@
       "context": "_probe_capability",
       "fingerprint": "b5dcc0004133d42e",
       "handler": "Exception",
-      "lineno": 282,
+      "lineno": 396,
       "path": "robot_sf/benchmark/forecast_lane_inventory.py",
       "source": "except Exception as exc:  # noqa: BLE001 - report any import failure as a blocker"
     },
@@ -1000,7 +1009,7 @@
       "context": "_serial_execute_map_jobs",
       "fingerprint": "3c319434af965984",
       "handler": "Exception",
-      "lineno": 121,
+      "lineno": 127,
       "path": "robot_sf/benchmark/map_runner_batch_runner.py",
       "source": "except Exception as exc:  # pragma: no cover - error path"
     },
@@ -1009,7 +1018,7 @@
       "context": "_parallel_execute_map_jobs",
       "fingerprint": "799adee47403c857",
       "handler": "Exception",
-      "lineno": 201,
+      "lineno": 215,
       "path": "robot_sf/benchmark/map_runner_batch_runner.py",
       "source": "except Exception as exc:  # pragma: no cover"
     },
@@ -1018,7 +1027,7 @@
       "context": "_parallel_execute_map_jobs",
       "fingerprint": "8b7483e028607728",
       "handler": "Exception",
-      "lineno": 221,
+      "lineno": 235,
       "path": "robot_sf/benchmark/map_runner_batch_runner.py",
       "source": "except Exception as exc:  # pragma: no cover - write/validate path"
     },
@@ -1027,7 +1036,7 @@
       "context": "representative_metric_affecting_config",
       "fingerprint": "ca3a7028492cbd27",
       "handler": "Exception",
-      "lineno": 80,
+      "lineno": 84,
       "path": "robot_sf/benchmark/map_runner_env.py",
       "source": "except Exception as exc:  # noqa: BLE001 - provenance must never break a benchmark run."
     },
@@ -2332,7 +2341,7 @@
       "context": "_init_wandb",
       "fingerprint": "c69862f1d86e1c9c",
       "handler": "Exception",
-      "lineno": 1448,
+      "lineno": 1486,
       "path": "scripts/training/train_ppo.py",
       "source": "except Exception as exc:  # pragma: no cover - optional dependency"
     },
@@ -2341,7 +2350,7 @@
       "context": "_collect_scenario_coverage",
       "fingerprint": "3b3a0ef3ccea6c5c",
       "handler": "Exception",
-      "lineno": 1853,
+      "lineno": 1891,
       "path": "scripts/training/train_ppo.py",
       "source": "except Exception:  # pragma: no cover - best effort across vec env types"
     },
@@ -2350,7 +2359,7 @@
       "context": "_upload_wandb_best_checkpoint_artifact",
       "fingerprint": "a37b06c9172d6e1c",
       "handler": "Exception",
-      "lineno": 2195,
+      "lineno": 2237,
       "path": "scripts/training/train_ppo.py",
       "source": "except Exception as exc:  # pragma: no cover - optional dependency"
     },

@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Recorded the **issue #4437 closure audit** at
+  `docs/context/evidence/issue_4437_closure_audit_2026-07-06.md` (indexed in
+  `docs/context/catalog.yaml`). It maps each acceptance criterion of the closure-audit hygiene lane
+  to merged-PR evidence: the read-only candidate/classification tool (#4440
+  `open_issue_closure_audit.py`), the comment templates + dry-run mechanics (#4503
+  `closure_mechanics.py`), and the human-gated close path requiring both `--close-issues` and
+  `--apply` (#4571). The **enablement tooling is complete and validated** (24 focused tests pass; a
+  live read-only run fails closed with a schema-valid packet on the GitHub search rate-limit), but
+  two acceptance criteria remain open — the audit **execution** write pass and the final #4437
+  **summary comment** — both requiring GitHub issue comment/close authority. The audit therefore
+  keeps #4437 open with a dispatchable residual checklist (`Refs #4437`). Docs-only; no queue edits,
+  new issues, benchmark execution, Slurm/GPU submission, or research claim.
 * Recorded the **issue #1470 closure audit** at
   `docs/context/evidence/issue_1470_closure_audit_2026-07-06.md` (linked from the #1397 launch
   note). It maps each acceptance criterion for the oracle-imitation dataset-collection lane to its

@@ -43,6 +43,180 @@ _REPORT_METRICS: tuple[str, ...] = (
     "snqi",
 )
 
+_CREDIBILITY_SCORECARD_SCHEMA = "campaign_credibility_scorecard.v1"
+_CREDIBILITY_SCORECARD_FACTORS: tuple[dict[str, str], ...] = (
+    {
+        "factor_id": "verification",
+        "factor": "Verification",
+        "description": "Repository and campaign checks supporting correct implementation.",
+    },
+    {
+        "factor_id": "validation",
+        "factor": "Validation",
+        "description": "Comparison against trusted real-world or independent reference data.",
+    },
+    {
+        "factor_id": "input_pedigree",
+        "factor": "Input pedigree",
+        "description": "Pinned inputs, hashes, manifests, and source provenance.",
+    },
+    {
+        "factor_id": "uncertainty_characterization",
+        "factor": "Uncertainty characterization",
+        "description": "Seed repetition, confidence intervals, or variance analysis.",
+    },
+    {
+        "factor_id": "results_robustness",
+        "factor": "Results robustness",
+        "description": "Coverage across planners, scenarios, and non-success classifications.",
+    },
+    {
+        "factor_id": "use_history",
+        "factor": "Use history",
+        "description": "Prior accepted use of this campaign configuration or equivalent evidence.",
+    },
+)
+_CREDIBILITY_STATUS_BY_SCORE = {
+    0: "weak",
+    1: "weak",
+    2: "partial",
+    3: "strong",
+}
+
+
+def _not_assessed_factor(spec: dict[str, str]) -> dict[str, Any]:
+    """Build one fail-closed credibility factor row.
+
+    Returns:
+        Factor row with ``not_assessed`` status and a null score.
+    """
+    return {
+        **spec,
+        "status": "not_assessed",
+        "score": None,
+        "scale": "not_assessed | weak | partial | strong | not_applicable",
+        "justification": "No campaign artifact supplied enough evidence for this factor.",
+        "evidence": [],
+    }
+
+
+def build_campaign_credibility_scorecard(payload: dict[str, Any]) -> dict[str, Any]:
+    """Build NASA-STD-7009-style per-campaign credibility scorecard.
+
+    The scorecard is deliberately conservative: every expected factor is present, and factors
+    without direct campaign evidence remain ``not_assessed`` instead of being silently omitted.
+
+    Returns:
+        Scorecard payload for JSON and Markdown campaign reports.
+    """
+    campaign = payload.get("campaign", {}) if isinstance(payload.get("campaign"), dict) else {}
+    artifacts = payload.get("artifacts", {}) if isinstance(payload.get("artifacts"), dict) else {}
+    rows = payload.get("planner_rows", []) if isinstance(payload.get("planner_rows"), list) else []
+    factors = {
+        spec["factor_id"]: _not_assessed_factor(spec) for spec in _CREDIBILITY_SCORECARD_FACTORS
+    }
+
+    if campaign.get("git_hash") and campaign.get("scenario_matrix_hash"):
+        factors["input_pedigree"].update(
+            {
+                "status": "partial",
+                "score": 2,
+                "justification": (
+                    "Campaign records git commit and scenario matrix hash; external input "
+                    "lineage remains limited to recorded artifacts."
+                ),
+                "evidence": [
+                    f"git_hash={campaign.get('git_hash')}",
+                    f"scenario_matrix_hash={campaign.get('scenario_matrix_hash')}",
+                    f"campaign_manifest={artifacts.get('campaign_manifest')}",
+                ],
+            }
+        )
+
+    seed_count = campaign.get("seed_count")
+    try:
+        seed_count_int = int(seed_count)
+    except (TypeError, ValueError):
+        seed_count_int = 0
+    if seed_count_int > 1 or artifacts.get("seed_variability_json"):
+        score = 2 if seed_count_int > 1 else 1
+        factors["uncertainty_characterization"].update(
+            {
+                "status": _CREDIBILITY_STATUS_BY_SCORE[score],
+                "score": score,
+                "justification": (
+                    f"Campaign records {seed_count_int} seed(s) and seed-variability artifacts "
+                    "when available; no claim beyond campaign-level uncertainty."
+                ),
+                "evidence": [
+                    f"seed_count={seed_count_int}",
+                    f"seed_variability_json={artifacts.get('seed_variability_json')}",
+                    f"statistical_sufficiency_json={artifacts.get('statistical_sufficiency_json')}",
+                ],
+            }
+        )
+
+    if artifacts.get("campaign_summary_json") and artifacts.get("campaign_table_csv"):
+        factors["verification"].update(
+            {
+                "status": "weak",
+                "score": 1,
+                "justification": (
+                    "Report was generated from structured campaign summary/table artifacts; "
+                    "test-suite evidence is not embedded in the campaign artifact."
+                ),
+                "evidence": [
+                    f"campaign_summary_json={artifacts.get('campaign_summary_json')}",
+                    f"campaign_table_csv={artifacts.get('campaign_table_csv')}",
+                ],
+            }
+        )
+
+    total_runs = len(rows)
+    successful_runs = sum(1 for row in rows if str(row.get("status")) == "ok")
+    if total_runs:
+        factors["results_robustness"].update(
+            {
+                "status": _CREDIBILITY_STATUS_BY_SCORE[1 if successful_runs else 0],
+                "score": 1 if successful_runs else 0,
+                "justification": (
+                    f"Campaign reports {successful_runs}/{total_runs} successful planner row(s); "
+                    "fallback/degraded rows remain caveats, not success evidence."
+                ),
+                "evidence": [
+                    f"total_runs={total_runs}",
+                    f"successful_runs={successful_runs}",
+                    f"row_status_summary={campaign.get('row_status_summary', {})}",
+                ],
+            }
+        )
+
+    assessed_scores = [
+        int(factor["score"])
+        for factor in factors.values()
+        if factor.get("status") not in {"not_assessed", "not_applicable"}
+        and factor.get("score") is not None
+    ]
+    overall_score = (
+        round(sum(assessed_scores) / len(assessed_scores), 2) if assessed_scores else None
+    )
+    return {
+        "schema_version": _CREDIBILITY_SCORECARD_SCHEMA,
+        "standard_reference": "NASA-STD-7009B-inspired credibility assessment",
+        "campaign_id": campaign.get("campaign_id", "unknown"),
+        "overall_score": overall_score,
+        "overall_status": (
+            _CREDIBILITY_STATUS_BY_SCORE[round(overall_score)]
+            if overall_score is not None
+            else "not_assessed"
+        ),
+        "claim_boundary": (
+            "Scorecard is reporting metadata for campaign credibility dimensions; it is not "
+            "benchmark proof, paper evidence, or real-world validation."
+        ),
+        "factors": [factors[spec["factor_id"]] for spec in _CREDIBILITY_SCORECARD_FACTORS],
+    }
+
 
 def _metric_mean(block: dict[str, Any], metric: str) -> float:
     """Extract aggregate mean value for one metric.
@@ -615,6 +789,7 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
     campaign = payload.get("campaign", {})
     rows = payload.get("planner_rows", [])
     warnings = payload.get("warnings", [])
+    scorecard = payload.get("credibility_scorecard")
     accepted_unavailable_rows = [
         row
         for row in rows
@@ -680,6 +855,37 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
             )
     else:
         lines.append("No planner rows were produced.")
+    if not isinstance(scorecard, dict):
+        scorecard = build_campaign_credibility_scorecard(payload)
+    factors = scorecard.get("factors", []) if isinstance(scorecard.get("factors"), list) else []
+    lines.extend(
+        [
+            "",
+            "## Credibility Scorecard",
+            "",
+            (
+                "NASA-STD-7009B-inspired campaign credibility metadata. "
+                "Unscored factors are shown as `not_assessed`."
+            ),
+            "",
+            f"- Schema: `{scorecard.get('schema_version', 'unknown')}`",
+            f"- Overall status: `{scorecard.get('overall_status', 'not_assessed')}`",
+            f"- Overall score: `{scorecard.get('overall_score')}`",
+            f"- Claim boundary: `{scorecard.get('claim_boundary', 'unknown')}`",
+            "",
+            "| factor | status | score | justification |",
+            "|---|---|---:|---|",
+        ]
+    )
+    for factor in factors:
+        lines.append(
+            "| "
+            f"{_escape_markdown_cell(factor.get('factor'))} | "
+            f"{_escape_markdown_cell(factor.get('status'))} | "
+            f"{_escape_markdown_cell(factor.get('score'))} | "
+            f"{_escape_markdown_cell(factor.get('justification'))} |"
+        )
+
     fallback_rows = [
         row for row in rows if str(row.get("readiness_status", "")) in {"fallback", "degraded"}
     ]

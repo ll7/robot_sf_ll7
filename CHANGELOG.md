@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Recorded the **issue #2312 closure audit** at
+  `docs/context/evidence/issue_2312_closure_audit.md` (linked from the #2312 context note). It maps
+  each acceptance criterion to its merged PR (#3762 manifest+validator, #3772 #1472 campaign gate,
+  #4549 status packet) and to a reproduced fail-closed validation run
+  (`validate_learned_risk_trace_manifest.py --status-json` exits `3` /
+  `artifact_retrieval_blocked`; 24 focused tests pass). The agent-executable slice is complete; the
+  only residual — a resolvable baseline/trace URI with `retrieval_status: available` — is
+  compute-gated on the #1472 / #2441 SLURM run and stays tracked by #1472. Docs-only; no trace
+  materialization, training run, SLURM submission, or research claim.
 * Added `--pin-report-json` to `scripts/tools/generate_socnavbench_traversible.py` for issue #4291.
   The generator can now write a maintainer-review sidecar with `expected_tree_sha256`,
   registry-owner, and no-raw-data guardrails after `traversibles/ETH/data.pkl` exists, keeping the

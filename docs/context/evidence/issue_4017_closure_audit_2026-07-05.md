@@ -34,6 +34,9 @@ Audit timestamp: 2026-07-05
 
 ## Closure Call
 
+> Superseded by the [2026-07-06 Re-admit Closure Decision](#2026-07-06-re-admit-closure-decision)
+> below. The 2026-07-05 reasoning is preserved here as the historical point-in-time record.
+
 This audit does NOT close #4017. The repository now has the complete CPU-side
 diagnostic constrained-RL lane requested by the issue implementation plan, and the
 only remaining item is a broader empirical campaign that this worker is explicitly
@@ -46,3 +49,49 @@ remaining #4017 campaign DoD with its own provenance and validation boundary.
 
 Forbidden actions confirmed: no Slurm submission, no GPU/full benchmark campaign,
 no merge, no release, no deletion, and no paper/dissertation claim edit.
+
+## 2026-07-06 Re-admit Closure Decision
+
+This section supersedes the 2026-07-05 "Closure Call" above. The issue was
+re-admitted to the ready queue as a merge-driven closure re-admit: PR #4588 (the
+2026-07-05 audit above) merged, yet issue #4017 stayed open with no live tracking
+row. Re-running the audit against the merged evidence and the current maintainer
+direction, the decision is now to **recommend closure of #4017**.
+
+Rationale for the change:
+
+1. **The issue's own Definition of Done is entirely diagnostic-tier and met.** The
+   three DoD checkboxes are "constrained-RL policy trains with an enforced
+   safety-constraint budget on a smoke scenario", "comparison vs unconstrained
+   baseline showing the constraint's effect (diagnostic tier first)", and "claim
+   boundary explicit". The evidence table above maps each to merged PRs #4155,
+   #4214, #4259, and #4477. The validation checkbox ("smoke training run;
+   repository validation gate") is satisfied by the CPU smoke entrypoint plus the
+   diagnostic comparison and readiness-gate scripts, all with fail-closed tests.
+2. **The benchmark-strength campaign is out of scope of THIS issue, not a
+   remaining DoD item.** The issue body's own Out-of-scope list names "benchmark
+   claim before paper-grade". The broader empirical/GPU/Slurm campaign is a
+   separate, compute-authorized effort; it is not one of #4017's acceptance
+   criteria.
+3. **COMPLETE-FIRST maintainer directive (2026-07-05).** Current maintainer
+   direction states that an issue whose only remainder is a campaign RUN counts
+   as complete for closure purposes. #4017's only remainder is exactly that
+   campaign run.
+
+Claim boundary is unchanged: this remains a closure audit only. No
+benchmark-strength, paper-grade, or dissertation safety claim is made or promoted
+by closing the issue. Any future benchmark-strength or paper-facing safety claim
+must be raised as its own compute-authorized issue with independent provenance and
+validation, not retro-attributed to this closure.
+
+Residual uncertainty (~75% confidence in the close call): the automated gate
+comments on 2026-07-03 and 2026-07-04 and the 2026-07-05 BLOCKED worker note
+described the campaign as "remaining" under this issue number. Those are status
+notes, not an explicit maintainer instruction to keep the issue open, and they
+predate the COMPLETE-FIRST directive. The opening PR therefore declares
+`Closes #4017`; the merge gate ratifies or demotes that keyword if a maintainer
+disagrees.
+
+Forbidden actions confirmed (re-admit pass): no Slurm submission, no GPU/full
+benchmark campaign run, no merge, no release, no deletion, no issue/PR comment
+(not authorized this task), and no paper/dissertation claim edit.

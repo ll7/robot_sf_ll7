@@ -1,0 +1,130 @@
+{
+  "blockers": [],
+  "claim_boundary": "diagnostic matched-scenario comparison; not paper-grade benchmark evidence",
+  "closure_criteria": [
+    {
+      "criterion": "short-horizon predictor checkpoint loads without fallback",
+      "evidence": "output/benchmarks/issue4013/learned_prediction_mpc/episodes.jsonl",
+      "met": true
+    },
+    {
+      "criterion": "model-based action selection runs on smoke scenario",
+      "evidence": [
+        "francis2023_blind_corner"
+      ],
+      "met": true
+    },
+    {
+      "criterion": "comparison includes cv_prediction_mpc and one model-free baseline",
+      "evidence": [
+        "learned_prediction_mpc",
+        "cv_prediction_mpc",
+        "model_free_baseline"
+      ],
+      "met": true
+    },
+    {
+      "criterion": "fallback/degraded rows are excluded from evidence",
+      "evidence": {
+        "excluded": 0,
+        "included_as_non_evidence": 0
+      },
+      "met": true
+    },
+    {
+      "criterion": "claim boundary excludes large world-model and paper-grade claims",
+      "evidence": "diagnostic matched-scenario comparison; not paper-grade benchmark evidence",
+      "met": true
+    }
+  ],
+  "evidence_tier": "diagnostic-only",
+  "fallback_degraded_rows": {
+    "excluded": 0,
+    "included_as_non_evidence": 0
+  },
+  "issue": 4013,
+  "paired_seed_count": 1,
+  "roles": {
+    "cv_prediction_mpc": {
+      "algorithm_metadata_statuses": [
+        "ok"
+      ],
+      "algorithms": [
+        "prediction_mpc"
+      ],
+      "collision_rate": 0.0,
+      "episode_keys": [
+        "francis2023_blind_corner::4013"
+      ],
+      "episodes": 1,
+      "episodes_path": "output/benchmarks/issue4013/cv_prediction_mpc/episodes.jsonl",
+      "evidence_episodes": 1,
+      "excluded_fallback_or_degraded": 0,
+      "fallback_reasons": [],
+      "mean_min_clearance_m": null,
+      "mean_time_to_goal_s": null,
+      "mean_wall_time_sec": 2.190011501312256,
+      "near_miss_rate": 0.0,
+      "role": "cv_prediction_mpc",
+      "success_rate": 0.0
+    },
+    "learned_prediction_mpc": {
+      "algorithm_metadata_statuses": [
+        "ok"
+      ],
+      "algorithms": [
+        "learned_prediction_mpc"
+      ],
+      "collision_rate": 0.0,
+      "episode_keys": [
+        "francis2023_blind_corner::4013"
+      ],
+      "episodes": 1,
+      "episodes_path": "output/benchmarks/issue4013/learned_prediction_mpc/episodes.jsonl",
+      "evidence_episodes": 1,
+      "excluded_fallback_or_degraded": 0,
+      "fallback_reasons": [],
+      "mean_min_clearance_m": null,
+      "mean_time_to_goal_s": null,
+      "mean_wall_time_sec": 6.134639263153076,
+      "near_miss_rate": 0.0,
+      "role": "learned_prediction_mpc",
+      "success_rate": 0.0
+    },
+    "model_free_baseline": {
+      "algorithm_metadata_statuses": [
+        "ok"
+      ],
+      "algorithms": [
+        "goal"
+      ],
+      "collision_rate": 0.0,
+      "episode_keys": [
+        "francis2023_blind_corner::4013"
+      ],
+      "episodes": 1,
+      "episodes_path": "output/benchmarks/issue4013/model_free_baseline/episodes.jsonl",
+      "evidence_episodes": 1,
+      "excluded_fallback_or_degraded": 0,
+      "fallback_reasons": [],
+      "mean_min_clearance_m": null,
+      "mean_time_to_goal_s": null,
+      "mean_wall_time_sec": 0.145965576171875,
+      "near_miss_rate": 0.0,
+      "role": "model_free_baseline",
+      "success_rate": 0.0
+    }
+  },
+  "scenario_ids": [
+    "francis2023_blind_corner"
+  ],
+  "schema_version": "issue_4013.model_based_planning_comparison.v1",
+  "status": "diagnostic_ready",
+  "world_model_exclusions": [
+    "dreamerv3",
+    "planet",
+    "td_mpc2",
+    "large_generative_world_model",
+    "paper_grade_claim"
+  ]
+}

@@ -1,0 +1,32 @@
+# Issue #4013 model-based arm for the paired diagnostic comparison RUN.
+#
+# Unlike issue_4013_model_based_smoke.yaml (which loads the UNTRAINED zero-weight
+# smoke model via configs/algos/learned_prediction_mpc_issue_4013_smoke.yaml), this
+# arm loads the trained checkpoint produced by the diagnostic Phase 2 trainer so the
+# model-based comparison arm runs on real learned weights
+# (evidence_tier=checkpoint_loaded) with NO fallback.
+#
+# The paired comparison runner
+# (scripts/benchmark/run_issue_4013_model_based_comparison.py) trains the checkpoint
+# first (CPU, git-ignored output/) when it is missing, then runs this arm. Claim
+# boundary: diagnostic-only smoke; not benchmark, navigation-quality, or paper-facing
+# evidence.
+name: issue_4013_model_based_checkpoint_smoke
+scenario_matrix: configs/scenarios/single/francis2023_blind_corner.yaml
+workers: 1
+horizon: 30
+dt: 0.1
+record_forces: true
+resume: false
+export_publication_bundle: false
+stop_on_failure: true
+seed_policy:
+  mode: fixed-list
+  seeds: [4013]
+planners:
+  - key: learned_prediction_mpc_checkpoint
+    algo: learned_prediction_mpc
+    algo_config: configs/algos/learned_prediction_mpc_issue_4013_checkpoint.yaml
+    benchmark_profile: experimental
+    issue_4013_role: learned_prediction_mpc
+    claim_boundary: diagnostic_smoke_only

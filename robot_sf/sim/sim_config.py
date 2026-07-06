@@ -6,6 +6,7 @@ from math import ceil, isfinite
 from robot_sf.ped_npc.adversial_ped_force import AdversarialPedForceConfig
 from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
 from robot_sf.sim.pedestrian_model_variants import (
+    HSFM_ALIGNMENT_TORQUE_V1,
     HSFM_ANISOTROPIC_FOV_V1,
     HSFM_TTC_PREDICTIVE_V1,
     normalize_pedestrian_model,
@@ -105,6 +106,56 @@ def _pedestrian_model_anisotropic_fov_config(
     return fov_config
 
 
+@dataclass(frozen=True)
+class AlignmentTorqueConfig:
+    """Opt-in HSFM body-orientation alignment-torque parameters.
+
+    The alignment torque decouples pedestrian body orientation ``phi`` from the instantaneous
+    force/velocity direction: instead of snapping to the desired direction each step, ``phi``
+    is driven toward it by a damped second-order torque (``k_theta`` stiffness, ``k_omega``
+    damping) with a bounded angular speed. Critical damping is ``k_omega = 2 * sqrt(k_theta)``.
+    """
+
+    enabled: bool = False
+    k_theta: float = 4.0
+    k_omega: float = 4.0
+    max_angular_speed_rad_s: float = 3.141592653589793
+
+    def __post_init__(self) -> None:
+        """Validate finite positive alignment-torque parameters."""
+        if not isfinite(self.k_theta) or self.k_theta <= 0:
+            raise ValueError("alignment_torque.k_theta must be > 0")
+        if not isfinite(self.k_omega) or self.k_omega < 0:
+            raise ValueError("alignment_torque.k_omega must be >= 0")
+        if not isfinite(self.max_angular_speed_rad_s) or self.max_angular_speed_rad_s <= 0:
+            raise ValueError("alignment_torque.max_angular_speed_rad_s must be > 0")
+
+
+def _normalize_alignment_torque_config(
+    value: AlignmentTorqueConfig | dict,
+) -> AlignmentTorqueConfig:
+    """Return a validated alignment-torque config."""
+    if isinstance(value, AlignmentTorqueConfig):
+        return value
+    if isinstance(value, dict):
+        return AlignmentTorqueConfig(**value)
+    raise ValueError("alignment_torque must be an AlignmentTorqueConfig or dict")
+
+
+def _pedestrian_model_alignment_torque_config(
+    pedestrian_model: str,
+    alignment_config: AlignmentTorqueConfig,
+) -> AlignmentTorqueConfig:
+    """Enable alignment-torque provenance when the selector is active.
+
+    Returns:
+        Updated config with ``enabled=True`` when the selector activates it.
+    """
+    if pedestrian_model == HSFM_ALIGNMENT_TORQUE_V1 and not alignment_config.enabled:
+        return replace(alignment_config, enabled=True)
+    return alignment_config
+
+
 @dataclass
 class SimulationSettings:
     """
@@ -128,6 +179,9 @@ class SimulationSettings:
 
     anisotropic_fov: AnisotropicFovConfig = field(default_factory=AnisotropicFovConfig)
     """Anisotropic field-of-view settings used by ``hsfm_anisotropic_fov_v1``."""
+
+    alignment_torque: AlignmentTorqueConfig = field(default_factory=AlignmentTorqueConfig)
+    """Body-orientation alignment-torque settings used by ``hsfm_alignment_torque_v1``."""
 
     difficulty: int = 0
     """Difficulty level"""
@@ -213,6 +267,11 @@ class SimulationSettings:
         self.anisotropic_fov = _pedestrian_model_anisotropic_fov_config(
             self.pedestrian_model,
             self.anisotropic_fov,
+        )
+        self.alignment_torque = _normalize_alignment_torque_config(self.alignment_torque)
+        self.alignment_torque = _pedestrian_model_alignment_torque_config(
+            self.pedestrian_model,
+            self.alignment_torque,
         )
         # Check that the maximum number of pedestrians per group is positive
         if self.max_peds_per_group <= 0:

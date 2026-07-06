@@ -100,6 +100,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #3481 — opt-in HSFM body-orientation alignment torque (`hsfm_alignment_torque_v1`).**
+  A new pedestrian-model selector that decouples pedestrian body orientation `phi` from the
+  instantaneous total-force direction: instead of snapping the heading each step (as
+  `hsfm_total_force_v1` does), the orientation relaxes toward the desired direction via a damped
+  second-order alignment torque (`k_theta` stiffness, `k_omega` damping, bounded turn rate). Adds the
+  pure helpers `wrap_to_pi` and `step_alignment_torque_heading` in
+  `robot_sf/sim/pedestrian_model_variants.py`, an `AlignmentTorqueConfig` opt-in surface on
+  `SimulationSettings` (validated fail-closed), scenario-config selection, and simulator-seam
+  angular-velocity state. Default pedestrian model and all prior selectors are unchanged. This
+  delivers the maintainer-named remaining code prerequisite for #3481 (the HSFM
+  heading-state/alignment-torque Definition-of-Done bullet); evidence tier stays
+  diagnostic/prototype — no calibrated-realism, benchmark, or paper claim. See
+  `docs/context/issue_3481_hsfm_alignment_torque.md`.
 * Extended the **Package C readiness helper** so issue #4547 can commit the real rerun artifact from
   the retained #2916 coupling report. `scripts/tools/prediction_package_c_readiness.py` now accepts
   `--output-markdown` alongside `--output-json`, which lets the cheap local lane write the durable

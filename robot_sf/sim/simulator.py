@@ -52,12 +52,14 @@ from robot_sf.ped_npc.ped_robot_force import PedRobotForce, PedRobotForceConfig
 from robot_sf.ped_npc.ped_zone import sample_zone
 from robot_sf.robot.robot_state import Robot
 from robot_sf.sim.pedestrian_model_variants import (
+    HSFM_ALIGNMENT_TORQUE_V1,
     HSFM_ANISOTROPIC_FOV_V1,
     HSFM_TOTAL_FORCE_V1,
     HSFM_TTC_PREDICTIVE_V1,
     fov_attenuated_total_force,
     normalize_pedestrian_model,
     pairwise_social_force_contributions,
+    step_alignment_torque_heading,
     step_hsfm_total_force,
     ttc_predictive_repulsion,
 )
@@ -167,6 +169,7 @@ class Simulator:
     _initial_pysf_states: np.ndarray = field(init=False, repr=False)
     ped_headings: np.ndarray = field(init=False, repr=False)
     _initial_ped_headings: np.ndarray = field(init=False, repr=False)
+    ped_angular_velocities: np.ndarray = field(init=False, repr=False)
     pedestrian_model: str = field(init=False)
 
     def __post_init__(self):
@@ -235,6 +238,7 @@ class Simulator:
         self.pedestrian_model = normalize_pedestrian_model(self.config.pedestrian_model)
         self.ped_headings = self._headings_from_current_ped_velocities()
         self._initial_ped_headings = self.ped_headings.copy()
+        self.ped_angular_velocities = np.zeros_like(self.ped_headings)
         self._initial_pysf_states = self.pysf_state.pysf_states().copy()
         self.reset_state()
 
@@ -257,6 +261,7 @@ class Simulator:
             HSFM_TOTAL_FORCE_V1,
             HSFM_TTC_PREDICTIVE_V1,
             HSFM_ANISOTROPIC_FOV_V1,
+            HSFM_ALIGNMENT_TORQUE_V1,
         }:
             self.pysf_sim.peds.step(ped_forces, groups)
             self.ped_headings = self._headings_from_current_ped_velocities()
@@ -298,13 +303,29 @@ class Simulator:
                 cone_half_angle_rad=fov_config.cone_half_angle_rad,
                 rear_weight=fov_config.rear_weight,
             )
-        next_state, self.ped_headings = step_hsfm_total_force(
+        next_state, target_headings = step_hsfm_total_force(
             current_state,
             ped_forces,
             self.ped_headings,
             dt=self.config.time_per_step_in_secs,
             max_speeds=max_speeds,
         )
+        if self.pedestrian_model == HSFM_ALIGNMENT_TORQUE_V1:
+            # Decouple body orientation from the instantaneous force direction (issue #3481):
+            # treat the total-force heading as the desired orientation and relax toward it
+            # with a bounded damped torque instead of snapping to it each step.
+            torque_config = self.config.alignment_torque
+            self.ped_headings, self.ped_angular_velocities = step_alignment_torque_heading(
+                self.ped_headings,
+                self.ped_angular_velocities,
+                target_headings,
+                dt=self.config.time_per_step_in_secs,
+                k_theta=torque_config.k_theta,
+                k_omega=torque_config.k_omega,
+                max_angular_speed=torque_config.max_angular_speed_rad_s,
+            )
+        else:
+            self.ped_headings = target_headings
         current_state[...] = next_state
         self.pysf_sim.peds.update(current_state, groups)
 
@@ -359,6 +380,7 @@ class Simulator:
         initial_headings = getattr(self, "_initial_ped_headings", None)
         if initial_headings is not None:
             self.ped_headings = initial_headings.copy()
+        self.ped_angular_velocities = np.zeros_like(self.ped_headings)
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
         for behavior in getattr(self, "peds_behaviors", ()):
             behavior.reset()
@@ -628,6 +650,7 @@ class PedSimulator(Simulator):
         self.pedestrian_model = normalize_pedestrian_model(self.config.pedestrian_model)
         self.ped_headings = self._headings_from_current_ped_velocities()
         self._initial_ped_headings = self.ped_headings.copy()
+        self.ped_angular_velocities = np.zeros_like(self.ped_headings)
         self._initial_pysf_states = self.pysf_state.pysf_states().copy()
 
         self.reset_state()

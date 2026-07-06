@@ -22,6 +22,10 @@ def test_issue_1475_acceptance_audit_stays_fail_closed_on_tracked_smoke() -> Non
     assert report["closure_call"] == "keep_open"
     assert report["smoke_gate"]["status"] == "invalid"
     assert "smoke summary missing required entries" in report["smoke_gate"]["error"]
+    assert report["state_surface"]["status"] == "valid"
+    assert report["state_surface"]["entry_status"] == (
+        "cpu_contract_delivered__external_slurm_rerun_pending"
+    )
 
     statuses = {item["criterion"]: item["status"] for item in report["acceptance_evidence"]}
     assert (
@@ -60,4 +64,6 @@ def test_issue_1475_acceptance_audit_cli_writes_json_artifact(tmp_path: Path) ->
     assert payload["issue"] == 1475
     assert payload["status"] == "blocked"
     assert payload["acceptance_evidence"]
+    assert payload["state_surface"]["path"] == "docs/context/issue_1475_state.yaml"
+    assert payload["state_surface"]["errors"] == []
     assert "Slurm-capable host" in payload["next_empirical_action"]

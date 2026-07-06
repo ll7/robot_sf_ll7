@@ -30,7 +30,7 @@ entries:
       hours. This entry is the single durable state propagation surface for the
       high-churn issue, not another guardrail/checker slice.
     closure_boundary:
-      closure_call_for_this_pr: "refs_not_closes"
+      closure_call_for_this_pr: "keep_open"
       reason: >-
         The executable acceptance audit remains fail-closed over tracked evidence:
         smoke evidence is recorded, fallback/degraded success is excluded, but
@@ -56,7 +56,7 @@ entries:
           checksum, but the tracked smoke summary has no durable
           artifact_pointer_status, so checkpoint pointer completion is not
           proven.
-      - criterion: "Diagnostics report includes required residual and fallback fields."
+      - criterion: "Diagnostics report includes ORCA command, raw residual, bounded residual, final guarded command, residual clipping rate, guard veto rate, fallback/degraded status."
         status: not_met
         evidence: >-
           The executable audit reports missing residual_clipping_rate,
@@ -73,7 +73,7 @@ entries:
         evidence: >-
           The job-12913 smoke result is durably tracked as failed_closed with
           nominal_escalation_allowed=false.
-      - criterion: "Nominal result classified ready for #1358 continuation, revise, or stop."
+      - criterion: "Nominal result classified ready #1358 continuation, revise, stop."
         status: not_met
         evidence: >-
           No nominal result exists in tracked evidence. The smoke gate remains

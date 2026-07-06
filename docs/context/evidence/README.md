@@ -148,7 +148,7 @@ is included.
 
 - `issue_1475_closure_audit_2026-07-06.md`: closure-audit / integration report for
   Issue #1475 (ORCA-residual BC smoke/nominal lineage job). Maps launch-packet,
-  adapter, telemetry-emission, and gate PRs #1875, #2989, #3502, #3844, and
+  adapter, telemetry-emission, and gate PRs #1875, #2989, #2998, #3502, #3844, and
   PR #4561 plus the durably recorded failed-closed job-12913 smoke to the
   acceptance criteria. Recommends keeping the issue open: CPU-side criteria are
   delivered and the #2445 missing-telemetry stop trigger is resolved, but the

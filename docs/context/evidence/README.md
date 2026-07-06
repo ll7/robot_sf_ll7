@@ -140,11 +140,19 @@ is included.
   keeps the issue open on missing durable >=3-planner S20 campaign output plus seed-sufficiency
   analysis.
 
-- `issue_3214_closure_audit_2026-07-05.md`: closure-audit evidence for Issue #3214.
-  Maps hard-case predictive retraining acceptance criteria to merged PRs #3255,
-  PR #3515, PR #3869, and PR #4467 plus follow-up Issue #3254, and keeps the issue
-  `blocked_not_closable` until the public control-law change and
-  checkpoint/evaluation provenance plan exist.
+- `issue_3214_closure_audit_2026-07-06.md`: closure-audit evidence for Issue #3214
+  (supersedes the 2026-07-05 note). Re-maps the hard-case predictive retraining
+  acceptance criteria to merged PRs #3255, #3515, #3869, #4467 plus follow-up
+  Issue #3254 and recommends **closing #3214 as a completed negative result**: the
+  model-side bet was tested (Slurm 13042, success 0.087 < 0.30 gate) and rejected,
+  registry promotion of a gate-failing checkpoint is prohibited by fail-closed
+  policy, and the control-law-side change is a distinct out-of-scope follow-up.
+
+- `issue_3214_closure_audit_2026-07-05.md`: closure-audit evidence for Issue #3214
+  (**superseded by** `issue_3214_closure_audit_2026-07-06.md`). Maps hard-case
+  predictive retraining acceptance criteria to merged PRs #3255, PR #3515, PR #3869,
+  and PR #4467 plus follow-up Issue #3254, and kept the issue `blocked_not_closable`;
+  the 2026-07-06 audit revises that reading to closable.
 
 - `issue_1475_closure_audit_2026-07-06.md`: closure-audit / integration report for
   Issue #1475 (ORCA-residual BC smoke/nominal lineage job). Maps launch-packet,

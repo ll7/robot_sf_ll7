@@ -102,6 +102,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_1489_synthesis_report_2026-07-06/synthesis_report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4291_closure_audit_2026-07-04.md
     status: evidence
     freshness: evidence

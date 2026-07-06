@@ -53,6 +53,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   providing the machinery that emits it; the issue stays open (`Refs #1489`), blocked on component
   campaigns producing ≥2 durable comparable `complete` lanes (#1470/#1472/#1474/#1475/#1358). No
   benchmark campaign run, no SLURM/GPU submission, no paper/dissertation claim edits.
+* **issue #1489 synthesis-report CLI + first durable artifact.**
+  `scripts/validation/validate_hybrid_evidence_matrix.py` now accepts `--synthesis-report`, exposing
+  the #4628 `build_hybrid_synthesis_report()` machinery through a reproducible command (previously it
+  was Python/tests-only). The synthesis report now also echoes `rows_valid` so a consumer can
+  distinguish a fail-closed "blocked but valid" gate from a matrix whose rows failed validation. The
+  flag was run once on the committed component matrix
+  (`docs/context/evidence/issue_2274_hybrid_component_matrix_2026-06-05/matrix.yaml`) to emit the
+  first durable synthesis-report artifact,
+  `docs/context/evidence/issue_1489_synthesis_report_2026-07-06/synthesis_report.json`: `status:
+  blocked`, all five mechanisms `gather_more_evidence`, `promoted_verdict_count: 0` — the correct
+  conservative fail-closed result while component campaigns remain incomplete. Focused CLI + echo
+  tests added to `tests/benchmark/test_hybrid_synthesis_report.py`. Issue stays open (`Refs #1489`),
+  still blocked on ≥2 durable comparable `complete` component lanes. No benchmark campaign run, no
+  SLURM/GPU submission, no paper/dissertation claim edits.
 
 ### Fixed
 

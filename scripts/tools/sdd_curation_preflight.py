@@ -43,6 +43,7 @@ from scripts.tools import import_sdd_scenarios, manage_external_data
 
 PREFLIGHT_SCHEMA = "sdd_curation_preflight.v1"
 DECISION_PACKET_SCHEMA = "robot_sf_sdd_curation_decision_packet.v1"
+INTEGRATION_REPORT_SCHEMA = "robot_sf_sdd_curation_integration_report.v1"
 ISSUE = 1126
 
 # Curation evidence states (kept strictly distinct so a proxy run can never read as benchmark).
@@ -581,6 +582,167 @@ def classify_smoke_decision(
     }
 
 
+def _criterion(
+    criterion: str,
+    status: str,
+    evidence: str,
+    remaining: str | None = None,
+) -> dict[str, str]:
+    """Build one stable issue #1126 acceptance row."""
+    row = {
+        "criterion": criterion,
+        "status": status,
+        "evidence": evidence,
+    }
+    if remaining:
+        row["remaining"] = remaining
+    return row
+
+
+def build_integration_report(
+    readiness: dict[str, Any],
+    *,
+    smoke_decision: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Summarize #1126 closure state from readiness and optional smoke evidence.
+
+    This is a report-only contract. It consolidates the staged-data, candidate-selection,
+    and smoke-decision gates without importing data, writing derived scenario artifacts, or
+    promoting an exploratory candidate as benchmark-ready.
+    """
+    dataset_backed = bool(readiness.get("dataset_backed", False))
+    benchmark_promotion_allowed = bool(readiness.get("benchmark_promotion_allowed", False))
+    annotation_probe = readiness.get("annotation_probe") or {}
+    candidate_scan = readiness.get("candidate_scan") or {}
+    scan_candidates = candidate_scan.get("candidates") or []
+
+    classification = smoke_decision.get("classification") if smoke_decision is not None else None
+    benchmark_ready = classification == SMOKE_BENCHMARK_READY
+    exploratory_only = classification == SMOKE_EXPLORATORY_ONLY
+
+    if benchmark_ready:
+        closure_status = "ready_to_close"
+        next_action = "close_issue_after_reviewer_confirms_benchmark_ready_boundary"
+    elif exploratory_only:
+        closure_status = "open_exploratory_only"
+        next_action = "tune_current_candidate_or_select_alternate_scene"
+    elif dataset_backed and scan_candidates:
+        closure_status = "open_empirical_action_ready"
+        next_action = "import_top_ranked_candidate_and_run_one_cpu_smoke"
+    elif dataset_backed:
+        closure_status = "open_needs_candidate_selection"
+        next_action = "scan_or_probe_staged_annotations_for_satisfiable_candidate"
+    else:
+        closure_status = "blocked_external_input"
+        next_action = "stage_or_restore_licensed_sdd_annotations_then_rerun_preflight"
+
+    criteria = [
+        _criterion(
+            "#1497 staged official/BYO SDD source annotations locally or recorded failure keeps issue blocked.",
+            "met" if dataset_backed else "blocked",
+            (
+                f"staging_mode={readiness.get('staging_mode')}; "
+                f"dataset_backed={dataset_backed}; "
+                f"staging_reason={readiness.get('staging_reason')}"
+            ),
+            None
+            if dataset_backed
+            else "Restore or stage the licensed SDD tree with checksum/license provenance.",
+        ),
+        _criterion(
+            "One scene/video selected with deterministic selection rationale.",
+            "met"
+            if annotation_probe.get("selection_satisfiable")
+            else "actionable"
+            if scan_candidates
+            else "pending",
+            (
+                f"annotation_probe={annotation_probe or None}; "
+                f"candidate_scan_satisfiable_count={candidate_scan.get('satisfiable_count')}"
+            ),
+            None
+            if annotation_probe.get("selection_satisfiable")
+            else "Probe/import the top ranked satisfiable candidate from candidate_scan.",
+        ),
+        _criterion(
+            "Import command, source identity, checksums, license/source URL, and scale assumptions recorded.",
+            "met" if benchmark_promotion_allowed else "pending",
+            (
+                "readiness permits benchmark promotion"
+                if benchmark_promotion_allowed
+                else "benchmark promotion is still fail-closed"
+            ),
+            None
+            if benchmark_promotion_allowed
+            else "Record selected annotation, checksum/license provenance, and meters-per-pixel before promotion.",
+        ),
+        _criterion(
+            "Generated scenario/map artifacts pass repository loading/parser validation.",
+            "met"
+            if smoke_decision and smoke_decision.get("generated_artifacts_load")
+            else "pending",
+            (
+                f"generated_artifacts_load={smoke_decision.get('generated_artifacts_load')}"
+                if smoke_decision
+                else "no smoke decision supplied"
+            ),
+            None
+            if smoke_decision and smoke_decision.get("generated_artifacts_load")
+            else "Run importer and load generated scenario/map/provenance artifacts.",
+        ),
+        _criterion(
+            "At least one representative smoke run succeeds or output explicitly rejected with reasons.",
+            "met" if smoke_decision else "pending",
+            (
+                f"classification={classification}; reasons={smoke_decision.get('reasons')}"
+                if smoke_decision
+                else "no representative smoke decision supplied"
+            ),
+            None if smoke_decision else "Run one CPU representative smoke and classify the result.",
+        ),
+        _criterion(
+            "Documentation states benchmark_ready vs exploratory_only status.",
+            "met" if smoke_decision else "pending",
+            (
+                f"benchmark_ready={benchmark_ready}; exploratory_only={exploratory_only}"
+                if smoke_decision
+                else f"output_classification={readiness.get('output_classification')}"
+            ),
+            None if smoke_decision else "Attach smoke decision before closure.",
+        ),
+        _criterion(
+            "Only small reviewable artifacts or durable pointers committed.",
+            "met",
+            "integration report is metadata-only; raw SDD and generated scenario outputs remain untracked",
+        ),
+    ]
+
+    blockers = [
+        row["remaining"] for row in criteria if row["status"] != "met" and row.get("remaining")
+    ]
+
+    return {
+        "schema": INTEGRATION_REPORT_SCHEMA,
+        "issue": ISSUE,
+        "closure_status": closure_status,
+        "next_empirical_action": next_action,
+        "claim_boundary": (
+            "integration report only; no raw SDD commit, generated scenario promotion, "
+            "full benchmark campaign, Slurm/GPU submission, or paper-facing claim"
+        ),
+        "readiness_summary": {
+            "staging_mode": readiness.get("staging_mode"),
+            "dataset_backed": dataset_backed,
+            "benchmark_promotion_allowed": benchmark_promotion_allowed,
+            "output_classification": readiness.get("output_classification"),
+            "candidate_scan_satisfiable_count": candidate_scan.get("satisfiable_count"),
+        },
+        "smoke_summary": smoke_decision,
+        "acceptance_criteria": criteria,
+        "remaining_blockers": blockers,
+    }
+
+
 def _format_human(report: dict[str, Any]) -> str:
     """Render a compact human-readable summary of the readiness report."""
     lines = [
@@ -642,6 +804,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         default=None,
         help="Write a JSON handoff packet for the first real SDD curation run.",
+    )
+    parser.add_argument(
+        "--write-integration-report",
+        type=Path,
+        default=None,
+        help="Write JSON issue #1126 acceptance/closure integration report.",
     )
     parser.add_argument(
         "--decision-dataset-id",
@@ -711,6 +879,13 @@ def main(argv: list[str] | None = None) -> int:
         args.write_decision_packet.parent.mkdir(parents=True, exist_ok=True)
         args.write_decision_packet.write_text(
             json.dumps(packet, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+    if args.write_integration_report is not None:
+        integration_report = build_integration_report(report)
+        args.write_integration_report.parent.mkdir(parents=True, exist_ok=True)
+        args.write_integration_report.write_text(
+            json.dumps(integration_report, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
     if args.require_benchmark_ready and not report["benchmark_promotion_allowed"]:

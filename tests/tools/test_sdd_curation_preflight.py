@@ -702,3 +702,106 @@ def test_cli_scan_root_reports_candidates_without_benchmark_claim(
     assert report["output_classification"] == sdd_curation_preflight.OUTPUT_BLOCKED
     assert report["candidate_scan"]["satisfiable_count"] == 1
     assert report["candidate_scan"]["candidates"][0]["path"] == str(annotations)
+
+
+def test_integration_report_keeps_unstaged_sdd_blocked(tmp_path: Path) -> None:
+    """Integration report maps #1126 criteria without promoting missing SDD data."""
+    readiness = sdd_curation_preflight.classify_curation_readiness(
+        {
+            "mode": manage_external_data.SDD_MODE_PROXY,
+            "dataset_backed": False,
+            "availability": {"state": "missing"},
+            "reason": "SDD not staged.",
+            "staging_dir": str(tmp_path),
+        },
+        None,
+    )
+
+    report = sdd_curation_preflight.build_integration_report(readiness)
+
+    assert report["schema"] == sdd_curation_preflight.INTEGRATION_REPORT_SCHEMA
+    assert report["closure_status"] == "blocked_external_input"
+    assert report["next_empirical_action"] == (
+        "stage_or_restore_licensed_sdd_annotations_then_rerun_preflight"
+    )
+    assert report["readiness_summary"]["benchmark_promotion_allowed"] is False
+    criteria = {row["criterion"]: row for row in report["acceptance_criteria"]}
+    assert (
+        criteria[
+            "#1497 staged official/BYO SDD source annotations locally or recorded failure keeps issue blocked."
+        ]["status"]
+        == "blocked"
+    )
+    assert (
+        criteria["Only small reviewable artifacts or durable pointers committed."]["status"]
+        == "met"
+    )
+    assert report["remaining_blockers"]
+
+
+def test_integration_report_closes_only_with_benchmark_ready_smoke(tmp_path: Path) -> None:
+    """Only a loaded benchmark-ready smoke decision makes #1126 ready to close."""
+    annotations = tmp_path / "annotations.txt"
+    _write_sdd_fixture(annotations)
+    readiness = sdd_curation_preflight.classify_curation_readiness(
+        {
+            "mode": manage_external_data.SDD_MODE_DATASET_BACKED,
+            "dataset_backed": True,
+            "availability": {"state": "dataset_backed"},
+            "reason": "SDD staged validated.",
+            "staging_dir": str(tmp_path),
+        },
+        sdd_curation_preflight.probe_annotation_file(
+            annotations, label="Pedestrian", min_track_points=4, max_pedestrians=4
+        ),
+    )
+    smoke_decision = sdd_curation_preflight.classify_smoke_decision(
+        readiness,
+        [
+            {
+                "horizon": 384,
+                "successful_jobs": 1,
+                "failed_jobs": 0,
+                "success": True,
+                "timeout": False,
+                "collisions": 0,
+            }
+        ],
+        generated_artifacts_load=True,
+    )
+
+    report = sdd_curation_preflight.build_integration_report(
+        readiness, smoke_decision=smoke_decision
+    )
+
+    assert report["closure_status"] == "ready_to_close"
+    assert report["smoke_summary"]["classification"] == sdd_curation_preflight.SMOKE_BENCHMARK_READY
+    assert report["remaining_blockers"] == []
+    assert all(row["status"] == "met" for row in report["acceptance_criteria"])
+
+
+def test_cli_writes_integration_report_without_raw_outputs(tmp_path: Path, monkeypatch) -> None:
+    """CLI integration report is metadata-only and follows current preflight blockers."""
+    report_path = tmp_path / "issue_1126_integration.json"
+    monkeypatch.setattr(
+        manage_external_data,
+        "resolve_sdd_scenario_prior_mode",
+        lambda manifest_path=None: {
+            "mode": manage_external_data.SDD_MODE_PROXY,
+            "dataset_backed": False,
+            "availability": {"state": "missing"},
+            "reason": "SDD not staged.",
+            "staging_dir": str(tmp_path / "sdd"),
+        },
+    )
+
+    exit_code = sdd_curation_preflight.main(
+        ["--write-integration-report", str(report_path), "--json"]
+    )
+
+    assert exit_code == 0
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["schema"] == sdd_curation_preflight.INTEGRATION_REPORT_SCHEMA
+    assert report["closure_status"] == "blocked_external_input"
+    assert report["claim_boundary"].startswith("integration report only")
+    assert not (tmp_path / "sdd_curation").exists()

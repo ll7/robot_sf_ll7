@@ -146,6 +146,74 @@ def test_scenario_certification_status_fails_closed_on_null_and_missing_counts()
     )
 
 
+def test_scenario_certification_status_blocks_missing_nonzero_detail_lists() -> None:
+    """Policy cannot accept nonzero aggregate counts without detail lists."""
+    policy = {
+        "nominal_release_suite": {
+            "certification_status": "scenario_cert.v1:accepted_reviewed",
+            "excluded_scenarios": [
+                {
+                    "scenario_id": "blocked_geometry",
+                    "action": "exclude_from_nominal_publication",
+                }
+            ],
+            "routed_stress_only_scenarios": [
+                {
+                    "scenario_id": "stress_geometry",
+                    "action": "route_to_stress_suite_only",
+                }
+            ],
+        }
+    }
+    summary = {"benchmark_eligibility_counts": {"excluded": 1, "stress_only": 1}}
+
+    assert _scenario_certification_status(summary, policy) == "scenario_cert.v1:blocked"
+
+
+def test_scenario_certification_status_blocks_empty_nonzero_detail_lists() -> None:
+    """Policy cannot accept nonzero aggregate counts with empty detail lists."""
+    policy = {
+        "nominal_release_suite": {
+            "certification_status": "scenario_cert.v1:accepted_reviewed",
+        }
+    }
+    summary = {
+        "benchmark_eligibility_counts": {"excluded": 1, "stress_only": 1},
+        "excluded_scenarios": [],
+        "stress_only_scenarios": [],
+    }
+
+    assert _scenario_certification_status(summary, policy) == "scenario_cert.v1:blocked"
+
+
+def test_scenario_certification_status_blocks_detail_count_mismatch() -> None:
+    """Policy cannot accept when detail-list lengths disagree with aggregate counts."""
+    policy = {
+        "nominal_release_suite": {
+            "certification_status": "scenario_cert.v1:accepted_reviewed",
+            "excluded_scenarios": [
+                {
+                    "scenario_id": "blocked_geometry",
+                    "action": "exclude_from_nominal_publication",
+                }
+            ],
+            "routed_stress_only_scenarios": [
+                {
+                    "scenario_id": "stress_geometry",
+                    "action": "route_to_stress_suite_only",
+                }
+            ],
+        }
+    }
+    summary = {
+        "benchmark_eligibility_counts": {"excluded": 2, "stress_only": 1},
+        "excluded_scenarios": [{"scenario_id": "blocked_geometry"}],
+        "stress_only_scenarios": [{"scenario_id": "stress_geometry"}],
+    }
+
+    assert _scenario_certification_status(summary, policy) == "scenario_cert.v1:blocked"
+
+
 def test_scenario_certification_prerequisites_normalizes_null_and_missing() -> None:
     """Null blocker must not surface as "None"; missing counts report unavailable."""
     # Explicit-null blocker with missing counts: no "None", explicit unavailable text.

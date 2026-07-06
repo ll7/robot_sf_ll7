@@ -92,6 +92,51 @@ def test_report_can_pass_for_synthetic_accepted_suite() -> None:
     assert report["summary"]["release_artifact_rows_blocked_on_certification"] == 0
 
 
+def test_report_policy_blocks_detail_count_mismatch() -> None:
+    """Publication-suite policy cannot pass when detail lists disagree with counts."""
+    summary = {
+        "scenario_count": 3,
+        "benchmark_eligibility_counts": {
+            "eligible": 1,
+            "excluded": 2,
+            "stress_only": 0,
+        },
+        "excluded_scenarios": [{"scenario_id": "blocked_geometry"}],
+        "stress_only_scenarios": [],
+    }
+    matrix = {
+        "rows": [
+            {
+                "section": "release_artifact",
+                "row_id": "release_artifact:complete",
+                "classification": "benchmark evidence",
+                "scenario_certification": "scenario_cert.v1:accepted_reviewed",
+            }
+        ]
+    }
+    policy = {
+        "nominal_release_suite": {
+            "certification_status": "scenario_cert.v1:accepted_reviewed",
+            "excluded_scenarios": [
+                {
+                    "scenario_id": "blocked_geometry",
+                    "action": "exclude_from_nominal_publication",
+                }
+            ],
+        }
+    }
+
+    report = build_report(
+        summary,
+        matrix,
+        inputs=_default_inputs(),
+        publication_suite_policy=policy,
+    )
+
+    assert report["status"] == "blocked"
+    assert {blocker["check"] for blocker in report["blockers"]} == {"excluded_scenarios"}
+
+
 def test_render_markdown_lists_blockers_and_next_action() -> None:
     """Markdown report preserves the scenario lists and next empirical action."""
 

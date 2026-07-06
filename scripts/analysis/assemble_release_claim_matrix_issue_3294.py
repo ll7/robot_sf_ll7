@@ -140,6 +140,29 @@ def _scenario_ids(items: Any) -> set[str]:
     return ids
 
 
+def _scenario_detail_lists_match_counts(summary: dict[str, Any]) -> bool:
+    """Return whether scenario detail lists are present and match aggregate counts."""
+    eligibility_counts = summary.get("benchmark_eligibility_counts")
+    if not isinstance(eligibility_counts, dict):
+        return False
+    try:
+        expected_excluded = int(eligibility_counts["excluded"])
+        expected_stress_only = int(eligibility_counts["stress_only"])
+    except (KeyError, TypeError, ValueError):
+        return False
+
+    excluded_items = summary.get("excluded_scenarios")
+    stress_only_items = summary.get("stress_only_scenarios")
+    if expected_excluded and not isinstance(excluded_items, list):
+        return False
+    if expected_stress_only and not isinstance(stress_only_items, list):
+        return False
+
+    excluded = _scenario_ids(excluded_items or [])
+    stress_only = _scenario_ids(stress_only_items or [])
+    return len(excluded) == expected_excluded and len(stress_only) == expected_stress_only
+
+
 def _policy_covers_certification_blockers(
     summary: dict[str, Any], policy: dict[str, Any] | None
 ) -> bool:
@@ -153,6 +176,8 @@ def _policy_covers_certification_blockers(
         "scenario_cert.v1:accepted",
         "scenario_cert.v1:accepted_reviewed",
     }:
+        return False
+    if not _scenario_detail_lists_match_counts(summary):
         return False
     excluded = _scenario_ids(summary.get("excluded_scenarios", []))
     stress_only = _scenario_ids(summary.get("stress_only_scenarios", []))

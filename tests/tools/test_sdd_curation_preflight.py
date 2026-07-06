@@ -209,6 +209,24 @@ def test_dataset_backed_with_valid_probe_is_benchmark_candidate(tmp_path: Path) 
     assert report["blockers"] == []
 
 
+def test_dataset_backed_without_probe_is_not_benchmark_candidate(tmp_path: Path) -> None:
+    """A pinned SDD tree still needs a selected annotation probe before promotion."""
+    backed_gate = {
+        "mode": manage_external_data.SDD_MODE_DATASET_BACKED,
+        "dataset_backed": True,
+        "availability": {"state": "dataset_backed"},
+        "reason": "SDD staged validated.",
+        "staging_dir": str(tmp_path),
+    }
+
+    report = sdd_curation_preflight.classify_curation_readiness(backed_gate, None)
+
+    assert report["benchmark_promotion_allowed"] is False
+    assert report["evidence_status"] == sdd_curation_preflight.EVIDENCE_BLOCKED
+    assert report["output_classification"] == sdd_curation_preflight.OUTPUT_BLOCKED
+    assert "no candidate annotation was probed" in report["blockers"][0]
+
+
 def test_dataset_backed_with_bad_probe_is_not_promotable(tmp_path: Path) -> None:
     """Even with staged SDD, an unsatisfiable probe must not be benchmark-promotable."""
     annotations = tmp_path / "annotations.txt"

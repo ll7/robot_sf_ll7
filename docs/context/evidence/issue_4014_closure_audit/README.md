@@ -36,8 +36,8 @@ uv run python scripts/training/compare_issue_4014_ppo_sequence_models.py \
   --perf-summary ppo=<ppo-perf.json> \
   --perf-summary recurrent_ppo_lstm=<lstm-perf.json> \
   --perf-summary ppo_mamba=<mamba-perf.json> \
-  --config ppo=configs/training/ppo/issue_4014_ppo_smoke_matched.yaml \
-  --config recurrent_ppo_lstm=configs/training/ppo/issue_4014_recurrent_ppo_lstm_smoke_matched.yaml \
-  --config ppo_mamba=configs/training/ppo/issue_4014_ppo_mamba_smoke_matched.yaml \
+  --config "ppo=configs/training/ppo/issue_4014_ppo_smoke_matched.yaml" \
+  --config "recurrent_ppo_lstm=configs/training/ppo/issue_4014_recurrent_ppo_lstm_smoke_matched.yaml" \
+  --config "ppo_mamba=configs/training/ppo/issue_4014_ppo_mamba_smoke_matched.yaml" \
   --output-dir docs/context/evidence/issue_4585_matched_ppo_sequence_smoke_comparison
 ```

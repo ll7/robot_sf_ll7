@@ -64,7 +64,9 @@ def _load_json(path: Path) -> dict[str, Any]:
 def _require_number(payload: dict[str, Any], field: str, *, path: Path) -> float:
     """Read a required numeric summary field."""
     value = payload.get(field)
-    if not isinstance(value, int | float):
+    # ``bool`` is a subclass of ``int``; reject it so a JSON ``true``/``false`` cannot masquerade
+    # as a throughput number.
+    if not isinstance(value, int | float) or isinstance(value, bool):
         raise ValueError(f"{path}: required numeric field missing: {field}")
     return float(value)
 
@@ -81,12 +83,16 @@ def _load_perf_row(label: str, summary_path: Path, config_path: Path) -> dict[st
     parameters: dict[str, int | None] = {}
     for field in PARAMETER_FIELDS:
         value = parameter_summary.get(field)
-        if field in REQUIRED_PARAMETER_FIELDS and not isinstance(value, int):
+        # ``bool`` is a subclass of ``int``; a JSON ``true``/``false`` must not count as a
+        # parameter count, so reject bool explicitly on both the required and optional branches.
+        if field in REQUIRED_PARAMETER_FIELDS and (
+            not isinstance(value, int) or isinstance(value, bool)
+        ):
             raise ValueError(f"{summary_path}: parameter_summary.{field} must be an integer")
         if (
             field not in REQUIRED_PARAMETER_FIELDS
             and value is not None
-            and not isinstance(value, int)
+            and (not isinstance(value, int) or isinstance(value, bool))
         ):
             raise ValueError(
                 f"{summary_path}: parameter_summary.{field} must be an integer or null"
@@ -101,7 +107,7 @@ def _load_perf_row(label: str, summary_path: Path, config_path: Path) -> dict[st
     if throughput["train_env_steps_per_sec_mean"] <= 0.0:
         raise ValueError(f"{summary_path}: train_env_steps_per_sec_mean must be positive")
 
-    config_sha256 = _sha256(config_path) if config_path.exists() else None
+    config_sha256 = _sha256(config_path) if config_path.is_file() else None
     if config_sha256 is None:
         raise ValueError(f"config file missing for {label}: {config_path}")
 
@@ -227,7 +233,14 @@ def _write_outputs(summary: dict[str, Any], output_dir: Path) -> list[Path]:
         if source_path.exists():
             checksum_paths.append(source_path)
     for path in checksum_paths:
-        checksum_lines.append(f"{_sha256(path)}  {path.name}")
+        # Preserve the path relative to the packet root (forward slashes) so nested entries such
+        # as ``source_perf/ppo.json`` verify correctly with ``sha256sum -c`` run from the packet
+        # directory; bare ``path.name`` collapsed them to root-level names that fail verification.
+        try:
+            rel_path = path.relative_to(output_dir).as_posix()
+        except ValueError:
+            rel_path = path.name
+        checksum_lines.append(f"{_sha256(path)}  {rel_path}")
     checksums_path.write_text("\n".join(checksum_lines) + "\n", encoding="utf-8")
     return [summary_path, throughput_path, readme_path, checksums_path]
 

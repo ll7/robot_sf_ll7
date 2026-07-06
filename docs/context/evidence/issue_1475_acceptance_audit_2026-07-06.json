@@ -34,7 +34,8 @@
   "checked_paths": [
     "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/summary.json",
     "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/source_slurm_checksum_manifest.sha256",
-    "docs/context/evidence/issue_1475_closure_audit_2026-07-06.md"
+    "docs/context/evidence/issue_1475_closure_audit_2026-07-06.md",
+    "docs/context/issue_1475_state.yaml"
   ],
   "claim_boundary": "CPU-only acceptance audit over tracked evidence; no Slurm/GPU submission, benchmark campaign, training run, or paper-facing claim.",
   "closure_audit_contains_issue_1475": true,
@@ -69,5 +70,12 @@
     "status": "invalid"
   },
   "source_thread_summary": "Issue #1475 live thread reviewed via gh api on 2026-07-06; latest maintainer comment remains the 2026-07-05 post-PR #4561 gate update.",
+  "state_surface": {
+    "entry_status": "cpu_contract_delivered__external_slurm_rerun_pending",
+    "errors": [],
+    "latest_recorded_at_utc": "2026-07-06T16:38:00Z",
+    "path": "docs/context/issue_1475_state.yaml",
+    "status": "valid"
+  },
   "status": "blocked"
 }

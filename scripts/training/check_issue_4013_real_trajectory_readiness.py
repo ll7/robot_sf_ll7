@@ -74,7 +74,7 @@ def build_report(manifest_path: Path) -> dict[str, Any]:
                     "code": "real_trajectory.availability_not_validated",
                     "message": (
                         "Phase 3 requires a checksum-validated real trajectory dataset; "
-                        f"manifest availability is is {availability!r}."
+                        f"manifest availability is {availability!r}."
                     ),
                 }
             ]

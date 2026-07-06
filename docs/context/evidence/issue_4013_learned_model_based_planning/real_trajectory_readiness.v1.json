@@ -26,7 +26,7 @@
   "blockers": [
     {
       "code": "real_trajectory.availability_not_validated",
-      "message": "Phase 3 requires a checksum-validated real trajectory dataset; manifest availability is is 'missing'."
+      "message": "Phase 3 requires a checksum-validated real trajectory dataset; manifest availability is 'missing'."
     }
   ],
   "claim_boundary": "Real-trajectory readiness only. No raw data is staged by this checker; no benchmark, navigation-quality, paper, or dissertation claim is made.",

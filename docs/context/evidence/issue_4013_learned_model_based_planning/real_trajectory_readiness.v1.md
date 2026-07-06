@@ -13,7 +13,7 @@ Claim boundary: real-trajectory readiness only. No raw data is staged, no full b
 
 ## Blockers
 
-- `real_trajectory.availability_not_validated`: Phase 3 requires a checksum-validated real trajectory dataset; manifest availability is is 'missing'.
+- `real_trajectory.availability_not_validated`: Phase 3 requires a checksum-validated real trajectory dataset; manifest availability is 'missing'.
 
 ## Acceptance Evidence
 

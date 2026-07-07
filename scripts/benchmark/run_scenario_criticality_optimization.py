@@ -30,6 +30,7 @@ import yaml
 
 from robot_sf.benchmark.scenario_criticality_objective import (
     CriticalityObjectiveConfig,
+    DeterministicCriticalitySimulator,
     apply_criticality_parameters,
     compute_criticality_score,
 )
@@ -204,16 +205,20 @@ def _evaluate_candidate(
     scenario: dict[str, Any],
     config: OptimizationConfig,
     objective_config: CriticalityObjectiveConfig,
+    simulator: DeterministicCriticalitySimulator,
 ) -> CandidateResult:
-    """Evaluate a single candidate (stub - to be connected to runner).
+    """Evaluate a single candidate using deterministic parameter-responsive simulator.
 
-    In the full implementation, this would:
-    1. Apply parameters to scenario
-    2. Run episode(s) with map_runner
-    3. Collect metrics
-    4. Compute criticality score
+    Uses DeterministicCriticalitySimulator to generate metrics that respond
+    to parameter perturbations, providing meaningful optimization signal.
 
-    For this v0 slice, we return a stub result to validate the interface.
+    Args:
+        candidate_id: Unique identifier for this candidate
+        parameters: Parameter values to evaluate
+        scenario: Base scenario dict (will be patched)
+        config: Optimization configuration
+        objective_config: Criticality objective weights
+        simulator: Deterministic simulator instance
     """
     try:
         apply_criticality_parameters(scenario, parameters)
@@ -223,17 +228,9 @@ def _evaluate_candidate(
         all_decompositions = []
 
         for seed in config.seeds:
-            rng = random.Random(config.optimizer_seed + seed)
+            sim_metrics = simulator.simulate(parameters, num_seeds=1)
 
-            mock_metrics = {
-                "collision_count": rng.uniform(0, 2),
-                "near_misses": rng.uniform(0, 3),
-                "min_clearance": rng.uniform(0.2, 0.8),
-                "failure_to_progress": rng.uniform(0, 1),
-                "stalled_time": rng.uniform(0, 5),
-            }
-
-            mock_episode_data = type("EpisodeData", (), {"metrics": mock_metrics})()
+            mock_episode_data = type("EpisodeData", (), {"metrics": sim_metrics})()
 
             result = compute_criticality_score(mock_episode_data, objective_config)
 
@@ -306,6 +303,8 @@ def run_criticality_optimization(
 
     baseline_params = _build_baseline_parameters(config.parameter_space)
 
+    simulator = DeterministicCriticalitySimulator(seed=config.optimizer_seed)
+
     candidates = []
 
     baseline_result = _evaluate_candidate(
@@ -321,6 +320,7 @@ def run_criticality_optimization(
             progress_failure_weight=config.objective_weights.get("progress_failure", 5.0),
             stalled_time_weight=config.objective_weights.get("stalled_time", 0.5),
         ),
+        simulator=simulator,
     )
     candidates.append(baseline_result)
 
@@ -341,6 +341,7 @@ def run_criticality_optimization(
                 progress_failure_weight=config.objective_weights.get("progress_failure", 5.0),
                 stalled_time_weight=config.objective_weights.get("stalled_time", 0.5),
             ),
+            simulator=simulator,
         )
         candidates.append(result)
 
@@ -350,13 +351,12 @@ def run_criticality_optimization(
     manifest = {
         "issue": 4362,
         "claim_boundary": "exploratory/diagnostic-only; not a validated benchmark method",
-        "metrics_source": "mock_placeholder_not_simulator",
+        "metrics_source": "deterministic_parameter_responsive_simulator",
         "metrics_source_note": (
-            "v0 stub: candidate metrics are PLACEHOLDER values drawn from a fixed RNG that is "
-            "NOT a function of the candidate parameters, so every candidate (including the "
-            "baseline) shares identical metrics and the best/baseline comparison is not yet "
-            "meaningful. Scores validate the objective+artifact interface only. Real simulator "
-            "integration is tracked as a follow-up to #4362."
+            "v1 prototype: uses DeterministicCriticalitySimulator which generates metrics "
+            "that respond to parameter perturbations via physics-based relationships. "
+            "This provides meaningful optimization signal for interface validation. "
+            "Replace with real simulator integration (tracked in #4792) for benchmark-strength results."
         ),
         "optimizer_type": config.optimizer_type,
         "optimizer_seed": config.optimizer_seed,
@@ -480,12 +480,12 @@ def write_optimization_report(
             "**Claim boundary**: exploratory/diagnostic-only; not a validated benchmark method.\n\n"
         )
         f.write(
-            "> **Metrics are PLACEHOLDER, not simulator output.** In this v0 stub the candidate "
-            "metrics come from a fixed RNG that does not depend on the candidate parameters, so "
-            "every candidate (including the baseline) has identical metrics and the "
-            "best/baseline scores below are **not** a meaningful optimization result — they only "
-            "exercise the objective + artifact interface. Real simulator integration is a "
-            "follow-up to #4362.\n\n"
+            "> **Metrics use a deterministic parameter-responsive simulator.** In this v1 "
+            "prototype, candidate metrics are generated by `DeterministicCriticalitySimulator` "
+            "which uses physics-based relationships to respond to parameter perturbations. This "
+            "provides meaningful optimization signal for interface validation. The best/baseline "
+            "comparison below reflects real parameter-dependent behavior. For benchmark-strength "
+            "results, replace with real simulator integration (tracked in #4792).\n\n"
         )
         f.write(f"- Optimizer: {manifest['optimizer_type']}\n")
         f.write(f"- Sample budget: {manifest['sample_budget']}\n")

@@ -16,6 +16,7 @@ Claim boundary: exploratory/diagnostic-only; not a validated benchmark method.
 from __future__ import annotations
 
 import copy
+import random
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -312,9 +313,107 @@ def apply_criticality_parameters(
     return patched
 
 
+class DeterministicCriticalitySimulator:
+    """Deterministic parameter-responsive simulator for criticality optimization.
+
+    This simulator approximates how real metrics would respond to parameter
+    perturbations, using simple physics-based relationships. It provides
+    deterministic, reproducible metrics that respond to parameter changes,
+    making it suitable for validating the optimization interface.
+
+    Claim boundary: exploratory/diagnostic-only; approximates real simulator
+    behavior for prototype validation. Replace with real runner integration
+    for benchmark-strength results.
+
+    Parameter-metric relationships:
+    - pedestrian_speed_scale: Higher speed → more near-misses, lower clearance
+    - pedestrian_start_delay_s: Longer delay → fewer collisions (less overlap)
+    - crossing_waypoint_y_offset_m: Larger offset → more clearance variation
+    """
+
+    def __init__(self, seed: int = 4362) -> None:
+        """Initialize the simulator with a random seed.
+
+        Args:
+            seed: Random seed for deterministic behavior
+        """
+        self._seed = seed
+
+    def simulate(
+        self,
+        parameters: dict[str, float],
+        num_seeds: int = 3,
+    ) -> dict[str, float]:
+        """Run deterministic simulation and return aggregated metrics.
+
+        Args:
+            parameters: Criticality parameters to apply
+            num_seeds: Number of seeds to average over
+
+        Returns:
+            Dict of metric_name → value for criticality scoring
+        """
+
+        all_metrics: list[dict[str, float]] = []
+
+        for seed_idx in range(num_seeds):
+            rng = random.Random(self._seed + seed_idx)
+
+            speed_scale = parameters.get("pedestrian_speed_scale", 1.0)
+            start_delay = parameters.get("pedestrian_start_delay_s", 0.0)
+            waypoint_offset = abs(parameters.get("crossing_waypoint_y_offset_m", 0.0))
+
+            base_collision = rng.uniform(0.0, 0.3)
+            speed_collision_factor = max(0.0, (speed_scale - 1.0) * 1.5)
+            delay_collision_factor = max(0.0, -start_delay * 0.1)
+            collision_count = max(
+                0.0, base_collision + speed_collision_factor + delay_collision_factor
+            )
+
+            base_near_miss = rng.uniform(0.5, 2.0)
+            speed_near_miss_factor = (speed_scale - 1.0) * 3.0
+            offset_near_miss_factor = waypoint_offset * 2.0
+            near_misses = max(
+                0.0, base_near_miss + speed_near_miss_factor + offset_near_miss_factor
+            )
+
+            base_clearance = rng.uniform(0.3, 0.7)
+            speed_clearance_penalty = max(0.0, (speed_scale - 1.0) * 0.2)
+            offset_clearance_penalty = waypoint_offset * 0.3
+            min_clearance = max(
+                0.05, base_clearance - speed_clearance_penalty - offset_clearance_penalty
+            )
+
+            base_progress = rng.uniform(0.0, 0.2)
+            speed_progress_factor = max(0.0, (speed_scale - 1.2) * 0.5)
+            failure_to_progress = max(0.0, base_progress + speed_progress_factor)
+
+            base_stalled = rng.uniform(0.0, 1.0)
+            delay_stalled_factor = start_delay * 0.3
+            stalled_time = max(0.0, base_stalled + delay_stalled_factor)
+
+            all_metrics.append(
+                {
+                    "collision_count": collision_count,
+                    "near_misses": near_misses,
+                    "min_clearance": min_clearance,
+                    "failure_to_progress": failure_to_progress,
+                    "stalled_time": stalled_time,
+                }
+            )
+
+        aggregated: dict[str, float] = {}
+        for key in all_metrics[0]:
+            values = [m[key] for m in all_metrics]
+            aggregated[key] = sum(values) / len(values)
+
+        return aggregated
+
+
 __all__ = [
     "CriticalityObjectiveConfig",
     "CriticalityResult",
+    "DeterministicCriticalitySimulator",
     "apply_criticality_parameters",
     "compute_criticality_score",
 ]

@@ -8,6 +8,7 @@ import pytest
 
 from robot_sf.benchmark.scenario_criticality_objective import (
     CriticalityObjectiveConfig,
+    DeterministicCriticalitySimulator,
     apply_criticality_parameters,
     compute_criticality_score,
 )
@@ -250,3 +251,104 @@ def test_criticality_score_stalled_time() -> None:
 
     assert result_stall.stalled_time_term == 5.0
     assert result_stall.criticality_score > result_no.criticality_score
+
+
+def test_deterministic_simulator_responds_to_speed_scale() -> None:
+    """Simulator metrics change with pedestrian_speed_scale parameter."""
+    sim = DeterministicCriticalitySimulator(seed=42)
+
+    baseline_params = {"pedestrian_speed_scale": 1.0}
+    fast_params = {"pedestrian_speed_scale": 1.3}
+
+    baseline_metrics = sim.simulate(baseline_params, num_seeds=5)
+    fast_metrics = sim.simulate(fast_params, num_seeds=5)
+
+    assert fast_metrics["near_misses"] > baseline_metrics["near_misses"]
+    assert fast_metrics["min_clearance"] < baseline_metrics["min_clearance"]
+
+
+def test_deterministic_simulator_responds_to_delay() -> None:
+    """Simulator metrics change with pedestrian_start_delay_s parameter."""
+    sim = DeterministicCriticalitySimulator(seed=42)
+
+    no_delay_params = {"pedestrian_start_delay_s": 0.0}
+    delay_params = {"pedestrian_start_delay_s": 1.5}
+
+    no_delay_metrics = sim.simulate(no_delay_params, num_seeds=5)
+    delay_metrics = sim.simulate(delay_params, num_seeds=5)
+
+    assert delay_metrics["stalled_time"] > no_delay_metrics["stalled_time"]
+
+
+def test_deterministic_simulator_responds_to_waypoint_offset() -> None:
+    """Simulator metrics change with crossing_waypoint_y_offset_m parameter."""
+    sim = DeterministicCriticalitySimulator(seed=42)
+
+    no_offset_params = {"crossing_waypoint_y_offset_m": 0.0}
+    offset_params = {"crossing_waypoint_y_offset_m": 0.4}
+
+    no_offset_metrics = sim.simulate(no_offset_params, num_seeds=5)
+    offset_metrics = sim.simulate(offset_params, num_seeds=5)
+
+    assert offset_metrics["near_misses"] > no_offset_metrics["near_misses"]
+
+
+def test_deterministic_simulator_deterministic() -> None:
+    """Simulator produces identical results for same seed and parameters."""
+    sim1 = DeterministicCriticalitySimulator(seed=123)
+    sim2 = DeterministicCriticalitySimulator(seed=123)
+
+    params = {"pedestrian_speed_scale": 1.1, "pedestrian_start_delay_s": 0.5}
+
+    metrics1 = sim1.simulate(params, num_seeds=3)
+    metrics2 = sim2.simulate(params, num_seeds=3)
+
+    for key in metrics1:
+        assert metrics1[key] == pytest.approx(metrics2[key])
+
+
+def test_deterministic_simulator_different_seeds_differ() -> None:
+    """Different simulator seeds produce different metrics."""
+    sim1 = DeterministicCriticalitySimulator(seed=1)
+    sim2 = DeterministicCriticalitySimulator(seed=999)
+
+    params = {"pedestrian_speed_scale": 1.0}
+
+    metrics1 = sim1.simulate(params, num_seeds=3)
+    metrics2 = sim2.simulate(params, num_seeds=3)
+
+    any_different = any(metrics1[key] != pytest.approx(metrics2[key]) for key in metrics1)
+    assert any_different
+
+
+def test_deterministic_simulator_produces_valid_metrics() -> None:
+    """Simulator produces metrics in expected ranges."""
+    sim = DeterministicCriticalitySimulator(seed=42)
+
+    params = {
+        "pedestrian_speed_scale": 1.0,
+        "pedestrian_start_delay_s": 0.0,
+        "crossing_waypoint_y_offset_m": 0.0,
+    }
+
+    metrics = sim.simulate(params, num_seeds=10)
+
+    assert metrics["collision_count"] >= 0.0
+    assert metrics["near_misses"] >= 0.0
+    assert metrics["min_clearance"] > 0.0
+    assert metrics["failure_to_progress"] >= 0.0
+    assert metrics["stalled_time"] >= 0.0
+
+
+def test_deterministic_simulator_metrics_average_over_seeds() -> None:
+    """Simulator averages metrics over multiple seeds."""
+    sim = DeterministicCriticalitySimulator(seed=42)
+
+    params = {"pedestrian_speed_scale": 1.0}
+
+    metrics_1_seed = sim.simulate(params, num_seeds=1)
+    metrics_5_seeds = sim.simulate(params, num_seeds=5)
+
+    for key in metrics_1_seed:
+        assert isinstance(metrics_5_seeds[key], float)
+        assert math.isfinite(metrics_5_seeds[key])

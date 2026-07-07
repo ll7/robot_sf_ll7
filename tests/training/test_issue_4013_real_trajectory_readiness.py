@@ -11,7 +11,10 @@ from robot_sf.data_ingestion.real_trajectory_contract import (
     _staging_tree_sha256,
     build_staging_tree_report,
 )
-from scripts.training.check_issue_4013_real_trajectory_readiness import build_report
+from scripts.training.check_issue_4013_real_trajectory_readiness import (
+    build_report,
+    render_markdown,
+)
 from tests.data.test_real_trajectory_contract import valid_manifest as _valid_manifest_fixture
 
 if TYPE_CHECKING:
@@ -109,3 +112,84 @@ def test_staging_tree_helper_reports_empty_directory(
         "file_count": 0,
         "reason": "staging directory empty",
     }
+
+
+# ---------------------------------------------------------------------------
+# Restored fail-closed and claim-boundary regression tests (dropped in #4748)
+# ---------------------------------------------------------------------------
+
+
+def test_missing_real_dataset_blocks_phase3_without_contract_error(
+    tmp_path: Path,
+) -> None:
+    """build_report returns blocked_real_trajectory_data_unavailable when availability != validated.
+
+    Restores coverage dropped in PR #4748.  The base _manifest() returns a
+    validated manifest; here we flip availability back to 'missing' so that
+    run_preflight produces no blocking errors yet the dataset-gate fires.
+    """
+    manifest = _valid_manifest_fixture.__wrapped__()
+    # Keep default availability="missing" and benchmark_eligibility="diagnostic_only"
+    # from the fixture; this is below "validated" so the dataset-gate blocks.
+    assert manifest["availability"] != "validated", "fixture assumption: not validated by default"
+
+    report = build_report(_write_manifest(tmp_path, manifest))
+
+    assert report["status"] == "blocked_real_trajectory_data_unavailable"
+    assert {b["code"] for b in report["blockers"]} == {"real_trajectory.availability_not_validated"}
+
+
+def test_manifest_contract_error_blocks_before_training(
+    tmp_path: Path,
+) -> None:
+    """build_report returns blocked_manifest_contract when the license acknowledgment is missing.
+
+    Restores coverage dropped in PR #4748.  Dropping supplier_acknowledgment
+    triggers the license.acknowledgment_missing blocker (severity=error), which
+    causes build_report to set status=blocked_manifest_contract.
+    """
+    manifest = _manifest()
+    manifest["license"]["supplier_acknowledgment"] = False
+
+    report = build_report(_write_manifest(tmp_path, manifest))
+
+    assert report["status"] == "blocked_manifest_contract"
+    assert any(
+        b["code"] == "license.acknowledgment_missing"
+        or "license.acknowledgment_missing" in b["message"]
+        for b in report["blockers"]
+    )
+
+
+def test_markdown_contains_acceptance_evidence_and_claim_boundary(
+    tmp_path: Path,
+) -> None:
+    """render_markdown exposes claim-boundary, acquisition, comparator, and staging-tree text.
+
+    Restores coverage dropped in PR #4748.  Uses a blocked (not-validated)
+    manifest so no local staging is needed; the assertion set covers the
+    evidence-boundary strings that must survive wording changes.
+    """
+    manifest = _valid_manifest_fixture.__wrapped__()
+    # Leave availability="missing" so we get a blocked report without needing local files.
+
+    report = build_report(_write_manifest(tmp_path, manifest))
+    md = render_markdown(report)
+
+    # Claim-boundary text.
+    assert "Claim boundary" in md or "claim boundary" in md or "claim_boundary" in md
+
+    # "No raw data is staged" — present in the claim_boundary field text.
+    assert "No raw data is staged" in md
+
+    # Acquisition URL or fallback sentinel.
+    assert ("manual/license-gated" in md) or ("https://" in md)
+
+    # Comparator / acceptance-evidence text (cv_prediction_mpc).
+    assert "cv_prediction_mpc" in md
+
+    # Staging-tree section lines introduced in #4748.
+    assert "Staging tree available" in md
+    assert "Staging tree path" in md
+    assert "Staging tree files" in md
+    assert "Staging tree SHA-256" in md

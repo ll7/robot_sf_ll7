@@ -8,12 +8,14 @@ and importable on the current checkout::
     uv run python scripts/benchmark/forecast_lane_preflight.py --json
     uv run python scripts/benchmark/forecast_lane_preflight.py --status --json
     uv run python scripts/benchmark/forecast_lane_preflight.py --closure-audit --json
+    uv run python scripts/benchmark/forecast_lane_preflight.py --integration-report --json
 
 Exit code 0 means every required forecast capability is present; non-zero means a
 required capability is missing or broken (the report names the blocker and its
 owner). The check is read-only: it imports and inspects the canonical
 ``robot_sf/benchmark`` forecast owners. Status mode reports the issue #2835
-checked-progress ledger and learned-predictor blockers. It never runs
+checked-progress ledger and learned-predictor blockers. Integration-report mode
+consolidates remaining closure blockers and intentional gates. It never runs
 predictors, training, or benchmark campaigns.
 """
 

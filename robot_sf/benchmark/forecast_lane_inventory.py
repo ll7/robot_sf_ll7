@@ -686,6 +686,66 @@ def build_forecast_lane_closure_audit() -> dict[str, Any]:
     }
 
 
+def build_forecast_lane_integration_report() -> dict[str, Any]:
+    """Return one integration report for remaining issue #2835 blockers.
+
+    This consolidates the checked-progress ledger and closure audit into one
+    artifact-first surface for high-churn closure audits. It is deliberately
+    read-only: it does not execute predictors, benchmarks, campaigns, or
+    learned-model training.
+    """
+    status_report = build_forecast_lane_status()
+    closure_report = build_forecast_lane_closure_audit()
+    unmet_rows = [row for row in closure_report["criteria"] if row["status"] != "met"]
+    status_rows = {row["requirement_id"]: row for row in status_report["requirements"]}
+    learned_blocker_ids = set(status_report["summary"]["learned_predictor_blocker_ids"])
+    intentionally_gated_ids = sorted(
+        row_id
+        for row_id in learned_blocker_ids
+        if status_rows[row_id]["status"] in {"blocked", "unresolved"}
+    )
+    blockers_remaining = [
+        {
+            "criterion_id": row["criterion_id"],
+            "status": row["status"],
+            "remaining_work": row["remaining_work"],
+            "next_empirical_action": row["next_empirical_action"],
+            "claim_boundary": row["claim_boundary"],
+        }
+        for row in unmet_rows
+    ]
+
+    return {
+        "schema": "forecast_lane_integration_report.v1",
+        "ok": status_report["ok"] and closure_report["ok"],
+        "issue": 2835,
+        "recommendation": closure_report["recommendation"],
+        "closable": closure_report["closable"],
+        "learned_predictor_unblocked": status_report["learned_predictor_unblocked"],
+        "claim_boundary": status_report["claim_boundary"],
+        "blockers_remaining": blockers_remaining,
+        "intentional_gates": [
+            {
+                "requirement_id": row_id,
+                "status": status_rows[row_id]["status"],
+                "remaining_blocker": status_rows[row_id]["remaining_blocker"],
+                "next_action": status_rows[row_id]["next_action"],
+            }
+            for row_id in intentionally_gated_ids
+        ],
+        "criteria": closure_report["criteria"],
+        "requirements": status_report["requirements"],
+        "summary": {
+            "unmet_criterion_ids": closure_report["summary"]["unmet_criterion_ids"],
+            "learned_predictor_blocker_ids": status_report["summary"][
+                "learned_predictor_blocker_ids"
+            ],
+            "intentional_gate_ids": intentionally_gated_ids,
+            "next_empirical_actions": closure_report["summary"]["next_empirical_actions"],
+        },
+    }
+
+
 def format_closure_audit_markdown(report: dict[str, Any]) -> str:
     """Render compact Markdown criterion-to-evidence closure audit.
 
@@ -715,6 +775,35 @@ def format_closure_audit_markdown(report: dict[str, Any]) -> str:
         lines.append("## Next empirical actions")
         for criterion_id, action in report["summary"]["next_empirical_actions"].items():
             lines.append(f"- `{criterion_id}`: {action}")
+    return "\n".join(lines)
+
+
+def format_integration_report_markdown(report: dict[str, Any]) -> str:
+    """Render compact Markdown for the issue #2835 integration report.
+
+    Returns:
+        Markdown table of remaining blockers plus intentional gates.
+    """
+    verdict = "CLOSE" if report["closable"] else "KEEP OPEN"
+    lines: list[str] = [f"# Forecast lane integration report: {verdict}", ""]
+    lines.append(report["claim_boundary"])
+    lines.append("")
+    lines.append("| Remaining criterion | Status | Next empirical action | Claim boundary |")
+    lines.append("| --- | --- | --- | --- |")
+    for row in report["blockers_remaining"]:
+        lines.append(
+            f"| `{row['criterion_id']}` | {row['status']} | "
+            f"{row['next_empirical_action']} | {row['claim_boundary']} |"
+        )
+
+    if report["intentional_gates"]:
+        lines.append("")
+        lines.append("## Intentional gates")
+        for row in report["intentional_gates"]:
+            lines.append(
+                f"- `{row['requirement_id']}` ({row['status']}): "
+                f"{row['remaining_blocker']} Next: {row['next_action']}"
+            )
     return "\n".join(lines)
 
 
@@ -818,11 +907,19 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Emit issue #2835 criterion-to-evidence closure audit.",
     )
+    parser.add_argument(
+        "--integration-report",
+        action="store_true",
+        help="Emit issue #2835 consolidated remaining-blocker integration report.",
+    )
     args = parser.parse_args(argv)
-    if args.status and args.closure_audit:
-        parser.error("--status and --closure-audit are mutually exclusive")
+    selected_modes = [args.status, args.closure_audit, args.integration_report]
+    if sum(selected_modes) > 1:
+        parser.error("--status, --closure-audit, and --integration-report are mutually exclusive")
 
-    if args.closure_audit:
+    if args.integration_report:
+        report = build_forecast_lane_integration_report()
+    elif args.closure_audit:
         report = build_forecast_lane_closure_audit()
     elif args.status:
         report = build_forecast_lane_status()
@@ -830,6 +927,8 @@ def main(argv: list[str] | None = None) -> int:
         report = build_forecast_lane_inventory()
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))  # noqa: T201 - CLI output
+    elif args.integration_report:
+        print(format_integration_report_markdown(report))  # noqa: T201 - CLI output
     elif args.closure_audit:
         print(format_closure_audit_markdown(report))  # noqa: T201 - CLI output
     elif args.status:

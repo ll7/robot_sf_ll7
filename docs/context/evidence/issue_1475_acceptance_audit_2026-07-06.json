@@ -148,6 +148,17 @@
       "merged_at_utc": "2026-07-07T03:10:15Z",
       "pr": "#4726",
       "title": "Issue #1475: add merged PR acceptance evidence"
+    },
+    {
+      "closure_effect": "post_merge_audit_keep_open",
+      "criteria_supported": [
+        "Merged PR acceptance evidence mapped through PR #4726.",
+        "Newest durable state row keeps closure blocked on external smoke rerun."
+      ],
+      "evidence": "Added post-#4726 closure-audit evidence, kept #1475 open, and recorded the state-surface selector over the newest recorded_at_utc row.",
+      "merged_at_utc": "2026-07-07T05:48:07Z",
+      "pr": "#4737",
+      "title": "Issue #1475: add post-merge closure audit evidence"
     }
   ],
   "next_empirical_action": "Run one bounded ORCA-residual BC smoke rerun on a Slurm-capable host; only if validate_smoke_nominal_gate passes, escalate nominal and classify #1358 continuation/revise/stop.",
@@ -178,12 +189,12 @@
     "error": "ORCA-residual smoke nominal gate failed:\n- smoke summary missing required entries: ['residual_clipping_rate', 'guard_veto_rate', 'fallback_degraded_status', 'artifact_pointer_status']\n- residual_clipping_rate must be numeric rate\n- guard_veto_rate must be numeric rate\n- fallback_degraded_status must be 'clear' before nominal escalation (got None)\n- artifact_pointer_status must be durable/complete before nominal escalation (got None)\n- nominal_escalation_allowed must be true\n- success_rate below nominal smoke gate: 0.0000 < 0.8000",
     "status": "invalid"
   },
-  "source_thread_summary": "Issue #1475 live thread reviewed via gh api on 2026-07-07; latest issue comment is the 2026-07-07 post-PR #4726 state update keeping the issue open.",
+  "source_thread_summary": "Issue #1475 live thread reviewed via gh api on 2026-07-07; latest issue comment is the 2026-07-07 post-PR #4726 state update keeping the issue open; PR #4737 later merged post-merge closure audit evidence without closing it.",
   "state_surface": {
-    "entry_status": "post_4726_closure_audit_delivered__external_slurm_rerun_pending",
+    "entry_status": "post_4737_closure_audit_delivered__external_slurm_rerun_pending",
     "errors": [],
     "integration_report_status": "blocked",
-    "latest_recorded_at_utc": "2026-07-07T05:30:00Z",
+    "latest_recorded_at_utc": "2026-07-07T06:30:00Z",
     "path": "docs/context/issue_1475_state.yaml",
     "status": "valid"
   },

@@ -24,7 +24,7 @@ def test_issue_1475_acceptance_audit_stays_fail_closed_on_tracked_smoke() -> Non
     assert "smoke summary missing required entries" in report["smoke_gate"]["error"]
     assert report["state_surface"]["status"] == "valid"
     assert report["state_surface"]["entry_status"] == (
-        "post_4726_closure_audit_delivered__external_slurm_rerun_pending"
+        "post_4737_closure_audit_delivered__external_slurm_rerun_pending"
     )
 
     statuses = {item["criterion"]: item["status"] for item in report["acceptance_evidence"]}
@@ -90,7 +90,8 @@ def test_issue_1475_acceptance_audit_cli_writes_json_artifact(tmp_path: Path) ->
         "#4678",
         "#4721",
         "#4726",
+        "#4737",
     ]
     assert payload["merged_pr_evidence"][-1]["closure_effect"] == "post_merge_audit_keep_open"
-    assert "post-PR #4726 state update" in payload["source_thread_summary"]
+    assert "PR #4737 later merged" in payload["source_thread_summary"]
     assert "Slurm-capable host" in payload["next_empirical_action"]

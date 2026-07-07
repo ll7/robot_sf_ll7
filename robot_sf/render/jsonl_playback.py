@@ -19,6 +19,7 @@ Schema Support:
     - Legacy multi-episode pickle file segmentation
 """
 
+import io
 import json
 import pickle
 from dataclasses import dataclass
@@ -28,6 +29,10 @@ from typing import Any, Union
 import loguru
 import numpy as np
 
+from robot_sf.common.safe_pickle import (
+    PLAYBACK_RECORDING_ALLOWED_GLOBALS,
+    restricted_pickle_load,
+)
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.obstacle import Obstacle
@@ -457,18 +462,26 @@ class JSONLPlaybackLoader:
     def _load_pickle_file(self, file_path: Path) -> tuple[PlaybackEpisode, MapDefinition]:
         """Load legacy pickle file and convert to episode format.
         Only for backward compatibility.
-        Use with caution and only with trusted inputs.
+        Uses a restricted unpickler to reject unsafe pickle globals.
 
         Args:
             file_path: Path to pickle file
 
         Returns:
             Tuple of (PlaybackEpisode, MapDefinition)
+
+        Raises:
+            UnsafePickleError: If the pickle contains disallowed globals.
         """
         logger.info(f"Loading legacy pickle file: {file_path}")
 
-        with open(file_path, "rb") as f:
-            states, map_def = pickle.load(f)
+        with file_path.open("rb") as f:
+            data = restricted_pickle_load(
+                io.BytesIO(f.read()),
+                allowed_globals=PLAYBACK_RECORDING_ALLOWED_GLOBALS,
+                label="playback recording",
+            )
+        states, map_def = data
 
         # Detect episode boundaries in multi-episode pickle files
         reset_points = self._detect_reset_points(states)

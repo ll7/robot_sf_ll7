@@ -14,13 +14,23 @@ Notes:
     The pickle files should contain a tuple of (states, map_def) where:
     - states: List[VisualizableSimState] - Sequence of simulation states
     - map_def: MapDefinition - Configuration of the simulation environment
+
+Security:
+    Legacy .pkl recordings are loaded through a restricted unpickler that only allows
+    known-safe RobotSF classes and NumPy reconstruction symbols. Arbitrary pickle files
+    remain untrusted and may be rejected. Prefer JSONL or other safer formats for new
+    recordings.
 """
 
+import io
 import os
-import pickle
 
 import loguru
 
+from robot_sf.common.safe_pickle import (
+    PLAYBACK_RECORDING_ALLOWED_GLOBALS,
+    restricted_pickle_load,
+)
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.render.sim_state import VisualizableSimState
 from robot_sf.render.sim_view import SimulationView
@@ -60,8 +70,13 @@ def load_states(filename: str) -> tuple[list[VisualizableSimState], MapDefinitio
         raise ValueError(f"File {filename} is empty; expected pickle with (states, map_def) tuple")
 
     logger.info(f"Loading states from {filename}")
-    with open(filename, "rb") as f:  # rb = read binary
-        states, map_def = pickle.load(f)
+    with open(filename, "rb") as f:
+        data = restricted_pickle_load(
+            io.BytesIO(f.read()),
+            allowed_globals=PLAYBACK_RECORDING_ALLOWED_GLOBALS,
+            label="playback recording",
+        )
+    states, map_def = data
     logger.info(f"Loaded {len(states)} states")
 
     # Verify `states` is a list of VisualizableSimState

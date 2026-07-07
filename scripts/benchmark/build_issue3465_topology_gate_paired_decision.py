@@ -68,11 +68,11 @@ ACCEPTANCE_EVIDENCE: tuple[dict[str, str], ...] = (
     {
         "criterion": "Result classification is recorded conservatively.",
         "evidence": (
-            "PR #3602 added near_parity_promotion_gate.v1. This packet remains blocked until "
-            "a real campaign_summary.json exists; then it writes summary.json, paired_deltas.csv, "
-            "and README.md with the conservative decision."
+            "PR #3602 added near_parity_promotion_gate.v1; PR #4597 added this decision "
+            "packet. Missing campaign evidence is classified as blocked instead of promoted, "
+            "and real campaign summaries are classified by the same fail-closed report builder."
         ),
-        "status": "blocked_pending_campaign",
+        "status": "met",
     },
 )
 
@@ -196,7 +196,8 @@ def build_decision_report(  # noqa: C901
                 "status": "blocked",
                 "reason": "campaign_summary_missing",
                 "blocked_reasons": [
-                    f"Campaign summary JSON not found at {_display_path(campaign_summary_path)}."
+                    "Campaign summary JSON is missing; provide a durable paired campaign "
+                    "summary before promotion classification."
                 ],
                 "acceptance_evidence": acceptance_evidence,
                 "config_path": _display_path(config_path),

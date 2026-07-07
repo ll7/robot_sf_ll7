@@ -13,6 +13,7 @@ from robot_sf.benchmark.figures.force_field import generate_force_field_figure
 from robot_sf.benchmark.figures.provenance import (
     build_caption_fragment,
     build_provenance,
+    latex_escape,
     write_caption_fragment,
     write_provenance,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "build_provenance",
     "figure_size",
     "generate_force_field_figure",
+    "latex_escape",
     "planner_color",
     "planner_palette",
     "publication_style",

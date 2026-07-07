@@ -13,8 +13,10 @@ import pytest
 
 from robot_sf.benchmark.figures.export import save_publication_figure
 from robot_sf.benchmark.figures.provenance import (
+    ProvenanceConfig,
     build_caption_fragment,
     build_provenance,
+    latex_escape,
     write_caption_fragment,
     write_provenance,
 )
@@ -171,7 +173,8 @@ class TestProvenance:
             campaign_name="test_campaign",
             episode_ids=["ep1", "ep2", "ep3"],
         )
-        assert "test_campaign" in caption
+        # Underscores are LaTeX-escaped
+        assert "test\\_campaign" in caption
         assert "ep1" in caption
 
     def test_write_caption_fragment_creates_file(self, tmp_path):
@@ -333,3 +336,225 @@ class TestStyleDoesNotAlterData:
         assert y_before == y_during
 
         plt.close(fig)
+
+
+class TestLatexEscape:
+    """Tests for LaTeX special character escaping."""
+
+    def test_escapes_underscore(self):
+        """Test underscore is escaped (common in planner names)."""
+        assert latex_escape("orca_v1") == "orca\\_v1"
+
+    def test_escapes_percent(self):
+        """Test percent is escaped."""
+        assert latex_escape("scenario%stress") == "scenario\\%stress"
+
+    def test_escapes_ampersand(self):
+        """Test ampersand is escaped."""
+        assert latex_escape("case&case") == "case\\&case"
+
+    def test_escapes_hash(self):
+        """Test hash is escaped."""
+        assert latex_escape("campaign#1") == "campaign\\#1"
+
+    def test_escapes_dollar(self):
+        """Test dollar sign is escaped."""
+        assert latex_escape("$draft") == "\\$draft"
+
+    def test_escapes_curly_braces(self):
+        """Test curly braces are escaped."""
+        assert latex_escape("{test}") == "\\{test\\}"
+
+    def test_escapes_tilde(self):
+        """Test tilde is escaped."""
+        assert latex_escape("a~b") == "a\\textasciitilde{}b"
+
+    def test_escapes_caret(self):
+        """Test caret is escaped."""
+        assert latex_escape("a^b") == "a\\textasciicircum{}b"
+
+    def test_escapes_backslash(self):
+        """Test backslash is escaped first to avoid double-escaping."""
+        assert "\\" in latex_escape("\\path")
+        assert "textbackslash" in latex_escape("\\path")
+
+    def test_escapes_all_special_chars_combined(self):
+        """Test all special characters escaped together."""
+        value = "orca_v1_%&#${}~^\\back"
+        result = latex_escape(value)
+        assert "_" not in result or "\\_" in result
+        assert "%&" not in result
+        assert "textbackslash" in result
+
+    def test_plain_text_unchanged(self):
+        """Test plain text without special chars is unchanged."""
+        assert latex_escape("plain text 123") == "plain text 123"
+
+
+class TestCaptionLatexEscaping:
+    """Tests that caption fragments escape special LaTeX characters."""
+
+    def test_caption_escapes_campaign_name(self):
+        """Test campaign name with special chars is escaped."""
+        caption = build_caption_fragment(
+            campaign_name="campaign_$draft#1",
+        )
+        assert "\\$" in caption
+        assert "\\#" in caption
+
+    def test_caption_escapes_scenario_id(self):
+        """Test scenario ID with special chars is escaped."""
+        caption = build_caption_fragment(
+            scenario_id="scenario%stress&case#1",
+        )
+        assert "\\%" in caption
+        assert "\\&" in caption
+        assert "\\#" in caption
+
+    def test_caption_escapes_episode_ids(self):
+        """Test episode IDs with underscores are escaped."""
+        caption = build_caption_fragment(
+            episode_ids=["ep_001", "ep_002"],
+        )
+        assert "\\_001" in caption
+        assert "\\_002" in caption
+
+    def test_caption_plain_values_pass_through(self):
+        """Test plain values are passed through correctly."""
+        caption = build_caption_fragment(
+            campaign_name="my campaign",
+            episode_ids=["ep1", "ep2"],
+        )
+        assert "my campaign" in caption
+        assert "ep1" in caption
+
+
+class TestMetadataEmbedding:
+    """Tests for provenance metadata embedding in output files."""
+
+    def test_pdf_embeds_description_metadata(self, tmp_path):
+        """Verify PDF metadata contains provenance Description field."""
+        plt = pytest.importorskip("matplotlib.pyplot")
+
+        fig, ax = plt.subplots()
+        ax.plot([1, 2, 3], [1, 2, 3])
+
+        provenance = build_provenance(
+            generator_command="test_metadata",
+            source_artifacts=[{"path": "data.jsonl", "hash": "abc123"}],
+        )
+
+        paths = save_publication_figure(
+            fig,
+            tmp_path / "test_figure",
+            formats=("pdf",),
+            provenance=provenance,
+        )
+
+        plt.close(fig)
+
+        pdf_path = next(p for p in paths if p.suffix == ".pdf")
+        assert pdf_path.exists()
+        assert pdf_path.stat().st_size > 0
+
+    def test_png_embeds_provenance_metadata(self, tmp_path):
+        """Verify PNG metadata contains provenance data."""
+        plt = pytest.importorskip("matplotlib.pyplot")
+        Image = pytest.importorskip("PIL.Image")
+
+        fig, ax = plt.subplots()
+        ax.plot([1, 2, 3], [1, 2, 3])
+
+        provenance = build_provenance(
+            generator_command="test_png_metadata",
+            seeds=[42, 123],
+        )
+
+        paths = save_publication_figure(
+            fig,
+            tmp_path / "test_figure",
+            formats=("png",),
+            provenance=provenance,
+        )
+
+        plt.close(fig)
+
+        png_path = next(p for p in paths if p.suffix == ".png")
+        assert png_path.exists()
+
+        img = Image.open(png_path)
+        text_info = getattr(img, "text", None)
+        assert text_info is not None
+        assert "RobotSF-Provenance" in text_info
+        assert "test_png_metadata" in text_info["RobotSF-Provenance"]
+
+    def test_png_embeds_software_and_title(self, tmp_path):
+        """Verify PNG contains Software and Title metadata."""
+        plt = pytest.importorskip("matplotlib.pyplot")
+        Image = pytest.importorskip("PIL.Image")
+
+        fig, ax = plt.subplots()
+        ax.plot([1, 2, 3], [1, 2, 3])
+
+        paths = save_publication_figure(
+            fig,
+            tmp_path / "my_figure",
+            formats=("png",),
+            provenance=build_provenance(
+                generator_command="sw_test"
+            ),
+        )
+
+        plt.close(fig)
+
+        png_path = next(p for p in paths if p.suffix == ".png")
+        img = Image.open(png_path)
+        text_info = getattr(img, "text", None)
+        assert text_info is not None
+        assert "Software" in text_info
+        assert "Title" in text_info
+
+    def test_multi_format_creates_all_requested(self, tmp_path):
+        """Verify all requested formats are created."""
+        plt = pytest.importorskip("matplotlib.pyplot")
+
+        fig, ax = plt.subplots()
+        ax.plot([1, 2, 3], [1, 2, 3])
+
+        paths = save_publication_figure(
+            fig,
+            tmp_path / "multi_fig",
+            formats=("pdf", "png", "svg"),
+        )
+
+        plt.close(fig)
+
+        suffixes = {p.suffix for p in paths}
+        assert ".pdf" in suffixes
+        assert ".png" in suffixes
+        assert ".svg" in suffixes
+
+
+class TestProvenanceConfig:
+    """Tests for ProvenanceConfig dataclass."""
+
+    def test_default_config(self):
+        """Verify default config has empty lists."""
+        config = ProvenanceConfig()
+        assert config.source_artifacts == []
+        assert config.seeds == []
+        assert config.episode_ids == []
+
+    def test_config_builds_provenance(self):
+        """Verify config with values produces rich provenance."""
+        config = ProvenanceConfig(
+            seeds=[1, 2, 3],
+            episode_ids=["ep1"],
+            generator_command="test_cmd",
+            figure_formats=["pdf", "png"],
+        )
+        prov = build_provenance(config)
+        assert prov["seeds"] == [1, 2, 3]
+        assert prov["episode_ids"] == ["ep1"]
+        assert prov["generator_command"] == "test_cmd"
+        assert prov["figure_formats"] == ["pdf", "png"]

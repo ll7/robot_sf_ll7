@@ -153,6 +153,36 @@ def write_provenance(
     return provenance_path
 
 
+def latex_escape(value: str) -> str:
+    """Escape special LaTeX characters in a string.
+
+    Escapes at minimum: ``_ % & # $ { } ~ ^ \\``
+
+    Args:
+        value: Raw string that may contain LaTeX special characters.
+
+    Returns:
+        LaTeX-safe string.
+    """
+    # Order matters: backslash must be escaped first to avoid double-escaping
+    replacements = [
+        ("\\", "\\textbackslash{}"),
+        ("_", "\\_"),
+        ("%", "\\%"),
+        ("&", "\\&"),
+        ("#", "\\#"),
+        ("$", "\\$"),
+        ("{", "\\{"),
+        ("}", "\\}"),
+        ("~", "\\textasciitilde{}"),
+        ("^", "\\textasciicircum{}"),
+    ]
+    result = value
+    for char, escaped in replacements:
+        result = result.replace(char, escaped)
+    return result
+
+
 def build_caption_fragment(
     *,
     campaign_name: str | None = None,
@@ -171,11 +201,12 @@ def build_caption_fragment(
     """
     parts = []
     if campaign_name:
-        parts.append(f"Campaign: {campaign_name}")
+        parts.append(f"Campaign: {latex_escape(str(campaign_name))}")
     if scenario_id:
-        parts.append(f"Scenario: {scenario_id}")
+        parts.append(f"Scenario: {latex_escape(str(scenario_id))}")
     if episode_ids:
-        ep_str = ", ".join(episode_ids[:3])
+        escaped_ids = [latex_escape(str(eid)) for eid in episode_ids[:3]]
+        ep_str = ", ".join(escaped_ids)
         if len(episode_ids) > 3:
             ep_str += f", ... ({len(episode_ids)} total)"
         parts.append(f"Episodes: {ep_str}")

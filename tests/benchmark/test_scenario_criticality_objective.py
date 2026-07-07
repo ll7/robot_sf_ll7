@@ -7,6 +7,8 @@ import math
 import pytest
 
 from robot_sf.benchmark.scenario_criticality_objective import (
+    CANONICAL_COLLISION_KEY,
+    COLLISION_KEY_FALLBACKS,
     CriticalityObjectiveConfig,
     apply_criticality_parameters,
     compute_criticality_score,
@@ -250,3 +252,125 @@ def test_criticality_score_stalled_time() -> None:
 
     assert result_stall.stalled_time_term == 5.0
     assert result_stall.criticality_score > result_no.criticality_score
+
+
+def test_collision_key_canonical_used_when_present() -> None:
+    """Canonical collision_count key is preferred when present."""
+    episode = _MockEpisodeData(
+        metrics={
+            "collision_count": 3,
+            "near_misses": 0,
+            "min_clearance": 0.6,
+            "failure_to_progress": 0,
+            "stalled_time": 0,
+        }
+    )
+    result = compute_criticality_score(episode)
+    assert result.status == "evaluated"
+    assert result.collision_key_used == CANONICAL_COLLISION_KEY
+    assert result.collision_term == 30.0
+
+
+def test_collision_key_fallback_agent_collision_count() -> None:
+    """Falls back to agent_collision_count when canonical key is absent."""
+    episode = _MockEpisodeData(
+        metrics={
+            "agent_collision_count": 2,
+            "near_misses": 0,
+            "min_clearance": 0.6,
+            "failure_to_progress": 0,
+            "stalled_time": 0,
+        }
+    )
+    result = compute_criticality_score(episode)
+    assert result.status == "evaluated"
+    assert result.collision_key_used == "agent_collision_count"
+    assert result.collision_term == 20.0
+
+
+def test_collision_key_fallback_total_collision_count() -> None:
+    """Falls back to total_collision_count when earlier keys are absent."""
+    episode = _MockEpisodeData(
+        metrics={
+            "total_collision_count": 4,
+            "near_misses": 0,
+            "min_clearance": 0.6,
+            "failure_to_progress": 0,
+            "stalled_time": 0,
+        }
+    )
+    result = compute_criticality_score(episode)
+    assert result.status == "evaluated"
+    assert result.collision_key_used == "total_collision_count"
+    assert result.collision_term == 40.0
+
+
+def test_collision_key_fallback_collisions() -> None:
+    """Falls back to legacy 'collisions' key when others are absent."""
+    episode = _MockEpisodeData(
+        metrics={
+            "collisions": 1,
+            "near_misses": 0,
+            "min_clearance": 0.6,
+            "failure_to_progress": 0,
+            "stalled_time": 0,
+        }
+    )
+    result = compute_criticality_score(episode)
+    assert result.status == "evaluated"
+    assert result.collision_key_used == "collisions"
+    assert result.collision_term == 10.0
+
+
+def test_collision_key_canonical_takes_precedence_over_fallbacks() -> None:
+    """Canonical key is used even when fallback keys also exist."""
+    episode = _MockEpisodeData(
+        metrics={
+            "collision_count": 1,
+            "agent_collision_count": 99,
+            "near_misses": 0,
+            "min_clearance": 0.6,
+            "failure_to_progress": 0,
+            "stalled_time": 0,
+        }
+    )
+    result = compute_criticality_score(episode)
+    assert result.collision_key_used == CANONICAL_COLLISION_KEY
+    assert result.collision_term == 10.0
+
+
+def test_collision_key_used_none_when_no_key_present() -> None:
+    """When neither canonical nor any fallback key exists, collision_key_used is None.
+
+    Regression: previously the absent case reported the canonical key as
+    ``collision_key_used``, falsely implying it was found in the metrics.
+    """
+    episode = _MockEpisodeData(
+        metrics={
+            "near_misses": 0,
+            "min_clearance": 0.6,
+            "failure_to_progress": 0,
+            "stalled_time": 0,
+        }
+    )
+    # fail_closed=False so the absent collision metric defaults to 0.0 and the
+    # episode still evaluates; the point is that collision_key_used is None
+    # (not falsely reported as the canonical key) when no key was found.
+    result = compute_criticality_score(episode, CriticalityObjectiveConfig(fail_closed=False))
+    assert result.status == "evaluated"
+    assert result.collision_key_used is None
+    assert result.collision_term == 0.0
+
+
+def test_canonical_collision_key_constant_value() -> None:
+    """CANONICAL_COLLISION_KEY is 'collision_count'."""
+    assert CANONICAL_COLLISION_KEY == "collision_count"
+
+
+def test_collision_key_fallbacks_ordered() -> None:
+    """Fallback chain has the expected order and length."""
+    assert COLLISION_KEY_FALLBACKS == (
+        "agent_collision_count",
+        "total_collision_count",
+        "collisions",
+    )

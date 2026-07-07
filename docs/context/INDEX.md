@@ -1,5 +1,8 @@
 # Context Retrieval Index
 
+Publication figure style pack (opt-in vector export, colorblind-safe planner palette, provenance sidecars, LaTeX-safe captions):
+[issue_4777_publication_figure_style_pack.md](issue_4777_publication_figure_style_pack.md).
+
 Recent SocNavBench ETH stage/SVG closure audit and generated SVG evidence:
 [issue_4546_closure_audit_2026-07-06.md](issue_4546_closure_audit_2026-07-06.md).
 

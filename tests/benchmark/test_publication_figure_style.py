@@ -166,13 +166,30 @@ class TestProvenance:
         assert content1 == content2
 
     def test_build_caption_fragment(self):
-        """Verify caption fragment includes campaign and episodes."""
+        """Verify caption fragment includes campaign and episodes (LaTeX-escaped)."""
         caption = build_caption_fragment(
             campaign_name="test_campaign",
             episode_ids=["ep1", "ep2", "ep3"],
         )
-        assert "test_campaign" in caption
+        # Underscore is a LaTeX special and must be escaped.
+        assert "test\\_campaign" in caption
         assert "ep1" in caption
+
+    def test_build_caption_fragment_escapes_latex_specials(self):
+        """LaTeX specials in identifiers are escaped so they cannot break compilation."""
+        caption = build_caption_fragment(
+            campaign_name="camp_aign",
+            scenario_id="sc#1",
+            episode_ids=["ep%2", "ep$3", "ep&4"],
+        )
+        assert "camp\\_aign" in caption
+        assert "sc\\#1" in caption
+        assert "ep\\%2" in caption
+        assert "ep\\$3" in caption
+        assert "ep\\&4" in caption
+        # No raw unescaped specials survive from the inputs.
+        for raw in ("camp_aign", "sc#1", "ep%2", "ep$3", "ep&4"):
+            assert raw not in caption
 
     def test_write_caption_fragment_creates_file(self, tmp_path):
         """Verify write_caption_fragment creates a .caption.tex file."""

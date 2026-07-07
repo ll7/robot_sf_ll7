@@ -16,9 +16,12 @@ Usage (example):
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
+import sys
 from collections.abc import Sequence
+from contextlib import nullcontext
 from datetime import (
     UTC,  # type: ignore[attr-defined]
     datetime,
@@ -28,6 +31,13 @@ from pathlib import Path
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.distributions import collect_grouped_values, save_distributions
 from robot_sf.benchmark.figures.force_field import generate_force_field_figure
+from robot_sf.benchmark.figures.provenance import (
+    build_caption_fragment,
+    build_provenance,
+    write_caption_fragment,
+    write_provenance,
+)
+from robot_sf.benchmark.figures.style import publication_style
 from robot_sf.benchmark.figures.thumbnails import save_montage, save_scenario_thumbnails
 from robot_sf.benchmark.metrics import snqi as _snqi
 from robot_sf.benchmark.plots import save_pareto_png
@@ -331,6 +341,35 @@ def main() -> int:  # noqa: PLR0915
         help="Output directory for thumbnails (default: <out-dir>/scenarios)",
     )
     ap.add_argument("--thumbs-montage", action="store_true", default=False)
+    # Publication figure options (opt-in; do not change data semantics)
+    ap.add_argument(
+        "--publication-style",
+        action="store_true",
+        default=False,
+        help="Render figures in publication style and write provenance sidecars (+ caption fragments with --caption-fragment)",
+    )
+    ap.add_argument(
+        "--format",
+        default="pdf",
+        help="Comma-separated output formats for publication figures (pdf,png,svg); PDF is the default for publication paths",
+    )
+    ap.add_argument(
+        "--caption-fragment",
+        action="store_true",
+        default=False,
+        help="Write LaTeX-ready .caption.tex sidecars naming campaign + episodes",
+    )
+    ap.add_argument(
+        "--campaign",
+        default=None,
+        help="Campaign name used in provenance and caption fragments",
+    )
+    ap.add_argument(
+        "--figure-size",
+        choices=["single", "double"],
+        default="single",
+        help="Publication figure size preset (single ~3.4in, double ~7in)",
+    )
     args = ap.parse_args()
 
     episodes = Path(args.episodes)
@@ -354,14 +393,54 @@ def main() -> int:  # noqa: PLR0915
     )
     _inject_snqi(records, snqi_weights, snqi_baseline)
 
-    # Pareto (unless disabled)
-    if not args.no_pareto:
-        _generate_pareto(records, out_dir, args)
+    publication = bool(args.publication_style)
+    formats = tuple(f.strip() for f in str(args.format).split(",") if f.strip())
+    episode_ids = [str(r.get("episode_id")) for r in records if r.get("episode_id")]
+    caption = (
+        build_caption_fragment(campaign_name=args.campaign, episode_ids=episode_ids)
+        if bool(args.caption_fragment)
+        else None
+    )
+    # In publication mode, --format pdf also enables vector PDF for pareto/dists.
+    if publication and "pdf" in formats:
+        args.pareto_pdf = True
+        args.dists_pdf = True
 
-    _generate_distributions(records, out_dir, args)
-    _generate_table(records, out_dir, args)
-    _maybe_thumbnails(out_dir, args)
-    _maybe_force_field(out_dir, args)
+    pub_ctx = publication_style(size=args.figure_size) if publication else nullcontext()
+    with pub_ctx:
+        # Pareto (unless disabled)
+        if not args.no_pareto:
+            _generate_pareto(
+                records,
+                out_dir,
+                args,
+                publication=publication,
+                formats=formats,
+                caption=caption,
+            )
+        _generate_distributions(
+            records,
+            out_dir,
+            args,
+            publication=publication,
+            formats=formats,
+            caption=caption,
+        )
+        _generate_table(records, out_dir, args)
+        _maybe_thumbnails(
+            out_dir,
+            args,
+            publication=publication,
+            formats=formats,
+            caption=caption,
+        )
+        _maybe_force_field(
+            out_dir,
+            args,
+            publication=publication,
+            formats=formats,
+            caption=caption,
+        )
 
     # Write meta.json and optionally update _latest.txt
     _write_meta(out_dir, episodes, args)
@@ -379,7 +458,43 @@ def main() -> int:  # noqa: PLR0915
     return 0
 
 
-def _generate_pareto(records, out_dir, args) -> None:
+def _source_artifact(path: Path) -> dict:
+    """Return a ``{path, hash}`` source-artifact dict for provenance."""
+    try:
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        digest = "unavailable"
+    return {"path": str(path), "hash": digest}
+
+
+def _write_publication_sidecars(
+    output_base: Path,
+    episodes: Path,
+    formats: Sequence[str],
+    caption: str | None,
+    claim_boundary: str,
+) -> None:
+    """Write a provenance sidecar (and optional caption) for a figure base path."""
+    provenance = build_provenance(
+        source_artifacts=[_source_artifact(episodes)],
+        generator_command=" ".join(sys.argv),
+        figure_formats=list(formats),
+        claim_boundary=claim_boundary,
+    )
+    write_provenance(output_base, provenance)
+    if caption is not None:
+        write_caption_fragment(output_base, caption)
+
+
+def _generate_pareto(
+    records,
+    out_dir,
+    args,
+    *,
+    publication: bool = False,
+    formats: Sequence[str] = (),
+    caption: str | None = None,
+) -> None:
     """Generate Pareto plot (factored out to reduce main complexity)."""
     pareto_png = out_dir / "pareto.png"
     pareto_pdf = out_dir / "pareto.pdf" if args.pareto_pdf else None
@@ -393,15 +508,35 @@ def _generate_pareto(records, out_dir, args) -> None:
         agg=args.pareto_agg,
         out_pdf=(str(pareto_pdf) if pareto_pdf else None),
     )
+    if publication:
+        written_formats = ["png"] + (["pdf"] if pareto_pdf else [])
+        _write_publication_sidecars(
+            out_dir / "pareto",
+            Path(args.episodes),
+            written_formats,
+            caption,
+            "Pareto front plot; presentation only.",
+        )
 
 
-def _generate_distributions(records, out_dir: Path, args) -> None:
+def _generate_distributions(
+    records,
+    out_dir: Path,
+    args,
+    *,
+    publication: bool = False,
+    formats: Sequence[str] = (),
+    caption: str | None = None,
+) -> None:
     """TODO docstring. Document this function.
 
     Args:
         records: TODO docstring.
         out_dir: TODO docstring.
         args: TODO docstring.
+        publication: Write provenance sidecars (and optional caption) per metric.
+        formats: Output formats recorded in provenance.
+        caption: Optional LaTeX-ready caption fragment.
     """
     dmetrics = [m.strip() for m in str(args.dmetrics).split(",") if m.strip()]
     grouped = collect_grouped_values(
@@ -410,13 +545,23 @@ def _generate_distributions(records, out_dir: Path, args) -> None:
         group_by=args.group_by,
         fallback_group_by=args.fallback_group_by,
     )
-    save_distributions(
+    meta = save_distributions(
         grouped,
         out_dir=out_dir,
         bins=int(args.dists_bins),
         kde=bool(args.dists_kde),
         out_pdf=bool(args.dists_pdf),
     )
+    if publication:
+        written_formats = ["png"] + (["pdf"] if bool(args.dists_pdf) else [])
+        for png_path in meta.wrote:
+            _write_publication_sidecars(
+                Path(png_path).with_suffix(""),
+                Path(args.episodes),
+                written_formats,
+                caption,
+                "Metric distribution plot; presentation only.",
+            )
 
 
 def _generate_table(records, out_dir: Path, args) -> None:
@@ -454,34 +599,73 @@ def _generate_table(records, out_dir: Path, args) -> None:
         )
 
 
-def _maybe_thumbnails(out_dir: Path, args) -> None:
+def _maybe_thumbnails(
+    out_dir: Path,
+    args,
+    *,
+    publication: bool = False,
+    formats: Sequence[str] = (),
+    caption: str | None = None,
+) -> None:
     """TODO docstring. Document this function.
 
     Args:
         out_dir: TODO docstring.
         args: TODO docstring.
+        publication: Render thumbnails/montage in publication style with provenance.
+        formats: Output formats for publication mode.
+        caption: Optional caption fragment (enables per-scenario caption sidecars).
     """
     if not args.thumbs_matrix:
         return
     thumbs_out = Path(args.thumbs_out_dir) if args.thumbs_out_dir else (out_dir / "scenarios")
     thumbs_out.mkdir(parents=True, exist_ok=True)
     scenarios = load_scenario_matrix(args.thumbs_matrix)
-    metas = save_scenario_thumbnails(scenarios, out_dir=thumbs_out, out_pdf=bool(args.thumbs_pdf))
+    metas = save_scenario_thumbnails(
+        scenarios,
+        out_dir=thumbs_out,
+        out_pdf=bool(args.thumbs_pdf),
+        publication=publication,
+        formats=formats,
+        caption=caption is not None,
+        campaign=args.campaign,
+        size=args.figure_size,
+        generator_command=" ".join(sys.argv),
+    )
     if bool(args.thumbs_montage):
+        source_artifacts = (
+            [_source_artifact(Path(args.thumbs_matrix))] if args.thumbs_matrix else []
+        )
         save_montage(
             metas,
             out_png=str(thumbs_out / "montage.png"),
             cols=int(args.thumbs_cols),
             out_pdf=(str(thumbs_out / "montage.pdf") if args.thumbs_pdf else None),
+            publication=publication,
+            formats=formats,
+            caption_fragment=caption,
+            size=args.figure_size,
+            source_artifacts=source_artifacts,
+            generator_command=" ".join(sys.argv),
         )
 
 
-def _maybe_force_field(out_dir: Path, args) -> None:
+def _maybe_force_field(
+    out_dir: Path,
+    args,
+    *,
+    publication: bool = False,
+    formats: Sequence[str] = (),
+    caption: str | None = None,
+) -> None:
     """TODO docstring. Document this function.
 
     Args:
         out_dir: TODO docstring.
         args: TODO docstring.
+        publication: Render the force-field figure in publication style with provenance.
+        formats: Output formats for publication mode.
+        caption: Optional LaTeX-ready caption fragment.
     """
     if not bool(args.force_field):
         return
@@ -498,6 +682,10 @@ def _maybe_force_field(out_dir: Path, args) -> None:
         y_max=float(args.ff_y_max),
         grid=int(args.ff_grid),
         quiver_step=int(args.ff_quiver_step),
+        publication=publication,
+        formats=formats,
+        caption_fragment=caption,
+        generator_command=" ".join(sys.argv),
     )
 
 

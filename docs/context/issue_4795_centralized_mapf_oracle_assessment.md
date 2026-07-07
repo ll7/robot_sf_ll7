@@ -1,4 +1,4 @@
-# Centralized MAPF Oracle Assessment
+# Issue #4795: Centralized MAPF Oracle Assessment
 
 Issue: [#4795](https://github.com/ll7/robot_sf_ll7/issues/4795)
 Date: 2026-07-07

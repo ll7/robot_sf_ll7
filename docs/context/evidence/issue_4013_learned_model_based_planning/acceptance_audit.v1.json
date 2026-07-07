@@ -1,0 +1,152 @@
+{
+  "blockers_remaining": [
+    "Stage ETH/BIWI or approved real trajectories under ROBOT_SF_EXTERNAL_DATA_ROOT and satisfy the pinned checksum preflight.",
+    "After readiness reaches ready_for_real_trajectory_training, run the real-trajectory trainer and publish compact metrics/manifest evidence.",
+    "Run the representative real-trajectory evaluation against cv_prediction_mpc and one model-free baseline after real-data training."
+  ],
+  "claim_boundary": "Closure audit and integration report only. Diagnostic smoke evidence is not benchmark, navigation-quality, paper, or dissertation evidence.",
+  "closure_status": "partial",
+  "criteria": [
+    {
+      "criterion": "Short-horizon predictor contract and learned backend exist.",
+      "evidence": [
+        "Merged PRs #4474/#4629 established the learned-prediction MPC path.",
+        "training_manifest.v1.json records a learned short-horizon predictor artifact."
+      ],
+      "remaining_work": null,
+      "status": "met"
+    },
+    {
+      "criterion": "Short-horizon predictor trains or fails closed with dataset blocker.",
+      "evidence": [
+        "training evidence_tier='diagnostic-only'.",
+        "training loss improved=True.",
+        "real_trajectory_readiness.v1.json records the Phase 3 real-data blocker."
+      ],
+      "remaining_work": null,
+      "status": "met"
+    },
+    {
+      "criterion": "Model-based action selection runs on a smoke scenario.",
+      "evidence": [
+        "PR #4644 loaded a checkpoint-backed planner without fallback.",
+        "comparison status='diagnostic_ready'.",
+        "comparison paired_seed_count=1."
+      ],
+      "remaining_work": null,
+      "status": "met"
+    },
+    {
+      "criterion": "Comparator smoke includes cv_prediction_mpc and a model-free baseline.",
+      "evidence": [
+        "comparison roles=['cv_prediction_mpc', 'learned_prediction_mpc', 'model_free_baseline'].",
+        "PR #4655 produced the 3-arm diagnostic comparison report."
+      ],
+      "remaining_work": null,
+      "status": "met"
+    },
+    {
+      "criterion": "Fallback/degraded rows are excluded or marked non-evidence.",
+      "evidence": [
+        "fallback_degraded_rows={'excluded': 0, 'included_as_non_evidence': 0}."
+      ],
+      "remaining_work": null,
+      "status": "met"
+    },
+    {
+      "criterion": "Claim boundary excludes large world-model and paper-grade claims.",
+      "evidence": [
+        "comparison evidence_tier='diagnostic-only'.",
+        "comparison claim_boundary='diagnostic matched-scenario comparison; not paper-grade benchmark evidence'."
+      ],
+      "remaining_work": null,
+      "status": "met"
+    },
+    {
+      "criterion": "Real pedestrian trajectory dataset is reachable and checksum-pinned.",
+      "evidence": [
+        "readiness status='blocked_manifest_contract'.",
+        "readiness blockers=[{'code': 'staging.env_unresolved_for_validated', 'message': \"availability 'validated' requires staging.staging_dir to resolve to a local directory; set ROBOT_SF_EXTERNAL_DATA_ROOT or use an output/ path.\", 'severity': 'error'}].",
+        "manifest availability='validated'."
+      ],
+      "remaining_work": "Stage ETH/BIWI or approved real trajectories under ROBOT_SF_EXTERNAL_DATA_ROOT and satisfy the pinned checksum preflight.",
+      "status": "blocked"
+    },
+    {
+      "criterion": "Real-trajectory predictor training has run on validated data.",
+      "evidence": [
+        "No checked-in evidence records a real-trajectory training run.",
+        "readiness next_action='Stage ETH/BIWI or another approved real pedestrian trajectory dataset under $ROBOT_SF_EXTERNAL_DATA_ROOT, validate its checksum, update the manifest, then run real-trajectory training and representative evaluation.'."
+      ],
+      "remaining_work": "After readiness reaches ready_for_real_trajectory_training, run the real-trajectory trainer and publish compact metrics/manifest evidence.",
+      "status": "blocked"
+    },
+    {
+      "criterion": "Representative evaluation compares learned predictor against cv_prediction_mpc and a model-free baseline.",
+      "evidence": [
+        "Existing comparison_report.v1.json is diagnostic synthetic/checkpoint smoke evidence.",
+        "Issue thread after PR #4712 still requires real-trajectory training plus representative evaluation."
+      ],
+      "remaining_work": "Run the representative real-trajectory evaluation against cv_prediction_mpc and one model-free baseline after real-data training.",
+      "status": "blocked"
+    }
+  ],
+  "forbidden_actions_confirmed": {
+    "full_benchmark_campaign_run": false,
+    "paper_or_dissertation_claim_edit": false,
+    "slurm_or_gpu_submission": false
+  },
+  "generated_at": "2026-07-07T01:48:59.315934+00:00",
+  "intentional_non_actions": [
+    "No raw external dataset staging or redistribution.",
+    "No full benchmark campaign run.",
+    "No Slurm/GPU submission.",
+    "No paper/dissertation claim edits."
+  ],
+  "issue": 4013,
+  "merged_pr_evidence": [
+    {
+      "evidence": "learned-prediction MPC comparator preflight",
+      "pr": 4474
+    },
+    {
+      "evidence": "fail-closed diagnostic comparison report contract",
+      "pr": 4587
+    },
+    {
+      "evidence": "seeded synthetic short-horizon predictor training",
+      "pr": 4629
+    },
+    {
+      "evidence": "checkpoint-backed planner plan() smoke",
+      "pr": 4644
+    },
+    {
+      "evidence": "3-arm diagnostic comparison report",
+      "pr": 4655
+    },
+    {
+      "evidence": "BYO real-trajectory manifest and readiness checker",
+      "pr": 4665
+    },
+    {
+      "evidence": "official ETH CVL acquisition URL and instructions",
+      "pr": 4679
+    },
+    {
+      "evidence": "real-trajectory trainer data path",
+      "pr": 4700
+    },
+    {
+      "evidence": "validated manifest requires reachable staging directory",
+      "pr": 4704
+    },
+    {
+      "evidence": "validated manifest requires pinned tree checksum",
+      "pr": 4712
+    }
+  ],
+  "new_blockers": [],
+  "next_empirical_action": "Provide a reachable checksum-pinned ETH/BIWI staging root, run real-trajectory predictor training, then run representative evaluation versus cv_prediction_mpc and one model-free baseline.",
+  "schema_version": "issue_4013.acceptance_audit.v1"
+}

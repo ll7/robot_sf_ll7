@@ -258,6 +258,14 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4013_learned_model_based_planning/acceptance_audit.v1.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_4013_learned_model_based_planning/acceptance_audit.v1.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_4445_ch8_statistics_reproducibility/source_manifest.json
     status: evidence
     freshness: evidence

@@ -1,0 +1,21 @@
+schema_version: issue_state_surface.v1
+issue: 4013
+title: "research: lightweight model-based local planning via learned short-horizon pedestrian prediction"
+claim_boundary: "Diagnostic smoke and readiness evidence only; not benchmark, navigation-quality, paper, or dissertation evidence."
+updates:
+  - date: "2026-07-07"
+    surface: "acceptance_audit.v1"
+    status: partial
+    evidence:
+      - "docs/context/evidence/issue_4013_learned_model_based_planning/acceptance_audit.v1.json"
+      - "docs/context/evidence/issue_4013_learned_model_based_planning/acceptance_audit.v1.md"
+    blockers_remaining:
+      - "Stage ETH/BIWI or approved real pedestrian trajectory data under a reachable ROBOT_SF_EXTERNAL_DATA_ROOT and satisfy pinned checksum preflight."
+      - "Run real-trajectory predictor training on validated data."
+      - "Run representative evaluation against cv_prediction_mpc and one model-free baseline."
+    next_empirical_action: "Provide reachable checksum-pinned ETH/BIWI staging root, then run real-trajectory training and representative evaluation."
+    forbidden_actions_confirmed:
+      compute_submit: false
+      merge: false
+      release: false
+      delete: false

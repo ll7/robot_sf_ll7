@@ -6,6 +6,7 @@ never download, stage, or read real external data.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import jsonschema
@@ -20,6 +21,7 @@ from robot_sf.data_ingestion import (
     validate_manifest_structure,
 )
 from robot_sf.data_ingestion import real_trajectory_contract as contract
+from scripts.tools.check_real_trajectory_manifest import main as check_manifest_main
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE_MANIFEST = REPO_ROOT / "configs" / "data" / "real_trajectory_manifest.example.yaml"
@@ -255,6 +257,41 @@ def test_validated_staging_tree_must_match_recorded_checksum(
 
     assert not result.ok
     assert any(i.code == "checksums.staging_tree_mismatch" for i in result.errors)
+
+
+def test_manifest_cli_reports_staging_tree_checksum(
+    valid_manifest: dict,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The manifest CLI exposes local staging checksum evidence for #4013 Phase 3."""
+
+    data_root = tmp_path / "external_data"
+    staging_dir = data_root / "synthetic_byo"
+    staging_dir.mkdir(parents=True)
+    (staging_dir / "trajectories.csv").write_text("frame,ped_id,x,y\n0,1,0,0\n", encoding="utf-8")
+    monkeypatch.setenv("ROBOT_SF_EXTERNAL_DATA_ROOT", str(data_root))
+    valid_manifest["staging"]["staging_dir"] = "${ROBOT_SF_EXTERNAL_DATA_ROOT}/synthetic_byo"
+    valid_manifest["availability"] = "validated"
+    valid_manifest["benchmark_eligibility"] = "benchmark_candidate"
+    tree_sha256 = contract._staging_tree_sha256(staging_dir)
+    valid_manifest["checksums"]["tree_sha256"] = tree_sha256
+    valid_manifest["checksums"]["expected_tree_sha256"] = tree_sha256
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(valid_manifest), encoding="utf-8")
+
+    exit_code = check_manifest_main([str(manifest_path), "--json", "--staging-checksum"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["staging_tree"] == {
+        "available": True,
+        "staging_dir": str(staging_dir),
+        "file_count": 1,
+        "tree_sha256": tree_sha256,
+    }
 
 
 def test_validated_checksums_must_be_pinned_consistently(

@@ -95,6 +95,27 @@ class ForecastLaneStatusSpec:
         }
 
 
+@dataclass(frozen=True)
+class ForecastLaneClosureCriterion:
+    """One acceptance criterion row for the issue #2835 closure audit."""
+
+    criterion_id: str
+    criterion: str
+    status: str
+    evidence: tuple[str, ...]
+    remaining_work: str
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return JSON-serializable closure-audit row."""
+        return {
+            "criterion_id": self.criterion_id,
+            "criterion": self.criterion,
+            "status": self.status,
+            "evidence": list(self.evidence),
+            "remaining_work": self.remaining_work,
+        }
+
+
 # Canonical forecast-lane registry. Each entry points at an existing owner module
 # under robot_sf/benchmark/; this inventory never reimplements those surfaces.
 _FORECAST_CAPABILITIES: tuple[ForecastCapabilitySpec, ...] = (
@@ -245,6 +266,7 @@ _FORECAST_CAPABILITIES: tuple[ForecastCapabilitySpec, ...] = (
 
 
 _VALID_LANE_STATUSES = frozenset({"done", "partial", "unresolved", "blocked"})
+_VALID_CLOSURE_STATUSES = frozenset({"met", "partial", "blocked", "unresolved"})
 
 
 # Checked-progress ledger requested on issue #2835. This is deliberately durable
@@ -329,6 +351,87 @@ _FORECAST_LANE_STATUS_ROWS: tuple[ForecastLaneStatusSpec, ...] = (
         remaining_blocker="Needs updated synthesis after gate and transfer rows settle.",
         next_action="Consolidate blockers and next empirical action before any claim promotion.",
         learned_predictor_gate=True,
+    ),
+)
+
+
+# Closure-audit evidence for issue #2835. These rows intentionally reference
+# merged issue/PR artifacts rather than transient ready-queue state.
+_FORECAST_LANE_CLOSURE_CRITERIA: tuple[ForecastLaneClosureCriterion, ...] = (
+    ForecastLaneClosureCriterion(
+        criterion_id="forecast_batch_artifact_contract",
+        criterion=(
+            "Forecast artifacts declare observation level, frame, horizon, dt_s, feature "
+            "schema, scenario id, seed, and fallback/degraded status."
+        ),
+        status="met",
+        evidence=(
+            "#2836",
+            "#2849",
+            "robot_sf/benchmark/forecast_batch.py",
+            "robot_sf/benchmark/schemas/forecast_batch_schema.py",
+        ),
+        remaining_work="None for the ForecastBatch.v1 schema/provenance contract.",
+    ),
+    ForecastLaneClosureCriterion(
+        criterion_id="motion_rich_trace_family",
+        criterion="At least one non-corridor motion-rich trace family is forecast-evaluable.",
+        status="met",
+        evidence=("#2774", "#2853", "#2884"),
+        remaining_work=(
+            "None for the at-least-one-family criterion; broader scenario-matrix coverage is "
+            "tracked by transferability_matrix."
+        ),
+    ),
+    ForecastLaneClosureCriterion(
+        criterion_id="baseline_ladder",
+        criterion="CV, semantic-CV, and interaction-aware baselines compared before learned predictors.",
+        status="partial",
+        evidence=("#2758", "#2781", "#2855", "#2915"),
+        remaining_work=(
+            "Baseline comparison remains diagnostic until same-seed planner consumption proves "
+            "non-regressive safety/progress."
+        ),
+    ),
+    ForecastLaneClosureCriterion(
+        criterion_id="probabilistic_metrics",
+        criterion=(
+            "Probabilistic metrics include likelihood, calibration, miss rate, and "
+            "collision relevance."
+        ),
+        status="partial",
+        evidence=("#2840", "#2850", "#2841", "#2865", "#2869"),
+        remaining_work=(
+            "Metric/calibration plumbing exists, but forecast-risk scoring rows still need "
+            "eligible risk-filtered planner evidence."
+        ),
+    ),
+    ForecastLaneClosureCriterion(
+        criterion_id="closed_loop_same_seed_gate",
+        criterion="Closed-loop same-seed gates report safety, progress, false positives, and runtime.",
+        status="unresolved",
+        evidence=("#2843", "#2902", "#2916", "#2966"),
+        remaining_work=(
+            "Forecast improvement has not yet been established as non-regressive planner "
+            "safety/progress under explicit fallback/degraded accounting."
+        ),
+    ),
+    ForecastLaneClosureCriterion(
+        criterion_id="transferability_matrix",
+        criterion=(
+            "A transfer matrix covers observation noise, occlusion, latency, map family, "
+            "density, and actor type."
+        ),
+        status="partial",
+        evidence=("#2847", "#2866", "#2887"),
+        remaining_work="Some transfer matrix cells remain unavailable or diagnostic-only.",
+    ),
+    ForecastLaneClosureCriterion(
+        criterion_id="final_synthesis",
+        criterion="Final synthesis recommends continue, revise, or stop learned prediction.",
+        status="partial",
+        evidence=("#2864", "#2881", "#2929"),
+        remaining_work="Needs updated synthesis after closed-loop, calibration, and transfer rows settle.",
     ),
 )
 
@@ -498,6 +601,69 @@ def build_forecast_lane_status() -> dict[str, Any]:
     }
 
 
+def build_forecast_lane_closure_audit() -> dict[str, Any]:
+    """Return criterion-to-evidence closure audit for issue #2835.
+
+    The audit is a read-only evidence-generation surface: it does not close the
+    issue, run predictors, launch campaigns, or promote benchmark claims.
+    """
+
+    criteria = list(_FORECAST_LANE_CLOSURE_CRITERIA)
+    invalid_rows = [row for row in criteria if row.status not in _VALID_CLOSURE_STATUSES]
+    unmet_rows = [row for row in criteria if row.status != "met"]
+    status_counts = {
+        status: sum(row.status == status for row in criteria) for status in _VALID_CLOSURE_STATUSES
+    }
+
+    return {
+        "schema": "forecast_lane_closure_audit.v1",
+        "ok": not invalid_rows,
+        "issue": 2835,
+        "closable": not unmet_rows and not invalid_rows,
+        "recommendation": "keep_open" if unmet_rows else "close",
+        "claim_boundary": (
+            "Issue #2835 remains a checked-progress ledger. Learned-predictor expansion "
+            "and planner-facing claims stay blocked until closed-loop, calibration/risk, "
+            "transferability, and final-synthesis evidence are complete."
+        ),
+        "criteria": [row.as_dict() for row in criteria],
+        "summary": {
+            "total": len(criteria),
+            "status_counts": status_counts,
+            "invalid_criterion_ids": [row.criterion_id for row in invalid_rows],
+            "unmet_criterion_ids": [row.criterion_id for row in unmet_rows],
+        },
+    }
+
+
+def format_closure_audit_markdown(report: dict[str, Any]) -> str:
+    """Render compact Markdown criterion-to-evidence closure audit.
+
+    Returns:
+        Markdown closure-audit table plus remaining criterion ids when present.
+    """
+
+    verdict = "CLOSE" if report["closable"] else "KEEP OPEN"
+    lines: list[str] = [f"# Forecast lane closure audit: {verdict}", ""]
+    lines.append(report["claim_boundary"])
+    lines.append("")
+    lines.append("| Criterion | Status | Evidence | Remaining work |")
+    lines.append("| --- | --- | --- | --- |")
+    for row in report["criteria"]:
+        evidence = ", ".join(row["evidence"])
+        lines.append(
+            f"| {row['criterion']} | {row['status']} | {evidence} | {row['remaining_work']} |"
+        )
+
+    unmet = report["summary"]["unmet_criterion_ids"]
+    if unmet:
+        lines.append("")
+        lines.append("## Remaining criteria")
+        for criterion_id in unmet:
+            lines.append(f"- `{criterion_id}`")
+    return "\n".join(lines)
+
+
 def format_status_markdown(report: dict[str, Any]) -> str:
     """Render compact Markdown for the forecast-lane checked-progress ledger.
 
@@ -593,11 +759,25 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Emit checked-progress ledger for issue #2835 instead of import inventory.",
     )
+    parser.add_argument(
+        "--closure-audit",
+        action="store_true",
+        help="Emit issue #2835 criterion-to-evidence closure audit.",
+    )
     args = parser.parse_args(argv)
+    if args.status and args.closure_audit:
+        parser.error("--status and --closure-audit are mutually exclusive")
 
-    report = build_forecast_lane_status() if args.status else build_forecast_lane_inventory()
+    if args.closure_audit:
+        report = build_forecast_lane_closure_audit()
+    elif args.status:
+        report = build_forecast_lane_status()
+    else:
+        report = build_forecast_lane_inventory()
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))  # noqa: T201 - CLI output
+    elif args.closure_audit:
+        print(format_closure_audit_markdown(report))  # noqa: T201 - CLI output
     elif args.status:
         print(format_status_markdown(report))  # noqa: T201 - CLI output
     else:

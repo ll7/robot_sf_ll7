@@ -227,10 +227,63 @@ def test_cli_status_json_reports_expected_blocker():
     assert "closed_loop_gate" in payload["summary"]["learned_predictor_blocker_ids"]
 
 
+def test_closure_audit_maps_criteria_to_evidence_and_keeps_issue_open():
+    """Closure audit records criterion evidence and remaining unmet work."""
+    report = fli.build_forecast_lane_closure_audit()
+
+    assert report["schema"] == "forecast_lane_closure_audit.v1"
+    assert report["ok"] is True
+    assert report["issue"] == 2835
+    assert report["closable"] is False
+    assert report["recommendation"] == "keep_open"
+    assert "closed_loop_same_seed_gate" in report["summary"]["unmet_criterion_ids"]
+
+    criteria = {row["criterion_id"]: row for row in report["criteria"]}
+    assert criteria["forecast_batch_artifact_contract"]["status"] == "met"
+    assert "#2849" in criteria["forecast_batch_artifact_contract"]["evidence"]
+    assert criteria["closed_loop_same_seed_gate"]["status"] == "unresolved"
+    assert "#2916" in criteria["closed_loop_same_seed_gate"]["evidence"]
+
+
+def test_closure_audit_markdown_lists_remaining_criteria():
+    """Markdown closure audit exposes keep-open verdict and unmet ids."""
+    report = fli.build_forecast_lane_closure_audit()
+    text = fli.format_closure_audit_markdown(report)
+
+    assert "KEEP OPEN" in text
+    assert "Remaining criteria" in text
+    assert "closed_loop_same_seed_gate" in text
+    assert "#2849" in text
+
+
+def test_cli_closure_audit_json_reports_keep_open():
+    """The runnable script emits closure-audit JSON without forecast workloads."""
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "scripts/benchmark/forecast_lane_preflight.py",
+            "--closure-audit",
+            "--json",
+        ],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["schema"] == "forecast_lane_closure_audit.v1"
+    assert payload["recommendation"] == "keep_open"
+    assert payload["closable"] is False
+
+
 def test_module_status_invocation_succeeds():
     """Status mode succeeds because blockers are issue state, not CLI failure."""
     assert fli.main(["--status"]) == 0
     assert fli.main(["--status", "--json"]) == 0
+    assert fli.main(["--closure-audit"]) == 0
+    assert fli.main(["--closure-audit", "--json"]) == 0
 
 
 if __name__ == "__main__":  # pragma: no cover

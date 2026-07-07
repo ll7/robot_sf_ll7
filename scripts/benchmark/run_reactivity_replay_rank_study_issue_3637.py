@@ -46,6 +46,13 @@ DEFAULT_OUTPUT_DIR = Path("output/issue_3637_reactivity_rank_study")
 DEFAULT_REPORT_JSON = DEFAULT_OUTPUT_DIR / "report.json"
 ISSUE = 3637
 EVIDENCE_TIER = "seed_sufficient_candidate"
+ANALYSIS_OUTPUT_FILES = (
+    "README.md",
+    "analysis.json",
+    "frozen_gate_input.json",
+    "rank_bootstrap_summary.json",
+    "per_planner_condition_metrics.csv",
+)
 
 
 def _load_packet(path: Path) -> dict[str, Any]:
@@ -87,6 +94,51 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _build_integration_report(
+    *,
+    packet_path: Path,
+    campaign_dir: Path,
+    report_json: Path,
+    analyzer_command: str,
+    preflight: dict[str, Any],
+) -> dict[str, Any]:
+    """Return machine-readable post-run handoff contract for issue #3637."""
+    analysis_dir = campaign_dir / "analysis"
+    return {
+        "schema_version": "issue-3637-reactivity-replay-rank-integration-report.v1",
+        "issue": ISSUE,
+        "status": "campaign_ran_analysis_required",
+        "evidence_tier": EVIDENCE_TIER,
+        "claim_boundary": (
+            "No issue #3637 paper-facing or closure claim until the post-run analyzer "
+            "validates the complete paired planner/arm/seed/scenario matrix and emits "
+            "seed-sufficiency artifacts."
+        ),
+        "delivered_contract": {
+            "launch_packet": str(packet_path),
+            "campaign_dir": str(campaign_dir),
+            "campaign_report": str(report_json),
+            "preflight_status": preflight["status"],
+            "post_run_analyzer": analyzer_command,
+        },
+        "required_post_run_artifacts": [
+            str(analysis_dir / filename) for filename in ANALYSIS_OUTPUT_FILES
+        ],
+        "remaining_acceptance_criteria": [
+            "Run the predeclared >=3-planner, 20-seed reactive-vs-replay campaign.",
+            "Run the post-run analyzer against the completed campaign JSONL files.",
+            "Record rank-stability and seed-sufficiency outputs in a durable evidence bundle.",
+            "Classify the result conservatively before any paper-facing claim or issue closure.",
+        ],
+        "next_empirical_action": analyzer_command,
+        "closure_decision": "keep_open_until_analysis_artifacts_exist",
+        "forbidden_actions_confirmed": {
+            "slurm_gpu_submission": False,
+            "paper_dissertation_claim_edit": False,
+        },
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the preflighted #3637 packet through the existing paired runner."""
     args = _parse_args(argv)
@@ -111,11 +163,19 @@ def main(argv: list[str] | None = None) -> int:
     report["generated_at_utc"] = datetime.now(UTC).isoformat()
     report["launch_packet"] = str(args.packet)
     report["preflight_status"] = preflight["status"]
-    report["post_run_analyzer"] = (
+    analyzer_command = (
         "uv run python scripts/benchmark/"
         "analyze_reactivity_replay_rank_study_issue_3637.py "
         f"--packet {args.packet} --campaign-dir {args.out_dir} "
         f"--campaign-report {args.report_json} --output-dir {args.out_dir / 'analysis'}"
+    )
+    report["post_run_analyzer"] = analyzer_command
+    report["integration_report"] = _build_integration_report(
+        packet_path=args.packet,
+        campaign_dir=args.out_dir,
+        report_json=args.report_json,
+        analyzer_command=analyzer_command,
+        preflight=preflight,
     )
 
     args.report_json.parent.mkdir(parents=True, exist_ok=True)

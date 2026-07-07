@@ -81,6 +81,31 @@ def test_runner_uses_packet_plan_and_writes_report(monkeypatch: pytest.MonkeyPat
     assert report["preflight_status"] == "ready"
     assert report["launch_packet"] == str(PACKET)
     assert "analyze_reactivity_replay_rank_study_issue_3637.py" in report["post_run_analyzer"]
+    integration = report["integration_report"]
+    assert (
+        integration["schema_version"] == "issue-3637-reactivity-replay-rank-integration-report.v1"
+    )
+    assert integration["status"] == "campaign_ran_analysis_required"
+    assert integration["closure_decision"] == "keep_open_until_analysis_artifacts_exist"
+    assert integration["delivered_contract"] == {
+        "launch_packet": str(PACKET),
+        "campaign_dir": str(out_dir),
+        "campaign_report": str(report_json),
+        "preflight_status": "ready",
+        "post_run_analyzer": report["post_run_analyzer"],
+    }
+    assert integration["required_post_run_artifacts"] == [
+        str(out_dir / "analysis" / "README.md"),
+        str(out_dir / "analysis" / "analysis.json"),
+        str(out_dir / "analysis" / "frozen_gate_input.json"),
+        str(out_dir / "analysis" / "rank_bootstrap_summary.json"),
+        str(out_dir / "analysis" / "per_planner_condition_metrics.csv"),
+    ]
+    assert integration["next_empirical_action"] == report["post_run_analyzer"]
+    assert integration["forbidden_actions_confirmed"] == {
+        "slurm_gpu_submission": False,
+        "paper_dissertation_claim_edit": False,
+    }
 
 
 def test_runner_fails_before_campaign_when_packet_preflight_blocks(

@@ -270,27 +270,34 @@ _THRESHOLDS_RE = re.compile(r"^(<|<=|>=|>|=)\s*([0-9eE.+\-]+)\s*[\-,]*(\s*[0-9eE
 _BAND_RE = re.compile(r"(\[|\()?\s*([0-9eE.+\-]+)\s*,\s*([0-9eE.+\-]+)\s*([)\]])?")
 
 
-def _get_metric_value(episode: Mapping[str, Any], keys: Sequence[str]) -> float | None:
+def _get_metric_value(
+    episode: Mapping[str, Any], keys: Sequence[str]
+) -> tuple[str | None, float | None]:
     """Search ``episode["metrics"]`` for the first key whose dot-path resolves to a number.
 
+    Non-finite values (NaN, Inf) and non-numeric leaves are skipped so that a
+    later candidate key can still supply a usable value.
+
     Returns:
-        The numeric metric value or ``None`` if no key is found or the value is non-finite.
+        A ``(matched_key, numeric_value)`` tuple, or ``(None, None)`` if no
+        candidate key resolves to a finite number.
     """
 
     metrics = episode.get("metrics")
     if not isinstance(metrics, Mapping):
-        return None
+        return None, None
 
     for key in keys:
         value = _resolve_dot_path(metrics, key)
         if value is not None:
             try:
                 numeric = float(value)
-                return numeric if _is_finite(numeric) else None
             except (TypeError, ValueError):
                 continue
+            if _is_finite(numeric):
+                return key, numeric
 
-    return None
+    return None, None
 
 
 def _resolve_dot_path(root: Mapping[str, Any], dot_path: str) -> Any:
@@ -318,20 +325,6 @@ def _resolve_dot_path(root: Mapping[str, Any], dot_path: str) -> Any:
 
 def _is_finite(value: float) -> bool:
     return math.isfinite(value)
-
-
-def _has_metric_key_path(
-    episode: Mapping[str, Any],
-    key: str,
-) -> bool:
-    """Return True if the dot-path resolves to *any* present leaf (not None)."""
-
-    metrics = episode.get("metrics")
-    if not isinstance(metrics, Mapping):
-        return False
-
-    found = _resolve_dot_path(metrics, key)
-    return found is not None
 
 
 # ---------------------------------------------------------------------------
@@ -480,14 +473,8 @@ def _annotate_one_label(
             "unit": unit,
         }
 
-    # Try to find a metric value
-    metric_value = _get_metric_value(episode, candidate_keys)
-    matched_key: str | None = None
-    if metric_value is not None:
-        for k in candidate_keys:
-            if _has_metric_key_path(episode, k):
-                matched_key = k
-                break
+    # Try to find a metric value; matched_key is the key that produced it.
+    matched_key, metric_value = _get_metric_value(episode, candidate_keys)
 
     if metric_value is None:
         return {
@@ -627,12 +614,9 @@ def _fallback_band_classification(value: float, bands: dict[str, str]) -> str:
         return "uncertain"
 
     numeric_bands.sort()
-    threshold, band_name = numeric_bands[-1]
-    if value >= threshold:
-        return band_name
 
-    # Otherwise, find the highest band where value >= threshold
-    for threshold, band_name in numeric_bands:
+    # Find the highest band whose threshold the value still meets.
+    for threshold, band_name in reversed(numeric_bands):
         if value >= threshold:
             return band_name
 

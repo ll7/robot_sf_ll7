@@ -342,3 +342,36 @@ class TestNestedMetricLookup:
 
         assert clearance_annotation["annotation"] == "acceptable"
         assert clearance_annotation["value"] == 0.7
+
+
+class TestCandidateKeyResolution:
+    """Regression tests for metric-key selection (PR #4774 gate hardening)."""
+
+    def test_non_finite_first_candidate_falls_through(self, schema: dict) -> None:
+        """A NaN in the first candidate key must not shadow a later finite candidate.
+
+        ``min_clearance`` (first candidate) is non-finite, so annotation should
+        fall through to ``mean_clearance`` rather than reporting not_available.
+        """
+
+        episode = _make_episode({"min_clearance": float("nan"), "mean_clearance": 1.1})
+        result = annotate_episode_social_preferences(episode, schema=schema)
+        clearance = next(a for a in result["labels"] if a["label_id"] == "clearance")
+
+        assert clearance["annotation"] != "not_available"
+        assert clearance["value"] == 1.1
+        assert clearance["evidence"]["metric_key"] == "mean_clearance"
+
+    def test_matched_key_is_the_value_producing_key(self, schema: dict) -> None:
+        """evidence.metric_key must be the key that produced the numeric value.
+
+        A present-but-non-numeric first candidate must not be reported as the
+        matched key when a later candidate supplies the value.
+        """
+
+        episode = _make_episode({"min_clearance": "not-a-number", "mean_clearance": 0.9})
+        result = annotate_episode_social_preferences(episode, schema=schema)
+        clearance = next(a for a in result["labels"] if a["label_id"] == "clearance")
+
+        assert clearance["value"] == 0.9
+        assert clearance["evidence"]["metric_key"] == "mean_clearance"

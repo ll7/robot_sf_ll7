@@ -172,12 +172,88 @@ def test_validated_availability_requires_checksum(valid_manifest: dict) -> None:
     assert any(i.code == "checksums.missing_for_validated" for i in result.errors)
 
 
-def test_fully_validated_benchmark_candidate_passes(valid_manifest: dict) -> None:
+def test_fully_validated_benchmark_candidate_passes(
+    valid_manifest: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A staged, checksum-validated benchmark candidate passes preflight."""
+    data_root = tmp_path / "external_data"
+    staging_dir = data_root / "synthetic_byo"
+    staging_dir.mkdir(parents=True)
+    (staging_dir / "trajectories.csv").write_text("frame,ped_id,x,y\n0,1,0,0\n", encoding="utf-8")
+    monkeypatch.setenv("ROBOT_SF_EXTERNAL_DATA_ROOT", str(data_root))
+    valid_manifest["staging"]["staging_dir"] = "${ROBOT_SF_EXTERNAL_DATA_ROOT}/synthetic_byo"
     valid_manifest["availability"] = "validated"
     valid_manifest["benchmark_eligibility"] = "benchmark_candidate"
     valid_manifest["checksums"]["tree_sha256"] = "a" * 64
     valid_manifest["checksums"]["expected_tree_sha256"] = "a" * 64
+    result = run_preflight(valid_manifest)
+    assert result.ok, [f"{i.code}: {i.message}" for i in result.errors]
+
+
+def test_validated_external_data_root_must_resolve(
+    valid_manifest: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Validated manifests fail closed when the external-data env var is unset."""
+    monkeypatch.delenv("ROBOT_SF_EXTERNAL_DATA_ROOT", raising=False)
+    valid_manifest["staging"]["staging_dir"] = "${ROBOT_SF_EXTERNAL_DATA_ROOT}/synthetic_byo"
+    valid_manifest["availability"] = "validated"
+    valid_manifest["checksums"]["tree_sha256"] = "a" * 64
+    valid_manifest["checksums"]["expected_tree_sha256"] = "a" * 64
+    result = run_preflight(valid_manifest)
+    assert not result.ok
+    assert any(i.code == "staging.env_unresolved_for_validated" for i in result.errors)
+
+
+def test_validated_staging_dir_must_exist(
+    valid_manifest: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Validated manifests fail closed when the resolved staging directory is absent."""
+    monkeypatch.setenv("ROBOT_SF_EXTERNAL_DATA_ROOT", str(tmp_path / "external_data"))
+    valid_manifest["staging"]["staging_dir"] = "${ROBOT_SF_EXTERNAL_DATA_ROOT}/synthetic_byo"
+    valid_manifest["availability"] = "validated"
+    valid_manifest["checksums"]["tree_sha256"] = "a" * 64
+    valid_manifest["checksums"]["expected_tree_sha256"] = "a" * 64
+    result = run_preflight(valid_manifest)
+    assert not result.ok
+    assert any(i.code == "staging.dir_missing_for_validated" for i in result.errors)
+
+
+def test_validated_staging_dir_must_be_non_empty(
+    valid_manifest: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Validated manifests fail closed when the local staging directory has no files."""
+    data_root = tmp_path / "external_data"
+    (data_root / "synthetic_byo").mkdir(parents=True)
+    monkeypatch.setenv("ROBOT_SF_EXTERNAL_DATA_ROOT", str(data_root))
+    valid_manifest["staging"]["staging_dir"] = "${ROBOT_SF_EXTERNAL_DATA_ROOT}/synthetic_byo"
+    valid_manifest["availability"] = "validated"
+    valid_manifest["checksums"]["tree_sha256"] = "a" * 64
+    valid_manifest["checksums"]["expected_tree_sha256"] = "a" * 64
+    result = run_preflight(valid_manifest)
+    assert not result.ok
+    assert any(i.code == "staging.dir_empty_for_validated" for i in result.errors)
+
+
+def test_validated_output_relative_staging_is_cwd_independent(
+    valid_manifest: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An ``output/``-relative validated manifest resolves against the repo root, not cwd."""
+    from robot_sf.data_ingestion import real_trajectory_contract as contract
+
+    repo_root = tmp_path / "repo"
+    staging_dir = repo_root / "output" / "external_data" / "synthetic_byo"
+    staging_dir.mkdir(parents=True)
+    (staging_dir / "trajectories.csv").write_text("frame,ped_id,x,y\n0,1,0,0\n", encoding="utf-8")
+    monkeypatch.setattr(contract, "get_repository_root", lambda: repo_root)
+    valid_manifest["staging"]["staging_dir"] = "output/external_data/synthetic_byo"
+    valid_manifest["availability"] = "validated"
+    valid_manifest["checksums"]["tree_sha256"] = "a" * 64
+    valid_manifest["checksums"]["expected_tree_sha256"] = "a" * 64
+
+    # Run from an unrelated cwd; resolution must still find the repo-root staging dir.
+    other_cwd = tmp_path / "elsewhere"
+    other_cwd.mkdir()
+    monkeypatch.chdir(other_cwd)
     result = run_preflight(valid_manifest)
     assert result.ok, [f"{i.code}: {i.message}" for i in result.errors]
 

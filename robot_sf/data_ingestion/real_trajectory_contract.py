@@ -19,12 +19,15 @@ This module performs no network access and stages no data; it only reads a manif
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import jsonschema
 import yaml
+
+from robot_sf.common.artifact_paths import get_repository_root
 
 MANIFEST_SCHEMA_ID = "robot_sf_real_trajectory_ingestion_manifest.v1"
 
@@ -40,6 +43,64 @@ _GITIGNORED_STAGING_PREFIXES = (
     "${ROBOT_SF_EXTERNAL_DATA_ROOT}",
     "$ROBOT_SF_EXTERNAL_DATA_ROOT",
 )
+
+
+def _resolved_staging_dir(staging_dir: str) -> Path:
+    """Resolve a BYO staging directory after expanding environment variables.
+
+    Relative paths (for example the canonical ``output/`` artifact root) are
+    anchored to the repository root so validated-staging checks do not depend on
+    the current working directory. Paths that still contain an unresolved
+    environment variable are returned unexpanded so the caller can fail closed.
+
+    Returns:
+        Expanded local filesystem path.
+    """
+    expanded = Path(os.path.expandvars(staging_dir)).expanduser()
+    if "$" in str(expanded) or expanded.is_absolute():
+        return expanded
+    return get_repository_root() / expanded
+
+
+def _validated_staging_issues(staging_dir: str) -> list[PreflightIssue]:
+    """Return fail-closed issues for a manifest claiming validated local staging.
+
+    Returns:
+        Blocking issues for unresolved, missing, or empty staging directories.
+    """
+    resolved_staging_dir = _resolved_staging_dir(staging_dir)
+    issues: list[PreflightIssue] = []
+    if "$" in str(resolved_staging_dir):
+        issues.append(
+            PreflightIssue(
+                code="staging.env_unresolved_for_validated",
+                message=(
+                    "availability 'validated' requires staging.staging_dir to resolve to a "
+                    "local directory; set ROBOT_SF_EXTERNAL_DATA_ROOT or use an output/ path."
+                ),
+            )
+        )
+    elif not resolved_staging_dir.is_dir():
+        issues.append(
+            PreflightIssue(
+                code="staging.dir_missing_for_validated",
+                message=(
+                    "availability 'validated' requires staging.staging_dir to exist locally: "
+                    f"{resolved_staging_dir}"
+                ),
+            )
+        )
+    elif not any(resolved_staging_dir.iterdir()):
+        issues.append(
+            PreflightIssue(
+                code="staging.dir_empty_for_validated",
+                message=(
+                    "availability 'validated' requires staging.staging_dir to contain "
+                    f"staged trajectory files: {resolved_staging_dir}"
+                ),
+            )
+        )
+    return issues
 
 
 class ContractError(RuntimeError):
@@ -226,6 +287,8 @@ def run_preflight(manifest: dict[str, Any], *, validate_structure: bool = True) 
                 ),
             )
         )
+    if availability == "validated":
+        issues.extend(_validated_staging_issues(staging["staging_dir"]))
 
     return PreflightResult(
         dataset_id=manifest["dataset_id"],

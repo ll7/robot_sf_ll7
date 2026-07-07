@@ -1,6 +1,6 @@
 # Issue #4013 Real-Trajectory Readiness
 
-Status: `ready_for_real_trajectory_training`
+Status: `blocked_manifest_contract`
 
 Claim boundary: real-trajectory readiness only. No raw data is staged, no full benchmark campaign is run, and no paper/dissertation claim is made.
 
@@ -15,7 +15,7 @@ Claim boundary: real-trajectory readiness only. No raw data is staged, no full b
 
 ## Blockers
 
-- None.
+- `staging.env_unresolved_for_validated`: availability 'validated' requires staging.staging_dir to resolve to a local directory; set ROBOT_SF_EXTERNAL_DATA_ROOT or use an output/ path.
 
 ## Acceptance Evidence
 

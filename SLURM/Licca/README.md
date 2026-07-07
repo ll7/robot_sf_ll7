@@ -28,7 +28,9 @@ support `uv`), and Slurm job patterns for CPU and GPU workloads.
 4. Install Robot SF:
    ```bash
    python -m pip install --upgrade pip
-   python -m pip install -e .[dev]
+python -m pip install -e .
+    python -m pip install pytest pytest-cov scalene ruff pre-commit setuptools pylint \
+        pytest-xdist pytest-split jupyter mypy
    ```
 5. If you need CUDA wheels on the login node, set
    `CONDA_OVERRIDE_CUDA=12.8` before installing packages such as PyTorch.

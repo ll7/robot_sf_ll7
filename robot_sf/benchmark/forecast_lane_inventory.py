@@ -103,6 +103,7 @@ class ForecastLaneClosureCriterion:
     criterion: str
     status: str
     evidence: tuple[str, ...]
+    pr_evidence: tuple[str, ...]
     remaining_work: str
     next_empirical_action: str
     claim_boundary: str
@@ -114,6 +115,7 @@ class ForecastLaneClosureCriterion:
             "criterion": self.criterion,
             "status": self.status,
             "evidence": list(self.evidence),
+            "pr_evidence": list(self.pr_evidence),
             "remaining_work": self.remaining_work,
             "next_empirical_action": self.next_empirical_action,
             "claim_boundary": self.claim_boundary,
@@ -401,6 +403,7 @@ _FORECAST_LANE_CLOSURE_CRITERIA: tuple[ForecastLaneClosureCriterion, ...] = (
             "robot_sf/benchmark/forecast_batch.py",
             "robot_sf/benchmark/schemas/forecast_batch_schema.py",
         ),
+        pr_evidence=("#2849", "#2934", "#3738", "#4545"),
         remaining_work="None for the ForecastBatch.v1 schema/provenance contract.",
         next_empirical_action="No empirical action needed for this met schema contract.",
         claim_boundary="Schema/provenance contract only; no forecast-quality or planner claim.",
@@ -410,6 +413,7 @@ _FORECAST_LANE_CLOSURE_CRITERIA: tuple[ForecastLaneClosureCriterion, ...] = (
         criterion="At least one non-corridor motion-rich trace family is forecast-evaluable.",
         status="met",
         evidence=("#2774", "#2853", "#2884"),
+        pr_evidence=("#2853", "#2884"),
         remaining_work=(
             "None for the at-least-one-family criterion; broader scenario-matrix coverage is "
             "tracked by transferability_matrix."
@@ -422,6 +426,7 @@ _FORECAST_LANE_CLOSURE_CRITERIA: tuple[ForecastLaneClosureCriterion, ...] = (
         criterion="CV, semantic-CV, and interaction-aware baselines compared before learned predictors.",
         status="partial",
         evidence=("#2758", "#2781", "#2855", "#2915"),
+        pr_evidence=("#2854", "#2855", "#3245", "#3269"),
         remaining_work=(
             "Baseline comparison remains diagnostic until same-seed planner consumption proves "
             "non-regressive safety/progress."
@@ -443,6 +448,7 @@ _FORECAST_LANE_CLOSURE_CRITERIA: tuple[ForecastLaneClosureCriterion, ...] = (
         ),
         status="partial",
         evidence=("#2840", "#2850", "#2841", "#2865", "#2869"),
+        pr_evidence=("#2850", "#2885", "#2886"),
         remaining_work=(
             "Metric/calibration plumbing exists, but forecast-risk scoring rows still need "
             "eligible risk-filtered planner evidence."
@@ -461,6 +467,7 @@ _FORECAST_LANE_CLOSURE_CRITERIA: tuple[ForecastLaneClosureCriterion, ...] = (
         criterion="Closed-loop same-seed gates report safety, progress, false positives, and runtime.",
         status="unresolved",
         evidence=("#2843", "#2902", "#2916", "#2966"),
+        pr_evidence=("#2942", "#2948", "#2949", "#3147", "#3197", "#3449"),
         remaining_work=(
             "Forecast improvement has not yet been established as non-regressive planner "
             "safety/progress under explicit fallback/degraded accounting."
@@ -482,6 +489,7 @@ _FORECAST_LANE_CLOSURE_CRITERIA: tuple[ForecastLaneClosureCriterion, ...] = (
         ),
         status="partial",
         evidence=("#2847", "#2866", "#2887"),
+        pr_evidence=("#2883", "#2887"),
         remaining_work="Some transfer matrix cells remain unavailable or diagnostic-only.",
         next_empirical_action=(
             "Fill the highest-value unavailable matrix cells after the closed-loop metric rows "
@@ -497,6 +505,7 @@ _FORECAST_LANE_CLOSURE_CRITERIA: tuple[ForecastLaneClosureCriterion, ...] = (
         criterion="Final synthesis recommends continue, revise, or stop learned prediction.",
         status="met",
         evidence=("#2864", "#2881", "#2929", "forecast_lane_final_synthesis.v1"),
+        pr_evidence=("#2881", "#2968", "#4731"),
         remaining_work=(
             "None for the synthesis decision artifact; empirical gates remain separate blockers."
         ),
@@ -728,6 +737,7 @@ def build_forecast_lane_closure_audit() -> dict[str, Any]:
         status: sum(row.status == status for row in criteria) for status in _VALID_CLOSURE_STATUSES
     }
     next_empirical_actions = {row.criterion_id: row.next_empirical_action for row in unmet_rows}
+    pr_evidence = {row.criterion_id: list(row.pr_evidence) for row in criteria}
 
     return {
         "schema": "forecast_lane_closure_audit.v1",
@@ -747,6 +757,7 @@ def build_forecast_lane_closure_audit() -> dict[str, Any]:
             "invalid_criterion_ids": [row.criterion_id for row in invalid_rows],
             "unmet_criterion_ids": [row.criterion_id for row in unmet_rows],
             "next_empirical_actions": next_empirical_actions,
+            "pr_evidence": pr_evidence,
         },
     }
 
@@ -855,12 +866,14 @@ def format_closure_audit_markdown(report: dict[str, Any]) -> str:
     lines: list[str] = [f"# Forecast lane closure audit: {verdict}", ""]
     lines.append(report["claim_boundary"])
     lines.append("")
-    lines.append("| Criterion | Status | Evidence | Remaining work |")
-    lines.append("| --- | --- | --- | --- |")
+    lines.append("| Criterion | Status | PR evidence | Other evidence | Remaining work |")
+    lines.append("| --- | --- | --- | --- | --- |")
     for row in report["criteria"]:
         evidence = ", ".join(row["evidence"])
+        pr_evidence = ", ".join(row["pr_evidence"])
         lines.append(
-            f"| {row['criterion']} | {row['status']} | {evidence} | {row['remaining_work']} |"
+            f"| {row['criterion']} | {row['status']} | {pr_evidence} | {evidence} | "
+            f"{row['remaining_work']} |"
         )
 
     unmet = report["summary"]["unmet_criterion_ids"]

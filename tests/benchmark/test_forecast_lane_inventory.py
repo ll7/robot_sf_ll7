@@ -242,6 +242,12 @@ def test_closure_audit_maps_criteria_to_evidence_and_keeps_issue_open():
     criteria = {row["criterion_id"]: row for row in report["criteria"]}
     assert criteria["forecast_batch_artifact_contract"]["status"] == "met"
     assert "#2849" in criteria["forecast_batch_artifact_contract"]["evidence"]
+    assert "#2849" in criteria["forecast_batch_artifact_contract"]["pr_evidence"]
+    assert "#4731" in criteria["final_synthesis"]["pr_evidence"]
+    assert (
+        report["summary"]["pr_evidence"]["closed_loop_same_seed_gate"]
+        == criteria["closed_loop_same_seed_gate"]["pr_evidence"]
+    )
     assert criteria["closed_loop_same_seed_gate"]["status"] == "unresolved"
     assert "#2916" in criteria["closed_loop_same_seed_gate"]["evidence"]
     assert (
@@ -256,11 +262,13 @@ def test_closure_audit_markdown_lists_remaining_criteria():
     text = fli.format_closure_audit_markdown(report)
 
     assert "KEEP OPEN" in text
+    assert "PR evidence" in text
     assert "Remaining criteria" in text
     assert "Next empirical actions" in text
     assert "same-seed replay slice" in text
     assert "closed_loop_same_seed_gate" in text
     assert "#2849" in text
+    assert "#4731" in text
 
 
 def test_cli_closure_audit_json_reports_keep_open():
@@ -283,6 +291,7 @@ def test_cli_closure_audit_json_reports_keep_open():
     assert payload["schema"] == "forecast_lane_closure_audit.v1"
     assert payload["recommendation"] == "keep_open"
     assert payload["closable"] is False
+    assert "#4731" in payload["summary"]["pr_evidence"]["final_synthesis"]
     assert "closed_loop_same_seed_gate" in payload["summary"]["next_empirical_actions"]
 
 

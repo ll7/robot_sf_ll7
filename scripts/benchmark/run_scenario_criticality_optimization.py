@@ -444,7 +444,12 @@ def run_criticality_optimization(  # noqa: C901
                 candidates.append(future.result())
 
     evaluated = [c for c in candidates if c.status == "evaluated"]
-    best_candidates = sorted(evaluated, key=lambda c: c.criticality_score, reverse=True)[:5]
+    # Secondary key on candidate_id makes "best" selection reproducible: parallel
+    # workers complete in nondeterministic order, so ties on criticality_score must
+    # break deterministically rather than on completion order.
+    best_candidates = sorted(
+        evaluated, key=lambda c: (-c.criticality_score, c.candidate_id)
+    )[:5]
 
     baseline_candidate = next(
         (c for c in candidates if c.candidate_id == "baseline_unperturbed"), None

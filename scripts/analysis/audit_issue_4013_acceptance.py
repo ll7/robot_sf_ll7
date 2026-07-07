@@ -61,7 +61,11 @@ def build_acceptance_audit(
             "evidence": [
                 f"training evidence_tier={training_manifest.get('evidence_tier')!r}.",
                 f"training loss improved={loss_improved!r}.",
-                "real_trajectory_readiness.v1.json records the Phase 3 real-data blocker.",
+                (
+                    "real_trajectory_readiness.v1.json reports ready_for_real_trajectory_training."
+                    if real_ready
+                    else "real_trajectory_readiness.v1.json records the Phase 3 real-data blocker."
+                ),
             ],
             "remaining_work": None
             if diagnostic_training_ready and loss_improved
@@ -254,6 +258,12 @@ def _read_json_object(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _escape_table_cell(text: str) -> str:
+    """Escape pipe characters so JSON-derived content cannot corrupt the Markdown table."""
+
+    return text.replace("|", "\\|")
+
+
 def _render_markdown(audit: Mapping[str, Any]) -> str:
     lines = [
         "# Issue #4013 Acceptance Audit",
@@ -272,9 +282,10 @@ def _render_markdown(audit: Mapping[str, Any]) -> str:
         "| --- | --- | --- | --- |",
     ]
     for item in audit["criteria"]:
-        evidence = "<br>".join(str(part) for part in item["evidence"])
-        remaining = item.get("remaining_work") or "None."
-        lines.append(f"| {item['criterion']} | `{item['status']}` | {evidence} | {remaining} |")
+        evidence = "<br>".join(_escape_table_cell(str(part)) for part in item["evidence"])
+        remaining = _escape_table_cell(item.get("remaining_work") or "None.")
+        criterion = _escape_table_cell(item["criterion"])
+        lines.append(f"| {criterion} | `{item['status']}` | {evidence} | {remaining} |")
 
     lines.extend(["", "## Merged PR Evidence", ""])
     for item in audit["merged_pr_evidence"]:

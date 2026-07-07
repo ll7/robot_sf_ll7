@@ -10,7 +10,12 @@ from pathlib import Path
 
 import pytest
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "benchmark" / "run_scenario_criticality_optimization.py"
+_SCRIPT_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "scripts"
+    / "benchmark"
+    / "run_scenario_criticality_optimization.py"
+)
 _SPEC = importlib.util.spec_from_file_location("_scenario_crit_opt", _SCRIPT_PATH)
 _MODULE = importlib.util.module_from_spec(_SPEC)
 assert _SPEC is not None and _SPEC.loader is not None
@@ -220,4 +225,6 @@ def test_cli_help() -> None:
         check=False,
     )
     assert result.returncode == 0
-    assert "scenario criticality" in result.stdout.lower() or "optimization" in result.stdout.lower()
+    assert (
+        "scenario criticality" in result.stdout.lower() or "optimization" in result.stdout.lower()
+    )

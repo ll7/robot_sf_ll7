@@ -140,7 +140,13 @@ def compute_criticality_score(
     failure_to_progress = _safe_get_metric(metrics, "failure_to_progress", 0.0, fail_closed)
     stalled_time = _safe_get_metric(metrics, "stalled_time", 0.0, fail_closed)
 
-    required_metrics = [collision_count, near_misses, min_clearance, failure_to_progress, stalled_time]
+    required_metrics = [
+        collision_count,
+        near_misses,
+        min_clearance,
+        failure_to_progress,
+        stalled_time,
+    ]
     if fail_closed and any(m is None for m in required_metrics):
         return CriticalityResult(
             criticality_score=float("nan"),
@@ -175,11 +181,7 @@ def compute_criticality_score(
     stalled_time_term = config.stalled_time_weight * stalled_time
 
     criticality_score = (
-        collision_term
-        + near_miss_term
-        + clearance_term
-        + progress_failure_term
-        + stalled_time_term
+        collision_term + near_miss_term + clearance_term + progress_failure_term + stalled_time_term
     )
 
     return CriticalityResult(

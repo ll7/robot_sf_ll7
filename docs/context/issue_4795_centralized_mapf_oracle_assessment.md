@@ -103,7 +103,7 @@ A standalone script `scripts/tools/mapf_oracle_diagnostic.py` that:
 - ~~Dynamic obstacle time-windows~~ → implemented (PR #4809): SIPP search.
 - ~~Multi-agent CBS conflict resolution~~ → implemented (PR #4813): CBS search.
 - ~~TPG schedule post-processing~~ → implemented (this PR): `_build_tpg_graph`, `_compute_schedule_slack`, `tpg_post_process`, CLI `--tpg`.
-- Integration into the benchmark campaign loop (requires follow-up issue).
+- ~~Integration into the benchmark campaign loop~~ → implemented (PR #TBD): `robot_sf/benchmark/mapf_oracle.py` (`run_mapf_oracle_diagnostics`), CLI `benchmark mapf-oracle`, 23 tests.
 
 ### Why Not Code Reuse from Upstream
 

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+import json
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -29,6 +30,94 @@ from robot_sf.benchmark.figures.provenance import (
     write_caption_fragment,
     write_provenance,
 )
+
+# Provenance fields embedded inside PDF/PNG file metadata (best-effort).
+# The ``.provenance.json`` sidecar remains the canonical machine-readable record.
+_PROVENANCE_METADATA_FIELDS = (
+    "source_artifacts",
+    "seeds",
+    "episode_ids",
+    "config_hash",
+    "scenario_matrix_hash",
+    "repo_commit",
+    "generator_command",
+    "figure_formats",
+    "claim_boundary",
+)
+
+
+def _provenance_embedded_payload(provenance: dict[str, Any]) -> dict[str, Any]:
+    """Return a compact provenance subset suitable for file-metadata embedding.
+
+    Omits volatile or output-specific fields (timestamps, output hashes) so the
+    embedded payload carries the stable provenance (source hashes, seeds, config
+    hash, repo commit, generator command) that must travel inside the file.
+
+    Args:
+        provenance: Full provenance metadata dictionary.
+
+    Returns:
+        Compact dictionary of stable provenance fields.
+    """
+    payload: dict[str, Any] = {}
+    for key in _PROVENANCE_METADATA_FIELDS:
+        value = provenance.get(key)
+        if value not in (None, "", [], {}):
+            payload[key] = value
+    return payload
+
+
+def _embedded_metadata(
+    provenance: dict[str, Any],
+    figure_name: str,
+    fmt: str,
+) -> dict[str, Any]:
+    """Build a ``savefig`` metadata dict embedding provenance for pdf or png.
+
+    PDF uses the standard info-dict keys (Title/Author/Subject/Keywords/Creator);
+    the compact provenance JSON is stored in ``Keywords``. PNG uses arbitrary
+    Pillow text chunks; the compact JSON is stored in a ``Provenance`` chunk.
+
+    Args:
+        provenance: Full provenance metadata dictionary.
+        figure_name: Figure base name (used as PDF Title).
+        fmt: Output format (``"pdf"`` or ``"png"``).
+
+    Returns:
+        Metadata dict accepted by ``Figure.savefig(metadata=...)`` for the format.
+    """
+    compact = json.dumps(
+        _provenance_embedded_payload(provenance),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+    summary_parts: list[str] = []
+    sources = provenance.get("source_artifacts") or []
+    if sources:
+        summary_parts.append(f"sources={len(sources)}")
+    episodes = provenance.get("episode_ids") or []
+    if episodes:
+        summary_parts.append(f"episodes={len(episodes)}")
+    if provenance.get("repo_commit"):
+        summary_parts.append(f"commit={provenance['repo_commit']}")
+    summary = " ".join(summary_parts) or "Publication figure"
+    creator = str(provenance.get("generator_command") or "robot_sf benchmark visualization")
+
+    if fmt == "pdf":
+        return {
+            "Title": figure_name,
+            "Author": "Robot SF Benchmark",
+            "Subject": summary,
+            "Keywords": compact,
+            "Creator": creator,
+        }
+    # png: Pillow text chunks accept arbitrary string keys
+    return {
+        "Software": creator,
+        "Description": summary,
+        "Provenance": compact,
+    }
 
 
 def save_publication_figure(
@@ -91,16 +180,13 @@ def save_publication_figure(
             "pad_inches": 0.05,
         }
 
-        # Add metadata for PDF and PNG
+        # Embed provenance in PDF/PNG metadata (best-effort; sidecar is canonical).
+        # SVG has no comparable metadata channel here, so it relies on the sidecar.
         if fmt == "pdf":
-            save_kwargs["metadata"] = {
-                "Title": output_base.name,
-                "Author": "Robot SF Benchmark",
-                "Subject": "Publication figure",
-                "Creator": "robot_sf benchmark visualization",
-            }
+            save_kwargs["metadata"] = _embedded_metadata(provenance, output_base.name, "pdf")
         elif fmt == "png":
             save_kwargs["dpi"] = 300
+            save_kwargs["metadata"] = _embedded_metadata(provenance, output_base.name, "png")
 
         plt.savefig(output_path, **save_kwargs)
         saved_files.append(output_path)

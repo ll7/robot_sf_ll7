@@ -1,5 +1,8 @@
 # Context Retrieval Index
 
+Publication figure style pack (opt-in vector export, colorblind-safe planner palette, provenance sidecars, LaTeX-safe captions):
+[issue_4777_publication_figure_style_pack.md](issue_4777_publication_figure_style_pack.md).
+
 Recent OMPL ST-RRT* feasibility assessment:
 [issue_4797_ompl_strrtstar_assessment.md](issue_4797_ompl_strrtstar_assessment.md).
 

@@ -129,7 +129,7 @@ Examples:
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # noqa: C901
     """Main entry point."""
     args = parse_args(argv)
 

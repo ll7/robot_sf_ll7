@@ -37,7 +37,7 @@ except ImportError:
 
     def _ensure_matplotlib_backend() -> None:
         """Initialize matplotlib to a headless-safe backend once."""
-        import matplotlib
+        import matplotlib  # noqa: PLC0415
 
         matplotlib.use("Agg")
 
@@ -384,7 +384,7 @@ def generate_still(
 
     if map_path:
         try:
-            import matplotlib.image as mpimg
+            import matplotlib.image as mpimg  # noqa: PLC0415
 
             img = mpimg.imread(map_path)
             ax.imshow(img, origin="upper", alpha=0.3)
@@ -399,7 +399,7 @@ def generate_still(
         ax.plot(ped_x, ped_y, "ro", markersize=8, label="Pedestrians")
 
     stamp_text = (
-        f"Ep: {replay_episode.episode_id}\nStep: {step_idx}\nSeed: {replay_episode.scenario_id}"
+        f"Ep: {replay_episode.episode_id}\nStep: {step_idx}\nScenario: {replay_episode.scenario_id}"
     )
     ax.text(
         0.02,
@@ -522,7 +522,7 @@ def generate_trajectory(
 
     if map_path:
         try:
-            import matplotlib.image as mpimg
+            import matplotlib.image as mpimg  # noqa: PLC0415
 
             img = mpimg.imread(map_path)
             ax.imshow(img, origin="upper", alpha=0.3)
@@ -683,7 +683,11 @@ def _generate_requested_artifacts(
     frame_steps: list[int] | None,
     map_path: str | None,
 ) -> tuple[list[FigureArtifact], list[dict[str, Any]]]:
-    """Generate requested figure artifacts and collect metadata."""
+    """Generate requested figure artifacts and collect metadata.
+
+    Returns:
+        Tuple of (artifacts, artifact metadata dicts).
+    """
     artifacts: list[FigureArtifact] = []
     artifact_metadata: list[dict[str, Any]] = []
 
@@ -732,7 +736,7 @@ def _generate_requested_artifacts(
     return artifacts, artifact_metadata
 
 
-def replay_episode_and_generate_figures(
+def replay_episode_and_generate_figures(  # noqa: PLR0913
     episode_row: EpisodeRow,
     outputs: list[Literal["still", "filmstrip", "trajectory"]],
     out_dir: Path,
@@ -867,7 +871,11 @@ def _check_determinism_or_skip(
     tolerance_m: float,
     no_determinism_check: bool,
 ) -> tuple[str, dict[str, Any]]:
-    """Check determinism or return skipped status."""
+    """Check determinism or return skipped status.
+
+    Returns:
+        Tuple of (status, details dict).
+    """
     if no_determinism_check:
         return "skipped", {"reason": "determinism check disabled via --no-determinism-check"}
     return check_determinism(replay_episode, episode_row, tolerance_m)

@@ -15,12 +15,15 @@ from __future__ import annotations
 
 import argparse
 import copy
+import os
 import sys
 from pathlib import Path
 from typing import Any
 
 import yaml
 from loguru import logger
+
+_REPO_ROOT: Path = Path(__file__).resolve().parent.parent.parent
 
 FAILURE_RECORD_SCHEMA_VERSION = "failure-record.v1"
 SCENARIO_MATRIX_SCHEMA_VERSION = "robot_sf.scenario_matrix.v1"
@@ -35,12 +38,12 @@ ENVIRONMENT_TO_TEMPLATE = {
     "road_edge": "road_edge",
 }
 
-TEMPLATE_TO_MAP = {
-    "event_disruption": "../../../maps/svg_maps/event_disruption/event_disruption.svg",
-    "ammv_sidewalk": "../../../maps/svg_maps/ammv_sidewalk/ammv_sidewalk.svg",
-    "ammv_shared_space": "../../../maps/svg_maps/ammv_shared_space/ammv_shared_space.svg",
-    "classic_crossing": "../../../maps/svg_maps/classic_crossing/classic_crossing.svg",
-    "road_edge": "../../../maps/svg_maps/road_edge/road_edge.svg",
+TEMPLATE_TO_MAP: dict[str, Path] = {
+    "event_disruption": Path("maps/svg_maps/classic_crossing.svg"),
+    "ammv_sidewalk": Path("maps/svg_maps/classic_doorway.svg"),
+    "ammv_shared_space": Path("maps/svg_maps/classic_merging.svg"),
+    "classic_crossing": Path("maps/svg_maps/classic_crossing.svg"),
+    "road_edge": Path("maps/svg_maps/classic_t_intersection.svg"),
 }
 
 FAILURE_MODE_TO_EXPECTED = {
@@ -59,6 +62,27 @@ CONTEXTUAL_FACTOR_WARNINGS = {
     "abnormal_hazard": "Hazard behavior is simplified",
     "narrow_clearance": "Clearance margins may need adjustment",
 }
+
+
+def _map_file_for_output(template: str, *, output_path: Path | None = None) -> str:
+    """Return the map file path relative to the generated scenario file.
+
+    When ``output_path`` is known the path is relative to the output directory.
+    Otherwise the repository-relative path is returned so that ``--stdout``
+    output documents the canonical location.
+    """
+    repo_rel = TEMPLATE_TO_MAP.get(template, TEMPLATE_TO_MAP["ammv_sidewalk"])
+    if output_path is None:
+        return repo_rel.as_posix()
+    return os.path.relpath(_REPO_ROOT / repo_rel, start=output_path.parent)
+
+
+def _resolve_generated_map_file(generated_yaml: Path, map_file: str) -> Path:
+    """Resolve a ``map_file`` value against the scenario YAML location."""
+    candidate = Path(map_file)
+    if not candidate.is_absolute():
+        candidate = generated_yaml.parent / candidate
+    return candidate.resolve()
 
 
 def _configure_logging(verbose: bool = False) -> None:
@@ -200,13 +224,15 @@ def _generate_pedestrians(
     return pedestrians
 
 
-def _build_scenario_payload(failure_record: dict[str, Any]) -> dict[str, Any]:
+def _build_scenario_payload(
+    failure_record: dict[str, Any], *, output_path: Path | None = None
+) -> dict[str, Any]:
     """Build the complete scenario YAML payload from a failure record."""
     fr = copy.deepcopy(failure_record)
 
     env = fr.get("environment", "sidewalk")
     template = ENVIRONMENT_TO_TEMPLATE.get(env, "ammv_sidewalk")
-    map_file = TEMPLATE_TO_MAP.get(template, TEMPLATE_TO_MAP["ammv_sidewalk"])
+    map_file = _map_file_for_output(template, output_path=output_path)
 
     failure_mode = fr.get("failure_mode", "blocked_path")
     expected_modes = FAILURE_MODE_TO_EXPECTED.get(failure_mode, ["stuck"])
@@ -304,7 +330,7 @@ def convert_failure_record(
 
     logger.info("Validation passed")
 
-    payload = _build_scenario_payload(record["failure_record"])
+    payload = _build_scenario_payload(record["failure_record"], output_path=output_path)
 
     if output_path is not None:
         output_path.parent.mkdir(parents=True, exist_ok=True)

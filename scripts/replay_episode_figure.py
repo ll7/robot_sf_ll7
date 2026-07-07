@@ -18,7 +18,6 @@ from pathlib import Path
 from loguru import logger
 
 from robot_sf.benchmark.episode_replay_figure import (
-    EpisodeRow,
     load_episode_row,
     replay_episode_and_generate_figures,
 )
@@ -130,7 +129,7 @@ Examples:
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # noqa: C901
     """Main entry point."""
     args = parse_args(argv)
 

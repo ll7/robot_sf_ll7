@@ -168,3 +168,42 @@ def test_log_manual_visualization_steps_logs_valid_commands(tmp_path: Path) -> N
     assert "--in" in distributions_command
     assert "--out-dir" in distributions_command
     assert "--metrics collisions,comfort_exposure" in distributions_command
+
+
+@pytest.mark.parametrize("formats", [("png",), ("svg",), ("png", "svg")])
+def test_publication_plot_without_pdf_format_does_not_crash(formats, tmp_path):
+    """Publication figures with formats excluding 'pdf' must not FileNotFoundError.
+
+    Regression for PR #4800 (Gemini finding): plot_path was unconditionally set
+    to ``<base>.pdf`` in publication mode, so the ``plot_path.stat()`` size probe
+    raised FileNotFoundError whenever the requested formats did not include pdf.
+    """
+    from robot_sf.benchmark.visualization import (
+        _generate_metrics_plot,
+        _generate_scenario_comparison_plot,
+    )
+
+    episodes = [
+        {
+            "episode_id": "ep_001",
+            "scenario_id": "classic_001",
+            "metrics": {"collision_rate": 0.1, "success_rate": 0.9, "snqi": 0.8},
+        },
+        {
+            "episode_id": "ep_002",
+            "scenario_id": "classic_002",
+            "metrics": {"collision_rate": 0.2, "success_rate": 0.8, "snqi": 0.7},
+        },
+    ]
+
+    for generate in (_generate_metrics_plot, _generate_scenario_comparison_plot):
+        artifact = generate(
+            episodes,
+            str(tmp_path),
+            publication=True,
+            formats=formats,
+        )
+        # Artifact must reference an actually-written file in a requested format.
+        assert artifact.format in formats
+        assert artifact.file_size > 0
+        assert (tmp_path / artifact.filename).is_file()

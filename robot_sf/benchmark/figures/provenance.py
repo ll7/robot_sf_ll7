@@ -161,6 +161,10 @@ def build_caption_fragment(
 ) -> str:
     """Build a LaTeX-ready caption fragment.
 
+    User-supplied identifiers (campaign name, scenario id, episode ids) are
+    LaTeX-escaped so ``_ % & # $ { } ~ ^ \\`` cannot break compilation. The
+    connecting punctuation is fixed LaTeX-safe text.
+
     Args:
         campaign_name: Name of the benchmark campaign.
         episode_ids: List of episode identifiers.
@@ -171,11 +175,12 @@ def build_caption_fragment(
     """
     parts = []
     if campaign_name:
-        parts.append(f"Campaign: {campaign_name}")
+        parts.append(f"Campaign: {_latex_escape(campaign_name)}")
     if scenario_id:
-        parts.append(f"Scenario: {scenario_id}")
+        parts.append(f"Scenario: {_latex_escape(scenario_id)}")
     if episode_ids:
-        ep_str = ", ".join(episode_ids[:3])
+        escaped = [_latex_escape(str(eid)) for eid in episode_ids[:3]]
+        ep_str = ", ".join(escaped)
         if len(episode_ids) > 3:
             ep_str += f", ... ({len(episode_ids)} total)"
         parts.append(f"Episodes: {ep_str}")
@@ -184,6 +189,36 @@ def build_caption_fragment(
         return "\\textit{No provenance data}"
 
     return " | ".join(parts)
+
+
+# LaTeX special characters that can break compilation, mapped to safe macros.
+# Backslash is handled per-character so it is not double-escaped.
+_LATEX_SPECIALS: dict[str, str] = {
+    "\\": r"\textbackslash{}",
+    "&": r"\&",
+    "%": r"\%",
+    "$": r"\$",
+    "#": r"\#",
+    "_": r"\_",
+    "{": r"\{",
+    "}": r"\}",
+    "~": r"\textasciitilde{}",
+    "^": r"\textasciicircum{}",
+}
+
+
+def _latex_escape(text: str) -> str:
+    """Escape LaTeX special characters in free-form text.
+
+    Args:
+        text: Raw text that may contain LaTeX specials.
+
+    Returns:
+        Text with LaTeX specials replaced by safe macros.
+    """
+    if not text:
+        return text
+    return "".join(_LATEX_SPECIALS.get(ch, ch) for ch in text)
 
 
 def write_caption_fragment(

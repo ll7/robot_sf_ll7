@@ -14,26 +14,37 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
 from robot_sf.benchmark.full_classic.replay import (
     ReplayEpisode,
     ReplayStep,
-    build_replay_episode,
     validate_replay_episode,
 )
-from robot_sf.benchmark.full_classic.visuals import _ensure_matplotlib_backend
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+try:
+    from robot_sf.benchmark.visualization import _ensure_matplotlib_backend
+except ImportError:
+
+    def _ensure_matplotlib_backend() -> None:
+        """Initialize matplotlib to a headless-safe backend once."""
+        import matplotlib  # noqa: PLC0415
+
+        matplotlib.use("Agg")
+
 
 try:
     import matplotlib.pyplot as plt
-    from matplotlib.patches import Circle
 
     _MATPLOTLIB_AVAILABLE = True
 except ImportError:
@@ -66,6 +77,47 @@ OPTIONAL_PROVENANCE_FIELDS = [
 ]
 
 
+def _finite_floats(*values: Any) -> tuple[float, ...] | None:
+    """Coerce values to finite floats, returning ``None`` if any is invalid.
+
+    Used to skip replay steps carrying NaN/Inf or non-numeric coordinates so
+    they never reach plot-limit or max-value computations.
+
+    Returns:
+        Tuple of finite floats in order, or ``None`` if any value is
+        non-numeric or non-finite.
+    """
+    out: list[float] = []
+    for v in values:
+        try:
+            f = float(v)
+        except (ValueError, TypeError):
+            return None
+        if not math.isfinite(f):
+            return None
+        out.append(f)
+    return tuple(out)
+
+
+def _parse_final_position(raw: Any) -> tuple[float, float] | None:
+    """Coerce a recorded final robot position to a 2-tuple of finite floats.
+
+    Returns:
+        ``(x, y)`` of finite floats, or ``None`` when the value is absent or
+        malformed so downstream determinism checks skip the comparison
+        instead of crashing on a bad row.
+    """
+    if not isinstance(raw, (list, tuple)) or len(raw) != 2:
+        return None
+    try:
+        x, y = float(raw[0]), float(raw[1])
+    except (ValueError, TypeError):
+        return None
+    if not (math.isfinite(x) and math.isfinite(y)):
+        return None
+    return (x, y)
+
+
 @dataclass
 class EpisodeRow:
     """Validated episode row with provenance."""
@@ -91,7 +143,17 @@ class EpisodeRow:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> EpisodeRow:
-        """Create EpisodeRow from dictionary, validating required fields."""
+        """Create EpisodeRow from dictionary, validating required fields.
+
+        Args:
+            data: Episode row dictionary.
+
+        Returns:
+            Validated EpisodeRow instance.
+
+        Raises:
+            ValueError: If required fields are missing.
+        """
         missing = [f for f in REQUIRED_EPISODE_FIELDS if f not in data]
         if missing:
             raise ValueError(f"Episode row missing required fields: {missing}")
@@ -110,9 +172,7 @@ class EpisodeRow:
             config_hash=data.get("config_hash"),
             scenario_matrix_hash=data.get("scenario_matrix_hash"),
             repo_commit=data.get("repo_commit"),
-            final_robot_position=tuple(data["final_robot_position"])
-            if "final_robot_position" in data
-            else None,
+            final_robot_position=_parse_final_position(data.get("final_robot_position")),
             final_progress=data.get("final_progress"),
             success=data.get("success"),
             collision=data.get("collision"),
@@ -163,7 +223,14 @@ class ProvenanceSidecar:
 
 
 def compute_file_sha256(path: Path) -> str:
-    """Compute SHA-256 hash of a file."""
+    """Compute SHA-256 hash of a file.
+
+    Args:
+        path: File path to hash.
+
+    Returns:
+        Hex digest string.
+    """
     sha256 = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(8192), b""):
@@ -172,7 +239,14 @@ def compute_file_sha256(path: Path) -> str:
 
 
 def compute_bytes_sha256(data: bytes) -> str:
-    """Compute SHA-256 hash of bytes."""
+    """Compute SHA-256 hash of bytes.
+
+    Args:
+        data: Bytes to hash.
+
+    Returns:
+        Hex digest string.
+    """
     return hashlib.sha256(data).hexdigest()
 
 
@@ -193,7 +267,7 @@ def load_episode_row(episodes_path: Path, episode_id: str) -> EpisodeRow:
     if not episodes_path.exists():
         raise FileNotFoundError(f"Episodes file not found: {episodes_path}")
 
-    with open(episodes_path, "r", encoding="utf-8") as f:
+    with open(episodes_path, encoding="utf-8") as f:
         for line_num, line in enumerate(f, 1):
             line = line.strip()
             if not line:
@@ -225,22 +299,30 @@ def build_replay_from_episode_row(episode_row: EpisodeRow) -> ReplayEpisode | No
     steps = []
     for step_data in replay_steps:
         if isinstance(step_data, dict):
+            coords = _finite_floats(
+                step_data.get("t", 0.0),
+                step_data.get("x", 0.0),
+                step_data.get("y", 0.0),
+                step_data.get("heading", 0.0),
+            )
+            if coords is None:
+                continue
+            t, x, y, heading = coords
             step = ReplayStep(
-                t=step_data.get("t", 0.0),
-                x=step_data.get("x", 0.0),
-                y=step_data.get("y", 0.0),
-                heading=step_data.get("heading", 0.0),
+                t=t,
+                x=x,
+                y=y,
+                heading=heading,
                 speed=step_data.get("speed"),
                 ped_positions=step_data.get("ped_positions"),
                 action=step_data.get("action"),
             )
         elif isinstance(step_data, list | tuple) and len(step_data) >= 4:
-            step = ReplayStep(
-                t=float(step_data[0]),
-                x=float(step_data[1]),
-                y=float(step_data[2]),
-                heading=float(step_data[3]),
-            )
+            coords = _finite_floats(step_data[0], step_data[1], step_data[2], step_data[3])
+            if coords is None:
+                continue
+            t, x, y, heading = coords
+            step = ReplayStep(t=t, x=x, y=y, heading=heading)
         else:
             continue
         steps.append(step)
@@ -292,8 +374,7 @@ def check_determinism(
         details["original_final_position"] = original_pos
 
         dist = np.sqrt(
-            (final_pos[0] - original_pos[0]) ** 2
-            + (final_pos[1] - original_pos[1]) ** 2
+            (final_pos[0] - original_pos[0]) ** 2 + (final_pos[1] - original_pos[1]) ** 2
         )
         details["position_error_m"] = dist
 
@@ -305,11 +386,13 @@ def check_determinism(
             )
 
     if episode_row.final_progress is not None:
-        details["checks_performed"].append("final_progress")
-        if final_step.speed is not None:
-            details["checks_passed"].append("final_progress (qualitative)")
-        else:
-            details["checks_passed"].append("final_progress recorded")
+        # `final_progress` is recorded for provenance context only. There is no
+        # replay-side progress endpoint to compare it against, so it does NOT
+        # constitute a determinism check and must not be counted toward a
+        # "pass" status — doing so previously let an episode carrying only
+        # `final_progress` report determinism "pass" while verifying nothing.
+        details.setdefault("checks_informational", []).append("final_progress recorded")
+        details["original_final_progress"] = episode_row.final_progress
 
     if details["checks_failed"]:
         return "fail", details
@@ -351,11 +434,11 @@ def generate_still(
 
     if map_path:
         try:
-            import matplotlib.image as mpimg
+            import matplotlib.image as mpimg  # noqa: PLC0415
 
             img = mpimg.imread(map_path)
             ax.imshow(img, origin="upper", alpha=0.3)
-        except Exception:
+        except (OSError, ValueError):
             pass
 
     ax.plot(step.x, step.y, "bo", markersize=15, label="Robot")
@@ -365,7 +448,9 @@ def generate_still(
         ped_y = [p[1] for p in step.ped_positions]
         ax.plot(ped_x, ped_y, "ro", markersize=8, label="Pedestrians")
 
-    stamp_text = f"Ep: {replay_episode.episode_id}\nStep: {step_idx}\nSeed: {replay_episode.scenario_id}"
+    stamp_text = (
+        f"Ep: {replay_episode.episode_id}\nStep: {step_idx}\nScenario: {replay_episode.scenario_id}"
+    )
     ax.text(
         0.02,
         0.98,
@@ -373,7 +458,7 @@ def generate_still(
         transform=ax.transAxes,
         fontsize=8,
         verticalalignment="top",
-        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+        bbox={"boxstyle": "round", "facecolor": "wheat", "alpha": 0.5},
     )
 
     ax.set_xlabel("X (m)")
@@ -423,14 +508,20 @@ def generate_filmstrip(
         indices = np.linspace(0, len(replay_episode.steps) - 1, n_frames, dtype=int)
         frame_steps = indices.tolist()
 
+    if not frame_steps:
+        raise ValueError("frame_steps must contain at least one step index")
+    out_of_range = [s for s in frame_steps if s < 0 or s >= len(replay_episode.steps)]
+    if out_of_range:
+        raise ValueError(
+            f"frame_steps out of range [0, {len(replay_episode.steps) - 1}]: {out_of_range}"
+        )
+
     n_frames = len(frame_steps)
     fig, axes = plt.subplots(1, n_frames, figsize=(3 * n_frames, 3))
     if n_frames == 1:
         axes = [axes]
 
-    for idx, (ax, step_idx) in enumerate(zip(axes, frame_steps)):
-        if step_idx < 0 or step_idx >= len(replay_episode.steps):
-            continue
+    for idx, (ax, step_idx) in enumerate(zip(axes, frame_steps, strict=False)):
         step = replay_episode.steps[step_idx]
 
         ax.plot(step.x, step.y, "bo", markersize=10)
@@ -487,11 +578,11 @@ def generate_trajectory(
 
     if map_path:
         try:
-            import matplotlib.image as mpimg
+            import matplotlib.image as mpimg  # noqa: PLC0415
 
             img = mpimg.imread(map_path)
             ax.imshow(img, origin="upper", alpha=0.3)
-        except Exception:
+        except (OSError, ValueError):
             pass
 
     robot_x = [s.x for s in replay_episode.steps]
@@ -536,7 +627,7 @@ def generate_trajectory(
         transform=ax.transAxes,
         fontsize=8,
         verticalalignment="top",
-        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+        bbox={"boxstyle": "round", "facecolor": "wheat", "alpha": 0.5},
     )
 
     ax.set_xlabel("X (m)")
@@ -585,10 +676,7 @@ def generate_caption_fragment(
     )
 
     if replay_result.determinism_details.get("position_error_m"):
-        caption += (
-            f" Position error: "
-            f"{replay_result.determinism_details['position_error_m']:.3f}m."
-        )
+        caption += f" Position error: {replay_result.determinism_details['position_error_m']:.3f}m."
 
     return caption
 
@@ -626,7 +714,11 @@ def write_provenance_sidecar(
 
 
 def get_repo_commit() -> str | None:
-    """Get current git commit hash."""
+    """Get current git commit hash.
+
+    Returns:
+        Git commit hash string or None if unavailable.
+    """
     try:
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -635,11 +727,72 @@ def get_repo_commit() -> str | None:
             check=True,
         )
         return result.stdout.strip()
-    except Exception:
+    except (subprocess.CalledProcessError, OSError):
         return None
 
 
-def replay_episode_and_generate_figures(
+def _generate_requested_artifacts(
+    replay_episode: ReplayEpisode,
+    outputs: list[str],
+    out_dir: Path,
+    fmt: str,
+    frame_steps: list[int] | None,
+    map_path: str | None,
+) -> tuple[list[FigureArtifact], list[dict[str, Any]]]:
+    """Generate requested figure artifacts and collect metadata.
+
+    Returns:
+        Tuple of (artifacts, artifact metadata dicts).
+    """
+    artifacts: list[FigureArtifact] = []
+    artifact_metadata: list[dict[str, Any]] = []
+
+    if "still" in outputs:
+        step_idx = frame_steps[0] if frame_steps else len(replay_episode.steps) // 2
+        still_path = out_dir / f"still_{step_idx}.{fmt}"
+        still = generate_still(replay_episode, step_idx, still_path, fmt, map_path)
+        artifacts.append(still)
+        artifact_metadata.append(
+            {
+                "type": "still",
+                "path": still.path,
+                "format": still.format,
+                "sha256": still.sha256,
+                "step_idx": step_idx,
+            }
+        )
+
+    if "filmstrip" in outputs:
+        filmstrip_path = out_dir / f"filmstrip.{fmt}"
+        filmstrip = generate_filmstrip(replay_episode, filmstrip_path, fmt, frame_steps)
+        artifacts.append(filmstrip)
+        artifact_metadata.append(
+            {
+                "type": "filmstrip",
+                "path": filmstrip.path,
+                "format": filmstrip.format,
+                "sha256": filmstrip.sha256,
+                "frame_steps": frame_steps,
+            }
+        )
+
+    if "trajectory" in outputs:
+        trajectory_path = out_dir / f"trajectory.{fmt}"
+        trajectory = generate_trajectory(replay_episode, trajectory_path, fmt, map_path)
+        artifacts.append(trajectory)
+        artifact_metadata.append(
+            {
+                "type": "trajectory",
+                "path": trajectory.path,
+                "format": trajectory.format,
+                "sha256": trajectory.sha256,
+            }
+        )
+
+    return artifacts, artifact_metadata
+
+
+def replay_episode_and_generate_figures(  # noqa: PLR0913
     episode_row: EpisodeRow,
     outputs: list[Literal["still", "filmstrip", "trajectory"]],
     out_dir: Path,
@@ -692,13 +845,9 @@ def replay_episode_and_generate_figures(
             f"(need >= 2, got {len(replay_episode.steps)})"
         )
 
-    if no_determinism_check:
-        determinism_status = "skipped"
-        determinism_details = {"reason": "determinism check disabled via --no-determinism-check"}
-    else:
-        determinism_status, determinism_details = check_determinism(
-            replay_episode, episode_row, tolerance_m
-        )
+    determinism_status, determinism_details = _check_determinism_or_skip(
+        replay_episode, episode_row, tolerance_m, no_determinism_check
+    )
 
     replay_result = ReplayResult(
         episode=replay_episode,
@@ -712,61 +861,11 @@ def replay_episode_and_generate_figures(
             f"{determinism_details.get('checks_failed', ['unknown'])}"
         )
 
-    artifacts: list[FigureArtifact] = []
-    artifact_metadata: list[dict[str, Any]] = []
-
     try:
-        if "still" in outputs:
-            step_idx = frame_steps[0] if frame_steps else len(replay_episode.steps) // 2
-            still_path = out_dir / f"still_{step_idx}.{fmt}"
-            still = generate_still(
-                replay_episode,
-                step_idx,
-                still_path,
-                fmt,
-                episode_row.raw.get("replay_map_path"),
-            )
-            artifacts.append(still)
-            artifact_metadata.append({
-                "type": "still",
-                "path": still.path,
-                "format": still.format,
-                "sha256": still.sha256,
-                "step_idx": step_idx,
-            })
-
-        if "filmstrip" in outputs:
-            filmstrip_path = out_dir / f"filmstrip.{fmt}"
-            filmstrip = generate_filmstrip(
-                replay_episode,
-                filmstrip_path,
-                fmt,
-                frame_steps,
-            )
-            artifacts.append(filmstrip)
-            artifact_metadata.append({
-                "type": "filmstrip",
-                "path": filmstrip.path,
-                "format": filmstrip.format,
-                "sha256": filmstrip.sha256,
-                "frame_steps": frame_steps,
-            })
-
-        if "trajectory" in outputs:
-            trajectory_path = out_dir / f"trajectory.{fmt}"
-            trajectory = generate_trajectory(
-                replay_episode,
-                trajectory_path,
-                fmt,
-                episode_row.raw.get("replay_map_path"),
-            )
-            artifacts.append(trajectory)
-            artifact_metadata.append({
-                "type": "trajectory",
-                "path": trajectory.path,
-                "format": trajectory.format,
-                "sha256": trajectory.sha256,
-            })
+        map_path = episode_row.raw.get("replay_map_path")
+        artifacts, artifact_metadata = _generate_requested_artifacts(
+            replay_episode, outputs, out_dir, fmt, frame_steps, map_path
+        )
 
         caption = generate_caption_fragment(episode_row, replay_result, artifacts)
         caption_path = out_dir / "caption_fragment.tex"
@@ -778,10 +877,7 @@ def replay_episode_and_generate_figures(
             source_sha256 = compute_file_sha256(episodes_jsonl_path)
 
         planner_key = (
-            episode_row.planner
-            or episode_row.planner_key
-            or episode_row.algo
-            or "unknown"
+            episode_row.planner or episode_row.planner_key or episode_row.algo or "unknown"
         )
 
         sidecar = ProvenanceSidecar(
@@ -825,18 +921,34 @@ def replay_episode_and_generate_figures(
         raise RuntimeError(f"Figure generation failed: {e}") from e
 
 
+def _check_determinism_or_skip(
+    replay_episode: ReplayEpisode,
+    episode_row: EpisodeRow,
+    tolerance_m: float,
+    no_determinism_check: bool,
+) -> tuple[str, dict[str, Any]]:
+    """Check determinism or return skipped status.
+
+    Returns:
+        Tuple of (status, details dict).
+    """
+    if no_determinism_check:
+        return "skipped", {"reason": "determinism check disabled via --no-determinism-check"}
+    return check_determinism(replay_episode, episode_row, tolerance_m)
+
+
 __all__ = [
     "EpisodeRow",
-    "ReplayResult",
     "FigureArtifact",
     "ProvenanceSidecar",
-    "load_episode_row",
+    "ReplayResult",
     "build_replay_from_episode_row",
     "check_determinism",
-    "generate_still",
+    "compute_file_sha256",
     "generate_filmstrip",
+    "generate_still",
     "generate_trajectory",
+    "load_episode_row",
     "replay_episode_and_generate_figures",
     "write_provenance_sidecar",
-    "compute_file_sha256",
 ]

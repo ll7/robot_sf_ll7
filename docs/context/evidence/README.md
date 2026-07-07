@@ -177,6 +177,10 @@ is included.
   durable dataset/checkpoint and nominal classification criteria remain blocked on
   a Slurm smoke rerun (revised objective) plus nominal escalation. High-churn
   state propagation is tracked in `../issue_1475_state.yaml`.
+- `issue_1358_acceptance_audit_2026-07-07.json`: executable parent acceptance
+  audit for Issue #1358. It consumes the ORCA-residual lane readiness checker and
+  Issue #1475 acceptance/state surfaces, keeps the parent fail-closed with four
+  unmet criteria, and records state propagation in `../issue_1358_state.yaml`.
 
 - `issue_1489_closure_audit_2026-07-05.md`: closure-audit evidence for Issue #1489.
   Maps schema/checker/status/integration PRs #1516, #1535, #1547, #2286,

@@ -1,0 +1,95 @@
+# Canonical high-churn state surface for issue #1358.
+#
+# Purpose: issue #1358 has multiple recent readiness/checker/closure-audit PRs.
+# Keep durable parent closure state in one append-only table rather than a new
+# comment stream. This file intentionally excludes transient ready-queue
+# routing, packet lineage pointers, private ops state, campaign launch state,
+# benchmark results, release state, or paper claims.
+issue: 1358
+state_surface: orca_residual_parent_acceptance_audit
+canonical_evidence:
+  closure_audit: docs/context/issue_1358_closure_audit_2026-07-07.md
+  executable_parent_audit: docs/context/evidence/issue_1358_acceptance_audit_2026-07-07.json
+  child_1475_state: docs/context/issue_1475_state.yaml
+entries:
+  - recorded_at_utc: "2026-07-07T01:15:00Z"
+    status: local_contract_delivered__external_slurm_child_pending
+    source:
+      issue_url: "https://github.com/ll7/robot_sf_ll7/issues/1358"
+      live_issue_state_checked: "open"
+      comments_reviewed: 13
+      latest_maintainer_comment_utc: "2026-07-06T10:28:24Z"
+      latest_maintainer_comment_summary: >-
+        Parent remains blocked; do not execute training directly from #1358.
+        Closure waits for child #1475 durable smoke/nominal evidence and a
+        continue/revise/stop classification.
+    fragmentation_guard: >-
+      Pull requests #4555 and #4706 already merged parent readiness/audit
+      surfaces in the recent high-churn window. This entry is the durable
+      state propagation surface for the executable parent acceptance audit,
+      not a new comment stream or transient queue-route record.
+    closure_boundary:
+      closure_call_for_this_pr: keep_open
+      reason: >-
+        Local handoff readiness is complete, but parent closure criteria that
+        require trained residual artifacts, nominal evidence, comparison
+        report, and final lane classification remain blocked on child #1475.
+    acceptance_evidence:
+      - criterion: "Candidate design records exact observation additions and residual action bounds."
+        status: met
+        evidence: >-
+          Readiness checker reports local handoff ready and the merged local
+          surfaces from #1409/#1875/#3770 cover the candidate design contract.
+      - criterion: "Training config versioned and runnable by one canonical handoff command."
+        status: met
+        evidence: >-
+          Readiness checker reports canonical lineage validation, smoke
+          candidate, and Slurm handoff command shapes without executing them.
+      - criterion: "Trained checkpoint durable lineage explicit artifact pointer."
+        status: not_met
+        evidence: >-
+          Child #1475 executable audit remains blocked; durable residual
+          dataset/checkpoint/report artifacts are not complete.
+      - criterion: "Smoke nominal-sanity policy-search stages run without fallback/degraded success."
+        status: not_met
+        evidence: >-
+          Fallback/degraded success is fail-closed, but the tracked smoke gate
+          remains invalid and no nominal result exists.
+      - criterion: "Report compares ORCA, current PPO leader, failed guarded-PPO variants, and new residual policy."
+        status: not_met
+        evidence: >-
+          No trained residual checkpoint and no scenario-stratified nominal
+          comparison report exist yet.
+      - criterion: "Result classified promote, revise, or reject using scenario-stratified evidence."
+        status: not_met
+        evidence: >-
+          Earlier #2445 progress-probe decision does not replace the parent
+          #1358 classification that must follow #1475 durable evidence.
+      - criterion: "Parent stays open until Issue #1475 classifies lane continue/revise/stop durable evidence."
+        status: met
+        evidence: >-
+          Child #1475 executable audit closure_call=keep_open and the #1475
+          state surface is valid.
+      - criterion: "No new residual-policy training children added before Issue #1475 reports durable evidence or fail-closed blocker."
+        status: met
+        evidence: >-
+          This CPU-only audit adds no child issues, Slurm/GPU submissions,
+          training runs, planner mutations, releases, or paper claims.
+    next_empirical_action: >-
+      On a Slurm-capable lane, run one bounded ORCA-residual BC smoke rerun
+      against current post-gate code. Only if the smoke gate passes, escalate
+      a bounded nominal run and record the #1358 continue/revise/stop
+      classification.
+    validation:
+      - command: "gh issue view 1358 --repo ll7/robot_sf_ll7 --comments"
+        result: "Issue body and 13 comments reviewed before implementation."
+      - command: "uv run pytest tests/validation/test_build_issue_1358_acceptance_audit.py tests/benchmark/test_orca_residual_lane_readiness.py tests/validation/test_build_issue_1475_acceptance_audit.py"
+        result: "Targeted validation for parent audit, readiness checker, and child audit."
+    out_of_scope_confirmed:
+      full_benchmark_campaign_run: false
+      slurm_or_gpu_submission: false
+      paper_or_dissertation_claim_edit: false
+      issue_comment: false
+      release: false
+      merge: false
+      deletion: false

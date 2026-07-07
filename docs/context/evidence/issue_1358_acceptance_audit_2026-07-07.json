@@ -1,0 +1,138 @@
+{
+  "acceptance_evidence": [
+    {
+      "criterion": "Candidate design records exact observation additions and residual action bounds.",
+      "evidence": "Readiness report status='blocked_on_followup', prerequisites 9/9 ready; merged PRs #1409/#1875/#3770 provide the local handoff surface.",
+      "status": "met"
+    },
+    {
+      "criterion": "Training config versioned and runnable by one canonical handoff command.",
+      "evidence": "Readiness report route set includes lineage validation, smoke candidate, and SLURM handoff command shapes; no commands are executed by this audit.",
+      "status": "met"
+    },
+    {
+      "criterion": "Trained checkpoint durable lineage explicit artifact pointer.",
+      "evidence": "Issue #1475 audit status='blocked'; remaining criteria include durable dataset/checkpoint/report artifacts from the next Slurm smoke rerun.",
+      "status": "not_met"
+    },
+    {
+      "criterion": "Smoke nominal-sanity policy-search stages run without fallback/degraded success.",
+      "evidence": "Issue #1475 audit keeps fallback/degraded success fail-closed, but tracked smoke gate status remains 'invalid'; no nominal result exists.",
+      "status": "not_met"
+    },
+    {
+      "criterion": "Report compares ORCA, current PPO leader, failed guarded-PPO variants, and new residual policy.",
+      "evidence": "No trained residual checkpoint and no scenario-stratified nominal report exist; comparison remains blocked on child #1475 durable evidence.",
+      "status": "not_met"
+    },
+    {
+      "criterion": "Result classified promote, revise, or reject using scenario-stratified evidence.",
+      "evidence": "Issue #2445 closed an earlier progress-probe decision, but parent #1358 thread still requires #1475 durable evidence before continue/revise/stop classification.",
+      "status": "not_met"
+    },
+    {
+      "criterion": "Parent stays open until Issue #1475 classifies lane continue/revise/stop durable evidence.",
+      "evidence": "Issue #1475 executable audit closure_call='keep_open'; state surface status='valid'.",
+      "status": "met"
+    },
+    {
+      "criterion": "No new residual-policy training children added before Issue #1475 reports durable evidence or fail-closed blocker.",
+      "evidence": "This audit is CPU-only evidence generation; it does not add children, submit Slurm/GPU work, run training, or mutate planner behavior.",
+      "status": "met"
+    }
+  ],
+  "checked_paths": [
+    "docs/context/issue_1358_closure_audit_2026-07-07.md",
+    "robot_sf/benchmark/orca_residual_lane_readiness.py",
+    "docs/context/evidence/issue_1475_acceptance_audit_2026-07-06.json",
+    "docs/context/issue_1475_state.yaml",
+    "docs/context/issue_1358_state.yaml"
+  ],
+  "claim_boundary": "CPU-only parent acceptance audit over tracked merged evidence; no Slurm/GPU submission, benchmark campaign, training run, release, or paper-facing claim.",
+  "closure_call": "keep_open",
+  "forbidden_actions_confirmed": {
+    "deletion": false,
+    "full_benchmark_campaign_run": false,
+    "issue_comment": false,
+    "merge": false,
+    "paper_or_dissertation_claim_edit": false,
+    "release": false,
+    "slurm_or_gpu_submission": false
+  },
+  "issue": 1358,
+  "issue_1475_audit": {
+    "closure_call": "keep_open",
+    "remaining_criteria": [
+      {
+        "criterion": "Residual dataset manifest NPZ recorded durable artifacts.",
+        "evidence": "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/source_slurm_checksum_manifest.sha256 records the smoke NPZ checksum; smoke artifact_pointer_status=None, so a durable pointer is still not proven by the tracked smoke summary.",
+        "status": "partially_met"
+      },
+      {
+        "criterion": "Learned residual checkpoint pointer durable included in completion update.",
+        "evidence": "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/source_slurm_checksum_manifest.sha256 records the smoke checkpoint checksum; smoke artifact_pointer_status=None, so durable checkpoint pointer completion remains unproven.",
+        "status": "partially_met"
+      },
+      {
+        "criterion": "Diagnostics report includes ORCA command, raw residual, bounded residual, final guarded command, residual clipping rate, guard veto rate, fallback/degraded status.",
+        "evidence": "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/summary.json missing required smoke evidence fields: ['residual_clipping_rate', 'guard_veto_rate', 'fallback_degraded_status', 'artifact_pointer_status'].",
+        "status": "not_met"
+      },
+      {
+        "criterion": "Nominal result classified ready #1358 continuation, revise, stop.",
+        "evidence": "No nominal result exists in tracked evidence; smoke gate remains 'invalid'. Gate error: ORCA-residual smoke nominal gate failed:\n- smoke summary missing required entries: ['residual_clipping_rate', 'guard_veto_rate', 'fallback_degraded_status', 'artifact_pointer_status']\n- residual_clipping_rate must be numeric rate\n- guard_veto_rate must be numeric rate\n- fallback_degraded_status must be 'clear' before nominal escalation (got None)\n- artifact_pointer_status must be durable/complete before nominal escalation (got None)\n- nominal_escalation_allowed must be true\n- success_rate below nominal smoke gate: 0.0000 < 0.8000",
+        "status": "not_met"
+      }
+    ],
+    "state_surface": {
+      "entry_status": "cpu_contract_delivered__external_slurm_rerun_pending",
+      "errors": [],
+      "latest_recorded_at_utc": "2026-07-06T16:38:00Z",
+      "path": "docs/context/issue_1475_state.yaml",
+      "status": "valid"
+    },
+    "status": "blocked"
+  },
+  "next_empirical_action": "On a Slurm-capable lane, run one bounded ORCA-residual BC smoke rerun against current post-gate code. Only if the smoke gate passes, escalate a bounded nominal run and record the #1358 continue/revise/stop classification.",
+  "readiness": {
+    "errors": [],
+    "integration_status": "local_handoff_ready_parent_blocked",
+    "overall_status": "blocked_on_followup",
+    "remaining_blocker_keys": [
+      "child_classification_gate",
+      "slurm_training_required",
+      "durable_artifacts_pending"
+    ]
+  },
+  "remaining_criteria": [
+    {
+      "criterion": "Trained checkpoint durable lineage explicit artifact pointer.",
+      "evidence": "Issue #1475 audit status='blocked'; remaining criteria include durable dataset/checkpoint/report artifacts from the next Slurm smoke rerun.",
+      "status": "not_met"
+    },
+    {
+      "criterion": "Smoke nominal-sanity policy-search stages run without fallback/degraded success.",
+      "evidence": "Issue #1475 audit keeps fallback/degraded success fail-closed, but tracked smoke gate status remains 'invalid'; no nominal result exists.",
+      "status": "not_met"
+    },
+    {
+      "criterion": "Report compares ORCA, current PPO leader, failed guarded-PPO variants, and new residual policy.",
+      "evidence": "No trained residual checkpoint and no scenario-stratified nominal report exist; comparison remains blocked on child #1475 durable evidence.",
+      "status": "not_met"
+    },
+    {
+      "criterion": "Result classified promote, revise, or reject using scenario-stratified evidence.",
+      "evidence": "Issue #2445 closed an earlier progress-probe decision, but parent #1358 thread still requires #1475 durable evidence before continue/revise/stop classification.",
+      "status": "not_met"
+    }
+  ],
+  "schema_version": "issue-1358-acceptance-audit.v1",
+  "state_surface": {
+    "entry_status": "local_contract_delivered__external_slurm_child_pending",
+    "errors": [],
+    "latest_recorded_at_utc": "2026-07-07T01:15:00Z",
+    "path": "docs/context/issue_1358_state.yaml",
+    "status": "valid"
+  },
+  "status": "blocked"
+}

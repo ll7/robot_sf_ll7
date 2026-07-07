@@ -134,7 +134,8 @@ knowledge, not every transient iteration detail.
 * Issue #2311 ORCA-residual lane decision:
   [issue_2311_orca_residual_lane_decision.md](issue_2311_orca_residual_lane_decision.md)
 * Issue #1358 ORCA-residual parent closure audit:
-  [issue_1358_closure_audit_2026-07-07.md](issue_1358_closure_audit_2026-07-07.md)
+[issue_1358_closure_audit_2026-07-07.md](issue_1358_closure_audit_2026-07-07.md)
+and high-churn state surface [issue_1358_state.yaml](issue_1358_state.yaml)
 * Issue #2271 oracle-imitation trace preflight:
   [issue_2271_oracle_imitation_trace_preflight.md](issue_2271_oracle_imitation_trace_preflight.md)
 * Issue #2620 oracle-imitation artifact access audit:

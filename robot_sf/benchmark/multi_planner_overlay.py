@@ -108,6 +108,36 @@ _TRAJECTORY_PATHS: list[tuple[str, str]] = [
 ]
 
 
+def _extract_positions_from_replay_steps(
+    record: dict[str, Any],
+) -> list[tuple[float, float]]:
+    """Extract robot positions from ``replay_steps`` in an episode record.
+
+    The replay bridge (#4776) stores per-step ``(t, x, y, heading)`` data in
+    the ``replay_steps`` field.  This function converts it to the flat
+    ``(x, y)`` position list the overlay renderer expects.
+
+    Returns:
+        List of ``(x, y)`` tuples with finite coordinates, or an empty
+        list when ``replay_steps`` is absent or contains no valid entries.
+    """
+    replay_steps = record.get("replay_steps")
+    if not isinstance(replay_steps, list) or not replay_steps:
+        return []
+
+    positions: list[tuple[float, float]] = []
+    for step in replay_steps:
+        if isinstance(step, dict):
+            pair = _coerce_finite_pair(step.get("x"), step.get("y"))
+        elif isinstance(step, (list, tuple)) and len(step) >= 3:
+            pair = _coerce_finite_pair(step[1], step[2])
+        else:
+            continue
+        if pair is not None:
+            positions.append(pair)
+    return positions
+
+
 def _get_nested(record: dict[str, Any], path: str, default: Any = None) -> Any:
     """Resolve a dotted-path value from a dict.
 
@@ -227,6 +257,9 @@ def extract_trajectory_from_episode(
             positions = _parse_positions(raw)
             if positions:
                 break
+
+    if not positions:
+        positions = _extract_positions_from_replay_steps(record)
 
     if not positions:
         return None
@@ -545,6 +578,66 @@ def _git_sha_short(length: int = 7) -> str:
         return "unknown"
 
 
+def trajectory_row_from_replay_episode(
+    replay_episode: Any,
+    *,
+    planner_key: str = "",
+    source_path: str = "",
+) -> TrajectoryRow:
+    """Convert a ``ReplayEpisode`` (replay bridge) to a ``TrajectoryRow``.
+
+    This bridges the replay bridge (#4776) into the overlay renderer
+    (#4778).  The replay episode's step-by-step ``(x, y)`` positions are
+    extracted; pedestrian snapshot positions from the last step are
+    included when available.
+
+    Args:
+        replay_episode: A ``ReplayEpisode`` instance from
+            ``robot_sf.benchmark.full_classic.replay``.
+        planner_key: Planner identifier; falls back to ``"unknown_planner"``.
+        source_path: Optional source provenance path.
+
+    Returns:
+        ``TrajectoryRow`` with positions from the replay episode.
+
+    Raises:
+        MultiPlannerOverlayError: If the replay episode has no steps.
+    """
+    if not replay_episode.steps:
+        raise MultiPlannerOverlayError(f"ReplayEpisode {replay_episode.episode_id!r} has no steps")
+
+    positions = [
+        (float(s.x), float(s.y))
+        for s in replay_episode.steps
+        if math.isfinite(float(s.x)) and math.isfinite(float(s.y))
+    ]
+    if not positions:
+        raise MultiPlannerOverlayError(
+            f"ReplayEpisode {replay_episode.episode_id!r} has no finite positions"
+        )
+
+    pedestrians: list[tuple[float, float]] | None = None
+    last_step = replay_episode.steps[-1]
+    if last_step.ped_positions:
+        pedestrians = [
+            (float(p[0]), float(p[1]))
+            for p in last_step.ped_positions
+            if len(p) >= 2 and math.isfinite(float(p[0])) and math.isfinite(float(p[1]))
+        ]
+        if not pedestrians:
+            pedestrians = None
+
+    return TrajectoryRow(
+        episode_id=replay_episode.episode_id,
+        planner_key=planner_key or "unknown_planner",
+        scenario_id=replay_episode.scenario_id,
+        seed=0,
+        positions=positions,
+        pedestrians=pedestrians,
+        source_path=source_path,
+    )
+
+
 def load_episodes(path: Path | str) -> list[dict[str, Any]]:
     """Load episodes from a JSONL file.
 
@@ -578,4 +671,5 @@ __all__ = [
     "extract_trajectory_from_episode",
     "load_episodes",
     "select_episodes_for_overlay",
+    "trajectory_row_from_replay_episode",
 ]

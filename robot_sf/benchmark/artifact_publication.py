@@ -1013,13 +1013,20 @@ def _compute_and_emit_badging_artifacts(
     elif computed_badging["functional_smoke_status"] == "passed":
         is_functional = True
 
-    # Determine achieved badge level
+    # Determine achieved badge level.
+    #
+    # This slice performs no independent reproduction rerun (issue #4681
+    # explicitly scopes out simulation campaigns), so "reproduced" is never
+    # granted here from the caller-supplied ``reproduction_status`` alone --
+    # emitting it would be an unverified claim, which the badging rubric
+    # forbids ("no reproduction claim unless its check passes"). The computed
+    # level is therefore capped at "functional" until a dedicated rerun-record
+    # check exists. ``reproduction_status`` is still carried through in the
+    # block as informational metadata.
     if not is_available:
         achieved_level = "none"
     elif not is_functional:
         achieved_level = "available"
-    elif computed_badging["reproduction_status"] == "passed":
-        achieved_level = "reproduced"
     else:
         achieved_level = "functional"
 

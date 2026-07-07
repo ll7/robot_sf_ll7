@@ -276,3 +276,36 @@ def test_export_publication_bundle_includes_artifact_badging(tmp_path: Path) -> 
             overwrite=True,
             artifact_badging=invalid_badging,
         )
+
+
+def test_export_publication_bundle_never_emits_unverified_reproduced(tmp_path: Path) -> None:
+    """A caller-asserted ``reproduction_status`` must not elevate the computed badge.
+
+    This slice runs no independent reproduction rerun, so "reproduced" can never
+    be earned here. Passing ``reproduction_status="passed"`` must be treated as
+    informational only; the computed badge is capped at "functional" (fail-closed
+    per issue #4681: no reproduction claim unless its check passes).
+    """
+    run_dir = tmp_path / "benchmarks" / "run_repro"
+    _make_run(run_dir, with_video=False)
+    out_dir = tmp_path / "publication"
+
+    badging = {
+        "claimed_level": "reproduced",
+        "functional_smoke_status": "passed",
+        "reproduction_status": "passed",  # hand-asserted, unverified
+    }
+
+    result = export_publication_bundle(
+        run_dir,
+        out_dir,
+        bundle_name="run_repro_bundle",
+        include_videos=False,
+        artifact_badging=badging,
+    )
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    # Capped at functional despite the hand-asserted reproduced/passed inputs.
+    assert manifest["artifact_badging"]["claimed_level"] == "functional"
+    # The raw status is still carried through as informational metadata.
+    assert manifest["artifact_badging"]["reproduction_status"] == "passed"

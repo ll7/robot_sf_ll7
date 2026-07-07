@@ -1,0 +1,39 @@
+diagnostic_only_not_benchmark_gate: true
+claim_boundary: exploratory/diagnostic-only classical criticality optimization prototype; no benchmark-strength claim
+
+optimizer_type: random_search
+sample_budget: 20
+optimizer_seed: 4362
+seeds:
+  - 0
+  - 1
+  - 2
+
+parameter_space:
+  pedestrian_speed_scale:
+    type: continuous
+    min: 0.7
+    max: 1.4
+  pedestrian_start_delay_s:
+    type: continuous
+    min: 0.0
+    max: 2.0
+  crossing_waypoint_y_offset_m:
+    type: continuous
+    min: -0.5
+    max: 0.5
+
+objective_weights:
+  collision: 10.0
+  near_miss: 2.0
+  clearance_margin: 0.5
+  clearance: 1.0
+  progress_failure: 5.0
+  stalled_time: 0.5
+
+invalid_run_policy: fail_closed
+
+scenario_family: null
+planner_name: safe_baseline
+
+output_dir: output/issue_4362_scenario_criticality_smoke

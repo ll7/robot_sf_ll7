@@ -2,17 +2,26 @@
 
 The loader only inspects locally staged files. It never downloads or vendors the
 license-gated SocNavBench/S3DIS ETH dataset bytes.
+
+Security:
+    The traversible pickle is loaded through a restricted unpickler that only allows
+    NumPy reconstruction symbols. Arbitrary pickle files remain untrusted.
 """
 
 from __future__ import annotations
 
-import pickle
+import io
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from robot_sf.common.safe_pickle import (
+    SOCNAVBENCH_TRAVERSIBLE_ALLOWED_GLOBALS,
+    UnsafePickleError,
+    restricted_pickle_load,
+)
 from scripts.tools.manage_external_data import (
     EXTERNAL_DATA_ROOT_ENV,
     check_asset,
@@ -110,7 +119,16 @@ def load_shape_contract(root: Path | str | None = None) -> SocNavBenchEthShapeCo
     layout = require_available(root)
     try:
         with layout.traversible_pickle.open("rb") as handle:
-            payload = pickle.load(handle)
+            payload = restricted_pickle_load(
+                io.BytesIO(handle.read()),
+                allowed_globals=SOCNAVBENCH_TRAVERSIBLE_ALLOWED_GLOBALS,
+                label="SocNavBench ETH traversible",
+            )
+    except UnsafePickleError as exc:
+        raise SocNavBenchEthDataError(
+            f"Unsafe pickle rejected for {layout.traversible_pickle}: {exc}. "
+            f"Re-stage official {ASSET_ID} assets if this is a legitimate file."
+        ) from exc
     except Exception as exc:  # pragma: no cover - depends on malformed external bytes.
         raise SocNavBenchEthDataError(
             f"Could not load {layout.traversible_pickle}. Re-stage official "

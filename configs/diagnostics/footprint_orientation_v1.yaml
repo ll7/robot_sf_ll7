@@ -1,0 +1,126 @@
+schema_version: footprint-orientation.v1
+profile_id: footprint_orientation_diagnostic_v1
+claim_boundary: >
+  Diagnostic-only footprint-orientation proxy for elongated Autonomous
+  Micromobility Vehicle (AMMV) bodies. This is a diagnostic proxy, not a full
+  SE(2) planner implementation, not a collision-checking runtime, not a
+  benchmark or paper-facing result, and not calibrated against real-vehicle
+  swept-volume data. It samples a route centerline at fixed spacing, orients a
+  rigid footprint along the local tangent, and reports centerline clearance
+  separately from footprint-aware clearance. It does not simulate dynamic
+  obstacles, yaw control, recovery behavior, or the full swept volume of a
+  body turning through a corner.
+source_literature:
+  - id: se2_navigation_mesh_2026_arxiv_2607_01454
+    role: motivation_only
+    url: https://arxiv.org/abs/2607.01454
+    caveat: >
+      The SE(2) Navigation Mesh paper motivates orientation-aware traversability
+      for non-circular bodies. This repository config does not implement an
+      SE(2) navigation mesh and does not claim swept-volume correctness.
+  - id: cofls_2026_arxiv_2607_02222
+    role: motivation_only
+    url: https://arxiv.org/abs/2607.02222
+    caveat: >
+      The CoFL-S paper motivates language-conditioned sector flow fields for
+      local navigation. This repository config does not implement CoFL-S and
+      uses the reference only as orientation-aware-navigation motivation.
+availability_policy:
+  missing_required_trace_fields: not_available
+  missing_metric_key: not_available
+  fallback_or_degraded_row: diagnostic_only
+# Footprint models from issue #4762. `kind: circular` uses `radius_m`;
+# `kind: rectangular` uses `length_m` (along travel) and `width_m`
+# (perpendicular to travel). The rectangular footprint is oriented along the
+# local route tangent at each sample; this is a rigid-body proxy, not a yaw
+# planner.
+footprints:
+  - id: circular
+    display_name: Circular footprint
+    kind: circular
+    radius_m: 0.35
+    computation_status: diagnostic_available
+    notes: >
+      Baseline circular footprint matching the existing route-clearance
+      contract. Footprint-aware clearance equals centerline clearance minus
+      the radius.
+  - id: scooter_like
+    display_name: Scooter-like AMMV
+    kind: rectangular
+    length_m: 1.3
+    width_m: 0.55
+    computation_status: diagnostic_available
+    notes: >
+      Kick-scooter-class elongated body. Width drives corridor clearance;
+      length drives turn-overrun and forward-reach diagnostics.
+  - id: cargo_bike_like
+    display_name: Cargo-bike-like AMMV
+    kind: rectangular
+    length_m: 2.2
+    width_m: 0.8
+    computation_status: diagnostic_available
+    notes: >
+      Cargo-bike-class elongated body. Longer forward reach and wider stance
+      than the scooter-like body.
+  - id: shuttle_pod_like
+    display_name: Shuttle-pod-like AMMV
+    kind: rectangular
+    length_m: 3.0
+    width_m: 1.4
+    computation_status: diagnostic_available
+    notes: >
+      Shuttle-pod-class elongated body. Largest stance; used to surface
+      narrow-passage and turn infeasibility that circular clearance hides.
+# Synthetic scenario families from issue #4762. Each family is realized as a
+# self-contained route-plus-obstacle fixture so the diagnostic is reproducible
+# without external map assets. See docs/diagnostics/footprint_orientation.md.
+scenario_families:
+  - id: narrow_passage
+    display_name: Narrow passage
+    description: >
+      Straight corridor with a 0.9 m passage. Surfaces width-driven
+      infeasibility: a circular body clears while a shuttle-pod-class body
+      collides.
+    mechanism: width_driven
+  - id: pedestrian_crossing
+    display_name: Pedestrian crossing
+    description: >
+      Straight route passing a pedestrian-sized block offset from the
+      centerline. Surfaces width-driven clearance gradient across footprints.
+    mechanism: width_driven
+  - id: occluded_corner
+    display_name: Occluded corner
+    description: >
+      L-shaped route turning away from a wall just east of the corner. An
+      elongated body oriented along the incoming leg overruns the turn and
+      pokes the wall; a circular body clears.
+    mechanism: turn_overrun_length_driven
+  - id: recovery_after_avoidance
+    display_name: Recovery after avoidance
+    description: >
+      Straight route passing a recovery-zone block offset from the
+      centerline. Width-driven clearance proxy for post-avoidance geometry.
+    mechanism: width_driven
+  - id: blocked_path_turn_around
+    display_name: Blocked-path turn-around
+    description: >
+      Straight route terminating near a dead-end wall. An elongated body's
+      forward reach pokes the wall before the centerline reaches it; a
+      circular body clears.
+    mechanism: forward_reach_length_driven
+diagnostic_parameters:
+  # Spacing (meters) between oriented-footprint samples along the route.
+  sample_step_m: 0.1
+  # A scenario-footprint pair is reported as `collision` when the oriented
+  # footprint intersects any obstacle (boundary contact counts as collision,
+  # matching a conservative fail-closed diagnostic).
+  pass_threshold_m: 0.0
+  # Hard cap on sample count to keep the diagnostic cheap on long routes.
+  max_samples: 5000
+computation_status: diagnostic_available
+notes: >
+  The diagnostic report distinguishes centerline clearance (route LineString to
+  obstacle polygons, ignoring footprint) from footprint-aware clearance
+  (oriented rigid footprint sampled along the route). Both are reported per
+  scenario and per footprint so circular-vs-elongated pass/fail outcomes are
+  directly comparable. This is a diagnostic proxy only.

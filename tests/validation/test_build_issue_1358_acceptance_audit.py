@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from scripts.validation.build_issue_1358_acceptance_audit import build_audit
+from scripts.validation.build_issue_1358_acceptance_audit import DEFAULT_OUTPUT, build_audit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -69,3 +69,10 @@ def test_issue_1358_parent_audit_cli_writes_json_artifact(tmp_path: Path) -> Non
     assert payload["state_surface"]["path"] == "docs/context/issue_1358_state.yaml"
     assert payload["state_surface"]["errors"] == []
     assert "Slurm-capable lane" in payload["next_empirical_action"]
+
+
+def test_issue_1358_tracked_audit_artifact_matches_builder() -> None:
+    """Tracked parent evidence must match current merged child-state inputs."""
+    tracked_payload = json.loads((REPO_ROOT / DEFAULT_OUTPUT).read_text(encoding="utf-8"))
+
+    assert tracked_payload == build_audit(repo_root=REPO_ROOT)

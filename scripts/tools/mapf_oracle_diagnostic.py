@@ -284,6 +284,7 @@ def sipp_search(  # noqa: C901
     max_time: int = 200,
     time_edges_blocked: dict[int, set[tuple[tuple[int, int], tuple[int, int]]]] | None = None,
     constraints: dict[int, set[tuple[int, int]]] | None = None,
+    edge_constraints: dict[int, set[tuple[tuple[int, int], tuple[int, int]]]] | None = None,
 ) -> list[tuple[int, int, int]] | None:
     """SIPP-style A* search with dynamic obstacle time-windows.
 
@@ -352,6 +353,10 @@ def sipp_search(  # noqa: C901
                 continue
             if constraints is not None and (nr, nc) in constraints.get(next_t, set()):
                 continue
+            if edge_constraints is not None and ((cr, cc), (nr, nc)) in edge_constraints.get(
+                ct, set()
+            ):
+                continue
 
             new_state = (nr, nc, next_t)
             tentative_g = g_score[(cr, cc, ct)] + 1.0
@@ -407,6 +412,7 @@ class _CBSNode:
 
     solution: dict[int, list[tuple[int, int, int]]]
     constraints: dict[int, dict[int, set[tuple[int, int]]]]
+    edge_constraints: dict[int, dict[int, set[tuple[tuple[int, int], tuple[int, int]]]]]
     cost: float
     _counter: int
 
@@ -511,7 +517,34 @@ def _build_agent_constraints(
     return {t: set(cells) for t, cells in raw.items()}
 
 
-def cbs_search(
+def _merge_edge_constraints(
+    parent_edge_constraints: dict[int, dict[int, set[tuple[tuple[int, int], tuple[int, int]]]]],
+    agent_id: int,
+    time: int,
+    edge: tuple[tuple[int, int], tuple[int, int]],
+) -> dict[int, dict[int, set[tuple[tuple[int, int], tuple[int, int]]]]]:
+    """Create a new edge constraint set with one added edge constraint."""
+    new: dict[int, dict[int, set[tuple[tuple[int, int], tuple[int, int]]]]] = {}
+    for aid, c_map in parent_edge_constraints.items():
+        new[aid] = {t: set(edges) for t, edges in c_map.items()}
+    if agent_id not in new:
+        new[agent_id] = {}
+    if time not in new[agent_id]:
+        new[agent_id][time] = set()
+    new[agent_id][time].add(edge)
+    return new
+
+
+def _build_agent_edge_constraints(
+    cbs_edge_constraints: dict[int, dict[int, set[tuple[tuple[int, int], tuple[int, int]]]]],
+    agent_id: int,
+) -> dict[int, set[tuple[tuple[int, int], tuple[int, int]]]]:
+    """Extract the edge constraint set for a single agent."""
+    raw = cbs_edge_constraints.get(agent_id, {})
+    return {t: set(edges) for t, edges in raw.items()}
+
+
+def cbs_search(  # noqa: C901
     grid: list[list[int]],
     agents: list[dict[str, Any]],
     time_blocked: dict[int, set[tuple[int, int]]] | None = None,
@@ -547,6 +580,7 @@ def cbs_search(
     root = _CBSNode(
         solution=solution,
         constraints={aid: {} for aid in agent_ids},
+        edge_constraints={aid: {} for aid in agent_ids},
         cost=sum(_path_cost(p) for p in solution.values()),
         _counter=counter,
     )
@@ -573,18 +607,29 @@ def cbs_search(
             }
 
         for agent_id in (conflict.agent_a, conflict.agent_b):
-            if conflict.is_edge and agent_id == conflict.agent_b:
-                constraint_cell = conflict.cell_b
+            if conflict.is_edge:
+                if agent_id == conflict.agent_a:
+                    edge = (conflict.cell_a, conflict.cell_b)
+                else:
+                    edge = (conflict.cell_b, conflict.cell_a)
+                new_constraints = node.constraints
+                new_edge_constraints = _merge_edge_constraints(
+                    node.edge_constraints,
+                    agent_id,
+                    conflict.time,
+                    edge,
+                )
             else:
-                constraint_cell = conflict.cell
-            assert constraint_cell is not None
-            new_constraints = _merge_constraints(
-                node.constraints,
-                agent_id,
-                conflict.time,
-                constraint_cell,
-            )
+                new_constraints = _merge_constraints(
+                    node.constraints,
+                    agent_id,
+                    conflict.time,
+                    conflict.cell,
+                )
+                new_edge_constraints = node.edge_constraints
+
             agent_constraints = _build_agent_constraints(new_constraints, agent_id)
+            agent_edge_constraints = _build_agent_edge_constraints(new_edge_constraints, agent_id)
             a = agent_map[agent_id]
             start = (int(a["start"][0]), int(a["start"][1]))
             goal = (int(a["goal"][0]), int(a["goal"][1]))
@@ -596,6 +641,7 @@ def cbs_search(
                 time_blocked,
                 max_time,
                 constraints=agent_constraints,
+                edge_constraints=agent_edge_constraints,
             )
             if new_path is None:
                 continue
@@ -608,6 +654,7 @@ def cbs_search(
             child = _CBSNode(
                 solution=new_solution,
                 constraints=new_constraints,
+                edge_constraints=new_edge_constraints,
                 cost=new_cost,
                 _counter=counter,
             )

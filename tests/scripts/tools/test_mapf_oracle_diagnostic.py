@@ -1018,6 +1018,21 @@ class TestCbsSearch:
         assert result["solution"][0][-1][:2] == (0, 2)
         assert result["solution"][1][-1][:2] == (2, 2)
 
+    def test_two_agents_swap_at_t0(self) -> None:
+        """Two agents start adjacent and want to swap positions immediately (t=0 to t=1)."""
+        grid = [
+            [0, 0, 0],
+            [0, 0, 0],
+        ]
+        agents = [
+            {"id": 0, "start": [0, 0], "goal": [0, 1]},
+            {"id": 1, "start": [0, 1], "goal": [0, 0]},
+        ]
+        result = cbs_search(grid, agents, max_time=50)
+        assert result is not None
+        assert result["solution"][0][-1][:2] == (0, 1)
+        assert result["solution"][1][-1][:2] == (0, 0)
+
 
 # ---------------------------------------------------------------------------
 # CBS CLI end-to-end

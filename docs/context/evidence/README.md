@@ -183,6 +183,12 @@ is included.
   PR #2419, PR #3736, and PR #4452 to the synthesis parent acceptance criteria and keeps
   the issue blocked on missing durable comparable component campaign outputs.
 
+- `issue_1489_post_4642_integration_audit_2026-07-07.md`: post-PR #4642
+  integration audit for Issue #1489. Maps merged PRs #4452, #4563, #4628,
+  and #4642 to acceptance criteria, keeps issue open on missing durable
+  comparable component outputs, and records that no new local code slice or
+  synthesis child is justified.
+
 - `issue_3501_closure_audit_2026-07-04.md`: closure-audit integration report for
   issue #3501 (reconciled 2026-07-06), mapping the merged safety-wrapper PRs and the
   new deadlock-recovery stage to acceptance criteria. Records honestly that the two

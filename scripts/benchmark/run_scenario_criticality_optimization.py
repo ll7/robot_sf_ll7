@@ -242,13 +242,15 @@ def _evaluate_candidate(
             else:
                 per_seed_scores.append((seed, result.criticality_score, result.status))
                 all_scores.append(result.criticality_score)
-                all_decompositions.append({
-                    "collision": result.collision_term,
-                    "near_miss": result.near_miss_term,
-                    "clearance": result.clearance_term,
-                    "progress_failure": result.progress_failure_term,
-                    "stalled_time": result.stalled_time_term,
-                })
+                all_decompositions.append(
+                    {
+                        "collision": result.collision_term,
+                        "near_miss": result.near_miss_term,
+                        "clearance": result.clearance_term,
+                        "progress_failure": result.progress_failure_term,
+                        "stalled_time": result.stalled_time_term,
+                    }
+                )
 
         if not all_scores:
             return CandidateResult(
@@ -348,6 +350,14 @@ def run_criticality_optimization(
     manifest = {
         "issue": 4362,
         "claim_boundary": "exploratory/diagnostic-only; not a validated benchmark method",
+        "metrics_source": "mock_placeholder_not_simulator",
+        "metrics_source_note": (
+            "v0 stub: candidate metrics are PLACEHOLDER values drawn from a fixed RNG that is "
+            "NOT a function of the candidate parameters, so every candidate (including the "
+            "baseline) shares identical metrics and the best/baseline comparison is not yet "
+            "meaningful. Scores validate the objective+artifact interface only. Real simulator "
+            "integration is tracked as a follow-up to #4362."
+        ),
         "optimizer_type": config.optimizer_type,
         "optimizer_seed": config.optimizer_seed,
         "sample_budget": config.sample_budget,
@@ -404,8 +414,7 @@ def write_optimization_report(
                 "status": c.status,
                 "reason": c.reason,
                 "per_seed_scores": [
-                    {"seed": s, "score": sc, "status": st}
-                    for s, sc, st in c.per_seed_scores
+                    {"seed": s, "score": sc, "status": st} for s, sc, st in c.per_seed_scores
                 ],
                 "runtime_s": c.runtime_s,
             }
@@ -416,27 +425,31 @@ def write_optimization_report(
     candidate_summary_csv = output_dir / "candidate_summary.csv"
     with candidate_summary_csv.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow([
-            "candidate_id",
-            "criticality_score",
-            "status",
-            "collision_term",
-            "near_miss_term",
-            "clearance_term",
-            "progress_failure_term",
-            "stalled_time_term",
-        ])
+        writer.writerow(
+            [
+                "candidate_id",
+                "criticality_score",
+                "status",
+                "collision_term",
+                "near_miss_term",
+                "clearance_term",
+                "progress_failure_term",
+                "stalled_time_term",
+            ]
+        )
         for c in candidates:
-            writer.writerow([
-                c.candidate_id,
-                c.criticality_score,
-                c.status,
-                c.score_decomposition.get("collision", ""),
-                c.score_decomposition.get("near_miss", ""),
-                c.score_decomposition.get("clearance", ""),
-                c.score_decomposition.get("progress_failure", ""),
-                c.score_decomposition.get("stalled_time", ""),
-            ])
+            writer.writerow(
+                [
+                    c.candidate_id,
+                    c.criticality_score,
+                    c.status,
+                    c.score_decomposition.get("collision", ""),
+                    c.score_decomposition.get("near_miss", ""),
+                    c.score_decomposition.get("clearance", ""),
+                    c.score_decomposition.get("progress_failure", ""),
+                    c.score_decomposition.get("stalled_time", ""),
+                ]
+            )
 
     best_candidates_json = output_dir / "best_candidates.json"
     evaluated = [c for c in candidates if c.status == "evaluated"]
@@ -463,10 +476,22 @@ def write_optimization_report(
     readme_md = output_dir / "README.md"
     with readme_md.open("w", encoding="utf-8") as f:
         f.write("# Issue #4362: Classical Criticality Optimization\n\n")
-        f.write("**Claim boundary**: exploratory/diagnostic-only; not a validated benchmark method.\n\n")
+        f.write(
+            "**Claim boundary**: exploratory/diagnostic-only; not a validated benchmark method.\n\n"
+        )
+        f.write(
+            "> **Metrics are PLACEHOLDER, not simulator output.** In this v0 stub the candidate "
+            "metrics come from a fixed RNG that does not depend on the candidate parameters, so "
+            "every candidate (including the baseline) has identical metrics and the "
+            "best/baseline scores below are **not** a meaningful optimization result — they only "
+            "exercise the objective + artifact interface. Real simulator integration is a "
+            "follow-up to #4362.\n\n"
+        )
         f.write(f"- Optimizer: {manifest['optimizer_type']}\n")
         f.write(f"- Sample budget: {manifest['sample_budget']}\n")
-        f.write(f"- Evaluated candidates: {manifest['evaluated_count']}/{manifest['total_candidates']}\n")
+        f.write(
+            f"- Evaluated candidates: {manifest['evaluated_count']}/{manifest['total_candidates']}\n"
+        )
         f.write(f"- Best score: {manifest['best_criticality_score']}\n")
         f.write(f"- Baseline score: {manifest['baseline_score']}\n")
         f.write(f"- Generated: {manifest['generated_at']}\n")

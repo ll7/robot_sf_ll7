@@ -2,23 +2,35 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
+from typing import TYPE_CHECKING
+
 import pytest
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from robot_sf.benchmark.scenario_interop import (
     TARGET_COMPATIBILITY_SCHEMA_VERSION,
     TARGET_EXPORT_MANIFEST_SCHEMA_VERSION,
     TARGET_EXPORT_PREVIEW_SCHEMA_VERSION,
+    TARGET_PREREQUISITE_REPORT_SCHEMA_VERSION,
     build_target_compatibility_report,
     build_target_export_manifest,
     build_target_export_preview,
+    build_target_prerequisite_report,
     convert_scenario_to_ir,
     dump_ir,
     load_target_compatibility_schema,
     load_target_export_manifest_schema,
     load_target_export_preview_schema,
+    load_target_prerequisite_report_schema,
     validate_target_compatibility_report,
     validate_target_export_manifest,
     validate_target_export_preview,
+    validate_target_prerequisite_report,
 )
 
 
@@ -229,3 +241,91 @@ def test_target_compatibility_report_rejects_unknown_target() -> None:
 
     with pytest.raises(ValueError, match="unsupported target"):
         build_target_compatibility_report(result.ir, targets=("unknownsim",))
+
+
+def test_target_prerequisite_report_fails_closed_for_missing_paths(tmp_path: Path) -> None:
+    """Runnable-export prerequisites are reported explicitly when absent."""
+    result = convert_scenario_to_ir(_explicit_map_scenario())
+
+    report = build_target_prerequisite_report(result.ir, target="socnavbench", root=tmp_path)
+
+    assert report["schema_version"] == TARGET_PREREQUISITE_REPORT_SCHEMA_VERSION
+    assert report["artifact_kind"] == "socnavbench_scenario_export_prerequisite_report"
+    assert report["target"] == "socnavbench"
+    assert report["source_scenario_id"] == "corridor-handoff"
+    assert report["status"] == "blocked"
+    assert report["ready"] is False
+    assert report["no_download_performed"] is True
+    assert {item["code"] for item in report["remaining_blockers"]} == {
+        "socnavbench_control_assets",
+        "socnavbench_eth_mesh",
+        "socnavbench_eth_traversible_pickle",
+    }
+    assert {item["issue"] for item in report["remaining_blockers"]} == {1456, 1134}
+    assert "benchmark evidence" in report["claim_boundary"]
+    assert validate_target_prerequisite_report(report) == []
+
+
+def test_target_prerequisite_report_passes_when_expected_paths_exist(tmp_path: Path) -> None:
+    """Synthetic local paths exercise the ready prerequisite-report path."""
+    (tmp_path / "third_party/socnavbench/wayptnav_data").mkdir(parents=True)
+    (tmp_path / "third_party/socnavbench/sd3dis/stanford_building_parser_dataset/mesh/ETH").mkdir(
+        parents=True
+    )
+    traversible = (
+        tmp_path
+        / "third_party/socnavbench/sd3dis/stanford_building_parser_dataset/traversibles/ETH/data.pkl"
+    )
+    traversible.parent.mkdir(parents=True)
+    traversible.write_bytes(b"synthetic-placeholder")
+    result = convert_scenario_to_ir(_explicit_map_scenario())
+
+    report = build_target_prerequisite_report(result.ir, target="socnavbench", root=tmp_path)
+
+    assert report["status"] == "ready"
+    assert report["ready"] is True
+    assert report["remaining_blockers"] == []
+    assert {item["status"] for item in report["prerequisites"]} == {"present"}
+    assert "target exporter smoke path" in report["next_empirical_action"]
+    assert validate_target_prerequisite_report(report) == []
+
+
+def test_target_prerequisite_schema_loader_and_tamper_check(tmp_path: Path) -> None:
+    """Prerequisite schema helper loads and rejects malformed reports."""
+    assert load_target_prerequisite_report_schema()["title"]
+    result = convert_scenario_to_ir(_explicit_map_scenario())
+    report = build_target_prerequisite_report(result.ir, target="hunavsim", root=tmp_path)
+    broken = dict(report)
+    broken["no_download_performed"] = False
+
+    assert validate_target_prerequisite_report(report) == []
+    assert validate_target_prerequisite_report(broken) != []
+
+
+def test_cli_writes_target_prerequisite_reports(tmp_path: Path) -> None:
+    """CLI emits local-only prerequisite reports for requested targets."""
+    out_dir = tmp_path / "prerequisites"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/tools/convert_scenario_interop.py",
+            "--matrix",
+            "configs/baselines/example_matrix.yaml",
+            "--target",
+            "socnavbench",
+            "--target-prerequisite-out-dir",
+            str(out_dir),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.stdout == ""
+    report_paths = sorted(out_dir.glob("*.socnavbench.prerequisite_report.json"))
+    assert report_paths
+    report = json.loads(report_paths[0].read_text(encoding="utf-8"))
+    assert report["schema_version"] == TARGET_PREREQUISITE_REPORT_SCHEMA_VERSION
+    assert report["target"] == "socnavbench"
+    assert report["no_download_performed"] is True
+    assert validate_target_prerequisite_report(report) == []

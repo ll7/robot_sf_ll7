@@ -22,6 +22,7 @@ from robot_sf.benchmark.scenario_interop import (
     build_target_compatibility_report,
     build_target_export_manifest,
     build_target_export_preview,
+    build_target_prerequisite_report,
     convert_scenario_to_ir,
     dump_ir,
 )
@@ -48,6 +49,7 @@ def _write_outputs(
     out_dir: Path | None,
     target_out_dir: Path | None,
     target_preview_out_dir: Path | None,
+    target_prerequisite_out_dir: Path | None,
 ) -> None:
     """Write requested IR, manifest, and preview outputs for one scenario."""
 
@@ -64,6 +66,13 @@ def _write_outputs(
             preview = build_target_export_preview(ir, target=target)
             preview_path = target_preview_out_dir / f"{scenario_id}.{target}.export_preview.json"
             preview_path.write_text(dump_ir(preview), encoding="utf-8")
+    if target_prerequisite_out_dir is not None:
+        for target in targets:
+            report = build_target_prerequisite_report(ir, target=target)
+            report_path = (
+                target_prerequisite_out_dir / f"{scenario_id}.{target}.prerequisite_report.json"
+            )
+            report_path.write_text(dump_ir(report), encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -102,6 +111,15 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--target-prerequisite-out-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Optional write one <scenario_id>.<target>.prerequisite_report.json "
+            "local-only prerequisite report per scenario requested target."
+        ),
+    )
+    parser.add_argument(
         "--target",
         action="append",
         choices=SUPPORTED_TARGETS,
@@ -114,7 +132,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     scenarios = _load_scenarios(args.matrix)
-    for directory in (args.out_dir, args.target_out_dir, args.target_preview_out_dir):
+    for directory in (
+        args.out_dir,
+        args.target_out_dir,
+        args.target_preview_out_dir,
+        args.target_prerequisite_out_dir,
+    ):
         if directory is not None:
             directory.mkdir(parents=True, exist_ok=True)
 
@@ -148,12 +171,14 @@ def main(argv: list[str] | None = None) -> int:
             out_dir=args.out_dir,
             target_out_dir=args.target_out_dir,
             target_preview_out_dir=args.target_preview_out_dir,
+            target_prerequisite_out_dir=args.target_prerequisite_out_dir,
         )
 
         if (
             args.out_dir is None
             and args.target_out_dir is None
             and args.target_preview_out_dir is None
+            and args.target_prerequisite_out_dir is None
         ):
             sys.stdout.write(dump_ir(result.ir))
 

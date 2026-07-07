@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ll7.github.io/robot_sf/scenario_interop_target_prerequisite_report.v1.json",
+  "title": "Robot SF Cross-Benchmark Scenario Target Prerequisite Report (v1)",
+  "description": "Local-only prerequisite status for runnable SocNavBench or HuNavSim scenario export. It checks known paths without downloading, vendoring, or validating external data content.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_kind",
+    "target",
+    "source_scenario_id",
+    "status",
+    "ready",
+    "no_download_performed",
+    "prerequisites",
+    "remaining_blockers",
+    "next_empirical_action",
+    "claim_boundary"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "robot_sf.scenario_interop_target_prerequisite_report.v1"
+    },
+    "artifact_kind": {
+      "enum": [
+        "socnavbench_scenario_export_prerequisite_report",
+        "hunavsim_scenario_export_prerequisite_report"
+      ]
+    },
+    "target": {
+      "$ref": "#/$defs/target"
+    },
+    "source_scenario_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "ready": {
+      "type": "boolean"
+    },
+    "no_download_performed": {
+      "const": true
+    },
+    "prerequisites": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/prerequisite"
+      }
+    },
+    "remaining_blockers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/blocker"
+      }
+    },
+    "next_empirical_action": {
+      "type": "string",
+      "minLength": 1
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$defs": {
+    "target": {
+      "enum": [
+        "socnavbench",
+        "hunavsim"
+      ]
+    },
+    "prerequisite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "issue",
+        "path",
+        "kind",
+        "status",
+        "reason"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "issue": {
+          "type": "integer"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "directory",
+            "file"
+          ]
+        },
+        "status": {
+          "enum": [
+            "present",
+            "missing"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "issue",
+        "path",
+        "reason"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "issue": {
+          "type": "integer"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

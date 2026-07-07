@@ -48,6 +48,9 @@ CONVERTER_VERSION = "1"
 TARGET_COMPATIBILITY_SCHEMA_VERSION = "robot_sf.scenario_interop_target_compatibility.v1"
 TARGET_EXPORT_MANIFEST_SCHEMA_VERSION = "robot_sf.scenario_interop_target_export_manifest.v1"
 TARGET_EXPORT_PREVIEW_SCHEMA_VERSION = "robot_sf.scenario_interop_target_export_preview.v1"
+TARGET_PREREQUISITE_REPORT_SCHEMA_VERSION = (
+    "robot_sf.scenario_interop_target_prerequisite_report.v1"
+)
 SUPPORTED_TARGETS = ("socnavbench", "hunavsim")
 IR_SCHEMA_FILE = Path(__file__).with_name("schemas") / "scenario_interop_ir.v1.json"
 TARGET_COMPATIBILITY_SCHEMA_FILE = (
@@ -58,6 +61,9 @@ TARGET_EXPORT_MANIFEST_SCHEMA_FILE = (
 )
 TARGET_EXPORT_PREVIEW_SCHEMA_FILE = (
     Path(__file__).with_name("schemas") / "scenario_interop_target_export_preview.v1.json"
+)
+TARGET_PREREQUISITE_REPORT_SCHEMA_FILE = (
+    Path(__file__).with_name("schemas") / "scenario_interop_target_prerequisite_report.v1.json"
 )
 
 # Source keys that map directly into IR sections. Anything not in this set is
@@ -117,6 +123,44 @@ _TARGET_ASSET_BLOCKERS: dict[str, tuple[dict[str, str], ...]] = {
             "code": "hunavsim_adapter_not_staged",
             "field": "target_adapter",
             "reason": "HuNavSim export requires a staged adapter/schema fixture (#2414).",
+        },
+    ),
+}
+
+_TARGET_PREREQUISITES: dict[str, tuple[dict[str, Any], ...]] = {
+    "socnavbench": (
+        {
+            "code": "socnavbench_control_assets",
+            "issue": 1456,
+            "path": "third_party/socnavbench/wayptnav_data",
+            "kind": "directory",
+            "reason": "SocNavBench control-pipeline data must be staged before runnable export.",
+        },
+        {
+            "code": "socnavbench_eth_mesh",
+            "issue": 1134,
+            "path": ("third_party/socnavbench/sd3dis/stanford_building_parser_dataset/mesh/ETH"),
+            "kind": "directory",
+            "reason": "Official SocNavBench ETH mesh directory is required for ETH map export.",
+        },
+        {
+            "code": "socnavbench_eth_traversible_pickle",
+            "issue": 1134,
+            "path": (
+                "third_party/socnavbench/sd3dis/"
+                "stanford_building_parser_dataset/traversibles/ETH/data.pkl"
+            ),
+            "kind": "file",
+            "reason": "Official SocNavBench ETH traversible pickle is required for ETH map export.",
+        },
+    ),
+    "hunavsim": (
+        {
+            "code": "hunavsim_adapter_checkout",
+            "issue": 2414,
+            "path": "third_party/hunav_sim",
+            "kind": "directory",
+            "reason": "HuNavSim adapter/schema checkout must be staged before runnable export.",
         },
     ),
 }
@@ -189,6 +233,17 @@ def load_target_export_preview_schema() -> dict[str, Any]:
     return json.loads(TARGET_EXPORT_PREVIEW_SCHEMA_FILE.read_text(encoding="utf-8"))
 
 
+@lru_cache(maxsize=1)
+def load_target_prerequisite_report_schema() -> dict[str, Any]:
+    """Load target prerequisite report JSON Schema.
+
+    Returns:
+        Parsed JSON Schema dictionary.
+    """
+
+    return json.loads(TARGET_PREREQUISITE_REPORT_SCHEMA_FILE.read_text(encoding="utf-8"))
+
+
 def validate_interop_ir(ir: Mapping[str, Any]) -> list[str]:
     """Validate an IR payload against the interop IR schema.
 
@@ -239,6 +294,19 @@ def validate_target_export_preview(preview: Mapping[str, Any]) -> list[str]:
     """
 
     return _validate_json_schema(preview, schema=load_target_export_preview_schema())
+
+
+def validate_target_prerequisite_report(report: Mapping[str, Any]) -> list[str]:
+    """Validate target prerequisite report against JSON Schema.
+
+    Args:
+        report: Candidate prerequisite report.
+
+    Returns:
+        Sorted JSON-pointer-prefixed validation error strings; empty valid.
+    """
+
+    return _validate_json_schema(report, schema=load_target_prerequisite_report_schema())
 
 
 def _validate_json_schema(payload: Mapping[str, Any], *, schema: Mapping[str, Any]) -> list[str]:
@@ -564,6 +632,87 @@ def build_target_export_preview(ir: Mapping[str, Any], *, target: str) -> dict[s
     }
 
 
+def build_target_prerequisite_report(
+    ir: Mapping[str, Any],
+    *,
+    target: str,
+    root: Path | str | None = None,
+) -> dict[str, Any]:
+    """Build local prerequisite status for a runnable target export.
+
+    The report checks only local filesystem presence for known external
+    prerequisites. It does not download, vendor, or validate licensed external
+    data and therefore remains a preflight handoff artifact, not benchmark
+    evidence.
+
+    Args:
+        ir: Source interop IR.
+        target: Target benchmark name.
+        root: Optional repository root for tests or alternate checkouts.
+
+    Returns:
+        JSON-safe target prerequisite report.
+    """
+
+    if target not in SUPPORTED_TARGETS:
+        raise ValueError(
+            f"unsupported target {target!r}; expected one {', '.join(SUPPORTED_TARGETS)}"
+        )
+    repo_root = Path(root) if root is not None else Path.cwd()
+    prerequisites = [
+        _target_prerequisite_status(item, root=repo_root) for item in _TARGET_PREREQUISITES[target]
+    ]
+    missing = [item for item in prerequisites if item["status"] != "present"]
+    return {
+        "schema_version": TARGET_PREREQUISITE_REPORT_SCHEMA_VERSION,
+        "artifact_kind": f"{target}_scenario_export_prerequisite_report",
+        "target": target,
+        "source_scenario_id": _ir_source_id(ir),
+        "status": "ready" if not missing else "blocked",
+        "ready": not missing,
+        "no_download_performed": True,
+        "prerequisites": prerequisites,
+        "remaining_blockers": [
+            {
+                "code": item["code"],
+                "issue": item["issue"],
+                "path": item["path"],
+                "reason": item["reason"],
+            }
+            for item in missing
+        ],
+        "next_empirical_action": (
+            "Stage the missing external prerequisite paths through their owning "
+            "issues, then rerun this report before enabling runnable export."
+            if missing
+            else "Run the target exporter smoke path with the staged prerequisites."
+        ),
+        "claim_boundary": (
+            "Local prerequisite presence check only; not runnable target export, "
+            "benchmark evidence, or paper/dissertation claim."
+        ),
+    }
+
+
+def _target_prerequisite_status(
+    prerequisite: Mapping[str, Any],
+    *,
+    root: Path,
+) -> dict[str, Any]:
+    path = str(prerequisite["path"])
+    absolute_path = root / path
+    kind = str(prerequisite["kind"])
+    exists = absolute_path.is_dir() if kind == "directory" else absolute_path.is_file()
+    return {
+        "code": str(prerequisite["code"]),
+        "issue": int(prerequisite["issue"]),
+        "path": path,
+        "kind": kind,
+        "status": "present" if exists else "missing",
+        "reason": str(prerequisite["reason"]),
+    }
+
+
 def _build_socnavbench_preview_payload(ir: Mapping[str, Any]) -> dict[str, Any]:
     geometry = ir.get("geometry") if isinstance(ir.get("geometry"), Mapping) else {}
     environment = ir.get("environment") if isinstance(ir.get("environment"), Mapping) else {}
@@ -713,12 +862,16 @@ __all__ = [
     "TARGET_COMPATIBILITY_SCHEMA_VERSION",
     "TARGET_EXPORT_MANIFEST_SCHEMA_VERSION",
     "TARGET_EXPORT_PREVIEW_SCHEMA_VERSION",
+    "TARGET_PREREQUISITE_REPORT_SCHEMA_VERSION",
     "ScenarioInteropResult",
     "build_target_compatibility_report",
     "build_target_export_manifest",
     "build_target_export_preview",
+    "build_target_prerequisite_report",
     "convert_scenario_to_ir",
     "dump_ir",
     "load_interop_ir_schema",
+    "load_target_prerequisite_report_schema",
     "validate_interop_ir",
+    "validate_target_prerequisite_report",
 ]

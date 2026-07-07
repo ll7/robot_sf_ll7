@@ -181,7 +181,10 @@ def test_regression_last_20_merged_prs() -> None:
             check=True,
         )
         prs = json.loads(res.stdout)
-    except Exception as e:
+    except (subprocess.SubprocessError, OSError, ValueError) as e:
+        # Narrow (not broad) except so the repo's except->skip policy is satisfied:
+        # OSError = gh not installed, SubprocessError = non-zero exit (check=True),
+        # ValueError = json.JSONDecodeError from unparseable stdout.
         pytest.skip(f"Skipping regression test because gh CLI query failed: {e}")
         return
 

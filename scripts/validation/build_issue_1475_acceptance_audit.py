@@ -311,6 +311,21 @@ def _build_merged_pr_evidence() -> list[dict[str, Any]]:
             ],
             "closure_effect": "post_merge_audit_keep_open",
         },
+        {
+            "pr": "#4737",
+            "title": "Issue #1475: add post-merge closure audit evidence",
+            "merged_at_utc": "2026-07-07T05:48:07Z",
+            "evidence": (
+                "Added post-#4726 closure-audit evidence, kept #1475 open, "
+                "and recorded the state-surface selector over the newest "
+                "recorded_at_utc row."
+            ),
+            "criteria_supported": [
+                "Merged PR acceptance evidence mapped through PR #4726.",
+                "Newest durable state row keeps closure blocked on external smoke rerun.",
+            ],
+            "closure_effect": "post_merge_audit_keep_open",
+        },
     ]
 
 
@@ -464,7 +479,8 @@ def build_audit(
         ),
         "source_thread_summary": (
             "Issue #1475 live thread reviewed via gh api on 2026-07-07; latest issue "
-            "comment is the 2026-07-07 post-PR #4726 state update keeping the issue open."
+            "comment is the 2026-07-07 post-PR #4726 state update keeping the issue open; "
+            "PR #4737 later merged post-merge closure audit evidence without closing it."
         ),
         "closure_audit_contains_issue_1475": "Issue #1475" in closure_audit,
     }

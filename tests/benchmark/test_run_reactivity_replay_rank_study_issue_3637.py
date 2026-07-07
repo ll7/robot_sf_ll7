@@ -98,6 +98,7 @@ def test_runner_uses_packet_plan_and_writes_report(monkeypatch: pytest.MonkeyPat
         str(out_dir / "analysis" / "README.md"),
         str(out_dir / "analysis" / "analysis.json"),
         str(out_dir / "analysis" / "frozen_gate_input.json"),
+        str(out_dir / "analysis" / "seed_gate_decision.json"),
         str(out_dir / "analysis" / "rank_bootstrap_summary.json"),
         str(out_dir / "analysis" / "per_planner_condition_metrics.csv"),
     ]

@@ -152,6 +152,32 @@ class TestExtractTrajectory:
         assert row is not None
         assert row.pedestrians == [(0.5, 0.5)]
 
+    def test_null_seed_does_not_crash(self) -> None:
+        """An explicit ``seed: null`` in a record must not crash extraction."""
+        positions = [[0.0, 0.0], [1.0, 0.0]]
+        ep = _make_episode_with_trajectory("ep_null_seed", "orca", "corridor", 1, positions)
+        ep["seed"] = None
+        row = extract_trajectory_from_episode(ep)
+        assert row is not None
+        assert row.seed == 0
+
+    def test_malformed_pedestrian_and_bounds_skipped(self) -> None:
+        """Non-finite / non-numeric pedestrian and map-bounds data is skipped."""
+        positions = [[0.0, 0.0], [1.0, 0.0]]
+        peds = [
+            {"position": [0.5, 0.5]},
+            {"position": ["nan", 1.0]},
+            {"position": [float("inf"), 2.0]},
+        ]
+        ep = _make_episode_with_trajectory(
+            "ep_bad_peds", "orca", "corridor", 1, positions, pedestrians=peds
+        )
+        ep.setdefault("scenario_params", {})["map_bounds"] = [0.0, 0.0, float("nan"), 10.0]
+        row = extract_trajectory_from_episode(ep)
+        assert row is not None
+        assert row.pedestrians == [(0.5, 0.5)]
+        assert row.map_bounds is None
+
     def test_planner_key_from_algo_field(self) -> None:
         """Planner key extracted from algo field."""
         positions = [[0.0, 0.0]]

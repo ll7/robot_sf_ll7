@@ -123,6 +123,57 @@ def _get_nested(record: dict[str, Any], path: str, default: Any = None) -> Any:
     return cur
 
 
+def _coerce_finite_pair(x_val: Any, y_val: Any) -> tuple[float, float] | None:
+    """Return ``(x, y)`` floats when both are finite, else ``None``.
+
+    Returns:
+        Finite ``(x, y)`` tuple, or ``None`` for malformed/non-finite input.
+    """
+    try:
+        x, y = float(x_val), float(y_val)
+    except (ValueError, TypeError):
+        return None
+    if math.isfinite(x) and math.isfinite(y):
+        return (x, y)
+    return None
+
+
+def _parse_pedestrians(ped_raw: Any) -> list[tuple[float, float]] | None:
+    """Best-effort extraction of pedestrian positions from an episode record.
+
+    Returns:
+        List of finite ``(x, y)`` tuples, or ``None`` when no valid data.
+    """
+    if not isinstance(ped_raw, list) or not ped_raw:
+        return None
+    pedestrians: list[tuple[float, float]] = []
+    for ped in ped_raw:
+        if isinstance(ped, dict):
+            pos = ped.get("position", ped.get("start_position"))
+            if isinstance(pos, (list, tuple)) and len(pos) >= 2:
+                point = _coerce_finite_pair(pos[0], pos[1])
+                if point is not None:
+                    pedestrians.append(point)
+    return pedestrians or None
+
+
+def _parse_map_bounds(bounds: Any) -> tuple[float, float, float, float] | None:
+    """Best-effort extraction of map bounds ``(xmin, ymin, xmax, ymax)``.
+
+    Returns:
+        Finite four-tuple of bounds, or ``None`` when any bound is malformed.
+    """
+    if not isinstance(bounds, (list, tuple)) or len(bounds) < 4:
+        return None
+    try:
+        coerced = [float(b) for b in bounds[:4]]
+    except (ValueError, TypeError):
+        return None
+    if all(math.isfinite(b) for b in coerced):
+        return (coerced[0], coerced[1], coerced[2], coerced[3])
+    return None
+
+
 def _parse_positions(raw: Any) -> list[tuple[float, float]]:
     """Convert position list or dict list to list of (x, y) tuples.
 
@@ -182,31 +233,16 @@ def extract_trajectory_from_episode(
 
     planner_key = _normalize_planner_key(record)
     scenario_id = str(record.get("scenario_id", ""))
-    seed = int(record.get("seed", 0))
+    # ``record.get("seed", 0)`` only falls back when the key is absent; an
+    # explicit ``"seed": null`` (or a non-numeric string) would otherwise crash
+    # ``int(...)``.  Fail-soft to 0 for best-effort visualization.
+    try:
+        seed = int(record.get("seed", 0) or 0)
+    except (ValueError, TypeError):
+        seed = 0
     episode_id = str(record.get("episode_id", ""))
-
-    # Pedestrian positions (best-effort)
-    ped_raw = _get_nested(record, "pedestrians")
-    pedestrians: list[tuple[float, float]] | None = None
-    if isinstance(ped_raw, list) and ped_raw:
-        pedestrians = []
-        for ped in ped_raw:
-            if isinstance(ped, dict):
-                pos = ped.get("position", ped.get("start_position"))
-                if isinstance(pos, (list, tuple)) and len(pos) >= 2:
-                    pedestrians.append((float(pos[0]), float(pos[1])))
-
-    # Map bounds (best-effort)
-    bounds = _get_nested(record, "scenario_params.map_bounds")
-    map_bounds: tuple[float, float, float, float] | None = None
-    if isinstance(bounds, (list, tuple)) and len(bounds) >= 4:
-        map_bounds = (
-            float(bounds[0]),
-            float(bounds[1]),
-            float(bounds[2]),
-            float(bounds[3]),
-        )
-
+    pedestrians = _parse_pedestrians(_get_nested(record, "pedestrians"))
+    map_bounds = _parse_map_bounds(_get_nested(record, "scenario_params.map_bounds"))
     source_path = str(record.get("source_path", ""))
 
     return TrajectoryRow(
@@ -359,14 +395,10 @@ def build_overlay_figure(
             seeds=[seed],
             figure_formats=list(formats),
             config_path=source_path,
-            claim_boundary=OverlayProvenance(
-                scenario_id=scenario_id,
-                seed=seed,
-                planners=planners_in_order,
-                episode_ids=episode_ids,
-                source_episodes=source_path,
-                git_hash=_git_sha_short(),
-            ).claim_boundary,
+            # ``claim_boundary`` is a constant class default; read it directly
+            # instead of constructing a throwaway instance (which would also
+            # spawn a discarded ``git rev-parse`` subprocess).
+            claim_boundary=OverlayProvenance.claim_boundary,
         )
 
         # Add overlay-specific provenance fields

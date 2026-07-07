@@ -251,7 +251,7 @@ namespace RVO {
 	{
 		return agents_[agentNo]->timeHorizonObst_;
 	}
-	
+
 	float RVOSimulator::getAgentCollabCoeff(size_t agentNo) const
 	{
 		return agents_[agentNo]->collabCoeff_;

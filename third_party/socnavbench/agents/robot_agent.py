@@ -115,7 +115,7 @@ class RobotAgent(Agent):
         return cls.generate_robot(start_goal, verbose=False)
 
     def check_termination_conditions(self) -> None:
-        """use this to take in a world state and compute obstacles 
+        """use this to take in a world state and compute obstacles
         (gen_agents/walls) to affect the robot"""
         # check for collisions with other gen_agents
         self.check_collisions(self.world_state)

@@ -11,23 +11,23 @@ This feature addresses the need to document the configuration hierarchy and depr
 
 ## Technical Context
 
-**Language/Version**: Python 3.11+ (project minimum per pyproject.toml)  
-**Primary Dependencies**: 
+**Language/Version**: Python 3.11+ (project minimum per pyproject.toml)
+**Primary Dependencies**:
 - Existing: dataclasses (stdlib), warnings (stdlib)
 - Documentation: Markdown (existing docs structure)
 - Testing: pytest (existing test framework)
 
-**Storage**: Filesystem (documentation files in `docs/architecture/`, deprecation warnings in existing `.py` modules)  
-**Testing**: pytest for deprecation warning validation  
-**Target Platform**: Documentation accessible via filesystem/GitHub; Python code runs on Linux/macOS  
-**Project Type**: Documentation + lightweight code changes (deprecation warnings)  
-**Performance Goals**: N/A (documentation-only changes; deprecation warnings negligible overhead)  
-**Constraints**: 
+**Storage**: Filesystem (documentation files in `docs/architecture/`, deprecation warnings in existing `.py` modules)
+**Testing**: pytest for deprecation warning validation
+**Target Platform**: Documentation accessible via filesystem/GitHub; Python code runs on Linux/macOS
+**Project Type**: Documentation + lightweight code changes (deprecation warnings)
+**Performance Goals**: N/A (documentation-only changes; deprecation warnings negligible overhead)
+**Constraints**:
 - Must maintain backward compatibility (non-breaking changes only)
 - All existing tests must pass after adding deprecation warnings
 - Documentation must be discoverable from existing `docs/README.md` and `dev_guide.md`
 
-**Scale/Scope**: 
+**Scale/Scope**:
 - 1 new documentation file (`docs/architecture/configuration.md`)
 - 4 legacy config classes to deprecate (`BaseEnvSettings`, `RobotEnvSettings`, `EnvSettings`, `PedEnvSettings` - all in `env_config.py`)
 - 4 canonical config classes documented (`BaseSimulationConfig`, `RobotSimulationConfig`, `ImageRobotConfig`, `PedestrianSimulationConfig` in `unified_config.py`)
@@ -106,7 +106,7 @@ configs/
 
 ## Post-Design Constitution Check
 
-**Re-evaluation Date**: 2025-11-11  
+**Re-evaluation Date**: 2025-11-11
 **Status**: ✅ PASS - No violations introduced
 
 ### Design Artifacts Review
@@ -119,7 +119,7 @@ configs/
 
 **Constitution Alignment**:
 
-**✅ Principle IV - Unified Configuration & Deterministic Seeds**: 
+**✅ Principle IV - Unified Configuration & Deterministic Seeds**:
 - Documentation reinforces the unified configuration layer
 - Deprecation warnings guide users away from fragmented legacy configs
 - No changes to seed handling or configuration precedence logic

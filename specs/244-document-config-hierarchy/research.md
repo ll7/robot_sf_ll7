@@ -1,7 +1,7 @@
 # Research: Configuration Hierarchy Documentation
 
-**Feature**: 244-document-config-hierarchy  
-**Date**: 2025-01-11  
+**Feature**: 244-document-config-hierarchy
+**Date**: 2025-01-11
 **Status**: Complete
 
 ## Overview
@@ -24,7 +24,7 @@ This model is consistent with established patterns in Python configuration libra
 - Single-tier (runtime only): Rejected - loses discoverability of defaults and scenario reusability
 - YAML-first precedence: Rejected - would break existing runtime override patterns
 
-**Evidence**: 
+**Evidence**:
 - `environment_factory.py` shows runtime kwargs override config objects
 - `unified_config.py` dataclasses define code defaults
 - Existing YAML configs in `configs/` demonstrate file-based overrides

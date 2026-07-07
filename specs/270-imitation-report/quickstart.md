@@ -1,7 +1,7 @@
 # Quickstart: Automated Research Reporting
 
-**Feature**: 270-imitation-report  
-**Phase**: 1 (Design)  
+**Feature**: 270-imitation-report
+**Phase**: 1 (Design)
 **Date**: 2025-11-21
 
 ## Overview
@@ -255,7 +255,7 @@ Generated `report.md` includes:
 
 1. **Abstract**: Auto-populated with hypothesis, primary findings, quantified improvement
 2. **Experimental Setup**: Seeds, configs, hardware profile, software versions
-3. **Results**: 
+3. **Results**:
    - Learning curves (timesteps vs success rate)
    - Sample efficiency comparison (bar chart + table)
    - Success/collision rate distributions

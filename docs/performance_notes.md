@@ -37,7 +37,7 @@ follow-up direction.
 
 From `dev_guide.md` expected ranges:
 - **Environment creation**: < 1 second
-- **Model loading**: 1–5 seconds  
+- **Model loading**: 1–5 seconds
 - **Simulation performance**: ~22 steps/second (~45ms/step)
 - **Build time**: 2–3 minutes (first time)
 - **Test suite**: 2–3 minutes (≈170 tests)
@@ -236,7 +236,7 @@ Location: `robot_sf/benchmark/runner.py`
 
 ### Key Metrics to Track
 1. **Environment Initialization**: Creation + first reset time
-2. **Episode Generation**: Episodes per second in benchmark runs  
+2. **Episode Generation**: Episodes per second in benchmark runs
 3. **Memory Usage**: Peak RSS during multi-worker runs
 4. **I/O Performance**: JSONL write throughput for large episode batches
 
@@ -282,7 +282,7 @@ DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
    headless cold starts. Pygame/SDL is no longer imported by
    `make_robot_env(debug=False)` after #1290; it is still initialized on explicit
    rendering, image-observation, occupancy-grid rendering, or video paths.
-2. **FastPysf compilation**: JIT overhead on first use  
+2. **FastPysf compilation**: JIT overhead on first use
 3. **Large episode JSON**: Serialization cost grows with trajectory length
 4. **File I/O**: JSONL append becomes slow with very large files
 5. **Map definition cache eviction** (fixed in #806): prior `maxsize=8` caused
@@ -311,7 +311,7 @@ DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
 
 ### Available Validation Scripts
 - ✅ `test_basic_environment.sh`: Environment creation smoke test
-- ✅ `test_model_prediction.sh`: Model loading and inference test  
+- ✅ `test_model_prediction.sh`: Model loading and inference test
 - ✅ `performance_smoke_test.py`: Performance baseline measurement
 - ⏳ `test_complete_simulation.sh`: Full episode simulation (may timeout on complex scenarios)
 
@@ -328,11 +328,11 @@ DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
 
 ### 2025-01-19 - Initial Baseline
 - Environment creation: 1.16s (target: < 2.0s)
-- Environment reset: 1,745 resets/sec (target: > 1/sec)  
+- Environment reset: 1,745 resets/sec (target: > 1/sec)
 - Platform: macOS ARM64, Python 3.13, headless mode
 - Status: All performance targets met
 
 ---
-**Monitoring Schedule**: Monthly performance validation recommended  
-**Next Review**: 2025-02-19  
+**Monitoring Schedule**: Monthly performance validation recommended
+**Next Review**: 2025-02-19
 **Contact**: Reference dev team for performance regression issues

@@ -2,7 +2,7 @@
 
 All notable changes to the Robot SF project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
@@ -2247,7 +2247,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * TEB corridor-commitment planner improvements for issue #805 (first iteration): multi-step corridor occupancy scoring, escalated lateral commitment gains, blocked-side flip fallback, route-waypoint guidance integration, and reproducible topology-slice artifacts (`configs/scenarios/sets/issue_805_teb_topology_slice.yaml`,   `docs/context/issue_805_teb_corridor_commitment_iteration.md`).
 
 * Added a repo-local agent memory layer with `CLAUDE.md` startup imports, a canonical
-`memory/MEMORY.md` index, typed memory subdirectories ( `architecture` , `decisions` , 
+`memory/MEMORY.md` index, typed memory subdirectories ( `architecture` , `decisions` ,
 `experiments` , `failures` , `benchmarks` ), example notes for each type, and linked guidance in
 `AGENTS.md` , `docs/dev_guide.md` , `docs/README.md` , and the AI-facing overview/deferral docs.
 * Added canonical `classic_cross_trap_*` scenario IDs and manifests for the former
@@ -2293,7 +2293,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * `ClassicGlobalPlanner.plan_random_path()` now supports `allow_inflation_fallback=False` to keep the configured inflated area instead of shrinking inflation during random path sampling.
 * Unified configs now support `map_id` for deterministic map selection when building environments.
 * Config-first RLlib DreamerV3 training workflow for `drive_state` + `rays`, including:
-`scripts/training/train_dreamerv3_rllib.py` , `configs/training/rllib_dreamerv3/drive_state_rays.yaml` , 
+`scripts/training/train_dreamerv3_rllib.py` , `configs/training/rllib_dreamerv3/drive_state_rays.yaml` ,
   deterministic observation flattening/action normalization wrappers, and a dedicated runbook.
 * Optional dependency split for training stacks: `imitation` moved to the `imitation` dependency group so BC pre-training can be installed separately from RLlib-oriented environments.
 * Added an explicit uv dependency conflict declaration between `--extra rllib` and `--group imitation` to provide actionable install errors when mixed.
@@ -2305,7 +2305,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Benchmark CLI warn-only scenario preview (`robot_sf_bench preview-scenarios`) plus warnings/coverage summary in validate-config output.
 * Expert PPO training now supports `ppo_hyperparams`/`best_checkpoint_metric` overrides and saves a best-checkpoint snapshot per run.
 * Optuna sweep helper for expert PPO training configs (`scripts/training/optuna_expert_ppo.py`).
-* Safety-gated Optuna objectives for expert PPO sweeps (`constraint_collision_rate_max`, 
+* Safety-gated Optuna objectives for expert PPO sweeps (`constraint_collision_rate_max`,
   optional `constraint_comfort_exposure_max` , and `constraint_handling=penalize|prune` )
   with per-trial feasibility metadata and feasible/infeasible study summaries.
 * Policy analysis episodes now store `shortest_path_len` in metrics to enable diagnostics of path-efficiency saturation.
@@ -2485,7 +2485,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   + Collapsed legacy detailed index into expandable section for backward compatibility
 * Added a benchmark spec doc covering scenario splits, seeds, baseline categories, reproducible commands, and metric caveats.
 * Updated benchmark spec for seed-holdout evaluation and policy sweep commands; documented map_id usage in scenario README.
-  
+
 
 ### Migration Guide (Version 2.1.0)
 
@@ -2548,12 +2548,12 @@ If your project imports from `robot_sf.util` or `robot_sf.utils` , update your i
   + **Baseline Comparison**: CI/CD pipeline compares coverage against baseline with non-blocking warnings on decreases
   + **VS Code Integration**: Tasks for "Run Tests with Coverage" and "Open Coverage Report"
   + **CI/CD Workflow**: GitHub Actions integration with caching, baseline updates on main branch, and artifact uploads
-  + **Library Infrastructure**: 
+  + **Library Infrastructure**:
     - `robot_sf/coverage_tools/baseline_comparator.py`: CoverageSnapshot, CoverageBaseline, CoverageDelta entities with comparison logic
     - `robot_sf/coverage_tools/report_formatter.py`: Multi-format report generation (terminal/JSON/markdown)
     - `scripts/coverage/compare_coverage.py`: CLI tool for local and CI baseline comparison
   + **Comprehensive Testing**: 18 unit tests (5 smoke + 13 baseline comparator) with 91.51% coverage of comparison logic
-  + **Documentation**: 
+  + **Documentation**:
   + `docs/coverage_guide.md`: 500+ line comprehensive guide with quickstart, CI integration, troubleshooting
   + `examples/plotting/coverage_example.py`: Programmatic usage examples
     - Updated `docs/dev_guide.md` with coverage workflow section
@@ -2648,7 +2648,7 @@ If your project imports from `robot_sf.util` or `robot_sf.utils` , update your i
   + **Episode Runner**: Parallel execution with manifest-based resume functionality
   + **CLI Interface**: 15 comprehensive subcommands covering full experiment workflow
     - `run` - Execute episodes with parallel workers
-    - `baseline` - Compute baseline statistics  
+    - `baseline` - Compute baseline statistics
     - `aggregate` - Generate summaries with bootstrap confidence intervals
     - `validate-config` - Schema validation for scenarios
     - `list-scenarios` - Display scenario configurations
@@ -2725,5 +2725,5 @@ When adding entries to this changelog:
 
 This project uses semantic versioning:
 * **MAJOR** version for incompatible API changes
-* **MINOR** version for backwards-compatible functionality additions  
+* **MINOR** version for backwards-compatible functionality additions
 * **PATCH** version for backwards-compatible bug fixes

@@ -18,7 +18,7 @@ Implement 22 social navigation metrics from paper 2306.16740v4 (Table 1) to enab
 **Target Platform**: Cross-platform (Linux, macOS) with headless execution support
 **Project Type**: Single project - extends existing robot_sf library
 **Performance Goals**: < 100ms per episode for up to 50 pedestrians; batch aggregation of 1000+ episodes in < 30 seconds
-**Constraints**: 
+**Constraints**:
   - Must maintain backward compatibility with episode.schema.v1.json
   - No new external dependencies beyond current project requirements
   - < 10% overhead on existing metric computation

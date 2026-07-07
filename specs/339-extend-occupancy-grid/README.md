@@ -1,9 +1,9 @@
 # Occupancy Grid Feature Planning & Implementation: Complete Package
 
-**Feature**: 339-extend-occupancy-grid  
-**Branch**: `339-extend-occupancy-grid`  
-**Created**: 2025-12-04  
-**Updated**: 2025-01-15  
+**Feature**: 339-extend-occupancy-grid
+**Branch**: `339-extend-occupancy-grid`
+**Created**: 2025-12-04
+**Updated**: 2025-01-15
 **Status**: 🟡 Phase 1 COMPLETE → Phase 2 READY (Implementation in progress)
 
 ---
@@ -131,14 +131,14 @@ This directory contains the complete planning and implementation package for the
   - OccupancyGrid, GridChannel, GridConfig, POIQuery, POIResult
   - Defined fields, invariants, relationships
   - Specified validation rules
-  
+
 - [x] Generated API contracts → `contracts/occupancy_api.md`
   - Function signatures with guarantees
   - Parameter types and return values
   - Performance targets
   - Error handling
   - Gymnasium integration details
-  
+
 - [x] Created usage guide → `quickstart.md`
   - 7 usage patterns (basic, spawn validation, training, visualization, custom configs, patterns, troubleshooting)
   - Copy-paste examples for common tasks
@@ -315,9 +315,9 @@ All 13 Robot SF Constitution principles have been verified:
 
 ## Contact & References
 
-**Feature Spec**: `specs/339-extend-occupancy-grid/spec.md`  
-**Implementation Plan**: `specs/339-extend-occupancy-grid/plan.md`  
-**Constitution**: `.specify/memory/constitution.md`  
+**Feature Spec**: `specs/339-extend-occupancy-grid/spec.md`
+**Implementation Plan**: `specs/339-extend-occupancy-grid/plan.md`
+**Constitution**: `.specify/memory/constitution.md`
 **Dev Guide**: `docs/dev_guide.md`
 
 ---
@@ -326,7 +326,7 @@ All 13 Robot SF Constitution principles have been verified:
 
 All planning phases (0 & 1) are complete. The feature is fully specified, designed, and documented. Implementation teams can proceed with Phase 2 task breakdown and begin coding.
 
-**Next Command**: 
+**Next Command**:
 ```bash
 # Generate detailed task breakdown (Phase 2)
 # /speckit.tasks (command to be implemented by speckit framework)

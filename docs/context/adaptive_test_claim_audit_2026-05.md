@@ -1,8 +1,8 @@
 # Issue #1432 Adaptive Test Strategy Claim Audit (2026-05-22)
 
-> **Scope:** Docs-only claim hygiene for GitHub Issue #1432.  
-> **Date:** 2026-05-22  
-> **Target path:** `docs/context/adaptive_test_claim_audit_2026-05.md`  
+> **Scope:** Docs-only claim hygiene for GitHub Issue #1432.
+> **Date:** 2026-05-22
+> **Target path:** `docs/context/adaptive_test_claim_audit_2026-05.md`
 > **Sensitivity:** paper-facing claim hygiene. No code, test, workflow, schema, config, metric,
 > formula, benchmark behavior, or paper text changes.
 

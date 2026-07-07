@@ -713,7 +713,7 @@ class SystemConfig(Trajectory):
         v: float | None = 0,
         w: float | None = 0,
     ):
-        """ Construct a SystemConfig from a list/tuple/np of (x, y, theta) 
+        """ Construct a SystemConfig from a list/tuple/np of (x, y, theta)
         with optional velocity and angular velocity """
         if isinstance(pos3, np.ndarray):
             assert pos3.shape == (3,)

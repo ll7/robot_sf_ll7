@@ -11,29 +11,29 @@ Implement an automated global planner that generates collision-free waypoint pat
 
 ## Technical Context
 
-**Language/Version**: Python 3.11+ (matches existing robot_sf codebase)  
-**Primary Dependencies**: 
+**Language/Version**: Python 3.11+ (matches existing robot_sf codebase)
+**Primary Dependencies**:
   - shapely>=2.1.2 (polygon operations, obstacle buffering - already in use)
   - networkx>=3.6 (graph search algorithms - Dijkstra, A*)
   - pyvisgraph>=0.2.1 (visibility graph construction)
   - Existing: robot_sf.nav (svg_map_parser, obstacle, navigation, occupancy_grid)
-  
-**Storage**: In-memory graph caching (per map hash), no persistent storage required  
-**Testing**: pytest (unit tests for planner, integration tests for map compatibility)  
-**Target Platform**: Linux/macOS (research workstations, headless CI)  
-**Project Type**: Single library extension (new robot_sf/planner/ module)  
-**Performance Goals**: 
+
+**Storage**: In-memory graph caching (per map hash), no persistent storage required
+**Testing**: pytest (unit tests for planner, integration tests for map compatibility)
+**Target Platform**: Linux/macOS (research workstations, headless CI)
+**Project Type**: Single library extension (new robot_sf/planner/ module)
+**Performance Goals**:
   - Path generation: <100ms median @ 50 obstacles
   - Graph build: <500ms one-time @ 50 obstacles
   - POI sampling: <50ms for 20 POIs
-  
-**Constraints**: 
+
+**Constraints**:
   - Maintains backward compatibility with existing RouteNavigator API
   - Must produce list[Vec2D] output format
   - Deterministic paths (seeded randomness)
   - Clearance margin: robot_radius + 0.3m default
-  
-**Scale/Scope**: 
+
+**Scale/Scope**:
   - Target maps: <50 obstacles typical, <100 max tested
   - Graph nodes: ~200-300 vertices typical (obstacle corners + start/goal)
   - Cache size: ~10 maps concurrent in typical training session

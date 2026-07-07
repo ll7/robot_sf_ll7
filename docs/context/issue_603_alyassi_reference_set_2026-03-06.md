@@ -11,7 +11,7 @@ Related issues:
 ## Why this note matters
 
 Treat this page as the canonical paper-side planner reference set for the Alyassi-style external
-family anchors. Downstream roadmap notes should point back here when they need the citekeys, 
+family anchors. Downstream roadmap notes should point back here when they need the citekeys,
 upstream repositories, or local clone locations.
 
 ## Confirmed external planner anchors

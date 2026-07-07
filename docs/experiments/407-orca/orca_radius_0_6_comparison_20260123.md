@@ -64,4 +64,3 @@ The few improved cases appear scenario-specific and do not offset the broader re
 - Keep **r=1.0** as baseline for now (more stable results).
 - If we want to revisit footprint tuning, first improve ORCA obstacle handling or
   consider integrating a stronger planner (e.g., fast-pysf local planner).
-

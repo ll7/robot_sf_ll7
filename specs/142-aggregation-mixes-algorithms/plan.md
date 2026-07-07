@@ -34,23 +34,23 @@
 The classic benchmark currently groups episode metrics by `scenario_params.algo`, but the orchestrator only records the algorithm name at the top level. This plan ensures every episode carries the algorithm identifier under both `algo` and `scenario_params["algo"]`, teaches the aggregators to fall back to the top-level field, and adds proactive warnings when expected baselines are missing so analysts always see per-algorithm metrics.
 
 ## Technical Context
-**Language/Version**: Python ≥3.11 (repo targets 3.11–3.12 via uv + Ruff)  
-**Primary Dependencies**: `robot_sf.benchmark` modules, Loguru logging, NumPy, JSON/JSONSchema utilities, pytest suite  
-**Storage**: JSONL/JSON files under `results/` (append-only episode logs and aggregates)  
-**Testing**: Pytest suites in `tests/` plus benchmark smoke validations (`scripts/validation/*.py`)  
-**Target Platform**: Headless macOS/Linux runners (CI + local)  
-**Project Type**: single-project Python library/application  
-**Performance Goals**: Maintain ability to aggregate ≥10k episodes without exceeding existing compute_aggregates runtime budgets (<2s per 5k episodes on dev hardware)  
-**Constraints**: Preserve JSON schema compatibility (Principle VII), use Loguru for diagnostics, fail fast on missing metadata, warn-but-continue on missing algorithms  
+**Language/Version**: Python ≥3.11 (repo targets 3.11–3.12 via uv + Ruff)
+**Primary Dependencies**: `robot_sf.benchmark` modules, Loguru logging, NumPy, JSON/JSONSchema utilities, pytest suite
+**Storage**: JSONL/JSON files under `results/` (append-only episode logs and aggregates)
+**Testing**: Pytest suites in `tests/` plus benchmark smoke validations (`scripts/validation/*.py`)
+**Target Platform**: Headless macOS/Linux runners (CI + local)
+**Project Type**: single-project Python library/application
+**Performance Goals**: Maintain ability to aggregate ≥10k episodes without exceeding existing compute_aggregates runtime budgets (<2s per 5k episodes on dev hardware)
+**Constraints**: Preserve JSON schema compatibility (Principle VII), use Loguru for diagnostics, fail fast on missing metadata, warn-but-continue on missing algorithms
 **Scale/Scope**: Classic benchmark matrix (≈3 algorithms × ~10 scenarios × ≤10 episodes each) with potential expansion to larger episode sets
 
 ## Constitution Check
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **Principle III (Benchmark & Metrics First)**: Plan maintains structured JSONL outputs and strengthens grouping metadata; passes.  
-- **Principle VI (Metrics Transparency)**: Aggregation changes continue to expose per-algorithm statistics with warnings for missing data; passes.  
-- **Principle VII (Backward Compatibility)**: Mirroring `algo` under `scenario_params` preserves schema expectations while leaving top-level field intact; no breaking change anticipated.  
-- **Principle XI (Library Reuse & Helper Documentation)**: Changes will live in existing benchmark library modules with docstrings and logging updates as needed; compliant.  
+- **Principle III (Benchmark & Metrics First)**: Plan maintains structured JSONL outputs and strengthens grouping metadata; passes.
+- **Principle VI (Metrics Transparency)**: Aggregation changes continue to expose per-algorithm statistics with warnings for missing data; passes.
+- **Principle VII (Backward Compatibility)**: Mirroring `algo` under `scenario_params` preserves schema expectations while leaving top-level field intact; no breaking change anticipated.
+- **Principle XI (Library Reuse & Helper Documentation)**: Changes will live in existing benchmark library modules with docstrings and logging updates as needed; compliant.
 - **Principle XII (Preferred Logging & Observability)**: Warning path will use Loguru warning level rather than prints; compliant.
 
 ## Project Structure
@@ -106,9 +106,9 @@ ios/ or android/
 **Structure Decision**: Option 1 (single Python project); no frontend/mobile splitting required.
 
 ## Phase 0: Outline & Research
-1. Confirm where algorithm metadata is produced (`run_full_benchmark` manifests, orchestrator payloads) and identify hook to mirror `algo` into `scenario_params`.  
-2. Review `compute_aggregates_with_ci` fallback logic and determine minimal changes needed to honour top-level `algo` while preserving dotted-path configuration.  
-3. Survey existing validation scripts and docs to capture required updates (documentation entry, changelog notes).  
+1. Confirm where algorithm metadata is produced (`run_full_benchmark` manifests, orchestrator payloads) and identify hook to mirror `algo` into `scenario_params`.
+2. Review `compute_aggregates_with_ci` fallback logic and determine minimal changes needed to honour top-level `algo` while preserving dotted-path configuration.
+3. Survey existing validation scripts and docs to capture required updates (documentation entry, changelog notes).
 4. Capture decisions plus alternatives (e.g., rewriting aggregation default vs. enriching records) in `research.md` following Decision/Rationale/Alternatives structure.
 
 **Output**: `/specs/142-aggregation-mixes-algorithms/research.md` documenting the above findings.
@@ -116,10 +116,10 @@ ios/ or android/
 ## Phase 1: Design & Contracts
 *Prerequisites: research.md complete*
 
-1. Document the episode record and aggregation summary structures in `data-model.md`, including new `scenario_params.algo` mirroring, warning annotations, and summary metadata for missing algorithms.  
-2. Define library-level contract expectations in `/specs/142-aggregation-mixes-algorithms/contracts/` (e.g., `compute_aggregates_with_ci` grouping behaviour, orchestration metadata injection) with request/response examples for programmatic consumers.  
-3. Outline validation-focused quickstart steps in `quickstart.md` (run benchmark slice, trigger aggregation, inspect warnings) aligned with smoke tests.  
-4. Identify failing tests to author (e.g., new pytest cases verifying grouping and warnings) and capture them as part of contracts/quickstart references.  
+1. Document the episode record and aggregation summary structures in `data-model.md`, including new `scenario_params.algo` mirroring, warning annotations, and summary metadata for missing algorithms.
+2. Define library-level contract expectations in `/specs/142-aggregation-mixes-algorithms/contracts/` (e.g., `compute_aggregates_with_ci` grouping behaviour, orchestration metadata injection) with request/response examples for programmatic consumers.
+3. Outline validation-focused quickstart steps in `quickstart.md` (run benchmark slice, trigger aggregation, inspect warnings) aligned with smoke tests.
+4. Identify failing tests to author (e.g., new pytest cases verifying grouping and warnings) and capture them as part of contracts/quickstart references.
 5. Update GitHub Copilot agent context via `.specify/scripts/bash/update-agent-context.sh copilot`, adding only the new libraries/concepts introduced in this plan.
 
 **Output**: `/specs/142-aggregation-mixes-algorithms/data-model.md`, `/specs/142-aggregation-mixes-algorithms/contracts/*`, `/specs/142-aggregation-mixes-algorithms/quickstart.md`, updated agent context note.
@@ -147,8 +147,8 @@ ios/ or android/
 ## Phase 3+: Future Implementation
 *These phases are beyond the scope of the /plan command*
 
-**Phase 3**: Task execution (/tasks command creates tasks.md)  
-**Phase 4**: Implementation (execute tasks.md following constitutional principles)  
+**Phase 3**: Task execution (/tasks command creates tasks.md)
+**Phase 4**: Implementation (execute tasks.md following constitutional principles)
 **Phase 5**: Validation (run tests, execute quickstart.md, performance validation)
 
 ## Complexity Tracking

@@ -1,6 +1,6 @@
 # Tasks: Code Coverage Monitoring and Quality Tracking
 
-**Input**: Design documents from `/specs/145-add-pytest-cov/`  
+**Input**: Design documents from `/specs/145-add-pytest-cov/`
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/, quickstart.md
 
 **Tests**: Smoke tests and validation included for each user story to verify functionality

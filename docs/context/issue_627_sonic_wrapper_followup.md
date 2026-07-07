@@ -105,7 +105,7 @@ Current evidence now includes both smoke validation and a small benchmark probe.
 * `Ours_GST` and `GST_predictor_rand` both step through the Robot SF wrapper and produce finite
   commands.
 * There is now episode-level evidence on `verified_simple_subset_v1`, recorded below.
-* That evidence is still too weak to support a strong performance claim; the wrappers are runnable, 
+* That evidence is still too weak to support a strong performance claim; the wrappers are runnable,
   but their benchmark quality remains limited here.
 
 ## Verified-Simple Benchmark Probe
@@ -285,9 +285,9 @@ Implemented scope:
   + `gst_predictor_rand_guarded` (canonical `gensafenav_gst_predictor_rand_guarded`)
 * Added mixed-mode metadata/readiness contracts for the guarded aliases.
 * Implemented map-runner wiring that:
-  + runs the same model-only `SonicCrowdNavAdapter` checkpoint path, 
-  + applies a short-horizon guard (`GuardedPPOAdapter`) to the proposed command, 
-  + uses explicit goal-policy fallback when guard vetoes the base command, 
+  + runs the same model-only `SonicCrowdNavAdapter` checkpoint path,
+  + applies a short-horizon guard (`GuardedPPOAdapter`) to the proposed command,
+  + uses explicit goal-policy fallback when guard vetoes the base command,
   + records guard decision counts (`guard_stats`) in episode metadata.
 
 Validation commands:
@@ -337,7 +337,7 @@ LOGURU_LEVEL=INFO uv run robot_sf_bench run \
 Guard activity snapshot (aggregate step decisions):
 
 * `ours_gst_guarded`: `ppo_clear=2275`,  `fallback_safe=183`,  `stop_safe=126`
-* `gst_predictor_rand_guarded`: `ppo_clear=1815`,  `ppo_safe=29`,  `fallback_safe=261`, 
+* `gst_predictor_rand_guarded`: `ppo_clear=1815`,  `ppo_safe=29`,  `fallback_safe=261`,
  `stop_safe=369`
 
 Decision status:

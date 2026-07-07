@@ -127,7 +127,7 @@ Assess whether the MPC-based social navigation candidates DR-MPC and SICNav are 
 
 * Robot SF docs now include a clear MPC arcade evaluation path for issue #771.
 * Team can use the document as a direct source of truth for:
-  + DR-MPC and SICNav viability, 
-  + integration interface mapping, 
+  + DR-MPC and SICNav viability,
+  + integration interface mapping,
   + classification decision and next-step boundary.
 * Benchmarks and reviewers can now identify the expected implementation ladder (external anchor → wrapper prototype → full integration).

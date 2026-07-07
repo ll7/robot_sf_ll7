@@ -48,7 +48,7 @@ class EpisodeData:
         Used by: agent_collisions (AC)
         Default: None (metric returns 0.0)
     """
-    
+
     robot_pos: np.ndarray
     robot_vel: np.ndarray
     robot_acc: np.ndarray
@@ -85,19 +85,19 @@ All metric functions follow the pattern established in `robot_sf/benchmark/metri
 ```python
 def metric_name(data: EpisodeData) -> float:
     """Short description.
-    
+
     Long description including formula, units, and edge case handling.
-    
+
     Parameters
     ----------
     data : EpisodeData
         Episode trajectory container
-        
+
     Returns
     -------
     float
         Metric value with specified units (or NaN if undefined)
-        
+
     Notes
     -----
     - Edge case behavior documented here
@@ -110,7 +110,7 @@ def metric_name(data: EpisodeData) -> float:
 ```python
 def metric_name(data: EpisodeData, *, horizon: int, threshold: float = DEFAULT) -> float:
     """Short description with parameter explanation.
-    
+
     Parameters
     ----------
     data : EpisodeData
@@ -119,7 +119,7 @@ def metric_name(data: EpisodeData, *, horizon: int, threshold: float = DEFAULT) 
         Maximum episode length (timesteps)
     threshold : float, optional
         Detection threshold (default: DEFAULT from constants)
-        
+
     Returns
     -------
     float
@@ -176,14 +176,14 @@ def metric_name(data: EpisodeData, *, horizon: int, threshold: float = DEFAULT) 
 ```python
 def _compute_ped_velocities(peds_pos: np.ndarray, dt: float) -> np.ndarray:
     """Compute pedestrian velocities from positions via finite difference.
-    
+
     Parameters
     ----------
     peds_pos : np.ndarray
         (T, K, 2) array of pedestrian positions
     dt : float
         Timestep duration (seconds)
-        
+
     Returns
     -------
     np.ndarray
@@ -196,14 +196,14 @@ def _compute_ped_velocities(peds_pos: np.ndarray, dt: float) -> np.ndarray:
 ```python
 def _compute_jerk(robot_acc: np.ndarray, dt: float) -> np.ndarray:
     """Compute jerk (acceleration derivative) via finite difference.
-    
+
     Parameters
     ----------
     robot_acc : np.ndarray
         (T, 2) array of robot accelerations
     dt : float
         Timestep duration (seconds)
-        
+
     Returns
     -------
     np.ndarray
@@ -216,12 +216,12 @@ def _compute_jerk(robot_acc: np.ndarray, dt: float) -> np.ndarray:
 ```python
 def _compute_distance_matrix(data: EpisodeData) -> np.ndarray:
     """Compute robot-pedestrian distance matrix.
-    
+
     Parameters
     ----------
     data : EpisodeData
         Episode trajectory container
-        
+
     Returns
     -------
     np.ndarray
@@ -261,7 +261,7 @@ MetricValue ──aggregates into──> SummaryStatistics (mean, median, CI)
 
 ## Migration Notes
 
-**Backward Compatibility**: 
+**Backward Compatibility**:
 - New `obstacles` and `other_agents_pos` fields are optional (default None)
 - Existing code creating `EpisodeData` without these fields continues to work
 - Metrics gracefully degrade when optional fields absent (return 0.0 or NaN)

@@ -40,4 +40,3 @@ do_not_read_by_default:
   - tests/benchmark/**
   - specs/**
   - output/benchmarks/**
-

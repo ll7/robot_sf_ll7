@@ -1,8 +1,8 @@
 # Feature Specification: Extract reusable helpers from examples/classic_interactions_pygame.py
 
-**Feature Branch**: `139-extract-reusable-helpers`  
-**Created**: 2025-09-29  
-**Status**: Draft  
+**Feature Branch**: `139-extract-reusable-helpers`
+**Created**: 2025-09-29
+**Status**: Draft
 **Input**: User description: "Extract reusable helpers from examples/classic_interactions_pygame.py into robot_sf/benchmark modules: move frame/recording helpers, plotting/overlay helpers, demo/test helpers, model/env utilities, and summary/validation helpers into appropriate benchmark modules (visualization.py, utils.py, model_utils.py, map_utils.py). Include tests, docs/design note, and a migration plan."
 
 ## Execution Flow (main)

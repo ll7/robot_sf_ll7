@@ -1,7 +1,7 @@
 # Quickstart: SVG-Based Global Planner
 
-**Audience**: Developers integrating the global planner into robot_sf environments  
-**Prerequisites**: Familiarity with robot_sf factory pattern and unified configs  
+**Audience**: Developers integrating the global planner into robot_sf environments
+**Prerequisites**: Familiarity with robot_sf factory pattern and unified configs
 **Time to Complete**: ~10 minutes
 
 ## Overview
@@ -144,11 +144,11 @@ Edit your SVG map to include POI markers:
 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="10">
   <!-- Obstacles -->
   <rect class="obstacle" x="5" y="3" width="3" height="2" />
-  
+
   <!-- POIs (point-of-interest waypoints) -->
-  <circle class="poi" id="poi_corridor_mid" cx="10" cy="5" r="0.3" 
+  <circle class="poi" id="poi_corridor_mid" cx="10" cy="5" r="0.3"
           label="corridor_midpoint" />
-  <circle class="poi" id="poi_junction" cx="15" cy="7" r="0.3" 
+  <circle class="poi" id="poi_junction" cx="15" cy="7" r="0.3"
           label="junction_A" />
 </svg>
 ```
@@ -418,14 +418,14 @@ sampler = POISampler(map_def, seed=42)
 scenarios = []
 for i in range(50):
     # Random start/goal
-    start = Vec2D(np.random.uniform(0, map_def.width), 
+    start = Vec2D(np.random.uniform(0, map_def.width),
                   np.random.uniform(0, map_def.height))
-    goal = Vec2D(np.random.uniform(0, map_def.width), 
+    goal = Vec2D(np.random.uniform(0, map_def.width),
                  np.random.uniform(0, map_def.height))
-    
+
     # Optional: route via POIs
     via_pois = sampler.sample(count=2, strategy="random")
-    
+
     path = planner.plan(start, goal)
     scenarios.append({"start": start, "goal": goal, "path": path})
 
@@ -538,12 +538,12 @@ config = PlannerConfig(smoothing_epsilon=0.05)
 
 ## Summary
 
-✓ **Installation**: Add `pyvisgraph` and `networkx` dependencies  
-✓ **Basic Usage**: `GlobalPlanner(map_def).plan(start, goal)`  
-✓ **Integration**: Set `config.use_planner = True` in gym environments  
-✓ **POIs**: Annotate maps with `<circle class="poi">` for waypoints  
-✓ **Performance**: Enable caching for <100ms repeated queries  
-✓ **Error Handling**: Catch `PlanningFailedError` or enable fallback  
+✓ **Installation**: Add `pyvisgraph` and `networkx` dependencies
+✓ **Basic Usage**: `GlobalPlanner(map_def).plan(start, goal)`
+✓ **Integration**: Set `config.use_planner = True` in gym environments
+✓ **POIs**: Annotate maps with `<circle class="poi">` for waypoints
+✓ **Performance**: Enable caching for <100ms repeated queries
+✓ **Error Handling**: Catch `PlanningFailedError` or enable fallback
 
 **Estimated time savings**: 70% reduction in map creation effort vs manual waypoints.
 

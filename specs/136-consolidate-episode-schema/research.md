@@ -24,7 +24,7 @@
 **Findings**:
 - **Current hook setup**: Pre-commit framework with Ruff linting/formatting only
 - **Hook type needed**: Pre-commit hook to scan for schema file patterns
-- **Detection logic**: 
+- **Detection logic**:
   - Identify JSON files with schema patterns (*.schema.v*.json)
   - Compare file contents using hashing or structural diff
   - Flag commits containing duplicate schemas

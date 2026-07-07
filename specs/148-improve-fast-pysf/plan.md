@@ -11,30 +11,30 @@ Integrate fast-pysf physics tests into the main pytest suite, resolve all 24 PR 
 
 ## Technical Context
 
-**Language/Version**: Python 3.13.1 (project standard, already in use)  
-**Primary Dependencies**: 
+**Language/Version**: Python 3.13.1 (project standard, already in use)
+**Primary Dependencies**:
 - pytest 8.3.4 (test framework)
 - ruff 0.9.2+ (linting/formatting)
 - ty (type checking via uvx)
 - uv (package manager and task runner)
 - fast-pysf subtree (NumPy 1.26.4, numba 0.60.0 for JIT-compiled physics)
 
-**Storage**: N/A (test fixtures use file-based map JSON in fast-pysf/tests/test_maps/)  
-**Testing**: pytest with coverage plugin, headless mode via environment variables (DISPLAY=, MPLBACKEND=Agg, SDL_VIDEODRIVER=dummy)  
-**Target Platform**: macOS (dev), Linux (CI), headless execution required  
-**Project Type**: Single Python library with integrated subtree (fast-pysf/ as git subtree)  
-**Performance Goals**: 
+**Storage**: N/A (test fixtures use file-based map JSON in fast-pysf/tests/test_maps/)
+**Testing**: pytest with coverage plugin, headless mode via environment variables (DISPLAY=, MPLBACKEND=Agg, SDL_VIDEODRIVER=dummy)
+**Target Platform**: macOS (dev), Linux (CI), headless execution required
+**Project Type**: Single Python library with integrated subtree (fast-pysf/ as git subtree)
+**Performance Goals**:
 - Test suite execution < 5 minutes total (robot_sf + fast-pysf combined)
 - Fast-pysf tests < 60 seconds
 - No degradation to existing ~43 robot_sf tests performance
 
-**Constraints**: 
+**Constraints**:
 - Must maintain backward compatibility with FastPysfWrapper integration point
 - Type annotations cannot break numba JIT compilation (@njit decorated functions)
 - Ruff and ty configurations must not conflict with existing robot_sf settings
 - All tests must run headless for CI compatibility
 
-**Scale/Scope**: 
+**Scale/Scope**:
 - Current: ~43 tests in tests/, 12 tests in fast-pysf/tests/ (2 failing due to missing fixtures)
 - Target: 55+ unified tests, all passing
 - PR #236 review comments: 24 issues (7 high, 10 medium, 7 low priority)
@@ -51,7 +51,7 @@ Integrate fast-pysf physics tests into the main pytest suite, resolve all 24 PR 
 - No changes to deterministic simulation or benchmark outputs
 - Test infrastructure improvements support reproducibility validation
 
-**II. Factory-Based Environment Abstraction**: ✅ PASS  
+**II. Factory-Based Environment Abstraction**: ✅ PASS
 - No changes to factory functions or environment interfaces
 - FastPysfWrapper integration point preserved
 - Quality improvements are internal to fast-pysf subtree

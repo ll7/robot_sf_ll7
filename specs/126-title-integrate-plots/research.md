@@ -50,4 +50,3 @@ Alternatives: Implicit renderer assumption (opaque); rejected due to reduced tra
 - Reproducibility: deterministic selection & stable filenames
 - Transparency: manifest JSON + skip notes
 - Backward compatibility: no schema breaks, no new config fields
-

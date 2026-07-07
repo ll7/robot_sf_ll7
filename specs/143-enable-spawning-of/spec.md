@@ -1,8 +1,8 @@
 # Feature Specification: Single Pedestrian Spawning and Control
 
-**Feature Branch**: `143-enable-spawning-of`  
-**Created**: October 17, 2025  
-**Status**: Draft  
+**Feature Branch**: `143-enable-spawning-of`
+**Created**: October 17, 2025
+**Status**: Draft
 **Input**: User description: "Enable spawning of single pedestrians with one goal or one trajectory in robot-sf"
 
 ## User Scenarios & Testing *(mandatory)*

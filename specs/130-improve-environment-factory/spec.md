@@ -1,8 +1,8 @@
 # Feature Specification: Improve Environment Factory Ergonomics
 
-**Feature Branch**: `130-improve-environment-factory`  
-**Created**: 2025-09-22  
-**Status**: Updated (post-implementation alignment)  
+**Feature Branch**: `130-improve-environment-factory`
+**Created**: 2025-09-22
+**Status**: Updated (post-implementation alignment)
 **Input**: User description: "Improve environment_factory API ergonomics: user-friendly explicit parameters, structured option objects, better docstrings, discoverability helpers, backward-compatible migration plan"
 
 ## User Scenarios & Testing *(mandatory)*

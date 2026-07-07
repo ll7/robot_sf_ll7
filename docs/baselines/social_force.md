@@ -19,7 +19,7 @@ obs = Observation(
     dt=0.1,
     robot={
         "position": [0.0, 0.0],
-        "velocity": [0.0, 0.0], 
+        "velocity": [0.0, 0.0],
         "goal": [5.0, 5.0],
         "radius": 0.3
     },
@@ -63,20 +63,20 @@ from robot_sf.baselines.social_force import SFPlannerConfig
 config = SFPlannerConfig(
     # Action space: "velocity" for (vx, vy) or "unicycle" for (v, omega)
     action_space="velocity",
-    
+
     # Speed limits
     v_max=2.0,           # Maximum linear velocity [m/s]
     omega_max=1.0,       # Maximum angular velocity [rad/s]
-    
+
     # Goal behavior
     desired_speed=1.0,   # Preferred speed toward goal [m/s]
     tau=0.5,            # Acceleration time constant [s]
-    
+
     # Social forces (agent repulsion)
     A=5.1,              # Force amplitude [N]
     B=0.35,             # Interaction range [m]
     lambda_anisotropy=2.0,  # Forward vs backward strength
-    
+
     # Safety
     safety_clamp=True,   # Enforce velocity limits
     noise_std=0.0       # Force noise (0 = deterministic)
@@ -264,7 +264,7 @@ planner = SocialForcePlanner(config, seed=42)
 
 **Robot oscillates or shows erratic behavior:**
 - Reduce `A` (force amplitude)
-- Increase `B` (smoother force profile) 
+- Increase `B` (smoother force profile)
 - Increase `tau` (gentler acceleration)
 - Enable `clip_force` and reduce `max_force`
 

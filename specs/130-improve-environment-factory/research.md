@@ -1,8 +1,8 @@
 # Phase 0 Research: Environment Factory Ergonomics
 
-**Feature**: Improve Environment Factory Ergonomics  
-**Branch**: 130-improve-environment-factory  
-**Status**: In Progress  
+**Feature**: Improve Environment Factory Ergonomics
+**Branch**: 130-improve-environment-factory
+**Status**: In Progress
 **Purpose**: Resolve unknowns, document current state, justify design decisions before Phase 1 artifacts.
 
 ## 1. Current State Inventory (Baseline)
@@ -12,8 +12,8 @@ TODO: Enumerate existing factory functions, signatures, and internal kwargs usag
 TODO: Grep repository for prior factory invocations collecting argument names into a frequency table.
 
 ## 3. Performance Baseline (Env Creation)
-Method: Time 30 sequential creations of each factory variant (robot, image, pedestrian).  
-Metrics: mean, p95, std; compare post-change (< +5% budget).  
+Method: Time 30 sequential creations of each factory variant (robot, image, pedestrian).
+Metrics: mean, p95, std; compare post-change (< +5% budget).
 TODO: Capture measurements.
 
 ## 4. Unknowns & Decisions
@@ -27,15 +27,15 @@ TODO: Capture measurements.
 
 ## 5. Alternatives Considered
 ### A. Builder Pattern
-Pros: Chainable clarity; Cons: Overkill, increases ceremony, diverges from current simple functional API.  
+Pros: Chainable clarity; Cons: Overkill, increases ceremony, diverges from current simple functional API.
 Status: Rejected (added complexity; no multi-step state required).
 
 ### B. Single Monolithic Options Object
-Pros: One param; Cons: Hides discoverability in IDE signature; discourages frequent simple usage.  
+Pros: One param; Cons: Hides discoverability in IDE signature; discourages frequent simple usage.
 Status: Rejected in favor of two focused option dataclasses.
 
 ### C. Dynamic Registry of Factories
-Pros: Extensibility; Cons: Adds indirection, not required for current scope.  
+Pros: Extensibility; Cons: Adds indirection, not required for current scope.
 Status: Rejected (YAGNI).
 
 ## 6. Preliminary Decisions (Proposed)

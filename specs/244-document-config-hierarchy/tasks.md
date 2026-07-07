@@ -1,6 +1,6 @@
 # Tasks: Document Configuration Hierarchy and Deprecate Legacy Config Classes
 
-**Feature**: Issue #244  
+**Feature**: Issue #244
 **Branch**: `244-document-config-hierarchy`
 **Status**: Ready for Implementation
 
@@ -8,8 +8,8 @@
 
 This feature implements configuration hierarchy documentation and legacy config deprecation through 4 independent user stories, organized by priority. Each story is independently testable and can be implemented incrementally.
 
-**Total Tasks**: 47  
-**Estimated Effort**: 4-6 hours  
+**Total Tasks**: 47
+**Estimated Effort**: 4-6 hours
 **MVP Scope**: User Story 1 only (Configuration Precedence Documentation)
 
 ---
@@ -213,7 +213,7 @@ uv run pytest tests -v | grep -E "(PASSED|FAILED|ERROR)"- [ ] **Task 4.1**: Add 
 
 ```markdown    - Documented precedence: Code Defaults < YAML Files < Runtime Parameters
 
-### EnvSettings → RobotSimulationConfig    
+### EnvSettings → RobotSimulationConfig
 
     ### Deprecated
 

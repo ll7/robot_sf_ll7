@@ -148,16 +148,16 @@ print(env.sim_config.peds_per_area_m2)  # 0.05
 ```
 
 ## FAQ
-**Q: Where is the density actually used?**  
+**Q: Where is the density actually used?**
 In population sizing inside `robot_sf/ped_npc/ped_population.py` (ceil of area × density) and downstream in physics interactions.
 
-**Q: Can I set different densities for different spawn zones?**  
+**Q: Can I set different densities for different spawn zones?**
 Not yet; current model applies a uniform global density. You can approximate heterogeneity by editing spawn zone sizes or temporarily forking the population logic.
 
-**Q: Why does the default difficulty ladder include 0.01?**  
+**Q: Why does the default difficulty ladder include 0.01?**
 To support tutorial / low-interaction demos without modifying benchmark YAMLs.
 
-**Q: Do videos or visual rendering depend on density?**  
+**Q: Do videos or visual rendering depend on density?**
 Only indirectly—more pedestrians means more rendering load, potentially lowering fps if uncapped.
 
 ---

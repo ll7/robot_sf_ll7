@@ -6,7 +6,7 @@ and downstream tooling.
 
 ## Default Observation Mode (`ObservationMode.DEFAULT_GYM`)
 
-**Producer:** `robot_sf/sensor/sensor_fusion.py`  
+**Producer:** `robot_sf/sensor/sensor_fusion.py`
 **Consumer:** `robot_sf/gym_env/robot_env.py`
 
 ### Keys and Shapes
@@ -40,7 +40,7 @@ and downstream tooling.
 
 ## SocNav Structured Observation Mode (`ObservationMode.SOCNAV_STRUCT`)
 
-**Producer:** `robot_sf/sensor/socnav_observation.py`  
+**Producer:** `robot_sf/sensor/socnav_observation.py`
 **Consumer:** `robot_sf/gym_env/robot_env.py`
 
 ### Keys and Shapes (Structured)

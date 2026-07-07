@@ -1,8 +1,8 @@
 # Feature Specification: Organize and Categorize Example Files
 
-**Feature Branch**: `245-organize-examples`  
-**Created**: November 12, 2025  
-**Status**: In Progress  
+**Feature Branch**: `245-organize-examples`
+**Created**: November 12, 2025
+**Status**: In Progress
 **Input**: User description: "Reorganize and categorize 84 example files into tiered structure with clear documentation for improved discoverability and maintainability"
 
 ## Overview

@@ -34,27 +34,27 @@
 Core benchmark foundations implemented. This extension adds a curated set of SVG maps modeling classical human–robot interaction patterns (crossing, head‑on corridor passing, overtaking, bottleneck negotiation, doorway traversal, merging flows, T‑intersection, group crossing). A unified scenario matrix (`classic_interactions.yaml`) will reference these maps with density/flow variants, enabling reproducible evaluation of social navigation policies in well‑studied micro‑navigation motifs.
 
 ## Technical Context
-**Language/Version**: Python 3.12+ (uv managed)  
-**Primary Dependencies**: Gymnasium-like env layer (internal), Fast-pysf (pedestrian physics submodule), NumPy, Matplotlib (figures), PPO model artifacts.  
-**Storage**: File-system (JSONL episodes, SVG maps, generated figures).  
-**Testing**: pytest (unit + integration + schema), headless CI with dummy video backend.  
-**Target Platform**: Linux (CI) & macOS dev; headless execution required.  
-**Project Type**: Single Python library + scripts (benchmark & docs generators).  
-**Performance Goals**: Maintain creation <3s, reset throughput soft >0.5/s (already instrumented).  
-**Constraints**: Deterministic seeding; maps must not introduce non-deterministic ordering; keep SVG obstacle sets minimal (perf).  
+**Language/Version**: Python 3.12+ (uv managed)
+**Primary Dependencies**: Gymnasium-like env layer (internal), Fast-pysf (pedestrian physics submodule), NumPy, Matplotlib (figures), PPO model artifacts.
+**Storage**: File-system (JSONL episodes, SVG maps, generated figures).
+**Testing**: pytest (unit + integration + schema), headless CI with dummy video backend.
+**Target Platform**: Linux (CI) & macOS dev; headless execution required.
+**Project Type**: Single Python library + scripts (benchmark & docs generators).
+**Performance Goals**: Maintain creation <3s, reset throughput soft >0.5/s (already instrumented).
+**Constraints**: Deterministic seeding; maps must not introduce non-deterministic ordering; keep SVG obstacle sets minimal (perf).
 **Scale/Scope**: 8 new interaction map archetypes * density variants (low/med/high) generating ~24–32 scenario entries.
 
 ## Constitution Check
 All additions comply with Constitution principles:
-I Reproducibility: Maps are deterministic static SVG assets (versioned).  
-II Factory Abstraction: No new factory functions; scenarios reference existing env factory.  
-III Benchmark First: Each scenario produces standardized episodes (no schema change).  
-IV Unified Config: Scenario YAML only; no ad-hoc kwargs added in code.  
-V Minimal Baselines: No new baselines introduced.  
-VI Metrics Transparency: Metrics unchanged; scenarios just expand coverage.  
-VII Backward Compatibility: No interface or schema change → no version bump.  
-VIII Documentation: New quickstart + index link will be added.  
-IX Tests: Add smoke for scenario matrix validation + one spawn parsing test.  
+I Reproducibility: Maps are deterministic static SVG assets (versioned).
+II Factory Abstraction: No new factory functions; scenarios reference existing env factory.
+III Benchmark First: Each scenario produces standardized episodes (no schema change).
+IV Unified Config: Scenario YAML only; no ad-hoc kwargs added in code.
+V Minimal Baselines: No new baselines introduced.
+VI Metrics Transparency: Metrics unchanged; scenarios just expand coverage.
+VII Backward Compatibility: No interface or schema change → no version bump.
+VIII Documentation: New quickstart + index link will be added.
+IX Tests: Add smoke for scenario matrix validation + one spawn parsing test.
 X Scope Discipline: Focus remains social navigation micro‑interaction contexts.
 
 Initial Gate: PASS (no violations requiring Complexity Tracking).
@@ -173,12 +173,12 @@ Adaptation: No external API endpoints; contracts map to internal scenario schema
 - Load `.specify/templates/tasks-template.md` as base
 - Generate tasks from Phase 1 design docs (contracts, data model, quickstart)
 - Each contract → contract test task [P]
-- Each entity → model creation task [P] 
+- Each entity → model creation task [P]
 - Each user story → integration test task
 - Implementation tasks to make tests pass
 
 **Ordering Strategy**:
-- TDD order: Tests before implementation 
+- TDD order: Tests before implementation
 - Dependency order: Models before services before UI
 - Mark [P] for parallel execution (independent files)
 
@@ -189,8 +189,8 @@ Adaptation: No external API endpoints; contracts map to internal scenario schema
 ## Phase 3+: Future Implementation
 *These phases are beyond the scope of the /plan command*
 
-**Phase 3**: Task execution (/tasks command creates tasks.md)  
-**Phase 4**: Implementation (execute tasks.md following constitutional principles)  
+**Phase 3**: Task execution (/tasks command creates tasks.md)
+**Phase 4**: Implementation (execute tasks.md following constitutional principles)
 **Phase 5**: Validation (run tests, execute quickstart.md, performance validation)
 
 ## Complexity Tracking

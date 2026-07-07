@@ -1,7 +1,7 @@
 # Research & Technical Decisions: Extended Occupancy Grid
 
-**Date**: 2025-12-04  
-**Phase**: Phase 0 (Research & Clarification)  
+**Date**: 2025-12-04
+**Phase**: Phase 0 (Research & Clarification)
 **Status**: Complete
 
 This document resolves all technical unknowns and documents design decisions for the occupancy grid feature.
@@ -48,7 +48,7 @@ How to extract pedestrian positions and radii per timestep? Are they available v
 **Extract pedestrians from wrapper state after each step; cache for current frame**
 
 - **Rationale**: Pedestrians are dynamic; grid must reflect current state, recomputed each frame
-- **Approach**: 
+- **Approach**:
   1. In `OccupancyGrid.update()`, call `sim.get_pedestrians()` to fetch positions
   2. For each pedestrian, rasterize circle (position + radius) onto pedestrian channel
   3. Use Bresenham circle or simple grid-scan (acceptable for <100 pedestrians)
@@ -213,7 +213,7 @@ Should occupancy be binary (0/1) or continuous probability (0–1)?
 **Default to binary; allow continuous via config flag**
 
 - **Rationale**: Simple common case (binary) by default; advanced use case (continuous) opt-in
-- **Implementation**: 
+- **Implementation**:
   - Binary mode: Cell is 1.0 if ANY obstacle touches; else 0.0
   - Continuous mode: Cell value = max(occupancy fraction from obstacles, occupancy from pedestrians)
 - **Config**: `GridConfig.occupancy_type = "binary" | "continuous"`
@@ -239,7 +239,7 @@ How to implement ego-frame (robot-relative) vs. world-frame (global) grids corre
 - **Rationale**: Different use cases (learning prefers consistent ego-frame; global planning prefers world-frame)
 - **Approach**:
   1. **World-frame**: Grid origin at world (0, 0); cells map directly to world coordinates
-  2. **Ego-frame**: 
+  2. **Ego-frame**:
      - Translate obstacles to robot-relative coordinates: `(dx, dy) = (obs_x - robot_x, obs_y - robot_y)`
      - Rotate by inverse robot heading: `(dx', dy') = rotate(-robot_theta, (dx, dy))`
      - Rasterize onto grid (origin at robot center)

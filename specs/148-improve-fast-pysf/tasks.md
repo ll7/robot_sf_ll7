@@ -86,7 +86,7 @@ description: "Task list for fast-pysf integration quality improvements"
 
 ### Verification Tasks ✅ COMPLETE
 
-- [x] T010 [US1] Test unified execution: `uv run pytest -v` 
+- [x] T010 [US1] Test unified execution: `uv run pytest -v`
   - **RESULT**: ✅ 893 tests collected (881 robot_sf + 12 fast-pysf)
 - [x] T011 [US1] Test selective execution: `uv run pytest tests -v`
   - **RESULT**: ✅ Works - can run robot_sf tests only

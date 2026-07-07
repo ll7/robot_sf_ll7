@@ -16,7 +16,7 @@
 | Unneeded artifact generation (plots/videos) | Extra CPU time | Check config flags | Force smoke mode, disable videos/plots |
 | Parallel worker spawn overhead | Startup > workload | Observe if workers>1 used | Set workers=1 (minimal) |
 | Full metric aggregation & bootstrap | Adds statistical passes | Inspect if bootstrap enabled | Disable bootstrap (set samples=0) |
-| Disk I/O for large metrics | Delay on JSON writes | Count metrics fields | Use minimal metrics or early flush | 
+| Disk I/O for large metrics | Delay on JSON writes | Count metrics fields | Use minimal metrics or early flush |
 | Re-reading scenario matrix each run | Duplicate YAML parse cost | Small but additive | Acceptable (microseconds) |
 
 ## Non-Negotiable Reproducibility Assertions

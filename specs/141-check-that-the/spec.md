@@ -1,8 +1,8 @@
 # Feature Specification: Verify Feature Extractor Training Flow
 
-**Feature Branch**: `141-check-that-the`  
-**Created**: 2025-10-02  
-**Status**: Draft  
+**Feature Branch**: `141-check-that-the`
+**Created**: 2025-10-02
+**Status**: Draft
 **Input**: User description: "Check that the new feature extractor works as intended in scripts/multi_extractor_training.py. Modify output to ./tmp, ensure single-thread fallback and cross-platform (mac m4, Ubuntu RTX) configs. Optionally refactor feature extractor helpers for reuse."
 
 ---

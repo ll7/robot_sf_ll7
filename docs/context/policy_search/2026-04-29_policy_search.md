@@ -1,6 +1,6 @@
 ## Executive Summary
 
-Create this as an **optimization-and-evidence project**, not as a “try more planners” project. The current benchmark already shows the key problem: `ppo` has the best success rate but too many collisions, while `orca` is safer but less successful. In the frozen campaign, `orca` reaches **18.44% success / 3.55% collision**, while `ppo` reaches **24.82% success / 9.93% collision**; the paper explicitly concludes that no planner dominates both safety and task completion. 
+Create this as an **optimization-and-evidence project**, not as a “try more planners” project. The current benchmark already shows the key problem: `ppo` has the best success rate but too many collisions, while `orca` is safer but less successful. In the frozen campaign, `orca` reaches **18.44% success / 3.55% collision**, while `ppo` reaches **24.82% success / 9.93% collision**; the paper explicitly concludes that no planner dominates both safety and task completion.
 
 The project should therefore search for a **Pareto-improving local planning stack**: higher success than `orca`, collision close to `orca`, and better scenario-stratified robustness than the current `ppo`. The strongest near-term direction is not pure RL. It is a **hybrid stack**:
 
@@ -35,7 +35,7 @@ Produce one or more planner candidates that can be promoted from experimental st
 
 ### Non-goal
 
-Do not chase a single scalar leaderboard score. The paper explicitly treats multi-objective interpretation as necessary because success alone can hide collision risk, discomfort, or unstable motion. 
+Do not chase a single scalar leaderboard score. The paper explicitly treats multi-objective interpretation as necessary because success alone can hide collision risk, discomfort, or unstable motion.
 
 ## 2. Definition of “Substantially Better”
 
@@ -200,7 +200,7 @@ Which scenario family caused the regression?
 Is the result seed-stable enough to continue?
 ```
 
-This aligns with the paper’s claim that the value of the benchmark is not a single planner ranking, but stratifiable and verifiable evidence. 
+This aligns with the paper’s claim that the value of the benchmark is not a single planner ranking, but stratifiable and verifiable evidence.
 
 ### Phase 1: Establish a nominal sanity matrix
 
@@ -253,7 +253,7 @@ Purpose:
 Catch failure modes cheaply before running all 47 scenarios × seeds × planners.
 ```
 
-This slice should include both classic constrained geometry and Francis interaction motifs because the paper shows that aggregate performance can hide scenario-type-specific collision risk. 
+This slice should include both classic constrained geometry and Francis interaction motifs because the paper shows that aggregate performance can hide scenario-type-specific collision risk.
 
 ### Phase 3: Candidate planner families
 
@@ -368,7 +368,7 @@ success >= current_ppo_success - 0.03
 collision <= 0.05
 ```
 
-This is attractive because the current PPO has the best success rate but poor safety. The paper explicitly states that PPO’s higher success is paired with substantially higher collision exposure than ORCA. 
+This is attractive because the current PPO has the best success rate but poor safety. The paper explicitly states that PPO’s higher success is paired with substantially higher collision exposure than ORCA.
 
 #### Candidate 4: `scenario_adaptive_orca_v1`
 
@@ -462,7 +462,7 @@ Stage 6: Promotion decision
   - promote, revise, or discard
 ```
 
-The paper notes that single-seed estimates can misrepresent success rates by up to 15 percentage points, so seed-aware evaluation is not optional. 
+The paper notes that single-seed estimates can misrepresent success rates by up to 15 percentage points, so seed-aware evaluation is not optional.
 
 ## 6. Progress Tracking
 
@@ -802,7 +802,7 @@ PPO already provides higher success but unsafe collision exposure.
 A hybrid planner can use ORCA-like safety constraints while adding progress-optimized trajectory scoring.
 ```
 
-The paper’s limitation section also identifies exactly the extensions this project should implement: broader planner coverage, paired nominal/stress evaluation, cross-kinematics evaluation, and scenario-stratified reporting. 
+The paper’s limitation section also identifies exactly the extensions this project should implement: broader planner coverage, paired nominal/stress evaluation, cross-kinematics evaluation, and scenario-stratified reporting.
 
 ## 11. What Not To Do
 
@@ -816,7 +816,7 @@ Do not tune only on the full matrix without a held-out sanity/stress split.
 
 Do not promote a planner because its mean score looks good while classic constrained scenarios remain unsafe.
 
-Do not use SNQI as the main optimization target. The paper states that SNQI is retained as an implementation-level aid, not a calibrated scientific endpoint. 
+Do not use SNQI as the main optimization target. The paper states that SNQI is retained as an implementation-level aid, not a calibrated scientific endpoint.
 
 ## 12. Minimal First Milestone
 

@@ -1,8 +1,8 @@
 # Quickstart: Utility Module Consolidation Migration
 
-**Feature**: 241-consolidate-utility-modules  
-**Audience**: Robot SF developers  
-**Time to Complete**: 5-10 minutes  
+**Feature**: 241-consolidate-utility-modules
+**Audience**: Robot SF developers
+**Time to Complete**: 5-10 minutes
 **Date**: November 10, 2025
 
 ## Overview
@@ -11,7 +11,7 @@ This guide walks you through migrating from the old fragmented utility structure
 
 **What Changed**:
 - ❌ Removed: `robot_sf/util/` directory
-- ❌ Removed: `robot_sf/utils/` directory  
+- ❌ Removed: `robot_sf/utils/` directory
 - ✅ Consolidated: All utilities now in `robot_sf/common/`
 - ✅ Renamed: `seed_utils.py` → `seed.py`, `compatibility.py` → `compat.py`
 
@@ -39,13 +39,13 @@ git rebase main
 
 In your code editor (VS Code, PyCharm, etc.):
 
-1. **Find**: `from robot_sf.util.types import`  
+1. **Find**: `from robot_sf.util.types import`
    **Replace**: `from robot_sf.common.types import`
 
-2. **Find**: `from robot_sf.util.compatibility import`  
+2. **Find**: `from robot_sf.util.compatibility import`
    **Replace**: `from robot_sf.common.compat import`
 
-3. **Find**: `from robot_sf.utils.seed_utils import`  
+3. **Find**: `from robot_sf.utils.seed_utils import`
    **Replace**: `from robot_sf.common.seed import`
 
 **Option B: Automated Script (For Multiple Files)**

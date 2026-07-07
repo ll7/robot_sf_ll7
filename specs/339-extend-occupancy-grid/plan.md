@@ -1,6 +1,6 @@
 # Implementation Plan: Extended Occupancy Grid with Multi-Channel Support
 
-**Branch**: `339-extend-occupancy-grid` | **Date**: 2025-12-04 | **Spec**: [specs/339-extend-occupancy-grid/spec.md](../spec.md)  
+**Branch**: `339-extend-occupancy-grid` | **Date**: 2025-12-04 | **Spec**: [specs/339-extend-occupancy-grid/spec.md](../spec.md)
 **Input**: Feature specification from `/specs/339-extend-occupancy-grid/spec.md`
 
 ## Summary
@@ -9,35 +9,35 @@ Extend the occupancy grid module in `robot_sf/nav/occupancy.py` to support confi
 
 ## Technical Context
 
-**Language/Version**: Python 3.11 (uv-managed environment; see `.venv`)  
-**Primary Dependencies**: 
+**Language/Version**: Python 3.11 (uv-managed environment; see `.venv`)
+**Primary Dependencies**:
 - `gymnasium` (environment API)
 - `robot_sf.gym_env` (factory functions, unified config)
 - `robot_sf.sim.FastPysfWrapper` (pedestrian physics)
 - `pygame` (visualization; optional for render)
 - `numpy` (grid computation)
 
-**Storage**: File-based (configs in YAML, maps in SVG, grids computed in-memory, no persistence required)  
-**Testing**: 
+**Storage**: File-based (configs in YAML, maps in SVG, grids computed in-memory, no persistence required)
+**Testing**:
 - Unit/integration: `pytest` (tests/ suite)
 - Visual/GUI: `pytest` headless mode with `DISPLAY=`, `MPLBACKEND=Agg`, `SDL_VIDEODRIVER=dummy` (tests/pygame/)
 - Coverage: `coverage.py` (automatic collection)
 
-**Target Platform**: Linux/macOS headless + interactive pygame desktop  
-**Project Type**: Single library (`robot_sf/` package) with examples/scripts  
-**Performance Goals**: 
+**Target Platform**: Linux/macOS headless + interactive pygame desktop
+**Project Type**: Single library (`robot_sf/` package) with examples/scripts
+**Performance Goals**:
 - Grid generation: <5ms for 10m×10m at 0.1m resolution
 - POI queries: <1ms per query
 - Visualization: 30+ FPS with grid overlay
 - Test coverage: 100% of `occupancy.py`
 
-**Constraints**: 
+**Constraints**:
 - Planar (2D) motion only; no z-axis/height considerations
 - Deterministic seed propagation for reproducibility
 - O(1) or O(log N) query performance (spatial index required for large obstacle sets)
 - Backward compatible with existing `occupancy.py` API (extend, don't break)
 
-**Scale/Scope**: 
+**Scale/Scope**:
 - Single module extension (~500–1000 LOC for core grid + channels)
 - Up to 100 pedestrians per scene
 - Grids up to 20m × 20m at variable resolution
@@ -147,17 +147,17 @@ docs/dev/occupancy/
 - **OccupancyGrid**: Main grid (2D numpy array or dict of channels)
   - Fields: size_m (tuple), resolution_m (float), frame (str: "ego" or "world"), timestamp (float), channels (dict)
   - Invariants: All channels same shape (height, width); size > 0; resolution > 0
-  
+
 - **GridChannel**: Named occupancy layer
   - Fields: name (str), data (2D numpy array float32), occupancy_type (str: "binary" or "continuous")
   - Invariants: 0 ≤ data ≤ 1.0
-  
+
 - **GridConfig**: Configuration
   - Fields: size_m, resolution_m, frame, enabled_channels (list), include_pedestrians (bool), include_obstacles (bool)
-  
+
 - **POIQuery**: Query input
   - Fields: world_x, world_y, region_type ("point" or "circle"), radius_m (if circle)
-  
+
 - **POIResult**: Query output
   - Fields: is_occupied (bool), occupancy_value (float), channel_values (dict), is_within_bounds (bool)
 

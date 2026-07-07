@@ -1,6 +1,6 @@
 # Tasks: Consolidate Utility Modules
 
-**Input**: Design documents from `/specs/241-consolidate-utility-modules/`  
+**Input**: Design documents from `/specs/241-consolidate-utility-modules/`
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/api-contract.md, quickstart.md
 
 **Tests**: This is a refactoring task - no new tests required. Existing 893-test suite validates migration correctness.

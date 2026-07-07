@@ -91,16 +91,16 @@ Single pedestrians can be defined in SVG maps using circle elements with specifi
 **Example SVG snippet:**
 ```xml
 <!-- Pedestrian with goal -->
-<circle cx="30" cy="100" r="2" 
-        inkscape:label="single_ped_ped1_start" 
+<circle cx="30" cy="100" r="2"
+        inkscape:label="single_ped_ped1_start"
         id="ped1_start" />
-<circle cx="170" cy="100" r="2" 
-        inkscape:label="single_ped_ped1_goal" 
+<circle cx="170" cy="100" r="2"
+        inkscape:label="single_ped_ped1_goal"
         id="ped1_goal" />
 
 <!-- Static pedestrian (no goal marker) -->
-<circle cx="100" cy="50" r="2" 
-        inkscape:label="single_ped_vendor_start" 
+<circle cx="100" cy="50" r="2"
+        inkscape:label="single_ped_vendor_start"
         id="vendor_start" />
 ```
 

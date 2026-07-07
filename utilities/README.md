@@ -41,8 +41,8 @@ The script automatically converts:
   # Before
   from robot_sf.gym_env.robot_env import RobotEnv
   from robot_sf.gym_env.env_config import EnvSettings
-  
-  # After  
+
+  # After
   from robot_sf.gym_env.environment_factory import make_robot_env
   from robot_sf.gym_env.unified_config import RobotSimulationConfig
   ```
@@ -51,7 +51,7 @@ The script automatically converts:
   ```python
   # Before
   env = RobotEnv(env_config=config, debug=True)
-  
+
   # After
   env = make_robot_env(config=config, debug=True)
   ```
@@ -60,7 +60,7 @@ The script automatically converts:
   ```python
   # Before
   config = EnvSettings()
-  
+
   # After
   config = RobotSimulationConfig()
   ```

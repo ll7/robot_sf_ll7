@@ -122,7 +122,7 @@ class DubinsCar(Dynamics):
 
     @staticmethod
     def convert_K_to_world_coordinates(ref_config, K_egocentric_nkfd, K_world_nkfd=None, mode='assign'):
-        """ Converts LQR Feedback matrix K_egocentric_nkfd (n=batch size, k=time, f=action size, d=state size) 
+        """ Converts LQR Feedback matrix K_egocentric_nkfd (n=batch size, k=time, f=action size, d=state size)
         to the world coordinate frame assuming ref_config is the origin of the egocentric coordinate frame
         in the world coordinate frame. If mode is assign the result is assigned to
         K_egocentric_nkfd, else a new tensor is created."""
@@ -140,7 +140,7 @@ class DubinsCar(Dynamics):
 
     @staticmethod
     def convert_K_to_egocentric_coordinates(ref_config, K_world_nkfd, K_egocentric_nkfd=None, mode='assign'):
-        """ Converts LQR Feedback matrix K_world_nkfd (n=batch size, k=time, f=action size, d=state size) 
+        """ Converts LQR Feedback matrix K_world_nkfd (n=batch size, k=time, f=action size, d=state size)
         to the egocentric coordinate frame assuming ref_config is the origin of the egocentric coordinate frame
         in the world coordinate frame. If mode is assign the result is assigned to
         K_world_nkfd, else a new tensor is created."""

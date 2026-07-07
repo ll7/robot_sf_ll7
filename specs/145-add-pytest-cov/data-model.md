@@ -1,7 +1,7 @@
 # Data Model: Code Coverage Monitoring and Quality Tracking
 
-**Feature**: pytest-cov integration for robot_sf  
-**Date**: 2025-10-23  
+**Feature**: pytest-cov integration for robot_sf
+**Date**: 2025-10-23
 **Status**: Complete
 
 ## Purpose
@@ -490,16 +490,16 @@ While this is a library-level feature, key internal APIs for reusability:
 class GapAnalyzer:
     def __init__(self, config: GapAnalysisConfig):
         """Initialize gap analyzer with configuration."""
-    
+
     def load_coverage(self, coverage_json_path: str) -> CoverageSnapshot:
         """Load coverage data from JSON file."""
-    
+
     def identify_gaps(self, snapshot: CoverageSnapshot) -> list[CoverageGap]:
         """Identify coverage gaps and return sorted by priority."""
-    
+
     def generate_report(self, gaps: list[CoverageGap]) -> GapAnalysisReport:
         """Generate gap analysis report from identified gaps."""
-    
+
     def format_report(self, report: GapAnalysisReport, format: str) -> str:
         """Format report for output (terminal, JSON, markdown)."""
 ```
@@ -509,19 +509,19 @@ class GapAnalyzer:
 class TrendTracker:
     def __init__(self, config: TrendConfig):
         """Initialize trend tracker with configuration."""
-    
+
     def load_trend(self, storage_path: str) -> CoverageTrend:
         """Load existing trend data from JSONL file."""
-    
+
     def append_snapshot(self, trend: CoverageTrend, snapshot: CoverageSnapshot) -> None:
         """Append new snapshot to trend."""
-    
+
     def apply_retention(self, trend: CoverageTrend) -> None:
         """Prune old snapshots based on retention policy."""
-    
+
     def save_trend(self, trend: CoverageTrend, storage_path: str) -> None:
         """Save trend data to JSONL file."""
-    
+
     def calculate_statistics(self, trend: CoverageTrend) -> dict:
         """Calculate trend statistics (direction, rate, etc.)."""
 ```
@@ -531,16 +531,16 @@ class TrendTracker:
 class BaselineComparator:
     def __init__(self, threshold: float = 1.0):
         """Initialize comparator with warning threshold."""
-    
+
     def load_baseline(self, baseline_path: str) -> CoverageBaseline:
         """Load baseline coverage from cache file."""
-    
+
     def compare(self, current: CoverageSnapshot, baseline: CoverageBaseline) -> CoverageDelta:
         """Compare current coverage against baseline."""
-    
+
     def generate_warning(self, delta: CoverageDelta, format: str) -> str:
         """Generate warning message in specified format."""
-    
+
     def should_warn(self, delta: CoverageDelta) -> bool:
         """Determine if warning should be issued based on threshold."""
 ```

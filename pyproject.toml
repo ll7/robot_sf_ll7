@@ -307,7 +307,7 @@ ignore = [
     "RUF012",   # Mutable class attributes should be annotated with `typing.ClassVar`
     "RUF001",   # String contains ambiguous `‑` (NON-BREAKING HYPHEN)
     "RUF002",   # String contains ambiguous characters (EN DASH, EM DASH)
-    "RUF003",   
+    "RUF003",
     "TRY300",   # Consider moving this statement to an `else` block
     "TRY003",   # Avoid specifying long messages outside the exception class
     "N806",     # Variable `X` in function should be lowercase (too noisy for math code)

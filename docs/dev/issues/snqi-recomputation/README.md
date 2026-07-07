@@ -133,4 +133,3 @@ This checklist tracks progress against the modernization, validation, and method
 Immediate value: 1) formal schema doc + normalization rationale, 2) unified CLI integration, 3) bootstrap stability prototype to retire heuristic stability proxy.
 
 ---
-

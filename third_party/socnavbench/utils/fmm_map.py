@@ -98,8 +98,8 @@ class FmmMap:
     def _create_fmm_map_goal_array_mn(goal_positions_n2, map_size_2, dx=1, map_origin_2=np.zeros([2], dtype=np.float32), mask_grid_mn=None):
         """
         Create a new **goal array** where the goals are marked as -1 as
-        given by goal_positions_n2 and map_origin_2, with dx. 
-        mask_grid_mn is kept although unused. 
+        given by goal_positions_n2 and map_origin_2, with dx.
+        mask_grid_mn is kept although unused.
         """
         goal_array_mn = np.ones((map_size_2[1], map_size_2[0]))
         goal_index_x = np.floor(

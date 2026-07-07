@@ -30,14 +30,14 @@ Add canonical run tracking to the imitation-learning pipeline so operators alway
   the iteration process.
 -->
 
-**Language/Version**: Python 3.11 (uv-managed virtual environment)  
-**Primary Dependencies**: `robot_sf` core modules, Loguru logging, `psutil` for CPU/memory metrics, optional NVIDIA/NVML bindings, optional TensorBoard event writer, YAML/JSON helpers already present in repo  
-**Storage**: Structured JSON/Markdown manifests in `output/` (respecting `ROBOT_SF_ARTIFACT_ROOT`), optional TensorBoard log directory  
-**Testing**: Pytest (unit + integration), plus existing validation scripts under `scripts/validation/`  
-**Target Platform**: Headless Linux/macOS developers + CI runners (no GUI requirement)  
-**Project Type**: Python library + CLI/scripts layered on existing `robot_sf` package  
-**Performance Goals**: <5% telemetry overhead on pipeline runtime, ETA accuracy within ±20% after second step, telemetry sampling default interval ≥1s to avoid hot-path slowdown  
-**Constraints**: Must honor artifact policy (everything under `output/`), operate without network access, degrade gracefully when GPU metrics unavailable, concurrency-safe for multiple runs  
+**Language/Version**: Python 3.11 (uv-managed virtual environment)
+**Primary Dependencies**: `robot_sf` core modules, Loguru logging, `psutil` for CPU/memory metrics, optional NVIDIA/NVML bindings, optional TensorBoard event writer, YAML/JSON helpers already present in repo
+**Storage**: Structured JSON/Markdown manifests in `output/` (respecting `ROBOT_SF_ARTIFACT_ROOT`), optional TensorBoard log directory
+**Testing**: Pytest (unit + integration), plus existing validation scripts under `scripts/validation/`
+**Target Platform**: Headless Linux/macOS developers + CI runners (no GUI requirement)
+**Project Type**: Python library + CLI/scripts layered on existing `robot_sf` package
+**Performance Goals**: <5% telemetry overhead on pipeline runtime, ETA accuracy within ±20% after second step, telemetry sampling default interval ≥1s to avoid hot-path slowdown
+**Constraints**: Must honor artifact policy (everything under `output/`), operate without network access, degrade gracefully when GPU metrics unavailable, concurrency-safe for multiple runs
 **Scale/Scope**: Designed for tens of long-running training runs per day (hours each), manifests must retain at least 20 historical entries and support parallel execution on shared workstations/CI
 
 ## Constitution Check

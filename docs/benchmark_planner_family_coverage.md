@@ -19,7 +19,7 @@ Use this matrix conservatively:
   infrastructure, not as evidence that the corresponding literature family is fully covered.
 * Treat `missing` rows as roadmap items only.
 
-The matrix is benchmark-facing. It reflects current entrypoints, config surfaces, readiness guards, 
+The matrix is benchmark-facing. It reflects current entrypoints, config surfaces, readiness guards,
 and kinematics/adapters in this repository, not a generic literature survey.
 
 ## How To Use This Matrix
@@ -27,7 +27,7 @@ and kinematics/adapters in this repository, not a generic literature survey.
 * Current in-repo runnable support appears only in the `Current In-Repo Support` section below.
 * External-family anchor rows are useful for manuscript interpretation and benchmark-roadmap
   context, but they must not be cited as implemented in-repo benchmark support.
-* Conceptual adjacency is not a support claim. If a row depends on a source-harness reproduction, 
+* Conceptual adjacency is not a support claim. If a row depends on a source-harness reproduction,
   wrapper spike, or design overlap rather than a current repo entrypoint, keep the claim boundary
   conservative.
 

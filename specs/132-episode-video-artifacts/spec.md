@@ -1,8 +1,8 @@
 # Feature Specification: Episode Video Artifacts MVP
 
-**Feature Branch**: `132-episode-video-artifacts`  
-**Created**: 2025-09-24  
-**Status**: Draft  
+**Feature Branch**: `132-episode-video-artifacts`
+**Created**: 2025-09-24
+**Status**: Draft
 **Input**: User description: "Episode Video Artifacts MVP: add per-episode MP4 generation (synthetic or SimulationView renderer), --no-video toggle, JSON Schema manifest entries, micro-batch integration test, and performance budget (<5% overhead); document design and link in docs."
 
 ## User Scenarios & Testing

@@ -4,10 +4,10 @@
 
 This document describes the migration from git submodule to git subtree for the `fast-pysf` integration with the [pysocialforce-ll7](https://github.com/ll7/pysocialforce-ll7) repository.
 
-**Migration Date**: October 29, 2025  
-**Branch**: `ll7/replace_submodule_with_subtree`  
-**Upstream Repository**: https://github.com/ll7/pysocialforce-ll7  
-**Upstream Branch**: `robot-sf`  
+**Migration Date**: October 29, 2025
+**Branch**: `ll7/replace_submodule_with_subtree`
+**Upstream Repository**: https://github.com/ll7/pysocialforce-ll7
+**Upstream Branch**: `robot-sf`
 **Commit**: `1021476` (102147601ad439597dd40f2beb52cd952db73a0c)
 
 ## Motivation
@@ -280,6 +280,6 @@ Consider:
 
 ---
 
-**Last Updated**: October 29, 2025  
-**Maintainer**: robot_sf_ll7 team  
+**Last Updated**: October 29, 2025
+**Maintainer**: robot_sf_ll7 team
 **Related Docs**: `docs/fast_pysf_wrapper.md`, `docs/dev_guide.md`

@@ -34,15 +34,15 @@
 Implement real SimulationView-based MP4 video generation with streaming encoding, replay adapter, JSON Schema validation of manifests (plots, videos, performance), and performance/memory instrumentation while preserving deterministic selection and existing benchmark schema. Fallback to synthetic videos or skips is explicit with canonical notes. Memory soft target <100 MB per encode; performance soft budgets: plots <2s total, first video <5s.
 
 ## Technical Context
-**Language/Version**: Python 3.11 (per project toolchain uv/ruff/pytest)  
-**Primary Dependencies**: pygame (SimulationView), moviepy+ffmpeg (encoding), jsonschema (validation), psutil (memory sampling), matplotlib (plots existing), numpy  
-**Storage**: File system manifests + MP4 artifacts only (no DB)  
-**Testing**: pytest (unit/integration), jsonschema validation tests, existing smoke tests extended  
-**Target Platform**: macOS/Linux headless CI (SDL dummy for pygame)  
-**Project Type**: single (library + scripts)  
-**Performance Goals**: plots <2s, first video <5s wall time; streaming encode constant memory target <100MB peak  
-**Constraints**: Deterministic ordering, no benchmark schema changes, optional dependencies degrade gracefully  
-**Scale/Scope**: ≤5 videos default selection; episodes moderate length (hundreds of timesteps)  
+**Language/Version**: Python 3.11 (per project toolchain uv/ruff/pytest)
+**Primary Dependencies**: pygame (SimulationView), moviepy+ffmpeg (encoding), jsonschema (validation), psutil (memory sampling), matplotlib (plots existing), numpy
+**Storage**: File system manifests + MP4 artifacts only (no DB)
+**Testing**: pytest (unit/integration), jsonschema validation tests, existing smoke tests extended
+**Target Platform**: macOS/Linux headless CI (SDL dummy for pygame)
+**Project Type**: single (library + scripts)
+**Performance Goals**: plots <2s, first video <5s wall time; streaming encode constant memory target <100MB peak
+**Constraints**: Deterministic ordering, no benchmark schema changes, optional dependencies degrade gracefully
+**Scale/Scope**: ≤5 videos default selection; episodes moderate length (hundreds of timesteps)
 
 ## Constitution Check
 *Initial + Post-Design (Phases 0 & 1 complete)*
@@ -178,12 +178,12 @@ Artifacts produced:
 - Load `.specify/templates/tasks-template.md` as base
 - Generate tasks from Phase 1 design docs (contracts, data model, quickstart)
 - Each contract → contract test task [P]
-- Each entity → model creation task [P] 
+- Each entity → model creation task [P]
 - Each user story → integration test task
 - Implementation tasks to make tests pass
 
 **Ordering Strategy**:
-- TDD order: Tests before implementation 
+- TDD order: Tests before implementation
 - Dependency order: Models before services before UI
 - Mark [P] for parallel execution (independent files)
 
@@ -194,8 +194,8 @@ Artifacts produced:
 ## Phase 3+: Future Implementation
 *These phases are beyond the scope of the /plan command*
 
-**Phase 3**: Task execution (/tasks command creates tasks.md)  
-**Phase 4**: Implementation (execute tasks.md following constitutional principles)  
+**Phase 3**: Task execution (/tasks command creates tasks.md)
+**Phase 4**: Implementation (execute tasks.md following constitutional principles)
 **Phase 5**: Validation (run tests, execute quickstart.md, performance validation)
 
 ## Complexity Tracking

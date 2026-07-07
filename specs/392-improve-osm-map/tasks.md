@@ -1,9 +1,9 @@
 # Implementation Tasks: OSM-Based Map Extraction to MapDefinition
 
-**Feature**: Robust OSM-Based Map Extraction  
-**Branch**: `392-Improve-osm-map-generation`  
-**Total Tasks**: 42 tasks across 4 phases  
-**Estimated Duration**: 8 weeks  
+**Feature**: Robust OSM-Based Map Extraction
+**Branch**: `392-Improve-osm-map-generation`
+**Total Tasks**: 42 tasks across 4 phases
+**Estimated Duration**: 8 weeks
 **Status**: Ready for Phase 1
 
 ---
@@ -36,7 +36,7 @@ Tasks are organized by **user story** to enable independent, parallel implementa
 - [x] T001 Create test PBF fixture (single city block, <1MB) in `tests/fixtures/scenarios/osm_fixtures/sample_block.pbf`
   - **Acceptance**: Fixture loads without error; has buildings, footways, obstacles
   - **Requires**: bbbike.org extract or local OSM data
-  
+
 - [x] T002 Create expected output fixtures (PNG, JSON metadata) in `tests/fixtures/scenarios/osm_fixtures/expected_outputs/`
   - **Acceptance**: Reference PNG exists; metadata JSON has affine_transform
   - **Depends on**: T001
@@ -46,7 +46,7 @@ Tasks are organized by **user story** to enable independent, parallel implementa
   - **File**: `/Users/lennart/git/robot_sf_ll7/pyproject.toml`
 
 - [x] T004 [P] Create module skeleton files (empty, with docstring/imports)
-  - **Files**: 
+  - **Files**:
     - `robot_sf/nav/osm_map_builder.py`
     - `robot_sf/maps/osm_background_renderer.py`
   - **Acceptance**: Modules importable; no runtime errors
@@ -312,7 +312,7 @@ Tasks are organized by **user story** to enable independent, parallel implementa
 **All 7 tasks completed** - Programmatic configuration API fully implemented:
 
 - T036: ✓ create_spawn_zone() - 8 tests
-- T037: ✓ create_goal_zone() - 4 tests  
+- T037: ✓ create_goal_zone() - 4 tests
 - T038: ✓ create_crowded_zone() - 6 tests
 - T039: ✓ create_route() - 8 tests
 - T040: ✓ load_scenario_config() - 4 tests
@@ -379,7 +379,7 @@ Tasks are organized by **user story** to enable independent, parallel implementa
 ### Critical Path (Sequential)
 
 ```
-T001 (fixture) 
+T001 (fixture)
   ↓
 T005 → T006 → T007,T008,T009,T010,T011 → T012 → T013 (core importer)
   ↓

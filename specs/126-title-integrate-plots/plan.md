@@ -34,14 +34,14 @@
 Wire existing placeholder plot & video generation into the Full Classic Benchmark orchestrator so that after the adaptive benchmark loop finishes a single post-processing pass produces (a) deterministic lightweight plots under `plots/` and (b) representative episode videos under `videos/` accompanied by machine-readable manifests (`plot_artifacts.json`, `video_artifacts.json`). Primary renderer for videos is the existing headless-capable PyGame `SimulationView` replaying recorded episode state; fallback is the current synthetic path renderer when `SimulationView` cannot initialize or replay state. No changes to existing episode or aggregate JSON schemas; optional dependencies (matplotlib, moviepy/ffmpeg, pygame) degrade gracefully via skipped artifact entries. Performance soft budgets: plots < 2s, one default video < 5s (documented if exceeded, not failing run). Deterministic selection: first N completed episodes (respect `max_videos`).
 
 ## Technical Context
-**Language/Version**: Python 3.11 (repo standard)  
-**Primary Dependencies**: Core repo (robot_sf), optional: matplotlib (plots), pygame (`SimulationView`), moviepy + ffmpeg (mp4 encoding; fallback synthetic writer already present).  
-**Storage**: File system outputs (JSONL episodes, JSON summaries, PDFs, MP4s).  
-**Testing**: pytest (unit + integration); add new tests under `tests/benchmark_full_classic/` or reuse existing structure; headless video tests require dummy SDL vars.  
-**Target Platform**: Headless CI (Linux/macOS) + local dev.  
-**Project Type**: Single library/research benchmark repository (Option 1 structure).  
-**Performance Goals**: Additional overhead: plots < 2s total, one video < 5s (soft), deterministic selection; zero impact on adaptive convergence logic.  
-**Constraints**: Must not break benchmark resume semantics; no new CLI flags unless later justified; no schema changes to existing JSON files; graceful skip on missing optional deps; reproducible outputs (stable filenames).  
+**Language/Version**: Python 3.11 (repo standard)
+**Primary Dependencies**: Core repo (robot_sf), optional: matplotlib (plots), pygame (`SimulationView`), moviepy + ffmpeg (mp4 encoding; fallback synthetic writer already present).
+**Storage**: File system outputs (JSONL episodes, JSON summaries, PDFs, MP4s).
+**Testing**: pytest (unit + integration); add new tests under `tests/benchmark_full_classic/` or reuse existing structure; headless video tests require dummy SDL vars.
+**Target Platform**: Headless CI (Linux/macOS) + local dev.
+**Project Type**: Single library/research benchmark repository (Option 1 structure).
+**Performance Goals**: Additional overhead: plots < 2s total, one video < 5s (soft), deterministic selection; zero impact on adaptive convergence logic.
+**Constraints**: Must not break benchmark resume semantics; no new CLI flags unless later justified; no schema changes to existing JSON files; graceful skip on missing optional deps; reproducible outputs (stable filenames).
 **Scale/Scope**: Typical benchmark run: tens of episodes (<= ~200) — video generation limited to small N (default small, user bounded by existing `max_videos`).
 
 ## Constitution Check
@@ -173,12 +173,12 @@ ios/ or android/
 - Load `.specify/templates/tasks-template.md` as base
 - Generate tasks from Phase 1 design docs (contracts, data model, quickstart)
 - Each contract → contract test task [P]
-- Each entity → model creation task [P] 
+- Each entity → model creation task [P]
 - Each user story → integration test task
 - Implementation tasks to make tests pass
 
 **Ordering Strategy**:
-- TDD order: Tests before implementation 
+- TDD order: Tests before implementation
 - Dependency order: Models before services before UI
 - Mark [P] for parallel execution (independent files)
 
@@ -189,8 +189,8 @@ ios/ or android/
 ## Phase 3+: Future Implementation
 *These phases are beyond the scope of the /plan command*
 
-**Phase 3**: Task execution (/tasks command creates tasks.md)  
-**Phase 4**: Implementation (execute tasks.md following constitutional principles)  
+**Phase 3**: Task execution (/tasks command creates tasks.md)
+**Phase 4**: Implementation (execute tasks.md following constitutional principles)
 **Phase 5**: Validation (run tests, execute quickstart.md, performance validation)
 
 ## Complexity Tracking

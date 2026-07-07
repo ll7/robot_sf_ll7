@@ -1,8 +1,8 @@
 # Design: Configuration Hierarchy Documentation
 
-**Feature**: Issue #244  
-**Author**: GitHub Copilot  
-**Date**: 2025-01-11  
+**Feature**: Issue #244
+**Author**: GitHub Copilot
+**Date**: 2025-01-11
 **Status**: Implementation Complete
 
 ## Purpose
@@ -24,18 +24,18 @@ This creates confusion, maintenance burden, and technical debt accumulation.
 
 ### In Scope (This Issue - Phases 1 & 2)
 
-✅ Document configuration precedence hierarchy  
-✅ Identify canonical vs legacy config modules  
-✅ Add deprecation warnings to legacy classes  
-✅ Create migration guide with examples  
-✅ Make configuration docs discoverable  
+✅ Document configuration precedence hierarchy
+✅ Identify canonical vs legacy config modules
+✅ Add deprecation warnings to legacy classes
+✅ Create migration guide with examples
+✅ Make configuration docs discoverable
 
 ### Out of Scope (Deferred to Phase 3 / v3.0)
 
-❌ Consolidate config modules into single package  
-❌ Remove legacy config classes (breaking change)  
-❌ Refactor existing code to use unified configs  
-❌ Add schema validation for YAML configs  
+❌ Consolidate config modules into single package
+❌ Remove legacy config classes (breaking change)
+❌ Refactor existing code to use unified configs
+❌ Add schema validation for YAML configs
 
 **Rationale for deferral**: Phase 3 requires breaking changes and extensive refactoring, better suited for a major version bump with dedicated planning.
 
@@ -88,7 +88,7 @@ import warnings
 
 class EnvSettings:
     """DEPRECATED: Use unified_config.RobotSimulationConfig instead.
-    
+
     This class will be removed in v3.0.
     See docs/architecture/configuration.md for migration guide.
     """

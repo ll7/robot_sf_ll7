@@ -22,10 +22,10 @@ Integration points
 - Keep existing `robot_sf.nav.svg_map_parser.SvgMapConverter` unchanged; the OSM importer produces a MapDefinition directly.
 
 Incremental plan
-1) Create importer with minimal tag filters and buffering. Project to meters. Validate with a small bbox.  
-2) Add geometric cleaning and complement-to-obstacles generation.  
-3) Provide a demo script under examples/ to render and inspect results; reuse visualizer.  
-4) Add tests for: valid MapDefinition, bounds correctness, non-empty obstacles, and invalid polygon repair.  
+1) Create importer with minimal tag filters and buffering. Project to meters. Validate with a small bbox.
+2) Add geometric cleaning and complement-to-obstacles generation.
+3) Provide a demo script under examples/ to render and inspect results; reuse visualizer.
+4) Add tests for: valid MapDefinition, bounds correctness, non-empty obstacles, and invalid polygon repair.
 5) Document workflow in SVG_MAP_EDITOR.md (new section: “OSM-based walkable import”).
 
 Proposed skeleton

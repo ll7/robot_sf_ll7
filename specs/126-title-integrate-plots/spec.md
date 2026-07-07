@@ -1,8 +1,8 @@
 # Feature Specification: Integrate Plots & Videos into Full Classic Benchmark
 
-**Feature Branch**: `126-title-integrate-plots`  
-**Created**: 2025-09-20  
-**Status**: Draft  
+**Feature Branch**: `126-title-integrate-plots`
+**Created**: 2025-09-20
+**Status**: Draft
 **Input**: User description: "Wire existing placeholder plot and video generation modules (plots.py, videos.py) into run_full_benchmark orchestrator. Add videos directory creation, invoke generation once after adaptive loop completion, write artifact manifests (plot_artifacts.json, video_artifacts.json) capturing status. Respect cfg.disable_videos, cfg.max_videos, smoke mode, and optional dependencies (matplotlib, moviepy). Update docs (dev issue folder) and changelog entry. Provide tests: ensure artifacts created or skipped markers. Non-goals: real trajectory rendering, rich metrics overlays. Risks: optional deps missing, performance overhead. Config: reuse existing flags no new ones unless necessary."
 
 ## User Scenarios & Testing *(mandatory)*
@@ -88,4 +88,3 @@ Out of Scope Clarification: Enhancing `SimulationView` fidelity (textures, advan
 - [x] Requirements generated
 - [x] Entities identified
 - [ ] Review checklist passed (pending clarification removal)
-

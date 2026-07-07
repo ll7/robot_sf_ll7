@@ -203,7 +203,7 @@ uv run python scripts/training/train_ppo.py --config <config.yaml>
 
 #### `training_ped_ppo.py`
 
-**Purpose**: PPO training for pedestrian environments  
+**Purpose**: PPO training for pedestrian environments
 **Usage**:
 
 ```bash
@@ -223,7 +223,7 @@ uv run python scripts/training/train_ppo.py --config <config.yaml>
 
 #### `multi_extractor_training.py`
 
-**Purpose**: Compare multiple feature extractors with reproducible summaries  
+**Purpose**: Compare multiple feature extractors with reproducible summaries
 **Usage**:
 
 ```bash
@@ -236,7 +236,7 @@ uv run python scripts/multi_extractor_training.py
 
 #### `classic_benchmark_full.py`
 
-**Purpose**: CLI entry for Full Classic Interaction Benchmark  
+**Purpose**: CLI entry for Full Classic Interaction Benchmark
 **Usage**:
 
 ```bash
@@ -273,7 +273,7 @@ uv run python scripts/validation/performance_smoke_test.py
 
 #### `benchmark_workers.py`
 
-**Purpose**: Parallel benchmark execution with worker processes  
+**Purpose**: Parallel benchmark execution with worker processes
 **Usage**:
 
 ```bash
@@ -282,7 +282,7 @@ uv run python scripts/benchmark_workers.py --out output/benchmarks/bench_workers
 
 #### `run_social_navigation_benchmark.py`
 
-**Purpose**: Complete social navigation benchmark runner  
+**Purpose**: Complete social navigation benchmark runner
 **Usage**:
 
 ```bash
@@ -295,7 +295,7 @@ uv run python scripts/run_social_navigation_benchmark.py
 
 #### `generate_figures.py`
 
-**Purpose**: Generate benchmark figures from episodes JSONL  
+**Purpose**: Generate benchmark figures from episodes JSONL
 **Usage**:
 
 ```bash
@@ -306,7 +306,7 @@ uv run python scripts/generate_figures.py
 
 #### `ranking_table.py`
 
-**Purpose**: Generate ranking tables by metric from benchmark episodes  
+**Purpose**: Generate ranking tables by metric from benchmark episodes
 **Usage**:
 
 ```bash
@@ -317,7 +317,7 @@ uv run python scripts/ranking_table.py
 
 #### `analyze_feature_extractors.py`
 
-**Purpose**: Statistical analysis for feature extractor comparison  
+**Purpose**: Statistical analysis for feature extractor comparison
 **Usage**:
 
 ```bash
@@ -326,7 +326,7 @@ uv run python scripts/analyze_feature_extractors.py
 
 #### `seed_variance.py`
 
-**Purpose**: Compute SNQI seed variance from benchmark episodes  
+**Purpose**: Compute SNQI seed variance from benchmark episodes
 **Usage**:
 
 ```bash
@@ -352,7 +352,7 @@ uv run python scripts/benchmark_threshold_sensitivity.py \
 
 #### `recompute_snqi_weights.py`
 
-**Purpose**: Recompute SNQI weights using different strategies  
+**Purpose**: Recompute SNQI weights using different strategies
 **Usage**:
 
 ```bash
@@ -368,7 +368,7 @@ uv run python scripts/recompute_snqi_weights.py \
 
 #### `snqi_weight_optimization.py`
 
-**Purpose**: Advanced SNQI weight optimization with differential evolution  
+**Purpose**: Advanced SNQI weight optimization with differential evolution
 **Usage**:
 
 ```bash
@@ -382,7 +382,7 @@ uv run python scripts/snqi_weight_optimization.py \
 
 #### `snqi_sensitivity_analysis.py`
 
-**Purpose**: Full sensitivity analysis with visualizations  
+**Purpose**: Full sensitivity analysis with visualizations
 **Usage**:
 
 ```bash
@@ -395,7 +395,7 @@ uv run python scripts/snqi_sensitivity_analysis.py \
 
 #### `validate_snqi_scripts.py`
 
-**Purpose**: Verify SNQI scripts work correctly  
+**Purpose**: Verify SNQI scripts work correctly
 **Usage**:
 
 ```bash
@@ -404,7 +404,7 @@ uv run python scripts/validate_snqi_scripts.py
 
 #### `example_snqi_workflow.py`
 
-**Purpose**: Complete SNQI workflow example with generated data  
+**Purpose**: Complete SNQI workflow example with generated data
 **Usage**:
 
 ```bash
@@ -423,7 +423,7 @@ uv sync --group imitation
 
 ### `training/train_ppo.py`
 
-**Purpose**: Expert PPO training workflow entry point  
+**Purpose**: Expert PPO training workflow entry point
 **Usage**:
 
 ```bash
@@ -433,7 +433,7 @@ uv run python scripts/training/train_ppo.py --config configs/training/ppo/expert
 **Details**: Loads unified config, orchestrates PPO expert training, evaluates policy, persists manifests
 
 ### `training/train_dreamerv3_rllib.py`
-**Purpose**: RLlib DreamerV3 training on `drive_state` + `rays` observations  
+**Purpose**: RLlib DreamerV3 training on `drive_state` + `rays` observations
 **Usage**:
 ```bash
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py --config configs/training/rllib_dreamerv3/drive_state_rays.yaml
@@ -442,7 +442,7 @@ uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py --config c
 
 ### `training/collect_expert_trajectories.py`
 
-**Purpose**: Trajectory collection for imitation learning  
+**Purpose**: Trajectory collection for imitation learning
 **Usage**:
 
 ```bash
@@ -453,7 +453,7 @@ uv run python scripts/training/collect_expert_trajectories.py --dataset-id exper
 
 ### `training/pretrain_from_expert.py`
 
-**Purpose**: Behavioral cloning pre-training from expert trajectories  
+**Purpose**: Behavioral cloning pre-training from expert trajectories
 **Usage**:
 
 ```bash
@@ -464,7 +464,7 @@ uv run --group imitation python scripts/training/pretrain_from_expert.py --confi
 
 ### `training/train_ppo_with_pretrained_policy.py`
 
-**Purpose**: PPO fine-tuning from pre-trained checkpoint  
+**Purpose**: PPO fine-tuning from pre-trained checkpoint
 **Usage**:
 
 ```bash
@@ -477,7 +477,7 @@ uv run python scripts/training/train_ppo_with_pretrained_policy.py --config conf
 
 ### `research/generate_report.py`
 
-**Purpose**: Research report generation from tracked runs  
+**Purpose**: Research report generation from tracked runs
 **Usage**:
 
 ```bash
@@ -488,7 +488,7 @@ uv run python scripts/research/generate_report.py
 
 ### `research/compare_ablations.py`
 
-**Purpose**: CLI for ablation study comparison (User Story 4)  
+**Purpose**: CLI for ablation study comparison (User Story 4)
 **Usage**:
 
 ```bash
@@ -506,7 +506,7 @@ uv run python scripts/research/compare_ablations.py \
 
 ### `validation/performance_smoke_test.py`
 
-**Purpose**: Performance baseline validation  
+**Purpose**: Performance baseline validation
 **Usage**:
 
 ```bash
@@ -518,7 +518,7 @@ DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
 
 ### `validation/run_examples_smoke.py`
 
-**Purpose**: Execute smoke tests for all examples  
+**Purpose**: Execute smoke tests for all examples
 **Usage**:
 
 ```bash
@@ -534,7 +534,7 @@ uv run python scripts/validation/run_examples_smoke.py
 
 ### `validation/validate_examples_manifest.py`
 
-**Purpose**: Ensure examples manifest is complete and aligned  
+**Purpose**: Ensure examples manifest is complete and aligned
 **Usage**:
 
 ```bash
@@ -543,7 +543,7 @@ uv run python scripts/validation/validate_examples_manifest.py
 
 ### `validation/verify_maps.py`
 
-**Purpose**: Map file validation  
+**Purpose**: Map file validation
 **Usage**:
 
 ```bash
@@ -567,7 +567,7 @@ Quick environment validation scripts:
 
 ### `validation/run_research_quickstart.sh`
 
-**Purpose**: Execute research pipeline quickstart  
+**Purpose**: Execute research pipeline quickstart
 **Usage**:
 
 ```bash
@@ -576,7 +576,7 @@ bash scripts/validation/run_research_quickstart.sh
 
 ### `validation/render_examples_readme.py`
 
-**Purpose**: Generate/update examples README from manifest  
+**Purpose**: Generate/update examples README from manifest
 **Usage**:
 
 ```bash
@@ -585,7 +585,7 @@ uv run python scripts/validation/render_examples_readme.py
 
 ### `validation/playback_trajectory.py`
 
-**Purpose**: Trajectory visualization and playback  
+**Purpose**: Trajectory visualization and playback
 **Usage**:
 
 ```bash
@@ -594,7 +594,7 @@ uv run python scripts/validation/playback_trajectory.py
 
 ### `validation/performance_research_report.py`
 
-**Purpose**: Research report performance validation  
+**Purpose**: Research report performance validation
 **Usage**:
 
 ```bash
@@ -603,7 +603,7 @@ uv run python scripts/validation/performance_research_report.py
 
 ### `validation/verify_sf_implementation.py`
 
-**Purpose**: Social Force implementation verification  
+**Purpose**: Social Force implementation verification
 **Usage**:
 
 ```bash
@@ -614,7 +614,7 @@ uv run python scripts/validation/verify_sf_implementation.py
 
 ### `tools/run_tracker_cli.py`
 
-**Purpose**: Command-line helper for run-tracking telemetry  
+**Purpose**: Command-line helper for run-tracking telemetry
 **Usage**:
 
 ```bash
@@ -645,7 +645,7 @@ uv run python scripts/tools/run_tracker_cli.py perf-tests \
 
 ### `tools/preview_scenario_trajectories.py`
 
-**Purpose**: Preview single-pedestrian trajectories on top of scenario maps  
+**Purpose**: Preview single-pedestrian trajectories on top of scenario maps
 **Usage**:
 
 ```bash
@@ -658,7 +658,7 @@ uv run python scripts/tools/preview_scenario_trajectories.py \
 
 ### `tools/render_scenario_videos.py`
 
-**Purpose**: Render MP4 videos for every scenario in a scenario matrix  
+**Purpose**: Render MP4 videos for every scenario in a scenario matrix
 **Usage**:
 
 ```bash
@@ -671,7 +671,7 @@ uv run python scripts/tools/render_scenario_videos.py \
 
 ### `tools/compare_training_runs.py`
 
-**Purpose**: Comparison tool for analyzing training runs  
+**Purpose**: Comparison tool for analyzing training runs
 **Usage**:
 
 ```bash
@@ -682,7 +682,7 @@ uv run python scripts/tools/compare_training_runs.py
 
 ### `tools/migrate_artifacts.py`
 
-**Purpose**: Migration helper to consolidate legacy artifacts  
+**Purpose**: Migration helper to consolidate legacy artifacts
 **Usage**:
 
 ```bash
@@ -697,7 +697,7 @@ uv run robot-sf-migrate-artifacts
 
 ### `tools/check_artifact_root.py`
 
-**Purpose**: Guard script ensuring artifacts respect canonical `output/` root  
+**Purpose**: Guard script ensuring artifacts respect canonical `output/` root
 **Usage**:
 
 ```bash
@@ -708,7 +708,7 @@ uv run python scripts/tools/check_artifact_root.py
 
 ### `tools/validate_report.py`
 
-**Purpose**: Report validation helper  
+**Purpose**: Report validation helper
 **Usage**:
 
 ```bash
@@ -721,7 +721,7 @@ uv run python scripts/tools/validate_report.py
 
 ### `coverage/open_coverage_report.py`
 
-**Purpose**: Open HTML coverage report in browser  
+**Purpose**: Open HTML coverage report in browser
 **Usage**:
 
 ```bash
@@ -732,7 +732,7 @@ uv run python scripts/coverage/open_coverage_report.py
 
 ### `coverage/compare_coverage.py`
 
-**Purpose**: Coverage comparison between runs  
+**Purpose**: Coverage comparison between runs
 **Usage**:
 
 ```bash
@@ -741,7 +741,7 @@ uv run python scripts/coverage/compare_coverage.py
 
 ### `telemetry/run_perf_tests.py`
 
-**Purpose**: Telemetry-aware wrapper for performance smoke test  
+**Purpose**: Telemetry-aware wrapper for performance smoke test
 **Usage**:
 
 ```bash
@@ -752,7 +752,7 @@ uv run python scripts/telemetry/run_perf_tests.py
 
 ### `perf/baseline_factory_creation.py`
 
-**Purpose**: Baseline environment factory creation timing  
+**Purpose**: Baseline environment factory creation timing
 **Usage**:
 
 ```bash
@@ -774,7 +774,7 @@ uv run python scripts/perf/baseline_factory_creation.py
 
 #### `convert_pickle_to_jsonl.py`
 
-**Purpose**: Convert legacy multi-episode pickle files to per-episode JSONL  
+**Purpose**: Convert legacy multi-episode pickle files to per-episode JSONL
 **Usage**:
 
 ```bash
@@ -785,7 +785,7 @@ uv run python scripts/convert_pickle_to_jsonl.py
 
 #### `demo_jsonl_recording.py`
 
-**Purpose**: Demonstration of JSONL recording and playback functionality  
+**Purpose**: Demonstration of JSONL recording and playback functionality
 **Usage**:
 
 ```bash
@@ -794,7 +794,7 @@ uv run python scripts/demo_jsonl_recording.py
 
 #### `play_recordings.py`
 
-**Purpose**: Playback recorded episodes  
+**Purpose**: Playback recorded episodes
 **Usage**:
 
 ```bash
@@ -805,7 +805,7 @@ uv run python scripts/play_recordings.py
 
 #### `failure_extractor.py`
 
-**Purpose**: Extract worst episodes by chosen metric from episodes JSONL  
+**Purpose**: Extract worst episodes by chosen metric from episodes JSONL
 **Usage**:
 
 ```bash
@@ -816,7 +816,7 @@ uv run python scripts/failure_extractor.py
 
 #### `collect_slow_tests.py`
 
-**Purpose**: Parse `pytest --durations=N` output into structured JSON  
+**Purpose**: Parse `pytest --durations=N` output into structured JSON
 **Usage**:
 
 ```bash
@@ -825,7 +825,7 @@ pytest --durations=20 | uv run python scripts/collect_slow_tests.py > slow_tests
 
 #### `compare_slow_tests.py`
 
-**Purpose**: Compare before/after slow test JSON captures  
+**Purpose**: Compare before/after slow test JSON captures
 **Usage**:
 
 ```bash
@@ -834,7 +834,7 @@ uv run python scripts/compare_slow_tests.py --before progress/slow_tests_pre.jso
 
 #### `evaluate.py`
 
-**Purpose**: Policy evaluation script  
+**Purpose**: Policy evaluation script
 **Usage**:
 
 ```bash
@@ -854,7 +854,7 @@ uv run python scripts/training/launch_optuna_expert_ppo.py --config configs/trai
 
 #### `tools/inspect_optuna_db.py`
 
-**Purpose**: Inspect Optuna sqlite databases (list studies, show best trials)  
+**Purpose**: Inspect Optuna sqlite databases (list studies, show best trials)
 **Usage**:
 
 ```bash
@@ -863,7 +863,7 @@ uv run python scripts/tools/inspect_optuna_db.py --db output/optuna/weekend_optu
 
 #### `training/optuna_expert_ppo.py`
 
-**Purpose**: Optuna sweep for expert PPO training configs  
+**Purpose**: Optuna sweep for expert PPO training configs
 **Usage**:
 
 ```bash
@@ -872,7 +872,7 @@ uv run python scripts/training/optuna_expert_ppo.py --config configs/training/pp
 
 #### `training/launch_optuna_expert_ppo.py`
 
-**Purpose**: Config-first launcher for Optuna expert PPO sweeps  
+**Purpose**: Config-first launcher for Optuna expert PPO sweeps
 **Usage**:
 
 ```bash
@@ -916,7 +916,7 @@ DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/training/lau
 ```
 
 #### `training/train_dreamerv3_rllib.py`
-**Purpose**: Config-first RLlib DreamerV3 training for Robot SF (`drive_state` + `rays`)  
+**Purpose**: Config-first RLlib DreamerV3 training for Robot SF (`drive_state` + `rays`)
 **Usage**:
 ```bash
 uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
@@ -936,7 +936,7 @@ uv run --extra rllib python scripts/training/train_dreamerv3_rllib.py \
 
 #### `benchmark_repro_check.py`
 
-**Purpose**: Create minimal test scenario for reproducibility testing  
+**Purpose**: Create minimal test scenario for reproducibility testing
 **Usage**:
 
 ```bash
@@ -956,7 +956,7 @@ uv run python scripts/generate_video_contact_sheet.py output/benchmarks/example/
 
 #### `update_svg_viewbox.py`
 
-**Purpose**: Update viewBox attribute of SVG files  
+**Purpose**: Update viewBox attribute of SVG files
 **Usage**:
 
 ```bash
@@ -965,7 +965,7 @@ uv run python scripts/update_svg_viewbox.py
 
 #### `scale_svgs_to_50m.py`
 
-**Purpose**: Scale SVG coordinate values  
+**Purpose**: Scale SVG coordinate values
 **Usage**:
 
 ```bash
@@ -974,7 +974,7 @@ uv run python scripts/scale_svgs_to_50m.py
 
 #### `run_classic_interactions.py`
 
-**Purpose**: Run classic interaction scenarios  
+**Purpose**: Run classic interaction scenarios
 **Usage**:
 
 ```bash
@@ -1113,5 +1113,5 @@ For questions or issues:
 
 ---
 
-**Last Updated**: 2026-02-11  
+**Last Updated**: 2026-02-11
 **Maintained By**: Robot SF Development Team

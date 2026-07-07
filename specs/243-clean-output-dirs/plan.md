@@ -15,14 +15,14 @@ Consolidate generated artifacts into a single `output/` directory with mandated 
   the iteration process.
 -->
 
-**Language/Version**: Python 3.11 (uv-managed virtual environment)  
-**Primary Dependencies**: Python standard library (`pathlib`, `json`, `shutil`), Loguru, pytest, uv CLI  
-**Storage**: Local filesystem (repository-relative `output/` tree or overridden path)  
-**Testing**: pytest suite, dedicated guard-check unit tests, migration dry-run regression tests  
-**Target Platform**: macOS and Linux developer machines; GitHub Actions CI  
-**Project Type**: Monorepo research platform (single project)  
-**Performance Goals**: Guard execution < 1s; migration < 5s for typical artifact volumes; no observable slowdown in CI jobs  
-**Constraints**: Preserve reproducibility (Principles I & IV), honor `ROBOT_SF_ARTIFACT_ROOT`, fail fast on legacy paths post-remediation  
+**Language/Version**: Python 3.11 (uv-managed virtual environment)
+**Primary Dependencies**: Python standard library (`pathlib`, `json`, `shutil`), Loguru, pytest, uv CLI
+**Storage**: Local filesystem (repository-relative `output/` tree or overridden path)
+**Testing**: pytest suite, dedicated guard-check unit tests, migration dry-run regression tests
+**Target Platform**: macOS and Linux developer machines; GitHub Actions CI
+**Project Type**: Monorepo research platform (single project)
+**Performance Goals**: Guard execution < 1s; migration < 5s for typical artifact volumes; no observable slowdown in CI jobs
+**Constraints**: Preserve reproducibility (Principles I & IV), honor `ROBOT_SF_ARTIFACT_ROOT`, fail fast on legacy paths post-remediation
 **Scale/Scope**: Touches all artifact-producing scripts (tests, validation, examples) plus docs and CI workflows
 
 ## Constitution Check

@@ -244,7 +244,7 @@ class Agent(AgentBase):  # TODO: rename to AutoAgent or SamplingPlannerAgent
         return obj_fn
 
     def _update_obj_fn(self) -> None:
-        """ 
+        """
         Update the objective function to use a new obstacle_map and fmm map
         """
         for objective in self.obj_fn.objectives:

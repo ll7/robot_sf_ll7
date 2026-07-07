@@ -12,7 +12,7 @@ gymnasium.Env
 ├── BaseSimulationEnv (abstract base)
 │   ├── SingleAgentEnv (abstract)
 │   │   ├── RobotEnv
-│   │   ├── RobotEnvWithImage  
+│   │   ├── RobotEnvWithImage
 │   │   └── PedestrianEnv
 │   └── MultiAgentEnv (abstract)
 │       └── MultiRobotEnv
@@ -36,18 +36,18 @@ class BaseSimulationConfig:
     sim_config: SimulationSettings
     map_pool: MapDefinitionPool
     lidar_config: LidarScannerSettings
-    
-@dataclass  
+
+@dataclass
 class RobotConfig(BaseSimulationConfig):
     """Robot-specific configuration"""
     robot_config: Union[DifferentialDriveSettings, BicycleDriveSettings]
-    
+
 @dataclass
 class ImageRobotConfig(RobotConfig):
     """Robot configuration with image observations"""
-    image_config: ImageSensorSettings 
+    image_config: ImageSensorSettings
     use_image_obs: bool = True
-    
+
 @dataclass
 class PedestrianConfig(RobotConfig):
     """Configuration for pedestrian environments"""
@@ -61,7 +61,7 @@ class PedestrianConfig(RobotConfig):
 - Shared utility methods (exit, save_recording, render setup)
 - Abstract methods for environment-specific logic
 
-### SingleAgentEnv  
+### SingleAgentEnv
 - Single robot/agent simulation logic
 - Common step/reset patterns
 - Sensor and collision detection setup
@@ -100,11 +100,11 @@ class EnvironmentFactory:
         if config.use_image_obs:
             return RobotEnvWithImage(config, **kwargs)
         return RobotEnv(config, **kwargs)
-    
-    @staticmethod  
+
+    @staticmethod
     def create_pedestrian_env(config: PedestrianConfig, **kwargs) -> SingleAgentEnv:
         return PedestrianEnv(config, **kwargs)
-        
+
     @staticmethod
     def create_multi_robot_env(config: RobotConfig, num_robots: int, **kwargs) -> MultiAgentEnv:
         return MultiRobotEnv(config, num_robots, **kwargs)
@@ -129,7 +129,7 @@ class EnvironmentFactory:
 ## Files to Modify
 
 1. `robot_sf/gym_env/base_env.py` - Expand to BaseSimulationEnv
-2. `robot_sf/gym_env/env_config.py` - Consolidate configuration classes  
+2. `robot_sf/gym_env/env_config.py` - Consolidate configuration classes
 3. `robot_sf/gym_env/pedestrian_env.py` - Refactor to extend new base
 4. `robot_sf/gym_env/crowd_sim_env.py` - Supported crowd-only replacement
 5. `robot_sf/gym_env/robot_env.py` - Update to use consolidated config

@@ -129,7 +129,7 @@
           "id": "forecast_reliability",
           "status": "passed",
           "depends_on": [2840],
-          "description": "Calibration and reliability outputs are available." 
+          "description": "Calibration and reliability outputs are available."
         }
       ]
     },

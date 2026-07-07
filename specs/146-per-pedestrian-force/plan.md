@@ -17,14 +17,14 @@ Implement per-pedestrian force magnitude quantiles (q50, q90, q95) as new metric
   the iteration process.
 -->
 
-**Language/Version**: Python 3.13 (repo tested with 3.13.1)  
-**Primary Dependencies**: NumPy, pytest (existing stack)  
-**Storage**: N/A (in-memory arrays)  
-**Testing**: pytest (extend `tests/test_metrics.py`)  
-**Target Platform**: Linux/macOS CI (headless)  
-**Project Type**: Single Python package/library (`robot_sf`) with tests  
-**Performance Goals**: Vectorized O(T×K); T=1000, K=50 completes < 50 ms on dev hardware  
-**Constraints**: Maintain stable metric naming contract; no schema breaking; handle NaN robustly (use nan-aware ops)  
+**Language/Version**: Python 3.13 (repo tested with 3.13.1)
+**Primary Dependencies**: NumPy, pytest (existing stack)
+**Storage**: N/A (in-memory arrays)
+**Testing**: pytest (extend `tests/test_metrics.py`)
+**Target Platform**: Linux/macOS CI (headless)
+**Project Type**: Single Python package/library (`robot_sf`) with tests
+**Performance Goals**: Vectorized O(T×K); T=1000, K=50 completes < 50 ms on dev hardware
+**Constraints**: Maintain stable metric naming contract; no schema breaking; handle NaN robustly (use nan-aware ops)
 **Scale/Scope**: Episodes up to thousands of timesteps and dozens of pedestrians
 
 ## Constitution Check

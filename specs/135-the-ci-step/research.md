@@ -29,7 +29,7 @@ sudo chmod +x /usr/local/bin/apt-fast
 sudo apt-fast update && sudo apt-fast install -y ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core
 ```
 
-**Pros**: 
+**Pros**:
 - Can reduce download time by 2-3x through parallel connections
 - Drop-in replacement for apt-get
 - No changes to workflow structure

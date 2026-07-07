@@ -1,6 +1,6 @@
 # Issue #1434 Stress/Uncertainty Coverage Schema v1 (2026-05-22)
 
-Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1434>  
+Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1434>
 Implementation follow-up: <https://github.com/ll7/robot_sf_ll7/issues/1445>
 
 ## Goal

@@ -130,9 +130,9 @@ Extend SVG map specification to support `<circle>` elements with `poi` class:
 <rect class="goal" id="goal_1" x="90" y="90" width="5" height="5" />
 
 <!-- NEW: Point-of-Interest markers -->
-<circle class="poi" id="poi_corridor_1" cx="50" cy="25" r="0.5" 
+<circle class="poi" id="poi_corridor_1" cx="50" cy="25" r="0.5"
         label="corridor_junction" />
-<circle class="poi" id="poi_doorway" cx="30" cy="50" r="0.5" 
+<circle class="poi" id="poi_doorway" cx="30" cy="50" r="0.5"
         label="room_entrance" />
 ```
 
@@ -224,7 +224,7 @@ next_target = navigator.current_waypoint
 **Decision**: Robot-radius-aware buffering via Shapely
 ```python
 inflated_obstacles = [
-    obstacle.buffer(robot_radius + clearance_margin) 
+    obstacle.buffer(robot_radius + clearance_margin)
     for obstacle in map_obstacles
 ]
 ```
@@ -283,10 +283,10 @@ def _get_or_build_graph(map_def: MapDefinition) -> VisibilityGraph:
 # tests/test_planner/test_global_planner.py
 def test_simple_corridor_path():
     """Path through straight corridor avoids walls."""
-    
+
 def test_obstacle_clearance_maintained():
     """All waypoints maintain minimum clearance."""
-    
+
 def test_no_path_raises_exception():
     """Surrounded goal raises PlanningFailedError."""
 
@@ -299,7 +299,7 @@ def test_poi_routing():
 # tests/test_planner/test_map_integration.py
 def test_all_example_maps_plannable():
     """Every map in maps/svg_maps/ generates valid paths."""
-    
+
 def test_route_navigator_compatibility():
     """Planner output works with RouteNavigator."""
 ```
@@ -376,10 +376,10 @@ planning-viz = [
 
 1. **Narrow passage handling**: Reject paths through gaps < `robot_diameter`, or allow with warning?
    - **Proposal**: Warn but allow; let `min_safe_clearance` be configurable
-   
+
 2. **POI ordering constraints**: Should planner enforce visiting POIs in sequence?
    - **Proposal**: Optional `ordered_pois: bool` parameter (default: `False`)
-   
+
 3. **Multi-goal support**: Plan tours visiting multiple goals?
    - **Proposal**: Out of scope for MVP; revisit in Phase 3
 

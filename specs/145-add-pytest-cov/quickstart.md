@@ -1,7 +1,7 @@
 # Quick Start: Code Coverage Monitoring
 
-**Feature**: pytest-cov integration for robot_sf  
-**Date**: 2025-10-23  
+**Feature**: pytest-cov integration for robot_sf
+**Date**: 2025-10-23
 **Audience**: Developers contributing to robot_sf
 
 ## Purpose
@@ -400,7 +400,7 @@ uv run python scripts/coverage/analyze_gaps.py --coverage-file coverage.json
 
 **Explanation**: Someone else's earlier PR may have decreased coverage and set a lower baseline.
 
-**Solution**: 
+**Solution**:
 - Check which files lost coverage in the warning message
 - If you can easily add tests for those files, do so
 - Otherwise, acknowledge the warning and document in PR description

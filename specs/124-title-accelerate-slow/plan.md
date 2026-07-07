@@ -34,14 +34,14 @@
 Primary requirement: Enforce a per-test performance budget (soft <20s, hard 60s) without reducing semantic coverage of benchmark tests (resume, reproducibility, orchestration logic). Approach: Define a performance budget policy, minimize heavy scenario matrices, add per-test timeouts, generate slow test report (top 10), provide guidance, and allow relax override.
 
 ## Technical Context
-**Language/Version**: Python (uv-managed, ≥3.11)  
-**Primary Dependencies**: pytest, internal benchmark orchestrator, ruff (indirect)  
-**Storage**: N/A (ephemeral test artifacts only)  
-**Testing**: pytest (possibly pytest-timeout marker)  
-**Target Platform**: macOS dev + Linux CI headless  
-**Project Type**: Single library/research framework  
-**Performance Goals**: Each test <20s soft; <60s hard; 95% tests under soft limit  
-**Constraints**: Preserve semantic assertions; deterministic reduced inputs  
+**Language/Version**: Python (uv-managed, ≥3.11)
+**Primary Dependencies**: pytest, internal benchmark orchestrator, ruff (indirect)
+**Storage**: N/A (ephemeral test artifacts only)
+**Testing**: pytest (possibly pytest-timeout marker)
+**Target Platform**: macOS dev + Linux CI headless
+**Project Type**: Single library/research framework
+**Performance Goals**: Each test <20s soft; <60s hard; 95% tests under soft limit
+**Constraints**: Preserve semantic assertions; deterministic reduced inputs
 **Scale/Scope**: ~170+ tests; a few heavy benchmark integration tests
 
 ## Constitution Check
@@ -126,8 +126,8 @@ Ordering: Foundational helpers → test refactors → reporting fixture → docu
 ## Phase 3+: Future Implementation
 *These phases are beyond the scope of the /plan command*
 
-**Phase 3**: Task execution (/tasks command creates tasks.md)  
-**Phase 4**: Implementation (execute tasks.md following constitutional principles)  
+**Phase 3**: Task execution (/tasks command creates tasks.md)
+**Phase 4**: Implementation (execute tasks.md following constitutional principles)
 **Phase 5**: Validation (run tests, execute quickstart.md, performance validation)
 
 ## Complexity Tracking

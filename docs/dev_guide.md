@@ -767,7 +767,7 @@ from robot_sf.gym_env.environment_factory import make_robot_env, make_image_robo
 # Basic robot navigation
 env = make_robot_env(debug=True)
 
-# With image observations  
+# With image observations
 env = make_image_robot_env(debug=True)
 
 # Pedestrian environment (requires trained robot model)
@@ -1011,7 +1011,7 @@ uv run pytest -m "not slow" tests
 # Run only robot_sf tests
 uv run pytest tests
 
-# Run only fast-pysf tests  
+# Run only fast-pysf tests
 uv run pytest fast-pysf/tests  # → 12 tests
 
 # Run with parallel execution (faster)
@@ -1027,7 +1027,7 @@ uv run pytest -n auto tests  # → 881 tests
 # Fast unit test pass (skip slow/integration)
 uv run pytest -m "not slow" tests
 
-# 2. GUI/display-dependent tests (headless mode)  
+# 2. GUI/display-dependent tests (headless mode)
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest tests/pygame
 
 # 3. fast-pysf subtree tests - NOW PART OF UNIFIED SUITE
@@ -1121,7 +1121,7 @@ open output/coverage/htmlcov/index.html
 
 - **Included**: All code in `robot_sf/` package
 - **Excluded**: Tests, examples, scripts, `fast-pysf/` subtree
-- **Output formats**: 
+- **Output formats**:
   - Terminal summary (printed after test run)
   - HTML report (`output/coverage/htmlcov/index.html` - interactive, detailed)
   - JSON data (`output/coverage/coverage.json` - for tooling)

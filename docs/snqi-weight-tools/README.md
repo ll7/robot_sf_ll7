@@ -512,7 +512,7 @@ Still planned (see design doc / backlog):
 - Drift detection test (continuous regression guard)
 
 ## Related Design Document
-For deep architectural details, data contracts, algorithms, and planned roadmap see:  
+For deep architectural details, data contracts, algorithms, and planned roadmap see:
 `docs/dev/issues/snqi-recomputation/DESIGN.md`.
 
 ---

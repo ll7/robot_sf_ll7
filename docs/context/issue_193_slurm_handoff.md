@@ -1,7 +1,7 @@
 # Issue #193 — SLURM Handoff: Feature Extractor Sweep
 
-**Date:** 2026-04-16  
-**Branch:** `codex/193-feature-extractor-evaluation`  
+**Date:** 2026-04-16
+**Branch:** `codex/193-feature-extractor-evaluation`
 **Status:** Historical submission handoff.  The `feat_sweep_4m` run has completed; see
 `docs/context/issue_193_feature_extractor_optuna_study.md` for the April 17 result analysis.
 
@@ -21,10 +21,10 @@ A 10-trial local smoke test ran on the dev machine (GPU: 7.65 GB VRAM).
   unavailable after 6 prior trials had fragmented the allocator.
   Error: `torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 3.03 GiB.`
 
-**The OOM is a dev-GPU constraint, not a code bug.**  
+**The OOM is a dev-GPU constraint, not a code bug.**
 A100/V100 cluster nodes (40–80 GB) have ample headroom for all combinations.
 
-**Fix applied since the debug run:**  
+**Fix applied since the debug run:**
 `study.optimize(..., catch=(Exception,))` now records a failed trial and continues
 instead of crashing the whole process.  An OOM on one trial will not abort the sweep.
 

@@ -67,4 +67,3 @@ From `config.yaml` for both runs:
 - To measure generalization, re-enable the holdout scenarios and compare again.
 - If the goal is better generalization, consider increasing scenario diversity
   before changing hyperparameters.
-

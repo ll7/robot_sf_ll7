@@ -1,6 +1,6 @@
 # Repository Structure Analysis & Improvement Plan
 
-**Created**: November 10, 2025  
+**Created**: November 10, 2025
 **Purpose**: Comprehensive assessment of robot_sf_ll7 repository structure, identifying redundancies, complexity issues, and actionable improvements.
 
 **Status**: ✅ Analysis Complete - Issues Created
@@ -105,8 +105,8 @@ robot_sf/
 6. Update test imports
 7. Verify with `uv run pytest tests`
 
-**Effort:** 2-4 hours  
-**Risk:** Medium (touching many files, but mechanical change)  
+**Effort:** 2-4 hours
+**Risk:** Medium (touching many files, but mechanical change)
 **ROI:** High (permanent navigation improvement)
 
 **Trade-offs:**
@@ -119,7 +119,7 @@ robot_sf/
 
 ### 2. Documentation Duplication & Proliferation 🟡
 
-**Problem:**  
+**Problem:**
 Two `docs/` folders exist:
 - `/docs/` (root level, 400+ markdown files)
 - `/robot_sf/docs/` (package level, minimal content)
@@ -156,7 +156,7 @@ docs/
   dev/                      # Development artifacts
     issues/                 # Issue-specific folders
       ARCHIVE.md            # Index of completed issues
-      142-aggregation/      
+      142-aggregation/
       149-coupling/
     refactoring/            # Keep refactoring notes
   media/                    # Consolidated media
@@ -180,8 +180,8 @@ docs/                       # Everything else here
 6. Update internal links (use relative paths)
 7. Add `docs/README.md` to main README as "📚 Full Documentation"
 
-**Effort:** 4-6 hours  
-**Risk:** Low (documentation only)  
+**Effort:** 4-6 hours
+**Risk:** Low (documentation only)
 **ROI:** High (reduces confusion for new contributors)
 
 **Trade-offs:**
@@ -195,7 +195,7 @@ docs/                       # Everything else here
 
 ### 3. Root-Level Output Clutter 🟡
 
-**Problem:**  
+**Problem:**
 Multiple output/artifact directories at repository root:
 ```
 benchmark_results.json
@@ -255,8 +255,8 @@ tmp/                      # Transient (fully .gitignored)
 5. Update documentation references
 6. Add `output/.gitkeep` for empty subdirs
 
-**Effort:** 3-5 hours  
-**Risk:** Medium (need to update all output path references)  
+**Effort:** 3-5 hours
+**Risk:** Medium (need to update all output path references)
 **ROI:** Medium (cleaner root, but mostly cosmetic)
 
 **Trade-offs:**
@@ -271,7 +271,7 @@ tmp/                      # Transient (fully .gitignored)
 
 ### 4. Configuration Sprawl 🟡
 
-**Problem:**  
+**Problem:**
 Configuration exists in multiple places with unclear hierarchy:
 - Code: `env_config.py`, `sim_config.py`, `unified_config.py`, `map_config.py`
 - Files: `configs/baselines/`, `configs/scenarios/`
@@ -301,11 +301,11 @@ Create `docs/architecture/configuration.md`:
 
 1. **Code Defaults** (lowest priority)
    - unified_config.py BaseSimulationConfig
-   
+
 2. **YAML Files** (medium priority)
    - configs/scenarios/*.yaml
    - configs/baselines/*.yaml
-   
+
 3. **Runtime Parameters** (highest priority)
    - Factory function kwargs
    - Environment-specific overrides
@@ -339,8 +339,8 @@ robot_sf/
     validation.py    # Config validation (already exists)
 ```
 
-**Effort:** 6-10 hours (Phase 1-2), 20+ hours (Phase 3)  
-**Risk:** High (central to all environments)  
+**Effort:** 6-10 hours (Phase 1-2), 20+ hours (Phase 3)
+**Risk:** High (central to all environments)
 **ROI:** Medium (improves clarity, but current system works)
 
 **Trade-offs:**
@@ -356,7 +356,7 @@ robot_sf/
 
 ### 5. Example Proliferation 🟡
 
-**Problem:**  
+**Problem:**
 84 example files, many overlapping or outdated:
 ```
 examples/
@@ -416,8 +416,8 @@ examples/
 5. Update main README.md to link to examples/README.md
 6. Add CI check: "all examples must run without errors"
 
-**Effort:** 8-12 hours  
-**Risk:** Low (examples don't affect core)  
+**Effort:** 8-12 hours
+**Risk:** Low (examples don't affect core)
 **ROI:** Medium (improves discoverability)
 
 **Trade-offs:**
@@ -430,7 +430,7 @@ examples/
 
 ### 6. Test Fragmentation 🟢
 
-**Problem:**  
+**Problem:**
 Tests split across multiple locations:
 - `tests/` (881 tests)
 - `tests/pygame/` (GUI tests)
@@ -464,8 +464,8 @@ tests/
 
 **Recommendation:** Option A (keep as-is) - not worth the disruption.
 
-**Effort:** 0-2 hours (if documenting only)  
-**Risk:** Low  
+**Effort:** 0-2 hours (if documenting only)
+**Risk:** Low
 **ROI:** Low (cosmetic improvement)
 
 **Trade-offs:**
@@ -478,7 +478,7 @@ tests/
 
 ### 7. TODOs and Technical Debt 🟢
 
-**Observation:**  
+**Observation:**
 30+ TODO comments in code (likely more with higher `maxResults`):
 ```python
 # TODO: REFACTOR IMPORTS TO UTILS FILE -> euclid_dist is defined in range_sensor.py
@@ -503,15 +503,15 @@ for py_file in Path('robot_sf').rglob('*.py'):
         print(f"{py_file}:{match.group(1)}")
 ```
 
-**Effort:** 2-4 hours  
-**Risk:** None (tracking only)  
+**Effort:** 2-4 hours
+**Risk:** None (tracking only)
 **ROI:** Low (visibility improvement)
 
 ---
 
 ### 8. Git Subtree Complexity 🟢
 
-**Observation:**  
+**Observation:**
 `fast-pysf/` is a git subtree (was submodule). This is appropriate but adds complexity.
 
 **Current Documentation:** `docs/SUBTREE_MIGRATION.md` exists
@@ -520,15 +520,15 @@ for py_file in Path('robot_sf').rglob('*.py'):
 - Keep as-is (correct pattern for external dependency)
 - Ensure documentation is discoverable in main README
 
-**Effort:** 0 hours (already documented)  
-**Risk:** None  
+**Effort:** 0 hours (already documented)
+**Risk:** None
 **ROI:** None (already optimal)
 
 ---
 
 ### 9. Top-Level Directory Count 🟢
 
-**Observation:**  
+**Observation:**
 30+ top-level directories, some questionable:
 ```
 svg_conv/        # Single-purpose utility?
@@ -545,19 +545,19 @@ Consolidate rarely-used directories:
 .github/
   hooks/          # Move hooks here
   workflows/      # Already here
-  
+
 docs/
   specs/          # Move specs here
   contracts/      # Move contracts here
   hpc/            # Move SLURM here
-  
+
 tools/            # Create single tools directory
   svg_conv/       # Move here
   utilities/      # Move here
 ```
 
-**Effort:** 4-6 hours  
-**Risk:** Medium (may break scripts)  
+**Effort:** 4-6 hours
+**Risk:** Medium (may break scripts)
 **ROI:** Low (cosmetic improvement)
 
 **Trade-offs:**
@@ -717,7 +717,7 @@ tools/            # Create single tools directory
 8. ❌ Top-level directory cleanup (cosmetic)
 9. ❌ Test reorganization (current structure works)
 
-**Overall Assessment:**  
+**Overall Assessment:**
 The repository is **well-functioning but could benefit from focused organizational improvements**. The highest-value changes are consolidating utility modules and improving documentation discoverability. Configuration and output organization can wait for a major version bump or until they cause actual problems.
 
 **Estimated Total Effort:**

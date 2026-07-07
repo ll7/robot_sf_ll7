@@ -1,8 +1,8 @@
 # Issue #2311 ORCA-Residual Lane Decision
 
-Issue: [#2311](https://github.com/ll7/robot_sf_ll7/issues/2311)  
-Parent issue: [#1475](https://github.com/ll7/robot_sf_ll7/issues/1475)  
-Date: 2026-06-05  
+Issue: [#2311](https://github.com/ll7/robot_sf_ll7/issues/2311)
+Parent issue: [#1475](https://github.com/ll7/robot_sf_ll7/issues/1475)
+Date: 2026-06-05
 Status: decision recorded; diagnostic smoke evidence only.
 
 ## Decision

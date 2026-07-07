@@ -11,18 +11,18 @@ class FeatureExtractor(BaseFeaturesExtractor):
     def __init__(self, observation_space: spaces.Dict, **kwargs):
         # Calculate features_dim based on architecture
         super().__init__(observation_space, features_dim=total_features)
-        
+
         # Initialize ray processor
         self.ray_extractor = ...
-        
+
         # Initialize drive state processor
         self.drive_state_extractor = ...
-    
+
     def forward(self, obs: dict) -> torch.Tensor:
         # Process rays and drive state separately
         ray_features = self.ray_extractor(obs[OBS_RAYS])
         drive_features = self.drive_state_extractor(obs[OBS_DRIVE_STATE])
-        
+
         # Concatenate features
         return torch.cat([ray_features, drive_features], dim=1)
 ```
@@ -38,7 +38,7 @@ observation = {
 }
 
 # Typical dimensions:
-# rays: (batch, 5, 64) - 5 timesteps, 64 LiDAR rays  
+# rays: (batch, 5, 64) - 5 timesteps, 64 LiDAR rays
 # drive_state: (batch, 5, 5) - 5 timesteps, 5 state variables
 ```
 
@@ -54,7 +54,7 @@ ray_input_dim = 5 * 64 = 320
 ray_layers = [Linear(320, 128), ReLU(), Dropout(0.1),
               Linear(128, 64), ReLU(), Dropout(0.1)]
 
-# Drive state processing: (batch, 5, 5) -> (batch, 25) -> MLP -> (batch, drive_output_dim)  
+# Drive state processing: (batch, 5, 5) -> (batch, 25) -> MLP -> (batch, drive_output_dim)
 drive_input_dim = 5 * 5 = 25
 drive_layers = [Linear(25, 32), ReLU(), Dropout(0.1),
                 Linear(32, 16), ReLU(), Dropout(0.1)]
@@ -64,7 +64,7 @@ drive_layers = [Linear(25, 32), ReLU(), Dropout(0.1),
 
 **Parameter Count**: Approximately 54,760 parameters for default configuration
 - Ray MLP: 320→128→64 ≈ 49,280 parameters
-- Drive MLP: 25→32→16 ≈ 1,312 parameters  
+- Drive MLP: 25→32→16 ≈ 1,312 parameters
 - Policy network: Additional ~14,000 parameters
 
 **Advantages**:
@@ -90,15 +90,15 @@ ray_embedding = Linear(timesteps=5, embed_dim=64)
 for layer in attention_layers:
     # Q, K, V projections
     Q = query_proj(rays)  # (batch, num_rays, embed_dim)
-    K = key_proj(rays)    # (batch, num_rays, embed_dim)  
+    K = key_proj(rays)    # (batch, num_rays, embed_dim)
     V = value_proj(rays)  # (batch, num_rays, embed_dim)
-    
+
     # Attention weights: softmax(QK^T / sqrt(d_k))
     attention_weights = softmax(Q @ K.T / sqrt(embed_dim))
-    
+
     # Attended features: attention_weights @ V
     attended = attention_weights @ V
-    
+
     # Residual connection and layer norm
     rays = layer_norm(rays + attended)
 
@@ -123,7 +123,7 @@ ray_features = global_average_pool(attended_rays)
 - Quadratic complexity in sequence length
 - May be overkill for simple navigation tasks
 
-### 3. Lightweight CNN Extractor  
+### 3. Lightweight CNN Extractor
 
 **Core Concept**: Use simplified 1D convolutions to preserve spatial relationships.
 
@@ -134,10 +134,10 @@ ray_features = global_average_pool(attended_rays)
 conv_layers = [
     Conv1d(in_channels=5, out_channels=32, kernel_size=5, padding=2),
     BatchNorm1d(32), ReLU(), MaxPool1d(2), Dropout(0.1),
-    
-    Conv1d(in_channels=32, out_channels=16, kernel_size=3, padding=1), 
+
+    Conv1d(in_channels=32, out_channels=16, kernel_size=3, padding=1),
     BatchNorm1d(16), ReLU(), MaxPool1d(2), Dropout(0.1),
-    
+
     AdaptiveAvgPool1d(output_size=16),  # Ensure consistent output size
     Flatten()  # (batch, 16 * 16) = (batch, 256)
 ]
@@ -176,7 +176,7 @@ conv_layers = [
 # Typical parameter counts for default configurations:
 {
     'dynamics_conv': 5296,
-    'dynamics_flatten': 0, 
+    'dynamics_flatten': 0,
     'mlp_small': 54760,
     'mlp_large': 253936,
     'attention_small': 35408,
@@ -194,7 +194,7 @@ conv_layers = [
     'dynamics_flatten': 831,   # Flattened input size + drive state
     'mlp_small': 40,          # ray_dim + drive_dim
     'mlp_large': 80,          # ray_dim + drive_dim
-    'attention_small': 80,     # embed_dim + drive_dim  
+    'attention_small': 80,     # embed_dim + drive_dim
     'lightweight_cnn': 272    # conv_output + drive_dim
 }
 ```
@@ -204,7 +204,7 @@ conv_layers = [
 ### 1. Separate Processing Pipelines
 **Decision**: Process rays and drive state separately, then concatenate.
 
-**Rationale**: 
+**Rationale**:
 - Drive state is already compact and structured
 - LiDAR rays need more sophisticated processing
 - Allows different architectures for different data types
@@ -252,7 +252,7 @@ policy = ActorCriticPolicy(
 
 # Training loop:
 features = policy.features_extractor(observations)  # Extract features
-actions = policy.actor(features)                   # Generate actions  
+actions = policy.actor(features)                   # Generate actions
 values = policy.critic(features)                   # Estimate values
 ```
 
@@ -279,7 +279,7 @@ All extractors maintain proper gradient flow:
 - Parameter counting
 - Gradient flow verification
 
-### Integration Tests  
+### Integration Tests
 - StableBaselines3 compatibility
 - Training loop integration
 - Model saving/loading
@@ -295,7 +295,7 @@ All extractors maintain proper gradient flow:
 
 ### Potential Improvements
 1. **Graph Neural Networks**: For structured environments
-2. **Temporal Transformers**: For better sequence modeling  
+2. **Temporal Transformers**: For better sequence modeling
 3. **Multi-scale CNNs**: For different spatial scales
 4. **Ensemble Methods**: Combining multiple extractors
 5. **Neural Architecture Search**: Automated design optimization

@@ -79,8 +79,8 @@ Top 10 Coverage Gaps:
 ```markdown
 # Coverage Gap Analysis Report
 
-**Generated**: 2025-10-23 14:30:00  
-**Overall Coverage**: 67.45%  
+**Generated**: 2025-10-23 14:30:00
+**Overall Coverage**: 67.45%
 **Gaps Identified**: 23
 
 ## Top 10 Coverage Gaps
@@ -346,31 +346,31 @@ coverage:
   runs-on: ubuntu-latest
   steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-    
+
     - name: Install dependencies
       run: |
         pip install uv
         uv sync
-    
+
     - name: Run tests with coverage
       run: |
         uv run pytest tests \
           --cov=robot_sf \
           --cov-report=json \
           --cov-report=term
-    
+
     - name: Cache baseline coverage
       id: cache-baseline
       uses: actions/cache@v4
       with:
         path: coverage/.coverage-baseline.json
         key: coverage-baseline-${{ github.base_ref || 'main' }}
-    
+
     - name: Compare coverage
       if: github.event_name == 'pull_request'
       run: |
@@ -380,13 +380,13 @@ coverage:
           --threshold 1.0 \
           --format github-actions
       continue-on-error: true  # Never fail the build
-    
+
     - name: Update baseline
       if: github.ref == 'refs/heads/main'
       run: |
   mkdir -p coverage
   cp coverage.json coverage/.coverage-baseline.json
-    
+
     - name: Upload coverage HTML
       uses: actions/upload-artifact@v4
       with:

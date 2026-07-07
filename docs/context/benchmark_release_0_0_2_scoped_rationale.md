@@ -1,11 +1,11 @@
 # Benchmark Release v0.0.2 Scoped (7-Planner Release) - Rationale
 
-**Date**: 2026-04-14  
+**Date**: 2026-04-14
 **Release ID**: `paper_experiment_matrix_7planners_v1_v0_0_2`
 
 **Release Tag**: `0.0.2-scoped`
 
-**Maturity**: pre-1.0 alpha  
+**Maturity**: pre-1.0 alpha
 
 ## Executive Summary
 
@@ -61,9 +61,9 @@ Scanned all campaign runs in the workspace for socnav_bench performance records:
 
 Given the alpha status and external dependency blocker, we proceed with:
 
-✅ **Decision**: Create scoped release excluding socnav_bench  
-✅ **Justification**: Prioritize releasing 7 reproducible, stable planners over blocking on external assets  
-✅ **Future Path**: Full 8-planner release contingent on asset staging (out-of-band process)  
+✅ **Decision**: Create scoped release excluding socnav_bench
+✅ **Justification**: Prioritize releasing 7 reproducible, stable planners over blocking on external assets
+✅ **Future Path**: Full 8-planner release contingent on asset staging (out-of-band process)
 
 ## Scoped Release Configuration
 
@@ -81,11 +81,11 @@ Changes from all-planners config:
 
 ### What Gets Published
 
-✅ Campaign artifacts (7 successful planners)  
-✅ SNQI contract validation report  
-✅ Full markdown report with planner rankings and diagnostics  
-✅ Video artifacts (if requested)  
-✅ Publication bundle with release manifest  
+✅ Campaign artifacts (7 successful planners)
+✅ SNQI contract validation report
+✅ Full markdown report with planner rankings and diagnostics
+✅ Video artifacts (if requested)
+✅ Publication bundle with release manifest
 
 ### Release Notes
 
@@ -95,18 +95,18 @@ Changes from all-planners config:
 
 ## v0.0.2 (Scoped)
 
-This release includes the **first stable benchmark of 7 core and experimental 
+This release includes the **first stable benchmark of 7 core and experimental
 planners** for the Robot SF framework.
 
-⚠️ **Note**: Release 0.0.2 is a scoped release (7 planners) due to missing 
-external dependencies for socnav_bench. The full all-planners benchmark 
-(including socnav_bench) requires manual setup of the SocNavBench SD3DIS dataset. 
+⚠️ **Note**: Release 0.0.2 is a scoped release (7 planners) due to missing
+external dependencies for socnav_bench. The full all-planners benchmark
+(including socnav_bench) requires manual setup of the SocNavBench SD3DIS dataset.
 See docs/socnav_assets_setup.md for setup instructions.
 
-**Included Planners**: goal, social_force, orca, ppo, prediction_planner, 
+**Included Planners**: goal, social_force, orca, ppo, prediction_planner,
 socnav_sampling, sacadrl
 
-**Benchmark Config**: paper_experiment_matrix_7planners_v1  
+**Benchmark Config**: paper_experiment_matrix_7planners_v1
 **Campaign Duration**: [runtime from campaign run]
 ```
 
@@ -126,7 +126,7 @@ socnav_sampling, sacadrl
 To migrate to full 8-planner release in a future version:
 
 1. **Stage Assets** (out-of-band):
-   
+
 
 ```bash
    # User downloads SD3DIS dataset and runs:
@@ -134,7 +134,7 @@ To migrate to full 8-planner release in a future version:
    ```
 
 2. **Verify socnav_bench Planner**:
-   
+
 
 ```bash
    uv run python scripts/validation/verify_planner.py --planner socnav_bench

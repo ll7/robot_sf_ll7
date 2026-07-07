@@ -73,8 +73,8 @@ ped_config = PedEnvSettings(ego_ped_config=UnicycleDriveSettings())
 #### New Configuration:
 ```python
 from robot_sf.gym_env.unified_config import (
-    RobotSimulationConfig, 
-    ImageRobotConfig, 
+    RobotSimulationConfig,
+    ImageRobotConfig,
     PedestrianSimulationConfig
 )
 
@@ -97,13 +97,13 @@ class CustomRobotEnv(Env):
         self.env_config = env_config
         self.debug = debug
         # ... lots of boilerplate
-        
+
     def render(self):
         # Duplicate rendering logic
         pass
-        
+
     def exit(self):
-        # Duplicate cleanup logic  
+        # Duplicate cleanup logic
         pass
 ```
 
@@ -117,12 +117,12 @@ class CustomRobotEnv(SingleAgentEnv):
         if config is None:
             config = RobotSimulationConfig()
         super().__init__(config=config, **kwargs)
-        
+
     def _setup_environment(self):
         # Only implement environment-specific setup
         self.map_def = self.config.map_pool.choose_random_map()
         # ... custom logic
-        
+
     def _create_spaces(self):
         # Only implement space creation
         return action_space, observation_space
@@ -135,7 +135,7 @@ class CustomRobotEnv(SingleAgentEnv):
 def test_env_creation():
     env = RobotEnv()
     assert env is not None
-    
+
 def test_ped_env():
     env = PedestrianEnv(robot_model=model)
     assert env is not None
@@ -146,11 +146,11 @@ def test_ped_env():
 def test_env_creation():
     env = make_robot_env()
     assert env is not None
-    
+
 def test_ped_env():
     env = make_pedestrian_env(robot_model=model)
     assert env is not None
-    
+
 def test_factory_consistency():
     # All environments follow same interface
     envs = [
@@ -204,7 +204,7 @@ def test_factory_consistency():
 import warnings
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 
-@dataclass  
+@dataclass
 class EnvSettings(RobotSimulationConfig):
     """Deprecated: Use RobotSimulationConfig instead."""
     def __post_init__(self):
@@ -251,7 +251,7 @@ def test_backward_compatibility():
     # Old interface should still work
     from robot_sf.gym_env.env_config import EnvSettings
     from robot_sf.gym_env.robot_env import RobotEnv
-    
+
     env = RobotEnv(env_config=EnvSettings())
     assert env is not None
 ```
@@ -272,10 +272,10 @@ def test_equivalent_behavior():
     # Old and new should behave the same
     old_env = RobotEnv()
     new_env = make_robot_env()
-    
+
     old_obs, _ = old_env.reset()
     new_obs, _ = new_env.reset()
-    
+
     # Should have same structure
     assert old_obs.keys() == new_obs.keys()
 ```

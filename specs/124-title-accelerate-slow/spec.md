@@ -1,8 +1,8 @@
 # Feature Specification: Accelerate Slow Benchmark Tests (Per-Test Performance Budget)
 
-**Feature Branch**: `124-title-accelerate-slow`  
-**Created**: 2025-09-20  
-**Status**: Draft  
+**Feature Branch**: `124-title-accelerate-slow`
+**Created**: 2025-09-20
+**Status**: Draft
 **Input Summary**: Improve test suite performance so no single test exceeds 20 seconds wall time locally; introduce systematic detection, prevention, and remediation of overly slow tests (notably long-running benchmark/"full classic" style tests).
 
 ## User Scenarios & Testing *(mandatory)*

@@ -1,8 +1,8 @@
 # Feature Specification: Per-Pedestrian Force Quantiles
 
-**Feature Branch**: `146-per-pedestrian-force`  
-**Created**: 2025-10-24  
-**Status**: Draft  
+**Feature Branch**: `146-per-pedestrian-force`
+**Created**: 2025-10-24
+**Status**: Draft
 **Input**: User description: "Implement per-pedestrian force magnitude quantiles (q50, q90, q95) that compute quantiles for each pedestrian individually before averaging, as distinct from the existing aggregated force quantiles"
 
 ## User Scenarios & Testing *(mandatory)*
@@ -104,28 +104,28 @@ Future maintainers and users need clear documentation of the per-ped quantile fo
 ```python
 def per_ped_force_quantiles(data: EpisodeData, qs: Iterable[float] = (0.5, 0.9, 0.95)) -> dict[str, float]:
     """Compute per-pedestrian force quantiles then average across pedestrians.
-    
+
     For each pedestrian k:
     1. Extract force magnitude time series: M_k = ||F_{k,t}||₂ for all t
     2. Compute quantiles Q_k(q) for each requested quantile q
     3. Average Q_k(q) across all pedestrians k
-    
+
     Returns dict with keys: ped_force_q50, ped_force_q90, ped_force_q95
     Returns NaN for all keys if K=0.
     """
     K = data.peds_pos.shape[1]
     if K == 0:
         return {f"ped_force_q{int(q * 100)}": float("nan") for q in qs}
-    
+
     # Compute magnitudes: (T,K)
     mags = np.linalg.norm(data.ped_forces, axis=2)
-    
+
     # Compute quantiles per pedestrian: (K, len(qs))
     per_ped_quantiles = np.quantile(mags, q=list(qs), axis=0)  # shape: (Q, K)
-    
+
     # Average across pedestrians: (len(qs),)
     mean_quantiles = np.mean(per_ped_quantiles, axis=1)
-    
+
     return {f"ped_force_q{int(q * 100)}": float(mean_quantiles[i]) for i, q in enumerate(qs)}
 ```
 

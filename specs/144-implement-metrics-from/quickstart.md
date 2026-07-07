@@ -300,7 +300,7 @@ for episode in episodes:
 for algo, episodes_metrics in algo_metrics.items():
     success_rates = [m["success"] for m in episodes_metrics]
     velocities = [m["velocity_avg"] for m in episodes_metrics]
-    
+
     print(f"{algo}:")
     print(f"  Success: {np.mean(success_rates):.2%}")
     print(f"  Avg Velocity: {np.mean(velocities):.2f} m/s")

@@ -1,7 +1,7 @@
 # Research: fast-pysf Integration Quality Improvements
 
-**Feature**: 148-improve-fast-pysf  
-**Date**: 2025-10-29  
+**Feature**: 148-improve-fast-pysf
+**Date**: 2025-10-29
 **Phase**: 0 (Research & Decision Documentation)
 
 ## Overview
@@ -270,12 +270,12 @@ omit = [
 
 All technical unknowns from plan.md Technical Context resolved:
 
-✅ **Pytest integration**: `testpaths` addition  
-✅ **Ruff activation**: Per-directory rules with gradual adoption  
-✅ **Type checking**: ty with numba compatibility strategy  
-✅ **Coverage tracking**: Source extension with 70% target  
-✅ **Test fixtures**: Minimal map JSON files to be created  
-✅ **PR review strategy**: High-priority first, tracked resolution  
+✅ **Pytest integration**: `testpaths` addition
+✅ **Ruff activation**: Per-directory rules with gradual adoption
+✅ **Type checking**: ty with numba compatibility strategy
+✅ **Coverage tracking**: Source extension with 70% target
+✅ **Test fixtures**: Minimal map JSON files to be created
+✅ **PR review strategy**: High-priority first, tracked resolution
 
 **No NEEDS CLARIFICATION items remaining**. Ready for Phase 1 (Design & Contracts).
 

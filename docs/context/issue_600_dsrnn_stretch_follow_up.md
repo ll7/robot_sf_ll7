@@ -51,9 +51,9 @@ The repository already has a credible first attention-family anchor in `CrowdNav
 prediction-family backlog via `Go-MPC` and `Pred2Nav` . A DSRNN-style family should stay behind
 those earlier spikes because it adds more than one new burden at once:
 
-* graph-structured observation packing beyond the original CrowdNav joint-state adapter burden, 
-* recurrent hidden-state handling across time, 
-* an older runtime stack centered on Python 3.6 and OpenAI Baselines, 
+* graph-structured observation packing beyond the original CrowdNav joint-state adapter burden,
+* recurrent hidden-state handling across time,
+* an older runtime stack centered on Python 3.6 and OpenAI Baselines,
 * and a stronger need to prove source-harness parity before any Robot SF wrapper can be treated as
   family-faithful.
 
@@ -125,7 +125,7 @@ Open a dedicated implementation issue only after the earlier attention/predictio
 issue should be limited to:
 
 1. create an isolated side environment matching the upstream runtime assumptions,
-2. run the upstream `test.py` path with one bundled checkpoint, 
+2. run the upstream `test.py` path with one bundled checkpoint,
 3. document the exact observation tensor, recurrent-state, and action contracts,
 4. decide whether Robot SF can support a thin wrapper without turning the result into a local
    reimplementation.

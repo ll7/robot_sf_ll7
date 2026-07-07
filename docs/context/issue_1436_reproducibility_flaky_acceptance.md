@@ -13,7 +13,7 @@ scripts. All lane definitions are derived from `.github/workflows/ci.yml` and
 
 ### 1. Strict Lane (Deterministic Contracts)
 
-**CI job**: `fast-feedback`  
+**CI job**: `fast-feedback`
 **Local equivalent**: `scripts/dev/ci_driver.sh lint typecheck test`
 
 - `lint` — Ruff lint and format check; any finding is a deterministic contract
@@ -30,7 +30,7 @@ statistical variance is expected.
 
 ### 2. Smoke Lane (Integration and Regression Guards)
 
-**CI job**: `smoke-artifacts`  
+**CI job**: `smoke-artifacts`
 **Local equivalent**: `scripts/dev/ci_driver.sh smoke artifact-policy`
 
 - `smoke` — Map verification, environment validation, model prediction,
@@ -48,7 +48,7 @@ statistical variance is expected.
 
 ### 3. Benchmark-Facing Lane (Campaign Evidence)
 
-**CI job**: `workflow_dispatch` reproducibility check (optional)  
+**CI job**: `workflow_dispatch` reproducibility check (optional)
 **Local equivalent**: Config-first benchmark campaigns using
 `scripts/tools/run_benchmark_release.py` or `robot_sf_bench run` with committed
 matrix YAML.

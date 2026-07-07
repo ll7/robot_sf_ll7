@@ -30,16 +30,16 @@ All forces are summed up in the end to determine the direction and the velocity.
 
 *Located in the [forces.py](../../fast-pysf/pysocialforce/forces.py) file.*
 
-Desired Force:  
-This force describes the pedestrian's wish to reach a goal and is also called the acceleration force.  
+Desired Force:
+This force describes the pedestrian's wish to reach a goal and is also called the acceleration force.
 It tries to accelerate the pedestrian in the right direction, if the pedestrian is moving towards the target at maximum speed, the force is zero.
 When the destination is reached, a braking force is applied depending on the current velocity.
 
-Social Force:  
-This force represents the influence of other npc pedestrians in a specific radius.  
+Social Force:
+This force represents the influence of other npc pedestrians in a specific radius.
 It tries to repel based on position, direction and velocity differences, decaying exponentially.
 
-Obstacle Force:  
+Obstacle Force:
 This repulsive force is used to avoid immovable obstacles such as walls.
 It uses the distance to the nearest point of the obstacle to calculate its strength.
 
@@ -47,21 +47,21 @@ It uses the distance to the nearest point of the obstacle to calculate its stren
 
 *Located in the [forces.py](../../fast-pysf/pysocialforce/forces.py) file.*
 
-Group Repulsive Force:  
+Group Repulsive Force:
 This force models repulsive interactions between members of a group, by summing up the relative position vectors of nearby members.
 
 
-Group Coherence Force:  
+Group Coherence Force:
 This force aims to keep the members of the group together by pointing towards the centroid of the group.
 
-Group Gaze Force:  
+Group Gaze Force:
 This force aligns the pedestrian with the members direction.
 
 #### New
 
 *Located in the [ped_robot_force.py](../../robot_sf/ped_npc/ped_robot_force.py) file.*
 
-Ped-Robot Force:  
+Ped-Robot Force:
 This force is repulsive and causes pedestrians to avoid the robot.
 
 
@@ -69,11 +69,11 @@ This force is repulsive and causes pedestrians to avoid the robot.
 
 *Located in the [ped_behavior.py](../../robot_sf/ped_npc/ped_behavior.py) file.*
 
-FollowRouteBehavior:  
+FollowRouteBehavior:
 Pedestrians follow a fixed route and restart at the spawn when the route is finished.
 When this happens, the pedestrian starts a new trajectory, even though the ID is the same.
 
-CrowdedZoneBehavior:  
+CrowdedZoneBehavior:
 Pedestrians try to reach a goal in a predefined zone, and when they reach it, they are redirected to a new goal within the zone without respawning at a different location.
 
 ### Configuration

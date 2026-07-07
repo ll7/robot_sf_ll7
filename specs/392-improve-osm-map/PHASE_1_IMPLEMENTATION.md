@@ -1,10 +1,10 @@
 # Phase 1 Implementation: Core Importer & Rendering
 
-**Branch**: `392-Improve-osm-map-generation`  
-**Phase**: 1 of 4  
-**Duration**: Weeks 1–2  
-**Tasks**: T001–T021 (21 total)  
-**Status**: 🟢 **READY TO BEGIN**  
+**Branch**: `392-Improve-osm-map-generation`
+**Phase**: 1 of 4
+**Duration**: Weeks 1–2
+**Tasks**: T001–T021 (21 total)
+**Status**: 🟢 **READY TO BEGIN**
 **Date Started**: 2025-12-19
 
 ---
@@ -36,7 +36,7 @@ T016,T017 (rendering)
 T019,T020,T021 (validation)
 ```
 
-**Estimated sequential time**: ~8–10 days  
+**Estimated sequential time**: ~8–10 days
 **With parallelization [P]**: ~5–7 days
 
 ---
@@ -45,7 +45,7 @@ T019,T020,T021 (validation)
 
 ### T001: Create test PBF fixture
 
-**Status**: ⏳ Ready to start  
+**Status**: ⏳ Ready to start
 **Acceptance Criteria**:
 - [ ] PBF file loads without error
 - [ ] Contains buildings, footways, and obstacles
@@ -63,7 +63,7 @@ T019,T020,T021 (validation)
 
 ### T002: Create expected output fixtures
 
-**Status**: ⏳ Blocked by T001  
+**Status**: ⏳ Blocked by T001
 **Acceptance Criteria**:
 - [ ] Reference PNG exists
 - [ ] Metadata JSON with affine_transform field
@@ -73,7 +73,7 @@ T019,T020,T021 (validation)
 - Generated after T016–T017 complete
 - Used for regression testing in Phase 2+
 
-**Files Affected**: 
+**Files Affected**:
 - `tests/fixtures/scenarios/osm_fixtures/expected_outputs/sample_block_bg.png` (new)
 - `tests/fixtures/scenarios/osm_fixtures/expected_outputs/sample_block_meta.json` (new)
 
@@ -81,7 +81,7 @@ T019,T020,T021 (validation)
 
 ### T003: Add OSM dependencies to pyproject.toml
 
-**Status**: ⏳ Parallelizable [P]  
+**Status**: ⏳ Parallelizable [P]
 **Acceptance Criteria**:
 - [ ] `uv sync --all-extras` succeeds
 - [ ] All imports available: `import osmnx, shapely, geopandas, pyproj, yaml`
@@ -108,7 +108,7 @@ uv add osmnx pyosmium geopandas shapely pyproj pyyaml
 
 ### T004: Create module skeleton files
 
-**Status**: ⏳ Parallelizable [P]  
+**Status**: ⏳ Parallelizable [P]
 **Acceptance Criteria**:
 - [ ] Modules importable without error
 - [ ] Contain docstrings and type hints
@@ -118,17 +118,17 @@ uv add osmnx pyosmium geopandas shapely pyproj pyyaml
 1. `robot_sf/nav/osm_map_builder.py`
    ```python
    """OSM PBF to MapDefinition importer."""
-   
+
    from dataclasses import dataclass, field
    from typing import Optional
    from robot_sf.nav.map_config import MapDefinition
    # ... imports
-   
+
    @dataclass
    class OSMTagFilters:
        """Configuration for OSM tag filtering."""
        pass
-   
+
    def osm_to_map_definition(...) -> MapDefinition:
        """Convert OSM PBF to MapDefinition."""
        pass
@@ -137,16 +137,16 @@ uv add osmnx pyosmium geopandas shapely pyproj pyyaml
 2. `robot_sf/maps/osm_background_renderer.py`
    ```python
    """Render OSM PBF to PNG background with affine transform."""
-   
+
    from typing import Any, Dict
    # ... imports
-   
+
    def render_osm_background(...) -> dict[str, Any]:
        """Render PBF as PNG background."""
        pass
    ```
 
-**Files Affected**: 
+**Files Affected**:
 - `robot_sf/nav/osm_map_builder.py` (new)
 - `robot_sf/maps/osm_background_renderer.py` (new)
 
@@ -156,7 +156,7 @@ uv add osmnx pyosmium geopandas shapely pyproj pyyaml
 
 ### T005: Implement OSMTagFilters dataclass
 
-**Status**: ⏳ Blocked by T004  
+**Status**: ⏳ Blocked by T004
 **Acceptance Criteria**:
 - [ ] Dataclass with default tag sets
 - [ ] Driveable highways: footway, path, cycleway, etc.
@@ -168,7 +168,7 @@ uv add osmnx pyosmium geopandas shapely pyproj pyyaml
 @dataclass
 class OSMTagFilters:
     """Configuration for semantic OSM tag filtering."""
-    
+
     driveable_highways: list[str] = field(
         default_factory=lambda: [
             "footway", "path", "cycleway", "bridleway", "pedestrian"
@@ -203,7 +203,7 @@ class OSMTagFilters:
 
 ### T006: Implement PBF loading via OSMnx
 
-**Status**: ⏳ Blocked by T005  
+**Status**: ⏳ Blocked by T005
 **Acceptance Criteria**:
 - [ ] Loads PBF fixture without error
 - [ ] Returns GeoDataFrame with ways/areas
@@ -229,7 +229,7 @@ def load_pbf(pbf_file: str, bbox: Optional[tuple] = None) -> gpd.GeoDataFrame:
 
 ### T007: Implement tag filtering (driveable ways)
 
-**Status**: ⏳ Parallelizable [P] with T008, T010, T011  
+**Status**: ⏳ Parallelizable [P] with T008, T010, T011
 **Acceptance Criteria**:
 - [ ] Returns only tagged highways
 - [ ] Excludes steps, motorway, private access
@@ -243,7 +243,7 @@ def load_pbf(pbf_file: str, bbox: Optional[tuple] = None) -> gpd.GeoDataFrame:
 
 ### T008: Implement obstacle extraction
 
-**Status**: ⏳ Parallelizable [P] with T007, T010, T011  
+**Status**: ⏳ Parallelizable [P] with T007, T010, T011
 **Acceptance Criteria**:
 - [ ] Extracts buildings, water, cliffs
 - [ ] Validates geometries
@@ -257,7 +257,7 @@ def load_pbf(pbf_file: str, bbox: Optional[tuple] = None) -> gpd.GeoDataFrame:
 
 ### T009: Implement UTM projection
 
-**Status**: ⏳ Blocked by T006  
+**Status**: ⏳ Blocked by T006
 **Acceptance Criteria**:
 - [ ] Auto-detects UTM zone from centroid
 - [ ] Projects to meter-based coordinates
@@ -286,7 +286,7 @@ def project_to_utm(gdf: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, int]:
 
 ### T010: Implement line buffering
 
-**Status**: ⏳ Parallelizable [P] with T007, T008, T011  
+**Status**: ⏳ Parallelizable [P] with T007, T008, T011
 **Acceptance Criteria**:
 - [ ] Buffers lines to polygons
 - [ ] Uses round cap and join styles
@@ -314,7 +314,7 @@ def buffer_ways(gdf: gpd.GeoDataFrame, half_width_m: float = 1.5) -> list[Polygo
 
 ### T011: Implement polygon cleanup
 
-**Status**: ⏳ Parallelizable [P] with T007, T008, T010  
+**Status**: ⏳ Parallelizable [P] with T007, T008, T010
 **Acceptance Criteria**:
 - [ ] Repairs self-intersections with buffer(0)
 - [ ] Simplifies with 0.1m tolerance
@@ -344,7 +344,7 @@ def cleanup_polygons(polys: list[Polygon]) -> list[Polygon]:
 
 ### T012: Implement obstacle derivation
 
-**Status**: ⏳ Blocked by T011  
+**Status**: ⏳ Blocked by T011
 **Acceptance Criteria**:
 - [ ] Computes bounds - walkable_union = obstacles
 - [ ] Validates result (no gaps)
@@ -375,7 +375,7 @@ def compute_obstacles(bounds_box: tuple, walkable_union: Polygon) -> list[Polygo
 
 ### T013: Implement core entry point
 
-**Status**: ⏳ Blocked by T012  
+**Status**: ⏳ Blocked by T012
 **Acceptance Criteria**:
 - [ ] End-to-end PBF → MapDefinition works
 - [ ] MapDefinition has bounds, obstacles, allowed_areas
@@ -392,27 +392,27 @@ def osm_to_map_definition(
     """Convert OSM PBF to MapDefinition."""
     if tag_filters is None:
         tag_filters = OSMTagFilters()
-    
+
     # Load
     gdf = load_pbf(pbf_file, bbox)
-    
+
     # Filter & extract
     driveable_ways = filter_driveable_ways(gdf, tag_filters)
     obstacles_gdf = extract_obstacles(gdf, tag_filters)
-    
+
     # Project
     gdf_utm, utm_zone = project_to_utm(gdf)
-    
+
     # Buffer & cleanup
     buffered = buffer_ways(driveable_ways, line_buffer_m / 2)
     buffered = cleanup_polygons(buffered)
     walkable_union = unary_union(buffered)
-    
+
     # Compute obstacles
     bounds = gdf_utm.total_bounds
     obstacles_polys = compute_obstacles(bounds, walkable_union)
     obstacles_list = [Obstacle(vertices) for vertices in obstacles_polys]
-    
+
     # Build MapDefinition
     return MapDefinition(
         bounds=box(*bounds),
@@ -431,7 +431,7 @@ def osm_to_map_definition(
 
 ### T014: Modify MapDefinition dataclass
 
-**Status**: ⏳ Parallelizable [P] with importer  
+**Status**: ⏳ Parallelizable [P] with importer
 **Acceptance Criteria**:
 - [ ] Field `allowed_areas: list[Polygon] | None = None` added
 - [ ] Type checks pass
@@ -451,7 +451,7 @@ class MapDefinition:
     goal_zones: list[GoalZone] = field(default_factory=list)
     crowded_zones: list[CrowdedZone] = field(default_factory=list)
     routes: list[Route] = field(default_factory=list)
-    
+
     # NEW FIELD:
     allowed_areas: Optional[list[Polygon]] = None
 ```
@@ -464,7 +464,7 @@ class MapDefinition:
 
 ### T015: Add helper method is_point_in_driveable_area
 
-**Status**: ⏳ Blocked by T014  
+**Status**: ⏳ Blocked by T014
 **Acceptance Criteria**:
 - [ ] Method uses allowed_areas if present
 - [ ] Falls back to obstacle complement
@@ -476,7 +476,7 @@ def is_point_in_driveable_area(self, point: tuple[float, float]) -> bool:
     """Check if point is in driveable area."""
     from shapely.geometry import Point
     p = Point(point)
-    
+
     if self.allowed_areas is not None:
         # Use explicit walkable areas
         return any(poly.contains(p) for poly in self.allowed_areas)
@@ -495,7 +495,7 @@ def is_point_in_driveable_area(self, point: tuple[float, float]) -> bool:
 
 ### T016: Implement render_osm_background
 
-**Status**: ⏳ Blocked by T004  
+**Status**: ⏳ Blocked by T004
 **Acceptance Criteria**:
 - [ ] PNG file created
 - [ ] Metadata dict returned with affine_transform
@@ -518,34 +518,34 @@ def render_osm_background(
     # Load PBF
     import osmnx as ox
     gdf = ox.features_from_file(pbf_file)
-    
+
     # Get bounds
     bounds = gdf.total_bounds  # (minx, miny, maxx, maxy)
-    
+
     # Create figure
     fig, ax = plt.subplots(figsize=(10, 10), dpi=100)
-    
+
     # Plot layers
     # ... (buildings, water, streets)
-    
+
     # Compute affine transform
     width_m = bounds[2] - bounds[0]
     height_m = bounds[3] - bounds[1]
     pixel_width = int(width_m * pixels_per_meter)
     pixel_height = int(height_m * pixels_per_meter)
-    
+
     affine = {
         "pixel_origin": [0, 0],
         "pixel_per_meter": pixels_per_meter,
         "bounds_meters": [bounds[0], bounds[1], bounds[2], bounds[3]],
     }
-    
+
     # Save PNG
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     png_path = f"{output_dir}/background.png"
     fig.savefig(png_path, bbox_inches="tight", dpi=100)
     plt.close(fig)
-    
+
     return {
         "png_path": png_path,
         "affine_transform": affine,
@@ -560,7 +560,7 @@ def render_osm_background(
 
 ### T017: Implement affine transform validation
 
-**Status**: ⏳ Blocked by T016  
+**Status**: ⏳ Blocked by T016
 **Acceptance Criteria**:
 - [ ] Round-trip pixel↔world transformation works
 - [ ] Error <±1 pixel, ±0.1m
@@ -573,14 +573,14 @@ def validate_affine_transform(transform: dict[str, Any]) -> bool:
     pixel_origin = transform["pixel_origin"]
     scale = transform["pixel_per_meter"]
     bounds = transform["bounds_meters"]
-    
+
     # Test: pixel (0, 0) → world → pixel
     world_x = bounds[0] + (pixel_origin[0] / scale)
     world_y = bounds[1] + (pixel_origin[1] / scale)
-    
+
     pixel_x_back = (world_x - bounds[0]) * scale
     pixel_y_back = (world_y - bounds[1]) * scale
-    
+
     error = max(abs(pixel_x_back - pixel_origin[0]), abs(pixel_y_back - pixel_origin[1]))
     return error < 1.0  # ±1 pixel tolerance
 ```
@@ -595,7 +595,7 @@ def validate_affine_transform(transform: dict[str, Any]) -> bool:
 
 ### T018: Create example script
 
-**Status**: ⏳ Blocked by T013, T016  
+**Status**: ⏳ Blocked by T013, T016
 **Acceptance Criteria**:
 - [ ] Script runs headless
 - [ ] Produces MapDefinition + PNG
@@ -607,7 +607,7 @@ def validate_affine_transform(transform: dict[str, Any]) -> bool:
 
 ### T019–T021: Backward-compat validation (3 tasks)
 
-**Status**: ⏳ Blocked by T013  
+**Status**: ⏳ Blocked by T013
 
 These three tasks validate that existing code still works:
 - T019: pygame visualization unchanged

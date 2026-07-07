@@ -70,7 +70,7 @@ The wrapper must expose the candidate as a Robot SF planner without changing the
 #### Action back-projection
 
 * map upstream output to Robot SF command space:
-  + `unicycle_vw` for 2D velocity/turn rate commands, 
+  + `unicycle_vw` for 2D velocity/turn rate commands,
   + if needed, curvature/velocity conversion for `SICNav`.
 * maintain semantics of safe interaction decisions rather than post-hoc clipping.
 
@@ -91,9 +91,9 @@ The wrapper must expose the candidate as a Robot SF planner without changing the
   + `include_in_paper: false`
   + `algo=sicnav` for the initial prototype
 * Confirm the wrapper:
-  + starts cleanly, 
-  + executes episodes without crashing, 
-  + produces valid Robot SF control actions, 
+  + starts cleanly,
+  + executes episodes without crashing,
+  + produces valid Robot SF control actions,
   + does not silently fall back to a different planner.
 
 ### 2. Representative scenario coverage
@@ -139,9 +139,9 @@ Validate the policy using the benchmark metrics that matter for Robot SF compari
 ### 3. Promotion criteria
 
 Keep the candidate behind the testing guard until it satisfies all of the following:
-* repeatable benchmark evidence on the verified-simple suite, 
-* contradiction-free outputs (no solver crashes, invalid actions, or pathing exploration failures), 
-* stable behavior across repeated seeds, 
+* repeatable benchmark evidence on the verified-simple suite,
+* contradiction-free outputs (no solver crashes, invalid actions, or pathing exploration failures),
+* stable behavior across repeated seeds,
 * a documented case for why the candidate should exist alongside current baselines.
 
 If Stage 1 fails, do not escalate the candidate to broader benchmark runs. If Stage 1 passes but metrics are weak, keep the candidate as `prototype only` and capture the failure mode.
@@ -149,8 +149,8 @@ If Stage 1 fails, do not escalate the candidate to broader benchmark runs. If St
 ### 4. Failure and deferral documentation
 
 If the new policy does not validate, record:
-* why the policy failed (installation, solver instability, zero success, collisions, runtime blow-up), 
-* whether the issue is implementation-mapped or algorithm-intrinsic, 
+* why the policy failed (installation, solver instability, zero success, collisions, runtime blow-up),
+* whether the issue is implementation-mapped or algorithm-intrinsic,
 * the current readiness classification (`assessment only` or `prototype only`).
 
 ## Governance and next steps
@@ -170,8 +170,8 @@ If the new policy does not validate, record:
 ### 3. Create the wrapper implementation issue
 
 Open a dedicated follow-up issue such as `#771-drmpscnav-implementation` that covers:
-* implementation of the thin wrapper adapter, 
-* CI smoke-run config for the verified-simple gate, 
+* implementation of the thin wrapper adapter,
+* CI smoke-run config for the verified-simple gate,
 * benchmark metric validation documentation.
 
 ## Recommended path
@@ -183,7 +183,7 @@ Open a dedicated follow-up issue such as `#771-drmpscnav-implementation` that co
 ## Validation completion signal
 
 This guide is fulfilled when the new policy has:
-* been executed successfully on the verified-simple benchmark gate, 
-* produced repeatable benchmark metrics, 
-* been compared to baseline policy outcomes, 
+* been executed successfully on the verified-simple benchmark gate,
+* produced repeatable benchmark metrics,
+* been compared to baseline policy outcomes,
 * been documented with a clear promotion or deferral recommendation.

@@ -1,7 +1,7 @@
 # Research & Technical Decisions: SVG-Based Global Planner
 
-**Phase**: 0 (Outline & Research)  
-**Date**: 2025-12-10  
+**Phase**: 0 (Outline & Research)
+**Date**: 2025-12-10
 **Status**: Complete
 
 ## Overview
@@ -118,7 +118,7 @@ def _get_or_build_graph(map_def: MapDefinition) -> VisibilityGraph:
 
 **Schema**:
 ```xml
-<circle class="poi" id="poi_corridor_1" cx="50" cy="25" r="0.5" 
+<circle class="poi" id="poi_corridor_1" cx="50" cy="25" r="0.5"
         label="corridor_junction" />
 ```
 
@@ -150,7 +150,7 @@ for circle in circles:
 1. **Phase 1 (Weeks 1-2)**: Add `use_planner: bool` flag to RobotSimulationConfig
    - Default: False (existing manual routes)
    - When True: `sample_route()` delegates to `GlobalPlanner.plan()`
-   
+
 2. **Phase 2 (Weeks 3-4)**: Auto-detect maps without manual paths
    - If `map_def.robot_routes` is empty → automatically use planner
    - Preserve backward compatibility for maps with existing routes
@@ -237,19 +237,19 @@ env = make_robot_env(config=config)
 map_sizes = [10, 25, 50, 75, 100]  # obstacle counts
 for num_obstacles in map_sizes:
     map_def = generate_test_map(num_obstacles)
-    
+
     # Time graph build (one-time)
     start = time.perf_counter()
     planner = GlobalPlanner(map_def)
     build_time = time.perf_counter() - start
-    
+
     # Time 100 path queries
     times = []
     for _ in range(100):
         start = time.perf_counter()
         path = planner.plan(sample_start(), sample_goal())
         times.append(time.perf_counter() - start)
-    
+
     print(f"{num_obstacles} obstacles: "
           f"build={build_time*1000:.1f}ms, "
           f"query_median={np.median(times)*1000:.1f}ms")

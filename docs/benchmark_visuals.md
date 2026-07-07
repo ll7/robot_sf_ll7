@@ -117,7 +117,7 @@ uv run python -c "import json; print(json.loads(open('episodes.jsonl').readline(
 
 **Solutions**:
 ```bash
-# Install dependencies  
+# Install dependencies
 uv sync --all-extras
 
 # Check trajectory data

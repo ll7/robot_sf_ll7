@@ -1,7 +1,7 @@
 # Data Model: Automated Research Reporting
 
-**Feature**: 270-imitation-report  
-**Phase**: 1 (Design)  
+**Feature**: 270-imitation-report
+**Phase**: 1 (Design)
 **Date**: 2025-11-21
 
 ## Overview
@@ -187,7 +187,7 @@ def evaluate_hypothesis(
     threshold: float
 ) -> HypothesisDefinition:
     improvement_pct = 100 * (baseline_metric - pretrained_metric) / baseline_metric
-    
+
     if improvement_pct >= threshold:
         decision = "PASS"
     elif improvement_pct < 0:
@@ -196,7 +196,7 @@ def evaluate_hypothesis(
     else:
         decision = "FAIL"
         note = f"Improvement {improvement_pct:.1f}% < threshold {threshold}%"
-    
+
     return HypothesisDefinition(
         description=f"Pre-training reduces timesteps by ≥{threshold}%",
         metric="timesteps_to_convergence",

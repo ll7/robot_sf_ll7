@@ -1,10 +1,10 @@
 # Tasks: Automated Research Reporting for Imitation Learning
 
-**Feature**: 270-imitation-report  
-**Branch**: `270-imitation-report`  
+**Feature**: 270-imitation-report
+**Branch**: `270-imitation-report`
 **Date**: 2025-11-21
 
-**Input**: Design documents from `/specs/270-imitation-report/`  
+**Input**: Design documents from `/specs/270-imitation-report/`
 **Prerequisites**: plan.md ✅, spec.md ✅, research.md ✅, data-model.md ✅, contracts/ ✅
 
 **Tests**: Integration tests included for report generation; unit tests for core components.
@@ -362,10 +362,10 @@ uv run python scripts/tools/validate_report.py output/research_reports/mvp_demo
 
 ## Format Validation
 
-✅ All tasks follow checklist format: `- [ ] [ID] [P?] [Story?] Description with file path`  
-✅ All user story tasks labeled with [US1], [US2], [US3], or [US4]  
-✅ All tasks include specific file paths or validation commands  
-✅ Dependencies clearly documented in execution order section  
-✅ MVP scope identified (User Story 1 = 32 tasks)  
-✅ Independent test criteria provided for each user story  
+✅ All tasks follow checklist format: `- [ ] [ID] [P?] [Story?] Description with file path`
+✅ All user story tasks labeled with [US1], [US2], [US3], or [US4]
+✅ All tasks include specific file paths or validation commands
+✅ Dependencies clearly documented in execution order section
+✅ MVP scope identified (User Story 1 = 32 tasks)
+✅ Independent test criteria provided for each user story
 ✅ Parallel opportunities marked with [P] tag

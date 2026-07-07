@@ -153,4 +153,3 @@ The refined plan is acceptable when:
 - It names proof obligations before claim promotion.
 - It preserves useful long-term ideas without making them near-term blockers.
 - It can guide future agents without encouraging benchmark overclaims.
-

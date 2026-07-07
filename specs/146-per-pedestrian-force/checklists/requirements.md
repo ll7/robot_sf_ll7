@@ -1,7 +1,7 @@
 # Specification Quality Checklist: Per-Pedestrian Force Quantiles
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning  
-**Created**: 2025-10-24  
+**Purpose**: Validate specification completeness and quality before proceeding to planning
+**Created**: 2025-10-24
 **Feature**: [../spec.md](../spec.md)
 
 ## Content Quality

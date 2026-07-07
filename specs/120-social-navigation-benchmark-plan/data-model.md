@@ -1,6 +1,6 @@
 # Data Model — Social Navigation Benchmark
 
-Version: 0.1 (Design Phase)  
+Version: 0.1 (Design Phase)
 Schema Version Reference: `episode.schema.v1`
 
 ## Entity Overview

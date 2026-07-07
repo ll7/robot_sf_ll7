@@ -1,7 +1,7 @@
 # Global Planner API Contract
 
-**Phase**: 1 (Design & Contracts)  
-**Version**: 1.0.0  
+**Phase**: 1 (Design & Contracts)
+**Version**: 1.0.0
 **Status**: Draft
 
 ## Purpose
@@ -411,24 +411,24 @@ def plan_legacy(self, start, goal):
 def plan(self, start: Vec2D, goal: Vec2D, *, via_pois: Optional[list[str]] = None) -> list[Vec2D]:
     """
     Compute collision-free path from start to goal.
-    
+
     Args:
         start: Starting position in meters (must be within map bounds)
         goal: Goal position in meters (must be within map bounds)
         via_pois: Optional POI IDs to route through, in order
-    
+
     Returns:
         List of waypoints forming collision-free path.
         Includes start and goal as first/last elements.
-    
+
     Raises:
         PlanningFailedError: No valid path exists (if fallback disabled)
         ValueError: Start/goal out of bounds or invalid POI ID
-    
+
     Performance:
         First call: 200-500ms (builds visibility graph)
         Cached: <100ms (queries existing graph)
-    
+
     Example:
         >>> planner = GlobalPlanner(map_def)
         >>> path = planner.plan(Vec2D(0, 0), Vec2D(10, 5))
@@ -469,8 +469,8 @@ Updates recorded in:
 
 ## Sign-Off
 
-**Author**: AI Agent (GitHub Copilot)  
-**Reviewers**: TBD  
+**Author**: AI Agent (GitHub Copilot)
+**Reviewers**: TBD
 **Approval Date**: TBD
 
 **Review Checklist**:

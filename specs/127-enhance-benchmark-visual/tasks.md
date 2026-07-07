@@ -183,4 +183,3 @@ Generated on 2025-09-20.
 - [x] Demo script updated
 - [x] CHANGELOG entry added
 - [x] Polish: lint, tests, performance sanity
-

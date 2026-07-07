@@ -23,8 +23,8 @@ This is the simplest scenario imaginable, pedestrians walk in a tightly confined
 
 ![Narrow Corridor](../img/ped_metrics_analysis/paper1_narrow.png)
 
-Despite different starts, almost all pedestrians are on the same line to the finish after 1 meter.  
-The reason for the exceptions is the simultaneous start.  
+Despite different starts, almost all pedestrians are on the same line to the finish after 1 meter.
+The reason for the exceptions is the simultaneous start.
 
 The paper also uses a wide corridor scenario, but with the NPC pedestrian model there wouldn't be any difference to the narrow corridor scene.
 
@@ -35,17 +35,17 @@ It was used to determine if the simulated trajectory was close enough to the rea
 ![Bench Scenario](../img/ped_metrics_analysis/paper1_bench.png)
 
 ![Bench - All Trajectories](../img/ped_metrics_analysis/paper1_all.png)
-Pedestrians usually choose the path above the  bench, making an almost 90-degree turn.  
+Pedestrians usually choose the path above the  bench, making an almost 90-degree turn.
 One pedestrian has taken the lower path, because he hits the bench slightly lower than all the other pedestrians.
 
 ![Bench - Velocity and Acceleration](../img/ped_metrics_analysis/paper1_vel_acc.png)
 
-Very similar behavior in speed and acceleration are recognizable.  
+Very similar behavior in speed and acceleration are recognizable.
 The orange trajectory needs to slow down the most, because it hits the bench in a bad angle. Better evasive behavior is shown by the blue and green trajectories.
 
 ![Bench - Velocity Distribution](../img/ped_metrics_analysis/paper1_vel_distru.png)
 
-Maximum speed is the most common, but slow speeds are also not rare.  
+Maximum speed is the most common, but slow speeds are also not rare.
 The velocities also don't fit a normal distribution.
 
 ![Bench - Color coded](../img/ped_metrics_analysis/paper1_colorcoded.png)
@@ -54,26 +54,26 @@ Pedestrians start at the maximum speed and slow down before the object using onl
 
 ### [Paper 2](#2)
 
-Validates the social force model with real data using the following methods: 
+Validates the social force model with real data using the following methods:
 - Trajectories
 - Kernel Density Estimation with bandwidth = 0.1m
 - Acceleration displayed on the map (color-coded)
 - Acceleration in x-direction along y-axis
 - Acceleration in y-direction along y-axis
 
-**Comparison with MIT Infinite Corridor**  
+**Comparison with MIT Infinite Corridor**
 This scenario describes a corridor with a single small object placed in the middle of it, with the goal of evaluating the evasive behavior of pedestrians in a tight space.
 
 ![MIT Corridor](../img/ped_metrics_analysis/paper2_MIT-corridor.png)
 
-Distances in x: Corridor = 3 m, Obstacle = 0.1 m, Pedestrian = 0.8  
+Distances in x: Corridor = 3 m, Obstacle = 0.1 m, Pedestrian = 0.8
 
 The obstacle force is higher than the desired force and therefore the pedestrian can't move any further, even though there is enough space to walk next to the obstacle.
 
 ### [Paper 3](#3)
 
 This paper developed a new model for trajectory prediction.
-To validate their model, they created experimental data by letting pedestrians walk a predefined route in six different variations including the walking speed (fast and normal) and the distraction level (texting, talking on the phone and no distraction) on a predefined route on their campus. 
+To validate their model, they created experimental data by letting pedestrians walk a predefined route in six different variations including the walking speed (fast and normal) and the distraction level (texting, talking on the phone and no distraction) on a predefined route on their campus.
 
 Following methods were used to visualize and validate the data:
 - 3D Plot - Speed, Deviation from pedestrians mean speed, Density

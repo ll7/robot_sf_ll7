@@ -1,8 +1,8 @@
 # Feature Specification: SVG-Based Global Planner for Robot Navigation
 
-**Feature Branch**: `342-svg-global-planner`  
-**Created**: December 10, 2025  
-**Status**: Draft  
+**Feature Branch**: `342-svg-global-planner`
+**Created**: December 10, 2025
+**Status**: Draft
 **Input**: User description: "Implement automated global planner that generates collision-free waypoint paths from spawn zones to goal zones around static obstacles using visibility graphs"
 
 ## User Scenarios & Testing *(mandatory)*

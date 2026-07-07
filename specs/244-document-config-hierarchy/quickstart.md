@@ -1,6 +1,6 @@
 # Quickstart: Configuration Hierarchy Documentation
 
-**Feature**: 244-document-config-hierarchy  
+**Feature**: 244-document-config-hierarchy
 **Date**: 2025-01-11
 
 ## For Developers: Using the Configuration Documentation
@@ -38,7 +38,7 @@ config = RobotSimulationConfig(
 
 **If you see this warning**:
 ```
-DeprecationWarning: EnvSettings is deprecated and will be removed in a future version. 
+DeprecationWarning: EnvSettings is deprecated and will be removed in a future version.
 Use RobotSimulationConfig from robot_sf.gym_env.unified_config instead.
 ```
 
@@ -74,9 +74,9 @@ from dataclasses import dataclass, field
 @dataclass
 class EnvSettings:
     """Legacy config class - use RobotSimulationConfig instead."""
-    
+
     # ... existing fields ...
-    
+
     def __post_init__(self):
         warnings.warn(
             "EnvSettings is deprecated and will be removed in a future version. "
@@ -167,11 +167,11 @@ def test_deprecation_message_content():
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         config = EnvSettings()
-        
+
         assert len(w) == 1
         assert issubclass(w[0].category, DeprecationWarning)
         message = str(w[0].message)
-        
+
         assert "EnvSettings" in message
         assert "deprecated" in message.lower()
         assert "RobotSimulationConfig" in message

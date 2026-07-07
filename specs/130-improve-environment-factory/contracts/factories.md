@@ -46,7 +46,7 @@ Unknown legacy kw:
 | Event | Level | Message Pattern |
 |-------|-------|-----------------|
 | Factory creation | INFO | Creating {factory} debug={debug} record={record} seed={seed} |
-| Deprecated kw used | WARNING | Deprecated parameter '{legacy}' mapped to '{new}' | 
+| Deprecated kw used | WARNING | Deprecated parameter '{legacy}' mapped to '{new}' |
 | Unknown kw (permissive) | WARNING | Unknown parameter '{legacy}' ignored (enable strict mode) |
 | Conflict (boolean vs object) | WARNING | Boolean flag overridden by explicit options object for recording |
 | Missing video path | WARNING | Recording enabled but no video_path provided; buffering frames only |

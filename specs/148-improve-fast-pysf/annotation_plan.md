@@ -1,7 +1,7 @@
 # Type Annotation Plan: fast-pysf
 
-**Created**: 2025-10-29  
-**Phase**: User Story 4 - Improved Type Annotations (P3)  
+**Created**: 2025-10-29
+**Phase**: User Story 4 - Improved Type Annotations (P3)
 **Goal**: Reduce type errors by ≥25% while maintaining numba JIT compatibility
 
 ## Baseline Analysis (T055)
@@ -9,7 +9,7 @@
 ### Current State
 - **Total type check output lines**: 275
 - **Total errors/warnings**: 18 (17 errors, 1 warning)
-- **Files with issues**: 
+- **Files with issues**:
   - `sim_view.py` (majority of errors)
   - `forces.py` (warnings about missing attributes)
   - Other files (minor issues)
@@ -80,7 +80,7 @@ Based on error analysis and public API importance:
 #### T057: forces.py Type Hints
 **Target Functions**:
 - `desired_force()`
-- `social_force()`  
+- `social_force()`
 - `obstacle_force()`
 - `ortho_vec()`
 
@@ -171,7 +171,7 @@ Based on error analysis and public API importance:
 ## Risks and Mitigations
 
 ### Risk 1: Numba Incompatibility
-**Mitigation**: 
+**Mitigation**:
 - Only type function signatures, not internals
 - Test after each change: `uv run pytest fast-pysf/tests/test_forces.py -v`
 - Keep backup of working version

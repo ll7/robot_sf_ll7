@@ -1,8 +1,8 @@
 # Implementation Plan: Improve fast-pysf Integration
 
-**Created**: October 29, 2025  
-**Feature**: 148-improve-fast-pysf  
-**Branch**: `148-improve-fast-pysf`  
+**Created**: October 29, 2025
+**Feature**: 148-improve-fast-pysf
+**Branch**: `148-improve-fast-pysf`
 **Dependencies**: PR #236 review comments analysis
 
 ## Overview
@@ -26,7 +26,7 @@ This implementation plan addresses the systematic improvement of fast-pysf integ
 **Goal**: Make fast-pysf tests run as part of main test suite
 
 ### Task 1.1: Configure pytest for fast-pysf Tests
-**Time**: 1 hour  
+**Time**: 1 hour
 **Files**: `pyproject.toml`
 
 **Steps**:
@@ -46,7 +46,7 @@ This implementation plan addresses the systematic improvement of fast-pysf integ
 - **Mitigation**: Run tests separately first, then combine; use environment variable guards
 
 ### Task 1.2: Verify Headless Test Execution
-**Time**: 1 hour  
+**Time**: 1 hour
 **Files**: Configuration files, CI workflow
 
 **Steps**:
@@ -61,7 +61,7 @@ This implementation plan addresses the systematic improvement of fast-pysf integ
 - Clear documentation for running tests locally
 
 ### Task 1.3: Update Documentation
-**Time**: 30 minutes  
+**Time**: 30 minutes
 **Files**: `docs/dev_guide.md`, `README.md`
 
 **Steps**:
@@ -93,7 +93,7 @@ This implementation plan addresses the systematic improvement of fast-pysf integ
 **Goal**: Address all 24 review comments from PR #236
 
 ### Task 2.1: Fix High-Priority Issues (Critical)
-**Time**: 4-6 hours  
+**Time**: 4-6 hours
 **Files**: See pr236_review_comments.md Group 1
 
 **Issues to Address**:
@@ -123,7 +123,7 @@ This implementation plan addresses the systematic improvement of fast-pysf integ
 - Add regression tests for critical fixes
 
 ### Task 2.2: Fix Medium-Priority Issues (Maintainability)
-**Time**: 2-3 hours  
+**Time**: 2-3 hours
 **Files**: See pr236_review_comments.md Group 2
 
 **Issues to Address**:
@@ -146,7 +146,7 @@ This implementation plan addresses the systematic improvement of fast-pysf integ
 - Linters and formatters pass
 
 ### Task 2.3: Polish Low-Priority Issues (Code Quality)
-**Time**: 1-2 hours  
+**Time**: 1-2 hours
 **Files**: See pr236_review_comments.md Group 3
 
 **Issues to Address**:
@@ -167,7 +167,7 @@ This implementation plan addresses the systematic improvement of fast-pysf integ
 - Markdown passes linting
 
 ### Task 2.4: Documentation and Tracking
-**Time**: 30 minutes  
+**Time**: 30 minutes
 **Files**: `specs/148-improve-fast-pysf/resolution_status.md`
 
 **Steps**:
@@ -186,7 +186,7 @@ This implementation plan addresses the systematic improvement of fast-pysf integ
 **Goal**: Extend ruff, ty, and coverage to fast-pysf code
 
 ### Task 3.1: Configure Ruff for fast-pysf
-**Time**: 1 hour  
+**Time**: 1 hour
 **Files**: `pyproject.toml`, `.ruff.toml` (if exists)
 
 **Steps**:
@@ -207,7 +207,7 @@ This implementation plan addresses the systematic improvement of fast-pysf integ
 - Track improvement over time
 
 ### Task 3.2: Configure Type Checking for fast-pysf
-**Time**: 1.5 hours  
+**Time**: 1.5 hours
 **Files**: `pyproject.toml`, type stubs if needed
 
 **Steps**:
@@ -229,7 +229,7 @@ This implementation plan addresses the systematic improvement of fast-pysf integ
 - Document known limitations
 
 ### Task 3.3: Integrate Coverage Reporting
-**Time**: 1 hour  
+**Time**: 1 hour
 **Files**: `pyproject.toml`, `.coveragerc` (if exists)
 
 **Steps**:
@@ -246,7 +246,7 @@ This implementation plan addresses the systematic improvement of fast-pysf integ
 - Minimum coverage threshold enforced (soft/warn)
 
 ### Task 3.4: Update Quality Gate Workflow
-**Time**: 30 minutes  
+**Time**: 30 minutes
 **Files**: `.github/workflows/`, VS Code tasks
 
 **Steps**:
@@ -265,7 +265,7 @@ This implementation plan addresses the systematic improvement of fast-pysf integ
 **Goal**: Improve type safety while preserving functionality
 
 ### Task 4.1: Identify Annotation Targets
-**Time**: 1 hour  
+**Time**: 1 hour
 **Files**: Analysis document
 
 **Steps**:
@@ -281,7 +281,7 @@ This implementation plan addresses the systematic improvement of fast-pysf integ
 - Plan for incremental improvement
 
 ### Task 4.2: Annotate Public APIs
-**Time**: 2-3 hours  
+**Time**: 2-3 hours
 **Files**: `fast-pysf/pysocialforce/*.py` (prioritized subset)
 
 **Steps**:
@@ -303,7 +303,7 @@ This implementation plan addresses the systematic improvement of fast-pysf integ
 - Check for performance regressions
 
 ### Task 4.3: Replace `Any` with Specific Types
-**Time**: 1-2 hours  
+**Time**: 1-2 hours
 **Files**: Subset from Task 4.1
 
 **Steps**:
@@ -319,7 +319,7 @@ This implementation plan addresses the systematic improvement of fast-pysf integ
 - Type checking shows improvement
 
 ### Task 4.4: Documentation and Baseline
-**Time**: 30 minutes  
+**Time**: 30 minutes
 **Files**: `specs/148-improve-fast-pysf/type_baseline.md`
 
 **Steps**:

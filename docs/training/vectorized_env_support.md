@@ -17,4 +17,3 @@ the primary training path, plus unit coverage that secondary entry points reques
 
 Supported vector-env smoke tests intentionally use tiny scenario/config slices. They validate
 construction and Gymnasium reset/step/close behavior, not training quality or policy performance.
-

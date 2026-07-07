@@ -1,8 +1,8 @@
 # Implementation Tasks: Metrics from Paper 2306.16740v4
 
-**Branch**: `144-implement-metrics-from`  
-**Generated**: October 23, 2025  
-**Total Tasks**: 35  
+**Branch**: `144-implement-metrics-from`
+**Generated**: October 23, 2025
+**Total Tasks**: 35
 **Estimated Effort**: Medium (22 metric functions + tests + docs)
 
 ## Overview
@@ -79,7 +79,7 @@ def _compute_distance_matrix(data: EpisodeData) -> np.ndarray:
 
 **Goal**: Implement all 22 metrics from paper Table 1
 
-**Independent Test Criteria**: 
+**Independent Test Criteria**:
 - All 22 metric functions callable with valid EpisodeData
 - Each metric returns correct type (float) and handles edge cases
 - Unit tests verify formulas match paper definitions
@@ -94,7 +94,7 @@ def _compute_distance_matrix(data: EpisodeData) -> np.ndarray:
 ```python
 def success_rate(data: EpisodeData, *, horizon: int) -> float:
     """Binary success indicator (1.0 if goal reached before horizon without collisions, else 0.0).
-    
+
     Formula: S = 1 if (reached_goal_step < horizon) AND (collisions == 0) else 0
     Units: boolean [0,1]
     """
@@ -116,7 +116,7 @@ def success_rate(data: EpisodeData, *, horizon: int) -> float:
 ```python
 def collision_count(data: EpisodeData) -> float:
     """Total collision count (sum of wall, agent, human collisions).
-    
+
     Formula: C = WC + AC + HC
     Units: collision count [0,∞)
     """
@@ -137,7 +137,7 @@ def collision_count(data: EpisodeData) -> float:
 ```python
 def wall_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
     """Count collisions with walls/obstacles.
-    
+
     Formula: WC = sum_t I(min_m ||robot_pos[t] - obstacles[m]|| < threshold)
     Units: collision count [0,∞)
     """
@@ -158,7 +158,7 @@ def wall_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
 ```python
 def agent_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
     """Count collisions with other agents/robots.
-    
+
     Formula: AC = sum_t I(min_j ||robot_pos[t] - agents[t,j]|| < threshold)
     Units: collision count [0,∞)
     """
@@ -179,7 +179,7 @@ def agent_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
 ```python
 def human_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
     """Count collisions with pedestrians/humans.
-    
+
     Formula: HC = sum_t I(min_k ||robot_pos[t] - peds_pos[t,k]|| < threshold)
     Units: collision count [0,∞)
     """
@@ -200,7 +200,7 @@ def human_collisions(data: EpisodeData, *, threshold: float = D_COLL) -> float:
 ```python
 def timeout(data: EpisodeData, *, horizon: int) -> float:
     """Binary indicator for timeout failure.
-    
+
     Formula: TO = 1 if reached_goal_step is None else 0
     Units: timeout [0,1]
     """
@@ -226,7 +226,7 @@ def failure_to_progress(
     time_threshold: float = 5.0
 ) -> float:
     """Count failure-to-progress events.
-    
+
     Formula: Count intervals where robot doesn't reduce distance to goal
              by distance_threshold within time_threshold window
     Units: failure count [0,∞)
@@ -249,7 +249,7 @@ def failure_to_progress(
 ```python
 def stalled_time(data: EpisodeData, *, velocity_threshold: float = 0.05) -> float:
     """Total time robot speed is below threshold.
-    
+
     Formula: ST = sum_t I(||robot_vel[t]|| < threshold) * dt
     Units: seconds [0,∞)
     """
@@ -271,7 +271,7 @@ def stalled_time(data: EpisodeData, *, velocity_threshold: float = 0.05) -> floa
 ```python
 def time_to_goal(data: EpisodeData) -> float:
     """Time from start to goal.
-    
+
     Formula: T = reached_goal_step * dt (if reached, else NaN)
     Units: seconds [0,∞)
     """
@@ -292,7 +292,7 @@ def time_to_goal(data: EpisodeData) -> float:
 ```python
 def path_length(data: EpisodeData) -> float:
     """Total path length traveled by robot.
-    
+
     Formula: PL = sum_{t=0}^{T-1} ||robot_pos[t+1] - robot_pos[t]||
     Units: meters [0,∞)
     """
@@ -319,7 +319,7 @@ def success_path_length(
     optimal_length: float
 ) -> float:
     """Success weighted by path efficiency.
-    
+
     Formula: SPL = S * (optimal_length / max(actual_length, optimal_length))
     Units: ratio [0,1]
     """
@@ -440,7 +440,7 @@ def clearing_distance_avg(data: EpisodeData) -> float:
 ```python
 def space_compliance(data: EpisodeData, *, threshold: float = 0.5) -> float:
     """Ratio of trajectory within personal space threshold.
-    
+
     Formula: SC = (# timesteps where min_k distance < threshold) / T
     Units: ratio [0,1]
     """
@@ -463,7 +463,7 @@ def space_compliance(data: EpisodeData, *, threshold: float = 0.5) -> float:
 ```python
 def distance_to_human_min(data: EpisodeData) -> float:
     """Minimum distance to any human/pedestrian.
-    
+
     Formula: DH_min = min_t min_k ||robot_pos[t] - peds_pos[t,k]||
     Units: meters [0,∞)
     """
@@ -485,7 +485,7 @@ def distance_to_human_min(data: EpisodeData) -> float:
 ```python
 def time_to_collision_min(data: EpisodeData) -> float:
     """Minimum time to collision with pedestrian.
-    
+
     Formula: TTC = min_{t,k} (d / ||v_rel||)
     Units: seconds [0,∞)
     """
@@ -512,7 +512,7 @@ def aggregated_time(
     agent_goal_times: dict[int, int]
 ) -> float:
     """Time for cooperative agents to reach goals.
-    
+
     Formula: AT = max_j (goal_time[j]) for j in cooperative set
     Units: seconds [0,∞)
     """
@@ -885,7 +885,7 @@ Create runnable example demonstrating new metrics:
 
 ### Critical Path
 ```
-T001 (EpisodeData) 
+T001 (EpisodeData)
   → T002 (Helpers)
     → T003-T021 (All Metrics) [Parallel]
       → T022 (Unit Tests)

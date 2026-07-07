@@ -1,6 +1,6 @@
 # Issue #850 PPO Collision Failures
 
-**Related issue:** [#850](https://github.com/ll7/robot_sf_ll7/issues/850)  
+**Related issue:** [#850](https://github.com/ll7/robot_sf_ll7/issues/850)
 **Predecessor:** [Issue #193 Feature Extractor Optuna Study](issue_193_feature_extractor_optuna_study.md)
 
 ## Goal

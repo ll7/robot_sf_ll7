@@ -1,7 +1,7 @@
 # Specification Quality Checklist: OSM Map Extraction to MapDefinition
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning  
-**Created**: 2025-12-19  
+**Purpose**: Validate specification completeness and quality before proceeding to planning
+**Created**: 2025-12-19
 **Feature**: [spec.md](spec.md)
 
 ## Content Quality

@@ -27,14 +27,14 @@ exists.
 
 Prefer updating an existing note when:
 
-* the same issue, planner family, workflow, or benchmark surface is already documented there, 
-* the new work changes or clarifies an existing conclusion, 
+* the same issue, planner family, workflow, or benchmark surface is already documented there,
+* the new work changes or clarifies an existing conclusion,
 * or splitting the note would make the decision trail harder to follow.
 
 When you update a note, preserve the current source of truth and remove ambiguity:
 
-* replace outdated statements when the old wording is no longer useful, 
-* add dated outcome updates when historical context still matters, 
+* replace outdated statements when the old wording is no longer useful,
+* add dated outcome updates when historical context still matters,
 * and link to the validation commands, artifacts, or follow-up notes that justify the new state.
 
 ## When To Create A New Note
@@ -44,7 +44,7 @@ would blur ownership or make the reasoning harder to locate.
 
 Prefer these naming patterns:
 
-* `issue_<number>_<topic>.md` for issue-scoped notes, 
+* `issue_<number>_<topic>.md` for issue-scoped notes,
 * `<topic>_<date>.md` using `YYYY-MM-DD` for cross-issue audits, release notes, or bounded
   investigations.
 
@@ -52,9 +52,9 @@ Prefer these naming patterns:
 
 Every durable context note should link to the smallest useful set of related surfaces:
 
-* the GitHub issue or PR that motivated the work, 
-* canonical docs or configs that define the contract, 
-* validation commands, artifacts, or output paths that support the conclusion, 
+* the GitHub issue or PR that motivated the work,
+* canonical docs or configs that define the contract,
+* validation commands, artifacts, or output paths that support the conclusion,
 * predecessor or successor notes when a document is continued or superseded.
 
 If the note changes repository guidance, also link it from a normal entry point such as
@@ -80,10 +80,10 @@ contradictory prose.
 
 Use the smallest structure that keeps the note reusable. Most notes should include:
 
-* the goal or decision, 
-* the assumptions made and why they matter, 
-* the key evidence or reasoning, 
-* the validation path, 
+* the goal or decision,
+* the assumptions made and why they matter,
+* the key evidence or reasoning,
+* the validation path,
 * the current conclusion or follow-up boundary.
 
 Avoid turning `docs/context/` into a scratchpad. Capture what future readers need to reuse the
@@ -1313,7 +1313,7 @@ parser-smoke validation for `maps/svg_maps/socnavbench/socnavbench_eth.svg`.
   preserves the historical `mlp_small` recommendation but marks default promotion as superseded
   pending the later `dyn_large_med` safety blocker and #834 maintainer decision.
 * [Issue #193 Feature Extractor Optuna Study](./issue_193_feature_extractor_optuna_study.md)
-  4 M-step SLURM sweep infrastructure, DB classification, and April 20 final pre-screen analysis; 
+  4 M-step SLURM sweep infrastructure, DB classification, and April 20 final pre-screen analysis;
 `feat_sweep_4m_array.db` is the current evidence surface, with longer 10 M+ validation still
   required before promotion.
 * [Issue #835 Lightweight CNN Divergence Triage](./issue_835_lightweight_cnn_divergence.md)
@@ -1531,7 +1531,7 @@ why a change was made rather than a full issue execution transcript.
   records the pure-data materializer from `adversarial-multi-ped.v1` configs to scenario-loader
 `single_pedestrians` override dictionaries, stacked on the issue #923 schema PR.
 * [Issue #944 Multi-Ped Adversarial Scenario Payload](issue_944_multi_ped_adversarial_scenario_payload.md)
-  adds a template-merging manifest payload materializer for `adversarial-multi-ped.v1` configs, 
+  adds a template-merging manifest payload materializer for `adversarial-multi-ped.v1` configs,
   stacked on the issue #936 override materializer.
 * [Issue #870 Multi-Ped Adversarial Runtime Slice](issue_870_multi_ped_adversarial_runtime.md)
   adds a fail-closed config-to-`RobotSimulationConfig` runtime path with N>1 reset/step proof and
@@ -1558,7 +1558,7 @@ why a change was made rather than a full issue execution transcript.
   records the post-#1329 live CARLA rerun on `imech156-u`, the fail-closed robot-spawn blocker,
   and the conservative unavailable parity report.
 * [Issue #934 CARLA T0 Export Builder API](issue_934_carla_t0_export_builder.md)
-  adds typed, schema-validated builder objects for `carla-replay-export.v1` payload construction, 
+  adds typed, schema-validated builder objects for `carla-replay-export.v1` payload construction,
   stacked on the issue #930 bridge package.
 * [Issue #940 CARLA T0 Export Read Helper](issue_940_carla_t0_export_read_helper.md)
   adds a schema-validating `read_export_payload(...)` boundary for exported replay JSON, stacked on
@@ -1567,7 +1567,7 @@ why a change was made rather than a full issue execution transcript.
   converts already-certified Robot-SF `MapDefinition` objects into schema-valid neutral export
   payloads, stacked on the issue #940 read helper.
 * [Issue #946 CARLA T0 Scenario Entry Export](issue_946_carla_t0_scenario_entry_export.md)
-  exports one scenario-loader entry through `scenario_cert.v1` into a neutral CARLA T0 payload, 
+  exports one scenario-loader entry through `scenario_cert.v1` into a neutral CARLA T0 payload,
   stacked on the issue #942 map-definition adapter.
 * [Issue #948 CARLA T0 Scenario File Export](issue_948_carla_t0_scenario_file_export.md)
   batch-loads scenario manifests into ordered neutral export payload records, stacked on the
@@ -1576,7 +1576,7 @@ why a change was made rather than a full issue execution transcript.
   writes ordered neutral export records to deterministic JSON files plus a local manifest, stacked
   on the issue #948 scenario-file helper.
 * [Issue #952 CARLA T0 Export CLI](issue_952_carla_t0_export_cli.md)
-  adds a CARLA-free command-line wrapper over scenario-file export and deterministic record writing, 
+  adds a CARLA-free command-line wrapper over scenario-file export and deterministic record writing,
   stacked on the issue #950 record writer.
 * [Issue #954 CARLA T0 Export CLI Packaging](issue_954_carla_t0_export_cli_packaging.md)
   exposes the issue #952 CLI as an installable project script while keeping the package CARLA-free.
@@ -1588,7 +1588,7 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #960 CARLA T0 Manifest Payload Paths](issue_960_carla_t0_manifest_payload_paths.md)
   resolves issue #950 manifest entries to local payload paths while rejecting unsafe path escapes.
 * [Issue #928 CARLA T0/T1 Oracle Replay Contract](issue_928_carla_t0_t1_replay_contract.md)
-  documents the first CARLA transfer boundary: neutral export first, optional oracle replay later, 
+  documents the first CARLA transfer boundary: neutral export first, optional oracle replay later,
   and fail-closed `not-available` / `failed` statuses instead of fallback parity claims.
 * [Issue #962 CARLA T0 Manifest Payload Loader](issue_962_carla_t0_manifest_payload_loader.md)
   loads and validates all payloads referenced by a local T0 export manifest, stacked on the

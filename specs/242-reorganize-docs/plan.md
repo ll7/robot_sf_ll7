@@ -23,14 +23,14 @@ No code behavior changes are planned; this is a documentation-only reorganizatio
   the iteration process.
 -->
 
-**Language/Version**: Markdown + Python 3.11 (repository standard per `pyproject.toml`)  
-**Primary Dependencies**: N/A for docs reorg; repository tooling uses uv, Ruff, pytest (no changes)  
-**Storage**: N/A (versioned docs in repository)  
-**Testing**: pytest (no new tests required), link validation deferred (manual for this PR)  
-**Target Platform**: Developers reading docs locally (VS Code) and on GitHub  
-**Project Type**: Single repository documentation reorganization  
-**Performance Goals**: N/A (documentation only)  
-**Constraints**: Must comply with Constitution Principle VIII; keep central index up-to-date; avoid breaking existing links where possible  
+**Language/Version**: Markdown + Python 3.11 (repository standard per `pyproject.toml`)
+**Primary Dependencies**: N/A for docs reorg; repository tooling uses uv, Ruff, pytest (no changes)
+**Storage**: N/A (versioned docs in repository)
+**Testing**: pytest (no new tests required), link validation deferred (manual for this PR)
+**Target Platform**: Developers reading docs locally (VS Code) and on GitHub
+**Project Type**: Single repository documentation reorganization
+**Performance Goals**: N/A (documentation only)
+**Constraints**: Must comply with Constitution Principle VIII; keep central index up-to-date; avoid breaking existing links where possible
 **Scale/Scope**: Reorganize and index existing docs under `docs/`; no new code modules
 
 ## Constitution Check

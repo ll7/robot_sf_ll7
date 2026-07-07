@@ -19,14 +19,14 @@
 From the spec: provide optional per-episode MP4 artifacts with a no-video toggle, deterministic renderer selection (synthetic by default, SimulationView on request), manifest metadata in-episode, micro-batch integration test, and <5% overhead budget. Documentation will be linked from docs index and benchmark TODO.
 
 ## Technical Context
-**Language/Version**: Python 3.13 (repo setup via uv)  
-**Primary Dependencies**: MoviePy (optional), NumPy, Pygame (SimulationView path), Loguru (logging)  
-**Storage**: Filesystem (results/videos/ under run output stem)  
-**Testing**: pytest (existing suite), micro-batch integration test to be added  
-**Target Platform**: macOS + headless CI  
-**Project Type**: single  
-**Performance Goals**: Video overhead < 5% added wall time (soft warn; enforce via env)  
-**Constraints**: Headless resilience; deterministic naming; resume-safe; no schema breaks without versioning  
+**Language/Version**: Python 3.13 (repo setup via uv)
+**Primary Dependencies**: MoviePy (optional), NumPy, Pygame (SimulationView path), Loguru (logging)
+**Storage**: Filesystem (results/videos/ under run output stem)
+**Testing**: pytest (existing suite), micro-batch integration test to be added
+**Target Platform**: macOS + headless CI
+**Project Type**: single
+**Performance Goals**: Video overhead < 5% added wall time (soft warn; enforce via env)
+**Constraints**: Headless resilience; deterministic naming; resume-safe; no schema breaks without versioning
 **Scale/Scope**: Dozens to hundreds of episodes per batch; videos optional
 
 ## Constitution Check

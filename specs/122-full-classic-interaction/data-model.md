@@ -196,4 +196,3 @@ class BenchmarkManifest:
 
 ## 7. Open Issues (None)
 All entity design unknowns resolved in Phase 0 research.
-

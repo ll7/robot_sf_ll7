@@ -221,6 +221,28 @@ def _build_time_blocked(
     return result
 
 
+def _build_time_edges_blocked(
+    obstacles: list[dict[str, Any]],
+) -> dict[int, set[tuple[tuple[int, int], tuple[int, int]]]]:
+    """Convert obstacle trajectories to time-indexed traversed edges.
+
+    Keyed by the departure time ``t``; each entry holds the ``(from, to)``
+    cell transitions that obstacles make between ``t`` and ``t + 1``.  Used to
+    detect swap collisions against the *specific* moving obstacle rather than
+    inferring one from two independent occupancy facts.
+    """
+    result: dict[int, set[tuple[tuple[int, int], tuple[int, int]]]] = {}
+    for entry in obstacles:
+        traj = entry["trajectory"]
+        for t in range(len(traj) - 1):
+            frm = (traj[t][0], traj[t][1])
+            to = (traj[t + 1][0], traj[t + 1][1])
+            if frm == to:
+                continue
+            result.setdefault(t, set()).add((frm, to))
+    return result
+
+
 def _has_collision(
     nr: int,
     nc: int,
@@ -229,13 +251,21 @@ def _has_collision(
     ct: int,
     next_t: int,
     time_blocked: dict[int, set[tuple[int, int]]],
+    time_edges_blocked: dict[int, set[tuple[tuple[int, int], tuple[int, int]]]] | None = None,
 ) -> bool:
-    """Check vertex and edge collisions for SIPP move."""
+    """Check vertex and edge (swap) collisions for a SIPP move.
+
+    Vertex collision: the destination cell is occupied at arrival time.
+    Edge collision: a single obstacle traverses the reverse edge in the same
+    interval (obstacle ``(nr, nc) -> (cr, cc)`` while the robot moves
+    ``(cr, cc) -> (nr, nc)``), i.e. a true position swap.
+    """
     blocked_next = time_blocked.get(next_t, set())
     if (nr, nc) in blocked_next:
         return True
-    if (cr, cc) in blocked_next and (nr, nc) in time_blocked.get(ct, set()):
-        return True
+    if time_edges_blocked is not None:
+        if ((nr, nc), (cr, cc)) in time_edges_blocked.get(ct, set()):
+            return True
     return False
 
 
@@ -245,6 +275,7 @@ def sipp_search(  # noqa: C901
     goal: tuple[int, int],
     time_blocked: dict[int, set[tuple[int, int]]],
     max_time: int = 200,
+    time_edges_blocked: dict[int, set[tuple[tuple[int, int], tuple[int, int]]]] | None = None,
 ) -> list[tuple[int, int, int]] | None:
     """SIPP-style A* search with dynamic obstacle time-windows.
 
@@ -307,7 +338,7 @@ def sipp_search(  # noqa: C901
                 continue
             if grid[nr][nc] == 1:
                 continue
-            if _has_collision(nr, nc, cr, cc, ct, next_t, time_blocked):
+            if _has_collision(nr, nc, cr, cc, ct, next_t, time_blocked, time_edges_blocked):
                 continue
 
             new_state = (nr, nc, next_t)
@@ -444,7 +475,15 @@ def _run_sipp_search(
     max_time: int,
 ) -> dict[str, Any]:
     """Run SIPP search and fill diagnostic fields."""
-    sipp_path = sipp_search(grid, start_pos, goal_pos, time_blocked, max_time)
+    time_edges_blocked = _build_time_edges_blocked(dyn_obstacles)
+    sipp_path = sipp_search(
+        grid,
+        start_pos,
+        goal_pos,
+        time_blocked,
+        max_time,
+        time_edges_blocked=time_edges_blocked,
+    )
     diagnostic["search_method"] = "sipp"
     diagnostic["dynamic_obstacle_count"] = len(dyn_obstacles)
     diagnostic["max_time"] = max_time

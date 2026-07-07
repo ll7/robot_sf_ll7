@@ -16,6 +16,7 @@ import pytest
 from scripts.tools.mapf_oracle_diagnostic import (
     _build_occupancy_grid,
     _build_time_blocked,
+    _build_time_edges_blocked,
     _load_dynamic_obstacles,
     _parse_svg_obstacles,
     _svg_dimensions,
@@ -395,18 +396,57 @@ class TestSippSearch:
                 assert (r, c) != (1, 1)
 
     def test_edge_collision_avoidance(self) -> None:
-        """Robot must not swap positions with a dynamic obstacle."""
+        """Robot must not swap positions with a dynamic obstacle.
+
+        Swap detection requires the per-obstacle edge map: occupancy alone
+        cannot tell a real swap from two independent obstacles (that was the
+        over-blocking bug fixed alongside this test).
+        """
         grid = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
-        # Obstacle moves from (1,0) at t=0 to (0,0) at t=1 (swap with robot)
-        time_blocked = {0: {(1, 0)}, 1: {(0, 0)}}
-        path = sipp_search(grid, (0, 0), (1, 0), time_blocked, max_time=50)
+        # Single obstacle moves (1,0)@t0 -> (0,0)@t1 — a genuine swap if the
+        # robot moves (0,0)@t0 -> (1,0)@t1.
+        obstacles = [{"id": 0, "trajectory": [[1, 0], [0, 0]]}]
+        time_blocked = _build_time_blocked(obstacles)
+        time_edges = _build_time_edges_blocked(obstacles)
+        path = sipp_search(
+            grid, (0, 0), (1, 0), time_blocked, max_time=50, time_edges_blocked=time_edges
+        )
         assert path is not None
-        # If robot goes (0,0)@t0 -> (1,0)@t1, that's a swap with obstacle
-        # going (1,0)@t0 -> (0,0)@t1. The search should avoid this.
+        # The direct swap move must be avoided.
         if len(path) >= 2 and path[0] == (0, 0, 0) and path[1] == (1, 0, 1):
-            # If it did take this path, the edge collision check should have
-            # prevented it — this would be a test failure
             pytest.fail("Edge collision not detected: robot swapped with obstacle")
+
+    def test_swap_collision_uses_specific_obstacle(self) -> None:
+        """Two independent obstacles must not be conflated into a false swap.
+
+        Occupancy-only detection over-blocks: obstacle A sits at the robot's
+        current cell next step while obstacle B sits at the target cell now,
+        with neither actually traversing the reverse edge. The edge-aware
+        check (fed via ``time_edges_blocked``) must allow the robot's move.
+        """
+        grid = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+        # Robot wants (0,0)@t0 -> (0,1)@t1.
+        # Obstacle A occupies (0,0) at t1 (was elsewhere at t0): (2,0)->(0,0)
+        #   would teleport, so use a static sitter B at (0,0) is a vertex clash;
+        # instead: obstacle at target (0,1) at t0 only, and a different
+        # obstacle arriving at (0,0) at t1 without traversing (0,1)->(0,0).
+        obstacles = [
+            {"id": 0, "trajectory": [[0, 1], [1, 1]]},  # (0,1)@t0 -> (1,1)@t1
+            {"id": 1, "trajectory": [[1, 0], [0, 0]]},  # (1,0)@t0 -> (0,0)@t1
+        ]
+        time_blocked = _build_time_blocked(obstacles)
+        time_edges = _build_time_edges_blocked(obstacles)
+        # Old occupancy-only check: (0,1) in blocked@t0 and (0,0) in blocked@t1
+        #   => would wrongly flag robot (0,0)->(0,1) as a swap. The reverse edge
+        #   (0,1)->(0,0) is NOT traversed by any obstacle, so it must be allowed.
+        path = sipp_search(
+            grid, (0, 0), (0, 2), time_blocked, max_time=50, time_edges_blocked=time_edges
+        )
+        assert path is not None
+        # Optimal direct move is allowed: (0,0)@0 -> (0,1)@1 -> (0,2)@2.
+        # The old occupancy-only check would over-block the first move and
+        # force a longer detour, so asserting the minimal path guards the fix.
+        assert path == [(0, 0, 0), (0, 1, 1), (0, 2, 2)]
 
     def test_wait_steps_counted(self) -> None:
         """Waiting in place counts as wait steps when bottleneck is blocked."""

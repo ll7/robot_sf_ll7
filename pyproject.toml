@@ -40,7 +40,7 @@ dependencies = [
     "python-motion-planning==2.0.1",
     # OSM map extraction (Issue #392)
     "osmnx>=1.9",
-    "geopandas>=0.14",
+    "geopandas>=1.1.4",
     "pyproj>=3.6",
     "pyyaml>=6.0",
     "orjson>=3.11.5",

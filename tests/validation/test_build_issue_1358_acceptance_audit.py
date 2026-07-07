@@ -25,6 +25,11 @@ def test_issue_1358_parent_audit_stays_fail_closed_on_child_blocker() -> None:
     assert report["readiness"]["integration_status"] == "local_handoff_ready_parent_blocked"
     assert report["issue_1475_audit"]["status"] == "blocked"
     assert report["state_surface"]["status"] == "valid"
+    child_state = report["issue_1475_audit"]["state_surface"]
+    assert child_state["status"] == "valid"
+    assert child_state["path"] == "docs/context/issue_1475_state.yaml"
+    assert "latest_recorded_at_utc" not in child_state
+    assert "entry_status" not in child_state
 
     statuses = {item["criterion"]: item["status"] for item in report["acceptance_evidence"]}
     assert (

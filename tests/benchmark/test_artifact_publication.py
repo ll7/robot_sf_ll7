@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 import os
 import tarfile
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
 from robot_sf.benchmark.artifact_publication import (
     PUBLICATION_BUNDLE_SCHEMA_VERSION,
     SIZE_REPORT_SCHEMA_VERSION,
+    _compute_and_emit_badging_artifacts,
     discover_run_directories,
     export_publication_bundle,
     list_publication_files,
@@ -236,7 +237,11 @@ def test_export_camera_campaign_bundle_includes_preflight_seed_policy(tmp_path: 
 
 
 def test_export_publication_bundle_includes_artifact_badging(tmp_path: Path) -> None:
-    """Export bundle manifest should carry artifact badging metadata when provided."""
+    """Export bundle manifest should carry artifact badging metadata when provided.
+
+    Without payload re-derivation evidence, caller-supplied ``functional_smoke_status``
+    is metadata only and cannot elevate the badge to ``functional`` (issue #4763).
+    """
     run_dir = tmp_path / "benchmarks" / "run_badging"
     _make_run(run_dir, with_video=False)
     out_dir = tmp_path / "publication"
@@ -255,11 +260,15 @@ def test_export_publication_bundle_includes_artifact_badging(tmp_path: Path) -> 
         out_dir,
         bundle_name="run_badging_bundle",
         include_videos=False,
+        doi="10.5281/zenodo.1234567",
         artifact_badging=badging,
     )
 
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
-    assert manifest["artifact_badging"]["claimed_level"] == "functional"
+    # Without payload re-derivation, computed level is "available", not "functional",
+    # even with a valid DOI and caller-supplied functional_smoke_status (issue #4763).
+    assert manifest["artifact_badging"]["claimed_level"] == "available"
+    # Caller-supplied status is preserved as metadata.
     assert manifest["artifact_badging"]["functional_smoke_status"] == "passed"
     assert manifest["artifact_badging"]["known_nondeterminism"] == ["Thread scheduling"]
 
@@ -283,8 +292,8 @@ def test_export_publication_bundle_never_emits_unverified_reproduced(tmp_path: P
 
     This slice runs no independent reproduction rerun, so "reproduced" can never
     be earned here. Passing ``reproduction_status="passed"`` must be treated as
-    informational only; the computed badge is capped at "functional" (fail-closed
-    per issue #4681: no reproduction claim unless its check passes).
+    informational only; the computed badge is capped at "available" (fail-closed
+    per issues #4681, #4763: no reproduction or functional claim without evidence).
     """
     run_dir = tmp_path / "benchmarks" / "run_repro"
     _make_run(run_dir, with_video=False)
@@ -301,11 +310,173 @@ def test_export_publication_bundle_never_emits_unverified_reproduced(tmp_path: P
         out_dir,
         bundle_name="run_repro_bundle",
         include_videos=False,
+        doi="10.5281/zenodo.7654321",
         artifact_badging=badging,
     )
 
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
-    # Capped at functional despite the hand-asserted reproduced/passed inputs.
-    assert manifest["artifact_badging"]["claimed_level"] == "functional"
+    # Capped at "available" despite hand-asserted reproduced/passed inputs.
+    # No payload re-derivation means it can never reach "functional".
+    assert manifest["artifact_badging"]["claimed_level"] == "available"
     # The raw status is still carried through as informational metadata.
     assert manifest["artifact_badging"]["reproduction_status"] == "passed"
+
+
+# ── Direct unit matrix for _compute_and_emit_badging_artifacts ────────────
+
+
+def _make_minimal_manifest(
+    *,
+    doi: str | None = None,
+    release_url: str | None = None,
+    files: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build a minimal manifest_payload for badging tests."""
+    return {
+        "bundle_name": "test-bundle",
+        "created_at_utc": "2024-01-01T00:00:00Z",
+        "publication_channels": {
+            "doi": doi,
+            "release_url": release_url,
+        },
+        "files": files or [],
+    }
+
+
+class TestComputeBadgingMatrix:
+    """Direct unit matrix for ``_compute_and_emit_badging_artifacts`` (issue #4763)."""
+
+    def test_no_durable_id_yields_none(self, tmp_path: Path) -> None:
+        """No DOI or release URL -> claimed_level is 'none'."""
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+        manifest = _make_minimal_manifest(
+            files=[{"path": "a.txt", "size_bytes": 1, "sha256": "x", "kind": "misc"}]
+        )
+        badging = {}
+
+        computed, achieved = _compute_and_emit_badging_artifacts(bundle_dir, manifest, badging)
+
+        assert computed["claimed_level"] == "none"
+        assert achieved == "none"
+
+    def test_placeholder_doi_is_not_durable(self, tmp_path: Path) -> None:
+        """Placeholders like {release_tag} or <record-id> are rejected as durable IDs."""
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+        manifest = _make_minimal_manifest(
+            doi="10.5281/zenodo.<record-id>",  # placeholder
+            release_url="https://github.com/x/y/releases/tag/{release_tag}",  # placeholder
+            files=[{"path": "a.txt", "size_bytes": 1, "sha256": "x", "kind": "misc"}],
+        )
+        badging = {}
+
+        computed, achieved = _compute_and_emit_badging_artifacts(bundle_dir, manifest, badging)
+
+        assert computed["claimed_level"] == "none"
+        assert achieved == "none"
+
+    def test_local_paths_rejected_as_durable(self, tmp_path: Path) -> None:
+        """Local output/ file:// ./ ../ and localhost paths are not durable IDs."""
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+        for doi_val in [
+            "output/artifacts/v1",
+            "file:///home/me",
+            "./local",
+            "../parent",
+            "http://localhost:8080",
+        ]:
+            manifest = _make_minimal_manifest(
+                doi=doi_val,
+                files=[{"path": "a.txt", "size_bytes": 1, "sha256": "x", "kind": "misc"}],
+            )
+            _computed, achieved = _compute_and_emit_badging_artifacts(bundle_dir, manifest, {})
+            assert achieved == "none", f"DOI {doi_val!r} should not be durable"
+
+    def test_durable_id_no_payload_tables_yields_available(self, tmp_path: Path) -> None:
+        """Durable id + files, no campaign_summary/report payload -> 'available'."""
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+        payload_dir = bundle_dir / "payload"
+        payload_dir.mkdir()
+        (payload_dir / "summary.json").write_text("{}", encoding="utf-8")
+
+        manifest = _make_minimal_manifest(
+            doi="10.5281/zenodo.1234567",
+            files=[{"path": "summary.json", "size_bytes": 2, "sha256": "abc", "kind": "misc"}],
+        )
+        badging = {"functional_smoke_status": "passed"}  # caller-supplied only
+
+        computed, achieved = _compute_and_emit_badging_artifacts(bundle_dir, manifest, badging)
+
+        assert computed["claimed_level"] == "available"
+        assert achieved == "available"
+
+    def test_caller_smoke_passed_without_payload_not_functional(self, tmp_path: Path) -> None:
+        """Caller-supplied functional_smoke_status: passed cannot yield 'functional' alone."""
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+        (bundle_dir / "payload").mkdir()
+
+        manifest = _make_minimal_manifest(
+            doi="10.5281/zenodo.1234567",
+            files=[{"path": "a.txt", "size_bytes": 1, "sha256": "x", "kind": "misc"}],
+        )
+        badging = {"functional_smoke_status": "passed"}
+
+        computed, achieved = _compute_and_emit_badging_artifacts(bundle_dir, manifest, badging)
+
+        assert computed["claimed_level"] == "available"
+        assert achieved == "available"
+
+    def test_no_files_yields_none_even_with_doi(self, tmp_path: Path) -> None:
+        """A durable id with an empty files list still yields 'none'."""
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+        manifest = _make_minimal_manifest(doi="10.5281/zenodo.1234567", files=[])
+
+        computed, achieved = _compute_and_emit_badging_artifacts(bundle_dir, manifest, {})
+
+        assert computed["claimed_level"] == "none"
+        assert achieved == "none"
+
+    def test_reproduction_passed_does_not_elevate(self, tmp_path: Path) -> None:
+        """reproduction_status: passed alone does not yield 'reproduced' or 'functional'."""
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+        (bundle_dir / "payload").mkdir()
+
+        manifest = _make_minimal_manifest(
+            doi="10.5281/zenodo.1234567",
+            files=[{"path": "a.txt", "size_bytes": 1, "sha256": "x", "kind": "misc"}],
+        )
+        badging = {"reproduction_status": "passed"}
+
+        computed, achieved = _compute_and_emit_badging_artifacts(bundle_dir, manifest, badging)
+
+        assert computed["claimed_level"] == "available"
+        assert achieved == "available"
+        # Raw status preserved
+        assert computed["reproduction_status"] == "passed"
+
+
+# ── Durable-id placeholder test for existing test ──────────────────────────
+
+
+def test_export_publication_bundle_placeholder_doi_yields_none(tmp_path: Path) -> None:
+    """Default placeholder DOI should result in 'none' badge level (issue #4763)."""
+    run_dir = tmp_path / "benchmarks" / "run_placeholder"
+    _make_run(run_dir, with_video=False)
+    out_dir = tmp_path / "publication"
+
+    result = export_publication_bundle(
+        run_dir,
+        out_dir,
+        bundle_name="run_placeholder_bundle",
+        include_videos=False,
+        # Uses default DOI template 10.5281/zenodo.<record-id>
+    )
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["artifact_badging"]["claimed_level"] == "none"

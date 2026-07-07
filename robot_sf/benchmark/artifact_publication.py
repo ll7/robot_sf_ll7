@@ -945,7 +945,7 @@ def export_evidence_bundle(  # noqa: PLR0913, C901
     )
 
 
-def _compute_and_emit_badging_artifacts(
+def _compute_and_emit_badging_artifacts(  # noqa: C901
     bundle_dir: Path,
     manifest_payload: dict[str, Any],
     badging_block: dict[str, Any],
@@ -972,11 +972,18 @@ def _compute_and_emit_badging_artifacts(
     def is_valid_durable_id(val: str | None) -> bool:
         if not val:
             return False
-        v = val.strip().lower()
-        return (
-            not any(v.startswith(prefix) for prefix in ("output/", "file://", "./", "../"))
-            and "localhost" not in v
-        )
+        v = val.strip()
+        vl = v.lower()
+        if any(vl.startswith(prefix) for prefix in ("output/", "file://", "./", "../")):
+            return False
+        if "localhost" in vl:
+            return False
+        # Reject placeholder templates
+        if "{release_tag}" in v or "<record-id>" in v or "<record_id>" in v:
+            return False
+        if v.strip() == _DEFAULT_DOI_TEMPLATE:
+            return False
+        return True
 
     has_durable_id = is_valid_durable_id(doi) or is_valid_durable_id(rel_url)
     is_available = has_durable_id and len(manifest_payload.get("files", [])) > 0
@@ -1010,8 +1017,8 @@ def _compute_and_emit_badging_artifacts(
                     computed_badging["functional_smoke_status"] = "failed"
         except (OSError, ValueError, json.JSONDecodeError):
             computed_badging["functional_smoke_status"] = "failed"
-    elif computed_badging["functional_smoke_status"] == "passed":
-        is_functional = True
+    # Caller-supplied functional_smoke_status is metadata only; functional
+    # must be earned via actual payload re-derivation (issue #4681 policy).
 
     # Determine achieved badge level.
     #

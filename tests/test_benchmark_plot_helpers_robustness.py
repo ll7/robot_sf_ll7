@@ -51,6 +51,26 @@ def test_filter_finite_empty_input():
     assert _filter_finite([]) == []
 
 
+def test_pair_finite_keeps_episode_alignment():
+    """_pair_finite drops a pair when either side is non-finite, keeping x/y aligned."""
+    from robot_sf.benchmark.visualization import _pair_finite
+
+    # episode 0: success finite, snqi NaN -> drop; episode 1: both finite -> keep;
+    # episode 2: success None -> drop.
+    xs, ys = _pair_finite([0.2, 0.5, None], [float("nan"), 0.9, 0.3])
+    assert xs == pytest.approx([0.5])
+    assert ys == pytest.approx([0.9])
+
+
+def test_pair_finite_empty_when_no_overlap():
+    """No pair survives when finite values never coincide on the same index."""
+    from robot_sf.benchmark.visualization import _pair_finite
+
+    xs, ys = _pair_finite([0.1, float("nan")], [float("nan"), 0.2])
+    assert xs == []
+    assert ys == []
+
+
 def test_ax_no_data_does_not_raise():
     """_ax_no_data renders placeholder text and sets axis labels."""
     from robot_sf.benchmark.visualization import _ax_no_data

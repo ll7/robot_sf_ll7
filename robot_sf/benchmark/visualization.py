@@ -625,6 +625,28 @@ def _filter_finite(values: list) -> list[float]:
     return result
 
 
+def _pair_finite(xs: list, ys: list) -> tuple[list[float], list[float]]:
+    """Return finite (x, y) pairs, dropping a pair when either side is non-finite.
+
+    Used for the success-vs-SNQI scatter so points stay episode-aligned: filtering
+    each series independently would mis-pair points when the two series drop
+    different indices.
+    """
+    xs_out: list[float] = []
+    ys_out: list[float] = []
+    for x, y in zip(xs, ys, strict=False):
+        if x is None or y is None:
+            continue
+        try:
+            fx, fy = float(x), float(y)
+        except (TypeError, ValueError):
+            continue
+        if np.isfinite(fx) and np.isfinite(fy):
+            xs_out.append(fx)
+            ys_out.append(fy)
+    return xs_out, ys_out
+
+
 def _ax_no_data(ax, title: str, xlabel: str = "", ylabel: str = "") -> None:
     """Render a 'No valid data' placeholder on *ax* when a series is empty."""
     ax.set_title(title)
@@ -679,11 +701,10 @@ def _populate_metrics_axes(ax1, ax2, ax3, ax4, collisions, success_rates, snqi_s
     else:
         _ax_no_data(ax3, "SNQI Score Distribution", "SNQI Score", "Frequency")
 
-    # Plot 4: Success vs SNQI scatter
-    if finite_success and finite_snqi:
-        # Align lengths in case counts differ after independent filtering
-        min_len = min(len(finite_success), len(finite_snqi))
-        ax4.scatter(finite_success[:min_len], finite_snqi[:min_len], alpha=0.6, color="purple")
+    # Plot 4: Success vs SNQI scatter (pair-filtered so points stay episode-aligned)
+    paired_success, paired_snqi = _pair_finite(success_rates, snqi_scores)
+    if paired_success:
+        ax4.scatter(paired_success, paired_snqi, alpha=0.6, color="purple")
         ax4.set_title("Success Rate vs SNQI")
         ax4.set_xlabel("Success Rate")
         ax4.set_ylabel("SNQI Score")

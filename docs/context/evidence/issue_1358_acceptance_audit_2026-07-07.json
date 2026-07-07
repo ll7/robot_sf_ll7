@@ -85,9 +85,10 @@
       }
     ],
     "state_surface": {
-      "entry_status": "cpu_contract_delivered__external_slurm_rerun_pending",
+      "entry_status": "integration_report_delivered__external_slurm_rerun_pending",
       "errors": [],
-      "latest_recorded_at_utc": "2026-07-06T16:38:00Z",
+      "integration_report_status": "blocked",
+      "latest_recorded_at_utc": "2026-07-07T02:20:00Z",
       "path": "docs/context/issue_1475_state.yaml",
       "status": "valid"
     },

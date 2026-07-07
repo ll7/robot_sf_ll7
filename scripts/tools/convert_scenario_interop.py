@@ -1,23 +1,10 @@
 #!/usr/bin/env python3
 """Dry-run Robot SF -> external-benchmark scenario converter CLI (issue #3285).
 
-Reads a Robot SF scenario-matrix file (YAML or JSON; a single scenario dict or a
-list of scenario dicts) and emits the deterministic, schema-validated interop
-**intermediate representation (IR)** for each scenario, plus an explicit
-unsupported-field report.
-
-This is a *dry run*: it requires no external assets and produces no SocNavBench or
-HuNavSim file. It makes no cross-benchmark validity claim. See
-``robot_sf/benchmark/scenario_interop.py`` for the contract and claim boundary.
-
-Examples:
-    # Print IR + unsupported report for every scenario in a matrix
-    uv run python scripts/tools/convert_scenario_interop.py \
-        --matrix configs/baselines/example_matrix.yaml
-
-    # Write one IR JSON file per scenario into a directory
-    uv run python scripts/tools/convert_scenario_interop.py \
-        --matrix configs/baselines/example_matrix.yaml --out-dir output/interop_ir
+Reads Robot SF scenario-matrix files and emits deterministic, schema-validated
+intermediate representation (IR) scenarios, explicit unsupported-field reports,
+fail-closed target export manifests, and asset-free target-shaped preview files.
+No command here produces runnable SocNavBench or HuNavSim assets.
 """
 
 from __future__ import annotations
@@ -34,49 +21,60 @@ from robot_sf.benchmark.scenario_interop import (
     SUPPORTED_TARGETS,
     build_target_compatibility_report,
     build_target_export_manifest,
+    build_target_export_preview,
     convert_scenario_to_ir,
     dump_ir,
 )
 
 
 def _load_scenarios(path: Path) -> list[dict[str, Any]]:
-    """Load scenario dicts from a YAML/JSON matrix file.
-
-    Accepts a single scenario mapping, a top-level list, or a ``{"scenarios": [...]}``
-    wrapper.
-
-    Returns:
-        Scenario dicts in file order.
-
-    Raises:
-        ValueError: When the file does not contain a usable scenario shape.
-    """
+    """Load scenario dicts from a YAML/JSON matrix file."""
 
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     if isinstance(raw, dict) and "scenarios" in raw:
         raw = raw["scenarios"]
     if isinstance(raw, dict):
-        return [raw]
-    if isinstance(raw, list) and all(isinstance(item, dict) for item in raw):
-        return raw
-    raise ValueError(
-        f"{path}: expected a scenario mapping, a list of mappings, or a top-level 'scenarios' list"
-    )
+        raw = [raw]
+    if not isinstance(raw, list) or not all(isinstance(item, dict) for item in raw):
+        raise ValueError(f"{path} must contain a scenario dict or list of scenario dicts")
+    return raw
+
+
+def _write_outputs(
+    *,
+    ir: dict[str, Any],
+    scenario_id: str,
+    targets: tuple[str, ...] | list[str],
+    out_dir: Path | None,
+    target_out_dir: Path | None,
+    target_preview_out_dir: Path | None,
+) -> None:
+    """Write requested IR, manifest, and preview outputs for one scenario."""
+
+    if out_dir is not None:
+        out_path = out_dir / f"{scenario_id}.ir.json"
+        out_path.write_text(dump_ir(ir), encoding="utf-8")
+    if target_out_dir is not None:
+        for target in targets:
+            manifest = build_target_export_manifest(ir, target=target)
+            manifest_path = target_out_dir / f"{scenario_id}.{target}.export_manifest.json"
+            manifest_path.write_text(dump_ir(manifest), encoding="utf-8")
+    if target_preview_out_dir is not None:
+        for target in targets:
+            preview = build_target_export_preview(ir, target=target)
+            preview_path = target_preview_out_dir / f"{scenario_id}.{target}.export_preview.json"
+            preview_path.write_text(dump_ir(preview), encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the dry-run converter CLI.
-
-    Returns:
-        Process exit code: ``0`` when every scenario IR validated, ``1`` otherwise.
-    """
+    """Run CLI and return ``0`` when every scenario IR validates."""
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--matrix",
         required=True,
         type=Path,
-        help="Path to a Robot SF scenario-matrix YAML/JSON file.",
+        help="Path to Robot SF scenario-matrix YAML/JSON file.",
     )
     parser.add_argument(
         "--out-dir",
@@ -89,8 +87,18 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=None,
         help=(
-            "Optional directory to write one <scenario_id>.<target>.export_manifest.json "
-            "fail-closed target export manifest per scenario and requested target."
+            "Optional directory to write one "
+            "<scenario_id>.<target>.export_manifest.json fail-closed target export "
+            "manifest per scenario and requested target."
+        ),
+    )
+    parser.add_argument(
+        "--target-preview-out-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Optional directory to write one <scenario_id>.<target>.export_preview.json "
+            "asset-free target-shaped preview per scenario and requested target."
         ),
     )
     parser.add_argument(
@@ -99,17 +107,16 @@ def main(argv: list[str] | None = None) -> int:
         choices=SUPPORTED_TARGETS,
         default=[],
         help=(
-            "Include fail-closed compatibility report for target exporter. "
+            "Include fail-closed compatibility report for a target exporter. "
             "May be passed more than once."
         ),
     )
     args = parser.parse_args(argv)
 
     scenarios = _load_scenarios(args.matrix)
-    if args.out_dir is not None:
-        args.out_dir.mkdir(parents=True, exist_ok=True)
-    if args.target_out_dir is not None:
-        args.target_out_dir.mkdir(parents=True, exist_ok=True)
+    for directory in (args.out_dir, args.target_out_dir, args.target_preview_out_dir):
+        if directory is not None:
+            directory.mkdir(parents=True, exist_ok=True)
 
     exit_code = 0
     summary: list[dict[str, Any]] = []
@@ -121,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:
             result.ir,
             targets=targets,
         )
+
         if not result.is_valid:
             exit_code = 1
         summary.append(
@@ -132,17 +140,21 @@ def main(argv: list[str] | None = None) -> int:
                 "target_compatibility": target_compatibility,
             }
         )
-        if args.out_dir is not None:
-            out_path = args.out_dir / f"{scenario_id}.ir.json"
-            out_path.write_text(dump_ir(result.ir), encoding="utf-8")
-        if args.target_out_dir is not None:
-            for target in targets:
-                manifest = build_target_export_manifest(result.ir, target=target)
-                manifest_path = args.target_out_dir / (
-                    f"{scenario_id}.{target}.export_manifest.json"
-                )
-                manifest_path.write_text(dump_ir(manifest), encoding="utf-8")
-        if args.out_dir is None and args.target_out_dir is None:
+
+        _write_outputs(
+            ir=result.ir,
+            scenario_id=scenario_id,
+            targets=targets,
+            out_dir=args.out_dir,
+            target_out_dir=args.target_out_dir,
+            target_preview_out_dir=args.target_preview_out_dir,
+        )
+
+        if (
+            args.out_dir is None
+            and args.target_out_dir is None
+            and args.target_preview_out_dir is None
+        ):
             sys.stdout.write(dump_ir(result.ir))
 
     sys.stderr.write(json.dumps({"dry_run_summary": summary}, indent=2) + "\n")

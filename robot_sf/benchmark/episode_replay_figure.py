@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -76,6 +77,47 @@ OPTIONAL_PROVENANCE_FIELDS = [
 ]
 
 
+def _finite_floats(*values: Any) -> tuple[float, ...] | None:
+    """Coerce values to finite floats, returning ``None`` if any is invalid.
+
+    Used to skip replay steps carrying NaN/Inf or non-numeric coordinates so
+    they never reach plot-limit or max-value computations.
+
+    Returns:
+        Tuple of finite floats in order, or ``None`` if any value is
+        non-numeric or non-finite.
+    """
+    out: list[float] = []
+    for v in values:
+        try:
+            f = float(v)
+        except (ValueError, TypeError):
+            return None
+        if not math.isfinite(f):
+            return None
+        out.append(f)
+    return tuple(out)
+
+
+def _parse_final_position(raw: Any) -> tuple[float, float] | None:
+    """Coerce a recorded final robot position to a 2-tuple of finite floats.
+
+    Returns:
+        ``(x, y)`` of finite floats, or ``None`` when the value is absent or
+        malformed so downstream determinism checks skip the comparison
+        instead of crashing on a bad row.
+    """
+    if not isinstance(raw, (list, tuple)) or len(raw) != 2:
+        return None
+    try:
+        x, y = float(raw[0]), float(raw[1])
+    except (ValueError, TypeError):
+        return None
+    if not (math.isfinite(x) and math.isfinite(y)):
+        return None
+    return (x, y)
+
+
 @dataclass
 class EpisodeRow:
     """Validated episode row with provenance."""
@@ -130,9 +172,7 @@ class EpisodeRow:
             config_hash=data.get("config_hash"),
             scenario_matrix_hash=data.get("scenario_matrix_hash"),
             repo_commit=data.get("repo_commit"),
-            final_robot_position=tuple(data["final_robot_position"])
-            if "final_robot_position" in data
-            else None,
+            final_robot_position=_parse_final_position(data.get("final_robot_position")),
             final_progress=data.get("final_progress"),
             success=data.get("success"),
             collision=data.get("collision"),
@@ -259,22 +299,30 @@ def build_replay_from_episode_row(episode_row: EpisodeRow) -> ReplayEpisode | No
     steps = []
     for step_data in replay_steps:
         if isinstance(step_data, dict):
+            coords = _finite_floats(
+                step_data.get("t", 0.0),
+                step_data.get("x", 0.0),
+                step_data.get("y", 0.0),
+                step_data.get("heading", 0.0),
+            )
+            if coords is None:
+                continue
+            t, x, y, heading = coords
             step = ReplayStep(
-                t=step_data.get("t", 0.0),
-                x=step_data.get("x", 0.0),
-                y=step_data.get("y", 0.0),
-                heading=step_data.get("heading", 0.0),
+                t=t,
+                x=x,
+                y=y,
+                heading=heading,
                 speed=step_data.get("speed"),
                 ped_positions=step_data.get("ped_positions"),
                 action=step_data.get("action"),
             )
         elif isinstance(step_data, list | tuple) and len(step_data) >= 4:
-            step = ReplayStep(
-                t=float(step_data[0]),
-                x=float(step_data[1]),
-                y=float(step_data[2]),
-                heading=float(step_data[3]),
-            )
+            coords = _finite_floats(step_data[0], step_data[1], step_data[2], step_data[3])
+            if coords is None:
+                continue
+            t, x, y, heading = coords
+            step = ReplayStep(t=t, x=x, y=y, heading=heading)
         else:
             continue
         steps.append(step)
@@ -460,14 +508,20 @@ def generate_filmstrip(
         indices = np.linspace(0, len(replay_episode.steps) - 1, n_frames, dtype=int)
         frame_steps = indices.tolist()
 
+    if not frame_steps:
+        raise ValueError("frame_steps must contain at least one step index")
+    out_of_range = [s for s in frame_steps if s < 0 or s >= len(replay_episode.steps)]
+    if out_of_range:
+        raise ValueError(
+            f"frame_steps out of range [0, {len(replay_episode.steps) - 1}]: {out_of_range}"
+        )
+
     n_frames = len(frame_steps)
     fig, axes = plt.subplots(1, n_frames, figsize=(3 * n_frames, 3))
     if n_frames == 1:
         axes = [axes]
 
     for idx, (ax, step_idx) in enumerate(zip(axes, frame_steps, strict=False)):
-        if step_idx < 0 or step_idx >= len(replay_episode.steps):
-            continue
         step = replay_episode.steps[step_idx]
 
         ax.plot(step.x, step.y, "bo", markersize=10)

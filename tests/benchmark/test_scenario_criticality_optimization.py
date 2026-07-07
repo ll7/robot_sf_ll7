@@ -249,3 +249,36 @@ def test_manifest_includes_max_workers() -> None:
     config.max_workers = 1
     _, manifest = run_criticality_optimization(config)
     assert manifest["max_workers"] == 1
+
+
+def test_parallel_matches_sequential_and_is_deterministic() -> None:
+    """max_workers=2 exercises the ProcessPoolExecutor path and yields the same,
+    deterministically-ordered results as the sequential path.
+
+    Guards against the nondeterministic ``as_completed`` ordering: candidates
+    must come back sorted by candidate_id regardless of worker completion order.
+    """
+    seq_config = _make_test_config(optimizer_seed=7)
+    seq_config.max_workers = 1
+    seq_candidates, _ = run_criticality_optimization(seq_config)
+
+    par_config = _make_test_config(optimizer_seed=7)
+    par_config.max_workers = 2
+    par_candidates, par_manifest = run_criticality_optimization(par_config)
+
+    # Effective workers is capped at the candidate count (baseline + budget).
+    assert 1 < par_manifest["max_workers"] <= len(par_candidates)
+
+    assert [c.candidate_id for c in par_candidates] == [c.candidate_id for c in seq_candidates]
+    for cp, cs in zip(par_candidates, seq_candidates, strict=True):
+        assert cp.status == cs.status
+        if cp.status == "evaluated":
+            assert cp.criticality_score == pytest.approx(cs.criticality_score)
+
+
+def test_effective_workers_capped_at_candidate_count() -> None:
+    """max_workers=0 (auto) must not spawn more workers than there are candidates."""
+    config = _make_test_config(sample_budget=2)
+    config.max_workers = 0
+    _, manifest = run_criticality_optimization(config)
+    assert manifest["max_workers"] <= manifest["total_candidates"]

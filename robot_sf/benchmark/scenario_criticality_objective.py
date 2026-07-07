@@ -125,12 +125,15 @@ def _safe_get_metric(
     return default if default is not None else float("nan")
 
 
-def _resolve_collision_key(metrics: dict[str, Any]) -> tuple[str, bool]:
+def _resolve_collision_key(metrics: dict[str, Any]) -> tuple[str | None, bool]:
     """Resolve the collision metric key with explicit fallback chain.
 
     Returns:
-        Tuple of (resolved_key, used_fallback). ``used_fallback`` is True
+        Tuple of ``(resolved_key, used_fallback)``. ``used_fallback`` is True
         when the canonical key was absent and a fallback key was selected.
+        ``resolved_key`` is ``None`` when *neither* the canonical key nor any
+        fallback is present, so callers can report that no collision key was
+        actually found rather than mislabelling it as the canonical key.
     """
     if CANONICAL_COLLISION_KEY in metrics:
         return CANONICAL_COLLISION_KEY, False
@@ -142,7 +145,7 @@ def _resolve_collision_key(metrics: dict[str, Any]) -> tuple[str, bool]:
                 fallback,
             )
             return fallback, True
-    return CANONICAL_COLLISION_KEY, False
+    return None, False
 
 
 def compute_criticality_score(
@@ -172,9 +175,13 @@ def compute_criticality_score(
 
     fail_closed = config.fail_closed
 
-    # Resolve collision metric key with explicit fallback chain
+    # Resolve collision metric key with explicit fallback chain. ``col_key`` is
+    # None when no collision key is present; read via the canonical key (yields
+    # the default) but report ``collision_key_used=None`` for transparency.
     col_key, _used_fallback = _resolve_collision_key(metrics)
-    collision_count = _safe_get_metric(metrics, col_key, 0.0, fail_closed)
+    collision_count = _safe_get_metric(
+        metrics, col_key or CANONICAL_COLLISION_KEY, 0.0, fail_closed
+    )
     near_misses = _safe_get_metric(metrics, "near_misses", 0.0, fail_closed)
     min_clearance = _safe_get_metric(metrics, "min_clearance", float("nan"), fail_closed)
     failure_to_progress = _safe_get_metric(metrics, "failure_to_progress", 0.0, fail_closed)

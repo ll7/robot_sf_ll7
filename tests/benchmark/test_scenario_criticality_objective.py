@@ -339,6 +339,29 @@ def test_collision_key_canonical_takes_precedence_over_fallbacks() -> None:
     assert result.collision_term == 10.0
 
 
+def test_collision_key_used_none_when_no_key_present() -> None:
+    """When neither canonical nor any fallback key exists, collision_key_used is None.
+
+    Regression: previously the absent case reported the canonical key as
+    ``collision_key_used``, falsely implying it was found in the metrics.
+    """
+    episode = _MockEpisodeData(
+        metrics={
+            "near_misses": 0,
+            "min_clearance": 0.6,
+            "failure_to_progress": 0,
+            "stalled_time": 0,
+        }
+    )
+    # fail_closed=False so the absent collision metric defaults to 0.0 and the
+    # episode still evaluates; the point is that collision_key_used is None
+    # (not falsely reported as the canonical key) when no key was found.
+    result = compute_criticality_score(episode, CriticalityObjectiveConfig(fail_closed=False))
+    assert result.status == "evaluated"
+    assert result.collision_key_used is None
+    assert result.collision_term == 0.0
+
+
 def test_canonical_collision_key_constant_value() -> None:
     """CANONICAL_COLLISION_KEY is 'collision_count'."""
     assert CANONICAL_COLLISION_KEY == "collision_count"

@@ -408,6 +408,11 @@ def run_criticality_optimization(  # noqa: C901
         import os
 
         effective_workers = os.cpu_count() or 1
+    # Never spawn more workers than there are candidates to evaluate: on a
+    # high-core host, max_workers=0 (auto) would otherwise start dozens of idle
+    # processes for a handful of candidates.
+    if effective_workers > 1:
+        effective_workers = min(effective_workers, max(1, len(candidate_params)))
 
     candidates: list[CandidateResult] = []
 
@@ -442,14 +447,17 @@ def run_criticality_optimization(  # noqa: C901
             }
             for future in as_completed(futures):
                 candidates.append(future.result())
+        # ProcessPoolExecutor completes futures in nondeterministic order.
+        # Restore a stable, reproducible ordering by candidate_id so the whole
+        # downstream (report listing, tie-breaking, manifest) matches the
+        # sequential path regardless of which worker finished first.
+        candidates.sort(key=lambda c: c.candidate_id)
 
     evaluated = [c for c in candidates if c.status == "evaluated"]
     # Secondary key on candidate_id makes "best" selection reproducible: parallel
     # workers complete in nondeterministic order, so ties on criticality_score must
     # break deterministically rather than on completion order.
-    best_candidates = sorted(
-        evaluated, key=lambda c: (-c.criticality_score, c.candidate_id)
-    )[:5]
+    best_candidates = sorted(evaluated, key=lambda c: (-c.criticality_score, c.candidate_id))[:5]
 
     baseline_candidate = next(
         (c for c in candidates if c.candidate_id == "baseline_unperturbed"), None
@@ -556,7 +564,9 @@ def write_optimization_report(
 
     best_candidates_json = output_dir / "best_candidates.json"
     evaluated = [c for c in candidates if c.status == "evaluated"]
-    best = sorted(evaluated, key=lambda c: c.criticality_score, reverse=True)[:5]
+    # Tie-break on candidate_id so the written "best" list is reproducible when
+    # multiple candidates share a criticality_score (matches run_* selection).
+    best = sorted(evaluated, key=lambda c: (-c.criticality_score, c.candidate_id))[:5]
     with best_candidates_json.open("w", encoding="utf-8") as f:
         json.dump(
             [

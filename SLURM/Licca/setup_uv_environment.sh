@@ -67,9 +67,9 @@ export UV_PROJECT_ENVIRONMENT="${ENV_DIR}"
 echo "[licca] Installing Python ${PY_VERSION} via uv"
 uv python install --if-missing "${PY_VERSION}"
 
-echo "[licca] Synchronising project dependencies (dev extras)"
+echo "[licca] Synchronising project dependencies (dev group)"
 cd "${REPO_ROOT}"
-uv sync --python "${PY_VERSION}" --extra dev
+uv sync --python "${PY_VERSION}" --group dev
 
 echo "[licca] Installing pre-commit hooks"
 uv run pre-commit install

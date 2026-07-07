@@ -35,6 +35,9 @@ from robot_sf.benchmark.scenario_criticality_objective import (
     compute_criticality_score,
 )
 from robot_sf.training.scenario_loader import load_scenarios
+from scripts.validation.run_scenario_perturbation_criticality_pilot import (
+    resolve_planner_run_spec,
+)
 
 
 @dataclass
@@ -209,7 +212,7 @@ def _build_baseline_parameters(
     return params
 
 
-def _evaluate_candidate(  # noqa: C901
+def _evaluate_candidate(  # noqa: C901, PLR0913
     candidate_id: str,
     parameters: dict[str, float],
     scenario: dict[str, Any],
@@ -217,15 +220,21 @@ def _evaluate_candidate(  # noqa: C901
     objective_config: CriticalityObjectiveConfig,
     output_dir: Path,
     scenario_path: Path,
+    *,
+    resolved_algo: str | None = None,
+    resolved_algo_config_path: str | None = None,
 ) -> CandidateResult:
-    """Evaluate a single candidate by running the simulator."""
+    """Evaluate a single candidate by running the simulator.
+
+    Args:
+        resolved_algo: Pre-resolved planner algo name (avoids redundant resolution
+            per worker in parallel mode).
+        resolved_algo_config_path: Pre-resolved algo config path string.
+    """
     import time
     from types import SimpleNamespace
 
     from robot_sf.benchmark.map_runner import run_map_batch
-    from scripts.validation.run_scenario_perturbation_criticality_pilot import (
-        resolve_planner_run_spec,
-    )
 
     start_time = time.perf_counter()
     try:
@@ -240,11 +249,19 @@ def _evaluate_candidate(  # noqa: C901
         if temp_jsonl.exists():
             temp_jsonl.unlink()
 
-        # Resolve the planner
-        planner_name = config.planner_name
-        if planner_name == "safe_baseline":
-            planner_name = "goal"
-        spec = resolve_planner_run_spec(planner_name)
+        # Use pre-resolved planner spec if provided, otherwise resolve locally
+        if resolved_algo is not None:
+            algo = resolved_algo
+            algo_config_path = resolved_algo_config_path
+        else:
+            planner_name = config.planner_name
+            if planner_name == "safe_baseline":
+                planner_name = "goal"
+            spec = resolve_planner_run_spec(planner_name)
+            algo = spec.algo
+            algo_config_path = (
+                spec.algo_config_path.as_posix() if spec.algo_config_path is not None else None
+            )
 
         # Run the batch
         run_map_batch(
@@ -252,10 +269,8 @@ def _evaluate_candidate(  # noqa: C901
             out_path=temp_jsonl,
             schema_path=Path("robot_sf/benchmark/schemas/episode.schema.v1.json"),
             scenario_path=scenario_path,
-            algo=spec.algo,
-            algo_config_path=spec.algo_config_path.as_posix()
-            if spec.algo_config_path is not None
-            else None,
+            algo=algo,
+            algo_config_path=algo_config_path,
             horizon=config.horizon,
             dt=config.dt,
             resume=False,
@@ -414,6 +429,19 @@ def run_criticality_optimization(  # noqa: C901
     if effective_workers > 1:
         effective_workers = min(effective_workers, max(1, len(candidate_params)))
 
+    # Pre-resolve planner spec once in the main process so parallel workers
+    # avoid redundant YAML registry / candidate-config file I/O.
+    planner_name = config.planner_name
+    if planner_name == "safe_baseline":
+        planner_name = "goal"
+    _planner_spec = resolve_planner_run_spec(planner_name)
+    _resolved_algo = _planner_spec.algo
+    _resolved_algo_config_path = (
+        _planner_spec.algo_config_path.as_posix()
+        if _planner_spec.algo_config_path is not None
+        else None
+    )
+
     candidates: list[CandidateResult] = []
 
     if effective_workers <= 1:
@@ -427,6 +455,8 @@ def run_criticality_optimization(  # noqa: C901
                 objective_config=objective_config,
                 output_dir=output_dir,
                 scenario_path=scenario_path,
+                resolved_algo=_resolved_algo,
+                resolved_algo_config_path=_resolved_algo_config_path,
             )
             candidates.append(result)
     else:
@@ -442,6 +472,8 @@ def run_criticality_optimization(  # noqa: C901
                     objective_config=objective_config,
                     output_dir=output_dir,
                     scenario_path=scenario_path,
+                    resolved_algo=_resolved_algo,
+                    resolved_algo_config_path=_resolved_algo_config_path,
                 ): cand_id
                 for cand_id, params in candidate_params
             }
@@ -472,6 +504,9 @@ def run_criticality_optimization(  # noqa: C901
         "optimizer_seed": config.optimizer_seed,
         "sample_budget": config.sample_budget,
         "seeds_per_candidate": config.seeds,
+        "planner_name": config.planner_name,
+        "planner_algo": _resolved_algo,
+        "planner_algo_config_path": _resolved_algo_config_path,
         "parameter_space": {
             name: {
                 "type": p.param_type,

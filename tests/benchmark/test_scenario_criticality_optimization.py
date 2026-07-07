@@ -27,6 +27,7 @@ ParameterDefinition = _MODULE.ParameterDefinition
 _build_baseline_parameters = _MODULE._build_baseline_parameters
 _parse_parameter_space = _MODULE._parse_parameter_space
 _sample_parameters = _MODULE._sample_parameters
+resolve_planner_run_spec = _MODULE.resolve_planner_run_spec
 run_criticality_optimization = _MODULE.run_criticality_optimization
 write_optimization_report = _MODULE.write_optimization_report
 
@@ -120,6 +121,9 @@ def test_manifest_contains_required_fields() -> None:
     assert "not_evaluable_count" in manifest
     assert "baseline_score" in manifest
     assert "generated_at" in manifest
+    assert "planner_name" in manifest
+    assert "planner_algo" in manifest
+    assert "planner_algo_config_path" in manifest
 
 
 def test_write_optimization_report(tmp_path: Path) -> None:
@@ -282,3 +286,38 @@ def test_effective_workers_capped_at_candidate_count() -> None:
     config.max_workers = 0
     _, manifest = run_criticality_optimization(config)
     assert manifest["max_workers"] <= manifest["total_candidates"]
+
+
+def test_manifest_includes_shared_planner_resolution() -> None:
+    """Manifest records the pre-resolved planner algo and config path."""
+    config = _make_test_config()
+    _, manifest = run_criticality_optimization(config)
+    assert "planner_algo" in manifest
+    assert manifest["planner_algo"] is not None
+    assert "planner_algo_config_path" in manifest
+    assert manifest["planner_name"] == config.planner_name
+
+
+def test_shared_planner_resolution_is_called_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pre-resolve planner spec once in the main process, not per worker.
+
+    Monkeypatch ``resolve_planner_run_spec`` to count calls.  Since
+    ProcessPoolExecutor forks the child, the patch does NOT propagate into
+    workers, so the main-process count must be exactly 1 regardless of
+    ``max_workers``.
+    """
+    call_count = {"n": 0}
+    original = _MODULE.resolve_planner_run_spec
+
+    def _counting_resolver(*args, **kwargs):  # type: ignore[no-untyped-def]
+        call_count["n"] += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(_MODULE, "resolve_planner_run_spec", _counting_resolver)
+
+    config = _make_test_config()
+    config.max_workers = 2
+    run_criticality_optimization(config)
+    assert call_count["n"] == 1

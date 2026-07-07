@@ -1,5 +1,8 @@
 # Context Retrieval Index
 
+Recent OMPL ST-RRT* feasibility assessment:
+[issue_4797_ompl_strrtstar_assessment.md](issue_4797_ompl_strrtstar_assessment.md).
+
 Recent SocNavBench ETH stage/SVG closure audit and generated SVG evidence:
 [issue_4546_closure_audit_2026-07-06.md](issue_4546_closure_audit_2026-07-06.md).
 

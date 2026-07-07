@@ -1,8 +1,16 @@
-"""Validation helpers for diagnostic social preference label configs."""
+"""Diagnostic social preference label config and annotation utilities.
+
+This module provides config validation via ``load_social_preference_label_config`` and an
+annotation entry point ``annotate_episode_social_preferences`` that applies threshold bands
+from the config to episode metric traces. The labels are diagnostic-only and must not be used
+as RL rewards or planner control signals.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import math
+import re
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +43,7 @@ REQUIRED_LABEL_FIELDS = frozenset(
         "notes",
     }
 )
+ANNOTATION_METHODS = frozenset({"threshold_band", "manual", "not_available"})
 
 
 class SocialPreferenceLabelConfigError(ValueError):
@@ -251,3 +260,523 @@ def _is_lowercase_snake_case(value: str) -> bool:
     return value[0].islower() and all(
         char.islower() or char.isdigit() or char == "_" for char in value
     )
+
+
+# ---------------------------------------------------------------------------
+# Threshold-band parsing helpers (private)
+# ---------------------------------------------------------------------------
+
+_THRESHOLDS_RE = re.compile(r"^(<|<=|>=|>|=)\s*([0-9eE.+\-]+)\s*[\-,]*(\s*[0-9eE.+\-]+)?")
+_BAND_RE = re.compile(r"(\[|\()?\s*([0-9eE.+\-]+)\s*,\s*([0-9eE.+\-]+)\s*([)\]])?")
+
+
+def _parse_threshold_band(value: Any) -> str | None:
+    """Return the band name whose range contains ``value``.
+
+    Supports simple band syntax used in the YAML config:
+    ``"< 0.0"``, ``"[0.0, 0.5)"``, ``">= 0.5"``.
+
+    Returns:
+        The band name (e.g. ``"poor"``, ``"caution"``, ``"acceptable"``) or
+        ``None`` when no band matches.
+    """
+    not_match: list[str] = []
+
+    for band_name, band_spec in value.items():
+        band_str = str(band_spec).strip()
+        matched = _match_band_spec(float(band_str))
+        if matched is not None:
+            return band_name
+        not_match.append(band_name + "=" + band_str)
+
+    return None
+
+
+def _match_band_spec(spec: str) -> float | None:
+    """Return the numeric value covered by a single band spec, or None."""
+    spec = spec.strip()
+
+    m = _THRESHOLDS_RE.match(spec)
+    if m:
+        op = m.group(1) or "<"
+        lo = float(m.group(2))
+        hi = float(m.group(3)) if m.group(3) else lo
+        return lo, op, hi  # type: ignore[return-value]
+    return None
+
+
+def _get_metric_value(episode: Mapping[str, Any], keys: Sequence[str]) -> float | None:
+    """Search ``episode["metrics"]`` for the first key whose dot-path resolves to a number.
+
+    Returns:
+        The numeric metric value or ``None`` if no key is found or the value is non-finite.
+    """
+
+    metrics = episode.get("metrics")
+    if not isinstance(metrics, Mapping):
+        return None
+
+    for key in keys:
+        value = _resolve_dot_path(metrics, key)
+        if value is not None:
+            try:
+                numeric = float(value)
+                return numeric if _is_finite(numeric) else None
+            except (TypeError, ValueError):
+                continue
+
+    return None
+
+
+def _resolve_dot_path(root: Mapping[str, Any], dot_path: str) -> Any:
+    """Resolve a dotted metric key into a value.
+
+    Candidate keys in the YAML config may include a ``metrics.`` prefix even though
+    ``root`` is already the episode's ``metrics`` mapping. A leading ``metrics.`` segment
+    is stripped before resolution.
+
+    Returns:
+        The resolved Python object, or ``None`` if the path does not resolve.
+    """
+
+    parts = [p for p in dot_path.split(".") if p]
+    if parts and parts[0] == "metrics":
+        parts = parts[1:]
+    cur: Any = root
+    for part in parts:
+        if isinstance(cur, Mapping):
+            cur = cur.get(part)
+        else:
+            return None
+    return cur
+
+
+def _is_finite(value: float) -> bool:
+    return math.isfinite(value)
+
+
+def _has_metric_key_path(
+    episode: Mapping[str, Any],
+    key: str,
+) -> bool:
+    """Return True if the dot-path resolves to *any* present leaf (not None)."""
+
+    metrics = episode.get("metrics")
+    if not isinstance(metrics, Mapping):
+        return False
+
+    found = _resolve_dot_path(metrics, key)
+    return found is not None
+
+
+# ---------------------------------------------------------------------------
+# Public annotation API
+# ---------------------------------------------------------------------------
+
+
+def get_episode_metric_names(episode: Mapping[str, Any]) -> set[str]:
+    """Return a set of all leaf key-paths available under the episode's ``metrics``.
+
+    Flattens nested dicts using dot-notation (e.g. ``social_acceptability.x``).
+    """
+
+    metrics = episode.get("metrics")
+    if not isinstance(metrics, Mapping):
+        return set()
+
+    result: set[str] = set()
+    _flatten_dict(metrics, "", result)
+    return result
+
+
+def _flatten_dict(d: Mapping[str, Any], prefix: str, out: set[str]) -> None:
+    """Recursively add dot-notation leaf keys to ``out``."""
+
+    for key, value in d.items():
+        full = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, Mapping):
+            _flatten_dict(value, full, out)
+        elif value is not None:
+            out.add(full)
+
+
+def annotate_episode_social_preferences(
+    episode: Mapping[str, Any],
+    *,
+    schema: dict[str, Any] | None = None,
+    config_path: str | Path | None = None,
+    trace_fields: set[str] | None = None,
+) -> dict[str, Any]:
+    """Annotate a single episode record with diagnostic social preference labels.
+
+    Applies the threshold-band rules from the schema to the metrics embedded in
+    ``episode``. Labels whose required trace fields or candidate metric keys are
+    missing are marked ``"not_available"`` rather than silently defaulting.
+
+    The return value is safe to serialise as JSON and append to a ``.jsonl`` file.
+
+    Args:
+        episode: An episode record containing at least a ``"metrics"`` mapping.
+        schema: Pre-loaded, validated label schema (``dict``). Mutually exclusive
+            with ``config_path``; ``schema`` takes precedence.
+        config_path: Path to the YAML config when schema is not provided.
+        trace_fields: Optional set of trace-field names available in the episode.
+            If not provided, availability checks use the presence of candidate
+            metric keys in the episode's ``"metrics"`` mapping.
+
+    Returns:
+        A dictionary with ``schema_version``, ``claim_boundary``, ``episode_id``,
+        and a ``labels`` list describing each label's diagnostic annotation.
+    """
+
+    if schema is None:
+        if config_path is None:
+            raise ValueError("annotate_episode_social_preferences requires schema or config_path")
+        schema = load_social_preference_label_config(Path(config_path))
+
+    labels_cfg = schema["labels"]
+    schema_version = schema.get("schema_version", SOCIAL_PREFERENCE_LABEL_SCHEMA_VERSION)
+    claim_boundary = schema.get("claim_boundary", "")
+    source_metrics_present = get_episode_metric_names(episode)
+    trace_fields = set(trace_fields) if trace_fields else None
+
+    annotations: list[dict[str, Any]] = []
+
+    for label in labels_cfg:
+        annotation = _annotate_one_label(
+            label,
+            episode,
+            trace_fields=trace_fields,
+            source_metrics=source_metrics_present,
+        )
+        annotations.append(annotation)
+
+    episode_id = (
+        episode.get("episode_id")
+        or episode.get("seed")
+        or episode.get("scenario_seed")
+        or "unknown"
+    )
+    return {
+        "schema_version": schema_version,
+        "claim_boundary": claim_boundary,
+        "episode_id": episode_id,
+        "labels": annotations,
+    }
+
+
+def _annotate_one_label(
+    label: Mapping[str, Any],
+    episode: Mapping[str, Any],
+    *,
+    trace_fields: set[str] | None,
+    source_metrics: set[str],
+) -> dict[str, Any]:
+    """Annotate a single label for a single episode.
+
+    Returns:
+        A dictionary with label_id, display_name, metric_family, value, annotation,
+        method, reason, evidence, and unit.
+    """
+
+    label_id = str(label["id"])
+    display_name = str(label.get("display_name", label_id))
+    metric_family = str(label.get("metric_family", "unknown"))
+    unit = str(label.get("unit", ""))
+    computation_status = str(label.get("computation_status", ""))
+
+    # Check structural availability first
+    if trace_fields is not None:
+        avail = label_availability(label, trace_fields)
+        if avail == "not_available":
+            return {
+                "label_id": label_id,
+                "display_name": display_name,
+                "metric_family": metric_family,
+                "value": None,
+                "annotation": "not_available",
+                "method": "not_available",
+                "reason": "required trace fields missing",
+                "evidence": {},
+                "unit": unit,
+            }
+
+    candidate_keys = label.get("candidate_metric_keys")
+    if not isinstance(candidate_keys, list) or not candidate_keys:
+        return {
+            "label_id": label_id,
+            "display_name": display_name,
+            "metric_family": metric_family,
+            "value": None,
+            "annotation": "not_available",
+            "method": "not_available",
+            "reason": "no candidate metric keys",
+            "evidence": {},
+            "unit": unit,
+        }
+
+    # Try to find a metric value
+    metric_value = _get_metric_value(episode, candidate_keys)
+    matched_key: str | None = None
+    if metric_value is not None:
+        for k in candidate_keys:
+            if _has_metric_key_path(episode, k):
+                matched_key = k
+                break
+
+    if metric_value is None:
+        return {
+            "label_id": label_id,
+            "display_name": display_name,
+            "metric_family": metric_family,
+            "value": None,
+            "annotation": "not_available",
+            "method": "not_available",
+            "reason": f"none of candidate keys present: {candidate_keys}",
+            "evidence": {
+                "candidate_keys_checked": candidate_keys,
+            },
+            "unit": unit,
+        }
+
+    # Apply threshold bands
+    thresholds = label.get("diagnostic_thresholds", {})
+    bands: dict[str, str] = thresholds.get("bands", {})
+    band_result = _classify_value_to_band(metric_value, bands)
+
+    return {
+        "label_id": label_id,
+        "display_name": display_name,
+        "metric_family": metric_family,
+        "value": metric_value,
+        "annotation": band_result,
+        "method": "threshold_band",
+        "reason": f"threshold band {band_result}",
+        "evidence": {
+            "metric_key": matched_key,
+            "metric_value": metric_value,
+            "threshold_bands": bands,
+            "computation_status": computation_status,
+        },
+        "unit": unit,
+    }
+
+
+def _classify_value_to_band(raw_value: float, bands: dict[str, str]) -> str:
+    """Classify a metric value into a band name using the YAML threshold bands.
+
+    Falls back to ``"uncertain"`` when no band matches or the bands dictionary is empty.
+
+    Returns:
+        The band name string (e.g. ``"acceptable"``, ``"poor"``, ``"caution"``, ``"uncertain"``).
+    """
+
+    if not bands:
+        return "uncertain"
+
+    matched_band = _match_value_to_band_spec(raw_value, bands)
+    if matched_band is not None:
+        return matched_band
+
+    # Fallback: try numeric sorting to find nearest band
+    return _fallback_band_classification(raw_value, bands)
+
+
+def _match_value_to_band_spec(value: float, bands: dict[str, str]) -> str | None:
+    """Try each band spec; return the first band name that contains ``value``.
+
+    Returns:
+        The band name or ``None`` if no band matches.
+    """
+
+    for band_name, spec in bands.items():
+        spec_str = str(spec).strip()
+        if _value_in_band_spec(value, spec_str):
+            return band_name
+    return None
+
+
+def _value_in_band_spec(value: float, spec: str) -> bool:
+    """Return True if ``value`` falls in the range described by ``spec``."""
+
+    spec = spec.strip()
+
+    # Simple comparisons: "< 0.0", "<= 0.0", ">= 0.5", "> 1.0"
+    m = _THRESHOLDS_RE.match(spec)
+    if m:
+        op = m.group(1) or "<"
+        threshold = float(m.group(2))
+        return _apply_op(value, op, threshold)
+
+    # Interval: "[0.0, 0.5)", "(0.0, 1.0]", "(0.0, 1.0)", "[0.0, 0.5]"
+    im = _BAND_RE.match(spec)
+    if im:
+        lo_bracket = im.group(1) or "["
+        lo = float(im.group(2))
+        hi = float(im.group(3))
+        hi_bracket = im.group(4) or "]"
+
+        lo_ok = value > lo if lo_bracket == "(" else value >= lo
+        hi_ok = value < hi if hi_bracket == ")" else value <= hi
+        return lo_ok and hi_ok
+
+    return False
+
+
+def _apply_op(value: float, op: str, threshold: float) -> bool:
+    """Evaluate a comparison operator.
+
+    Returns:
+        ``True`` if the operator holds for ``value`` and ``threshold``.
+    """
+
+    if op == "<":
+        return value < threshold
+    if op == "<=":
+        return value <= threshold
+    if op == ">=":
+        return value >= threshold
+    if op == ">":
+        return value > threshold
+    if op == "=":
+        return value == threshold
+    return False
+
+
+def _fallback_band_classification(value: float, bands: dict[str, str]) -> str:
+    """Heuristic fallback when the YAML bands use prose instead of numeric ranges.
+
+    Returns:
+        The best-guess band name string.
+    """
+
+    # Extract numeric thresholds and their band names to sort them
+    numeric_bands: list[tuple[float, str]] = []
+    for band_name, spec in bands.items():
+        spec_str = str(spec).strip()
+        extracted = _extract_threshold_number(spec_str)
+        if extracted is not None:
+            numeric_bands.append((extracted, band_name))
+
+    if not numeric_bands:
+        return "uncertain"
+
+    numeric_bands.sort()
+    threshold, band_name = numeric_bands[-1]
+    if value >= threshold:
+        return band_name
+
+    # Otherwise, find the highest band where value >= threshold
+    for threshold, band_name in numeric_bands:
+        if value >= threshold:
+            return band_name
+
+    # Below all thresholds — use the lowest band
+    return numeric_bands[0][1]
+
+
+def _extract_threshold_number(spec: str) -> float | None:
+    """Extract a leading numeric threshold from a band spec string.
+
+    Returns:
+        The extracted float or ``None`` if not parseable.
+    """
+
+    spec = spec.replace("[", "").replace("(", "").replace("]", "").replace(")", "").strip()
+    parts = spec.split(",")
+    for part in parts:
+        part = part.strip()
+        part = part.lstrip("<>=").strip()
+        try:
+            return float(part)
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
+def annotate_episodes_social_preferences(
+    episodes: Sequence[Mapping[str, Any]],
+    *,
+    schema: dict[str, Any] | None = None,
+    config_path: str | Path | None = None,
+    trace_fields: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Annotate a sequence of episode records with social preference labels.
+
+    Returns:
+        A list of annotation dicts, one per episode.
+    """
+
+    return [
+        annotate_episode_social_preferences(
+            ep, schema=schema, config_path=config_path, trace_fields=trace_fields
+        )
+        for ep in episodes
+    ]
+
+
+def build_label_summary(annotations: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Build a summary of social preference label results across a batch of annotations.
+
+    Counts label annotation values and ``not_available`` reasons per label.
+
+    Returns:
+        A dictionary with schema_version, claim_boundary, total_episodes, per-label
+        annotation counts, and not_available_reasons.
+    """
+
+    schema_version = ""
+    claim_boundary = ""
+    label_counts: dict[str, dict[str, int]] = {}
+    not_available_reasons: dict[str, dict[str, int]] = {}
+
+    for annotation in annotations:
+        schema_version = annotation.get("schema_version", schema_version) or schema_version
+        claim_boundary = annotation.get("claim_boundary", claim_boundary) or claim_boundary
+
+        for label_result in annotation.get("labels", []):
+            label_id = label_result.get("label_id", "unknown")
+            annotation_value = label_result.get("annotation", "unknown")
+
+            if label_id not in label_counts:
+                label_counts[label_id] = {}
+
+            label_counts[label_id][annotation_value] = (
+                label_counts[label_id].get(annotation_value, 0) + 1
+            )
+
+            if annotation_value == "not_available":
+                if label_id not in not_available_reasons:
+                    not_available_reasons[label_id] = {}
+                reason = label_result.get("reason", "unknown")
+                not_available_reasons[label_id][reason] = (
+                    not_available_reasons[label_id].get(reason, 0) + 1
+                )
+
+    total_episodes = len(annotations)
+    summary = {
+        "schema_version": schema_version,
+        "claim_boundary": claim_boundary,
+        "total_episodes": total_episodes,
+        "labels": {},
+        "not_available_reasons": not_available_reasons,
+    }
+
+    for label_id, counts in sorted(label_counts.items()):
+        label_summary = {
+            "count": sums(counts) if counts else 0,
+            "annotation_counts": dict(sorted(counts.items())),
+        }
+        summary["labels"][label_id] = label_summary
+
+    return summary
+
+
+def sums(d: dict[str, int]) -> int:
+    """Sums the values in a dictionary of counts.
+
+    Returns:
+        The total count across all keys.
+    """
+
+    return sum(d.values())

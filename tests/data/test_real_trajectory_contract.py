@@ -22,6 +22,9 @@ from robot_sf.data_ingestion import (
 )
 from robot_sf.data_ingestion import real_trajectory_contract as contract
 from scripts.tools.check_real_trajectory_manifest import main as check_manifest_main
+from scripts.training.check_issue_4013_real_trajectory_readiness import (
+    build_report as build_readiness_report,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE_MANIFEST = REPO_ROOT / "configs" / "data" / "real_trajectory_manifest.example.yaml"
@@ -291,6 +294,84 @@ def test_manifest_cli_reports_staging_tree_checksum(
         "staging_dir": str(staging_dir),
         "file_count": 1,
         "tree_sha256": tree_sha256,
+    }
+
+
+def test_staging_tree_report_is_reusable_for_readiness_artifact(
+    valid_manifest: dict,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The #4013 readiness artifact records the same local staging checksum evidence."""
+    data_root = tmp_path / "external_data"
+    staging_dir = data_root / "synthetic_byo"
+    staging_dir.mkdir(parents=True)
+    (staging_dir / "trajectories.csv").write_text("frame,ped_id,x,y\n0,1,0,0\n", encoding="utf-8")
+    monkeypatch.setenv("ROBOT_SF_EXTERNAL_DATA_ROOT", str(data_root))
+    valid_manifest["staging"]["staging_dir"] = "${ROBOT_SF_EXTERNAL_DATA_ROOT}/synthetic_byo"
+    valid_manifest["availability"] = "validated"
+    valid_manifest["benchmark_eligibility"] = "research_only"
+    tree_sha256 = contract._staging_tree_sha256(staging_dir)
+    valid_manifest["checksums"]["tree_sha256"] = tree_sha256
+    valid_manifest["checksums"]["expected_tree_sha256"] = tree_sha256
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest_path.write_text(json.dumps(valid_manifest), encoding="utf-8")
+
+    report = build_readiness_report(manifest_path)
+
+    assert report["status"] == "ready_for_real_trajectory_training"
+    assert report["staging_tree"] == {
+        "available": True,
+        "staging_dir": str(staging_dir),
+        "file_count": 1,
+        "tree_sha256": tree_sha256,
+    }
+
+
+@pytest.mark.parametrize(
+    ("staging_dir", "expected_reason"),
+    [
+        (None, "manifest.staging.staging_dir missing"),
+        ("${ROBOT_SF_EXTERNAL_DATA_ROOT}/synthetic_byo", "environment variable unresolved"),
+        ("output/external_data/missing_synthetic_byo", "staging directory missing"),
+    ],
+)
+def test_staging_tree_report_fails_closed_before_checksum(
+    valid_manifest: dict,
+    staging_dir: str | None,
+    expected_reason: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Staging checksum evidence reports blockers instead of raising."""
+    monkeypatch.delenv("ROBOT_SF_EXTERNAL_DATA_ROOT", raising=False)
+    if staging_dir is None:
+        valid_manifest["staging"].pop("staging_dir")
+    else:
+        valid_manifest["staging"]["staging_dir"] = staging_dir
+
+    report = contract.build_staging_tree_report(valid_manifest)
+
+    assert report["available"] is False
+    assert report["reason"] == expected_reason
+
+
+def test_staging_tree_report_marks_empty_directory_unavailable(
+    valid_manifest: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty local staging root is visible but not usable evidence."""
+    data_root = tmp_path / "external_data"
+    staging_dir = data_root / "synthetic_byo"
+    staging_dir.mkdir(parents=True)
+    monkeypatch.setenv("ROBOT_SF_EXTERNAL_DATA_ROOT", str(data_root))
+    valid_manifest["staging"]["staging_dir"] = "${ROBOT_SF_EXTERNAL_DATA_ROOT}/synthetic_byo"
+
+    report = contract.build_staging_tree_report(valid_manifest)
+
+    assert report == {
+        "available": False,
+        "staging_dir": str(staging_dir),
+        "file_count": 0,
+        "reason": "staging directory empty",
     }
 
 

@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from robot_sf.data_ingestion.real_trajectory_contract import (
     ContractError,
+    build_staging_tree_report,
     load_manifest,
     run_preflight,
 )
@@ -42,10 +43,12 @@ def build_report(manifest_path: Path) -> dict[str, Any]:
     try:
         manifest = load_manifest(manifest_path)
         preflight = run_preflight(manifest)
+        staging_tree = build_staging_tree_report(manifest)
         input_error: str | None = None
     except (ContractError, jsonschema.ValidationError) as exc:
         manifest = {}
         preflight = None
+        staging_tree = {"available": False, "reason": "manifest input error"}
         input_error = str(exc)
 
     if input_error:
@@ -133,6 +136,7 @@ def build_report(manifest_path: Path) -> dict[str, Any]:
         "dataset_id": dataset_id,
         "availability": availability,
         "benchmark_eligibility": benchmark_eligibility,
+        "staging_tree": staging_tree,
         "retrieval": {
             "download_url": retrieval.get("download_url"),
             "instructions": retrieval.get("instructions"),
@@ -169,6 +173,10 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Dataset: `{report['dataset_id']}`",
         f"- Availability: `{report['availability']}`",
         f"- Benchmark eligibility: `{report['benchmark_eligibility']}`",
+        f"- Staging tree available: `{report['staging_tree'].get('available')}`",
+        f"- Staging tree path: `{report['staging_tree'].get('staging_dir', 'unresolved')}`",
+        f"- Staging tree files: `{report['staging_tree'].get('file_count', 'n/a')}`",
+        f"- Staging tree SHA-256: `{report['staging_tree'].get('tree_sha256', 'n/a')}`",
         f"- Acquisition URL: `{report['retrieval']['download_url'] or 'manual/license-gated'}`",
         f"- Acquisition fail-closed: `{report['retrieval']['fail_closed']}`",
         "",

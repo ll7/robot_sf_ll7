@@ -148,7 +148,7 @@ def build_acceptance_audit(
             "status": "blocked",
             "evidence": [
                 "Existing comparison_report.v1.json is diagnostic synthetic/checkpoint smoke evidence.",
-                "Issue thread after PR #4712 still requires real-trajectory training plus representative evaluation.",
+                "Issue thread after PR #4732 still requires real-trajectory training plus representative evaluation.",
             ],
             "remaining_work": (
                 "Run the representative real-trajectory evaluation against cv_prediction_mpc "
@@ -184,6 +184,7 @@ def build_acceptance_audit(
             {"pr": 4700, "evidence": "real-trajectory trainer data path"},
             {"pr": 4704, "evidence": "validated manifest requires reachable staging directory"},
             {"pr": 4712, "evidence": "validated manifest requires pinned tree checksum"},
+            {"pr": 4732, "evidence": "staging checksum surfaced in manifest checker output"},
         ],
         "criteria": criteria,
         "blockers_remaining": blockers,

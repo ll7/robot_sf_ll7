@@ -18,7 +18,7 @@ This audit maps issue #4013 acceptance criteria to merged PR evidence and the cu
 | Claim boundary excludes large world-model and paper-grade claims. | `met` | comparison evidence_tier='diagnostic-only'.<br>comparison claim_boundary='diagnostic matched-scenario comparison; not paper-grade benchmark evidence'. | None. |
 | Real pedestrian trajectory dataset is reachable and checksum-pinned. | `blocked` | readiness status='blocked_manifest_contract'.<br>readiness blockers=[{'code': 'staging.env_unresolved_for_validated', 'message': "availability 'validated' requires staging.staging_dir to resolve to a local directory; set ROBOT_SF_EXTERNAL_DATA_ROOT or use an output/ path.", 'severity': 'error'}].<br>manifest availability='validated'. | Stage ETH/BIWI or approved real trajectories under ROBOT_SF_EXTERNAL_DATA_ROOT and satisfy the pinned checksum preflight. |
 | Real-trajectory predictor training has run on validated data. | `blocked` | No checked-in evidence records a real-trajectory training run.<br>readiness next_action='Stage ETH/BIWI or another approved real pedestrian trajectory dataset under $ROBOT_SF_EXTERNAL_DATA_ROOT, validate its checksum, update the manifest, then run real-trajectory training and representative evaluation.'. | After readiness reaches ready_for_real_trajectory_training, run the real-trajectory trainer and publish compact metrics/manifest evidence. |
-| Representative evaluation compares learned predictor against cv_prediction_mpc and a model-free baseline. | `blocked` | Existing comparison_report.v1.json is diagnostic synthetic/checkpoint smoke evidence.<br>Issue thread after PR #4712 still requires real-trajectory training plus representative evaluation. | Run the representative real-trajectory evaluation against cv_prediction_mpc and one model-free baseline after real-data training. |
+| Representative evaluation compares learned predictor against cv_prediction_mpc and a model-free baseline. | `blocked` | Existing comparison_report.v1.json is diagnostic synthetic/checkpoint smoke evidence.<br>Issue thread after PR #4732 still requires real-trajectory training plus representative evaluation. | Run the representative real-trajectory evaluation against cv_prediction_mpc and one model-free baseline after real-data training. |
 
 ## Merged PR Evidence
 
@@ -32,6 +32,7 @@ This audit maps issue #4013 acceptance criteria to merged PR evidence and the cu
 - PR #4700: real-trajectory trainer data path.
 - PR #4704: validated manifest requires reachable staging directory.
 - PR #4712: validated manifest requires pinned tree checksum.
+- PR #4732: staging checksum surfaced in manifest checker output.
 
 ## Blockers Remaining
 

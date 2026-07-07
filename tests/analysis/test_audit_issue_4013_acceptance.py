@@ -79,6 +79,17 @@ def test_acceptance_audit_keeps_issue_partial_until_real_data_lane_runs(tmp_path
     )
     assert statuses["Real-trajectory predictor training has run on validated data."] == "blocked"
     assert "checksum-pinned ETH/BIWI" in audit["next_empirical_action"]
+    assert audit["merged_pr_evidence"][-1] == {
+        "pr": 4732,
+        "evidence": "staging checksum surfaced in manifest checker output",
+    }
+
+    representative = next(
+        item
+        for item in audit["criteria"]
+        if item["criterion"].startswith("Representative evaluation compares")
+    )
+    assert "PR #4732" in "\n".join(representative["evidence"])
 
 
 def test_acceptance_audit_fails_closed_on_missing_comparator_role(tmp_path: Path) -> None:

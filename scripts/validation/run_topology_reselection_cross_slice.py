@@ -17,6 +17,12 @@ import yaml
 _DEFAULT_MANIFEST = Path("configs/policy_search/topology_reselection_cross_slice_issue_2716.yaml")
 _DEFAULT_REGISTRY = Path("docs/context/policy_search/candidate_registry.yaml")
 
+# Recorded (repo-relative) interpreter used in tracked evidence commands so the
+# provenance stays reproducible and free of absolute worktree paths. Execution
+# substitutes the real ``sys.executable`` (see ``run_row``) so the script does
+# not depend on the process cwd or a ``.venv`` at a fixed location.
+_RECORDED_INTERPRETER = ".venv/bin/python3"
+
 
 def _manifest_issue_number(manifest: dict[str, Any]) -> int:
     """Extract the issue number from a manifest."""
@@ -246,7 +252,7 @@ def command_for_row(
             issue_number=_manifest_issue_number(manifest),
         )
     return [
-        sys.executable,
+        _RECORDED_INTERPRETER,
         "scripts/validation/run_topology_hypothesis_diagnostics.py",
         "--candidate",
         candidate,
@@ -282,7 +288,12 @@ def run_row(command: list[str]) -> dict[str, Any]:
         Row result payload.
     """
 
-    completed = subprocess.run(command, check=False, capture_output=True, text=True)
+    exec_command = command
+    if command and command[0] == _RECORDED_INTERPRETER:
+        # Execute with the live interpreter; the recorded/relative form is kept
+        # only for reproducible evidence provenance, not for process launch.
+        exec_command = [sys.executable, *command[1:]]
+    completed = subprocess.run(exec_command, check=False, capture_output=True, text=True)
     stdout_payload: dict[str, Any] = {}
     if completed.stdout.strip():
         stdout_payload = json.loads(completed.stdout)
@@ -376,6 +387,69 @@ def row_metrics(row: SweepRow, result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def summarize_blockers(metrics: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Group fail-closed rows into compact blocker records."""
+    grouped: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for row in metrics:
+        status = str(row.get("diagnostic_status") or "unknown")
+        if status == "diagnostic_complete":
+            continue
+        key = (
+            str(row.get("slice_id") or "unknown_slice"),
+            str(row.get("slice_role") or "unknown_role"),
+            str(row.get("scenario_name") or "unknown_scenario"),
+            str(row.get("terminal_outcome") or "unknown_outcome"),
+        )
+        entry = grouped.setdefault(
+            key,
+            {
+                "slice_id": key[0],
+                "slice_role": key[1],
+                "scenario_name": key[2],
+                "terminal_outcome": key[3],
+                "diagnostic_status_counts": {},
+                "candidate_roles": [],
+                "thresholds_m": [],
+                "row_count": 0,
+                "max_collision_rate": 0.0,
+                "min_route_progress_m": None,
+                "max_route_progress_m": None,
+                "classification": "fail_closed_not_success_evidence",
+                "next_empirical_action": (
+                    "repair or replace this slice before benchmark-facing promotion"
+                ),
+            },
+        )
+        entry["row_count"] += 1
+        status_counts = entry["diagnostic_status_counts"]
+        status_counts[status] = int(status_counts.get(status, 0)) + 1
+        candidate_role = str(row.get("candidate_role") or "unknown_candidate_role")
+        if candidate_role not in entry["candidate_roles"]:
+            entry["candidate_roles"].append(candidate_role)
+        threshold = row.get("threshold_m")
+        if threshold is not None and threshold not in entry["thresholds_m"]:
+            entry["thresholds_m"].append(threshold)
+        entry["max_collision_rate"] = max(
+            float(entry["max_collision_rate"]),
+            float(row.get("collision_rate") or 0.0),
+        )
+        progress = row.get("route_progress_m")
+        if isinstance(progress, int | float):
+            min_progress = entry["min_route_progress_m"]
+            max_progress = entry["max_route_progress_m"]
+            entry["min_route_progress_m"] = (
+                float(progress)
+                if min_progress is None
+                else min(float(min_progress), float(progress))
+            )
+            entry["max_route_progress_m"] = (
+                float(progress)
+                if max_progress is None
+                else max(float(max_progress), float(progress))
+            )
+    return sorted(grouped.values(), key=lambda item: (item["slice_id"], item["terminal_outcome"]))
+
+
 def classify_report(metrics: list[dict[str, Any]]) -> tuple[str, str]:
     """Classify progress-gated reselection from aggregate hard/control metrics.
 
@@ -390,6 +464,16 @@ def classify_report(metrics: list[dict[str, Any]]) -> tuple[str, str]:
     if not progress_rows or not reuse_rows:
         return "blocked", "Missing progress-gated or reuse-penalty rows."
     if any(row["diagnostic_status"] != "diagnostic_complete" for row in progress_rows):
+        blockers = summarize_blockers(progress_rows)
+        if blockers:
+            blocker_names = ", ".join(
+                f"{item['slice_id']}:{item['terminal_outcome']}" for item in blockers
+            )
+            return (
+                "blocked",
+                "Progress-gated rows failed closed before producing diagnostic evidence: "
+                f"{blocker_names}.",
+            )
         return "blocked", "At least one progress-gated row did not produce diagnostic evidence."
     if any(row["topology_command_steps"] == 0 for row in hard_progress):
         return "stop", "A hard slice lost topology-command influence under progress gating."
@@ -423,7 +507,7 @@ def report_markdown(report: dict[str, Any]) -> str:
     """
 
     lines = [
-        f"# Issue {report['issue']} Topology Reselection Cross-Slice Diagnostic",
+        f"# Issue #{report['issue']} - Topology Reselection Cross-Slice Diagnostic",
         "",
         f"Claim boundary: `{report['claim_boundary']}`.",
         f"Classification: `{report['classification']}`.",
@@ -445,6 +529,38 @@ def report_markdown(report: dict[str, Any]) -> str:
             f"{row['topology_switch_count']} | {row['deadlock_duration_steps']} | "
             f"{row['collision_rate']} |"
         )
+    blockers = report.get("blockers", [])
+    if blockers:
+        lines.extend(
+            [
+                "",
+                "## Fail-Closed Blockers",
+                "",
+                "| Slice | Scenario | Outcome | Status counts | Candidate roles | Thresholds m | Rows | Route progress m | Next action |",
+                "|---|---|---|---|---|---:|---:|---:|---|",
+            ]
+        )
+        for item in blockers:
+            status_counts = ", ".join(
+                f"{key}={value}" for key, value in sorted(item["diagnostic_status_counts"].items())
+            )
+            thresholds = ", ".join(str(value) for value in item["thresholds_m"]) or "NA"
+            progress_min = item.get("min_route_progress_m")
+            progress_max = item.get("max_route_progress_m")
+            if progress_min is None or progress_max is None:
+                progress_range = "NA"
+            elif progress_min == progress_max:
+                progress_range = str(progress_min)
+            else:
+                progress_range = f"{progress_min} to {progress_max}"
+            lines.append(
+                "| "
+                f"{item['slice_id']} | {item['scenario_name']} | "
+                f"{item['terminal_outcome']} | {status_counts} | "
+                f"{', '.join(item['candidate_roles'])} | {thresholds} | "
+                f"{item['row_count']} | {progress_range} | "
+                f"{item['next_empirical_action']} |"
+            )
     lines.extend(
         [
             "",
@@ -494,6 +610,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.dry_run
         else classify_report(metrics)
     )
+    blockers = [] if args.dry_run else summarize_blockers(metrics)
     report = {
         "schema": "topology_reselection_cross_slice_report.v1",
         "issue": _manifest_issue_number(manifest),
@@ -511,6 +628,7 @@ def main(argv: list[str] | None = None) -> int:
             }
             for item in row_results
         ],
+        "blockers": blockers,
         "rows": metrics,
     }
     json_path = output_dir / "topology_reselection_cross_slice_report.json"

@@ -1,0 +1,21 @@
+# Append-only durable state for issue #3285. Do not store host routing, queue packet lineage,
+# credentials, or private asset locations here.
+entries:
+  - date: "2026-07-07"
+    source: "closure_audit_integration_slice"
+    status: "open_blocked_on_external_assets"
+    delivered:
+      - "Target compatibility, export manifest, and export preview artifacts now have JSON schemas."
+      - "Existing target handoff builders have validation helpers and focused tamper tests."
+    acceptance_evidence:
+      - criterion: "Converter output schema-validated deterministic fixture scenario."
+        evidence: "PR #3735 added IR schema validation and deterministic fixture tests; this slice adds schema validation for later target handoff artifacts."
+      - criterion: "Unsupported fields reported explicitly instead silently dropped."
+        evidence: "PR #3735 emits unsupported_fields; PR #4562 and PR #4711 preserve those blockers in target compatibility and preview payloads."
+      - criterion: "Smoke dry-run command documented."
+        evidence: "docs/context/issue_3285_scenario_interop_converter.md documents IR, manifest, and preview dry-run commands."
+      - criterion: "Issue links external asset prerequisites required full run."
+        evidence: "Issue #3285 and docs/context/issue_3285_scenario_interop_converter.md name #1456, #1498, #2414, and #1134 as full-run blockers."
+    remaining:
+      - "Runnable SocNavBench/HuNavSim export remains blocked on staged external assets/adapters tracked by #1456, #1498, #2414, and #1134."
+    next_empirical_action: "Run an asset-backed target adapter smoke after prerequisite staged inputs exist."

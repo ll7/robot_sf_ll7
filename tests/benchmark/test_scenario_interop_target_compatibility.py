@@ -13,6 +13,12 @@ from robot_sf.benchmark.scenario_interop import (
     build_target_export_preview,
     convert_scenario_to_ir,
     dump_ir,
+    load_target_compatibility_schema,
+    load_target_export_manifest_schema,
+    load_target_export_preview_schema,
+    validate_target_compatibility_report,
+    validate_target_export_manifest,
+    validate_target_export_preview,
 )
 
 
@@ -65,6 +71,7 @@ def test_target_compatibility_report_fails_closed_for_missing_external_assets() 
     assert "socnavbench_assets_not_staged" in blockers_by_target["socnavbench"]
     assert "hunavsim_adapter_not_staged" in blockers_by_target["hunavsim"]
     assert "unsupported_fields_present" in blockers_by_target["socnavbench"]
+    assert all(validate_target_compatibility_report(report) == [] for report in reports)
 
 
 def test_target_compatibility_report_names_axis_scenario_export_gaps() -> None:
@@ -97,6 +104,7 @@ def test_target_export_manifest_records_blocked_artifact_contract() -> None:
         "socnavbench_assets_not_staged",
         "unsupported_fields_present",
     }
+    assert validate_target_export_manifest(manifest) == []
 
 
 def test_target_export_manifest_is_deterministic() -> None:
@@ -142,6 +150,7 @@ def test_socnavbench_export_preview_contains_target_shaped_payload() -> None:
         "socnavbench_assets_not_staged",
         "unsupported_fields_present",
     }
+    assert validate_target_export_preview(preview) == []
 
 
 def test_hunavsim_export_preview_contains_target_shaped_payload() -> None:
@@ -171,6 +180,32 @@ def test_hunavsim_export_preview_contains_target_shaped_payload() -> None:
         }
     ]
     assert any(warning["code"] == "ros_semantics_unmapped" for warning in preview["warnings"])
+    assert validate_target_export_preview(preview) == []
+
+
+def test_target_artifact_schema_loaders_and_tamper_checks() -> None:
+    """Target artifact schema helpers load schemas and reject malformed payloads."""
+
+    assert load_target_compatibility_schema()["title"]
+    assert load_target_export_manifest_schema()["title"]
+    assert load_target_export_preview_schema()["title"]
+
+    result = convert_scenario_to_ir(_explicit_map_scenario())
+
+    compatibility = build_target_compatibility_report(result.ir, targets=("socnavbench",))[0]
+    broken_compatibility = dict(compatibility)
+    broken_compatibility["target"] = "unknownsim"
+    assert validate_target_compatibility_report(broken_compatibility) != []
+
+    manifest = build_target_export_manifest(result.ir, target="socnavbench")
+    broken_manifest = dict(manifest)
+    broken_manifest["status"] = "exported"
+    assert validate_target_export_manifest(broken_manifest) != []
+
+    preview = build_target_export_preview(result.ir, target="socnavbench")
+    broken_preview = dict(preview)
+    broken_preview["payload"] = {"unexpected": True}
+    assert validate_target_export_preview(broken_preview) != []
 
 
 def test_target_export_preview_is_deterministic() -> None:

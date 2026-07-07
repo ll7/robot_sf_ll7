@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ll7.github.io/robot_sf/scenario_interop_target_compatibility.v1.json",
+  "title": "Robot SF Cross-Benchmark Scenario Target Compatibility Report (v1)",
+  "description": "Asset-free readiness report for projecting Robot SF scenario interop IR toward SocNavBench or HuNavSim. A blocked report is expected until target assets and adapters are staged.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "target",
+    "source_scenario_id",
+    "ready",
+    "blockers",
+    "warnings"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "robot_sf.scenario_interop_target_compatibility.v1"
+    },
+    "target": {
+      "$ref": "#/$defs/target"
+    },
+    "source_scenario_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ready": {
+      "type": "boolean"
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    }
+  },
+  "$defs": {
+    "target": {
+      "enum": [
+        "socnavbench",
+        "hunavsim"
+      ]
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "field",
+        "reason"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "field": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

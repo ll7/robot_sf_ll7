@@ -17,9 +17,15 @@ for Robot SF scenario-matrix entries, plus explicit unsupported-field reports. I
 require external assets and does not emit runnable SocNavBench or HuNavSim files.
 
 - Module: `robot_sf/benchmark/scenario_interop.py` (`convert_scenario_to_ir`, `dump_ir`,
-  `validate_interop_ir`, `build_target_export_manifest`, `build_target_export_preview`).
+  `validate_interop_ir`, `validate_target_compatibility_report`,
+  `validate_target_export_manifest`, `validate_target_export_preview`,
+  `build_target_export_manifest`, `build_target_export_preview`).
 - IR schema: `robot_sf/benchmark/schemas/scenario_interop_ir.v1.json`
   (`robot_sf.scenario_interop_ir.v1`).
+- Target handoff schemas:
+  `robot_sf/benchmark/schemas/scenario_interop_target_compatibility.v1.json`,
+  `robot_sf/benchmark/schemas/scenario_interop_target_export_manifest.v1.json`, and
+  `robot_sf/benchmark/schemas/scenario_interop_target_export_preview.v1.json`.
 - Dry-run CLI: `scripts/tools/convert_scenario_interop.py`.
 - Tests: `tests/benchmark/test_scenario_interop.py`,
   `tests/benchmark/test_scenario_interop_target_compatibility.py`.
@@ -95,3 +101,20 @@ validation.
   claim about simulator equivalence, planner transferability, or benchmark-score parity.
 - Emitting real runnable SocNavBench/HuNavSim scenario assets and running them remains blocked on
   staged external assets/adapters (#1456, #1498, #2414, #1134).
+
+## Closure Audit Integration 2026-07-07
+
+Merged evidence through PR #4711 satisfies the original asset-free acceptance criteria:
+
+| Acceptance criterion | Evidence |
+| --- | --- |
+| Converter output schema-validated deterministic fixture scenario. | PR #3735 added the IR converter, `scenario_interop_ir.v1.json`, deterministic serialization tests, and schema validation. |
+| Unsupported fields reported explicitly instead silently dropped. | PR #3735 records unmapped top-level source fields in `unsupported_fields`; PR #4562 and PR #4711 propagate those blockers into target compatibility and preview artifacts. |
+| Smoke dry-run command documented. | PR #3735 documented the IR CLI; PR #4673 and PR #4711 extended this note with manifest and preview dry-run commands. |
+| Issue links external asset prerequisites required full run. | The issue thread and this note keep #1456, #1498, #2414, and #1134 as full-run blockers. |
+
+This integration slice adds JSON-Schema validation for the target compatibility, target export
+manifest, and target export preview artifacts introduced after the base IR converter. It does not
+change the closure boundary: runnable SocNavBench/HuNavSim export remains intentionally blocked
+until external assets and adapters are staged. The next empirical action is an asset-backed adapter
+smoke after the relevant prerequisite issue provides staged target inputs.

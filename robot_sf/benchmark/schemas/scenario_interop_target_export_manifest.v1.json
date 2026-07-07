@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ll7.github.io/robot_sf/scenario_interop_target_export_manifest.v1.json",
+  "title": "Robot SF Cross-Benchmark Scenario Target Export Manifest (v1)",
+  "description": "Fail-closed manifest for target scenario export attempts. It records readiness, blockers, and source provenance without claiming runnable SocNavBench or HuNavSim artifacts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_kind",
+    "target",
+    "source_scenario_id",
+    "source_ir_schema_version",
+    "status",
+    "ready",
+    "blockers",
+    "warnings",
+    "compatibility_report_schema_version"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "robot_sf.scenario_interop_target_export_manifest.v1"
+    },
+    "artifact_kind": {
+      "enum": [
+        "socnavbench_scenario_export_manifest",
+        "hunavsim_scenario_export_manifest"
+      ]
+    },
+    "target": {
+      "$ref": "#/$defs/target"
+    },
+    "source_scenario_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_ir_schema_version": {
+      "const": "robot_sf.scenario_interop_ir.v1"
+    },
+    "status": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "ready": {
+      "type": "boolean"
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "compatibility_report_schema_version": {
+      "const": "robot_sf.scenario_interop_target_compatibility.v1"
+    }
+  },
+  "$defs": {
+    "target": {
+      "enum": [
+        "socnavbench",
+        "hunavsim"
+      ]
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "field",
+        "reason"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "field": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

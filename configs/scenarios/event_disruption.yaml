@@ -1,0 +1,16 @@
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - single/event_disruption_public_exit.yaml
+map_search_paths:
+  - ../../maps/svg_maps
+metadata:
+  scenario_family: event_disruption
+  purpose: >
+    Manifest for the event-disruption scenario family.  Contains ODD-stress
+    proxy scenarios for public-event disruption, using existing 2D simulation
+    primitives.  Experimental and opt-in; not a real-world event model.
+  not_real_world_event_model: true
+  odd_stress_proxy: public_event_disruption
+  authoring:
+    source_issue: https://github.com/ll7/robot_sf_ll7/issues/4759
+    benchmark_evidence: false

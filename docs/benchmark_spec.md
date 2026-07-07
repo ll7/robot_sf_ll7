@@ -256,22 +256,35 @@ planner observations unchanged.
 
 ## Campaign Credibility Scorecard
 
-Campaign reports include `reports/campaign_credibility_scorecard.json` and a matching Markdown
-table in `reports/campaign_report.md`. The schema is
-`campaign_credibility_scorecard.v1`, a lightweight credibility summary inspired by
-NASA-STD-7009B for model and simulation reporting. It helps readers see which trust dimensions are
-supported by campaign artifacts and which remain unassessed.
+Campaign reports include `reports/campaign_analysis.json` and a matching Markdown table in `reports/campaign_analysis.md` (emitted by `scripts/tools/analyze_camera_ready_campaign.py`). The schema version is `nasa-7009-style-credibility-scorecard.v1`, a lightweight credibility summary adapted from NASA-STD-7009B for model and simulation reporting. It helps readers see which trust dimensions are supported by campaign artifacts.
 
-Every scorecard contains the same six factors: `verification`, `validation`, `input_pedigree`,
-`uncertainty_characterization`, `results_robustness`, and `use_history`. Each factor has
-`factor_id`, `factor`, `description`, `status`, `score`, `scale`, `justification`, and `evidence`.
-Status uses the coarse scale `not_assessed`, `weak`, `partial`, `strong`, or `not_applicable`.
-Scores use a companion `0` to `3` numeric value when mechanically assessed. Missing evidence fails closed: the factor remains
-`status: not_assessed` with `score: null`, and the Markdown table renders the score cell blank
-instead of omitting the factor. Mechanically derived factors may be pre-filled from pinned campaign
-inputs, seed-variability artifacts, structured report artifacts, and planner-row status summaries.
-The scorecard is reporting metadata only; it is not benchmark proof, paper evidence, or real-world
-validation.
+The scorecard evaluates five factors, mapping scores dynamically to a status (`pass`, `warning`, `fail`):
+
+| Factor ID / check_id | Label | Description | Status Mapping | Score Range | Blocker Criteria |
+|---|---|---|---|---|---|
+| `traceable_campaign_artifacts` | Traceable campaign artifacts | Verifies presence of planner runs and corresponding non-empty episode record files (`episodes.jsonl`). | `pass` if present; `fail` if empty/missing. | `1.0` (present) or `0.0` (missing) | Yes, fails campaign credibility (adds `No episode evidence found` blocker). |
+| `verification_consistency` | Verification consistency | Checks for consistency between planner summary rows and episode records (e.g. success, collision, or SNQI mean mismatches) and portability (absence of absolute map paths). | `pass` (score >= 0.8), `warning` (score >= 0.5), or `fail` (score < 0.5). | `[0.0, 1.0]`. Starts at `1.0`; `-0.4` for row-episode mismatches, `-0.2` for absolute map paths. | Yes, fails check if score < 0.5. |
+| `validation_coverage` | Validation coverage | Checks if the campaign exposures/reports include a scenario difficulty breakdown for validation analysis. | `pass` if breakdown available; `warning` otherwise. | `1.0` (available) or `0.5` (unavailable) | No. |
+| `uncertainty_characterization` | Uncertainty characterization | Verifies the declaration of seed variability analysis artifacts to assess metric uncertainty. | `pass` if declared; `warning` otherwise. | `1.0` (declared) or `0.5` (undeclared) | No. |
+| `limitations_explicit` | Limitations explicit | Checks for explicit limitations such as fallback/degraded planner runs or general campaign findings. | `pass` if no findings or fallbacks; `warning` otherwise. | `1.0` (none) or `0.5` (any fallback/findings) | Any fallback/degraded run adds an overall campaign-level blocker. |
+
+The scorecard is reporting metadata only; it is not benchmark proof, paper evidence, or real-world validation.
+
+### Worked-Example Scorecard
+
+Below is the credibility scorecard emitted for the camera-ready campaign `paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316`:
+
+- **Status**: `credible_diagnostic`
+- **Score**: `0.8200`
+- **Claim boundary**: Diagnostic campaign-report credibility only; not paper-facing evidence and not a benchmark-success promotion.
+
+| check | status | score | evidence | blocker |
+|---|---|---:|---|---|
+| Traceable campaign artifacts | pass | 1.0000 | 7 planner runs with 987 episode records | - |
+| Verification consistency | warning | 0.6000 | 7 planner consistency finding(s) | - |
+| Validation coverage | pass | 1.0000 | 47 scenario difficulty row(s) | - |
+| Uncertainty characterization | pass | 1.0000 | Seed variability artifact declared: `output/benchmarks/camera_ready/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316/reports/seed_variability_by_scenario.json` | - |
+| Limitations explicit | warning | 0.5000 | 0 fallback/degraded run(s); 7 campaign finding(s) | - |
 
 ## Metrics: Definitions + Caveats (Summary)
 

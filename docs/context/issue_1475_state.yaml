@@ -96,6 +96,113 @@ entries:
       release: false
       merge: false
       deletion: false
+  - recorded_at_utc: "2026-07-07T05:30:00Z"
+    status: post_4726_closure_audit_delivered__external_slurm_rerun_pending
+    source:
+      issue_url: "https://github.com/ll7/robot_sf_ll7/issues/1475"
+      live_issue_state_checked: "open"
+      comments_reviewed: 36
+      latest_issue_comment_utc: "2026-07-07T03:10:17Z"
+      latest_issue_comment_summary: >-
+        PR #4726 merged and posted the live issue state update: merged-pr
+        acceptance evidence exists through #4721, audit remains blocked, and
+        #1475 stays open for the bounded Slurm smoke rerun before nominal
+        escalation.
+    fragmentation_guard: >-
+      Multiple issue #1475 audit/state PRs already merged in the last 24 hours;
+      this entry records the post-#4726 closure audit in the canonical state
+      surface instead of opening an issue-comment stream or encoding transient
+      queue-routing state.
+    closure_boundary:
+      closure_call_for_this_pr: "keep_open"
+      reason: >-
+        Executable acceptance audit still reports blocked over tracked evidence.
+        Remaining acceptance criteria require post-gate Slurm smoke evidence and
+        nominal classification, both outside this CPU-only closure audit.
+    current_authorization_boundary: >-
+      No full benchmark campaign run, no Slurm/GPU submission, no paper or
+      dissertation claim edit, no issue comment, no merge, no release, no
+      deletion.
+    acceptance_evidence:
+      - criterion: "Residual dataset manifest NPZ recorded durable artifacts."
+        status: partially_met
+        evidence: >-
+          job-12913 source checksum manifest records smoke NPZ checksum, but
+          tracked smoke summary no durable artifact_pointer_status, so durable
+          pointer completion not proven.
+      - criterion: "Learned residual checkpoint pointer durable included in completion update."
+        status: partially_met
+        evidence: >-
+          job-12913 source checksum manifest records smoke checkpoint checksum,
+          but tracked smoke summary no durable artifact_pointer_status, so
+          durable checkpoint pointer completion not proven.
+      - criterion: "Diagnostics report includes ORCA command, raw residual, bounded residual, final guarded command, residual clipping rate, guard veto rate, fallback/degraded status."
+        status: not_met
+        evidence: >-
+          Executable audit reports missing residual_clipping_rate,
+          guard_veto_rate, fallback_degraded_status, artifact_pointer_status in
+          tracked smoke summary.
+      - criterion: "Fallback/degraded rows are not counted learned-residual success evidence."
+        status: met
+        evidence: >-
+          validate_smoke_nominal_gate() remains invalid over incomplete tracked
+          smoke evidence, so fallback/degraded rows are excluded from positive
+          learned-residual success evidence.
+      - criterion: "Smoke result recorded before nominal escalation."
+        status: met
+        evidence: >-
+          job-12913 smoke result is durably tracked failed_closed
+          nominal_escalation_allowed=false.
+      - criterion: "Nominal result classified ready #1358 continuation, revise, stop."
+        status: not_met
+        evidence: >-
+          No nominal result exists in tracked evidence; smoke gate remains
+          invalid over tracked job-12913 summary.
+    merged_pr_evidence:
+      - pr: "#4561"
+        closure_effect: partial
+        evidence: "CPU-only smoke nominal gate delivered."
+      - pr: "#4661"
+        closure_effect: partial
+        evidence: "Executable acceptance audit delivered."
+      - pr: "#4667"
+        closure_effect: partial
+        evidence: "Canonical high-churn state surface delivered."
+      - pr: "#4678"
+        closure_effect: partial
+        evidence: "State surface verification delivered."
+      - pr: "#4721"
+        closure_effect: partial_keep_open
+        evidence: "Integration report delivered; issue remains externally smoke-blocked."
+      - pr: "#4726"
+        closure_effect: post_merge_audit_keep_open
+        evidence: "Merged-PR evidence table and live keep-open issue update delivered."
+    integration_report:
+      status: blocked
+      blockers_remaining:
+        - "Durable artifact_pointer_status not proven for dataset/checkpoint outputs."
+        - "Tracked smoke summary lacks required residual/guard/fallback fields."
+        - "No nominal result classification exists."
+      blockers_new: []
+      blockers_intentional:
+        - "No Slurm/GPU submission in PR."
+        - "No nominal escalation while smoke gate remains invalid."
+      next_empirical_action: >-
+        On a Slurm-capable lane, run one bounded ORCA-residual BC smoke rerun
+        against current post-gate code. Only if validate_smoke_nominal_gate()
+        passes, escalate bounded nominal and record #1358
+        continuation/revise/stop classification.
+    validation:
+      - command: "uv run python scripts/validation/build_issue_1475_acceptance_audit.py --write"
+        result: "Regenerates JSON merged_pr_evidence through #4726 and integration_report.status=blocked."
+    out_of_scope_confirmed:
+      full_benchmark_campaign_run: false
+      slurm_or_gpu_submission: false
+      paper_or_dissertation_claim_edit: false
+      issue_comment: false
+      release: false
+      merge: false
+      deletion: false
   - recorded_at_utc: "2026-07-07T02:50:00Z"
     status: merged_pr_evidence_audit_delivered__external_slurm_rerun_pending
     source:

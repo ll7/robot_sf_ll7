@@ -133,7 +133,11 @@ def _state_surface_check(
             "status": "invalid",
             "errors": ["state surface has no entries"],
         }
-    latest = entries[-1]
+    latest = max(
+        (entry for entry in entries if isinstance(entry, dict)),
+        key=lambda entry: str(entry.get("recorded_at_utc", "")),
+        default={},
+    )
     errors: list[str] = []
     if state_surface.get("issue") != 1475:
         errors.append(f"issue must be 1475, got {state_surface.get('issue')!r}")
@@ -292,6 +296,21 @@ def _build_merged_pr_evidence() -> list[dict[str, Any]]:
             ],
             "closure_effect": "partial_keep_open",
         },
+        {
+            "pr": "#4726",
+            "title": "Issue #1475: add merged PR acceptance evidence",
+            "merged_at_utc": "2026-07-07T03:10:15Z",
+            "evidence": (
+                "Added ordered merged-pr_evidence records for #4561/#4661/"
+                "#4667/#4678/#4721 and posted the live issue state update "
+                "that the audit still keeps #1475 open."
+            ),
+            "criteria_supported": [
+                "Merged PR acceptance evidence mapped through PR #4721.",
+                "Post-merge issue propagation recorded keep-open closure call.",
+            ],
+            "closure_effect": "post_merge_audit_keep_open",
+        },
     ]
 
 
@@ -444,8 +463,8 @@ def build_audit(
             "continuation/revise/stop."
         ),
         "source_thread_summary": (
-            "Issue #1475 live thread reviewed via gh api on 2026-07-06; latest maintainer "
-            "comment remains the 2026-07-05 post-PR #4561 gate update."
+            "Issue #1475 live thread reviewed via gh api on 2026-07-07; latest issue "
+            "comment is the 2026-07-07 post-PR #4726 state update keeping the issue open."
         ),
         "closure_audit_contains_issue_1475": "Issue #1475" in closure_audit,
     }

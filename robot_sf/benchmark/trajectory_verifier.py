@@ -131,6 +131,17 @@ class VerifierResult:
     claim_boundary: str = field(default=TRAJECTORY_VERIFIER_CLAIM_BOUNDARY)
 
 
+def _require_finite(name: str, arr: np.ndarray) -> None:
+    """Raise ``ValueError`` if ``arr`` holds any non-finite (NaN/inf) value.
+
+    Non-finite inputs would silently defeat every threshold comparison — e.g.
+    ``nan < min_clearance`` evaluates to ``False`` — and could cause an unsafe
+    trajectory to be accepted. Reject them at the input boundary (fail closed).
+    """
+    if not np.isfinite(arr).all():
+        raise ValueError(f"{name} must contain only finite values (no NaN or inf)")
+
+
 def _as_float2d(name: str, array: np.ndarray | None) -> np.ndarray | None:
     """Validate a (T, 2) trajectory array or return None for missing input.
 
@@ -148,6 +159,7 @@ def _as_float2d(name: str, array: np.ndarray | None) -> np.ndarray | None:
         raise ValueError(f"{name} must have shape (T, 2); got {arr.shape}")
     if arr.shape[0] == 0:
         raise ValueError(f"{name} must contain at least one timestep; got {arr.shape}")
+    _require_finite(name, arr)
     return arr
 
 
@@ -162,6 +174,7 @@ def _as_ped_positions(name: str, array: np.ndarray, expected_t: int) -> np.ndarr
             not match ``expected_t``, or there are no pedestrians.
     """
     arr = np.asarray(array, dtype=float)
+    _require_finite(name, arr)
     if arr.ndim == 2:
         if arr.shape[1] != 2:
             raise ValueError(f"{name} with shape (N, 2) must have last dim 2; got {arr.shape}")
@@ -203,6 +216,7 @@ def _as_ped_velocities(
     if array is None:
         return None
     arr = np.asarray(array, dtype=float)
+    _require_finite(name, arr)
     if arr.ndim == 2:
         if arr.shape != (target_shape[1], 2):
             raise ValueError(
@@ -260,10 +274,13 @@ def _braking_feasible(
     """Return True iff the robot can stop before colliding with any pedestrian ahead.
 
     For each timestep with non-negligible robot speed, compute the stopping distance
-    ``d_stop = v^2 / (2 * a)`` and the clearance to each pedestrian projected onto the
-    robot heading. If a pedestrian is ahead of the robot within the lateral footprint
-    envelope (``|perpendicular offset| <= sum_radii``) and the projected clearance is
-    less than ``d_stop``, braking is infeasible.
+    ``d_stop = v^2 / (2 * a)`` and the longitudinal clearance to each pedestrian
+    projected onto the robot heading. Because both bodies have physical size, a
+    collision occurs when the center-to-center along-heading distance reaches
+    ``sum_radii``; the available braking distance is therefore ``along - sum_radii``.
+    If a pedestrian is ahead of the robot within the lateral footprint envelope
+    (``|perpendicular offset| <= sum_radii``) and that available distance is less than
+    ``d_stop``, braking is infeasible.
     """
     robot_speed = np.linalg.norm(robot_velocities, axis=-1)
     diff = ped_positions - robot_positions[:, None, :]
@@ -275,7 +292,11 @@ def _braking_feasible(
     ahead = along > 0.0
     moving = robot_speed > 1.0e-9
     in_envelope = lateral <= sum_radii
-    cannot_stop = along < d_stop[:, None]
+    # Subtract the summed radii: the robot must stop before the footprints touch,
+    # not before the centers coincide. Ignoring sum_radii would call braking
+    # feasible even when the robot halts inside the pedestrian (fail-open).
+    available = along - sum_radii
+    cannot_stop = available < d_stop[:, None]
     infeasible = moving[:, None] & ahead & in_envelope & cannot_stop
     return not bool(np.any(infeasible))
 
@@ -298,11 +319,14 @@ def _count_heading_oscillations(
     moving = speed > min_speed_mps
     if int(np.sum(moving)) < 2:
         return 0
-    angles = np.arctan2(robot_velocities[:, 1], robot_velocities[:, 0])
+    # Compare consecutive *moving* timesteps. Filtering to the moving subsequence
+    # first (rather than masking adjacent-pair differences) means a heading change
+    # spanning a stopped/slow timestep is still counted, matching the docstring.
+    moving_velocities = robot_velocities[moving]
+    angles = np.arctan2(moving_velocities[:, 1], moving_velocities[:, 0])
     d_angle = np.abs(np.diff(angles))
     d_angle = np.minimum(d_angle, 2.0 * np.pi - d_angle)
-    moving_pairs = moving[1:] & moving[:-1]
-    return int(np.sum((d_angle > angle_rad) & moving_pairs))
+    return int(np.sum(d_angle > angle_rad))
 
 
 def _aggregate_risk_score(

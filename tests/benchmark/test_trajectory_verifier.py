@@ -448,3 +448,105 @@ def test_schema_and_claim_boundary_constants() -> None:
     assert "not a formal safety case" in TRAJECTORY_VERIFIER_CLAIM_BOUNDARY
     assert "not learned" in TRAJECTORY_VERIFIER_CLAIM_BOUNDARY
     assert "default planner behavior unchanged" in TRAJECTORY_VERIFIER_CLAIM_BOUNDARY
+
+
+def test_braking_accounts_for_footprint_radii() -> None:
+    """Braking is infeasible when the robot would stop inside the pedestrian footprint.
+
+    Regression for the sum_radii gap: at 2 m/s ``d_stop = 0.8 m``. With the
+    nearest along-heading center distance at 0.9 m and ``sum_radii = 0.2 m`` the
+    available braking distance is ``0.9 - 0.2 = 0.7 m < 0.8 m`` -> infeasible.
+    Ignoring the radii (comparing 0.9 m directly to 0.8 m) would wrongly call
+    braking feasible even though the robot halts inside the pedestrian.
+    """
+    n = 5
+    robot_pos = np.stack([np.linspace(0.0, 0.4, n), np.zeros(n)], axis=1)
+    robot_vel = np.tile([2.0, 0.0], (n, 1))  # d_stop = 4 / (2 * 2.5) = 0.8 m
+    ped_pos = np.array([[1.3, 0.0]])  # min along-distance = 1.3 - 0.4 = 0.9 m
+    ped_vel = np.array([[0.0, 0.0]])
+    # Loose clearance/TTC thresholds so only the braking predicate can fire here.
+    cfg = TrajectoryVerifierConfig(
+        min_clearance_m=0.05, warn_clearance_m=0.1, min_ttc_s=0.1, warn_ttc_s=0.2
+    )
+    result = verify_trajectory(
+        robot_positions=robot_pos,
+        robot_velocities=robot_vel,
+        pedestrian_positions=ped_pos,
+        pedestrian_velocities=ped_vel,
+        dt_s=0.1,
+        robot_radius_m=0.1,
+        pedestrian_radius_m=0.1,  # sum_radii = 0.2 m
+        config=cfg,
+    )
+    assert result.braking_feasible is False
+    assert PRED_BRAKING_INFEASIBLE in result.violated_predicates
+
+
+def test_heading_oscillation_counted_across_a_pause() -> None:
+    """Heading reversals separated by a stopped timestep still count as oscillations.
+
+    Regression for the adjacent-pair mask: previously a turn straddling a
+    non-moving timestep was dropped because both bordering pairs contained a
+    stopped step. Filtering to the moving subsequence first counts the reversal
+    between consecutive *moving* timesteps regardless of intervening pauses.
+    """
+    velocities: list[list[float]] = []
+    move_idx = 0
+    for i in range(20):
+        if i % 2 == 1:
+            velocities.append([0.0, 0.0])  # pause between every moving step
+        else:
+            heading = 0.0 if move_idx % 2 == 0 else np.pi  # alternate east/west
+            velocities.append([0.5 * float(np.cos(heading)), 0.5 * float(np.sin(heading))])
+            move_idx += 1
+    robot_vel = np.array(velocities)
+    robot_pos = np.cumsum(robot_vel * 0.1, axis=0)
+    ped_pos = np.array([[10.0, 10.0]])
+    ped_vel = np.array([[0.0, 0.0]])
+    cfg = TrajectoryVerifierConfig(max_heading_oscillation_count=3)
+    result = verify_trajectory(
+        robot_positions=robot_pos,
+        robot_velocities=robot_vel,
+        pedestrian_positions=ped_pos,
+        pedestrian_velocities=ped_vel,
+        dt_s=0.1,
+        robot_radius_m=0.2,
+        pedestrian_radius_m=0.2,
+        config=cfg,
+    )
+    assert PRED_RECOVERY_SMOOTHNESS in result.violated_predicates
+
+
+def test_non_finite_inputs_raise() -> None:
+    """NaN/inf inputs are rejected at the boundary, never silently accepted.
+
+    A ``nan`` in a position would defeat threshold comparisons (``nan < x`` is
+    ``False``), so the verifier must fail closed with a clear ValueError.
+    """
+    robot_pos, robot_vel, ped_pos, ped_vel = _straight_trajectory(ped_offset=(5.0, 0.0))
+
+    bad_robot = robot_pos.copy()
+    bad_robot[0, 0] = np.nan
+    with pytest.raises(ValueError, match="finite"):
+        verify_trajectory(
+            robot_positions=bad_robot,
+            robot_velocities=robot_vel,
+            pedestrian_positions=ped_pos,
+            pedestrian_velocities=ped_vel,
+            dt_s=0.1,
+            robot_radius_m=0.3,
+            pedestrian_radius_m=0.3,
+        )
+
+    bad_ped = ped_pos.copy()
+    bad_ped[0, 0, 0] = np.inf
+    with pytest.raises(ValueError, match="finite"):
+        verify_trajectory(
+            robot_positions=robot_pos,
+            robot_velocities=robot_vel,
+            pedestrian_positions=bad_ped,
+            pedestrian_velocities=ped_vel,
+            dt_s=0.1,
+            robot_radius_m=0.3,
+            pedestrian_radius_m=0.3,
+        )

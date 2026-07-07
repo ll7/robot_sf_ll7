@@ -14,6 +14,7 @@ Usage:
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Literal
@@ -76,8 +77,12 @@ def planner_color(planner_key: str) -> str:
     if planner_key in _PLANNER_COLORS:
         return _PLANNER_COLORS[planner_key]
 
-    # Deterministic fallback: hash the key to select from fallback palette
-    idx = hash(planner_key) % len(_FALLBACK_PALETTE)
+    # Deterministic fallback: use a stable hash so an unknown planner keeps the
+    # same color across processes/figures. Python's builtin hash() is salted per
+    # process (PYTHONHASHSEED), so it must NOT be used here — it would give the
+    # same planner a different color in each figure-generation run.
+    digest = hashlib.sha256(planner_key.encode("utf-8")).digest()
+    idx = int.from_bytes(digest[:8], "big") % len(_FALLBACK_PALETTE)
     return _FALLBACK_PALETTE[idx]
 
 

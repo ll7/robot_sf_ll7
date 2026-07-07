@@ -48,6 +48,18 @@ class TestPlannerPalette:
         color2 = planner_color("unknown_planner_xyz")
         assert color1 == color2
 
+    def test_planner_color_unknown_planner_stable_across_processes(self):
+        """Pin fallback colors so an unknown planner keeps its color everywhere.
+
+        The fallback must use a stable hash (not Python's per-process salted
+        ``hash()``); otherwise the same planner would get a different color in
+        each figure-generation run. These pinned values encode that contract:
+        if the fallback hashing changes, this test fails on purpose.
+        """
+        assert planner_color("planner_a") == "#66A61E"
+        assert planner_color("planner_b") == "#CC79A7"
+        assert planner_color("planner_c") == "#0072B2"
+
     def test_planner_color_unknown_planner_hex_format(self):
         """Verify unknown planner colors are valid hex."""
         color = planner_color("unknown_planner")

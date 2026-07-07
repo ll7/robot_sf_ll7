@@ -101,8 +101,8 @@ A standalone script `scripts/tools/mapf_oracle_diagnostic.py` that:
 ### What Is Deferred
 
 - ~~Dynamic obstacle time-windows~~ → implemented (PR #4809): SIPP search.
-- ~~Multi-agent CBS conflict resolution~~ → implemented (this PR): CBS search.
-- TPG schedule post-processing (requires CBS output).
+- ~~Multi-agent CBS conflict resolution~~ → implemented (PR #4813): CBS search.
+- ~~TPG schedule post-processing~~ → implemented (this PR): `_build_tpg_graph`, `_compute_schedule_slack`, `tpg_post_process`, CLI `--tpg`.
 - Integration into the benchmark campaign loop (requires follow-up issue).
 
 ### Why Not Code Reuse from Upstream

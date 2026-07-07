@@ -3,8 +3,10 @@
 
 Discretizes an SVG map into a coarse occupancy grid and runs
 single-agent A* / SIPP or multi-agent CBS to check route feasibility
-and produce oracle path metrics.  This is a diagnostic tool, not a
-benchmark claim or production planner.
+and produce oracle path metrics.  Optional TPG (Temporal Plan Graph)
+post-processing computes schedule slack and temporal dependency
+information.  This is a diagnostic tool, not a benchmark claim or
+production planner.
 
 Usage (single-agent):
     uv run python scripts/tools/mapf_oracle_diagnostic.py \
@@ -16,10 +18,16 @@ Usage (multi-agent CBS):
         maps/svg_maps/classic_crossing.svg \
         --grid-size 40 --agents agents.json
 
+Usage (CBS + TPG schedule post-processing):
+    uv run python scripts/tools/mapf_oracle_diagnostic.py \
+        maps/svg_maps/classic_crossing.svg \
+        --grid-size 40 --agents agents.json --tpg
+
 Upstream provenance:
     Algorithms inspired by SIPP (Safe Interval Path Planning, Li et al.
-    ICRA 2011, DOI: 10.1109/ICRA.2011.5980306) and CBS (Conflict-Based
-    Search, Sharon et al., AAAI 2015) from
+    ICRA 2011, DOI: 10.1109/ICRA.2011.5980306), CBS (Conflict-Based
+    Search, Sharon et al., AAAI 2015), and TPG (Temporal Plan Graph,
+    Phillips & Likhachev, ICAPS 2011) from
     atb033/multi_agent_path_planning under MIT license.
     This is a clean-room reimplementation, not a copy.
 """
@@ -704,6 +712,217 @@ def _run_cbs_search(
 
 
 # ---------------------------------------------------------------------------
+# TPG (Temporal Plan Graph) schedule post-processing
+# ---------------------------------------------------------------------------
+
+
+@dataclasses.dataclass(frozen=True)
+class _TPGEdge:
+    """A temporal dependency edge in the TPG."""
+
+    from_agent: int
+    to_agent: int
+    time: int
+    cell: tuple[int, int]
+
+
+def _build_tpg_graph(
+    solution: dict[int, list[tuple[int, int, int]]],
+) -> list[_TPGEdge]:
+    """Build a Temporal Plan Graph from a CBS solution.
+
+    For each pair of agents that share a cell (but at different times),
+    an edge is created from the earlier agent to the later one.  This
+    captures the temporal ordering constraint: the later agent must not
+    arrive before the earlier one leaves.
+
+    Provenance: inspired by Temporal Plan Graph from
+    Phillips & Likhachev, ICAPS 2011.  Clean-room reimplementation.
+    """
+    edges: list[_TPGEdge] = []
+    agent_ids = sorted(solution.keys())
+
+    # Build position -> time mapping per agent
+    agent_pos_times: dict[int, dict[tuple[int, int], list[int]]] = {}
+    for aid in agent_ids:
+        pos_times: dict[tuple[int, int], list[int]] = {}
+        for r, c, t in solution[aid]:
+            pos_times.setdefault((r, c), []).append(t)
+        agent_pos_times[aid] = pos_times
+
+    for i, a_id in enumerate(agent_ids):
+        for b_id in agent_ids[i + 1 :]:
+            a_pos = agent_pos_times[a_id]
+            b_pos = agent_pos_times[b_id]
+            # Find shared cells
+            shared = set(a_pos.keys()) & set(b_pos.keys())
+            for cell in shared:
+                for t_a in a_pos[cell]:
+                    for t_b in b_pos[cell]:
+                        if t_a < t_b:
+                            edges.append(_TPGEdge(a_id, b_id, t_a, cell))
+                        elif t_b < t_a:
+                            edges.append(_TPGEdge(b_id, a_id, t_b, cell))
+    return edges
+
+
+def _compute_schedule_slack(
+    solution: dict[int, list[tuple[int, int, int]]],
+    tpg_edges: list[_TPGEdge],
+    time_blocked: dict[int, set[tuple[int, int]]] | None = None,
+) -> dict[int, float]:
+    """Compute per-agent schedule slack from the TPG.
+
+    Slack is the maximum number of time steps an agent can be uniformly
+    delayed before it would violate a temporal dependency (edge) in the
+    TPG or collide with a dynamic obstacle.  Higher slack means more
+    flexibility for execution under kinematic imperfections.
+
+    Returns a dict mapping agent_id -> slack (may be inf for agents
+    with no downstream dependencies).
+    """
+    if time_blocked is None:
+        time_blocked = {}
+
+    agent_ids = sorted(solution.keys())
+    makespan = max(path[-1][2] for path in solution.values()) if solution else 0
+
+    downstream: dict[int, list[_TPGEdge]] = {aid: [] for aid in agent_ids}
+    for edge in tpg_edges:
+        downstream[edge.from_agent].append(edge)
+
+    slack: dict[int, float] = {}
+    for aid in agent_ids:
+        path = solution[aid]
+        path_times = {t: (r, c) for r, c, t in path}
+        min_delay = _downstream_slack(solution, downstream, aid)
+        min_delay = _obstacle_slack(path_times, time_blocked, min_delay)
+        if min_delay == float("inf"):
+            slack[aid] = float(makespan)
+        else:
+            slack[aid] = max(0.0, min_delay)
+
+    return slack
+
+
+def _downstream_slack(
+    solution: dict[int, list[tuple[int, int, int]]],
+    downstream: dict[int, list[_TPGEdge]],
+    aid: int,
+) -> float:
+    """Compute the minimum delay constraint from downstream TPG edges."""
+    min_delay = float("inf")
+    for edge in downstream[aid]:
+        to_path = solution[edge.to_agent]
+        to_times = {t: (r, c) for r, c, t in to_path}
+        for t_to, pos in to_times.items():
+            if pos == edge.cell and t_to > edge.time:
+                delay_gap = t_to - edge.time - 1
+                min_delay = min(min_delay, delay_gap)
+                break
+    return min_delay
+
+
+def _obstacle_slack(
+    path_times: dict[int, tuple[int, int]],
+    time_blocked: dict[int, set[tuple[int, int]]],
+    current_min: float,
+) -> float:
+    """Update min_delay if any path position collides with a dynamic obstacle."""
+    last_time = max(path_times) if path_times else 0
+    for t in range(last_time + 1):
+        blocked = time_blocked.get(t, set())
+        pos = path_times.get(t)
+        if pos is not None and pos in blocked:
+            return 0.0
+    return current_min
+
+
+def tpg_post_process(
+    solution: dict[int, list[tuple[int, int, int]]],
+    time_blocked: dict[int, set[tuple[int, int]]] | None = None,
+) -> dict[str, Any]:
+    """Run TPG post-processing on a CBS solution and return diagnostic metrics.
+
+    Returns a dict with:
+    - ``tpg_makespan``: latest arrival time across all agents.
+    - ``tpg_total_slack``: sum of per-agent schedule slack.
+    - ``tpg_min_slack``: minimum slack across agents (bottleneck).
+    - ``tpg_bottleneck_agent``: agent with the least slack.
+    - ``tpg_slack_per_agent``: per-agent slack values.
+    - ``tpg_dependency_edges``: number of temporal dependency edges.
+    - ``tpg_dependency_pairs``: unique agent-pair count with dependencies.
+
+    Provenance: inspired by Temporal Plan Graph (Phillips & Likhachev,
+    ICAPS 2011).  Clean-room reimplementation for diagnostic use.
+    """
+    tpg_edges = _build_tpg_graph(solution)
+    slack = _compute_schedule_slack(solution, tpg_edges, time_blocked)
+
+    makespan = max(path[-1][2] for path in solution.values()) if solution else 0
+
+    # Dependency pair count (unique unordered pairs)
+    dep_pairs: set[tuple[int, int]] = set()
+    for edge in tpg_edges:
+        pair = (min(edge.from_agent, edge.to_agent), max(edge.from_agent, edge.to_agent))
+        dep_pairs.add(pair)
+
+    min_slack = min(slack.values()) if slack else 0.0
+    bottleneck = min(slack, key=lambda a: slack[a]) if slack else None
+
+    return {
+        "tpg_enabled": True,
+        "tpg_makespan": makespan,
+        "tpg_total_slack": round(sum(slack.values()), 2),
+        "tpg_min_slack": round(min_slack, 2),
+        "tpg_bottleneck_agent": bottleneck,
+        "tpg_slack_per_agent": {str(a): round(s, 2) for a, s in sorted(slack.items())},
+        "tpg_dependency_edges": len(tpg_edges),
+        "tpg_dependency_pairs": len(dep_pairs),
+    }
+
+
+def _run_cbs_search(
+    diagnostic: dict[str, Any],
+    grid: list[list[int]],
+    agents: list[dict[str, Any]],
+    time_blocked: dict[int, set[tuple[int, int]]],
+    max_time: int,
+    max_nodes: int,
+) -> dict[str, Any]:
+    """Run CBS multi-agent search and fill diagnostic fields."""
+    result = cbs_search(grid, agents, time_blocked, max_time, max_nodes)
+
+    diagnostic["search_method"] = "cbs"
+    diagnostic["agent_count"] = len(agents)
+    diagnostic["max_time"] = max_time
+    diagnostic["cbs_max_nodes"] = max_nodes
+
+    if result is None:
+        diagnostic["multi_agent_feasible"] = False
+        diagnostic["diagnostic_status"] = "infeasible"
+        diagnostic["agent_paths"] = None
+        diagnostic["total_path_cost"] = None
+        diagnostic["cbs_nodes_expanded"] = None
+        return diagnostic
+
+    diagnostic["multi_agent_feasible"] = True
+    diagnostic["diagnostic_status"] = "feasible"
+    diagnostic["total_path_cost"] = result["cost"]
+    diagnostic["cbs_nodes_expanded"] = result["nodes_expanded"]
+
+    agent_paths: dict[str, Any] = {}
+    for aid in result["agent_ids"]:
+        path = result["solution"][aid]
+        agent_paths[str(aid)] = {
+            "path_length": len(path),
+            "path": [{"row": r, "col": c, "time": t} for r, c, t in path],
+        }
+    diagnostic["agent_paths"] = agent_paths
+    return diagnostic
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -763,6 +982,12 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=500,
         help="Maximum CBS constraint-tree nodes to expand. Default: 500.",
+    )
+    parser.add_argument(
+        "--tpg",
+        action="store_true",
+        default=False,
+        help="Run TPG (Temporal Plan Graph) schedule post-processing on CBS solutions.",
     )
     return parser
 
@@ -972,6 +1197,18 @@ def main(argv: list[str] | None = None) -> int:
             args.max_time,
             args.cbs_max_nodes,
         )
+        if args.tpg and diagnostic.get("multi_agent_feasible") and diagnostic.get("agent_paths"):
+            # Build solution from diagnostic output for TPG post-processing
+            solution: dict[int, list[tuple[int, int, int]]] = {}
+            for aid_str, info in diagnostic["agent_paths"].items():
+                solution[int(aid_str)] = [
+                    (step["row"], step["col"], step["time"]) for step in info["path"]
+                ]
+            tpg_result = tpg_post_process(solution, time_blocked)
+            diagnostic.update(tpg_result)
+        elif args.tpg and not diagnostic.get("multi_agent_feasible"):
+            diagnostic["tpg_enabled"] = False
+            diagnostic["tpg_skipped_reason"] = "infeasible_cbs_solution"
     elif dyn_obstacles is not None:
         diagnostic = _run_sipp_search(
             diagnostic,

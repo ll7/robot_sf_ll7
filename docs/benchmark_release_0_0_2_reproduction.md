@@ -4,7 +4,7 @@ This document provides step-by-step instructions to reproduce the canonical pape
 
 ## Overview and Key Differences
 
-- **Release Tag (`0.0.2`)**: Points to commit `cbeaca617` (three commits earlier than the campaign completion). This commit has the core simulation logic and code representation.
+- **Release Tag (`0.0.2`)**: Points to commit `cbeaca610` (three commits earlier than the campaign completion). This commit has the core simulation logic and code representation.
 - **Campaign Commit (`f7ebdcae2375d085e925213197a75a386e26a79c`)**: Contains the final generated publication manifest, checksums, and the scoped release manifest that exists outside the tag `0.0.2` tree.
 - **Parity Test**: The regeneration parity test (`tests/benchmark/test_paper_results_handoff.py::test_canonical_handoff_matches_durable_release_campaign_table`) lives on `main` (not in the tag tree). Therefore, reproduction must be run from a fresh clone of `main` using the downloaded release `0.0.2` bundle.
 

@@ -46,7 +46,8 @@ def test_release_0_0_2_reproduction_doc_content() -> None:
     assert "64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90" in text
 
     # Verify explanation of annotated tag and campaign commit difference is present
-    assert "cbeaca617" in text
+    # (short SHA of the 0.0.2 tag commit cbeaca6109654b4053c19542a0a17ed656a387a6)
+    assert "cbeaca610" in text
     assert "f7ebdcae2375d085e925213197a75a386e26a79c" in text
 
 

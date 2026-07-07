@@ -648,6 +648,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
         label=label,
         campaign_id=campaign_id,
         invoked_command=invoked_command,
+        checkpoint_preflight_mode="enforced_staged",
     )
     campaign_id = str(prepared["campaign_id"])
     campaign_root = Path(prepared["campaign_root"])

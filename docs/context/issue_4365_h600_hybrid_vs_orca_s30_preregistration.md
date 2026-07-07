@@ -64,6 +64,16 @@ The canonical focused validation command is:
 uv run pytest tests/benchmark/test_h600_hybrid_vs_orca_s30_config.py
 ```
 
+## Submit-Time Checkpoint Gate
+
+Before any S30 requeue or resume-append submission for this campaign, the submit path must run
+enforced staged checkpoint preflight (`checkpoint_preflight_mode="enforced_staged"`), which writes
+`preflight/checkpoint_staging.json` and uses `stage: true`. A `stageable_remote` checkpoint reference
+is not submit-safe by itself; the checkpoint must be staged and checksum-verified into the durable
+`output/model_cache` location (or an explicit submit cache) that the compute node will load. This
+note does not authorize a fresh output root, Slurm/GPU submission, benchmark interpretation, or
+paper/dissertation claim edit.
+
 ## Terminality Status
 
 PR #4368 landed the complete issue #4365 config and preflight-only slice on 2026-07-04:

@@ -4108,6 +4108,40 @@ def test_run_campaign_checks_orca_rvo2_before_loading_optional_artifacts(
         run_campaign(cfg, output_root=tmp_path / "out", label="orca")
 
 
+def test_run_campaign_requests_enforced_staged_checkpoint_preflight(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Campaign runs use submit-safe checkpoint staging, not metadata-only preflight."""
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text("scenarios: []\n", encoding="utf-8")
+    cfg = CampaignConfig(
+        name="checkpoint_submit_mode",
+        scenario_matrix_path=scenario_path,
+        planners=(PlannerSpec(key="goal", algo="goal"),),
+        seed_policy=SeedPolicy(),
+    )
+    observed: dict[str, object] = {}
+
+    def fake_prepare_campaign_preflight(*_args: object, **kwargs: object) -> dict[str, object]:
+        observed.update(kwargs)
+        raise RuntimeError("stop after preflight mode assertion")
+
+    monkeypatch.setattr(
+        camera_ready_campaign_module,
+        "prepare_campaign_preflight",
+        fake_prepare_campaign_preflight,
+    )
+
+    with pytest.raises(RuntimeError, match="stop after preflight mode assertion"):
+        run_campaign(
+            cfg,
+            output_root=tmp_path / "out",
+            label="submit-mode",
+        )
+
+    assert observed["checkpoint_preflight_mode"] == "enforced_staged"
+
+
 def test_run_campaign_sanitizes_run_directory_keys(tmp_path: Path, monkeypatch) -> None:
     """Planner run directories should use sanitized planner/kinematics identifiers."""
     scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")

@@ -8,6 +8,7 @@ a temporary registry fixture (present ``local_path`` => resolvable; absent/unkno
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 import pytest
@@ -278,3 +279,67 @@ def test_prepare_campaign_preflight_rejects_missing_checkpoint_before_scenarios(
 
     with pytest.raises(CampaignCheckpointPreflightError, match="unknown_model_id"):
         prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="ckpt")
+
+
+def test_prepare_campaign_preflight_enforced_stage_writes_submit_safe_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Submit-mode preflight stages and records a submit-safe checkpoint report."""
+    model_path = tmp_path / "model" / "policy.zip"
+    model_path.parent.mkdir(parents=True)
+    model_path.write_text("checkpoint", encoding="utf-8")
+    algo_config = _write_algo_config(
+        tmp_path, "ppo.yaml", {"algo": "ppo", "model_path": str(model_path)}
+    )
+    cfg = _campaign(
+        (PlannerSpec(key="ppo", algo="ppo", algo_config_path=algo_config),), tmp_path=tmp_path
+    )
+    monkeypatch.setattr(preflight_module, "_load_campaign_scenarios", lambda _cfg: [])
+
+    prepared = prepare_campaign_preflight(
+        cfg,
+        output_root=tmp_path / "out",
+        label="ckpt",
+        checkpoint_preflight_mode="enforced_staged",
+        checkpoint_cache_dir=tmp_path / "submit-cache",
+    )
+
+    report_path = prepared["checkpoint_staging_path"]
+    assert report_path is not None
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["mode"] == "enforced_staged"
+    assert report["stage"] is True
+    assert report["submit_safe"] is True
+    assert report["cache_dir"] == str(tmp_path / "submit-cache")
+    assert report["arms"][0]["planner_key"] == "ppo"
+    assert report["arms"][0]["status"] == "present_local"
+
+
+def test_prepare_campaign_preflight_enforced_stage_writes_blocked_report(
+    tmp_path: Path,
+) -> None:
+    """Submit-mode preflight records blocked checkpoint staging before raising."""
+    algo_config = _write_algo_config(
+        tmp_path, "ppo.yaml", {"algo": "ppo", "model_id": "definitely_missing_4663"}
+    )
+    cfg = _campaign(
+        (PlannerSpec(key="ppo", algo="ppo", algo_config_path=algo_config),), tmp_path=tmp_path
+    )
+    output_root = tmp_path / "out"
+
+    with pytest.raises(CampaignCheckpointPreflightError, match="stage_failed"):
+        prepare_campaign_preflight(
+            cfg,
+            output_root=output_root,
+            label="ckpt",
+            checkpoint_preflight_mode="enforced_staged",
+            checkpoint_cache_dir=tmp_path / "submit-cache",
+        )
+
+    report_path = next(output_root.glob("*/preflight/checkpoint_staging.json"))
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["mode"] == "enforced_staged"
+    assert report["submit_safe"] is False
+    assert report["status"] == "blocked"
+    assert report["blocked_arms"] == ["ppo"]
+    assert "definitely_missing_4663" in report["blocker"]

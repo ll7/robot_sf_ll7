@@ -457,6 +457,12 @@ def check_campaign_arm_checkpoints_preflight(
                 "kind": resolution.reference.kind,
                 "value": resolution.reference.value,
                 "status": resolution.status,
+                "detail": resolution.detail,
+                "algo_config_path": (
+                    str(resolution.reference.algo_config_path)
+                    if resolution.reference.algo_config_path is not None
+                    else None
+                ),
                 "resolved_path": (
                     str(resolution.resolved_path) if resolution.resolved_path is not None else None
                 ),

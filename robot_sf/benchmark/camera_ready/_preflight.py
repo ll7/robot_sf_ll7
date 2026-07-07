@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
 
@@ -39,6 +40,7 @@ from robot_sf.benchmark.camera_ready._util import (
     _utc_now,
 )
 from robot_sf.benchmark.campaign_checkpoint_preflight import (
+    CampaignCheckpointPreflightError,
     check_campaign_arm_checkpoints_preflight,
 )
 from robot_sf.benchmark.latency_stress import not_available_latency_metrics
@@ -51,10 +53,40 @@ from robot_sf.benchmark.utils import _config_hash
 from robot_sf.common.artifact_paths import ensure_canonical_tree, get_artifact_category_path
 
 CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
+CheckpointPreflightMode = Literal["metadata_only", "enforced_staged"]
+
+
+def _checkpoint_staging_report_payload(
+    *,
+    mode: CheckpointPreflightMode,
+    cache_dir: Path | None,
+    summary: dict[str, Any] | None = None,
+    blocker: str | None = None,
+    arms: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """Build persisted submit-safety report for campaign checkpoint preflight.
+
+    Returns:
+        JSON-serializable checkpoint staging report payload.
+    """
+    stage = mode == "enforced_staged"
+    return {
+        "schema_version": "campaign-checkpoint-staging-preflight.v1",
+        "mode": mode,
+        "stage": stage,
+        "submit_safe": bool(stage and blocker is None),
+        "cache_dir": str(cache_dir) if cache_dir is not None else None,
+        "status": "blocked" if blocker is not None else "ok",
+        "checked": int((summary or {}).get("checked", 0)),
+        "resolved": int((summary or {}).get("resolved", 0)),
+        "arms": list((summary or {}).get("arms", [])),
+        "blocked_arms": list(arms),
+        "blocker": blocker,
+    }
+
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from pathlib import Path
 
     from robot_sf.benchmark.camera_ready._config_types import CampaignConfig
 
@@ -228,13 +260,15 @@ def _build_preflight_preview_payload(
     return payload
 
 
-def prepare_campaign_preflight(
+def prepare_campaign_preflight(  # noqa: C901, PLR0913, PLR0915
     cfg: CampaignConfig,
     *,
     output_root: Path | None = None,
     label: str | None = None,
     campaign_id: str | None = None,
     invoked_command: str | None = None,
+    checkpoint_preflight_mode: CheckpointPreflightMode = "metadata_only",
+    checkpoint_cache_dir: Path | None = None,
     validate_campaign_config: Callable[[CampaignConfig], None] | None = None,
     build_route_clearance_warnings: Callable[..., list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
@@ -259,11 +293,12 @@ def prepare_campaign_preflight(
 
     validate_campaign_config(cfg)
     check_orca_rvo2_preflight(cfg)
-    # Fail fast when an enabled arm names a checkpoint that cannot be resolved (unknown/mistyped
-    # model_id, local_only-missing, or a missing model_path file) before any scenario loads. This
-    # is the cheap network-free guard; the enforced download+checksum staging step (stage=True) is
-    # run pre-sbatch by scripts/benchmark/preflight_campaign_checkpoints.py (issue #4613).
-    check_campaign_arm_checkpoints_preflight(cfg)
+    if checkpoint_preflight_mode not in ("metadata_only", "enforced_staged"):
+        raise ValueError(f"unknown checkpoint_preflight_mode: {checkpoint_preflight_mode!r}")
+    checkpoint_stage = checkpoint_preflight_mode == "enforced_staged"
+    resolved_checkpoint_cache_dir = (
+        checkpoint_cache_dir if checkpoint_cache_dir is not None else Path("output/model_cache")
+    )
     ensure_canonical_tree(categories=("benchmarks",))
     campaign_id = _resolve_campaign_id(cfg, label=label, campaign_id=campaign_id)
     base_dir = (
@@ -274,6 +309,38 @@ def prepare_campaign_preflight(
     campaign_root = (base_dir / campaign_id).resolve()
     reports_dir = campaign_root / "reports"
     preflight_dir = campaign_root / "preflight"
+    checkpoint_staging_path = preflight_dir / "checkpoint_staging.json"
+    # Fail fast when an enabled arm names a checkpoint that cannot be resolved (unknown/mistyped
+    # model_id, local_only-missing, or a missing model_path file) before any scenario loads. This
+    # is the cheap network-free guard; the enforced download+checksum staging step (stage=True) is
+    # run pre-sbatch by scripts/benchmark/preflight_campaign_checkpoints.py (issue #4613).
+    try:
+        checkpoint_summary = check_campaign_arm_checkpoints_preflight(
+            cfg,
+            stage=checkpoint_stage,
+            cache_dir=resolved_checkpoint_cache_dir if checkpoint_stage else None,
+        )
+    except CampaignCheckpointPreflightError as exc:
+        if checkpoint_stage:
+            _write_json(
+                checkpoint_staging_path,
+                _checkpoint_staging_report_payload(
+                    mode=checkpoint_preflight_mode,
+                    cache_dir=resolved_checkpoint_cache_dir,
+                    blocker=str(exc),
+                    arms=exc.arms,
+                ),
+            )
+        raise
+    if checkpoint_stage:
+        _write_json(
+            checkpoint_staging_path,
+            _checkpoint_staging_report_payload(
+                mode=checkpoint_preflight_mode,
+                cache_dir=resolved_checkpoint_cache_dir,
+                summary=checkpoint_summary,
+            ),
+        )
     reports_dir.mkdir(parents=True, exist_ok=True)
     preflight_dir.mkdir(parents=True, exist_ok=True)
 
@@ -483,6 +550,9 @@ def prepare_campaign_preflight(
         "artifacts": {
             "preflight_validate_config": _repo_relative(validate_config_path),
             "preflight_preview_scenarios": _repo_relative(preview_scenarios_path),
+            "preflight_checkpoint_staging": (
+                _repo_relative(checkpoint_staging_path) if checkpoint_stage else None
+            ),
             "matrix_summary_json": _repo_relative(matrix_summary_json_path),
             "matrix_summary_csv": _repo_relative(matrix_summary_csv_path),
             "amv_coverage_json": _repo_relative(amv_coverage_json_path),
@@ -504,6 +574,7 @@ def prepare_campaign_preflight(
         "campaign_root": campaign_root,
         "reports_dir": reports_dir,
         "preflight_dir": preflight_dir,
+        "checkpoint_staging_path": checkpoint_staging_path if checkpoint_stage else None,
         "validate_config_path": validate_config_path,
         "preview_scenarios_path": preview_scenarios_path,
         "matrix_summary_json_path": matrix_summary_json_path,

@@ -1,5 +1,9 @@
 # Issue #3285 Dry-Run Scenario Interop Converter
 
+Plain-language summary: Robot SF can emit deterministic local handoff artifacts for
+SocNavBench and HuNavSim scenario conversion, but it still cannot claim runnable external
+benchmark export until the external assets and adapters are staged.
+
 Status: local, asset-free implementation slice (`smoke evidence`). This is not benchmark
 evidence and does not claim cross-benchmark validity.
 
@@ -8,63 +12,36 @@ Related:
 - Conceptual mapping seed: [`issue_2928_socnavbench_hunavsim_metric_correspondence.md`](issue_2928_socnavbench_hunavsim_metric_correspondence.md)
 - Source-side contract: `robot_sf/benchmark/scenario_contract.py`,
   `robot_sf/benchmark/schema/scenarios.schema.json`
-- External-asset prerequisites that block an external run: #1456, #1498, #2414, #1134
+- External-asset prerequisites block external run: #1456, #1498, #2414, #1134
 
 ## Slice Delivers
 
 The local converter emits deterministic, schema-validated intermediate representation (IR)
-for Robot SF scenario-matrix entries, plus explicit unsupported-field reports. It does not
-require external assets and does not emit runnable SocNavBench or HuNavSim files.
+Robot SF scenario-matrix entries, explicit unsupported-field reports, fail-closed target
+compatibility reports, export manifests, target-shaped previews, and local-only prerequisite
+reports. It does not download assets and does not emit runnable SocNavBench or HuNavSim files.
 
-- Module: `robot_sf/benchmark/scenario_interop.py` (`convert_scenario_to_ir`, `dump_ir`,
-  `validate_interop_ir`, `validate_target_compatibility_report`,
-  `validate_target_export_manifest`, `validate_target_export_preview`,
-  `build_target_export_manifest`, `build_target_export_preview`).
+- Module: `robot_sf/benchmark/scenario_interop.py`
+- CLI: `scripts/tools/convert_scenario_interop.py`
+- Tests: `tests/benchmark/test_scenario_interop.py`,
+  `tests/benchmark/test_scenario_interop_target_compatibility.py`
 - IR schema: `robot_sf/benchmark/schemas/scenario_interop_ir.v1.json`
-  (`robot_sf.scenario_interop_ir.v1`).
 - Target handoff schemas:
   `robot_sf/benchmark/schemas/scenario_interop_target_compatibility.v1.json`,
-  `robot_sf/benchmark/schemas/scenario_interop_target_export_manifest.v1.json`, and
-  `robot_sf/benchmark/schemas/scenario_interop_target_export_preview.v1.json`.
-- Dry-run CLI: `scripts/tools/convert_scenario_interop.py`.
-- Tests: `tests/benchmark/test_scenario_interop.py`,
-  `tests/benchmark/test_scenario_interop_target_compatibility.py`.
+  `robot_sf/benchmark/schemas/scenario_interop_target_export_manifest.v1.json`,
+  `robot_sf/benchmark/schemas/scenario_interop_target_export_preview.v1.json`,
+  `robot_sf/benchmark/schemas/scenario_interop_target_prerequisite_report.v1.json`
 
-## Target Compatibility
-
-The converter emits asset-free target compatibility reports
-(`robot_sf.scenario_interop_target_compatibility.v1`) for `socnavbench` and `hunavsim`.
-These are fail-closed readiness projections, not target artifact exports.
-
-- `ready`: false until target assets/adapters are staged and required IR fields are present.
-- `blockers`: explicit missing asset, adapter, map, agent, flow, and unsupported-field blockers.
-- `warnings`: non-blocking provenance or target-semantics gaps, including missing seeds and
-  HuNavSim ROS/Gazebo launch semantics outside the target-neutral IR.
-
-## Target Export Manifest And Preview
-
-`--target-out-dir` writes deterministic, asset-free target export manifests
-(`robot_sf.scenario_interop_target_export_manifest.v1`). A manifest is a JSON handoff
-contract for downstream adapters; it is not a runnable SocNavBench or HuNavSim scenario file.
-When prerequisites are missing, it remains `status: blocked`, `ready: false`, with named
-blockers, warnings, source scenario, and source IR schema.
-
-`--target-preview-out-dir` writes deterministic, asset-free target-shaped preview payloads
-(`robot_sf.scenario_interop_target_export_preview.v1`). Preview payloads preserve the
-target-specific sections that a real writer must resolve: `scenario`/`pedestrians` for
-SocNavBench and `world`/`agents` for HuNavSim. They carry the same fail-closed blockers as
-the manifest and are adapter-development artifacts, not runnable external benchmark inputs.
-
-## IR Contract
+## Mapping Contract
 
 | IR section | Source fields | Notes |
-|---|---|---|
-| `provenance` | `id`/`scenario_id`/`name`, `metadata`, all top-level keys, source file | Records source id, `source_kind` (`axis`/`explicit_map`), full `source_fields`, and `source_metadata`. |
-| `geometry` | `obstacle`, `map_file` | `obstacle` maps to coarse `environment_type` (`open` -> `open_space`, `bottleneck` -> `constrained_passage`, `maze` -> `cluttered`). |
+| --- | --- | --- |
+| `provenance` | `id`, `scenario_id`, `name`, source file, source fields | Stable source trace. |
+| `geometry` | `obstacle`, `map_file` | Coarse target-neutral environment type. |
 | `environment` | `density`, `flow`, `groups`, `speed_var`, `goal_topology`, `robot_context` | Target-neutral environment semantics. |
-| `agents` | `single_pedestrians[]` | Start/goal points of interest, preferred speed, role, role target, wait points; specs without an `id` get deterministic id `agent_<index>`. |
+| `agents` | `single_pedestrians[]` | Start/goal points, preferred speed, role, role target, wait points. |
 | `timing` | `repeats`, `seeds` | Preserves repeat count and explicit seed set when present. |
-| `unsupported_fields` | everything else | Every unmapped top-level source key is reported with a reason; nothing is silently dropped. |
+| `unsupported_fields` | everything else | Every unmapped top-level source key is reported with a reason. |
 
 ## Dry-Run Commands
 
@@ -89,32 +66,39 @@ uv run python scripts/tools/convert_scenario_interop.py \
   --matrix configs/baselines/example_matrix.yaml \
   --target socnavbench \
   --target-preview-out-dir output/issue_3285_target_export_preview_smoke
+
+# Write local-only prerequisite reports for runnable export readiness.
+uv run python scripts/tools/convert_scenario_interop.py \
+  --matrix configs/baselines/example_matrix.yaml \
+  --target socnavbench \
+  --target-prerequisite-out-dir output/issue_3285_target_prerequisite_smoke
 ```
 
 The CLI prints IR to stdout only when no output directory is requested. It always writes a
-`{"dry_run_summary": [...]}` block to stderr and exits non-zero when a scenario IR fails schema
+`{"dry_run_summary": [...]}` block to stderr and exits non-zero when scenario IR fails schema
 validation.
 
 ## Claim Boundary
 
-- This dry-run, IR validation, target export manifest, and target export preview slice makes no
-  claim about simulator equivalence, planner transferability, or benchmark-score parity.
-- Emitting real runnable SocNavBench/HuNavSim scenario assets and running them remains blocked on
-  staged external assets/adapters (#1456, #1498, #2414, #1134).
+- Dry-run IR validation, target compatibility, export manifest, export preview, and target
+  prerequisite reports make no claim about simulator equivalence, planner transferability,
+  benchmark-score parity, runnable external export, or paper/dissertation evidence.
+- Real runnable SocNavBench/HuNavSim scenario asset export remains blocked on staged external
+  assets/adapters (#1456, #1498, #2414, #1134).
 
 ## Closure Audit Integration 2026-07-07
 
-Merged evidence through PR #4711 satisfies the original asset-free acceptance criteria:
+Merged evidence through PR #4718 satisfies the original asset-free acceptance criteria:
 
 | Acceptance criterion | Evidence |
 | --- | --- |
-| Converter output schema-validated deterministic fixture scenario. | PR #3735 added the IR converter, `scenario_interop_ir.v1.json`, deterministic serialization tests, and schema validation. |
-| Unsupported fields reported explicitly instead silently dropped. | PR #3735 records unmapped top-level source fields in `unsupported_fields`; PR #4562 and PR #4711 propagate those blockers into target compatibility and preview artifacts. |
-| Smoke dry-run command documented. | PR #3735 documented the IR CLI; PR #4673 and PR #4711 extended this note with manifest and preview dry-run commands. |
-| Issue links external asset prerequisites required full run. | The issue thread and this note keep #1456, #1498, #2414, and #1134 as full-run blockers. |
+| Converter output is schema-validated for deterministic fixture scenarios. | PR #3735 added the IR converter, `scenario_interop_ir.v1.json`, deterministic serialization tests, and schema validation. |
+| Unsupported fields are reported explicitly instead of silently dropped. | PR #3735 records unmapped top-level source fields in `unsupported_fields`; PR #4562 and PR #4711 propagate blockers into target compatibility and preview artifacts. |
+| Smoke dry-run command is documented. | PR #3735 documented the IR CLI; PR #4673 and PR #4711 extended the note with manifest and preview dry-run commands. |
+| External asset prerequisites required for full run are linked. | The issue thread and this note keep #1456, #1498, #2414, and #1134 as full-run blockers. |
 
-This integration slice adds JSON-Schema validation for the target compatibility, target export
-manifest, and target export preview artifacts introduced after the base IR converter. It does not
-change the closure boundary: runnable SocNavBench/HuNavSim export remains intentionally blocked
-until external assets and adapters are staged. The next empirical action is an asset-backed adapter
-smoke after the relevant prerequisite issue provides staged target inputs.
+The current integration slice adds a schema-validated target prerequisite report so the remaining
+external blockers become one machine-readable local preflight artifact. It does not change the
+closure boundary: runnable SocNavBench/HuNavSim export remains intentionally blocked until external
+assets and adapters are staged. The next empirical action is an asset-backed adapter smoke after a
+prerequisite issue provides staged target inputs.

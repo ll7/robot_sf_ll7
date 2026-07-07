@@ -263,11 +263,18 @@ def _apply_single_param(
     if key == "robot_start_offset_m":
         _apply_robot_offset(patched, value)
     elif key in _PARAM_APPLIERS:
-        peds = patched.get("pedestrians") or patched.get("single_pedestrians")
-        if peds:
-            for ped in peds:
-                if isinstance(ped, dict):
-                    _PARAM_APPLIERS[key](ped, value)
+        # Apply to every pedestrian group present; a scenario may carry both
+        # `pedestrians` (grouped) and `single_pedestrians` (flat) lists, and
+        # perturbing only one subset would leave the criticality parameter
+        # partially applied.
+        peds: list[Any] = []
+        for group_key in ("pedestrians", "single_pedestrians"):
+            group = patched.get(group_key)
+            if isinstance(group, list):
+                peds.extend(group)
+        for ped in peds:
+            if isinstance(ped, dict):
+                _PARAM_APPLIERS[key](ped, value)
 
 
 def _validate_params(params: dict[str, float]) -> None:

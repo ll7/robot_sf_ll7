@@ -33,6 +33,7 @@ from robot_sf.benchmark.scenario_criticality_objective import (
     apply_criticality_parameters,
     compute_criticality_score,
 )
+from robot_sf.training.scenario_loader import load_scenarios
 
 
 @dataclass
@@ -79,6 +80,8 @@ class OptimizationConfig:
     objective_weights: dict[str, float] = field(default_factory=dict)
     invalid_run_policy: str = "fail_closed"
     diagnostic_only: bool = True
+    horizon: int = 80
+    dt: float = 0.1
 
 
 @dataclass
@@ -165,6 +168,8 @@ def _parse_optimization_config(payload: dict[str, Any]) -> OptimizationConfig:
         objective_weights=payload.get("objective_weights", {}),
         invalid_run_policy=payload.get("invalid_run_policy", "fail_closed"),
         diagnostic_only=bool(payload.get("diagnostic_only_not_benchmark_gate", True)),
+        horizon=int(payload.get("horizon", 80)),
+        dt=float(payload.get("dt", 0.1)),
     )
 
 
@@ -198,44 +203,85 @@ def _build_baseline_parameters(
     return params
 
 
-def _evaluate_candidate(
+def _evaluate_candidate(  # noqa: C901
     candidate_id: str,
     parameters: dict[str, float],
     scenario: dict[str, Any],
     config: OptimizationConfig,
     objective_config: CriticalityObjectiveConfig,
+    output_dir: Path,
+    scenario_path: Path,
 ) -> CandidateResult:
-    """Evaluate a single candidate (stub - to be connected to runner).
+    """Evaluate a single candidate by running the simulator."""
+    import time
+    from types import SimpleNamespace
 
-    In the full implementation, this would:
-    1. Apply parameters to scenario
-    2. Run episode(s) with map_runner
-    3. Collect metrics
-    4. Compute criticality score
+    from robot_sf.benchmark.map_runner import run_map_batch
+    from scripts.validation.run_scenario_perturbation_criticality_pilot import (
+        resolve_planner_run_spec,
+    )
 
-    For this v0 slice, we return a stub result to validate the interface.
-    """
+    start_time = time.perf_counter()
     try:
-        apply_criticality_parameters(scenario, parameters)
+        # Apply parameters to scenario without mutation
+        patched_scenario = apply_criticality_parameters(scenario, parameters)
+        patched_scenario["seeds"] = config.seeds
+
+        # Temporary JSONL for this candidate's run
+        import uuid
+
+        temp_jsonl = output_dir / f"{candidate_id}_{uuid.uuid4().hex}_eval.episodes.jsonl"
+        if temp_jsonl.exists():
+            temp_jsonl.unlink()
+
+        # Resolve the planner
+        planner_name = config.planner_name
+        if planner_name == "safe_baseline":
+            planner_name = "goal"
+        spec = resolve_planner_run_spec(planner_name)
+
+        # Run the batch
+        run_map_batch(
+            scenarios_or_path=[patched_scenario],
+            out_path=temp_jsonl,
+            schema_path=Path("robot_sf/benchmark/schemas/episode.schema.v1.json"),
+            scenario_path=scenario_path,
+            algo=spec.algo,
+            algo_config_path=spec.algo_config_path.as_posix()
+            if spec.algo_config_path is not None
+            else None,
+            horizon=config.horizon,
+            dt=config.dt,
+            resume=False,
+            benchmark_profile="experimental",
+        )
+
+        # Load the generated JSONL records
+        records = []
+        if temp_jsonl.exists():
+            for line in temp_jsonl.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    records.append(json.loads(line))
+
+        # Cleanup the temp JSONL
+        if temp_jsonl.exists():
+            temp_jsonl.unlink()
+
+        # Group records by seed
+        records_by_seed = {int(r.get("seed", 0)): r for r in records}
 
         per_seed_scores = []
         all_scores = []
         all_decompositions = []
 
         for seed in config.seeds:
-            rng = random.Random(config.optimizer_seed + seed)
+            row = records_by_seed.get(seed)
+            if row is None:
+                per_seed_scores.append((seed, float("nan"), "missing"))
+                continue
 
-            mock_metrics = {
-                "collision_count": rng.uniform(0, 2),
-                "near_misses": rng.uniform(0, 3),
-                "min_clearance": rng.uniform(0.2, 0.8),
-                "failure_to_progress": rng.uniform(0, 1),
-                "stalled_time": rng.uniform(0, 5),
-            }
-
-            mock_episode_data = type("EpisodeData", (), {"metrics": mock_metrics})()
-
-            result = compute_criticality_score(mock_episode_data, objective_config)
+            episode_data = SimpleNamespace(metrics=row.get("metrics", {}))
+            result = compute_criticality_score(episode_data, objective_config)
 
             if result.status == "not_evaluable":
                 per_seed_scores.append((seed, float("nan"), result.status))
@@ -252,6 +298,8 @@ def _evaluate_candidate(
                     }
                 )
 
+        runtime_s = time.perf_counter() - start_time
+
         if not all_scores:
             return CandidateResult(
                 candidate_id=candidate_id,
@@ -261,6 +309,7 @@ def _evaluate_candidate(
                 status="not_evaluable",
                 reason="All seeds failed evaluation",
                 per_seed_scores=per_seed_scores,
+                runtime_s=runtime_s,
             )
 
         mean_score = sum(all_scores) / len(all_scores)
@@ -276,9 +325,11 @@ def _evaluate_candidate(
             score_decomposition=mean_decomposition,
             status="evaluated",
             per_seed_scores=per_seed_scores,
+            runtime_s=runtime_s,
         )
 
-    except (ValueError, KeyError, TypeError, RuntimeError) as e:
+    except Exception as e:  # noqa: BLE001
+        runtime_s = time.perf_counter() - start_time
         return CandidateResult(
             candidate_id=candidate_id,
             parameters=parameters,
@@ -286,6 +337,7 @@ def _evaluate_candidate(
             score_decomposition={},
             status="invalid_candidate",
             reason=str(e),
+            runtime_s=runtime_s,
         )
 
 
@@ -302,25 +354,50 @@ def run_criticality_optimization(
     Returns:
         Tuple of (candidate_results, manifest)
     """
+    if output_dir is None:
+        output_dir = Path("output/tmp_criticality")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    scenario_path = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenarios = []
+    if isinstance(config.scenario_family, (str, Path)):
+        scenario_path = Path(config.scenario_family)
+        scenarios = load_scenarios(scenario_path)
+    elif isinstance(config.scenario_family, list):
+        scenarios = list(config.scenario_family)
+
+    if not scenarios:
+        # Fallback default scenario
+        default_path = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+        if default_path.exists():
+            scenarios = load_scenarios(default_path)
+            scenario_path = default_path
+        else:
+            raise ValueError("No scenario_family configured, and default fallback not found.")
+
+    scenario = dict(scenarios[0])
+
     rng = random.Random(config.optimizer_seed)
-
     baseline_params = _build_baseline_parameters(config.parameter_space)
-
     candidates = []
+
+    objective_config = CriticalityObjectiveConfig(
+        collision_weight=config.objective_weights.get("collision", 10.0),
+        near_miss_weight=config.objective_weights.get("near_miss", 2.0),
+        clearance_margin=config.objective_weights.get("clearance_margin", 0.5),
+        clearance_weight=config.objective_weights.get("clearance", 1.0),
+        progress_failure_weight=config.objective_weights.get("progress_failure", 5.0),
+        stalled_time_weight=config.objective_weights.get("stalled_time", 0.5),
+    )
 
     baseline_result = _evaluate_candidate(
         candidate_id="baseline_unperturbed",
         parameters=baseline_params,
-        scenario={"id": "baseline", "pedestrians": [], "robot": {}},
+        scenario=scenario,
         config=config,
-        objective_config=CriticalityObjectiveConfig(
-            collision_weight=config.objective_weights.get("collision", 10.0),
-            near_miss_weight=config.objective_weights.get("near_miss", 2.0),
-            clearance_margin=config.objective_weights.get("clearance_margin", 0.5),
-            clearance_weight=config.objective_weights.get("clearance", 1.0),
-            progress_failure_weight=config.objective_weights.get("progress_failure", 5.0),
-            stalled_time_weight=config.objective_weights.get("stalled_time", 0.5),
-        ),
+        objective_config=objective_config,
+        output_dir=output_dir,
+        scenario_path=scenario_path,
     )
     candidates.append(baseline_result)
 
@@ -331,16 +408,11 @@ def run_criticality_optimization(
         result = _evaluate_candidate(
             candidate_id=candidate_id,
             parameters=params,
-            scenario={"id": f"scenario_{i}", "pedestrians": [], "robot": {}},
+            scenario=scenario,
             config=config,
-            objective_config=CriticalityObjectiveConfig(
-                collision_weight=config.objective_weights.get("collision", 10.0),
-                near_miss_weight=config.objective_weights.get("near_miss", 2.0),
-                clearance_margin=config.objective_weights.get("clearance_margin", 0.5),
-                clearance_weight=config.objective_weights.get("clearance", 1.0),
-                progress_failure_weight=config.objective_weights.get("progress_failure", 5.0),
-                stalled_time_weight=config.objective_weights.get("stalled_time", 0.5),
-            ),
+            objective_config=objective_config,
+            output_dir=output_dir,
+            scenario_path=scenario_path,
         )
         candidates.append(result)
 
@@ -350,14 +422,7 @@ def run_criticality_optimization(
     manifest = {
         "issue": 4362,
         "claim_boundary": "exploratory/diagnostic-only; not a validated benchmark method",
-        "metrics_source": "mock_placeholder_not_simulator",
-        "metrics_source_note": (
-            "v0 stub: candidate metrics are PLACEHOLDER values drawn from a fixed RNG that is "
-            "NOT a function of the candidate parameters, so every candidate (including the "
-            "baseline) shares identical metrics and the best/baseline comparison is not yet "
-            "meaningful. Scores validate the objective+artifact interface only. Real simulator "
-            "integration is tracked as a follow-up to #4362."
-        ),
+        "metrics_source": "simulator_run_map_batch",
         "optimizer_type": config.optimizer_type,
         "optimizer_seed": config.optimizer_seed,
         "sample_budget": config.sample_budget,
@@ -479,14 +544,20 @@ def write_optimization_report(
         f.write(
             "**Claim boundary**: exploratory/diagnostic-only; not a validated benchmark method.\n\n"
         )
-        f.write(
-            "> **Metrics are PLACEHOLDER, not simulator output.** In this v0 stub the candidate "
-            "metrics come from a fixed RNG that does not depend on the candidate parameters, so "
-            "every candidate (including the baseline) has identical metrics and the "
-            "best/baseline scores below are **not** a meaningful optimization result — they only "
-            "exercise the objective + artifact interface. Real simulator integration is a "
-            "follow-up to #4362.\n\n"
-        )
+        if manifest.get("metrics_source") == "simulator_run_map_batch":
+            f.write(
+                "> **Metrics are generated using the simulator runner.** Evaluated candidates are "
+                "run on the configured planner across the specified seeds.\n\n"
+            )
+        else:
+            f.write(
+                "> **Metrics are PLACEHOLDER, not simulator output.** In this v0 stub the candidate "
+                "metrics come from a fixed RNG that does not depend on the candidate parameters, so "
+                "every candidate (including the baseline) has identical metrics and the "
+                "best/baseline scores below are **not** a meaningful optimization result — they only "
+                "exercise the objective + artifact interface. Real simulator integration is a "
+                "follow-up to #4362.\n\n"
+            )
         f.write(f"- Optimizer: {manifest['optimizer_type']}\n")
         f.write(f"- Sample budget: {manifest['sample_budget']}\n")
         f.write(

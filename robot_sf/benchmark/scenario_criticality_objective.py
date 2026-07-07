@@ -134,7 +134,14 @@ def compute_criticality_score(
 
     fail_closed = config.fail_closed
 
-    collision_count = _safe_get_metric(metrics, "collision_count", 0.0, fail_closed)
+    # Map collision metric from alternative simulator keys if main key is absent
+    col_key = "collision_count"
+    if col_key not in metrics:
+        for alt in ["collisions", "agent_collision_count", "total_collision_count"]:
+            if alt in metrics:
+                col_key = alt
+                break
+    collision_count = _safe_get_metric(metrics, col_key, 0.0, fail_closed)
     near_misses = _safe_get_metric(metrics, "near_misses", 0.0, fail_closed)
     min_clearance = _safe_get_metric(metrics, "min_clearance", float("nan"), fail_closed)
     failure_to_progress = _safe_get_metric(metrics, "failure_to_progress", 0.0, fail_closed)
@@ -255,10 +262,12 @@ def _apply_single_param(
 ) -> None:
     if key == "robot_start_offset_m":
         _apply_robot_offset(patched, value)
-    elif key in _PARAM_APPLIERS and "pedestrians" in patched:
-        for ped in patched["pedestrians"]:
-            if isinstance(ped, dict):
-                _PARAM_APPLIERS[key](ped, value)
+    elif key in _PARAM_APPLIERS:
+        peds = patched.get("pedestrians") or patched.get("single_pedestrians")
+        if peds:
+            for ped in peds:
+                if isinstance(ped, dict):
+                    _PARAM_APPLIERS[key](ped, value)
 
 
 def _validate_params(params: dict[str, float]) -> None:

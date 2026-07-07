@@ -606,7 +606,15 @@ def trajectory_row_from_replay_episode(
     if not replay_episode.steps:
         raise MultiPlannerOverlayError(f"ReplayEpisode {replay_episode.episode_id!r} has no steps")
 
-    positions = [(s.x, s.y) for s in replay_episode.steps]
+    positions = [
+        (float(s.x), float(s.y))
+        for s in replay_episode.steps
+        if math.isfinite(float(s.x)) and math.isfinite(float(s.y))
+    ]
+    if not positions:
+        raise MultiPlannerOverlayError(
+            f"ReplayEpisode {replay_episode.episode_id!r} has no finite positions"
+        )
 
     pedestrians: list[tuple[float, float]] | None = None
     last_step = replay_episode.steps[-1]

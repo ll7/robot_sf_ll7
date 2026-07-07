@@ -161,7 +161,10 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         cells: dict[tuple[str, int], list[str]] = {}
         for entry in selected:
             scenario = entry.get("scenario_id", "")
-            seed_val = entry.get("seed", 0)
+            # Coerce a null/absent seed to 0 so grouping keys stay int-typed
+            # (entry.get(..., 0) still yields None when the key is present-but-null).
+            seed_raw = entry.get("seed", 0)
+            seed_val = 0 if seed_raw is None else seed_raw
             planner = entry.get("planner_key", "")
             key = (scenario, seed_val)
             cells.setdefault(key, []).append(planner)

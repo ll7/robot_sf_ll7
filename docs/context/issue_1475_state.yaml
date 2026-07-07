@@ -96,3 +96,89 @@ entries:
       release: false
       merge: false
       deletion: false
+  - recorded_at_utc: "2026-07-07T02:20:00Z"
+    status: integration_report_delivered__external_slurm_rerun_pending
+    source:
+      issue_url: "https://github.com/ll7/robot_sf_ll7/issues/1475"
+      live_issue_state_checked: "open"
+      comments_reviewed: 35
+      latest_maintainer_comment_utc: "2026-07-05T02:58:46Z"
+      latest_maintainer_comment_summary: >-
+        PR #4561 merged CPU-only smoke-to-nominal gate. Remaining action remains one
+        bounded ORCA-residual BC smoke rerun on a Slurm-capable host before any
+        nominal escalation.
+      fragmentation_guard: >-
+        Multiple issue #1475 audit/state PRs already merged in the last 24 hours;
+        this entry records the consolidated integration-report slice, not another
+        readiness packet or transient queue route.
+    closure_boundary:
+      closure_call_for_this_pr: "keep_open"
+      reason: >-
+        Executable acceptance audit still reports blocked over tracked evidence.
+        Current authorization forbids compute submission, and local.machine.md
+        records allow_slurm_submission: false, so the remaining empirical smoke
+        rerun cannot be performed in this PR.
+      current_authorization_boundary: >-
+        No full benchmark campaign run, no Slurm/GPU submission, no paper or
+        dissertation claim edit, no issue comment, no merge, no release, no
+        deletion.
+    acceptance_evidence:
+      - criterion: "Residual dataset manifest NPZ recorded durable artifacts."
+        status: partially_met
+        evidence: >-
+          job-12913 source checksum manifest records smoke NPZ checksum, but
+          tracked smoke summary no durable artifact_pointer_status, so durable
+          pointer completion is not proven.
+      - criterion: "Learned residual checkpoint pointer durable included in completion update."
+        status: partially_met
+        evidence: >-
+          job-12913 source checksum manifest records smoke checkpoint checksum, but
+          tracked smoke summary no durable artifact_pointer_status, so durable
+          checkpoint pointer completion is not proven.
+      - criterion: "Diagnostics report includes ORCA command, raw residual, bounded residual, final guarded command, residual clipping rate, guard veto rate, fallback/degraded status."
+        status: not_met
+        evidence: >-
+          Executable audit reports missing residual_clipping_rate, guard_veto_rate,
+          fallback_degraded_status, and artifact_pointer_status in tracked smoke
+          summary.
+      - criterion: "Fallback/degraded rows are not counted learned-residual success evidence."
+        status: met
+        evidence: >-
+          validate_smoke_nominal_gate() remains invalid over incomplete tracked
+          smoke evidence, so fallback/degraded rows are excluded from positive
+          learned-residual success evidence.
+      - criterion: "Smoke result recorded before nominal escalation."
+        status: met
+        evidence: >-
+          job-12913 smoke result is durably tracked as failed_closed with
+          nominal_escalation_allowed=false.
+      - criterion: "Nominal result classified ready #1358 continuation, revise, stop."
+        status: not_met
+        evidence: >-
+          No nominal result exists in tracked evidence; smoke gate remains invalid
+          over tracked job-12913 summary.
+    integration_report:
+      status: blocked
+      blockers_remaining:
+        - "Durable artifact_pointer_status not proven for dataset/checkpoint outputs."
+        - "Tracked smoke summary lacks required residual/guard/fallback fields."
+        - "No nominal result classification exists."
+      blockers_new: []
+      blockers_intentional:
+        - "No Slurm/GPU submission in this PR."
+        - "No nominal escalation while smoke gate remains invalid."
+    next_empirical_action: >-
+      On a Slurm-capable lane, run one bounded ORCA-residual BC smoke rerun against
+      current post-gate code. Only if validate_smoke_nominal_gate() passes, escalate
+      bounded nominal and record #1358 continuation/revise/stop classification.
+    validation:
+      - command: "uv run python scripts/validation/build_issue_1475_acceptance_audit.py --write"
+        result: "Regenerates JSON with integration_report.status=blocked."
+    out_of_scope_confirmed:
+      full_benchmark_campaign_run: false
+      slurm_or_gpu_submission: false
+      paper_or_dissertation_claim_edit: false
+      issue_comment: false
+      release: false
+      merge: false
+      deletion: false

@@ -159,7 +159,64 @@ def _state_surface_check(
         "status": "valid" if not errors else "invalid",
         "latest_recorded_at_utc": latest.get("recorded_at_utc"),
         "entry_status": latest.get("status"),
+        "integration_report_status": latest.get("integration_report", {}).get("status"),
         "errors": errors,
+    }
+
+
+def _build_integration_report(
+    *,
+    criteria: list[CriterionAudit],
+    smoke_gate_status: str,
+    smoke_gate_error: str,
+    state_surface_path: Path,
+) -> dict[str, Any]:
+    """Summarize current closure blockers without transient queue state."""
+
+    blockers_remaining = [
+        {
+            "criterion": item.criterion,
+            "status": item.status,
+            "why_blocking": item.evidence,
+        }
+        for item in criteria
+        if item.status in {"not_met", "partially_met"}
+    ]
+    return {
+        "status": "blocked" if blockers_remaining else "complete",
+        "evidence_grade": "tracked_cpu_audit_plus_retrieved_failed_closed_smoke",
+        "fragmentation_guard_response": (
+            "Integration slice: consolidate executable audit, canonical state row, "
+            "and remaining empirical action after multiple issue #1475 audit/state PRs."
+        ),
+        "blockers_remaining": blockers_remaining,
+        "blockers_new": [],
+        "blockers_intentional": [
+            {
+                "blocker": "No Slurm/GPU submission in this PR.",
+                "why_intentional": (
+                    "Current authorization forbids compute_submit and local.machine.md "
+                    "sets allow_slurm_submission: false."
+                ),
+            },
+            {
+                "blocker": "No nominal escalation while smoke gate is invalid.",
+                "why_intentional": (
+                    "The issue smoke-to-nominal contract requires a passing smoke "
+                    "summary before nominal work can count as evidence."
+                ),
+            },
+        ],
+        "smoke_gate": {
+            "status": smoke_gate_status,
+            "error": smoke_gate_error,
+        },
+        "canonical_state_surface": str(state_surface_path),
+        "next_empirical_action": (
+            "Run one bounded ORCA-residual BC smoke rerun on a Slurm-capable host; "
+            "only if validate_smoke_nominal_gate passes, escalate nominal and "
+            "classify #1358 continuation/revise/stop."
+        ),
     }
 
 
@@ -273,6 +330,12 @@ def build_audit(
         acceptance_evidence=criteria,
         closure_call=closure_call,
     )
+    integration_report = _build_integration_report(
+        criteria=criteria,
+        smoke_gate_status=smoke_gate_status,
+        smoke_gate_error=smoke_gate_error,
+        state_surface_path=state_surface_path,
+    )
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -297,6 +360,7 @@ def build_audit(
         "remaining_criteria": [
             item.to_dict() for item in criteria if item.status in unmet_statuses
         ],
+        "integration_report": integration_report,
         "state_surface": state_surface,
         "next_empirical_action": (
             "Run one bounded ORCA-residual BC smoke rerun on a Slurm-capable host; only if "

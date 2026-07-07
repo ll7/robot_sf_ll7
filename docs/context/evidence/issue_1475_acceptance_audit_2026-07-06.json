@@ -40,6 +40,50 @@
   "claim_boundary": "CPU-only acceptance audit over tracked evidence; no Slurm/GPU submission, benchmark campaign, training run, or paper-facing claim.",
   "closure_audit_contains_issue_1475": true,
   "closure_call": "keep_open",
+  "integration_report": {
+    "blockers_intentional": [
+      {
+        "blocker": "No Slurm/GPU submission in this PR.",
+        "why_intentional": "Current authorization forbids compute_submit and local.machine.md sets allow_slurm_submission: false."
+      },
+      {
+        "blocker": "No nominal escalation while smoke gate is invalid.",
+        "why_intentional": "The issue smoke-to-nominal contract requires a passing smoke summary before nominal work can count as evidence."
+      }
+    ],
+    "blockers_new": [],
+    "blockers_remaining": [
+      {
+        "criterion": "Residual dataset manifest NPZ recorded durable artifacts.",
+        "status": "partially_met",
+        "why_blocking": "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/source_slurm_checksum_manifest.sha256 records the smoke NPZ checksum; smoke artifact_pointer_status=None, so a durable pointer is still not proven by the tracked smoke summary."
+      },
+      {
+        "criterion": "Learned residual checkpoint pointer durable included in completion update.",
+        "status": "partially_met",
+        "why_blocking": "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/source_slurm_checksum_manifest.sha256 records the smoke checkpoint checksum; smoke artifact_pointer_status=None, so durable checkpoint pointer completion remains unproven."
+      },
+      {
+        "criterion": "Diagnostics report includes ORCA command, raw residual, bounded residual, final guarded command, residual clipping rate, guard veto rate, fallback/degraded status.",
+        "status": "not_met",
+        "why_blocking": "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/summary.json missing required smoke evidence fields: ['residual_clipping_rate', 'guard_veto_rate', 'fallback_degraded_status', 'artifact_pointer_status']."
+      },
+      {
+        "criterion": "Nominal result classified ready #1358 continuation, revise, stop.",
+        "status": "not_met",
+        "why_blocking": "No nominal result exists in tracked evidence; smoke gate remains 'invalid'. Gate error: ORCA-residual smoke nominal gate failed:\n- smoke summary missing required entries: ['residual_clipping_rate', 'guard_veto_rate', 'fallback_degraded_status', 'artifact_pointer_status']\n- residual_clipping_rate must be numeric rate\n- guard_veto_rate must be numeric rate\n- fallback_degraded_status must be 'clear' before nominal escalation (got None)\n- artifact_pointer_status must be durable/complete before nominal escalation (got None)\n- nominal_escalation_allowed must be true\n- success_rate below nominal smoke gate: 0.0000 < 0.8000"
+      }
+    ],
+    "canonical_state_surface": "docs/context/issue_1475_state.yaml",
+    "evidence_grade": "tracked_cpu_audit_plus_retrieved_failed_closed_smoke",
+    "fragmentation_guard_response": "Integration slice: consolidate executable audit, canonical state row, and remaining empirical action after multiple issue #1475 audit/state PRs.",
+    "next_empirical_action": "Run one bounded ORCA-residual BC smoke rerun on a Slurm-capable host; only if validate_smoke_nominal_gate passes, escalate nominal and classify #1358 continuation/revise/stop.",
+    "smoke_gate": {
+      "error": "ORCA-residual smoke nominal gate failed:\n- smoke summary missing required entries: ['residual_clipping_rate', 'guard_veto_rate', 'fallback_degraded_status', 'artifact_pointer_status']\n- residual_clipping_rate must be numeric rate\n- guard_veto_rate must be numeric rate\n- fallback_degraded_status must be 'clear' before nominal escalation (got None)\n- artifact_pointer_status must be durable/complete before nominal escalation (got None)\n- nominal_escalation_allowed must be true\n- success_rate below nominal smoke gate: 0.0000 < 0.8000",
+      "status": "invalid"
+    },
+    "status": "blocked"
+  },
   "issue": 1475,
   "next_empirical_action": "Run one bounded ORCA-residual BC smoke rerun on a Slurm-capable host; only if validate_smoke_nominal_gate passes, escalate nominal and classify #1358 continuation/revise/stop.",
   "remaining_criteria": [
@@ -71,9 +115,10 @@
   },
   "source_thread_summary": "Issue #1475 live thread reviewed via gh api on 2026-07-06; latest maintainer comment remains the 2026-07-05 post-PR #4561 gate update.",
   "state_surface": {
-    "entry_status": "cpu_contract_delivered__external_slurm_rerun_pending",
+    "entry_status": "integration_report_delivered__external_slurm_rerun_pending",
     "errors": [],
-    "latest_recorded_at_utc": "2026-07-06T16:38:00Z",
+    "integration_report_status": "blocked",
+    "latest_recorded_at_utc": "2026-07-07T02:20:00Z",
     "path": "docs/context/issue_1475_state.yaml",
     "status": "valid"
   },

@@ -24,7 +24,7 @@ def test_issue_1475_acceptance_audit_stays_fail_closed_on_tracked_smoke() -> Non
     assert "smoke summary missing required entries" in report["smoke_gate"]["error"]
     assert report["state_surface"]["status"] == "valid"
     assert report["state_surface"]["entry_status"] == (
-        "cpu_contract_delivered__external_slurm_rerun_pending"
+        "integration_report_delivered__external_slurm_rerun_pending"
     )
 
     statuses = {item["criterion"]: item["status"] for item in report["acceptance_evidence"]}
@@ -37,6 +37,15 @@ def test_issue_1475_acceptance_audit_stays_fail_closed_on_tracked_smoke() -> Non
         statuses["Nominal result classified ready #1358 continuation, revise, stop."] == "not_met"
     )
     assert len(report["remaining_criteria"]) == 4
+    integration_report = report["integration_report"]
+    assert integration_report["status"] == "blocked"
+    assert integration_report["blockers_new"] == []
+    assert len(integration_report["blockers_remaining"]) == 4
+    assert "Integration slice" in integration_report["fragmentation_guard_response"]
+    assert any(
+        item["blocker"] == "No Slurm/GPU submission in this PR."
+        for item in integration_report["blockers_intentional"]
+    )
 
 
 def test_issue_1475_acceptance_audit_cli_writes_json_artifact(tmp_path: Path) -> None:
@@ -66,4 +75,7 @@ def test_issue_1475_acceptance_audit_cli_writes_json_artifact(tmp_path: Path) ->
     assert payload["acceptance_evidence"]
     assert payload["state_surface"]["path"] == "docs/context/issue_1475_state.yaml"
     assert payload["state_surface"]["errors"] == []
+    assert payload["integration_report"]["canonical_state_surface"] == (
+        "docs/context/issue_1475_state.yaml"
+    )
     assert "Slurm-capable host" in payload["next_empirical_action"]

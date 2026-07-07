@@ -270,41 +270,6 @@ _THRESHOLDS_RE = re.compile(r"^(<|<=|>=|>|=)\s*([0-9eE.+\-]+)\s*[\-,]*(\s*[0-9eE
 _BAND_RE = re.compile(r"(\[|\()?\s*([0-9eE.+\-]+)\s*,\s*([0-9eE.+\-]+)\s*([)\]])?")
 
 
-def _parse_threshold_band(value: Any) -> str | None:
-    """Return the band name whose range contains ``value``.
-
-    Supports simple band syntax used in the YAML config:
-    ``"< 0.0"``, ``"[0.0, 0.5)"``, ``">= 0.5"``.
-
-    Returns:
-        The band name (e.g. ``"poor"``, ``"caution"``, ``"acceptable"``) or
-        ``None`` when no band matches.
-    """
-    not_match: list[str] = []
-
-    for band_name, band_spec in value.items():
-        band_str = str(band_spec).strip()
-        matched = _match_band_spec(float(band_str))
-        if matched is not None:
-            return band_name
-        not_match.append(band_name + "=" + band_str)
-
-    return None
-
-
-def _match_band_spec(spec: str) -> float | None:
-    """Return the numeric value covered by a single band spec, or None."""
-    spec = spec.strip()
-
-    m = _THRESHOLDS_RE.match(spec)
-    if m:
-        op = m.group(1) or "<"
-        lo = float(m.group(2))
-        hi = float(m.group(3)) if m.group(3) else lo
-        return lo, op, hi  # type: ignore[return-value]
-    return None
-
-
 def _get_metric_value(episode: Mapping[str, Any], keys: Sequence[str]) -> float | None:
     """Search ``episode["metrics"]`` for the first key whose dot-path resolves to a number.
 
@@ -764,7 +729,7 @@ def build_label_summary(annotations: Sequence[dict[str, Any]]) -> dict[str, Any]
 
     for label_id, counts in sorted(label_counts.items()):
         label_summary = {
-            "count": sums(counts) if counts else 0,
+            "count": _sum_counts(counts) if counts else 0,
             "annotation_counts": dict(sorted(counts.items())),
         }
         summary["labels"][label_id] = label_summary
@@ -772,8 +737,8 @@ def build_label_summary(annotations: Sequence[dict[str, Any]]) -> dict[str, Any]
     return summary
 
 
-def sums(d: dict[str, int]) -> int:
-    """Sums the values in a dictionary of counts.
+def _sum_counts(d: dict[str, int]) -> int:
+    """Sum the values in a dictionary of counts.
 
     Returns:
         The total count across all keys.

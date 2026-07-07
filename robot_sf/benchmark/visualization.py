@@ -610,31 +610,106 @@ def _filter_episodes(
     return filtered_episodes
 
 
+def _filter_finite(values: list) -> list[float]:
+    """Return only finite (non-None, non-NaN, non-Inf) numeric values."""
+    result = []
+    for v in values:
+        if v is None:
+            continue
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            continue
+        if np.isfinite(f):
+            result.append(f)
+    return result
+
+
+def _pair_finite(xs: list, ys: list) -> tuple[list[float], list[float]]:
+    """Return finite (x, y) pairs, dropping a pair when either side is non-finite.
+
+    Used for the success-vs-SNQI scatter so points stay episode-aligned: filtering
+    each series independently would mis-pair points when the two series drop
+    different indices.
+    """
+    xs_out: list[float] = []
+    ys_out: list[float] = []
+    for x, y in zip(xs, ys, strict=False):
+        if x is None or y is None:
+            continue
+        try:
+            fx, fy = float(x), float(y)
+        except (TypeError, ValueError):
+            continue
+        if np.isfinite(fx) and np.isfinite(fy):
+            xs_out.append(fx)
+            ys_out.append(fy)
+    return xs_out, ys_out
+
+
+def _ax_no_data(ax, title: str, xlabel: str = "", ylabel: str = "") -> None:
+    """Render a 'No valid data' placeholder on *ax* when a series is empty."""
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.text(
+        0.5,
+        0.5,
+        "No valid data",
+        transform=ax.transAxes,
+        ha="center",
+        va="center",
+        fontsize=12,
+        color="gray",
+    )
+
+
 def _populate_metrics_axes(ax1, ax2, ax3, ax4, collisions, success_rates, snqi_scores) -> None:
-    """Draw the four metrics subplots (factored for both render paths)."""
+    """Draw the four metrics subplots (factored for both render paths).
+
+    Filters ``None`` / non-finite values per series before plotting.
+    Renders a 'No valid data' placeholder when a filtered series is empty.
+    """
+    finite_collisions = _filter_finite(collisions)
+    finite_success = _filter_finite(success_rates)
+    finite_snqi = _filter_finite(snqi_scores)
+
     # Plot 1: Collision distribution
-    ax1.hist(collisions, bins=20, alpha=0.7, color="red")
-    ax1.set_title("Collision Rate Distribution")
-    ax1.set_xlabel("Collision Rate")
-    ax1.set_ylabel("Frequency")
+    if finite_collisions:
+        ax1.hist(finite_collisions, bins=20, alpha=0.7, color="red")
+        ax1.set_title("Collision Rate Distribution")
+        ax1.set_xlabel("Collision Rate")
+        ax1.set_ylabel("Frequency")
+    else:
+        _ax_no_data(ax1, "Collision Rate Distribution", "Collision Rate", "Frequency")
 
     # Plot 2: Success rate distribution
-    ax2.hist(success_rates, bins=20, alpha=0.7, color="green")
-    ax2.set_title("Success Rate Distribution")
-    ax2.set_xlabel("Success Rate")
-    ax2.set_ylabel("Frequency")
+    if finite_success:
+        ax2.hist(finite_success, bins=20, alpha=0.7, color="green")
+        ax2.set_title("Success Rate Distribution")
+        ax2.set_xlabel("Success Rate")
+        ax2.set_ylabel("Frequency")
+    else:
+        _ax_no_data(ax2, "Success Rate Distribution", "Success Rate", "Frequency")
 
     # Plot 3: SNQI distribution
-    ax3.hist(snqi_scores, bins=20, alpha=0.7, color="blue")
-    ax3.set_title("SNQI Score Distribution")
-    ax3.set_xlabel("SNQI Score")
-    ax3.set_ylabel("Frequency")
+    if finite_snqi:
+        ax3.hist(finite_snqi, bins=20, alpha=0.7, color="blue")
+        ax3.set_title("SNQI Score Distribution")
+        ax3.set_xlabel("SNQI Score")
+        ax3.set_ylabel("Frequency")
+    else:
+        _ax_no_data(ax3, "SNQI Score Distribution", "SNQI Score", "Frequency")
 
-    # Plot 4: Success vs SNQI scatter
-    ax4.scatter(success_rates, snqi_scores, alpha=0.6, color="purple")
-    ax4.set_title("Success Rate vs SNQI")
-    ax4.set_xlabel("Success Rate")
-    ax4.set_ylabel("SNQI Score")
+    # Plot 4: Success vs SNQI scatter (pair-filtered so points stay episode-aligned)
+    paired_success, paired_snqi = _pair_finite(success_rates, snqi_scores)
+    if paired_success:
+        ax4.scatter(paired_success, paired_snqi, alpha=0.6, color="purple")
+        ax4.set_title("Success Rate vs SNQI")
+        ax4.set_xlabel("Success Rate")
+        ax4.set_ylabel("SNQI Score")
+    else:
+        _ax_no_data(ax4, "Success Rate vs SNQI", "Success Rate", "SNQI Score")
 
 
 def _generate_metrics_plot(
@@ -655,9 +730,9 @@ def _generate_metrics_plot(
 
     try:
         # Extract metrics
-        collisions = [ep.get("metrics", {}).get("collision_rate", 0) for ep in episodes]
-        success_rates = [ep.get("metrics", {}).get("success_rate", 0) for ep in episodes]
-        snqi_scores = [ep.get("metrics", {}).get("snqi", 0) for ep in episodes]
+        collisions = [(ep.get("metrics") or {}).get("collision_rate", 0) for ep in episodes]
+        success_rates = [(ep.get("metrics") or {}).get("success_rate", 0) for ep in episodes]
+        snqi_scores = [(ep.get("metrics") or {}).get("snqi", 0) for ep in episodes]
 
         plot_filename = "metrics_distribution.pdf"
         if publication:
@@ -733,24 +808,39 @@ def _generate_metrics_plot(
 def _populate_scenario_comparison_axes(
     ax1, ax2, ax3, scenarios, avg_snqi, avg_collisions, success_rates
 ) -> None:
-    """Draw the three scenario comparison subplots (factored for both paths)."""
+    """Draw the three scenario comparison subplots (factored for both paths).
+
+    ``avg_snqi``, ``avg_collisions``, and ``success_rates`` must already be
+    finite-filtered lists aligned with ``scenarios``.  When a series is empty
+    (no scenarios remain after filtering), a 'No valid data' placeholder is
+    rendered instead of calling bar() with an empty sequence.
+    """
     # Plot 1: Average SNQI by scenario
-    ax1.bar(scenarios, avg_snqi, color="blue", alpha=0.7)
-    ax1.set_title("Average SNQI by Scenario")
-    ax1.set_ylabel("SNQI Score")
-    ax1.tick_params(axis="x", rotation=45)
+    if scenarios:
+        ax1.bar(scenarios, avg_snqi, color="blue", alpha=0.7)
+        ax1.set_title("Average SNQI by Scenario")
+        ax1.set_ylabel("SNQI Score")
+        ax1.tick_params(axis="x", rotation=45)
+    else:
+        _ax_no_data(ax1, "Average SNQI by Scenario", ylabel="SNQI Score")
 
     # Plot 2: Average collision rate by scenario
-    ax2.bar(scenarios, avg_collisions, color="red", alpha=0.7)
-    ax2.set_title("Average Collision Rate by Scenario")
-    ax2.set_ylabel("Collision Rate")
-    ax2.tick_params(axis="x", rotation=45)
+    if scenarios:
+        ax2.bar(scenarios, avg_collisions, color="red", alpha=0.7)
+        ax2.set_title("Average Collision Rate by Scenario")
+        ax2.set_ylabel("Collision Rate")
+        ax2.tick_params(axis="x", rotation=45)
+    else:
+        _ax_no_data(ax2, "Average Collision Rate by Scenario", ylabel="Collision Rate")
 
     # Plot 3: Success rate by scenario
-    ax3.bar(scenarios, success_rates, color="green", alpha=0.7)
-    ax3.set_title("Success Rate by Scenario")
-    ax3.set_ylabel("Success Rate")
-    ax3.tick_params(axis="x", rotation=45)
+    if scenarios:
+        ax3.bar(scenarios, success_rates, color="green", alpha=0.7)
+        ax3.set_title("Success Rate by Scenario")
+        ax3.set_ylabel("Success Rate")
+        ax3.tick_params(axis="x", rotation=45)
+    else:
+        _ax_no_data(ax3, "Success Rate by Scenario", ylabel="Success Rate")
 
 
 def _generate_scenario_comparison_plot(
@@ -786,13 +876,19 @@ def _generate_scenario_comparison_plot(
 
         for scenario in scenarios:
             eps = scenario_groups[scenario]
-            snqi_scores = [ep.get("metrics", {}).get("snqi", 0) for ep in eps]
-            collision_rates = [ep.get("metrics", {}).get("collision_rate", 0) for ep in eps]
-            successes = [ep.get("metrics", {}).get("success_rate", 1) for ep in eps]
+            snqi_scores = _filter_finite([(ep.get("metrics") or {}).get("snqi") for ep in eps])
+            collision_rates = _filter_finite(
+                [(ep.get("metrics") or {}).get("collision_rate") for ep in eps]
+            )
+            successes = _filter_finite(
+                [(ep.get("metrics") or {}).get("success_rate") for ep in eps]
+            )
 
-            avg_snqi.append(sum(snqi_scores) / len(snqi_scores))
-            avg_collisions.append(sum(collision_rates) / len(collision_rates))
-            success_rates.append(sum(successes) / len(successes))
+            avg_snqi.append(sum(snqi_scores) / len(snqi_scores) if snqi_scores else 0.0)
+            avg_collisions.append(
+                sum(collision_rates) / len(collision_rates) if collision_rates else 0.0
+            )
+            success_rates.append(sum(successes) / len(successes) if successes else 0.0)
 
         plot_filename = "scenario_comparison.pdf"
         if publication:

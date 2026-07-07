@@ -237,6 +237,27 @@ def test_sac_metadata_declares_native_unicycle_contract() -> None:
     assert action["output_keys"] == ["v", "omega"]
 
 
+def test_distributional_rl_metadata_declares_unicycle_adapter_contract() -> None:
+    """Distributional RL map-runner batches need explicit command metadata."""
+    meta = enrich_algorithm_metadata(
+        algo="distributional_rl",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    action = meta["planner_contract"]["action_contract"]
+
+    assert meta["baseline_category"] == "learning"
+    assert meta["policy_semantics"] == "qr_dqn_distributional_value_risk_selector"
+    assert planner["planner_command_space"] == "unicycle_vw"
+    assert planner["benchmark_command_space"] == "unicycle_vw"
+    assert planner["adapter_name"] == "DistributionalRLPlanner"
+    assert planner["projection_policy"] == "qr_dqn_discrete_unicycle_lattice_to_unicycle_vw"
+    assert action["command_space"] == "unicycle_vw"
+    assert action["output_keys"] == ["v", "omega"]
+
+
 def test_safety_barrier_metadata_marks_testing_only_native_spike() -> None:
     """Safety-barrier metadata should expose the testing-only adapter contract."""
     meta = enrich_algorithm_metadata(

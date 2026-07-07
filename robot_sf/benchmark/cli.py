@@ -140,6 +140,7 @@ def _handle_baseline(args) -> int:
             record_forces=args.record_forces,
             algo=args.algo,
             algo_config_path=args.algo_config,
+            benchmark_profile=args.benchmark_profile,
             workers=args.workers,
             resume=(not bool(getattr(args, "no_resume", False))),
             progress_cb=progress_cb,
@@ -1548,6 +1549,12 @@ def _add_baseline_subparser(
         help="Algorithm to use for robot policy (simple_policy, baseline_sf, etc.)",
     )
     p.add_argument("--algo-config", help="Path to algorithm configuration YAML file")
+    p.add_argument(
+        "--benchmark-profile",
+        default="baseline-safe",
+        choices=("baseline-safe", "experimental", "paper-baseline"),
+        help="Algorithm readiness profile for map-based benchmark runs",
+    )
     p.add_argument(
         "--workers",
         type=int,

@@ -1,8 +1,7 @@
-# Issue #4016 Distributional RL Smoke Evidence
+# Issue #4016 Distributional RL Measured Smoke Evidence
 
-This directory records a diagnostic-only issue #4016 smoke comparison from one
-QR-DQN-style checkpoint evaluated with both mean-return and lower-tail CVaR action
-selection.
+This directory records diagnostic-only issue #4016 evidence from one QR-DQN-style checkpoint
+evaluated by the benchmark runner in both mean-return and lower-tail CVaR action-selection modes.
 
 ## Claim Boundary
 
@@ -18,22 +17,40 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/training/train_
   --config configs/training/distributional_rl/qr_dqn_issue_4016_smoke.yaml \
   --log-level WARNING
 
-scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/analysis/materialize_distributional_rl_issue_4016_smoke_manifests.py \
-  --training-manifest output/models/distributional_rl/issue_4016/training_manifest.json \
-  --output-dir docs/context/evidence/issue_4016_distributional_rl_smoke \
-  --write-comparison-config docs/context/evidence/issue_4016_distributional_rl_smoke/compare_config.yaml
+scripts/dev/run_worktree_shared_venv.sh -- uv run robot_sf_bench --quiet baseline \
+  --matrix configs/scenarios/sets/classic_cross_trap_subset.yaml \
+  --algo distributional_rl \
+  --algo-config configs/baselines/distributional_rl_issue_4016_mean.yaml \
+  --benchmark-profile experimental \
+  --out output/benchmarks/issue4016/mean/baseline_stats.json \
+  --jsonl output/benchmarks/issue4016/mean/episodes.jsonl \
+  --base-seed 4016 --repeats 1 --horizon 5 --dt 0.1 --workers 1 --no-resume
 
-scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/analysis/compare_distributional_rl_issue_4016.py \
-  --config docs/context/evidence/issue_4016_distributional_rl_smoke/compare_config.yaml
+scripts/dev/run_worktree_shared_venv.sh -- uv run robot_sf_bench --quiet baseline \
+  --matrix configs/scenarios/sets/classic_cross_trap_subset.yaml \
+  --algo distributional_rl \
+  --algo-config configs/baselines/distributional_rl_issue_4016_cvar.yaml \
+  --benchmark-profile experimental \
+  --out output/benchmarks/issue4016/cvar/baseline_stats.json \
+  --jsonl output/benchmarks/issue4016/cvar/episodes.jsonl \
+  --base-seed 4016 --repeats 1 --horizon 5 --dt 0.1 --workers 1 --no-resume
+
+scripts/dev/run_worktree_shared_venv.sh -- uv run python \
+  scripts/analysis/summarize_distributional_rl_issue_4016_benchmark_rows.py \
+  --mean-jsonl output/benchmarks/issue4016/mean/episodes.jsonl \
+  --risk-jsonl output/benchmarks/issue4016/cvar/episodes.jsonl \
+  --output-dir docs/context/evidence/issue_4016_distributional_rl_smoke
+
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/analysis/audit_issue_4016_acceptance.py \
+  --evidence-dir docs/context/evidence/issue_4016_distributional_rl_smoke
 ```
 
 ## Result
 
+- `summary.json`: `benchmark_runner_measured=true`, included rows `mean=6`, `risk=6`.
 - `distributional_rl_risk_comparison.json`: `comparison_status=valid_diagnostic`.
-- Matched context: same checkpoint, seed, and total timesteps.
-- Fallback/degraded rows: excluded `0`, included as non-evidence `0`.
-- Smoke trainer result: `train_steps=112`; bulky checkpoint and trace remain under ignored
-  `output/models/distributional_rl/issue_4016/`.
+- `acceptance_audit.json`: `closure_status=complete`.
+- Fallback/degraded rows: `0` excluded from both mean and risk inputs.
 
-This is the smallest remaining empirical-output slice after PR #4476. It records real
-mean/CVaR smoke manifests and leaves broader benchmark-strength evidence out of scope.
+The ignored benchmark JSONL and checkpoint artifacts stay under `output/`; the tracked files here are
+small reviewable summaries of the measured diagnostic smoke slice.

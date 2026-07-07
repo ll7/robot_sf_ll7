@@ -89,6 +89,7 @@ def run_and_compute_baseline(  # noqa: PLR0913
     metrics: Iterable[str] | None = None,
     algo: str = "simple_policy",
     algo_config_path: str | None = None,
+    benchmark_profile: str = "baseline-safe",
     workers: int = 1,
     resume: bool = True,
     progress_cb: Callable | None = None,
@@ -119,6 +120,7 @@ def run_and_compute_baseline(  # noqa: PLR0913
         progress_cb=progress_cb,
         algo=algo,
         algo_config_path=algo_config_path,
+        benchmark_profile=benchmark_profile,
         workers=workers,
         resume=resume,
     )

@@ -815,6 +815,16 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_adapter_commands": False,
         "default_execution_mode": "native",
     },
+    "distributional_rl": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "DistributionalRLPlanner",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "qr_dqn_discrete_unicycle_lattice_to_unicycle_vw",
+        "projection_documented": True,
+    },
     "hybrid_global_rl": {
         "planner_command_space": "mixed_vw_or_vxy",
         "supports_native_commands": False,

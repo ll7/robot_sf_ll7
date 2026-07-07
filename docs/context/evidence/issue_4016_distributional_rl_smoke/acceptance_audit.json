@@ -1,9 +1,7 @@
 {
-  "blockers": [
-    "Run or ingest a benchmark-runner measured comparison for mean and cvar_lower modes on safety-relevant scenarios; keep fallback/degraded rows excluded or marked non-evidence."
-  ],
+  "blockers": [],
   "claim_boundary": "closure audit of merged implementation evidence; diagnostic-only smoke evidence is not benchmark-strength safety evidence",
-  "closure_status": "partial",
+  "closure_status": "complete",
   "criteria": [
     {
       "criterion": "QR-DQN-style distributional critic trains on a smoke scenario.",
@@ -55,10 +53,11 @@
       "criterion": "Reports include collision, near-miss, min-clearance, success/progress, and path-efficiency tradeoffs.",
       "evidence": [
         "Required metric keys present in smoke manifests: True.",
-        "PR #4672 gate review states these are synthetic-observation placeholders, not measured benchmark safety outcomes."
+        "benchmark_runner_measured=True.",
+        "Measured benchmark-runner manifests remain diagnostic-only; no paper-facing safety claim is promoted."
       ],
-      "remaining_work": "Run or ingest a benchmark-runner measured comparison for mean and cvar_lower modes on safety-relevant scenarios; keep fallback/degraded rows excluded or marked non-evidence.",
-      "status": "partial"
+      "remaining_work": null,
+      "status": "met"
     },
     {
       "criterion": "Fallback/degraded rows are explicitly excluded or marked non-evidence.",
@@ -84,7 +83,7 @@
     "paper_or_dissertation_claim_edit": false,
     "slurm_or_gpu_submission": false
   },
-  "generated_at": "2026-07-06T21:10:02.252690+00:00",
+  "generated_at": "2026-07-07T01:23:18.272238+00:00",
   "issue": 4016,
   "merged_prs_reviewed": [
     {

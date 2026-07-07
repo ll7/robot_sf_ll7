@@ -1,83 +1,46 @@
 {
-  "action_lattice_path": "output/models/distributional_rl/issue_4016/action_lattice.json",
   "algorithm": "qr_dqn",
+  "benchmark_runner": {
+    "excluded_row_count": 0,
+    "horizon": 5,
+    "included_row_count": 6,
+    "scenario_ids": [
+      "classic_cross_trap_high",
+      "classic_cross_trap_low"
+    ],
+    "seeds": [
+      101,
+      102,
+      103
+    ],
+    "source_jsonl": "output/benchmarks/issue4016/cvar/episodes.jsonl"
+  },
+  "benchmark_runner_measured": true,
   "checkpoint_path": "output/models/distributional_rl/issue_4016/qr_dqn_issue_4016_smoke.pt",
   "claim_boundary": "risk-selection diagnostic only; not benchmark evidence",
   "evidence_tier": "diagnostic-only",
   "fallback_or_degraded": false,
   "metrics": {
-    "benchmark_safety_claim": 0.0,
-    "collision_rate": 0.0,
-    "diagnostic_action_progress_rate": 0.0,
-    "diagnostic_turning_cost": 1.0,
-    "mean_min_clearance": 1.0,
-    "mean_path_efficiency": 0.0,
-    "near_miss_rate": 0.0,
-    "selection_mode_id": 1.0,
+    "collision_rate": 0.16666666666666666,
+    "mean_min_clearance": 2.6443194647159523,
+    "mean_path_efficiency": 1.0,
+    "near_miss_rate": 0.16666666666666666,
     "success_rate": 0.0
   },
-  "planner_metadata": {
-    "action_lattice": {
-      "angular_values": [
-        -1.0,
-        -0.5,
-        0.0,
-        0.5,
-        1.0
-      ],
-      "command_space": "unicycle_vw",
-      "linear_values": [
-        0.0,
-        0.25,
-        0.5,
-        0.75,
-        1.0
-      ],
-      "max_angular_speed": 1.0,
-      "max_linear_speed": 1.0
-    },
-    "algorithm": "distributional_rl",
-    "claim_boundary": "distributional value/risk-selection diagnostic; not paper-grade safety evidence",
-    "config": {
-      "action_lattice_path": "output/models/distributional_rl/issue_4016/action_lattice.json",
-      "checkpoint_path": "output/models/distributional_rl/issue_4016/qr_dqn_issue_4016_smoke.pt",
-      "deterministic": true,
-      "device": "cpu",
-      "fallback_to_goal": false,
-      "obs_mode": "dict",
-      "obs_transform": "ego",
-      "profile": "experimental",
-      "record_quantile_diagnostics": true,
-      "risk_alpha": 0.2,
-      "risk_blend_beta": 1.0,
-      "risk_objective": "cvar_lower"
-    },
-    "evidence_tier": "diagnostic-only",
-    "fallback_or_degraded": false,
-    "fallback_reason": null,
-    "planner_kinematics": {
-      "native_env_action": false,
-      "planner_command_space": "unicycle_vw",
-      "planner_output_keys": [
-        "v",
-        "omega"
-      ]
-    },
-    "policy_semantics": "qr_dqn_discrete_unicycle_lattice_risk_aware_selector",
-    "status": "ok"
-  },
-  "policy_id": "qr_dqn_issue_4016_risk",
+  "policy_id": "qr_dqn_issue_4016_risk_benchmark",
   "risk_alpha": 0.2,
-  "risk_blend_beta": 1.0,
   "risk_objective": "cvar_lower",
   "risk_selection_diagnostics": {
     "mean_risk_disagreement_count": 0,
     "mean_selected_count": 0,
-    "record_count": 8,
-    "risk_selected_count": 8
+    "record_count": 6,
+    "risk_selected_count": 6
   },
-  "seed": 4016,
-  "source_training_manifest": "output/models/distributional_rl/issue_4016/training_manifest.json",
-  "total_timesteps": 128,
-  "train_steps": 112
+  "schema_version": "issue_4016.benchmark_runner_manifest.v1",
+  "seed": [
+    101,
+    102,
+    103
+  ],
+  "total_timesteps": 0
 }

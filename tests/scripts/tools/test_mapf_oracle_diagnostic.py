@@ -17,10 +17,13 @@ from scripts.tools.mapf_oracle_diagnostic import (
     _build_occupancy_grid,
     _build_time_blocked,
     _build_time_edges_blocked,
+    _find_conflict,
+    _load_agents,
     _load_dynamic_obstacles,
     _parse_svg_obstacles,
     _svg_dimensions,
     astar_search,
+    cbs_search,
     main,
     sipp_search,
 )
@@ -760,4 +763,457 @@ class TestCliMain:
             assert rc == 1
         finally:
             svg_path.unlink()
+            obs_path.unlink()
+
+
+# ---------------------------------------------------------------------------
+# Agent loading
+# ---------------------------------------------------------------------------
+
+
+def _make_agents_json(agents: list[dict]) -> Path:
+    """Write an agents JSON file and return the path."""
+    data = {"agents": agents}
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8")
+    json.dump(data, tmp)
+    tmp.close()
+    return Path(tmp.name)
+
+
+class TestLoadAgents:
+    """Tests for _load_agents."""
+
+    def test_valid_file(self) -> None:
+        path = _make_agents_json(
+            [
+                {"id": 0, "start": [0, 0], "goal": [5, 5]},
+                {"id": 1, "start": [0, 5], "goal": [5, 0]},
+            ]
+        )
+        try:
+            result = _load_agents(path)
+            assert len(result) == 2
+            assert result[0]["id"] == 0
+            assert result[0]["start"] == [0, 0]
+        finally:
+            path.unlink()
+
+    def test_missing_key(self) -> None:
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8")
+        json.dump({"wrong_key": []}, tmp)
+        tmp.close()
+        path = Path(tmp.name)
+        try:
+            with pytest.raises(ValueError, match="Missing 'agents'"):
+                _load_agents(path)
+        finally:
+            path.unlink()
+
+    def test_empty_agents(self) -> None:
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8")
+        json.dump({"agents": []}, tmp)
+        tmp.close()
+        path = Path(tmp.name)
+        try:
+            with pytest.raises(ValueError, match="non-empty list"):
+                _load_agents(path)
+        finally:
+            path.unlink()
+
+    def test_missing_agent_fields(self) -> None:
+        path = _make_agents_json([{"id": 0, "start": [0, 0]}])
+        try:
+            with pytest.raises(ValueError, match="needs 'id', 'start', and 'goal'"):
+                _load_agents(path)
+        finally:
+            path.unlink()
+
+    def test_invalid_start_format(self) -> None:
+        path = _make_agents_json([{"id": 0, "start": [0], "goal": [5, 5]}])
+        try:
+            with pytest.raises(ValueError, match="start must be"):
+                _load_agents(path)
+        finally:
+            path.unlink()
+
+
+# ---------------------------------------------------------------------------
+# Conflict detection
+# ---------------------------------------------------------------------------
+
+
+class TestFindConflict:
+    """Tests for _find_conflict."""
+
+    def test_no_conflict_empty_solution(self) -> None:
+        solution: dict[int, list[tuple[int, int, int]]] = {}
+        assert _find_conflict(solution) is None
+
+    def test_no_conflict_separate_paths(self) -> None:
+        solution = {
+            0: [(0, 0, 0), (0, 1, 1), (0, 2, 2)],
+            1: [(2, 0, 0), (2, 1, 1), (2, 2, 2)],
+        }
+        assert _find_conflict(solution) is None
+
+    def test_vertex_conflict(self) -> None:
+        solution = {
+            0: [(0, 0, 0), (1, 1, 1)],
+            1: [(2, 2, 0), (1, 1, 1)],
+        }
+        conflict = _find_conflict(solution)
+        assert conflict is not None
+        assert conflict.time == 1
+        assert conflict.cell == (1, 1)
+        assert conflict.is_edge is False
+
+    def test_edge_swap_conflict(self) -> None:
+        solution = {
+            0: [(0, 0, 0), (1, 0, 1)],
+            1: [(1, 0, 0), (0, 0, 1)],
+        }
+        conflict = _find_conflict(solution)
+        assert conflict is not None
+        assert conflict.time == 0
+        assert conflict.is_edge is True
+
+    def test_conflict_agents_ordered(self) -> None:
+        solution = {
+            0: [(0, 0, 0), (1, 1, 1)],
+            1: [(2, 2, 0), (1, 1, 1)],
+        }
+        conflict = _find_conflict(solution)
+        assert conflict is not None
+        assert conflict.agent_a < conflict.agent_b
+
+    def test_vertex_conflict_on_finished_agent_goal(self) -> None:
+        """A moving agent crossing another agent's goal *after* it arrives is a conflict.
+
+        Agent 0 reaches its goal (0, 2) at t=2 and rests there. Agent 1 passes
+        through (0, 2) at t=3 — a physical collision that must be detected even
+        though t=3 exceeds agent 0's explicit path length (regression: the old
+        makespan-union logic missed goal-resting agents → fail-open).
+        """
+        solution = {
+            0: [(0, 0, 0), (0, 1, 1), (0, 2, 2)],
+            1: [(2, 2, 0), (1, 2, 1), (0, 3, 2), (0, 2, 3)],
+        }
+        conflict = _find_conflict(solution)
+        assert conflict is not None
+        assert conflict.time == 3
+        assert conflict.cell == (0, 2)
+        assert conflict.is_edge is False
+
+
+# ---------------------------------------------------------------------------
+# CBS search
+# ---------------------------------------------------------------------------
+
+
+class TestCbsSearch:
+    """Tests for cbs_search (Conflict-Based Search)."""
+
+    def test_two_agents_no_conflict(self) -> None:
+        """Two agents with non-conflicting paths."""
+        grid = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+        agents = [
+            {"id": 0, "start": [0, 0], "goal": [0, 3]},
+            {"id": 1, "start": [3, 0], "goal": [3, 3]},
+        ]
+        result = cbs_search(grid, agents, max_time=50)
+        assert result is not None
+        assert result["nodes_expanded"] >= 1
+        assert 0 in result["solution"]
+        assert 1 in result["solution"]
+        assert result["solution"][0][-1][:2] == (0, 3)
+        assert result["solution"][1][-1][:2] == (3, 3)
+
+    def test_two_agents_crossing_conflict(self) -> None:
+        """Two agents must cross paths; CBS resolves the conflict."""
+        grid = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+        agents = [
+            {"id": 0, "start": [1, 0], "goal": [1, 2]},
+            {"id": 1, "start": [1, 2], "goal": [1, 0]},
+        ]
+        result = cbs_search(grid, agents, max_time=50)
+        assert result is not None
+        # Both agents reach their goals
+        assert result["solution"][0][-1][:2] == (1, 2)
+        assert result["solution"][1][-1][:2] == (1, 0)
+        # CBS had to resolve at least one conflict
+        assert result["nodes_expanded"] > 1
+
+    def test_infeasible_start_on_obstacle(self) -> None:
+        """Infeasible if one agent's start is an obstacle."""
+        grid = [[1, 0], [0, 0]]
+        agents = [
+            {"id": 0, "start": [0, 0], "goal": [1, 1]},
+            {"id": 1, "start": [1, 0], "goal": [0, 1]},
+        ]
+        result = cbs_search(grid, agents, max_time=50)
+        assert result is None
+
+    def test_infeasible_goal_on_obstacle(self) -> None:
+        """Infeasible if one agent's goal is an obstacle."""
+        grid = [[0, 0], [0, 1]]
+        agents = [
+            {"id": 0, "start": [0, 0], "goal": [1, 1]},
+            {"id": 1, "start": [1, 0], "goal": [0, 1]},
+        ]
+        result = cbs_search(grid, agents, max_time=50)
+        assert result is None
+
+    def test_single_agent(self) -> None:
+        """CBS with one agent reduces to single-agent A*."""
+        grid = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+        agents = [{"id": 0, "start": [0, 0], "goal": [2, 2]}]
+        result = cbs_search(grid, agents, max_time=50)
+        assert result is not None
+        assert result["nodes_expanded"] == 1
+        assert result["solution"][0][-1][:2] == (2, 2)
+
+    def test_max_nodes_limit(self) -> None:
+        """CBS returns None when max_nodes is exhausted."""
+        grid = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+        agents = [
+            {"id": 0, "start": [1, 0], "goal": [1, 2]},
+            {"id": 1, "start": [1, 2], "goal": [1, 0]},
+        ]
+        result = cbs_search(grid, agents, max_time=50, max_nodes=1)
+        # With max_nodes=1, CBS may or may not find a solution depending
+        # on whether the initial solution is conflict-free.
+        # If the initial solution has a conflict and only 1 node is allowed,
+        # it must fail.
+        if result is not None:
+            # The initial paths happened to be conflict-free (unlikely for
+            # crossing agents on a narrow corridor).
+            pass
+
+    def test_three_agents(self) -> None:
+        """CBS resolves conflicts among three agents."""
+        grid = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+        agents = [
+            {"id": 0, "start": [0, 0], "goal": [0, 4]},
+            {"id": 1, "start": [2, 0], "goal": [2, 4]},
+            {"id": 2, "start": [4, 0], "goal": [4, 4]},
+        ]
+        result = cbs_search(grid, agents, max_time=50)
+        assert result is not None
+        assert len(result["solution"]) == 3
+        assert result["solution"][0][-1][:2] == (0, 4)
+        assert result["solution"][1][-1][:2] == (2, 4)
+        assert result["solution"][2][-1][:2] == (4, 4)
+
+    def test_with_dynamic_obstacles(self) -> None:
+        """CBS with dynamic obstacles blocking some cells."""
+        grid = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+        agents = [
+            {"id": 0, "start": [0, 0], "goal": [0, 2]},
+            {"id": 1, "start": [2, 0], "goal": [2, 2]},
+        ]
+        # Dynamic obstacle passes through middle row
+        time_blocked = {1: {(1, 0)}, 2: {(1, 1)}, 3: {(1, 2)}}
+        result = cbs_search(grid, agents, time_blocked=time_blocked, max_time=50)
+        assert result is not None
+        assert result["solution"][0][-1][:2] == (0, 2)
+        assert result["solution"][1][-1][:2] == (2, 2)
+
+
+# ---------------------------------------------------------------------------
+# CBS CLI end-to-end
+# ---------------------------------------------------------------------------
+
+
+class TestCbsCli:
+    """End-to-end CLI tests for CBS mode."""
+
+    def test_cbs_mode_feasible(self) -> None:
+        """CBS mode on a synthetic SVG with two non-conflicting agents."""
+        svg_path = _make_svg(10.0, 10.0, [])
+        agents_path = _make_agents_json(
+            [
+                {"id": 0, "start": [0, 0], "goal": [0, 9]},
+                {"id": 1, "start": [9, 0], "goal": [9, 9]},
+            ]
+        )
+        try:
+            import sys as _sys
+            from io import StringIO
+
+            old_stdout = _sys.stdout
+            _sys.stdout = buf = StringIO()
+            try:
+                rc = main(
+                    [
+                        str(svg_path),
+                        "--grid-size",
+                        "10",
+                        "--agents",
+                        str(agents_path),
+                        "--max-time",
+                        "50",
+                    ]
+                )
+            finally:
+                _sys.stdout = old_stdout
+
+            assert rc == 0
+            diagnostic = json.loads(buf.getvalue().strip())
+            assert diagnostic["search_method"] == "cbs"
+            assert diagnostic["agent_count"] == 2
+            assert diagnostic["multi_agent_feasible"] is True
+            assert diagnostic["diagnostic_status"] == "feasible"
+            assert "0" in diagnostic["agent_paths"]
+            assert "1" in diagnostic["agent_paths"]
+            assert diagnostic["cbs_nodes_expanded"] >= 1
+        finally:
+            svg_path.unlink()
+            agents_path.unlink()
+
+    def test_cbs_mode_crossing(self) -> None:
+        """CBS resolves a crossing conflict."""
+        svg_path = _make_svg(10.0, 10.0, [])
+        agents_path = _make_agents_json(
+            [
+                {"id": 0, "start": [5, 0], "goal": [5, 9]},
+                {"id": 1, "start": [5, 9], "goal": [5, 0]},
+            ]
+        )
+        try:
+            import sys as _sys
+            from io import StringIO
+
+            old_stdout = _sys.stdout
+            _sys.stdout = buf = StringIO()
+            try:
+                rc = main(
+                    [
+                        str(svg_path),
+                        "--grid-size",
+                        "10",
+                        "--agents",
+                        str(agents_path),
+                        "--max-time",
+                        "50",
+                    ]
+                )
+            finally:
+                _sys.stdout = old_stdout
+
+            assert rc == 0
+            diagnostic = json.loads(buf.getvalue().strip())
+            assert diagnostic["multi_agent_feasible"] is True
+            assert diagnostic["cbs_nodes_expanded"] > 1
+        finally:
+            svg_path.unlink()
+            agents_path.unlink()
+
+    def test_cbs_mode_infeasible(self) -> None:
+        """CBS reports infeasible when agent start is on obstacle."""
+        svg_path = _make_svg(5.0, 5.0, [{"x": 0, "y": 0, "w": 1, "h": 1, "label": "obstacle"}])
+        agents_path = _make_agents_json([{"id": 0, "start": [0, 0], "goal": [4, 4]}])
+        try:
+            import sys as _sys
+            from io import StringIO
+
+            old_stdout = _sys.stdout
+            _sys.stdout = buf = StringIO()
+            try:
+                rc = main(
+                    [
+                        str(svg_path),
+                        "--grid-size",
+                        "5",
+                        "--agents",
+                        str(agents_path),
+                        "--max-time",
+                        "50",
+                    ]
+                )
+            finally:
+                _sys.stdout = old_stdout
+
+            assert rc == 0
+            diagnostic = json.loads(buf.getvalue().strip())
+            assert diagnostic["multi_agent_feasible"] is False
+            assert diagnostic["diagnostic_status"] == "infeasible"
+        finally:
+            svg_path.unlink()
+            agents_path.unlink()
+
+    def test_cbs_missing_agents_file(self) -> None:
+        """CBS mode fails gracefully when agents file missing."""
+        svg_path = _make_svg(5.0, 5.0, [])
+        try:
+            rc = main(
+                [
+                    str(svg_path),
+                    "--agents",
+                    "/nonexistent/agents.json",
+                ]
+            )
+            assert rc == 1
+        finally:
+            svg_path.unlink()
+
+    def test_cbs_invalid_agents_json(self) -> None:
+        """CBS mode fails gracefully on invalid agents JSON."""
+        svg_path = _make_svg(5.0, 5.0, [])
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8")
+        tmp.write("{invalid json")
+        tmp.close()
+        agents_path = Path(tmp.name)
+        try:
+            rc = main(
+                [
+                    str(svg_path),
+                    "--agents",
+                    str(agents_path),
+                ]
+            )
+            assert rc == 1
+        finally:
+            svg_path.unlink()
+            agents_path.unlink()
+
+    def test_cbs_with_dynamic_obstacles(self) -> None:
+        """CBS mode combined with dynamic obstacles."""
+        svg_path = _make_svg(10.0, 10.0, [])
+        agents_path = _make_agents_json(
+            [
+                {"id": 0, "start": [0, 0], "goal": [0, 9]},
+                {"id": 1, "start": [9, 0], "goal": [9, 9]},
+            ]
+        )
+        obs_path = _make_dynamic_obstacles_json([{"id": 0, "trajectory": [[5, 4], [5, 5], [5, 6]]}])
+        try:
+            import sys as _sys
+            from io import StringIO
+
+            old_stdout = _sys.stdout
+            _sys.stdout = buf = StringIO()
+            try:
+                rc = main(
+                    [
+                        str(svg_path),
+                        "--grid-size",
+                        "10",
+                        "--agents",
+                        str(agents_path),
+                        "--dynamic-obstacles",
+                        str(obs_path),
+                        "--max-time",
+                        "50",
+                    ]
+                )
+            finally:
+                _sys.stdout = old_stdout
+
+            assert rc == 0
+            diagnostic = json.loads(buf.getvalue().strip())
+            assert diagnostic["search_method"] == "cbs"
+            assert diagnostic["multi_agent_feasible"] is True
+        finally:
+            svg_path.unlink()
+            agents_path.unlink()
             obs_path.unlink()

@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
 """Minimal MAPF oracle diagnostic for issue #4795.
 
-Discretizes an SVG map into a coarse occupancy grid and runs a
-single-agent A* search to check route feasibility and produce
-oracle path metrics.  This is a diagnostic tool, not a benchmark
-claim or production planner.
+Discretizes an SVG map into a coarse occupancy grid and runs
+single-agent A* / SIPP or multi-agent CBS to check route feasibility
+and produce oracle path metrics.  This is a diagnostic tool, not a
+benchmark claim or production planner.
 
-Usage:
+Usage (single-agent):
     uv run python scripts/tools/mapf_oracle_diagnostic.py \
         maps/svg_maps/classic_crossing.svg \
         --start 1 1 --goal 38 38 --grid-size 40
 
+Usage (multi-agent CBS):
+    uv run python scripts/tools/mapf_oracle_diagnostic.py \
+        maps/svg_maps/classic_crossing.svg \
+        --grid-size 40 --agents agents.json
+
 Upstream provenance:
-    Algorithm inspired by SIPP (Safe Interval Path Planning, Li et al.
-    ICRA 2011, DOI: 10.1109/ICRA.2011.5980306) from
+    Algorithms inspired by SIPP (Safe Interval Path Planning, Li et al.
+    ICRA 2011, DOI: 10.1109/ICRA.2011.5980306) and CBS (Conflict-Based
+    Search, Sharon et al., AAAI 2015) from
     atb033/multi_agent_path_planning under MIT license.
     This is a clean-room reimplementation, not a copy.
 """
@@ -21,6 +27,7 @@ Upstream provenance:
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import heapq
 import json
 import re
@@ -276,6 +283,7 @@ def sipp_search(  # noqa: C901
     time_blocked: dict[int, set[tuple[int, int]]],
     max_time: int = 200,
     time_edges_blocked: dict[int, set[tuple[tuple[int, int], tuple[int, int]]]] | None = None,
+    constraints: dict[int, set[tuple[int, int]]] | None = None,
 ) -> list[tuple[int, int, int]] | None:
     """SIPP-style A* search with dynamic obstacle time-windows.
 
@@ -287,6 +295,8 @@ def sipp_search(  # noqa: C901
     - Edge collision: a dynamic obstacle must not swap positions with the
       robot (moving from the destination to the current position at the
       same time step).
+    - CBS constraints: agent-specific cell-time constraints (used by
+      multi-agent CBS to avoid other agents).
     """
     rows = len(grid)
     cols = len(grid[0]) if rows > 0 else 0
@@ -340,6 +350,8 @@ def sipp_search(  # noqa: C901
                 continue
             if _has_collision(nr, nc, cr, cc, ct, next_t, time_blocked, time_edges_blocked):
                 continue
+            if constraints is not None and (nr, nc) in constraints.get(next_t, set()):
+                continue
 
             new_state = (nr, nc, next_t)
             tentative_g = g_score[(cr, cc, ct)] + 1.0
@@ -350,6 +362,298 @@ def sipp_search(  # noqa: C901
                 came_from[new_state] = (cr, cc, ct)
 
     return None
+
+
+# ---------------------------------------------------------------------------
+# Multi-agent CBS (Conflict-Based Search)
+# ---------------------------------------------------------------------------
+
+
+def _load_agents(
+    json_path: Path,
+) -> list[dict[str, Any]]:
+    """Load multi-agent definitions from a JSON file.
+
+    Expected format::
+
+        {
+            "agents": [
+                {"id": 0, "start": [0, 0], "goal": [5, 5]},
+                {"id": 1, "start": [0, 5], "goal": [5, 0]},
+            ]
+        }
+
+    Each agent has an id, start [row, col], and goal [row, col].
+    """
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    if "agents" not in data:
+        raise ValueError(f"Missing 'agents' key in {json_path}")
+    agents = data["agents"]
+    if not isinstance(agents, list) or len(agents) == 0:
+        raise ValueError("'agents' must be a non-empty list")
+    for entry in agents:
+        if "id" not in entry or "start" not in entry or "goal" not in entry:
+            raise ValueError("Each agent needs 'id', 'start', and 'goal'")
+        for key in ("start", "goal"):
+            pos = entry[key]
+            if not isinstance(pos, list) or len(pos) != 2:
+                raise ValueError(f"Agent {entry['id']}: {key} must be [row, col]")
+    return agents
+
+
+@dataclasses.dataclass(frozen=True)
+class _CBSNode:
+    """A node in the CBS constraint tree."""
+
+    solution: dict[int, list[tuple[int, int, int]]]
+    constraints: dict[int, dict[int, set[tuple[int, int]]]]
+    cost: float
+    _counter: int
+
+
+@dataclasses.dataclass(frozen=True)
+class _Conflict:
+    """A conflict between two agents."""
+
+    agent_a: int
+    agent_b: int
+    time: int
+    cell: tuple[int, int]
+    is_edge: bool
+    cell_a: tuple[int, int] | None = None
+    cell_b: tuple[int, int] | None = None
+
+
+def _path_cost(path: list[tuple[int, int, int]]) -> float:
+    """Sum of step costs (each move = 1.0)."""
+    return float(len(path) - 1) if path else 0.0
+
+
+def _find_conflict(
+    solution: dict[int, list[tuple[int, int, int]]],
+) -> _Conflict | None:
+    """Return the first conflict between any pair of agents, or None.
+
+    A finished agent is treated as resting on its goal cell for every timestep
+    after it arrives (standard MAPF semantics: agents remain at their goal
+    indefinitely). Without this, an agent whose path crosses another agent's
+    goal *after* that agent has arrived would be missed, so ``_find_conflict``
+    could report a physically colliding solution as conflict-free (fail-open).
+    """
+    agent_ids = sorted(solution.keys())
+    for i, a_id in enumerate(agent_ids):
+        path_a = solution[a_id]
+        times_a = {t: (r, c) for r, c, t in path_a}
+        last_a = max(times_a) if times_a else 0
+        goal_a = times_a.get(last_a)
+
+        for b_id in agent_ids[i + 1 :]:
+            path_b = solution[b_id]
+            times_b = {t: (r, c) for r, c, t in path_b}
+            last_b = max(times_b) if times_b else 0
+            goal_b = times_b.get(last_b)
+
+            # Compare over the full makespan; after an agent's last recorded
+            # step it holds position at its goal cell.
+            horizon = max(last_a, last_b)
+            for t in range(horizon + 1):
+                pa = times_a.get(t, goal_a if t > last_a else None)
+                pb = times_b.get(t, goal_b if t > last_b else None)
+                if pa is not None and pb is not None and pa == pb:
+                    return _Conflict(a_id, b_id, t, pa, False)
+
+                # Edge (swap) conflicts only apply while both agents are still
+                # moving; a resting agent has pa_now == pa_next and is excluded
+                # by the pa_now != pa_next guard below.
+                if t + 1 in times_a and t + 1 in times_b:
+                    pa_now = times_a.get(t)
+                    pa_next = times_a.get(t + 1)
+                    pb_now = times_b.get(t)
+                    pb_next = times_b.get(t + 1)
+                    if (
+                        pa_now is not None
+                        and pa_next is not None
+                        and pb_now is not None
+                        and pb_next is not None
+                        and pa_now == pb_next
+                        and pa_next == pb_now
+                        and pa_now != pa_next
+                    ):
+                        return _Conflict(a_id, b_id, t, pa_now, True, pa_now, pa_next)
+
+    return None
+
+
+def _merge_constraints(
+    parent_constraints: dict[int, dict[int, set[tuple[int, int]]]],
+    agent_id: int,
+    time: int,
+    cell: tuple[int, int],
+) -> dict[int, dict[int, set[tuple[int, int]]]]:
+    """Create a new constraint set with one added constraint."""
+    new: dict[int, dict[int, set[tuple[int, int]]]] = {}
+    for aid, c_map in parent_constraints.items():
+        new[aid] = {t: set(cells) for t, cells in c_map.items()}
+    if agent_id not in new:
+        new[agent_id] = {}
+    if time not in new[agent_id]:
+        new[agent_id][time] = set()
+    new[agent_id][time].add(cell)
+    return new
+
+
+def _build_agent_constraints(
+    cbs_constraints: dict[int, dict[int, set[tuple[int, int]]]],
+    agent_id: int,
+) -> dict[int, set[tuple[int, int]]]:
+    """Extract the constraint set for a single agent."""
+    raw = cbs_constraints.get(agent_id, {})
+    return {t: set(cells) for t, cells in raw.items()}
+
+
+def cbs_search(
+    grid: list[list[int]],
+    agents: list[dict[str, Any]],
+    time_blocked: dict[int, set[tuple[int, int]]] | None = None,
+    max_time: int = 200,
+    max_nodes: int = 500,
+) -> dict[str, Any] | None:
+    """CBS (Conflict-Based Search) for multi-agent path finding.
+
+    Returns a dict with solution info or None if infeasible.
+
+    Algorithm: Sharon et al., "Conflict-Based Search for Optimal
+    Multi-Agent Path Finding", AAAI 2015.
+
+    Provenance: clean-room reimplementation, not a copy of upstream code.
+    """
+    if time_blocked is None:
+        time_blocked = {}
+
+    agent_ids: list[int] = [int(a["id"]) for a in agents]
+    agent_map: dict[int, dict[str, Any]] = {int(a["id"]): a for a in agents}
+
+    solution: dict[int, list[tuple[int, int, int]]] = {}
+    for aid in agent_ids:
+        a = agent_map[aid]
+        start = (int(a["start"][0]), int(a["start"][1]))
+        goal = (int(a["goal"][0]), int(a["goal"][1]))
+        path = sipp_search(grid, start, goal, time_blocked, max_time)
+        if path is None:
+            return None
+        solution[aid] = path
+
+    counter = 0
+    root = _CBSNode(
+        solution=solution,
+        constraints={aid: {} for aid in agent_ids},
+        cost=sum(_path_cost(p) for p in solution.values()),
+        _counter=counter,
+    )
+
+    open_list: list[tuple[float, int, _CBSNode]] = []
+    heapq.heappush(open_list, (root.cost, root._counter, root))
+
+    nodes_expanded = 0
+
+    while open_list:
+        if nodes_expanded >= max_nodes:
+            return None
+
+        _c, _cnt, node = heapq.heappop(open_list)
+        nodes_expanded += 1
+
+        conflict = _find_conflict(node.solution)
+        if conflict is None:
+            return {
+                "solution": node.solution,
+                "cost": node.cost,
+                "nodes_expanded": nodes_expanded,
+                "agent_ids": agent_ids,
+            }
+
+        for agent_id in (conflict.agent_a, conflict.agent_b):
+            if conflict.is_edge and agent_id == conflict.agent_b:
+                constraint_cell = conflict.cell_b
+            else:
+                constraint_cell = conflict.cell
+            assert constraint_cell is not None
+            new_constraints = _merge_constraints(
+                node.constraints,
+                agent_id,
+                conflict.time,
+                constraint_cell,
+            )
+            agent_constraints = _build_agent_constraints(new_constraints, agent_id)
+            a = agent_map[agent_id]
+            start = (int(a["start"][0]), int(a["start"][1]))
+            goal = (int(a["goal"][0]), int(a["goal"][1]))
+
+            new_path = sipp_search(
+                grid,
+                start,
+                goal,
+                time_blocked,
+                max_time,
+                constraints=agent_constraints,
+            )
+            if new_path is None:
+                continue
+
+            new_solution = dict(node.solution)
+            new_solution[agent_id] = new_path
+
+            counter += 1
+            new_cost = sum(_path_cost(p) for p in new_solution.values())
+            child = _CBSNode(
+                solution=new_solution,
+                constraints=new_constraints,
+                cost=new_cost,
+                _counter=counter,
+            )
+            heapq.heappush(open_list, (child.cost, child._counter, child))
+
+    return None
+
+
+def _run_cbs_search(
+    diagnostic: dict[str, Any],
+    grid: list[list[int]],
+    agents: list[dict[str, Any]],
+    time_blocked: dict[int, set[tuple[int, int]]],
+    max_time: int,
+    max_nodes: int,
+) -> dict[str, Any]:
+    """Run CBS multi-agent search and fill diagnostic fields."""
+    result = cbs_search(grid, agents, time_blocked, max_time, max_nodes)
+
+    diagnostic["search_method"] = "cbs"
+    diagnostic["agent_count"] = len(agents)
+    diagnostic["max_time"] = max_time
+    diagnostic["cbs_max_nodes"] = max_nodes
+
+    if result is None:
+        diagnostic["multi_agent_feasible"] = False
+        diagnostic["diagnostic_status"] = "infeasible"
+        diagnostic["agent_paths"] = None
+        diagnostic["total_path_cost"] = None
+        diagnostic["cbs_nodes_expanded"] = None
+        return diagnostic
+
+    diagnostic["multi_agent_feasible"] = True
+    diagnostic["diagnostic_status"] = "feasible"
+    diagnostic["total_path_cost"] = result["cost"]
+    diagnostic["cbs_nodes_expanded"] = result["nodes_expanded"]
+
+    agent_paths: dict[str, Any] = {}
+    for aid in result["agent_ids"]:
+        path = result["solution"][aid]
+        agent_paths[str(aid)] = {
+            "path_length": len(path),
+            "path": [{"row": r, "col": c, "time": t} for r, c, t in path],
+        }
+    diagnostic["agent_paths"] = agent_paths
+    return diagnostic
 
 
 # ---------------------------------------------------------------------------
@@ -399,7 +703,19 @@ def _build_parser() -> argparse.ArgumentParser:
         "--max-time",
         type=int,
         default=200,
-        help="Maximum time horizon for SIPP search. Default: 200.",
+        help="Maximum time horizon for SIPP/CBS search. Default: 200.",
+    )
+    parser.add_argument(
+        "--agents",
+        type=Path,
+        default=None,
+        help="JSON file with multi-agent definitions for CBS search.",
+    )
+    parser.add_argument(
+        "--cbs-max-nodes",
+        type=int,
+        default=500,
+        help="Maximum CBS constraint-tree nodes to expand. Default: 500.",
     )
     return parser
 
@@ -509,15 +825,15 @@ def _run_sipp_search(
     return diagnostic
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Entry point for the MAPF oracle diagnostic CLI."""
-    args = _build_parser().parse_args(argv)
-
-    if not args.map_file.exists():
-        print(f"Error: map file not found: {args.map_file}", file=sys.stderr)
-        return 1
-
-    # Load dynamic obstacles if provided
+def _load_inputs(
+    args: argparse.Namespace,
+) -> tuple[
+    list[dict[str, Any]] | None,
+    list[dict[str, Any]] | None,
+    dict[int, set[tuple[int, int]]],
+    int,
+]:
+    """Load dynamic obstacles and agents from CLI args. Return (dyn_obstacles, agents, time_blocked, rc) or raise SystemExit."""
     dyn_obstacles: list[dict[str, Any]] | None = None
     time_blocked: dict[int, set[tuple[int, int]]] = {}
     if args.dynamic_obstacles is not None:
@@ -526,13 +842,43 @@ def main(argv: list[str] | None = None) -> int:
                 f"Error: dynamic obstacles file not found: {args.dynamic_obstacles}",
                 file=sys.stderr,
             )
-            return 1
+            raise SystemExit(1)
         try:
             dyn_obstacles = _load_dynamic_obstacles(args.dynamic_obstacles)
             time_blocked = _build_time_blocked(dyn_obstacles)
         except ValueError as exc:
             print(f"Error: {exc}", file=sys.stderr)
-            return 1
+            raise SystemExit(1)
+
+    agents: list[dict[str, Any]] | None = None
+    if args.agents is not None:
+        if not args.agents.exists():
+            print(
+                f"Error: agents file not found: {args.agents}",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        try:
+            agents = _load_agents(args.agents)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            raise SystemExit(1)
+
+    return dyn_obstacles, agents, time_blocked
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Entry point for the MAPF oracle diagnostic CLI."""
+    args = _build_parser().parse_args(argv)
+
+    if not args.map_file.exists():
+        print(f"Error: map file not found: {args.map_file}", file=sys.stderr)
+        return 1
+
+    try:
+        dyn_obstacles, agents, time_blocked = _load_inputs(args)
+    except SystemExit as exc:
+        return int(exc.code)
 
     width, height = _svg_dimensions(args.map_file)
     obstacles = _parse_svg_obstacles(args.map_file, width, height)
@@ -570,7 +916,16 @@ def main(argv: list[str] | None = None) -> int:
         goal_pos,
     )
 
-    if dyn_obstacles is not None:
+    if agents is not None:
+        diagnostic = _run_cbs_search(
+            diagnostic,
+            grid,
+            agents,
+            time_blocked,
+            args.max_time,
+            args.cbs_max_nodes,
+        )
+    elif dyn_obstacles is not None:
         diagnostic = _run_sipp_search(
             diagnostic,
             grid,

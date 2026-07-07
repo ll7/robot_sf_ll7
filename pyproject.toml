@@ -335,6 +335,7 @@ max-statements = 60
     "TC002",
     "D417",
     "DOC201",
+    "D102",
 ]
 "tests/pygame/**/*.py" = [
     "S101",

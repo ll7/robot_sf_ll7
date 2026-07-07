@@ -294,6 +294,8 @@ def test_module_status_invocation_succeeds():
     assert fli.main(["--closure-audit", "--json"]) == 0
     assert fli.main(["--integration-report"]) == 0
     assert fli.main(["--integration-report", "--json"]) == 0
+    assert fli.main(["--final-synthesis"]) == 0
+    assert fli.main(["--final-synthesis", "--json"]) == 0
 
 
 def test_integration_report_consolidates_remaining_blockers_and_gates():
@@ -347,6 +349,55 @@ def test_cli_integration_report_json_reports_keep_open():
     assert payload["recommendation"] == "keep_open"
     assert payload["closable"] is False
     assert "learned_predictor" in payload["summary"]["intentional_gate_ids"]
+
+
+def test_final_synthesis_records_continue_revise_stop_decisions():
+    """Final synthesis makes learned-prediction decision explicit."""
+    report = fli.build_forecast_lane_final_synthesis()
+
+    assert report["schema"] == "forecast_lane_final_synthesis.v1"
+    assert report["ok"] is True
+    assert report["issue"] == 2835
+    assert report["recommendation"] == "revise"
+    assert report["closable"] is False
+    recommendations = report["summary"]["recommendations"]
+    assert recommendations["infrastructure"] == "continue"
+    assert recommendations["learned_predictor_expansion"] == "revise"
+    assert recommendations["paper_facing_claims"] == "stop"
+    assert "closed_loop_same_seed_gate" in report["summary"]["unmet_criterion_ids"]
+
+
+def test_final_synthesis_markdown_lists_remaining_empirical_blockers():
+    """Markdown synthesis names decision and remaining empirical blockers."""
+    report = fli.build_forecast_lane_final_synthesis()
+    text = fli.format_final_synthesis_markdown(report)
+
+    assert "Forecast lane final synthesis: revise" in text
+    assert "Keep typed forecast-lane infrastructure" in text
+    assert "Remaining empirical blockers" in text
+    assert "closed_loop_same_seed_gate" in text
+
+
+def test_cli_final_synthesis_json_reports_revise_decision():
+    """The runnable script emits final-synthesis JSON without forecast workloads."""
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "scripts/benchmark/forecast_lane_preflight.py",
+            "--final-synthesis",
+            "--json",
+        ],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["schema"] == "forecast_lane_final_synthesis.v1"
+    assert payload["recommendation"] == "revise"
+    assert payload["summary"]["recommendations"]["paper_facing_claims"] == "stop"
 
 
 if __name__ == "__main__":  # pragma: no cover

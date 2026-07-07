@@ -120,6 +120,29 @@ class ForecastLaneClosureCriterion:
         }
 
 
+@dataclass(frozen=True)
+class ForecastLaneFinalSynthesisDecision:
+    """One decision row in the issue #2835 final synthesis."""
+
+    decision_id: str
+    decision: str
+    recommendation: str
+    evidence: tuple[str, ...]
+    rationale: str
+    next_action: str
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return JSON-serializable synthesis row."""
+        return {
+            "decision_id": self.decision_id,
+            "decision": self.decision,
+            "recommendation": self.recommendation,
+            "evidence": list(self.evidence),
+            "rationale": self.rationale,
+            "next_action": self.next_action,
+        }
+
+
 # Canonical forecast-lane registry. Each entry points at an existing owner module
 # under robot_sf/benchmark/; this inventory never reimplements those surfaces.
 _FORECAST_CAPABILITIES: tuple[ForecastCapabilitySpec, ...] = (
@@ -350,10 +373,13 @@ _FORECAST_LANE_STATUS_ROWS: tuple[ForecastLaneStatusSpec, ...] = (
     ForecastLaneStatusSpec(
         requirement_id="final_synthesis",
         requirement="Final forecast-lane synthesis",
-        current_artifacts=("#2864", "#2881", "#2929"),
-        status="partial",
-        remaining_blocker="Needs updated synthesis after gate and transfer rows settle.",
-        next_action="Consolidate blockers and next empirical action before any claim promotion.",
+        current_artifacts=("#2864", "#2881", "#2929", "forecast_lane_final_synthesis.v1"),
+        status="done",
+        remaining_blocker=(
+            "None for the decision artifact; empirical gates still block epic closure and "
+            "learned-predictor expansion."
+        ),
+        next_action="Revisit the synthesis after closed-loop, calibration/risk, and transfer gates move.",
         learned_predictor_gate=True,
     ),
 )
@@ -469,9 +495,11 @@ _FORECAST_LANE_CLOSURE_CRITERIA: tuple[ForecastLaneClosureCriterion, ...] = (
     ForecastLaneClosureCriterion(
         criterion_id="final_synthesis",
         criterion="Final synthesis recommends continue, revise, or stop learned prediction.",
-        status="partial",
-        evidence=("#2864", "#2881", "#2929"),
-        remaining_work="Needs updated synthesis after closed-loop, calibration, and transfer rows settle.",
+        status="met",
+        evidence=("#2864", "#2881", "#2929", "forecast_lane_final_synthesis.v1"),
+        remaining_work=(
+            "None for the synthesis decision artifact; empirical gates remain separate blockers."
+        ),
         next_empirical_action=(
             "Revise synthesis after the closed-loop, calibration/risk, and transfer criteria "
             "settle; current decision stays revise/blocked for learned expansion."
@@ -480,6 +508,43 @@ _FORECAST_LANE_CLOSURE_CRITERIA: tuple[ForecastLaneClosureCriterion, ...] = (
             "Current synthesis may recommend keeping infrastructure and revising learned "
             "expansion, but cannot close the epic while empirical gates remain unmet."
         ),
+    ),
+)
+
+
+_FORECAST_LANE_FINAL_SYNTHESIS_DECISIONS: tuple[ForecastLaneFinalSynthesisDecision, ...] = (
+    ForecastLaneFinalSynthesisDecision(
+        decision_id="infrastructure",
+        decision="Keep typed forecast-lane infrastructure.",
+        recommendation="continue",
+        evidence=("#2836", "#2839", "#2840", "#2841", "#4545", "#4709", "#4720"),
+        rationale=(
+            "Schema, provenance, metrics, calibration, status, closure-audit, and integration "
+            "surfaces are present as read-only infrastructure."
+        ),
+        next_action="Use these surfaces to run bounded empirical gates; do not treat them as claims.",
+    ),
+    ForecastLaneFinalSynthesisDecision(
+        decision_id="learned_predictor_expansion",
+        decision="Defer learned probabilistic predictor expansion.",
+        recommendation="revise",
+        evidence=("#2844", "#2845", "#2916", "#2966", "#4720"),
+        rationale=(
+            "The learned branch is still gated by unresolved same-seed closed-loop, "
+            "calibration/risk, and transferability evidence."
+        ),
+        next_action="Revise the learned-predictor scope only after the closed-loop gate reaches continue.",
+    ),
+    ForecastLaneFinalSynthesisDecision(
+        decision_id="paper_facing_claims",
+        decision="Do not promote forecast safety/progress or transfer claims.",
+        recommendation="stop",
+        evidence=("#2864", "#2881", "#2916", "#2966"),
+        rationale=(
+            "Open-loop and diagnostic artifacts are useful route evidence but not sufficient "
+            "for dissertation or paper-facing local-navigation claims."
+        ),
+        next_action="Keep claim promotion blocked until valid non-degraded planner-consumed rows exist.",
     ),
 )
 
@@ -746,6 +811,39 @@ def build_forecast_lane_integration_report() -> dict[str, Any]:
     }
 
 
+def build_forecast_lane_final_synthesis() -> dict[str, Any]:
+    """Return final decision synthesis for issue #2835.
+
+    The synthesis is a read-only decision artifact: it recommends what to
+    continue, revise, and stop without running predictors, benchmarks, campaigns,
+    or learned-model training.
+    """
+    integration_report = build_forecast_lane_integration_report()
+    decisions = [decision.as_dict() for decision in _FORECAST_LANE_FINAL_SYNTHESIS_DECISIONS]
+    recommendations = {
+        decision["decision_id"]: decision["recommendation"] for decision in decisions
+    }
+    return {
+        "schema": "forecast_lane_final_synthesis.v1",
+        "ok": integration_report["ok"],
+        "issue": 2835,
+        "recommendation": "revise",
+        "closable": integration_report["closable"],
+        "claim_boundary": (
+            "Final synthesis is a decision artifact only: continue typed infrastructure, "
+            "revise learned-predictor expansion behind the closed-loop gate, and stop "
+            "paper-facing forecast-safety/progress claims until empirical gates pass."
+        ),
+        "decisions": decisions,
+        "remaining_blockers": integration_report["blockers_remaining"],
+        "summary": {
+            "recommendations": recommendations,
+            "unmet_criterion_ids": integration_report["summary"]["unmet_criterion_ids"],
+            "intentional_gate_ids": integration_report["summary"]["intentional_gate_ids"],
+        },
+    }
+
+
 def format_closure_audit_markdown(report: dict[str, Any]) -> str:
     """Render compact Markdown criterion-to-evidence closure audit.
 
@@ -804,6 +902,37 @@ def format_integration_report_markdown(report: dict[str, Any]) -> str:
                 f"- `{row['requirement_id']}` ({row['status']}): "
                 f"{row['remaining_blocker']} Next: {row['next_action']}"
             )
+    return "\n".join(lines)
+
+
+def format_final_synthesis_markdown(report: dict[str, Any]) -> str:
+    """Render compact Markdown final synthesis for issue #2835.
+
+    Returns:
+        Markdown decision table plus remaining empirical blockers.
+    """
+    lines: list[str] = [
+        f"# Forecast lane final synthesis: {report['recommendation']}",
+        "",
+        report["claim_boundary"],
+        "",
+        "| Decision | Recommendation | Evidence | Next action |",
+        "| --- | --- | --- | --- |",
+    ]
+    for decision in report["decisions"]:
+        evidence = ", ".join(decision["evidence"])
+        lines.append(
+            "| "
+            f"{decision['decision']} | "
+            f"{decision['recommendation']} | "
+            f"{evidence} | "
+            f"{decision['next_action']} |"
+        )
+    if report["remaining_blockers"]:
+        lines.append("")
+        lines.append("## Remaining empirical blockers")
+        for blocker in report["remaining_blockers"]:
+            lines.append(f"- `{blocker['criterion_id']}`: {blocker['next_empirical_action']}")
     return "\n".join(lines)
 
 
@@ -875,7 +1004,7 @@ def format_inventory_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # noqa: C901
     """CLI entry point: print inventory or status report and return exit code.
 
     Returns:
@@ -912,12 +1041,28 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Emit issue #2835 consolidated remaining-blocker integration report.",
     )
-    args = parser.parse_args(argv)
-    selected_modes = [args.status, args.closure_audit, args.integration_report]
-    if sum(selected_modes) > 1:
-        parser.error("--status, --closure-audit, and --integration-report are mutually exclusive")
+    parser.add_argument(
+        "--final-synthesis",
+        action="store_true",
+        help="Emit issue #2835 final continue/revise/stop synthesis report.",
+    )
 
-    if args.integration_report:
+    args = parser.parse_args(argv)
+    selected_modes = [
+        args.status,
+        args.closure_audit,
+        args.integration_report,
+        args.final_synthesis,
+    ]
+    if sum(selected_modes) > 1:
+        parser.error(
+            "--status, --closure-audit, --integration-report, and --final-synthesis "
+            "are mutually exclusive"
+        )
+
+    if args.final_synthesis:
+        report = build_forecast_lane_final_synthesis()
+    elif args.integration_report:
         report = build_forecast_lane_integration_report()
     elif args.closure_audit:
         report = build_forecast_lane_closure_audit()
@@ -931,6 +1076,8 @@ def main(argv: list[str] | None = None) -> int:
         print(format_integration_report_markdown(report))  # noqa: T201 - CLI output
     elif args.closure_audit:
         print(format_closure_audit_markdown(report))  # noqa: T201 - CLI output
+    elif args.final_synthesis:
+        print(format_final_synthesis_markdown(report))  # noqa: T201 - CLI output
     elif args.status:
         print(format_status_markdown(report))  # noqa: T201 - CLI output
     else:

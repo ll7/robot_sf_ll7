@@ -28,8 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from robot_sf.data_ingestion.real_trajectory_contract import (
     ContractError,
-    _resolved_staging_dir,
-    _staging_tree_sha256,
+    build_staging_tree_report,
     load_manifest,
     run_preflight,
 )
@@ -53,39 +52,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _staging_tree_report(manifest: dict) -> dict[str, object]:
-    staging = manifest.get("staging", {})
-    staging_dir = staging.get("staging_dir") if isinstance(staging, dict) else None
-    if not isinstance(staging_dir, str):
-        return {"available": False, "reason": "manifest.staging.staging_dir missing"}
-
-    resolved = _resolved_staging_dir(staging_dir)
-    if "$" in str(resolved):
-        return {
-            "available": False,
-            "staging_dir": str(resolved),
-            "reason": "environment variable unresolved",
-        }
-    if not resolved.is_dir():
-        return {
-            "available": False,
-            "staging_dir": str(resolved),
-            "reason": "staging directory missing",
-        }
-
-    file_count = sum(1 for path in resolved.rglob("*") if path.is_file())
-    if file_count == 0:
-        return {
-            "available": False,
-            "staging_dir": str(resolved),
-            "file_count": 0,
-            "reason": "staging directory empty",
-        }
-    return {
-        "available": True,
-        "staging_dir": str(resolved),
-        "file_count": file_count,
-        "tree_sha256": _staging_tree_sha256(resolved),
-    }
+    return build_staging_tree_report(manifest)
 
 
 def main(argv: list[str] | None = None) -> int:

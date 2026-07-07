@@ -86,6 +86,54 @@ def _staging_tree_sha256(source_root: Path) -> str:
     return digest.hexdigest()
 
 
+def build_staging_tree_report(manifest: dict[str, Any]) -> dict[str, object]:
+    """Return local staging-tree availability and checksum evidence for a manifest.
+
+    The report is read-only and fail-closed: unresolved environment variables,
+    missing directories, and empty staging trees return ``available: false`` with
+    a reason instead of raising. Callers can include this payload in readiness
+    artifacts without touching or redistributing raw external data.
+    """
+    staging = manifest.get("staging", {})
+    staging_dir = staging.get("staging_dir") if isinstance(staging, dict) else None
+    if not isinstance(staging_dir, str):
+        report = {"available": False, "reason": "manifest.staging.staging_dir missing"}
+        return report
+
+    resolved = _resolved_staging_dir(staging_dir)
+    if "$" in str(resolved):
+        report = {
+            "available": False,
+            "staging_dir": str(resolved),
+            "reason": "environment variable unresolved",
+        }
+        return report
+    if not resolved.is_dir():
+        report = {
+            "available": False,
+            "staging_dir": str(resolved),
+            "reason": "staging directory missing",
+        }
+        return report
+
+    file_count = sum(1 for path in resolved.rglob("*") if path.is_file())
+    if file_count == 0:
+        report = {
+            "available": False,
+            "staging_dir": str(resolved),
+            "file_count": 0,
+            "reason": "staging directory empty",
+        }
+        return report
+
+    return {
+        "available": True,
+        "staging_dir": str(resolved),
+        "file_count": file_count,
+        "tree_sha256": _staging_tree_sha256(resolved),
+    }
+
+
 def _validated_staging_issues(staging_dir: str, checksums: dict[str, Any]) -> list[PreflightIssue]:
     """Return fail-closed issues for a manifest claiming validated local staging.
 

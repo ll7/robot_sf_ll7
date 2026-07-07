@@ -48,5 +48,10 @@
     "instructions": "Obtain the ETH/BIWI walking pedestrians annotation archive from the official ETH Computer Vision Lab datasets page under its current terms. Extract the raw annotation files into staging_dir. Do not commit raw annotations or converted trajectory files. After staging, compute the aggregate SHA-256 tree checksum, set checksums.tree_sha256 and expected_tree_sha256, and change availability to validated before using the data for #4013 real-trajectory training or representative evaluation."
   },
   "schema_version": "issue_4013.real_trajectory_readiness.v1",
+  "staging_tree": {
+    "available": false,
+    "reason": "environment variable unresolved",
+    "staging_dir": "${ROBOT_SF_EXTERNAL_DATA_ROOT}/issue_4013_eth_biwi"
+  },
   "status": "blocked_manifest_contract"
 }

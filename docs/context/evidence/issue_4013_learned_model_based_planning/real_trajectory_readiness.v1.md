@@ -10,6 +10,10 @@ Claim boundary: real-trajectory readiness only. No raw data is staged, no full b
 - Dataset: `issue_4013_eth_biwi`
 - Availability: `validated`
 - Benchmark eligibility: `research_only`
+- Staging tree available: `False`
+- Staging tree path: `${ROBOT_SF_EXTERNAL_DATA_ROOT}/issue_4013_eth_biwi`
+- Staging tree files: `n/a`
+- Staging tree SHA-256: `n/a`
 - Acquisition URL: `https://ethz.ch/content/dam/ethz/special-interest/itet/cvl/vision-dam/documents/ewap_dataset_light.tgz`
 - Acquisition fail-closed: `True`
 

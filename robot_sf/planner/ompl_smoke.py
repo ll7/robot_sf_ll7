@@ -19,6 +19,7 @@ OMPL is imported lazily so the module fails closed when the package is absent.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -68,7 +69,12 @@ class OmplSmokeConfig:
     """
 
     state_bounds: tuple[float, float, float, float, float, float] = (
-        0.0, 50.0, 0.0, 50.0, -3.1416, 3.1416
+        0.0,
+        50.0,
+        0.0,
+        50.0,
+        -3.1416,
+        3.1416,
     )
     control_bounds: tuple[float, float, float, float] = (0.0, 1.5, -2.0, 2.0)
     robot_radius: float = 0.25
@@ -173,8 +179,7 @@ def smoke_plan(  # noqa: C901, PLR0915
             path_states=[],
             planning_time_sec=0.0,
             error=(
-                "OMPL not available"
-                + (f": {_OMPL_IMPORT_ERROR}" if _OMPL_IMPORT_ERROR else "")
+                "OMPL not available" + (f": {_OMPL_IMPORT_ERROR}" if _OMPL_IMPORT_ERROR else "")
             ),
         )
 
@@ -232,10 +237,14 @@ def smoke_plan(  # noqa: C901, PLR0915
         try:
             import shapely.geometry as sg  # noqa: PLC0415
 
+            # Pre-buffer obstacle polygons once by the robot radius instead of
+            # rebuffering on every validity check (called many times per solve).
+            buffered_polygons = [poly.buffer(cfg.robot_radius) for poly in obstacle_polygons]
+
             def is_state_valid(state: ompl_base.State) -> bool:
                 point = sg.Point(state[0], state[1])
-                for poly in obstacle_polygons:
-                    if poly.buffer(cfg.robot_radius).contains(point):
+                for poly in buffered_polygons:
+                    if poly.contains(point):
                         return False
                 return True
 
@@ -257,7 +266,7 @@ def smoke_plan(  # noqa: C901, PLR0915
     ss.setStartAndGoalStates(start_state, goal_state, cfg.state_tolerance)
 
     # Setup and solve
-    time_start = float(np.datetime64("now", "us").astype(np.int64)) / 1e6
+    time_start = time.perf_counter()
 
     if cfg.seed is not None:
         ompl_base.RNG().setSeed(cfg.seed)
@@ -267,8 +276,7 @@ def smoke_plan(  # noqa: C901, PLR0915
     ss.setup()
 
     solved = ss.solve(cfg.max_planning_time_sec)
-    time_end = float(np.datetime64("now", "us").astype(np.int64)) / 1e6
-    planning_time = time_end - time_start
+    planning_time = time.perf_counter() - time_start
 
     if not solved:
         return OmplSmokeResult(

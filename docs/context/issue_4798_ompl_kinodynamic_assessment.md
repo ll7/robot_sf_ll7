@@ -1,4 +1,4 @@
-# Issue #4798 — OMPL kinodynamic route diagnostics assessment
+# Issue #4798 — OMPL Kinodynamic Route Diagnostics Assessment
 
 **Date:** 2026-07-07
 **Status:** Assessment complete; smoke diagnostic implemented.

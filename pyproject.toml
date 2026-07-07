@@ -28,7 +28,7 @@ dependencies = [
     "svgelements>=1.9.6",
     # Utilities
     "loguru>=0.7.2",
-    "rich>=13.9.4",
+    "rich>=15.0.0",
     "psutil>=6.1.0",
     "toml>=0.10.2",
     "shimmy>=1.0.0,<2.0.0",

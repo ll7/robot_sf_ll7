@@ -136,9 +136,7 @@ def test_missing_real_dataset_blocks_phase3_without_contract_error(
     report = build_report(_write_manifest(tmp_path, manifest))
 
     assert report["status"] == "blocked_real_trajectory_data_unavailable"
-    assert {b["code"] for b in report["blockers"]} == {
-        "real_trajectory.availability_not_validated"
-    }
+    assert {b["code"] for b in report["blockers"]} == {"real_trajectory.availability_not_validated"}
 
 
 def test_manifest_contract_error_blocks_before_training(
@@ -157,7 +155,8 @@ def test_manifest_contract_error_blocks_before_training(
 
     assert report["status"] == "blocked_manifest_contract"
     assert any(
-        b["code"] == "license.acknowledgment_missing" or "license.acknowledgment_missing" in b["message"]
+        b["code"] == "license.acknowledgment_missing"
+        or "license.acknowledgment_missing" in b["message"]
         for b in report["blockers"]
     )
 

@@ -81,6 +81,7 @@ def test_runner_uses_packet_plan_and_writes_report(monkeypatch: pytest.MonkeyPat
     assert report["preflight_status"] == "ready"
     assert report["launch_packet"] == str(PACKET)
     assert "analyze_reactivity_replay_rank_study_issue_3637.py" in report["post_run_analyzer"]
+    assert "finalize_reactivity_replay_rank_study_issue_3637.py" in report["post_run_finalizer"]
     integration = report["integration_report"]
     assert (
         integration["schema_version"] == "issue-3637-reactivity-replay-rank-integration-report.v1"
@@ -93,6 +94,7 @@ def test_runner_uses_packet_plan_and_writes_report(monkeypatch: pytest.MonkeyPat
         "campaign_report": str(report_json),
         "preflight_status": "ready",
         "post_run_analyzer": report["post_run_analyzer"],
+        "post_run_finalizer": report["post_run_finalizer"],
     }
     assert integration["required_post_run_artifacts"] == [
         str(out_dir / "analysis" / "README.md"),
@@ -102,7 +104,7 @@ def test_runner_uses_packet_plan_and_writes_report(monkeypatch: pytest.MonkeyPat
         str(out_dir / "analysis" / "rank_bootstrap_summary.json"),
         str(out_dir / "analysis" / "per_planner_condition_metrics.csv"),
     ]
-    assert integration["next_empirical_action"] == report["post_run_analyzer"]
+    assert integration["next_empirical_action"] == report["post_run_finalizer"]
     assert integration["forbidden_actions_confirmed"] == {
         "slurm_gpu_submission": False,
         "paper_dissertation_claim_edit": False,

@@ -75,7 +75,7 @@ rllib = [
     "ray[rllib]>=2.53.0",
 ]
 progress = [
-    "tqdm>=4.67.0",
+    "tqdm>=4.68.3",
 ]
 analysis = [
     "seaborn>=0.13.2",

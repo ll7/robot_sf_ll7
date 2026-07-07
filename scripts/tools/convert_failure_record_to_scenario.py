@@ -87,9 +87,17 @@ def _validate_failure_record(record: dict[str, Any]) -> list[str]:  # noqa: C901
         return errors
 
     fr = record["failure_record"]
-    required_fields = ["id", "source", "date", "environment", "actors",
-                       "triggering_condition", "failure_mode",
-                       "required_manual_review", "claim_boundary"]
+    required_fields = [
+        "id",
+        "source",
+        "date",
+        "environment",
+        "actors",
+        "triggering_condition",
+        "failure_mode",
+        "required_manual_review",
+        "claim_boundary",
+    ]
 
     for field in required_fields:
         if field not in fr:
@@ -133,7 +141,9 @@ def _generate_assumptions(failure_record: dict[str, Any]) -> list[str]:
 
     fr = copy.deepcopy(failure_record)
     assumptions.append(f"Environment '{fr.get('environment', 'unknown')}' mapped to template")
-    assumptions.append(f"Failure mode '{fr.get('failure_mode', 'unknown')}' used for expected modes")
+    assumptions.append(
+        f"Failure mode '{fr.get('failure_mode', 'unknown')}' used for expected modes"
+    )
 
     actor_count = sum(a.get("count", 0) for a in fr.get("actors", []) if isinstance(a, dict))
     if actor_count > 4:
@@ -164,7 +174,9 @@ def _generate_invalidity_warnings(failure_record: dict[str, Any]) -> list[str]:
     return warnings
 
 
-def _generate_pedestrians(failure_record: dict[str, Any], max_count: int = 4) -> list[dict[str, Any]]:
+def _generate_pedestrians(
+    failure_record: dict[str, Any], max_count: int = 4
+) -> list[dict[str, Any]]:
     """Generate single_pedestrians list from actors."""
     pedestrians = []
 
@@ -176,12 +188,14 @@ def _generate_pedestrians(failure_record: dict[str, Any], max_count: int = 4) ->
 
         count = min(actor.get("count", 1), max_count - len(pedestrians))
         for i in range(count):
-            pedestrians.append({
-                "id": f"h{len(pedestrians) + 1}",
-                "goal_poi": f"poi_h{len(pedestrians) + 1}_goal",
-                "speed_m_s": 1.0,
-                "note": f"Pedestrian {len(pedestrians) + 1} from failure record {failure_record.get('id')}",
-            })
+            pedestrians.append(
+                {
+                    "id": f"h{len(pedestrians) + 1}",
+                    "goal_poi": f"poi_h{len(pedestrians) + 1}_goal",
+                    "speed_m_s": 1.0,
+                    "note": f"Pedestrian {len(pedestrians) + 1} from failure record {failure_record.get('id')}",
+                }
+            )
 
     return pedestrians
 
@@ -204,9 +218,7 @@ def _build_scenario_payload(failure_record: dict[str, Any]) -> dict[str, Any]:
     assumptions = _generate_assumptions(fr)
     warnings = _generate_invalidity_warnings(fr)
 
-    actor_count = sum(
-        a.get("count", 0) for a in fr.get("actors", []) if isinstance(a, dict)
-    )
+    actor_count = sum(a.get("count", 0) for a in fr.get("actors", []) if isinstance(a, dict))
 
     ped_density = 0.0
     if "dense_crowd" in fr.get("contextual_factors", []):

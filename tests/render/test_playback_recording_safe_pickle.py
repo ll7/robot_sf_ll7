@@ -10,13 +10,16 @@ import pytest
 from robot_sf.common.safe_pickle import UnsafePickleError
 from robot_sf.render.playback_recording import load_states
 
+# Resolve repo-relative fixtures from this file, not the process cwd.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 class TestPlaybackRecordingSafePickle:
     """Tests for safe pickle in playback_recording.load_states."""
 
     def test_real_example_recording_loads(self) -> None:
         """Verify that a real example recording loads unchanged."""
-        example_dir = Path("examples/recordings")
+        example_dir = _REPO_ROOT / "examples" / "recordings"
         pkl_files = list(example_dir.glob("*.pkl"))
 
         if not pkl_files:

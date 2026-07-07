@@ -292,6 +292,61 @@ def test_module_status_invocation_succeeds():
     assert fli.main(["--status", "--json"]) == 0
     assert fli.main(["--closure-audit"]) == 0
     assert fli.main(["--closure-audit", "--json"]) == 0
+    assert fli.main(["--integration-report"]) == 0
+    assert fli.main(["--integration-report", "--json"]) == 0
+
+
+def test_integration_report_consolidates_remaining_blockers_and_gates():
+    """Integration report combines closure blockers and intentional learned gates."""
+    report = fli.build_forecast_lane_integration_report()
+
+    assert report["schema"] == "forecast_lane_integration_report.v1"
+    assert report["ok"] is True
+    assert report["issue"] == 2835
+    assert report["recommendation"] == "keep_open"
+    assert report["closable"] is False
+    assert report["learned_predictor_unblocked"] is False
+    assert "closed_loop_same_seed_gate" in report["summary"]["unmet_criterion_ids"]
+    assert "learned_predictor" in report["summary"]["intentional_gate_ids"]
+    blocker_ids = {row["criterion_id"] for row in report["blockers_remaining"]}
+    assert "closed_loop_same_seed_gate" in blocker_ids
+    gate_ids = {row["requirement_id"] for row in report["intentional_gates"]}
+    assert "closed_loop_gate" in gate_ids
+
+
+def test_integration_report_markdown_lists_remaining_blockers_and_gates():
+    """Markdown integration report is a compact human-readable closure surface."""
+    report = fli.build_forecast_lane_integration_report()
+    text = fli.format_integration_report_markdown(report)
+
+    assert "KEEP OPEN" in text
+    assert "Intentional gates" in text
+    assert "closed_loop_same_seed_gate" in text
+    assert "learned_predictor" in text
+    assert "same-seed replay slice" in text
+
+
+def test_cli_integration_report_json_reports_keep_open():
+    """The runnable script emits integration-report JSON without forecast workloads."""
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "scripts/benchmark/forecast_lane_preflight.py",
+            "--integration-report",
+            "--json",
+        ],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["schema"] == "forecast_lane_integration_report.v1"
+    assert payload["recommendation"] == "keep_open"
+    assert payload["closable"] is False
+    assert "learned_predictor" in payload["summary"]["intentional_gate_ids"]
 
 
 if __name__ == "__main__":  # pragma: no cover

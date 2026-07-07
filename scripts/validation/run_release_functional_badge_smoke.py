@@ -62,6 +62,67 @@ def verify_bundle_checksums(bundle_dir: Path, files_list: list[dict[str, Any]]) 
     return errors
 
 
+def _check_summaries(payload_dir: Path, errors: list[str]) -> None:
+    """Smoke check: Load and parse campaign_summary or summary.json if present."""
+    summary_files = list(payload_dir.glob("**/campaign_summary.json")) + list(
+        payload_dir.glob("**/summary.json")
+    )
+    for sf in summary_files:
+        try:
+            data = json.loads(sf.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                errors.append(f"Summary file {sf.name} is not a JSON object.")
+        except (json.JSONDecodeError, OSError) as e:
+            errors.append(f"Failed to read/parse summary file {sf.name}: {e}")
+
+
+def _check_episodes(payload_dir: Path, errors: list[str]) -> None:
+    """Smoke check: Check episodes.jsonl is readable and has lines."""
+    episodes_files = list(payload_dir.glob("**/episodes.jsonl"))
+    for ef in episodes_files:
+        try:
+            with ef.open("r", encoding="utf-8") as handle:
+                lines = handle.readlines()
+                if not lines:
+                    errors.append(f"Episodes file {ef.name} is empty.")
+                for line in lines[:5]:  # smoke check first few lines
+                    json.loads(line)
+        except (json.JSONDecodeError, OSError) as e:
+            errors.append(f"Failed to parse episodes file {ef.name} lines: {e}")
+
+
+def _check_report_re_derivation(payload_dir: Path, errors: list[str]) -> None:
+    """Functional check: Re-derive headline table and byte-compare it against shipped report."""
+    campaign_summary_files = list(payload_dir.glob("**/campaign_summary.json"))
+    campaign_report_files = list(payload_dir.glob("**/campaign_report.md"))
+
+    if campaign_summary_files and campaign_report_files:
+        summary_path = campaign_summary_files[0]
+        report_path = campaign_report_files[0]
+        try:
+            import tempfile
+
+            from robot_sf.benchmark.camera_ready._reporting import (
+                write_campaign_report,
+            )
+
+            payload_data = json.loads(summary_path.read_text(encoding="utf-8"))
+            with tempfile.TemporaryDirectory() as tmpdir:
+                temp_report_path = Path(tmpdir) / "campaign_report.md"
+                write_campaign_report(temp_report_path, payload_data)
+
+                # Byte-compare after normalizing line endings
+                shipped_content = report_path.read_text(encoding="utf-8").replace("\r\n", "\n")
+                derived_content = temp_report_path.read_text(encoding="utf-8").replace("\r\n", "\n")
+
+                if shipped_content != derived_content:
+                    errors.append(
+                        "Byte-comparison failed: re-derived headline table does not match shipped campaign_report.md."
+                    )
+        except (OSError, ValueError, json.JSONDecodeError) as e:
+            errors.append(f"Failed to re-derive headline table and byte-compare: {e}")
+
+
 def execute_functional_smoke_checks(bundle_dir: Path) -> list[str]:
     """Execute smoke checks on the bundle artifacts (e.g.
 
@@ -85,31 +146,9 @@ def execute_functional_smoke_checks(bundle_dir: Path) -> list[str]:
         return errors
 
     payload_dir = bundle_dir / "payload"
-
-    # Smoke check 1: Load and parse campaign_summary or summary.json if present
-    summary_files = list(payload_dir.glob("**/campaign_summary.json")) + list(
-        payload_dir.glob("**/summary.json")
-    )
-    for sf in summary_files:
-        try:
-            data = json.loads(sf.read_text(encoding="utf-8"))
-            if not isinstance(data, dict):
-                errors.append(f"Summary file {sf.name} is not a JSON object.")
-        except (json.JSONDecodeError, OSError) as e:
-            errors.append(f"Failed to read/parse summary file {sf.name}: {e}")
-
-    # Smoke check 2: Check episodes.jsonl is readable and has lines
-    episodes_files = list(payload_dir.glob("**/episodes.jsonl"))
-    for ef in episodes_files:
-        try:
-            with ef.open("r", encoding="utf-8") as handle:
-                lines = handle.readlines()
-                if not lines:
-                    errors.append(f"Episodes file {ef.name} is empty.")
-                for line in lines[:5]:  # smoke check first few lines
-                    json.loads(line)
-        except (json.JSONDecodeError, OSError) as e:
-            errors.append(f"Failed to parse episodes file {ef.name} lines: {e}")
+    _check_summaries(payload_dir, errors)
+    _check_episodes(payload_dir, errors)
+    _check_report_re_derivation(payload_dir, errors)
 
     return errors
 

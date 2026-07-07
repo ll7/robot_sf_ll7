@@ -177,3 +177,69 @@ def test_functional_smoke_checks_on_synthetic_bundle(tmp_path: Path) -> None:
     # Verify execute_functional_smoke_checks
     smoke_errors = execute_functional_smoke_checks(bundle_dir)
     assert not smoke_errors
+
+
+def test_functional_smoke_checks_with_table_re_derivation(tmp_path: Path) -> None:
+    """Verify that execute_functional_smoke_checks correctly re-derives and byte-compares the campaign report."""
+    bundle_dir = tmp_path / "table_bundle"
+    payload_dir = bundle_dir / "payload" / "reports"
+    payload_dir.mkdir(parents=True)
+
+    summary_data = {
+        "campaign": {
+            "campaign_id": "test_camp",
+            "name": "Test Campaign",
+            "created_at_utc": "2026-07-06T12:00:00Z",
+            "status": "success",
+            "benchmark_success": True,
+        },
+        "planner_rows": [],
+        "warnings": [],
+    }
+
+    # Write campaign_summary.json
+    summary_path = payload_dir / "campaign_summary.json"
+    summary_path.write_text(json.dumps(summary_data, indent=2), encoding="utf-8")
+
+    # Generate the expected report using the official writer
+    from robot_sf.benchmark.camera_ready._reporting import write_campaign_report
+
+    shipped_report_path = payload_dir / "campaign_report.md"
+    write_campaign_report(shipped_report_path, summary_data)
+
+    # Write a dummy manifest and episodes.jsonl to satisfy other checks
+    (bundle_dir / "publication_manifest.json").write_text(
+        json.dumps({"schema_version": "publication-bundle.v1", "files": []}), encoding="utf-8"
+    )
+    (bundle_dir / "payload" / "episodes.jsonl").write_text(
+        '{"episode_id": "ep1"}\n', encoding="utf-8"
+    )
+
+    # Run checks - should pass
+    errors = execute_functional_smoke_checks(bundle_dir)
+    assert not errors
+
+    # Corrupt the shipped report file to trigger comparison failure
+    shipped_report_path.write_text("corrupted content", encoding="utf-8")
+    errors_corrupted = execute_functional_smoke_checks(bundle_dir)
+    assert len(errors_corrupted) == 1
+    assert "byte-comparison failed" in errors_corrupted[0].lower()
+
+
+def test_worked_example_checklist_verification() -> None:
+    """The back-badged 0.0.2 checklist worked example should validate successfully."""
+    from pathlib import Path
+
+    from scripts.validation.check_release_artifact_badging import main
+
+    checklist_path = Path(
+        "docs/experiments/publication/20260414_benchmark_release_0_0_2/reproducibility_checklist.md"
+    )
+    assert checklist_path.exists(), f"Worked example checklist missing at: {checklist_path}"
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        report_path = Path(tmpdir) / "report.json"
+        exit_code = main(["--checklist", str(checklist_path), "--output", str(report_path)])
+        assert exit_code == 0, f"Checklist verification failed for worked example: {checklist_path}"

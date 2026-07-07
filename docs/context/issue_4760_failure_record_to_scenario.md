@@ -128,7 +128,7 @@ Contextual factors become scenario metadata, not simulator behavior:
 
 1. **No LLM generation**: This prototype uses deterministic templates only.
 2. **Single pedestrians only**: Actor counts > 1 are noted but not expanded into groups.
-3. **Map assumptions**: Converter assumes canonical maps exist for each template.
+3. **Map templates are approximations**: Each template maps to an existing SVG under `maps/svg_maps/`. The map is a structural approximation of the failure environment, not a replica. Paths are computed relative to the generated YAML location so that `--output-yaml` produces file-relative paths and `--stdout` produces repo-relative paths.
 4. **No validation of executability**: Generated scenarios may reference POIs that do not exist in the target map.
 5. **No evidence claims**: Generated scenarios are hypotheses until executed and reviewed.
 

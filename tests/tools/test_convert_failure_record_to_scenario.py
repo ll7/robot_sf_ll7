@@ -12,10 +12,13 @@ import yaml
 
 from scripts.tools.convert_failure_record_to_scenario import (
     FAILURE_RECORD_SCHEMA_VERSION,
+    TEMPLATE_TO_MAP,
     _build_scenario_payload,
     _generate_assumptions,
     _generate_invalidity_warnings,
     _generate_pedestrians,
+    _map_file_for_output,
+    _resolve_generated_map_file,
     _validate_failure_record,
     convert_failure_record,
 )
@@ -284,18 +287,56 @@ class TestScenarioPayload:
 
     def test_map_file_paths_resolve_to_existing_files(self):
         """All emitted map_file paths must resolve to existing SVG maps."""
-        repo_root = Path(__file__).resolve().parent.parent.parent
         test_records = [
             VALID_EVENT_RECORD["failure_record"],
             VALID_SIDEWALK_RECORD["failure_record"],
         ]
         for record in test_records:
-            payload = _build_scenario_payload(record)
-            scenario = payload["scenarios"][0]
-            map_file = scenario["map_file"]
-            resolved = (repo_root / "output" / "failure_record_scenarios").resolve()
-            expected_map = (resolved / map_file).resolve()
-            assert expected_map.exists(), f"map_file {map_file!r} resolves to {expected_map} which does not exist"
+            with tempfile.TemporaryDirectory() as tmpdir:
+                output_path = Path(tmpdir) / "scenario.yaml"
+                payload = _build_scenario_payload(record, output_path=output_path)
+                scenario = payload["scenarios"][0]
+                resolved = _resolve_generated_map_file(output_path, scenario["map_file"])
+                assert resolved.is_file(), (
+                    f"map_file {scenario['map_file']!r} resolves to {resolved} which does not exist"
+                )
+
+
+class TestMapFileResolution:
+    """Tests for TEMPLATE_TO_MAP and map path resolution."""
+
+    def test_all_template_to_map_entries_exist(self):
+        """Every TEMPLATE_TO_MAP entry must point to an existing SVG."""
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        for template, repo_rel in TEMPLATE_TO_MAP.items():
+            svg = (repo_root / repo_rel).resolve()
+            assert svg.is_file(), (
+                f"TEMPLATE_TO_MAP[{template!r}] -> {repo_rel} resolves to {svg}, which does not exist"
+            )
+
+    def test_stdout_uses_repo_relative_paths(self):
+        """When output_path is None the map path is repo-relative."""
+        payload = _build_scenario_payload(VALID_EVENT_RECORD["failure_record"], output_path=None)
+        map_file = payload["scenarios"][0]["map_file"]
+        assert map_file.startswith("maps/svg_maps/"), (
+            f"stdout map_file should be repo-relative, got {map_file!r}"
+        )
+
+    def test_output_yaml_uses_output_relative_paths(self):
+        """When output_path is provided the map path is relative to its parent."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "subdir" / "scenario.yaml"
+            payload = _build_scenario_payload(
+                VALID_SIDEWALK_RECORD["failure_record"], output_path=output_path
+            )
+            map_file = payload["scenarios"][0]["map_file"]
+            resolved = _resolve_generated_map_file(output_path, map_file)
+            assert resolved.is_file()
+
+    def test_map_file_for_output_returns_string(self):
+        """_map_file_for_output returns a plain string, not a Path."""
+        result = _map_file_for_output("ammv_sidewalk")
+        assert isinstance(result, str)
 
 
 class TestConvertFailureRecord:

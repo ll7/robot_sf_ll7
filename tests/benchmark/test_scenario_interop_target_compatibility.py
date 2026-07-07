@@ -258,9 +258,10 @@ def test_target_prerequisite_report_fails_closed_for_missing_paths(tmp_path: Pat
     assert {item["code"] for item in report["remaining_blockers"]} == {
         "socnavbench_control_assets",
         "socnavbench_eth_mesh",
+        "socnavbench_eth_traversible_provenance",
         "socnavbench_eth_traversible_pickle",
     }
-    assert {item["issue"] for item in report["remaining_blockers"]} == {1456, 1134}
+    assert {item["issue"] for item in report["remaining_blockers"]} == {1456, 1498, 1134}
     assert "benchmark evidence" in report["claim_boundary"]
     assert validate_target_prerequisite_report(report) == []
 
@@ -271,6 +272,9 @@ def test_target_prerequisite_report_passes_when_expected_paths_exist(tmp_path: P
     (tmp_path / "third_party/socnavbench/sd3dis/stanford_building_parser_dataset/mesh/ETH").mkdir(
         parents=True
     )
+    provenance = tmp_path / "docs/context/issue_1498_state.yaml"
+    provenance.parent.mkdir(parents=True)
+    provenance.write_text("status: staged_verified_ready_for_eth_first\n", encoding="utf-8")
     traversible = (
         tmp_path
         / "third_party/socnavbench/sd3dis/stanford_building_parser_dataset/traversibles/ETH/data.pkl"

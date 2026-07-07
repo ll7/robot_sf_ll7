@@ -144,6 +144,13 @@ _TARGET_PREREQUISITES: dict[str, tuple[dict[str, Any], ...]] = {
             "reason": "Official SocNavBench ETH mesh directory is required for ETH map export.",
         },
         {
+            "code": "socnavbench_eth_traversible_provenance",
+            "issue": 1498,
+            "path": "docs/context/issue_1498_state.yaml",
+            "kind": "file",
+            "reason": "SocNavBench ETH traversible staging provenance is required before export.",
+        },
+        {
             "code": "socnavbench_eth_traversible_pickle",
             "issue": 1134,
             "path": (

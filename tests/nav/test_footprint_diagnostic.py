@@ -294,6 +294,41 @@ def test_footprint_aware_returns_none_without_obstacles(footprints: list, params
     assert samples == 0
 
 
+def test_degenerate_local_tangent_keeps_full_footprint(params: dict) -> None:
+    """A duplicate mid-route waypoint must not collapse the footprint to a point.
+
+    A degenerate local tangent (repeated consecutive waypoint) previously fell
+    back to a zero-size point, which understates clearance and could miss a real
+    collision (fail-open). The route-level fallback heading must keep the full
+    oriented rectangle, so an elongated body flush against a wall still reports
+    the same near-zero clearance / collision it does without the duplicate.
+    """
+
+    from shapely.geometry import Polygon as _Polygon
+
+    footprint = RectangularFootprint(id="scooter_like", length_m=1.3, width_m=0.55)
+    # Wall directly beside a straight route; the elongated body clears it thinly.
+    obstacles = [_Polygon([(0.0, 0.30), (6.0, 0.30), (6.0, 2.0), (0.0, 2.0)])]
+    straight_route = [(0.0, 0.0), (2.0, 0.0), (4.0, 0.0), (6.0, 0.0)]
+    # Same route but with a duplicated mid-route waypoint -> degenerate tangent
+    # at that sample under the old code path.
+    duplicated_route = [(0.0, 0.0), (2.0, 0.0), (2.0, 0.0), (4.0, 0.0), (6.0, 0.0)]
+
+    baseline, _, _ = footprint_aware_clearance_m(
+        straight_route, footprint, obstacles, params["sample_step_m"], params["max_samples"]
+    )
+    with_dup, _, _ = footprint_aware_clearance_m(
+        duplicated_route, footprint, obstacles, params["sample_step_m"], params["max_samples"]
+    )
+    assert baseline is not None
+    assert with_dup is not None
+    # Full footprint retained: clearance stays the thin wall gap, not a larger
+    # point-to-wall distance that a collapsed footprint would report.
+    assert with_dup == pytest.approx(baseline, abs=1e-6)
+    # A degenerate sample must never yield MORE clearance than the true footprint.
+    assert with_dup <= baseline + 1e-9
+
+
 # --------------------------------------------------------------------------- #
 # Report shape
 # --------------------------------------------------------------------------- #

@@ -23,6 +23,7 @@ compared directly with an elongated body that "collides" on the same route.
 
 from __future__ import annotations
 
+import itertools
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -30,7 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import yaml
-from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import LineString, Polygon
 from shapely.ops import unary_union
 
 if TYPE_CHECKING:
@@ -285,16 +286,21 @@ def footprint_aware_clearance_m(
 
     sample_count = min(max_samples, max(2, math.ceil(length / sample_step_m) + 1))
     eps = max(1e-3, length * 1e-6)
+    # Route-level fallback heading from the first non-degenerate segment. The
+    # route is guaranteed non-degenerate here (``length > 0``), so this is
+    # always available and lets a locally degenerate sample (e.g. duplicate
+    # consecutive waypoints) keep the full oriented footprint instead of
+    # collapsing to a zero-size point, which would understate collision risk
+    # and violate the fail-closed contract.
+    fallback_heading = _route_fallback_heading(line)
     min_clearance: float | None = None
     for index in range(sample_count):
         distance = length * index / (sample_count - 1) if sample_count > 1 else 0.0
         point = line.interpolate(distance)
         heading = _route_tangent(line, distance, length, eps)
-        rect = (
-            _oriented_rectangle(point.x, point.y, footprint.length_m, footprint.width_m, heading)
-            if heading is not None
-            else Point(point)
-        )
+        if heading is None:
+            heading = fallback_heading
+        rect = _oriented_rectangle(point.x, point.y, footprint.length_m, footprint.width_m, heading)
         clearance = float(rect.distance(obstacles))
         if min_clearance is None or clearance < min_clearance:
             min_clearance = clearance
@@ -698,6 +704,26 @@ def _oriented_rectangle(
         (cx + x * cos_h - y * sin_h, cy + x * sin_h + y * cos_h) for x, y in local_corners
     ]
     return Polygon(world_corners)
+
+
+def _route_fallback_heading(line: LineString) -> float:
+    """Return a heading (radians) from the first non-degenerate route segment.
+
+    Used as a conservative fallback when a local tangent is degenerate at a
+    sample point (e.g. duplicate consecutive waypoints) so the oriented
+    footprint never collapses to a zero-size point. The caller guarantees the
+    route has positive length, so at least one non-degenerate segment exists;
+    ``0.0`` is only returned in the theoretically-unreachable all-degenerate
+    case, keeping a full-size (axis-aligned) footprint rather than a point.
+    """
+
+    coords = list(line.coords)
+    for (x0, y0), (x1, y1) in itertools.pairwise(coords):
+        dx = x1 - x0
+        dy = y1 - y0
+        if dx != 0.0 or dy != 0.0:
+            return float(math.atan2(dy, dx))
+    return 0.0
 
 
 def _route_tangent(line: LineString, distance: float, length: float, eps: float) -> float | None:

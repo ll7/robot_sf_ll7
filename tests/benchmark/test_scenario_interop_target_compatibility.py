@@ -5,12 +5,9 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from robot_sf.benchmark.scenario_interop import (
     TARGET_COMPATIBILITY_SCHEMA_VERSION,
@@ -32,6 +29,8 @@ from robot_sf.benchmark.scenario_interop import (
     validate_target_export_preview,
     validate_target_prerequisite_report,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _axis_scenario() -> dict:
@@ -316,6 +315,7 @@ def test_cli_writes_target_prerequisite_reports(tmp_path: Path) -> None:
             "--target-prerequisite-out-dir",
             str(out_dir),
         ],
+        cwd=REPO_ROOT,
         check=True,
         capture_output=True,
         text=True,

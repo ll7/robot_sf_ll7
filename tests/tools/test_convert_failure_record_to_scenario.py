@@ -12,10 +12,13 @@ import yaml
 
 from scripts.tools.convert_failure_record_to_scenario import (
     FAILURE_RECORD_SCHEMA_VERSION,
+    TEMPLATE_TO_MAP,
     _build_scenario_payload,
     _generate_assumptions,
     _generate_invalidity_warnings,
     _generate_pedestrians,
+    _map_file_for_output,
+    _resolve_generated_map_file,
     _validate_failure_record,
     convert_failure_record,
 )
@@ -222,14 +225,14 @@ class TestScenarioPayload:
         payload = _build_scenario_payload(VALID_EVENT_RECORD["failure_record"])
         assert "scenarios" in payload
         scenario = payload["scenarios"][0]
-        assert "event_disruption" in scenario["map_file"]
+        assert "classic_crossing" in scenario["map_file"]
         assert "failure_record_test-event-001" in scenario["name"]
 
     def test_sidewalk_scenario(self):
         """Sidewalk record generates sidewalk scenario."""
         payload = _build_scenario_payload(VALID_SIDEWALK_RECORD["failure_record"])
         scenario = payload["scenarios"][0]
-        assert "ammv_sidewalk" in scenario["map_file"]
+        assert "classic_doorway" in scenario["map_file"]
 
     def test_metadata_required_manual_review(self):
         """Output always has required_manual_review: true."""
@@ -281,6 +284,59 @@ class TestScenarioPayload:
         payload1 = _build_scenario_payload(VALID_EVENT_RECORD["failure_record"])
         payload2 = _build_scenario_payload(VALID_EVENT_RECORD["failure_record"])
         assert payload1 == payload2
+
+    def test_map_file_paths_resolve_to_existing_files(self):
+        """All emitted map_file paths must resolve to existing SVG maps."""
+        test_records = [
+            VALID_EVENT_RECORD["failure_record"],
+            VALID_SIDEWALK_RECORD["failure_record"],
+        ]
+        for record in test_records:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                output_path = Path(tmpdir) / "scenario.yaml"
+                payload = _build_scenario_payload(record, output_path=output_path)
+                scenario = payload["scenarios"][0]
+                resolved = _resolve_generated_map_file(output_path, scenario["map_file"])
+                assert resolved.is_file(), (
+                    f"map_file {scenario['map_file']!r} resolves to {resolved} which does not exist"
+                )
+
+
+class TestMapFileResolution:
+    """Tests for TEMPLATE_TO_MAP and map path resolution."""
+
+    def test_all_template_to_map_entries_exist(self):
+        """Every TEMPLATE_TO_MAP entry must point to an existing SVG."""
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        for template, repo_rel in TEMPLATE_TO_MAP.items():
+            svg = (repo_root / repo_rel).resolve()
+            assert svg.is_file(), (
+                f"TEMPLATE_TO_MAP[{template!r}] -> {repo_rel} resolves to {svg}, which does not exist"
+            )
+
+    def test_stdout_uses_repo_relative_paths(self):
+        """When output_path is None the map path is repo-relative."""
+        payload = _build_scenario_payload(VALID_EVENT_RECORD["failure_record"], output_path=None)
+        map_file = payload["scenarios"][0]["map_file"]
+        assert map_file.startswith("maps/svg_maps/"), (
+            f"stdout map_file should be repo-relative, got {map_file!r}"
+        )
+
+    def test_output_yaml_uses_output_relative_paths(self):
+        """When output_path is provided the map path is relative to its parent."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "subdir" / "scenario.yaml"
+            payload = _build_scenario_payload(
+                VALID_SIDEWALK_RECORD["failure_record"], output_path=output_path
+            )
+            map_file = payload["scenarios"][0]["map_file"]
+            resolved = _resolve_generated_map_file(output_path, map_file)
+            assert resolved.is_file()
+
+    def test_map_file_for_output_returns_string(self):
+        """_map_file_for_output returns a plain string, not a Path."""
+        result = _map_file_for_output("ammv_sidewalk")
+        assert isinstance(result, str)
 
 
 class TestConvertFailureRecord:

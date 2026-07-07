@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
+from robot_sf.common.safe_pickle import UnsafePickleError
 from robot_sf.render import frame_export
 from robot_sf.render.playback_recording import load_states
 from robot_sf.render.sim_state import VisualizableSimState
@@ -51,12 +52,18 @@ def test_load_states_accepts_base_visualizable_sim_state(tmp_path: Path) -> None
 
 
 def test_load_states_rejects_arbitrary_objects(tmp_path: Path) -> None:
-    """The broader base-type acceptance does not accept arbitrary objects."""
+    """Arbitrary objects are rejected by the restricted unpickler.
+
+    Since #4767, ``load_states`` loads through a restricted unpickler that
+    allowlists known-safe globals, so an arbitrary ``object()`` is rejected at
+    unpickle time (``UnsafePickleError``) — before the post-load type check that
+    previously raised ``TypeError('Invalid states')``.
+    """
     pickle_path = tmp_path / "states.pkl"
     with pickle_path.open("wb") as handle:
         pickle.dump(([object()], _empty_map_definition()), handle)
 
-    with pytest.raises(TypeError, match="Invalid states"):
+    with pytest.raises(UnsafePickleError, match="builtins.object"):
         load_states(str(pickle_path))
 
 

@@ -51,6 +51,7 @@
       "scripts/benchmark/run_forecast_risk_coupling_gate.py": 1,
       "scripts/benchmark/run_observation_noise_envelope.py": 1,
       "scripts/benchmark/run_observation_noise_live_replay_issue_2777.py": 1,
+      "scripts/benchmark/run_scenario_criticality_optimization.py": 1,
       "scripts/benchmark_ped_policy_collisions.py": 1,
       "scripts/benchmark_repro_check.py": 2,
       "scripts/classic_benchmark_full.py": 1,
@@ -1553,6 +1554,15 @@
       "lineno": 358,
       "path": "scripts/benchmark/run_observation_noise_live_replay_issue_2777.py",
       "source": "except Exception as exc:  # pragma: no cover - defensive fail-closed path"
+    },
+    {
+      "col_offset": 4,
+      "context": "_evaluate_candidate",
+      "fingerprint": "b22e48d247193770",
+      "handler": "Exception",
+      "lineno": 331,
+      "path": "scripts/benchmark/run_scenario_criticality_optimization.py",
+      "source": "except Exception as e:  # noqa: BLE001"
     },
     {
       "col_offset": 4,

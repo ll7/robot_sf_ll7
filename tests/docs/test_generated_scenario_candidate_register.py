@@ -1,7 +1,5 @@
 """Validation tests for the issue #2724 adversarial candidate register."""
 
-# ruff: noqa: D102
-
 from __future__ import annotations
 
 import json

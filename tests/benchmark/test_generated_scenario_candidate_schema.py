@@ -1,7 +1,5 @@
 """Tests for the ``generated_scenario_candidate.v1`` schema."""
 
-# ruff: noqa: D102
-
 from __future__ import annotations
 
 import json

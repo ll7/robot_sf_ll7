@@ -1,7 +1,5 @@
 """Validation tests for the issue #2788 negative-result candidate directory."""
 
-# ruff: noqa: D102
-
 from __future__ import annotations
 
 import json

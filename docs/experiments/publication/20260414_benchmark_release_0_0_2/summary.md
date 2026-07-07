@@ -12,6 +12,10 @@ the licensed SocNavBench dataset assets were not staged for the release run. The
 documented in
 [`docs/context/benchmark_release_0_0_2_scoped_rationale.md`](../../../context/benchmark_release_0_0_2_scoped_rationale.md).
 
+> [!TIP]
+> For instructions on reproducing and verifying release 0.0.2, see the dedicated [Release 0.0.2 Reproduction Note](../../../benchmark_release_0_0_2_reproduction.md).
+
+
 ## Public Endpoints
 
 - Release: `https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.2`

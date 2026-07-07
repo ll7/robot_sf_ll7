@@ -1636,6 +1636,10 @@ entries:
     status: current
     freshness: dated
     area: planner_integration
+  - path: docs/context/issue_4797_ompl_strrtstar_assessment.md
+    status: current
+    freshness: dated
+    area: planner_integration
   - path: docs/context/issue_1360_external_teb_assessment.md
     status: current
     freshness: dated

@@ -4,7 +4,7 @@ Covers deterministic ranking, missing-source graceful degradation, and
 JSON/Markdown shape contracts.
 """
 
-# ruff: noqa: D102,E402
+# ruff: noqa: E402
 
 from __future__ import annotations
 

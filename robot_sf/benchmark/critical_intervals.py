@@ -96,9 +96,16 @@ class IntervalMetrics:
     n_steps: int = 0
     min_clearance_m: float | None = None
     min_distance_m: float | None = None
+    # NOTE: min_ttc_s is not yet computed by _compute_interval_metrics_in_window
+    # (always None as shipped). Windowed TTC aggregation is tracked as a
+    # follow-up; kept in the schema so the field is stable when populated.
     min_ttc_s: float | None = None
     mean_speed_ms: float | None = None
     max_speed_ms: float | None = None
+    # NOTE: this is the max L2 magnitude of per-step velocity change (|Δv|/dt),
+    # i.e. total acceleration magnitude within the window — NOT a signed
+    # deceleration projected onto the braking direction. Rename/redefinition is
+    # tracked as a follow-up.
     max_deceleration_mps2: float | None = None
     heading_oscillation: float | None = None
     near_miss_count: int = 0
@@ -568,10 +575,14 @@ def _compute_interval_metrics_in_window(
     # Speed
     robot_vel_raw = trace.get("robot_vel")
     if robot_vel_raw is not None:
-        sub_vel = np.asarray(robot_vel_raw, dtype=float)
-        if sub_vel.ndim == 1:
-            sub_vel = sub_vel.reshape(1, -1)
-        speeds = np.linalg.norm(sub_vel[sl], axis=1)
+        full_vel = np.asarray(robot_vel_raw, dtype=float)
+        if full_vel.ndim == 1:
+            full_vel = full_vel.reshape(1, -1)
+        # Slice to the window so per-interval metrics reflect ONLY the window,
+        # not the whole run (otherwise the critical-window value always equals
+        # the whole-run value and the comparison is meaningless).
+        sub_vel = full_vel[sl]
+        speeds = np.linalg.norm(sub_vel, axis=1)
         result["mean_speed_ms"] = float(np.mean(speeds))
         result["max_speed_ms"] = float(np.max(speeds))
 

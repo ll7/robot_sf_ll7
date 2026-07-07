@@ -17,6 +17,7 @@ import yaml
 from robot_sf.benchmark.critical_intervals import (
     CriticalInterval,
     IntervalMetrics,
+    _compute_interval_metrics_in_window,
     extract_critical_intervals,
     load_config,
     report_to_dict,
@@ -497,3 +498,31 @@ class TestDataclasses:
         assert im.n_steps == 0
         assert im.near_miss_count == 0
         assert im.collision_flag is False
+
+
+# ---------------------------------------------------------------------------
+# Windowed-aggregation regression (gate review PR #4782, finding #1)
+# ---------------------------------------------------------------------------
+
+
+class TestWindowedDeceleration:
+    """max_deceleration_mps2 must reflect ONLY the window, not the whole run."""
+
+    def test_deceleration_is_windowed_not_whole_run(self) -> None:
+        # A single large velocity change at steps 0->1 (Δv = 10 m/s over dt=0.1s
+        # => 100 m/s^2), then constant velocity for the rest of the trace.
+        n = 20
+        dt = 0.1
+        robot_vel = np.zeros((n, 2), dtype=float)
+        robot_vel[1:, 0] = 10.0  # spike between step 0 and step 1 only
+        robot_pos = np.cumsum(robot_vel * dt, axis=0)
+        trace = _make_trace(robot_pos, robot_vel=robot_vel, dt=dt)
+
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=n)
+        # A late window that excludes the step-0->1 spike must see zero accel.
+        late = _compute_interval_metrics_in_window(trace, start=5, end=n)
+
+        assert whole["max_deceleration_mps2"] == pytest.approx(100.0)
+        assert late["max_deceleration_mps2"] == pytest.approx(0.0)
+        # The whole point of the feature: window value != whole-run value.
+        assert late["max_deceleration_mps2"] < whole["max_deceleration_mps2"]

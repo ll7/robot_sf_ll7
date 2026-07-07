@@ -84,9 +84,12 @@ def _state_surface_check(
             f"{closure_boundary.get('closure_call_for_this_pr')!r} != {closure_call!r}"
         )
 
+    state_evidence = latest.get("acceptance_evidence")
+    if state_evidence is None:
+        state_evidence = closure_boundary.get("acceptance_evidence", [])
     state_by_criterion = {
         item.get("criterion"): item.get("status")
-        for item in latest.get("acceptance_evidence", [])
+        for item in state_evidence
         if isinstance(item, dict)
     }
     for item in acceptance_evidence:
@@ -102,6 +105,23 @@ def _state_surface_check(
         "latest_recorded_at_utc": latest.get("recorded_at_utc"),
         "entry_status": latest.get("status"),
         "errors": errors,
+    }
+
+
+def _stable_issue_1475_audit_summary(issue_1475_audit: dict[str, Any]) -> dict[str, Any]:
+    """Return #1475 facts needed by #1358 without volatile child state-row metadata."""
+
+    state_surface = issue_1475_audit["state_surface"]
+    return {
+        "status": issue_1475_audit["status"],
+        "closure_call": issue_1475_audit["closure_call"],
+        "remaining_criteria": issue_1475_audit["remaining_criteria"],
+        "state_surface": {
+            "path": state_surface["path"],
+            "status": state_surface["status"],
+            "errors": state_surface["errors"],
+            "integration_report_status": state_surface.get("integration_report_status"),
+        },
     }
 
 
@@ -234,10 +254,7 @@ def build_audit(
             "errors": readiness["errors"],
         },
         "issue_1475_audit": {
-            "status": issue_1475_audit["status"],
-            "closure_call": issue_1475_audit["closure_call"],
-            "remaining_criteria": issue_1475_audit["remaining_criteria"],
-            "state_surface": issue_1475_audit["state_surface"],
+            **_stable_issue_1475_audit_summary(issue_1475_audit),
         },
         "acceptance_evidence": [item.to_dict() for item in criteria],
         "remaining_criteria": [item.to_dict() for item in criteria if item.status != "met"],

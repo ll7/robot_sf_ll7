@@ -14,6 +14,18 @@ updates:
       - "Run real-trajectory predictor training on validated data."
       - "Run representative evaluation against cv_prediction_mpc and one model-free baseline."
     next_empirical_action: "Provide reachable checksum-pinned ETH/BIWI staging root, then run real-trajectory training and representative evaluation."
+  - date: "2026-07-07"
+    surface: "acceptance_audit.v1.post_pr_4732"
+    status: partial
+    evidence:
+      - "docs/context/evidence/issue_4013_learned_model_based_planning/acceptance_audit.v1.json"
+      - "docs/context/evidence/issue_4013_learned_model_based_planning/acceptance_audit.v1.md"
+      - "PR #4732 merged staging-checksum reporting into the manifest checker; closure remains blocked without a reachable local ETH/BIWI staging root."
+    blockers_remaining:
+      - "Resolve ROBOT_SF_EXTERNAL_DATA_ROOT or another approved local staging root so the validated ETH/BIWI manifest passes pinned checksum preflight."
+      - "Run real-trajectory predictor training on validated data."
+      - "Run representative evaluation against cv_prediction_mpc and one model-free baseline."
+    next_empirical_action: "Set a reachable checksum-pinned ETH/BIWI staging root, run real-trajectory training, then run representative evaluation."
     forbidden_actions_confirmed:
       compute_submit: false
       merge: false

@@ -85,7 +85,7 @@
       "criterion": "Representative evaluation compares learned predictor against cv_prediction_mpc and a model-free baseline.",
       "evidence": [
         "Existing comparison_report.v1.json is diagnostic synthetic/checkpoint smoke evidence.",
-        "Issue thread after PR #4712 still requires real-trajectory training plus representative evaluation."
+        "Issue thread after PR #4732 still requires real-trajectory training plus representative evaluation."
       ],
       "remaining_work": "Run the representative real-trajectory evaluation against cv_prediction_mpc and one model-free baseline after real-data training.",
       "status": "blocked"
@@ -96,7 +96,7 @@
     "paper_or_dissertation_claim_edit": false,
     "slurm_or_gpu_submission": false
   },
-  "generated_at": "2026-07-07T01:48:59.315934+00:00",
+  "generated_at": "2026-07-07T05:07:34.560784+00:00",
   "intentional_non_actions": [
     "No raw external dataset staging or redistribution.",
     "No full benchmark campaign run.",
@@ -144,6 +144,10 @@
     {
       "evidence": "validated manifest requires pinned tree checksum",
       "pr": 4712
+    },
+    {
+      "evidence": "staging checksum surfaced in manifest checker output",
+      "pr": 4732
     }
   ],
   "new_blockers": [],

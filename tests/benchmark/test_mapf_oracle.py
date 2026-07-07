@@ -263,7 +263,8 @@ class TestRunMapfOracleDiagnostics:
 
     def test_real_svg_map(self, tmp_path: Path) -> None:
         """Run against a real map file if available."""
-        map_file = Path("maps/svg_maps/classic_crossing.svg")
+        repo_root = Path(__file__).resolve().parents[2]
+        map_file = repo_root / "maps/svg_maps/classic_crossing.svg"
         if not map_file.exists():
             pytest.skip("classic_crossing.svg not found")
 

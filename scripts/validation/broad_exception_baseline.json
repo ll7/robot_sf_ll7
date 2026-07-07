@@ -129,7 +129,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 288
+    "total": 289
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -642,7 +642,7 @@
       "context": "replay_episode_and_generate_figures",
       "fingerprint": "d47c045067cd76f5",
       "handler": "Exception",
-      "lineno": 864,
+      "lineno": 866,
       "path": "robot_sf/benchmark/episode_replay_figure.py",
       "source": "except Exception as e:"
     },

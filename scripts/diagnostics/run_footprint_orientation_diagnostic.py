@@ -134,6 +134,7 @@ def main(argv: list[str] | None = None) -> int:
         footprints,
         params["sample_step_m"],
         params["max_samples"],
+        pass_threshold_m=params["pass_threshold_m"],
         profile_id=str(payload.get("profile_id", "footprint_orientation_diagnostic_v1")),
     )
     if args.format == "markdown":

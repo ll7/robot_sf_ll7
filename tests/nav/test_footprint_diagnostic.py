@@ -357,3 +357,51 @@ def test_runner_writes_markdown_and_json_reports(tmp_path: Path) -> None:
     assert "collision" in markdown
     # build_markdown_report must render a self-contained table from a report dict
     assert "shuttle_pod_like" in build_markdown_report(report)
+
+
+# --------------------------------------------------------------------------- #
+# pass_threshold_m (near-miss margin)
+# --------------------------------------------------------------------------- #
+
+
+def test_pass_threshold_flags_near_miss_as_collision(footprints: list, params: dict) -> None:
+    """A positive pass_threshold_m turns a near-miss clearance into a collision.
+
+    Locks the ``pass_threshold_m`` config field to actual behavior: at the default
+    ``0.0`` the scooter clears the narrow passage, but a threshold above its
+    clearance margin flips the same run to ``collision`` without moving geometry.
+    """
+
+    scenarios = {s.id: s for s in build_diagnostic_scenarios()}
+    narrow = scenarios["narrow_passage_v1"]
+    scooter = next(fp for fp in footprints if fp.id == "scooter_like")
+
+    clearance, collision_default, _ = footprint_aware_clearance_m(
+        narrow.route, scooter, narrow.obstacles, params["sample_step_m"], params["max_samples"]
+    )
+    assert clearance is not None and clearance > 0.0
+    assert collision_default is False
+
+    _, collision_strict, _ = footprint_aware_clearance_m(
+        narrow.route,
+        scooter,
+        narrow.obstacles,
+        params["sample_step_m"],
+        params["max_samples"],
+        pass_threshold_m=clearance + 0.05,
+    )
+    assert collision_strict is True
+
+    # The report threads the threshold and echoes it in diagnostic_parameters.
+    report = build_diagnostic_report(
+        [narrow],
+        footprints,
+        params["sample_step_m"],
+        params["max_samples"],
+        pass_threshold_m=clearance + 0.05,
+    )
+    assert report["diagnostic_parameters"]["pass_threshold_m"] == pytest.approx(clearance + 0.05)
+    scooter_row = next(
+        r for r in report["scenarios"][0]["results"] if r["footprint_id"] == "scooter_like"
+    )
+    assert scooter_row["status"] == "collision"

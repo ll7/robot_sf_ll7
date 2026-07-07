@@ -239,6 +239,7 @@ def footprint_aware_clearance_m(
     obstacle_polygons: Sequence[Polygon],
     sample_step_m: float,
     max_samples: int,
+    pass_threshold_m: float = 0.0,
 ) -> tuple[float | None, bool, int]:
     """Compute min oriented-footprint-to-obstacle clearance along a route.
 
@@ -247,12 +248,18 @@ def footprint_aware_clearance_m(
     at ``sample_step_m`` spacing and a rigid rectangle is oriented along the
     local tangent at each sample.
 
+    A scenario-footprint pair is reported as a collision when the min
+    footprint-to-obstacle clearance is ``<= pass_threshold_m``. The default
+    ``0.0`` treats boundary contact (touching or overlapping) as a collision,
+    matching a conservative fail-closed diagnostic; a positive threshold flags
+    near-misses within that margin.
+
     Returns:
         ``(clearance_m, collision, sample_count)`` where ``clearance_m`` is the
         min footprint-to-obstacle distance (``0.0`` when overlapping, ``None``
         when there are no obstacles or the route is degenerate), ``collision``
-        is True when the footprint intersects any obstacle, and ``sample_count``
-        is the number of evaluated samples.
+        is True when that clearance is ``<= pass_threshold_m``, and
+        ``sample_count`` is the number of evaluated samples.
     """
 
     if len(route) < 2 or not obstacle_polygons:
@@ -268,8 +275,9 @@ def footprint_aware_clearance_m(
     if isinstance(footprint, CircularFootprint):
         center_distance = float(line.distance(obstacles))
         clearance = max(0.0, center_distance - footprint.radius_m)
-        # Boundary contact (center_distance == radius) counts as collision.
-        collision = center_distance <= footprint.radius_m
+        # Boundary contact (clearance == 0) counts as collision at the default
+        # threshold; a positive threshold also flags near-misses.
+        collision = clearance <= pass_threshold_m
         return clearance, collision, 1
 
     if not isinstance(footprint, RectangularFootprint):
@@ -278,7 +286,6 @@ def footprint_aware_clearance_m(
     sample_count = min(max_samples, max(2, math.ceil(length / sample_step_m) + 1))
     eps = max(1e-3, length * 1e-6)
     min_clearance: float | None = None
-    any_collision = False
     for index in range(sample_count):
         distance = length * index / (sample_count - 1) if sample_count > 1 else 0.0
         point = line.interpolate(distance)
@@ -291,11 +298,9 @@ def footprint_aware_clearance_m(
         clearance = float(rect.distance(obstacles))
         if min_clearance is None or clearance < min_clearance:
             min_clearance = clearance
-        if rect.intersects(obstacles):
-            any_collision = True
     if min_clearance is None:
-        return None, any_collision, sample_count
-    return float(min_clearance), any_collision, sample_count
+        return None, False, sample_count
+    return float(min_clearance), min_clearance <= pass_threshold_m, sample_count
 
 
 def run_footprint_diagnostic(
@@ -303,6 +308,7 @@ def run_footprint_diagnostic(
     footprints: Sequence[FootprintModel],
     sample_step_m: float,
     max_samples: int,
+    pass_threshold_m: float = 0.0,
 ) -> list[FootprintClearanceResult]:
     """Run all footprint models against one scenario and return per-footprint results.
 
@@ -319,6 +325,7 @@ def run_footprint_diagnostic(
             scenario.obstacles,
             sample_step_m,
             max_samples,
+            pass_threshold_m,
         )
         method = (
             "analytic_margin"
@@ -345,6 +352,7 @@ def build_diagnostic_report(
     sample_step_m: float,
     max_samples: int,
     *,
+    pass_threshold_m: float = 0.0,
     profile_id: str = "footprint_orientation_diagnostic_v1",
 ) -> dict[str, Any]:
     """Build a JSON-serializable diagnostic report across scenarios and footprints.
@@ -361,7 +369,9 @@ def build_diagnostic_report(
 
     scenario_reports: list[dict[str, Any]] = []
     for scenario in scenarios:
-        results = run_footprint_diagnostic(scenario, footprints, sample_step_m, max_samples)
+        results = run_footprint_diagnostic(
+            scenario, footprints, sample_step_m, max_samples, pass_threshold_m
+        )
         rows = [_result_to_row(result) for result in results]
         scenario_reports.append(
             {
@@ -390,6 +400,7 @@ def build_diagnostic_report(
         "diagnostic_parameters": {
             "sample_step_m": float(sample_step_m),
             "max_samples": int(max_samples),
+            "pass_threshold_m": float(pass_threshold_m),
         },
         "scenarios": scenario_reports,
     }

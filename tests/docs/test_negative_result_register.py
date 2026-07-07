@@ -1,6 +1,5 @@
 """Validation tests for the negative result register schema and seeded entries."""
 
-
 from __future__ import annotations
 
 import json

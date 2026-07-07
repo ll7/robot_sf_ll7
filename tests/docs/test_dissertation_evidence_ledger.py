@@ -1,6 +1,5 @@
 """Validation tests for the dissertation evidence ledger JSON schema."""
 
-
 from __future__ import annotations
 
 import json

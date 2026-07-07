@@ -1,6 +1,5 @@
 """Validation tests for the dissertation gap report JSON and source accounting."""
 
-
 from __future__ import annotations
 
 import json

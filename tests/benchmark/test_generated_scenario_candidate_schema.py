@@ -1,6 +1,5 @@
 """Tests for the ``generated_scenario_candidate.v1`` schema."""
 
-
 from __future__ import annotations
 
 import json

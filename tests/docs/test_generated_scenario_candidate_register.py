@@ -1,6 +1,5 @@
 """Validation tests for the issue #2724 adversarial candidate register."""
 
-
 from __future__ import annotations
 
 import json

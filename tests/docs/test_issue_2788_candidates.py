@@ -1,6 +1,5 @@
 """Validation tests for the issue #2788 negative-result candidate directory."""
 
-
 from __future__ import annotations
 
 import json

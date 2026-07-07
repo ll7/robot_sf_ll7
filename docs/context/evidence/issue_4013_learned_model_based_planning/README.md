@@ -47,6 +47,25 @@ is **not** benchmark, navigation-quality, or paper/dissertation evidence, and it
 not a large generative world model. Scaling seeds/scenarios into nominal benchmark
 evidence is a separate campaign (excluded here).
 
+## Acceptance audit
+
+`acceptance_audit.v1.json` and `acceptance_audit.v1.md` consolidate the merged
+PR evidence for issue #4013 against the current real-trajectory readiness gate.
+The audit keeps closure status `partial`: diagnostic predictor training,
+checkpoint-backed model-based action selection, the 3-arm comparator smoke,
+fallback/degraded exclusion, and claim-boundary criteria are met at diagnostic
+tier, but real-trajectory data staging, real-trajectory training, and
+representative evaluation remain blocked.
+
+Generate it with:
+
+```bash
+uv run python scripts/analysis/audit_issue_4013_acceptance.py --write
+```
+
+This audit performs no data staging, no benchmark campaign, no Slurm/GPU
+submission, and no paper/dissertation claim edit.
+
 ## Trained short-horizon predictor (diagnostic)
 
 The predictor can now be trained on CPU so the model-based arm loads real learned
@@ -57,9 +76,9 @@ uv run python scripts/training/train_learned_short_horizon_predictor_issue_4013.
   --config configs/training/learned_short_horizon_predictor_issue_4013_smoke.yaml
 ```
 
-This writes a checkpoint plus manifest and metrics under
-`output/models/issue_4013/short_horizon_predictor/` (git-ignored). A copy of the
-manifest and metrics from a local run is promoted here as durable evidence:
+This writes a local checkpoint plus manifest and metrics. The checkpoint remains
+worktree-local; compact manifest and metrics from a local run are promoted here
+as durable evidence:
 
 - `training_manifest.v1.json` — schema, architecture, trainer/predictor config, claim boundary.
 - `training_metrics.v1.json` — initial/final training loss.

@@ -1,0 +1,25 @@
+name: trajectory_verifier_default
+description: >
+  Optional default thresholds manifest for the experimental AMMV trajectory
+  verifier (issue #4757). The verifier does not load this config automatically;
+  it is a discoverability and reproducibility pointer for offline analysis.
+  Values mirror TrajectoryVerifierConfig defaults in
+  robot_sf/benchmark/trajectory_verifier.py. Experimental diagnostic only: not a
+  formal safety case, not conformalized, not learned, and does not change
+  default planner behavior.
+schema: trajectory_verifier.v1
+claim_boundary: >
+  experimental test-time verification prototype; not a formal safety case;
+  not conformalized; not learned; missing data fails closed to warn;
+  default planner behavior unchanged
+thresholds:
+  min_clearance_m: 0.25
+  warn_clearance_m: 0.5
+  min_ttc_s: 1.0
+  warn_ttc_s: 1.5
+  max_brake_deceleration_mps2: 2.5
+  max_heading_oscillation_count: 3
+  stale_prediction_max_age_s: 0.5
+footprint_defaults:
+  robot_radius_m: 0.3
+  pedestrian_radius_m: 0.3

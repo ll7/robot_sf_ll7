@@ -17,6 +17,8 @@ from scripts.tools.mapf_oracle_diagnostic import (
     _build_occupancy_grid,
     _build_time_blocked,
     _build_time_edges_blocked,
+    _build_tpg_graph,
+    _compute_schedule_slack,
     _find_conflict,
     _load_agents,
     _load_dynamic_obstacles,
@@ -26,6 +28,7 @@ from scripts.tools.mapf_oracle_diagnostic import (
     cbs_search,
     main,
     sipp_search,
+    tpg_post_process,
 )
 
 # ---------------------------------------------------------------------------
@@ -1232,3 +1235,293 @@ class TestCbsCli:
             svg_path.unlink()
             agents_path.unlink()
             obs_path.unlink()
+
+
+# ---------------------------------------------------------------------------
+# TPG (Temporal Plan Graph) post-processing
+# ---------------------------------------------------------------------------
+
+
+class TestBuildTpgGraph:
+    """Tests for _build_tpg_graph."""
+
+    def test_no_overlap_no_edges(self) -> None:
+        solution = {
+            0: [(0, 0, 0), (0, 1, 1)],
+            1: [(2, 0, 0), (2, 1, 1)],
+        }
+        edges = _build_tpg_graph(solution)
+        assert edges == []
+
+    def test_shared_cell_different_times(self) -> None:
+        solution = {
+            0: [(0, 0, 0), (1, 1, 1)],
+            1: [(2, 2, 0), (1, 1, 3)],
+        }
+        edges = _build_tpg_graph(solution)
+        assert len(edges) == 1
+        assert edges[0].from_agent == 0
+        assert edges[0].to_agent == 1
+        assert edges[0].time == 1
+        assert edges[0].cell == (1, 1)
+
+    def test_shared_cell_same_time_no_edge(self) -> None:
+        solution = {
+            0: [(1, 1, 0)],
+            1: [(1, 1, 0)],
+        }
+        edges = _build_tpg_graph(solution)
+        assert edges == []
+
+    def test_multiple_shared_cells(self) -> None:
+        solution = {
+            0: [(0, 0, 0), (1, 1, 1), (2, 2, 2)],
+            1: [(0, 0, 3), (1, 1, 4)],
+        }
+        edges = _build_tpg_graph(solution)
+        assert len(edges) == 2
+        for edge in edges:
+            assert edge.from_agent == 0
+            assert edge.to_agent == 1
+
+    def test_three_agents(self) -> None:
+        solution = {
+            0: [(0, 0, 0), (1, 1, 1)],
+            1: [(2, 2, 0), (1, 1, 2)],
+            2: [(3, 3, 0), (1, 1, 3)],
+        }
+        edges = _build_tpg_graph(solution)
+        # 0 -> 1 at (1,1) t=1<t=2
+        # 0 -> 2 at (1,1) t=1<t=3
+        # 1 -> 2 at (1,1) t=2<t=3
+        assert len(edges) == 3
+
+
+class TestComputeScheduleSlack:
+    """Tests for _compute_schedule_slack."""
+
+    def test_no_dependencies_infinite_slack(self) -> None:
+        solution = {
+            0: [(0, 0, 0), (0, 1, 1), (0, 2, 2)],
+            1: [(2, 0, 0), (2, 1, 1), (2, 2, 2)],
+        }
+        slack = _compute_schedule_slack(solution, [])
+        assert slack[0] == 2.0
+        assert slack[1] == 2.0
+
+    def test_with_dependency_limits_slack(self) -> None:
+        solution = {
+            0: [(0, 0, 0), (1, 1, 1)],
+            1: [(2, 2, 0), (1, 1, 3)],
+        }
+        edges = _build_tpg_graph(solution)
+        slack = _compute_schedule_slack(solution, edges)
+        # Agent 0 visits (1,1) at t=1, agent 1 arrives at t=3
+        # Slack = 3 - 1 - 1 = 1
+        assert slack[0] == 1.0
+
+    def test_dynamic_obstacle_zero_slack(self) -> None:
+        solution = {
+            0: [(0, 0, 0), (0, 1, 1)],
+        }
+        time_blocked = {1: {(0, 1)}}
+        slack = _compute_schedule_slack(solution, [], time_blocked)
+        assert slack[0] == 0.0
+
+
+class TestTpgPostProcess:
+    """Tests for tpg_post_process."""
+
+    def test_basic_tpg_output(self) -> None:
+        solution = {
+            0: [(0, 0, 0), (0, 1, 1), (0, 2, 2)],
+            1: [(2, 0, 0), (2, 1, 1), (2, 2, 2)],
+        }
+        result = tpg_post_process(solution)
+        assert result["tpg_enabled"] is True
+        assert result["tpg_makespan"] == 2
+        assert result["tpg_dependency_edges"] == 0
+        assert result["tpg_dependency_pairs"] == 0
+        assert result["tpg_min_slack"] == 2.0
+        assert result["tpg_bottleneck_agent"] == 0
+
+    def test_with_dependency(self) -> None:
+        solution = {
+            0: [(0, 0, 0), (1, 1, 1)],
+            1: [(2, 2, 0), (1, 1, 3)],
+        }
+        result = tpg_post_process(solution)
+        assert result["tpg_dependency_edges"] == 1
+        assert result["tpg_dependency_pairs"] == 1
+        assert result["tpg_makespan"] == 3
+
+    def test_single_agent(self) -> None:
+        solution = {
+            0: [(0, 0, 0), (1, 0, 1), (2, 0, 2)],
+        }
+        result = tpg_post_process(solution)
+        assert result["tpg_enabled"] is True
+        assert result["tpg_makespan"] == 2
+        assert result["tpg_dependency_edges"] == 0
+
+    def test_with_dynamic_obstacles(self) -> None:
+        solution = {
+            0: [(0, 0, 0), (0, 1, 1)],
+            1: [(2, 2, 0), (2, 3, 1)],
+        }
+        time_blocked = {1: {(0, 1)}}
+        result = tpg_post_process(solution, time_blocked)
+        assert result["tpg_slack_per_agent"]["0"] == 0.0
+
+
+class TestTpgCli:
+    """End-to-end CLI tests for TPG mode."""
+
+    def test_tpg_flag_feasible_cbs(self) -> None:
+        """--tpg adds schedule slack fields to a feasible CBS solution."""
+        svg_path = _make_svg(10.0, 10.0, [])
+        agents_path = _make_agents_json(
+            [
+                {"id": 0, "start": [0, 0], "goal": [0, 9]},
+                {"id": 1, "start": [9, 0], "goal": [9, 9]},
+            ]
+        )
+        try:
+            import sys as _sys
+            from io import StringIO
+
+            old_stdout = _sys.stdout
+            _sys.stdout = buf = StringIO()
+            try:
+                rc = main(
+                    [
+                        str(svg_path),
+                        "--grid-size",
+                        "10",
+                        "--agents",
+                        str(agents_path),
+                        "--max-time",
+                        "50",
+                        "--tpg",
+                    ]
+                )
+            finally:
+                _sys.stdout = old_stdout
+
+            assert rc == 0
+            diagnostic = json.loads(buf.getvalue().strip())
+            assert diagnostic["tpg_enabled"] is True
+            assert "tpg_makespan" in diagnostic
+            assert "tpg_min_slack" in diagnostic
+            assert "tpg_slack_per_agent" in diagnostic
+            assert "tpg_dependency_edges" in diagnostic
+            assert "0" in diagnostic["tpg_slack_per_agent"]
+            assert "1" in diagnostic["tpg_slack_per_agent"]
+        finally:
+            svg_path.unlink()
+            agents_path.unlink()
+
+    def test_tpg_flag_infeasible_cbs(self) -> None:
+        """--tpg marks skipped when CBS is infeasible."""
+        svg_path = _make_svg(5.0, 5.0, [{"x": 0, "y": 0, "w": 1, "h": 1, "label": "obstacle"}])
+        agents_path = _make_agents_json([{"id": 0, "start": [0, 0], "goal": [4, 4]}])
+        try:
+            import sys as _sys
+            from io import StringIO
+
+            old_stdout = _sys.stdout
+            _sys.stdout = buf = StringIO()
+            try:
+                rc = main(
+                    [
+                        str(svg_path),
+                        "--grid-size",
+                        "5",
+                        "--agents",
+                        str(agents_path),
+                        "--tpg",
+                    ]
+                )
+            finally:
+                _sys.stdout = old_stdout
+
+            assert rc == 0
+            diagnostic = json.loads(buf.getvalue().strip())
+            assert diagnostic.get("tpg_enabled") is False
+            assert diagnostic.get("tpg_skipped_reason") == "infeasible_cbs_solution"
+        finally:
+            svg_path.unlink()
+            agents_path.unlink()
+
+    def test_tpg_flag_without_agents(self) -> None:
+        """--tpg with static A* has no effect (no TPG fields added)."""
+        svg_path = _make_svg(10.0, 10.0, [])
+        try:
+            import sys as _sys
+            from io import StringIO
+
+            old_stdout = _sys.stdout
+            _sys.stdout = buf = StringIO()
+            try:
+                rc = main(
+                    [
+                        str(svg_path),
+                        "--grid-size",
+                        "10",
+                        "--start",
+                        "0",
+                        "0",
+                        "--goal",
+                        "9",
+                        "9",
+                        "--tpg",
+                    ]
+                )
+            finally:
+                _sys.stdout = old_stdout
+
+            assert rc == 0
+            diagnostic = json.loads(buf.getvalue().strip())
+            assert "tpg_enabled" not in diagnostic
+        finally:
+            svg_path.unlink()
+
+    def test_tpg_with_crossing_agents(self) -> None:
+        """--tpg with crossing agents yields non-zero dependency edges."""
+        svg_path = _make_svg(10.0, 10.0, [])
+        agents_path = _make_agents_json(
+            [
+                {"id": 0, "start": [5, 0], "goal": [5, 9]},
+                {"id": 1, "start": [5, 9], "goal": [5, 0]},
+            ]
+        )
+        try:
+            import sys as _sys
+            from io import StringIO
+
+            old_stdout = _sys.stdout
+            _sys.stdout = buf = StringIO()
+            try:
+                rc = main(
+                    [
+                        str(svg_path),
+                        "--grid-size",
+                        "10",
+                        "--agents",
+                        str(agents_path),
+                        "--max-time",
+                        "50",
+                        "--tpg",
+                    ]
+                )
+            finally:
+                _sys.stdout = old_stdout
+
+            assert rc == 0
+            diagnostic = json.loads(buf.getvalue().strip())
+            assert diagnostic["tpg_enabled"] is True
+            assert diagnostic["tpg_dependency_edges"] > 0
+            assert diagnostic["tpg_makespan"] > 0
+        finally:
+            svg_path.unlink()
+            agents_path.unlink()

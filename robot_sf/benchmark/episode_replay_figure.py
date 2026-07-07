@@ -338,11 +338,13 @@ def check_determinism(
             )
 
     if episode_row.final_progress is not None:
-        details["checks_performed"].append("final_progress")
-        if final_step.speed is not None:
-            details["checks_passed"].append("final_progress (qualitative)")
-        else:
-            details["checks_passed"].append("final_progress recorded")
+        # `final_progress` is recorded for provenance context only. There is no
+        # replay-side progress endpoint to compare it against, so it does NOT
+        # constitute a determinism check and must not be counted toward a
+        # "pass" status — doing so previously let an episode carrying only
+        # `final_progress` report determinism "pass" while verifying nothing.
+        details.setdefault("checks_informational", []).append("final_progress recorded")
+        details["original_final_progress"] = episode_row.final_progress
 
     if details["checks_failed"]:
         return "fail", details

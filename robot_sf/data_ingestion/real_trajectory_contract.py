@@ -18,6 +18,7 @@ This module performs no network access and stages no data; it only reads a manif
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from dataclasses import dataclass, field
@@ -62,7 +63,30 @@ def _resolved_staging_dir(staging_dir: str) -> Path:
     return get_repository_root() / expanded
 
 
-def _validated_staging_issues(staging_dir: str) -> list[PreflightIssue]:
+def _staging_tree_sha256(source_root: Path) -> str:
+    """Return aggregate SHA-256 over every file below ``source_root``.
+
+    Relative path, byte size, and per-file SHA-256 all contribute to the
+    aggregate so renamed, truncated, or modified local raw files fail closed.
+    """
+
+    digest = hashlib.sha256()
+    for file_path in sorted(path for path in source_root.rglob("*") if path.is_file()):
+        file_digest = hashlib.sha256()
+        with file_path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                file_digest.update(chunk)
+        relative_path = file_path.relative_to(source_root).as_posix()
+        digest.update(relative_path.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(file_path.stat().st_size).encode("ascii"))
+        digest.update(b"\0")
+        digest.update(file_digest.hexdigest().encode("ascii"))
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _validated_staging_issues(staging_dir: str, checksums: dict[str, Any]) -> list[PreflightIssue]:
     """Return fail-closed issues for a manifest claiming validated local staging.
 
     Returns:
@@ -100,6 +124,45 @@ def _validated_staging_issues(staging_dir: str) -> list[PreflightIssue]:
                 ),
             )
         )
+    expected_tree_sha256 = checksums["expected_tree_sha256"]
+    recorded_tree_sha256 = checksums["tree_sha256"]
+    if not expected_tree_sha256:
+        issues.append(
+            PreflightIssue(
+                code="checksums.expected_missing_for_validated",
+                message=(
+                    "availability 'validated' requires checksums.expected_tree_sha256 "
+                    "to pin the staged-file tree."
+                ),
+            )
+        )
+    elif recorded_tree_sha256 and recorded_tree_sha256 != expected_tree_sha256:
+        issues.append(
+            PreflightIssue(
+                code="checksums.recorded_expected_mismatch",
+                message=(
+                    "checksums.tree_sha256 must match checksums.expected_tree_sha256 "
+                    "for validated real-trajectory staging."
+                ),
+            )
+        )
+
+    if issues:
+        return issues
+
+    computed_tree_sha256 = _staging_tree_sha256(resolved_staging_dir)
+    if computed_tree_sha256 != recorded_tree_sha256:
+        issues.append(
+            PreflightIssue(
+                code="checksums.staging_tree_mismatch",
+                message=(
+                    "availability 'validated' requires the local staging tree checksum "
+                    "to match checksums.tree_sha256; computed "
+                    f"{computed_tree_sha256}, expected {recorded_tree_sha256}."
+                ),
+            )
+        )
+
     return issues
 
 
@@ -288,7 +351,7 @@ def run_preflight(manifest: dict[str, Any], *, validate_structure: bool = True) 
             )
         )
     if availability == "validated":
-        issues.extend(_validated_staging_issues(staging["staging_dir"]))
+        issues.extend(_validated_staging_issues(staging["staging_dir"], checksums))
 
     return PreflightResult(
         dataset_id=manifest["dataset_id"],

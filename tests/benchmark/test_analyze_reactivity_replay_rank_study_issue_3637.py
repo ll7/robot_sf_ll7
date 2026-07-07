@@ -163,7 +163,10 @@ def test_complete_synthetic_matrix_writes_analysis_and_gate_input(tmp_path: Path
     assert analysis["replay_limitation"]["is_trajectory_playback"] is False
     assert (output_dir / "analysis.json").exists()
     assert (output_dir / "frozen_gate_input.json").exists()
+    assert (output_dir / "seed_gate_decision.json").exists()
     assert (output_dir / "rank_bootstrap_summary.json").exists()
+    decision = json.loads((output_dir / "seed_gate_decision.json").read_text(encoding="utf-8"))
+    assert decision["decision"] in {"diagnostic_only", "escalate", "stop_confirmed"}
     assert (output_dir / "per_planner_condition_metrics.csv").exists()
 
 

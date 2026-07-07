@@ -39,7 +39,7 @@ from robot_sf.benchmark.reactivity_replay_preflight import (  # noqa: E402
     build_preflight_manifest,
     run_plan_from_packet,
 )
-from scripts.tools.seed_sufficiency_gate import SeedGateInput  # noqa: E402
+from scripts.tools.seed_sufficiency_gate import SeedGateInput, decide_seed_gate  # noqa: E402
 
 ISSUE = 3637
 SOURCE_CAMPAIGN_ISSUE = 3573
@@ -417,6 +417,7 @@ def analyze(
         heldout_delta_threshold=None,
         invalid_row_count=0,
     )
+    gate_decision = decide_seed_gate(gate_input)
     analysis = {
         "schema_version": SCHEMA_VERSION,
         "issue": ISSUE,
@@ -437,6 +438,7 @@ def analyze(
         "rank_effect": rank_effect,
         "paired_seed_bootstrap": bootstrap,
         "seed_sufficiency_gate_input": asdict(gate_input),
+        "seed_sufficiency_gate_decision": asdict(gate_decision),
         "replay_limitation": {
             "is_trajectory_playback": False,
             "note": packet.get("replay", {}).get("limitation", REPLAY_LIMITATION),
@@ -452,6 +454,10 @@ def analyze(
         )
         (output_dir / "frozen_gate_input.json").write_text(
             json.dumps(asdict(gate_input), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        (output_dir / "seed_gate_decision.json").write_text(
+            json.dumps(asdict(gate_decision), indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
         (output_dir / "rank_bootstrap_summary.json").write_text(

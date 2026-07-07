@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ll7.github.io/robot_sf/scenario_interop_target_export_preview.v1.json",
+  "title": "Robot SF Cross-Benchmark Scenario Target Export Preview (v1)",
+  "description": "Asset-free target-shaped preview payload for SocNavBench or HuNavSim scenario export handoff. The payload is not a runnable external benchmark artifact.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_kind",
+    "target",
+    "source_scenario_id",
+    "source_ir_schema_version",
+    "status",
+    "ready",
+    "blockers",
+    "warnings",
+    "payload",
+    "compatibility_report_schema_version"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "robot_sf.scenario_interop_target_export_preview.v1"
+    },
+    "artifact_kind": {
+      "enum": [
+        "socnavbench_scenario_export_preview",
+        "hunavsim_scenario_export_preview"
+      ]
+    },
+    "target": {
+      "$ref": "#/$defs/target"
+    },
+    "source_scenario_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_ir_schema_version": {
+      "const": "robot_sf.scenario_interop_ir.v1"
+    },
+    "status": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "ready": {
+      "type": "boolean"
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "payload": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/socnavbench_payload"
+        },
+        {
+          "$ref": "#/$defs/hunavsim_payload"
+        }
+      ]
+    },
+    "compatibility_report_schema_version": {
+      "const": "robot_sf.scenario_interop_target_compatibility.v1"
+    }
+  },
+  "$defs": {
+    "target": {
+      "enum": [
+        "socnavbench",
+        "hunavsim"
+      ]
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "field",
+        "reason"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "field": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "nullable_string": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "nullable_number": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "socnavbench_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario",
+        "pedestrians"
+      ],
+      "properties": {
+        "scenario": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "map",
+            "environment_type",
+            "flow",
+            "density",
+            "seed_set"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "map": {
+              "$ref": "#/$defs/nullable_string"
+            },
+            "environment_type": {
+              "$ref": "#/$defs/nullable_string"
+            },
+            "flow": {
+              "$ref": "#/$defs/nullable_string"
+            },
+            "density": {
+              "$ref": "#/$defs/nullable_string"
+            },
+            "seed_set": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "pedestrians": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "start",
+              "goal",
+              "preferred_speed_mps"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "start": {
+                "$ref": "#/$defs/nullable_string"
+              },
+              "goal": {
+                "$ref": "#/$defs/nullable_string"
+              },
+              "preferred_speed_mps": {
+                "$ref": "#/$defs/nullable_number"
+              }
+            }
+          }
+        }
+      }
+    },
+    "hunavsim_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "world",
+        "agents"
+      ],
+      "properties": {
+        "world": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "map_file",
+            "obstacle_topology",
+            "flow"
+          ],
+          "properties": {
+            "map_file": {
+              "$ref": "#/$defs/nullable_string"
+            },
+            "obstacle_topology": {
+              "$ref": "#/$defs/nullable_string"
+            },
+            "flow": {
+              "$ref": "#/$defs/nullable_string"
+            }
+          }
+        },
+        "agents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "start_poi",
+              "goal_poi",
+              "behavior"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "start_poi": {
+                "$ref": "#/$defs/nullable_string"
+              },
+              "goal_poi": {
+                "$ref": "#/$defs/nullable_string"
+              },
+              "behavior": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "preferred_speed_mps",
+                  "role",
+                  "role_target_id"
+                ],
+                "properties": {
+                  "preferred_speed_mps": {
+                    "$ref": "#/$defs/nullable_number"
+                  },
+                  "role": {
+                    "$ref": "#/$defs/nullable_string"
+                  },
+                  "role_target_id": {
+                    "$ref": "#/$defs/nullable_string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

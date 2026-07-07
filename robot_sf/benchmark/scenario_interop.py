@@ -50,6 +50,15 @@ TARGET_EXPORT_MANIFEST_SCHEMA_VERSION = "robot_sf.scenario_interop_target_export
 TARGET_EXPORT_PREVIEW_SCHEMA_VERSION = "robot_sf.scenario_interop_target_export_preview.v1"
 SUPPORTED_TARGETS = ("socnavbench", "hunavsim")
 IR_SCHEMA_FILE = Path(__file__).with_name("schemas") / "scenario_interop_ir.v1.json"
+TARGET_COMPATIBILITY_SCHEMA_FILE = (
+    Path(__file__).with_name("schemas") / "scenario_interop_target_compatibility.v1.json"
+)
+TARGET_EXPORT_MANIFEST_SCHEMA_FILE = (
+    Path(__file__).with_name("schemas") / "scenario_interop_target_export_manifest.v1.json"
+)
+TARGET_EXPORT_PREVIEW_SCHEMA_FILE = (
+    Path(__file__).with_name("schemas") / "scenario_interop_target_export_preview.v1.json"
+)
 
 # Source keys that map directly into IR sections. Anything not in this set is
 # reported in ``unsupported_fields`` rather than silently dropped.
@@ -147,6 +156,39 @@ def load_interop_ir_schema() -> dict[str, Any]:
     return json.loads(IR_SCHEMA_FILE.read_text(encoding="utf-8"))
 
 
+@lru_cache(maxsize=1)
+def load_target_compatibility_schema() -> dict[str, Any]:
+    """Load the target compatibility report JSON Schema.
+
+    Returns:
+        Parsed JSON Schema dictionary.
+    """
+
+    return json.loads(TARGET_COMPATIBILITY_SCHEMA_FILE.read_text(encoding="utf-8"))
+
+
+@lru_cache(maxsize=1)
+def load_target_export_manifest_schema() -> dict[str, Any]:
+    """Load the target export manifest JSON Schema.
+
+    Returns:
+        Parsed JSON Schema dictionary.
+    """
+
+    return json.loads(TARGET_EXPORT_MANIFEST_SCHEMA_FILE.read_text(encoding="utf-8"))
+
+
+@lru_cache(maxsize=1)
+def load_target_export_preview_schema() -> dict[str, Any]:
+    """Load the target export preview JSON Schema.
+
+    Returns:
+        Parsed JSON Schema dictionary.
+    """
+
+    return json.loads(TARGET_EXPORT_PREVIEW_SCHEMA_FILE.read_text(encoding="utf-8"))
+
+
 def validate_interop_ir(ir: Mapping[str, Any]) -> list[str]:
     """Validate an IR payload against the interop IR schema.
 
@@ -157,10 +199,63 @@ def validate_interop_ir(ir: Mapping[str, Any]) -> list[str]:
         Sorted JSON-pointer-prefixed validation error strings; empty when valid.
     """
 
-    validator = Draft202012Validator(load_interop_ir_schema())
+    return _validate_json_schema(ir, schema=load_interop_ir_schema())
+
+
+def validate_target_compatibility_report(report: Mapping[str, Any]) -> list[str]:
+    """Validate a target compatibility report against its JSON Schema.
+
+    Args:
+        report: Candidate compatibility report.
+
+    Returns:
+        Sorted JSON-pointer-prefixed validation error strings; empty when valid.
+    """
+
+    return _validate_json_schema(report, schema=load_target_compatibility_schema())
+
+
+def validate_target_export_manifest(manifest: Mapping[str, Any]) -> list[str]:
+    """Validate a target export manifest against its JSON Schema.
+
+    Args:
+        manifest: Candidate target export manifest.
+
+    Returns:
+        Sorted JSON-pointer-prefixed validation error strings; empty when valid.
+    """
+
+    return _validate_json_schema(manifest, schema=load_target_export_manifest_schema())
+
+
+def validate_target_export_preview(preview: Mapping[str, Any]) -> list[str]:
+    """Validate a target export preview against its JSON Schema.
+
+    Args:
+        preview: Candidate target export preview.
+
+    Returns:
+        Sorted JSON-pointer-prefixed validation error strings; empty when valid.
+    """
+
+    return _validate_json_schema(preview, schema=load_target_export_preview_schema())
+
+
+def _validate_json_schema(payload: Mapping[str, Any], *, schema: Mapping[str, Any]) -> list[str]:
+    """Return deterministic JSON-Schema validation errors for a payload.
+
+    Args:
+        payload: Candidate JSON-compatible mapping.
+        schema: JSON Schema mapping.
+
+    Returns:
+        Sorted JSON-pointer-prefixed validation error strings; empty when valid.
+    """
+
+    validator = Draft202012Validator(schema)
     return [
         f"{json_pointer(error.absolute_path)}: {error.message}"
-        for error in sorted(validator.iter_errors(ir), key=lambda err: list(err.absolute_path))
+        for error in sorted(validator.iter_errors(payload), key=lambda err: list(err.absolute_path))
     ]
 
 

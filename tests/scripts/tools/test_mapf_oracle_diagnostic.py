@@ -886,6 +886,24 @@ class TestFindConflict:
         assert conflict is not None
         assert conflict.agent_a < conflict.agent_b
 
+    def test_vertex_conflict_on_finished_agent_goal(self) -> None:
+        """A moving agent crossing another agent's goal *after* it arrives is a conflict.
+
+        Agent 0 reaches its goal (0, 2) at t=2 and rests there. Agent 1 passes
+        through (0, 2) at t=3 — a physical collision that must be detected even
+        though t=3 exceeds agent 0's explicit path length (regression: the old
+        makespan-union logic missed goal-resting agents → fail-open).
+        """
+        solution = {
+            0: [(0, 0, 0), (0, 1, 1), (0, 2, 2)],
+            1: [(2, 2, 0), (1, 2, 1), (0, 3, 2), (0, 2, 3)],
+        }
+        conflict = _find_conflict(solution)
+        assert conflict is not None
+        assert conflict.time == 3
+        assert conflict.cell == (0, 2)
+        assert conflict.is_edge is False
+
 
 # ---------------------------------------------------------------------------
 # CBS search

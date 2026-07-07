@@ -432,23 +432,39 @@ def _path_cost(path: list[tuple[int, int, int]]) -> float:
 def _find_conflict(
     solution: dict[int, list[tuple[int, int, int]]],
 ) -> _Conflict | None:
-    """Return the first conflict between any pair of agents, or None."""
+    """Return the first conflict between any pair of agents, or None.
+
+    A finished agent is treated as resting on its goal cell for every timestep
+    after it arrives (standard MAPF semantics: agents remain at their goal
+    indefinitely). Without this, an agent whose path crosses another agent's
+    goal *after* that agent has arrived would be missed, so ``_find_conflict``
+    could report a physically colliding solution as conflict-free (fail-open).
+    """
     agent_ids = sorted(solution.keys())
     for i, a_id in enumerate(agent_ids):
         path_a = solution[a_id]
         times_a = {t: (r, c) for r, c, t in path_a}
+        last_a = max(times_a) if times_a else 0
+        goal_a = times_a.get(last_a)
 
         for b_id in agent_ids[i + 1 :]:
             path_b = solution[b_id]
             times_b = {t: (r, c) for r, c, t in path_b}
+            last_b = max(times_b) if times_b else 0
+            goal_b = times_b.get(last_b)
 
-            all_times = set(times_a.keys()) | set(times_b.keys())
-            for t in sorted(all_times):
-                pa = times_a.get(t)
-                pb = times_b.get(t)
+            # Compare over the full makespan; after an agent's last recorded
+            # step it holds position at its goal cell.
+            horizon = max(last_a, last_b)
+            for t in range(horizon + 1):
+                pa = times_a.get(t, goal_a if t > last_a else None)
+                pb = times_b.get(t, goal_b if t > last_b else None)
                 if pa is not None and pb is not None and pa == pb:
                     return _Conflict(a_id, b_id, t, pa, False)
 
+                # Edge (swap) conflicts only apply while both agents are still
+                # moving; a resting agent has pa_now == pa_next and is excluded
+                # by the pa_now != pa_next guard below.
                 if t + 1 in times_a and t + 1 in times_b:
                     pa_now = times_a.get(t)
                     pa_next = times_a.get(t + 1)

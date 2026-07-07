@@ -199,6 +199,9 @@ def prepare_campaign_preflight(
     label: str | None = None,
     campaign_id: str | None = None,
     invoked_command: str | None = None,
+    checkpoint_preflight_mode: str = "metadata_only",
+    checkpoint_cache_dir: Path | None = None,
+    checkpoint_registry_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Prepare campaign preflight artifacts via the extracted preflight module.
 
@@ -213,6 +216,9 @@ def prepare_campaign_preflight(
         invoked_command=invoked_command,
         validate_campaign_config=_validate_campaign_config,
         build_route_clearance_warnings=_build_route_clearance_warnings,
+        checkpoint_preflight_mode=checkpoint_preflight_mode,  # type: ignore[arg-type]
+        checkpoint_cache_dir=checkpoint_cache_dir,
+        checkpoint_registry_path=checkpoint_registry_path,
     )
 
 

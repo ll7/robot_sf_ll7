@@ -7,15 +7,26 @@ campaign jobs 13296 and 13301 both failed identically on a missing PPO ``model_c
 Modes:
 
 - default (``--check``): confirm every enabled arm's ``model_id`` / ``model_path`` checkpoint is
-  present locally or has a durable remote source to stage from. Network-free.
+  present locally or has a durable remote source to stage from. Network-free. This mode is
+  **not** submit-safe by itself: a ``stageable_remote`` arm passes here but the compute node would
+  still discover a missing-cache failure if it has not actually been staged. The ``submit_safe``
+  boolean in the JSON output reports whether the resolvability is sufficient for ``sbatch``.
 - ``--stage``: enforced pre-submit staging -- actually download and checksum-verify each registry
-  checkpoint into the durable cache so the compute node loads a validated file.
+  checkpoint into the durable cache so the compute node loads a validated file. After a successful
+  ``--stage`` run, ``submit_safe`` is ``true``. The ops ``sbatch`` wrapper must run this mode (or
+  the public submit gate
+  ``scripts/benchmark/submit_camera_ready_checkpoint_gate.sh``) before requeueing.
+
+Optionally persist the preflight JSON report with ``--report-path`` so the requeue packet records
+the per-arm staging status.
 
 Exit codes are distinct so an sbatch wrapper can branch mechanically:
 
 - ``0`` -- all arm checkpoints resolvable (``--stage`` also means staged + verified).
 - ``2`` -- the campaign config file is missing or unreadable (cannot be evaluated).
 - ``3`` -- one or more arm checkpoints are unresolvable (fail-closed; do not submit).
+
+See ``docs/context/issue_4613_camera_ready_checkpoint_provisioning.md`` for the runbook.
 """
 
 from __future__ import annotations
@@ -57,7 +68,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--stage",
         action="store_true",
         help="Download and checksum-verify each registry checkpoint into the durable cache "
-        "(enforced pre-submit staging) instead of the cheap network-free resolvability check.",
+        "(enforced pre-submit staging; produces submit_safe=true) instead of the cheap "
+        "network-free resolvability check. The sbatch/submit wrapper must run this mode "
+        "(or scripts/benchmark/submit_camera_ready_checkpoint_gate.sh) before requeueing.",
     )
     parser.add_argument(
         "--registry-path",
@@ -74,7 +87,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--json",
         action="store_true",
-        help="Emit the preflight summary as JSON on stdout.",
+        help="Emit the preflight summary as JSON on stdout (includes submit_safe).",
+    )
+    parser.add_argument(
+        "--report-path",
+        type=Path,
+        default=None,
+        help="Optional path to persist the preflight summary JSON next to the submission "
+        "packet/log root so the requeue record carries per-arm staging status.",
     )
     return parser
 
@@ -100,19 +120,39 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         if args.json:
             print(json.dumps({"status": "blocked", "arms": list(exc.arms)}, indent=2))
+        if args.report_path is not None:
+            args.report_path.parent.mkdir(parents=True, exist_ok=True)
+            args.report_path.write_text(
+                json.dumps(
+                    {
+                        "status": "blocked",
+                        "stage": bool(args.stage),
+                        "arms": list(exc.arms),
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
         return EXIT_BLOCKED
     except (FileNotFoundError, TypeError, ValueError, yaml.YAMLError) as exc:
         print(f"error: could not evaluate campaign config: {exc}", file=sys.stderr)
         return EXIT_CONFIG_ERROR
 
     mode = "staged" if args.stage else "resolvable"
+    payload = {"status": "ok", **summary}
     if args.json:
-        print(json.dumps({"status": "ok", **summary}, indent=2))
+        print(json.dumps(payload, indent=2))
     else:
+        submit_safe_note = "submit_safe=true" if summary.get("submit_safe") else "submit_safe=FALSE"
         print(
             f"campaign checkpoint preflight passed: {summary['resolved']}/{summary['checked']} "
-            f"arm checkpoint reference(s) {mode}."
+            f"arm checkpoint reference(s) {mode} ({submit_safe_note})."
         )
+    if args.report_path is not None:
+        args.report_path.parent.mkdir(parents=True, exist_ok=True)
+        args.report_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        if not args.json:
+            print(f"report: {args.report_path}")
     return EXIT_OK
 
 

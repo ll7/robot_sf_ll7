@@ -279,6 +279,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `scripts/benchmark/preflight_campaign_checkpoints.py --config <campaign> [--stage]` before `sbatch`
   (exit `0` resolvable/staged, `2` config error, `3` unresolvable → do not submit). Provisioning
   preflight only: it runs no benchmark, submits no Slurm job, and is not benchmark evidence.
+* Added the **enforced-staged submit-time checkpoint gate** for issue #4613 (follow-up #4663):
+  `prepare_campaign_preflight()` now accepts `checkpoint_preflight_mode` (`metadata_only` default
+  vs `enforced_staged`), `checkpoint_cache_dir`, and `checkpoint_registry_path`. The enforced
+  mode runs the existing cheap guard with `stage=True` so a remote-backed but locally-absent
+  checkpoint is caught before `sbatch`, and a `submit_safe` boolean now reports whether the
+  resolvability is sufficient for compute (false when any arm is only `stageable_remote`). The
+  per-arm summary is persisted as `preflight/checkpoint_staging.json` (enforced) or
+  `preflight/checkpoint_resolvability.json` (metadata-only) and embedded in the campaign manifest
+  under `artifacts.preflight_checkpoint_provisioning`. New public pre-sbatch gate
+  `scripts/benchmark/submit_camera_ready_checkpoint_gate.sh` runs the staging CLI with
+  `--report-path` so the requeue packet records per-arm staging status.
+  `scripts/tools/run_camera_ready_benchmark.py` gains `--checkpoint-preflight-mode`,
+  `--checkpoint-cache-dir`, and `--checkpoint-registry-path` flags for the preflight-only path.
+  The `preflight_campaign_checkpoints.py --json` output now includes `submit_safe` and supports
+  `--report-path`. Provisioning only: no benchmark, Slurm, or paper-facing claim.
 * **issue #3481 — opt-in HSFM body-orientation alignment torque (`hsfm_alignment_torque_v1`).**
   A new pedestrian-model selector that decouples pedestrian body orientation `phi` from the
   instantaneous total-force direction: instead of snapping the heading each step (as

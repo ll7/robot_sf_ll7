@@ -220,6 +220,81 @@ def _build_integration_report(
     }
 
 
+def _build_merged_pr_evidence() -> list[dict[str, Any]]:
+    """Return merged PR evidence for the current issue #1475 closure audit."""
+
+    return [
+        {
+            "pr": "#4561",
+            "title": "Issue #1475 add ORCA-residual smoke nominal gate",
+            "merged_at_utc": "2026-07-05T02:58:35Z",
+            "evidence": (
+                "Added CPU-only validate_smoke_nominal_gate() and CLI validation for "
+                "required smoke telemetry, fallback/degraded status, durable artifact "
+                "status, and smoke thresholds before nominal escalation."
+            ),
+            "criteria_supported": [
+                "Fallback/degraded rows are not counted learned-residual success evidence.",
+                "Smoke result recorded before nominal escalation.",
+            ],
+            "closure_effect": "partial",
+        },
+        {
+            "pr": "#4661",
+            "title": "Issue #1475: add executable acceptance audit",
+            "merged_at_utc": "2026-07-06T15:44:15Z",
+            "evidence": (
+                "Added the executable criterion-to-evidence audit over tracked issue #1475 "
+                "smoke artifacts and fail-closed closure_call=keep_open behavior."
+            ),
+            "criteria_supported": [
+                "All acceptance criteria mapped to repository evidence.",
+            ],
+            "closure_effect": "partial",
+        },
+        {
+            "pr": "#4667",
+            "title": "Issue #1475: add high-churn closure state surface",
+            "merged_at_utc": "2026-07-06T16:52:33Z",
+            "evidence": (
+                "Added docs/context/issue_1475_state.yaml as the canonical durable "
+                "state surface for high-churn issue #1475 audit propagation."
+            ),
+            "criteria_supported": [
+                "High-churn issue state recorded in one canonical durable surface.",
+            ],
+            "closure_effect": "partial",
+        },
+        {
+            "pr": "#4678",
+            "title": "Issue #1475: verify closure state surface",
+            "merged_at_utc": "2026-07-06T18:12:15Z",
+            "evidence": (
+                "Verified the executable audit and canonical state surface stay aligned "
+                "on acceptance statuses and blocked closure boundary."
+            ),
+            "criteria_supported": [
+                "State surface agrees with executable acceptance evidence.",
+            ],
+            "closure_effect": "partial",
+        },
+        {
+            "pr": "#4721",
+            "title": "Issue #1475: add acceptance audit integration report",
+            "merged_at_utc": "2026-07-07T02:26:36Z",
+            "evidence": (
+                "Added integration report fields naming remaining blockers, intentional "
+                "compute exclusions, and the next empirical Slurm smoke action."
+            ),
+            "criteria_supported": [
+                "Fragmentation guard satisfied by a consolidation/integration slice.",
+                "Remaining blockers and next empirical action recorded.",
+            ],
+            "closure_effect": "partial_keep_open",
+        },
+    ]
+
+
 def build_audit(
     *,
     repo_root: Path,
@@ -361,6 +436,7 @@ def build_audit(
             item.to_dict() for item in criteria if item.status in unmet_statuses
         ],
         "integration_report": integration_report,
+        "merged_pr_evidence": _build_merged_pr_evidence(),
         "state_surface": state_surface,
         "next_empirical_action": (
             "Run one bounded ORCA-residual BC smoke rerun on a Slurm-capable host; only if "

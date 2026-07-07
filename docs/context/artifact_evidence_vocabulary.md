@@ -49,6 +49,10 @@ coverage, temporary exports, videos, and caches, but it is not a durable depende
   hydrated, the dependent benchmark or planner path should fail closed with an actionable message.
 - When evidence is expensive or too large to commit, track a manifest or pointer instead of copying
   raw episodes, videos, checkpoints, model caches, or logs into git.
+- Substantial agent-produced evidence should include an
+  [Agent Run Manifest](../agent_run_manifest.md) (`agent_run_manifest.yaml`) in the evidence bundle
+  so the run that produced the evidence is auditable. Start from
+  [`docs/templates/agent_run_manifest.yaml`](../templates/agent_run_manifest.yaml).
 
 ## Learned-Policy Artifact Manifests
 

@@ -1,0 +1,86 @@
+# Agent Run Manifest Template
+#
+# Copy this file and fill in the fields to make a substantial agent-assisted run
+# auditable. See docs/agent_run_manifest.md for when this manifest is required,
+# where to store it, and trace/log hygiene expectations.
+#
+# Keep values scrubbed: do not include secrets, raw private prompts, full traces,
+# or token/credit details beyond coarse caps. Point to redacted or stored-privately
+# trace/log refs instead of pasting raw content.
+#
+# schema_version lets future validation evolve cleanly. Do not change it here
+# unless the schema contract is intentionally being revised.
+agent_run:
+  schema_version: agent-run-manifest.v1
+
+  # One-sentence objective of the run.
+  objective: ""
+
+  # Tool that drove the run. Use one of: codex | claude-code | copilot | other.
+  tool: "codex|claude-code|copilot|other"
+
+  # Model identifier as reported by the tool, e.g. "gpt-5-codex" or "claude-sonnet-4".
+  model: ""
+
+  # Tool/runtime version string, e.g. CLI version or extension version.
+  tool_version: ""
+
+  # Permission mode the run operated under: manual | auto | other.
+  permission_mode: "manual|auto|other"
+
+  # Repository-relative or absolute worktree path the run edited in.
+  worktree: ""
+
+  # GitHub Actions run id, if the run was triggered from a workflow; else "".
+  workflow_run_id: ""
+
+  # GitHub Actions workflow name, if applicable; else "".
+  workflow_name: ""
+
+  # Number of agents the run declared it would use; null when not declared.
+  declared_agent_count: null
+
+  # Number of agents the run actually used; null when unknown or not applicable.
+  actual_agent_count: null
+
+  # Commands executed by the run. Keep each entry a short, copyable string.
+  # Prefer canonical repo commands (e.g. "uv run pytest tests/test_x.py -q").
+  commands_run: []
+
+  # Tests run, with outcome if known, e.g. "tests/test_x.py::test_a (pass)".
+  tests_run: []
+
+  # External pages accessed during the run, as URLs. Leave empty when none.
+  external_pages_accessed: []
+
+  # References to trace/log artifacts. Prefer a stored-privately path or a
+  # redacted excerpt; never paste raw traces that may contain secrets.
+  trace_or_log_refs: []
+
+  # Set true after confirming traces/logs were reviewed and redacted as needed.
+  trace_redaction_checked: false
+
+  # Coarse cost or credit cap for the run, e.g. "~10 USD" or "<5% of weekly cap".
+  # Do not record precise token counts or private billing details.
+  cost_or_credit_cap: ""
+
+  # Why the run stopped: completed | blocked | usage-guard | user-stop | error.
+  stop_reason: ""
+
+  # Number of retries the run performed after a recoverable failure.
+  retries: 0
+
+  # Partial failures during the run, each with a short label and status, e.g.
+  # "validation: ruff check failed, fixed and rerun (pass)".
+  partial_failures: []
+
+  # Evidence produced by the run. Each entry should name the artifact and its
+  # durable location (not a worktree-local output/ path), per the
+  # Artifact Evidence Vocabulary (docs/context/artifact_evidence_vocabulary.md).
+  evidence_produced: []
+
+  # Short note describing the human validity check performed, or "pending".
+  human_validity_check: ""
+
+  # Remaining risk or caveat after the run, or "none known".
+  remaining_risk: ""

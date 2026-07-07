@@ -28,6 +28,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from robot_sf.data_ingestion.real_trajectory_contract import (
     ContractError,
+    _resolved_staging_dir,
+    _staging_tree_sha256,
     load_manifest,
     run_preflight,
 )
@@ -39,7 +41,51 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--json", action="store_true", help="Emit a machine-readable JSON report instead of text."
     )
+    parser.add_argument(
+        "--staging-checksum",
+        action="store_true",
+        help=(
+            "Include the resolved staging directory and aggregate SHA-256 tree checksum when "
+            "staging files are locally available."
+        ),
+    )
     return parser
+
+
+def _staging_tree_report(manifest: dict) -> dict[str, object]:
+    staging = manifest.get("staging", {})
+    staging_dir = staging.get("staging_dir") if isinstance(staging, dict) else None
+    if not isinstance(staging_dir, str):
+        return {"available": False, "reason": "manifest.staging.staging_dir missing"}
+
+    resolved = _resolved_staging_dir(staging_dir)
+    if "$" in str(resolved):
+        return {
+            "available": False,
+            "staging_dir": str(resolved),
+            "reason": "environment variable unresolved",
+        }
+    if not resolved.is_dir():
+        return {
+            "available": False,
+            "staging_dir": str(resolved),
+            "reason": "staging directory missing",
+        }
+
+    file_count = sum(1 for path in resolved.rglob("*") if path.is_file())
+    if file_count == 0:
+        return {
+            "available": False,
+            "staging_dir": str(resolved),
+            "file_count": 0,
+            "reason": "staging directory empty",
+        }
+    return {
+        "available": True,
+        "staging_dir": str(resolved),
+        "file_count": file_count,
+        "tree_sha256": _staging_tree_sha256(resolved),
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -68,6 +114,8 @@ def main(argv: list[str] | None = None) -> int:
                 for i in result.issues
             ],
         }
+        if args.staging_checksum:
+            payload["staging_tree"] = _staging_tree_report(manifest)
         print(json.dumps(payload, indent=2))
     else:
         status = "OK" if result.ok else "FAIL"
@@ -76,6 +124,8 @@ def main(argv: list[str] | None = None) -> int:
             f"  availability={result.availability} "
             f"benchmark_eligibility={result.benchmark_eligibility}"
         )
+        if args.staging_checksum:
+            print(f" staging_tree={_staging_tree_report(manifest)}")
         for issue in result.issues:
             print(f"  [{issue.severity}] {issue.code}: {issue.message}")
 

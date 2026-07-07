@@ -101,6 +101,7 @@ def _build_integration_report(
     campaign_dir: Path,
     report_json: Path,
     analyzer_command: str,
+    finalizer_command: str,
     preflight: dict[str, Any],
 ) -> dict[str, Any]:
     """Return machine-readable post-run handoff contract for issue #3637."""
@@ -121,17 +122,18 @@ def _build_integration_report(
             "campaign_report": str(report_json),
             "preflight_status": preflight["status"],
             "post_run_analyzer": analyzer_command,
+            "post_run_finalizer": finalizer_command,
         },
         "required_post_run_artifacts": [
             str(analysis_dir / filename) for filename in ANALYSIS_OUTPUT_FILES
         ],
         "remaining_acceptance_criteria": [
             "Run the predeclared >=3-planner, 20-seed reactive-vs-replay campaign.",
-            "Run the post-run analyzer against the completed campaign JSONL files.",
+            "Run the post-run finalizer against the completed campaign JSONL files.",
             "Record rank-stability and seed-sufficiency outputs in a durable evidence bundle.",
             "Classify the result conservatively before any paper-facing claim or issue closure.",
         ],
-        "next_empirical_action": analyzer_command,
+        "next_empirical_action": finalizer_command,
         "closure_decision": "keep_open_until_analysis_artifacts_exist",
         "forbidden_actions_confirmed": {
             "slurm_gpu_submission": False,
@@ -170,12 +172,20 @@ def main(argv: list[str] | None = None) -> int:
         f"--packet {args.packet} --campaign-dir {args.out_dir} "
         f"--campaign-report {args.report_json} --output-dir {args.out_dir / 'analysis'}"
     )
+    finalizer_command = (
+        "uv run python scripts/benchmark/"
+        "finalize_reactivity_replay_rank_study_issue_3637.py "
+        f"--packet {args.packet} --campaign-dir {args.out_dir} "
+        f"--campaign-report {args.report_json} --analysis-dir {args.out_dir / 'analysis'}"
+    )
     report["post_run_analyzer"] = analyzer_command
+    report["post_run_finalizer"] = finalizer_command
     report["integration_report"] = _build_integration_report(
         packet_path=args.packet,
         campaign_dir=args.out_dir,
         report_json=args.report_json,
         analyzer_command=analyzer_command,
+        finalizer_command=finalizer_command,
         preflight=preflight,
     )
 

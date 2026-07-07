@@ -60,7 +60,7 @@ Status: covered as a claim-boundary guard; not benchmark evidence.
 ### Route-Progress Accounting
 
 PR [#4411](https://github.com/ll7/robot_sf_ll7/pull/4411), merge
-`b067850e516a169d0d018c8c95fcdd44c30d4627`, added
+`31dd50467ee9a7361cdc236bb4682358d713afde`, added
 `topology_route_progress_state.v1` and near-parity churn metadata. PR #4444
 registered the monotone progress-gated reselection candidate.
 

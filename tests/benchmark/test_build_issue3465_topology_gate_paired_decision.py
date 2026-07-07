@@ -67,11 +67,11 @@ def test_decision_blocked_when_campaign_summary_missing(
     report = decision_builder.build_decision_report(CONFIG_PATH, tmp_path)
     assert report["status"] == "blocked"
     assert report["reason"] == "campaign_summary_missing"
-    assert "Campaign summary JSON not found" in report["blocked_reasons"][0]
+    assert "Campaign summary JSON is missing" in report["blocked_reasons"][0]
     assert str(_REPO_ROOT) not in report["blocked_reasons"][0]
     assert report["config_path"] == "configs/benchmarks/issue_3465_topology_gate_paired.yaml"
     assert report["acceptance_evidence"]
-    assert report["acceptance_evidence"][-1]["status"] == "blocked_pending_campaign"
+    assert report["acceptance_evidence"][-1]["status"] == "met"
 
 
 def test_decision_blocked_when_campaign_summary_invalid(

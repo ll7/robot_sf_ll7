@@ -141,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
             formats=formats,
             dpi=args.dpi,
         )
-    except MultiPlannerOverlayError as exc:
+    except (MultiPlannerOverlayError, ValueError) as exc:
         print(f"Error rendering overlay: {exc}", file=sys.stderr)
         return 1
 
@@ -163,22 +163,18 @@ def _handle_missing_planners(
     Returns:
         Exit code.
     """
-    from robot_sf.benchmark.multi_planner_overlay import _normalize_planner_key
+    from robot_sf.benchmark.multi_planner_overlay import _find_trajectory_row
 
     available: list[str] = []
     for pk in args.planners.split(","):
         pk = pk.strip()
         if not pk:
             continue
-        for ep in episodes:
-            ep_planner = _normalize_planner_key(ep)
-            if (
-                ep_planner == pk
-                and str(ep.get("scenario_id")) == args.scenario_id
-                and ep.get("seed") == args.seed
-            ):
-                available.append(pk)
-                break
+        # Reuse the canonical matcher so a planner counts as available only
+        # when it actually resolves to valid trajectory data (shared seed
+        # coercion + fail-closed extraction).
+        if _find_trajectory_row(episodes, args.scenario_id, args.seed, pk) is not None:
+            available.append(pk)
 
     if not available:
         print("Error: no trajectory data available", file=sys.stderr)
@@ -207,7 +203,7 @@ def _handle_missing_planners(
             formats=formats,
             dpi=args.dpi,
         )
-    except MultiPlannerOverlayError as exc:
+    except (MultiPlannerOverlayError, ValueError) as exc:
         print(f"Error rendering overlay: {exc}", file=sys.stderr)
         return 1
 

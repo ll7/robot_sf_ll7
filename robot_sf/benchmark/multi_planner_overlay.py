@@ -24,8 +24,8 @@ Usage (CLI):
 
 from __future__ import annotations
 
-import hashlib
 import json
+import math
 import subprocess
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -134,12 +134,23 @@ def _parse_positions(raw: Any) -> list[tuple[float, float]]:
     positions: list[tuple[float, float]] = []
     for item in raw:
         if isinstance(item, (list, tuple)) and len(item) >= 2:
-            positions.append((float(item[0]), float(item[1])))
+            try:
+                x, y = float(item[0]), float(item[1])
+            except (ValueError, TypeError):
+                continue
         elif isinstance(item, dict):
-            x = item.get("x", item.get("position_x"))
-            y = item.get("y", item.get("position_y"))
-            if x is not None and y is not None:
-                positions.append((float(x), float(y)))
+            x_val = item.get("x", item.get("position_x"))
+            y_val = item.get("y", item.get("position_y"))
+            if x_val is None or y_val is None:
+                continue
+            try:
+                x, y = float(x_val), float(y_val)
+            except (ValueError, TypeError):
+                continue
+        else:
+            continue
+        if math.isfinite(x) and math.isfinite(y):
+            positions.append((x, y))
     return positions
 
 
@@ -277,10 +288,17 @@ def _find_trajectory_row(
     """
     for ep in episodes:
         ep_scenario = str(ep.get("scenario_id", ""))
-        ep_seed = int(ep.get("seed", 0))
+        try:
+            ep_seed = int(ep.get("seed") or 0)
+        except (ValueError, TypeError):
+            continue
         ep_planner = _normalize_planner_key(ep)
         if ep_scenario == scenario_id and ep_seed == seed and ep_planner == planner_key:
-            return extract_trajectory_from_episode(ep)
+            row = extract_trajectory_from_episode(ep)
+            if row is not None:
+                # Keep scanning: another matching episode may carry valid
+                # trajectory data even when this one does not.
+                return row
     return None
 
 
@@ -305,7 +323,8 @@ def build_overlay_figure(
         trajectory_rows: Planner key to ``TrajectoryRow`` mapping.
         output_base: Base output path (without extension).
         formats: Output formats to save (``"pdf"``, ``"png"``, ``"svg"``).
-        dpi: Resolution for raster formats.
+        dpi: Accepted for API/CLI stability but currently ignored; the shared
+            ``save_publication_figure`` helper hardcodes 300 DPI for PNGs.
 
     Returns:
         List of generated file paths (figures plus sidecars).
@@ -381,7 +400,8 @@ def _plot_trajectories(
     """Plot all planner trajectories and optional pedestrian positions."""
     # Plot each planner trajectory
     for planner_key, row in trajectory_rows.items():
-        xs, ys = zip(*row.positions, strict=True)
+        xs = [p[0] for p in row.positions]
+        ys = [p[1] for p in row.positions]
         color = planner_color(planner_key)
         ax.plot(
             xs,
@@ -417,7 +437,8 @@ def _plot_trajectories(
     # Plot pedestrian positions if available from any row
     for row in trajectory_rows.values():
         if row.pedestrians:
-            ped_xs, ped_ys = zip(*row.pedestrians, strict=True)
+            ped_xs = [p[0] for p in row.pedestrians]
+            ped_ys = [p[1] for p in row.pedestrians]
             ax.scatter(
                 ped_xs,
                 ped_ys,
@@ -439,7 +460,7 @@ def _add_annotations(ax: plt.Axes, scenario_id: str, seed: int) -> None:
 
     # Legend
     handles, labels = ax.get_legend_handles_labels()
-    dedup = dict(zip(labels, handles, strict=False))
+    dedup = dict(zip(labels, handles, strict=True))
     ax.legend(dedup.values(), dedup.keys(), loc="best", fontsize=8)
 
     # Add claim boundary annotation
@@ -490,19 +511,6 @@ def _git_sha_short(length: int = 7) -> str:
         return sha or "unknown"
     except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         return "unknown"
-
-
-def _compute_file_sha256(path: Path) -> str:
-    """Compute SHA-256 of a file.
-
-    Returns:
-        Hex-encoded SHA-256 digest.
-    """
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def load_episodes(path: Path | str) -> list[dict[str, Any]]:

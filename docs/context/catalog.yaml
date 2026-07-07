@@ -3572,3 +3572,7 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_1358_acceptance_audit_2026-07-07.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

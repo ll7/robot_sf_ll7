@@ -33,7 +33,8 @@ Slurm smoke rerun + nominal escalation, CPU-side criteria delivered):
 Recent ORCA-residual parent closure audit (keep open; local handoff ready,
 parent blocked on Issue #1475 durable smoke/nominal evidence):
 [issue_1358_closure_audit_2026-07-07.md](issue_1358_closure_audit_2026-07-07.md).
-High-churn state propagation: [issue_1475_state.yaml](issue_1475_state.yaml).
+High-churn state propagation: [issue_1358_state.yaml](issue_1358_state.yaml),
+[issue_1475_state.yaml](issue_1475_state.yaml).
 
 Recent camera-ready decomposition closure audit:
 [issue_3385_closure_audit_2026_07_04.md](issue_3385_closure_audit_2026_07_04.md).

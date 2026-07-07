@@ -104,6 +104,8 @@ class ForecastLaneClosureCriterion:
     status: str
     evidence: tuple[str, ...]
     remaining_work: str
+    next_empirical_action: str
+    claim_boundary: str
 
     def as_dict(self) -> dict[str, Any]:
         """Return JSON-serializable closure-audit row."""
@@ -113,6 +115,8 @@ class ForecastLaneClosureCriterion:
             "status": self.status,
             "evidence": list(self.evidence),
             "remaining_work": self.remaining_work,
+            "next_empirical_action": self.next_empirical_action,
+            "claim_boundary": self.claim_boundary,
         }
 
 
@@ -372,6 +376,8 @@ _FORECAST_LANE_CLOSURE_CRITERIA: tuple[ForecastLaneClosureCriterion, ...] = (
             "robot_sf/benchmark/schemas/forecast_batch_schema.py",
         ),
         remaining_work="None for the ForecastBatch.v1 schema/provenance contract.",
+        next_empirical_action="No empirical action needed for this met schema contract.",
+        claim_boundary="Schema/provenance contract only; no forecast-quality or planner claim.",
     ),
     ForecastLaneClosureCriterion(
         criterion_id="motion_rich_trace_family",
@@ -382,6 +388,8 @@ _FORECAST_LANE_CLOSURE_CRITERIA: tuple[ForecastLaneClosureCriterion, ...] = (
             "None for the at-least-one-family criterion; broader scenario-matrix coverage is "
             "tracked by transferability_matrix."
         ),
+        next_empirical_action="Use existing motion-rich families as inputs to transfer rows.",
+        claim_boundary="Fixture availability only; no planner-safety or transferability claim.",
     ),
     ForecastLaneClosureCriterion(
         criterion_id="baseline_ladder",
@@ -391,6 +399,14 @@ _FORECAST_LANE_CLOSURE_CRITERIA: tuple[ForecastLaneClosureCriterion, ...] = (
         remaining_work=(
             "Baseline comparison remains diagnostic until same-seed planner consumption proves "
             "non-regressive safety/progress."
+        ),
+        next_empirical_action=(
+            "Promote the baseline ladder only through the closed-loop same-seed gate; do not "
+            "train learned predictors from open-loop baseline deltas alone."
+        ),
+        claim_boundary=(
+            "Open-loop and diagnostic baseline comparisons are infrastructure evidence, not "
+            "planner-facing proof."
         ),
     ),
     ForecastLaneClosureCriterion(
@@ -405,6 +421,14 @@ _FORECAST_LANE_CLOSURE_CRITERIA: tuple[ForecastLaneClosureCriterion, ...] = (
             "Metric/calibration plumbing exists, but forecast-risk scoring rows still need "
             "eligible risk-filtered planner evidence."
         ),
+        next_empirical_action=(
+            "Add or reuse risk-filtered closed-loop rows that report calibration, miss, "
+            "likelihood, and collision relevance together."
+        ),
+        claim_boundary=(
+            "Metric plumbing can be counted; safety or learned-predictor value cannot be "
+            "claimed until planner-consumed rows are valid."
+        ),
     ),
     ForecastLaneClosureCriterion(
         criterion_id="closed_loop_same_seed_gate",
@@ -414,6 +438,14 @@ _FORECAST_LANE_CLOSURE_CRITERIA: tuple[ForecastLaneClosureCriterion, ...] = (
         remaining_work=(
             "Forecast improvement has not yet been established as non-regressive planner "
             "safety/progress under explicit fallback/degraded accounting."
+        ),
+        next_empirical_action=(
+            "Run the smallest CPU/local same-seed replay slice that compares no-forecast, CV, "
+            "semantic, and interaction/risk arms with false-positive and runtime fields."
+        ),
+        claim_boundary=(
+            "Closed-loop evidence remains unresolved; fallback/degraded/proxy-only execution "
+            "must stay a blocker, not a success."
         ),
     ),
     ForecastLaneClosureCriterion(
@@ -425,6 +457,14 @@ _FORECAST_LANE_CLOSURE_CRITERIA: tuple[ForecastLaneClosureCriterion, ...] = (
         status="partial",
         evidence=("#2847", "#2866", "#2887"),
         remaining_work="Some transfer matrix cells remain unavailable or diagnostic-only.",
+        next_empirical_action=(
+            "Fill the highest-value unavailable matrix cells after the closed-loop metric rows "
+            "produce valid deployable evidence."
+        ),
+        claim_boundary=(
+            "Partial transfer rows are coverage evidence only; unavailable or diagnostic cells "
+            "block paper-facing transfer claims."
+        ),
     ),
     ForecastLaneClosureCriterion(
         criterion_id="final_synthesis",
@@ -432,6 +472,14 @@ _FORECAST_LANE_CLOSURE_CRITERIA: tuple[ForecastLaneClosureCriterion, ...] = (
         status="partial",
         evidence=("#2864", "#2881", "#2929"),
         remaining_work="Needs updated synthesis after closed-loop, calibration, and transfer rows settle.",
+        next_empirical_action=(
+            "Revise synthesis after the closed-loop, calibration/risk, and transfer criteria "
+            "settle; current decision stays revise/blocked for learned expansion."
+        ),
+        claim_boundary=(
+            "Current synthesis may recommend keeping infrastructure and revising learned "
+            "expansion, but cannot close the epic while empirical gates remain unmet."
+        ),
     ),
 )
 
@@ -614,6 +662,7 @@ def build_forecast_lane_closure_audit() -> dict[str, Any]:
     status_counts = {
         status: sum(row.status == status for row in criteria) for status in _VALID_CLOSURE_STATUSES
     }
+    next_empirical_actions = {row.criterion_id: row.next_empirical_action for row in unmet_rows}
 
     return {
         "schema": "forecast_lane_closure_audit.v1",
@@ -632,6 +681,7 @@ def build_forecast_lane_closure_audit() -> dict[str, Any]:
             "status_counts": status_counts,
             "invalid_criterion_ids": [row.criterion_id for row in invalid_rows],
             "unmet_criterion_ids": [row.criterion_id for row in unmet_rows],
+            "next_empirical_actions": next_empirical_actions,
         },
     }
 
@@ -661,6 +711,10 @@ def format_closure_audit_markdown(report: dict[str, Any]) -> str:
         lines.append("## Remaining criteria")
         for criterion_id in unmet:
             lines.append(f"- `{criterion_id}`")
+        lines.append("")
+        lines.append("## Next empirical actions")
+        for criterion_id, action in report["summary"]["next_empirical_actions"].items():
+            lines.append(f"- `{criterion_id}`: {action}")
     return "\n".join(lines)
 
 

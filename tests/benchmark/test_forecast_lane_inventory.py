@@ -237,12 +237,17 @@ def test_closure_audit_maps_criteria_to_evidence_and_keeps_issue_open():
     assert report["closable"] is False
     assert report["recommendation"] == "keep_open"
     assert "closed_loop_same_seed_gate" in report["summary"]["unmet_criterion_ids"]
+    assert "closed_loop_same_seed_gate" in report["summary"]["next_empirical_actions"]
 
     criteria = {row["criterion_id"]: row for row in report["criteria"]}
     assert criteria["forecast_batch_artifact_contract"]["status"] == "met"
     assert "#2849" in criteria["forecast_batch_artifact_contract"]["evidence"]
     assert criteria["closed_loop_same_seed_gate"]["status"] == "unresolved"
     assert "#2916" in criteria["closed_loop_same_seed_gate"]["evidence"]
+    assert (
+        "same-seed replay slice" in criteria["closed_loop_same_seed_gate"]["next_empirical_action"]
+    )
+    assert "fallback/degraded" in criteria["closed_loop_same_seed_gate"]["claim_boundary"]
 
 
 def test_closure_audit_markdown_lists_remaining_criteria():
@@ -252,6 +257,8 @@ def test_closure_audit_markdown_lists_remaining_criteria():
 
     assert "KEEP OPEN" in text
     assert "Remaining criteria" in text
+    assert "Next empirical actions" in text
+    assert "same-seed replay slice" in text
     assert "closed_loop_same_seed_gate" in text
     assert "#2849" in text
 
@@ -276,6 +283,7 @@ def test_cli_closure_audit_json_reports_keep_open():
     assert payload["schema"] == "forecast_lane_closure_audit.v1"
     assert payload["recommendation"] == "keep_open"
     assert payload["closable"] is False
+    assert "closed_loop_same_seed_gate" in payload["summary"]["next_empirical_actions"]
 
 
 def test_module_status_invocation_succeeds():

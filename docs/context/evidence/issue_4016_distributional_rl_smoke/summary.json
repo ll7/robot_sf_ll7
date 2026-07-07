@@ -1,11 +1,20 @@
 {
+  "benchmark_runner_measured": true,
   "claim_boundary": "risk-selection diagnostic only; not benchmark evidence",
   "evidence_tier": "diagnostic-only",
+  "fallback_degraded_rows": {
+    "mean": 0,
+    "risk": 0
+  },
   "fallback_or_degraded": false,
+  "included_rows": {
+    "mean": 6,
+    "risk": 6
+  },
   "issue": 4016,
   "mean_manifest": "docs/context/evidence/issue_4016_distributional_rl_smoke/qr_dqn_mean_manifest.json",
-  "observation_count": 8,
+  "mean_source_jsonl": "output/benchmarks/issue4016/mean/episodes.jsonl",
   "risk_manifest": "docs/context/evidence/issue_4016_distributional_rl_smoke/qr_dqn_cvar_manifest.json",
-  "schema_version": "issue_4016.smoke_manifest_materialization.v1",
-  "training_manifest": "output/models/distributional_rl/issue_4016/training_manifest.json"
+  "risk_source_jsonl": "output/benchmarks/issue4016/cvar/episodes.jsonl",
+  "schema_version": "issue_4016.benchmark_runner_summary.v1"
 }

@@ -15,8 +15,8 @@
 - `success_rate_delta`: 0
 - `collision_rate_delta`: 0
 - `near_miss_rate_delta`: 0
-- `mean_min_clearance_delta`: 0
-- `mean_path_efficiency_delta`: -0.5
+- `mean_min_clearance_delta`: 0.0179676
+- `mean_path_efficiency_delta`: 0
 
 ## Boundary
 

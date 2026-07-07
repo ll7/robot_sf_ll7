@@ -115,6 +115,10 @@ def _criteria(
     same_checkpoint = mean_manifest.get("checkpoint_path") == cvar_manifest.get("checkpoint_path")
     same_seed = mean_manifest.get("seed") == cvar_manifest.get("seed")
     same_steps = mean_manifest.get("total_timesteps") == cvar_manifest.get("total_timesteps")
+    measured_benchmark_metrics = (
+        mean_manifest.get("benchmark_runner_measured") is True
+        and cvar_manifest.get("benchmark_runner_measured") is True
+    )
     fallback_clean = (
         summary.get("fallback_or_degraded") is False
         and comparison.get("fallback_degraded_rows", {}).get("excluded") == 0
@@ -191,13 +195,16 @@ def _criteria(
                 "Reports include collision, near-miss, min-clearance, success/progress, and "
                 "path-efficiency tradeoffs."
             ),
-            "status": "partial",
+            "status": "met" if metric_keys_present and measured_benchmark_metrics else "partial",
             "evidence": [
                 f"Required metric keys present in smoke manifests: {metric_keys_present}.",
-                "PR #4672 gate review states these are synthetic-observation placeholders, not "
-                "measured benchmark safety outcomes.",
+                f"benchmark_runner_measured={measured_benchmark_metrics}.",
+                "Measured benchmark-runner manifests remain diagnostic-only; no paper-facing "
+                "safety claim is promoted.",
             ],
-            "remaining_work": (
+            "remaining_work": None
+            if metric_keys_present and measured_benchmark_metrics
+            else (
                 "Run or ingest a benchmark-runner measured comparison for mean and cvar_lower modes "
                 "on safety-relevant scenarios; keep fallback/degraded rows excluded or marked "
                 "non-evidence."

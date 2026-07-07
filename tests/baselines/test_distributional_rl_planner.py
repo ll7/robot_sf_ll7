@@ -54,6 +54,7 @@ def test_distributional_rl_planner_selects_lower_cvar_action(tmp_path: Path) -> 
     assert action == {"v": 0.0, "omega": 0.0}
     assert planner.diagnostics()["last_decision"]["selected_action_index"] == 0
     assert planner.get_metadata()["evidence_tier"] == "diagnostic-only"
+    assert "fallback_reason" not in planner.get_metadata()
 
 
 def test_distributional_rl_planner_selects_mean_return_action(tmp_path: Path) -> None:

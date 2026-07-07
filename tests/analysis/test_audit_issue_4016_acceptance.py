@@ -85,6 +85,26 @@ def test_acceptance_audit_keeps_measured_metrics_partial(tmp_path: Path) -> None
     assert any("benchmark-runner measured comparison" in blocker for blocker in audit["blockers"])
 
 
+def test_acceptance_audit_accepts_benchmark_runner_measured_metrics(tmp_path: Path) -> None:
+    """Measured benchmark-runner manifests satisfy the remaining metric criterion."""
+    evidence_dir = _evidence_dir(tmp_path)
+    for filename in ("qr_dqn_mean_manifest.json", "qr_dqn_cvar_manifest.json"):
+        path = evidence_dir / filename
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["benchmark_runner_measured"] = True
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+    audit = build_acceptance_audit(evidence_dir=evidence_dir)
+
+    assert audit["closure_status"] == "complete"
+    statuses = {item["criterion"]: item["status"] for item in audit["criteria"]}
+    measured_metric_statuses = [
+        status for criterion, status in statuses.items() if criterion.startswith("Reports include")
+    ]
+    assert measured_metric_statuses == ["met"]
+    assert audit["blockers"] == []
+
+
 def test_acceptance_audit_fails_closed_on_degraded_comparison(tmp_path: Path) -> None:
     """Fallback/degraded comparison rows block closure evidence."""
     evidence_dir = _evidence_dir(tmp_path)

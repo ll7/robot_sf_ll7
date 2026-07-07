@@ -208,13 +208,14 @@ class DistributionalRLPlanner:
             ),
             "config": asdict(self.config),
             "fallback_or_degraded": self._status != "ok",
-            "fallback_reason": self._fallback_reason,
             "planner_kinematics": {
                 "planner_command_space": "unicycle_vw",
                 "planner_output_keys": ["v", "omega"],
                 "native_env_action": False,
             },
         }
+        if self._fallback_reason is not None:
+            metadata["fallback_reason"] = self._fallback_reason
         if self._action_lattice is not None:
             metadata["action_lattice"] = self._action_lattice.to_dict()
         return metadata

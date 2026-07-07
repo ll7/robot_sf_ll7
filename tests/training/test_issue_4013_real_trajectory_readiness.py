@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 import yaml
 
+from robot_sf.data_ingestion import real_trajectory_contract as contract
 from scripts.training.check_issue_4013_real_trajectory_readiness import (
     build_report,
     render_markdown,
@@ -98,8 +99,9 @@ def test_validated_research_manifest_is_ready_for_real_trajectory_training(
     manifest = deepcopy(_manifest())
     manifest["availability"] = "validated"
     manifest["benchmark_eligibility"] = "research_only"
-    manifest["checksums"]["tree_sha256"] = "a" * 64
-    manifest["checksums"]["expected_tree_sha256"] = "a" * 64
+    tree_sha256 = contract._staging_tree_sha256(staging_dir)
+    manifest["checksums"]["tree_sha256"] = tree_sha256
+    manifest["checksums"]["expected_tree_sha256"] = tree_sha256
 
     report = build_report(_write_manifest(tmp_path, manifest))
 

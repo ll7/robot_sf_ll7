@@ -7,8 +7,10 @@ import pytest
 from robot_sf.benchmark.scenario_interop import (
     TARGET_COMPATIBILITY_SCHEMA_VERSION,
     TARGET_EXPORT_MANIFEST_SCHEMA_VERSION,
+    TARGET_EXPORT_PREVIEW_SCHEMA_VERSION,
     build_target_compatibility_report,
     build_target_export_manifest,
+    build_target_export_preview,
     convert_scenario_to_ir,
     dump_ir,
 )
@@ -106,6 +108,81 @@ def test_target_export_manifest_is_deterministic() -> None:
     second = build_target_export_manifest(
         convert_scenario_to_ir(_explicit_map_scenario()).ir,
         target="hunavsim",
+    )
+
+    assert dump_ir(first) == dump_ir(second)
+
+
+def test_socnavbench_export_preview_contains_target_shaped_payload() -> None:
+    """SocNavBench preview preserves mapped sections while still blocked."""
+
+    result = convert_scenario_to_ir(_explicit_map_scenario())
+    preview = build_target_export_preview(result.ir, target="socnavbench")
+
+    assert preview["schema_version"] == TARGET_EXPORT_PREVIEW_SCHEMA_VERSION
+    assert preview["artifact_kind"] == "socnavbench_scenario_export_preview"
+    assert preview["status"] == "blocked"
+    assert preview["payload"]["scenario"] == {
+        "name": "corridor-handoff",
+        "map": "maps/svg_maps/corridor.svg",
+        "environment_type": None,
+        "flow": "bi",
+        "density": None,
+        "seed_set": None,
+    }
+    assert preview["payload"]["pedestrians"] == [
+        {
+            "id": "ped-1",
+            "start": "north",
+            "goal": "south",
+            "preferred_speed_mps": 1.2,
+        }
+    ]
+    assert {blocker["code"] for blocker in preview["blockers"]} >= {
+        "socnavbench_assets_not_staged",
+        "unsupported_fields_present",
+    }
+
+
+def test_hunavsim_export_preview_contains_target_shaped_payload() -> None:
+    """HuNavSim preview records ROS-adapter-shaped inputs without claiming readiness."""
+
+    result = convert_scenario_to_ir(_explicit_map_scenario())
+    preview = build_target_export_preview(result.ir, target="hunavsim")
+
+    assert preview["schema_version"] == TARGET_EXPORT_PREVIEW_SCHEMA_VERSION
+    assert preview["artifact_kind"] == "hunavsim_scenario_export_preview"
+    assert preview["status"] == "blocked"
+    assert preview["payload"]["world"] == {
+        "map_file": "maps/svg_maps/corridor.svg",
+        "obstacle_topology": None,
+        "flow": "bi",
+    }
+    assert preview["payload"]["agents"] == [
+        {
+            "name": "ped-1",
+            "start_poi": "north",
+            "goal_poi": "south",
+            "behavior": {
+                "preferred_speed_mps": 1.2,
+                "role": None,
+                "role_target_id": None,
+            },
+        }
+    ]
+    assert any(warning["code"] == "ros_semantics_unmapped" for warning in preview["warnings"])
+
+
+def test_target_export_preview_is_deterministic() -> None:
+    """Identical target preview inputs serialize byte-identically."""
+
+    first = build_target_export_preview(
+        convert_scenario_to_ir(_explicit_map_scenario()).ir,
+        target="socnavbench",
+    )
+    second = build_target_export_preview(
+        convert_scenario_to_ir(_explicit_map_scenario()).ir,
+        target="socnavbench",
     )
 
     assert dump_ir(first) == dump_ir(second)

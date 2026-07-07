@@ -47,6 +47,7 @@ CONVERTER_NAME = "robot_sf.scenario_interop"
 CONVERTER_VERSION = "1"
 TARGET_COMPATIBILITY_SCHEMA_VERSION = "robot_sf.scenario_interop_target_compatibility.v1"
 TARGET_EXPORT_MANIFEST_SCHEMA_VERSION = "robot_sf.scenario_interop_target_export_manifest.v1"
+TARGET_EXPORT_PREVIEW_SCHEMA_VERSION = "robot_sf.scenario_interop_target_export_preview.v1"
 SUPPORTED_TARGETS = ("socnavbench", "hunavsim")
 IR_SCHEMA_FILE = Path(__file__).with_name("schemas") / "scenario_interop_ir.v1.json"
 
@@ -436,6 +437,95 @@ def build_target_export_manifest(ir: Mapping[str, Any], *, target: str) -> dict[
     }
 
 
+def build_target_export_preview(ir: Mapping[str, Any], *, target: str) -> dict[str, Any]:
+    """Build deterministic, target-shaped preview payload without external assets.
+
+    The preview is an asset-free handoff artifact: it preserves the target-specific
+    sections a real exporter must resolve while still failing closed through the
+    same compatibility blockers as the export manifest.
+
+    Returns:
+        JSON-safe target export preview with target-shaped payload and fail-closed status.
+    """
+
+    report = build_target_compatibility_report(ir, targets=(target,))[0]
+    payload = (
+        _build_socnavbench_preview_payload(ir)
+        if target == "socnavbench"
+        else _build_hunavsim_preview_payload(ir)
+    )
+    return {
+        "schema_version": TARGET_EXPORT_PREVIEW_SCHEMA_VERSION,
+        "artifact_kind": f"{target}_scenario_export_preview",
+        "target": target,
+        "source_scenario_id": report["source_scenario_id"],
+        "source_ir_schema_version": ir.get("schema_version"),
+        "status": "ready" if report["ready"] else "blocked",
+        "ready": report["ready"],
+        "blockers": report["blockers"],
+        "warnings": report["warnings"],
+        "payload": payload,
+        "compatibility_report_schema_version": report["schema_version"],
+    }
+
+
+def _build_socnavbench_preview_payload(ir: Mapping[str, Any]) -> dict[str, Any]:
+    geometry = ir.get("geometry") if isinstance(ir.get("geometry"), Mapping) else {}
+    environment = ir.get("environment") if isinstance(ir.get("environment"), Mapping) else {}
+    timing = ir.get("timing") if isinstance(ir.get("timing"), Mapping) else {}
+    return {
+        "scenario": {
+            "name": _ir_source_id(ir),
+            "map": geometry.get("map_file"),
+            "environment_type": geometry.get("environment_type"),
+            "flow": environment.get("flow"),
+            "density": environment.get("density"),
+            "seed_set": timing.get("seeds"),
+        },
+        "pedestrians": [
+            {
+                "id": agent.get("id"),
+                "start": agent.get("start"),
+                "goal": agent.get("goal"),
+                "preferred_speed_mps": agent.get("preferred_speed_mps"),
+            }
+            for agent in _ir_agents(ir)
+        ],
+    }
+
+
+def _build_hunavsim_preview_payload(ir: Mapping[str, Any]) -> dict[str, Any]:
+    geometry = ir.get("geometry") if isinstance(ir.get("geometry"), Mapping) else {}
+    environment = ir.get("environment") if isinstance(ir.get("environment"), Mapping) else {}
+    return {
+        "world": {
+            "map_file": geometry.get("map_file"),
+            "obstacle_topology": geometry.get("obstacle_topology"),
+            "flow": environment.get("flow"),
+        },
+        "agents": [
+            {
+                "name": agent.get("id"),
+                "start_poi": agent.get("start"),
+                "goal_poi": agent.get("goal"),
+                "behavior": {
+                    "preferred_speed_mps": agent.get("preferred_speed_mps"),
+                    "role": agent.get("role"),
+                    "role_target_id": agent.get("role_target_id"),
+                },
+            }
+            for agent in _ir_agents(ir)
+        ],
+    }
+
+
+def _ir_agents(ir: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    agents = ir.get("agents")
+    if not isinstance(agents, Sequence) or isinstance(agents, (str, bytes)):
+        return []
+    return [agent for agent in agents if isinstance(agent, Mapping)]
+
+
 def _target_blockers(ir: Mapping[str, Any], *, target: str) -> list[dict[str, str]]:
     blockers: list[dict[str, str]] = [dict(item) for item in _TARGET_ASSET_BLOCKERS[target]]
     geometry = ir.get("geometry") if isinstance(ir.get("geometry"), Mapping) else {}
@@ -526,8 +616,12 @@ __all__ = [
     "IR_SCHEMA_VERSION",
     "SUPPORTED_TARGETS",
     "TARGET_COMPATIBILITY_SCHEMA_VERSION",
+    "TARGET_EXPORT_MANIFEST_SCHEMA_VERSION",
+    "TARGET_EXPORT_PREVIEW_SCHEMA_VERSION",
     "ScenarioInteropResult",
     "build_target_compatibility_report",
+    "build_target_export_manifest",
+    "build_target_export_preview",
     "convert_scenario_to_ir",
     "dump_ir",
     "load_interop_ir_schema",

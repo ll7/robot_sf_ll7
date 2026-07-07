@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 import torch
 
+from robot_sf.data_ingestion import real_trajectory_contract as contract
 from robot_sf.planner.learned_short_horizon_predictor import (
     LearnedShortHorizonPedestrianPredictor,
     predictor_io_dims,
@@ -135,6 +136,7 @@ def test_real_trajectory_manifest_batch_requires_validated_data(tmp_path, monkey
         + "\n",
         encoding="utf-8",
     )
+    tree_sha256 = contract._staging_tree_sha256(staging_dir)
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(
         json.dumps(
@@ -162,8 +164,8 @@ def test_real_trajectory_manifest_batch_requires_validated_data(tmp_path, monkey
                 },
                 "checksums": {
                     "algorithm": "SHA-256",
-                    "tree_sha256": "0" * 64,
-                    "expected_tree_sha256": "0" * 64,
+                    "tree_sha256": tree_sha256,
+                    "expected_tree_sha256": tree_sha256,
                 },
                 "conversion": {
                     "frame_rate_hz": 2.5,

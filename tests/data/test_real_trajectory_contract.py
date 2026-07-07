@@ -19,6 +19,7 @@ from robot_sf.data_ingestion import (
     run_preflight,
     validate_manifest_structure,
 )
+from robot_sf.data_ingestion import real_trajectory_contract as contract
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE_MANIFEST = REPO_ROOT / "configs" / "data" / "real_trajectory_manifest.example.yaml"
@@ -184,8 +185,9 @@ def test_fully_validated_benchmark_candidate_passes(
     valid_manifest["staging"]["staging_dir"] = "${ROBOT_SF_EXTERNAL_DATA_ROOT}/synthetic_byo"
     valid_manifest["availability"] = "validated"
     valid_manifest["benchmark_eligibility"] = "benchmark_candidate"
-    valid_manifest["checksums"]["tree_sha256"] = "a" * 64
-    valid_manifest["checksums"]["expected_tree_sha256"] = "a" * 64
+    tree_sha256 = contract._staging_tree_sha256(staging_dir)
+    valid_manifest["checksums"]["tree_sha256"] = tree_sha256
+    valid_manifest["checksums"]["expected_tree_sha256"] = tree_sha256
     result = run_preflight(valid_manifest)
     assert result.ok, [f"{i.code}: {i.message}" for i in result.errors]
 
@@ -234,6 +236,48 @@ def test_validated_staging_dir_must_be_non_empty(
     assert any(i.code == "staging.dir_empty_for_validated" for i in result.errors)
 
 
+def test_validated_staging_tree_must_match_recorded_checksum(
+    valid_manifest: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Validated manifests fail closed when local files do not match pinned checksum."""
+
+    data_root = tmp_path / "external_data"
+    staging_dir = data_root / "synthetic_byo"
+    staging_dir.mkdir(parents=True)
+    (staging_dir / "trajectories.csv").write_text("frame,ped_id,x,y\n0,1,0,0\n", encoding="utf-8")
+    monkeypatch.setenv("ROBOT_SF_EXTERNAL_DATA_ROOT", str(data_root))
+    valid_manifest["staging"]["staging_dir"] = "${ROBOT_SF_EXTERNAL_DATA_ROOT}/synthetic_byo"
+    valid_manifest["availability"] = "validated"
+    valid_manifest["checksums"]["tree_sha256"] = "b" * 64
+    valid_manifest["checksums"]["expected_tree_sha256"] = "b" * 64
+
+    result = run_preflight(valid_manifest)
+
+    assert not result.ok
+    assert any(i.code == "checksums.staging_tree_mismatch" for i in result.errors)
+
+
+def test_validated_checksums_must_be_pinned_consistently(
+    valid_manifest: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Validated manifests fail closed when recorded and expected hashes diverge."""
+
+    data_root = tmp_path / "external_data"
+    staging_dir = data_root / "synthetic_byo"
+    staging_dir.mkdir(parents=True)
+    (staging_dir / "trajectories.csv").write_text("frame,ped_id,x,y\n0,1,0,0\n", encoding="utf-8")
+    monkeypatch.setenv("ROBOT_SF_EXTERNAL_DATA_ROOT", str(data_root))
+    valid_manifest["staging"]["staging_dir"] = "${ROBOT_SF_EXTERNAL_DATA_ROOT}/synthetic_byo"
+    valid_manifest["availability"] = "validated"
+    valid_manifest["checksums"]["tree_sha256"] = contract._staging_tree_sha256(staging_dir)
+    valid_manifest["checksums"]["expected_tree_sha256"] = "c" * 64
+
+    result = run_preflight(valid_manifest)
+
+    assert not result.ok
+    assert any(i.code == "checksums.recorded_expected_mismatch" for i in result.errors)
+
+
 def test_validated_output_relative_staging_is_cwd_independent(
     valid_manifest: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -247,8 +291,9 @@ def test_validated_output_relative_staging_is_cwd_independent(
     monkeypatch.setattr(contract, "get_repository_root", lambda: repo_root)
     valid_manifest["staging"]["staging_dir"] = "output/external_data/synthetic_byo"
     valid_manifest["availability"] = "validated"
-    valid_manifest["checksums"]["tree_sha256"] = "a" * 64
-    valid_manifest["checksums"]["expected_tree_sha256"] = "a" * 64
+    tree_sha256 = contract._staging_tree_sha256(staging_dir)
+    valid_manifest["checksums"]["tree_sha256"] = tree_sha256
+    valid_manifest["checksums"]["expected_tree_sha256"] = tree_sha256
 
     # Run from an unrelated cwd; resolution must still find the repo-root staging dir.
     other_cwd = tmp_path / "elsewhere"

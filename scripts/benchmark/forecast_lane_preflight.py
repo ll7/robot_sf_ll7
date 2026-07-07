@@ -7,6 +7,7 @@ and importable on the current checkout::
     uv run python scripts/benchmark/forecast_lane_preflight.py
     uv run python scripts/benchmark/forecast_lane_preflight.py --json
     uv run python scripts/benchmark/forecast_lane_preflight.py --status --json
+    uv run python scripts/benchmark/forecast_lane_preflight.py --closure-audit --json
 
 Exit code 0 means every required forecast capability is present; non-zero means a
 required capability is missing or broken (the report names the blocker and its

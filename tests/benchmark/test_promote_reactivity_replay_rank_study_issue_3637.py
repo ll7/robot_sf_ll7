@@ -44,6 +44,12 @@ def _write_analysis_dir(tmp_path: Path, *, replay_is_trajectory: bool = False) -
             "heldout_delta_threshold": None,
             "invalid_row_count": 0,
         },
+        "seed_sufficiency_gate_decision": {
+            "decision": "stop_confirmed",
+            "current_schedule": "s20",
+            "next_schedule": None,
+            "reason": "s20 stable under frozen threshold",
+        },
         "replay_limitation": {
             "is_trajectory_playback": replay_is_trajectory,
             "note": "'replay' = robot->pedestrian force disabled; not trajectory playback.",
@@ -54,6 +60,10 @@ def _write_analysis_dir(tmp_path: Path, *, replay_is_trajectory: bool = False) -
     (analysis_dir / "analysis.json").write_text(json.dumps(analysis), encoding="utf-8")
     (analysis_dir / "frozen_gate_input.json").write_text(
         json.dumps(analysis["seed_sufficiency_gate_input"]),
+        encoding="utf-8",
+    )
+    (analysis_dir / "seed_gate_decision.json").write_text(
+        json.dumps(analysis["seed_sufficiency_gate_decision"]),
         encoding="utf-8",
     )
     (analysis_dir / "rank_bootstrap_summary.json").write_text(
@@ -94,6 +104,7 @@ def test_promote_writes_durable_bundle_and_manifest(tmp_path: Path) -> None:
     assert "not a paper-facing claim by itself" in readme
     manifest = (evidence_dir / "manifest.sha256").read_text(encoding="utf-8")
     assert "analysis.json" in manifest
+    assert "seed_gate_decision.json" in manifest
     assert "summary.json" in manifest
 
 
@@ -104,6 +115,16 @@ def test_missing_required_artifact_fails_closed(tmp_path: Path) -> None:
     (analysis_dir / "rank_bootstrap_summary.json").unlink()
 
     with pytest.raises(PROMOTER.PromotionError, match="missing rank_bootstrap_summary.json"):
+        PROMOTER.promote(analysis_dir, tmp_path / "evidence")
+
+
+def test_missing_seed_gate_decision_fails_closed(tmp_path: Path) -> None:
+    """Promotion refuses outputs that skipped the frozen seed-sufficiency gate."""
+
+    analysis_dir = _write_analysis_dir(tmp_path)
+    (analysis_dir / "seed_gate_decision.json").unlink()
+
+    with pytest.raises(PROMOTER.PromotionError, match="missing seed_gate_decision.json"):
         PROMOTER.promote(analysis_dir, tmp_path / "evidence")
 
 

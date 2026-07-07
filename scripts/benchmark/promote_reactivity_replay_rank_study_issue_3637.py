@@ -25,6 +25,7 @@ REQUIRED_ARTIFACTS = (
     "README.md",
     "analysis.json",
     "frozen_gate_input.json",
+    "seed_gate_decision.json",
     "rank_bootstrap_summary.json",
     "per_planner_condition_metrics.csv",
 )
@@ -74,6 +75,10 @@ def _validate_analysis(analysis_dir: Path) -> dict[str, Any]:
         raise PromotionError("analysis claim_decision must be post_run_gate_input_ready")
     if analysis.get("episode_count") != analysis.get("expected_episode_count"):
         raise PromotionError("analysis episode_count must match expected_episode_count")
+    seed_gate_decision = _load_json(analysis_dir / "seed_gate_decision.json")
+    decision = seed_gate_decision.get("decision")
+    if not isinstance(decision, str) or not decision:
+        raise PromotionError("seed_gate_decision.json must include decision")
     return analysis
 
 
@@ -100,6 +105,7 @@ def _write_summary(evidence_dir: Path, analysis: dict[str, Any], analysis_dir: P
         "replay_limitation": analysis.get("replay_limitation"),
         "rank_effect": analysis.get("rank_effect"),
         "paired_seed_bootstrap": analysis.get("paired_seed_bootstrap"),
+        "seed_sufficiency_gate_decision": _load_json(analysis_dir / "seed_gate_decision.json"),
         "artifact_policy": (
             "Compact analyzer outputs are tracked here. Raw campaign JSONL/video/output files "
             "remain outside git and need durable external storage pointers before paper-facing use."

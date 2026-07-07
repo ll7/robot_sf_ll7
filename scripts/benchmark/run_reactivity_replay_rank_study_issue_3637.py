@@ -50,6 +50,7 @@ ANALYSIS_OUTPUT_FILES = (
     "README.md",
     "analysis.json",
     "frozen_gate_input.json",
+    "seed_gate_decision.json",
     "rank_bootstrap_summary.json",
     "per_planner_condition_metrics.csv",
 )

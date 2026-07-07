@@ -18,9 +18,7 @@ installed raises ``ImportError`` with a clear message. Do not add ``ompl`` to
 
 **Usage:**
     >>> from robot_sf.nav.svg_map_parser import convert_map
-    >>> from robot_sf.planner.ompl_geometric_adapter import (
-    ...     OmplGeometricAdapter, OmplPlannerChoice
-    ... )
+    >>> from robot_sf.planner.ompl_geometric_adapter import OmplGeometricAdapter, OmplPlannerChoice
     >>> map_def = convert_map("maps/svg_maps/classic_bottleneck.svg")
     >>> adapter = OmplGeometricAdapter(map_def, planner=OmplPlannerChoice.BITSTAR)
     >>> result = adapter.plan(start=(20.0, 31.0), goal=(20.0, 8.0))
@@ -131,13 +129,18 @@ def _build_obstacle_union(map_def: MapDefinition, robot_radius_m: float = 0.0):
     """
     polys = []
     for obs in map_def.obstacles:
-        try:
-            poly = Polygon(obs.vertices)
-            if robot_radius_m > 0.0:
-                poly = poly.buffer(robot_radius_m)
-            polys.append(poly)
-        except Exception:  # noqa: BLE001  # invalid geometry — skip
-            continue
+        # Use the obstacle's own polygon components (handles MultiPolygon and
+        # representative-vertex fallbacks) rather than Polygon(obs.vertices),
+        # which silently mis-constructs complex/holed obstacles.
+        for poly in obs.iter_polygons():
+            try:
+                if poly.is_empty:
+                    continue
+                if robot_radius_m > 0.0:
+                    poly = poly.buffer(robot_radius_m)
+                polys.append(poly)
+            except Exception:  # noqa: BLE001  # invalid geometry — skip
+                continue
     # Include map bounds as boundary obstacles
     w, h = map_def.width, map_def.height
     margin = 0.05  # thin boundary wall

@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point
 
 from robot_sf.nav.svg_map_parser import convert_map
 
@@ -35,7 +35,7 @@ def simple_map_def(tmp_path):
         '  <rect inkscape:label="robot_spawn_zone" x="1" y="1" width="1" height="1"/>\n'
         '  <rect inkscape:label="robot_goal_zone" x="18" y="18" width="1" height="1"/>\n'
         '  <path inkscape:label="robot_route_0_0" d="M 2 2 L 19 19"/>\n'
-        '</svg>'
+        "</svg>"
     )
     return convert_map(str(svg_path))
 
@@ -60,7 +60,7 @@ def empty_map_def(tmp_path):
         '  <rect inkscape:label="robot_spawn_zone" x="1" y="1" width="1" height="1"/>\n'
         '  <rect inkscape:label="robot_goal_zone" x="8" y="8" width="1" height="1"/>\n'
         '  <path inkscape:label="robot_route_0_0" d="M 2 2 L 9 9"/>\n'
-        '</svg>'
+        "</svg>"
     )
     return convert_map(str(svg_path))
 
@@ -71,15 +71,24 @@ def empty_map_def(tmp_path):
 
 
 def test_raises_import_error_when_ompl_missing():
-    """Construction raises ImportError with install instructions when ompl is absent."""
+    """Construction raises ImportError with install instructions when ompl is absent.
+
+    Forces ompl to be unimportable in the subprocess by poisoning ``sys.modules``
+    (``sys.modules['ompl'] = None`` makes ``import ompl`` raise ImportError) so the
+    contract is exercised even on machines where ompl *is* installed.
+    """
     result = subprocess.run(
         [
-            sys.executable, "-c",
-            "import sys; sys.modules.pop('ompl', None); "
-            "from robot_sf.nav.map_config import MapDefinition, Obstacle; "
-            "m = MapDefinition(width=10.0, height=10.0, obstacles=[]); "
+            sys.executable,
+            "-c",
+            "import sys; "
+            "sys.modules['ompl'] = None; "
+            "sys.modules['ompl.base'] = None; "
+            "sys.modules['ompl.geometric'] = None; "
             "from robot_sf.planner.ompl_geometric_adapter import OmplGeometricAdapter; "
-            "OmplGeometricAdapter(m)",
+            # map_def is unused: the ompl import guard runs first in __init__,
+            # so a sentinel is enough to reach the ImportError path.
+            "OmplGeometricAdapter(object())",
         ],
         capture_output=True,
         text=True,
@@ -87,11 +96,13 @@ def test_raises_import_error_when_ompl_missing():
         env={
             **dict(os.environ),
             "PYTHONPATH": str(Path(__file__).parents[2]),
-            "OMPPL_TEST_NO_OMPL": "1",
         },
     )
-    if result.returncode == 0:
-        pytest.skip("ompl is installed; ImportError contract cannot be tested in-process")
+    assert result.returncode != 0, (
+        f"Expected construction to fail when ompl is unavailable; "
+        f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
+    assert "ompl is not installed" in result.stderr, result.stderr
 
 
 # ---------------------------------------------------------------------------
@@ -194,9 +205,7 @@ class TestOmplIntegration:
             OmplPlannerChoice,
         )
 
-        adapter = OmplGeometricAdapter(
-            bottleneck_map_def, planner=OmplPlannerChoice.BITSTAR
-        )
+        adapter = OmplGeometricAdapter(bottleneck_map_def, planner=OmplPlannerChoice.BITSTAR)
         result = adapter.plan(start=(20.0, 31.0), goal=(20.0, 8.0))
 
         assert result.solved
@@ -212,17 +221,15 @@ class TestOmplIntegration:
             OmplPlannerChoice,
         )
 
-        adapter = OmplGeometricAdapter(
-            bottleneck_map_def, planner=OmplPlannerChoice.BITSTAR
-        )
+        adapter = OmplGeometricAdapter(bottleneck_map_def, planner=OmplPlannerChoice.BITSTAR)
         result = adapter.plan(start=(20.0, 31.0), goal=(20.0, 8.0))
 
         assert result.solved
         for wp in result.waypoints:
             pt = Point(wp)
             for obs in bottleneck_map_def.obstacles:
-                poly = Polygon(obs.vertices)
-                assert not poly.contains(pt), f"Waypoint {wp} inside obstacle"
+                for poly in obs.iter_polygons():
+                    assert not poly.contains(pt), f"Waypoint {wp} inside obstacle"
 
     def test_rrtconnect_plans_path(self, bottleneck_map_def):
         """RRTConnect finds a feasible path (may be suboptimal)."""
@@ -231,9 +238,7 @@ class TestOmplIntegration:
             OmplPlannerChoice,
         )
 
-        adapter = OmplGeometricAdapter(
-            bottleneck_map_def, planner=OmplPlannerChoice.RRTCONNECT
-        )
+        adapter = OmplGeometricAdapter(bottleneck_map_def, planner=OmplPlannerChoice.RRTCONNECT)
         result = adapter.plan(start=(20.0, 31.0), goal=(20.0, 8.0))
 
         assert result.solved
@@ -269,19 +274,13 @@ class TestOmplIntegration:
 
         adapter_no_inflate = OmplGeometricAdapter(
             simple_map_def,
-            config=OmplGeometricConfig(
-                planner=OmplPlannerChoice.BITSTAR, robot_radius_m=0.0
-            ),
+            config=OmplGeometricConfig(planner=OmplPlannerChoice.BITSTAR, robot_radius_m=0.0),
         )
-        result_no_inflate = adapter_no_inflate.plan(
-            start=(1.0, 3.0), goal=(1.0, 13.0)
-        )
+        result_no_inflate = adapter_no_inflate.plan(start=(1.0, 3.0), goal=(1.0, 13.0))
 
         adapter_inflate = OmplGeometricAdapter(
             simple_map_def,
-            config=OmplGeometricConfig(
-                planner=OmplPlannerChoice.BITSTAR, robot_radius_m=2.0
-            ),
+            config=OmplGeometricConfig(planner=OmplPlannerChoice.BITSTAR, robot_radius_m=2.0),
         )
         result_inflate = adapter_inflate.plan(start=(1.0, 3.0), goal=(1.0, 13.0))
 
@@ -303,9 +302,7 @@ class TestOmplIntegration:
         _, grid_info = grid_planner.plan(start, goal)
         grid_length = grid_info.get("length", 0) if grid_info else 0
 
-        adapter = OmplGeometricAdapter(
-            bottleneck_map_def, planner=OmplPlannerChoice.BITSTAR
-        )
+        adapter = OmplGeometricAdapter(bottleneck_map_def, planner=OmplPlannerChoice.BITSTAR)
         ompl_result = adapter.plan(start, goal)
 
         assert ompl_result.solved

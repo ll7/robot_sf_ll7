@@ -100,8 +100,8 @@ A standalone script `scripts/tools/mapf_oracle_diagnostic.py` that:
 
 ### What Is Deferred
 
-- Dynamic obstacle time-windows (requires known pedestrian trajectories).
-- Multi-agent CBS conflict resolution (requires multiple controlled agents).
+- ~~Dynamic obstacle time-windows~~ → implemented (PR #4809): SIPP search.
+- ~~Multi-agent CBS conflict resolution~~ → implemented (this PR): CBS search.
 - TPG schedule post-processing (requires CBS output).
 - Integration into the benchmark campaign loop (requires follow-up issue).
 

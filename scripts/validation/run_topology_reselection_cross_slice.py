@@ -7,6 +7,7 @@ import argparse
 import copy
 import json
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,12 @@ import yaml
 
 _DEFAULT_MANIFEST = Path("configs/policy_search/topology_reselection_cross_slice_issue_2716.yaml")
 _DEFAULT_REGISTRY = Path("docs/context/policy_search/candidate_registry.yaml")
+
+# Recorded (repo-relative) interpreter used in tracked evidence commands so the
+# provenance stays reproducible and free of absolute worktree paths. Execution
+# substitutes the real ``sys.executable`` (see ``run_row``) so the script does
+# not depend on the process cwd or a ``.venv`` at a fixed location.
+_RECORDED_INTERPRETER = ".venv/bin/python3"
 
 
 def _manifest_issue_number(manifest: dict[str, Any]) -> int:
@@ -245,7 +252,7 @@ def command_for_row(
             issue_number=_manifest_issue_number(manifest),
         )
     return [
-        ".venv/bin/python3",
+        _RECORDED_INTERPRETER,
         "scripts/validation/run_topology_hypothesis_diagnostics.py",
         "--candidate",
         candidate,
@@ -281,7 +288,12 @@ def run_row(command: list[str]) -> dict[str, Any]:
         Row result payload.
     """
 
-    completed = subprocess.run(command, check=False, capture_output=True, text=True)
+    exec_command = command
+    if command and command[0] == _RECORDED_INTERPRETER:
+        # Execute with the live interpreter; the recorded/relative form is kept
+        # only for reproducible evidence provenance, not for process launch.
+        exec_command = [sys.executable, *command[1:]]
+    completed = subprocess.run(exec_command, check=False, capture_output=True, text=True)
     stdout_payload: dict[str, Any] = {}
     if completed.stdout.strip():
         stdout_payload = json.loads(completed.stdout)

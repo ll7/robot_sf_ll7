@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -250,6 +251,28 @@ def test_run_row_handles_child_command_without_json_stdout(monkeypatch) -> None:
     assert result["diagnostic_status"] == "command_failed"
     assert result["trace"] is None
     assert "boom" in result["stderr_excerpt"]
+
+
+def test_run_row_executes_with_live_interpreter_not_recorded_path(monkeypatch) -> None:
+    """Execution must use sys.executable; the recorded relative interpreter is provenance only."""
+
+    captured: dict[str, list[str]] = {}
+
+    def fake_run(*args, **kwargs):
+        captured["argv"] = args[0]
+        return subprocess.CompletedProcess(args=args[0], returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+
+    recorded = [runner._RECORDED_INTERPRETER, "scripts/validation/some_child.py", "--flag"]
+    runner.run_row(recorded)
+
+    # argv[0] is swapped to the live interpreter so launch never depends on cwd
+    # or a .venv at a fixed location; the remaining args are preserved verbatim.
+    assert captured["argv"][0] == sys.executable
+    assert captured["argv"][1:] == recorded[1:]
+    # The caller's recorded command is left untouched for evidence provenance.
+    assert recorded[0] == runner._RECORDED_INTERPRETER
 
 
 # --- Issue #2742 successor manifest tests ---

@@ -35,7 +35,7 @@ The `event_disruption` family covers the following disruption dimensions:
 |---|---|---|
 | Dense pedestrian exit flow | Yes | Bidirectional, high-density, multiple archetypes |
 | Blocked path / temporary closure | Yes | `platform_semantics` hazard regions |
-| Non-cooperative pedestrians | Yes | Zero-speed blockers, proxemic-hold semantics |
+| Non-cooperative pedestrians | Yes | Reduced-speed (0.5×) archetype + proxemic-hold semantics; literal zero-speed holding is realized only by the scripted `p3` pedestrian (`wait_at`/`hold_*`), since composition rejects speed factors ≤ 0 |
 | Unexpected hazard objects | Yes | Rigid obstacle proxies (firework debris) |
 | Communication-loss flag | Planned | Metadata-only for first slice |
 | Low-battery / limited-fallback horizon | Planned | Metadata-only for first slice |
@@ -56,7 +56,7 @@ A deterministic template with:
 - **Pedestrian archetypes:**
   - `exiting_crowd`: higher-speed outbound flow (60% of population)
   - `counter_flow`: lower-speed inbound flow (25%)
-  - `non_cooperative`: zero-speed path blockers (15%)
+  - `non_cooperative`: reduced-speed path blockers, `archetype_speed_factors.non_cooperative: 0.5` (15%); literal zero-speed holding is scripted separately via the `p3` pedestrian's `wait_at`/`hold_*` fields
 - **Hazard regions** (metadata-only):
   - `temporary_blockage_01`: bbox barricade simulating event closure
   - `hazard_object_01`: polygon debris proxy (rigid obstacle)
@@ -66,14 +66,15 @@ A deterministic template with:
 ## Running
 
 ```bash
-# Load and validate the scenario through the existing loader:
-uv run python -m robot_sf.benchmark.cli \
-  --scenario configs/scenarios/event_disruption.yaml \
-  --max-episodes 1
-
-# Run smoke tests:
+# Load and validate the scenario family (this is the actual validation path;
+# the smoke test loads each YAML and runs it through validate_scenario_list):
 uv run pytest tests/scenarios/test_event_disruption_scenarios.py -v
 ```
+
+Note: `robot_sf.benchmark.cli` runs benchmark matrices via subcommands
+(`--matrix`/`--out`), not single scenario-family files, so there is no
+`--scenario`/`--max-episodes` one-liner for this manifest — the pytest smoke
+test above is the supported load-and-validate entry point for this slice.
 
 ## Known Limitations
 

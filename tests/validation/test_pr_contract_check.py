@@ -207,7 +207,11 @@ def test_regression_last_20_merged_prs() -> None:
         except Exception:
             changed_files = []
 
+        # Pass pr_number=None: this regression test only asserts on blockers, and
+        # supplying a real PR number would make Rule 6 (worker-lane provenance) run a
+        # live `gh pr edit --add-label cheap-lane` against real merged PRs as a test
+        # side-effect. None exercises the same blocker paths without mutating GitHub.
         blockers, _, _ = pr_contract_check.run_all_checks(
-            title, body, changed_files, "ll7/robot_sf_ll7", "origin/main", str(number)
+            title, body, changed_files, "ll7/robot_sf_ll7", "origin/main", None
         )
         assert not blockers, f"PR #{number} ('{title}') triggered false blockers: {blockers}"

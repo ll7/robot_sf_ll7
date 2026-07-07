@@ -16,6 +16,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Best-effort helpers below shell out to git/gh, parse JSON, and read files; these
+# are the only errors those operations realistically raise. Catching this explicit
+# tuple (instead of bare Exception) keeps the checks fail-soft without swallowing
+# genuine programming errors, and satisfies the broad-exception ratchet.
+# ValueError covers json.JSONDecodeError and UnicodeDecodeError (both subclasses);
+# OSError covers FileNotFoundError when git/gh is absent.
+_BEST_EFFORT_ERRORS = (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError)
+
 # Match keywords followed by #N or a GitHub issue URL
 CLOSING_PATTERN = re.compile(
     r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+`?(?:#(\d+)|https?://github\.com/[^/\s]+/[^/\s]+/issues/(\d+))\b",
@@ -82,7 +90,7 @@ def get_issue_labels(issue: str, repo: str) -> list[str]:
         if res.returncode == 0:
             data = json.loads(res.stdout)
             return [lbl["name"].lower() for lbl in data.get("labels", [])]
-    except Exception:  # noqa: BLE001
+    except _BEST_EFFORT_ERRORS:
         pass
     return []
 
@@ -104,7 +112,7 @@ def get_new_files(base_ref: str) -> set[str]:
                     status, path = parts
                     if status.startswith("A"):
                         new_files.add(path.replace("\\", "/").strip())
-    except Exception:  # noqa: BLE001
+    except _BEST_EFFORT_ERRORS:
         pass
     return new_files
 
@@ -200,7 +208,7 @@ def check_evidence_tree_hygiene(changed_files: list[str], base_ref: str) -> list
         try:
             with open(f, encoding="utf-8") as file_obj:
                 content = file_obj.read()
-        except Exception:  # noqa: BLE001
+        except _BEST_EFFORT_ERRORS:
             continue
 
         # 1. Marker check for new evidence files
@@ -274,7 +282,7 @@ def check_successor_discipline(title: str, body: str, repo: str) -> list[str]:
                             f"but the PR body does not contain a successor statement ('successor slice' "
                             f"or 'does not duplicate')."
                         )
-            except Exception:  # noqa: BLE001
+            except _BEST_EFFORT_ERRORS:
                 pass
     return warnings
 
@@ -306,7 +314,7 @@ def check_worker_lane_provenance(body: str, pr_number: str | None, repo: str) ->
                         f"INFO: Detected cheap-lane provenance, but failed to add label: {res.stderr.strip()}",
                         True,
                     )
-            except Exception as e:  # noqa: BLE001
+            except _BEST_EFFORT_ERRORS as e:
                 return (
                     f"INFO: Detected cheap-lane provenance, but failed to run gh to add label: {e}",
                     True,
@@ -337,7 +345,7 @@ def post_or_update_comment(pr_number: str, repo: str, comment_body: str) -> None
                 if signature in c.get("body", ""):
                     comment_id = c.get("id")
                     break
-    except Exception as e:  # noqa: BLE001
+    except _BEST_EFFORT_ERRORS as e:
         print(f"Error searching for comment: {e}", file=sys.stderr)
 
     if comment_id:
@@ -355,7 +363,7 @@ def post_or_update_comment(pr_number: str, repo: str, comment_body: str) -> None
                 check=True,
             )
             print("Successfully updated existing comment.")
-        except Exception as e:  # noqa: BLE001
+        except _BEST_EFFORT_ERRORS as e:
             print(f"Error updating comment: {e}", file=sys.stderr)
     else:
         try:
@@ -373,7 +381,7 @@ def post_or_update_comment(pr_number: str, repo: str, comment_body: str) -> None
                 check=True,
             )
             print("Successfully created new comment.")
-        except Exception as e:  # noqa: BLE001
+        except _BEST_EFFORT_ERRORS as e:
             print(f"Error creating comment: {e}", file=sys.stderr)
 
 
@@ -491,7 +499,7 @@ def get_changed_files(changed_files_file: Path | None, base_ref: str) -> list[st
         try:
             with open(changed_files_file, encoding="utf-8") as f:
                 return [line.strip() for line in f if line.strip()]
-        except Exception:  # noqa: BLE001
+        except _BEST_EFFORT_ERRORS:
             pass
 
     try:
@@ -503,7 +511,7 @@ def get_changed_files(changed_files_file: Path | None, base_ref: str) -> list[st
         )
         if res.returncode == 0:
             return [line.strip() for line in res.stdout.splitlines() if line.strip()]
-    except Exception:  # noqa: BLE001
+    except _BEST_EFFORT_ERRORS:
         pass
     return []
 
@@ -540,7 +548,7 @@ def main() -> int:  # noqa: C901
             pr_title = pull_request.get("title") or ""
             pr_number = str(pull_request.get("number", ""))
             repo = event.get("repository", {}).get("full_name") or repo
-        except Exception as e:  # noqa: BLE001
+        except _BEST_EFFORT_ERRORS as e:
             print(f"Error reading event path: {e}", file=sys.stderr)
 
     # CLI overrides

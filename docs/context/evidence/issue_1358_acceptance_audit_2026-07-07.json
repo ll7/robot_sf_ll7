@@ -85,10 +85,8 @@
       }
     ],
     "state_surface": {
-      "entry_status": "integration_report_delivered__external_slurm_rerun_pending",
       "errors": [],
       "integration_report_status": "blocked",
-      "latest_recorded_at_utc": "2026-07-07T02:20:00Z",
       "path": "docs/context/issue_1475_state.yaml",
       "status": "valid"
     },
@@ -129,9 +127,9 @@
   ],
   "schema_version": "issue-1358-acceptance-audit.v1",
   "state_surface": {
-    "entry_status": "local_contract_delivered__external_slurm_child_pending",
+    "entry_status": "parent_audit_child_state_normalized__external_slurm_child_pending",
     "errors": [],
-    "latest_recorded_at_utc": "2026-07-07T01:15:00Z",
+    "latest_recorded_at_utc": "2026-07-07T03:35:00Z",
     "path": "docs/context/issue_1358_state.yaml",
     "status": "valid"
   },

@@ -6,6 +6,9 @@ Recent SocNavBench ETH stage/SVG closure audit and generated SVG evidence:
 Recent Simple Linux Utility Resource Management (SLURM)-to-claim closure audit:
 [issue_3425_closure_audit_2026-07-05.md](evidence/issue_3425_closure_audit_2026-07-05.md).
 
+Recent campaign fail-fast contract closure audit:
+[issue_4684_closure_audit_2026-07-07.md](evidence/issue_4684_closure_audit_2026-07-07.md).
+
 Recent Package C prediction/observation closure audit:
 [issue_3080_closure_audit_2026-07-05.md](evidence/issue_3080_closure_audit_2026-07-05.md).
 

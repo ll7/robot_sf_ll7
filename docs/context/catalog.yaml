@@ -33,6 +33,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_4684_closure_audit_2026-07-07.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_1134_state.yaml
     status: current
     freshness: maintained

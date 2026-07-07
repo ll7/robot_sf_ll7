@@ -85,6 +85,60 @@
     "status": "blocked"
   },
   "issue": 1475,
+  "merged_pr_evidence": [
+    {
+      "closure_effect": "partial",
+      "criteria_supported": [
+        "Fallback/degraded rows are not counted learned-residual success evidence.",
+        "Smoke result recorded before nominal escalation."
+      ],
+      "evidence": "Added CPU-only validate_smoke_nominal_gate() and CLI validation for required smoke telemetry, fallback/degraded status, durable artifact status, and smoke thresholds before nominal escalation.",
+      "merged_at_utc": "2026-07-05T02:58:35Z",
+      "pr": "#4561",
+      "title": "Issue #1475 add ORCA-residual smoke nominal gate"
+    },
+    {
+      "closure_effect": "partial",
+      "criteria_supported": [
+        "All acceptance criteria mapped to repository evidence."
+      ],
+      "evidence": "Added the executable criterion-to-evidence audit over tracked issue #1475 smoke artifacts and fail-closed closure_call=keep_open behavior.",
+      "merged_at_utc": "2026-07-06T15:44:15Z",
+      "pr": "#4661",
+      "title": "Issue #1475: add executable acceptance audit"
+    },
+    {
+      "closure_effect": "partial",
+      "criteria_supported": [
+        "High-churn issue state recorded in one canonical durable surface."
+      ],
+      "evidence": "Added docs/context/issue_1475_state.yaml as the canonical durable state surface for high-churn issue #1475 audit propagation.",
+      "merged_at_utc": "2026-07-06T16:52:33Z",
+      "pr": "#4667",
+      "title": "Issue #1475: add high-churn closure state surface"
+    },
+    {
+      "closure_effect": "partial",
+      "criteria_supported": [
+        "State surface agrees with executable acceptance evidence."
+      ],
+      "evidence": "Verified the executable audit and canonical state surface stay aligned on acceptance statuses and blocked closure boundary.",
+      "merged_at_utc": "2026-07-06T18:12:15Z",
+      "pr": "#4678",
+      "title": "Issue #1475: verify closure state surface"
+    },
+    {
+      "closure_effect": "partial_keep_open",
+      "criteria_supported": [
+        "Fragmentation guard satisfied by a consolidation/integration slice.",
+        "Remaining blockers and next empirical action recorded."
+      ],
+      "evidence": "Added integration report fields naming remaining blockers, intentional compute exclusions, and the next empirical Slurm smoke action.",
+      "merged_at_utc": "2026-07-07T02:26:36Z",
+      "pr": "#4721",
+      "title": "Issue #1475: add acceptance audit integration report"
+    }
+  ],
   "next_empirical_action": "Run one bounded ORCA-residual BC smoke rerun on a Slurm-capable host; only if validate_smoke_nominal_gate passes, escalate nominal and classify #1358 continuation/revise/stop.",
   "remaining_criteria": [
     {
@@ -115,10 +169,10 @@
   },
   "source_thread_summary": "Issue #1475 live thread reviewed via gh api on 2026-07-06; latest maintainer comment remains the 2026-07-05 post-PR #4561 gate update.",
   "state_surface": {
-    "entry_status": "integration_report_delivered__external_slurm_rerun_pending",
+    "entry_status": "merged_pr_evidence_audit_delivered__external_slurm_rerun_pending",
     "errors": [],
     "integration_report_status": "blocked",
-    "latest_recorded_at_utc": "2026-07-07T02:20:00Z",
+    "latest_recorded_at_utc": "2026-07-07T02:55:00Z",
     "path": "docs/context/issue_1475_state.yaml",
     "status": "valid"
   },

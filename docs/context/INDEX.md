@@ -9,6 +9,12 @@ Recent Simple Linux Utility Resource Management (SLURM)-to-claim closure audit:
 Recent campaign fail-fast contract closure audit:
 [issue_4684_closure_audit_2026-07-07.md](evidence/issue_4684_closure_audit_2026-07-07.md).
 
+Recent topology corrective-behaviors closure audit:
+[issue_3463_closure_audit_2026-07-07.md](evidence/issue_3463_closure_audit_2026-07-07.md).
+
+High-churn topology corrective-behaviors issue state:
+[issue_3463_state.yaml](issue_3463_state.yaml).
+
 Recent Package C prediction/observation closure audit:
 [issue_3080_closure_audit_2026-07-05.md](evidence/issue_3080_closure_audit_2026-07-05.md).
 

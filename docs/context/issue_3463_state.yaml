@@ -1,0 +1,24 @@
+issue: 3463
+state_surface: high_churn_issue_state
+updated_at: "2026-07-07"
+current_status: open_blocked_diagnostic_only
+claim_boundary: diagnostic_only_not_benchmark_or_paper_evidence
+benchmark_promotion_gate: 3465
+latest_audit:
+  path: docs/context/evidence/issue_3463_closure_audit_2026-07-07.md
+  decision: keep_open
+  reason: >
+    Corrective implementation surfaces are present, but the latest CPU-only
+    cross-slice packet is fail-closed blocked because doorway_transfer rows are
+    not_available after obstacle collision.
+latest_blocker:
+  evidence_path: docs/context/evidence/issue_3463_topology_reselection_cross_slice_2026-07-05/summary.json
+  slice_id: doorway_transfer
+  status: not_available
+  outcome: obstacle_collision
+  rows: 5
+  next_empirical_action: repair_or_replace_slice_before_benchmark_promotion
+forbidden_claims:
+  benchmark_improvement: false
+  planner_promotion: false
+  paper_or_dissertation_claim: false

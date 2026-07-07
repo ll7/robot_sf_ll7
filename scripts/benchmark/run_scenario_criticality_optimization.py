@@ -21,6 +21,7 @@ import argparse
 import hashlib
 import json
 import random
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -68,6 +69,9 @@ class OptimizationConfig:
         objective_weights: Weights for criticality objective
         invalid_run_policy: "fail_closed" or "log_continue"
         diagnostic_only: Must be True to acknowledge exploratory status
+        horizon: Simulation horizon in steps
+        dt: Simulation timestep in seconds
+        max_workers: Max parallel candidates (1 = sequential, 0 = auto)
     """
 
     parameter_space: dict[str, ParameterDefinition]
@@ -82,6 +86,7 @@ class OptimizationConfig:
     diagnostic_only: bool = True
     horizon: int = 80
     dt: float = 0.1
+    max_workers: int = 1
 
 
 @dataclass
@@ -170,6 +175,7 @@ def _parse_optimization_config(payload: dict[str, Any]) -> OptimizationConfig:
         diagnostic_only=bool(payload.get("diagnostic_only_not_benchmark_gate", True)),
         horizon=int(payload.get("horizon", 80)),
         dt=float(payload.get("dt", 0.1)),
+        max_workers=int(payload.get("max_workers", 1)),
     )
 
 
@@ -341,7 +347,7 @@ def _evaluate_candidate(  # noqa: C901
         )
 
 
-def run_criticality_optimization(
+def run_criticality_optimization(  # noqa: C901
     config: OptimizationConfig,
     output_dir: Path | None = None,
 ) -> tuple[list[CandidateResult], dict[str, Any]]:
@@ -367,7 +373,6 @@ def run_criticality_optimization(
         scenarios = list(config.scenario_family)
 
     if not scenarios:
-        # Fallback default scenario
         default_path = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
         if default_path.exists():
             scenarios = load_scenarios(default_path)
@@ -379,7 +384,6 @@ def run_criticality_optimization(
 
     rng = random.Random(config.optimizer_seed)
     baseline_params = _build_baseline_parameters(config.parameter_space)
-    candidates = []
 
     objective_config = CriticalityObjectiveConfig(
         collision_weight=config.objective_weights.get("collision", 10.0),
@@ -390,34 +394,62 @@ def run_criticality_optimization(
         stalled_time_weight=config.objective_weights.get("stalled_time", 0.5),
     )
 
-    baseline_result = _evaluate_candidate(
-        candidate_id="baseline_unperturbed",
-        parameters=baseline_params,
-        scenario=scenario,
-        config=config,
-        objective_config=objective_config,
-        output_dir=output_dir,
-        scenario_path=scenario_path,
-    )
-    candidates.append(baseline_result)
-
+    # Pre-sample all candidate parameters for deterministic parallel execution
+    candidate_params: list[tuple[str, dict[str, float]]] = [
+        ("baseline_unperturbed", baseline_params),
+    ]
     for i in range(config.sample_budget):
         params = _sample_parameters(config.parameter_space, rng)
-        candidate_id = f"candidate_{i:04d}"
+        candidate_params.append((f"candidate_{i:04d}", params))
 
-        result = _evaluate_candidate(
-            candidate_id=candidate_id,
-            parameters=params,
-            scenario=scenario,
-            config=config,
-            objective_config=objective_config,
-            output_dir=output_dir,
-            scenario_path=scenario_path,
-        )
-        candidates.append(result)
+    # Resolve effective worker count: 0 means auto (cpu_count), 1 means sequential
+    effective_workers = config.max_workers
+    if effective_workers == 0:
+        import os
+
+        effective_workers = os.cpu_count() or 1
+
+    candidates: list[CandidateResult] = []
+
+    if effective_workers <= 1:
+        # Sequential evaluation (original behavior)
+        for cand_id, params in candidate_params:
+            result = _evaluate_candidate(
+                candidate_id=cand_id,
+                parameters=params,
+                scenario=scenario,
+                config=config,
+                objective_config=objective_config,
+                output_dir=output_dir,
+                scenario_path=scenario_path,
+            )
+            candidates.append(result)
+    else:
+        # Parallel evaluation with ProcessPoolExecutor
+        with ProcessPoolExecutor(max_workers=effective_workers) as executor:
+            futures = {
+                executor.submit(
+                    _evaluate_candidate,
+                    candidate_id=cand_id,
+                    parameters=params,
+                    scenario=scenario,
+                    config=config,
+                    objective_config=objective_config,
+                    output_dir=output_dir,
+                    scenario_path=scenario_path,
+                ): cand_id
+                for cand_id, params in candidate_params
+            }
+            for future in as_completed(futures):
+                candidates.append(future.result())
 
     evaluated = [c for c in candidates if c.status == "evaluated"]
     best_candidates = sorted(evaluated, key=lambda c: c.criticality_score, reverse=True)[:5]
+
+    baseline_candidate = next(
+        (c for c in candidates if c.candidate_id == "baseline_unperturbed"), None
+    )
+    baseline_score = baseline_candidate.criticality_score if baseline_candidate else float("nan")
 
     manifest = {
         "issue": 4362,
@@ -438,13 +470,14 @@ def run_criticality_optimization(
         },
         "objective_weights": config.objective_weights,
         "invalid_run_policy": config.invalid_run_policy,
+        "max_workers": effective_workers,
         "total_candidates": len(candidates),
         "evaluated_count": len(evaluated),
         "invalid_count": len([c for c in candidates if c.status == "invalid_candidate"]),
         "not_evaluable_count": len([c for c in candidates if c.status == "not_evaluable"]),
         "best_candidate_id": best_candidates[0].candidate_id if best_candidates else None,
         "best_criticality_score": best_candidates[0].criticality_score if best_candidates else None,
-        "baseline_score": baseline_result.criticality_score,
+        "baseline_score": baseline_score,
         "generated_at": datetime.now(UTC).isoformat(),
     }
 

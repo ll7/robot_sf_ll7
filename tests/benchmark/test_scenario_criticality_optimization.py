@@ -228,3 +228,24 @@ def test_cli_help() -> None:
     assert (
         "scenario criticality" in result.stdout.lower() or "optimization" in result.stdout.lower()
     )
+
+
+def test_max_workers_default_is_sequential() -> None:
+    """Default max_workers=1 means sequential execution."""
+    config = _make_test_config()
+    assert config.max_workers == 1
+
+
+def test_max_workers_stored_in_config() -> None:
+    """max_workers can be set on OptimizationConfig."""
+    config = _make_test_config()
+    config.max_workers = 2
+    assert config.max_workers == 2
+
+
+def test_manifest_includes_max_workers() -> None:
+    """Manifest records the effective max_workers used."""
+    config = _make_test_config()
+    config.max_workers = 1
+    _, manifest = run_criticality_optimization(config)
+    assert manifest["max_workers"] == 1

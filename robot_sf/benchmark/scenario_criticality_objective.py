@@ -16,11 +16,27 @@ Claim boundary: exploratory/diagnostic-only; not a validated benchmark method.
 from __future__ import annotations
 
 import copy
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from robot_sf.benchmark.map_runner_episode import EpisodeData
+
+_LOGGER = logging.getLogger(__name__)
+
+#: Canonical collision metric key expected from the episode-metrics schema.
+#: All new episode outputs should use this key.  The fallback chain below
+#: exists only for backward compatibility with older simulator outputs.
+CANONICAL_COLLISION_KEY: str = "collision_count"
+
+#: Ordered fallback keys tried when the canonical key is absent.
+#: The order is: agent-scoped count, then total-scoped, then legacy name.
+COLLISION_KEY_FALLBACKS: tuple[str, ...] = (
+    "agent_collision_count",
+    "total_collision_count",
+    "collisions",
+)
 
 
 @dataclass
@@ -60,6 +76,7 @@ class CriticalityResult:
         status: "evaluated", "not_evaluable", or "invalid_candidate"
         reason: Optional explanation for non-evaluated status
         raw_metrics: Dict of raw metric values used
+        collision_key_used: The actual metric key resolved for collision count
     """
 
     criticality_score: float
@@ -71,6 +88,7 @@ class CriticalityResult:
     status: str
     reason: str | None = None
     raw_metrics: dict[str, float] | None = None
+    collision_key_used: str | None = None
 
 
 def _safe_get_metric(
@@ -107,6 +125,26 @@ def _safe_get_metric(
     return default if default is not None else float("nan")
 
 
+def _resolve_collision_key(metrics: dict[str, Any]) -> tuple[str, bool]:
+    """Resolve the collision metric key with explicit fallback chain.
+
+    Returns:
+        Tuple of (resolved_key, used_fallback). ``used_fallback`` is True
+        when the canonical key was absent and a fallback key was selected.
+    """
+    if CANONICAL_COLLISION_KEY in metrics:
+        return CANONICAL_COLLISION_KEY, False
+    for fallback in COLLISION_KEY_FALLBACKS:
+        if fallback in metrics:
+            _LOGGER.info(
+                "Collision metric: canonical key %r missing, using fallback %r",
+                CANONICAL_COLLISION_KEY,
+                fallback,
+            )
+            return fallback, True
+    return CANONICAL_COLLISION_KEY, False
+
+
 def compute_criticality_score(
     episode_data: EpisodeData,
     config: CriticalityObjectiveConfig | None = None,
@@ -134,13 +172,8 @@ def compute_criticality_score(
 
     fail_closed = config.fail_closed
 
-    # Map collision metric from alternative simulator keys if main key is absent
-    col_key = "collision_count"
-    if col_key not in metrics:
-        for alt in ["collisions", "agent_collision_count", "total_collision_count"]:
-            if alt in metrics:
-                col_key = alt
-                break
+    # Resolve collision metric key with explicit fallback chain
+    col_key, _used_fallback = _resolve_collision_key(metrics)
     collision_count = _safe_get_metric(metrics, col_key, 0.0, fail_closed)
     near_misses = _safe_get_metric(metrics, "near_misses", 0.0, fail_closed)
     min_clearance = _safe_get_metric(metrics, "min_clearance", float("nan"), fail_closed)
@@ -165,6 +198,7 @@ def compute_criticality_score(
             status="not_evaluable",
             reason="Missing required metrics with fail_closed=True",
             raw_metrics=metrics,
+            collision_key_used=col_key,
         )
 
     collision_count = collision_count if collision_count is not None else 0.0
@@ -206,6 +240,7 @@ def compute_criticality_score(
             "failure_to_progress": failure_to_progress,
             "stalled_time": stalled_time,
         },
+        collision_key_used=col_key,
     )
 
 
@@ -329,6 +364,8 @@ def apply_criticality_parameters(
 
 
 __all__ = [
+    "CANONICAL_COLLISION_KEY",
+    "COLLISION_KEY_FALLBACKS",
     "CriticalityObjectiveConfig",
     "CriticalityResult",
     "apply_criticality_parameters",

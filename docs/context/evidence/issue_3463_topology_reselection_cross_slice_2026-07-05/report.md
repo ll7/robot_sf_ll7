@@ -1,9 +1,9 @@
-# Issue #3463 — Topology Reselection Cross-Slice Diagnostic
+# Issue #3463 - Topology Reselection Cross-Slice Diagnostic
 
 Claim boundary: `diagnostic_only_not_benchmark_or_paper_evidence`.
 Classification: `blocked`.
 
-At least one progress-gated row did not produce diagnostic evidence.
+Progress-gated rows failed closed before producing diagnostic evidence: doorway_transfer:obstacle_collision.
 
 ## Decision Table
 
@@ -29,6 +29,12 @@ At least one progress-gated row did not produce diagnostic evidence.
 | simple_negative_control | negative_control | progress_gated | 0.05 | diagnostic_complete | success | 1.8000000268220901 | 0 | 0 | 0.0 |
 | simple_negative_control | negative_control | progress_gated | 0.1 | diagnostic_complete | success | 1.8000000268220901 | 0 | 0 | 0.0 |
 | simple_negative_control | negative_control | progress_gated | 0.2 | diagnostic_complete | success | 1.8000000268220901 | 0 | 0 | 0.0 |
+
+## Fail-Closed Blockers
+
+| Slice | Scenario | Outcome | Status counts | Candidate roles | Thresholds m | Rows | Route progress m | Next action |
+|---|---|---|---|---|---:|---:|---:|---|
+| doorway_transfer | classic_doorway_medium | obstacle_collision | not_available=5 | baseline, reuse_penalty, progress_gated | 0.05, 0.1, 0.2 | 5 | -12.02842730398372 | repair or replace this slice before benchmark-facing promotion |
 
 ## Caveats
 

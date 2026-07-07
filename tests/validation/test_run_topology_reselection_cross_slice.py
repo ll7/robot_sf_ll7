@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -250,6 +251,28 @@ def test_run_row_handles_child_command_without_json_stdout(monkeypatch) -> None:
     assert result["diagnostic_status"] == "command_failed"
     assert result["trace"] is None
     assert "boom" in result["stderr_excerpt"]
+
+
+def test_run_row_executes_with_live_interpreter_not_recorded_path(monkeypatch) -> None:
+    """Execution must use sys.executable; the recorded relative interpreter is provenance only."""
+
+    captured: dict[str, list[str]] = {}
+
+    def fake_run(*args, **kwargs):
+        captured["argv"] = args[0]
+        return subprocess.CompletedProcess(args=args[0], returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+
+    recorded = [runner._RECORDED_INTERPRETER, "scripts/validation/some_child.py", "--flag"]
+    runner.run_row(recorded)
+
+    # argv[0] is swapped to the live interpreter so launch never depends on cwd
+    # or a .venv at a fixed location; the remaining args are preserved verbatim.
+    assert captured["argv"][0] == sys.executable
+    assert captured["argv"][1:] == recorded[1:]
+    # The caller's recorded command is left untouched for evidence provenance.
+    assert recorded[0] == runner._RECORDED_INTERPRETER
 
 
 # --- Issue #2742 successor manifest tests ---
@@ -629,3 +652,106 @@ def test_issue_2742_classifier_revises_when_hard_all_exhaust() -> None:
 
     assert classification == "revise"
     assert "horizon_exhausted" in rationale
+
+
+def test_blocker_summary_groups_unavailable_progress_gated_rows() -> None:
+    """Issue-3463 blocked rows should name the failing slice and outcome."""
+    rows = [
+        {
+            "candidate_role": "progress_gated",
+            "slice_id": "doorway_transfer",
+            "slice_role": "hard",
+            "scenario_name": "classic_doorway_medium",
+            "diagnostic_status": "not_available",
+            "terminal_outcome": "obstacle_collision",
+            "threshold_m": 0.05,
+            "collision_rate": 1.0,
+            "route_progress_m": -12.0,
+        },
+        {
+            "candidate_role": "progress_gated",
+            "slice_id": "doorway_transfer",
+            "slice_role": "hard",
+            "scenario_name": "classic_doorway_medium",
+            "diagnostic_status": "not_available",
+            "terminal_outcome": "obstacle_collision",
+            "threshold_m": 0.1,
+            "collision_rate": 1.0,
+            "route_progress_m": -12.0,
+        },
+        {
+            "candidate_role": "reuse_penalty",
+            "slice_id": "doorway_transfer",
+            "slice_role": "hard",
+            "scenario_name": "classic_doorway_medium",
+            "diagnostic_status": "not_available",
+            "terminal_outcome": "obstacle_collision",
+            "threshold_m": None,
+            "collision_rate": 1.0,
+            "route_progress_m": -12.0,
+        },
+    ]
+
+    blockers = runner.summarize_blockers(rows)
+    classification, rationale = runner.classify_report(rows)
+
+    assert classification == "blocked"
+    assert "doorway_transfer:obstacle_collision" in rationale
+    assert len(blockers) == 1
+    blocker = blockers[0]
+    assert blocker["slice_id"] == "doorway_transfer"
+    assert blocker["diagnostic_status_counts"] == {"not_available": 3}
+    assert blocker["candidate_roles"] == ["progress_gated", "reuse_penalty"]
+    assert blocker["thresholds_m"] == [0.05, 0.1]
+    assert blocker["classification"] == "fail_closed_not_success_evidence"
+
+
+def test_report_markdown_renders_fail_closed_blockers() -> None:
+    """Markdown report should expose blocker triage before caveats."""
+    report = {
+        "issue": 3463,
+        "claim_boundary": "diagnostic_only_not_benchmark_or_paper_evidence",
+        "classification": "blocked",
+        "classification_rationale": (
+            "Progress-gated rows failed closed before producing diagnostic evidence: "
+            "doorway_transfer:obstacle_collision."
+        ),
+        "rows": [
+            {
+                "slice_id": "doorway_transfer",
+                "slice_role": "hard",
+                "candidate_role": "progress_gated",
+                "threshold_m": 0.05,
+                "diagnostic_status": "not_available",
+                "terminal_outcome": "obstacle_collision",
+                "route_progress_m": -12.0,
+                "topology_switch_count": 0,
+                "deadlock_duration_steps": 0,
+                "collision_rate": 1.0,
+            }
+        ],
+        "blockers": [
+            {
+                "slice_id": "doorway_transfer",
+                "slice_role": "hard",
+                "scenario_name": "classic_doorway_medium",
+                "terminal_outcome": "obstacle_collision",
+                "diagnostic_status_counts": {"not_available": 1},
+                "candidate_roles": ["progress_gated"],
+                "thresholds_m": [0.05],
+                "row_count": 1,
+                "min_route_progress_m": -12.0,
+                "max_route_progress_m": -12.0,
+                "next_empirical_action": (
+                    "repair or replace this slice before benchmark-facing promotion"
+                ),
+            }
+        ],
+    }
+
+    markdown = runner.report_markdown(report)
+
+    assert "## Fail-Closed Blockers" in markdown
+    assert "doorway_transfer" in markdown
+    assert "classic_doorway_medium" in markdown
+    assert "repair or replace this slice" in markdown

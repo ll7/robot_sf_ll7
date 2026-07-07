@@ -1188,6 +1188,8 @@ def test_prepare_campaign_preflight_resolves_synthetic_actuation_slice_metadata(
             route_clearance_warning_summary=validate_payload["route_clearance_warning_summary"],
             noise_spec=validate_payload["observation_noise"],
             noise_hash=validate_payload["observation_noise_hash"],
+            checkpoint_preflight_summary=prepared["checkpoint_preflight_summary"],
+            checkpoint_preflight_mode="metadata_only",
         )
         == validate_payload
     )

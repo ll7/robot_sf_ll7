@@ -218,7 +218,13 @@ def test_empty_campaign_returns_zero_checked(tmp_path: Path) -> None:
     """A config with no checkpoint-bearing arms is a no-op that never raises."""
     cfg = _campaign((PlannerSpec(key="orca", algo="orca"),), tmp_path=tmp_path)
     summary = check_campaign_arm_checkpoints_preflight(cfg)
-    assert summary == {"checked": 0, "resolved": 0, "stage": False, "arms": []}
+    assert summary == {
+        "checked": 0,
+        "resolved": 0,
+        "stage": False,
+        "submit_safe": True,
+        "arms": [],
+    }
 
 
 # --- staging mode ----------------------------------------------------------

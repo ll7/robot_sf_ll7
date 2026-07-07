@@ -74,6 +74,34 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Execution mode: full run or preflight-only artifact generation.",
     )
     parser.add_argument(
+        "--checkpoint-preflight-mode",
+        choices=("metadata_only", "enforced_staged"),
+        default="metadata_only",
+        help=(
+            "Arm-checkpoint preflight mode (issue #4613/#4663). 'metadata_only' (default) is the "
+            "cheap network-free guard and is NOT submit-safe when any arm is only "
+            "stageable_remote. 'enforced_staged' actually downloads and checksum-verifies each "
+            "registry checkpoint into the durable cache before continuing; the submit/sbatch "
+            "wrapper must use this mode (or run the public "
+            "scripts/benchmark/submit_camera_ready_checkpoint_gate.sh) before requeueing. Only "
+            "applied to the preflight-only mode path; 'run' mode keeps the cheap guard and "
+            "expects checkpoints to be already staged on the compute node."
+        ),
+    )
+    parser.add_argument(
+        "--checkpoint-cache-dir",
+        type=Path,
+        default=None,
+        help="Optional cache directory override for staged downloads "
+        "(used with --checkpoint-preflight-mode=enforced_staged).",
+    )
+    parser.add_argument(
+        "--checkpoint-registry-path",
+        type=Path,
+        default=None,
+        help="Optional model-registry path override for the arm-checkpoint preflight.",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"),
@@ -101,6 +129,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 label=args.label,
                 campaign_id=args.campaign_id,
                 invoked_command=invoked_command,
+                checkpoint_preflight_mode=args.checkpoint_preflight_mode,
+                checkpoint_cache_dir=args.checkpoint_cache_dir,
+                checkpoint_registry_path=args.checkpoint_registry_path,
             )
             result = {
                 "campaign_id": prepared["campaign_id"],

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
 
@@ -58,6 +58,12 @@ if TYPE_CHECKING:
 
     from robot_sf.benchmark.camera_ready._config_types import CampaignConfig
 
+CheckpointPreflightMode = Literal["metadata_only", "enforced_staged"]
+_CHECKPOINT_PREFLIGHT_REPORT_NAME: dict[str, str] = {
+    "metadata_only": "checkpoint_resolvability.json",
+    "enforced_staged": "checkpoint_staging.json",
+}
+
 
 def _scenario_display_name(scenario: dict[str, Any]) -> str:
     """Return the stable scenario identifier used in preflight payloads."""
@@ -76,6 +82,8 @@ def _build_preflight_validate_payload(  # noqa: PLR0913
     route_clearance_warning_summary: dict[str, Any],
     noise_spec: dict[str, Any],
     noise_hash: str,
+    checkpoint_preflight_summary: dict[str, Any],
+    checkpoint_preflight_mode: CheckpointPreflightMode,
 ) -> dict[str, Any]:
     """Build the ``validate_config.json`` preflight artifact payload.
 
@@ -107,6 +115,14 @@ def _build_preflight_validate_payload(  # noqa: PLR0913
             "seeds": list(cfg.seed_policy.seeds),
             "resolved_seeds": resolved_seeds,
             "seed_sets_path": _repo_relative(cfg.seed_policy.seed_sets_path),
+        },
+        "checkpoint_preflight": {
+            "mode": checkpoint_preflight_mode,
+            "stage": bool(checkpoint_preflight_summary.get("stage")),
+            "checked": int(checkpoint_preflight_summary.get("checked", 0)),
+            "resolved": int(checkpoint_preflight_summary.get("resolved", 0)),
+            "submit_safe": bool(checkpoint_preflight_summary.get("submit_safe")),
+            "arms": list(checkpoint_preflight_summary.get("arms", [])),
         },
         "amv_profile": {
             "name": cfg.amv_profile.name,
@@ -228,7 +244,7 @@ def _build_preflight_preview_payload(
     return payload
 
 
-def prepare_campaign_preflight(
+def prepare_campaign_preflight(  # noqa: PLR0913
     cfg: CampaignConfig,
     *,
     output_root: Path | None = None,
@@ -237,8 +253,35 @@ def prepare_campaign_preflight(
     invoked_command: str | None = None,
     validate_campaign_config: Callable[[CampaignConfig], None] | None = None,
     build_route_clearance_warnings: Callable[..., list[dict[str, Any]]] | None = None,
+    checkpoint_preflight_mode: CheckpointPreflightMode = "metadata_only",
+    checkpoint_cache_dir: Path | None = None,
+    checkpoint_registry_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Prepare campaign preflight artifacts and matrix-definition summary.
+
+    Args:
+        cfg: A loaded camera-ready campaign config.
+        output_root: Optional campaign base output directory.
+        label: Optional label suffix embedded into ``campaign_id``.
+        campaign_id: Optional exact campaign directory id (used with resume-enabled configs).
+        invoked_command: Optional shell-quoted command line recorded in the manifest.
+        validate_campaign_config: Injected config validator (defaults to the canonical one).
+        build_route_clearance_warnings: Injected route-clearance warning builder.
+        checkpoint_preflight_mode: Arm-checkpoint preflight mode.
+
+            * ``"metadata_only"`` (default, cheap, network-free): only confirm each checkpoint is
+              present locally or declares a durable remote source to stage from. Safe for the
+              always-on guard including offline preflight-only workflows. A ``stageable_remote``
+              arm passes this check but is **not** submit-safe (see ``submit_safe`` in the report).
+            * ``"enforced_staged"``: actually download and checksum-verify each registry artifact
+              into the durable cache via :func:`robot_sf.models.resolve_model_path`. The submit
+              wrapper must invoke this mode (or run
+              ``scripts/benchmark/preflight_campaign_checkpoints.py --stage``) before ``sbatch`` so
+              the compute node loads a validated file (issue #4613).
+
+        checkpoint_cache_dir: Optional cache directory override for staged downloads
+            (only meaningful with ``checkpoint_preflight_mode="enforced_staged"``).
+        checkpoint_registry_path: Optional model-registry path override.
 
     Returns:
         Paths and metadata required by preflight-only workflows and full runs.
@@ -249,6 +292,8 @@ def prepare_campaign_preflight(
         RouteClearanceError: When any scenario route centerline lies closer to a static obstacle
             than the robot radius, making the route geometrically impossible to follow without
             collision.
+        CampaignCheckpointPreflightError: When any enabled arm names a checkpoint that cannot be
+            resolved (or, in ``enforced_staged`` mode, cannot be staged) before scenarios load.
     """
     if validate_campaign_config is None:
         from robot_sf.benchmark.camera_ready_campaign import (  # noqa: PLC0415
@@ -260,10 +305,19 @@ def prepare_campaign_preflight(
     validate_campaign_config(cfg)
     check_orca_rvo2_preflight(cfg)
     # Fail fast when an enabled arm names a checkpoint that cannot be resolved (unknown/mistyped
-    # model_id, local_only-missing, or a missing model_path file) before any scenario loads. This
-    # is the cheap network-free guard; the enforced download+checksum staging step (stage=True) is
-    # run pre-sbatch by scripts/benchmark/preflight_campaign_checkpoints.py (issue #4613).
-    check_campaign_arm_checkpoints_preflight(cfg)
+    # model_id, local_only-missing, or a missing model_path file) before any scenario loads. There
+    # are two modes (issue #4613/#4663):
+    #   * metadata_only (default, cheap, network-free): accept present_local OR stageable_remote.
+    #     Safe to leave always-on. NOT submit-safe when any arm is stageable_remote.
+    #   * enforced_staged: actually download+checksum-verify each registry artifact so the compute
+    #     node loads a validated file. The submit wrapper must run this before sbatch.
+    checkpoint_preflight_stage = checkpoint_preflight_mode == "enforced_staged"
+    checkpoint_preflight_report = check_campaign_arm_checkpoints_preflight(
+        cfg,
+        stage=checkpoint_preflight_stage,
+        registry_path=checkpoint_registry_path,
+        cache_dir=checkpoint_cache_dir,
+    )
     ensure_canonical_tree(categories=("benchmarks",))
     campaign_id = _resolve_campaign_id(cfg, label=label, campaign_id=campaign_id)
     base_dir = (
@@ -316,6 +370,8 @@ def prepare_campaign_preflight(
         route_clearance_warning_summary=route_clearance_warning_summary,
         noise_spec=noise_spec,
         noise_hash=noise_hash,
+        checkpoint_preflight_summary=checkpoint_preflight_report,
+        checkpoint_preflight_mode=checkpoint_preflight_mode,
     )
     preview_payload = _build_preflight_preview_payload(
         cfg,
@@ -327,6 +383,25 @@ def prepare_campaign_preflight(
     )
     _write_json(validate_config_path, validate_payload)
     _write_json(preview_scenarios_path, preview_payload)
+    # Persist the per-arm checkpoint preflight summary next to the other preflight artifacts so the
+    # submit path can record `submit_safe`/staging-status alongside the requeue packet (issue
+    # #4613/#4663). `enforced_staged` writes `checkpoint_staging.json`; the cheap metadata-only
+    # mode writes `checkpoint_resolvability.json` and clearly labels itself non-submit-safe when
+    # any arm is only `stageable_remote`.
+    checkpoint_preflight_report_path = (
+        preflight_dir / _CHECKPOINT_PREFLIGHT_REPORT_NAME[checkpoint_preflight_mode]
+    )
+    _write_json(
+        checkpoint_preflight_report_path,
+        {
+            "mode": checkpoint_preflight_mode,
+            "stage": bool(checkpoint_preflight_report.get("stage")),
+            "checked": int(checkpoint_preflight_report.get("checked", 0)),
+            "resolved": int(checkpoint_preflight_report.get("resolved", 0)),
+            "submit_safe": bool(checkpoint_preflight_report.get("submit_safe")),
+            "arms": list(checkpoint_preflight_report.get("arms", [])),
+        },
+    )
 
     matrix_rows = _build_matrix_summary_rows(
         cfg,
@@ -483,6 +558,7 @@ def prepare_campaign_preflight(
         "artifacts": {
             "preflight_validate_config": _repo_relative(validate_config_path),
             "preflight_preview_scenarios": _repo_relative(preview_scenarios_path),
+            "preflight_checkpoint_provisioning": _repo_relative(checkpoint_preflight_report_path),
             "matrix_summary_json": _repo_relative(matrix_summary_json_path),
             "matrix_summary_csv": _repo_relative(matrix_summary_csv_path),
             "amv_coverage_json": _repo_relative(amv_coverage_json_path),
@@ -506,6 +582,8 @@ def prepare_campaign_preflight(
         "preflight_dir": preflight_dir,
         "validate_config_path": validate_config_path,
         "preview_scenarios_path": preview_scenarios_path,
+        "checkpoint_preflight_report_path": checkpoint_preflight_report_path,
+        "checkpoint_preflight_summary": checkpoint_preflight_report,
         "matrix_summary_json_path": matrix_summary_json_path,
         "matrix_summary_csv_path": matrix_summary_csv_path,
         "amv_coverage_json_path": amv_coverage_json_path,

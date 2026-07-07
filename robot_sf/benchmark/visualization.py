@@ -675,7 +675,7 @@ def _generate_metrics_plot(
                     figure_formats=list(formats),
                     claim_boundary="Benchmark metrics distribution plot; presentation only.",
                 )
-                save_publication_figure(
+                saved = save_publication_figure(
                     _fig,
                     output_base,
                     formats=formats,
@@ -683,7 +683,13 @@ def _generate_metrics_plot(
                     caption_fragment=caption_fragment,
                 )
             plt.close(_fig)
-            plot_path = output_base.with_suffix(".pdf")
+            # ``formats`` may exclude pdf; reference an actually-written figure
+            # file (pdf preferred) so the size probe below cannot FileNotFoundError.
+            plot_path = next(
+                (p for p in saved if p.suffix == ".pdf"),
+                next((p for p in saved if p.suffix != ".json"), output_base.with_suffix(".pdf")),
+            )
+            plot_filename = plot_path.name
         else:
             # Create plot
             _fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 8))
@@ -709,7 +715,7 @@ def _generate_metrics_plot(
         return VisualArtifact(
             artifact_id=f"plot_metrics_{generation_time.timestamp()}",
             artifact_type="plot",
-            format="pdf",
+            format=plot_path.suffix.lstrip(".") or "pdf",
             filename=plot_filename,
             source_data=f"{len(episodes)} episodes",
             generation_time=generation_time,
@@ -806,7 +812,7 @@ def _generate_scenario_comparison_plot(
                     figure_formats=list(formats),
                     claim_boundary="Scenario comparison plot; presentation only.",
                 )
-                save_publication_figure(
+                saved = save_publication_figure(
                     _fig,
                     output_base,
                     formats=formats,
@@ -814,7 +820,13 @@ def _generate_scenario_comparison_plot(
                     caption_fragment=caption_fragment,
                 )
             plt.close(_fig)
-            plot_path = output_base.with_suffix(".pdf")
+            # ``formats`` may exclude pdf; reference an actually-written figure
+            # file (pdf preferred) so the size probe below cannot FileNotFoundError.
+            plot_path = next(
+                (p for p in saved if p.suffix == ".pdf"),
+                next((p for p in saved if p.suffix != ".json"), output_base.with_suffix(".pdf")),
+            )
+            plot_filename = plot_path.name
         else:
             # Create plot
             _fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
@@ -842,7 +854,7 @@ def _generate_scenario_comparison_plot(
         return VisualArtifact(
             artifact_id=f"plot_scenario_{generation_time.timestamp()}",
             artifact_type="plot",
-            format="pdf",
+            format=plot_path.suffix.lstrip(".") or "pdf",
             filename=plot_filename,
             source_data=f"{len(scenarios)} scenarios, {len(episodes)} episodes",
             generation_time=generation_time,

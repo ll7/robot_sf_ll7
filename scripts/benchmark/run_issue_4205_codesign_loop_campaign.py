@@ -14,6 +14,7 @@ import json
 import multiprocessing
 import sys
 from collections import Counter, defaultdict
+from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -45,6 +46,11 @@ DEFAULT_OUTPUT_ROOT = REPO_ROOT / "output/benchmarks/issue_4205_codesign_loop_ca
 DEFAULT_EPISODE_SCHEMA = REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json"
 CAMPAIGN_SCHEMA = "robot_sf.issue_4205.static_constriction_codesign_campaign.v1"
 DEFAULT_BENCHMARK_PROFILE = "experimental"
+RISKY_FIRST_ARM_KEYS = (
+    "ppo_frozen_cbf_on",
+    "ppo_frozen_wrapper_on",
+    "ppo_frozen",
+)
 PER_EPISODE_FIELDS = [
     "arm_key",
     "scenario_id",
@@ -166,6 +172,8 @@ def _arm_runtime_by_key(research_config: dict[str, Any]) -> dict[str, dict[str, 
         if not isinstance(arm, dict):
             raise ContractError("research arm must be a mapping")
         key = str(arm.get("key"))
+        if key in by_key:
+            raise ContractError(f"duplicate campaign arm key: {key}")
         by_key[key] = {
             "algo": str(arm["algo"]),
             "algo_config": str(arm["algo_config"]),
@@ -175,6 +183,111 @@ def _arm_runtime_by_key(research_config: dict[str, Any]) -> dict[str, dict[str, 
     if tuple(by_key) != EXPECTED_ARM_KEYS:
         raise ContractError("research arms drifted from pre-registration")
     return by_key
+
+
+def _preflight_campaign_arms(
+    *,
+    arm_runtime: dict[str, dict[str, Any]],
+    hydration: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve every campaign arm before any smoke/full execution starts."""
+    expected = set(EXPECTED_ARM_KEYS)
+    runtime_keys = set(arm_runtime)
+    missing_runtime = sorted(expected - runtime_keys)
+    extra_runtime = sorted(runtime_keys - expected)
+    hydration_arms = hydration.get("arms")
+    if not isinstance(hydration_arms, list):
+        raise ContractError("hydration preflight did not return arm list")
+    missing_hydration = sorted(expected - set(hydration_arms))
+    extra_hydration = sorted(set(hydration_arms) - expected)
+    if set(RISKY_FIRST_ARM_KEYS) != expected:
+        raise ContractError("risky-first execution order must cover every expected arm")
+    arm_reports: dict[str, dict[str, Any]] = {}
+    errors: list[str] = []
+    for arm_key in EXPECTED_ARM_KEYS:
+        arm_errors: list[str] = []
+        runtime = arm_runtime.get(arm_key)
+        if runtime is None:
+            arm_errors.append("missing research arm runtime")
+        else:
+            if runtime.get("algo") != "ppo":
+                arm_errors.append(f"unknown algorithm {runtime.get('algo')!r}; expected 'ppo'")
+            algo_config = REPO_ROOT / str(runtime.get("algo_config", ""))
+            if not algo_config.exists():
+                arm_errors.append(f"missing algo config: {_repo_relative(algo_config)}")
+        if arm_key not in hydration_arms:
+            arm_errors.append("missing hydrated checkpoint arm")
+        arm_reports[arm_key] = {
+            "status": "error" if arm_errors else "ok",
+            "algo": None if runtime is None else runtime.get("algo"),
+            "algo_config": None if runtime is None else runtime.get("algo_config"),
+            "checkpoint_sha256": hydration.get("checkpoint_sha256"),
+            "errors": arm_errors,
+        }
+        errors.extend(f"{arm_key}: {error}" for error in arm_errors)
+    if missing_runtime or extra_runtime or missing_hydration or extra_hydration or errors:
+        raise ContractError(
+            "campaign arm-resolution preflight failed: "
+            f"missing_runtime={missing_runtime} extra_runtime={extra_runtime} "
+            f"missing_hydration={missing_hydration} extra_hydration={extra_hydration} "
+            f"errors={errors}"
+        )
+    return {
+        "status": "passed",
+        "expected_arms": list(EXPECTED_ARM_KEYS),
+        "execution_order": list(RISKY_FIRST_ARM_KEYS),
+        "hydrated_arms": list(hydration_arms),
+        "arms": arm_reports,
+    }
+
+
+def _initial_live_arm_status(*, phase: str, arm_order: tuple[str, ...]) -> dict[str, Any]:
+    """Return live arm status payload before a campaign phase starts."""
+    return {
+        "schema_version": f"{CAMPAIGN_SCHEMA}.live_arm_status.v1",
+        "phase": phase,
+        "execution_order": list(arm_order),
+        "arms": {arm_key: {"status": "pending"} for arm_key in arm_order},
+    }
+
+
+def _write_live_arm_status(output_root: Path, payload: dict[str, Any]) -> None:
+    """Persist current arm status for queue/ops readers during execution."""
+    output_root.mkdir(parents=True, exist_ok=True)
+    (output_root / "live_arm_status.json").write_text(
+        json.dumps(payload, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _append_arm_status_event(
+    output_root: Path,
+    *,
+    phase: str,
+    arm_key: str,
+    state: str,
+    details: dict[str, Any] | None = None,
+) -> None:
+    """Append one live arm state transition for polling and early-abort triage."""
+    output_root.mkdir(parents=True, exist_ok=True)
+    event = {
+        "schema_version": f"{CAMPAIGN_SCHEMA}.arm_status_event.v1",
+        "ts": datetime.now(UTC).isoformat(),
+        "phase": phase,
+        "arm": arm_key,
+        "state": state,
+        "details": details or {},
+    }
+    with (output_root / "arm_status.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(event, sort_keys=True) + "\n")
+
+
+def _write_preflight_report(output_root: Path, payload: dict[str, Any]) -> Path:
+    """Persist the submit-time arm-resolution preflight report."""
+    output_root.mkdir(parents=True, exist_ok=True)
+    path = output_root / "preflight_report.json"
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
 
 
 def _scenario_key(scenario: dict[str, Any]) -> str:
@@ -423,6 +536,9 @@ def _write_outputs(
     output_root.mkdir(parents=True, exist_ok=True)
     output_paths = {
         "metadata": output_root / "run_metadata.json",
+        "preflight_report": output_root / "preflight_report.json",
+        "live_arm_status": output_root / "live_arm_status.json",
+        "arm_status_events": output_root / "arm_status.jsonl",
         "per_episode_rows": output_root / "per_episode_rows.csv",
         "per_arm_metric_table": output_root / "per_arm_metric_table.csv",
         "failure_mode_counts": output_root / "failure_mode_counts.csv",
@@ -479,6 +595,73 @@ def _run_arm(  # noqa: PLR0913
     return summary, _episode_summary_rows(arm_key, episode_jsonl_path)
 
 
+def _run_arm_sequence(  # noqa: PLR0913
+    *,
+    phase: str,
+    arm_order: tuple[str, ...],
+    arm_runtime: dict[str, dict[str, Any]],
+    scenarios: list[dict[str, Any]],
+    scenario_path: Path,
+    output_root: Path,
+    benchmark_profile: str,
+    workers: int,
+    horizon: int | None,
+    dt: float | None,
+    resume: bool,
+) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
+    """Run arms in fail-fast risky-first order with live status updates."""
+    arm_summaries: dict[str, Any] = {}
+    per_episode_rows: list[dict[str, Any]] = []
+    live_status = _initial_live_arm_status(phase=phase, arm_order=arm_order)
+    _write_live_arm_status(output_root, live_status)
+    for arm_key in arm_order:
+        live_status["arms"][arm_key]["status"] = "running"
+        _write_live_arm_status(output_root, live_status)
+        _append_arm_status_event(output_root, phase=phase, arm_key=arm_key, state="running")
+        try:
+            summary, arm_rows = _run_arm(
+                arm_key=arm_key,
+                arm_runtime=arm_runtime[arm_key],
+                scenarios=scenarios,
+                scenario_path=scenario_path,
+                output_root=output_root,
+                benchmark_profile=benchmark_profile,
+                workers=workers,
+                horizon=horizon,
+                dt=dt,
+                resume=resume,
+            )
+        except ContractError as exc:
+            live_status["arms"][arm_key] = {
+                "status": "failed",
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+            _write_live_arm_status(output_root, live_status)
+            _append_arm_status_event(
+                output_root,
+                phase=phase,
+                arm_key=arm_key,
+                state="failed",
+                details={"error": f"{type(exc).__name__}: {exc}"},
+            )
+            raise
+        arm_summaries[arm_key] = summary
+        per_episode_rows.extend(arm_rows)
+        live_status["arms"][arm_key] = {
+            "status": "completed",
+            "episode_count": len(arm_rows),
+        }
+        _write_live_arm_status(output_root, live_status)
+        _append_arm_status_event(
+            output_root,
+            phase=phase,
+            arm_key=arm_key,
+            state="completed",
+            details={"episode_count": len(arm_rows)},
+        )
+    return arm_summaries, per_episode_rows, live_status
+
+
 def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
     """Validate contracts, execute arm runs, and write campaign outputs."""
     benchmark_config_path = Path(args.config)
@@ -512,12 +695,14 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
     scenarios = _campaign_scenarios(matrix_path, scenario_ids, seeds)
     arm_runtime = _arm_runtime_by_key(research_config)
     output_root = Path(args.output_root)
-    per_episode_rows: list[dict[str, Any]] = []
-    arm_summaries: dict[str, Any] = {}
-    for arm_key in EXPECTED_ARM_KEYS:
-        summary, arm_rows = _run_arm(
-            arm_key=arm_key,
-            arm_runtime=arm_runtime[arm_key],
+    arm_preflight = _preflight_campaign_arms(arm_runtime=arm_runtime, hydration=hydration)
+    preflight_report_path = _write_preflight_report(output_root, arm_preflight)
+    phase_0_summary: dict[str, Any] | None = None
+    if args.smoke:
+        arm_summaries, per_episode_rows, live_arm_status = _run_arm_sequence(
+            phase="smoke",
+            arm_order=RISKY_FIRST_ARM_KEYS,
+            arm_runtime=arm_runtime,
             scenarios=scenarios,
             scenario_path=matrix_path,
             output_root=output_root,
@@ -527,8 +712,53 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
             dt=args.dt,
             resume=not args.no_resume,
         )
-        arm_summaries[arm_key] = summary
-        per_episode_rows.extend(arm_rows)
+    else:
+        phase_0_scenarios = _campaign_scenarios(
+            matrix_path,
+            [EXPECTED_SCENARIOS[0]],
+            [EXPECTED_SEEDS[0]],
+        )
+        phase_0_arm_summaries, phase_0_rows, phase_0_live_status = _run_arm_sequence(
+            phase="phase_0_smoke",
+            arm_order=RISKY_FIRST_ARM_KEYS,
+            arm_runtime=arm_runtime,
+            scenarios=phase_0_scenarios,
+            scenario_path=matrix_path,
+            output_root=output_root / "phase_0_smoke",
+            benchmark_profile=args.benchmark_profile,
+            workers=args.workers,
+            horizon=args.horizon,
+            dt=args.dt,
+            resume=not args.no_resume,
+        )
+        expected_phase_0_rows = len(EXPECTED_ARM_KEYS)
+        if len(phase_0_rows) != expected_phase_0_rows:
+            raise ContractError(
+                f"phase-0 smoke wrote {len(phase_0_rows)} episode rows, "
+                f"expected {expected_phase_0_rows}"
+            )
+        phase_0_summary = {
+            "status": "passed",
+            "benchmark_evidence": False,
+            "scenario_ids": [EXPECTED_SCENARIOS[0]],
+            "seeds": [EXPECTED_SEEDS[0]],
+            "observed_episode_count": len(phase_0_rows),
+            "arm_summaries": phase_0_arm_summaries,
+            "live_arm_status": phase_0_live_status,
+        }
+        arm_summaries, per_episode_rows, live_arm_status = _run_arm_sequence(
+            phase="full",
+            arm_order=RISKY_FIRST_ARM_KEYS,
+            arm_runtime=arm_runtime,
+            scenarios=scenarios,
+            scenario_path=matrix_path,
+            output_root=output_root,
+            benchmark_profile=args.benchmark_profile,
+            workers=args.workers,
+            horizon=args.horizon,
+            dt=args.dt,
+            resume=not args.no_resume,
+        )
     expected_episode_count = len(EXPECTED_ARM_KEYS) * len(scenario_ids) * len(seeds)
     full_grid_completed = not args.smoke and len(per_episode_rows) == len(EXPECTED_ARM_KEYS) * len(
         EXPECTED_SCENARIOS
@@ -565,6 +795,11 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
         "scenario_ids": scenario_ids,
         "seeds": seeds,
         "arms": list(EXPECTED_ARM_KEYS),
+        "arm_resolution_preflight": arm_preflight,
+        "preflight_report": _repo_relative(preflight_report_path),
+        "arm_execution_order": list(RISKY_FIRST_ARM_KEYS),
+        "phase_0_smoke": phase_0_summary,
+        "live_arm_status": live_arm_status,
         "expected_episode_count": expected_episode_count,
         "observed_episode_count": len(per_episode_rows),
         "arm_summaries": arm_summaries,

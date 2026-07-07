@@ -215,3 +215,32 @@ def test_populate_scenario_comparison_axes_valid_uses_bar():
     ax1.bar.assert_called_once()
     ax2.bar.assert_called_once()
     ax3.bar.assert_called_once()
+
+
+def test_generate_metrics_plot_null_metrics_no_raise(tmp_path):
+    """An episode with an explicit ``metrics: None`` must not raise AttributeError.
+
+    ``ep.get("metrics", {})`` returns ``None`` for a null-valued key, so the
+    downstream ``.get(...)`` would crash; the generator must coerce to ``{}``.
+    """
+    from robot_sf.benchmark.visualization import _generate_metrics_plot
+
+    episodes = [
+        {"scenario_id": "s", "metrics": None},
+        {"scenario_id": "s", "metrics": {"snqi": 0.5, "collision_rate": 0.1, "success_rate": 0.9}},
+    ]
+    artifact = _generate_metrics_plot(episodes, str(tmp_path))
+    assert artifact.status == "generated"
+
+
+def test_generate_scenario_comparison_plot_null_metrics_no_raise(tmp_path):
+    """Explicit ``metrics: None`` must not crash scenario comparison aggregation."""
+    from robot_sf.benchmark.visualization import _generate_scenario_comparison_plot
+
+    episodes = [
+        {"scenario_id": "a", "metrics": None},
+        {"scenario_id": "a", "metrics": {"snqi": 0.4, "collision_rate": 0.2, "success_rate": 0.8}},
+        {"scenario_id": "b", "metrics": None},
+    ]
+    artifact = _generate_scenario_comparison_plot(episodes, str(tmp_path))
+    assert artifact.status == "generated"

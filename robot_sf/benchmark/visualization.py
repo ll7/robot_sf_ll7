@@ -730,9 +730,9 @@ def _generate_metrics_plot(
 
     try:
         # Extract metrics
-        collisions = [ep.get("metrics", {}).get("collision_rate", 0) for ep in episodes]
-        success_rates = [ep.get("metrics", {}).get("success_rate", 0) for ep in episodes]
-        snqi_scores = [ep.get("metrics", {}).get("snqi", 0) for ep in episodes]
+        collisions = [(ep.get("metrics") or {}).get("collision_rate", 0) for ep in episodes]
+        success_rates = [(ep.get("metrics") or {}).get("success_rate", 0) for ep in episodes]
+        snqi_scores = [(ep.get("metrics") or {}).get("snqi", 0) for ep in episodes]
 
         plot_filename = "metrics_distribution.pdf"
         if publication:
@@ -876,11 +876,13 @@ def _generate_scenario_comparison_plot(
 
         for scenario in scenarios:
             eps = scenario_groups[scenario]
-            snqi_scores = _filter_finite([ep.get("metrics", {}).get("snqi") for ep in eps])
+            snqi_scores = _filter_finite([(ep.get("metrics") or {}).get("snqi") for ep in eps])
             collision_rates = _filter_finite(
-                [ep.get("metrics", {}).get("collision_rate") for ep in eps]
+                [(ep.get("metrics") or {}).get("collision_rate") for ep in eps]
             )
-            successes = _filter_finite([ep.get("metrics", {}).get("success_rate") for ep in eps])
+            successes = _filter_finite(
+                [(ep.get("metrics") or {}).get("success_rate") for ep in eps]
+            )
 
             avg_snqi.append(sum(snqi_scores) / len(snqi_scores) if snqi_scores else 0.0)
             avg_collisions.append(

@@ -53,9 +53,11 @@ OPENGL_RUNTIME_PACKAGES=(libglvnd mesa-libgl-cos7-x86_64)
 echo "[licca] Installing OpenGL runtime packages: ${OPENGL_RUNTIME_PACKAGES[*]}"
 "${PACKAGE_CMD[@]}" "${OPENGL_RUNTIME_PACKAGES[@]}"
 
-# Upgrade pip and install Robot SF in editable mode with dev extras.
+# Upgrade pip and install Robot SF in editable mode with dev dependencies.
 "${RUN_CMD[@]}" python -m pip install --upgrade pip ${EXTRA_PIP_FLAGS:-}
-"${RUN_CMD[@]}" python -m pip install --editable ".[dev]" ${EXTRA_PIP_FLAGS:-}
+"${RUN_CMD[@]}" python -m pip install --editable . ${EXTRA_PIP_FLAGS:-}
+"${RUN_CMD[@]}" python -m pip install pytest pytest-cov scalene ruff pre-commit setuptools \
+    pylint pytest-xdist pytest-split jupyter mypy ${EXTRA_PIP_FLAGS:-}
 
 # Force the headless OpenCV build to avoid libGL loader issues in CI/HPC.
 echo "[licca] Replacing OpenCV with headless build"

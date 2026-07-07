@@ -1936,6 +1936,19 @@ follow the higher-precedence source and make the smallest doc update needed to r
 7) Open PR with summary, risks, validation evidence, and links to docs/tests. Explicitly state
    which gates were skipped when using the cheap docs/instruction path.
 
+### Agent run manifest for PRs
+
+For nontrivial agent-assisted runs (Codex, Claude Code, Copilot, or other), attach or link an
+`agent_run_manifest.yaml` so the run is auditable. See
+[Agent Run Manifest](./agent_run_manifest.md) for when this is required versus optional, where to
+store it, and trace/log hygiene. Start from
+[`docs/templates/agent_run_manifest.yaml`](./templates/agent_run_manifest.yaml). Do not block all
+PRs on this yet; it is required for major agent-assisted work that creates or changes durable
+evidence, benchmark/reporting gates, generated artifacts, CI/release policy, or substantial code
+paths, and recommended for multi-agent or multi-run tasks.
+
+- [ ] If this PR used a nontrivial agent run, attach or link an agent_run_manifest.yaml and confirm trace/log redaction was checked.
+
 ### Final-readiness checklist for scripted tooling work
 - Run `uv run ruff check <touched_files>` and `uv run ruff format <touched_files>` before finalizing.
 - Run focused tests that cover modified paths (for example `uv run pytest tests/dev/test_snapshot_pr_queue.py`).

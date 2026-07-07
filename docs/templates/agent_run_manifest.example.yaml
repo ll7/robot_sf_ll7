@@ -1,0 +1,40 @@
+# Agent Run Manifest Example
+#
+# A small, scrubbed, illustrative example. Do not include real secrets, raw
+# traces, private prompts, or token/credit details beyond coarse caps. Copy
+# docs/templates/agent_run_manifest.yaml as the starting point for a real run.
+agent_run:
+  schema_version: agent-run-manifest.v1
+  objective: "Add docs-only agent run manifest convention with template and checklist."
+  tool: "codex"
+  model: "gpt-5-codex"
+  tool_version: "codex-cli 0.0.123"
+  permission_mode: "manual"
+  worktree: "../robot_sf_ll7.worktrees/cheap-issue-4756"
+  workflow_run_id: ""
+  workflow_name: ""
+  declared_agent_count: 1
+  actual_agent_count: 1
+  commands_run:
+    - "git fetch origin"
+    - "gh issue view 4756 --comments"
+    - "git worktree add -b cheap/issue-4756 ../robot_sf_ll7.worktrees/cheap-issue-4756 origin/main"
+    - "uv run python -c \"from pathlib import Path; import yaml; yaml.safe_load(Path('docs/templates/agent_run_manifest.yaml').read_text())\""
+    - "git diff --check"
+  tests_run:
+    - "yaml-parse smoke (pass)"
+  external_pages_accessed: []
+  trace_or_log_refs:
+    - "private agent-run artifact: common Git-dir codex-agent-runs/active/issue-4756.md (redacted)"
+  trace_redaction_checked: true
+  cost_or_credit_cap: "<2% of weekly cap"
+  stop_reason: "completed"
+  retries: 0
+  partial_failures: []
+  evidence_produced:
+    - "docs/templates/agent_run_manifest.yaml (template)"
+    - "docs/templates/agent_run_manifest.example.yaml (this example)"
+    - "docs/agent_run_manifest.md (usage documentation)"
+    - "docs/dev_guide.md (PR checklist item added)"
+  human_validity_check: "Maintainer reviewed the template fields against the issue acceptance criteria."
+  remaining_risk: "none known; no runtime dependency or CI enforcement introduced in this slice."

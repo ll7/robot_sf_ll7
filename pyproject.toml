@@ -502,6 +502,8 @@ max-statements = 60
 "robot_sf/benchmark/visualization.py" = ["BLE001"]
 "robot_sf/adversarial/**/*.py" = ["D417", "DOC201", "TC001", "TC003"]
 "robot_sf/adversarial/config.py" = ["C901", "PLR0913"]
+# trajectory_verifier: verify_trajectory has 9 keyword-only args as specified by issue #4757 API contract
+"robot_sf/benchmark/trajectory_verifier.py" = ["PLR0913"]
 "robot_sf/adversarial/search.py" = ["BLE001"]
 "robot_sf/adversarial/certification.py" = ["BLE001", "PLC0415"]
 "tests/adversarial/**/*.py" = ["D100", "D103", "TC003"]

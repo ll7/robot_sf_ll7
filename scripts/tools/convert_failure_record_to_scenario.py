@@ -36,11 +36,11 @@ ENVIRONMENT_TO_TEMPLATE = {
 }
 
 TEMPLATE_TO_MAP = {
-    "event_disruption": "../../../maps/svg_maps/event_disruption/event_disruption.svg",
-    "ammv_sidewalk": "../../../maps/svg_maps/ammv_sidewalk/ammv_sidewalk.svg",
-    "ammv_shared_space": "../../../maps/svg_maps/ammv_shared_space/ammv_shared_space.svg",
-    "classic_crossing": "../../../maps/svg_maps/classic_crossing/classic_crossing.svg",
-    "road_edge": "../../../maps/svg_maps/road_edge/road_edge.svg",
+    "event_disruption": "../../maps/svg_maps/classic_crossing.svg",
+    "ammv_sidewalk": "../../maps/svg_maps/classic_doorway.svg",
+    "ammv_shared_space": "../../maps/svg_maps/classic_merging.svg",
+    "classic_crossing": "../../maps/svg_maps/classic_crossing.svg",
+    "road_edge": "../../maps/svg_maps/classic_t_intersection.svg",
 }
 
 FAILURE_MODE_TO_EXPECTED = {

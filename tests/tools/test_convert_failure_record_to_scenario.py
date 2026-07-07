@@ -222,14 +222,14 @@ class TestScenarioPayload:
         payload = _build_scenario_payload(VALID_EVENT_RECORD["failure_record"])
         assert "scenarios" in payload
         scenario = payload["scenarios"][0]
-        assert "event_disruption" in scenario["map_file"]
+        assert "classic_crossing" in scenario["map_file"]
         assert "failure_record_test-event-001" in scenario["name"]
 
     def test_sidewalk_scenario(self):
         """Sidewalk record generates sidewalk scenario."""
         payload = _build_scenario_payload(VALID_SIDEWALK_RECORD["failure_record"])
         scenario = payload["scenarios"][0]
-        assert "ammv_sidewalk" in scenario["map_file"]
+        assert "classic_doorway" in scenario["map_file"]
 
     def test_metadata_required_manual_review(self):
         """Output always has required_manual_review: true."""
@@ -281,6 +281,21 @@ class TestScenarioPayload:
         payload1 = _build_scenario_payload(VALID_EVENT_RECORD["failure_record"])
         payload2 = _build_scenario_payload(VALID_EVENT_RECORD["failure_record"])
         assert payload1 == payload2
+
+    def test_map_file_paths_resolve_to_existing_files(self):
+        """All emitted map_file paths must resolve to existing SVG maps."""
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        test_records = [
+            VALID_EVENT_RECORD["failure_record"],
+            VALID_SIDEWALK_RECORD["failure_record"],
+        ]
+        for record in test_records:
+            payload = _build_scenario_payload(record)
+            scenario = payload["scenarios"][0]
+            map_file = scenario["map_file"]
+            resolved = (repo_root / "output" / "failure_record_scenarios").resolve()
+            expected_map = (resolved / map_file).resolve()
+            assert expected_map.exists(), f"map_file {map_file!r} resolves to {expected_map} which does not exist"
 
 
 class TestConvertFailureRecord:

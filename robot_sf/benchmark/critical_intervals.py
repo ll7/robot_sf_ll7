@@ -39,6 +39,11 @@ import yaml
 
 SCHEMA_VERSION = "critical-intervals.v1"
 
+# TTC convention: physical line-of-sight closing speed, result in seconds.
+# Formula: ttc = dist / closing_speed where closing_speed = dot(v_rel, d_vec / dist)
+# Equivalent to: ttc = dist**2 / dot(v_rel, d_vec)
+TTC_CONVENTION = "line_of_sight_closing_speed_seconds.v1"
+
 VALID_ANCHORS = frozenset(
     [
         "closest_approach",
@@ -53,6 +58,10 @@ VALID_ANCHORS = frozenset(
 )
 
 DEFAULT_NEAR_MISS_DIST = 0.7  # metres, aligned with benchmark constants
+
+# TTC computation tolerances
+_TTC_EPS_DIST = 1e-9  # metres, below this counts as overlap/contact
+_TTC_EPS_SPEED = 1e-9  # m/s, below this counts as not closing
 
 
 # ---------------------------------------------------------------------------
@@ -217,6 +226,78 @@ def _get_trace_arrays(
 
 
 # ---------------------------------------------------------------------------
+# TTC computation (shared helper for issue #4832)
+# ---------------------------------------------------------------------------
+
+
+def _pairwise_ttc_s(
+    *,
+    robot_pos: np.ndarray,
+    robot_vel: np.ndarray,
+    ped_pos: np.ndarray,
+    ped_vel: np.ndarray,
+) -> float | None:
+    """Return physical constant-velocity TTC in seconds for one pair.
+
+    Uses line-of-sight closing speed: the component of relative velocity
+    along the separation vector.  Returns ``None`` when the pair is not closing
+    (moving apart or perpendicular motion only).
+
+    Parameters
+    ----------
+    robot_pos :
+        Robot position (2-element array).
+    robot_vel :
+        Robot velocity (2-element array).
+    ped_pos :
+        Pedestrian position (2-element array).
+    ped_vel :
+        Pedestrian velocity (2-element array).
+
+    Returns
+    -------
+    float | None
+        Physical TTC in seconds, or ``0.0`` for overlap/contact, or ``None``
+        when the pair is not closing.
+
+    Notes
+    -----
+    The TTC convention is given by the module constant ``TTC_CONVENTION``:
+    ``line_of_sight_closing_speed_seconds.v1``.  The formula is:
+
+    ``ttc = dist / closing_speed``
+
+    where ``closing_speed = dot(v_rel, d_hat)`` and ``d_hat`` is the unit
+    separation vector (from robot to pedestrian).  Equivalently:
+
+    ``ttc = dist**2 / dot(v_rel, d_vec)``
+    """
+    d_vec = ped_pos - robot_pos
+    dist = float(np.linalg.norm(d_vec))
+
+    # Overlap/contact counts as zero TTC
+    if dist < _TTC_EPS_DIST:
+        return 0.0
+
+    v_rel = robot_vel - ped_vel
+
+    # Compute line-of-sight closing speed: v_rel projected onto separation direction
+    closing_speed = float(np.dot(v_rel, d_vec)) / dist
+
+    # Not closing (moving apart or perpendicular)
+    if closing_speed <= _TTC_EPS_SPEED:
+        return None
+
+    ttc = dist / closing_speed
+
+    # Guard against numerical issues
+    if not (np.isfinite(ttc) and ttc >= 0.0):
+        return None
+
+    return ttc
+
+
+# ---------------------------------------------------------------------------
 # Anchor detection
 # ---------------------------------------------------------------------------
 
@@ -242,7 +323,7 @@ def _detect_closest_approach(robot_pos: np.ndarray, peds_pos: np.ndarray) -> int
     return int(np.argmin(min_dist_per_step))
 
 
-def _detect_ttc_threshold_crossing(  # noqa: C901
+def _detect_ttc_threshold_crossing(
     robot_pos: np.ndarray,
     robot_vel: np.ndarray,
     peds_pos: np.ndarray,
@@ -254,10 +335,11 @@ def _detect_ttc_threshold_crossing(  # noqa: C901
     """Return the first step where TTC drops below *threshold_s*.
 
     TTC is computed using the constant-velocity convention relative to the line
-    of approach.  If velocity data is missing for either robot or pedestrians,
-    no anchor can be resolved.
-    """
+    of approach (physical seconds).  If velocity data is missing for either robot
+    or pedestrians, no anchor can be resolved.
 
+    The TTC convention is given by the module constant ``TTC_CONVENTION``.
+    """
     T = robot_pos.shape[0]
     n_peds = peds_pos.shape[1] if peds_pos.ndim >= 3 else 0
     if n_peds == 0 or T < 2:
@@ -270,36 +352,24 @@ def _detect_ttc_threshold_crossing(  # noqa: C901
         else:
             return None
 
-    if robot_vel.shape[0] < T:
+    if robot_vel.shape[0] < T or peds_pos.shape[0] < T or ped_vel.shape[0] < T:
         return None
-
-    _MIN_SPEED = 1e-9
-    _MIN_DIST = 1e-9
 
     for t in range(T):
         for k in range(n_peds):
-            d_vec = peds_pos[t, k] - robot_pos[t]
-            dist = float(np.linalg.norm(d_vec))
-            if dist < _MIN_DIST:
-                return t
-
-            v_rel = robot_vel[t] - ped_vel[t, k]
-            speed = float(np.linalg.norm(v_rel))
-            if speed < _MIN_SPEED:
-                continue
-
-            closing = float(np.dot(v_rel, d_vec))
-            if closing <= 0:
-                continue
-
-            ttc = dist / closing
-            if ttc < threshold_s:
+            ttc = _pairwise_ttc_s(
+                robot_pos=robot_pos[t],
+                robot_vel=robot_vel[t],
+                ped_pos=peds_pos[t, k],
+                ped_vel=ped_vel[t, k],
+            )
+            if ttc is not None and ttc < threshold_s:
                 return t
 
     return None
 
 
-def _compute_window_min_ttc_s(  # noqa: C901
+def _compute_window_min_ttc_s(
     *,
     robot_pos: np.ndarray,
     robot_vel: np.ndarray | None,
@@ -310,7 +380,7 @@ def _compute_window_min_ttc_s(  # noqa: C901
     """Compute the minimum finite TTC over all steps and pedestrians.
 
     Uses the same constant-velocity closing convention as
-    ``_detect_ttc_threshold_crossing``.
+    ``_detect_ttc_threshold_crossing`` (physical seconds).
 
     Returns
     -------
@@ -319,7 +389,6 @@ def _compute_window_min_ttc_s(  # noqa: C901
         missing.  Never returns ``0``, ``NaN``, or ``inf`` for a missing-data
         placeholder (``0.0`` is only returned for a true zero-distance overlap).
     """
-
     T = robot_pos.shape[0]
     n_peds = peds_pos.shape[1] if peds_pos.ndim >= 3 else 0
     if n_peds == 0 or T == 0 or robot_vel is None:
@@ -328,32 +397,20 @@ def _compute_window_min_ttc_s(  # noqa: C901
     if peds_pos.shape[0] < T:
         return None
 
-    _MIN_SPEED = 1e-9
-    _MIN_DIST = 1e-9
+    if ped_vel is None or ped_vel.shape[0] < T or robot_vel.shape[0] < T:
+        return None
 
     min_ttc: float | None = None
 
     for t in range(T):
         for k in range(n_peds):
-            d_vec = peds_pos[t, k] - robot_pos[t]
-            dist = float(np.linalg.norm(d_vec))
-            if dist < _MIN_DIST:
-                min_ttc = 0.0 if min_ttc is None else min(min_ttc, 0.0)
-                continue
-
-            if ped_vel is None:
-                continue
-            v_rel = robot_vel[t] - ped_vel[t, k]
-            speed = float(np.linalg.norm(v_rel))
-            if speed < _MIN_SPEED:
-                continue
-
-            closing = float(np.dot(v_rel, d_vec))
-            if closing <= 0:
-                continue
-
-            ttc = dist / closing
-            if np.isfinite(ttc) and ttc > 0:
+            ttc = _pairwise_ttc_s(
+                robot_pos=robot_pos[t],
+                robot_vel=robot_vel[t],
+                ped_pos=peds_pos[t, k],
+                ped_vel=ped_vel[t, k],
+            )
+            if ttc is not None:
                 if min_ttc is None or ttc < min_ttc:
                     min_ttc = ttc
 
@@ -833,6 +890,7 @@ def report_to_dict(report: CriticalIntervalReport) -> dict[str, Any]:
         return d
 
     return {
+        "ttc_convention": TTC_CONVENTION,
         "whole_run": report.whole_run,
         "critical_intervals": [_interval_to_dict(iv) for iv in report.intervals],
         "interval_metrics": [_metrics_to_dict(m) for m in report.interval_metrics],

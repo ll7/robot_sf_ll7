@@ -18,6 +18,9 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 
+_DENOMINATOR_GUARD_EPSILON: float = 1e-6
+
+
 @dataclass(frozen=True)
 class AlyassiRewardWeights:
     """Weight set for the Alyassi-inspired reward components."""
@@ -98,13 +101,16 @@ def _f(meta: Mapping[str, object], key: str, default: float = 0.0) -> float:
     """Safely read numeric metadata values.
 
     Returns:
-        Numeric value when conversion succeeds, otherwise ``default``.
+        Finite float value when conversion succeeds, otherwise ``default``.
     """
     value = meta.get(key, default)
     try:
-        return float(value)
+        result = float(value)
     except (TypeError, ValueError):
         return float(default)
+    if not np.isfinite(result):
+        return float(default)
+    return result
 
 
 def _b(meta: Mapping[str, object], key: str, default: bool = False) -> bool:
@@ -163,7 +169,7 @@ def _collision_component(meta: Mapping[str, object], near_miss_dist: float) -> f
     if min_dist >= near_miss_dist:
         prox_term = 0.0
     else:
-        prox_term = -max(0.0, (near_miss_dist - min_dist) / max(near_miss_dist, 1e-6))
+        prox_term = -max(0.0, (near_miss_dist - min_dist) / max(near_miss_dist, _DENOMINATOR_GUARD_EPSILON))
     return collision_term + prox_term
 
 
@@ -193,7 +199,7 @@ def _efficiency_component(
         s = float(speed)
     except (TypeError, ValueError):
         return value
-    speed_term = 1.0 - abs(s - speed_target) / max(speed_target, 1e-6)
+    speed_term = 1.0 - abs(s - speed_target) / max(speed_target, _DENOMINATOR_GUARD_EPSILON)
     # Keep speed shaping bounded so large speed outliers do not dominate all terms.
     speed_term = float(np.clip(speed_term, -1.0, 1.0))
     value += speed_term

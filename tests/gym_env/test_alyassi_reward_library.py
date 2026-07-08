@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 from robot_sf.gym_env.reward import build_reward_function
@@ -165,3 +166,35 @@ def test_alyassi_collision_component_near_miss_penalty_branch() -> None:
     meta["min_ped_distance"] = 0.1
     scores = alyassi_component_scores(meta, near_miss_dist=0.5)
     assert scores["collision"] < 0.0
+
+
+@pytest.mark.parametrize("non_finite", [float("nan"), float("inf"), float("-inf")])
+def test_alyassi_reward_f_guard_rejects_non_finite_values(non_finite: float) -> None:
+    """Non-finite values (NaN, Inf) should safely fall back to default instead of propagating."""
+    meta = _base_meta()
+    meta["near_misses"] = non_finite
+    meta["comfort_exposure"] = non_finite
+    meta["human_preference_score"] = non_finite
+
+    scores = alyassi_component_scores(meta)
+    # All affected components should use default values (0.0), not NaN/Inf
+    assert scores["social"] == 0.0, f"Social component should fall back to 0.0, got {scores['social']}"
+    assert scores["human_preference"] == 0.0, (
+        f"Human preference should fall back to 0.0, got {scores['human_preference']}"
+    )
+    # Overall reward should remain finite
+    reward = alyassi_reward(meta)
+    assert np.isfinite(reward), f"Total reward should be finite, got {reward}"
+
+
+def test_alyassi_reward_f_guard_bit_identical_for_finite_inputs() -> None:
+    """Finite inputs should produce bit-identical results before and after the guard addition."""
+    meta = _base_meta()
+    meta["near_misses"] = 2.5
+    meta["comfort_exposure"] = 1.3
+    meta["human_preference_score"] = 0.8
+
+    scores = alyassi_component_scores(meta)
+    # Verify the finite values flow through correctly
+    assert scores["social"] == -(2.5 + 1.3), f"Expected -3.8, got {scores['social']}"
+    assert scores["human_preference"] == 0.8, f"Expected 0.8, got {scores['human_preference']}"

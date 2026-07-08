@@ -436,7 +436,11 @@ def _run_differential_evolution(
         maxiter=config.de_maxiter,
         popsize=config.de_popsize,
         seed=seed,
-        polish=True,
+        # Disable polish: the L-BFGS-B refinement pass adds finite-difference
+        # gradient evaluations that are wasteful (and near-meaningless) for this
+        # noisy, simulator-backed objective. SciPy only keeps the polished point
+        # when it improves, so skipping it cannot worsen the DE result.
+        polish=False,
         updating="deferred",
     )
 
@@ -632,7 +636,10 @@ def run_criticality_optimization(  # noqa: C901, PLR0912, PLR0915
         de_manifest = {
             "de_maxiter": config.de_maxiter,
             "de_popsize": config.de_popsize,
-            "de_seed": config.de_seed,
+            # Record the effective seed actually used by the DE run (the runner
+            # falls back to optimizer_seed when de_seed is None), so the manifest
+            # reflects a reproducible seed instead of null.
+            "de_seed": config.de_seed if config.de_seed is not None else config.optimizer_seed,
         }
 
     manifest = {

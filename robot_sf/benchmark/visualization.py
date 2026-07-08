@@ -463,7 +463,14 @@ def _plot_subprocess_worker(  # noqa: PLR0913
             size=size,
         )
         conn.send(("ok", artifacts))
-    except Exception as exc:  # noqa: BLE001  # pragma: no cover - subprocess boundary
+    except (
+        ValueError,
+        TypeError,
+        RuntimeError,
+        AttributeError,
+        OSError,
+        ImportError,
+    ) as exc:  # pragma: no cover - subprocess boundary
         conn.send(("err", f"{type(exc).__name__}: {exc}"))
     finally:
         conn.close()

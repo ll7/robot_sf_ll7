@@ -293,33 +293,41 @@ _TEST_LANE_ENV = "ROBOT_SF_TEST_LANE"
 _TEST_LANE_ALL = "all"
 _TEST_LANE_CORE = "core"
 _TEST_LANE_OPTIONAL = "optional"
-_OPTIONAL_TEST_PATH_FRAGMENTS = (
-    "tests/benchmark/",
-    "tests/benchmark_full/",
-    "tests/carla_bridge/",
-    "tests/integration/",
-    "tests/planner/",
-    "tests/render/",
-    "tests/training/",
-    "tests/visuals/",
-)
-_OPTIONAL_TEST_FILES = {
-    "tests/sb3_test.py",
-    "tests/tools/test_probe_sonic_model_inference.py",
-    "tests/test_baseline_ppo_smoke.py",
-    "tests/test_benchmark_visualization_integration.py",
-    "tests/test_feature_extractors.py",
-    "tests/test_grid_socnav_extractor.py",
-    "tests/test_map_runner_ppo.py",
-    "tests/test_map_runner_sac.py",
-    "tests/test_output_root_migration.py",
-    "tests/test_ppo_diagnostics.py",
-    "tests/test_predictive_model.py",
-    "tests/unit/test_cli_logging_flags.py",
-    "tests/unit/test_figure_orchestrator_requirements.py",
-    "tests/unit/test_runner_helper_coverage.py",
-    "tests/unit/test_runner_video.py",
-}
+_OPTIONAL_ALLOWLIST_PATH = Path(__file__).parent / "support" / "optional_test_allowlist.txt"
+
+
+def _load_optional_allowlist() -> tuple[set[str], set[str]]:
+    """Load the optional test allowlist from the single source of truth.
+
+    Returns:
+        A tuple of (directory_patterns, file_paths) where:
+        - directory_patterns: set of directory patterns (with trailing /)
+        - file_paths: set of specific file paths
+    """
+    allowlist_path = _OPTIONAL_ALLOWLIST_PATH
+    if not allowlist_path.is_file():
+        raise FileNotFoundError(f"Optional test allowlist file not found: {allowlist_path}")
+
+    directory_patterns = set()
+    file_paths = set()
+
+    with open(allowlist_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            # Skip empty lines and comments
+            if not line or line.startswith("#"):
+                continue
+            # Directory patterns end with /
+            if line.endswith("/"):
+                directory_patterns.add(line)
+            else:
+                file_paths.add(line)
+
+    return directory_patterns, file_paths
+
+
+# Load the allowlist once at module load time
+_OPTIONAL_TEST_PATH_FRAGMENTS, _OPTIONAL_TEST_FILES = _load_optional_allowlist()
 
 
 @pytest.fixture

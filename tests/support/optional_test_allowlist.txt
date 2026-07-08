@@ -1,0 +1,35 @@
+# Optional test allowlist: tests that require optional-extra readiness dependencies.
+# Each line is either a directory pattern (with trailing /) or a file path.
+# This file is the single source of truth; consumers:
+# - tests/conftest.py (Python, _is_optional_readiness_test_path)
+# - scripts/dev/run_tests_parallel.sh (bash, is_optional_test_path)
+# - scripts/dev/pr_ready_check.sh (bash, optional_test_patterns)
+#
+# To add a new optional test path, add it here. Do NOT edit the three consumers directly.
+
+# Directory patterns (all tests under these paths are optional)
+tests/benchmark/
+tests/benchmark_full/
+tests/carla_bridge/
+tests/integration/
+tests/planner/
+tests/render/
+tests/training/
+tests/visuals/
+
+# Individual test files (optional even when outside optional directories)
+tests/sb3_test.py
+tests/tools/test_probe_sonic_model_inference.py
+tests/test_baseline_ppo_smoke.py
+tests/test_benchmark_visualization_integration.py
+tests/test_feature_extractors.py
+tests/test_grid_socnav_extractor.py
+tests/test_map_runner_ppo.py
+tests/test_map_runner_sac.py
+tests/test_output_root_migration.py
+tests/test_ppo_diagnostics.py
+tests/test_predictive_model.py
+tests/unit/test_cli_logging_flags.py
+tests/unit/test_figure_orchestrator_requirements.py
+tests/unit/test_runner_helper_coverage.py
+tests/unit/test_runner_video.py

@@ -87,32 +87,21 @@ core_test_paths=(
   tests/unicycle_drive_test.py
   tests/zone_sampling_test.py
 )
-optional_test_paths=(
-  tests/benchmark
-  tests/benchmark_full
-  tests/carla_bridge
-  tests/integration
-  tests/planner
-  tests/render
-  tests/training
-  tests/visuals
-  tests/tools/test_probe_sonic_model_inference.py
-  tests/sb3_test.py
-  tests/test_baseline_ppo_smoke.py
-  tests/test_benchmark_visualization_integration.py
-  tests/test_feature_extractors.py
-  tests/test_grid_socnav_extractor.py
-  tests/test_map_runner_ppo.py
-  tests/test_map_runner_sac.py
-  tests/test_output_root_migration.py
-  tests/test_ppo_diagnostics.py
-  tests/test_predictive_model.py
-  tests/unit/test_cli_logging_flags.py
-  tests/unit/test_figure_orchestrator_requirements.py
-  tests/unit/test_runner_helper_coverage.py
-  tests/unit/test_runner_video.py
-)
-
+# Optional test allowlist is loaded from the single source of truth
+# tests/support/optional_test_allowlist.txt
+allowlist_file="${SCRIPT_DIR}/../../tests/support/optional_test_allowlist.txt"
+if [[ ! -f "$allowlist_file" ]]; then
+  echo "Error: optional test allowlist file not found: $allowlist_file" >&2
+  exit 1
+fi
+optional_test_paths=()
+while IFS= read -r line || [[ -n "$line" ]]; do
+    # Skip empty lines and comments
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    # Remove trailing slash for shell pattern matching
+    line="${line%/}"
+    optional_test_paths+=("$line")
+done < "$allowlist_file"
 normalize_pytest_target_path() {
   local path="${1#./}"
   path="${path%%::*}"
@@ -122,36 +111,17 @@ normalize_pytest_target_path() {
 is_optional_test_path() {
   local path
   path="$(normalize_pytest_target_path "$1")"
-  case "$path" in
-    tests/benchmark|tests/benchmark/*|\
-    tests/benchmark_full|tests/benchmark_full/*|\
-    tests/carla_bridge|tests/carla_bridge/*|\
-    tests/integration|tests/integration/*|\
-    tests/planner|tests/planner/*|\
-    tests/render|tests/render/*|\
-    tests/training|tests/training/*|\
-    tests/visuals|tests/visuals/*|\
-    tests/tools/test_probe_sonic_model_inference.py|\
-    tests/sb3_test.py|\
-    tests/test_baseline_ppo_smoke.py|\
-    tests/test_benchmark_visualization_integration.py|\
-    tests/test_feature_extractors.py|\
-    tests/test_grid_socnav_extractor.py|\
-    tests/test_map_runner_ppo.py|\
-    tests/test_map_runner_sac.py|\
-    tests/test_output_root_migration.py|\
-    tests/test_ppo_diagnostics.py|\
-    tests/test_predictive_model.py|\
-    tests/unit/test_cli_logging_flags.py|\
-    tests/unit/test_figure_orchestrator_requirements.py|\
-    tests/unit/test_runner_helper_coverage.py|\
-    tests/unit/test_runner_video.py)
+
+  # Check against the loaded optional_test_paths array
+  for pattern in "${optional_test_paths[@]}"; do
+    # Directory pattern: check if path is the directory or under it
+    # Exact file match: path equals pattern
+    if [[ "$path" == "$pattern" || "$path" == "$pattern"/* ]]; then
       return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
+    fi
+  done
+
+  return 1
 }
 
 pytest_args=()

@@ -7,6 +7,7 @@ import numpy as np
 from gymnasium import spaces
 
 from robot_sf.common.math_utils import clip_scalar, normalize_angle_atan2
+from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 from robot_sf.common.types import BicycleAction, PolarVec2D, RobotPose, Vec2D
 
 
@@ -16,7 +17,9 @@ class BicycleDriveSettings:
     A class that defines the settings for a bicycle drive robot.
     """
 
-    radius: float = 1.0  # Collision radius for physics/metrics, not used in kinematics
+    # Collision radius for physics/metrics, not used in kinematics.
+    # References the authoritative default from robot_sf.common.robot_defaults.
+    radius: float = DEFAULT_ROBOT_RADIUS
     wheelbase: float = 1.0  # Distance between front and rear wheels
     max_steer: float = 0.78  # Maximum steering angle (45 degrees in radians)
     max_velocity: float = 3.0  # Maximum forward velocity

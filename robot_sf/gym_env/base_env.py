@@ -298,6 +298,9 @@ def attach_planner_to_map(map_def, env_config) -> None:
 
     clearance = getattr(env_config, "planner_clearance_margin", 0.3)
     robot_cfg = getattr(env_config, "robot_config", None)
+    # NOTE: This fallback (0.4m) differs from the authoritative robot radius (1.0m)
+    # defined in robot_sf.common.robot_defaults. Changing this would affect planner
+    # clearance margins and benchmark metrics. See issue #4856 for details.
     robot_radius = getattr(robot_cfg, "radius", 0.4) if robot_cfg else 0.4
 
     planner_cfg = PlannerConfig(robot_radius=robot_radius, min_safe_clearance=clearance)

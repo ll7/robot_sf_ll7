@@ -9,10 +9,11 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
+
 _DEFAULT_COLLISION_DIST = 0.25
 _DEFAULT_NEAR_MISS_DIST = 0.50
 _DEFAULT_COMFORT_FORCE_THRESHOLD = 2.0
-_DEFAULT_ROBOT_RADIUS = 1.0
 _DEFAULT_PED_RADIUS = 0.4
 _SNQI_THRESHOLD_CACHE: tuple[float, float, float] | None = None
 
@@ -161,12 +162,12 @@ def _resolve_robot_radius(simulator: Any) -> float:
     """
     direct = getattr(simulator, "robot_radius", None)
     if direct is not None:
-        return _coerce_positive_float(direct, _DEFAULT_ROBOT_RADIUS)
+        return _coerce_positive_float(direct, DEFAULT_ROBOT_RADIUS)
     robots = getattr(simulator, "robots", None)
     if robots:
         config = getattr(robots[0], "config", None)
-        return _coerce_positive_float(getattr(config, "radius", None), _DEFAULT_ROBOT_RADIUS)
-    return _DEFAULT_ROBOT_RADIUS
+        return _coerce_positive_float(getattr(config, "radius", None), DEFAULT_ROBOT_RADIUS)
+    return DEFAULT_ROBOT_RADIUS
 
 
 def _resolve_ped_radius(simulator: Any) -> float:

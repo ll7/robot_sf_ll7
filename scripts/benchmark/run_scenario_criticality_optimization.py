@@ -234,7 +234,7 @@ def _build_baseline_parameters(
     return params
 
 
-def _evaluate_candidate(  # noqa: C901, PLR0913
+def _evaluate_candidate(  # noqa: C901, PLR0912, PLR0913, PLR0915
     candidate_id: str,
     parameters: dict[str, float],
     scenario: dict[str, Any],
@@ -263,6 +263,7 @@ def _evaluate_candidate(  # noqa: C901, PLR0913
     patch_s: float | None = None
     simulation_s: float | None = None
     score_s: float | None = None
+    temp_jsonl = output_dir / f"{candidate_id}_{uuid.uuid4().hex}_eval.episodes.jsonl"
 
     try:
         # Stage 1: Apply parameters to scenario without mutation
@@ -272,7 +273,6 @@ def _evaluate_candidate(  # noqa: C901, PLR0913
         patch_s = time.perf_counter() - patch_start
 
         # Temporary JSONL for this candidate's run
-        temp_jsonl = output_dir / f"{candidate_id}_{uuid.uuid4().hex}_eval.episodes.jsonl"
         if temp_jsonl.exists():
             temp_jsonl.unlink()
 
@@ -400,6 +400,12 @@ def _evaluate_candidate(  # noqa: C901, PLR0913
             simulation_s=simulation_s,
             score_s=score_s,
         )
+    finally:
+        if temp_jsonl.exists():
+            try:
+                temp_jsonl.unlink()
+            except OSError:
+                pass
 
 
 def _run_differential_evolution(

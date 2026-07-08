@@ -146,19 +146,22 @@ is_optional_readiness_path() {
   esac
 
   # Test paths from the single source of truth
-  local allowlist_file="${SCRIPT_DIR}/../tests/support/optional_test_allowlist.txt"
-  if [[ -f "$allowlist_file" ]]; then
-    local test_path="$1"
-    while IFS= read -r line; do
-      [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-      # Remove trailing slash for pattern matching
-      line="${line%/}"
-      # Check if test_path matches the pattern
-      if [[ "$test_path" == "$line" || "$test_path" == "$line"/* ]]; then
-        return 0
-      fi
-    done < "$allowlist_file"
+  local allowlist_file="${SCRIPT_DIR}/../../tests/support/optional_test_allowlist.txt"
+  if [[ ! -f "$allowlist_file" ]]; then
+    printf 'Error: optional test allowlist file not found: %s\n' "$allowlist_file" >&2
+    exit 1
   fi
+
+  local test_path="$1"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    # Remove trailing slash for pattern matching
+    line="${line%/}"
+    # Check if test_path matches the pattern
+    if [[ "$test_path" == "$line" || "$test_path" == "$line"/* ]]; then
+      return 0
+    fi
+  done < "$allowlist_file"
 
   return 1
 }

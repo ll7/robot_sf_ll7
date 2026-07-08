@@ -305,9 +305,8 @@ def _load_optional_allowlist() -> tuple[set[str], set[str]]:
         - file_paths: set of specific file paths
     """
     allowlist_path = _OPTIONAL_ALLOWLIST_PATH
-    if not allowlist_path.exists():
-        # Fallback to hardcoded patterns if the file is missing
-        return set(), set()
+    if not allowlist_path.is_file():
+        raise FileNotFoundError(f"Optional test allowlist file not found: {allowlist_path}")
 
     directory_patterns = set()
     file_paths = set()

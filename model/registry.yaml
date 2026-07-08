@@ -255,6 +255,30 @@ models:
     metadata_asset: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200-metadata.json
     published_at_utc: '2026-05-24T05:32:03+00:00'
   public_artifact_source: github_release
+  benchmark_promotion:
+    claim_boundary: benchmark_candidate
+    benchmark_track: grid_socnav_v1
+    track_schema_version: observation-track.v1
+    observation_level: tracked_agents_no_noise
+    observation_mode: dict
+    allowed_observation_keys:
+    - occupancy_grid
+    - occupancy_grid_meta_origin
+    - occupancy_grid_meta_resolution
+    - occupancy_grid_meta_width
+    - occupancy_grid_meta_height
+    - robot_position
+    - robot_heading
+    - robot_velocity_xy
+    - robot_speed
+    - robot_angular_velocity
+    - robot_radius
+    - goal_current
+    - goal_next
+    - pedestrians_positions
+    goal_encoding: polar
+    sensor_geometry: differential_drive
+    privileged_input_status: none
 - model_id: ppo_expert_br06_v2_15m_all_maps_20260302T152332
   display_name: PPO expert BR-06 v2 all-maps (2026-03-02)
   local_path: output/model_cache/ppo_expert_br06_v2_15m_all_maps_20260302T152332/model.zip

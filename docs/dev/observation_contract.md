@@ -130,6 +130,80 @@ through planner compatibility metadata. Unsupported planner/level combinations
 fail before episodes are written. These levels are benchmark provenance labels;
 they are not detector, camera, lidar, or sim-to-real certification claims.
 
+## Checkpoint Observation Contract (Model Registry)
+
+Learned-policy checkpoints that use dict-family observation modes (`dict`, `native_dict`,
+`multi_input`) must declare their observation contract in the model registry. This prevents
+running checkpoints with the wrong observation producer and ensures reproducibility.
+
+### When Observation Contract is Required
+
+A checkpoint requires `benchmark_promotion` metadata with observation contract fields when:
+- The checkpoint uses `obs_mode: dict`, `native_dict`, or `multi_input`
+- The algorithm's default observation mode is not `socnav_state`
+
+For example, `guarded_ppo` uses `obs_mode: dict` with default `sensor_fusion_state`, so its
+checkpoint must declare the observation level and mode used during training.
+
+### Model Registry Metadata
+
+Add a `benchmark_promotion` block to the model registry entry (`model/registry.yaml`):
+
+```yaml
+- model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
+  # ... other fields ...
+  benchmark_promotion:
+    claim_boundary: benchmark_candidate  # or benchmark_promoted, research_only
+    benchmark_track: grid_socnav_v1
+    track_schema_version: observation-track.v1
+    observation_level: tracked_agents_no_noise
+    observation_mode: dict
+    allowed_observation_keys:
+    - occupancy_grid
+    - occupancy_grid_meta_origin
+    - occupancy_grid_meta_resolution
+    - occupancy_grid_meta_width
+    - occupancy_grid_meta_height
+    - robot_position
+    - robot_heading
+    - robot_velocity_xy
+    - robot_speed
+    - robot_angular_velocity
+    - robot_radius
+    - goal_current
+    - goal_next
+    - pedestrians_positions
+    goal_encoding: polar
+    sensor_geometry: differential_drive
+    privileged_input_status: none
+```
+
+### Required Fields
+
+- `observation_level`: Must be a valid level from `robot_sf/benchmark/observation_levels.py`
+- `observation_mode`: The planner-side observation mode (`dict`, `socnav_state`, etc.)
+- `allowed_observation_keys`: List of observation keys the checkpoint expects
+- `goal_encoding`, `sensor_geometry`, `privileged_input_status`: Additional metadata
+
+### Resolution Behavior
+
+The observation contract is resolved by `resolve_learned_checkpoint_observation_contract`
+in `robot_sf/benchmark/algorithm_metadata.py`. Resolution follows this priority:
+1. Explicit `observation_mode` or `observation_level` override (command-line or config)
+2. `algo_config.observation_contract` dict
+3. `algo_config.benchmark_promotion` dict
+4. Model registry `benchmark_promotion` metadata (lookup by `model_id`)
+5. Algorithm default observation mode (fallback when metadata not required)
+
+If none of the above sources provide metadata and the checkpoint requires it,
+a ValueError is raised with guidance on where to add the metadata.
+
+### Regression Testing
+
+The test `test_guarded_ppo_checkpoint_observation_contract_resolves_from_registry`
+in `tests/benchmark/test_algorithm_metadata_contract.py` validates this contract.
+See issue #4837 for context on why this metadata is required.
+
 ## Reference Files
 
 - `robot_sf/sensor/sensor_fusion.py`
@@ -137,3 +211,6 @@ they are not detector, camera, lidar, or sim-to-real certification claims.
 - `robot_sf/gym_env/robot_env.py`
 - `robot_sf/nav/occupancy_grid.py`
 - `robot_sf/benchmark/observation_levels.py`
+- `robot_sf/benchmark/algorithm_metadata.py`
+- `robot_sf/models/registry.py`
+- `model/registry.yaml`

@@ -72,6 +72,41 @@ REPOS: tuple[RepoSpec, ...] = (
         ),
         related_issues=(3347, 3366),
     ),
+    RepoSpec(
+        name="crowdnav_pred_attng",
+        title=(
+            "CrowdNav_Prediction_AttnGraph: intention-aware crowd navigation with an "
+            "attention-based interaction graph (ICRA 2023) reference implementation"
+        ),
+        upstream_url="https://github.com/Shuijing725/CrowdNav_Prediction_AttnGraph",
+        fork_url=None,
+        pinned_sha="390773137be04ed14e27620dc5fd7c5e1a5b1f62",
+        stage_path=DEFAULT_STAGE_ROOT / "crowdnav_pred_attng",
+        source_access_date="2026-07-08",
+        license_note=(
+            "MIT License, as reported by GitHub repository license metadata (LICENSE file at the "
+            "pinned commit)."
+        ),
+        license_compatibility_decision=(
+            "compatible for local research/reference staging; MIT permits academic benchmark reuse"
+        ),
+        redistribution_decision=(
+            "public fork allowed by MIT after maintainer review; this registry stages from "
+            "upstream until an ll7 fork is created"
+        ),
+        intended_use=(
+            "Reference checkout for the CrowdNav_Prediction_AttnGraph learned-baseline feasibility "
+            "smoke (issue #4871). Only the PyTorch RL navigation policy path is exercised; the "
+            "TensorFlow GST trajectory-predictor path and OpenAI Baselines/crowd_sim stack are out "
+            "of scope for the smoke. Benchmark roster eligibility remains a separate maintainer "
+            "gate."
+        ),
+        validation_command=(
+            "uv run pytest tests/planner/test_crowdnav_pred_attng.py "
+            "-k crowdnav_pred_attng_skip_without_external_repo -q"
+        ),
+        related_issues=(4871, 1617),
+    ),
 )
 
 

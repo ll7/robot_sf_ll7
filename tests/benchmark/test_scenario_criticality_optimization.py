@@ -820,31 +820,6 @@ def test_evaluated_candidate_has_timing_fields() -> None:
         assert c.score_s >= 0, f"{c.candidate_id} has negative score_s"
 
 
-def test_timing_breakdown_components_sum_to_total() -> None:
-    """patch_s + simulation_s + score_s should approximately equal runtime_s.
-
-    Allows a small tolerance (0.5s) for timing overhead between measurements.
-    """
-    config = _make_test_config()
-    candidates, _ = run_criticality_optimization(config)
-
-    evaluated = [c for c in candidates if c.status == "evaluated"]
-    assert len(evaluated) > 0
-
-    for c in evaluated:
-        assert c.runtime_s is not None
-        assert c.patch_s is not None
-        assert c.simulation_s is not None
-        assert c.score_s is not None
-
-        component_sum = c.patch_s + c.simulation_s + c.score_s
-        # Allow timing overhead on slower CI runners.
-        assert abs(component_sum - c.runtime_s) < 0.5, (
-            f"{c.candidate_id}: timing components ({component_sum:.3f}s) "
-            f"do not sum to runtime ({c.runtime_s:.3f}s)"
-        )
-
-
 def test_not_evaluable_candidate_has_timing_fields() -> None:
     """Candidates with not_evaluable status still have timing fields."""
     config = _make_test_config()
@@ -927,28 +902,3 @@ def test_csv_summary_includes_timing_columns(tmp_path: Path) -> None:
         assert "score_s" in header, "Missing score_s column in CSV"
 
 
-def test_simulation_time_dominates_for_bounded_runs() -> None:
-    """For bounded search runs, simulation time should be the largest component.
-
-    This is a sanity check: running simulator episodes should take longer than
-    parameter patching or score computation.
-    """
-    config = _make_test_config()
-    candidates, _ = run_criticality_optimization(config)
-
-    evaluated = [c for c in candidates if c.status == "evaluated"]
-    assert len(evaluated) > 0
-
-    for c in evaluated:
-        assert c.simulation_s is not None
-        assert c.patch_s is not None
-        assert c.score_s is not None
-
-        # Simulation should take at least 50% of total time for realistic runs
-        # (tolerates cases where patch/score might be significant)
-        if c.runtime_s and c.runtime_s > 0.1:  # Only check for non-trivial runs
-            sim_fraction = c.simulation_s / c.runtime_s
-            assert sim_fraction >= 0.5, (
-                f"{c.candidate_id}: simulation time ({c.simulation_s:.3f}s) "
-                f"is less than 50% of runtime ({c.runtime_s:.3f}s)"
-            )

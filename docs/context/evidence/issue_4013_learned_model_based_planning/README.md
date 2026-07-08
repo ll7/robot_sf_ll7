@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#4013, 2026-07-08) - NEEDS-REVIEW -->
+
 # Issue #4013 Learned-Prediction MPC Evidence
 
 This directory records the durable evidence for issue #4013. The paired diagnostic
@@ -75,3 +77,5 @@ learnability probe, **not** real ETH/UCY pedestrian data. The checkpoint is
 benchmark, navigation-quality, or paper/dissertation evidence. The paired smoke
 comparison across all three arms has now been run (see the section above); scaling
 to nominal benchmark evidence remains a separate campaign.
+
+<!-- /AI-GENERATED -->

@@ -30,7 +30,9 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
 RELEASE_TAG = "0.0.2"
-BUNDLE_NAME = "paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle"
+BUNDLE_NAME = (
+    "paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle"
+)
 ISSUE = 4867
 
 
@@ -144,7 +146,7 @@ def transform_episode_to_constraints_first_format(episode: Mapping) -> dict:
     safe_success = route_complete and collisions == 0 and near_misses == 0
 
     return {
-        "planner": episode.get("algo", "unknown"),
+        "planner": episode.get("algo") or episode.get("planner") or "unknown",
         "collisions": collisions,
         "near_miss_severity": near_misses,  # Using count as severity proxy
         "comfort": -comfort_raw,  # Invert so higher is better
@@ -298,39 +300,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     write_methods_note(methods_note_path)
     print(f"  Wrote methods note to {methods_note_path}")
 
-    # Step 4: Run constraints_first_scoring.py CLI
-    print("\nRunning constraints-first scoring CLI...")
-    import subprocess
-
-    # Use absolute paths for CLI inputs
-    transformed_abs = transformed_path.resolve()
-    compensatory_abs = compensatory_path.resolve()
-    output_abs = (output_dir / "constraints_first_report.json").resolve()
-
-    result = subprocess.run(
-        [
-            "uv",
-            "run",
-            "python",
-            "-m",
-            "robot_sf.benchmark.constraints_first_scoring",
-            "--episodes",
-            str(transformed_abs),
-            "--compensatory",
-            str(compensatory_abs),
-            "--output",
-            str(output_abs),
-            "--confidence",
-            "0.95",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
+    # Step 4: Run constraints-first scoring in-process.
+    print("\nRunning constraints-first scoring...")
+    from robot_sf.benchmark.constraints_first_scoring import (
+        build_constraints_first_report,
+        group_episodes_by_planner,
     )
 
-    if result.returncode != 0:
-        sys.stderr.write(f"ERROR: constraints_first_scoring failed:\n{result.stderr}\n")
-        return 2
+    records = [
+        json.loads(line)
+        for line in transformed_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    planner_episodes = group_episodes_by_planner(records)
+    report = build_constraints_first_report(
+        planner_episodes,
+        compensatory_scores=compensatory_scores,
+        confidence=0.95,
+    )
+    output_abs = output_dir / "constraints_first_report.json"
+    output_abs.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     print(f"  Wrote {output_dir / 'constraints_first_report.json'}")
 
@@ -364,9 +353,7 @@ def generate_ranking_comparison(
 
     # Build ordered lists for each ranking
     comp_ordered = sorted(compensatory_scores.items(), key=lambda x: (-x[1], x[0]))
-    cons_ordered = sorted(
-        per_planner.items(), key=lambda x: (-x[1]["constraints_first_rank"], x[0])
-    )
+    cons_ordered = sorted(per_planner.items(), key=lambda x: (x[1]["constraints_first_rank"], x[0]))
 
     # Extract key metrics from the full report
     per_planner_metrics = {}
@@ -374,9 +361,7 @@ def generate_ranking_comparison(
         per_planner_metrics[planner] = {
             "admissible_rate": summary.get("admissible_rate"),
             "collision_rate": summary.get("collision_rate"),
-            "collision_upper_confidence_bound": summary.get(
-                "collision_upper_confidence_bound"
-            ),
+            "collision_upper_confidence_bound": summary.get("collision_upper_confidence_bound"),
             "n_safe_success": summary.get("comfort", {}).get("n_safe_success"),
             "n_episodes": summary.get("n_episodes"),
         }
@@ -414,9 +399,7 @@ def write_ranking_comparison_csv(comparison: dict, output_path: Path) -> None:
                 "n_episodes",
             ]
         )
-        for planner, data in sorted(
-            per_planner.items(), key=lambda x: x[1]["compensatory_rank"]
-        ):
+        for planner, data in sorted(per_planner.items(), key=lambda x: x[1]["compensatory_rank"]):
             metrics = per_planner_metrics.get(planner, {})
             writer.writerow(
                 [

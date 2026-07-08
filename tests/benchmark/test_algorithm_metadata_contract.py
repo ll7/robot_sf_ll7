@@ -688,49 +688,13 @@ def test_infer_execution_mode_from_counts() -> None:
     assert infer_execution_mode_from_counts(native_steps=0, adapted_steps=0) == "unknown"
 
 
-def test_guarded_ppo_checkpoint_observation_contract_resolves_from_registry(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_guarded_ppo_checkpoint_observation_contract_resolves_from_registry() -> None:
     """Issue #4837 regression: guarded_ppo checkpoint should resolve observation contract.
 
     The ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200 checkpoint lacked
     benchmark_promotion metadata in the registry, causing resolve_learned_checkpoint_observation_contract
     to fail for guarded_ppo arms with obs_mode=dict. This test verifies the fix.
     """
-
-    def _mock_registry_entry(model_id: str) -> dict[str, object]:
-        if model_id == "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200":
-            return {
-                "benchmark_promotion": {
-                    "claim_boundary": "benchmark_candidate",
-                    "benchmark_track": "grid_socnav_v1",
-                    "track_schema_version": "observation-track.v1",
-                    "observation_level": "tracked_agents_no_noise",
-                    "observation_mode": "dict",
-                    "allowed_observation_keys": [
-                        "occupancy_grid",
-                        "occupancy_grid_meta_origin",
-                        "occupancy_grid_meta_resolution",
-                        "occupancy_grid_meta_width",
-                        "occupancy_grid_meta_height",
-                        "robot_position",
-                        "robot_heading",
-                        "robot_velocity_xy",
-                        "robot_speed",
-                        "robot_angular_velocity",
-                        "robot_radius",
-                        "goal_current",
-                        "goal_next",
-                        "pedestrians_positions",
-                    ],
-                    "goal_encoding": "polar",
-                    "sensor_geometry": "differential_drive",
-                    "privileged_input_status": "none",
-                }
-            }
-        raise KeyError(f"unknown model_id: {model_id}")
-
-    monkeypatch.setattr(algorithm_metadata, "get_registry_entry", _mock_registry_entry, raising=False)
 
     contract = algorithm_metadata.resolve_learned_checkpoint_observation_contract(
         "guarded_ppo",

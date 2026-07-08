@@ -623,3 +623,179 @@ def test_de_optimum_score_comparable_to_baseline() -> None:
     assert optimum.status == "evaluated"
     assert math.isfinite(baseline.criticality_score)
     assert math.isfinite(optimum.criticality_score)
+
+
+# ── CMA-ES optimizer tests ──────────────────────────────────────────────
+
+_CMA_SCRIPT = (
+    Path(__file__).resolve().parents[2]
+    / "scripts"
+    / "benchmark"
+    / "run_scenario_criticality_optimization.py"
+)
+
+
+def _load_cma_opt_module(mod_name: str):
+    """Load the optimization script as a fresh module for CMA-ES tests."""
+    import importlib.util as _u
+
+    spec = _u.spec_from_file_location(mod_name, _CMA_SCRIPT)
+    assert spec is not None and spec.loader is not None
+    mod = _u.module_from_spec(spec)
+    sys.modules[mod_name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_cma_es_optimizer_accepted() -> None:
+    """CMA-ES optimizer_type is accepted by the runner."""
+    mod = _load_cma_opt_module("_cma_test_opt")
+
+    config = mod.OptimizationConfig(
+        parameter_space={
+            "pedestrian_speed_scale": mod.ParameterDefinition(
+                param_type="continuous", min=0.7, max=1.4
+            ),
+            "pedestrian_start_delay_s": mod.ParameterDefinition(
+                param_type="continuous", min=0.0, max=2.0
+            ),
+        },
+        optimizer_type="cma_es",
+        sample_budget=5,
+        optimizer_seed=42,
+        seeds=[0],
+        cma_es_maxiter=5,
+        cma_es_sigma0=0.5,
+    )
+    candidates, manifest = mod.run_criticality_optimization(config)
+    assert manifest["optimizer_type"] == "cma_es"
+    assert len(candidates) >= 2  # baseline + at least cma_optimum
+
+
+def test_cma_es_requires_continuous_params() -> None:
+    """CMA-ES rejects all-discrete parameter spaces."""
+    mod = _load_cma_opt_module("_cma_test_opt2")
+
+    config = mod.OptimizationConfig(
+        parameter_space={
+            "mode": mod.ParameterDefinition(
+                param_type="discrete", values=[1.0, 2.0]
+            ),
+        },
+        optimizer_type="cma_es",
+        cma_es_maxiter=2,
+    )
+    with pytest.raises(ValueError, match="cma_es requires at least one continuous"):
+        mod.run_criticality_optimization(config)
+
+
+def test_cma_es_manifest_fields() -> None:
+    """CMA-ES run records optimizer-specific manifest fields."""
+    mod = _load_cma_opt_module("_cma_test_opt3")
+
+    config = mod.OptimizationConfig(
+        parameter_space={
+            "pedestrian_speed_scale": mod.ParameterDefinition(
+                param_type="continuous", min=0.7, max=1.4
+            ),
+        },
+        optimizer_type="cma_es",
+        sample_budget=2,
+        optimizer_seed=77,
+        seeds=[0],
+        cma_es_maxiter=3,
+        cma_es_sigma0=0.3,
+        cma_es_seed=99,
+    )
+    _, manifest = mod.run_criticality_optimization(config)
+    assert manifest["cma_es_maxiter"] == 3
+    assert manifest["cma_es_sigma0"] == 0.3
+    assert manifest["cma_es_seed"] == 99
+
+
+def test_cma_es_seed_fallback() -> None:
+    """CMA-ES falls back to optimizer_seed when cma_es_seed is None."""
+    mod = _load_cma_opt_module("_cma_test_opt4")
+
+    config = mod.OptimizationConfig(
+        parameter_space={
+            "pedestrian_speed_scale": mod.ParameterDefinition(
+                param_type="continuous", min=0.7, max=1.4
+            ),
+        },
+        optimizer_type="cma_es",
+        sample_budget=2,
+        optimizer_seed=123,
+        seeds=[0],
+        cma_es_maxiter=2,
+        cma_es_seed=None,
+    )
+    _, manifest = mod.run_criticality_optimization(config)
+    assert manifest["cma_es_seed"] == 123
+
+
+def test_cma_es_optimum_score_finite() -> None:
+    """CMA-ES optimum and baseline both produce finite scores."""
+    import math
+
+    mod = _load_cma_opt_module("_cma_test_opt5")
+
+    config = mod.OptimizationConfig(
+        parameter_space={
+            "pedestrian_speed_scale": mod.ParameterDefinition(
+                param_type="continuous", min=0.7, max=1.4
+            ),
+            "pedestrian_start_delay_s": mod.ParameterDefinition(
+                param_type="continuous", min=0.0, max=2.0
+            ),
+        },
+        optimizer_type="cma_es",
+        sample_budget=3,
+        optimizer_seed=42,
+        seeds=[0],
+        cma_es_maxiter=5,
+        cma_es_sigma0=0.5,
+    )
+    candidates, _ = mod.run_criticality_optimization(config)
+
+    baseline = next(c for c in candidates
+                    if c.candidate_id == "baseline_unperturbed")
+    optimum = next(
+        (c for c in candidates if c.candidate_id == "cma_optimum"),
+        None,
+    )
+
+    assert baseline.status == "evaluated"
+    assert math.isfinite(baseline.criticality_score)
+    assert optimum is not None, "cma_optimum candidate not found"
+    assert optimum.status == "evaluated"
+    assert math.isfinite(optimum.criticality_score)
+
+
+def test_cma_es_import_error_message() -> None:
+    """Missing cma package raises ImportError with install hint."""
+    from unittest import mock
+
+    mod = _load_cma_opt_module("_cma_test_opt6")
+
+    config = mod.OptimizationConfig(
+        parameter_space={
+            "x": mod.ParameterDefinition(
+                param_type="continuous", min=0.0, max=1.0
+            ),
+        },
+        optimizer_type="cma_es",
+        cma_es_maxiter=1,
+    )
+
+    # Patch _run_cma_es to simulate the import failure
+    with mock.patch.object(
+        mod,
+        "_run_cma_es",
+        side_effect=ImportError(
+            "cma_es optimizer requires the 'cma' package. "
+            'Install with: uv pip install -e ".[criticality]"'
+        ),
+    ):
+        with pytest.raises(ImportError, match="cma_es optimizer requires"):
+            mod.run_criticality_optimization(config)

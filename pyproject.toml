@@ -97,6 +97,9 @@ socnav = [
     # SocNavBench planner prerequisites used by the vendored subset.
     "scikit-fmm>=2024.5",
 ]
+criticality = [
+    "cma>=3.3.0",
+]
 
 [build-system]
 requires = ["hatchling", "Cython>=3.0.0"]

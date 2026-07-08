@@ -63,7 +63,7 @@ class OptimizationConfig:
 
     Attributes:
         parameter_space: Dict of parameter name to ParameterDefinition
-        optimizer_type: "random_search" or "differential_evolution"
+        optimizer_type: "random_search", "differential_evolution", or "cma_es"
         sample_budget: Number of candidates to evaluate
         optimizer_seed: Random seed for reproducibility
         scenario_family: Path to scenario YAML or list of scenario dicts
@@ -94,6 +94,10 @@ class OptimizationConfig:
     de_maxiter: int = 50
     de_popsize: int = 15
     de_seed: int | None = None
+    # CMA-ES-specific settings (ignored for other optimizer types)
+    cma_es_maxiter: int = 30
+    cma_es_sigma0: float = 0.5
+    cma_es_seed: int | None = None
 
 
 @dataclass
@@ -186,6 +190,13 @@ def _parse_optimization_config(payload: dict[str, Any]) -> OptimizationConfig:
         de_maxiter=int(payload.get("de_maxiter", 50)),
         de_popsize=int(payload.get("de_popsize", 15)),
         de_seed=(int(payload["de_seed"]) if payload.get("de_seed") is not None else None),
+        cma_es_maxiter=int(payload.get("cma_es_maxiter", 30)),
+        cma_es_sigma0=float(payload.get("cma_es_sigma0", 0.5)),
+        cma_es_seed=(
+            int(payload["cma_es_seed"])
+            if payload.get("cma_es_seed") is not None
+            else None
+        ),
     )
 
 
@@ -466,6 +477,120 @@ def _run_differential_evolution(
     return de_candidates
 
 
+
+def _run_cma_es(
+    config: OptimizationConfig,
+    scenario: dict[str, Any],
+    scenario_path: Path,
+    objective_config: CriticalityObjectiveConfig,
+    output_dir: Path,
+    resolved_algo: str,
+    resolved_algo_config_path: str | None,
+) -> list[CandidateResult]:
+    """Run CMA-ES optimization.
+
+    CMA-ES minimizes, so we negate the criticality score (which should be maximized).
+    Only continuous parameters are supported; discrete params default to baseline.
+    Requires the ``cma`` package (install via ``uv pip install -e ".[criticality]"``).
+    """
+    try:
+        import cma
+    except ImportError as exc:
+        raise ImportError(
+            "cma_es optimizer requires the 'cma' package. "
+            'Install with: uv pip install -e ".[criticality]"'
+        ) from exc
+
+    # CMA-ES requires all-continuous params; extract bounds and dimensionality
+    continuous_names = [
+        name for name, p in config.parameter_space.items() if p.param_type == "continuous"
+    ]
+    if not continuous_names:
+        raise ValueError("cma_es requires at least one continuous parameter")
+
+
+    # Compute the search range midpoint and initial sigma
+    midpoints = [
+        (config.parameter_space[name].min + config.parameter_space[name].max) / 2.0
+        for name in continuous_names
+    ]
+    half_ranges = [
+        (config.parameter_space[name].max - config.parameter_space[name].min) / 2.0
+        for name in continuous_names
+    ]
+    sigma0 = config.cma_es_sigma0 * max(half_ranges)
+
+    # Container for evaluated candidates
+    cma_candidates: list[CandidateResult] = []
+    trial_counter: int = 0
+
+    def _cma_objective(x: list[float]) -> float:
+        """CMA-ES minimizes; return negative criticality score."""
+        nonlocal trial_counter
+        params = dict(zip(continuous_names, x, strict=True))
+        # Fill discrete params with baseline (first value)
+        for name, pdef in config.parameter_space.items():
+            if pdef.param_type == "discrete" and name not in params:
+                params[name] = pdef.values[0] if pdef.values else 0.0
+
+        trial_counter += 1
+        result = _evaluate_candidate(
+            candidate_id=f"cma_trial_{trial_counter:04d}",
+            parameters=params,
+            scenario=scenario,
+            config=config,
+            objective_config=objective_config,
+            output_dir=output_dir,
+            scenario_path=scenario_path,
+            resolved_algo=resolved_algo,
+            resolved_algo_config_path=resolved_algo_config_path,
+        )
+        cma_candidates.append(result)
+        if result.status == "evaluated":
+            return -result.criticality_score
+        return 1e12
+
+    seed = config.cma_es_seed if config.cma_es_seed is not None else config.optimizer_seed
+
+    lower_bounds = [config.parameter_space[name].min for name in continuous_names]
+    upper_bounds = [config.parameter_space[name].max for name in continuous_names]
+
+    options = {
+        "maxiter": config.cma_es_maxiter,
+        "seed": seed,
+        "bounds": [lower_bounds, upper_bounds],
+        "verbose": -9,
+    }
+
+    result = cma.fmin2(
+        _cma_objective,
+        x0=midpoints,
+        sigma0=sigma0,
+        options=options,
+    )
+
+    optimum_params = dict(zip(continuous_names, result[0], strict=True))
+    for name, pdef in config.parameter_space.items():
+        if pdef.param_type == "discrete" and name not in optimum_params:
+            optimum_params[name] = pdef.values[0] if pdef.values else 0.0
+
+    cma_best = _evaluate_candidate(
+        candidate_id="cma_optimum",
+        parameters=optimum_params,
+        scenario=scenario,
+        config=config,
+        objective_config=objective_config,
+        output_dir=output_dir,
+        scenario_path=scenario_path,
+        resolved_algo=resolved_algo,
+        resolved_algo_config_path=resolved_algo_config_path,
+    )
+    cma_candidates.append(cma_best)
+
+    return cma_candidates
+
+
+
 def run_criticality_optimization(  # noqa: C901, PLR0912, PLR0915
     config: OptimizationConfig,
     output_dir: Path | None = None,
@@ -613,10 +738,34 @@ def run_criticality_optimization(  # noqa: C901, PLR0912, PLR0915
             resolved_algo_config_path=_resolved_algo_config_path,
         )
         candidates = [baseline_result] + de_results
+    elif config.optimizer_type == "cma_es":
+        cma_results = _run_cma_es(
+            config=config,
+            scenario=scenario,
+            scenario_path=scenario_path,
+            objective_config=objective_config,
+            output_dir=output_dir,
+            resolved_algo=_resolved_algo,
+            resolved_algo_config_path=_resolved_algo_config_path,
+        )
+        # CMA-ES results include the optimum; prepend baseline
+        baseline_params = _build_baseline_parameters(config.parameter_space)
+        baseline_result = _evaluate_candidate(
+            candidate_id="baseline_unperturbed",
+            parameters=baseline_params,
+            scenario=scenario,
+            config=config,
+            objective_config=objective_config,
+            output_dir=output_dir,
+            scenario_path=scenario_path,
+            resolved_algo=_resolved_algo,
+            resolved_algo_config_path=_resolved_algo_config_path,
+        )
+        candidates = [baseline_result] + cma_results
     else:
         raise ValueError(
             f"unsupported optimizer_type {config.optimizer_type!r}; "
-            "supported: random_search, differential_evolution"
+            "supported: random_search, differential_evolution, cma_es"
         )
 
     evaluated = [c for c in candidates if c.status == "evaluated"]
@@ -641,7 +790,16 @@ def run_criticality_optimization(  # noqa: C901, PLR0912, PLR0915
             # reflects a reproducible seed instead of null.
             "de_seed": config.de_seed if config.de_seed is not None else config.optimizer_seed,
         }
-
+    # CMA-ES-specific manifest fields
+    cma_manifest = {}
+    if config.optimizer_type == "cma_es":
+        cma_manifest = {
+            "cma_es_maxiter": config.cma_es_maxiter,
+            "cma_es_sigma0": config.cma_es_sigma0,
+            "cma_es_seed": config.cma_es_seed
+            if config.cma_es_seed is not None
+            else config.optimizer_seed,
+        }
     manifest = {
         "issue": 4362,
         "claim_boundary": "exploratory/diagnostic-only; not a validated benchmark method",
@@ -675,6 +833,7 @@ def run_criticality_optimization(  # noqa: C901, PLR0912, PLR0915
         "generated_at": datetime.now(UTC).isoformat(),
     }
     manifest.update(de_manifest)
+    manifest.update(cma_manifest)
 
     return candidates, manifest
 

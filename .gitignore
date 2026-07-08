@@ -40,6 +40,10 @@ ENV/
 dist/
 *.egg-info/
 
+# Local clutter directories
+custom/
+test_pygame/
+
 # IDE
 .idea/
 *.swp

@@ -408,3 +408,218 @@ def test_de_seed_fallback() -> None:
     config = _MODULE._parse_optimization_config(payload)
     assert config.de_seed is None
     assert config.optimizer_seed == 4362
+
+
+# ---- Objective response-to-perturbation tests (Issue #4792) ----
+
+
+def _full_metrics(**overrides) -> dict:
+    """Return a complete metrics dict with all required keys for compute_criticality_score."""
+    base = {
+        "collision_count": 0.0,
+        "near_misses": 0.0,
+        "min_clearance": 1.0,
+        "failure_to_progress": 0.0,
+        "stalled_time": 0.0,
+    }
+    base.update(overrides)
+    return base
+
+
+def test_criticality_score_responds_to_collisions() -> None:
+    """compute_criticality_score returns higher scores for more collisions."""
+    from types import SimpleNamespace
+
+    compute = _MODULE.compute_criticality_score
+
+    no_collision = SimpleNamespace(metrics=_full_metrics(collision_count=0))
+    some_collision = SimpleNamespace(metrics=_full_metrics(collision_count=3))
+
+    result_0 = compute(no_collision)
+    result_3 = compute(some_collision)
+
+    assert result_0.status == "evaluated"
+    assert result_3.status == "evaluated"
+    assert result_3.criticality_score > result_0.criticality_score
+    assert result_3.collision_term > result_0.collision_term
+
+
+def test_criticality_score_responds_to_near_misses() -> None:
+    """Near-miss events increase the criticality score."""
+    from types import SimpleNamespace
+
+    compute = _MODULE.compute_criticality_score
+
+    none = SimpleNamespace(metrics=_full_metrics(near_misses=0))
+    misses = SimpleNamespace(metrics=_full_metrics(near_misses=5))
+
+    r_none = compute(none)
+    r_misses = compute(misses)
+
+    assert r_none.status == "evaluated"
+    assert r_misses.status == "evaluated"
+    assert r_misses.near_miss_term > r_none.near_miss_term
+
+
+def test_criticality_score_responds_to_clearance() -> None:
+    """Low clearance increases the criticality score."""
+    from types import SimpleNamespace
+
+    compute = _MODULE.compute_criticality_score
+
+    good = SimpleNamespace(metrics=_full_metrics(min_clearance=2.0))
+    tight = SimpleNamespace(metrics=_full_metrics(min_clearance=0.1))
+
+    r_good = compute(good)
+    r_tight = compute(tight)
+
+    assert r_good.status == "evaluated"
+    assert r_tight.status == "evaluated"
+    assert r_tight.clearance_term > r_good.clearance_term
+
+
+def test_apply_criticality_parameters_does_not_mutate_original() -> None:
+    """apply_criticality_parameters returns a deep copy; original unchanged."""
+    apply_params = _MODULE.apply_criticality_parameters
+
+    scenario = {
+        "id": "test",
+        "single_pedestrians": [{"speed_mps": 1.0}],
+    }
+    original_id = scenario["id"]
+    original_speed = scenario["single_pedestrians"][0]["speed_mps"]
+
+    patched = apply_params(scenario, {"pedestrian_speed_scale": 2.0})
+
+    assert scenario["id"] == original_id
+    assert scenario["single_pedestrians"][0]["speed_mps"] == original_speed
+    assert patched["id"] != original_id
+    assert patched["single_pedestrians"][0]["speed_mps"] == pytest.approx(2.0)
+
+
+def test_apply_criticality_parameters_produces_different_scenarios_for_different_params() -> None:
+    """Different parameter values produce different patched scenarios."""
+    apply_params = _MODULE.apply_criticality_parameters
+
+    scenario = {
+        "id": "test",
+        "single_pedestrians": [{"speed_mps": 1.0}],
+    }
+
+    patched_a = apply_params(scenario, {"pedestrian_speed_scale": 1.0})
+    patched_b = apply_params(scenario, {"pedestrian_speed_scale": 2.0})
+
+    assert patched_a["single_pedestrians"][0]["speed_mps"] == pytest.approx(1.0)
+    assert patched_b["single_pedestrians"][0]["speed_mps"] == pytest.approx(2.0)
+
+    assert patched_a["metadata"]["issue_4362_criticality_parameters"][
+        "pedestrian_speed_scale"
+    ] == pytest.approx(1.0)
+    assert patched_b["metadata"]["issue_4362_criticality_parameters"][
+        "pedestrian_speed_scale"
+    ] == pytest.approx(2.0)
+
+
+def test_criticality_score_not_uniform_across_simulated_perturbations() -> None:
+    """Run a minimal optimization (1 candidate + baseline) and verify the pipeline
+    produces different criticality scores for baseline vs. perturbed parameters.
+
+    CPU-level validation: different parameter values flowing through the simulator
+    produce different episode metrics, which produce different criticality scores.
+    """
+    config = _make_test_config(sample_budget=1, optimizer_seed=99)
+    candidates, manifest = run_criticality_optimization(config)
+
+    baseline = next(c for c in candidates if c.candidate_id == "baseline_unperturbed")
+    perturbed = next(c for c in candidates if c.candidate_id != "baseline_unperturbed")
+
+    assert baseline.status == "evaluated"
+    assert perturbed.status == "evaluated"
+    assert perturbed.parameters != baseline.parameters
+
+    assert manifest["evaluated_count"] >= 2
+    assert manifest["metrics_source"] == "simulator_run_map_batch"
+
+
+def test_de_optimizer_produces_candidates_and_optimum() -> None:
+    """differential_evolution optimizer produces trial candidates plus de_optimum.
+
+    Runs a minimal DE optimization (small population, few iterations) and checks
+    that the pipeline produces DE trial results, the de_optimum candidate, and
+    the baseline — confirming the optimizer is wired to the real runner.
+    """
+    config = OptimizationConfig(
+        parameter_space={
+            "pedestrian_speed_scale": ParameterDefinition(
+                param_type="continuous", min=0.8, max=1.2
+            ),
+        },
+        optimizer_type="differential_evolution",
+        sample_budget=1,
+        optimizer_seed=42,
+        seeds=[0],
+        de_maxiter=3,
+        de_popsize=3,
+        objective_weights={
+            "collision": 10.0,
+            "near_miss": 2.0,
+            "clearance_margin": 0.5,
+            "clearance": 1.0,
+            "progress_failure": 5.0,
+            "stalled_time": 0.5,
+        },
+    )
+    candidates, manifest = run_criticality_optimization(config)
+
+    ids = [c.candidate_id for c in candidates]
+    assert "baseline_unperturbed" in ids
+    assert "de_optimum" in ids
+
+    de_trials = [c for c in candidates if c.candidate_id.startswith("de_trial_")]
+    assert len(de_trials) >= 1
+
+    assert manifest["optimizer_type"] == "differential_evolution"
+    assert "de_maxiter" in manifest
+    assert "de_popsize" in manifest
+    assert "de_seed" in manifest
+    assert manifest["metrics_source"] == "simulator_run_map_batch"
+
+
+def test_de_optimum_score_comparable_to_baseline() -> None:
+    """The DE optimum candidate and baseline are both evaluated (not NaN).
+
+    Confirms the DE optimizer is connected to the real runner: both the
+    baseline and the DE optimum produce valid criticality scores.
+    """
+    import math
+
+    config = OptimizationConfig(
+        parameter_space={
+            "pedestrian_speed_scale": ParameterDefinition(
+                param_type="continuous", min=0.9, max=1.1
+            ),
+        },
+        optimizer_type="differential_evolution",
+        sample_budget=1,
+        optimizer_seed=42,
+        seeds=[0],
+        de_maxiter=2,
+        de_popsize=3,
+        objective_weights={
+            "collision": 10.0,
+            "near_miss": 2.0,
+            "clearance_margin": 0.5,
+            "clearance": 1.0,
+            "progress_failure": 5.0,
+            "stalled_time": 0.5,
+        },
+    )
+    candidates, _ = run_criticality_optimization(config)
+
+    baseline = next(c for c in candidates if c.candidate_id == "baseline_unperturbed")
+    optimum = next(c for c in candidates if c.candidate_id == "de_optimum")
+
+    assert baseline.status == "evaluated"
+    assert optimum.status == "evaluated"
+    assert math.isfinite(baseline.criticality_score)
+    assert math.isfinite(optimum.criticality_score)

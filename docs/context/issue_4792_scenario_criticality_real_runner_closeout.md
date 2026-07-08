@@ -27,6 +27,8 @@ The following PRs landed the core functionality:
 | [#4821](https://github.com/ll7/robot_sf_ll7/pull/4821) | 2026-07-08 | `differential_evolution` optimizer type behind the shared interface |
 | [#4822](https://github.com/ll7/robot_sf_ll7/pull/4822) | 2026-07-08 | CPU validation confirming objective responsiveness and real-runner integration |
 | [#4823](https://github.com/ll7/robot_sf_ll7/pull/4823) | 2026-07-08 | `cma_es` optimizer type (CMA-ES) with dependency and formatting fixes |
+| [#4835](https://github.com/ll7/robot_sf_ll7/pull/4835) | 2026-07-08 | Close-out policy note documenting implementation state and residuals |
+| [#4839](https://github.com/ll7/robot_sf_ll7/pull/4839) | 2026-07-08 | Per-candidate timing breakdown profiling (patch_s, simulation_s, score_s) |
 
 ## Canonical Evaluator Policy
 
@@ -137,7 +139,7 @@ From PR #4822 CPU validation:
 ### Current Limitations
 
 - No batch-mode execution (each candidate runs full `run_map_batch` independently)
-- No profiling/timing fields per candidate
+- Timing breakdown available (patch_s, simulation_s, score_s) but batch-mode not yet implemented
 - No shared planner batch optimization beyond the pre-resolution step
 
 ## Collision-Key Schema Policy
@@ -169,19 +171,20 @@ COLLISION_KEY_FALLBACKS = ("agent_collision_count", "total_collision_count", "co
 
 ### Post-Submission Follow-ups (Out of Scope for #4792)
 
-1. **Parallel-batch profiling and tuning**
-   - Add timing/profiling fields per candidate (patch, setup, simulation, score times)
-   - Implement batch execution if profiling shows repeated setup dominates
-   - Current parallelization is sufficient for bounded optimization sweeps
+1. **Parallel-batch tuning**
+   - Timing/profiling fields per candidate implemented (PR #4839: patch_s, simulation_s, score_s)
+   - Batch-mode execution not yet implemented (would require grouping candidates and sharing more state)
+   - Current parallelization (ProcessPoolExecutor with shared planner resolution) is sufficient for bounded optimization sweeps
+   - Batch-mode should be implemented only if profiling data shows clear bottlenecks
 
 2. **Collision-key schema finalization**
    - Migrate all fixtures to use `collision_count`
    - Remove fallback acceptance or add explicit legacy flag
-   - Depends on external schema settlement
+   - Depends on external episode-metrics schema settlement
 
 3. **Bayesian optimizer** (stretch)
    - Not required for #4792 close-out
-   - Can be added post-submission if needed for comparison
+   - Can be added post-submission if needed for optimizer comparison
 
 ## Claim Boundary
 

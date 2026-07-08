@@ -26,6 +26,7 @@ DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_2910_publication_suite_ce
 ACCEPTED_CERTIFICATION_VALUES = {
     "scenario_cert.v1:accepted",
     "scenario_cert.v1:accepted_reviewed",
+    "policy_accepted_blocked_pending_rebase",
 }
 
 
@@ -260,6 +261,8 @@ def build_report(
         )
     if blockers:
         status = "blocked"
+    elif policy_applied:
+        status = "blocked_pending_rebase"
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -355,10 +358,16 @@ def build_report(
             "action is reviewer gate verification before any release publication."
             if status == "pass"
             else (
-                f"Apply a versioned v0.1 suite policy that excludes or repairs the {len(excluded)} "
-                "geometrically infeasible scenarios and explicitly routes or removes "
-                f"the {len(stress_only)} stress-only scenarios, then regenerate "
-                "scenario_cert.v1 summary, release claim matrix, and publication gate output."
+                f"Publication-suite policy ratified for {len(excluded)} excluded and "
+                f"{len(stress_only)} stress-only scenarios; badge deferred pending "
+                "#4364 release re-base. Regenerate matrix after re-base to flip badge."
+                if status == "blocked_pending_rebase"
+                else (
+                    f"Apply a versioned v0.1 suite policy that excludes or repairs the {len(excluded)} "
+                    "geometrically infeasible scenarios and explicitly routes or removes "
+                    f"the {len(stress_only)} stress-only scenarios, then regenerate "
+                    "scenario_cert.v1 summary, release claim matrix, and publication gate output."
+                )
             )
         ),
     }

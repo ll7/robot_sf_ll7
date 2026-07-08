@@ -160,7 +160,7 @@ def test_cli_writes_json_and_markdown(tmp_path) -> None:
 
     payload = _load_json(tmp_path / "report.json")
     markdown = (tmp_path / "report.md").read_text(encoding="utf-8")
-    assert payload["status"] == "pass"
+    assert payload["status"] == "blocked_pending_rebase"
     assert payload["summary"]["blocker_count"] == 0
     assert payload["summary"]["publication_suite_policy_status"] == "applied"
     assert "Publication Suite Certification Report" in markdown

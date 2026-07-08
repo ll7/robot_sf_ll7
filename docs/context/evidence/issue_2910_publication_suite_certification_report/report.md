@@ -1,6 +1,6 @@
 # Issue #2910 Publication Suite Certification Report
 
-Status: `pass`
+Status: `blocked_pending_rebase`
 
 Claim boundary: CPU-only integration report over tracked scenario_cert.v1 summary and release claim matrix. It does not run a benchmark campaign, publish a release, submit compute, or promote blocked/stress-only rows as benchmark evidence.
 
@@ -43,4 +43,4 @@ Claim boundary: CPU-only integration report over tracked scenario_cert.v1 summar
 
 ## Next Empirical Action
 
-No CPU-only publication-suite blocker remains in this report; next empirical action is reviewer gate verification before any release publication.
+Publication-suite policy ratified for 2 excluded and 9 stress-only scenarios; badge deferred pending #4364 release re-base. Regenerate matrix after re-base to flip badge.

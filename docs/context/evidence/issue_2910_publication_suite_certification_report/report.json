@@ -17,12 +17,12 @@
     },
     {
       "criterion": "Release summary states exactly what benchmark supports.",
-      "evidence": "Report states claim boundary and reports zero CPU-only publication-suite blockers after policy application.",
-      "result": "met"
+      "evidence": "Report states claim boundary and lists blockers that prevent publication readiness.",
+      "result": "improved_but_release_publication_still_blocked"
     },
     {
       "criterion": "If intended evidence cannot be produced, fail closed.",
-      "evidence": "status is pass with zero publication gate blockers after applying the versioned suite policy.",
+      "evidence": "status remains blocked while excluded/stress-only scenarios and matrix certification blockers remain.",
       "result": "met"
     }
   ],
@@ -47,10 +47,10 @@
     "scenario_certification_summary": "docs/context/evidence/issue_2910_release_scenario_certification/summary.json"
   },
   "issue": 2910,
-  "next_empirical_action": "No CPU-only publication-suite blocker remains in this report; next empirical action is reviewer gate verification before any release publication.",
+  "next_empirical_action": "Publication-suite policy ratified for 2 excluded and 9 stress-only scenarios; badge deferred pending #4364 release re-base. Regenerate matrix after re-base to flip badge.",
   "release_claim_matrix_blocked_rows": [],
   "schema_version": "issue_2910_publication_suite_certification_report.v1",
-  "status": "pass",
+  "status": "blocked_pending_rebase",
   "stress_only_scenarios": [
     "classic_cross_trap_high",
     "classic_cross_trap_low",

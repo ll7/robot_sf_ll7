@@ -47,13 +47,13 @@ def test_build_matrix_uses_tracked_sources_and_fail_closed_classifications() -> 
     release_rows = [row for row in matrix["rows"] if row["section"] == "release_artifact"]
     assert release_rows
     assert all(
-        row["scenario_certification"] == "scenario_cert.v1:accepted_reviewed"
+        row["scenario_certification"] == "policy_accepted_blocked_pending_rebase"
         for row in release_rows
     )
     assert all(
         row["publication_suite_policy"]["policy_status"] == "applied" for row in release_rows
     )
-    assert all(not row["missing_prerequisites"] for row in release_rows)
+    assert all(row["missing_prerequisites"] for row in release_rows)
     assert all(
         DEFAULT_SCENARIO_CERTIFICATION_SUMMARY.as_posix() in row["source_refs"]
         for row in release_rows

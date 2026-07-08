@@ -203,9 +203,14 @@ def _scenario_certification_status(
     string ``"None"``), and a missing or incomplete ``benchmark_eligibility_counts``
     block never certifies as accepted — accepted requires both ``excluded`` and
     ``stress_only`` to be present and zero.
+
+    When the publication-suite policy covers all certification blockers, the
+    status is ``policy_accepted_blocked_pending_rebase`` — the policy is
+    ratified but the badge is deferred until the #4364 release re-base
+    regenerates the evidence matrix.
     """
     if _policy_covers_certification_blockers(summary, policy):
-        return "scenario_cert.v1:accepted_reviewed"
+        return "policy_accepted_blocked_pending_rebase"
     raw_status = summary.get("publication_gate_status")
     status = str(raw_status).strip() if raw_status is not None else ""
     if status:
@@ -230,10 +235,18 @@ def _scenario_certification_prerequisites(
     Fail-closed: an explicit-``null`` blocker is treated as absent, and missing
     eligibility counts are reported as unavailable rather than a misleading
     ``(0 excluded, 0 stress-only)``.
+
+    ``policy_accepted_blocked_pending_rebase`` surfaces a specific prerequisite
+    noting the policy is ratified but the badge is deferred until the release
+    re-base.
     """
     status = _scenario_certification_status(summary, policy)
-    if status in {"scenario_cert.v1:accepted", "scenario_cert.v1:accepted_reviewed"}:
+    if status == "scenario_cert.v1:accepted":
         return []
+    if status == "policy_accepted_blocked_pending_rebase":
+        return [
+            "publication-suite policy ratified; badge deferred pending #4364 release re-base"
+        ]
     raw_blocker = summary.get("publication_blocker")
     blocker = str(raw_blocker).strip() if raw_blocker is not None else ""
     if blocker:

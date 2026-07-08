@@ -1057,3 +1057,24 @@ class TestHeadingOscillationBaseline:
         trace = _make_trace(robot_pos)
         whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
         assert "heading_oscillation" not in whole
+
+    def test_straight_path_with_pause_is_zero(self) -> None:
+        """A straight path that pauses for a step must still score 0.0.
+
+        Stationary steps have no defined heading; injecting their ``[0, 0]``
+        delta into the direction population would inflate the variance and make
+        a merely-paused straight path read as "oscillating". A straight
+        ``(1, 0)`` path with a single repeated (stationary) position must score
+        the same 0.0 as the uninterrupted path.
+        """
+        robot_pos = np.array([[0.0, 0.0], [0.5, 0.0], [0.5, 0.0], [1.0, 0.0]], dtype=float)
+        trace = _make_trace(robot_pos)
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
+        assert whole["heading_oscillation"] == pytest.approx(0.0, abs=1e-12)
+
+    def test_fully_stationary_window_is_zero(self) -> None:
+        """A window with no movement at all defaults to 0.0 (no heading)."""
+        robot_pos = np.zeros((5, 2), dtype=float)
+        trace = _make_trace(robot_pos)
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
+        assert whole["heading_oscillation"] == pytest.approx(0.0, abs=1e-12)

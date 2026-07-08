@@ -790,12 +790,21 @@ def _compute_interval_metrics_in_window(  # noqa: C901, PLR0912, PLR0915
     # returns 0.25 (the variance of [1, 0, 1, 0, ...] around its 0.5 mean) --
     # indistinguishable from a small wiggle -- so it could not separate straight
     # motion from genuine oscillation. See test_heading_oscillation_straight_*.
+    # Stationary steps (displacement norm ~0) have no defined heading; a naive
+    # guard that maps their delta to a zero vector would inject ``[0, 0]`` rows
+    # into ``dirs`` and inflate the variance -- a straight path that merely
+    # pauses for one step would then read as "oscillating". Filter stationary
+    # steps out before computing the direction variance, and default to 0.0
+    # when the whole window is stationary (no heading to disperse).
     if sub_robot_pos.shape[0] >= 2:
         deltas = np.diff(sub_robot_pos, axis=0)
-        norms = np.linalg.norm(deltas, axis=1, keepdims=True)
-        norms = np.where(norms < 1e-9, 1.0, norms)
-        dirs = deltas / norms
-        result["heading_oscillation"] = float(np.var(dirs, axis=0).sum())
+        norms = np.linalg.norm(deltas, axis=1)
+        moving_mask = norms >= 1e-9
+        if np.any(moving_mask):
+            dirs = deltas[moving_mask] / norms[moving_mask, np.newaxis]
+            result["heading_oscillation"] = float(np.var(dirs, axis=0).sum())
+        else:
+            result["heading_oscillation"] = 0.0
 
     return result
 

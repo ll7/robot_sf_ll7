@@ -794,3 +794,161 @@ def test_cma_es_import_error_message() -> None:
     ):
         with pytest.raises(ImportError, match="cma_es optimizer requires"):
             mod.run_criticality_optimization(config)
+
+
+# ---- Profiling/timing breakdown tests (Issue #4792) ----
+
+
+def test_evaluated_candidate_has_timing_fields() -> None:
+    """Evaluated candidates have non-negative timing breakdown fields."""
+    config = _make_test_config()
+    candidates, _ = run_criticality_optimization(config)
+
+    evaluated = [c for c in candidates if c.status == "evaluated"]
+    assert len(evaluated) > 0, "No evaluated candidates found"
+
+    for c in evaluated:
+        assert c.runtime_s is not None, f"{c.candidate_id} missing runtime_s"
+        assert c.patch_s is not None, f"{c.candidate_id} missing patch_s"
+        assert c.simulation_s is not None, f"{c.candidate_id} missing simulation_s"
+        assert c.score_s is not None, f"{c.candidate_id} missing score_s"
+
+        # All times must be non-negative
+        assert c.runtime_s >= 0, f"{c.candidate_id} has negative runtime_s"
+        assert c.patch_s >= 0, f"{c.candidate_id} has negative patch_s"
+        assert c.simulation_s >= 0, f"{c.candidate_id} has negative simulation_s"
+        assert c.score_s >= 0, f"{c.candidate_id} has negative score_s"
+
+
+def test_timing_breakdown_components_sum_to_total() -> None:
+    """patch_s + simulation_s + score_s should approximately equal runtime_s.
+
+    Allows a small tolerance (0.1s) for timing overhead between measurements.
+    """
+    config = _make_test_config()
+    candidates, _ = run_criticality_optimization(config)
+
+    evaluated = [c for c in candidates if c.status == "evaluated"]
+    assert len(evaluated) > 0
+
+    for c in evaluated:
+        assert c.runtime_s is not None
+        assert c.patch_s is not None
+        assert c.simulation_s is not None
+        assert c.score_s is not None
+
+        component_sum = c.patch_s + c.simulation_s + c.score_s
+        # Allow 0.1s tolerance for timing overhead
+        assert abs(component_sum - c.runtime_s) < 0.1, (
+            f"{c.candidate_id}: timing components ({component_sum:.3f}s) "
+            f"do not sum to runtime ({c.runtime_s:.3f}s)"
+        )
+
+
+def test_not_evaluable_candidate_has_timing_fields() -> None:
+    """Candidates with not_evaluable status still have timing fields."""
+    config = _make_test_config()
+    candidates, _ = run_criticality_optimization(config)
+
+    not_evaluable = [c for c in candidates if c.status == "not_evaluable"]
+    if not not_evaluable:
+        pytest.skip("No not_evaluable candidates in this run")
+
+    for c in not_evaluable:
+        assert c.runtime_s is not None, f"{c.candidate_id} missing runtime_s"
+        assert c.patch_s is not None, f"{c.candidate_id} missing patch_s"
+        assert c.simulation_s is not None, f"{c.candidate_id} missing simulation_s"
+        assert c.score_s is not None, f"{c.candidate_id} missing score_s"
+
+
+def test_invalid_candidate_has_timing_fields() -> None:
+    """Candidates with invalid_candidate status (exception) still have timing fields."""
+    config = _make_test_config()
+    candidates, _ = run_criticality_optimization(config)
+
+    invalid = [c for c in candidates if c.status == "invalid_candidate"]
+    if not invalid:
+        pytest.skip("No invalid_candidate cases in this run")
+
+    for c in invalid:
+        assert c.runtime_s is not None, f"{c.candidate_id} missing runtime_s"
+        # patch_s may be None if exception occurred during patching
+        # simulation_s and score_s may also be None depending on when exception occurred
+        assert c.reason is not None, f"{c.candidate_id} should have reason for invalid status"
+
+
+def test_jsonl_artifact_includes_timing_fields(tmp_path: Path) -> None:
+    """candidate_results.jsonl includes the new timing breakdown fields."""
+    config = _make_test_config()
+    candidates, manifest = run_criticality_optimization(config)
+    output_dir = tmp_path / "timing_test_output"
+
+    write_optimization_report(candidates, manifest, output_dir)
+
+    jsonl_path = output_dir / "candidate_results.jsonl"
+    assert jsonl_path.exists()
+
+    with jsonl_path.open() as f:
+        for line in f:
+            record = json.loads(line)
+            assert "patch_s" in record, "Missing patch_s in JSONL"
+            assert "simulation_s" in record, "Missing simulation_s in JSONL"
+            assert "score_s" in record, "Missing score_s in JSONL"
+            assert "runtime_s" in record, "Missing runtime_s in JSONL"
+
+            # For evaluated candidates, verify fields are non-null
+            if record["status"] == "evaluated":
+                assert record["patch_s"] is not None
+                assert record["simulation_s"] is not None
+                assert record["score_s"] is not None
+                assert record["runtime_s"] is not None
+
+
+def test_csv_summary_includes_timing_columns(tmp_path: Path) -> None:
+    """candidate_summary.csv includes the new timing breakdown columns."""
+    import csv
+
+    config = _make_test_config()
+    candidates, manifest = run_criticality_optimization(config)
+    output_dir = tmp_path / "timing_csv_test_output"
+
+    write_optimization_report(candidates, manifest, output_dir)
+
+    csv_path = output_dir / "candidate_summary.csv"
+    assert csv_path.exists()
+
+    with csv_path.open(newline="") as f:
+        reader = csv.reader(f)
+        header = next(reader)
+
+        assert "runtime_s" in header, "Missing runtime_s column in CSV"
+        assert "patch_s" in header, "Missing patch_s column in CSV"
+        assert "simulation_s" in header, "Missing simulation_s column in CSV"
+        assert "score_s" in header, "Missing score_s column in CSV"
+
+
+def test_simulation_time_dominates_for_bounded_runs() -> None:
+    """For bounded search runs, simulation time should be the largest component.
+
+    This is a sanity check: running simulator episodes should take longer than
+    parameter patching or score computation.
+    """
+    config = _make_test_config()
+    candidates, _ = run_criticality_optimization(config)
+
+    evaluated = [c for c in candidates if c.status == "evaluated"]
+    assert len(evaluated) > 0
+
+    for c in evaluated:
+        assert c.simulation_s is not None
+        assert c.patch_s is not None
+        assert c.score_s is not None
+
+        # Simulation should take at least 50% of total time for realistic runs
+        # (tolerates cases where patch/score might be significant)
+        if c.runtime_s and c.runtime_s > 0.1:  # Only check for non-trivial runs
+            sim_fraction = c.simulation_s / c.runtime_s
+            assert sim_fraction >= 0.5, (
+                f"{c.candidate_id}: simulation time ({c.simulation_s:.3f}s) "
+                f"is less than 50% of runtime ({c.runtime_s:.3f}s)"
+            )

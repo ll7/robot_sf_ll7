@@ -113,6 +113,9 @@ class CandidateResult:
         reason: Optional failure reason
         per_seed_scores: List of (seed, score, status) tuples
         runtime_s: Optional runtime in seconds
+        patch_s: Time to apply parameters to scenario
+        simulation_s: Time to run simulator episodes
+        score_s: Time to compute criticality score from metrics
     """
 
     candidate_id: str
@@ -123,6 +126,9 @@ class CandidateResult:
     reason: str | None = None
     per_seed_scores: list[tuple[int, float, str]] = field(default_factory=list)
     runtime_s: float | None = None
+    patch_s: float | None = None
+    simulation_s: float | None = None
+    score_s: float | None = None
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -248,19 +254,24 @@ def _evaluate_candidate(  # noqa: C901, PLR0913
         resolved_algo_config_path: Pre-resolved algo config path string.
     """
     import time
+    import uuid
     from types import SimpleNamespace
 
     from robot_sf.benchmark.map_runner import run_map_batch
 
     start_time = time.perf_counter()
+    patch_s: float | None = None
+    simulation_s: float | None = None
+    score_s: float | None = None
+
     try:
-        # Apply parameters to scenario without mutation
+        # Stage 1: Apply parameters to scenario without mutation
+        patch_start = time.perf_counter()
         patched_scenario = apply_criticality_parameters(scenario, parameters)
         patched_scenario["seeds"] = config.seeds
+        patch_s = time.perf_counter() - patch_start
 
         # Temporary JSONL for this candidate's run
-        import uuid
-
         temp_jsonl = output_dir / f"{candidate_id}_{uuid.uuid4().hex}_eval.episodes.jsonl"
         if temp_jsonl.exists():
             temp_jsonl.unlink()
@@ -279,7 +290,8 @@ def _evaluate_candidate(  # noqa: C901, PLR0913
                 spec.algo_config_path.as_posix() if spec.algo_config_path is not None else None
             )
 
-        # Run the batch
+        # Stage 2: Run the batch (simulator episodes)
+        sim_start = time.perf_counter()
         run_map_batch(
             scenarios_or_path=[patched_scenario],
             out_path=temp_jsonl,
@@ -292,8 +304,10 @@ def _evaluate_candidate(  # noqa: C901, PLR0913
             resume=False,
             benchmark_profile="experimental",
         )
+        simulation_s = time.perf_counter() - sim_start
 
-        # Load the generated JSONL records
+        # Stage 3: Load JSONL records and compute scores
+        score_start = time.perf_counter()
         records = []
         if temp_jsonl.exists():
             for line in temp_jsonl.read_text(encoding="utf-8").splitlines():
@@ -335,6 +349,7 @@ def _evaluate_candidate(  # noqa: C901, PLR0913
                     }
                 )
 
+        score_s = time.perf_counter() - score_start
         runtime_s = time.perf_counter() - start_time
 
         if not all_scores:
@@ -347,6 +362,9 @@ def _evaluate_candidate(  # noqa: C901, PLR0913
                 reason="All seeds failed evaluation",
                 per_seed_scores=per_seed_scores,
                 runtime_s=runtime_s,
+                patch_s=patch_s,
+                simulation_s=simulation_s,
+                score_s=score_s,
             )
 
         mean_score = sum(all_scores) / len(all_scores)
@@ -363,6 +381,9 @@ def _evaluate_candidate(  # noqa: C901, PLR0913
             status="evaluated",
             per_seed_scores=per_seed_scores,
             runtime_s=runtime_s,
+            patch_s=patch_s,
+            simulation_s=simulation_s,
+            score_s=score_s,
         )
 
     except Exception as e:  # noqa: BLE001
@@ -375,6 +396,9 @@ def _evaluate_candidate(  # noqa: C901, PLR0913
             status="invalid_candidate",
             reason=str(e),
             runtime_s=runtime_s,
+            patch_s=patch_s,
+            simulation_s=simulation_s,
+            score_s=score_s,
         )
 
 
@@ -864,6 +888,9 @@ def write_optimization_report(
                     {"seed": s, "score": sc, "status": st} for s, sc, st in c.per_seed_scores
                 ],
                 "runtime_s": c.runtime_s,
+                "patch_s": c.patch_s,
+                "simulation_s": c.simulation_s,
+                "score_s": c.score_s,
             }
             f.write(json.dumps(record) + "\n")
 
@@ -882,6 +909,10 @@ def write_optimization_report(
                 "clearance_term",
                 "progress_failure_term",
                 "stalled_time_term",
+                "runtime_s",
+                "patch_s",
+                "simulation_s",
+                "score_s",
             ]
         )
         for c in candidates:
@@ -895,6 +926,10 @@ def write_optimization_report(
                     c.score_decomposition.get("clearance", ""),
                     c.score_decomposition.get("progress_failure", ""),
                     c.score_decomposition.get("stalled_time", ""),
+                    c.runtime_s if c.runtime_s is not None else "",
+                    c.patch_s if c.patch_s is not None else "",
+                    c.simulation_s if c.simulation_s is not None else "",
+                    c.score_s if c.score_s is not None else "",
                 ]
             )
 

@@ -855,7 +855,7 @@ def _resolve_scenario_from_matrix(
     scenarios = load_scenario_matrix(scenario_matrix_path)
 
     for scenario in scenarios:
-        if scenario.get("scenario_id") == scenario_id:
+        if scenario.get("scenario_id") == scenario_id or scenario.get("id") == scenario_id:
             return scenario
 
     return None
@@ -915,7 +915,7 @@ def _resimulate_episode(
         if dist < 1e-9:
             return np.zeros(2)
         speed = 1.0  # Default speed
-        return (goal_vec / dist) * min(speed, dist / dt_)
+        return (goal_vec / dist) * min(speed, dist)
 
     # Extract robot configuration from scenario
     robot_start = np.array(scenario_params.get("robot_start", [0.3, 3.0]), dtype=float)
@@ -1051,6 +1051,12 @@ def replay_episode_and_generate_figures(  # noqa: PLR0913
                 f"Scenario '{episode_row.scenario_id}' not found in matrix {scenario_matrix_path}"
             )
 
+        if episode_row.algo is not None and episode_row.algo != "simple_policy":
+            logger.warning(
+                f"Episode {episode_row.episode_id} used algorithm '{episode_row.algo}', "
+                "but re-simulation only supports 'simple_policy'. The re-simulated "
+                "trajectory likely will not match original."
+            )
         logger.info(f"Re-simulating episode {episode_row.episode_id} from seed {episode_row.seed}")
         replay_episode = _resimulate_episode(episode_row, scenario_params)
         resimulated = True

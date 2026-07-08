@@ -760,6 +760,29 @@ class TestResimulation:
         assert scenario["scenario_id"] == "test_scenario"
         assert scenario["robot_start"] == [0.3, 3.0]
 
+    def test_resolve_scenario_from_matrix_id_key(self, tmp_path):
+        """Scenario matrices use id while episode rows use scenario_id."""
+        import yaml
+
+        from robot_sf.benchmark.episode_replay_figure import _resolve_scenario_from_matrix
+
+        matrix_path = tmp_path / "scenarios.yaml"
+        scenarios = [
+            {
+                "id": "test_scenario",
+                "robot_start": [0.3, 3.0],
+                "robot_goal": [9.7, 3.0],
+                "n_agents": 0,
+            }
+        ]
+        with open(matrix_path, "w") as f:
+            yaml.dump(scenarios, f)
+
+        scenario = _resolve_scenario_from_matrix("test_scenario", matrix_path)
+
+        assert scenario is not None
+        assert scenario["id"] == "test_scenario"
+
     def test_resolve_scenario_from_matrix_not_found(self, simple_scenario_matrix):
         """Test resolving scenario from matrix when not found."""
         from robot_sf.benchmark.episode_replay_figure import _resolve_scenario_from_matrix
@@ -912,15 +935,12 @@ class TestResimulation:
         with open(matrix_path, "w") as f:
             yaml.dump(scenarios, f)
 
-        # Create episode row with expected final position
+        # Create episode row with expected final position after the finite 100-step replay horizon.
         row_dict = {
             "episode_id": "test_det_ep",
             "scenario_id": "test_scenario",
             "seed": 42,
-            "final_robot_position": [
-                0.3,
-                3.0,
-            ],  # Starting position (robot doesn't move without collision)
+            "final_robot_position": [9.417570463519, 3.0],
         }
         episode_row = EpisodeRow.from_dict(row_dict)
 
@@ -937,13 +957,12 @@ class TestResimulation:
             episode_row=episode_row,
             outputs=["trajectory"],
             out_dir=output_dir,
-            tolerance_m=10.0,  # Large tolerance
+            tolerance_m=0.01,
             episodes_jsonl_path=episodes_jsonl,
             scenario_matrix_path=matrix_path,
         )
 
-        # Should pass determinism check with large tolerance
-        assert result["determinism_check_status"] in ["pass", "not_evaluable"]
+        assert result["determinism_check_status"] == "pass"
 
     def test_resimulation_missing_scenario_matrix_error(self, tmp_path):
         """Test re-simulation fails without scenario matrix."""

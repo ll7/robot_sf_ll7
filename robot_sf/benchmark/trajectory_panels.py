@@ -19,6 +19,7 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
     SimulationTraceExport,
     load_simulation_trace_export,
 )
+from robot_sf.benchmark.figures.style import publication_style
 
 TRAJECTORY_PANEL_MANIFEST_SCHEMA_VERSION = "trajectory_panel_manifest.v1"
 _CATEGORY_ORDER = {
@@ -30,6 +31,7 @@ _CATEGORY_ORDER = {
 }
 _NEAR_MISS_MIN_TTC_S = 0.5
 _LOW_PROGRESS_DISTANCE_M = 0.25
+DEFAULT_PANEL_SIZE = (6.0, 4.0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -320,41 +322,45 @@ def _render_episode_panel(
             ped_id = str(pedestrian.get("id", "pedestrian"))
             pedestrian_tracks.setdefault(ped_id, []).append(_xy(pedestrian.get("position")))
 
-    fig, ax = plt.subplots(figsize=(6.0, 4.0), constrained_layout=True)
-    if robot_xy:
-        xs, ys = zip(*robot_xy, strict=True)
-        ax.plot(xs, ys, color="#1f77b4", linewidth=2.0, marker="o", label="robot")
-        ax.scatter([xs[0]], [ys[0]], color="#2ca02c", s=55, zorder=3, label="start")
-        ax.scatter([xs[-1]], [ys[-1]], color="#d62728", s=55, zorder=3, label="terminal")
-    for ped_id, points in sorted(pedestrian_tracks.items()):
-        if not points:
-            continue
-        xs, ys = zip(*points, strict=True)
-        ax.plot(xs, ys, color="#7f7f7f", linewidth=1.0, linestyle="--", alpha=0.8)
-        ax.scatter(xs, ys, color="#ff7f0e", s=20, alpha=0.8, label=ped_id)
+    # Use publication style for consistent rendering
+    with publication_style(size="single"):
+        matplotlib.rcParams["figure.constrained_layout.use"] = True
 
-    ax.set_title(f"{trace.source.planner_id} / {trace.source.scenario_id} / {episode.category}")
-    ax.set_xlabel("x (m)")
-    ax.set_ylabel("y (m)")
-    ax.set_aspect("equal", adjustable="datalim")
-    ax.grid(True, alpha=0.25)
-    ax.text(
-        0.01,
-        0.01,
-        "diagnostic-only; map geometry rendered when present in trace inputs",
-        transform=ax.transAxes,
-        fontsize=8,
-        va="bottom",
-    )
-    handles, labels = ax.get_legend_handles_labels()
-    dedup = dict(zip(labels, handles, strict=False))
-    ax.legend(dedup.values(), dedup.keys(), loc="best", fontsize=8)
+        fig, ax = plt.subplots(figsize=DEFAULT_PANEL_SIZE, constrained_layout=True)
+        if robot_xy:
+            xs, ys = zip(*robot_xy, strict=True)
+            ax.plot(xs, ys, color="#1f77b4", linewidth=2.0, marker="o", label="robot")
+            ax.scatter([xs[0]], [ys[0]], color="#2ca02c", s=55, zorder=3, label="start")
+            ax.scatter([xs[-1]], [ys[-1]], color="#d62728", s=55, zorder=3, label="terminal")
+        for ped_id, points in sorted(pedestrian_tracks.items()):
+            if not points:
+                continue
+            xs, ys = zip(*points, strict=True)
+            ax.plot(xs, ys, color="#7f7f7f", linewidth=1.0, linestyle="--", alpha=0.8)
+            ax.scatter(xs, ys, color="#ff7f0e", s=20, alpha=0.8, label=ped_id)
 
-    png_path.parent.mkdir(parents=True, exist_ok=True)
-    pdf_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(png_path, dpi=140)
-    fig.savefig(pdf_path)
-    plt.close(fig)
+        ax.set_title(f"{trace.source.planner_id} / {trace.source.scenario_id} / {episode.category}")
+        ax.set_xlabel("x (m)")
+        ax.set_ylabel("y (m)")
+        ax.set_aspect("equal", adjustable="datalim")
+        ax.grid(True, alpha=0.25)
+        ax.text(
+            0.01,
+            0.01,
+            "diagnostic-only; map geometry rendered when present in trace inputs",
+            transform=ax.transAxes,
+            fontsize=8,
+            va="bottom",
+        )
+        handles, labels = ax.get_legend_handles_labels()
+        dedup = dict(zip(labels, handles, strict=False))
+        ax.legend(dedup.values(), dedup.keys(), loc="best", fontsize=8)
+
+        png_path.parent.mkdir(parents=True, exist_ok=True)
+        pdf_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(png_path, dpi=140)
+        fig.savefig(pdf_path)
+        plt.close(fig)
 
 
 def _xy(value: Any) -> tuple[float, float]:

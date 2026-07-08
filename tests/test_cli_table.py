@@ -89,7 +89,7 @@ def test_cli_table_md(tmp_path: Path, capsys):
     content = out_md.read_text(encoding="utf-8")
     assert "| Group |" in content
     assert "Benchmark Track" not in content
-    assert "collisions" in content
+    assert "Collision rate" in content
     assert content.endswith("\n")
 
 
@@ -156,6 +156,6 @@ def test_cli_table_diagnostic_cross_track_labels_benchmark_track(
     assert rc == 0, f"table failed: {cap.err}"
 
     content = diagnostic_out.read_text(encoding="utf-8")
-    assert "| Benchmark Track | Group | score |" in content
+    assert "| Benchmark Track | Group | Score |" in content
     assert "| grid_socnav_v1 | grid_socnav_v1 :: planner-a | 1.0000 |" in content
     assert "| lidar_2d_v1 | lidar_2d_v1 :: planner-a | 3.0000 |" in content

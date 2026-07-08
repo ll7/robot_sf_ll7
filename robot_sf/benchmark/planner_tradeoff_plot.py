@@ -20,11 +20,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.lines import Line2D
 
-from robot_sf.benchmark.plotting_style import apply_latex_style
+from robot_sf.benchmark.figures.style import planner_color, publication_style
 from robot_sf.benchmark.utils import episode_collision_value, episode_success_value
 
 if TYPE_CHECKING:
@@ -47,12 +48,16 @@ DEFAULT_CONTROL_PLANNERS = ("goal",)
 DEFAULT_BOOTSTRAP_SAMPLES = 400
 DEFAULT_CI_CONFIDENCE = 0.95
 DEFAULT_BOOTSTRAP_SEED = 42
+DEFAULT_PLOT_SIZE = (5.2, 3.6)
 
+# Role-based color mapping using colorblind-safe palette
+# Headline planners use their specific planner colors from the shared palette
+# Control uses the goal planner color, experimental uses a neutral gray
 _ROLE_COLORS: dict[str, str] = {
-    "headline_orca": "#2166ac",
-    "headline_ppo": "#d6604d",
-    "control": "#888888",
-    "experimental": "#626262",
+    "headline_orca": planner_color("orca"),  # Sky blue
+    "headline_ppo": planner_color("ppo"),  # Blue
+    "control": planner_color("goal"),  # Orange
+    "experimental": "#999999",  # Neutral gray
 }
 
 
@@ -308,115 +313,117 @@ def plot_planner_tradeoff(
         Matplotlib figure with the plotted planner tradeoff.
     """
     plt.switch_backend("Agg")
-    apply_latex_style(
-        {
-            "figure.figsize": (5.2, 3.6),
-            "axes.grid": True,
-            "grid.alpha": 0.2,
-            "axes.titlesize": 9,
-            "ps.fonttype": 42,
-        }
-    )
-    fig, ax = plt.subplots()
 
-    for index, point in enumerate(points):
-        x = point.collision_mean
-        y = point.success_mean
-        if point.role == "headline":
-            color = _ROLE_COLORS.get(f"headline_{point.planner_key}", "#2166ac")
-            xerr = _finite_error(x, point.collision_ci)
-            yerr = _finite_error(y, point.success_ci)
-            ax.errorbar(
-                x,
-                y,
-                xerr=([[xerr[0]], [xerr[1]]] if xerr else None),
-                yerr=([[yerr[0]], [yerr[1]]] if yerr else None),
-                fmt="o",
+    # Use publication style context for consistent styling
+    # Create a custom size that matches the original figure dimensions
+    with publication_style(size="double"):
+        mpl.rcParams["axes.grid"] = True
+        mpl.rcParams["grid.alpha"] = 0.2
+        mpl.rcParams["axes.titlesize"] = 9
+
+        fig, ax = plt.subplots(figsize=DEFAULT_PLOT_SIZE)
+
+        for index, point in enumerate(points):
+            x = point.collision_mean
+            y = point.success_mean
+            if point.role == "headline":
+                color = _ROLE_COLORS.get(
+                    f"headline_{point.planner_key}", planner_color(point.planner_key)
+                )
+                xerr = _finite_error(x, point.collision_ci)
+                yerr = _finite_error(y, point.success_ci)
+                ax.errorbar(
+                    x,
+                    y,
+                    xerr=([[xerr[0]], [xerr[1]]] if xerr else None),
+                    yerr=([[yerr[0]], [yerr[1]]] if yerr else None),
+                    fmt="o",
+                    color=color,
+                    markersize=7,
+                    capsize=3,
+                    linewidth=1.2,
+                    zorder=4,
+                )
+            elif point.role == "control":
+                color = _ROLE_COLORS["control"]
+                ax.plot(
+                    x,
+                    y,
+                    "o",
+                    color="white",
+                    markeredgecolor=color,
+                    markeredgewidth=1.4,
+                    markersize=7,
+                    zorder=4,
+                )
+            else:
+                color = _ROLE_COLORS["experimental"]
+                ax.plot(x, y, "^", color=color, markersize=6, alpha=0.9, zorder=3)
+
+            # Deterministic, dependency-free label staggering.  It is less elaborate
+            # than adjustText, but keeps the core package free of another plotting
+            # dependency while avoiding exact label overlap in common bundles.
+            offset_y = 0.012 if index % 2 == 0 else -0.012
+            ax.annotate(
+                point.label,
+                xy=(x, y),
+                xytext=(5, 6 if offset_y > 0 else -8),
+                textcoords="offset points",
+                fontsize=8.0 if point.role == "experimental" else 7.5,
                 color=color,
-                markersize=7,
-                capsize=3,
-                linewidth=1.2,
-                zorder=4,
+                alpha=0.95,
             )
-        elif point.role == "control":
-            color = _ROLE_COLORS["control"]
-            ax.plot(
-                x,
-                y,
-                "o",
-                color="white",
-                markeredgecolor=color,
-                markeredgewidth=1.4,
-                markersize=7,
-                zorder=4,
-            )
-        else:
-            color = _ROLE_COLORS["experimental"]
-            ax.plot(x, y, "^", color=color, markersize=6, alpha=0.9, zorder=3)
 
-        # Deterministic, dependency-free label staggering.  It is less elaborate
-        # than adjustText, but keeps the core package free of another plotting
-        # dependency while avoiding exact label overlap in common bundles.
-        offset_y = 0.012 if index % 2 == 0 else -0.012
-        ax.annotate(
-            point.label,
-            xy=(x, y),
-            xytext=(5, 6 if offset_y > 0 else -8),
-            textcoords="offset points",
-            fontsize=8.0 if point.role == "experimental" else 7.5,
-            color=color,
-            alpha=0.95,
-        )
+        ax.set_xlabel("Collision rate (lower is safer)")
+        ax.set_ylabel("Success rate (higher is better)")
+        ax.set_xlim(left=-0.02)
+        ax.set_ylim(bottom=-0.02)
+        if title:
+            ax.set_title(title, loc="left", color="#4a4a4a")
 
-    ax.set_xlabel("Collision rate (lower is safer)")
-    ax.set_ylabel("Success rate (higher is better)")
-    ax.set_xlim(left=-0.02)
-    ax.set_ylim(bottom=-0.02)
-    if title:
-        ax.set_title(title, loc="left", color="#4a4a4a")
+        legend_elements = [
+            Line2D(
+                [0],
+                [0],
+                marker="o",
+                color="w",
+                markerfacecolor=_ROLE_COLORS["headline_orca"],
+                markersize=6,
+                label="orca (main)",
+            ),
+            Line2D(
+                [0],
+                [0],
+                marker="o",
+                color="w",
+                markerfacecolor=_ROLE_COLORS["headline_ppo"],
+                markersize=6,
+                label="ppo (main)",
+            ),
+            Line2D(
+                [0],
+                [0],
+                marker="o",
+                color="w",
+                markerfacecolor="white",
+                markeredgecolor=_ROLE_COLORS["control"],
+                markeredgewidth=1.2,
+                markersize=6,
+                label="goal (control)",
+            ),
+            Line2D(
+                [0],
+                [0],
+                marker="^",
+                color="w",
+                markerfacecolor=_ROLE_COLORS["experimental"],
+                markersize=6,
+                label="experimental planners",
+            ),
+        ]
+        ax.legend(handles=legend_elements, loc="best", frameon=True, framealpha=0.9)
+        fig.tight_layout()
 
-    legend_elements = [
-        Line2D(
-            [0],
-            [0],
-            marker="o",
-            color="w",
-            markerfacecolor=_ROLE_COLORS["headline_orca"],
-            markersize=6,
-            label="orca (main)",
-        ),
-        Line2D(
-            [0],
-            [0],
-            marker="o",
-            color="w",
-            markerfacecolor=_ROLE_COLORS["headline_ppo"],
-            markersize=6,
-            label="ppo (main)",
-        ),
-        Line2D(
-            [0],
-            [0],
-            marker="o",
-            color="w",
-            markerfacecolor="white",
-            markeredgecolor=_ROLE_COLORS["control"],
-            markeredgewidth=1.2,
-            markersize=6,
-            label="goal (control)",
-        ),
-        Line2D(
-            [0],
-            [0],
-            marker="^",
-            color="w",
-            markerfacecolor=_ROLE_COLORS["experimental"],
-            markersize=6,
-            label="experimental planners",
-        ),
-    ]
-    ax.legend(handles=legend_elements, loc="best", frameon=True, framealpha=0.9)
-    fig.tight_layout()
     return fig
 
 

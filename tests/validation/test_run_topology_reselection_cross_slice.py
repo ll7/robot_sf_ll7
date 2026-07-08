@@ -7,6 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 from scripts.validation import run_topology_reselection_cross_slice as runner
@@ -28,6 +29,16 @@ def test_checked_in_manifest_names_required_slice_roles() -> None:
         manifest["candidates"]["progress_gated"]
         == "topology_guided_hybrid_rule_v0_progress_gated_reselection"
     )
+
+
+def test_load_manifest_rejects_non_mapping_root(tmp_path: Path) -> None:
+    """Manifest root must be a mapping so validation fails closed."""
+
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest_path.write_text("- not\n- a\n- mapping\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Manifest must be a mapping"):
+        runner.load_manifest(manifest_path)
 
 
 def test_build_rows_expands_candidates_and_thresholds(tmp_path: Path) -> None:
@@ -396,18 +407,25 @@ def test_issue_2742_classifier_revises_when_hard_not_all_clear() -> None:
 
 
 def test_issue_3463_manifest_uses_monotone_progress_gated_candidate() -> None:
-    """The issue-3463 packet should route the progress-gated arm through the monotone candidate."""
+    """The issue-3463 packet should route the progress-gated arm through the monotone candidate.
+
+    The doorway_transfer slice was removed after all topology-guided candidates hit
+    obstacle_collision on classic_doorway_medium. The manifest now has 2 hard slices
+    (bottleneck_transfer, t_intersection_transfer) and 1 negative_control slice.
+    """
 
     manifest = runner.load_manifest(_ISSUE_3463_MANIFEST)
 
     assert manifest["issue"] == 3463
     assert manifest["stage"] == "corrective_monotone_sensitivity"
+    assert manifest["min_total_slices"] == 3
+    assert manifest["min_hard_slices"] == 2
     assert (
         manifest["candidates"]["progress_gated"]
         == "topology_guided_hybrid_rule_v0_progress_gated_reselection_monotone"
     )
     roles = [row["role"] for row in manifest["slices"]]
-    assert roles.count("hard") >= 3
+    assert roles.count("hard") >= 2  # Reduced from 3 after doorway_transfer removal
     assert roles.count("negative_control") >= 1
 
 

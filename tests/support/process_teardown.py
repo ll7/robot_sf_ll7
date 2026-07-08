@@ -10,12 +10,10 @@ recorded for issue #4216 (PR #4276): the suite reaches 100%, but a nested pytest
 child survives holding device handles and pytest never emits its final summary
 or exits.
 
-Two facts make the hang silent on this repo:
-
-* ``pytest-timeout`` is **not** installed, so ``@pytest.mark.timeout(...)`` is a
-  no-op decoration -- the intended per-test bound is never enforced.
-* the spawning test used ``subprocess.run(...)`` without a ``timeout=`` argument,
-  so nothing bounds the nested child.
+Note: ``pytest-timeout`` is now installed (added to dev dependencies in
+issue #4858), so ``@pytest.mark.timeout(...)`` markers are active. This helper
+remains useful as a fallback for subprocess-level timeout enforcement and as
+a process-group cleanup mechanism for wedged children.
 
 This helper runs the child in its own session/process group and, on timeout,
 terminates the *whole* group (SIGTERM -> SIGKILL) so descendants holding device

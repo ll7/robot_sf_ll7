@@ -127,6 +127,7 @@ resolve_base_ref() {
 }
 
 is_optional_readiness_path() {
+  # Code paths that require optional extras (hardcoded for readiness scope)
   case "$1" in
     robot_sf/benchmark/*|\
     robot_sf/baselines/drl_vo.py|\
@@ -139,36 +140,27 @@ is_optional_readiness_path() {
     scripts/tools/benchmark_feature_extractors.py|\
     scripts/tools/probe_social_navigation_pyenvs_socialforce_runtime.py|\
     scripts/tools/probe_sonic_model_inference.py|\
-    scripts/training/*|\
-    tests/benchmark/*|\
-    tests/benchmark_full/*|\
-    tests/carla_bridge/*|\
-    tests/integration/*|\
-    tests/planner/*|\
-    tests/render/*|\
-    tests/training/*|\
-    tests/visuals/*|\
-    tests/sb3_test.py|\
-    tests/tools/test_probe_sonic_model_inference.py|\
-    tests/test_baseline_ppo_smoke.py|\
-    tests/test_benchmark_visualization_integration.py|\
-    tests/test_feature_extractors.py|\
-    tests/test_grid_socnav_extractor.py|\
-    tests/test_map_runner_ppo.py|\
-    tests/test_map_runner_sac.py|\
-    tests/test_output_root_migration.py|\
-    tests/test_ppo_diagnostics.py|\
-    tests/test_predictive_model.py|\
-    tests/unit/test_cli_logging_flags.py|\
-    tests/unit/test_figure_orchestrator_requirements.py|\
-    tests/unit/test_runner_helper_coverage.py|\
-    tests/unit/test_runner_video.py)
+    scripts/training/*)
       return 0
       ;;
-    *)
-      return 1
-      ;;
   esac
+
+  # Test paths from the single source of truth
+  local allowlist_file="${SCRIPT_DIR}/../tests/support/optional_test_allowlist.txt"
+  if [[ -f "$allowlist_file" ]]; then
+    local test_path="$1"
+    while IFS= read -r line; do
+      [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+      # Remove trailing slash for pattern matching
+      line="${line%/}"
+      # Check if test_path matches the pattern
+      if [[ "$test_path" == "$line" || "$test_path" == "$line"/* ]]; then
+        return 0
+      fi
+    done < "$allowlist_file"
+  fi
+
+  return 1
 }
 
 pr_ready_mode_lower=$(printf '%s' "$PR_READY_MODE" | tr '[:upper:]' '[:lower:]')

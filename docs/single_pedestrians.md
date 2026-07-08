@@ -467,7 +467,7 @@ ped = SinglePedestrianDefinition(id="ped1", start=(50, 50))
 
 ## See Also
 
-- [Example: Single Pedestrian Spawning](../examples/example_single_pedestrian.py)
+- [Example: Single Pedestrian Spawning](../examples/advanced/07_single_pedestrian.py)
 - [Test Suite: Single Pedestrian Tests](../tests/test_single_pedestrian.py)
 - [Environment Documentation](ENVIRONMENT.md)
 - [Simulation View Documentation](SIM_VIEW.md)

@@ -132,7 +132,7 @@ git log --grep="Subtree" --oneline
 The integration remains unchanged for Python code:
 
 ```python
-from robot_sf.sim.FastPysfWrapper import FastPysfWrapper
+from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 # FastPysfWrapper internally uses fast-pysf/pysocialforce
 ```
 
@@ -235,7 +235,7 @@ uv run pytest tests/
 
 - **Git Subtree Documentation**: https://git-scm.com/book/en/v2/Git-Tools-Advanced-Merging
 - **Upstream Repository**: https://github.com/ll7/pysocialforce-ll7
-- **Integration Wrapper**: `robot_sf/sim/FastPysfWrapper.py`
+- **Integration Wrapper**: `robot_sf/sim/fast_pysf_wrapper.py`
 - **Development Guide**: `docs/dev_guide.md`
 
 ## Migration Commit

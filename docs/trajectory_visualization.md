@@ -143,10 +143,10 @@ ego_ped_trajectory: Deque[Tuple[float, float]]
 
 ## Testing
 
-The feature includes comprehensive tests in `test_trajectory_feature.py`:
+The feature includes comprehensive tests in `tests/test_trajectory_feature.py`:
 
 ```bash
-python test_trajectory_feature.py
+uv run pytest tests/test_trajectory_feature.py
 ```
 
 Tests cover:

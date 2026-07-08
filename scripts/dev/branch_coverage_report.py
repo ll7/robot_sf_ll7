@@ -177,7 +177,9 @@ subset.
 - Target: Q2 2027.
 
 ### Recommended immediate actions
-1. Add ``--cov-fail-under=25`` to the CPU test runner to lock the baseline.
+1. Add ``--cov-fail-under={int(current_pct)}`` to the CPU test runner to lock the
+   baseline (must match the Phase 2 floor; a value above the current {current_pct:.1f}%
+   baseline would fail CI immediately).
 2. Open follow-up issues for the 10 worst evidence-critical modules.
 3. Integrate optional-dep tests into CPU CI with ``--ignore`` guards for GPU-only tests.
 """

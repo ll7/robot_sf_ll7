@@ -98,8 +98,9 @@ blind spots. This report serves as the Phase 1 deliverable.
 
 ## Recommended Immediate Actions
 
-1. Add `--cov-fail-under=25` to the CPU test runner to lock the baseline
-   (after optional-dep tests are integrated).
+1. Add `--cov-fail-under=7` to the CPU test runner to lock the baseline
+   (matches the Phase 2 floor; must stay at or below the ~7.3% baseline or CI
+   fails immediately — so 7, not 25).
 2. Open follow-up issues for the 10 worst evidence-critical modules.
 3. Integrate optional-dep tests into CPU CI with `--ignore` guards for
    GPU-only tests.

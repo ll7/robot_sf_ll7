@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#4891, 2026-07-09) - NEEDS-REVIEW -->
+
 # Issue #4891 Exemplar Trace: classic_head_on_corridor_medium (goal)
 
 Plain-language summary: this directory contains one exemplar trace episode from the

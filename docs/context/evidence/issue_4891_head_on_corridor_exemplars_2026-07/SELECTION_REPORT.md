@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#4891, 2026-07-09) - NEEDS-REVIEW -->
+
 # Issue #4891 Head-On Corridor Exemplar Selection Report
 
 Generated: 2026-07-08T23:13:25.893838+00:00

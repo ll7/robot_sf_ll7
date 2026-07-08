@@ -8,6 +8,7 @@
   "git_commit": "bb59e8b516a7fed1e014cc2d70b40af2478e747d",
   "issue": "https://github.com/ll7/robot_sf_ll7/issues/4891",
   "planner": "orca",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "scenario_id": "classic_head_on_corridor_low",
   "schema_version": "issue-4891-exemplar-trace.v1",
   "seed": 20,

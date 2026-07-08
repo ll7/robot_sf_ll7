@@ -15,6 +15,35 @@ def _format_probability(value: object) -> str:
     return f"{value:.3f}" if isinstance(value, (int, float)) else "N/A"
 
 
+def _print_arm_summaries(arms: object) -> None:
+    if not isinstance(arms, dict):
+        print("Arms: N/A")
+        return
+
+    print(f"Arms: {', '.join(sorted(arms))}")
+    for arm_name in sorted(arms):
+        arm_data = arms[arm_name]
+        print(f"\nArm: {arm_name}")
+        print("-" * 80)
+
+        ranking = arm_data.get("ranking", [])
+        if ranking:
+            print(f" Rank order: {' > '.join(ranking)}")
+
+        observed_means = arm_data.get("observed_means", {})
+        if observed_means:
+            print(" Observed means:")
+            for planner, mean_value in sorted(observed_means.items()):
+                print(f"  - {planner}: {_format_probability(mean_value)}")
+
+        pairwise = arm_data.get("pairwise_probabilities", {})
+        if pairwise:
+            print(" Pairwise bootstrap probabilities:")
+            for pair_name, probability in sorted(pairwise.items()):
+                label = pair_name.replace("_beats_", " beats ")
+                print(f"  - P({label}) = {_format_probability(probability)}")
+
+
 def main() -> int:  # noqa: C901
     """Generate and print the rank-sensitivity report."""
     output_dir = REPO_ROOT / "output/issue_4850_multiplier_sweep"
@@ -58,7 +87,7 @@ def main() -> int:  # noqa: C901
         print("=" * 80)
         print(f"\nMetric: {report.get('metric_key', 'N/A')}")
         print(f"Bootstrap iterations: {report.get('num_bootstrap', 'N/A')}")
-        print(f"Arms: {report.get('arms', [])}")
+        _print_arm_summaries(report.get("arms", {}))
 
         if "pairwise_probabilities" in report:
             print("\nPairwise win probabilities (P(row beats column)):")
@@ -86,6 +115,9 @@ def main() -> int:  # noqa: C901
             reversals = report["reversals"]
             if reversals:
                 for reversal in reversals:
+                    if "description" in reversal:
+                        print(f" {reversal['description']}")
+                        continue
                     pair = reversal.get("pair", [])
                     arm_a = reversal.get("arm_a", "N/A")
                     arm_b = reversal.get("arm_b", "N/A")

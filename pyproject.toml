@@ -611,7 +611,7 @@ markers = [
 dev = [
     # Development tools
     "pytest>=9.1.1",
-    "pytest-timeout>=2.3.1",
+    "pytest-timeout>=2.4.0",
     "pytest-cov>=6.0.0",
     "scalene>=1.5.48",
     "ruff==0.15.12",

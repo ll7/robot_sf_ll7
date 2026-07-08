@@ -33,6 +33,20 @@ if ! [[ "$max_attempts" =~ ^[1-9][0-9]*$ ]]; then
   max_attempts=3
 fi
 
+# Validate the backoff knobs the same way: a non-numeric value (e.g. ``5s``)
+# would otherwise be treated as an unbound variable in the arithmetic
+# expansion below and abort the wrapper under ``set -u`` with a confusing
+# error. Fall back to the documented defaults instead.
+if ! [[ "$backoff_base" =~ ^[0-9]+$ ]]; then
+  echo "uv_sync_retry: UV_SYNC_BACKOFF_BASE='${backoff_base}' is not a non-negative integer; defaulting to 5" >&2
+  backoff_base=5
+fi
+
+if ! [[ "$backoff_cap" =~ ^[0-9]+$ ]]; then
+  echo "uv_sync_retry: UV_SYNC_BACKOFF_CAP='${backoff_cap}' is not a non-negative integer; defaulting to 30" >&2
+  backoff_cap=30
+fi
+
 # Drop an optional leading ``--`` separator so callers can write the wrapper as
 # ``uv_sync_retry.sh -- --all-extras --frozen`` for unambiguous arg forwarding.
 if [[ "${1:-}" == "--" ]]; then

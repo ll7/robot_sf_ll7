@@ -229,6 +229,43 @@ def test_uv_sync_retry_invalid_max_attempts_defaults_to_three(tmp_path: Path) ->
     assert len(calls) == 3, f"expected default of 3 attempts, got: {calls}"
 
 
+def test_uv_sync_retry_invalid_backoff_base_defaults_gracefully(tmp_path: Path) -> None:
+    """A non-numeric ``UV_SYNC_BACKOFF_BASE`` falls back to 5 with a warning.
+
+    Guards against a ``set -u`` arithmetic crash: previously the malformed value
+    was treated as an unbound variable in the backoff expansion and aborted the
+    wrapper with a confusing error instead of retrying.
+    """
+    fake_bin, env = _fast_retry_env(tmp_path)
+    env["UV_SYNC_BACKOFF_BASE"] = "not-a-number"
+    env["UV_SYNC_BACKOFF_CAP"] = "0"  # keep the defaulted base instant for the test
+    env["UV_SYNC_MAX_ATTEMPTS"] = "2"
+    _write_stub_uv(fake_bin, counter=tmp_path / "counter", log=tmp_path / "uv.log", succeed_on=999)
+
+    result = _run_wrapper(tmp_path, args=["--", "--frozen"], env=env)
+
+    assert result.returncode == 1, f"stdout: {result.stdout}, stderr: {result.stderr}"
+    assert "defaulting to 5" in result.stdout + result.stderr
+    calls = (tmp_path / "uv.log").read_text().splitlines()
+    assert len(calls) == 2, f"expected 2 attempts, got: {calls}"
+
+
+def test_uv_sync_retry_invalid_backoff_cap_defaults_gracefully(tmp_path: Path) -> None:
+    """A non-numeric ``UV_SYNC_BACKOFF_CAP`` falls back to 30 with a warning."""
+    fake_bin, env = _fast_retry_env(tmp_path)
+    env["UV_SYNC_BACKOFF_CAP"] = "not-a-number"
+    env["UV_SYNC_BACKOFF_BASE"] = "0"  # instant base so the defaulted cap is not slept
+    env["UV_SYNC_MAX_ATTEMPTS"] = "2"
+    _write_stub_uv(fake_bin, counter=tmp_path / "counter", log=tmp_path / "uv.log", succeed_on=999)
+
+    result = _run_wrapper(tmp_path, args=["--", "--frozen"], env=env)
+
+    assert result.returncode == 1, f"stdout: {result.stdout}, stderr: {result.stderr}"
+    assert "defaulting to 30" in result.stdout + result.stderr
+    calls = (tmp_path / "uv.log").read_text().splitlines()
+    assert len(calls) == 2, f"expected 2 attempts, got: {calls}"
+
+
 def test_uv_sync_retry_backoff_is_exponential_and_capped(tmp_path: Path) -> None:
     """Backoff doubles per attempt (base, base*2, ...) up to the cap."""
     tmp = tmp_path / "case"

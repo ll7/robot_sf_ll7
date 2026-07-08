@@ -404,9 +404,14 @@ def _load_agents(
     agents = data["agents"]
     if not isinstance(agents, list) or len(agents) == 0:
         raise ValueError("'agents' must be a non-empty list")
+    seen_ids: set[int] = set()
     for entry in agents:
         if "id" not in entry or "start" not in entry or "goal" not in entry:
             raise ValueError("Each agent needs 'id', 'start', and 'goal'")
+        agent_id = int(entry["id"])
+        if agent_id in seen_ids:
+            raise ValueError(f"Duplicate agent id: {agent_id}")
+        seen_ids.add(agent_id)
         for key in ("start", "goal"):
             pos = entry[key]
             if not isinstance(pos, list) or len(pos) != 2:
@@ -558,6 +563,7 @@ def cbs_search(  # noqa: C901
     time_blocked: dict[int, set[tuple[int, int]]] | None = None,
     max_time: int = 200,
     max_nodes: int = 500,
+    time_edges_blocked: dict[int, set[tuple[tuple[int, int], tuple[int, int]]]] | None = None,
 ) -> dict[str, Any] | None:
     """CBS (Conflict-Based Search) for multi-agent path finding.
 
@@ -579,7 +585,14 @@ def cbs_search(  # noqa: C901
         a = agent_map[aid]
         start = (int(a["start"][0]), int(a["start"][1]))
         goal = (int(a["goal"][0]), int(a["goal"][1]))
-        path = sipp_search(grid, start, goal, time_blocked, max_time)
+        path = sipp_search(
+            grid,
+            start,
+            goal,
+            time_blocked,
+            max_time,
+            time_edges_blocked=time_edges_blocked,
+        )
         if path is None:
             return None
         solution[aid] = path
@@ -648,6 +661,7 @@ def cbs_search(  # noqa: C901
                 goal,
                 time_blocked,
                 max_time,
+                time_edges_blocked=time_edges_blocked,
                 constraints=agent_constraints,
                 edge_constraints=agent_edge_constraints,
             )
@@ -678,9 +692,18 @@ def _run_cbs_search(
     time_blocked: dict[int, set[tuple[int, int]]],
     max_time: int,
     max_nodes: int,
+    dyn_obstacles: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Run CBS multi-agent search and fill diagnostic fields."""
-    result = cbs_search(grid, agents, time_blocked, max_time, max_nodes)
+    time_edges_blocked = _build_time_edges_blocked(dyn_obstacles) if dyn_obstacles else None
+    result = cbs_search(
+        grid,
+        agents,
+        time_blocked,
+        max_time,
+        max_nodes,
+        time_edges_blocked=time_edges_blocked,
+    )
 
     diagnostic["search_method"] = "cbs"
     diagnostic["agent_count"] = len(agents)
@@ -889,9 +912,18 @@ def _run_cbs_search(
     time_blocked: dict[int, set[tuple[int, int]]],
     max_time: int,
     max_nodes: int,
+    dyn_obstacles: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Run CBS multi-agent search and fill diagnostic fields."""
-    result = cbs_search(grid, agents, time_blocked, max_time, max_nodes)
+    time_edges_blocked = _build_time_edges_blocked(dyn_obstacles) if dyn_obstacles else None
+    result = cbs_search(
+        grid,
+        agents,
+        time_blocked,
+        max_time,
+        max_nodes,
+        time_edges_blocked=time_edges_blocked,
+    )
 
     diagnostic["search_method"] = "cbs"
     diagnostic["agent_count"] = len(agents)
@@ -1103,9 +1135,8 @@ def _load_inputs(
     list[dict[str, Any]] | None,
     list[dict[str, Any]] | None,
     dict[int, set[tuple[int, int]]],
-    int,
 ]:
-    """Load dynamic obstacles and agents from CLI args. Return (dyn_obstacles, agents, time_blocked, rc) or raise SystemExit."""
+    """Load dynamic obstacles and agents from CLI args. Return (dyn_obstacles, agents, time_blocked) or raise SystemExit."""
     dyn_obstacles: list[dict[str, Any]] | None = None
     time_blocked: dict[int, set[tuple[int, int]]] = {}
     if args.dynamic_obstacles is not None:
@@ -1196,6 +1227,7 @@ def main(argv: list[str] | None = None) -> int:
             time_blocked,
             args.max_time,
             args.cbs_max_nodes,
+            dyn_obstacles=dyn_obstacles,
         )
         if args.tpg and diagnostic.get("multi_agent_feasible") and diagnostic.get("agent_paths"):
             # Build solution from diagnostic output for TPG post-processing

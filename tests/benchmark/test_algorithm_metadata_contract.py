@@ -686,3 +686,26 @@ def test_infer_execution_mode_from_counts() -> None:
     assert infer_execution_mode_from_counts(native_steps=0, adapted_steps=3) == "adapter"
     assert infer_execution_mode_from_counts(native_steps=3, adapted_steps=2) == "mixed"
     assert infer_execution_mode_from_counts(native_steps=0, adapted_steps=0) == "unknown"
+
+
+def test_guarded_ppo_checkpoint_observation_contract_resolves_from_registry() -> None:
+    """Issue #4837 regression: guarded_ppo checkpoint should resolve observation contract.
+
+    The ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200 checkpoint lacked
+    benchmark_promotion metadata in the registry, causing resolve_learned_checkpoint_observation_contract
+    to fail for guarded_ppo arms with obs_mode=dict. This test verifies the fix.
+    """
+
+    contract = algorithm_metadata.resolve_learned_checkpoint_observation_contract(
+        "guarded_ppo",
+        {
+            "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+            "obs_mode": "dict",
+        },
+    )
+
+    assert contract["status"] == "metadata_resolved"
+    assert contract["metadata_source"] == "model_registry.benchmark_promotion"
+    assert contract["active_observation_mode"] == "socnav_state"
+    assert contract["observation_level"] == "tracked_agents_no_noise"
+    assert contract["planner_observation_mode"] == "dict"

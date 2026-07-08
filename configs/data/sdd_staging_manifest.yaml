@@ -89,10 +89,16 @@ expected_total_size_bytes: 524288000  # ~500 MiB headroom for annotations + extr
 # tree checksum over the matched annotation files and records it under `tree_sha256` in the
 # generated staging-status manifest written to the staging_dir. They are intentionally empty here
 # because no data is bundled with the repository.
+#
+# NOTE (Issue #4079): The Kaggle-reduced SDD checksum (66dec2c82b0a01b23bf9fa9acef352af86549e7ea749811ea4ef9c47003d4acf)
+# is NOT promoted to canonical status because byte-equivalence to the official Stanford archive
+# cannot be verified (the official archive is unreachable as of 2026-07-02). See docs/context/issue_2657_sdd_staging.md
+# for the provenance decision. This checksum may be used locally for BYO staging but must not be
+# treated as an official-equivalent canonical checksum.
 checksums:
   algorithm: SHA-256
   tree_sha256: null            # filled on real staging (aggregate over matched files)
-  expected_tree_sha256: 66dec2c82b0a01b23bf9fa9acef352af86549e7ea749811ea4ef9c47003d4acf # pinned reviewed SDD annotations tree, 60 files, 444959624 bytes
+  expected_tree_sha256: null  # NOT promoted to canonical; see Issue #4079 provenance decision
 
 # --- Availability gate -----------------------------------------------------------------------
 # `missing` until the staging script validates a local copy. Scenario-prior generation reads this

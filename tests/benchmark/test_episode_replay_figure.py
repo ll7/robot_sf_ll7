@@ -532,16 +532,14 @@ class TestReplayEpisodeAndGenerateFigures:
         assert result["determinism_check_status"] == "skipped"
 
     def test_full_workflow_no_replay_steps(self, output_dir, episodes_jsonl_file):
-        """Test workflow fails without replay steps with helpful error message."""
+        """Test workflow requires scenario matrix when replay steps absent."""
         row = EpisodeRow(
             episode_id="test_missing_replay",
             scenario_id="scen",
             seed=1,
         )
 
-        with pytest.raises(
-            ValueError, match="no replay_steps.*Future work will support re-simulation"
-        ):
+        with pytest.raises(ValueError, match="no replay_steps.*no scenario matrix"):
             replay_episode_and_generate_figures(
                 episode_row=row,
                 outputs=["trajectory"],
@@ -728,3 +726,439 @@ class TestCLI:
             ]
         )
         assert ret == 0
+
+    def test_cli_end_to_end_full_workflow(self, tmp_path):
+        """End-to-end test: complete workflow from episode row to rendered artifacts.
+
+        This test validates the full command-to-artifact pipeline:
+        1. Episode row loading from JSONL
+        2. Replay figure generation (all output types)
+        3. Artifact file creation and validation
+        4. Provenance sidecar completeness
+        5. Determinism check execution
+
+        Corresponds to acceptance criterion: "One command maps an episode row to
+        replay-derived figure artifacts with determinism check and provenance."
+        """
+        from scripts.replay_episode_figure import main
+
+        # Create comprehensive episode row with full provenance
+        episode_data = {
+            "episode_id": "e2e_test_ep",
+            "scenario_id": "crossing_scenario",
+            "seed": 123,
+            "planner": "social_force",
+            "campaign_id": "test_campaign_001",
+            "config_hash": "abc123def",
+            "repo_commit": "a1b2c3d4",
+            "final_robot_position": [5.0, 2.5],
+            "final_progress": 0.75,
+            "success": True,
+            "collision": False,
+            "replay_steps": [
+                {"t": 0.0, "x": 0.0, "y": 0.0, "heading": 0.0, "speed": 0.0},
+                {"t": 1.0, "x": 1.0, "y": 0.5, "heading": 0.1, "speed": 1.0},
+                {"t": 2.0, "x": 2.0, "y": 1.0, "heading": 0.2, "speed": 1.0},
+                {"t": 3.0, "x": 3.0, "y": 1.5, "heading": 0.3, "speed": 1.0},
+                {"t": 4.0, "x": 4.0, "y": 2.0, "heading": 0.4, "speed": 1.0},
+                {"t": 5.0, "x": 5.0, "y": 2.5, "heading": 0.5, "speed": 0.0},
+            ],
+            "replay_dt": 1.0,
+        }
+
+        episodes_jsonl = tmp_path / "episodes.jsonl"
+        import json
+
+        with open(episodes_jsonl, "w") as f:
+            json.dump(episode_data, f)
+            f.write("\n")
+
+        output_dir = tmp_path / "output"
+
+        # Run CLI with all output types
+        ret = main(
+            [
+                "--episodes",
+                str(episodes_jsonl),
+                "--episode-id",
+                "e2e_test_ep",
+                "--outputs",
+                "still,filmstrip,trajectory",
+                "--out-dir",
+                str(output_dir),
+                "--tolerance-m",
+                "0.1",
+            ]
+        )
+        assert ret == 0, "CLI should complete successfully"
+
+        # Verify all expected artifact files exist
+        # Note: still is generated at midpoint (len(steps)//2) when no frame_steps provided
+        expected_artifacts = [
+            "still_3.png",  # Midpoint of 6 steps (indices 0-5)
+            "filmstrip.png",
+            "trajectory.png",
+        ]
+        for artifact in expected_artifacts:
+            artifact_path = output_dir / artifact
+            assert artifact_path.exists(), f"Artifact {artifact} should be generated"
+            assert artifact_path.stat().st_size > 0, f"Artifact {artifact} should not be empty"
+
+        # Verify provenance sidecar exists and contains all required fields
+        provenance_path = output_dir / "replay_provenance.json"
+        assert provenance_path.exists(), "Provenance sidecar should be generated"
+
+        with open(provenance_path) as f:
+            provenance = json.load(f)
+
+        # Required provenance fields per issue acceptance criteria
+        required_fields = [
+            "campaign_id",
+            "episode_id",
+            "scenario_id",
+            "seed",
+            "determinism_check_status",
+            "artifacts",
+            "generated_at",
+        ]
+        for field in required_fields:
+            assert field in provenance, f"Provenance must contain {field}"
+
+        # Verify provenance values match input
+        assert provenance["episode_id"] == "e2e_test_ep"
+        assert provenance["scenario_id"] == "crossing_scenario"
+        assert provenance["seed"] == 123
+        assert provenance["campaign_id"] == "test_campaign_001"
+        assert provenance["determinism_check_status"] in ["pass", "fail", "not_evaluable"]
+
+        # Verify artifacts list matches generated files
+        artifact_names = [Path(a["path"]).name for a in provenance["artifacts"]]
+        assert "still_3.png" in artifact_names
+        assert "filmstrip.png" in artifact_names
+        assert "trajectory.png" in artifact_names
+
+        # Verify each artifact has metadata
+        for artifact in provenance["artifacts"]:
+            assert "type" in artifact
+            assert "sha256" in artifact
+            assert len(artifact["sha256"]) == 64  # SHA-256 hex digest length
+
+        # Verify caption fragment exists
+        caption_path = output_dir / "caption_fragment.tex"
+        assert caption_path.exists(), "Caption fragment should be generated"
+
+        with open(caption_path) as f:
+            caption_content = f.read()
+        assert len(caption_content) > 0, "Caption fragment should not be empty"
+        assert "e2e_test_ep" in caption_content or "crossing_scenario" in caption_content
+
+
+class TestResimulation:
+    """Tests for deterministic re-simulation functionality."""
+
+    @pytest.fixture
+    def simple_scenario_matrix(self, tmp_path):
+        """Create a simple scenario matrix for testing."""
+        scenarios = [
+            {
+                "scenario_id": "test_scenario",
+                "robot_start": [0.3, 3.0],
+                "robot_goal": [9.7, 3.0],
+                "n_agents": 1,
+                "flow": "uni",
+                "goal_topology": "point",
+            }
+        ]
+        matrix_path = tmp_path / "scenarios.yaml"
+        import yaml
+
+        with open(matrix_path, "w") as f:
+            yaml.dump(scenarios, f)
+        return matrix_path
+
+    def test_resolve_scenario_from_matrix_found(self, simple_scenario_matrix):
+        """Test resolving scenario from matrix when found."""
+        from robot_sf.benchmark.episode_replay_figure import _resolve_scenario_from_matrix
+
+        scenario = _resolve_scenario_from_matrix("test_scenario", simple_scenario_matrix)
+        assert scenario is not None
+        assert scenario["scenario_id"] == "test_scenario"
+        assert scenario["robot_start"] == [0.3, 3.0]
+
+    def test_resolve_scenario_from_matrix_id_key(self, tmp_path):
+        """Scenario matrices use id while episode rows use scenario_id."""
+        import yaml
+
+        from robot_sf.benchmark.episode_replay_figure import _resolve_scenario_from_matrix
+
+        matrix_path = tmp_path / "scenarios.yaml"
+        scenarios = [
+            {
+                "id": "test_scenario",
+                "robot_start": [0.3, 3.0],
+                "robot_goal": [9.7, 3.0],
+                "n_agents": 0,
+            }
+        ]
+        with open(matrix_path, "w") as f:
+            yaml.dump(scenarios, f)
+
+        scenario = _resolve_scenario_from_matrix("test_scenario", matrix_path)
+
+        assert scenario is not None
+        assert scenario["id"] == "test_scenario"
+
+    def test_resolve_scenario_from_matrix_not_found(self, simple_scenario_matrix):
+        """Test resolving scenario from matrix when not found."""
+        from robot_sf.benchmark.episode_replay_figure import _resolve_scenario_from_matrix
+
+        scenario = _resolve_scenario_from_matrix("nonexistent", simple_scenario_matrix)
+        assert scenario is None
+
+    def test_resolve_scenario_from_matrix_file_not_found(self, tmp_path):
+        """Test resolving scenario from non-existent matrix file."""
+        from robot_sf.benchmark.episode_replay_figure import _resolve_scenario_from_matrix
+
+        with pytest.raises(FileNotFoundError, match="Scenario matrix not found"):
+            _resolve_scenario_from_matrix("test", tmp_path / "nonexistent.yaml")
+
+    def test_resimulate_episode_basic(self, simple_scenario_matrix):
+        """Test basic episode re-simulation."""
+        from robot_sf.benchmark.episode_replay_figure import (
+            EpisodeRow,
+            _resimulate_episode,
+        )
+
+        episode_row = EpisodeRow(
+            episode_id="test_ep",
+            scenario_id="test_scenario",
+            seed=42,
+            algo="simple_policy",
+        )
+
+        scenario = {
+            "scenario_id": "test_scenario",
+            "robot_start": [0.3, 3.0],
+            "robot_goal": [9.7, 3.0],
+            "n_agents": 1,
+            "flow": "uni",
+            "goal_topology": "point",
+        }
+
+        replay = _resimulate_episode(episode_row, scenario, horizon=10, dt=0.1)
+
+        assert replay.episode_id == "test_ep"
+        assert replay.scenario_id == "test_scenario"
+        assert len(replay.steps) > 1
+        assert replay.dt == 0.1
+
+        # Check initial step
+        assert replay.steps[0].t == 0.0
+        assert replay.steps[0].x == pytest.approx(0.3)
+        assert replay.steps[0].y == pytest.approx(3.0)
+
+        # Check that robot moves toward goal
+        final_x = replay.steps[-1].x
+        assert final_x > 0.3  # Should have moved toward goal at x=9.7
+
+    def test_resimulate_episode_with_pedestrians(self, simple_scenario_matrix):
+        """Test re-simulation records pedestrian positions."""
+        from robot_sf.benchmark.episode_replay_figure import (
+            EpisodeRow,
+            _resimulate_episode,
+        )
+
+        episode_row = EpisodeRow(
+            episode_id="test_ep",
+            scenario_id="test_scenario",
+            seed=42,
+        )
+
+        scenario = {
+            "scenario_id": "test_scenario",
+            "robot_start": [0.3, 3.0],
+            "robot_goal": [9.7, 3.0],
+            "n_agents": 2,
+            "flow": "uni",
+            "goal_topology": "point",
+        }
+
+        replay = _resimulate_episode(episode_row, scenario, horizon=5, dt=0.1)
+
+        # Should have pedestrian positions recorded
+        for step in replay.steps:
+            assert step.ped_positions is not None
+            # The scenario generator may generate more than 2 pedestrians based on area
+            assert len(step.ped_positions) >= 1
+
+    def test_full_workflow_with_resimulation(self, tmp_path, simple_scenario_matrix):
+        """Test full workflow using re-simulation when replay_steps absent."""
+        from robot_sf.benchmark.episode_replay_figure import (
+            EpisodeRow,
+            replay_episode_and_generate_figures,
+        )
+
+        # Create an episode row WITHOUT replay_steps
+        row_dict = {
+            "episode_id": "test_resim_ep",
+            "scenario_id": "test_scenario",
+            "seed": 42,
+            "final_robot_position": [5.0, 3.0],  # Expected approximate position
+        }
+        episode_row = EpisodeRow.from_dict(row_dict)
+
+        # Create a dummy episodes JSONL file
+        episodes_jsonl = tmp_path / "episodes.jsonl"
+        import json
+
+        with open(episodes_jsonl, "w") as f:
+            json.dump(row_dict, f)
+            f.write("\n")
+
+        output_dir = tmp_path / "output"
+
+        result = replay_episode_and_generate_figures(
+            episode_row=episode_row,
+            outputs=["trajectory"],
+            out_dir=output_dir,
+            tolerance_m=5.0,  # Large tolerance for simple policy
+            episodes_jsonl_path=episodes_jsonl,
+            scenario_matrix_path=simple_scenario_matrix,
+        )
+
+        assert result["episode_id"] == "test_resim_ep"
+        assert result["artifacts_generated"] == 1
+        assert Path(result["provenance_sidecar"]).exists()
+
+        # Check that provenance shows resimulation occurred
+        with open(result["provenance_sidecar"]) as f:
+            provenance = json.load(f)
+        assert provenance["resimulated"] is True
+        assert provenance["scenario_id"] == "test_scenario"
+
+    def test_full_workflow_resimulation_determinism_pass(self, tmp_path):
+        """Test re-simulation determinism check passes with correct endpoint."""
+        from robot_sf.benchmark.episode_replay_figure import (
+            EpisodeRow,
+            replay_episode_and_generate_figures,
+        )
+
+        # Create scenario matrix
+        scenarios = [
+            {
+                "scenario_id": "test_scenario",
+                "robot_start": [0.3, 3.0],
+                "robot_goal": [9.7, 3.0],
+                "n_agents": 0,  # No pedestrians for deterministic behavior
+                "flow": "uni",
+                "goal_topology": "point",
+            }
+        ]
+        matrix_path = tmp_path / "scenarios.yaml"
+        import yaml
+
+        with open(matrix_path, "w") as f:
+            yaml.dump(scenarios, f)
+
+        # Create episode row with expected final position after the finite 100-step replay horizon.
+        row_dict = {
+            "episode_id": "test_det_ep",
+            "scenario_id": "test_scenario",
+            "seed": 42,
+            "final_robot_position": [9.417570463519, 3.0],
+        }
+        episode_row = EpisodeRow.from_dict(row_dict)
+
+        episodes_jsonl = tmp_path / "episodes.jsonl"
+        import json
+
+        with open(episodes_jsonl, "w") as f:
+            json.dump(row_dict, f)
+            f.write("\n")
+
+        output_dir = tmp_path / "output"
+
+        result = replay_episode_and_generate_figures(
+            episode_row=episode_row,
+            outputs=["trajectory"],
+            out_dir=output_dir,
+            tolerance_m=0.01,
+            episodes_jsonl_path=episodes_jsonl,
+            scenario_matrix_path=matrix_path,
+        )
+
+        assert result["determinism_check_status"] == "pass"
+
+    def test_resimulation_missing_scenario_matrix_error(self, tmp_path):
+        """Test re-simulation fails without scenario matrix."""
+        from robot_sf.benchmark.episode_replay_figure import (
+            EpisodeRow,
+            replay_episode_and_generate_figures,
+        )
+
+        # Create episode row WITHOUT replay_steps
+        row_dict = {
+            "episode_id": "test_ep",
+            "scenario_id": "test_scenario",
+            "seed": 42,
+        }
+        episode_row = EpisodeRow.from_dict(row_dict)
+
+        episodes_jsonl = tmp_path / "episodes.jsonl"
+        import json
+
+        with open(episodes_jsonl, "w") as f:
+            json.dump(row_dict, f)
+            f.write("\n")
+
+        output_dir = tmp_path / "output"
+
+        with pytest.raises(ValueError, match="no replay_steps.*no scenario matrix"):
+            replay_episode_and_generate_figures(
+                episode_row=episode_row,
+                outputs=["trajectory"],
+                out_dir=output_dir,
+                episodes_jsonl_path=episodes_jsonl,
+            )
+
+    def test_resimulation_scenario_not_in_matrix(self, tmp_path):
+        """Test re-simulation fails when scenario not in matrix."""
+        from robot_sf.benchmark.episode_replay_figure import (
+            EpisodeRow,
+            replay_episode_and_generate_figures,
+        )
+
+        # Create empty scenario matrix
+        scenarios = []
+        matrix_path = tmp_path / "scenarios.yaml"
+        import yaml
+
+        with open(matrix_path, "w") as f:
+            yaml.dump(scenarios, f)
+
+        # Create episode row for non-existent scenario
+        row_dict = {
+            "episode_id": "test_ep",
+            "scenario_id": "nonexistent_scenario",
+            "seed": 42,
+        }
+        episode_row = EpisodeRow.from_dict(row_dict)
+
+        episodes_jsonl = tmp_path / "episodes.jsonl"
+        import json
+
+        with open(episodes_jsonl, "w") as f:
+            json.dump(row_dict, f)
+            f.write("\n")
+
+        output_dir = tmp_path / "output"
+
+        # The error can come from either our lookup or the scenario generator
+        with pytest.raises(ValueError, match="Scenario.*(not found|missing|config)"):
+            replay_episode_and_generate_figures(
+                episode_row=episode_row,
+                outputs=["trajectory"],
+                out_dir=output_dir,
+                episodes_jsonl_path=episodes_jsonl,
+                scenario_matrix_path=matrix_path,
+            )

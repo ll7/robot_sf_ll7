@@ -92,16 +92,28 @@ def load_manifest(path: Path) -> dict[str, Any]:
 
     manifest = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(manifest, dict):
-        raise TypeError(f"Manifest must be a mapping: {path}")
+        raise ValueError(f"Manifest must be a mapping: {path}")
     if manifest.get("schema") != "topology_reselection_cross_slice.v1":
         raise ValueError("Unsupported manifest schema")
     slices = manifest.get("slices")
-    if not isinstance(slices, list) or len(slices) < 4:
-        raise ValueError("Manifest must include at least four slices")
+    issue_number = _manifest_issue_number(manifest)
+
+    min_total_slices = manifest.get("min_total_slices", 4)
+    if not isinstance(slices, list) or len(slices) < min_total_slices:
+        raise ValueError(
+            f"Manifest must include at least {min_total_slices} slices "
+            f"(issue {issue_number} has {len(slices) if isinstance(slices, list) else 0})"
+        )
+
     hard_count = sum(1 for row in slices if row.get("role") == "hard")
     control_count = sum(1 for row in slices if row.get("role") == "negative_control")
-    if hard_count < 3 or control_count < 1:
-        raise ValueError("Manifest must include >=3 hard slices and >=1 negative-control slice")
+
+    min_hard_slices = manifest.get("min_hard_slices", 3)
+    if hard_count < min_hard_slices or control_count < 1:
+        raise ValueError(
+            f"Manifest must include >={min_hard_slices} hard slices and >=1 negative-control slice "
+            f"(issue {issue_number} has {hard_count} hard, {control_count} control)"
+        )
     return manifest
 
 

@@ -1,5 +1,6 @@
 {
   "schema_version": "issue3213-predictive-nontransfer-confirming-eval.v1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "packet_id": "issue3213-predictive-nontransfer-confirming-eval-20260708",
   "issue_pin": 4879,
   "bundle_dir": "docs/context/evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08",
@@ -8,7 +9,10 @@
   "claim_boundary": "diagnostic_only confirming-eval plateau; predictive-planner non-transfer across checkpoints and authority knobs; not benchmark-strength, not safety, not promotion, not paper-facing",
   "evidence_tier": "diagnostic",
   "result_classification": "negative_result",
-  "failure_mode": ["mechanism_failed", "non_transfer"],
+  "failure_mode": [
+    "mechanism_failed",
+    "non_transfer"
+  ],
   "paper_facing": false,
   "benchmark_promotion": false,
   "forbidden_actions_confirmed": {
@@ -39,8 +43,20 @@
     "planner_authority_grid_sha256": "02037593d8ea2a9f7aa3112c8245c237176af77cb73adfe86b900eb96c5f1c90",
     "hard_seed_manifest": "configs/benchmarks/predictive_hard_seeds_v1.yaml",
     "hard_seed_manifest_sha256": "535dfc5e2382a75140e128c98a32d898ab6655ab2925c45b565512924ca5c575",
-    "manifest_variants": ["baseline", "high_angular", "dense_lattice", "nearfield_turn", "combined_max_authority"],
-    "observed_grid_variants": ["baseline", "nf_headings_only", "nf_speedcap_only", "nf_horizonboost_only", "nearfield_turn"]
+    "manifest_variants": [
+      "baseline",
+      "high_angular",
+      "dense_lattice",
+      "nearfield_turn",
+      "combined_max_authority"
+    ],
+    "observed_grid_variants": [
+      "baseline",
+      "nf_headings_only",
+      "nf_speedcap_only",
+      "nf_horizonboost_only",
+      "nearfield_turn"
+    ]
   },
   "closed_loop_seed_schedule": {
     "name": "broad_robust_200_229",
@@ -73,11 +89,26 @@
     "gate_source_bundle": "docs/context/evidence/issue_3254_predictive_crossing_conflict_13042_2026-06-23/summary.json"
   },
   "plateau_summary": {
-    "observed_populated_success_rate_range": [0.0667, 0.1],
-    "baseline_success_rate_range": [0.0667, 0.0833],
-    "active_knob_success_rate_range": [0.0917, 0.1],
-    "active_knobs": ["nf_speedcap_only", "nearfield_turn"],
-    "inert_knobs": ["nf_headings_only", "nf_horizonboost_only"],
+    "observed_populated_success_rate_range": [
+      0.0667,
+      0.1
+    ],
+    "baseline_success_rate_range": [
+      0.0667,
+      0.0833
+    ],
+    "active_knob_success_rate_range": [
+      0.0917,
+      0.1
+    ],
+    "active_knobs": [
+      "nf_speedcap_only",
+      "nearfield_turn"
+    ],
+    "inert_knobs": [
+      "nf_headings_only",
+      "nf_horizonboost_only"
+    ],
     "active_knob_lift_absolute": 0.03,
     "active_knob_lift_relative": 0.33,
     "episodes_per_cell_full": 120
@@ -103,26 +134,35 @@
     "origin_grid": "docs/context/evidence/issue_3213_authority_sweep/robust_grid.json",
     "origin_grid_sha256": "bde1a7eb4058a0cc8d7c83d4a64fd896a84395c3a8a164da061e8dbeafc14084",
     "pinned_copy": "robust_grid.json",
-    "pinned_copy_byte_identical": true,
+    "pinned_copy_payload_note": "Same source grid payload with required top-level review_marker added for evidence hygiene.",
     "unpopulated_checkpoint": {
       "token": "sweep_h256_mp4_s42",
       "reason": "All five authority variants returned zero episodes (success_rate_mean=null, episodes_approx=0). Recorded as the genuinely-unrecoverable cell per issue #4879; not silently dropped.",
-      "authority_variants_affected": ["baseline", "nf_headings_only", "nf_speedcap_only", "nf_horizonboost_only", "nearfield_turn"]
+      "authority_variants_affected": [
+        "baseline",
+        "nf_headings_only",
+        "nf_speedcap_only",
+        "nf_horizonboost_only",
+        "nearfield_turn"
+      ]
     },
     "partial_cells": {
       "checkpoint": "sweep_h192_mp3_s7_wd5e5",
-      "variants_one_half_only": ["nf_horizonboost_only", "nearfield_turn"],
+      "variants_one_half_only": [
+        "nf_horizonboost_only",
+        "nearfield_turn"
+      ],
       "episodes": 60,
       "reason": "robust_b half absent for these two cells"
     },
-    "durability_note": "The origin robust_grid.json was a bare 0600 file with no pinned provenance; this packet pins a byte-identical copy plus README, packet.json, artifact_inventory.json, seed_provenance.yaml, confirming_eval_plateau.csv, and negative_finding.md so downstream assessment docs can cite a durable bundle."
+    "durability_note": "The origin robust_grid.json bare 0600 file had no pinned provenance; packet pins the same grid payload with required review_marker plus README, packet.json, artifact_inventory.json, seed_provenance.yaml, confirming_eval_plateau.csv, and negative_finding.md so downstream assessment docs can cite a durable bundle."
   },
   "checksums_sha256": {
-    "README.md": "a01c56fdf0748fb0d50b09bf5a5de78fc62f5a5813ce0dce4dac85d084cb6c07",
-    "confirming_eval_plateau.csv": "f192a7a4fc38c5d5a82cbbebcadd3f111dd1ed38126c755c2348c81eef221472",
-    "negative_finding.md": "040dba06eaa652bf2a481a1debe33b4e9aec1f1d11cc773a07ee65a6c3d5d695",
-    "robust_grid.json": "bde1a7eb4058a0cc8d7c83d4a64fd896a84395c3a8a164da061e8dbeafc14084",
-    "seed_provenance.yaml": "f7eb89be7042110b614e99709511eba482651d9dab65ee60a3b62fdd54950f44"
+    "README.md": "16208d2685ce3a34952f68983701b04b574aa64bf3c7eb98a60c00421959f857",
+    "confirming_eval_plateau.csv": "6d0fa419223fc30b02308c4f3748f906e5025ee3c1aba86c503983c7cdb18e48",
+    "negative_finding.md": "de7fe51e769f26272bd21e9d47b319554e795451ae2457aee120357a3005617f",
+    "robust_grid.json": "9b13cc25c50804bc44c955d87284b3be0661958f190fbfb25b8f5471f872296a",
+    "seed_provenance.yaml": "82df1ebc53be442c4da49fc417454ecb4e04595085f647d88000249292123b51"
   },
   "references_updated": [
     "docs/context/negative_result_register.md (NR-004 evidence_pointer)",

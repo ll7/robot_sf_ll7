@@ -1,3 +1,4 @@
+# AI-GENERATED NEEDS-REVIEW
 checkpoint,authority_variant,success_rate_mean,seed_half_robust_a,seed_half_robust_b,episodes_approx,populated
 predictive_proxy_selected_v2_full,baseline,0.075,0.083333,0.066667,120,yes
 predictive_proxy_selected_v2_full,nearfield_turn,0.1,0.1,0.1,120,yes

@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#4879, 2026-07-08) - NEEDS-REVIEW -->
+
 # Non-Transfer Finding (Confirming-Eval Plateau)
 
 ## Decision

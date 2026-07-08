@@ -1,5 +1,6 @@
 {
   "schema_version": "hardcase_authority_sweep.v1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "issue": 3213,
   "parent": 3215,
   "scenario_set": "configs/scenarios/sets/predictive_hardcase_portfolio_v1.yaml",

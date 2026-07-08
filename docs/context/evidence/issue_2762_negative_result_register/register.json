@@ -1,5 +1,6 @@
 {
   "schema_version": "negative_result_register.v1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "created_at_utc": "2026-06-13",
   "issue": 2762,
   "purpose": "synthesis/planning aid for negative, diagnostic-only, failed, and revise-classified findings; not new benchmark or paper evidence",

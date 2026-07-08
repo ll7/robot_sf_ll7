@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#4879, 2026-07-08) - NEEDS-REVIEW -->
+
 # Issue #3213 Predictive-Planner Non-Transfer Confirming-Eval Packet (2026-07-08)
 
 Pinned evidence packet for the predictive-planner **non-transfer** confirming-eval bundle behind
@@ -17,7 +19,7 @@ The closed-loop confirming-eval grid from the `#3213` maneuver-authority sweep (
 variants across five predictive-planner checkpoints on the `predictive_hardcase_portfolio_v1`
 crossing-conflict scenarios. Before this packet, the grid lived only as a bare
 [`robust_grid.json`](../issue_3213_authority_sweep/robust_grid.json) with no pinned provenance; this
-packet pins an identical byte-copy and adds the provenance, claim boundary, and references the
+packet pins the same grid payload with required `review_marker` and adds provenance, claim boundary, and references the
 downstream assessment docs need to make stronger statements about the non-transfer result.
 
 ## Provenance
@@ -67,7 +69,7 @@ unrecoverable cell in the grid; it is documented here and in `packet.json`
 
 - [`packet.json`](packet.json): machine-readable provenance, methodology, plateau summary,
   non-transfer finding, checksums, and forbidden-actions confirmation.
-- [`robust_grid.json`](robust_grid.json): pinned byte-identical copy of the source
+- [`robust_grid.json`](robust_grid.json): pinned source confirming-eval grid payload with required `review_marker`; source
   confirming-eval grid (sha256 `bde1a7eb…`, matches the source at
   `../issue_3213_authority_sweep/robust_grid.json`).
 - [`confirming_eval_plateau.csv`](confirming_eval_plateau.csv): flat checkpoint × authority-variant
@@ -89,9 +91,8 @@ claim, not a model promotion, and not paper-facing evidence.
 ```bash
 python -m json.tool docs/context/evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08/packet.json
 python -m json.tool docs/context/evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08/artifact_inventory.json
-# Confirm the pinned grid is byte-identical to the source:
-sha256sum docs/context/evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08/robust_grid.json \
-          docs/context/evidence/issue_3213_authority_sweep/robust_grid.json
+# Confirm source-grid checksum recorded in packet metadata:
+sha256sum docs/context/evidence/issue_3213_authority_sweep/robust_grid.json
 uv run python scripts/validation/check_docs_proof_consistency.py \
   --path docs/context/evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08/README.md \
   --path docs/context/evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08/packet.json \

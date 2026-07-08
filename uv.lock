@@ -558,6 +558,18 @@ wheels = [
 ]
 
 [[package]]
+name = "cma"
+version = "4.4.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/67/ac/8c27720838e293898671f01b5c452236a0c74f4799a3f2d5fcccbbf50d71/cma-4.4.4.tar.gz", hash = "sha256:632bd654b5dce04c0eaa3166679d3e4773ce7a79eab7934e7f363c341b9a8170", size = 316645, upload-time = "2026-02-25T22:18:16Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d4/d4/ec46cedab6a6145e21768baa8110db3e2e836a320d8499e4ef18bc894e61/cma-4.4.4-py3-none-any.whl", hash = "sha256:edb6d02eb2aac2d54650f16a8f0c70711ff17445957de7c9de92ff7fd4b7ef38", size = 328311, upload-time = "2026-02-25T22:18:09.602Z" },
+]
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -4927,6 +4939,9 @@ analytics = [
 browser = [
     { name = "playwright" },
 ]
+criticality = [
+    { name = "cma" },
+]
 gpu = [
     { name = "torch" },
 ]
@@ -4991,6 +5006,7 @@ imitation = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cma", marker = "extra == 'criticality'", specifier = ">=3.3.0" },
     { name = "duckdb", marker = "extra == 'analytics'", specifier = ">=1.4.0" },
     { name = "geopandas", specifier = ">=1.1.4" },
     { name = "gymnasium", specifier = ">=0.29,<1.2" },
@@ -5039,7 +5055,7 @@ requires-dist = [
     { name = "tqdm", marker = "extra == 'progress'", specifier = ">=4.68.3" },
     { name = "wandb", marker = "extra == 'training'", specifier = ">=0.28.0" },
 ]
-provides-extras = ["gpu", "training", "recurrent", "rllib", "progress", "analysis", "analytics", "viz", "browser", "sacadrl", "orca", "socnav"]
+provides-extras = ["gpu", "training", "recurrent", "rllib", "progress", "analysis", "analytics", "viz", "browser", "sacadrl", "orca", "socnav", "criticality"]
 
 [package.metadata.requires-dev]
 carla = [{ name = "carla", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = "==0.9.16" }]

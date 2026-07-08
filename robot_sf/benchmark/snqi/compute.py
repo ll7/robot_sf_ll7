@@ -30,7 +30,7 @@ import hashlib
 import json
 from collections.abc import Mapping
 from datetime import datetime
-from subprocess import DEVNULL, run
+from subprocess import run
 
 from robot_sf.benchmark.snqi.types import SNQIWeights
 
@@ -264,14 +264,17 @@ def recompute_snqi_weights(
         msg = f"Unknown weight computation method: {method}"
         raise ValueError(msg)
 
-    # Get git SHA for provenance
+    # Get git SHA for provenance. NOTE: ``capture_output=True`` is equivalent to
+    # ``stdout=PIPE, stderr=PIPE``, so also passing ``stderr=DEVNULL`` is an
+    # invalid combination that always raises ``ValueError`` (swallowed by the
+    # handler below) -- which silently degraded ``git_sha`` to ``"unknown"`` for
+    # every recorded weight config (issue #4895). Do not reintroduce it.
     try:
         result = run(
             ["git", "rev-parse", "HEAD"],
             capture_output=True,
             text=True,
             check=False,
-            stderr=DEVNULL,
         )
         git_sha = result.stdout.strip()[:8] if result.returncode == 0 else "unknown"
     except Exception:

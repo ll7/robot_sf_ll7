@@ -230,6 +230,7 @@ def run_campaign(
     campaign_id: str | None = None,
     skip_publication_bundle: bool = False,
     invoked_command: str | None = None,
+    arm_isolation: str | None = None,
 ) -> dict[str, Any]:
     """Execute a camera-ready planner campaign via the extracted campaign module.
 
@@ -259,6 +260,7 @@ def run_campaign(
         run_batch=run_batch,
         compute_aggregates_with_ci=compute_aggregates_with_ci,
         export_publication_bundle=export_publication_bundle,
+        arm_isolation=arm_isolation,
     )
 
 

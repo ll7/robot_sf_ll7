@@ -176,6 +176,13 @@ and high-churn state surface [issue_1358_state.yaml](issue_1358_state.yaml)
 
   records that merged PR #4528 delivered CPU-testable serial-arm teardown; no GPU
   campaign, Slurm submission, or benchmark claim was run by audit.
+* Issue #4826 camera-ready GPU lifecycle:
+
+  [issue_4826_camera_ready_gpu_lifecycle.md](issue_4826_camera_ready_gpu_lifecycle.md)
+
+  records the cross-arm VRAM leak fix (per-arm cleanup, subprocess isolation via
+  `--arm-isolation subprocess`, and `PYTORCH_ALLOC_CONF` hardening); Phase 5
+  GPU smoke validation remains pending.
 * Issue #4546 Social Navigation Benchmark (SocNavBench) ETH stage/SVG closure audit:
 [issue_4546_closure_audit_2026-07-06.md](issue_4546_closure_audit_2026-07-06.md)
 records real external-root source staging, converter input/output hashes, and

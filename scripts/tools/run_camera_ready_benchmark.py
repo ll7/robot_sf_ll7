@@ -114,6 +114,17 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=("TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"),
         help="Log level for campaign execution.",
     )
+    parser.add_argument(
+        "--arm-isolation",
+        choices=("in_process", "subprocess"),
+        default="in_process",
+        help=(
+            "Arm isolation mode for campaign execution. 'subprocess' runs each "
+            "planner/kinematics variant in a subprocess to ensure full GPU memory "
+            "release between arms (issue #4826). 'in_process' runs all arms in the "
+            "same process with explicit cleanup."
+        ),
+    )
     return parser
 
 
@@ -168,6 +179,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 campaign_id=args.campaign_id,
                 skip_publication_bundle=bool(args.skip_publication_bundle),
                 invoked_command=invoked_command,
+                arm_isolation=args.arm_isolation,
             )
     except OrcaRvo2PreflightError as exc:
         result = {

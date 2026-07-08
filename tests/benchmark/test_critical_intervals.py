@@ -8,6 +8,7 @@ opt-in only.
 from __future__ import annotations
 
 import json
+import math
 import tempfile
 
 import numpy as np
@@ -940,3 +941,140 @@ class TestPhysicalTTC:
             ped_vel=np.array([-1.0, 0.0]),
         )
         assert ttc == pytest.approx(5.0 / 2.4, abs=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# heading_oscillation straight-path baseline (issue #4886)
+# ---------------------------------------------------------------------------
+
+
+class TestHeadingOscillationBaseline:
+    """``heading_oscillation`` must be ~0 for straight, constant-heading motion.
+
+    Regression coverage for issue #4886. The previous implementation used
+    ``np.var(dirs)`` over the *flattened* unit-direction vectors, which mixes
+    the structurally different x and y components of a unit vector into one
+    population. For a straight ``(1, 0)`` path that flattened variance is
+    ``0.25`` (variance of ``[1, 0, 1, 0, ...]`` around its ``0.5`` mean) --
+    indistinguishable from a small wiggle, and wildly different from a straight
+    ``(1, 1)`` path (which scored ``0.0``). The metric therefore measured axis
+    alignment, not heading oscillation.
+
+    The fix computes variance *per component* (``axis=0``) and sums it (the
+    trace of the 2x2 covariance of the unit directions == ``1 - |mean_dir|^2``),
+    which is ``0.0`` for any constant-heading path and rises with dispersion.
+    """
+
+    def test_straight_x_axis_is_zero(self) -> None:
+        """Constant ``(1, 0)`` motion must score 0.0 (was 0.25 before #4886)."""
+        n = 10
+        robot_pos = np.zeros((n, 2), dtype=float)
+        robot_pos[:, 0] = np.arange(n) * 0.5
+        trace = _make_trace(robot_pos)
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
+        assert whole["heading_oscillation"] == pytest.approx(0.0, abs=1e-12)
+
+    def test_straight_diagonal_is_zero(self) -> None:
+        """Constant ``(1, 1)`` motion must also score 0.0 -- axis independent."""
+        n = 10
+        robot_pos = np.zeros((n, 2), dtype=float)
+        step = np.arange(n) * 0.5
+        robot_pos[:, 0] = step
+        robot_pos[:, 1] = step
+        trace = _make_trace(robot_pos)
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
+        assert whole["heading_oscillation"] == pytest.approx(0.0, abs=1e-12)
+
+    def test_axis_alignment_does_not_change_score(self) -> None:
+        """Straight motion scores identically along any heading."""
+        n = 10
+        cases = {
+            "x_axis": np.array([[i * 0.5, 0.0] for i in range(n)]),
+            "diagonal": np.array([[i * 0.5, i * 0.5] for i in range(n)]),
+            "y_axis": np.array([[0.0, i * 0.5] for i in range(n)]),
+        }
+        scores = {
+            name: _compute_interval_metrics_in_window(_make_trace(pos), start=0, end=None)[
+                "heading_oscillation"
+            ]
+            for name, pos in cases.items()
+        }
+        # All constant-heading paths score 0.0; none is privileged by axis.
+        for name, score in scores.items():
+            assert score == pytest.approx(0.0, abs=1e-12), name
+
+    def test_small_wiggle_is_small_and_nonzero(self) -> None:
+        """A +-5 deg heading wiggle scores a small value (~0.0076)."""
+        angles_deg = [5.0, -5.0, 5.0, -5.0]
+        dirs = np.array(
+            [[math.cos(math.radians(a)), math.sin(math.radians(a))] for a in angles_deg]
+        )
+        robot_pos = np.vstack([[0.0, 0.0], np.cumsum(dirs, axis=0)])
+        trace = _make_trace(robot_pos)
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
+        wiggle = whole["heading_oscillation"]
+        # Real oscillation, but small -- tightly matches the closed-form value.
+        assert wiggle == pytest.approx(0.0075961, abs=1e-6)
+
+    def test_straight_is_distinguishable_from_wiggle(self) -> None:
+        """The defining property the old metric violated: straight < wiggle.
+
+        Under the buggy flattened-variance metric, straight ``(1, 0)`` scored
+        0.25 while a +-5 deg wiggle scored ~0.252 -- the metric could not tell
+        them apart. The fixed per-component metric restores the ordering.
+        """
+        n = 10
+        straight_pos = np.zeros((n, 2), dtype=float)
+        straight_pos[:, 0] = np.arange(n) * 0.5
+        straight = _compute_interval_metrics_in_window(
+            _make_trace(straight_pos), start=0, end=None
+        )["heading_oscillation"]
+
+        angles_deg = [5.0, -5.0, 5.0, -5.0]
+        dirs = np.array(
+            [[math.cos(math.radians(a)), math.sin(math.radians(a))] for a in angles_deg]
+        )
+        wiggle_pos = np.vstack([[0.0, 0.0], np.cumsum(dirs, axis=0)])
+        wiggle = _compute_interval_metrics_in_window(_make_trace(wiggle_pos), start=0, end=None)[
+            "heading_oscillation"
+        ]
+
+        assert straight < wiggle
+        assert straight == pytest.approx(0.0, abs=1e-12)
+
+    def test_full_reversal_scores_high(self) -> None:
+        """Back-and-forth ``(1, 0) <-> (-1, 0)`` reversals score ~1.0."""
+        dirs = np.array([[1.0, 0.0], [-1.0, 0.0], [1.0, 0.0], [-1.0, 0.0]])
+        robot_pos = np.vstack([[0.0, 0.0], np.cumsum(dirs, axis=0)])
+        trace = _make_trace(robot_pos)
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
+        # x component alternates +-1 (variance 1.0), y stays 0 -> total 1.0.
+        assert whole["heading_oscillation"] == pytest.approx(1.0, abs=1e-12)
+
+    def test_single_step_window_omits_metric(self) -> None:
+        """With fewer than 2 positions the metric key is absent (boundary)."""
+        robot_pos = np.zeros((1, 2), dtype=float)
+        trace = _make_trace(robot_pos)
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
+        assert "heading_oscillation" not in whole
+
+    def test_straight_path_with_pause_is_zero(self) -> None:
+        """A straight path that pauses for a step must still score 0.0.
+
+        Stationary steps have no defined heading; injecting their ``[0, 0]``
+        delta into the direction population would inflate the variance and make
+        a merely-paused straight path read as "oscillating". A straight
+        ``(1, 0)`` path with a single repeated (stationary) position must score
+        the same 0.0 as the uninterrupted path.
+        """
+        robot_pos = np.array([[0.0, 0.0], [0.5, 0.0], [0.5, 0.0], [1.0, 0.0]], dtype=float)
+        trace = _make_trace(robot_pos)
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
+        assert whole["heading_oscillation"] == pytest.approx(0.0, abs=1e-12)
+
+    def test_fully_stationary_window_is_zero(self) -> None:
+        """A window with no movement at all defaults to 0.0 (no heading)."""
+        robot_pos = np.zeros((5, 2), dtype=float)
+        trace = _make_trace(robot_pos)
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
+        assert whole["heading_oscillation"] == pytest.approx(0.0, abs=1e-12)

@@ -9,6 +9,7 @@ current `robot_sf_ll7` environment metadata and optional extended fields.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -108,7 +109,7 @@ def _f(meta: Mapping[str, object], key: str, default: float = 0.0) -> float:
         result = float(value)
     except (TypeError, ValueError):
         return float(default)
-    if not np.isfinite(result):
+    if not math.isfinite(result):
         return float(default)
     return result
 

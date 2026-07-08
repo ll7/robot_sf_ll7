@@ -82,7 +82,7 @@ class TestMedianSelection:
         assert selected[0].metric_value == 0.5
 
     def test_even_cell_size(self) -> None:
-        """Median of 4 episodes selects index 2 (floor(n/2))."""
+        """Median of 4 episodes selects index 2 (floor(n/2)) in canonical ascending order."""
         episodes = [
             _make_episode("ep1", "orca", "s1", 1, 0.1),
             _make_episode("ep2", "orca", "s1", 2, 0.5),
@@ -97,9 +97,9 @@ class TestMedianSelection:
             modes=["median"],
         )
         assert len(selected) == 1
-        # Sorted descending: [0.9, 0.8, 0.5, 0.1], median index=2 -> 0.5
-        assert selected[0].episode_id == "ep2"
-        assert selected[0].metric_value == 0.5
+        # Canonical ascending sort: [0.1, 0.5, 0.8, 0.9], median index=2 -> 0.8
+        assert selected[0].episode_id == "ep3"
+        assert selected[0].metric_value == 0.8
 
 
 class TestBestWorstDirection:
@@ -182,8 +182,8 @@ class TestMissingMetric:
             modes=["median"],
         )
         assert len(selected) == 1
-        # Only 2 valid episodes, median index=1 -> 0.7
-        assert selected[0].metric_value == 0.7
+        # Only 2 valid episodes, canonical ascending: [0.7, 0.9], median index=1 -> 0.9
+        assert selected[0].metric_value == 0.9
 
 
 class TestTieBreaking:
@@ -203,11 +203,12 @@ class TestTieBreaking:
             metric_direction="higher",
             modes=["best", "median", "worst"],
         )
-        # All have same value; best=first in sorted order, worst=last
+        # All have same value; with canonical ascending sort and higher direction,
+        # best = last (ep_c), worst = first (ep_a).
         best = next(s for s in selected if s.selection_mode == "best")
         worst = next(s for s in selected if s.selection_mode == "worst")
-        assert best.episode_id == "ep_a"
-        assert worst.episode_id == "ep_c"
+        assert best.episode_id == "ep_c"
+        assert worst.episode_id == "ep_a"
 
 
 class TestGrouping:
@@ -340,3 +341,59 @@ class TestMetricDirectionAutoDetection:
             modes=["best"],
         )
         assert selected[0].episode_id == "ep2"
+
+
+class TestDirectionInvariantMedian:
+    """Regression test for issue #4794: median selection must be invariant to metric_direction."""
+
+    def test_same_median_under_both_directions(self) -> None:
+        """Median episode is the same regardless of metric_direction flip."""
+        episodes = [
+            _make_episode("ep1", "orca", "s1", 1, 0.1),
+            _make_episode("ep2", "orca", "s1", 2, 0.5),
+            _make_episode("ep3", "orca", "s1", 3, 0.8),
+            _make_episode("ep4", "orca", "s1", 4, 0.9),
+        ]
+        selected_higher, _ = select_exemplars(
+            episodes,
+            group_by=["planner_key"],
+            metric="path_efficiency",
+            metric_direction="higher",
+            modes=["median"],
+        )
+        selected_lower, _ = select_exemplars(
+            episodes,
+            group_by=["planner_key"],
+            metric="path_efficiency",
+            metric_direction="lower",
+            modes=["median"],
+        )
+        assert len(selected_higher) == 1
+        assert len(selected_lower) == 1
+        assert selected_higher[0].episode_id == selected_lower[0].episode_id
+        assert selected_higher[0].metric_value == selected_lower[0].metric_value
+
+    def test_odd_size_same_median_both_directions(self) -> None:
+        """Median of odd-sized group is also direction-invariant."""
+        episodes = [
+            _make_episode("ep1", "orca", "s1", 1, 0.2),
+            _make_episode("ep2", "orca", "s1", 2, 0.6),
+            _make_episode("ep3", "orca", "s1", 3, 0.8),
+            _make_episode("ep4", "orca", "s1", 4, 0.9),
+            _make_episode("ep5", "orca", "s1", 5, 1.0),
+        ]
+        selected_higher, _ = select_exemplars(
+            episodes,
+            group_by=["planner_key"],
+            metric="path_efficiency",
+            metric_direction="higher",
+            modes=["median"],
+        )
+        selected_lower, _ = select_exemplars(
+            episodes,
+            group_by=["planner_key"],
+            metric="path_efficiency",
+            metric_direction="lower",
+            modes=["median"],
+        )
+        assert selected_higher[0].episode_id == selected_lower[0].episode_id

@@ -2012,6 +2012,28 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     return _policy, meta
 
 
+def build_map_policy(
+    algo: str,
+    algo_config: dict[str, Any],
+    *,
+    robot_kinematics: str | None = None,
+    robot_command_mode: str | None = None,
+    adapter_impact_eval: bool = False,
+) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
+    """Build a benchmark map-runner policy for scripts and other public callers.
+
+    Returns:
+        Policy callable and metadata dictionary from the map-runner policy builder.
+    """
+    return _build_policy(
+        algo,
+        algo_config,
+        robot_kinematics=robot_kinematics,
+        robot_command_mode=robot_command_mode,
+        adapter_impact_eval=adapter_impact_eval,
+    )
+
+
 def _validate_behavior_sanity(scenario: dict[str, Any]) -> list[str]:
     """Check behavior metadata has the fields needed by pedestrian definitions.
 
@@ -2794,4 +2816,4 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     return summary
 
 
-__all__ = ["run_map_batch"]
+__all__ = ["build_map_policy", "run_map_batch"]

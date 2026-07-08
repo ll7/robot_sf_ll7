@@ -1640,6 +1640,10 @@ entries:
     status: current
     freshness: dated
     area: planner_integration
+  - path: docs/context/issue_4826_camera_ready_gpu_lifecycle.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/issue_1360_external_teb_assessment.md
     status: current
     freshness: dated

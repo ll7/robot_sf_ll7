@@ -55,3 +55,28 @@ def test_forecast_variant_default_and_validation():
 
     with pytest.raises(ValueError, match="forecast_variant"):
         EnvSettings(forecast_variant="unknown_variant")
+
+
+def test_non_reactive_response_multiplier_default_and_validation():
+    """non_reactive_response_multiplier should default to 0.0 and reject invalid values.
+
+    This is a regression test (issue #4850) ensuring the default behavior is preserved:
+    non-reactive/non-yielding pedestrians do not respond to the robot.
+    """
+
+    env_settings = EnvSettings()
+    assert env_settings.sim_config.non_reactive_response_multiplier == 0.0
+
+    # Valid multiplier values
+    env_settings.sim_config = SimulationSettings(non_reactive_response_multiplier=0.1)
+    assert env_settings.sim_config.non_reactive_response_multiplier == 0.1
+
+    env_settings.sim_config = SimulationSettings(non_reactive_response_multiplier=0.3)
+    assert env_settings.sim_config.non_reactive_response_multiplier == 0.3
+
+    # Invalid multiplier values
+    with pytest.raises(ValueError, match="non_reactive_response_multiplier"):
+        SimulationSettings(non_reactive_response_multiplier=-0.1)
+
+    with pytest.raises(ValueError, match="non_reactive_response_multiplier"):
+        SimulationSettings(non_reactive_response_multiplier=float("inf"))

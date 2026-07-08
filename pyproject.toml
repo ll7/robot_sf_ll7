@@ -30,8 +30,6 @@ dependencies = [
     "loguru>=0.7.2",
     "rich>=15.0.0",
     "psutil>=6.1.0",
-    "toml>=0.10.2",
-    "shimmy>=1.0.0,<2.0.0",
     "moviepy>=2.0.0",
     "jsonschema>=4.23.0",
     "shapely>=2.1.2",
@@ -70,15 +68,12 @@ progress = [
 ]
 analysis = [
     "seaborn>=0.13.2",
-    "matplotlib>=3.9.2",
-    "pandas>=2.2.3",
 ]
 analytics = [
     "duckdb>=1.4.0",
     "pyarrow>=23.0.0",
 ]
 viz = [
-    "matplotlib>=3.9.2",
     "seaborn>=0.13.2",
 ]
 browser = [

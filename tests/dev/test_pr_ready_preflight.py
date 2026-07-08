@@ -11,6 +11,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_DEV = REPO_ROOT / "scripts" / "dev"
+OPTIONAL_ALLOWLIST = REPO_ROOT / "tests" / "support" / "optional_test_allowlist.txt"
 
 _POST_PREFLIGHT_SCRIPTS = [
     "check_pr_followups.py",
@@ -103,6 +104,14 @@ def _make_fake_scripts(repo: Path) -> None:
     (validation_dir / "check_broad_exceptions.py").write_text(
         "import sys\nsys.exit(0)\n", encoding="utf-8"
     )
+    # PR #4865 made pr_ready_check.sh hard-require tests/support/optional_test_
+    # allowlist.txt: is_optional_readiness_path reads it to classify each
+    # changed test path (e.g. tests/planner/ -> optional, tests/unit/ -> core)
+    # and exits 1 when it is absent. Copy the real file so the fake repo matches
+    # production; the lane-split assertions below depend on its contents.
+    support_dir = repo / "tests" / "support"
+    support_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(OPTIONAL_ALLOWLIST, support_dir / "optional_test_allowlist.txt")
 
 
 def _write_lane_logging_stub(repo: Path) -> Path:

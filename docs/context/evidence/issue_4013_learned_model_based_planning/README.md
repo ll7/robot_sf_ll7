@@ -61,7 +61,7 @@ This writes a checkpoint plus manifest and metrics under
 `output/models/issue_4013/short_horizon_predictor/` (git-ignored). A copy of the
 manifest and metrics from a local run is promoted here as durable evidence:
 
-- `training_manifest.v1.json` — schema, architecture, trainer/predictor config, claim boundary.
+- `training_manifest.v1.json` — schema, architecture, trainer/predictor config, claim boundary, and checkpoint hash provenance.
 - `training_metrics.v1.json` — initial/final training loss.
 
 Observed local run (seed 4013, 512 samples, 400 epochs, CPU): training loss fell

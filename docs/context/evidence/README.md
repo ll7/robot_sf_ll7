@@ -61,7 +61,7 @@ Each bundle writes:
 
 - `payload/`: exactly the selected compact files;
 - `evidence_bundle_manifest.json`: `schema_version: evidence_bundle.v1`, command, commit,
-  claim boundary, source root, file index, sizes, SHA-256 checksums, and policy caveats;
+  claim boundary, source root, file index, sizes, SHA-256 hash checksums, and policy caveats;
 - `checksums.sha256`: checksum lines for every payload file.
 
 The schema contract lives at `robot_sf/benchmark/schemas/evidence_bundle.v1.json`.

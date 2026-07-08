@@ -1,6 +1,6 @@
 {
   "claim_boundary": "Issue #3294 assembles a review matrix from existing tracked metadata and release artifacts. It does not run a new benchmark campaign, create scenario certification, or establish deployment-safety, real-world AMV, fallback, degraded, or unavailable rows as successful benchmark evidence.",
-  "generated_at_utc": "2026-07-08T06:05:42.092890Z",
+  "generated_at_utc": "2026-07-08T07:11:48.531407Z",
   "issue": 3294,
   "rows": [
     {

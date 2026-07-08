@@ -16,6 +16,7 @@ coverage in ``test_aggregate_snqi_recompute.py``.
 
 from __future__ import annotations
 
+import copy
 import json
 from typing import TYPE_CHECKING, Any
 
@@ -25,6 +26,7 @@ from robot_sf.benchmark import aggregate
 from robot_sf.benchmark.aggregate import (
     build_observation_track_meta,
     compute_aggregates,
+    compute_aggregates_with_ci,
     flatten_metrics,
     normalize_observation_track_mode,
     read_jsonl,
@@ -216,7 +218,11 @@ _TWO_GROUP_RECORDS: list[dict[str, Any]] = [
 
 def test_compute_aggregates_coerces_bool_success_and_computes_exact_stats() -> None:
     """``success`` bools are coerced to 0/1 and aggregated with mean/median/p95."""
-    agg = compute_aggregates(_TWO_GROUP_RECORDS, group_by="algo", fallback_group_by="scenario_id")
+    agg = compute_aggregates(
+        copy.deepcopy(_TWO_GROUP_RECORDS),
+        group_by="algo",
+        fallback_group_by="scenario_id",
+    )
     # Group A: success {1.0, 0.0}; avg_speed {1.0, 3.0}; collisions {0.0, 1.0}
     assert agg["A"]["success"]["mean"] == pytest.approx(0.5)
     # numpy linear-interp p95 of [0.0, 1.0] == 0.95
@@ -232,7 +238,7 @@ def test_compute_aggregates_coerces_bool_success_and_computes_exact_stats() -> N
 
 def test_compute_aggregates_meta_block_shape_and_defaults() -> None:
     """The additive ``_meta`` block carries grouping, threshold, and track info."""
-    agg = compute_aggregates(_TWO_GROUP_RECORDS, group_by="algo")
+    agg = compute_aggregates(copy.deepcopy(_TWO_GROUP_RECORDS), group_by="algo")
     meta = agg["_meta"]
     assert set(meta) >= {
         "group_by",
@@ -253,12 +259,66 @@ def test_compute_aggregates_meta_block_shape_and_defaults() -> None:
 def test_compute_aggregates_reports_missing_expected_algorithms() -> None:
     """``expected_algorithms`` not present in records surface as missing + warning."""
     agg = compute_aggregates(
-        _TWO_GROUP_RECORDS,
+        copy.deepcopy(_TWO_GROUP_RECORDS),
         group_by="algo",
         expected_algorithms={"A", "B", "C"},
     )
     assert agg["_meta"]["missing_algorithms"] == ["C"]
     assert any("C" in w for w in agg["_meta"]["warnings"])
+
+
+def test_compute_aggregates_with_ci_pins_pairwise_bootstrap_shape() -> None:
+    """CI aggregation adds deterministic bootstrap intervals and paired contrasts."""
+    records = [
+        {
+            "episode_id": "e1",
+            "scenario_id": "s1",
+            "seed": 1,
+            "algo": "A",
+            "metrics": {"success": 1.0, "avg_speed": 1.0},
+        },
+        {
+            "episode_id": "e2",
+            "scenario_id": "s2",
+            "seed": 2,
+            "algo": "A",
+            "metrics": {"success": 0.0, "avg_speed": 3.0},
+        },
+        {
+            "episode_id": "e1",
+            "scenario_id": "s1",
+            "seed": 1,
+            "algo": "B",
+            "metrics": {"success": 1.0, "avg_speed": 2.0},
+        },
+        {
+            "episode_id": "e2",
+            "scenario_id": "s2",
+            "seed": 2,
+            "algo": "B",
+            "metrics": {"success": 1.0, "avg_speed": 5.0},
+        },
+    ]
+
+    agg = compute_aggregates_with_ci(
+        records,
+        group_by="algo",
+        fallback_group_by="scenario_id",
+        bootstrap_samples=20,
+        bootstrap_seed=123,
+    )
+
+    assert agg["A"]["avg_speed"]["mean"] == pytest.approx(2.0)
+    assert agg["A"]["avg_speed"]["mean_ci"] == pytest.approx([1.0, 3.0])
+    assert agg["B"]["success"]["p95"] == pytest.approx(1.0)
+    contrast = agg["pairwise_contrasts"]["A__vs__B"]
+    assert contrast["left"] == "A"
+    assert contrast["right"] == "B"
+    assert contrast["metrics"]["avg_speed"]["n_pairs"] == 2
+    assert contrast["metrics"]["avg_speed"]["delta_mean"] == pytest.approx(1.5)
+    assert contrast["metrics"]["avg_speed"]["delta_ci"] == pytest.approx([1.0, 2.0])
+    assert contrast["metrics"]["success"]["p_value_holm"] == pytest.approx(0.4)
+    assert agg["pairwise_contrasts"]["_meta"]["bootstrap_samples"] == 20
 
 
 def test_compute_aggregates_empty_records_returns_meta_only() -> None:

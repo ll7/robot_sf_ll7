@@ -196,6 +196,35 @@ def test_path_motion_metrics_on_straight_line() -> None:
     assert socnavbench_path_length(data) == pytest.approx(3.0)
 
 
+def test_path_motion_metrics_on_curved_nonuniform_trajectory() -> None:
+    """Pin non-zero jerk and curvature on a bent trajectory."""
+    data = _episode(
+        robot_pos=np.array(
+            [
+                [0.0, 0.0],
+                [1.0, 0.0],
+                [1.0, 1.0],
+                [0.0, 1.0],
+            ]
+        ),
+        robot_acc=np.array(
+            [
+                [0.0, 0.0],
+                [1.0, 0.0],
+                [1.0, 1.0],
+                [2.0, 1.0],
+            ]
+        ),
+        dt=0.5,
+        goal=np.array([0.0, 1.0]),
+        reached_goal_step=3,
+    )
+
+    assert path_length(data) == pytest.approx(3.0)
+    assert jerk_mean(data) == pytest.approx(1.0)
+    assert curvature_mean(data) == pytest.approx(1.0)
+
+
 def test_path_length_single_timestep_is_zero() -> None:
     """A single-timestep trajectory has zero path length."""
     data = _episode(robot_pos=np.array([[1.0, 1.0]]))

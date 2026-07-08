@@ -18,6 +18,7 @@ from robot_sf.benchmark.figures.provenance import (
 )
 from robot_sf.benchmark.figures.style import (
     figure_size,
+    metric_label,
     planner_color,
     planner_palette,
     publication_style,
@@ -30,6 +31,7 @@ __all__ = [
     "build_provenance",
     "figure_size",
     "generate_force_field_figure",
+    "metric_label",
     "planner_color",
     "planner_palette",
     "publication_style",

@@ -17,6 +17,7 @@ from robot_sf.benchmark.aggregate import (
     normalize_observation_track_mode,
     observation_track_group_label,
 )
+from robot_sf.benchmark.figures.style import metric_label, publication_style
 from robot_sf.benchmark.grouping import resolve_report_group_key
 
 if TYPE_CHECKING:
@@ -229,8 +230,6 @@ def save_pareto_png(  # noqa: PLR0913
         Metadata dict with plot info, point counts, and output paths.
     """
     os.environ.setdefault("MPLBACKEND", "Agg")
-    # Apply optional LaTeX plotting style if available.
-    _maybe_apply_latex_style()
     points, labels = compute_pareto_points(
         records,
         x_metric,
@@ -251,33 +250,40 @@ def save_pareto_png(  # noqa: PLR0913
         y_higher_better=y_higher_better,
     )
 
-    plt.figure(figsize=(6, 4))
-    # All points
-    plt.scatter(xs, ys, c="#888", label="Groups", s=24, alpha=0.7, linewidths=0.6)
-    # Frontier
-    fxs = [xs[i] for i in front]
-    fys = [ys[i] for i in front]
-    plt.scatter(fxs, fys, c="#d62728", label="Pareto front", s=36, marker="^", linewidths=0.8)
+    # Use publication style context for consistent styling
+    with publication_style(size="single"):
+        _, ax = plt.subplots()
+        # All points - use neutral gray from colorblind-safe palette
+        ax.scatter(xs, ys, c="#999999", label="Groups", s=24, alpha=0.7, linewidths=0.6)
+        # Frontier - use vermilion from colorblind-safe palette for emphasis
+        fxs = [xs[i] for i in front]
+        fys = [ys[i] for i in front]
+        ax.scatter(fxs, fys, c="#D55E00", label="Pareto front", s=36, marker="^", linewidths=0.8)
 
-    plt.xlabel(f"{x_metric} ({agg})")
-    plt.ylabel(f"{y_metric} ({agg})")
-    if title:
-        plt.title(title)
-    plt.legend(loc="best", fontsize=8)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=150)
+        # Use formatted metric labels with units
+        ax.set_xlabel(metric_label(x_metric, aggregation=agg))
+        ax.set_ylabel(metric_label(y_metric, aggregation=agg))
+        if title:
+            ax.set_title(title)
+        ax.legend(loc="best", fontsize=8)
+
+        # Save PNG
+        plt.savefig(out_path, dpi=150)
+
+        if out_pdf is not None:
+            # Save vector PDF for LaTeX inclusion
+            pdf_dir = os.path.dirname(out_pdf)
+            if pdf_dir:
+                os.makedirs(pdf_dir, exist_ok=True)
+            plt.savefig(out_pdf)
+
+        plt.close()
+
     # Force garbage collection to reduce memory footprint in long CI runs
     try:
         gc.collect()
     except Exception:
         pass
-    if out_pdf is not None:
-        # Save vector PDF for LaTeX inclusion
-        pdf_dir = os.path.dirname(out_pdf)
-        if pdf_dir:
-            os.makedirs(pdf_dir, exist_ok=True)
-        plt.savefig(out_pdf)
-    plt.close()
 
     front_labels = [labels[i] for i in front]
     payload: dict[str, object] = {

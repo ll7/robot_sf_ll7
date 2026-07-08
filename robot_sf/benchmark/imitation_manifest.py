@@ -133,7 +133,7 @@ def _to_json_ready(value: Any) -> Any:
     if hasattr(value, "isoformat"):
         try:
             return value.isoformat()  # type: ignore[return-value]
-        except Exception:  # pragma: no cover - best effort fallback
+        except (TypeError, ValueError, AttributeError):  # pragma: no cover - best effort fallback
             pass
     return str(value)
 

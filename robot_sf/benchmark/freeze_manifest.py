@@ -403,7 +403,7 @@ def evaluate_freeze_manifest(
     )
     try:
         freeze_contract = load_freeze_manifest(freeze_manifest_path)
-    except Exception as exc:
+    except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:
         return {
             "path": str(Path(freeze_manifest_path)),
             "status": "error",

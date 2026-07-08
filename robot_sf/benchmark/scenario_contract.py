@@ -249,7 +249,7 @@ def validate_scenario_contract_references(
 
     try:
         scenarios = load_scenarios(scenario_path)
-    except Exception as exc:
+    except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:
         return [f"scenario_ref.source '{contract.scenario_ref.source}' could not be loaded: {exc}"]
 
     scenario_names = set(_scenario_names_from_payload(scenarios))

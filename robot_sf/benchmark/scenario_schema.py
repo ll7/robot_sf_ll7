@@ -22,7 +22,7 @@ from robot_sf.common.json_pointer import json_pointer
 
 try:
     from jsonschema import Draft7Validator
-except Exception as e:  # pragma: no cover - jsonschema is project dependency
+except ImportError as e:  # pragma: no cover - jsonschema is project dependency
     raise RuntimeError("jsonschema package is required for scenario validation") from e
 
 SCENARIO_MATRIX_SCHEMA_VERSION = "robot_sf.scenario_matrix.v1"
@@ -81,7 +81,7 @@ def validate_scenario_list(scenarios: list[dict[str, Any]]) -> list[dict[str, An
                             "path": "/repeats",
                         },
                     )
-            except Exception:
+            except (ValueError, TypeError):
                 errors.append(
                     {
                         "index": i,

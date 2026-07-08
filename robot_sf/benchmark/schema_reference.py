@@ -91,7 +91,7 @@ class SchemaReference:
 
             return schema
 
-        except Exception:
+        except (OSError, ValueError, KeyError, TypeError):
             logger.exception(f"Failed to load schema from {full_path}")
             raise
 

@@ -146,7 +146,7 @@ def validate_artifact_catalog(path: Path) -> list[ArtifactCatalogIssue]:
     try:
         text = path.read_text(encoding="utf-8")
         payload = json.loads(text) if path.suffix.lower() == ".json" else yaml.safe_load(text)
-    except Exception as exc:  # pragma: no cover - defensive CLI path
+    except (OSError, ValueError, yaml.YAMLError) as exc:  # pragma: no cover - defensive CLI path
         return [ArtifactCatalogIssue("/", f"failed to load catalog: {exc}")]
     if not isinstance(payload, Mapping):
         return [ArtifactCatalogIssue("/", "expected a mapping payload")]

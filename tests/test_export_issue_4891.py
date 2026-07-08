@@ -148,10 +148,9 @@ class TestSha256File:
         test_file.write_text("hello\n", encoding="utf-8")
         digest = _export_module.sha256_file(test_file)
         assert len(digest) == 64  # SHA-256 hex length
-        assert (
-            digest == "ce06092fb948d9ff53507a23d24b5043b6583e6e30e4e2a7f1a1b1c1d1e1f2a2"
-            or len(digest) == 64
-        )
+        # Known SHA-256 of the literal bytes "hello\n"; pins the helper's correctness
+        # rather than merely asserting the digest length.
+        assert digest == "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"
 
 
 class TestConstants:

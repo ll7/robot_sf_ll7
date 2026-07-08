@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #4871 CrowdNav_Prediction_AttnGraph external learned-baseline feasibility smoke.** New
+  `robot_sf/planner/crowdnav_pred_attng.py` is the thinnest model-only adapter proving the shipped
+  ICRA 2023 attention-graph SRNN checkpoint (`41200.pt`, MIT, pinned at upstream `3907731`) loads and
+  acts on synthetic Robot SF observations, plus the per-step wall-clock measurement. The repo is
+  registered in `scripts/tools/manage_external_repos.py` (`stage crowdnav_pred_attng`) and the
+  PyTorch-only inference path is exercised via a `tests/planner/test_crowdnav_pred_attng.py` smoke
+  that skips cleanly when the repo is not staged. The adapter reconstructs the upstream dict
+  observation (5-step constant-velocity future edges, holonomic `ActionXY`) and reports ~1–2 ms/step
+  on CPU, flat in neighbor count. Verdict recorded in `docs/benchmark_experimental_planners.md` with
+  the full contract + transfer-caveat analysis in
+  `docs/context/issue_4871_crowdnav_pred_attng_smoke.md`. Claim boundary: `smoke evidence` only —
+  no roster addition (not in `algorithm_metadata`/`algorithm_readiness`), no benchmark campaign, no
+  retraining; zero-shot transfer into Robot SF is documented as not defensible without an
+  out-of-training-distribution caveat (holonomic vs unicycle, ORCA vs social-force crowd, GST
+  prediction variant needs TensorFlow).
 * **issue #3501 safety-wrapper deadlock-recovery stage wired into benchmark runtime.** The stateful
   fourth wrapper stage (`DeadlockRecoveryMonitor`) is now bound into the benchmark episode step loop
   via `robot_sf/benchmark/safety_wrapper_runtime.py`. `SafetyWrapperRuntimeConfig` gains an opt-in

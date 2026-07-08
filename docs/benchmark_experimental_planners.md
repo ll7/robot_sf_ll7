@@ -136,3 +136,16 @@ testing-only planners. None of them currently meet the promotion bar.
 - Keep all testing-only planners behind `allow_testing_algorithms: true`.
 - Treat their existing benchmark notes as negative evidence, not missing paperwork.
 - Do not remove the guard for documentation completeness alone.
+
+## External learned-baseline feasibility smokes
+
+These are go/no-go records for reusing third-party learned planners as external
+baselines. They are **pre-roster**: a smoke PASS means the upstream loads and acts
+locally, not that the planner is benchmark-ready or rostered. Zero-shot transfer
+into Robot SF scenarios requires the documented out-of-training-distribution
+caveats; roster/campaign decisions are separate maintainer calls.
+
+| External baseline | Upstream | Smoke verdict | Per-step | Blocker for any future comparison | Detail |
+| --- | --- | --- | --- | --- | --- |
+| CrowdNav_Prediction_AttnGraph | `Shuijing725/CrowdNav_Prediction_AttnGraph` @ `3907731` (MIT, ICRA 2023) | PASS — checkpoint loads and acts on synthetic observations (model-only adapter, PyTorch path only) | ~1–2 ms CPU, flat in neighbor count | Holonomic `ActionXY` vs Robot SF unicycle; trained on ORCA pedestrians vs default social-force crowd; GST-inferred prediction variant needs TensorFlow. Results need an "evaluated out-of-training-distribution" caveat until reconciled. | `docs/context/issue_4871_crowdnav_pred_attng_smoke.md` (issue #4871) |
+

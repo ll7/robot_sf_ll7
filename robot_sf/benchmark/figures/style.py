@@ -125,6 +125,10 @@ def planner_color(planner_key: str) -> str:
     return _FALLBACK_PALETTE[idx]
 
 
+def _humanize_metric_key(metric_key: str) -> str:
+    return metric_key.replace("_", " ").strip().title()
+
+
 def metric_label(metric_key: str, *, aggregation: str | None = None) -> str:
     """Get the formatted label for a metric with optional unit and aggregation.
 
@@ -136,12 +140,14 @@ def metric_label(metric_key: str, *, aggregation: str | None = None) -> str:
         Formatted label string like "Collision rate" or "Time to goal (s)".
         Includes aggregation in parentheses if provided.
     """
-    label, unit = _METRIC_LABELS.get(metric_key, (metric_key.replace("_", " ").title(), ""))
+    normalized_key = metric_key.strip() if metric_key else ""
+    fallback_label = _humanize_metric_key(normalized_key) if normalized_key else "Metric"
+    label, unit = _METRIC_LABELS.get(normalized_key, (fallback_label, ""))
     parts = [label]
     if unit:
         parts.append(f"({unit})")
-    if aggregation:
-        parts.append(f"({aggregation})")
+    if aggregation and aggregation.strip():
+        parts.append(f"({aggregation.strip()})")
     return " ".join(parts)
 
 

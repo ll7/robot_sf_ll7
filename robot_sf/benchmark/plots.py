@@ -252,7 +252,7 @@ def save_pareto_png(  # noqa: PLR0913
 
     # Use publication style context for consistent styling
     with publication_style(size="single"):
-        _, ax = plt.subplots()
+        fig, ax = plt.subplots()
         # All points - use neutral gray from colorblind-safe palette
         ax.scatter(xs, ys, c="#999999", label="Groups", s=24, alpha=0.7, linewidths=0.6)
         # Frontier - use vermilion from colorblind-safe palette for emphasis
@@ -268,16 +268,16 @@ def save_pareto_png(  # noqa: PLR0913
         ax.legend(loc="best", fontsize=8)
 
         # Save PNG
-        plt.savefig(out_path, dpi=150)
+        fig.savefig(out_path, dpi=150)
 
         if out_pdf is not None:
             # Save vector PDF for LaTeX inclusion
             pdf_dir = os.path.dirname(out_pdf)
             if pdf_dir:
                 os.makedirs(pdf_dir, exist_ok=True)
-            plt.savefig(out_pdf)
+            fig.savefig(out_pdf)
 
-        plt.close()
+        plt.close(fig)
 
     # Force garbage collection to reduce memory footprint in long CI runs
     try:

@@ -31,6 +31,7 @@ _CATEGORY_ORDER = {
 }
 _NEAR_MISS_MIN_TTC_S = 0.5
 _LOW_PROGRESS_DISTANCE_M = 0.25
+DEFAULT_PANEL_SIZE = (6.0, 4.0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -323,11 +324,9 @@ def _render_episode_panel(
 
     # Use publication style for consistent rendering
     with publication_style(size="single"):
-        # Override to match original figure size
-        matplotlib.rcParams["figure.figsize"] = (6.0, 4.0)
         matplotlib.rcParams["figure.constrained_layout.use"] = True
 
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=DEFAULT_PANEL_SIZE, constrained_layout=True)
         if robot_xy:
             xs, ys = zip(*robot_xy, strict=True)
             ax.plot(xs, ys, color="#1f77b4", linewidth=2.0, marker="o", label="robot")

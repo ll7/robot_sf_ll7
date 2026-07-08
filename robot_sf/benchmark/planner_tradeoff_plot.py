@@ -48,6 +48,7 @@ DEFAULT_CONTROL_PLANNERS = ("goal",)
 DEFAULT_BOOTSTRAP_SAMPLES = 400
 DEFAULT_CI_CONFIDENCE = 0.95
 DEFAULT_BOOTSTRAP_SEED = 42
+DEFAULT_PLOT_SIZE = (5.2, 3.6)
 
 # Role-based color mapping using colorblind-safe palette
 # Headline planners use their specific planner colors from the shared palette
@@ -316,19 +317,19 @@ def plot_planner_tradeoff(
     # Use publication style context for consistent styling
     # Create a custom size that matches the original figure dimensions
     with publication_style(size="double"):
-        # Override figure size to match original (5.2, 3.6)
-        mpl.rcParams["figure.figsize"] = (5.2, 3.6)
         mpl.rcParams["axes.grid"] = True
         mpl.rcParams["grid.alpha"] = 0.2
         mpl.rcParams["axes.titlesize"] = 9
 
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=DEFAULT_PLOT_SIZE)
 
         for index, point in enumerate(points):
             x = point.collision_mean
             y = point.success_mean
             if point.role == "headline":
-                color = _ROLE_COLORS.get(f"headline_{point.planner_key}", planner_color("orca"))
+                color = _ROLE_COLORS.get(
+                    f"headline_{point.planner_key}", planner_color(point.planner_key)
+                )
                 xerr = _finite_error(x, point.collision_ci)
                 yerr = _finite_error(y, point.success_ci)
                 ax.errorbar(

@@ -171,3 +171,6 @@ def test_metric_label_with_aggregation() -> None:
     # Test without aggregation
     assert metric_label("collision_rate") == "Collision rate"
     assert metric_label("time_to_goal") == "Time to goal (s)"
+    assert metric_label("unknown_metric") == "Unknown Metric"
+    assert metric_label(" unknown_metric ") == "Unknown Metric"
+    assert metric_label("") == "Metric"

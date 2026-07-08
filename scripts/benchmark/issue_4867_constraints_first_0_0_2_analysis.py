@@ -131,8 +131,17 @@ def transform_episode_to_constraints_first_format(episode: Mapping) -> dict:
     - deadlock: always False (not tracked in 0.0.2)
     - safe_success: success without safety violations
     """
-    metrics = episode.get("metrics", {})
-    outcome = episode.get("outcome", {})
+    metrics = episode.get("metrics")
+    if metrics is None:
+        metrics = {}
+    outcome = episode.get("outcome")
+    if outcome is None:
+        outcome = {}
+    planner = episode.get("algo")
+    if planner is None:
+        planner = episode.get("planner")
+    if planner is None:
+        planner = "unknown"
 
     # Extract and invert metrics so higher is better for ranking
     comfort_raw = metrics.get("comfort_exposure", 0.0)
@@ -146,7 +155,7 @@ def transform_episode_to_constraints_first_format(episode: Mapping) -> dict:
     safe_success = route_complete and collisions == 0 and near_misses == 0
 
     return {
-        "planner": episode.get("algo") or episode.get("planner") or "unknown",
+        "planner": planner,
         "collisions": collisions,
         "near_miss_severity": near_misses,  # Using count as severity proxy
         "comfort": -comfort_raw,  # Invert so higher is better

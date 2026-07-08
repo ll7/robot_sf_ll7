@@ -49,6 +49,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from loguru import logger
+from shapely.errors import ShapelyError
 
 # Centralized constants imported from benchmark.constants to avoid drift.
 from robot_sf.benchmark.constants import (
@@ -2902,7 +2903,7 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
         values["_episode_metadata"] = dict(data.episode_metadata)
     try:
         values.update(calculate_signal_metrics(data))
-    except (ValueError, TypeError, KeyError, AttributeError):
+    except (ValueError, TypeError, KeyError, AttributeError, ShapelyError):
         logger.exception("Failed to compute signal metrics; falling back to unavailable defaults.")
         values.update(
             {

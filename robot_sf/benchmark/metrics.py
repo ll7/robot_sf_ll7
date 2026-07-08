@@ -2902,7 +2902,7 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
         values["_episode_metadata"] = dict(data.episode_metadata)
     try:
         values.update(calculate_signal_metrics(data))
-    except Exception:
+    except (ValueError, TypeError, KeyError, AttributeError):
         logger.exception("Failed to compute signal metrics; falling back to unavailable defaults.")
         values.update(
             {

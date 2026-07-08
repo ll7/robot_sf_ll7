@@ -57,7 +57,7 @@ def frame_shape_from_map(map_svg_path: str) -> tuple[int, int]:
     if width and height:
         try:
             return int(float(width)), int(float(height))
-        except Exception:
+        except (ValueError, TypeError):
             # fallthrough to try viewBox
             pass
 
@@ -68,7 +68,7 @@ def frame_shape_from_map(map_svg_path: str) -> tuple[int, int]:
             try:
                 _, _, w, h = parts
                 return int(float(w)), int(float(h))
-            except Exception:
+            except (ValueError, TypeError):
                 pass
 
     raise ValueError("SVG missing width/height or valid viewBox")
@@ -237,7 +237,7 @@ def generate_benchmark_plots_from_data(
         # Update source_data to include filter info
         artifact.source_data = f"{len(filtered_episodes)} episodes{filter_str}"
         artifacts.append(artifact)
-    except Exception as e:
+    except (ValueError, TypeError, RuntimeError, AttributeError) as e:
         logger.warning(f"Failed to generate metrics plot: {e}")
         artifacts.append(
             VisualArtifact(
@@ -266,7 +266,7 @@ def generate_benchmark_plots_from_data(
         # Update source_data to include filter info
         artifact.source_data = f"{len(filtered_episodes)} episodes{filter_str}"
         artifacts.append(artifact)
-    except Exception as e:
+    except (ValueError, TypeError, RuntimeError, AttributeError) as e:
         logger.warning(f"Failed to generate scenario comparison plot: {e}")
         artifacts.append(
             VisualArtifact(
@@ -463,7 +463,7 @@ def _plot_subprocess_worker(  # noqa: PLR0913
             size=size,
         )
         conn.send(("ok", artifacts))
-    except Exception as exc:  # pragma: no cover - defensive fallback
+    except (ValueError, TypeError, RuntimeError, AttributeError) as exc:  # pragma: no cover - defensive fallback
         conn.send(("err", f"{type(exc).__name__}: {exc}"))
     finally:
         conn.close()
@@ -780,7 +780,7 @@ def _generate_metrics_plot(
         # Ensure figures are fully released and memory returned to OS where possible
         try:
             gc.collect()
-        except Exception:
+        except (RuntimeError, TypeError):
             pass
 
         # Create artifact
@@ -940,7 +940,7 @@ def _generate_scenario_comparison_plot(
         # Ensure figures are fully released and memory returned to OS where possible
         try:
             gc.collect()
-        except Exception:
+        except (RuntimeError, TypeError):
             pass
 
         # Create artifact

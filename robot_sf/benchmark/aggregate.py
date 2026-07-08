@@ -528,7 +528,7 @@ def _ensure_snqi(
         return
     try:
         rec["metrics"]["snqi"] = float(snqi_fn(rec["metrics"], weights, baseline_stats=baseline))
-    except Exception:
+    except (ValueError, TypeError):
         logger.bind(
             event="aggregation_snqi_compute_failed",
             episode_id=rec.get("episode_id"),
@@ -735,7 +735,12 @@ def _bootstrap_ci(
         xb = x[idx]
         try:
             stats[i] = float(stat_fn(xb))
-        except Exception:
+        except (ValueError, TypeError) as exc:
+            logger.debug(
+                "Bootstrap resample {i} failed: {exc}. Treating as NaN.",
+                i=i,
+                exc=exc,
+            )
             stats[i] = float("nan")
     stats = stats[~np.isnan(stats)]
     if stats.size == 0:

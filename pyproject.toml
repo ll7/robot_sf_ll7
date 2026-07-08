@@ -451,8 +451,8 @@ max-statements = 60
 # CLI tools: allow prints to stdout.
 # Existing broad benchmark exception handlers are ratcheted by
 # scripts/validation/check_broad_exceptions.py; keep BLE001 scoped current files.
+# Issue #4859: aggregate.py worst sites fixed, BLE001 removed to enforce lint guard.
 "robot_sf/benchmark/ablation.py" = ["BLE001"]
-"robot_sf/benchmark/aggregate.py" = ["BLE001"]
 "robot_sf/benchmark/artifact_catalog.py" = ["BLE001"]
 "robot_sf/benchmark/camera_ready_campaign.py" = ["BLE001"]
 "robot_sf/benchmark/camera_ready/campaign.py" = ["BLE001"]
@@ -472,7 +472,7 @@ max-statements = 60
 "robot_sf/benchmark/imitation_manifest.py" = ["BLE001"]
 "robot_sf/benchmark/map_runner.py" = ["BLE001"]
 "robot_sf/benchmark/map_runner_batch_runner.py" = ["BLE001"]
-"robot_sf/benchmark/metrics.py" = ["BLE001"]
+# Issue #4859: metrics.py worst sites fixed, BLE001 removed to enforce lint guard.
 "robot_sf/benchmark/orca_preflight.py" = ["BLE001"]
 "robot_sf/benchmark/planner_inclusion.py" = ["BLE001"]
 "robot_sf/benchmark/plots.py" = ["BLE001"]
@@ -488,7 +488,7 @@ max-statements = 60
 "robot_sf/benchmark/summary.py" = ["BLE001"]
 "robot_sf/benchmark/validation/trajectory_dataset.py" = ["BLE001"]
 "robot_sf/benchmark/validation_utils.py" = ["BLE001"]
-"robot_sf/benchmark/visualization.py" = ["BLE001"]
+# Issue #4859: visualization.py worst sites fixed, BLE001 removed to enforce lint guard.
 "robot_sf/adversarial/**/*.py" = ["D417", "DOC201", "TC001", "TC003"]
 "robot_sf/adversarial/config.py" = ["C901", "PLR0913"]
 # trajectory_verifier: verify_trajectory has 9 keyword-only args as specified by issue #4757 API contract

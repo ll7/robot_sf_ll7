@@ -141,11 +141,8 @@ is_optional_test_path() {
   # Check against the loaded optional_test_paths array
   for pattern in "${optional_test_paths[@]}"; do
     # Directory pattern: check if path is the directory or under it
+    # Exact file match: path equals pattern
     if [[ "$path" == "$pattern" || "$path" == "$pattern"/* ]]; then
-      return 0
-    fi
-    # Exact file match
-    if [[ "$path" == "$pattern" ]]; then
       return 0
     fi
   done

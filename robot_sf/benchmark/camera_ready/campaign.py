@@ -710,13 +710,10 @@ def _run_campaign_planner_variant_subprocess(
         algo_config_path=planner.algo_config_path,
     )
 
-    # Spawn subprocess to run the arm
-    worker_script = Path(__file__).parent / "resource_lifecycle.py"
-
     # Serialize parameters for subprocess
     arm_params_json = json.dumps(asdict(arm_params))
     proc = subprocess.run(
-        [sys.executable, str(worker_script)],
+        [sys.executable, "-m", "robot_sf.benchmark.camera_ready.resource_lifecycle"],
         input=arm_params_json,
         capture_output=True,
         text=True,
@@ -787,6 +784,8 @@ def _run_campaign_planner_variant_subprocess(
             seed_variability_records=seed_variability_records,
             stop_requested=stop_requested,
         )
+
+    warnings: list[str] = []
 
     # Parse subprocess result
     try:

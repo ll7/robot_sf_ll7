@@ -208,6 +208,10 @@ class TestSubprocessWorkerExecution:
             result = _main_subprocess_worker()
             assert result == 0
             mock_run_arm.assert_called_once()
+            params = mock_run_arm.call_args.args[0]
+            assert isinstance(params.scenario_matrix_path, Path)
+            assert isinstance(params.episodes_path, Path)
+            assert isinstance(params.summary_path, Path)
 
 
 class TestRunCampaignArmIsolationParameter:

@@ -131,7 +131,6 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
         Summary dict compatible with campaign orchestration expectations.
     """
 
-    from robot_sf.benchmark.aggregate import read_jsonl  # noqa: PLC0415
     from robot_sf.benchmark.camera_ready._config import (  # noqa: PLC0415
         _scenario_with_kinematics,
     )
@@ -231,6 +230,7 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
     summary["episodes_per_second"] = (episodes_written / runtime_sec) if runtime_sec > 0 else 0.0
     summary["kinematics"] = params.kinematics
     summary["benchmark_availability"] = availability_payload(summary)
+    summary["episodes_total"] = episodes_written
 
     # Write summary.json
     params.summary_path.parent.mkdir(parents=True, exist_ok=True)
@@ -247,7 +247,7 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
         "summary": summary,
         "cleanup_metrics": cleanup_metrics,
         "warnings": warnings,
-        "episodes_total": len(read_jsonl(str(params.episodes_path))) if params.episodes_path.exists() else 0,
+        "episodes_total": episodes_written,
     }
 
     return result
@@ -275,6 +275,13 @@ def _main_subprocess_worker() -> int:
     # Read parameters from stdin
     params_json = sys.stdin.read()
     params_dict = json.loads(params_json)
+    for field_name in ("scenario_matrix_path", "episodes_path", "summary_path"):
+        field_value = params_dict.get(field_name)
+        if field_value:
+            params_dict[field_name] = Path(field_value)
+    algo_config_path = params_dict.get("algo_config_path")
+    if algo_config_path:
+        params_dict["algo_config_path"] = Path(algo_config_path)
 
     params = _SubprocessArmParams(**params_dict)
 

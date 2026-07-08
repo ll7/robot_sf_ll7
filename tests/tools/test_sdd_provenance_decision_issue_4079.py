@@ -85,8 +85,12 @@ def test_sdd_staging_doc_excludes_kaggle_checksum_from_manifest() -> None:
     manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
     assert isinstance(manifest, dict), "Manifest must be a mapping"
 
-    checksums = manifest.get("checksums", {})
-    expected_tree_sha256 = checksums.get("expected_tree_sha256") if isinstance(checksums, dict) else None
+    checksums = manifest.get("checksums")
+    assert isinstance(checksums, dict), "Manifest must contain a 'checksums' mapping"
+    assert "expected_tree_sha256" in checksums, (
+        "Manifest checksums must include expected_tree_sha256"
+    )
+    expected_tree_sha256 = checksums["expected_tree_sha256"]
 
     # The Kaggle checksum must NOT be pinned as the expected checksum
     kaggle_checksum = "66dec2c82b0a01b23bf9fa9acef352af86549e7ea749811ea4ef9c47003d4acf"

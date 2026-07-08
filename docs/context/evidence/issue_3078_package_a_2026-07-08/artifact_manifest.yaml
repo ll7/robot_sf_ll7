@@ -1,4 +1,5 @@
 schema_version: artifact-manifest.v1
+review_marker: AI-GENERATED NEEDS-REVIEW
 issue: 3078
 parent_issue: 3057
 package: A

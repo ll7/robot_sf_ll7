@@ -1,4 +1,5 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "artifacts": {
     "baseline_table": "output/benchmarks/issue_3078_package_a/baseline_table.csv",
     "seed_sufficiency_analysis": "output/benchmarks/issue_3078_package_a/seed_sufficiency/seed_sufficiency_analysis.json",

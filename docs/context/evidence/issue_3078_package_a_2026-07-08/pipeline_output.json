@@ -1,4 +1,5 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "artifacts": {
     "baseline_table": "output/benchmarks/issue_3078_package_a/baseline_table.csv",
     "claim_card": "output/benchmarks/issue_3078_package_a/claim_card.json",

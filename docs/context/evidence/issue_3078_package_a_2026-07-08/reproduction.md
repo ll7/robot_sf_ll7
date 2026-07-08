@@ -1,4 +1,6 @@
-# Package A Pipeline Output
+<!-- AI-GENERATED (robot_sf#3078, 2026-07-08) - NEEDS-REVIEW -->
+
+# Issue #3078 — Package A Pipeline Output
 
 - Issue: `#3078`
 - Classification: `diagnostic`

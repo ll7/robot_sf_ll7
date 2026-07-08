@@ -1,13 +1,13 @@
-planner_key,benchmark_snqi,heldout_snqi,transfer_delta_snqi,transfer_direction
-goal,-0.10834588948566656,0.68,-0.7883458894856666,negative_transfer
-hybrid_rule_v3_fast_progress,0.021875291801255047,,,incomplete
-hybrid_rule_v3_fast_progress_static_escape,0.021875291801255047,,,incomplete
-hybrid_rule_v3_fast_progress_static_escape_continuous,0.05197831903096121,,,incomplete
-orca,-0.5054352687555362,0.45,-0.9554352687555363,negative_transfer
-ppo,-0.29142105055583606,,,incomplete
-prediction_planner,-0.10039033325596686,,,incomplete
-sacadrl,-0.40917822487994254,,,incomplete
-scenario_adaptive_hybrid_orca_v1,0.021875291801255047,,,incomplete
-scenario_adaptive_hybrid_orca_v2_collision_guard,0.021875291801255047,,,incomplete
-social_force,-0.41206322959262204,0.6,-1.012063229592622,negative_transfer
-socnav_sampling,-0.09998383103973885,,,incomplete
+planner_key,benchmark_snqi,heldout_snqi,transfer_delta_snqi,transfer_direction,review_marker
+goal,-0.10834588948566656,0.68,-0.7883458894856666,negative_transfer,AI-GENERATED NEEDS-REVIEW
+hybrid_rule_v3_fast_progress,0.021875291801255047,,,incomplete,AI-GENERATED NEEDS-REVIEW
+hybrid_rule_v3_fast_progress_static_escape,0.021875291801255047,,,incomplete,AI-GENERATED NEEDS-REVIEW
+hybrid_rule_v3_fast_progress_static_escape_continuous,0.05197831903096121,,,incomplete,AI-GENERATED NEEDS-REVIEW
+orca,-0.5054352687555362,0.45,-0.9554352687555363,negative_transfer,AI-GENERATED NEEDS-REVIEW
+ppo,-0.29142105055583606,,,incomplete,AI-GENERATED NEEDS-REVIEW
+prediction_planner,-0.10039033325596686,,,incomplete,AI-GENERATED NEEDS-REVIEW
+sacadrl,-0.40917822487994254,,,incomplete,AI-GENERATED NEEDS-REVIEW
+scenario_adaptive_hybrid_orca_v1,0.021875291801255047,,,incomplete,AI-GENERATED NEEDS-REVIEW
+scenario_adaptive_hybrid_orca_v2_collision_guard,0.021875291801255047,,,incomplete,AI-GENERATED NEEDS-REVIEW
+social_force,-0.41206322959262204,0.6,-1.012063229592622,negative_transfer,AI-GENERATED NEEDS-REVIEW
+socnav_sampling,-0.09998383103973885,,,incomplete,AI-GENERATED NEEDS-REVIEW

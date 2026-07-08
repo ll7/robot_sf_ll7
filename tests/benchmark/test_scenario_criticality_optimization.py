@@ -900,5 +900,3 @@ def test_csv_summary_includes_timing_columns(tmp_path: Path) -> None:
         assert "patch_s" in header, "Missing patch_s column in CSV"
         assert "simulation_s" in header, "Missing simulation_s column in CSV"
         assert "score_s" in header, "Missing score_s column in CSV"
-
-

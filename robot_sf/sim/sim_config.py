@@ -305,7 +305,10 @@ class SimulationSettings:
             raise ValueError("Pedestrian radius mustn't be negative or zero!")
         self._validate_pedestrian_uncertainty_envelope_config()
         # Check that the non-reactive response multiplier is finite and >= 0
-        if not isfinite(self.non_reactive_response_multiplier) or self.non_reactive_response_multiplier < 0:
+        if (
+            not isfinite(self.non_reactive_response_multiplier)
+            or self.non_reactive_response_multiplier < 0
+        ):
             raise ValueError("non_reactive_response_multiplier must be a finite value >= 0!")
         # Check that the goal radius is positive
         if self.goal_radius <= 0:

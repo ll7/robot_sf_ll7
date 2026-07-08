@@ -7,6 +7,8 @@ critical_intervals:
     after_s: 1.0
   ttc_threshold_crossing:
     enabled: true
+    # threshold_s uses physical line-of-sight TTC in seconds:
+    # distance / dot(relative_velocity, unit_separation_vector)
     threshold_s: 1.5
     before_s: 1.0
     after_s: 2.0

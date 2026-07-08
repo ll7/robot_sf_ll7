@@ -126,7 +126,7 @@ From PR #4822 CPU validation:
 
 - `max_workers: 1` → sequential execution
 - `max_workers: N` → up to N parallel candidates via `ProcessPoolExecutor`
-- `max_workers: 0` → auto-detect CPU count (not yet implemented; treated as 1)
+- `max_workers: 0` → auto-detect CPU count with `os.cpu_count()` and fallback to 1
 
 ### Determinism Guarantees
 
@@ -182,10 +182,6 @@ COLLISION_KEY_FALLBACKS = ("agent_collision_count", "total_collision_count", "co
 3. **Bayesian optimizer** (stretch)
    - Not required for #4792 close-out
    - Can be added post-submission if needed for comparison
-
-4. **Auto `max_workers: 0`** behavior
-   - Currently treated as `max_workers: 1`
-   - Could auto-detect CPU count in future pass
 
 ## Claim Boundary
 

@@ -37,7 +37,7 @@ dependencies = [
     "shapely>=2.1.2",
     "networkx>=3.6.1,<4.0",
     "pyvisgraph>=0.2.1",
-    "python-motion-planning==2.0.1",
+    "python-motion-planning>=2.0.1,<3",
     # OSM map extraction (Issue #392)
     "osmnx>=1.9",
     "geopandas>=1.1.4",
@@ -47,10 +47,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
-    "jupyter>=1.0.0",
-    "mypy>=1.0.0",
-]
 gpu = [
     "torch[cuda]>=2.5.1",
 ]
@@ -65,11 +61,6 @@ training = [
 ]
 recurrent = [
     "sb3-contrib>=2.7.0,<2.8.0",
-]
-docs = [
-    "myst-parser>=4.0.0",
-    "sphinx>=7.0.0",
-    "sphinx-rtd-theme>=2.0.0",
 ]
 rllib = [
     "ray[rllib]>=2.53.0",
@@ -101,15 +92,17 @@ orca = [
     # See https://github.com/mit-acl/Python-RVO2 for details; upstream is https://github.com/sybrenstuvel/Python-RVO2.
     # The fork is vendored under third_party/python-rvo2 to patch CMake compatibility.
     "pyrvo2",
-    "Cython>=3.0.0",
 ]
 socnav = [
     # SocNavBench planner prerequisites used by the vendored subset.
     "scikit-fmm>=2024.5",
 ]
+criticality = [
+    "cma>=3.3.0",
+]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "Cython>=3.0.0"]
 build-backend = "hatchling.build"
 
 [tool.hatchling.build.targets.wheel]
@@ -335,6 +328,7 @@ max-statements = 60
     "TC002",
     "D417",
     "DOC201",
+    "D102",
 ]
 "tests/pygame/**/*.py" = [
     "S101",
@@ -630,6 +624,8 @@ dev = [
     "pylint>=3.3.4",
     "pytest-xdist>=3.6.1",
     "pytest-split>=0.9.0",
+    "jupyter>=1.0.0",
+    "mypy>=1.0.0",
 ]
 docs = [
     "myst-parser>=4.0.0",

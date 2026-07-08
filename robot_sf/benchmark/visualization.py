@@ -176,6 +176,11 @@ def generate_benchmark_plots_from_data(
     output_dir: str,
     scenario_filter: str | None = None,
     baseline_filter: str | None = None,
+    *,
+    publication: bool = False,
+    formats: tuple[str, ...] = ("pdf",),
+    caption_fragment: str | None = None,
+    size: str = "single",
 ) -> list[VisualArtifact]:
     """
     Generate PDF plots by analyzing benchmark episodes from data.
@@ -185,6 +190,10 @@ def generate_benchmark_plots_from_data(
         output_dir: Directory to save generated PDF plots
         scenario_filter: Optional scenario ID to filter plots
         baseline_filter: Optional baseline name to filter plots
+        publication: Render plots in publication style with provenance sidecars
+        formats: Output formats for publication mode (pdf/png/svg)
+        caption_fragment: Optional LaTeX-ready caption fragment
+        size: Publication size preset ("single" or "double")
 
     Returns:
         List of generated VisualArtifact objects with metadata
@@ -217,7 +226,14 @@ def generate_benchmark_plots_from_data(
 
     # Generate metrics distribution plot
     try:
-        artifact = _generate_metrics_plot(filtered_episodes, str(plots_dir))
+        artifact = _generate_metrics_plot(
+            filtered_episodes,
+            str(plots_dir),
+            publication=publication,
+            formats=formats,
+            caption_fragment=caption_fragment,
+            size=size,
+        )
         # Update source_data to include filter info
         artifact.source_data = f"{len(filtered_episodes)} episodes{filter_str}"
         artifacts.append(artifact)
@@ -239,7 +255,14 @@ def generate_benchmark_plots_from_data(
 
     # Generate scenario comparison plot
     try:
-        artifact = _generate_scenario_comparison_plot(filtered_episodes, str(plots_dir))
+        artifact = _generate_scenario_comparison_plot(
+            filtered_episodes,
+            str(plots_dir),
+            publication=publication,
+            formats=formats,
+            caption_fragment=caption_fragment,
+            size=size,
+        )
         # Update source_data to include filter info
         artifact.source_data = f"{len(filtered_episodes)} episodes{filter_str}"
         artifacts.append(artifact)
@@ -267,6 +290,11 @@ def generate_benchmark_plots_from_file(
     output_dir: str,
     scenario_filter: str | None = None,
     baseline_filter: str | None = None,
+    *,
+    publication: bool = False,
+    formats: tuple[str, ...] = ("pdf",),
+    caption_fragment: str | None = None,
+    size: str = "single",
 ) -> list[VisualArtifact]:
     """
     Generate PDF plots by analyzing benchmark episodes from a file.
@@ -276,6 +304,10 @@ def generate_benchmark_plots_from_file(
         output_dir: Directory to save generated PDF plots
         scenario_filter: Optional scenario ID to filter plots
         baseline_filter: Optional baseline name to filter plots
+        publication: Render plots in publication style with provenance sidecars
+        formats: Output formats for publication mode (pdf/png/svg)
+        caption_fragment: Optional LaTeX-ready caption fragment
+        size: Publication size preset ("single" or "double")
 
     Returns:
         List of generated VisualArtifact objects with metadata
@@ -297,6 +329,10 @@ def generate_benchmark_plots_from_file(
             output_dir,
             scenario_filter,
             baseline_filter,
+            publication=publication,
+            formats=formats,
+            caption_fragment=caption_fragment,
+            size=size,
         )
 
     episodes = _load_episodes(str(episodes_path))
@@ -305,6 +341,10 @@ def generate_benchmark_plots_from_file(
         output_dir,
         scenario_filter,
         baseline_filter,
+        publication=publication,
+        formats=formats,
+        caption_fragment=caption_fragment,
+        size=size,
     )
 
 
@@ -313,6 +353,11 @@ def generate_benchmark_plots(
     output_dir: str,
     scenario_filter: str | None = None,
     baseline_filter: str | None = None,
+    *,
+    publication: bool = False,
+    formats: tuple[str, ...] = ("pdf",),
+    caption_fragment: str | None = None,
+    size: str = "single",
 ) -> list[VisualArtifact]:
     """
     Generate PDF plots by analyzing benchmark episodes.
@@ -322,6 +367,10 @@ def generate_benchmark_plots(
         output_dir: Directory to save generated PDF plots
         scenario_filter: Optional scenario ID to filter plots
         baseline_filter: Optional baseline name to filter plots
+        publication: Render plots in publication style with provenance sidecars
+        formats: Output formats for publication mode (pdf/png/svg)
+        caption_fragment: Optional LaTeX-ready caption fragment
+        size: Publication size preset ("single" or "double")
 
     Returns:
         List of generated VisualArtifact objects with metadata
@@ -337,6 +386,10 @@ def generate_benchmark_plots(
             output_dir,
             scenario_filter,
             baseline_filter,
+            publication=publication,
+            formats=formats,
+            caption_fragment=caption_fragment,
+            size=size,
         )
     else:
         return generate_benchmark_plots_from_data(
@@ -344,6 +397,10 @@ def generate_benchmark_plots(
             output_dir,
             scenario_filter,
             baseline_filter,
+            publication=publication,
+            formats=formats,
+            caption_fragment=caption_fragment,
+            size=size,
         )
 
 
@@ -381,12 +438,16 @@ def _should_use_plot_subprocess(
     return True
 
 
-def _plot_subprocess_worker(
+def _plot_subprocess_worker(  # noqa: PLR0913
     episodes_path: str,
     output_dir: str,
     scenario_filter: str | None,
     baseline_filter: str | None,
     conn: Connection,
+    publication: bool = False,
+    formats: tuple[str, ...] = ("pdf",),
+    caption_fragment: str | None = None,
+    size: str = "single",
 ) -> None:
     """Generate plots in a child process and return artifacts via a pipe."""
     try:
@@ -396,6 +457,10 @@ def _plot_subprocess_worker(
             output_dir,
             scenario_filter,
             baseline_filter,
+            publication=publication,
+            formats=formats,
+            caption_fragment=caption_fragment,
+            size=size,
         )
         conn.send(("ok", artifacts))
     except Exception as exc:  # pragma: no cover - defensive fallback
@@ -409,6 +474,11 @@ def _generate_plots_subprocess(
     output_dir: str,
     scenario_filter: str | None,
     baseline_filter: str | None,
+    *,
+    publication: bool = False,
+    formats: tuple[str, ...] = ("pdf",),
+    caption_fragment: str | None = None,
+    size: str = "single",
 ) -> list[VisualArtifact]:
     """Run plot generation in a subprocess to keep parent RSS stable.
 
@@ -419,7 +489,17 @@ def _generate_plots_subprocess(
     parent_conn, child_conn = ctx.Pipe(duplex=False)
     process = ctx.Process(
         target=_plot_subprocess_worker,
-        args=(episodes_path, output_dir, scenario_filter, baseline_filter, child_conn),
+        args=(
+            episodes_path,
+            output_dir,
+            scenario_filter,
+            baseline_filter,
+            child_conn,
+            publication,
+            formats,
+            caption_fragment,
+            size,
+        ),
     )
     process.start()
     child_conn.close()
@@ -530,7 +610,117 @@ def _filter_episodes(
     return filtered_episodes
 
 
-def _generate_metrics_plot(episodes: list[dict], output_dir: str) -> VisualArtifact:
+def _filter_finite(values: list) -> list[float]:
+    """Return only finite (non-None, non-NaN, non-Inf) numeric values."""
+    result = []
+    for v in values:
+        if v is None:
+            continue
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            continue
+        if np.isfinite(f):
+            result.append(f)
+    return result
+
+
+def _pair_finite(xs: list, ys: list) -> tuple[list[float], list[float]]:
+    """Return finite (x, y) pairs, dropping a pair when either side is non-finite.
+
+    Used for the success-vs-SNQI scatter so points stay episode-aligned: filtering
+    each series independently would mis-pair points when the two series drop
+    different indices.
+    """
+    xs_out: list[float] = []
+    ys_out: list[float] = []
+    for x, y in zip(xs, ys, strict=False):
+        if x is None or y is None:
+            continue
+        try:
+            fx, fy = float(x), float(y)
+        except (TypeError, ValueError):
+            continue
+        if np.isfinite(fx) and np.isfinite(fy):
+            xs_out.append(fx)
+            ys_out.append(fy)
+    return xs_out, ys_out
+
+
+def _ax_no_data(ax, title: str, xlabel: str = "", ylabel: str = "") -> None:
+    """Render a 'No valid data' placeholder on *ax* when a series is empty."""
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.text(
+        0.5,
+        0.5,
+        "No valid data",
+        transform=ax.transAxes,
+        ha="center",
+        va="center",
+        fontsize=12,
+        color="gray",
+    )
+
+
+def _populate_metrics_axes(ax1, ax2, ax3, ax4, collisions, success_rates, snqi_scores) -> None:
+    """Draw the four metrics subplots (factored for both render paths).
+
+    Filters ``None`` / non-finite values per series before plotting.
+    Renders a 'No valid data' placeholder when a filtered series is empty.
+    """
+    finite_collisions = _filter_finite(collisions)
+    finite_success = _filter_finite(success_rates)
+    finite_snqi = _filter_finite(snqi_scores)
+
+    # Plot 1: Collision distribution
+    if finite_collisions:
+        ax1.hist(finite_collisions, bins=20, alpha=0.7, color="red")
+        ax1.set_title("Collision Rate Distribution")
+        ax1.set_xlabel("Collision Rate")
+        ax1.set_ylabel("Frequency")
+    else:
+        _ax_no_data(ax1, "Collision Rate Distribution", "Collision Rate", "Frequency")
+
+    # Plot 2: Success rate distribution
+    if finite_success:
+        ax2.hist(finite_success, bins=20, alpha=0.7, color="green")
+        ax2.set_title("Success Rate Distribution")
+        ax2.set_xlabel("Success Rate")
+        ax2.set_ylabel("Frequency")
+    else:
+        _ax_no_data(ax2, "Success Rate Distribution", "Success Rate", "Frequency")
+
+    # Plot 3: SNQI distribution
+    if finite_snqi:
+        ax3.hist(finite_snqi, bins=20, alpha=0.7, color="blue")
+        ax3.set_title("SNQI Score Distribution")
+        ax3.set_xlabel("SNQI Score")
+        ax3.set_ylabel("Frequency")
+    else:
+        _ax_no_data(ax3, "SNQI Score Distribution", "SNQI Score", "Frequency")
+
+    # Plot 4: Success vs SNQI scatter (pair-filtered so points stay episode-aligned)
+    paired_success, paired_snqi = _pair_finite(success_rates, snqi_scores)
+    if paired_success:
+        ax4.scatter(paired_success, paired_snqi, alpha=0.6, color="purple")
+        ax4.set_title("Success Rate vs SNQI")
+        ax4.set_xlabel("Success Rate")
+        ax4.set_ylabel("SNQI Score")
+    else:
+        _ax_no_data(ax4, "Success Rate vs SNQI", "Success Rate", "SNQI Score")
+
+
+def _generate_metrics_plot(
+    episodes: list[dict],
+    output_dir: str,
+    *,
+    publication: bool = False,
+    formats: tuple[str, ...] = ("pdf",),
+    caption_fragment: str | None = None,
+    size: str = "single",
+) -> VisualArtifact:
     """Generate metrics distribution plot and return artifact.
 
     Returns:
@@ -540,44 +730,53 @@ def _generate_metrics_plot(episodes: list[dict], output_dir: str) -> VisualArtif
 
     try:
         # Extract metrics
-        collisions = [ep.get("metrics", {}).get("collision_rate", 0) for ep in episodes]
-        success_rates = [ep.get("metrics", {}).get("success_rate", 0) for ep in episodes]
-        snqi_scores = [ep.get("metrics", {}).get("snqi", 0) for ep in episodes]
+        collisions = [(ep.get("metrics") or {}).get("collision_rate", 0) for ep in episodes]
+        success_rates = [(ep.get("metrics") or {}).get("success_rate", 0) for ep in episodes]
+        snqi_scores = [(ep.get("metrics") or {}).get("snqi", 0) for ep in episodes]
 
-        # Create plot
-        _fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 8))
-
-        # Plot 1: Collision distribution
-        ax1.hist(collisions, bins=20, alpha=0.7, color="red")
-        ax1.set_title("Collision Rate Distribution")
-        ax1.set_xlabel("Collision Rate")
-        ax1.set_ylabel("Frequency")
-
-        # Plot 2: Success rate distribution
-        ax2.hist(success_rates, bins=20, alpha=0.7, color="green")
-        ax2.set_title("Success Rate Distribution")
-        ax2.set_xlabel("Success Rate")
-        ax2.set_ylabel("Frequency")
-
-        # Plot 3: SNQI distribution
-        ax3.hist(snqi_scores, bins=20, alpha=0.7, color="blue")
-        ax3.set_title("SNQI Score Distribution")
-        ax3.set_xlabel("SNQI Score")
-        ax3.set_ylabel("Frequency")
-
-        # Plot 4: Success vs SNQI scatter
-        ax4.scatter(success_rates, snqi_scores, alpha=0.6, color="purple")
-        ax4.set_title("Success Rate vs SNQI")
-        ax4.set_xlabel("Success Rate")
-        ax4.set_ylabel("SNQI Score")
-
-        plt.tight_layout()
-
-        # Save plot
         plot_filename = "metrics_distribution.pdf"
-        plot_path = Path(output_dir) / plot_filename
-        plt.savefig(plot_path, format="pdf", bbox_inches="tight")
-        plt.close(_fig)
+        if publication:
+            from robot_sf.benchmark.figures.export import save_publication_figure  # noqa: PLC0415
+            from robot_sf.benchmark.figures.provenance import build_provenance  # noqa: PLC0415
+            from robot_sf.benchmark.figures.style import publication_style  # noqa: PLC0415
+
+            with publication_style(size=size):
+                _fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 8))
+                _populate_metrics_axes(ax1, ax2, ax3, ax4, collisions, success_rates, snqi_scores)
+                plt.tight_layout()
+                output_base = Path(output_dir) / "metrics_distribution"
+                provenance = build_provenance(
+                    generator_command="generate_benchmark_plots",
+                    figure_formats=list(formats),
+                    claim_boundary="Benchmark metrics distribution plot; presentation only.",
+                )
+                saved = save_publication_figure(
+                    _fig,
+                    output_base,
+                    formats=formats,
+                    provenance=provenance,
+                    caption_fragment=caption_fragment,
+                )
+            plt.close(_fig)
+            # ``formats`` may exclude pdf; reference an actually-written figure
+            # file (pdf preferred) so the size probe below cannot FileNotFoundError.
+            plot_path = next(
+                (p for p in saved if p.suffix == ".pdf"),
+                next((p for p in saved if p.suffix != ".json"), output_base.with_suffix(".pdf")),
+            )
+            plot_filename = plot_path.name
+        else:
+            # Create plot
+            _fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 8))
+            _populate_metrics_axes(ax1, ax2, ax3, ax4, collisions, success_rates, snqi_scores)
+
+            plt.tight_layout()
+
+            # Save plot
+            plot_path = Path(output_dir) / plot_filename
+            plt.savefig(plot_path, format="pdf", bbox_inches="tight")
+            plt.close(_fig)
+
         # Ensure figures are fully released and memory returned to OS where possible
         try:
             gc.collect()
@@ -591,7 +790,7 @@ def _generate_metrics_plot(episodes: list[dict], output_dir: str) -> VisualArtif
         return VisualArtifact(
             artifact_id=f"plot_metrics_{generation_time.timestamp()}",
             artifact_type="plot",
-            format="pdf",
+            format=plot_path.suffix.lstrip(".") or "pdf",
             filename=plot_filename,
             source_data=f"{len(episodes)} episodes",
             generation_time=generation_time,
@@ -606,7 +805,53 @@ def _generate_metrics_plot(episodes: list[dict], output_dir: str) -> VisualArtif
         )
 
 
-def _generate_scenario_comparison_plot(episodes: list[dict], output_dir: str) -> VisualArtifact:
+def _populate_scenario_comparison_axes(
+    ax1, ax2, ax3, scenarios, avg_snqi, avg_collisions, success_rates
+) -> None:
+    """Draw the three scenario comparison subplots (factored for both paths).
+
+    ``avg_snqi``, ``avg_collisions``, and ``success_rates`` must already be
+    finite-filtered lists aligned with ``scenarios``.  When a series is empty
+    (no scenarios remain after filtering), a 'No valid data' placeholder is
+    rendered instead of calling bar() with an empty sequence.
+    """
+    # Plot 1: Average SNQI by scenario
+    if scenarios:
+        ax1.bar(scenarios, avg_snqi, color="blue", alpha=0.7)
+        ax1.set_title("Average SNQI by Scenario")
+        ax1.set_ylabel("SNQI Score")
+        ax1.tick_params(axis="x", rotation=45)
+    else:
+        _ax_no_data(ax1, "Average SNQI by Scenario", ylabel="SNQI Score")
+
+    # Plot 2: Average collision rate by scenario
+    if scenarios:
+        ax2.bar(scenarios, avg_collisions, color="red", alpha=0.7)
+        ax2.set_title("Average Collision Rate by Scenario")
+        ax2.set_ylabel("Collision Rate")
+        ax2.tick_params(axis="x", rotation=45)
+    else:
+        _ax_no_data(ax2, "Average Collision Rate by Scenario", ylabel="Collision Rate")
+
+    # Plot 3: Success rate by scenario
+    if scenarios:
+        ax3.bar(scenarios, success_rates, color="green", alpha=0.7)
+        ax3.set_title("Success Rate by Scenario")
+        ax3.set_ylabel("Success Rate")
+        ax3.tick_params(axis="x", rotation=45)
+    else:
+        _ax_no_data(ax3, "Success Rate by Scenario", ylabel="Success Rate")
+
+
+def _generate_scenario_comparison_plot(
+    episodes: list[dict],
+    output_dir: str,
+    *,
+    publication: bool = False,
+    formats: tuple[str, ...] = ("pdf",),
+    caption_fragment: str | None = None,
+    size: str = "single",
+) -> VisualArtifact:
     """Generate scenario comparison plot and return artifact.
 
     Returns:
@@ -631,42 +876,67 @@ def _generate_scenario_comparison_plot(episodes: list[dict], output_dir: str) ->
 
         for scenario in scenarios:
             eps = scenario_groups[scenario]
-            snqi_scores = [ep.get("metrics", {}).get("snqi", 0) for ep in eps]
-            collision_rates = [ep.get("metrics", {}).get("collision_rate", 0) for ep in eps]
-            successes = [ep.get("metrics", {}).get("success_rate", 1) for ep in eps]
+            snqi_scores = _filter_finite([(ep.get("metrics") or {}).get("snqi") for ep in eps])
+            collision_rates = _filter_finite(
+                [(ep.get("metrics") or {}).get("collision_rate") for ep in eps]
+            )
+            successes = _filter_finite(
+                [(ep.get("metrics") or {}).get("success_rate") for ep in eps]
+            )
 
-            avg_snqi.append(sum(snqi_scores) / len(snqi_scores))
-            avg_collisions.append(sum(collision_rates) / len(collision_rates))
-            success_rates.append(sum(successes) / len(successes))
+            avg_snqi.append(sum(snqi_scores) / len(snqi_scores) if snqi_scores else 0.0)
+            avg_collisions.append(
+                sum(collision_rates) / len(collision_rates) if collision_rates else 0.0
+            )
+            success_rates.append(sum(successes) / len(successes) if successes else 0.0)
 
-        # Create plot
-        _fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
-
-        # Plot 1: Average SNQI by scenario
-        ax1.bar(scenarios, avg_snqi, color="blue", alpha=0.7)
-        ax1.set_title("Average SNQI by Scenario")
-        ax1.set_ylabel("SNQI Score")
-        ax1.tick_params(axis="x", rotation=45)
-
-        # Plot 2: Average collision rate by scenario
-        ax2.bar(scenarios, avg_collisions, color="red", alpha=0.7)
-        ax2.set_title("Average Collision Rate by Scenario")
-        ax2.set_ylabel("Collision Rate")
-        ax2.tick_params(axis="x", rotation=45)
-
-        # Plot 3: Success rate by scenario
-        ax3.bar(scenarios, success_rates, color="green", alpha=0.7)
-        ax3.set_title("Success Rate by Scenario")
-        ax3.set_ylabel("Success Rate")
-        ax3.tick_params(axis="x", rotation=45)
-
-        plt.tight_layout()
-
-        # Save plot
         plot_filename = "scenario_comparison.pdf"
-        plot_path = Path(output_dir) / plot_filename
-        plt.savefig(plot_path, format="pdf", bbox_inches="tight")
-        plt.close(_fig)
+        if publication:
+            from robot_sf.benchmark.figures.export import save_publication_figure  # noqa: PLC0415
+            from robot_sf.benchmark.figures.provenance import build_provenance  # noqa: PLC0415
+            from robot_sf.benchmark.figures.style import publication_style  # noqa: PLC0415
+
+            with publication_style(size=size):
+                _fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
+                _populate_scenario_comparison_axes(
+                    ax1, ax2, ax3, scenarios, avg_snqi, avg_collisions, success_rates
+                )
+                plt.tight_layout()
+                output_base = Path(output_dir) / "scenario_comparison"
+                provenance = build_provenance(
+                    generator_command="generate_benchmark_plots",
+                    figure_formats=list(formats),
+                    claim_boundary="Scenario comparison plot; presentation only.",
+                )
+                saved = save_publication_figure(
+                    _fig,
+                    output_base,
+                    formats=formats,
+                    provenance=provenance,
+                    caption_fragment=caption_fragment,
+                )
+            plt.close(_fig)
+            # ``formats`` may exclude pdf; reference an actually-written figure
+            # file (pdf preferred) so the size probe below cannot FileNotFoundError.
+            plot_path = next(
+                (p for p in saved if p.suffix == ".pdf"),
+                next((p for p in saved if p.suffix != ".json"), output_base.with_suffix(".pdf")),
+            )
+            plot_filename = plot_path.name
+        else:
+            # Create plot
+            _fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
+            _populate_scenario_comparison_axes(
+                ax1, ax2, ax3, scenarios, avg_snqi, avg_collisions, success_rates
+            )
+
+            plt.tight_layout()
+
+            # Save plot
+            plot_path = Path(output_dir) / plot_filename
+            plt.savefig(plot_path, format="pdf", bbox_inches="tight")
+            plt.close(_fig)
+
         # Ensure figures are fully released and memory returned to OS where possible
         try:
             gc.collect()
@@ -680,7 +950,7 @@ def _generate_scenario_comparison_plot(episodes: list[dict], output_dir: str) ->
         return VisualArtifact(
             artifact_id=f"plot_scenario_{generation_time.timestamp()}",
             artifact_type="plot",
-            format="pdf",
+            format=plot_path.suffix.lstrip(".") or "pdf",
             filename=plot_filename,
             source_data=f"{len(scenarios)} scenarios, {len(episodes)} episodes",
             generation_time=generation_time,

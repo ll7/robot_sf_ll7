@@ -1,0 +1,22 @@
+schema_version: failure-record.v1
+failure_record:
+  id: event-disruption-waymo-001
+  source: "Adapted from public robotaxi incident reports"
+  date: "2025-06-15"
+  environment: event
+  actors:
+    - type: pedestrian
+      count: 15
+      description: "Dense crowd at event exit"
+    - type: temporary_obstacle
+      count: 1
+      description: "Abandoned stroller on path"
+  triggering_condition: "Sudden crowd surge combined with unexpected static obstacle"
+  failure_mode: blocked_path
+  contextual_factors:
+    - dense_crowd
+    - temporary_obstacle
+    - abnormal_hazard
+  required_manual_review: true
+  claim_boundary: "scenario hypothesis only; not evidence"
+  notes: "Adapted as AMMV ODD-stress proxy, not direct robotaxi simulation"

@@ -1,0 +1,153 @@
+schema_version: robot_sf.scenario_matrix.v1
+scenarios:
+- name: event_disruption_public_exit_blocked_path_v1
+  map_id: classic_station_platform
+  scenario_family: event_disruption
+  simulation_config:
+    max_episode_steps: 500
+    ped_density: 0.2
+    archetype_composition:
+      exiting_crowd: 0.6
+      counter_flow: 0.25
+      non_cooperative: 0.15
+    archetype_speed_factors:
+      exiting_crowd: 1.2
+      counter_flow: 0.8
+      non_cooperative: 0.5
+    archetype_seed: 4759
+    route_spawn_distribution: "uniform"
+    route_spawn_jitter_frac: 0.1
+    route_spawn_seed: 4759
+  robot_config:
+    type: "differential_drive"
+    radius: 0.3
+    max_linear_speed: 1.0
+    max_angular_speed: 2.0
+  single_pedestrians:
+    - id: p1
+      goal: null
+      trajectory:
+        - [10.0, 18.0]
+        - [10.0, 12.0]
+        - [8.0, 6.0]
+        - [8.0, 2.0]
+      speed_m_s: 1.2
+      start_delay_s: 0.0
+      note: dense exit flow, outbound
+      metadata:
+        intent_label: crowd_exit_outbound
+    - id: p2
+      goal: null
+      trajectory:
+        - [14.0, 2.0]
+        - [14.0, 8.0]
+        - [12.0, 14.0]
+        - [12.0, 20.0]
+      speed_m_s: 0.8
+      start_delay_s: 2.0
+      note: counter-flow pedestrian
+      metadata:
+        intent_label: counter_flow_inbound
+    - id: p3
+      goal: null
+      trajectory:
+        - [6.0, 10.0]
+      start_delay_s: 0.0
+      wait_at:
+        - waypoint_index: 0
+          wait_s: 30.0
+          note: non-cooperative stopper in zone
+      hold_until_robot_within_m: 0.5
+      hold_ref_point: [6.0, 10.0]
+      hold_timeout_s: 60.0
+      note: non-cooperative pedestrian blocking path segment
+      metadata:
+        intent_label: non_cooperative_blocker
+  platform_semantics:
+    status: "metadata_only"
+    regions:
+      - id: temporary_blockage_01
+        kind: "hazard"
+        shape: "bbox"
+        bounds: [5.0, 6.0, 9.0, 14.0]
+        note: Temporary path blockage simulating event barricade
+        metadata:
+          blockage_type: event_barricade
+          removal_time_s: null
+          hazard_class: soft_blockage
+      - id: hazard_object_01
+        kind: "hazard"
+        shape: "polygon"
+        points:
+          - [7.5, 8.0]
+          - [7.5, 10.0]
+          - [8.5, 10.0]
+          - [8.5, 8.0]
+        note: Nonstandard obstacle (firework debris proxy)
+        metadata:
+          hazard_type: unexpected_debris
+          hazard_class: rigid_obstacle
+  observation_visibility:
+    enabled: false
+  metadata:
+    scenario_family: event_disruption
+    purpose: >
+      Experimental ODD-stress proxy for public-event disruption: dense crowd
+      exit flow with a temporary path blockage and nonstandard hazard object.
+      Models the class of failure triggered when a robot must transit shared
+      space during or after a mass public event that has produced blocked paths,
+      abnormal pedestrian behavior, and unexpected obstacles.
+    archetype: event_disruption_public_exit
+    flow: dense_bidirectional_with_blockage
+    behavior: crowd_exit_blockage
+    density: high
+    density_advisory: stress_proxy_only
+    not_real_world_event_model: true
+    odd_stress_proxy: public_event_disruption
+    expected_failure_modes:
+      - fallback_brake
+      - stuck
+      - near_miss
+      - excessive_pedestrian_disruption
+      - collision_with_hazard
+    disruption_dimensions:
+      dense_pedestrian_exit_flow: true
+      blocked_path_temporary_closure: true
+      non_cooperative_pedestrians: true
+      unexpected_hazard_object: true
+      communication_loss_flag: false
+      low_battery_limited_fallback: false
+      remote_assistance_unavailable: true
+      emergency_stop_trigger: true
+    communication_loss_flag: false
+    remote_assistance_available: false
+    limited_fallback_horizon_s: 3.0
+    authoring:
+      status: draft
+      source_issue: https://github.com/ll7/robot_sf_ll7/issues/4759
+      benchmark_evidence: false
+      claim_boundary: >
+        Experimental ODD-stress proxy, not a real-world event reconstruction.
+        Uses existing 2D simulation primitives to stress-test shared-space
+        autonomy under public-event conditions. Does not prove or claim
+        realistic crowd dynamics or robotaxi deployment equivalence.
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: >
+        Prototype disruption scenario; synthetic pedestrian trajectories and
+        obstacle placement for architectural stress testing.  Requires runner
+        integration and benchmark evidence before use in planner ranking.
+      metrics_updated_on: null
+      metrics:
+        min_distance: null
+        mean_distance: null
+        robot_ped_within_5m_frac: null
+        ped_force_mean: null
+        force_q95: null
+  seeds:
+    - 4759
+    - 4760
+    - 4761

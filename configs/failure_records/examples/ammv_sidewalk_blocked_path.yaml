@@ -1,0 +1,24 @@
+schema_version: failure-record.v1
+failure_record:
+  id: ammv-sidewalk-blocked-001
+  source: "Synthetic AMMV sidewalk scenario"
+  date: "2026-07-07"
+  environment: sidewalk
+  actors:
+    - type: pedestrian
+      count: 4
+      description: "Pedestrians passing around obstacle"
+    - type: temporary_obstacle
+      count: 1
+      description: "Construction barrier blocking 50% of path"
+  triggering_condition: "Robot encounters partially blocked sidewalk with oncoming pedestrians"
+  failure_mode: blocked_path
+  contextual_factors:
+    - temporary_obstacle
+    - narrow_clearance
+  required_manual_review: true
+  claim_boundary: "scenario hypothesis only; not evidence"
+  expected_failure_modes:
+    - stuck
+    - near_miss
+    - excessive_detour

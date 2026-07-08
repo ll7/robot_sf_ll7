@@ -1,7 +1,5 @@
 """Validation tests for the dissertation gap report JSON and source accounting."""
 
-# ruff: noqa: D102
-
 from __future__ import annotations
 
 import json

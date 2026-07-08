@@ -1,0 +1,29 @@
+schema_version: critical-intervals.v1
+claim_boundary: experimental trace-window diagnostics only
+critical_intervals:
+  closest_approach:
+    enabled: true
+    before_s: 2.0
+    after_s: 1.0
+  ttc_threshold_crossing:
+    enabled: true
+    threshold_s: 1.5
+    before_s: 1.0
+    after_s: 2.0
+  first_braking_event:
+    enabled: true
+    deceleration_threshold_mps2: 0.75
+    before_s: 1.0
+    after_s: 2.0
+  collision_or_near_miss:
+    enabled: true
+    before_s: 2.0
+    after_s: 2.0
+  recovery_after_avoidance:
+    enabled: false
+    before_s: 0.5
+    after_s: 3.0
+  planner_mode_switch:
+    enabled: false
+    before_s: 0.5
+    after_s: 2.0

@@ -1122,6 +1122,25 @@ def _handle_doctor(args: argparse.Namespace) -> int:
     return doctor_exit_code(report)
 
 
+def _handle_mapf_oracle(args: argparse.Namespace) -> int:
+    """Run MAPF oracle diagnostics on a scenario matrix.
+
+    Returns:
+        int: Exit code (0 success, 1 error).
+    """
+    from robot_sf.benchmark.mapf_oracle import run_mapf_oracle_diagnostics  # noqa: PLC0415
+
+    report = run_mapf_oracle_diagnostics(
+        args.matrix,
+        grid_size=args.grid_size,
+        scenario_filter=args.filter,
+    )
+    print(json.dumps(report, indent=2, sort_keys=False))
+    if report.get("status") == "error":
+        return 1
+    return 0
+
+
 def _handle_list_scenarios(args) -> int:
     """List scenarios from a matrix.
 
@@ -1851,6 +1870,34 @@ def _add_doctor_subparser(
         help="Skip the minimal reset/step environment smoke check",
     )
     p.set_defaults(cmd="doctor")
+
+
+def _add_mapf_oracle_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the MAPF oracle diagnostics subcommand parser."""
+    p = subparsers.add_parser(
+        "mapf-oracle",
+        help="Run MAPF oracle route-feasibility diagnostics on a scenario matrix",
+        description=(
+            "Run the MAPF oracle diagnostic (A* static-route feasibility) on each "
+            "scenario in a matrix.  Diagnostic-only, not benchmark evidence."
+        ),
+    )
+    p.add_argument("matrix", help="Scenario matrix YAML path")
+    p.add_argument(
+        "--grid-size",
+        type=int,
+        default=40,
+        help="Grid resolution (grid_size x grid_size). Default: 40.",
+    )
+    p.add_argument(
+        "--filter",
+        type=str,
+        default=None,
+        help="Substring filter on scenario names.",
+    )
+    p.set_defaults(cmd="mapf-oracle")
 
 
 def _add_summary_subparser(
@@ -2683,6 +2730,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_list_subparser(subparsers)
     _add_planner_inclusion_subparser(subparsers)
     _add_doctor_subparser(subparsers)
+    _add_mapf_oracle_subparser(subparsers)
     snqi_parser = subparsers.add_parser(
         "snqi",
         help="SNQI weight tooling (optimize / recompute)",
@@ -3188,6 +3236,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         "plot-planner-tradeoff": _handle_plot_planner_tradeoff,
         "plot-scenarios": _handle_plot_scenarios,
         "doctor": _handle_doctor,
+        "mapf-oracle": _handle_mapf_oracle,
     }
     handler = handlers.get(args.cmd)
     if handler is None:

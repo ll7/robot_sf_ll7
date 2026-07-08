@@ -1,7 +1,5 @@
 """Validation tests for the dissertation evidence ledger JSON schema."""
 
-# ruff: noqa: D102
-
 from __future__ import annotations
 
 import json

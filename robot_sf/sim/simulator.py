@@ -236,7 +236,7 @@ class Simulator:
                 resp_law = label.get("response_law")
                 if sim_idx is not None and 0 <= sim_idx < num_peds:
                     if resp_law in ("non_reactive", "non_yielding"):
-                        multipliers[sim_idx] = 0.0
+                        multipliers[sim_idx] = self.config.non_reactive_response_multiplier
         elif getattr(self.config, "response_law_composition", None) and num_peds > 0:
             response_laws = assign_archetype_labels(
                 num_peds,
@@ -245,7 +245,7 @@ class Simulator:
             )
             for idx, law in enumerate(response_laws):
                 if law in ("non_reactive", "non_yielding"):
-                    multipliers[idx] = 0.0
+                    multipliers[idx] = self.config.non_reactive_response_multiplier
 
         self.pedestrian_response_multipliers = multipliers
 

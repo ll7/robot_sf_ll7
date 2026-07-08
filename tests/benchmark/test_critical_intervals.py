@@ -20,6 +20,8 @@ from robot_sf.benchmark.critical_intervals import (
     IntervalMetrics,
     _compute_interval_metrics_in_window,
     _compute_max_braking_deceleration_mps2,
+    _compute_window_min_ttc_s,
+    _detect_ttc_threshold_crossing,
     _pairwise_ttc_s,
     extract_critical_intervals,
     load_config,
@@ -666,6 +668,43 @@ class TestPhysicalTTC:
     def test_ttc_convention_constant(self) -> None:
         """Module declares the TTC convention explicitly."""
         assert TTC_CONVENTION == "line_of_sight_closing_speed_seconds.v1"
+
+    def test_ttc_threshold_returns_none_for_truncated_pedestrian_arrays(self) -> None:
+        """TTC threshold detection fails closed on shorter pedestrian traces."""
+        robot_pos = np.zeros((3, 2))
+        robot_vel = np.ones((3, 2))
+        peds_pos = np.zeros((2, 1, 2))
+        ped_vel = np.zeros((2, 1, 2))
+
+        assert (
+            _detect_ttc_threshold_crossing(
+                robot_pos,
+                robot_vel,
+                peds_pos,
+                threshold_s=2.0,
+                dt=0.1,
+                ped_vel=ped_vel,
+            )
+            is None
+        )
+
+    def test_window_min_ttc_returns_none_for_truncated_velocity_arrays(self) -> None:
+        """Window min TTC fails closed when velocity arrays are shorter than positions."""
+        robot_pos = np.zeros((3, 2))
+        robot_vel = np.ones((2, 2))
+        peds_pos = np.zeros((3, 1, 2))
+        ped_vel = np.zeros((2, 1, 2))
+
+        assert (
+            _compute_window_min_ttc_s(
+                robot_pos=robot_pos,
+                robot_vel=robot_vel,
+                peds_pos=peds_pos,
+                ped_vel=ped_vel,
+                dt=0.1,
+            )
+            is None
+        )
 
     def test_report_includes_ttc_convention(self) -> None:
         """Report output includes the TTC convention metadata."""

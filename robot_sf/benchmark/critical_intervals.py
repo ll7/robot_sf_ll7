@@ -352,7 +352,7 @@ def _detect_ttc_threshold_crossing(
         else:
             return None
 
-    if robot_vel.shape[0] < T:
+    if robot_vel.shape[0] < T or peds_pos.shape[0] < T or ped_vel.shape[0] < T:
         return None
 
     for t in range(T):
@@ -397,7 +397,7 @@ def _compute_window_min_ttc_s(
     if peds_pos.shape[0] < T:
         return None
 
-    if ped_vel is None:
+    if ped_vel is None or ped_vel.shape[0] < T or robot_vel.shape[0] < T:
         return None
 
     min_ttc: float | None = None

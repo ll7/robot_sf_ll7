@@ -1,6 +1,8 @@
+<!-- AI-GENERATED (robot_sf#2910, 2026-07-08) - NEEDS-REVIEW -->
+
 # Issue #2910 Publication Suite Certification Report
 
-Status: `blocked`
+Status: `blocked_pending_rebase`
 
 Claim boundary: CPU-only integration report over tracked scenario_cert.v1 summary and release claim matrix. It does not run a benchmark campaign, publish a release, submit compute, or promote blocked/stress-only rows as benchmark evidence.
 
@@ -8,13 +10,12 @@ Claim boundary: CPU-only integration report over tracked scenario_cert.v1 summar
 
 - Scenario count: 48
 - Benchmark eligibility: {'eligible': 37, 'excluded': 2, 'stress_only': 9}
-- Release artifact rows blocked on certification: 3
+- Release artifact rows blocked on certification: 0
+- Publication-suite policy: `applied` (configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml)
 
 ## Blockers
 
-- `excluded_scenarios` (2): Remove these geometrically infeasible scenarios from the v0.1 publication suite or repair the geometry and regenerate scenario_cert.v1 evidence.
-- `stress_only_scenarios` (9): Route these scenarios through an explicit stress-suite claim boundary or keep them out of the nominal v0.1 publication set.
-- `release_claim_matrix_rows` (3): Regenerate the release claim matrix after the publication suite exclusion/stress-only policy is applied.
+- None.
 
 ## Excluded Scenarios
 
@@ -41,10 +42,9 @@ Claim boundary: CPU-only integration report over tracked scenario_cert.v1 summar
 
 | Row | Classification | Scenario certification |
 | --- | --- | --- |
-| `release_artifact:tab_release_failure_count_slices` | benchmark evidence | scenario_cert.v1:blocked |
-| `release_artifact:tab_results_overview` | benchmark evidence | scenario_cert.v1:blocked |
-| `release_artifact:tab_robot_sf_release_planner_results` | benchmark evidence | scenario_cert.v1:blocked |
 
 ## Next Empirical Action
 
-Apply a versioned v0.1 suite policy that excludes or repairs the 2 geometrically infeasible scenarios and explicitly routes or removes the 9 stress-only scenarios, then regenerate scenario_cert.v1 summary, release claim matrix, and publication gate output.
+Publication-suite policy ratified for 2 excluded and 9 stress-only scenarios; badge deferred pending #4364 release re-base. Regenerate matrix after re-base to flip badge.
+
+<!-- /AI-GENERATED -->

@@ -46,7 +46,14 @@ def test_build_matrix_uses_tracked_sources_and_fail_closed_classifications() -> 
 
     release_rows = [row for row in matrix["rows"] if row["section"] == "release_artifact"]
     assert release_rows
-    assert all(row["scenario_certification"] == "scenario_cert.v1:blocked" for row in release_rows)
+    assert all(
+        row["scenario_certification"] == "policy_accepted_blocked_pending_rebase"
+        for row in release_rows
+    )
+    assert all(
+        row["publication_suite_policy"]["policy_status"] == "applied" for row in release_rows
+    )
+    assert all(row["missing_prerequisites"] for row in release_rows)
     assert all(
         DEFAULT_SCENARIO_CERTIFICATION_SUMMARY.as_posix() in row["source_refs"]
         for row in release_rows
@@ -84,7 +91,7 @@ def test_cli_writes_json_and_markdown(tmp_path: Path, monkeypatch) -> None:
 def test_render_markdown_keeps_matrix_table_rows_single_line() -> None:
     """Multiline source caveats should not split the Markdown table."""
     markdown = render_markdown(build_matrix(_default_sources()))
-    assert "scenario_cert.v1 summary is not publication-accepted" in markdown
+    assert "scenario_cert.v1 summary is not publication-accepted" not in markdown
     table_started = False
     for line in markdown.splitlines():
         if line.startswith("| Row |"):
@@ -94,6 +101,26 @@ def test_render_markdown_keeps_matrix_table_rows_single_line() -> None:
         if line == "":
             break
         assert line.startswith("| ")
+
+
+def test_release_matrix_without_publication_policy_remains_blocked() -> None:
+    """Without the v0.1 suite policy, scenario certification still fails closed."""
+
+    sources = SourcePaths(
+        release_snapshot=DEFAULT_RELEASE_SNAPSHOT,
+        artifact_manifest=DEFAULT_ARTIFACT_MANIFEST,
+        release_config=DEFAULT_RELEASE_CONFIG,
+        odd_coverage=DEFAULT_ODD_COVERAGE,
+        scenario_certification_summary=DEFAULT_SCENARIO_CERTIFICATION_SUMMARY,
+        publication_suite_policy=None,
+        leaderboard_sidecars=tuple(sorted(Path().glob(DEFAULT_LEADERBOARD_GLOB))),
+    )
+    matrix = build_matrix(sources)
+    release_rows = [row for row in matrix["rows"] if row["section"] == "release_artifact"]
+
+    assert release_rows
+    assert all(row["scenario_certification"] == "scenario_cert.v1:blocked" for row in release_rows)
+    assert all(row["missing_prerequisites"] for row in release_rows)
 
 
 def test_scenario_certification_status_fails_closed_on_null_and_missing_counts() -> None:
@@ -117,6 +144,74 @@ def test_scenario_certification_status_fails_closed_on_null_and_missing_counts()
         )
         == "scenario_cert.v1:accepted"
     )
+
+
+def test_scenario_certification_status_blocks_missing_nonzero_detail_lists() -> None:
+    """Policy cannot accept nonzero aggregate counts without detail lists."""
+    policy = {
+        "nominal_release_suite": {
+            "certification_status": "scenario_cert.v1:accepted_reviewed",
+            "excluded_scenarios": [
+                {
+                    "scenario_id": "blocked_geometry",
+                    "action": "exclude_from_nominal_publication",
+                }
+            ],
+            "routed_stress_only_scenarios": [
+                {
+                    "scenario_id": "stress_geometry",
+                    "action": "route_to_stress_suite_only",
+                }
+            ],
+        }
+    }
+    summary = {"benchmark_eligibility_counts": {"excluded": 1, "stress_only": 1}}
+
+    assert _scenario_certification_status(summary, policy) == "scenario_cert.v1:blocked"
+
+
+def test_scenario_certification_status_blocks_empty_nonzero_detail_lists() -> None:
+    """Policy cannot accept nonzero aggregate counts with empty detail lists."""
+    policy = {
+        "nominal_release_suite": {
+            "certification_status": "scenario_cert.v1:accepted_reviewed",
+        }
+    }
+    summary = {
+        "benchmark_eligibility_counts": {"excluded": 1, "stress_only": 1},
+        "excluded_scenarios": [],
+        "stress_only_scenarios": [],
+    }
+
+    assert _scenario_certification_status(summary, policy) == "scenario_cert.v1:blocked"
+
+
+def test_scenario_certification_status_blocks_detail_count_mismatch() -> None:
+    """Policy cannot accept when detail-list lengths disagree with aggregate counts."""
+    policy = {
+        "nominal_release_suite": {
+            "certification_status": "scenario_cert.v1:accepted_reviewed",
+            "excluded_scenarios": [
+                {
+                    "scenario_id": "blocked_geometry",
+                    "action": "exclude_from_nominal_publication",
+                }
+            ],
+            "routed_stress_only_scenarios": [
+                {
+                    "scenario_id": "stress_geometry",
+                    "action": "route_to_stress_suite_only",
+                }
+            ],
+        }
+    }
+    summary = {
+        "benchmark_eligibility_counts": {"excluded": 2, "stress_only": 1},
+        "excluded_scenarios": [{"scenario_id": "blocked_geometry"}],
+        "stress_only_scenarios": [{"scenario_id": "stress_geometry"}],
+    }
+
+    assert _scenario_certification_status(summary, policy) == "scenario_cert.v1:blocked"
 
 
 def test_scenario_certification_prerequisites_normalizes_null_and_missing() -> None:

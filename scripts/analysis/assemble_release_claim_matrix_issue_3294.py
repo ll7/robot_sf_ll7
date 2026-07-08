@@ -32,6 +32,9 @@ DEFAULT_ODD_COVERAGE = Path(
 DEFAULT_SCENARIO_CERTIFICATION_SUMMARY = Path(
     "docs/context/evidence/issue_2910_release_scenario_certification/summary.json"
 )
+DEFAULT_PUBLICATION_SUITE_POLICY = Path(
+    "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml"
+)
 DEFAULT_LEADERBOARD_GLOB = "docs/leaderboards/*.rows.json"
 
 CLAIM_BOUNDARY = (
@@ -51,7 +54,8 @@ class SourcePaths:
     release_config: Path
     odd_coverage: Path
     scenario_certification_summary: Path
-    leaderboard_sidecars: tuple[Path, ...]
+    publication_suite_policy: Path | None = DEFAULT_PUBLICATION_SUITE_POLICY
+    leaderboard_sidecars: tuple[Path, ...] = ()
 
 
 def _repo_relative(path: Path) -> str:
@@ -121,14 +125,92 @@ def _classify_odd_row(row: dict[str, Any]) -> str:
     return "non-claim"
 
 
-def _scenario_certification_status(summary: dict[str, Any]) -> str:
+def _scenario_ids(items: Any) -> set[str]:
+    """Extract scenario identifiers from summary or policy lists."""
+    if not isinstance(items, list):
+        return set()
+    ids: set[str] = set()
+    for item in items:
+        if isinstance(item, dict):
+            scenario_id = str(item.get("scenario_id", "")).strip()
+        else:
+            scenario_id = str(item).strip()
+        if scenario_id:
+            ids.add(scenario_id)
+    return ids
+
+
+def _scenario_detail_lists_match_counts(summary: dict[str, Any]) -> bool:
+    """Return whether scenario detail lists are present and match aggregate counts."""
+    eligibility_counts = summary.get("benchmark_eligibility_counts")
+    if not isinstance(eligibility_counts, dict):
+        return False
+    try:
+        expected_excluded = int(eligibility_counts["excluded"])
+        expected_stress_only = int(eligibility_counts["stress_only"])
+    except (KeyError, TypeError, ValueError):
+        return False
+
+    excluded_items = summary.get("excluded_scenarios")
+    stress_only_items = summary.get("stress_only_scenarios")
+    if expected_excluded and not isinstance(excluded_items, list):
+        return False
+    if expected_stress_only and not isinstance(stress_only_items, list):
+        return False
+
+    excluded = _scenario_ids(excluded_items or [])
+    stress_only = _scenario_ids(stress_only_items or [])
+    return len(excluded) == expected_excluded and len(stress_only) == expected_stress_only
+
+
+def _policy_covers_certification_blockers(
+    summary: dict[str, Any], policy: dict[str, Any] | None
+) -> bool:
+    """Return whether a publication-suite policy handles every non-nominal scenario."""
+    if not policy:
+        return False
+    nominal = policy.get("nominal_release_suite")
+    if not isinstance(nominal, dict):
+        return False
+    if str(nominal.get("certification_status", "")).strip() not in {
+        "scenario_cert.v1:accepted",
+        "scenario_cert.v1:accepted_reviewed",
+    }:
+        return False
+    if not _scenario_detail_lists_match_counts(summary):
+        return False
+    excluded = _scenario_ids(summary.get("excluded_scenarios", []))
+    stress_only = _scenario_ids(summary.get("stress_only_scenarios", []))
+    policy_excluded = {
+        str(item.get("scenario_id", "")).strip()
+        for item in nominal.get("excluded_scenarios", [])
+        if isinstance(item, dict) and item.get("action") == "exclude_from_nominal_publication"
+    }
+    policy_stress_only = {
+        str(item.get("scenario_id", "")).strip()
+        for item in nominal.get("routed_stress_only_scenarios", [])
+        if isinstance(item, dict) and item.get("action") == "route_to_stress_suite_only"
+    }
+    return excluded <= policy_excluded and stress_only <= policy_stress_only
+
+
+def _scenario_certification_status(
+    summary: dict[str, Any], policy: dict[str, Any] | None = None
+) -> str:
     """Return publication-gate scenario-certification status from summary.
 
     Fail-closed: an explicit-``null`` status is treated as absent (not the
     string ``"None"``), and a missing or incomplete ``benchmark_eligibility_counts``
     block never certifies as accepted — accepted requires both ``excluded`` and
     ``stress_only`` to be present and zero.
+
+    When the publication-suite policy covers all certification blockers, the
+    status is ``policy_accepted_blocked_pending_rebase`` — the policy is
+    ratified but the badge is deferred until the #4364 release re-base
+    regenerates the evidence matrix.
     """
+    if _policy_covers_certification_blockers(summary, policy):
+        return "policy_accepted_blocked_pending_rebase"
     raw_status = summary.get("publication_gate_status")
     status = str(raw_status).strip() if raw_status is not None else ""
     if status:
@@ -145,16 +227,24 @@ def _scenario_certification_status(summary: dict[str, Any]) -> str:
     return "scenario_cert.v1:blocked"
 
 
-def _scenario_certification_prerequisites(summary: dict[str, Any]) -> list[str]:
+def _scenario_certification_prerequisites(
+    summary: dict[str, Any], policy: dict[str, Any] | None = None
+) -> list[str]:
     """Return compact missing-prerequisite text for non-accepted certification.
 
     Fail-closed: an explicit-``null`` blocker is treated as absent, and missing
     eligibility counts are reported as unavailable rather than a misleading
     ``(0 excluded, 0 stress-only)``.
+
+    ``policy_accepted_blocked_pending_rebase`` surfaces a specific prerequisite
+    noting the policy is ratified but the badge is deferred until the release
+    re-base.
     """
-    status = _scenario_certification_status(summary)
-    if status in {"scenario_cert.v1:accepted", "scenario_cert.v1:accepted_reviewed"}:
+    status = _scenario_certification_status(summary, policy)
+    if status == "scenario_cert.v1:accepted":
         return []
+    if status == "policy_accepted_blocked_pending_rebase":
+        return ["publication-suite policy ratified; badge deferred pending #4364 release re-base"]
     raw_blocker = summary.get("publication_blocker")
     blocker = str(raw_blocker).strip() if raw_blocker is not None else ""
     if blocker:
@@ -185,6 +275,7 @@ def _release_artifact_rows(
     artifact_manifest: dict[str, Any],
     release_config: dict[str, Any],
     scenario_certification_summary: dict[str, Any],
+    publication_suite_policy: dict[str, Any] | None,
     source_paths: SourcePaths,
 ) -> list[dict[str, Any]]:
     """Build matrix rows from the release artifact manifest and release evidence gate snapshot."""
@@ -201,9 +292,11 @@ def _release_artifact_rows(
         "seed_sets_path": seed_policy.get("seed_sets_path", "unknown"),
         "seeds": seed_policy.get("seeds", []),
     }
-    scenario_certification_status = _scenario_certification_status(scenario_certification_summary)
+    scenario_certification_status = _scenario_certification_status(
+        scenario_certification_summary, publication_suite_policy
+    )
     scenario_certification_prerequisites = _scenario_certification_prerequisites(
-        scenario_certification_summary
+        scenario_certification_summary, publication_suite_policy
     )
     rows: list[dict[str, Any]] = []
     for artifact in artifact_manifest.get("artifacts", []):
@@ -244,6 +337,16 @@ def _release_artifact_rows(
                         "benchmark_eligibility_counts", {}
                     ),
                 },
+                "publication_suite_policy": {
+                    "policy_ref": _repo_relative(source_paths.publication_suite_policy)
+                    if source_paths.publication_suite_policy
+                    else None,
+                    "policy_status": "applied"
+                    if _policy_covers_certification_blockers(
+                        scenario_certification_summary, publication_suite_policy
+                    )
+                    else "not_applied",
+                },
                 "artifact_uri": _repo_relative(source_paths.artifact_manifest),
                 "artifact_sha256": artifact.get("sha256") or snapshot_row.get("tracked_sha256"),
                 "artifact_match": sha_match,
@@ -259,6 +362,11 @@ def _release_artifact_rows(
                     _repo_relative(source_paths.artifact_manifest),
                     _repo_relative(source_paths.release_config),
                     _repo_relative(source_paths.scenario_certification_summary),
+                    *(
+                        [_repo_relative(source_paths.publication_suite_policy)]
+                        if source_paths.publication_suite_policy
+                        else []
+                    ),
                 ],
                 "missing_prerequisites": [
                     *scenario_certification_prerequisites,
@@ -375,12 +483,18 @@ def build_matrix(source_paths: SourcePaths) -> dict[str, Any]:
     release_config = _load_yaml(source_paths.release_config)
     odd_coverage = _load_json(source_paths.odd_coverage)
     scenario_certification_summary = _load_json(source_paths.scenario_certification_summary)
+    publication_suite_policy = (
+        _load_yaml(source_paths.publication_suite_policy)
+        if source_paths.publication_suite_policy
+        else None
+    )
     rows = [
         *_release_artifact_rows(
             snapshot=release_snapshot,
             artifact_manifest=artifact_manifest,
             release_config=release_config,
             scenario_certification_summary=scenario_certification_summary,
+            publication_suite_policy=publication_suite_policy,
             source_paths=source_paths,
         ),
         *_leaderboard_rows(source_paths),
@@ -392,6 +506,7 @@ def build_matrix(source_paths: SourcePaths) -> dict[str, Any]:
         classification_counts[classification] = classification_counts.get(classification, 0) + 1
     return {
         "schema_version": SCHEMA_VERSION,
+        "review_marker": "AI-GENERATED NEEDS-REVIEW",
         "generated_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "issue": 3294,
         "claim_boundary": CLAIM_BOUNDARY,
@@ -403,6 +518,9 @@ def build_matrix(source_paths: SourcePaths) -> dict[str, Any]:
             "scenario_certification_summary": _repo_relative(
                 source_paths.scenario_certification_summary
             ),
+            "publication_suite_policy": _repo_relative(source_paths.publication_suite_policy)
+            if source_paths.publication_suite_policy
+            else None,
             "leaderboard_sidecars": [
                 _repo_relative(path) for path in source_paths.leaderboard_sidecars
             ],
@@ -439,6 +557,8 @@ def _markdown_cell(value: Any) -> str:
 def render_markdown(matrix: dict[str, Any]) -> str:
     """Render a compact Markdown matrix for review."""
     lines = [
+        "<!-- AI-GENERATED (robot_sf#3294, 2026-07-08) - NEEDS-REVIEW -->",
+        "",
         "# Issue 3294 Release Claim Matrix",
         "",
         f"Schema: `{matrix['schema_version']}`",
@@ -494,7 +614,7 @@ def render_markdown(matrix: dict[str, Any]) -> str:
     )
     for key, value in matrix["sources"].items():
         lines.append(f"- `{key}`: `{_markdown_cell(value)}`")
-    lines.append("")
+    lines.extend(["", "<!-- /AI-GENERATED -->", ""])
     return "\n".join(lines)
 
 
@@ -511,6 +631,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=DEFAULT_SCENARIO_CERTIFICATION_SUMMARY,
     )
+    parser.add_argument(
+        "--publication-suite-policy",
+        type=Path,
+        default=DEFAULT_PUBLICATION_SUITE_POLICY,
+    )
     parser.add_argument("--leaderboard-glob", default=DEFAULT_LEADERBOARD_GLOB)
     return parser.parse_args()
 
@@ -524,6 +649,7 @@ def main() -> int:
         release_config=args.release_config,
         odd_coverage=args.odd_coverage,
         scenario_certification_summary=args.scenario_certification_summary,
+        publication_suite_policy=args.publication_suite_policy,
         leaderboard_sidecars=tuple(sorted(Path().glob(args.leaderboard_glob))),
     )
     matrix = build_matrix(source_paths)

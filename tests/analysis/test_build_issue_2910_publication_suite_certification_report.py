@@ -54,11 +54,10 @@ def test_report_maps_current_remaining_scenarios_and_keeps_gate_blocked() -> Non
         "francis2023_narrow_doorway",
     ]
     assert len(report["stress_only_scenarios"]) == 9
-    assert report["summary"]["release_artifact_rows_blocked_on_certification"] == 3
+    assert report["summary"]["release_artifact_rows_blocked_on_certification"] == 0
     assert {blocker["check"] for blocker in report["blockers"]} == {
         "excluded_scenarios",
         "stress_only_scenarios",
-        "release_claim_matrix_rows",
     }
 
 
@@ -93,6 +92,51 @@ def test_report_can_pass_for_synthetic_accepted_suite() -> None:
     assert report["summary"]["release_artifact_rows_blocked_on_certification"] == 0
 
 
+def test_report_policy_blocks_detail_count_mismatch() -> None:
+    """Publication-suite policy cannot pass when detail lists disagree with counts."""
+    summary = {
+        "scenario_count": 3,
+        "benchmark_eligibility_counts": {
+            "eligible": 1,
+            "excluded": 2,
+            "stress_only": 0,
+        },
+        "excluded_scenarios": [{"scenario_id": "blocked_geometry"}],
+        "stress_only_scenarios": [],
+    }
+    matrix = {
+        "rows": [
+            {
+                "section": "release_artifact",
+                "row_id": "release_artifact:complete",
+                "classification": "benchmark evidence",
+                "scenario_certification": "scenario_cert.v1:accepted_reviewed",
+            }
+        ]
+    }
+    policy = {
+        "nominal_release_suite": {
+            "certification_status": "scenario_cert.v1:accepted_reviewed",
+            "excluded_scenarios": [
+                {
+                    "scenario_id": "blocked_geometry",
+                    "action": "exclude_from_nominal_publication",
+                }
+            ],
+        }
+    }
+
+    report = build_report(
+        summary,
+        matrix,
+        inputs=_default_inputs(),
+        publication_suite_policy=policy,
+    )
+
+    assert report["status"] == "blocked"
+    assert {blocker["check"] for blocker in report["blockers"]} == {"excluded_scenarios"}
+
+
 def test_render_markdown_lists_blockers_and_next_action() -> None:
     """Markdown report preserves the scenario lists and next empirical action."""
 
@@ -116,6 +160,7 @@ def test_cli_writes_json_and_markdown(tmp_path) -> None:
 
     payload = _load_json(tmp_path / "report.json")
     markdown = (tmp_path / "report.md").read_text(encoding="utf-8")
-    assert payload["status"] == "blocked"
-    assert payload["summary"]["blocker_count"] == 3
+    assert payload["status"] == "blocked_pending_rebase"
+    assert payload["summary"]["blocker_count"] == 0
+    assert payload["summary"]["publication_suite_policy_status"] == "applied"
     assert "Publication Suite Certification Report" in markdown

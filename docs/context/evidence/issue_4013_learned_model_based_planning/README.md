@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#4013, 2026-07-08) - NEEDS-REVIEW -->
+
 # Issue #4013 Learned-Prediction MPC Evidence
 
 This directory records the durable evidence for issue #4013. The paired diagnostic
@@ -80,7 +82,7 @@ This writes a local checkpoint plus manifest and metrics. The checkpoint remains
 worktree-local; compact manifest and metrics from a local run are promoted here
 as durable evidence:
 
-- `training_manifest.v1.json` — schema, architecture, trainer/predictor config, claim boundary.
+- `training_manifest.v1.json` — schema, architecture, trainer/predictor config, claim boundary, and checkpoint hash provenance.
 - `training_metrics.v1.json` — initial/final training loss.
 
 Observed local run (seed 4013, 512 samples, 400 epochs, CPU): training loss fell
@@ -94,3 +96,5 @@ learnability probe, **not** real ETH/UCY pedestrian data. The checkpoint is
 benchmark, navigation-quality, or paper/dissertation evidence. The paired smoke
 comparison across all three arms has now been run (see the section above); scaling
 to nominal benchmark evidence remains a separate campaign.
+
+<!-- /AI-GENERATED -->

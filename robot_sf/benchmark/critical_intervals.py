@@ -96,16 +96,9 @@ class IntervalMetrics:
     n_steps: int = 0
     min_clearance_m: float | None = None
     min_distance_m: float | None = None
-    # NOTE: min_ttc_s is not yet computed by _compute_interval_metrics_in_window
-    # (always None as shipped). Windowed TTC aggregation is tracked as a
-    # follow-up; kept in the schema so the field is stable when populated.
     min_ttc_s: float | None = None
     mean_speed_ms: float | None = None
     max_speed_ms: float | None = None
-    # NOTE: this is the max L2 magnitude of per-step velocity change (|Δv|/dt),
-    # i.e. total acceleration magnitude within the window — NOT a signed
-    # deceleration projected onto the braking direction. Rename/redefinition is
-    # tracked as a follow-up.
     max_deceleration_mps2: float | None = None
     heading_oscillation: float | None = None
     near_miss_count: int = 0
@@ -304,6 +297,102 @@ def _detect_ttc_threshold_crossing(  # noqa: C901
                 return t
 
     return None
+
+
+def _compute_window_min_ttc_s(  # noqa: C901
+    *,
+    robot_pos: np.ndarray,
+    robot_vel: np.ndarray | None,
+    peds_pos: np.ndarray,
+    ped_vel: np.ndarray | None,
+    dt: float,
+) -> float | None:
+    """Compute the minimum finite TTC over all steps and pedestrians.
+
+    Uses the same constant-velocity closing convention as
+    ``_detect_ttc_threshold_crossing``.
+
+    Returns
+    -------
+    float | None
+        Minimum finite TTC in seconds, or ``None`` when required data is
+        missing.  Never returns ``0``, ``NaN``, or ``inf`` for a missing-data
+        placeholder (``0.0`` is only returned for a true zero-distance overlap).
+    """
+
+    T = robot_pos.shape[0]
+    n_peds = peds_pos.shape[1] if peds_pos.ndim >= 3 else 0
+    if n_peds == 0 or T == 0 or robot_vel is None:
+        return None
+
+    if peds_pos.shape[0] < T:
+        return None
+
+    _MIN_SPEED = 1e-9
+    _MIN_DIST = 1e-9
+
+    min_ttc: float | None = None
+
+    for t in range(T):
+        for k in range(n_peds):
+            d_vec = peds_pos[t, k] - robot_pos[t]
+            dist = float(np.linalg.norm(d_vec))
+            if dist < _MIN_DIST:
+                min_ttc = 0.0 if min_ttc is None else min(min_ttc, 0.0)
+                continue
+
+            if ped_vel is None:
+                continue
+            v_rel = robot_vel[t] - ped_vel[t, k]
+            speed = float(np.linalg.norm(v_rel))
+            if speed < _MIN_SPEED:
+                continue
+
+            closing = float(np.dot(v_rel, d_vec))
+            if closing <= 0:
+                continue
+
+            ttc = dist / closing
+            if np.isfinite(ttc) and ttc > 0:
+                if min_ttc is None or ttc < min_ttc:
+                    min_ttc = ttc
+
+    return min_ttc
+
+
+def _compute_max_braking_deceleration_mps2(robot_vel: np.ndarray, *, dt: float) -> float | None:
+    """Compute maximum braking deceleration opposite the current velocity direction.
+
+    Braking deceleration is ``max(0, -dot(acc, vel_dir))`` at each step.
+    Pure turning at constant speed does **not** count as braking.
+
+    Returns
+    -------
+    float | None
+        Maximum braking deceleration in m/s², or ``None`` when fewer than two
+        velocity samples are available.
+    """
+
+    T = robot_vel.shape[0]
+    if T < 2:
+        return None
+
+    acc = np.zeros_like(robot_vel)
+    acc[0] = (robot_vel[1] - robot_vel[0]) / dt
+    acc[-1] = (robot_vel[-1] - robot_vel[-2]) / dt
+    if T > 2:
+        acc[1:-1] = (robot_vel[2:] - robot_vel[:-2]) / (2.0 * dt)
+
+    speed = np.linalg.norm(robot_vel, axis=1)
+    max_decel = 0.0
+    for t in range(T):
+        if speed[t] > 1e-9:
+            vel_dir = robot_vel[t] / speed[t]
+            tangential_a = float(np.dot(acc[t], vel_dir))
+            decel = max(0.0, -tangential_a)
+            max_decel = max(max_decel, decel)
+
+    return max_decel
 
 
 def _detect_first_braking_event(
@@ -526,7 +615,7 @@ def extract_critical_intervals(  # noqa: C901, PLR0912, PLR0915
     return intervals
 
 
-def _compute_interval_metrics_in_window(
+def _compute_interval_metrics_in_window(  # noqa: C901, PLR0912, PLR0915
     trace: dict[str, Any],
     *,
     start: int,
@@ -572,6 +661,36 @@ def _compute_interval_metrics_in_window(
         result["min_distance_m"] = None
         result["min_clearance_m"] = None
 
+    # TTC (time-to-collision)
+    if n_peds > 0 and sub_robot_pos.shape[0] > 0:
+        robot_vel_raw_ttc = trace.get("robot_vel")
+        robot_vel_arr: np.ndarray | None = None
+        if robot_vel_raw_ttc is not None:
+            full_vel_ttc = np.asarray(robot_vel_raw_ttc, dtype=float)
+            if full_vel_ttc.ndim == 1:
+                full_vel_ttc = full_vel_ttc.reshape(1, -1)
+            robot_vel_arr = full_vel_ttc[sl]
+
+        ped_vel_raw = trace.get("ped_vel")
+        ped_vel_arr: np.ndarray | None = None
+        if ped_vel_raw is not None:
+            full_ped_vel = np.asarray(ped_vel_raw, dtype=float)
+            if full_ped_vel.shape[0] >= end:
+                ped_vel_arr = full_ped_vel[sl]
+        elif sub_peds_pos.shape[0] >= 2:
+            ped_diffs = np.diff(sub_peds_pos, axis=0) / dt
+            ped_vel_arr = np.vstack([ped_diffs[:1], ped_diffs])
+
+        result["min_ttc_s"] = _compute_window_min_ttc_s(
+            robot_pos=sub_robot_pos,
+            robot_vel=robot_vel_arr,
+            peds_pos=sub_peds_pos,
+            ped_vel=ped_vel_arr,
+            dt=dt,
+        )
+    else:
+        result["min_ttc_s"] = None
+
     # Speed
     robot_vel_raw = trace.get("robot_vel")
     if robot_vel_raw is not None:
@@ -587,9 +706,7 @@ def _compute_interval_metrics_in_window(
         result["max_speed_ms"] = float(np.max(speeds))
 
         if sub_vel.shape[0] >= 2:
-            acc_diffs = np.diff(sub_vel, axis=0) / dt
-            acc_norms = np.linalg.norm(acc_diffs, axis=1)
-            result["max_deceleration_mps2"] = float(np.max(acc_norms))
+            result["max_deceleration_mps2"] = _compute_max_braking_deceleration_mps2(sub_vel, dt=dt)
     elif sub_robot_pos.shape[0] >= 2:
         vel_approx = np.diff(sub_robot_pos, axis=0) / dt
         speeds = np.linalg.norm(vel_approx, axis=1)
@@ -648,6 +765,7 @@ def summarize_interval_metrics(
                 n_steps=window_metrics.get("n_steps", 0),
                 min_clearance_m=window_metrics.get("min_clearance_m"),
                 min_distance_m=window_metrics.get("min_distance_m"),
+                min_ttc_s=window_metrics.get("min_ttc_s"),
                 mean_speed_ms=window_metrics.get("mean_speed_ms"),
                 max_speed_ms=window_metrics.get("max_speed_ms"),
                 max_deceleration_mps2=window_metrics.get("max_deceleration_mps2"),

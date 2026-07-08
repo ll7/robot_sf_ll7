@@ -18,6 +18,7 @@ from robot_sf.benchmark.critical_intervals import (
     CriticalInterval,
     IntervalMetrics,
     _compute_interval_metrics_in_window,
+    _compute_max_braking_deceleration_mps2,
     extract_critical_intervals,
     load_config,
     report_to_dict,
@@ -509,20 +510,144 @@ class TestWindowedDeceleration:
     """max_deceleration_mps2 must reflect ONLY the window, not the whole run."""
 
     def test_deceleration_is_windowed_not_whole_run(self) -> None:
-        # A single large velocity change at steps 0->1 (Δv = 10 m/s over dt=0.1s
-        # => 100 m/s^2), then constant velocity for the rest of the trace.
+        # Robot moves east at 10 m/s for steps 1..5, then brakes to -5 m/s
+        # between steps 5 and 6, then stays at -5 m/s.  The deceleration spike
+        # lives between steps 5 and 6 only.
         n = 20
         dt = 0.1
         robot_vel = np.zeros((n, 2), dtype=float)
-        robot_vel[1:, 0] = 10.0  # spike between step 0 and step 1 only
+        robot_vel[1:6, 0] = 10.0
+        robot_vel[6:, 0] = -5.0
         robot_pos = np.cumsum(robot_vel * dt, axis=0)
         trace = _make_trace(robot_pos, robot_vel=robot_vel, dt=dt)
 
         whole = _compute_interval_metrics_in_window(trace, start=0, end=n)
-        # A late window that excludes the step-0->1 spike must see zero accel.
-        late = _compute_interval_metrics_in_window(trace, start=5, end=n)
+        # A late window that excludes the deceleration spike must see zero.
+        late = _compute_interval_metrics_in_window(trace, start=10, end=n)
 
-        assert whole["max_deceleration_mps2"] == pytest.approx(100.0)
+        # Central-difference at the 10→-5 transition: Δv=15, dt=0.2 → 75
+        assert whole["max_deceleration_mps2"] == pytest.approx(75.0)
         assert late["max_deceleration_mps2"] == pytest.approx(0.0)
         # The whole point of the feature: window value != whole-run value.
         assert late["max_deceleration_mps2"] < whole["max_deceleration_mps2"]
+
+
+# ---------------------------------------------------------------------------
+# min_ttc_s (issue #4785)
+# ---------------------------------------------------------------------------
+
+
+class TestWindowedMinTTC:
+    """min_ttc_s is populated when robot/pedestrian data are available."""
+
+    def test_closing_pair_produces_finite_ttc(self) -> None:
+        trace = _make_approaching_trace()
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
+        assert whole["min_ttc_s"] is not None
+        assert whole["min_ttc_s"] >= 0
+        assert np.isfinite(whole["min_ttc_s"])
+
+    def test_ttc_in_report_to_dict(self) -> None:
+        trace = _make_approaching_trace()
+        cfg = {
+            "critical_intervals": {
+                "closest_approach": {
+                    "enabled": True,
+                    "before_s": 0.5,
+                    "after_s": 0.5,
+                },
+            },
+        }
+        intervals = extract_critical_intervals(trace, cfg)
+        report = summarize_interval_metrics(trace, intervals)
+        d = report_to_dict(report)
+        assert len(d["interval_metrics"]) == 1
+        assert d["interval_metrics"][0]["min_ttc_s"] is not None
+        assert d["interval_metrics"][0]["min_ttc_s"] >= 0
+
+    def test_missing_robot_vel_gives_none(self) -> None:
+        trace = _make_approaching_trace()
+        del trace["robot_vel"]
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
+        assert whole["min_ttc_s"] is None
+
+    def test_no_peds_gives_none(self) -> None:
+        n = 5
+        robot_pos = np.zeros((n, 2))
+        robot_pos[:, 0] = np.arange(n) * 0.5
+        robot_vel = np.zeros((n, 2))
+        robot_vel[:, 0] = 1.0
+        trace = _make_trace(robot_pos, robot_vel=robot_vel)
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
+        assert whole["min_ttc_s"] is None
+
+    def test_non_closing_pair_gives_none(self) -> None:
+        n = 5
+        robot_pos = np.zeros((n, 2))
+        robot_vel = np.zeros((n, 2))
+        robot_vel[:, 0] = 1.0
+        peds_pos = np.zeros((n, 1, 2))
+        peds_pos[:, 0, 0] = 10.0
+        ped_vel = np.zeros((n, 1, 2))
+        ped_vel[:, 0, 0] = 2.0
+        trace = _make_trace(robot_pos, peds_pos, robot_vel=robot_vel, dt=0.1)
+        trace["ped_vel"] = ped_vel
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
+        assert whole["min_ttc_s"] is None
+
+
+# ---------------------------------------------------------------------------
+# max_deceleration_mps2 — braking semantics (issue #4785)
+# ---------------------------------------------------------------------------
+
+
+class TestBrakingDeceleration:
+    """max_deceleration_mps2 is braking deceleration, not acceleration magnitude."""
+
+    def test_deceleration_along_velocity_direction(self) -> None:
+        dt = 0.1
+        n = 10
+        robot_vel = np.zeros((n, 2))
+        robot_vel[:, 0] = np.linspace(5.0, 0.0, n)
+
+        result = _compute_max_braking_deceleration_mps2(robot_vel, dt=dt)
+        assert result is not None
+        assert result > 0
+        # Uniform deceleration: Δv/Δt = 5/(9*0.1) ≈ 5.556 m/s²
+        assert result == pytest.approx(50.0 / 9.0, abs=0.1)
+
+    def test_speed_increase_gives_zero_braking(self) -> None:
+        dt = 0.1
+        n = 5
+        robot_vel = np.zeros((n, 2))
+        robot_vel[:, 0] = np.linspace(1.0, 5.0, n)
+        result = _compute_max_braking_deceleration_mps2(robot_vel, dt=dt)
+        assert result is not None
+        assert result == pytest.approx(0.0)
+
+    def test_pure_turning_does_not_count_as_braking(self) -> None:
+        # Circular motion at constant speed: velocity direction changes but
+        # speed is constant, so tangential acceleration is zero.
+        speed = 5.0
+        omega = 1.0  # rad/s
+        n_steps = 200
+        t = np.arange(n_steps) * 0.01
+        robot_vel = np.column_stack([speed * np.cos(omega * t), speed * np.sin(omega * t)])
+        result = _compute_max_braking_deceleration_mps2(robot_vel, dt=0.01)
+        assert result is not None
+        # Central-difference introduces O(dt²·ω²·speed) numerical error;
+        # the key property is that it is orders of magnitude smaller than
+        # the centripetal acceleration (speed·ω = 5 m/s²).
+        assert result < 0.01 * speed * omega
+
+    def test_two_samples_only(self) -> None:
+        dt = 0.1
+        robot_vel = np.array([[10.0, 0.0], [0.0, 0.0]])
+        result = _compute_max_braking_deceleration_mps2(robot_vel, dt=dt)
+        assert result is not None
+        assert result == pytest.approx(100.0)
+
+    def test_single_sample_returns_none(self) -> None:
+        robot_vel = np.array([[5.0, 0.0]])
+        result = _compute_max_braking_deceleration_mps2(robot_vel, dt=0.1)
+        assert result is None

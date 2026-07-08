@@ -120,6 +120,7 @@
       "failure_mode": "mechanism_failed",
       "why_failed_or_inconclusive": "Only the near-field speed cap moved hard-success (~0.07 to ~0.10, about +0.03 absolute / +33% relative, consistent across checkpoints, ~120 episodes/cell). nf_headings_only, nf_horizonboost_only, high_angular, dense_lattice, deep_sequence, and combined_max_authority were inert (about baseline). The lift does not close the plateau (hard-success ~0.10) and checkpoint choice barely moved baseline, indicating the binding constraint is model/data-side rather than planner authority.",
       "evidence_pointer": [
+        "docs/context/evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08/README.md",
         "docs/context/evidence/issue_3213_authority_sweep/robust_grid.json"
       ],
       "recommended_next_action": "Keep predictive_near_field_speed_cap as a minor safety-progress tuning knob, not a success driver. Stop further planner-authority tuning as a plateau fix; prioritize model-side bets (#3214 retraining, richer hard-case data) and proxy-vs-ADE selection (#3204).",

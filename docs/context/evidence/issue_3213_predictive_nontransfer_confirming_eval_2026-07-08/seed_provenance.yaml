@@ -1,0 +1,85 @@
+# Seed / scenario / config provenance for the predictive-planner non-transfer
+# confirming-eval bundle (issue #4879, pinning the #3213 authority-sweep / #3254-era
+# closed-loop plateau). This file records how the plateau grid was produced so the
+# pinned packet is reproducible from the tracked configs alone.
+#
+# Source grid: ../issue_3213_authority_sweep/robust_grid.json (pinned copy in this
+# packet at robust_grid.json, identical sha256).
+# Producing PR: #3306 (commit 95adcc3ae69620f67b42603bdfdde9504b99d9b1).
+
+schema_version: predictive_nontransfer_confirming_eval_seed_provenance.v1
+issue_pin: 4879
+producing_pr: 3306
+producing_commit: 95adcc3ae69620f67b42603bdfdde9504b99d9b1
+producing_commit_date: 2026-06-21
+producing_commit_subject: "feat: hard-case portfolio maneuver-authority sweep (#3213, #3215)"
+child_issue: 3213            # maneuver-authority sweep
+parent_issue: 3215           # predictive hard-case breakthrough portfolio
+era_issue: 3254              # predictive crossing-conflict training line (predictive_ego_v1)
+
+# --- Closed-loop eval seed schedule (the plateau grid's actual seeds) ---
+# NOTE: the plateau grid used the BROAD robust seed schedule below, NOT the small
+# configs/benchmarks/predictive_hard_seeds_v1.yaml hard-seed set (101-103, 171).
+# robust_a and robust_b are the two map/cluster seed halves reported per cell.
+closed_loop_seed_schedule:
+  name: broad_robust_200_229
+  robust_a:
+    seeds: [200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214]
+    cluster_label: "LiCCA test 9832460"
+  robust_b:
+    seeds: [215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229]
+    cluster_label: "imech192 a30 12969"
+  episodes_per_cell_when_both_halves_present: 120
+  episodes_per_cell_when_one_half_present: 60
+
+# --- Tracked configs that define the sweep ---
+configs:
+  scenario_set:
+    path: configs/scenarios/sets/predictive_hardcase_portfolio_v1.yaml
+    sha256: 4fde34d246bcf8933bd2fd68aed5f0367185f995a3fa373d381461134d522322
+    selects:
+      - classic_cross_trap_low
+      - classic_cross_trap_medium
+      - classic_cross_trap_high
+      - classic_group_crossing_high
+  planner_authority_grid:
+    path: configs/benchmarks/predictive_hardcase_authority_grid_issue_3213.yaml
+    sha256: 02037593d8ea2a9f7aa3112c8245c237176af77cb73adfe86b900eb96c5f1c90
+    schema_version: maneuver_authority_sweep_manifest.v1
+    # The manifest names these five campaign variants; the observed plateau grid
+    # reports the near-field single-knob ablation columns listed under checkpoints.
+    manifest_variants: [baseline, high_angular, dense_lattice, nearfield_turn, combined_max_authority]
+    observed_grid_variants: [baseline, nf_headings_only, nf_speedcap_only, nf_horizonboost_only, nearfield_turn]
+  hard_seed_manifest:
+    path: configs/benchmarks/predictive_hard_seeds_v1.yaml
+    sha256: 535dfc5e2382a75140e128c98a32d898ab6655ab2925c45b565512924ca5c575
+    note: >
+      The v1 hard-seed set (classic_cross_trap_high [101,102,103], medium [102,103],
+      low [102], classic_group_crossing_high [171]). Recorded for lineage; the
+      plateau grid itself used the broad robust_200_229 schedule above.
+
+# --- Prediction checkpoints evaluated (5 total; 4 populated, 1 empty) ---
+prediction_checkpoints:
+  - token: predictive_proxy_selected_v2_full
+    populated: true
+  - token: predictive_proxy_selected_v1
+    populated: true
+  - token: predictive_rgl_full_v1
+    populated: true
+  - token: sweep_h192_mp3_s7_wd5e5
+    populated: true
+    partial_cells_note: "nf_horizonboost_only and nearfield_turn cells have only the robust_a half (~60 episodes)."
+  - token: sweep_h256_mp4_s42
+    populated: false
+    unrecoverable_note: >
+      All five authority variants returned zero episodes (success_rate_mean=null,
+      episodes_approx=0). This fifth checkpoint is the one genuinely-empty cell in
+      the grid; the negative is documented in negative_finding.md and packet.json
+      (source_artifacts.unpopulated_checkpoint) rather than silently dropped.
+
+# --- Quality gate the plateau is measured against ---
+gate:
+  metric: success_rate
+  required_min: 0.3
+  source: docs/context/evidence/issue_3254_predictive_crossing_conflict_13042_2026-06-23/summary.json
+  observed_range_across_populated_cells: [0.0667, 0.1]

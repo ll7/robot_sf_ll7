@@ -3059,6 +3059,34 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08/README.md
+  status: evidence
+  freshness: evidence
+  area: predictive_planner
+- path: docs/context/evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08/packet.json
+  status: evidence
+  freshness: evidence
+  area: predictive_planner
+- path: docs/context/evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08/artifact_inventory.json
+  status: evidence
+  freshness: evidence
+  area: predictive_planner
+- path: docs/context/evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08/robust_grid.json
+  status: evidence
+  freshness: evidence
+  area: predictive_planner
+- path: docs/context/evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08/confirming_eval_plateau.csv
+  status: evidence
+  freshness: evidence
+  area: predictive_planner
+- path: docs/context/evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08/seed_provenance.yaml
+  status: evidence
+  freshness: evidence
+  area: predictive_planner
+- path: docs/context/evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08/negative_finding.md
+  status: evidence
+  freshness: evidence
+  area: predictive_planner
 - path: docs/context/evidence/issue_3254_predictive_crossing_conflict_13042_2026-06-23/summary.json
   status: evidence
   freshness: evidence

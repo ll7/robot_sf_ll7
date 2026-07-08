@@ -539,7 +539,9 @@ class TestReplayEpisodeAndGenerateFigures:
             seed=1,
         )
 
-        with pytest.raises(ValueError, match="no replay_steps.*Future work will support re-simulation"):
+        with pytest.raises(
+            ValueError, match="no replay_steps.*Future work will support re-simulation"
+        ):
             replay_episode_and_generate_figures(
                 episode_row=row,
                 outputs=["trajectory"],

@@ -1,7 +1,8 @@
 # Issue #4792: Scenario Criticality Real-Runner Close-Out
 
-**Status**: Implementation complete; documentation phase. This note documents the landed
-implementation, policy decisions, and remaining residuals.
+**Status**: Core real-runner implementation complete; residuals remain tracked on
+issue #4792. This note documents the landed implementation, policy decisions, and
+remaining residuals.
 
 **Related**: [#4362](https://github.com/ll7/robot_sf_ll7/issues/4362), [#4792](https://github.com/ll7/robot_sf_ll7/issues/4792)
 
@@ -10,9 +11,9 @@ implementation, policy decisions, and remaining residuals.
 ## Overview
 
 Issue #4792 was opened to complete the criticality optimizer by connecting it to the real
-simulator runner (replacing mock placeholder metrics). The issue has been fully implemented
-through a series of PRs. This note documents the implementation state, policy decisions, and
-remaining follow-up work.
+simulator runner (replacing mock placeholder metrics). The core real-runner path has been
+implemented through a series of PRs. This note documents the implementation state, policy
+decisions, and remaining follow-up work still tracked on the parent issue.
 
 ## PR Ledger
 
@@ -245,13 +246,14 @@ uv run python scripts/benchmark/run_scenario_criticality_optimization.py \
 | PR ledger complete | ✅ | All landed PRs tracked above |
 | Remaining residuals documented | ✅ | See "Remaining Residuals" section |
 
-## Issue Close-Out
+## Issue State
 
-Issue #4792 can be closed once:
-- This context note is merged
-- The canonical evaluator policy is acknowledged in any subsequent work
+This note is a state and policy record, not an automatic closure claim for issue #4792.
+The parent issue should remain open while the residuals above are still tracked there, or
+until maintainers explicitly accept those items as non-blocking and move any durable work
+to child follow-up issues.
 
-The residuals identified above are intentionally deferred as post-submission follow-ups.
-They do not block the close-out of #4792 because the core functionality (real-runner
-integration, objective responsiveness, baseline-vs-best comparison) is complete and
-validated.
+The core functionality (real-runner integration, objective responsiveness, and
+baseline-vs-best comparison from simulator rows) is complete for the diagnostic lane, but
+parallel-batch tuning, collision-key schema finalization, and the Bayesian optimizer stretch
+remain residual work.

@@ -139,7 +139,6 @@ From PR #4822 CPU validation:
 ### Current Limitations
 
 - No batch-mode execution (each candidate runs full `run_map_batch` independently)
-- Timing breakdown available (patch_s, simulation_s, score_s) but batch-mode not yet implemented
 - No shared planner batch optimization beyond the pre-resolution step
 
 ## Collision-Key Schema Policy

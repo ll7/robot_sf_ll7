@@ -31,6 +31,7 @@ os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
 @dataclass(frozen=True)
 class _SubprocessArmParams:
     """Parameters for running a single planner arm in subprocess isolation."""
+
     planner_key: str
     planner_algo: str
     planner_human_model_variant: str | None
@@ -201,7 +202,7 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
             status = "partial-failure"
         elif availability.availability_status == "failed":
             status = "failed"
-    except Exception as exc:  # noqa: BLE001
+    except (RuntimeError, ValueError, OSError, ImportError) as exc:
         status = "failed"
         summary = {
             "status": "failed",
@@ -301,7 +302,7 @@ def _main_subprocess_worker() -> int:
         # Write result to stdout as JSON for parent process
         print(json.dumps(result))  # noqa: T201
         return 0
-    except Exception as exc:  # noqa: BLE001
+    except (json.JSONDecodeError, TypeError, ValueError, RuntimeError, OSError, ImportError) as exc:
         logger.error("Subprocess arm failed: {}", exc)
         print(  # noqa: T201
             json.dumps(

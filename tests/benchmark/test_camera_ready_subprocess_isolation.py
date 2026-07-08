@@ -150,9 +150,7 @@ class TestSubprocessWorkerExecution:
     @patch("sys.stdin")
     @patch("sys.stdout")
     @patch("robot_sf.benchmark.camera_ready.resource_lifecycle._run_single_arm_subprocess")
-    def test_subprocess_worker_reads_params_from_stdin(
-        self, mock_run_arm, mock_stdout, mock_stdin
-    ):
+    def test_subprocess_worker_reads_params_from_stdin(self, mock_run_arm, mock_stdout, mock_stdin):
         """Verify subprocess worker reads parameters from stdin."""
         # Setup mock stdin with valid parameters
         mock_stdin.read.return_value = json.dumps(

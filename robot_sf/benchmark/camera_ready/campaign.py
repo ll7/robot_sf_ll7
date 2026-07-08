@@ -554,7 +554,7 @@ def _run_campaign_planner_variant(
                 bootstrap_confidence=cfg.bootstrap_confidence,
                 bootstrap_seed=cfg.bootstrap_seed,
             )
-        except Exception as exc:
+        except (RuntimeError, ValueError, OSError, KeyError, TypeError) as exc:
             warnings.append(
                 f"Aggregation failed for planner '{planner.key}' ({kinematics}): {exc}",
             )
@@ -844,7 +844,7 @@ def _run_campaign_planner_variant_subprocess(
                 bootstrap_confidence=cfg.bootstrap_confidence,
                 bootstrap_seed=cfg.bootstrap_seed,
             )
-        except Exception as exc:
+        except (RuntimeError, ValueError, OSError, KeyError, TypeError) as exc:
             warnings.append(
                 f"Aggregation failed for planner '{planner.key}' ({kinematics}): {exc}",
             )

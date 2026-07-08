@@ -254,8 +254,16 @@ if [[ "$shard_count" =~ ^[0-9]+$ ]] && [[ "$shard_count" -gt 1 ]]; then
 fi
 
 # Fast PR lane: when sharding is active (typically on PRs), run only fast tests
-# using the -m "not slow" marker. Full suite runs unsharded on main/nightly.
-if [[ "$sharding_active" == "1" ]]; then
+# using the -m "not slow" marker unless the caller supplied an explicit marker.
+# Full suite runs unsharded on main/nightly.
+has_marker="0"
+for pytest_arg in "${pytest_args[@]}"; do
+  if [[ "$pytest_arg" == "-m" || "$pytest_arg" == --markexpr=* ]]; then
+    has_marker="1"
+    break
+  fi
+done
+if [[ "$sharding_active" == "1" && "$has_marker" == "0" ]]; then
   cmd+=("-m" "not slow")
 fi
 
@@ -310,8 +318,9 @@ elif [[ "$lane_mode" == "optional" && ${#explicit_test_targets[@]} -eq 0 ]]; the
 fi
 
 if [[ "$fast_fail" == "1" ]]; then
-  # When sharding, each shard should report all failures, not just the first
-  if [[ "$sharding_active" != "1" ]]; then
+  # When sharding, each shard should report all failures, not just the first,
+  # unless the caller explicitly requested fast-fail for local debugging.
+  if [[ "$sharding_active" != "1" || "${PYTEST_FAST_FAIL:-}" == "1" ]]; then
     cmd+=("-x")
   fi
 elif [[ "$fast_fail" != "0" ]]; then

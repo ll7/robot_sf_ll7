@@ -20,9 +20,21 @@ runs:
       with:
         version: ${{ inputs.uv-version }}
 
+    - name: Cache uv sync package payloads
+      id: cache-uv
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ${{ runner.temp }}/setup-uv-cache/archive-v0
+          ${{ runner.temp }}/setup-uv-cache/wheels-v6
+        key: uv-sync-payloads-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+
     - name: Report uv cache state before sync
       shell: bash
-      run: bash scripts/dev/ci_uv_sync_diag.sh "uv-cache-pre-sync"
+      run: |
+        echo "cache-hit=${{ steps.cache-uv.outputs.cache-hit }}"
+        echo "cache-matched-key=${{ steps.cache-uv.outputs.cache-matched-key }}"
+        bash scripts/dev/ci_uv_sync_diag.sh "uv-cache-pre-sync"
 
     - name: Set up Python
       uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -42,11 +54,11 @@ runs:
       shell: bash
       run: bash scripts/dev/free_github_runner_space.sh
 
-    - name: Sync dependencies (locked)
+    - name: Sync dependencies (locked, with transient-failure retry)
       shell: bash
       env:
         CI_STEP_TIMEOUT_SECONDS: "1200"
-      run: bash scripts/dev/ci_step_timer.sh "Sync dependencies (locked)" uv sync --all-extras --frozen
+      run: bash scripts/dev/ci_step_timer.sh "Sync dependencies (locked)" bash scripts/dev/uv_sync_retry.sh -- --all-extras --frozen
 
     - name: Report uv cache state after sync
       if: always()

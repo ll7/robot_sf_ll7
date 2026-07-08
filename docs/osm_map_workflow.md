@@ -141,11 +141,10 @@ from robot_sf.nav.osm_map_builder import osm_to_map_definition
 # Load PBF and extract
 map_def = osm_to_map_definition(
     pbf_file="maps/pbf/oslo.pbf",
-    simplify_m=0.5,  # Simplify polygons to 0.5m
-    buffer_m=2.0,     # Expand obstacles by 2m
+    line_buffer_m=1.5,  # Half-width buffer for driveable lines (m)
 )
 
-print(f"Map bounds: {map_def.map_bounds}")
+print(f"Map bounds: {map_def.bounds}")
 print(f"Obstacles: {len(map_def.obstacles)}")
 print(f"Allowed areas: {len(map_def.allowed_areas)}")
 ```
@@ -160,7 +159,6 @@ output = render_osm_background(
     pbf_file="maps/pbf/oslo.pbf",
     output_dir="output/maps",
     dpi=100,
-    simplify_m=0.5,
 )
 
 affine = output["affine_transform"]
@@ -275,8 +273,7 @@ zones_config = load_zones_yaml("scenarios/my_scenario.yaml")
 
 # Create environment config
 config = RobotSimulationConfig(
-    map_pool=[...],  # Your OSM-derived map
-    zones_config=zones_config,  # Add zones
+    map_pool=[...],  # Your OSM-derived map (zones live in the map/scenario definition)
 )
 
 # Create and use environment
@@ -463,7 +460,7 @@ with open('scenarios/my_scenario.yaml') as f:
 
 ```python
 # Check map bounds
-print(f"Map bounds: {map_def.map_bounds}")
+print(f"Map bounds: {map_def.bounds}")
 
 # Verify zones are within bounds
 for name, zone in config.zones.items():

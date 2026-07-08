@@ -147,12 +147,8 @@ uv run python scripts/research/generate_report.py [OPTIONS]
 Options:
   --tracker-run TEXT          Run tracker ID (from output/run-tracker/)
   --experiment-name TEXT      Human-readable experiment label
-  --output PATH               Report output directory
-  --hypothesis-threshold FLOAT Improvement threshold % (default: 40.0)
-  --bootstrap-samples INT     Bootstrap iterations (default: 1000)
-  --confidence FLOAT          CI confidence level (default: 0.95)
-  --export-latex              Also generate LaTeX report
-  --skip-figures              Skip figure generation (metadata only)
+  --output PATH               Report output directory (default: output/research_reports/<ts>_<name>)
+  --threshold FLOAT           Improvement threshold % (default: 40.0)
   --help                      Show help message
 ```
 
@@ -162,11 +158,11 @@ Options:
 uv run python scripts/research/compare_ablations.py [OPTIONS]
 
 Options:
-  --ablation-config PATH      YAML file defining ablation matrix
+  --config PATH               YAML file defining ablation matrix
   --experiment-name TEXT      Experiment identifier
   --seeds INT...              Random seeds (space-separated)
   --output PATH               Report output directory
-  --parallel-workers INT      Parallel execution workers (default: 1)
+  --threshold FLOAT           Improvement threshold % (default: 40.0)
   --help                      Show help message
 ```
 

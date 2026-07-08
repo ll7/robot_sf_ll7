@@ -47,14 +47,15 @@ risks should name:
 - what would change the decision, such as exposing the path to untrusted input,
   publishing supported library behavior, or using it in CI or releases.
 
-Do not use broad category ignores for new security findings. The existing broad
-suppression for Ruff `S` rules remains a legacy baseline until the advisory scan
-is triaged into fixes or scoped ignores.
+Do not use broad category ignores for new security findings. Ruff `S` findings are
+ratcheted via explicit per-code ignores (the issue #3477 baseline) rather than a broad
+category suppression; triage new findings into fixes or scoped per-file ignores.
 
 ## Ruff Security Baseline
 
-`pyproject.toml` currently selects Ruff Bandit rules (`S`) but keeps the legacy
-global `S` ignore so normal linting does not fail on the existing backlog. The
+`pyproject.toml` currently selects Ruff Bandit rules (`S`) and ratchets the existing
+backlog via explicit per-code ignores (S101, S105, S108, ... under issue #3477) rather
+than a global `S` ignore, so any new Bandit finding outside that baseline fails lint. The
 `security-baseline` GitHub Actions workflow runs Ruff with ignores overridden:
 
 ```bash
@@ -63,8 +64,8 @@ uv run ruff check --config 'lint.ignore=[]' --select S .
 
 That advisory job uploads the raw finding log. Use it to ratchet the baseline by
 fixing findings and replacing broad suppression with scoped per-file ignores.
-Once the finding count is small enough to review comfortably, remove the global
-`S` ignore and keep only justified scoped exceptions.
+Keep ratcheting the per-code baseline down: fix findings and replace each code-level
+ignore with justified scoped per-file exceptions.
 
 ## Dependency Visibility
 

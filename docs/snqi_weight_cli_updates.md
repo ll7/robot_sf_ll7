@@ -23,7 +23,7 @@ Recompute (`scripts/recompute_snqi_weights.py`):
 Centralized in `robot_sf/benchmark/snqi/weights_validation.py`:
 
 * All required keys defined in `WEIGHT_NAMES` must be present
-* Values must be convertible to float, finite, and > 0
+* Values must be convertible to float, finite, and >= 0 (a weight of 0 disables the corresponding term)
 * Extraneous keys are ignored with a warning (forward compatibility)
 * Very large weights (>10) emit a warning
 

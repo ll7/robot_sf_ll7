@@ -132,6 +132,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **issue #4873 user-facing docs drift audit — corrected stale claims against current code (docs-only).**
+  Verified `README.md` and `docs/*.md` top-level docs against the current codebase and fixed incorrect
+  statements in place across 13 files: renamed module path `robot_sf/sim/FastPysfWrapper.py` →
+  `fast_pysf_wrapper.py` (SUBTREE_MIGRATION, dev_guide); fixed the `02_trained_model.py` JSONL output path
+  `output/benchmarks/` → `output/results/` and the `tests/test_gym_env.py` → `tests/test_gymnasium_env_contracts.py`
+  example (dev_guide); corrected the `robot_sf_bench` CLI subcommand count 15 → 32 (docs/README); corrected the
+  benchmark scenario-schema location (`schema/` singular holds `scenarios.schema.json`, `schemas/` holds the
+  episode schema); fixed OSM API examples to real kwargs (`osm_to_map_definition`/`render_osm_background`),
+  `MapDefinition.bounds` (not `map_bounds`), and removed the non-existent `zones_config` `RobotSimulationConfig`
+  kwarg (osm_map_workflow); corrected coverage config (`[tool.pytest.ini_options] addopts` has no `--cov*`;
+  `[tool.coverage.run] source` includes `fast-pysf/pysocialforce`; real gym-env test path) (coverage_guide);
+  corrected `research_reporting` CLI flags to the real `generate_report.py`/`compare_ablations.py` options;
+  updated `security_triage` (Ruff `S` is a per-code baseline under issue #3477, not a global `S` ignore); fixed
+  `imitation_learning_pipeline` (`best_checkpoint_metric` default is `success_rate`; spec link is `spec.md`);
+  fixed `single_pedestrians` example link to `examples/advanced/07_single_pedestrian.py`; fixed
+  `snqi_weight_cli_updates` validation rule (`>= 0`, not `> 0` — a weight of 0 disables a term); fixed
+  `trajectory_visualization` test invocation; and removed `ffmpeg` from the documented headless-CI apt list
+  (CI installs only `libglib2.0-0 libgl1 fonts-dejavu-core jq`). Illustrative sample-output filenames, tutorial
+  placeholders, and historical migration/fix logs were intentionally left unchanged. No code changes — docs only.
 * **issue #4183 hybrid_global_rl diagnostic runner — executable baseline arm.**
   The paired diagnostic runner `scripts/benchmark/run_hybrid_global_rl_diagnostic_issue_4183.py` now
   (a) validates episodes against the canonical `robot_sf/benchmark/schemas/episode.schema.v1.json`

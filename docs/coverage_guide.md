@@ -40,17 +40,17 @@ uv run python scripts/coverage/compare_coverage.py \
   --format terminal
 ```
 
-## Automatic Collection
+## Coverage Collection
 
-Coverage is enabled by default through `pyproject.toml` configuration:
+Coverage tooling is configured in `pyproject.toml`, and `pytest-cov` ships in the `dev`
+dependency group. The default pytest invocation does not collect coverage — pass `--cov`
+explicitly (see examples below). The base pytest options are:
 
 ```toml
 [tool.pytest.ini_options]
 addopts = [
-    "--cov=robot_sf",           # Measure coverage for robot_sf package
-    "--cov-report=term",         # Terminal summary
-    "--cov-report=html",         # Interactive HTML report
-    "--cov-report=json",         # Machine-readable JSON
+    "--import-mode=importlib",
+    "--durations=10",
 ]
 ```
 
@@ -241,7 +241,7 @@ All coverage settings live in `pyproject.toml`:
 
 ```toml
 [tool.coverage.run]
-source = ["robot_sf"]              # Package to measure
+source = ["robot_sf", "fast-pysf/pysocialforce"]  # Packages to measure
 omit = [
     "tests/*",                     # Exclude test code
     "examples/*",                  # Exclude demos
@@ -386,7 +386,7 @@ branch = true  # Measure if/else branches taken
 
 ```bash
 # Only measure coverage for integration tests
-uv run pytest tests/test_gym_env.py --cov=robot_sf.gym_env
+uv run pytest tests/test_gymnasium_env_contracts.py --cov=robot_sf.gym_env
 
 # Measure coverage for single module
 uv run pytest tests --cov=robot_sf.benchmark

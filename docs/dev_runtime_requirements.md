@@ -55,7 +55,7 @@ workflow:
 
 * `gh` - GitHub issue, PR, checks, and Actions log workflows.
 * `jq` - JSON validation in CI smoke paths and local diagnostics.
-* `ffmpeg` - video/rendering paths and GitHub CI parity.
+* `ffmpeg` - local video/rendering paths (not required for headless CI).
 * `gh-signoff` - optional advisory local-CI statuses. `scripts/dev/local_signoff.sh`
   auto-installs `basecamp/gh-signoff` when needed and never changes branch protection.
 
@@ -63,7 +63,7 @@ GitHub Actions currently installs these Ubuntu packages for headless jobs:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y --no-install-recommends ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core jq
+sudo apt-get install -y --no-install-recommends libglib2.0-0 libgl1 fonts-dejavu-core jq
 ```
 
 The promoted-planner and nightly performance workflows use the same headless stack, without `jq`

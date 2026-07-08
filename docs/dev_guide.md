@@ -231,7 +231,7 @@ uv run python examples/quickstart/03_custom_map.py
 
 - `01_basic_robot.py` introduces the environment factory pattern and headless rollouts.
 - `02_trained_model.py` replays the bundled PPO baseline and writes JSONL metrics to
-  `output/benchmarks/episodes_demo_ppo.jsonl`.
+  `output/results/episodes_demo_ppo.jsonl`.
 - `03_custom_map.py` shows how to load `maps/svg_maps/debug_06.svg` via
   `RobotSimulationConfig.map_pool` for custom layouts.
 
@@ -955,7 +955,7 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 
 - Architecture in one line: Gymnasium envs → factory functions → FastPysfWrapper → fast-pysf physics; training/eval via StableBaselines3; baselines/benchmarks under `robot_sf/baselines` and `robot_sf/benchmark`.
 - Environments: always create via factories (`make_robot_env`, `make_image_robot_env`, `make_pedestrian_env`). Configure via `robot_sf.gym_env.unified_config` only; toggle flags before passing to the factory.
-- Simulation glue: interact with pedestrian physics through `robot_sf/sim/FastPysfWrapper`. Don’t import from `fast-pysf` directly inside envs.
+- Simulation glue: interact with pedestrian physics through `robot_sf/sim/fast_pysf_wrapper.py`. Don’t import from `fast-pysf` directly inside envs.
 - Baselines/benchmarks: get planners with `robot_sf.baselines.get_baseline(...)`. Prefer programmatic runners; CLI exists at `robot_sf/benchmark/cli.py` for convenience.
 - Local planner adapters: start from `docs/dev/planner_adapter_template.md` and the diagnostic
   `reference_adapter` path before adding a new map-runner planner key.
@@ -1162,9 +1162,9 @@ uv run pytest tests -n auto
 ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests
 
 # Run specific test file with coverage
-ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests/test_gym_env.py -v
+ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests/test_gymnasium_env_contracts.py -v
 # Run specific test file without coverage
-uv run pytest tests/test_gym_env.py -v
+uv run pytest tests/test_gymnasium_env_contracts.py -v
 
 # View coverage data programmatically
 python -c "import json; print(json.load(open('output/coverage/coverage.json'))['totals'])"

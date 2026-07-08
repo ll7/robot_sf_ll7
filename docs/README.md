@@ -42,7 +42,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **Baseline Interface**: Unified PlannerProtocol for SocialForce, PPO, Random planners
 * **Statistical Analysis**: Bootstrap confidence intervals and robust aggregation
 * **Figure Orchestrator**: Distribution plots, Pareto frontiers, force fields, thumbnails, tables
-* **CLI Tools**: 15 subcommands covering full experiment workflow
+* **CLI Tools**: 32 subcommands covering full experiment workflow
 
 ### Ready-to-Use Workflows
 

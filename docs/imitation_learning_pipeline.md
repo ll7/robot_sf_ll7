@@ -208,7 +208,7 @@ Example configuration files are located in `configs/training/ppo_imitation/`:
 - `ppo_hyperparams`: Overrides Stable-Baselines3 PPO kwargs (e.g., `learning_rate`,
   `n_steps`, `batch_size`, `n_epochs`, `ent_coef`, `clip_range`, `target_kl`).
 - `best_checkpoint_metric`: Which eval metric to track for saving the best checkpoint
-  (default: `eval_episode_return`; minimize `collision_rate`/`comfort_exposure`, maximize others).
+  (default: `success_rate`; minimize `collision_rate`/`comfort_exposure`, maximize others).
 - `snqi_weights`: Optional path to SNQI weights JSON used for canonical SNQI calculation.
 - `snqi_baseline`: Optional path to SNQI baseline med/p95 JSON used for normalization.
 - `env_factory_kwargs.reward_name`: Optional named reward (`simple`, `punish_action`,
@@ -297,7 +297,7 @@ Comprehensive integration tests in `tests/integration/test_ppo_pretraining_pipel
 ## Related Documentation
 
 - [Development Guide](./dev_guide.md) - Main development reference
-- [Feature Specification](../specs/001-ppo-imitation-pretrain/README.md) - Technical specification
+- [Feature Specification](../specs/001-ppo-imitation-pretrain/spec.md) - Technical specification
 - [Data Model](../specs/001-ppo-imitation-pretrain/data-model.md) - Artifact schemas
 - [Implementation Plan](../specs/001-ppo-imitation-pretrain/plan.md) - Design decisions
 - [CHANGELOG](../CHANGELOG.md) - Feature 001 release notes
@@ -346,7 +346,7 @@ For questions, issues, or contributions related to the imitation learning pipeli
 
 1. Check the [quickstart guide](../specs/001-ppo-imitation-pretrain/quickstart.md) for common issues
 2. Review [integration tests](../tests/integration/test_ppo_pretraining_pipeline.py) for usage examples
-3. Consult the [feature specification](../specs/001-ppo-imitation-pretrain/README.md) for design rationale
+3. Consult the [feature specification](../specs/001-ppo-imitation-pretrain/spec.md) for design rationale
 4. Open an issue on GitHub with the `imitation-learning` label
 
 ---

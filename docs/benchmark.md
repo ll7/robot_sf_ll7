@@ -89,9 +89,9 @@ sanity check for basic shared-space competence, not safety or robustness evidenc
 
 ### Canonical Schema Location
 
-**Single source of truth**: `robot_sf/benchmark/schemas/`
-- Episode schemas: `episode.schema.v1.json`
-- Scenario schemas: `scenarios.schema.json`
+**Canonical schema locations**:
+- Episode schema: `robot_sf/benchmark/schemas/episode.schema.v1.json`
+- Scenario schema: `robot_sf/benchmark/schema/scenarios.schema.json` (note: `schema/`, singular)
 
 ### Runtime Schema Resolution
 

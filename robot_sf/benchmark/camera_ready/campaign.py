@@ -253,15 +253,16 @@ def _cleanup_gpu_memory_between_arms(
     Returns:
         Memory metrics dict with allocated/freed stats and high-water mark.
     """
-    gc.collect()
     memory_metrics: dict[str, Any] = {
         "planner_key": planner_key,
         "kinematics": kinematics,
         "torch_available": False,
         "cuda_available": False,
-        "allocated_mb": 0,
-        "reserved_mb": 0,
-        "high_water_mark_mb": 0,
+        "allocated_mb": 0.0,
+        "reserved_mb": 0.0,
+        "high_water_mark_mb": 0.0,
+        "allocated_freed_mb": 0.0,
+        "reserved_freed_mb": 0.0,
     }
 
     if "torch" in sys.modules:
@@ -270,19 +271,18 @@ def _cleanup_gpu_memory_between_arms(
         memory_metrics["torch_available"] = True
         if torch.cuda.is_available():
             memory_metrics["cuda_available"] = True
-            # Capture high-water mark before clearing
-            memory_metrics["high_water_mark_mb"] = (
-                torch.cuda.max_memory_allocated() / 1024 / 1024
-            )
+            # Measure before gc/empty_cache so diagnostics capture what cleanup freed.
+            memory_metrics["high_water_mark_mb"] = torch.cuda.max_memory_allocated() / 1024 / 1024
             allocated_before = torch.cuda.memory_allocated() / 1024 / 1024
             reserved_before = torch.cuda.memory_reserved() / 1024 / 1024
 
-            # Force cache cleanup and synchronization
+            gc.collect()
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
 
             allocated_after = torch.cuda.memory_allocated() / 1024 / 1024
             reserved_after = torch.cuda.memory_reserved() / 1024 / 1024
+            torch.cuda.reset_peak_memory_stats()
 
             memory_metrics["allocated_mb"] = allocated_after
             memory_metrics["reserved_mb"] = reserved_after
@@ -662,20 +662,20 @@ def _run_campaign_planner_matrix(
                 kinematics=kinematics,
                 active_observation_mode=active_observation_mode,
             )
-            run_entries.extend(variant_result.run_entries)
-            planner_rows.extend(variant_result.planner_rows)
-            warnings.extend(variant_result.warnings)
-            seed_variability_records.extend(variant_result.seed_variability_records)
-
             # Clean up GPU memory after each arm to prevent VRAM leaks
             # across campaign iterations (issue #4826).
             memory_metrics = _cleanup_gpu_memory_between_arms(
                 planner_key=planner.key,
                 kinematics=kinematics,
             )
-            # Attach memory metrics to the run entry for diagnostics
-            if run_entries:
-                run_entries[-1]["gpu_cleanup"] = memory_metrics
+            # Attach diagnostics to the run entry created by this variant.
+            if variant_result.run_entries:
+                variant_result.run_entries[-1]["gpu_cleanup"] = memory_metrics
+
+            run_entries.extend(variant_result.run_entries)
+            planner_rows.extend(variant_result.planner_rows)
+            warnings.extend(variant_result.warnings)
+            seed_variability_records.extend(variant_result.seed_variability_records)
 
             if variant_result.stop_requested:
                 stop_requested = True

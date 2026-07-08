@@ -7,77 +7,66 @@ arms to prevent VRAM leaks during long-running multi-arm campaigns.
 from __future__ import annotations
 
 import sys
-from pathlib import Path
-from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
 
+from robot_sf.benchmark.camera_ready import campaign as campaign_mod
 from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, PlannerSpec
 from robot_sf.benchmark.camera_ready.campaign import (
+    _CampaignPlannerVariantResult,
+    _CampaignRuntimeDependencies,
     _cleanup_gpu_memory_between_arms,
 )
-
-if TYPE_CHECKING:
-    pass
 
 
 class TestGPUCleanupBetweenArms:
     """Tests for GPU cleanup function between campaign arms."""
 
-    def test_cleanup_gpu_memory_between_arms_without_torch(self) -> None:
+    def test_cleanup_gpu_memory_between_arms_without_torch(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """GPU cleanup returns safe defaults when torch is not available."""
-        # Ensure torch is not in sys.modules
-        torch_backup = sys.modules.get("torch")
-        if "torch" in sys.modules:
-            del sys.modules["torch"]
+        monkeypatch.delitem(sys.modules, "torch", raising=False)
 
-        try:
-            metrics = _cleanup_gpu_memory_between_arms(
-                planner_key="test_planner",
-                kinematics="unicycle",
-            )
+        metrics = _cleanup_gpu_memory_between_arms(
+            planner_key="test_planner",
+            kinematics="unicycle",
+        )
 
-            assert metrics["planner_key"] == "test_planner"
-            assert metrics["kinematics"] == "unicycle"
-            assert metrics["torch_available"] is False
-            assert metrics["cuda_available"] is False
-            assert metrics["allocated_mb"] == 0
-            assert metrics["reserved_mb"] == 0
-            assert metrics["high_water_mark_mb"] == 0
-        finally:
-            # Restore torch if it was present
-            if torch_backup is not None:
-                sys.modules["torch"] = torch_backup
+        assert metrics["planner_key"] == "test_planner"
+        assert metrics["kinematics"] == "unicycle"
+        assert metrics["torch_available"] is False
+        assert metrics["cuda_available"] is False
+        assert metrics["allocated_mb"] == 0
+        assert metrics["reserved_mb"] == 0
+        assert metrics["high_water_mark_mb"] == 0
 
-    def test_cleanup_gpu_memory_between_arms_with_torch_cpu(self) -> None:
+    def test_cleanup_gpu_memory_between_arms_with_torch_cpu(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """GPU cleanup handles torch available but CUDA not available."""
-        # Mock torch module with CUDA unavailable
         mock_torch = MagicMock()
         mock_torch.cuda.is_available.return_value = False
-        sys.modules["torch"] = mock_torch
+        monkeypatch.setitem(sys.modules, "torch", mock_torch)
 
-        try:
-            metrics = _cleanup_gpu_memory_between_arms(
-                planner_key="test_planner",
-                kinematics="unicycle",
-            )
+        metrics = _cleanup_gpu_memory_between_arms(
+            planner_key="test_planner",
+            kinematics="unicycle",
+        )
 
-            assert metrics["planner_key"] == "test_planner"
-            assert metrics["kinematics"] == "unicycle"
-            assert metrics["torch_available"] is True
-            assert metrics["cuda_available"] is False
-            assert metrics["allocated_mb"] == 0
-            assert metrics["reserved_mb"] == 0
-            assert metrics["high_water_mark_mb"] == 0
-        finally:
-            # Clean up mock
-            if "torch" in sys.modules:
-                del sys.modules["torch"]
+        assert metrics["planner_key"] == "test_planner"
+        assert metrics["kinematics"] == "unicycle"
+        assert metrics["torch_available"] is True
+        assert metrics["cuda_available"] is False
+        assert metrics["allocated_mb"] == 0
+        assert metrics["reserved_mb"] == 0
+        assert metrics["high_water_mark_mb"] == 0
 
-    def test_cleanup_gpu_memory_between_arms_with_cuda(self) -> None:
+    def test_cleanup_gpu_memory_between_arms_with_cuda(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """GPU cleanup properly frees CUDA memory when available."""
-        # Mock torch module with CUDA available
         mock_torch = MagicMock()
         mock_torch.cuda.is_available.return_value = True
         # Return values in BYTES (max_memory_allocated returns bytes)
@@ -91,58 +80,46 @@ class TestGPUCleanupBetweenArms:
             600 * 1024 * 1024,  # Before: 600 MiB in bytes
             300 * 1024 * 1024,  # After: 300 MiB in bytes
         ]
-        sys.modules["torch"] = mock_torch
+        monkeypatch.setitem(sys.modules, "torch", mock_torch)
 
-        try:
-            metrics = _cleanup_gpu_memory_between_arms(
-                planner_key="test_planner",
-                kinematics="unicycle",
-            )
+        metrics = _cleanup_gpu_memory_between_arms(
+            planner_key="test_planner",
+            kinematics="unicycle",
+        )
 
-            assert metrics["planner_key"] == "test_planner"
-            assert metrics["kinematics"] == "unicycle"
-            assert metrics["torch_available"] is True
-            assert metrics["cuda_available"] is True
-            # max_memory_allocated is converted to MiB by the function
-            assert metrics["high_water_mark_mb"] == 1024
-            assert metrics["allocated_mb"] == 256
-            assert metrics["reserved_mb"] == 300
-            assert metrics["allocated_freed_mb"] == 256  # 512 - 256
-            assert metrics["reserved_freed_mb"] == 300  # 600 - 300
+        assert metrics["planner_key"] == "test_planner"
+        assert metrics["kinematics"] == "unicycle"
+        assert metrics["torch_available"] is True
+        assert metrics["cuda_available"] is True
+        # max_memory_allocated is converted to MiB by the function
+        assert metrics["high_water_mark_mb"] == 1024
+        assert metrics["allocated_mb"] == 256
+        assert metrics["reserved_mb"] == 300
+        assert metrics["allocated_freed_mb"] == 256  # 512 - 256
+        assert metrics["reserved_freed_mb"] == 300  # 600 - 300
 
-            # Verify cleanup methods were called
-            mock_torch.cuda.empty_cache.assert_called_once()
-            mock_torch.cuda.synchronize.assert_called_once()
-        finally:
-            # Clean up mock
-            if "torch" in sys.modules:
-                del sys.modules["torch"]
+        mock_torch.cuda.empty_cache.assert_called_once()
+        mock_torch.cuda.synchronize.assert_called_once()
+        mock_torch.cuda.reset_peak_memory_stats.assert_called_once()
 
 
 class TestCampaignMultiArmMemoryRegression:
     """Regression test for multi-arm campaign memory leaks (issue #4826)."""
 
-    def test_cleanup_function_is_callable(self) -> None:
+    def test_cleanup_function_is_callable(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Cleanup function exists and is callable with planner_key and kinematics."""
         assert callable(_cleanup_gpu_memory_between_arms)
-        # Test basic call without torch
-        torch_backup = sys.modules.get("torch")
-        if "torch" in sys.modules:
-            del sys.modules["torch"]
-        try:
-            result = _cleanup_gpu_memory_between_arms(
-                planner_key="test",
-                kinematics="unicycle",
-            )
-            assert result["planner_key"] == "test"
-            assert result["kinematics"] == "unicycle"
-        finally:
-            if torch_backup is not None:
-                sys.modules["torch"] = torch_backup
+        monkeypatch.delitem(sys.modules, "torch", raising=False)
 
-    def test_cleanup_metrics_structure(self) -> None:
+        result = _cleanup_gpu_memory_between_arms(
+            planner_key="test",
+            kinematics="unicycle",
+        )
+        assert result["planner_key"] == "test"
+        assert result["kinematics"] == "unicycle"
+
+    def test_cleanup_metrics_structure(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Cleanup returns dict with required metric fields for diagnostics."""
-        # Mock torch with CUDA
         mock_torch = MagicMock()
         mock_torch.cuda.is_available.return_value = True
         mock_torch.cuda.max_memory_allocated.return_value = 1024 * 1024 * 512  # 512 MiB
@@ -154,41 +131,95 @@ class TestCampaignMultiArmMemoryRegression:
             300 * 1024 * 1024,  # Before
             150 * 1024 * 1024,  # After
         ]
-        sys.modules["torch"] = mock_torch
+        monkeypatch.setitem(sys.modules, "torch", mock_torch)
 
-        try:
-            metrics = _cleanup_gpu_memory_between_arms(
-                planner_key="planner_a",
-                kinematics="diff_drive",
+        metrics = _cleanup_gpu_memory_between_arms(
+            planner_key="planner_a",
+            kinematics="diff_drive",
+        )
+
+        # Verify all required fields exist
+        required_fields = {
+            "planner_key",
+            "kinematics",
+            "torch_available",
+            "cuda_available",
+            "allocated_mb",
+            "reserved_mb",
+            "high_water_mark_mb",
+            "allocated_freed_mb",
+            "reserved_freed_mb",
+        }
+        assert set(metrics.keys()) == required_fields
+
+        # Verify values are reasonable
+        assert metrics["planner_key"] == "planner_a"
+        assert metrics["kinematics"] == "diff_drive"
+        assert metrics["torch_available"] is True
+        assert metrics["cuda_available"] is True
+        assert metrics["allocated_mb"] == 128
+        assert metrics["reserved_mb"] == 150
+        assert metrics["allocated_freed_mb"] == 128  # 256 - 128
+        assert metrics["reserved_freed_mb"] == 150  # 300 - 150
+        assert metrics["high_water_mark_mb"] == 512
+
+    def test_cleanup_metrics_attach_to_current_variant(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        """Each campaign arm gets its own cleanup diagnostics."""
+
+        def fake_variant(
+            context: object,
+            *,
+            planner: PlannerSpec,
+            kinematics: str,
+            active_observation_mode: str,
+        ) -> _CampaignPlannerVariantResult:
+            del context, active_observation_mode
+            return _CampaignPlannerVariantResult(
+                run_entries=[{"planner": {"key": planner.key, "kinematics": kinematics}}],
+                planner_rows=[],
+                warnings=[],
+                seed_variability_records=[],
+                stop_requested=False,
             )
 
-            # Verify all required fields exist
-            required_fields = {
-                "planner_key",
-                "kinematics",
-                "torch_available",
-                "cuda_available",
-                "allocated_mb",
-                "reserved_mb",
-                "high_water_mark_mb",
-                "allocated_freed_mb",
-                "reserved_freed_mb",
-            }
-            assert set(metrics.keys()) == required_fields
+        def fake_cleanup(*, planner_key: str, kinematics: str) -> dict[str, str]:
+            return {"planner_key": planner_key, "kinematics": kinematics}
 
-            # Verify values are reasonable
-            assert metrics["planner_key"] == "planner_a"
-            assert metrics["kinematics"] == "diff_drive"
-            assert metrics["torch_available"] is True
-            assert metrics["cuda_available"] is True
-            assert metrics["allocated_mb"] == 128
-            assert metrics["reserved_mb"] == 150
-            assert metrics["allocated_freed_mb"] == 128  # 256 - 128
-            assert metrics["reserved_freed_mb"] == 150  # 300 - 150
-            assert metrics["high_water_mark_mb"] == 512
-        finally:
-            if "torch" in sys.modules:
-                del sys.modules["torch"]
+        monkeypatch.setattr(campaign_mod, "_run_campaign_planner_variant", fake_variant)
+        monkeypatch.setattr(campaign_mod, "_cleanup_gpu_memory_between_arms", fake_cleanup)
+
+        cfg = CampaignConfig(
+            name="gpu-cleanup-test",
+            scenario_matrix_path=tmp_path / "scenarios.yaml",
+            planners=(PlannerSpec(key="planner_a", algo="orca"),),
+            kinematics_matrix=("diff_drive", "holonomic"),
+        )
+        dependencies = _CampaignRuntimeDependencies(
+            prepare_campaign_preflight=lambda *args, **kwargs: {},
+            run_batch=lambda *args, **kwargs: {},
+            compute_aggregates_with_ci=lambda *args, **kwargs: {},
+            export_publication_bundle=lambda *args, **kwargs: None,
+        )
+
+        results = campaign_mod._run_campaign_planner_matrix(
+            cfg=cfg,
+            scenarios=[],
+            snqi_weights=None,
+            snqi_baseline=None,
+            runs_dir=tmp_path,
+            dependencies=dependencies,
+        )
+
+        assert [entry["gpu_cleanup"]["kinematics"] for entry in results.run_entries] == [
+            "diff_drive",
+            "holonomic",
+        ]
+        assert [entry["planner"]["kinematics"] for entry in results.run_entries] == [
+            "diff_drive",
+            "holonomic",
+        ]
 
 
 def test_pytorch_alloc_conf_set_in_slurm_env() -> None:

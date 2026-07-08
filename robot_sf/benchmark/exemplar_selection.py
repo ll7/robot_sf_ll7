@@ -106,12 +106,18 @@ def _git_sha_short(length: int = 7) -> str:
             subprocess.check_output(
                 ["git", "rev-parse", f"--short={length}", "HEAD"],
                 stderr=subprocess.DEVNULL,
+                timeout=5,
             )
             .decode("utf-8")
             .strip()
         )
         return sha or "unknown"
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+    except (
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        FileNotFoundError,
+        OSError,
+    ):
         return "unknown"
 
 
@@ -273,18 +279,18 @@ def _select_in_cell(
             reason=f"metric '{metric}' missing or non-finite for all {len(cell_episodes)} episodes",
         )
 
-    # Sort: lower is better or higher is better
-    reverse = metric_direction == "higher"
-    scored.sort(key=lambda x: x[0], reverse=reverse)
+    # Canonical ascending sort by metric value so median index is
+    # invariant to metric_direction.  Direction only affects best/worst.
+    scored.sort(key=lambda x: x[0])
 
     planner_key = group_values.get("planner_key", "unknown_planner")
     results: list[SelectedEpisode] = []
 
     for mode in modes:
         if mode == "best":
-            idx = 0
+            idx = len(scored) - 1 if metric_direction == "higher" else 0
         elif mode == "worst":
-            idx = len(scored) - 1
+            idx = 0 if metric_direction == "higher" else len(scored) - 1
         else:  # median
             idx = len(scored) // 2
 
@@ -384,7 +390,7 @@ def build_manifest(
         Populated ``SelectionManifest``.
     """
     source_path = Path(source_episodes_path)
-    source_sha256 = _compute_file_sha256(source_path) if source_path.exists() else "unknown"
+    source_sha256 = _compute_file_sha256(source_path) if source_path.is_file() else "unknown"
 
     if metric_direction is None:
         metric_direction = METRIC_DIRECTIONS.get(metric, "lower")

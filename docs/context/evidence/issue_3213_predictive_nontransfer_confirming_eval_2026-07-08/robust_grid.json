@@ -1,0 +1,209 @@
+{
+  "schema_version": "hardcase_authority_sweep.v1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "issue": 3213,
+  "parent": 3215,
+  "scenario_set": "configs/scenarios/sets/predictive_hardcase_portfolio_v1.yaml",
+  "seeds": "robust_a (200-214) + robust_b (215-229) over 4 crossing families; ~120 episodes/cell when both halves present",
+  "clusters": {
+    "robust_a": "LiCCA test 9832460",
+    "robust_b": "imech192 a30 12969"
+  },
+  "evidence_tier": "diagnostic",
+  "finding": "Near-field speed cap is the only active authority knob; lifts hard-success ~0.07->0.10 (+~0.03 abs, ~+33% rel) consistently across checkpoints; headings/horizon-boost/lattice/turn-rate/sequence-depth inert; does not close the plateau; checkpoint choice barely moves baseline.",
+  "grid": {
+    "predictive_proxy_selected_v2_full": {
+      "baseline": {
+        "success_rate_mean": 0.075,
+        "seed_halves": [
+          0.08333333333333333,
+          0.06666666666666667
+        ],
+        "episodes_approx": 120
+      },
+      "nf_headings_only": {
+        "success_rate_mean": 0.075,
+        "seed_halves": [
+          0.08333333333333333,
+          0.06666666666666667
+        ],
+        "episodes_approx": 120
+      },
+      "nf_speedcap_only": {
+        "success_rate_mean": 0.1,
+        "seed_halves": [
+          0.1,
+          0.1
+        ],
+        "episodes_approx": 120
+      },
+      "nf_horizonboost_only": {
+        "success_rate_mean": 0.075,
+        "seed_halves": [
+          0.08333333333333333,
+          0.06666666666666667
+        ],
+        "episodes_approx": 120
+      },
+      "nearfield_turn": {
+        "success_rate_mean": 0.1,
+        "seed_halves": [
+          0.1,
+          0.1
+        ],
+        "episodes_approx": 120
+      }
+    },
+    "predictive_proxy_selected_v1": {
+      "baseline": {
+        "success_rate_mean": 0.075,
+        "seed_halves": [
+          0.08333333333333333,
+          0.06666666666666667
+        ],
+        "episodes_approx": 120
+      },
+      "nf_headings_only": {
+        "success_rate_mean": 0.075,
+        "seed_halves": [
+          0.08333333333333333,
+          0.06666666666666667
+        ],
+        "episodes_approx": 120
+      },
+      "nf_speedcap_only": {
+        "success_rate_mean": 0.1,
+        "seed_halves": [
+          0.1,
+          0.1
+        ],
+        "episodes_approx": 120
+      },
+      "nf_horizonboost_only": {
+        "success_rate_mean": 0.075,
+        "seed_halves": [
+          0.08333333333333333,
+          0.06666666666666667
+        ],
+        "episodes_approx": 120
+      },
+      "nearfield_turn": {
+        "success_rate_mean": 0.1,
+        "seed_halves": [
+          0.1,
+          0.1
+        ],
+        "episodes_approx": 120
+      }
+    },
+    "predictive_rgl_full_v1": {
+      "baseline": {
+        "success_rate_mean": 0.0667,
+        "seed_halves": [
+          0.06666666666666667,
+          0.06666666666666667
+        ],
+        "episodes_approx": 120
+      },
+      "nf_headings_only": {
+        "success_rate_mean": 0.0667,
+        "seed_halves": [
+          0.06666666666666667,
+          0.06666666666666667
+        ],
+        "episodes_approx": 120
+      },
+      "nf_speedcap_only": {
+        "success_rate_mean": 0.0917,
+        "seed_halves": [
+          0.1,
+          0.08333333333333333
+        ],
+        "episodes_approx": 120
+      },
+      "nf_horizonboost_only": {
+        "success_rate_mean": 0.0667,
+        "seed_halves": [
+          0.06666666666666667,
+          0.06666666666666667
+        ],
+        "episodes_approx": 120
+      },
+      "nearfield_turn": {
+        "success_rate_mean": 0.0917,
+        "seed_halves": [
+          0.1,
+          0.08333333333333333
+        ],
+        "episodes_approx": 120
+      }
+    },
+    "sweep_h192_mp3_s7_wd5e5": {
+      "baseline": {
+        "success_rate_mean": 0.075,
+        "seed_halves": [
+          0.08333333333333333,
+          0.06666666666666667
+        ],
+        "episodes_approx": 120
+      },
+      "nf_headings_only": {
+        "success_rate_mean": 0.075,
+        "seed_halves": [
+          0.08333333333333333,
+          0.06666666666666667
+        ],
+        "episodes_approx": 120
+      },
+      "nf_speedcap_only": {
+        "success_rate_mean": 0.1,
+        "seed_halves": [
+          0.1,
+          0.1
+        ],
+        "episodes_approx": 120
+      },
+      "nf_horizonboost_only": {
+        "success_rate_mean": 0.0833,
+        "seed_halves": [
+          0.08333333333333333
+        ],
+        "episodes_approx": 60
+      },
+      "nearfield_turn": {
+        "success_rate_mean": 0.1,
+        "seed_halves": [
+          0.1
+        ],
+        "episodes_approx": 60
+      }
+    },
+    "sweep_h256_mp4_s42": {
+      "baseline": {
+        "success_rate_mean": null,
+        "seed_halves": [],
+        "episodes_approx": 0
+      },
+      "nf_headings_only": {
+        "success_rate_mean": null,
+        "seed_halves": [],
+        "episodes_approx": 0
+      },
+      "nf_speedcap_only": {
+        "success_rate_mean": null,
+        "seed_halves": [],
+        "episodes_approx": 0
+      },
+      "nf_horizonboost_only": {
+        "success_rate_mean": null,
+        "seed_halves": [],
+        "episodes_approx": 0
+      },
+      "nearfield_turn": {
+        "success_rate_mean": null,
+        "seed_halves": [],
+        "episodes_approx": 0
+      }
+    }
+  }
+}

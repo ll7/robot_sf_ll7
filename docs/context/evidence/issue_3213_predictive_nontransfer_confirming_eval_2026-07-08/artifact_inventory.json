@@ -1,0 +1,52 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "accepted_packet_id": "issue3213-predictive-nontransfer-confirming-eval-20260708",
+  "bundle_dir": "docs/context/evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08",
+  "claim_boundary": "diagnostic_only confirming-eval plateau; predictive-planner non-transfer across checkpoints and authority knobs; success 0.0667-0.1 vs 0.30 gate",
+  "issue_pin": 4879,
+  "pattern_followed": "campaign-bundle (issue_1554_job_13198_constraints_first_analysis)",
+  "files": [
+    {
+      "kind": "narrative_boundary",
+      "path": "README.md",
+      "sha256": "16208d2685ce3a34952f68983701b04b574aa64bf3c7eb98a60c00421959f857",
+      "size_bytes": 6881
+    },
+    {
+      "kind": "machine_packet",
+      "path": "packet.json",
+      "sha256": "8d4a69194496828cc26d1abb8274f090247502c9b6978ac4b278ca43b83dfb0d",
+      "size_bytes": 7634
+    },
+    {
+      "kind": "source_grid_pinned_copy",
+      "path": "robust_grid.json",
+      "sha256": "9b13cc25c50804bc44c955d87284b3be0661958f190fbfb25b8f5471f872296a",
+      "size_bytes": 5336
+    },
+    {
+      "kind": "plateau_table",
+      "path": "confirming_eval_plateau.csv",
+      "sha256": "6d0fa419223fc30b02308c4f3748f906e5025ee3c1aba86c503983c7cdb18e48",
+      "size_bytes": 1795
+    },
+    {
+      "kind": "seed_scenario_provenance",
+      "path": "seed_provenance.yaml",
+      "sha256": "82df1ebc53be442c4da49fc417454ecb4e04595085f647d88000249292123b51",
+      "size_bytes": 4324
+    },
+    {
+      "kind": "claim_decision",
+      "path": "negative_finding.md",
+      "sha256": "de7fe51e769f26272bd21e9d47b319554e795451ae2457aee120357a3005617f",
+      "size_bytes": 3498
+    }
+  ],
+  "forbidden_actions_confirmed": {
+    "artifact_deletion": false,
+    "compute_submit": false,
+    "paper_or_dissertation_claim_edits": false
+  },
+  "schema_version": "artifact_inventory.v1"
+}

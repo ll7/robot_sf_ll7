@@ -35,3 +35,12 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/validation/run_
 
 Do not treat this setup note or the grid as evidence that any authority variant improves success.
 Benchmark evidence starts only after the campaign writes valid result artifacts with provenance.
+
+## Durable Evidence Packet
+
+The closed-loop confirming-eval grid from this sweep is durably pinned (with full config + seed
+provenance) at
+[issue_3213_predictive_nontransfer_confirming_eval_2026-07-08](evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08/README.md)
+(issue [#4879](https://github.com/ll7/robot_sf_ll7/issues/4879)). That packet archives the
+checkpoint-eval plateau (closed-loop success `0.0667`-`0.1` across four populated prediction
+checkpoints vs the `0.30` gate) behind the predictive-planner non-transfer finding.

@@ -1,0 +1,27 @@
+# AI-GENERATED NEEDS-REVIEW
+checkpoint,authority_variant,success_rate_mean,seed_half_robust_a,seed_half_robust_b,episodes_approx,populated
+predictive_proxy_selected_v2_full,baseline,0.075,0.083333,0.066667,120,yes
+predictive_proxy_selected_v2_full,nearfield_turn,0.1,0.1,0.1,120,yes
+predictive_proxy_selected_v2_full,nf_headings_only,0.075,0.083333,0.066667,120,yes
+predictive_proxy_selected_v2_full,nf_horizonboost_only,0.075,0.083333,0.066667,120,yes
+predictive_proxy_selected_v2_full,nf_speedcap_only,0.1,0.1,0.1,120,yes
+predictive_proxy_selected_v1,baseline,0.075,0.083333,0.066667,120,yes
+predictive_proxy_selected_v1,nearfield_turn,0.1,0.1,0.1,120,yes
+predictive_proxy_selected_v1,nf_headings_only,0.075,0.083333,0.066667,120,yes
+predictive_proxy_selected_v1,nf_horizonboost_only,0.075,0.083333,0.066667,120,yes
+predictive_proxy_selected_v1,nf_speedcap_only,0.1,0.1,0.1,120,yes
+predictive_rgl_full_v1,baseline,0.0667,0.066667,0.066667,120,yes
+predictive_rgl_full_v1,nearfield_turn,0.0917,0.1,0.083333,120,yes
+predictive_rgl_full_v1,nf_headings_only,0.0667,0.066667,0.066667,120,yes
+predictive_rgl_full_v1,nf_horizonboost_only,0.0667,0.066667,0.066667,120,yes
+predictive_rgl_full_v1,nf_speedcap_only,0.0917,0.1,0.083333,120,yes
+sweep_h192_mp3_s7_wd5e5,baseline,0.075,0.083333,0.066667,120,yes
+sweep_h192_mp3_s7_wd5e5,nearfield_turn,0.1,0.1,,60,yes
+sweep_h192_mp3_s7_wd5e5,nf_headings_only,0.075,0.083333,0.066667,120,yes
+sweep_h192_mp3_s7_wd5e5,nf_horizonboost_only,0.0833,0.083333,,60,yes
+sweep_h192_mp3_s7_wd5e5,nf_speedcap_only,0.1,0.1,0.1,120,yes
+sweep_h256_mp4_s42,baseline,,,,0,no
+sweep_h256_mp4_s42,nearfield_turn,,,,0,no
+sweep_h256_mp4_s42,nf_headings_only,,,,0,no
+sweep_h256_mp4_s42,nf_horizonboost_only,,,,0,no
+sweep_h256_mp4_s42,nf_speedcap_only,,,,0,no

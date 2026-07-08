@@ -5,6 +5,14 @@ Issue: [#3254](https://github.com/ll7/robot_sf_ll7/issues/3254)
 Evidence bundle:
 [issue_3254_predictive_crossing_conflict_13042_2026-06-23](evidence/issue_3254_predictive_crossing_conflict_13042_2026-06-23/README.md)
 
+Confirming-eval plateau bundle (durably pinned, issue
+[#4879](https://github.com/ll7/robot_sf_ll7/issues/4879)):
+[issue_3213_predictive_nontransfer_confirming_eval_2026-07-08](evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08/README.md).
+This `#3213` maneuver-authority sweep evaluated five planner-authority variants across five
+predictive-planner checkpoints; closed-loop success stayed on a `0.0667`-`0.1` plateau (the
+`0.08696` final-eval point above sits inside it) versus the `0.30` gate, confirming the
+predictive-planner non-transfer finding across checkpoints.
+
 ## Summary
 
 Slurm job `13042` completed the schema-fixed crossing-conflict predictive training run, but the

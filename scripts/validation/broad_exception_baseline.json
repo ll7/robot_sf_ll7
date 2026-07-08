@@ -2,7 +2,6 @@
   "counts": {
     "by_path": {
       "robot_sf/benchmark/ablation.py": 1,
-      "robot_sf/benchmark/aggregate.py": 2,
       "robot_sf/benchmark/artifact_catalog.py": 1,
       "robot_sf/benchmark/camera_ready/campaign.py": 3,
       "robot_sf/benchmark/cli.py": 47,
@@ -23,7 +22,6 @@
       "robot_sf/benchmark/map_runner.py": 2,
       "robot_sf/benchmark/map_runner_batch_runner.py": 3,
       "robot_sf/benchmark/map_runner_env.py": 1,
-      "robot_sf/benchmark/metrics.py": 1,
       "robot_sf/benchmark/orca_preflight.py": 1,
       "robot_sf/benchmark/planner_inclusion.py": 2,
       "robot_sf/benchmark/plots.py": 1,
@@ -39,7 +37,6 @@
       "robot_sf/benchmark/summary.py": 2,
       "robot_sf/benchmark/validation/trajectory_dataset.py": 1,
       "robot_sf/benchmark/validation_utils.py": 2,
-      "robot_sf/benchmark/visualization.py": 7,
       "scripts/analysis/amv_timeout_trace_analyzer.py": 1,
       "scripts/analysis/build_signalized_crossing_failure_pack_issue_2754.py": 2,
       "scripts/analysis/calibrate_scenario_priors_from_traces_issue_2726.py": 2,
@@ -129,7 +126,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 288
+    "total": 278
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -140,24 +137,6 @@
       "handler": "Exception",
       "lineno": 117,
       "path": "robot_sf/benchmark/ablation.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 4,
-      "context": "_ensure_snqi",
-      "fingerprint": "ff569cb256fbb14e",
-      "handler": "Exception",
-      "lineno": 531,
-      "path": "robot_sf/benchmark/aggregate.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 8,
-      "context": "_bootstrap_ci",
-      "fingerprint": "d9b9f1646cba1615",
-      "handler": "Exception",
-      "lineno": 738,
-      "path": "robot_sf/benchmark/aggregate.py",
       "source": "except Exception:"
     },
     {
@@ -1044,15 +1023,6 @@
     },
     {
       "col_offset": 4,
-      "context": "compute_all_metrics",
-      "fingerprint": "e2db220ea97bb25c",
-      "handler": "Exception",
-      "lineno": 2905,
-      "path": "robot_sf/benchmark/metrics.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 4,
       "context": "_ensure_rvo2_importable",
       "fingerprint": "761e86439e262801",
       "handler": "Exception",
@@ -1338,69 +1308,6 @@
       "lineno": 90,
       "path": "robot_sf/benchmark/validation_utils.py",
       "source": "except Exception as e:"
-    },
-    {
-      "col_offset": 8,
-      "context": "frame_shape_from_map",
-      "fingerprint": "bba45879be658dd5",
-      "handler": "Exception",
-      "lineno": 60,
-      "path": "robot_sf/benchmark/visualization.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 12,
-      "context": "frame_shape_from_map",
-      "fingerprint": "bba45879be658dd5",
-      "handler": "Exception",
-      "lineno": 71,
-      "path": "robot_sf/benchmark/visualization.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 4,
-      "context": "generate_benchmark_plots_from_data",
-      "fingerprint": "8f539027d1a9c59a",
-      "handler": "Exception",
-      "lineno": 240,
-      "path": "robot_sf/benchmark/visualization.py",
-      "source": "except Exception as e:"
-    },
-    {
-      "col_offset": 4,
-      "context": "generate_benchmark_plots_from_data",
-      "fingerprint": "8f539027d1a9c59a",
-      "handler": "Exception",
-      "lineno": 269,
-      "path": "robot_sf/benchmark/visualization.py",
-      "source": "except Exception as e:"
-    },
-    {
-      "col_offset": 4,
-      "context": "_plot_subprocess_worker",
-      "fingerprint": "bba1e9e83de4d87b",
-      "handler": "Exception",
-      "lineno": 466,
-      "path": "robot_sf/benchmark/visualization.py",
-      "source": "except Exception as exc:  # pragma: no cover - defensive fallback"
-    },
-    {
-      "col_offset": 8,
-      "context": "_generate_metrics_plot",
-      "fingerprint": "c90db09c9215e774",
-      "handler": "Exception",
-      "lineno": 783,
-      "path": "robot_sf/benchmark/visualization.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 8,
-      "context": "_generate_scenario_comparison_plot",
-      "fingerprint": "fe958e2b9ee653e9",
-      "handler": "Exception",
-      "lineno": 943,
-      "path": "robot_sf/benchmark/visualization.py",
-      "source": "except Exception:"
     },
     {
       "col_offset": 4,

@@ -158,6 +158,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   split). Fixed by having `_make_fake_scripts` copy the real allowlist into the fake repo so the
   lane-detection assertions stay faithful to production. No production code changed; no test deleted
   or skipped. Acceptance bar met: full `tests/dev/` green (644 pass).
+* **issue #4895 SNQI weights `git_sha` provenance always recorded as `"unknown"`.** The
+  `recompute_snqi_weights` SHA lookup passed BOTH `capture_output=True` and `stderr=DEVNULL` to
+  `subprocess.run` — an invalid combination that raises `ValueError` at call time, which the
+  provenance handler swallowed, so every weight config produced via the recompute path silently
+  recorded `git_sha: "unknown"` even inside a real git checkout. Removed the incompatible
+  `stderr=DEVNULL` (`capture_output=True` already captures stderr); the output contract is preserved
+  (real short SHA when git is available, `"unknown"` only on genuine failure such as no repo/timeout).
+  Regression tests pin both the in-repo resolution and the out-of-repo fallback, plus a static guard
+  against reintroducing the invalid argument combination.
 * **issue #4873 user-facing docs drift audit — corrected stale claims against current code (docs-only).**
   Verified `README.md` and `docs/*.md` top-level docs against the current codebase and fixed incorrect
   statements in place across 13 files: renamed module path `robot_sf/sim/FastPysfWrapper.py` →

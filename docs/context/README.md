@@ -727,7 +727,7 @@ parser-smoke validation for `maps/svg_maps/socnavbench/socnavbench_eth.svg`.
   [issue_2929_forecast_workflow_synthesis.md](issue_2929_forecast_workflow_synthesis.md)
 * [Issue #3193](https://github.com/ll7/robot_sf_ll7/issues/3193) closed-loop forecast
   falsification paper plan:
-  [paper_closed_loop_forecast_falsification.md](docs/context/paper_closed_loop_forecast_falsification.md)
+  [paper_closed_loop_forecast_falsification.md](paper_closed_loop_forecast_falsification.md)
   freezes the #3193 claim, hypotheses, endpoints, thresholds, design matrix,
   child-issue sequence, and figure/table query map before any heavy campaign runs.
 * Issue #2902 Live same-seed forecast replay gate:

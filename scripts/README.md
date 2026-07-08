@@ -65,6 +65,11 @@ scripts/
 │   ├── run_planner_portfolio_campaign.py # Multi-planner campaign sweep
 │   ├── run_policy_search_candidate.py # Stage-gated policy-search candidate runner
 │   ├── run_examples_smoke.py         # Example script smoke tests
+│   ├── validate_examples_manifest.py # Examples manifest completeness check
+│   ├── render_examples_readme.py     # Generate examples README from manifest
+│   ├── playback_trajectory.py        # Trajectory visualization and playback
+│   ├── performance_research_report.py # Research report performance validation
+│   ├── verify_sf_implementation.py   # Social Force implementation verification
 │   ├── verify_maps.py                # Map file validation
 │   └── test_*.sh                     # Shell-based validation tests
 │
@@ -82,12 +87,24 @@ scripts/
 │   ├── inspect_optuna_db.py           # Inspect Optuna sqlite databases
 │   └── validate_report.py            # Report validation
 │
+├── adversarial/                       # Adversarial scenario tools
+├── analysis/                          # Trace analyzers, crossing failure packs
+├── benchmark/                         # Horizon/timestep ablation, forecast eval
+├── carla_bridge/                      # CARLA bridge diagnostics
+├── ci/                                # CI helper scripts
 ├── coverage/                          # Coverage tools
 │   ├── open_coverage_report.py       # Open HTML coverage report
 │   └── compare_coverage.py           # Coverage comparison
-│
+├── data/                              # Data files
+├── demo/                              # Demo and smoke scripts
+├── dev/                               # Development helpers and automation
+├── diagnostics/                       # Diagnostic tools
+├── manual_control/                    # Manual control interface
+├── reporting/                         # Report generation
+├── repro/                             # Reproducibility helpers
 ├── telemetry/                         # Performance telemetry
 │   └── run_perf_tests.py             # Telemetry wrapper for perf tests
+├── PPO_training/                      # PPO training variants
 │
 └── perf/                              # Performance baselines
     └── baseline_factory_creation.py   # Factory creation timing
@@ -413,7 +430,7 @@ uv run python scripts/example_snqi_workflow.py
 
 ## Training Directory
 
-Imitation learning pipeline scripts (feature 001-ppo-imitation-pretrain):
+Training workflows (PPO, DreamerV3, imitation learning, Optuna sweeps, trajectory collection):
 
 ```bash
 # Required for behavioral cloning pre-training (imitation package)
@@ -1113,5 +1130,5 @@ For questions or issues:
 
 ---
 
-**Last Updated**: 2026-02-11
+**Last Updated**: 2026-07-09
 **Maintained By**: Robot SF Development Team

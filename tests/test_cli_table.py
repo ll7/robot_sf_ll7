@@ -89,7 +89,7 @@ def test_cli_table_md(tmp_path: Path, capsys):
     content = out_md.read_text(encoding="utf-8")
     assert "| Group |" in content
     assert "Benchmark Track" not in content
-    assert "collisions" in content
+    assert "Collision rate" in content
     assert content.endswith("\n")
 
 

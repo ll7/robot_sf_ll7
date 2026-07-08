@@ -67,9 +67,8 @@ def test_generate_table_from_summary_with_ci(tmp_path: Path):
     md = (out_dir / "baseline_table.md").read_text(encoding="utf-8")
     tex = (out_dir / "baseline_table.tex").read_text(encoding="utf-8")
 
-    # Expect columns for collisions_mean and collisions_mean_ci_low/high
-    assert "collisions_mean_ci_low" in md
-    assert "collisions_mean_ci_high" in md
-    # LaTeX escapes underscores
-    assert ("collisions_mean_ci_low" in tex) or ("collisions\\_mean\\_ci\\_low" in tex)
-    assert ("collisions_mean_ci_high" in tex) or ("collisions\\_mean\\_ci\\_high" in tex)
+    # Expect formatted columns for collisions_mean and collisions_mean_ci_low/high
+    assert "Collisions Mean Ci Low" in md
+    assert "Collisions Mean Ci High" in md
+    assert "Collisions Mean Ci Low" in tex
+    assert "Collisions Mean Ci High" in tex

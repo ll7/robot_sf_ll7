@@ -1140,7 +1140,7 @@ def replay_episode_and_generate_figures(  # noqa: PLR0913
             "output_dir": str(out_dir),
         }
 
-    except Exception as e:
+    except (ValueError, TypeError, RuntimeError, OSError, KeyError, AttributeError) as e:
         raise RuntimeError(f"Figure generation failed: {e}") from e
 
 

@@ -1932,7 +1932,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
                 "total_bytes": bundle.total_bytes,
             }
             campaign_summary["publication_bundle"] = publication_payload
-        except Exception as exc:
+        except (OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:
             warnings.append(f"Publication bundle export failed: {exc}")
     elif (
         cfg.export_publication_bundle
@@ -1967,7 +1967,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
         )
         validate_assurance_fragment(fragment)
         write_assurance_fragment(reports_dir, fragment, repo_root=get_repository_root())
-    except Exception as exc:
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:
         warnings.append(f"Assurance fragment export failed: {exc}")
 
     if snqi_hard_fail:

@@ -147,6 +147,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **issue #4896 three pre-existing failures in tests/dev/test_pr_ready_preflight.py on main.**
+  PR #4865 ("allowlist triplication") made `scripts/dev/pr_ready_check.sh` hard-require
+  `tests/support/optional_test_allowlist.txt` — `is_optional_readiness_path` reads it to classify
+  each changed test path (`tests/planner/` → optional lane, `tests/unit/` → core lane) and exits `1`
+  when the file is absent — but the preflight test's fake-repo fixture never provided that file, so
+  three lane/base-ref tests tripped the hard error. Root cause for all three is the same stale
+  fixture, not broken preflight code: the hard-error is correct production behavior (a missing
+  allowlist on a real repo would silently misclassify optional tests as core, defeating the lane
+  split). Fixed by having `_make_fake_scripts` copy the real allowlist into the fake repo so the
+  lane-detection assertions stay faithful to production. No production code changed; no test deleted
+  or skipped. Acceptance bar met: full `tests/dev/` green (644 pass).
 * **issue #4895 SNQI weights `git_sha` provenance always recorded as `"unknown"`.** The
   `recompute_snqi_weights` SHA lookup passed BOTH `capture_output=True` and `stderr=DEVNULL` to
   `subprocess.run` — an invalid combination that raises `ValueError` at call time, which the

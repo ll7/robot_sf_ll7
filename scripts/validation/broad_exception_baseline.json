@@ -1,42 +1,18 @@
 {
   "counts": {
     "by_path": {
-      "robot_sf/benchmark/ablation.py": 1,
-      "robot_sf/benchmark/artifact_catalog.py": 1,
-      "robot_sf/benchmark/camera_ready/campaign.py": 3,
+      "robot_sf/benchmark/camera_ready/campaign.py": 1,
       "robot_sf/benchmark/cli.py": 47,
       "robot_sf/benchmark/doctor.py": 1,
-      "robot_sf/benchmark/episode_replay_figure.py": 1,
-      "robot_sf/benchmark/figure_qa.py": 2,
       "robot_sf/benchmark/forecast_lane_inventory.py": 1,
-      "robot_sf/benchmark/freeze_manifest.py": 1,
-      "robot_sf/benchmark/full_classic/orchestrator.py": 11,
-      "robot_sf/benchmark/full_classic/plots.py": 5,
-      "robot_sf/benchmark/full_classic/render_sim_view.py": 9,
-      "robot_sf/benchmark/full_classic/validation.py": 1,
-      "robot_sf/benchmark/full_classic/visual_deps.py": 1,
-      "robot_sf/benchmark/hazard_odd_coverage.py": 4,
       "robot_sf/benchmark/helper_catalog.py": 2,
-      "robot_sf/benchmark/imitation_manifest.py": 1,
       "robot_sf/benchmark/learned_predictor_capability_inventory.py": 1,
       "robot_sf/benchmark/map_runner.py": 2,
       "robot_sf/benchmark/map_runner_batch_runner.py": 3,
       "robot_sf/benchmark/map_runner_env.py": 1,
-      "robot_sf/benchmark/orca_preflight.py": 1,
-      "robot_sf/benchmark/planner_inclusion.py": 2,
-      "robot_sf/benchmark/plots.py": 1,
-      "robot_sf/benchmark/predictive_planner_config.py": 1,
-      "robot_sf/benchmark/runner.py": 11,
-      "robot_sf/benchmark/scenario_contract.py": 1,
-      "robot_sf/benchmark/scenario_schema.py": 2,
-      "robot_sf/benchmark/schema_reference.py": 1,
-      "robot_sf/benchmark/snqi/campaign_contract.py": 1,
+      "robot_sf/benchmark/runner.py": 7,
       "robot_sf/benchmark/snqi/cli.py": 3,
       "robot_sf/benchmark/snqi/compute.py": 1,
-      "robot_sf/benchmark/snqi/weights_validation.py": 2,
-      "robot_sf/benchmark/summary.py": 2,
-      "robot_sf/benchmark/validation/trajectory_dataset.py": 1,
-      "robot_sf/benchmark/validation_utils.py": 2,
       "scripts/analysis/amv_timeout_trace_analyzer.py": 1,
       "scripts/analysis/build_signalized_crossing_failure_pack_issue_2754.py": 2,
       "scripts/analysis/calibrate_scenario_priors_from_traces_issue_2726.py": 2,
@@ -126,52 +102,16 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 278
+    "total": 217
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
-    {
-      "col_offset": 12,
-      "context": "_compute_group_means",
-      "fingerprint": "60216f7fa12e0cf5",
-      "handler": "Exception",
-      "lineno": 117,
-      "path": "robot_sf/benchmark/ablation.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 4,
-      "context": "validate_artifact_catalog",
-      "fingerprint": "e75c62376f8fc9a9",
-      "handler": "Exception",
-      "lineno": 149,
-      "path": "robot_sf/benchmark/artifact_catalog.py",
-      "source": "except Exception as exc:  # pragma: no cover - defensive CLI path"
-    },
     {
       "col_offset": 4,
       "context": "_execute_campaign_planner_batch",
       "fingerprint": "ba3cb2a07fb0c63c",
       "handler": "Exception",
       "lineno": 374,
-      "path": "robot_sf/benchmark/camera_ready/campaign.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 8,
-      "context": "_run_campaign_orchestrator",
-      "fingerprint": "b57306be9066573d",
-      "handler": "Exception",
-      "lineno": 1935,
-      "path": "robot_sf/benchmark/camera_ready/campaign.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 4,
-      "context": "_run_campaign_orchestrator",
-      "fingerprint": "b57306be9066573d",
-      "handler": "Exception",
-      "lineno": 1970,
       "path": "robot_sf/benchmark/camera_ready/campaign.py",
       "source": "except Exception as exc:"
     },
@@ -609,327 +549,12 @@
     },
     {
       "col_offset": 4,
-      "context": "replay_episode_and_generate_figures",
-      "fingerprint": "d47c045067cd76f5",
-      "handler": "Exception",
-      "lineno": 1143,
-      "path": "robot_sf/benchmark/episode_replay_figure.py",
-      "source": "except Exception as e:"
-    },
-    {
-      "col_offset": 4,
-      "context": "_check_image_content",
-      "fingerprint": "c007497d97e35eac",
-      "handler": "Exception",
-      "lineno": 273,
-      "path": "robot_sf/benchmark/figure_qa.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 4,
-      "context": "_check_caption_file",
-      "fingerprint": "c9adf7d39f8f03c4",
-      "handler": "Exception",
-      "lineno": 321,
-      "path": "robot_sf/benchmark/figure_qa.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 4,
       "context": "_probe_capability",
       "fingerprint": "b5dcc0004133d42e",
       "handler": "Exception",
       "lineno": 621,
       "path": "robot_sf/benchmark/forecast_lane_inventory.py",
       "source": "except Exception as exc:  # noqa: BLE001 - report any import failure as a blocker"
-    },
-    {
-      "col_offset": 4,
-      "context": "evaluate_freeze_manifest",
-      "fingerprint": "008f678c74196298",
-      "handler": "Exception",
-      "lineno": 406,
-      "path": "robot_sf/benchmark/freeze_manifest.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 4,
-      "context": "_build_env_config",
-      "fingerprint": "a87cf0cec699225e",
-      "handler": "Exception",
-      "lineno": 530,
-      "path": "robot_sf/benchmark/full_classic/orchestrator.py",
-      "source": "except Exception:  # pragma: no cover - defensive"
-    },
-    {
-      "col_offset": 4,
-      "context": "_extract_ped_forces",
-      "fingerprint": "921f8e264570e4ff",
-      "handler": "Exception",
-      "lineno": 594,
-      "path": "robot_sf/benchmark/full_classic/orchestrator.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 12,
-      "context": "_capture_visual_state",
-      "fingerprint": "9a396f2b7625ac4b",
-      "handler": "Exception",
-      "lineno": 654,
-      "path": "robot_sf/benchmark/full_classic/orchestrator.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 4,
-      "context": "_capture_visual_state",
-      "fingerprint": "9a396f2b7625ac4b",
-      "handler": "Exception",
-      "lineno": 657,
-      "path": "robot_sf/benchmark/full_classic/orchestrator.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 8,
-      "context": "_compute_episode_metrics",
-      "fingerprint": "e8f83d1aed7ada47",
-      "handler": "Exception",
-      "lineno": 688,
-      "path": "robot_sf/benchmark/full_classic/orchestrator.py",
-      "source": "except Exception:  # pragma: no cover - defensive fallback"
-    },
-    {
-      "col_offset": 4,
-      "context": "_compute_episode_metrics",
-      "fingerprint": "ad28fe15d3a24332",
-      "handler": "Exception",
-      "lineno": 734,
-      "path": "robot_sf/benchmark/full_classic/orchestrator.py",
-      "source": "except Exception:  # pragma: no cover - defensive"
-    },
-    {
-      "col_offset": 8,
-      "context": "_init_env_for_job",
-      "fingerprint": "2731243b5c87bda2",
-      "handler": "Exception",
-      "lineno": 832,
-      "path": "robot_sf/benchmark/full_classic/orchestrator.py",
-      "source": "except Exception:  # pragma: no cover - defensive fallback"
-    },
-    {
-      "col_offset": 8,
-      "context": "_rollout_episode",
-      "fingerprint": "ddd9bb86d1581525",
-      "handler": "Exception",
-      "lineno": 880,
-      "path": "robot_sf/benchmark/full_classic/orchestrator.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 4,
-      "context": "_close_env",
-      "fingerprint": "482da461ca3da12e",
-      "handler": "Exception",
-      "lineno": 895,
-      "path": "robot_sf/benchmark/full_classic/orchestrator.py",
-      "source": "except Exception:  # pragma: no cover"
-    },
-    {
-      "col_offset": 4,
-      "context": "_close_env",
-      "fingerprint": "3b6e4bb855daada8",
-      "handler": "Exception",
-      "lineno": 899,
-      "path": "robot_sf/benchmark/full_classic/orchestrator.py",
-      "source": "except Exception:  # pragma: no cover - gym close best-effort"
-    },
-    {
-      "col_offset": 12,
-      "context": "run_full_benchmark",
-      "fingerprint": "205fd8fcd5306170",
-      "handler": "Exception",
-      "lineno": 1496,
-      "path": "robot_sf/benchmark/full_classic/orchestrator.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 4,
-      "context": "_distribution_plot",
-      "fingerprint": "a6d60484d2662990",
-      "handler": "Exception",
-      "lineno": 140,
-      "path": "robot_sf/benchmark/full_classic/plots.py",
-      "source": "except Exception as exc:  # pragma: no cover - defensive"
-    },
-    {
-      "col_offset": 4,
-      "context": "_trajectory_plot",
-      "fingerprint": "5d3e077df5633bd8",
-      "handler": "Exception",
-      "lineno": 186,
-      "path": "robot_sf/benchmark/full_classic/plots.py",
-      "source": "except Exception as exc:  # pragma: no cover - defensive"
-    },
-    {
-      "col_offset": 4,
-      "context": "_path_efficiency_distribution_plot",
-      "fingerprint": "ee804f785f712654",
-      "handler": "Exception",
-      "lineno": 220,
-      "path": "robot_sf/benchmark/full_classic/plots.py",
-      "source": "except Exception as exc:  # pragma: no cover - defensive"
-    },
-    {
-      "col_offset": 4,
-      "context": "_success_collision_scatter_plot",
-      "fingerprint": "806de78d4095b388",
-      "handler": "Exception",
-      "lineno": 268,
-      "path": "robot_sf/benchmark/full_classic/plots.py",
-      "source": "except Exception as exc:  # pragma: no cover - defensive"
-    },
-    {
-      "col_offset": 4,
-      "context": "_episode_length_histogram",
-      "fingerprint": "434b219b3b5a5f55",
-      "handler": "Exception",
-      "lineno": 298,
-      "path": "robot_sf/benchmark/full_classic/plots.py",
-      "source": "except Exception as exc:  # pragma: no cover - defensive"
-    },
-    {
-      "col_offset": 0,
-      "context": "<module>",
-      "fingerprint": "1618b1f7363ea5e6",
-      "handler": "Exception",
-      "lineno": 49,
-      "path": "robot_sf/benchmark/full_classic/render_sim_view.py",
-      "source": "except Exception as e:  # pragma: no cover - defensive"
-    },
-    {
-      "col_offset": 8,
-      "context": "generate_frames",
-      "fingerprint": "4e51bbab03ab9a12",
-      "handler": "Exception",
-      "lineno": 89,
-      "path": "robot_sf/benchmark/full_classic/render_sim_view.py",
-      "source": "except Exception as exc:  # pragma: no cover - fallback path"
-    },
-    {
-      "col_offset": 12,
-      "context": "generate_frames",
-      "fingerprint": "62858d37bb4cf445",
-      "handler": "Exception",
-      "lineno": 93,
-      "path": "robot_sf/benchmark/full_classic/render_sim_view.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 12,
-      "context": "generate_frames",
-      "fingerprint": "62858d37bb4cf445",
-      "handler": "Exception",
-      "lineno": 121,
-      "path": "robot_sf/benchmark/full_classic/render_sim_view.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 12,
-      "context": "generate_frames",
-      "fingerprint": "6dac2e99534cca0a",
-      "handler": "Exception",
-      "lineno": 141,
-      "path": "robot_sf/benchmark/full_classic/render_sim_view.py",
-      "source": "except Exception as exc:  # pragma: no cover - defensive"
-    },
-    {
-      "col_offset": 8,
-      "context": "_load_map_def",
-      "fingerprint": "3994519d144d2ffd",
-      "handler": "Exception",
-      "lineno": 210,
-      "path": "robot_sf/benchmark/full_classic/render_sim_view.py",
-      "source": "except Exception:  # pragma: no cover - fallback"
-    },
-    {
-      "col_offset": 4,
-      "context": "_load_map_def",
-      "fingerprint": "ec4714e26dcafcd2",
-      "handler": "Exception",
-      "lineno": 214,
-      "path": "robot_sf/benchmark/full_classic/render_sim_view.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 4,
-      "context": "generate_video_file",
-      "fingerprint": "d00f6e0a48596269",
-      "handler": "Exception",
-      "lineno": 273,
-      "path": "robot_sf/benchmark/full_classic/render_sim_view.py",
-      "source": "except Exception as exc:  # pragma: no cover - defensive"
-    },
-    {
-      "col_offset": 8,
-      "context": "generate_video_file",
-      "fingerprint": "b60122e1cd8eeb3b",
-      "handler": "Exception",
-      "lineno": 276,
-      "path": "robot_sf/benchmark/full_classic/render_sim_view.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 8,
-      "context": "validate_visual_manifests",
-      "fingerprint": "3378f7f6a723a3e5",
-      "handler": "Exception",
-      "lineno": 83,
-      "path": "robot_sf/benchmark/full_classic/validation.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 4,
-      "context": "simulation_view_ready",
-      "fingerprint": "0f180077da5f9831",
-      "handler": "Exception",
-      "lineno": 47,
-      "path": "robot_sf/benchmark/full_classic/visual_deps.py",
-      "source": "except Exception as exc:  # pragma: no cover - defensive"
-    },
-    {
-      "col_offset": 4,
-      "context": "_load_hazard_mapping",
-      "fingerprint": "9ab50e04f2a5e782",
-      "handler": "Exception",
-      "lineno": 247,
-      "path": "robot_sf/benchmark/hazard_odd_coverage.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 8,
-      "context": "_load_odd_contracts",
-      "fingerprint": "a24b38fa0af705d5",
-      "handler": "Exception",
-      "lineno": 261,
-      "path": "robot_sf/benchmark/hazard_odd_coverage.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 8,
-      "context": "_load_scenario_contracts",
-      "fingerprint": "93471f0401df2f51",
-      "handler": "Exception",
-      "lineno": 281,
-      "path": "robot_sf/benchmark/hazard_odd_coverage.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 8,
-      "context": "_load_scenario_certificates",
-      "fingerprint": "ffa074136b70ece5",
-      "handler": "Exception",
-      "lineno": 303,
-      "path": "robot_sf/benchmark/hazard_odd_coverage.py",
-      "source": "except Exception as exc:"
     },
     {
       "col_offset": 4,
@@ -948,15 +573,6 @@
       "lineno": 166,
       "path": "robot_sf/benchmark/helper_catalog.py",
       "source": "except Exception as e:"
-    },
-    {
-      "col_offset": 8,
-      "context": "_to_json_ready",
-      "fingerprint": "282c0ddbbcb7b444",
-      "handler": "Exception",
-      "lineno": 136,
-      "path": "robot_sf/benchmark/imitation_manifest.py",
-      "source": "except Exception:  # pragma: no cover - best effort fallback"
     },
     {
       "col_offset": 4,
@@ -1022,51 +638,6 @@
       "source": "except Exception as exc:  # noqa: BLE001 - provenance must never break a benchmark run."
     },
     {
-      "col_offset": 4,
-      "context": "_ensure_rvo2_importable",
-      "fingerprint": "761e86439e262801",
-      "handler": "Exception",
-      "lineno": 89,
-      "path": "robot_sf/benchmark/orca_preflight.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 12,
-      "context": "_unwrap_json_value",
-      "fingerprint": "2ec5a13f47a89ec0",
-      "handler": "Exception",
-      "lineno": 72,
-      "path": "robot_sf/benchmark/planner_inclusion.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 12,
-      "context": "_unwrap_json_value",
-      "fingerprint": "2ec5a13f47a89ec0",
-      "handler": "Exception",
-      "lineno": 80,
-      "path": "robot_sf/benchmark/planner_inclusion.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 4,
-      "context": "save_pareto_png",
-      "fingerprint": "861c2653b1eadcf2",
-      "handler": "Exception",
-      "lineno": 272,
-      "path": "robot_sf/benchmark/plots.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 4,
-      "context": "infer_predictive_checkpoint_feature_schema_name",
-      "fingerprint": "7d7ce771bf209840",
-      "handler": "Exception",
-      "lineno": 46,
-      "path": "robot_sf/benchmark/predictive_planner_config.py",
-      "source": "except Exception:"
-    },
-    {
       "col_offset": 12,
       "context": "_planner_step_worker",
       "fingerprint": "a8cc46e15ae90443",
@@ -1074,24 +645,6 @@
       "lineno": 291,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as exc:  # pragma: no cover - defensive child-process path"
-    },
-    {
-      "col_offset": 12,
-      "context": "_annotate_and_check_video_perf",
-      "fingerprint": "dcd523fc21c608fb",
-      "handler": "Exception",
-      "lineno": 956,
-      "path": "robot_sf/benchmark/runner.py",
-      "source": "except Exception:  # pragma: no cover - logging optional"
-    },
-    {
-      "col_offset": 12,
-      "context": "_annotate_and_check_video_perf",
-      "fingerprint": "dcd523fc21c608fb",
-      "handler": "Exception",
-      "lineno": 978,
-      "path": "robot_sf/benchmark/runner.py",
-      "source": "except Exception:  # pragma: no cover - logging optional"
     },
     {
       "col_offset": 16,
@@ -1148,69 +701,6 @@
       "source": "except Exception:  # pragma: no cover"
     },
     {
-      "col_offset": 8,
-      "context": "_run_batch_parallel",
-      "fingerprint": "baa1af696f71b54a",
-      "handler": "Exception",
-      "lineno": 1589,
-      "path": "robot_sf/benchmark/runner.py",
-      "source": "except Exception as e:  # pragma: no cover - write/validate path"
-    },
-    {
-      "col_offset": 4,
-      "context": "_finalize_batch",
-      "fingerprint": "fc7a1ebf15707983",
-      "handler": "Exception",
-      "lineno": 1803,
-      "path": "robot_sf/benchmark/runner.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 4,
-      "context": "validate_scenario_contract_references",
-      "fingerprint": "46f2dafa4976cf9e",
-      "handler": "Exception",
-      "lineno": 252,
-      "path": "robot_sf/benchmark/scenario_contract.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 0,
-      "context": "<module>",
-      "fingerprint": "4e4a2ebe1c5c72f3",
-      "handler": "Exception",
-      "lineno": 25,
-      "path": "robot_sf/benchmark/scenario_schema.py",
-      "source": "except Exception as e:  # pragma: no cover - jsonschema is project dependency"
-    },
-    {
-      "col_offset": 12,
-      "context": "validate_scenario_list",
-      "fingerprint": "1242f11b6c534c27",
-      "handler": "Exception",
-      "lineno": 84,
-      "path": "robot_sf/benchmark/scenario_schema.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 8,
-      "context": "SchemaReference.load_schema",
-      "fingerprint": "344c925437a4b5ff",
-      "handler": "Exception",
-      "lineno": 94,
-      "path": "robot_sf/benchmark/schema_reference.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 16,
-      "context": "collect_episodes_from_campaign_runs",
-      "fingerprint": "1a9d7eba8297c18d",
-      "handler": "Exception",
-      "lineno": 902,
-      "path": "robot_sf/benchmark/snqi/campaign_contract.py",
-      "source": "except Exception:"
-    },
-    {
       "col_offset": 4,
       "context": "cmd_recompute_weights",
       "fingerprint": "ca9342b89ea033bf",
@@ -1245,69 +735,6 @@
       "lineno": 277,
       "path": "robot_sf/benchmark/snqi/compute.py",
       "source": "except Exception:"
-    },
-    {
-      "col_offset": 8,
-      "context": "_apply_weight_aliases",
-      "fingerprint": "f487adc20721c664",
-      "handler": "Exception",
-      "lineno": 63,
-      "path": "robot_sf/benchmark/snqi/weights_validation.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 8,
-      "context": "validate_weights_mapping",
-      "fingerprint": "6b684be37b2257bb",
-      "handler": "Exception",
-      "lineno": 101,
-      "path": "robot_sf/benchmark/snqi/weights_validation.py",
-      "source": "except Exception as e:"
-    },
-    {
-      "col_offset": 4,
-      "context": "_safe_number",
-      "fingerprint": "c74837031cfec3c5",
-      "handler": "Exception",
-      "lineno": 157,
-      "path": "robot_sf/benchmark/summary.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 16,
-      "context": "collect_values",
-      "fingerprint": "46c7db4b5011dffa",
-      "handler": "Exception",
-      "lineno": 199,
-      "path": "robot_sf/benchmark/summary.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 12,
-      "context": "TrajectoryDatasetValidator._extract_metadata",
-      "fingerprint": "7fcf1922b7362bcc",
-      "handler": "Exception",
-      "lineno": 404,
-      "path": "robot_sf/benchmark/validation/trajectory_dataset.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 4,
-      "context": "validate_schema_integrity",
-      "fingerprint": "5a709887610eb255",
-      "handler": "Exception",
-      "lineno": 69,
-      "path": "robot_sf/benchmark/validation_utils.py",
-      "source": "except Exception as e:"
-    },
-    {
-      "col_offset": 4,
-      "context": "validate_schema_compatibility",
-      "fingerprint": "f8b5d8c3ffa8c1ef",
-      "handler": "Exception",
-      "lineno": 90,
-      "path": "robot_sf/benchmark/validation_utils.py",
-      "source": "except Exception as e:"
     },
     {
       "col_offset": 4,
@@ -1944,7 +1371,7 @@
       "context": "stage_repo",
       "fingerprint": "8b5f4a2c9bce3c5d",
       "handler": "Exception",
-      "lineno": 313,
+      "lineno": 348,
       "path": "scripts/tools/manage_external_repos.py",
       "source": "except Exception:"
     },

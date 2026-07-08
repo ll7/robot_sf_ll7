@@ -69,7 +69,7 @@ def _unwrap_json_value(value: Any) -> Any:
             try:
                 current = item()
                 continue
-            except Exception:
+            except (ValueError, TypeError, AttributeError):
                 pass
 
         tolist = getattr(current, "tolist", None)
@@ -77,7 +77,7 @@ def _unwrap_json_value(value: Any) -> Any:
             try:
                 current = tolist()
                 continue
-            except Exception:
+            except (ValueError, TypeError, AttributeError):
                 pass
 
         break

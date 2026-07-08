@@ -60,7 +60,7 @@ def _apply_weight_aliases(working: dict[str, object]) -> None:
         try:
             alias_val = float(working[alias])  # type: ignore[arg-type]
             canon_val = float(working[canonical])  # type: ignore[arg-type]
-        except Exception:
+        except (ValueError, TypeError):
             logger.warning(
                 f"Alias '{alias}' provided alongside '{canonical}'; "
                 "ignoring alias due to non-numeric values"
@@ -98,7 +98,7 @@ def validate_weights_mapping(raw: Mapping[str, object]) -> dict[str, float]:
         v = working[k]
         try:
             fv = float(v)  # type: ignore[arg-type]
-        except Exception as e:
+        except (ValueError, TypeError) as e:
             raise ValueError(f"Non-numeric weight for {k}: {v}") from e
         # Accept zero as a valid weight to disable a term; reject negatives and non-finite.
         if not np.isfinite(fv) or fv < 0:

@@ -31,6 +31,7 @@ from datetime import (
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+import jsonschema
 import numpy as np
 import yaml
 from loguru import logger
@@ -953,7 +954,12 @@ def _annotate_and_check_video_perf(
                     seed=record.get("seed"),
                     renderer=vid.get("renderer"),
                 )
-            except Exception:  # pragma: no cover - logging optional
+            except (
+                ValueError,
+                TypeError,
+                KeyError,
+                AttributeError,
+            ):  # pragma: no cover - logging optional
                 pass
     elif overhead_ratio > soft:
         if enforce:
@@ -975,7 +981,12 @@ def _annotate_and_check_video_perf(
                     seed=record.get("seed"),
                     renderer=vid.get("renderer"),
                 )
-            except Exception:  # pragma: no cover - logging optional
+            except (
+                ValueError,
+                TypeError,
+                KeyError,
+                AttributeError,
+            ):  # pragma: no cover - logging optional
                 pass
 
 
@@ -1586,7 +1597,13 @@ def _run_batch_parallel(  # noqa: C901
         try:
             _write_validated_record(out_path, schema, results_by_idx[idx])
             wrote += 1
-        except Exception as e:  # pragma: no cover - write/validate path
+        except (
+            OSError,
+            ValueError,
+            TypeError,
+            KeyError,
+            jsonschema.ValidationError,
+        ) as e:  # pragma: no cover - write/validate path
             logger.exception(
                 "Benchmark batch write/validation failed for scenario_id={} seed={}",
                 results_by_idx[idx].get("scenario_id", "unknown"),
@@ -1800,7 +1817,7 @@ def _finalize_batch(
             perf_path.parent.mkdir(parents=True, exist_ok=True)
             with perf_path.open("w", encoding="utf-8") as f:
                 json.dump(snap, f, indent=2)
-    except Exception:
+    except (OSError, ValueError, TypeError, KeyError):
         # Best-effort; ignore snapshot errors
         pass
 

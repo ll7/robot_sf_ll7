@@ -451,43 +451,35 @@ max-statements = 60
 # CLI tools: allow prints to stdout.
 # Existing broad benchmark exception handlers are ratcheted by
 # scripts/validation/check_broad_exceptions.py; keep BLE001 scoped current files.
-# Issue #4859: aggregate.py worst sites fixed, BLE001 removed to enforce lint guard.
-"robot_sf/benchmark/ablation.py" = ["BLE001"]
-"robot_sf/benchmark/artifact_catalog.py" = ["BLE001"]
+# Issue #4859: aggregate.py/metrics.py/visualization.py worst sites fixed; BLE001 removed.
+# Issue #4880 (commit 1): schema/contract/manifest/catalog group fully narrowed; BLE001
+# removed for ablation, artifact_catalog, freeze_manifest, imitation_manifest,
+# scenario_contract, scenario_schema, schema_reference, summary,
+# validation/trajectory_dataset, validation_utils.
+# helper_catalog.py keeps BLE001: its wrappers intentionally convert any failure to RuntimeError.
 "robot_sf/benchmark/camera_ready_campaign.py" = ["BLE001"]
 "robot_sf/benchmark/camera_ready/campaign.py" = ["BLE001"]
 "robot_sf/benchmark/cli.py" = ["BLE001", "T201"]
 "robot_sf/benchmark/doctor.py" = ["BLE001"]
 "robot_sf/benchmark/failure_extractor.py" = ["BLE001"]
-"robot_sf/benchmark/figure_qa.py" = ["BLE001"]
-"robot_sf/benchmark/freeze_manifest.py" = ["BLE001"]
-"robot_sf/benchmark/full_classic/orchestrator.py" = ["BLE001"]
-"robot_sf/benchmark/full_classic/plots.py" = ["BLE001"]
-"robot_sf/benchmark/full_classic/render_sim_view.py" = ["BLE001", "C901"]
-"robot_sf/benchmark/full_classic/validation.py" = ["BLE001"]
-"robot_sf/benchmark/full_classic/visual_deps.py" = ["BLE001"]
+"robot_sf/benchmark/full_classic/render_sim_view.py" = ["C901"]
 "robot_sf/benchmark/full_classic/visuals.py" = ["C901"]
-"robot_sf/benchmark/hazard_odd_coverage.py" = ["BLE001"]
 "robot_sf/benchmark/helper_catalog.py" = ["BLE001"]
-"robot_sf/benchmark/imitation_manifest.py" = ["BLE001"]
 "robot_sf/benchmark/map_runner.py" = ["BLE001"]
 "robot_sf/benchmark/map_runner_batch_runner.py" = ["BLE001"]
-# Issue #4859: metrics.py worst sites fixed, BLE001 removed to enforce lint guard.
-"robot_sf/benchmark/orca_preflight.py" = ["BLE001"]
-"robot_sf/benchmark/planner_inclusion.py" = ["BLE001"]
-"robot_sf/benchmark/plots.py" = ["BLE001"]
-"robot_sf/benchmark/predictive_planner_config.py" = ["BLE001"]
 "robot_sf/benchmark/runner.py" = ["BLE001"]
-"robot_sf/benchmark/scenario_contract.py" = ["BLE001"]
-"robot_sf/benchmark/scenario_schema.py" = ["BLE001"]
-"robot_sf/benchmark/schema_reference.py" = ["BLE001"]
-"robot_sf/benchmark/snqi/campaign_contract.py" = ["BLE001"]
 "robot_sf/benchmark/snqi/cli.py" = ["BLE001", "T201"]
 "robot_sf/benchmark/snqi/compute.py" = ["BLE001"]
-"robot_sf/benchmark/snqi/weights_validation.py" = ["BLE001"]
-"robot_sf/benchmark/summary.py" = ["BLE001"]
-"robot_sf/benchmark/validation/trajectory_dataset.py" = ["BLE001"]
-"robot_sf/benchmark/validation_utils.py" = ["BLE001"]
+# Issue #4880 (commit 2): runner/map/snqi/planner group; BLE001 removed for
+# hazard_odd_coverage, orca_preflight, planner_inclusion, predictive_planner_config,
+# snqi/campaign_contract, snqi/weights_validation.
+# Kept broad on purpose (CLI boundary / diagnostic / batch-isolation / policy handlers):
+# cli.py, snqi/cli.py, doctor.py, helper_catalog.py, map_runner*.py, runner.py,
+# snqi/compute.py (latent capture_output+stderr ValueError masked by handler; see PR body).
+# Issue #4880 (commit 3): viz/figure/full_classic group; BLE001 removed for figure_qa,
+# plots, full_classic/{orchestrator,plots,render_sim_view(C901 kept),validation,visual_deps}.
+# camera_ready/campaign.py keeps BLE001: its full-benchmark-run handler is campaign fault isolation.
+# cli.py remains a future slice (47 CLI-boundary handlers).
 # Issue #4859: visualization.py worst sites fixed, BLE001 removed to enforce lint guard.
 "robot_sf/adversarial/**/*.py" = ["D417", "DOC201", "TC001", "TC003"]
 "robot_sf/adversarial/config.py" = ["C901", "PLR0913"]

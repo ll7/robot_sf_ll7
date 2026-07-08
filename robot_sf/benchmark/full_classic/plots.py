@@ -137,7 +137,13 @@ def _distribution_plot(groups, out_dir: Path) -> _PlotArtifact:
     try:
         fig.savefig(pdf_path, bbox_inches="tight")
         status = "generated"
-    except Exception as exc:  # pragma: no cover - defensive
+    except (
+        ValueError,
+        TypeError,
+        RuntimeError,
+        AttributeError,
+        OSError,
+    ) as exc:  # pragma: no cover - defensive
         note = f"savefig-error:{exc}"
     finally:
         _safe_fig_close(fig)
@@ -183,7 +189,13 @@ def _trajectory_plot(records: Iterable[dict], out_dir: Path) -> _PlotArtifact:
     try:
         fig.savefig(pdf_path, bbox_inches="tight")
         status = "generated"
-    except Exception as exc:  # pragma: no cover - defensive
+    except (
+        ValueError,
+        TypeError,
+        RuntimeError,
+        AttributeError,
+        OSError,
+    ) as exc:  # pragma: no cover - defensive
         note = f"savefig-error:{exc}"
     finally:
         _safe_fig_close(fig)
@@ -217,7 +229,13 @@ def _path_efficiency_distribution_plot(groups, out_dir: Path) -> _PlotArtifact:
     try:
         fig.savefig(pdf_path, bbox_inches="tight")
         status = "generated"
-    except Exception as exc:  # pragma: no cover - defensive
+    except (
+        ValueError,
+        TypeError,
+        RuntimeError,
+        AttributeError,
+        OSError,
+    ) as exc:  # pragma: no cover - defensive
         note = f"savefig-error:{exc}"
     finally:
         _safe_fig_close(fig)
@@ -265,7 +283,13 @@ def _success_collision_scatter_plot(groups, out_dir: Path) -> _PlotArtifact:
     try:
         fig.savefig(pdf_path, bbox_inches="tight")
         status = "generated"
-    except Exception as exc:  # pragma: no cover - defensive
+    except (
+        ValueError,
+        TypeError,
+        RuntimeError,
+        AttributeError,
+        OSError,
+    ) as exc:  # pragma: no cover - defensive
         note = f"savefig-error:{exc}"
     finally:
         _safe_fig_close(fig)
@@ -295,7 +319,13 @@ def _episode_length_histogram(out_dir: Path, records: Iterable[dict]) -> _PlotAr
     try:
         fig.savefig(pdf_path, bbox_inches="tight")
         status = "generated"
-    except Exception as exc:  # pragma: no cover - defensive
+    except (
+        ValueError,
+        TypeError,
+        RuntimeError,
+        AttributeError,
+        OSError,
+    ) as exc:  # pragma: no cover - defensive
         note = f"savefig-error:{exc}"
     finally:
         _safe_fig_close(fig)

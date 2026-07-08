@@ -114,7 +114,7 @@ def _compute_group_means(
         for rec in rows:
             try:
                 vals.append(_episode_snqi(rec, weights, baseline))
-            except Exception:
+            except (ValueError, TypeError, KeyError):
                 continue
         if vals:
             means[gid] = _mean(vals)

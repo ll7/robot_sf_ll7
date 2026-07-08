@@ -282,7 +282,7 @@ def save_pareto_png(  # noqa: PLR0913
     # Force garbage collection to reduce memory footprint in long CI runs
     try:
         gc.collect()
-    except Exception:
+    except (RuntimeError, TypeError):
         pass
 
     front_labels = [labels[i] for i in front]

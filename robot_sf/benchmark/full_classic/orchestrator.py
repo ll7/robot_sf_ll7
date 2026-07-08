@@ -527,7 +527,7 @@ def _build_env_config(scenario, cfg, horizon: int):
     )
     try:
         dt = float(config.sim_config.time_per_step_in_secs)
-    except Exception:  # pragma: no cover - defensive
+    except (ValueError, TypeError, AttributeError):  # pragma: no cover - defensive
         dt = 0.1
     # Ensure sim horizon matches requested horizon
     config.sim_config.sim_time_in_secs = horizon * dt
@@ -591,7 +591,7 @@ def _extract_ped_forces(simulator, ped_pos: np.ndarray) -> np.ndarray:
         return np.full_like(ped_pos, np.nan)
     try:
         arr = np.asarray(forces, dtype=float)
-    except Exception:
+    except (ValueError, TypeError):
         return np.full_like(ped_pos, np.nan)
 
     if arr.shape == ped_pos.shape:
@@ -651,10 +651,10 @@ def _capture_visual_state(env):
             try:
                 goal_val = vis_state.robot_action.goal  # type: ignore[attr-defined]
                 robot_goal = (float(goal_val[0]), float(goal_val[1]))
-            except Exception:
+            except (AttributeError, TypeError, ValueError, IndexError, KeyError):
                 robot_goal = None
         return ray_vecs, ped_actions, robot_goal
-    except Exception:
+    except (ValueError, TypeError, KeyError, AttributeError):
         return None, None, None
 
 
@@ -685,7 +685,7 @@ def _compute_episode_metrics(  # noqa: PLR0913
     if map_path:
         try:
             map_def = resolve_map_definition(str(map_path), scenario_path=Path(str(map_path)))
-        except Exception:  # pragma: no cover - defensive fallback
+        except (OSError, ValueError, KeyError):  # pragma: no cover - defensive fallback
             map_def = None
     shortest_path = (
         compute_shortest_path_length(map_def, robot_pos[0], goal)
@@ -731,7 +731,7 @@ def _compute_episode_metrics(  # noqa: PLR0913
     weights = _load_snqi_weights(getattr(cfg, "snqi_weights_path", None))
     try:
         metrics["snqi"] = snqi(metrics_raw, weights, baseline_stats=None)
-    except Exception:  # pragma: no cover - defensive
+    except (ValueError, TypeError, KeyError):  # pragma: no cover - defensive
         metrics["snqi"] = float("nan")
     serializable: dict[str, float] = {}
     for key, value in metrics.items():
@@ -829,7 +829,13 @@ def _init_env_for_job(job, cfg, horizon: int, *, episode_id: str, scenario):
     if sim is not None:
         try:
             goal_vec = np.asarray(sim.goal_pos[0], dtype=float)
-        except Exception:  # pragma: no cover - defensive fallback
+        except (
+            ValueError,
+            TypeError,
+            IndexError,
+            KeyError,
+            AttributeError,
+        ):  # pragma: no cover - defensive fallback
             goal_vec = np.zeros(2, dtype=float)
     return env, dt, replay_cap, goal_vec
 
@@ -877,7 +883,7 @@ def _rollout_episode(env, horizon: int, dt: float, replay_cap):
                 env.sim_ui, "record_video", False
             ):
                 env.render()
-        except Exception:
+        except (RuntimeError, ValueError, TypeError, AttributeError, OSError, IndexError, KeyError):
             # Rendering is best-effort; ignore to keep rollout running
             pass
         step_meta = info.get("meta", {}) if isinstance(info, dict) else {}
@@ -892,11 +898,16 @@ def _close_env(env):
     """Best-effort environment cleanup."""
     try:
         env.exit()
-    except Exception:  # pragma: no cover
+    except (RuntimeError, AttributeError, TypeError, OSError):  # pragma: no cover
         pass
     try:
         env.close()
-    except Exception:  # pragma: no cover - gym close best-effort
+    except (
+        RuntimeError,
+        AttributeError,
+        TypeError,
+        OSError,
+    ):  # pragma: no cover - gym close best-effort
         pass
 
 
@@ -1493,7 +1504,7 @@ def run_full_benchmark(  # noqa: C901,PLR0912,PLR0915
         for jb in jobs:
             try:
                 jb.horizon = min(int(getattr(jb, "horizon", horizon_cap)), horizon_cap)
-            except Exception:
+            except (ValueError, TypeError, AttributeError):
                 jb.horizon = horizon_cap
 
     # Manifest & initial execution

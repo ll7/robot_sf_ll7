@@ -43,7 +43,7 @@ def infer_predictive_checkpoint_feature_schema_name(
 
     try:
         payload = torch.load(path, map_location="cpu", weights_only=True)
-    except Exception:
+    except (OSError, EOFError, RuntimeError, ValueError, KeyError):
         return None
     if not isinstance(payload, dict):
         return None

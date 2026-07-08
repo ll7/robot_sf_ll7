@@ -244,7 +244,7 @@ def _load_hazard_mapping(path: Path | None) -> tuple[HazardTraceability | None, 
         return load_hazard_traceability(path), _input_ref(
             path, "available", "loaded hazard mapping"
         )
-    except Exception as exc:
+    except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:
         return None, _input_ref(path, "unavailable", f"could not load hazard mapping: {exc}")
 
 
@@ -258,7 +258,7 @@ def _load_odd_contracts(paths: Sequence[Path]) -> tuple[list[OddContract], list[
     for path in paths:
         try:
             loaded = load_odd_contracts(path)
-        except Exception as exc:
+        except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:
             inputs.append(_input_ref(path, "unavailable", f"could not load ODD contracts: {exc}"))
             continue
         contracts.extend(loaded)
@@ -278,7 +278,7 @@ def _load_scenario_contracts(
     for path in paths:
         try:
             loaded = load_scenario_contracts(path)
-        except Exception as exc:
+        except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:
             inputs.append(
                 _input_ref(path, "unavailable", f"could not load scenario contracts: {exc}")
             )
@@ -300,7 +300,7 @@ def _load_scenario_certificates(
     for path in paths:
         try:
             raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except Exception as exc:
+        except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:
             inputs.append(_input_ref(path, "unavailable", f"could not load scenario certs: {exc}"))
             continue
         loaded = _as_record_list(raw)

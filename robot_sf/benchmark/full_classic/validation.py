@@ -80,7 +80,7 @@ def validate_visual_manifests(base_dir: Path, contracts_dir: Path) -> list[str]:
             raise ValueError(
                 f"Validation failed for {manifest_name}: {exc.message} at path {'/'.join(str(p) for p in exc.path)}",
             ) from exc
-        except Exception as exc:
+        except (jsonschema.SchemaError, OSError, ValueError, TypeError) as exc:
             raise ValueError(
                 f"Error validating {manifest_name}: {exc.__class__.__name__}: {exc}",
             ) from exc

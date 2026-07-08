@@ -154,7 +154,7 @@ def _safe_number(x: Any) -> float | None:
         if math.isnan(v):
             return None
         return v
-    except Exception:
+    except (ValueError, TypeError):
         return None
 
 
@@ -196,7 +196,7 @@ def collect_values(
                     s = np.linalg.norm(arr, axis=1).mean()
                     if np.isfinite(s):
                         speeds.append(float(s))
-                except Exception as exc:
+                except (ValueError, TypeError) as exc:
                     if strict:
                         record_id = rec.get("episode_id") or rec.get("scenario_id") or "<unknown>"
                         fallback_errors.append(f"{record_id}: {exc}")

@@ -46,7 +46,7 @@ try:  # lightweight import gate
 except ImportError as e:
     SimulationView = None  # type: ignore
     _SIM_VIEW_IMPORT_ERROR = e
-except Exception as e:  # pragma: no cover - defensive
+except (OSError, RuntimeError) as e:  # pragma: no cover - defensive
     # Keep prior behavior for unexpected import-time errors: record and continue.
     SimulationView = None  # type: ignore
     _SIM_VIEW_IMPORT_ERROR = e
@@ -86,11 +86,17 @@ def generate_frames(  # noqa: PLR0912
     if getattr(episode, "map_path", None):
         try:
             map_def = convert_map(str(episode.map_path))  # type: ignore[arg-type]
-        except Exception as exc:  # pragma: no cover - fallback path
+        except (
+            OSError,
+            ValueError,
+            KeyError,
+            TypeError,
+            RuntimeError,
+        ) as exc:  # pragma: no cover - fallback path
             try:
                 logger = importlib.import_module("loguru").logger
                 logger.debug("convert_map failed for %s: %s", episode.map_path, exc)
-            except Exception:
+            except ImportError:
                 pass
             map_def = None
     view_kwargs: dict = {
@@ -118,7 +124,7 @@ def generate_frames(  # noqa: PLR0912
                     ped_actions=np.zeros_like(ped_positions),
                     time_per_step_in_secs=dt,
                 )
-            except Exception:
+            except (ValueError, TypeError, KeyError, AttributeError):
                 state = step  # fallback to replay step if construction fails
             try:
                 if hasattr(_sim_view, "render"):
@@ -138,7 +144,13 @@ def generate_frames(  # noqa: PLR0912
                     frame = np.zeros((360, 640, 3), dtype=np.uint8)
             except (AttributeError, RuntimeError, ImportError):
                 frame = np.zeros((360, 640, 3), dtype=np.uint8)
-            except Exception as exc:  # pragma: no cover - defensive
+            except (
+                ValueError,
+                IndexError,
+                TypeError,
+                KeyError,
+                OSError,
+            ) as exc:  # pragma: no cover - defensive
                 try:
                     logger = importlib.import_module("loguru").logger
                     logger.debug("generate_frames render capture failed: %s", exc)
@@ -207,11 +219,11 @@ def _load_map_def(ep: ReplayEpisode) -> MapDefinition | None:
     if getattr(ep, "map_path", None):
         try:
             map_def = convert_map(str(ep.map_path))  # type: ignore[arg-type]
-        except Exception:  # pragma: no cover - fallback
+        except (OSError, ValueError, KeyError):  # pragma: no cover - fallback
             map_def = None
     try:
         ep._map_def_cache = map_def
-    except Exception:
+    except (AttributeError, TypeError):
         pass
     return map_def
 
@@ -270,10 +282,19 @@ def generate_video_file(
         status = "success" if size > 0 else "skipped"
         if size == 0:
             note = "moviepy-missing" if not MOVIEPY_AVAILABLE else "encode-empty"
-    except Exception as exc:  # pragma: no cover - defensive
+    except (
+        ValueError,
+        IndexError,
+        TypeError,
+        RuntimeError,
+        OSError,
+        KeyError,
+        AttributeError,
+        ImportError,
+    ) as exc:  # pragma: no cover - defensive
         try:
             view.exit_simulation()
-        except Exception:
+        except (RuntimeError, AttributeError, TypeError, OSError):
             pass
         status = "failed"
         note = f"render-error:{exc.__class__.__name__}"

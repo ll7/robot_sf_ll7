@@ -270,7 +270,7 @@ def _check_image_content(path: Path, artifact_id: str, issues: list[FigureQA]) -
         with Image.open(path) as img:
             width, height = img.size
             img.verify()
-    except Exception as exc:
+    except (OSError, ValueError) as exc:
         issues.append(FigureQA(artifact_id, "valid_image", f"cannot verify image: {exc}"))
         return
 
@@ -318,7 +318,7 @@ def _check_caption_file(path: Path, artifact_id: str, issues: list[FigureQA]) ->
         return
     try:
         text = path.read_text(encoding="utf-8")
-    except Exception as exc:
+    except OSError as exc:
         issues.append(FigureQA(artifact_id, "caption_file", f"cannot read caption file: {exc}"))
         return
     if not text.strip():

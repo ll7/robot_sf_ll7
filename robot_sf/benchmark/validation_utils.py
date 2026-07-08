@@ -66,7 +66,7 @@ def validate_schema_integrity(schema: dict[str, Any]) -> list[str]:
 
     except jsonschema.ValidationError as e:
         errors.append(f"Schema validation error: {e.message}")
-    except Exception as e:
+    except (jsonschema.SchemaError, RecursionError, TypeError) as e:
         errors.append(f"Schema validation failed: {e!s}")
 
     return errors
@@ -87,7 +87,7 @@ def validate_schema_compatibility(schema: dict[str, Any]) -> tuple[bool, list[st
         # In a real implementation, you'd fetch and use the actual meta-schema
         errors = validate_schema_integrity(schema)
         return len(errors) == 0, errors
-    except Exception as e:
+    except (TypeError, KeyError, ValueError) as e:
         return False, [f"Compatibility validation failed: {e!s}"]
 
 

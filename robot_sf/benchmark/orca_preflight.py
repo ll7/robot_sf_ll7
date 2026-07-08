@@ -86,7 +86,7 @@ def _ensure_rvo2_importable(*, planner_keys: list[str] | None = None) -> None:
     """Raise a typed preflight error when ``rvo2`` is unavailable."""
     try:
         import rvo2  # type: ignore[import-untyped,unused-ignore]  # noqa: F401, PLC0415
-    except Exception as exc:
+    except (ImportError, OSError) as exc:
         message = _missing_rvo2_message(planner_keys=planner_keys, error=exc)
         logger.error(message)
         raise OrcaRvo2PreflightError(

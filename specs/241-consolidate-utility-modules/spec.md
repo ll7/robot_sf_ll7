@@ -1,9 +1,9 @@
 # Feature Specification: Consolidate Utility Modules
 
-**Feature Branch**: `241-consolidate-utility-modules`
-**Created**: November 10, 2025
-**Status**: Draft
-**Input**: User description: "Consolidate fragmented utility modules (util/utils/common) into single robot_sf/common/ module"
+**Feature Branch**: `241-consolidate-utility-modules`  
+**Created**: November 10, 2025  
+**Status**: Draft  
+**Input**: User description: "Consolidate fragmented utility modules (util/utils/common) into single robot_sf/common/ module"  
 **Related Issue**: [#241](https://github.com/ll7/robot_sf_ll7/issues/241)
 
 ## User Scenarios & Testing *(mandatory)*
@@ -163,17 +163,17 @@ As a new contributor to the project, I need clear documentation showing where to
 
 ### Risk 1: Breaking External Code
 
-**Likelihood**: Low
-**Impact**: Medium
-**Mitigation**:
+**Likelihood**: Low  
+**Impact**: Medium  
+**Mitigation**: 
 - Bump minor version (2.0 → 2.1) to signal change
 - Add deprecation warnings in stub modules for one release cycle
 - Document migration in CHANGELOG with clear before/after examples
 
 ### Risk 2: Circular Import Dependencies
 
-**Likelihood**: Low
-**Impact**: High
+**Likelihood**: Low  
+**Impact**: High  
 **Mitigation**:
 - Review dependency graph before moving modules
 - Use deferred imports (TYPE_CHECKING blocks) if needed
@@ -181,8 +181,8 @@ As a new contributor to the project, I need clear documentation showing where to
 
 ### Risk 3: IDE Cache Issues
 
-**Likelihood**: Medium
-**Impact**: Low
+**Likelihood**: Medium  
+**Impact**: Low  
 **Mitigation**:
 - Document need to restart IDE/clear cache after migration
 - Test with fresh virtual environment
@@ -190,8 +190,8 @@ As a new contributor to the project, I need clear documentation showing where to
 
 ### Risk 4: Incomplete Import Updates
 
-**Likelihood**: Low
-**Impact**: High
+**Likelihood**: Low  
+**Impact**: High  
 **Mitigation**:
 - Use automated grep search to find ALL import statements
 - Run comprehensive test suite (893 tests)

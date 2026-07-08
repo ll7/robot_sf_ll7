@@ -35,15 +35,15 @@ Primary requirement: Reduce runtime of the reproducibility integration test whil
 Approach (from research): Minimize episodes (2 total), disable heavy artifacts (videos/plots, bootstrap), enforce workers=1, add soft timing assertion, retain full planning/execution path for authenticity.
 
 ## Technical Context
-**Language/Version**: Python 3.13 (repo current)
-**Primary Dependencies**: pytest, benchmark modules (`robot_sf.benchmark.full_classic`), standard library
-**Storage**: Local filesystem (temporary output dirs)
-**Testing**: pytest integration test (accelerated)
-**Target Platform**: macOS/Linux CI (headless)
-**Project Type**: Single research/benchmark Python project
-**Performance Goals**: Test <2s local, <4s CI wall time
-**Constraints**: Deterministic episode ordering & hash; avoid heavy artifact generation
-**Scale/Scope**: Narrow (single test optimization)
+**Language/Version**: Python 3.13 (repo current)  
+**Primary Dependencies**: pytest, benchmark modules (`robot_sf.benchmark.full_classic`), standard library  
+**Storage**: Local filesystem (temporary output dirs)  
+**Testing**: pytest integration test (accelerated)  
+**Target Platform**: macOS/Linux CI (headless)  
+**Project Type**: Single research/benchmark Python project  
+**Performance Goals**: Test <2s local, <4s CI wall time  
+**Constraints**: Deterministic episode ordering & hash; avoid heavy artifact generation  
+**Scale/Scope**: Narrow (single test optimization)  
 
 ## Constitution Check
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
@@ -174,12 +174,12 @@ ios/ or android/
 - Load `.specify/templates/tasks-template.md` as base
 - Generate tasks from Phase 1 design docs (contracts, data model, quickstart)
 - Each contract → contract test task [P]
-- Each entity → model creation task [P]
+- Each entity → model creation task [P] 
 - Each user story → integration test task
 - Implementation tasks to make tests pass
 
 **Ordering Strategy**:
-- TDD order: Tests before implementation
+- TDD order: Tests before implementation 
 - Dependency order: Models before services before UI
 - Mark [P] for parallel execution (independent files)
 
@@ -190,8 +190,8 @@ ios/ or android/
 ## Phase 3+: Future Implementation
 *These phases are beyond the scope of the /plan command*
 
-**Phase 3**: Task execution (/tasks command creates tasks.md)
-**Phase 4**: Implementation (execute tasks.md following constitutional principles)
+**Phase 3**: Task execution (/tasks command creates tasks.md)  
+**Phase 4**: Implementation (execute tasks.md following constitutional principles)  
 **Phase 5**: Validation (run tests, execute quickstart.md, performance validation)
 
 ## Complexity Tracking

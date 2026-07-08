@@ -46,7 +46,7 @@ Each line: JSON object with minimal structure:
 ## 1. Context
 The Social Navigation Quality Index (SNQI) aggregates task success and social safety / comfort metrics into a single scalar score for benchmarking navigation policies. Earlier iterations duplicated logic, lacked schema guarantees, and provided limited provenance. The refactor introduces canonical computation, weight optimization (grid + differential evolution), recomputation with strategy comparison, normalization sensitivity, and external weight validation.
 
-Related PR: #175
+Related PR: #175  
 Checklist: `README.md` in this directory.
 
 ## 2. Goals
@@ -71,8 +71,8 @@ Checklist: `README.md` in this directory.
 
 ## 5. Data & File Contracts
 ### 5.1 Episodes JSONL
-Line‑delimited JSON objects: `{"scenario_id": str, "metrics": {...}, "scenario_params": {... optional ...}}`
-Notable fields (optional unless noted): success, time_to_goal_norm, collisions, near_misses, comfort_exposure, force_exceed_events, jerk_mean.
+Line‑delimited JSON objects: `{"scenario_id": str, "metrics": {...}, "scenario_params": {... optional ...}}`  
+Notable fields (optional unless noted): success, time_to_goal_norm, collisions, near_misses, comfort_exposure, force_exceed_events, jerk_mean.  
 Malformed lines are skipped (warning logged; aggregate count future enhancement).
 
 ### 5.2 Baseline Stats JSON
@@ -157,8 +157,8 @@ Documentation / User Guide Sync: A condensed rationale will be mirrored into the
 Placeholder fields removed (no synthetic `pareto_efficiency`).
 
 ## 8. Optimization Objective
-`maximize 0.6 * stability + 0.4 * discriminative_power` implemented as negated minimization.
-Stability: Spearman between algorithm groups if ≥2 groups else variance‑derived fallback.
+`maximize 0.6 * stability + 0.4 * discriminative_power` implemented as negated minimization.  
+Stability: Spearman between algorithm groups if ≥2 groups else variance‑derived fallback.  
 Discriminative power: variance (normalized) of SNQI scores.
 
 ### 8.1 Heuristic Components (v1 – Experimental)
@@ -492,7 +492,7 @@ Normalization: `(v - med) / (p95 - med)` clamped to [0,1].
 3. Compute average pairwise Spearman across bootstraps → stability score.
 
 ### 9.3 Discriminative Power
-Option A: Std dev of per-algorithm mean scores.
+Option A: Std dev of per-algorithm mean scores.  
 Option B: ANOVA F-statistic scaled to [0,1]. (TBD—decide in implementation section.)
 
 ### 9.4 Multi-objective Combination
@@ -536,12 +536,12 @@ Mitigations:
 - Large file size guard (optional future enhancement)
 
 ## 14. Migration / Rollout Plan
-Phase 1: Introduce shared module + modify scripts to import it (backward compatible)  (COMPLETED)
-Phase 1b: Add parity regression test (COMPLETED)
-Phase 2: Add broader tests + formal JSON schema artifact + expand design doc (IN PROGRESS)
-Phase 3: Add CLI integration (`robot_sf_bench snqi`)
-Phase 4: Introduce bootstrap stability metric & deprecate direct script usage (soft warning)
-Phase 5: Optional advanced methodology (ANOVA, NSGA-II)
+Phase 1: Introduce shared module + modify scripts to import it (backward compatible)  (COMPLETED)  
+Phase 1b: Add parity regression test (COMPLETED)  
+Phase 2: Add broader tests + formal JSON schema artifact + expand design doc (IN PROGRESS)  
+Phase 3: Add CLI integration (`robot_sf_bench snqi`)  
+Phase 4: Introduce bootstrap stability metric & deprecate direct script usage (soft warning)  
+Phase 5: Optional advanced methodology (ANOVA, NSGA-II)  
 
 ## 15. Open Questions
 - Should weights be normalized (sum=const)?
@@ -561,7 +561,7 @@ Phase 5: Optional advanced methodology (ANOVA, NSGA-II)
 - Shared module replaces duplication (DONE)
 - Parity test ensures canonical score stability (DONE)
 - Test suite covers ≥85% of new logic paths (non-viz) (PARTIAL – more tests pending)
-- Deterministic optimization under fixed seed (PARTIAL – NumPy seeding applied; ensure SciPy DE reproducibility)
+- Deterministic optimization under fixed seed (PARTIAL – NumPy seeding applied; ensure SciPy DE reproducibility) 
 - Documented JSON schema with `schema_version` (PARTIAL – `_metadata` implemented; jsonschema file pending)
 - Reproducibility metadata (`_metadata` with seed/git commit/provenance) (DONE)
 - CI passes with new tests & type hints (ONGOING; current additions green)

@@ -34,14 +34,14 @@
 Resolve 103 type checking diagnostics in the robot_sf codebase through a phased approach: Phase 1 fixes critical compatibility and runtime issues, Phase 2 updates type annotations, Phase 3 handles import resolution, and Phase 4 improves overall type safety. Technical approach involves analyzing current diagnostics, implementing fixes while maintaining backward compatibility, and achieving 80% type coverage validated with uvx ty type checker.
 
 ## Technical Context
-**Language/Version**: Python 3.11 and later
-**Primary Dependencies**: uvx ty (mypy-based type checker), Python standard library
-**Storage**: N/A
-**Testing**: pytest
-**Target Platform**: Any Python 3.11+ compatible platform
-**Project Type**: single (codebase quality improvement)
-**Performance Goals**: N/A (type checking is static analysis)
-**Constraints**: Maintain backward compatibility, no breaking changes to public APIs
+**Language/Version**: Python 3.11 and later  
+**Primary Dependencies**: uvx ty (mypy-based type checker), Python standard library  
+**Storage**: N/A  
+**Testing**: pytest  
+**Target Platform**: Any Python 3.11+ compatible platform  
+**Project Type**: single (codebase quality improvement)  
+**Performance Goals**: N/A (type checking is static analysis)  
+**Constraints**: Maintain backward compatibility, no breaking changes to public APIs  
 **Scale/Scope**: Resolve 103 type diagnostics across ~15k lines of Python code
 
 ## Constitution Check
@@ -163,8 +163,8 @@ tests/
 ## Phase 3+: Future Implementation
 *These phases are beyond the scope of the /plan command*
 
-**Phase 3**: Task execution (/tasks command creates tasks.md)
-**Phase 4**: Implementation (execute tasks.md following constitutional principles)
+**Phase 3**: Task execution (/tasks command creates tasks.md)  
+**Phase 4**: Implementation (execute tasks.md following constitutional principles)  
 **Phase 5**: Validation (run tests, execute quickstart.md, performance validation)
 
 ## Complexity Tracking

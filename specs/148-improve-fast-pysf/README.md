@@ -1,7 +1,7 @@
 # Feature 148: Improve fast-pysf Integration - Specification Complete
 
-**Status**: ✅ Ready for Planning/Implementation
-**Created**: October 29, 2025
+**Status**: ✅ Ready for Planning/Implementation  
+**Created**: October 29, 2025  
 **Branch**: `148-improve-fast-pysf`
 
 ## Summary
@@ -157,6 +157,6 @@ The specification is **production-ready** and provides a solid foundation for im
 
 ---
 
-**Branch**: `148-improve-fast-pysf`
-**Spec Location**: `/Users/lennart/git/robot_sf_ll7/specs/148-improve-fast-pysf/`
+**Branch**: `148-improve-fast-pysf`  
+**Spec Location**: `/Users/lennart/git/robot_sf_ll7/specs/148-improve-fast-pysf/`  
 **Ready for**: `/speckit.plan` or direct implementation

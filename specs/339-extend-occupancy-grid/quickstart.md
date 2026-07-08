@@ -1,7 +1,7 @@
 # Quickstart: Using Extended Occupancy Grids
 
-**Date**: 2025-12-04
-**Phase**: Phase 1 (Design & Contracts)
+**Date**: 2025-12-04  
+**Phase**: Phase 1 (Design & Contracts)  
 **Audience**: Developers integrating occupancy grids into environments or using them for planning
 
 ---
@@ -74,11 +74,11 @@ print("Pedestrians occupied cells:", (pedestrians_channel > 0).sum())
 for step in range(10):
     action = env.action_space.sample()  # Random action
     obs, reward, terminated, truncated, info = env.step(action)
-
+    
     # Grid updates automatically with pedestrian positions
     current_grid = obs["occupancy_grid"]
     print(f"Step {step}: pedestrians channel max occupancy = {current_grid[1].max()}")
-
+    
     if terminated or truncated:
         break
 ```
@@ -211,7 +211,7 @@ import torch.nn as nn
 
 class OccupancyGridFeatureExtractor(nn.Module):
     """Custom feature extractor for occupancy grids."""
-
+    
     def __init__(self, observation_space, features_dim=256):
         super().__init__()
         # Simple CNN: 3x3 conv → 3x3 conv → flatten
@@ -225,7 +225,7 @@ class OccupancyGridFeatureExtractor(nn.Module):
             nn.Linear(32, features_dim),
             nn.ReLU(),
         )
-
+    
     def forward(self, observations):
         return self.net(observations)
 
@@ -266,11 +266,11 @@ obs = env.reset()
 for step in range(500):
     action = env.action_space.sample()
     obs, reward, terminated, truncated, info = env.step(action)
-
+    
     # env handles visualization automatically in debug mode
     # Press 'g' to toggle grid visibility (example; depends on implementation)
     # Press 'c' to toggle specific channels (example)
-
+    
     if terminated or truncated:
         obs = env.reset()
 ```
@@ -365,15 +365,15 @@ ped_only_config = GridConfig(
 class GridAugmentedObserver:
     def __init__(self, env):
         self.env = env
-
+    
     def reset(self):
         obs = self.env.reset()
         return self._augment(obs)
-
+    
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
         return self._augment(obs), reward, terminated, truncated, info
-
+    
     def _augment(self, obs):
         # obs already includes "occupancy_grid" from environment
         # Add custom fields if needed

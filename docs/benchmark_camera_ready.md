@@ -674,7 +674,7 @@ Core vs experimental partitions:
   cannot find an eligible core benchmark-success set, the report falls back to the
   full scenario breakdown and says so explicitly instead of implying a core consensus.
 * `campaign_table_core.{csv,md}`:
-  core partition rows ( `planner_group=core` for paper-facing runs;
+  core partition rows ( `planner_group=core` for paper-facing runs; 
 `readiness_tier=baseline-ready` for non-paper runs).
 * `campaign_table_experimental.{csv,md}`:
   non-core rows ( `planner_group!=core` for paper-facing runs; non-baseline-ready otherwise).

@@ -1,8 +1,8 @@
 # Feature Specification: Great Starting Set for Ruff Linting Rules Expansion
 
-**Feature Branch**: `137-great-starting-set`
-**Created**: September 26, 2025
-**Status**: Draft
+**Feature Branch**: `137-great-starting-set`  
+**Created**: September 26, 2025  
+**Status**: Draft  
 **Input**: User description: "I'd layer in a few high-signal rule families that catch real bugs, modernize syntax, and keep imports/exception handling tidy—without turning your CI into a nag.
 
 Here's a curated, battle-tested expansion:
@@ -69,19 +69,19 @@ ignore = [
 "docs/**/*" = ["T201"]
 
 Why these:
-	•	B / BLE / TRY: catch real bugs like mutable defaults, bare excepts, and sketchy try/except flows (e.g., TRY300/TRY203).
-	•	UP: nudges you to modern Python (e.g., f-strings, pathlib PurePath bits) with safe auto-fixes.
-	•	SIM / C4: replaces re-implemented builtins and collapses nested conditionals; clearer, smaller diffs.
-	•	DTZ: prevents subtle time bugs (naive datetimes), which bite in sims/logging.
-	•	S (Bandit): cheap security wins (unsafe subprocess, yaml.load, etc.). Keep a few ignores in tests.
-	•	PERF: gentle micro-optimizations; good signal, low cost.
-	•	PTH / TCH / TID / ICN: cleaner imports and faster cold-start by deferring heavy typing deps.
-	•	RUF / PGH: trims stale noqa and blanket ignores so your config stays honest.
-	•	G / T20 / ERA / COM / ISC: avoids logging/print/string pitfalls and keeps diffs neat.
+	•	B / BLE / TRY: catch real bugs like mutable defaults, bare excepts, and sketchy try/except flows (e.g., TRY300/TRY203).  
+	•	UP: nudges you to modern Python (e.g., f-strings, pathlib PurePath bits) with safe auto-fixes.  
+	•	SIM / C4: replaces re-implemented builtins and collapses nested conditionals; clearer, smaller diffs.  
+	•	DTZ: prevents subtle time bugs (naive datetimes), which bite in sims/logging.  
+	•	S (Bandit): cheap security wins (unsafe subprocess, yaml.load, etc.). Keep a few ignores in tests.  
+	•	PERF: gentle micro-optimizations; good signal, low cost.  
+	•	PTH / TCH / TID / ICN: cleaner imports and faster cold-start by deferring heavy typing deps.  
+	•	RUF / PGH: trims stale noqa and blanket ignores so your config stays honest.  
+	•	G / T20 / ERA / COM / ISC: avoids logging/print/string pitfalls and keeps diffs neat.  
 
 Tips:
-	•	Let Ruff auto-fix what it can (ruff check --fix). You can restrict fixability if desired (e.g., only E,F,UP,SIM,C4).
-	•	Keep docstrings & annotations optional at first. If you want stricter APIs later, consider ANN (annotations) and a minimal D1xx docstring baseline in public modules.
+	•	Let Ruff auto-fix what it can (ruff check --fix). You can restrict fixability if desired (e.g., only E,F,UP,SIM,C4).  
+	•	Keep docstrings & annotations optional at first. If you want stricter APIs later, consider ANN (annotations) and a minimal D1xx docstring baseline in public modules.  
 	•	If you prefer the "strict by default" style, one viable approach is select = ["ALL"] and then ignore what you truly dislike—useful to benefit from new rules over time. (Communities do this; just be deliberate with ignores.)"
 
 ## Clarifications
@@ -132,7 +132,7 @@ When creating this spec from a user prompt:
 3. **Think like a tester**: Every vague requirement should fail the "testable and unambiguous" checklist item
 4. **Common underspecified areas**:
    - User types and permissions
-   - Data retention/deletion policies
+   - Data retention/deletion policies  
    - Performance targets and scale
    - Error handling behaviors
    - Integration requirements
@@ -179,6 +179,6 @@ I want to expand the Ruff linting rules in pyproject.toml to catch more bugs, mo
 
 ### Requirement Completeness
 - [ ] No [NEEDS CLARIFICATION] markers remain
-- [ ] Requirements are testable and unambiguous
+- [ ] Requirements are testable and unambiguous  
 - [ ] Success criteria are measurable
 - [ ] Scope is clearly bounded

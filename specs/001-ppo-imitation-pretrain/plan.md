@@ -17,14 +17,14 @@ Deliver a reproducible pipeline that (1) trains and validates a PPO expert polic
   the iteration process.
 -->
 
-**Language/Version**: Python 3.11 (uv-managed virtual environment)
-**Primary Dependencies**: Stable-Baselines3, imitation (HumanCompatibleAI), Gymnasium, Loguru, NumPy, PyTorch
-**Storage**: Local filesystem artefact tree under `output/` (JSONL episodes, NPZ trajectory files, model checkpoints)
-**Testing**: pytest suite with headless validations; additional smoke scripts in `scripts/validation/`
-**Target Platform**: Linux/macOS headless execution (CI and local workstations)
-**Project Type**: Research platform with scripted pipelines (library-centric)
-**Performance Goals**: Pre-trained PPO must reach benchmark success in ≤70% of the timesteps required by baseline PPO and complete end-to-end runs within 18 hours on reference hardware
-**Constraints**: Curated trajectory datasets capped at 25 GB each with enforced archival rotation after three iterations to protect storage and CI throughput
+**Language/Version**: Python 3.11 (uv-managed virtual environment)  
+**Primary Dependencies**: Stable-Baselines3, imitation (HumanCompatibleAI), Gymnasium, Loguru, NumPy, PyTorch  
+**Storage**: Local filesystem artefact tree under `output/` (JSONL episodes, NPZ trajectory files, model checkpoints)  
+**Testing**: pytest suite with headless validations; additional smoke scripts in `scripts/validation/`  
+**Target Platform**: Linux/macOS headless execution (CI and local workstations)  
+**Project Type**: Research platform with scripted pipelines (library-centric)  
+**Performance Goals**: Pre-trained PPO must reach benchmark success in ≤70% of the timesteps required by baseline PPO and complete end-to-end runs within 18 hours on reference hardware  
+**Constraints**: Curated trajectory datasets capped at 25 GB each with enforced archival rotation after three iterations to protect storage and CI throughput  
 **Scale/Scope**: Research-scale experiments covering ≥3 seeds per scenario and ≥200 expert episodes per dataset
 
 ## Constitution Check

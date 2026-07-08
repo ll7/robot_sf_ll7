@@ -29,7 +29,7 @@ A feasibility spike was conducted in the project environment to verify package i
    print(dir(geometric))
    ```
    *Result list:* `['AORRTC', 'BFMT', 'BITstar', 'BKPIECE1', 'Discretization', 'DiscretizationCellData', 'FMT', 'InformedRRTstar', 'KPIECE1', 'LBKPIECE1', 'PRM', 'PRMstar', 'PathGeometric', 'PathSimplifier', 'RRT', 'RRTConnect', 'RRTstar', 'SORRTstar', 'SimpleSetup', ...]`
-
+   
    The class `STRRTstar` is **missing** from the pre-built `ompl` wheel.
 
 ### Root Cause and Dependency Constraints

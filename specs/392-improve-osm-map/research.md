@@ -1,8 +1,8 @@
 # Research & Analysis: OSM-Based Map Extraction
 
-**Phase**: 0 (Research & Clarification)
-**Date**: 2025-12-19
-**Status**: Complete
+**Phase**: 0 (Research & Clarification)  
+**Date**: 2025-12-19  
+**Status**: Complete  
 **Research Artifacts**: See `/research/` folder (5 AI-generated proposals)
 
 ---
@@ -101,7 +101,7 @@ All five AI-generated proposals converge on similar recommendations:
 - `waterway=river` (major water features; optional)
 - `natural=cliff` (cliffs, unpassable)
 
-**Reference**:
+**Reference**: 
 - [OpenStreetMap Highways Wiki](https://wiki.openstreetmap.org/wiki/Key:highway)
 - [OSMnx tag filters](https://osmnx.readthedocs.io/en/stable/#tag-filters)
 
@@ -127,7 +127,7 @@ All five AI-generated proposals converge on similar recommendations:
 - Cap style: round (smooth corners, no sharp artifacts)
 - Join style: round (smooth intersections)
 
-**Reference**:
+**Reference**: 
 - Shapely BufferCapStyle documentation
 - PyProj for projection transforms
 
@@ -190,17 +190,17 @@ metadata:
   source_pbf: "uni_campus.pbf"
   map_bounds: [48.3, 11.9, 48.32, 11.92]  # (minlat, minlon, maxlat, maxlon)
   created_at: "2025-12-19T14:23:45Z"
-
+  
 zones:
   spawn_a:
     type: "spawn"
     polygon: [[100.0, 200.0], [110.0, 200.0], [110.0, 210.0], [100.0, 210.0]]  # meters
     priority: 1
-
+    
   goal_zone:
     type: "goal"
     polygon: [[500.0, 600.0], [520.0, 600.0], [520.0, 620.0], [500.0, 620.0]]
-
+    
   crowded_area:
     type: "crowded"
     polygon: [[300.0, 400.0], [350.0, 400.0], [350.0, 450.0], [300.0, 450.0]]
@@ -260,7 +260,7 @@ class MapDefinition:
     goal_zones: list[GoalZone] = field(default_factory=list)
     crowded_zones: list[CrowdedZone] = field(default_factory=list)
     routes: list[Route] = field(default_factory=list)
-
+    
     # NEW FIELD:
     allowed_areas: list[Polygon] | None = None  # Populated by OSM importer
 ```
@@ -302,7 +302,7 @@ pyyaml = "^6.0"
 ## MVP Scope & Phases
 
 ### Phase 1 (Weeks 1–2): Core Importer & Rendering
-**Goals**:
+**Goals**: 
 - Parse local PBF → filter by tags → buffer → compute obstacles
 - Populate MapDefinition with `allowed_areas`
 - Render PNG background + affine transform metadata

@@ -1,6 +1,6 @@
 # Implementation Plan: OSM-Based Map Extraction to MapDefinition
 
-**Branch**: `392-Improve-osm-map-generation` | **Date**: 2025-12-19 | **Spec**: [spec.md](./spec.md) | **Research**: [research.md](./research.md)
+**Branch**: `392-Improve-osm-map-generation` | **Date**: 2025-12-19 | **Spec**: [spec.md](./spec.md) | **Research**: [research.md](./research.md)  
 **Input**: Feature specification + 5 AI research proposals + dev_guide.md constitution
 
 **Purpose**: Execute Phase 1–4 implementation plan for semantic OSM PBF pipeline with visual editor, replacing lossy SVG export workflow. Deliverables: 4 new modules, updated MapDefinition, end-to-end examples, comprehensive tests, backward-compat validation.
@@ -39,7 +39,7 @@
 - Matplotlib (~3.8+): Background PNG rendering, editor UI (click handlers)
 - PyYAML (~6.0+): Deterministic zone/route serialization
 
-**Storage**:
+**Storage**: 
 - Input: Local PBF files (OSM extracts, e.g., from bbbike.org)
 - Output: MapDefinition objects (in-memory), PNG backgrounds, YAML zone/route files (under `output/maps/`)
 
@@ -182,7 +182,7 @@ def osm_to_map_definition(
 ) -> MapDefinition:
     """
     Convert OSM PBF to MapDefinition.
-
+    
     Returns:
         MapDefinition with:
         - bounds: Bounding box polygon
@@ -239,7 +239,7 @@ def render_osm_background(
 ) -> dict[str, Any]:
     """
     Render PBF as PNG background image.
-
+    
     Returns:
         {
             "png_path": str,
@@ -297,11 +297,11 @@ class OSMZonesEditor:
         obstacles: list[Obstacle],
     ):
         """Interactive editor for drawing zones and routes over background."""
-
+        
     def launch(self) -> dict[str, Any]:
         """
         Open interactive editor.
-
+        
         Returns:
             {
                 "zones": {"spawn_a": Polygon, "goal": Polygon, ...},
@@ -352,7 +352,7 @@ class OSMZonesConfig:
 
 def load_zones_yaml(yaml_file: str) -> OSMZonesConfig:
     """Load YAML file; validate schema; round-trip determinism guaranteed."""
-
+    
 def save_zones_yaml(config: OSMZonesConfig, yaml_file: str) -> None:
     """Save to YAML with deterministic ordering and precision (3 decimal places)."""
 ```
@@ -372,11 +372,11 @@ zones:
     polygon: [[100.0, 200.0], [110.0, 200.0], [110.0, 210.0], [100.0, 210.0]]  # meters
     priority: 1
     metadata: {}  # Optional user notes
-
+    
   goal_zone:
     type: "goal"
     polygon: [[500.0, 600.0], [520.0, 600.0], [520.0, 620.0], [500.0, 620.0]]
-
+    
   crowded_zone:
     type: "crowded"
     polygon: [[300.0, 400.0], [350.0, 400.0], [350.0, 450.0], [300.0, 450.0]]
@@ -410,10 +410,10 @@ class MapDefinition:
     goal_zones: list[GoalZone] = field(default_factory=list)
     crowded_zones: list[CrowdedZone] = field(default_factory=list)
     routes: list[Route] = field(default_factory=list)
-
+    
     # NEW FIELD (Optional, populated by OSM importer only):
     allowed_areas: list[Polygon] | None = None
-
+    
     def is_point_in_driveable_area(self, point: tuple[float, float]) -> bool:
         """Check if point is in driveable area (uses allowed_areas if present)."""
         if self.allowed_areas is not None:

@@ -11,14 +11,14 @@ Reorganize the 84 example scripts into a tiered structure (`quickstart/`, `advan
 
 ## Technical Context
 
-**Language/Version**: Python 3.11
-**Primary Dependencies**: Python standard library (`pathlib`, `shutil`, `textwrap`), existing `robot_sf` modules, documentation tooling
-**Storage**: Git-tracked file system (source tree)
-**Testing**: pytest-based suite with parametrized example smoke module (`tests/examples/test_examples_run.py`)
-**Target Platform**: Cross-platform developer environments (macOS/Linux CLI)
-**Project Type**: Python research toolkit / library
-**Performance Goals**: Ensure full example harness completes under 10 minutes in CI by default; per-example metadata can opt out rare interactive cases with documented rationale
-**Constraints**: Preserve reproducibility contracts, maintain stable import paths, align with documentation governance
+**Language/Version**: Python 3.11  
+**Primary Dependencies**: Python standard library (`pathlib`, `shutil`, `textwrap`), existing `robot_sf` modules, documentation tooling  
+**Storage**: Git-tracked file system (source tree)  
+**Testing**: pytest-based suite with parametrized example smoke module (`tests/examples/test_examples_run.py`)  
+**Target Platform**: Cross-platform developer environments (macOS/Linux CLI)  
+**Project Type**: Python research toolkit / library  
+**Performance Goals**: Ensure full example harness completes under 10 minutes in CI by default; per-example metadata can opt out rare interactive cases with documented rationale  
+**Constraints**: Preserve reproducibility contracts, maintain stable import paths, align with documentation governance  
 **Scale/Scope**: 84 existing example scripts plus associated docs/links
 
 ## Constitution Check

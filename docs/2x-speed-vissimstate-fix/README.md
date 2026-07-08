@@ -47,7 +47,7 @@ ped_actions = zip(
     self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel() * 2,  # ❌ Artificial 2x
 )
 
-# After
+# After  
 ped_actions = zip(
     self.simulator.pysf_sim.peds.pos(),
     self.simulator.pysf_sim.peds.pos() + self.simulator.pysf_sim.peds.vel(),      # ✅ Actual velocity
@@ -67,7 +67,7 @@ velocity = velocity      # ✅ No manipulation needed
 
 **Environment Files:**
 - `robot_sf/gym_env/robot_env.py`
-- `robot_sf/gym_env/pedestrian_env.py`
+- `robot_sf/gym_env/pedestrian_env.py`  
 - `robot_sf/gym_env/crowd_sim_env.py`
 
 **Data Analysis Files:**
@@ -77,7 +77,7 @@ velocity = velocity      # ✅ No manipulation needed
 
 ### Data Integrity Restored
 - ✅ **Accurate Velocities**: Saved states contain actual pedestrian speeds
-- ✅ **Research Quality**: Data analysis reflects true simulation behavior
+- ✅ **Research Quality**: Data analysis reflects true simulation behavior  
 - ✅ **Consistency**: Aligns with fast-pysf reference implementation
 - ✅ **Architecture**: Proper separation of data and visualization concerns
 
@@ -100,8 +100,8 @@ def _augment_ped_actions(self, ped_actions: np.ndarray):
         if self.enhanced_velocity_display:
             direction = np.array(p2) - np.array(p1)
             p2 = np.array(p1) + direction * 2
-
-        pygame.draw.line(self.screen, PED_ACTION_COLOR,
+            
+        pygame.draw.line(self.screen, PED_ACTION_COLOR, 
                         self._scale_tuple(p1), self._scale_tuple(p2), width=3)
 ```
 

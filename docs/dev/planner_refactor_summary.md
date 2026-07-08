@@ -78,11 +78,11 @@ The alias `GlobalPlanner = VisibilityPlanner` ensures no breaking changes.
 ### VisibilityPlanner
 - **Approach**: Visibility graph construction from obstacle corners
 - **Representation**: Continuous vector-based coordinates
-- **Strengths**:
+- **Strengths**: 
   - Fast for sparse environments
   - Optimal paths with few waypoints
   - Good for clear line-of-sight scenarios
-- **Limitations**:
+- **Limitations**: 
   - May struggle with narrow passages
   - Requires well-defined obstacle corners
 

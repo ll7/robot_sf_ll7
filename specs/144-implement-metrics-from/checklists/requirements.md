@@ -1,7 +1,7 @@
 # Specification Quality Checklist: Metrics from Paper 2306.16740v4
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: October 22, 2025
+**Purpose**: Validate specification completeness and quality before proceeding to planning  
+**Created**: October 22, 2025  
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality

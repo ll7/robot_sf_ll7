@@ -1,7 +1,7 @@
 # Research: Consolidate Utility Modules
 
-**Feature**: 241-consolidate-utility-modules
-**Date**: November 10, 2025
+**Feature**: 241-consolidate-utility-modules  
+**Date**: November 10, 2025  
 **Status**: Complete
 
 ## Overview
@@ -27,7 +27,7 @@ This document consolidates research findings for safely consolidating three frag
 
 **Implementation Approach**:
 1. Use `git mv util/types.py common/types.py`
-2. Use `git mv utils/seed_utils.py common/seed.py`
+2. Use `git mv utils/seed_utils.py common/seed.py`  
 3. Use `git mv util/compatibility.py common/compat.py`
 4. Update `common/__init__.py` to export commonly-used symbols
 5. Run grep to find all import statements: `grep -r "from robot_sf.util" robot_sf/ tests/ examples/`
@@ -159,7 +159,7 @@ grep "^from robot_sf" robot_sf/util/types.py robot_sf/utils/seed_utils.py robot_
   - Moved `robot_sf/utils/seed_utils.py` → `robot_sf/common/seed.py` (renamed)
   - Moved `robot_sf/util/compatibility.py` → `robot_sf/common/compat.py` (renamed)
   - Removed empty `robot_sf/util/` and `robot_sf/utils/` directories
-
+  
 ### Migration Guide
 If you have external code importing from `robot_sf.util` or `robot_sf.utils`, update:
 - `from robot_sf.util.types import X` → `from robot_sf.common.types import X`

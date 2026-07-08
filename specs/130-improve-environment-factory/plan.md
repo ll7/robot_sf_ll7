@@ -1,10 +1,10 @@
 
 # Implementation Plan: Improve Environment Factory Ergonomics
 
-**Branch**: `130-improve-environment-factory`
-**Date**: 2025-09-23
-**Spec**: `specs/130-improve-environment-factory/spec.md`
-**Tasks**: `specs/130-improve-environment-factory/tasks.md`
+**Branch**: `130-improve-environment-factory`  
+**Date**: 2025-09-23  
+**Spec**: `specs/130-improve-environment-factory/spec.md`  
+**Tasks**: `specs/130-improve-environment-factory/tasks.md`  
 **Context**: Plan updated post partial implementation + analysis pass (legacy shim removed, seed param missing, perf threshold mismatch). This document restores concrete content and realigns execution with Constitution v1.2.0.
 
 > NOTE: Template was re-copied; this revision reconstructs plan from analysis findings.
@@ -63,14 +63,14 @@ Improve ergonomics of environment creation by:
 Current divergence vs spec: legacy shim inactive, seed param absent, performance threshold mismatch, incomplete docstrings. This plan enumerates remediation tasks.
 
 ## Technical Context
-**Language/Version**: Python 3.13
-**Primary Dependencies**: Gymnasium-like env interface, Loguru, NumPy, Pygame (render), `fast-pysf` SocialForce submodule.
-**Storage**: N/A (in-memory; optional video outputs).
-**Testing**: Pytest (signature, normalization, performance, pedestrian precedence, future seed determinism).
-**Target Platform**: macOS + Linux (CI headless).
-**Project Type**: Research framework (single codebase).
-**Performance Goals**: Env creation mean <= baseline_mean * 1.05; cold <1s, warm <25ms typical.
-**Constraints**: Honor Principles II, IV, VII, XII; no silent breaking changes.
+**Language/Version**: Python 3.13  
+**Primary Dependencies**: Gymnasium-like env interface, Loguru, NumPy, Pygame (render), `fast-pysf` SocialForce submodule.  
+**Storage**: N/A (in-memory; optional video outputs).  
+**Testing**: Pytest (signature, normalization, performance, pedestrian precedence, future seed determinism).  
+**Target Platform**: macOS + Linux (CI headless).  
+**Project Type**: Research framework (single codebase).  
+**Performance Goals**: Env creation mean <= baseline_mean * 1.05; cold <1s, warm <25ms typical.  
+**Constraints**: Honor Principles II, IV, VII, XII; no silent breaking changes.  
 **Scale/Scope**: Limited to four factories (`make_robot_env`, `make_image_robot_env`, `make_pedestrian_env`, `make_multi_robot_env`).
 
 ## Constitution Check

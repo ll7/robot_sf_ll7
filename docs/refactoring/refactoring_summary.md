@@ -14,7 +14,7 @@
 
 #### Abstract Base Classes (`abstract_envs.py`)
 - `BaseSimulationEnv`: Common functionality for all simulation environments
-- `SingleAgentEnv`: Specialized for single robot/agent environments
+- `SingleAgentEnv`: Specialized for single robot/agent environments  
 - `MultiAgentEnv`: Specialized for multi-agent environments
 
 #### Unified Configuration (`unified_config.py`)
@@ -94,7 +94,7 @@
    ```python
    # examples/demo_pedestrian.py
    from robot_sf.gym_env.environment_factory import make_pedestrian_env
-
+   
    env = make_pedestrian_env(
        robot_model=robot_model,
        debug=True
@@ -105,7 +105,7 @@
    ```python
    # tests/test_env.py
    from robot_sf.gym_env.environment_factory import make_robot_env
-
+   
    def test_can_create_env():
        env = make_robot_env()
        assert env is not None
@@ -121,7 +121,7 @@
 2. **Add Deprecation Warnings**:
    ```python
    import warnings
-
+   
    class EnvSettings(RobotSimulationConfig):
        def __post_init__(self):
            warnings.warn(
@@ -162,7 +162,7 @@ def migrate_env_creation(old_code):
 
 ### Code Quality Improvements:
 - **50% reduction** in duplicated initialization code
-- **Consistent interface** across all environment types
+- **Consistent interface** across all environment types  
 - **Clear separation of concerns** between configuration and implementation
 - **Better error handling** with configuration validation
 

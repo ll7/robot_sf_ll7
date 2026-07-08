@@ -1,6 +1,6 @@
 # Data Model: robot_sf.common Module Structure
 
-**Feature**: 241-consolidate-utility-modules
+**Feature**: 241-consolidate-utility-modules  
 **Date**: November 10, 2025
 
 ## Module Overview
@@ -63,7 +63,7 @@ class ConfigurationError(Exception):
 
 **Usage Patterns**:
 - Imported by: `robot_sf/gym_env/`, `robot_sf/sim/`, configuration validation
-- Typical use:
+- Typical use: 
   ```python
   from robot_sf.common.errors import raise_fatal_with_remedy
   if invalid_config:

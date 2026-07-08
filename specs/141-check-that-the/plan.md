@@ -34,23 +34,23 @@
 Enhance `scripts/multi_extractor_training.py` so that each registered feature extractor can be validated end-to-end on macOS (single-thread spawn mode) and Ubuntu RTX (vectorized workers), while writing timestamped outputs under `./tmp/multi_extractor_training/`, emitting both JSON and Markdown summaries, and consolidating reusable helper logic inside `robot_sf/` for cross-script reuse.
 
 ## Technical Context
-**Language/Version**: Python ≥3.11 (uv-managed virtual environment)
-**Primary Dependencies**: Stable-Baselines3, Gymnasium, Torch, Loguru, JSONSchema
-**Storage**: Local filesystem (timestamped directories under `./tmp/multi_extractor_training/`)
-**Testing**: pytest with headless environment smoke tests
-**Target Platform**: macOS 15 (Apple Silicon M4) and Ubuntu 22.04 with NVIDIA RTX GPUs
-**Project Type**: single
-**Performance Goals**: Default macOS run completes without crash; Ubuntu vectorized mode sustains multi-env execution without schema drift; summaries generated within seconds post-run
-**Constraints**: Enforce spawn start method on macOS, honor Constitution Principle XI by moving reusable helpers into `robot_sf/`, ensure logging via Loguru with clear severity separation, avoid interactive prompts, preserve prior tmp artifacts
+**Language/Version**: Python ≥3.11 (uv-managed virtual environment)  
+**Primary Dependencies**: Stable-Baselines3, Gymnasium, Torch, Loguru, JSONSchema  
+**Storage**: Local filesystem (timestamped directories under `./tmp/multi_extractor_training/`)  
+**Testing**: pytest with headless environment smoke tests  
+**Target Platform**: macOS 15 (Apple Silicon M4) and Ubuntu 22.04 with NVIDIA RTX GPUs  
+**Project Type**: single  
+**Performance Goals**: Default macOS run completes without crash; Ubuntu vectorized mode sustains multi-env execution without schema drift; summaries generated within seconds post-run  
+**Constraints**: Enforce spawn start method on macOS, honor Constitution Principle XI by moving reusable helpers into `robot_sf/`, ensure logging via Loguru with clear severity separation, avoid interactive prompts, preserve prior tmp artifacts  
 **Scale/Scope**: Typical comparison of 3–6 extractors per run; aggregated summaries expected to remain under 1 MB
 
 ## Constitution Check
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **Principle I (Reproducibility)**: Timestamped output directories and structured summaries guarantee reruns remain auditable.
-- **Principle II (Factory Abstraction)**: Training script will continue to create environments via `environment_factory.make_*`, avoiding direct instantiation.
-- **Principle III (Benchmark & Metrics)**: JSON summary aligns with existing metrics pipeline and remains append-only.
-- **Principle XI (Library Reuse & Helper Documentation)**: Shared logic for extractor registry, hardware capture, and summary writing will live under `robot_sf/` with docstrings.
+- **Principle I (Reproducibility)**: Timestamped output directories and structured summaries guarantee reruns remain auditable.  
+- **Principle II (Factory Abstraction)**: Training script will continue to create environments via `environment_factory.make_*`, avoiding direct instantiation.  
+- **Principle III (Benchmark & Metrics)**: JSON summary aligns with existing metrics pipeline and remains append-only.  
+- **Principle XI (Library Reuse & Helper Documentation)**: Shared logic for extractor registry, hardware capture, and summary writing will live under `robot_sf/` with docstrings.  
 - **Principle XII (Logging)**: All runtime messaging will use Loguru with warning/error separation.
 
 **Status**: PASS (initial and post-design review)
@@ -147,12 +147,12 @@ ios/ or android/
 - Load `.specify/templates/tasks-template.md` as base
 - Generate tasks from Phase 1 design docs (contracts, data model, quickstart)
 - Each contract → contract test task [P]
-- Each entity → model creation task [P]
+- Each entity → model creation task [P] 
 - Each user story → integration test task
 - Implementation tasks to make tests pass
 
 **Ordering Strategy**:
-- TDD order: Tests before implementation
+- TDD order: Tests before implementation 
 - Dependency order: Models before services before UI
 - Mark [P] for parallel execution (independent files)
 
@@ -163,8 +163,8 @@ ios/ or android/
 ## Phase 3+: Future Implementation
 *These phases are beyond the scope of the /plan command*
 
-**Phase 3**: Task execution (/tasks command creates tasks.md)
-**Phase 4**: Implementation (execute tasks.md following constitutional principles)
+**Phase 3**: Task execution (/tasks command creates tasks.md)  
+**Phase 4**: Implementation (execute tasks.md following constitutional principles)  
 **Phase 5**: Validation (run tests, execute quickstart.md, performance validation)
 
 ## Complexity Tracking

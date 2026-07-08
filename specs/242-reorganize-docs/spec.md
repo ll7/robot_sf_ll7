@@ -1,8 +1,8 @@
 # Feature Specification: Reorganize Documentation Index
 
-**Feature Branch**: `242-reorganize-docs`
-**Created**: 2025-11-10
-**Status**: Complete
+**Feature Branch**: `242-reorganize-docs`  
+**Created**: 2025-11-10  
+**Status**: Complete  
 **Input**: User description: "Reorganize docs index with categorized sections and improve discoverability"
 
 ## User Scenarios & Testing *(mandatory)*
@@ -82,7 +82,7 @@ Identify documentation files not explicitly linked from central index to ensure 
 - **FR-001**: Central index MUST categorize all major documentation files into logical sections
 - **FR-002**: All major guides MUST have H1 headings and purpose statements
 - **FR-003**: Related documentation MUST include cross-reference links for discoverability
-- **FR-004**: Central index MUST provide back-link targets for major guides
+- **FR-004**: Central index MUST provide back-link targets for major guides  
 - **FR-005**: System MUST identify orphaned documentation files not linked from index
 - **FR-006**: All links MUST be validated to resolve correctly before merging
 
@@ -99,6 +99,7 @@ Identify documentation files not explicitly linked from central index to ensure 
 
 - **SC-001**: Developers can find any major guide within 2 clicks from `docs/README.md`
 - **SC-002**: All 8 categorized sections contain correct, working links to existing documentation
-- **SC-003**: 100% of major guides have H1 headings and purpose statements
+- **SC-003**: 100% of major guides have H1 headings and purpose statements  
 - **SC-004**: Zero broken links in central index (validated manually before merge)
 - **SC-005**: Orphan scan identifies all unlisted docs with recommendations for inclusion
+

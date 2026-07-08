@@ -7,7 +7,7 @@
 
 ## Table of Contents
 1. [Prerequisites and Setup](#prerequisites-and-setup)
-2. [Quick Validation](#quick-validation)
+2. [Quick Validation](#quick-validation)  
 3. [Basic Benchmark Workflow](#basic-benchmark-workflow)
 4. [Advanced Experiment Execution](#advanced-experiment-execution)
 5. [Visualization and Analysis](#visualization-and-analysis)
@@ -19,7 +19,7 @@
 
 ### System Requirements
 - **OS**: Linux/macOS (headless execution supported)
-- **Python**: 3.12+
+- **Python**: 3.12+ 
 - **RAM**: 8GB minimum (16GB recommended for parallel execution)
 - **Storage**: 2GB for base installation, 10GB+ for experiment outputs
 
@@ -30,7 +30,7 @@ git clone <repository-url>
 cd robot_sf_ll7
 git submodule update --init --recursive
 
-# 2. Install dependencies
+# 2. Install dependencies  
 uv sync --all-extras
 source .venv/bin/activate  # or activate via your shell
 
@@ -45,7 +45,7 @@ uv run robot_sf_bench --help
 For headless execution (recommended for batch processing):
 ```bash
 export DISPLAY=""
-export MPLBACKEND="Agg"
+export MPLBACKEND="Agg"  
 export SDL_VIDEODRIVER="dummy"
 ```
 
@@ -300,7 +300,7 @@ densities = list(summary.keys())
 snqi_means = [summary[d]["metrics.snqi"]["mean"] for d in densities]
 snqi_cis = [summary[d]["metrics.snqi"]["mean_ci"] for d in densities]
 
-plt.errorbar(densities, snqi_means, yerr=[[ci[1]-m for ci, m in zip(snqi_cis, snqi_means)],
+plt.errorbar(densities, snqi_means, yerr=[[ci[1]-m for ci, m in zip(snqi_cis, snqi_means)], 
                                           [m-ci[0] for ci, m in zip(snqi_cis, snqi_means)]])
 plt.xlabel("Pedestrian Density")
 plt.ylabel("SNQI Score")
@@ -321,7 +321,7 @@ episodes = read_jsonl("output/benchmarks/quickstart/my_experiment_episodes.jsonl
 ### Metric Understanding
 **SNQI (Social Navigation Quality Index)**: Composite score (0-1, higher better)
 - `> 0.8`: Excellent social navigation
-- `0.6-0.8`: Good performance
+- `0.6-0.8`: Good performance  
 - `0.4-0.6`: Acceptable performance
 - `< 0.4`: Poor social behavior
 
@@ -366,7 +366,7 @@ uv sync
 # Symptom: "can't connect to display"
 # Solution: Use headless mode
 export DISPLAY=""
-export MPLBACKEND="Agg"
+export MPLBACKEND="Agg" 
 export SDL_VIDEODRIVER="dummy"
 ```
 
@@ -420,7 +420,7 @@ from robot_sf.benchmark.runner import run_single_episode
 
 ```bash
 # 1. Setup (30 seconds)
-export MPLBACKEND="Agg"
+export MPLBACKEND="Agg"  
 cd robot_sf_ll7
 
 # 2. Compute baseline (10 minutes)
@@ -430,7 +430,7 @@ uv run robot_sf_bench baseline \
   --jsonl output/benchmarks/quickstart/policy_comparison.jsonl \
   --workers 4
 
-# 3. Generate summary (2 minutes)
+# 3. Generate summary (2 minutes)  
 uv run robot_sf_bench aggregate \
   --in output/benchmarks/quickstart/policy_comparison.jsonl \
   --out output/benchmarks/quickstart/policy_summary.json \
@@ -535,7 +535,7 @@ After completing this quickstart:
 
 1. **Explore Advanced Features**: See `docs/` for detailed component documentation
 2. **Custom Metrics**: Add domain-specific metrics to the metrics module
-3. **New Baselines**: Implement additional planners using the PlannerProtocol interface
+3. **New Baselines**: Implement additional planners using the PlannerProtocol interface  
 4. **Integration**: Incorporate benchmark platform into your research workflow
 5. **Community**: Share configurations and results with the research community
 

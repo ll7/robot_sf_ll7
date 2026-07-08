@@ -1,8 +1,8 @@
 # Feature Specification: Full Classic Interaction Benchmark
 
-**Feature Branch**: `122-full-classic-interaction`
-**Created**: 2025-09-19
-**Status**: Draft
+**Feature Branch**: `122-full-classic-interaction`  
+**Created**: 2025-09-19  
+**Status**: Draft  
 **Input**: User description: "Full classic interaction benchmark: run all classic_interactions.yaml scenarios at statistically powered sample sizes; produce JSONL episodes, bootstrap aggregated metrics with confidence intervals, effect sizes across archetype+density, comprehensive plots (distributions, trajectories, KDE density, force field snapshots, Pareto/SNQI trade-offs), and annotated representative videos (robot path, pedestrian flows, collision/stall events). Provide single end-to-end reproducible script classic_benchmark_full.py with resume + parallel workers, statistical sufficiency report (CI widths < target thresholds), and documentation + smoke test mode."
 
 ## User Scenarios & Testing *(mandatory)*
@@ -102,3 +102,4 @@ As a benchmarking researcher, I want a single reproducible command that runs eve
 - [x] Requirements generated
 - [x] Entities identified
 - [ ] Review checklist passed (pending clarifications removal)
+

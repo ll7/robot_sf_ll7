@@ -1,166 +1,166 @@
 # Tasks: Improve Environment Factory Ergonomics
 
-Feature Dir: `specs/130-improve-environment-factory`
+Feature Dir: `specs/130-improve-environment-factory`  
 Branch: `130-improve-environment-factory`
 
-Legend: `[P]` = Can run in parallel with other `[P]` tasks (different files / no shared mutable code).
-Dependencies explicitly noted where sequencing required.
+Legend: `[P]` = Can run in parallel with other `[P]` tasks (different files / no shared mutable code).  
+Dependencies explicitly noted where sequencing required.  
 All tasks follow Constitution Principles II, IV, VII, XII.
 
 ## Ordering Strategy
-1. Baseline data capture (tests first where feasible).
-2. Introduce option dataclasses & contracts with failing tests (TDD).
-3. Implement deprecation + normalization layer.
-4. Update factories incrementally.
-5. Add docs & migration.
-6. Performance + final validation.
+1. Baseline data capture (tests first where feasible).  
+2. Introduce option dataclasses & contracts with failing tests (TDD).  
+3. Implement deprecation + normalization layer.  
+4. Update factories incrementally.  
+5. Add docs & migration.  
+6. Performance + final validation.  
 
 ## Task List
 
 ### Setup & Baseline
-**T001** [X]: Create baseline timing helper script (`scripts/perf/baseline_factory_creation.py`) to measure current env creation (30 iterations each) → output JSON to `results/factory_perf_baseline.json`.
-Deps: None.
+**T001** [X]: Create baseline timing helper script (`scripts/perf/baseline_factory_creation.py`) to measure current env creation (30 iterations each) → output JSON to `results/factory_perf_baseline.json`.  
+Deps: None.  
 Accept: File created; runs and prints mean & p95; no imports fail.
 
-**T002 [P] [X]**: Add test `tests/factories/test_current_factory_signatures.py` asserting existing signatures (pre-change snapshot) to detect unintended drift during refactor.
-Deps: None.
+**T002 [P] [X]**: Add test `tests/factories/test_current_factory_signatures.py` asserting existing signatures (pre-change snapshot) to detect unintended drift during refactor.  
+Deps: None.  
 Accept: Test passes and fails meaningfully if signature changes prematurely.
 
-**T003 [P] [X]**: Grep usage of `make_*_env` across repo; generate `specs/130-improve-environment-factory/deprecation_map_raw.txt` listing legacy kwargs & frequency.
-Deps: None.
+**T003 [P] [X]**: Grep usage of `make_*_env` across repo; generate `specs/130-improve-environment-factory/deprecation_map_raw.txt` listing legacy kwargs & frequency.  
+Deps: None.  
 Accept: File contains frequency table.
 
 ### Option Dataclasses & Contracts (Failing Tests First)
-**T004 [X]**: Create `robot_sf/gym_env/options.py` module with placeholder (unimplemented) `RenderOptions`, `RecordingOptions` dataclasses (slots, type hints) – minimal stub.
-Deps: T002.
+**T004 [X]**: Create `robot_sf/gym_env/options.py` module with placeholder (unimplemented) `RenderOptions`, `RecordingOptions` dataclasses (slots, type hints) – minimal stub.  
+Deps: T002.  
 Accept: Module imports; attributes docstring skeleton present.
 
-**T005 [X]**: Add tests `tests/factories/test_option_dataclasses_api.py` expecting fields (from data-model). Initially failing until full implementation.
-Deps: T004.
+**T005 [X]**: Add tests `tests/factories/test_option_dataclasses_api.py` expecting fields (from data-model). Initially failing until full implementation.  
+Deps: T004.  
 Accept: Test fails on missing validation logic initially.
 
-**T006 [X]**: Implement full `RenderOptions` & `RecordingOptions` with validation (value checks, repr) in `options.py`; add factory methods `from_bool_and_path(record_video, video_path, existing)` for normalization.
-Deps: T005.
+**T006 [X]**: Implement full `RenderOptions` & `RecordingOptions` with validation (value checks, repr) in `options.py`; add factory methods `from_bool_and_path(record_video, video_path, existing)` for normalization.  
+Deps: T005.  
 Accept: Prior failing test passes; type hints clean.
 
 ### Deprecation & Normalization Layer
 **T007 [X, superseded in Robot SF 2.0]**: Create the temporary factory compatibility mapper for the pre-2.0 migration window.
-Deps: T006, T003.
+Deps: T006, T003.  
 Accept: Unit tests (next task) can import and manipulate.
 
 **T008 [X, superseded in Robot SF 2.0]**: Add temporary tests for the pre-2.0 deprecation mapper.
-Deps: T007.
+Deps: T007.  
 Accept: Tests fail until factories integrate layer.
 
 ### Factory Refactor (Incremental)
 **T009 [X, superseded in Robot SF 2.0]**: Refactor `environment_factory.py` to accept new `render_options` / `recording_options` parameters while the old paths were still present.
-Deps: T008.
+Deps: T008.  
 Accept: Code compiles; legacy usage still works; new params accepted (no behavior change yet).
 
-**T010 [X]**: Implement normalization logic: precedence rules (explicit options over booleans) with logging; boolean convenience path auto-constructs RecordingOptions.
-Deps: T009.
+**T010 [X]**: Implement normalization logic: precedence rules (explicit options over booleans) with logging; boolean convenience path auto-constructs RecordingOptions.  
+Deps: T009.  
 Accept: Add/extend tests `tests/factories/test_normalization.py` verifying precedence & warning emission.
 
-**T011 [X]**: Add validation for incompatible combos (e.g., `record_video=True` + `recording_options.record=False` → enforce True + warning).
-Deps: T010.
+**T011 [X]**: Add validation for incompatible combos (e.g., `record_video=True` + `recording_options.record=False` → enforce True + warning).  
+Deps: T010.  
 Accept: Extend normalization test or new `test_incompatible_combinations.py`.
 
-**T012 [P] [X]**: Update pedestrian factory path (`make_pedestrian_env`) to mirror normalization logic; add test for required `robot_model` presence unaffected.
+**T012 [P] [X]**: Update pedestrian factory path (`make_pedestrian_env`) to mirror normalization logic; add test for required `robot_model` presence unaffected.  
 Deps: T010.
 
-**T013 [P] [X]**: (Optional placeholder) Insert stub for prospective `make_multi_robot_env` raising NotImplementedError with docstring referencing future extension—documented but not exposed publicly yet.
+**T013 [P] [X]**: (Optional placeholder) Insert stub for prospective `make_multi_robot_env` raising NotImplementedError with docstring referencing future extension—documented but not exposed publicly yet.  
 Deps: T010.
 
 ### Logging & Diagnostics
-**T014 [X]**: Add Loguru logging points (INFO creation, WARNING deprecation, WARNING precedence overrides) inside factories; unit test capturing log messages with `caplog` or Loguru sink.
+**T014 [X]**: Add Loguru logging points (INFO creation, WARNING deprecation, WARNING precedence overrides) inside factories; unit test capturing log messages with `caplog` or Loguru sink.  
 Deps: T011.
 
 ### Tests Enhancements & Performance Guard
-**T015 [X]**: Add performance regression test `tests/perf/test_factory_creation_perf.py` comparing new creation time vs baseline JSON (< +5% mean). Skip if baseline file missing.
+**T015 [X]**: Add performance regression test `tests/perf/test_factory_creation_perf.py` comparing new creation time vs baseline JSON (< +5% mean). Skip if baseline file missing.  
 Deps: T001, T011.
 
-**T016 [P]**: Add (failing) RNG seed determinism test `tests/factories/test_seed_determinism.py` ensuring two env creations with same forthcoming `seed` param produce identical initial observations (and first sampled action where applicable). Fails until T030 implements seeding.
-Deps: T011.
+**T016 [P]**: Add (failing) RNG seed determinism test `tests/factories/test_seed_determinism.py` ensuring two env creations with same forthcoming `seed` param produce identical initial observations (and first sampled action where applicable). Fails until T030 implements seeding.  
+Deps: T011.  
 Accept: Test fails meaningfully until seed support exists; passes once implemented.
 
-**T017 [P] [X]**: Add frame recording integration test reusing existing rendering test harness verifying `record_video=True` path still records frames with new options.
+**T017 [P] [X]**: Add frame recording integration test reusing existing rendering test harness verifying `record_video=True` path still records frames with new options.  
 Deps: T011.
 
 ### Documentation & Migration
-**T018**: Create migration guide `docs/dev/issues/130-improve-environment-factory/migration.md` with before/after table and deprecation window timeline.
+**T018**: Create migration guide `docs/dev/issues/130-improve-environment-factory/migration.md` with before/after table and deprecation window timeline.  
 Deps: T011.
 
-**T019 [P]**: Update `docs/ENVIRONMENT.md` adding new parameter tables & option object examples.
+**T019 [P]**: Update `docs/ENVIRONMENT.md` adding new parameter tables & option object examples.  
 Deps: T018.
 
-**T020 [P]**: Update `examples/` or add new example `examples/demo_factory_options.py` demonstrating combined render + recording options.
+**T020 [P]**: Update `examples/` or add new example `examples/demo_factory_options.py` demonstrating combined render + recording options.  
 Deps: T011.
 
-**T021**: Update `CHANGELOG.md` (pending release) summarizing ergonomic additions, deprecation notice.
+**T021**: Update `CHANGELOG.md` (pending release) summarizing ergonomic additions, deprecation notice.  
 Deps: T018.
 
 ### Quality & Cleanup
-**T022 [P]**: Run and fix linters & type checks after refactor (Ruff + ty), adjust type hints if needed.
+**T022 [P]**: Run and fix linters & type checks after refactor (Ruff + ty), adjust type hints if needed.  
 Deps: T021.
 
-**T023 [P]**: Consolidate tests ensuring no redundancy; remove obsolete signature snapshot test (T002) once new baseline accepted; update references.
+**T023 [P]**: Consolidate tests ensuring no redundancy; remove obsolete signature snapshot test (T002) once new baseline accepted; update references.  
 Deps: T022.
 
-**T024**: Final performance re-run of baseline script (now post-change) writing `results/factory_perf_post.json`; compare and store diff into `specs/130-improve-environment-factory/perf_diff.md`.
+**T024**: Final performance re-run of baseline script (now post-change) writing `results/factory_perf_post.json`; compare and store diff into `specs/130-improve-environment-factory/perf_diff.md`.  
 Deps: T015, T022.
 
-**T025**: Review spec vs implementation: verify FR-001..FR-021 coverage; add `specs/130-improve-environment-factory/coverage_checklist.md` documenting each FR with file references.
+**T025**: Review spec vs implementation: verify FR-001..FR-021 coverage; add `specs/130-improve-environment-factory/coverage_checklist.md` documenting each FR with file references.  
 Deps: T024.
 
-**T026**: Prepare PR description draft (`specs/130-improve-environment-factory/pr_outline.md`) including risks, migration summary, performance diff.
+**T026**: Prepare PR description draft (`specs/130-improve-environment-factory/pr_outline.md`) including risks, migration summary, performance diff.  
 Deps: T025.
 
 ### Optional / Stretch
-**T027 [P]**: Prototype docstring auto-generation helper for factories reducing duplication (may defer if time constrained).
+**T027 [P]**: Prototype docstring auto-generation helper for factories reducing duplication (may defer if time constrained).  
 Deps: T010.
 
-**T028 [P]**: Add telemetry hook stub (no-op) for future usage analytics (documented off by default).
+**T028 [P]**: Add telemetry hook stub (no-op) for future usage analytics (documented off by default).  
 Deps: T014.
 
 ### Remediation & Alignment (Post Analysis)
 **T029 (CRITICAL, superseded in Robot SF 2.0)**: Reinstate legacy kwargs shim usage in all public factories. This was temporary migration work and was removed after the 2.0 migration window.
-Deps: T008, T011.
+Deps: T008, T011.  
 Accept: Tests assert correct warnings/errors; legacy params mapped.
 
-**T030 (CRITICAL)**: Implement `seed: Optional[int]` param across factories; seed Python `random`, NumPy, env RNG; store `seed_applied` attribute. Update quickstart & docstrings.
-Deps: T016 (failing test), T011.
+**T030 (CRITICAL)**: Implement `seed: Optional[int]` param across factories; seed Python `random`, NumPy, env RNG; store `seed_applied` attribute. Update quickstart & docstrings.  
+Deps: T016 (failing test), T011.  
 Accept: T016 passes; signatures updated; docs adjusted.
 
-**T031 (HIGH)**: Tighten performance guard to +5% mean (spec compliance). Update perf test constant; add `specs/130-improve-environment-factory/perf_diff.md` summarizing baseline vs current metrics.
-Deps: T015, T022.
+**T031 (HIGH)**: Tighten performance guard to +5% mean (spec compliance). Update perf test constant; add `specs/130-improve-environment-factory/perf_diff.md` summarizing baseline vs current metrics.  
+Deps: T015, T022.  
 Accept: Perf test passes under new threshold; diff file committed.
 
-**T032 (HIGH) [X]**: Expand docstrings (factories & option dataclasses) with param tables, precedence rules, pedestrian divergence, seeding sequence, performance note.
-Deps: T030.
+**T032 (HIGH) [X]**: Expand docstrings (factories & option dataclasses) with param tables, precedence rules, pedestrian divergence, seeding sequence, performance note.  
+Deps: T030.  
 Accept: Docstrings present; lint/type checks clean.
 
-**T033 (MEDIUM) [X]**: Edge-case tests: (1) headless + debug + recording interplay; (2) recording without video_path warns & buffers; (3) pedestrian explicit opt-out respected with seed.
-Deps: T030.
+**T033 (MEDIUM) [X]**: Edge-case tests: (1) headless + debug + recording interplay; (2) recording without video_path warns & buffers; (3) pedestrian explicit opt-out respected with seed.  
+Deps: T030.  
 Accept: Tests added & pass.
 
-**T034 (MEDIUM) [X]**: Create `coverage_checklist.md` mapping FR-001..FR-021 → code/tests/status (Done/Deferred). Mark `max_episode_steps` deferred.
-Deps: T029, T030.
+**T034 (MEDIUM) [X]**: Create `coverage_checklist.md` mapping FR-001..FR-021 → code/tests/status (Done/Deferred). Mark `max_episode_steps` deferred.  
+Deps: T029, T030.  
 Accept: Checklist complete.
 
-**T035 (HIGH) [X]**: Migration guide `docs/dev/issues/130-improve-environment-factory/migration.md` (before/after, env vars, precedence divergence, seeding examples). Link from `docs/README.md` & quickstart.
-Deps: T029, T030.
+**T035 (HIGH) [X]**: Migration guide `docs/dev/issues/130-improve-environment-factory/migration.md` (before/after, env vars, precedence divergence, seeding examples). Link from `docs/README.md` & quickstart.  
+Deps: T029, T030.  
 Accept: Links valid; guide thorough.
 
-**T036 (LOW) [X]**: Import purity test `tests/factories/test_factory_import_purity.py` ensuring no side-effects (prints/file writes) on import.
-Deps: T029.
+**T036 (LOW) [X]**: Import purity test `tests/factories/test_factory_import_purity.py` ensuring no side-effects (prints/file writes) on import.  
+Deps: T029.  
 Accept: Test passes; fails if side-effects appear.
 
-**T037 (MEDIUM) [X]**: Logging enforcement test scanning `environment_factory.py` for stray `print(` excluding docstrings/comments.
-Deps: T032.
+**T037 (MEDIUM) [X]**: Logging enforcement test scanning `environment_factory.py` for stray `print(` excluding docstrings/comments.  
+Deps: T032.  
 Accept: Test fails if print introduced.
 
-**T038 (LOW) [X]**: Update spec & quickstart: integrate seed param; mark `max_episode_steps` deferred; remove outdated references.
-Deps: T030.
+**T038 (LOW) [X]**: Update spec & quickstart: integrate seed param; mark `max_episode_steps` deferred; remove outdated references.  
+Deps: T030.  
 Accept: Spec & quickstart updated consistently.
 
 ## Parallel Execution Guidance

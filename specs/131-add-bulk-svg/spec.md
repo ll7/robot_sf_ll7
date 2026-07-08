@@ -1,8 +1,8 @@
 # Feature Specification: Bulk SVG Map Validation & Loader Tests
 
-**Feature Branch**: `131-add-bulk-svg`
-**Created**: 2025-09-23
-**Status**: Draft
+**Feature Branch**: `131-add-bulk-svg`  
+**Created**: 2025-09-23  
+**Status**: Draft  
 **Input**: User description: "Add bulk SVG map validation & loader tests and documentation"
 
 ## User Scenarios & Testing *(mandatory)*
@@ -19,7 +19,7 @@ As a developer maintaining robot-sf map assets, I want an automated (manual-trig
 6. **Given** an SVG with pedestrian route requirements (ped routes + spawn/goal zones), **When** validation runs, **Then** their counts are reported similarly to robot elements.
 
 ### Edge Cases
-- Directory path exists but contains zero SVG files → strict mode must raise an error; lenient mode should raise as well (no usable maps).
+- Directory path exists but contains zero SVG files → strict mode must raise an error; lenient mode should raise as well (no usable maps). 
 - Non-SVG file passed to single-file loader → error raised early with clear message.
 - Duplicate filename stems in directory (e.g., copying maps) → the later one overwrites the earlier; a warning SHOULD be issued (proposed) to highlight replacement.
 - Extremely minimal valid map (one robot spawn, one robot goal, one simple route) → still accepted.

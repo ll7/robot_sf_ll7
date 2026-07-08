@@ -36,15 +36,15 @@ End‑to‑end benchmark for the classic interaction scenario matrix producing: 
 High‑level approach: Reuse existing `run_batch` episode execution core; add orchestration layer that (1) expands scenario matrix + seed plan, (2) streams/validates episodes, (3) triggers aggregation + bootstrap, (4) computes effect sizes & precision evaluation with early‑stop option, (5) generates plots/videos via modular producers. All configuration (workers, samples/precision, bootstrap params, SNQI weights) exposed via CLI args and a small BenchmarkConfig dataclass.
 
 ## Technical Context
-**Language/Version**: Python >=3.10 (repo targets 3.12 in Ruff config; ensure compatibility)
-**Primary Dependencies**: gymnasium, numpy, pandas, scipy, matplotlib, seaborn (optional analysis extra), moviepy (video), pysocialforce (submodule physics), stable-baselines3 (policy episodes), jsonschema, loguru, rich.
-**Storage**: Local filesystem only (JSONL episode logs, JSON summaries, PDF/PNG plots, MP4 videos).
-**Testing**: pytest (main + GUI + fast-pysf suites); add new unit tests for aggregation/effect size + smoke integration test for full script.
-**Target Platform**: Headless macOS/Linux (CI) with optional display disabled (`SDL_VIDEODRIVER=dummy`).
-**Project Type**: Single Python package (Option 1).
-**Performance Goals**: Full run <4h on reference hardware; smoke mode <2m (p95); episode throughput baseline ~22 steps/sec; parallel scaling efficiency ≥80% up to 8 workers.
-**Constraints**: Deterministic seeds; memory footprint <2GB for full benchmark; no network calls; reproducible figures (vector PDF); resume idempotency.
-**Scale/Scope**: ~8 archetype×density combinations (exact from scenario matrix) × target episodes per scenario (initial estimate 200) = O(1600) episodes; each ≤500 steps horizon; episodic JSONL size manageable (<200MB).
+**Language/Version**: Python >=3.10 (repo targets 3.12 in Ruff config; ensure compatibility)  
+**Primary Dependencies**: gymnasium, numpy, pandas, scipy, matplotlib, seaborn (optional analysis extra), moviepy (video), pysocialforce (submodule physics), stable-baselines3 (policy episodes), jsonschema, loguru, rich.  
+**Storage**: Local filesystem only (JSONL episode logs, JSON summaries, PDF/PNG plots, MP4 videos).  
+**Testing**: pytest (main + GUI + fast-pysf suites); add new unit tests for aggregation/effect size + smoke integration test for full script.  
+**Target Platform**: Headless macOS/Linux (CI) with optional display disabled (`SDL_VIDEODRIVER=dummy`).  
+**Project Type**: Single Python package (Option 1).  
+**Performance Goals**: Full run <4h on reference hardware; smoke mode <2m (p95); episode throughput baseline ~22 steps/sec; parallel scaling efficiency ≥80% up to 8 workers.  
+**Constraints**: Deterministic seeds; memory footprint <2GB for full benchmark; no network calls; reproducible figures (vector PDF); resume idempotency.  
+**Scale/Scope**: ~8 archetype×density combinations (exact from scenario matrix) × target episodes per scenario (initial estimate 200) = O(1600) episodes; each ≤500 steps horizon; episodic JSONL size manageable (<200MB).  
 
 UNKNOWNS TO RESOLVE IN PHASE 0 (convert to decisions): reference hardware spec, minimum episodes formula & early stop criteria, effect size definitions per metric, video annotation detail set, scaling acceptance metric.
 
@@ -199,8 +199,8 @@ Estimated Output: ~32–38 tasks (slightly higher due to statistical sufficiency
 ## Phase 3+: Future Implementation
 *These phases are beyond the scope of the /plan command*
 
-**Phase 3**: Task execution (/tasks command creates tasks.md)
-**Phase 4**: Implementation (execute tasks.md following constitutional principles)
+**Phase 3**: Task execution (/tasks command creates tasks.md)  
+**Phase 4**: Implementation (execute tasks.md following constitutional principles)  
 **Phase 5**: Validation (run tests, execute quickstart.md, performance validation)
 
 ## Complexity Tracking

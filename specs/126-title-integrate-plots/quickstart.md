@@ -52,3 +52,4 @@ If plots or videos exceed target soft budgets (2s / 5s), consider:
 - Reducing `max_videos`
 - Running with `--disable-videos` in CI
 - Ensuring ffmpeg installed to avoid slow fallbacks
+

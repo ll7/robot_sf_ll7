@@ -12,9 +12,9 @@ repos:
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
-        exclude: ^docs/context/evidence/
+        exclude: ^(docs/|specs/|\.understand-anything/|maps/svg_maps/|fast-pysf/tests/test_maps/)
       - id: end-of-file-fixer
-        exclude: ^docs/context/evidence/
+        exclude: ^(docs/|specs/|\.understand-anything/|maps/svg_maps/|fast-pysf/tests/test_maps/)
       - id: check-yaml
         args: [--allow-multiple-documents]
       - id: check-toml

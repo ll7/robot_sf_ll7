@@ -1,8 +1,8 @@
 # Feature Specification: Preserve Algorithm Separation in Benchmark Aggregation
 
-**Feature Branch**: `142-aggregation-mixes-algorithms`
-**Created**: 2025-10-06
-**Status**: Draft
+**Feature Branch**: `142-aggregation-mixes-algorithms`  
+**Created**: 2025-10-06  
+**Status**: Draft  
 **Input**: User description: "Aggregation mixes algorithms together. The benchmark aggregates with group_by=\"scenario_params.algo\" (scripts/run_social_navigation_benchmark.py:146), but run_full_benchmark only records the algorithm at the top level (\"algo\") and never injects it into scenario_params (robot_sf/benchmark/full_classic/orchestrator.py:200-214). Because scenario_params.algo is missing, compute_aggregates_with_ci falls back to scenario_id (robot_sf/benchmark/aggregate.py:143-162), so episodes from SF, PPO, and Random in the same scenario get merged into one bucket. That defeats the whole purpose of comparing baselines—the reported stats are per-scenario averages across all algorithms instead of per-algorithm metrics. You’ll need to either change the group key to \"algo\" or ensure the episodes carry scenario_params[\"algo\"] before writing JSONL."
 
 ---
@@ -51,7 +51,7 @@ A benchmarking analyst needs to compare Social Force, PPO, and Random baselines 
 
 ### Requirement Completeness
 - [x] No [NEEDS CLARIFICATION] markers remain
-- [x] Requirements are testable and unambiguous
+- [x] Requirements are testable and unambiguous  
 - [x] Success criteria are measurable
 - [x] Scope is clearly bounded
 - [x] Dependencies and assumptions identified
@@ -66,3 +66,4 @@ A benchmarking analyst needs to compare Social Force, PPO, and Random baselines 
 - [x] Requirements generated
 - [x] Entities identified
 - [x] Review checklist passed
+

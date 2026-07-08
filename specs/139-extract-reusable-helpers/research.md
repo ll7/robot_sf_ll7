@@ -14,7 +14,7 @@ Alternatives considered:
 - Postpone extraction until a larger refactor — rejected because small extractions unblock reuse and reduce duplication now.
 
 Open questions (resolved):
-- Phase A contents: resolved via clarification session 2025-09-29 (included in spec).
+- Phase A contents: resolved via clarification session 2025-09-29 (included in spec). 
 
 Next research tasks (Phase 0 outputs that drove Phase 1):
 - Enumerate helper functions in `examples/classic_interactions_pygame.py` and identify pure adapters.

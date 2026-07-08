@@ -1,8 +1,8 @@
 # Feature Specification: Code Coverage Monitoring and Quality Tracking
 
-**Feature Branch**: `145-add-pytest-cov`
-**Created**: 2025-10-23
-**Status**: Draft
+**Feature Branch**: `145-add-pytest-cov`  
+**Created**: 2025-10-23  
+**Status**: Draft  
 **Input**: User description: "add pytest-cov to the project. Make the default implementation non intrusive and informative. Create a cicd integration that does not fail, but warns when coverage decreases. create methods to monitor quality metrics over time. Create methods to automatically identify the biggest code coverage gaps."
 
 ## User Scenarios & Testing *(mandatory)*

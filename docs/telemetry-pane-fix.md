@@ -21,11 +21,11 @@ def render_surface(self):
     """Render the pane as a pygame.Surface, or return cached surface if throttled."""
     now = _timestamp_ms()
     min_interval_ms = 1000.0 / max(self.refresh_hz, 0.1)
-
+    
     if self._last_render_ms and now - self._last_render_ms < min_interval_ms:
         # Return cached surface if available for display persistence
         return self._last_surface
-
+    
     # ... render new surface and cache it ...
     self._last_surface = surface
     return surface

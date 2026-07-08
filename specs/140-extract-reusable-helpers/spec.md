@@ -1,8 +1,8 @@
 # Feature Specification: Reusable Helper Consolidation
 
-**Feature Branch**: `140-extract-reusable-helpers`
-**Created**: 2025-09-30
-**Status**: Draft
+**Feature Branch**: `140-extract-reusable-helpers`  
+**Created**: 2025-09-30  
+**Status**: Draft  
 **Input**: User description: "extract reusable helpers from examples and scripts into robot_sf"
 
 ## User Scenarios & Testing *(mandatory)*
@@ -43,7 +43,7 @@ Repository maintainers need a single, well-documented library surface for demo a
 - [x] All mandatory sections completed
 
 - [x] No [NEEDS CLARIFICATION] markers remain
-- [x] Requirements are testable and unambiguous
+- [x] Requirements are testable and unambiguous  
 - [x] Success criteria are measurable
 - [x] Scope is clearly bounded
 - [x] Dependencies and assumptions identified
@@ -63,3 +63,4 @@ Repository maintainers need a single, well-documented library surface for demo a
 
 ### Session 2025-09-30
 - Q: Should one-off validation or CI-only scripts be part of this helper-extraction effort? → A: No—limit to widely used demos/examples; leave one-off validation scripts unchanged.
+

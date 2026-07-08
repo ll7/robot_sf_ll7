@@ -1,7 +1,7 @@
 # Specification Quality Checklist: Automated Research Reporting for Imitation Learning
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2025-11-21
+**Purpose**: Validate specification completeness and quality before proceeding to planning  
+**Created**: 2025-11-21  
 **Feature**: ./spec.md
 
 ## Content Quality

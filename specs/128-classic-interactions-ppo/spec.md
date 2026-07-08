@@ -1,8 +1,8 @@
 # Feature Specification: Classic Interactions PPO Pygame Visualization
 
-**Feature Branch**: `128-classic-interactions-ppo`
-**Created**: 2025-09-22
-**Status**: Draft
+**Feature Branch**: `128-classic-interactions-ppo`  
+**Created**: 2025-09-22  
+**Status**: Draft  
 **Input**: User description: "Classic interactions PPO pygame visualization: run scenarios from configs/scenarios/classic_interactions.yaml using SimulationView (sim_view.py) and default PPO model (model/ppo_model_retrained_10m_2025-02-01.zip); provide example script and benchmark loader utility; Display the simulation of the benchmark and enable video recording by default with a toggle."
 
 ## User Scenarios & Testing *(mandatory)*
@@ -75,7 +75,7 @@ Unclear / pending confirmation requirements are explicitly marked.
 
 ### Requirement Completeness
 - [ ] No [NEEDS CLARIFICATION] markers remain
-- [x] Requirements are testable and mostly unambiguous
+- [x] Requirements are testable and mostly unambiguous  
 - [x] Success criteria are measurable (episode counts, recording presence, error messages)
 - [x] Scope is clearly bounded (single-scenario or limited sequential playback of matrix entries)
 - [x] Dependencies and assumptions identified (model file, scenario yaml, visualization environment, optional ffmpeg)

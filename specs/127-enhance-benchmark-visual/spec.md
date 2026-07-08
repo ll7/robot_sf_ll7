@@ -1,8 +1,8 @@
 # Feature Specification: Enhance Benchmark Visual Artifacts (SimulationView Replay, Encoding, Schema Validation)
 
-**Feature Branch**: `127-enhance-benchmark-visual`
-**Created**: 2025-09-20
-**Status**: Draft
+**Feature Branch**: `127-enhance-benchmark-visual`  
+**Created**: 2025-09-20  
+**Status**: Draft  
 **Input**: User description: "Enhance benchmark visual artifacts: implement real SimulationView replay rendering and MP4 encoding (with moviepy/ffmpeg if available, graceful skip otherwise); add replay adapter extracting position, heading, timestep for episodes; introduce JSON Schema validation for plot_artifacts.json and video_artifacts.json plus performance_visuals.json; update documentation (benchmark visuals section) and demo script to reflect operational SimulationView path; add tests for successful SimulationView renderer and moviepy absence skip; maintain deterministic selection and performance budgets (<2s plots, <5s single video)."
 
 ## User Scenarios & Testing
@@ -78,3 +78,4 @@ A researcher runs the full classic benchmark and expects high‑fidelity represe
 - [x] Requirements generated
 - [x] Entities identified
 - [ ] Review checklist passed (pending FR-012 clarification)
+

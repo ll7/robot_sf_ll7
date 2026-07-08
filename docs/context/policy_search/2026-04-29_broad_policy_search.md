@@ -32,7 +32,7 @@ global / route-level intent
 → benchmark-driven iteration
 ```
 
-The uploaded paper already supports this framing: the current evidence shows a trade-off where `ppo` improves success but increases collision exposure, while `orca` remains safer but less successful. The benchmark is explicitly multi-objective and scenario-stratified, which is exactly the evaluation setting needed for broad policy search.
+The uploaded paper already supports this framing: the current evidence shows a trade-off where `ppo` improves success but increases collision exposure, while `orca` remains safer but less successful. The benchmark is explicitly multi-objective and scenario-stratified, which is exactly the evaluation setting needed for broad policy search. 
 
 ## 1. First Principle: “Best Policy” Is Not One Objective
 

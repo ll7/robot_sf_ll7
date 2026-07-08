@@ -223,15 +223,15 @@ robot_sf_bench figures --config figures/config.yaml
 4. Discriminative: each baseline differs on ≥2 core metrics in ≥60% of scenarios
 
 ## 11. Paper Skeleton (Draft)
-1. Introduction (motivation & gap)
-2. Related Work (benchmarks & metrics)
-3. Benchmark Design (scenarios + methodology)
-4. Metrics & SNQI (definitions + rationale)
-5. Experimental Setup (baselines, configs)
-6. Results (tables, Pareto plots, sensitivity)
-7. Ablations & Discussion (metric impact)
-8. Reproducibility & Limitations
-9. Conclusion & Future Work
+1. Introduction (motivation & gap)  
+2. Related Work (benchmarks & metrics)  
+3. Benchmark Design (scenarios + methodology)  
+4. Metrics & SNQI (definitions + rationale)  
+5. Experimental Setup (baselines, configs)  
+6. Results (tables, Pareto plots, sensitivity)  
+7. Ablations & Discussion (metric impact)  
+8. Reproducibility & Limitations  
+9. Conclusion & Future Work  
 
 ## 12. Immediate Next Steps (Echo of `todo.md` Section 13)
 - Draft scenario dimension list
@@ -239,10 +239,10 @@ robot_sf_bench figures --config figures/config.yaml
 - JSON schema prototype for episode output
 
 ## 13. Contribution Workflow
-1. Pick or add a task in `todo.md` (avoid scope creep in core phases)
-2. Implement / add tests
-3. Update README or schemas if public interface changes
-4. Link PR to `todo.md` entry and mark after merge
+1. Pick or add a task in `todo.md` (avoid scope creep in core phases)  
+2. Implement / add tests  
+3. Update README or schemas if public interface changes  
+4. Link PR to `todo.md` entry and mark after merge  
 
 ## 14. Stretch Goals (Summary)
 - Force divergence / curl measures

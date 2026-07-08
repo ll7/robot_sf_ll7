@@ -1,7 +1,7 @@
 # Specification Quality Checklist: Improve fast-pysf Integration
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: October 29, 2025
+**Purpose**: Validate specification completeness and quality before proceeding to planning  
+**Created**: October 29, 2025  
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality

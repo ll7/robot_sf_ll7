@@ -84,3 +84,4 @@ Ignored local output:
 
 The ignored output is about 4.4 MiB and contains raw JSONL records plus generated algo YAML files.
 It is reproducible from tracked configs and remains out of git.
+

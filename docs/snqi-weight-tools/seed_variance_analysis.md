@@ -21,5 +21,5 @@ from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.seed_variance import compute_seed_variance
 
 records = read_jsonl("output/benchmarks/episodes.jsonl")
-sv = compute_seed_variance(records, group_by="scenario_id", metrics=["success", "collisions"])
+sv = compute_seed_variance(records, group_by="scenario_id", metrics=["success", "collisions"]) 
 ```

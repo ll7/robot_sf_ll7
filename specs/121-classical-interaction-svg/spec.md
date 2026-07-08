@@ -1,8 +1,8 @@
 # Feature Specification: Classical Interaction SVG Map Pack
 
-**Feature Branch**: `121-classical-interaction-svg`
-**Created**: 2025-09-19
-**Status**: Draft
+**Feature Branch**: `121-classical-interaction-svg`  
+**Created**: 2025-09-19  
+**Status**: Draft  
 **Input**: User description: "Classical interaction SVG map pack with scenario matrix for robot-pedestrian micro-navigation patterns (crossing, head-on, overtaking, bottleneck, doorway, merging, T-intersection, group crossing)"
 
 ## User Scenarios & Testing *(mandatory)*
@@ -64,3 +64,4 @@ As a benchmarking user, I want a curated set of canonical social navigation inte
 - [x] Requirements generated
 - [x] Entities identified
 - [ ] Review checklist passed (final review pending planning)
+

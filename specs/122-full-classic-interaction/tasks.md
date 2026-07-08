@@ -94,7 +94,7 @@
 - [X] T050 [P] Add unit test for Wilson interval correctness vs known values `tests/benchmark_full/test_unit_wilson.py`.
 - [X] T051 [P] Add unit test for bootstrap reproducibility (seeded) `tests/benchmark_full/test_unit_bootstrap_seed.py`.
 - [X] T052 [P] Add unit test for video selection logic `tests/benchmark_full/test_unit_video_selection.py`.
-- [X] T053 Run Ruff + type check + pytest full suite; fix issues (commit). (Meta task)
+- [X] T053 Run Ruff + type check + pytest full suite; fix issues (commit). (Meta task) 
 - [X] T054 Add validation script extension (optional) to include new benchmark in a validation shell script.
 - [X] T055 Generate example benchmark run artifacts and add figure thumbnails to `docs/scenario_thumbnails.md` (if appropriate) or a new section.
 - [X] T056 Final documentation review for reproducibility claims (ensure git hash & matrix hash captured) & update manifest fields if gaps.
@@ -169,3 +169,4 @@ T049 T050 T051 T052
 - Keep each task atomic (commit per task).
 - Adjust worker counts in tests to keep runtime reasonable (< few seconds per unit test when possible).
 - Use deterministic seeds in tests for stability.
+

@@ -1,6 +1,6 @@
 # Tasks: Social Navigation Benchmark Platform Foundations
 
-**Input**: Design documents from `specs/120-social-navigation-benchmark-plan/`
+**Input**: Design documents from `specs/120-social-navigation-benchmark-plan/`  
 **Prerequisites**: plan.md (present), research.md (present), data-model.md (present), contracts/ (present - schemas pending creation)
 
 ## Execution Flow Mapping
@@ -37,7 +37,7 @@ Schema contract test files target non-existent schema definitions; they must fai
 
 ## Phase 3.3: Core Schemas & Identity
 - [X] T030 Implement `episode.schema.v1.json` (`specs/120-social-navigation-benchmark-plan/contracts/episode.schema.v1.json` & copy to `robot_sf/benchmark/schemas/episode.schema.v1.json`)
-- [X] T031 Implement `scenario-matrix.schema.v1.json` (same twin locations)
+- [X] T031 Implement `scenario-matrix.schema.v1.json` (same twin locations) 
 - [X] T032 Implement `aggregate.schema.v1.json`
 - [X] T033 Implement `snqi-weights.schema.v1.json`
 - [X] T034 Implement `resume-manifest.schema.v1.json`
@@ -127,10 +127,10 @@ Schema contract test files target non-existent schema definitions; they must fai
 - Baseline planner tests (T114) depend on interface + planner implementations (T110–T113).
 
 ## Parallelizable Groups Examples
-Group A (post-setup, contract tests): T010–T014 concurrently.
-Group B (integration tests): T015–T020 concurrently (some may share runner; ensure isolated temp outputs).
-Group C (dataclasses): T040–T044 concurrently.
-Group D (docs batch at end): T121–T124 concurrently.
+Group A (post-setup, contract tests): T010–T014 concurrently.  
+Group B (integration tests): T015–T020 concurrently (some may share runner; ensure isolated temp outputs).  
+Group C (dataclasses): T040–T044 concurrently.  
+Group D (docs batch at end): T121–T124 concurrently.  
 
 ## Validation Checklist
 - [X] All schema contracts have tests (T010–T014)

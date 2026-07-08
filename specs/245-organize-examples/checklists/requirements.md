@@ -1,7 +1,7 @@
 # Specification Quality Checklist: Organize and Categorize Example Files
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: November 12, 2025
+**Purpose**: Validate specification completeness and quality before proceeding to planning  
+**Created**: November 12, 2025  
 **Feature**: [245-organize-examples/spec.md](../spec.md)
 
 ## Content Quality

@@ -1,7 +1,7 @@
 # Quickstart: fast-pysf Integration Quality Improvements
 
-**Feature**: 148-improve-fast-pysf
-**Branch**: `148-improve-fast-pysf`
+**Feature**: 148-improve-fast-pysf  
+**Branch**: `148-improve-fast-pysf`  
 **For**: Developers working on fast-pysf integration or running unified tests
 
 ## Overview
@@ -10,9 +10,9 @@ This guide helps you quickly get started with the improved fast-pysf integration
 
 ## Prerequisites
 
-✅ Python 3.13.1 (project standard)
-✅ uv package manager installed (`pip install uv`)
-✅ Repository cloned: `git clone https://github.com/ll7/robot_sf_ll7.git`
+✅ Python 3.13.1 (project standard)  
+✅ uv package manager installed (`pip install uv`)  
+✅ Repository cloned: `git clone https://github.com/ll7/robot_sf_ll7.git`  
 ✅ Branch checked out: `git checkout 148-improve-fast-pysf`
 
 ## Quick Setup (30 seconds)

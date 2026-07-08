@@ -1,8 +1,8 @@
 # API Contract: robot_sf.common Module
 
-**Feature**: 241-consolidate-utility-modules
-**Version**: 2.1.0
-**Status**: Draft
+**Feature**: 241-consolidate-utility-modules  
+**Version**: 2.1.0  
+**Status**: Draft  
 **Date**: November 10, 2025
 
 ## Contract Overview
@@ -72,7 +72,7 @@ The following import paths are **no longer valid** as of version 2.1.0:
 from robot_sf.util.types import Vec2D
 from robot_sf.util.compatibility import get_gym_reset_info
 
-# ❌ REMOVED - utils/ directory deleted
+# ❌ REMOVED - utils/ directory deleted  
 from robot_sf.utils.seed_utils import set_global_seed
 
 # ❌ REMOVED - module renamed
@@ -176,7 +176,7 @@ The **only** user-visible change:
 - No deprecation warnings (clean break)
 - No compatibility shims or redirects
 
-**Rationale**:
+**Rationale**: 
 - Internal refactoring for research project (limited external consumers)
 - Clean migration preferred over ongoing tech debt from compatibility layer
 - CHANGELOG provides clear migration path
@@ -311,7 +311,7 @@ Before marking this feature complete, verify:
 Clean break with clear migration guide is preferred.
 
 ### Q: What if external projects depend on old paths?
-**A**:
+**A**: 
 1. This is a research project with limited external consumers
 2. CHANGELOG provides clear migration instructions
 3. MINOR version bump signals change per semver

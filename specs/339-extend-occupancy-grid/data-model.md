@@ -1,7 +1,7 @@
 # Data Model: Extended Occupancy Grid
 
-**Date**: 2025-12-04
-**Phase**: Phase 1 (Design & Contracts)
+**Date**: 2025-12-04  
+**Phase**: Phase 1 (Design & Contracts)  
 **Status**: Complete
 
 This document defines the core data entities, their fields, relationships, and invariants for the occupancy grid feature.
@@ -181,7 +181,7 @@ GridConfig(
    │  └─ Return OccupancyGrid
    ├─ Store grid in environment state
    └─ Include grid in observation
-
+   
 3. Environment Step
    ├─ Move robot, update pedestrians (physics sim)
    ├─ Call grid.update(robot_pose, obstacles, pedestrians)
@@ -189,12 +189,12 @@ GridConfig(
    │  └─ Update grid timestamp
    ├─ Include grid in observation
    └─ Optionally render grid visualization
-
+   
 4. Optional: POI Query
    ├─ Create POIQuery (world_x, world_y, radius_m, ...)
    ├─ Call query_occupancy(grid, query)
    └─ Use result for spawn validation / planning
-
+   
 5. Optionally: Visualization Interaction
    ├─ Toggle channel visibility in pygame
    ├─ Call render_grid_pygame(..., visible_channels)

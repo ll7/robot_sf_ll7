@@ -11,8 +11,8 @@ Create an automated research reporting system for the imitation learning pipelin
 
 ## Technical Context
 
-**Language/Version**: Python 3.11 (existing uv-managed environment)
-**Primary Dependencies**:
+**Language/Version**: Python 3.11 (existing uv-managed environment)  
+**Primary Dependencies**: 
 - scipy (paired t-test, effect size computation)
 - matplotlib (figure generation with LaTeX export capability)
 - pandas (CSV export, data manipulation)
@@ -20,18 +20,18 @@ Create an automated research reporting system for the imitation learning pipelin
 - loguru (logging facade per Constitution XII)
 - Existing: StableBaselines3, imitation, robot_sf modules, run tracker/telemetry
 
-**Storage**: File-based (JSONL episode records, JSON manifests, YAML configs, NPZ trajectories, ZIP model checkpoints)
-**Testing**: pytest (integration tests for report generation, unit tests for metric aggregation)
-**Target Platform**: Linux/macOS (headless execution required for CI, PDF generation via matplotlib backend)
-**Project Type**: Single Python project extending existing robot_sf library
-**Performance Goals**: Report generation < 120 seconds for 3-seed run (per SC-001)
-**Constraints**:
+**Storage**: File-based (JSONL episode records, JSON manifests, YAML configs, NPZ trajectories, ZIP model checkpoints)  
+**Testing**: pytest (integration tests for report generation, unit tests for metric aggregation)  
+**Target Platform**: Linux/macOS (headless execution required for CI, PDF generation via matplotlib backend)  
+**Project Type**: Single Python project extending existing robot_sf library  
+**Performance Goals**: Report generation < 120 seconds for 3-seed run (per SC-001)  
+**Constraints**: 
 - Must integrate with existing benchmark schema (episode.schema.v1.json)
 - Must respect canonical artifact root (output/)
 - Must align with training_summary.schema.json extensions
 - Must support headless execution (MPLBACKEND=Agg)
 
-**Scale/Scope**:
+**Scale/Scope**: 
 - Process 3-10 seeds per condition
 - Handle ablation matrices up to ~20 variants
 - Generate 5-10 core figures per report
@@ -146,11 +146,11 @@ All aspects align with Constitution principles. No complexity justification requ
 
 ## Phase 1: Design & Contracts (COMPLETED)
 
-**Date**: 2025-11-21
+**Date**: 2025-11-21  
 **Deliverables**:
 - ✅ `data-model.md` - 8 entity definitions with validation rules
 - ✅ `contracts/report_metadata.schema.json` - Metadata schema
-- ✅ `contracts/aggregated_metrics.schema.json` - Metrics schema
+- ✅ `contracts/aggregated_metrics.schema.json` - Metrics schema  
 - ✅ `contracts/hypothesis_result.schema.json` - Hypothesis schema
 - ✅ `quickstart.md` - Usage guide with CLI examples and workflows
 - ✅ Agent context updated via `update-agent-context.sh`
@@ -163,7 +163,7 @@ All aspects align with Constitution principles. No complexity justification requ
 
 ## Phase 2: Task Breakdown (COMPLETED)
 
-**Date**: 2025-11-21
+**Date**: 2025-11-21  
 **Deliverable**: ✅ `tasks.md` - Detailed implementation task list
 
 **Summary**:

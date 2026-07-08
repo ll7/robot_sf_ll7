@@ -1,7 +1,7 @@
 # Phase 0 Complete: OSM Map Extraction Implementation Plan
 
-**Date**: 2025-12-19
-**Branch**: `392-Improve-osm-map-generation`
+**Date**: 2025-12-19  
+**Branch**: `392-Improve-osm-map-generation`  
 **Status**: ✅ **PHASE 0 COMPLETE & READY FOR PHASE 1 IMPLEMENTATION**
 
 ---
@@ -204,8 +204,8 @@ tests/
 - From: https://extract.bbbike.org/
 
 ### 3. Semantic Tag Filtering
-**Driveable**: footway, path, cycleway, bridleway, pedestrian, (residential/service if area=yes)
-**Obstacles**: building, water, cliff
+**Driveable**: footway, path, cycleway, bridleway, pedestrian, (residential/service if area=yes)  
+**Obstacles**: building, water, cliff  
 **Excluded**: steps, motorway, access=private/no
 
 ### 4. Projection: Local UTM Zone

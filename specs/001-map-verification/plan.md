@@ -17,14 +17,14 @@ Build a reproducible map-verification workflow that (1) runs as a single CLI/CI 
   the iteration process.
 -->
 
-**Language/Version**: Python 3.11 (uv-managed virtual environment)
-**Primary Dependencies**: `robot_sf.gym_env` factories + unified configs, Loguru logging, SVG parsing utilities already present in `robot_sf.maps`, optional geometry helpers (Shapely)
-**Storage**: File-based inputs/outputs (SVG maps under `maps/svg_maps/`, JSON/JSONL manifests under `output/validation/`)
-**Testing**: Pytest suite (`tests/maps/test_map_verifier.py`, CI tasks)
+**Language/Version**: Python 3.11 (uv-managed virtual environment)  
+**Primary Dependencies**: `robot_sf.gym_env` factories + unified configs, Loguru logging, SVG parsing utilities already present in `robot_sf.maps`, optional geometry helpers (Shapely)  
+**Storage**: File-based inputs/outputs (SVG maps under `maps/svg_maps/`, JSON/JSONL manifests under `output/validation/`)  
+**Testing**: Pytest suite (`tests/maps/test_map_verifier.py`, CI tasks)  
 **Target Platform**: Linux/macOS headless runners (CI + local dev)
-**Project Type**: Python research/benchmark toolkit module
-**Performance Goals**: Median verification ≤ 3s per map, soft budget 20s/map, hard timeout 60s run-wide, CI job < 5 min
-**Constraints**: Must run fully offline/headless, obey artifact policy, and emit Loguru-based structured logs alongside the JSON manifest for observability
+**Project Type**: Python research/benchmark toolkit module  
+**Performance Goals**: Median verification ≤ 3s per map, soft budget 20s/map, hard timeout 60s run-wide, CI job < 5 min  
+**Constraints**: Must run fully offline/headless, obey artifact policy, and emit Loguru-based structured logs alongside the JSON manifest for observability  
 **Scale/Scope**: ≈50 SVG maps today, each ≤5 MB, with growth expectation <100 maps in near term
 
 ## Constitution Check

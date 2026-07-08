@@ -1,8 +1,8 @@
 # Feature Specification: Performance Tracking & Telemetry for Imitation Pipeline
 
-**Feature Branch**: `001-performance-tracking`
-**Created**: 2025-11-19
-**Status**: Draft
+**Feature Branch**: `001-performance-tracking`  
+**Created**: 2025-11-19  
+**Status**: Draft  
 **Input**: User description: "Add duration estimates, progress tracking, run telemetry, resource monitoring, and automated performance recommendations/tests for imitation-learning pipeline workflows."
 
 ## Clarifications

@@ -325,21 +325,21 @@ Final per-scenario split at `100k` :
 ## 1. Move from world-relative to ego-frame observations
 
 Current `relative_obs` subtracts `robot_position` , but it does not rotate goal or pedestrian
-vectors into the robot frame. Since the base repo contract keeps these keys in world coordinates,
+vectors into the robot frame. Since the base repo contract keeps these keys in world coordinates, 
 that means SAC still has to learn orientation invariance from data unless the model-side transform
 adds it explicitly.
 
 Why this likely matters:
 
-* the policy is failing even on simple atomic maps with rotated goal directions,
-* the direct trace shows pure rotation commands with zero forward motion,
+* the policy is failing even on simple atomic maps with rotated goal directions, 
+* the direct trace shows pure rotation commands with zero forward motion, 
 * training on `classic_interactions.yaml` may not cover heading and map-orientation diversity well
   enough for raw world-frame transfer.
 
 Recommended next change:
 
 * rotate `goal_current`,   `goal_next`, and `pedestrians_positions` into the robot ego frame using
-`robot_heading` ,
+`robot_heading` , 
 * keep this transform identical in both `scripts/training/train_sac_sb3.py` and
 `robot_sf/baselines/sac.py` .
 
@@ -352,20 +352,20 @@ Status:
 ## 2. Do not keep the current safety-shaped reward variant
 
 The first safety-focused reward pass was a useful experiment, but it did not improve benchmark
-behavior. It reduced success from `36.7%` to `26.7%` , increased failed episodes from `19` to `22` ,
+behavior. It reduced success from `36.7%` to `26.7%` , increased failed episodes from `19` to `22` , 
 and did not materially reduce collision-heavy failures.
 
 Interpretation:
 
-* the ego-frame transform addressed a real representation problem,
+* the ego-frame transform addressed a real representation problem, 
 * the current reward weights are now over-constraining the controller without teaching the missing
-  interaction policy,
+  interaction policy, 
 * more penalty magnitude alone is unlikely to be the highest-value next step.
 
 Recommended next stance:
 
-* keep `gate_socnav_struct_ego.yaml` as the current best SAC config,
-* keep `gate_socnav_struct_ego_safe_v1.yaml` only as a recorded negative result,
+* keep `gate_socnav_struct_ego.yaml` as the current best SAC config, 
+* keep `gate_socnav_struct_ego_safe_v1.yaml` only as a recorded negative result, 
 * avoid spending another immediate loop on reward-only tuning unless a more targeted hypothesis
   emerges from interaction-specific traces.
 
@@ -377,18 +377,18 @@ the same distribution.
 
 Recommended next experiments:
 
-* create a SAC gate config that includes atomic empty-map and simple route-following scenarios,
-* include `verified_simple_subset_v1` archetype coverage or a training-safe analogue,
+* create a SAC gate config that includes atomic empty-map and simple route-following scenarios, 
+* include `verified_simple_subset_v1` archetype coverage or a training-safe analogue, 
 * keep `classic_interactions` as part of the curriculum rather than the whole curriculum.
 
-Observed evidence supports this: ego-frame transfer is now good on directional open-space tasks,
+Observed evidence supports this: ego-frame transfer is now good on directional open-space tasks, 
 but it remains zero on detour, obstacle, and social-interaction scenarios. That is exactly the kind
 of split a curriculum or source-distribution gap would produce.
 
 Updated interpretation after the multi-scenario fix:
 
-* a stronger scenario distribution already helped benchmark transfer,
-* the remaining gaps are now specific capability gaps, not just a generic coordinate mismatch,
+* a stronger scenario distribution already helped benchmark transfer, 
+* the remaining gaps are now specific capability gaps, not just a generic coordinate mismatch, 
 * the next curriculum work should be weighted rather than purely broader so we do not regress on
   cases like `goal_behind_robot` while adding more detour and interaction coverage.
 

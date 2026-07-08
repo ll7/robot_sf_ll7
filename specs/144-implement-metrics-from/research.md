@@ -87,7 +87,7 @@ def collisions(data: EpisodeData) -> float:
 3. **Agent Collisions (AC)**: Require optional other-agent data (if multi-robot scenarios supported)
 4. **Total Collisions (C)**: Sum of WC + AC + HC where data available
 
-**Rationale**:
+**Rationale**: 
 - Maintains backward compatibility with existing single-robot, pedestrian-only scenarios
 - Returns 0 or NaN for collision types when relevant data unavailable
 - Aligns with constitution's requirement for graceful degradation
@@ -130,17 +130,17 @@ def collisions(data: EpisodeData) -> float:
 ```python
 def _compute_ped_velocities(peds_pos: np.ndarray, dt: float) -> np.ndarray:
     """Compute pedestrian velocities from positions via finite difference.
-
+    
     Args:
         peds_pos: (T, K, 2) array of pedestrian positions
         dt: timestep duration
-
+        
     Returns:
         (T, K, 2) array with velocities (first timestep = 0)
     """
     if peds_pos.shape[0] < 2:
         return np.zeros_like(peds_pos)
-
+    
     # Forward difference: v[t] = (pos[t+1] - pos[t]) / dt
     vel = np.zeros_like(peds_pos)
     vel[:-1] = (peds_pos[1:] - peds_pos[:-1]) / dt
@@ -152,24 +152,24 @@ def _compute_ped_velocities(peds_pos: np.ndarray, dt: float) -> np.ndarray:
 ```python
 def _compute_jerk(robot_acc: np.ndarray, dt: float) -> np.ndarray:
     """Compute jerk (derivative of acceleration) via finite difference.
-
+    
     Args:
         robot_acc: (T, 2) array of robot accelerations
         dt: timestep duration
-
+        
     Returns:
         (T, 2) array of jerk values
     """
     if robot_acc.shape[0] < 2:
         return np.zeros_like(robot_acc)
-
+    
     jerk = np.zeros_like(robot_acc)
     jerk[:-1] = (robot_acc[1:] - robot_acc[:-1]) / dt
     jerk[-1] = jerk[-2]
     return jerk
 ```
 
-**Rationale**:
+**Rationale**: 
 - Standard numerical differentiation approach
 - Maintains consistency with how velocities/accelerations likely computed in simulation
 - Simple, deterministic, no new dependencies
@@ -208,7 +208,7 @@ def path_efficiency(...) -> float:
 - **Statistics (V/A/J min/avg/max, T, PL)**: Return `float("nan")` for empty trajectories
 - **Time metrics (ST, T, AT, TTC)**: Return `0.0` for instant/empty trajectories
 
-**Rationale**:
+**Rationale**: 
 - Makes aggregation meaningful (NaN excluded from means; 0s contribute)
 - Aligns with paper definitions and existing codebase patterns
 - Clear error signaling vs. valid zero values
@@ -224,7 +224,7 @@ def path_efficiency(...) -> float:
 - Current pattern: one function per metric (clean, testable)
 - Potential bottleneck: repeated distance computations
 
-**Decision**:
+**Decision**: 
 1. Keep one-function-per-metric pattern (readability, testability)
 2. Use memoization/caching only if profiling shows bottleneck
 3. Leverage existing NumPy vectorization
@@ -256,7 +256,7 @@ def _compute_distance_matrix(data: EpisodeData) -> np.ndarray:
 3. Schema validation in `robot_sf/benchmark/schemas/`
 4. Existing tests in `tests/test_metrics.py`
 
-**Decision**:
+**Decision**: 
 - Add new metric functions to `robot_sf/benchmark/metrics.py` following existing pattern
 - Export new functions in module's `__all__` if present
 - Ensure metric names match schema expectations (lowercase_with_underscores)

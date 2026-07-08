@@ -1,7 +1,7 @@
 # Issue #193 — Feature Extractor Optuna Study
 
-**Related issue:** #193
-**Branch:** `codex/193-feature-extractor-evaluation`
+**Related issue:** #193  
+**Branch:** `codex/193-feature-extractor-evaluation`  
 **Status:** 4 M-step array sweep finished by 2026-04-19 with 38 completed Optuna trials and 2
 stale timeout trials.  Results are a pre-screening snapshot, not promotion evidence or a final
 architecture ranking.
@@ -81,8 +81,8 @@ The `_extractor_kwargs` function in `optuna_feature_extractor.py` maps
 
 ## 2026-04-17 SLURM Sweep Result
 
-**Study DB:** `output/optuna/feat_extractor/feat_sweep_4m.db`
-**SLURM logs:** `output/slurm/feat_sweep_*.err` / `output/slurm/feat_sweep_*.out`
+**Study DB:** `output/optuna/feat_extractor/feat_sweep_4m.db`  
+**SLURM logs:** `output/slurm/feat_sweep_*.err` / `output/slurm/feat_sweep_*.out`  
 **Submitted from handoff:** `docs/context/issue_193_slurm_handoff.md`
 
 The `feat_sweep_4m` study contains 20 trials:
@@ -231,9 +231,9 @@ surface.
 
 > Superseded by the 2026-04-20 final analysis below.  Kept for handoff history.
 
-**Current study DB:** `output/optuna/feat_extractor/feat_sweep_4m_array.db`
-**Study name:** `feat_sweep_4m_array`
-**SLURM arrays:** `11713` on `pro6000`, `11714` on `a30`
+**Current study DB:** `output/optuna/feat_extractor/feat_sweep_4m_array.db`  
+**Study name:** `feat_sweep_4m_array`  
+**SLURM arrays:** `11713` on `pro6000`, `11714` on `a30`  
 **SLURM logs:** `output/slurm/sweep_4m_array_11713_*.{out,err}` and
 `output/slurm/sweep_4m_array_a30_lp_11714_*.{out,err}`
 
@@ -302,9 +302,9 @@ Recommended next step after array completion:
 
 ## 2026-04-20 Final Array Sweep Analysis
 
-**Current source of truth:** `output/optuna/feat_extractor/feat_sweep_4m_array.db`
-**Study name:** `feat_sweep_4m_array`
-**Last DB modification:** 2026-04-19 13:29 Europe/Berlin
+**Current source of truth:** `output/optuna/feat_extractor/feat_sweep_4m_array.db`  
+**Study name:** `feat_sweep_4m_array`  
+**Last DB modification:** 2026-04-19 13:29 Europe/Berlin  
 **Queue state checked:** `squeue --me` returned no active jobs on 2026-04-20.
 
 The active array sweep is done from SLURM's perspective.  Optuna still reports two `RUNNING` trials,
@@ -651,7 +651,7 @@ Final SLURM status:
 
 ### Final 12M study state
 
-**Study:** `feat_extractor_12m_hardening_20260420`
+**Study:** `feat_extractor_12m_hardening_20260420`  
 **DB:** `output/optuna/feat_extractor/feat_extractor_12m_hardening_20260420.db`
 
 | State | Count | Meaning |

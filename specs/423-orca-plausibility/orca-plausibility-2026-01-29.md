@@ -89,3 +89,4 @@ Highest ped_force_mean:
 ## Notes
 - `ped_force_mean` and `force_q95` come from total pedestrian force vectors (sum of all force components).
 - Plausibility status remains **unverified**; metrics were recorded via `--write-plausibility-metrics`.
+

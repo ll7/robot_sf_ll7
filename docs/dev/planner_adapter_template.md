@@ -89,3 +89,4 @@ uv run robot_sf_bench run \
 
 `configs/algos/reference_adapter.yaml` exists only to opt into the diagnostic/testing-only path.
 Do not include `reference_adapter` in benchmark comparison matrices except as a wiring smoke.
+

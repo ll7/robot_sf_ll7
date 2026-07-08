@@ -40,14 +40,14 @@
 Update pyproject.toml with expanded Ruff linting rules to catch more bugs, modernize syntax, and improve code quality while maintaining CI performance under 60 seconds. Technical approach: Add high-signal rule families (B, BLE, TRY, UP, SIM, etc.) with targeted ignores for research/scientific computing patterns, excluding overly noisy rules like complexity checks.
 
 ## Technical Context
-**Language/Version**: Python
-**Primary Dependencies**: Ruff
-**Storage**: N/A
-**Testing**: Ruff linting
-**Target Platform**: CI/CD and development environments
-**Project Type**: single
-**Performance Goals**: CI linting completes in under 60 seconds
-**Constraints**: No increase in CI failures
+**Language/Version**: Python  
+**Primary Dependencies**: Ruff  
+**Storage**: N/A  
+**Testing**: Ruff linting  
+**Target Platform**: CI/CD and development environments  
+**Project Type**: single  
+**Performance Goals**: CI linting completes in under 60 seconds  
+**Constraints**: No increase in CI failures  
 **Scale/Scope**: Update pyproject.toml with expanded Ruff linting rules
 
 ## Constitution Check
@@ -172,12 +172,12 @@ ios/ or android/
 - Load `.specify/templates/tasks-template.md` as base
 - Generate tasks from Phase 1 design docs (contracts, data model, quickstart)
 - Each contract → contract test task [P]
-- Each entity → model creation task [P]
+- Each entity → model creation task [P] 
 - Each user story → integration test task
 - Implementation tasks to make tests pass
 
 **Ordering Strategy**:
-- TDD order: Tests before implementation
+- TDD order: Tests before implementation 
 - Dependency order: Models before services before UI
 - Mark [P] for parallel execution (independent files)
 
@@ -188,8 +188,8 @@ ios/ or android/
 ## Phase 3+: Future Implementation
 *These phases are beyond the scope of the /plan command*
 
-**Phase 3**: Task execution (/tasks command creates tasks.md)
-**Phase 4**: Implementation (execute tasks.md following constitutional principles)
+**Phase 3**: Task execution (/tasks command creates tasks.md)  
+**Phase 4**: Implementation (execute tasks.md following constitutional principles)  
 **Phase 5**: Validation (run tests, execute quickstart.md, performance validation)
 
 ## Complexity Tracking

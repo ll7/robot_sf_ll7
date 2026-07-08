@@ -1,8 +1,8 @@
 # Execution Guide: Occupancy Grid Feature Tasks
 
-**Feature**: 339-extend-occupancy-grid
-**Generated**: 2025-12-04
-**Tasks**: 118 total | Phases: 8 | User Stories: 5
+**Feature**: 339-extend-occupancy-grid  
+**Generated**: 2025-12-04  
+**Tasks**: 118 total | Phases: 8 | User Stories: 5  
 
 ---
 
@@ -546,8 +546,8 @@ code specs/339-extend-occupancy-grid/tasks.md
 # Follow the task description and check contracts/occupancy_api.md for details
 ```
 
-**Estimated full feature delivery**: **8–12 weeks** (118 tasks)
-**MVP delivery** (US1 + US2): **4–6 weeks** (48 tasks)
+**Estimated full feature delivery**: **8–12 weeks** (118 tasks)  
+**MVP delivery** (US1 + US2): **4–6 weeks** (48 tasks)  
 **With parallel team**: **6–9 weeks** (optimal with 4+ people)
 
 ---
@@ -556,12 +556,12 @@ code specs/339-extend-occupancy-grid/tasks.md
 
 Upon completion of all phases (Phase 1–8), the occupancy grid feature will be:
 
-✅ **Complete**: All user stories implemented
-✅ **Tested**: 100% coverage with comprehensive edge cases
-✅ **Integrated**: Gymnasium observation, pygame visualization
-✅ **Documented**: Usage guides, API reference, examples
-✅ **Performance**: <5ms generation, <1ms queries, 30+ FPS visualization
-✅ **Merged**: Ready for production use
+✅ **Complete**: All user stories implemented  
+✅ **Tested**: 100% coverage with comprehensive edge cases  
+✅ **Integrated**: Gymnasium observation, pygame visualization  
+✅ **Documented**: Usage guides, API reference, examples  
+✅ **Performance**: <5ms generation, <1ms queries, 30+ FPS visualization  
+✅ **Merged**: Ready for production use  
 
 ---
 

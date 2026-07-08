@@ -56,3 +56,4 @@ PerformanceMeta object written only if timing captured.
 ## Non-Changes
 - No modification to episodes.jsonl schema.
 - No modification to summary.json, effect_sizes.json, statistical_sufficiency.json.
+

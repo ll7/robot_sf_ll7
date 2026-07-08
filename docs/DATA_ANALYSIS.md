@@ -16,7 +16,7 @@ The data can be plotted via the newly generated `*.json` file or directly via th
 
 An easy to use example can be found in the [data_analysis_example.py](../examples/plotting/data_analysis_example.py) file.
 
-In-depth for more customization:
+In-depth for more customization: 
 - Json: [extract_json_from_pickle.py](../robot_sf/data_analysis/extract_json_from_pickle.py)
 - Directly: [extract_obj_from_pickle.py](../robot_sf/data_analysis/extract_obj_from_pickle.py)
 

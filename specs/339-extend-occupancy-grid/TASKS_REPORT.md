@@ -1,8 +1,8 @@
 # Task Generation Report: Extended Occupancy Grid Feature
 
-**Feature**: 339-extend-occupancy-grid
-**Generated**: 2025-12-04
-**Command**: `/speckit.tasks`
+**Feature**: 339-extend-occupancy-grid  
+**Generated**: 2025-12-04  
+**Command**: `/speckit.tasks`  
 **Status**: ✅ COMPLETE
 
 ---
@@ -211,7 +211,7 @@ tests/pygame/
 
 ### MVP Scope (User Stories 1 & 2)
 
-**Duration**: 4–6 weeks
+**Duration**: 4–6 weeks  
 **Tasks**: T001–T048 (48 tasks)
 
 **Sprint Breakdown**:
@@ -223,7 +223,7 @@ tests/pygame/
 
 ### Full Scope (All 5 User Stories)
 
-**Duration**: 8–12 weeks
+**Duration**: 8–12 weeks  
 **Tasks**: T001–T118 (all tasks)
 
 **Sprint Breakdown**:
@@ -236,7 +236,7 @@ tests/pygame/
 
 ### Parallelization Impact
 
-**Sequential execution**: 8–12 weeks
+**Sequential execution**: 8–12 weeks  
 **With parallelization** (47 parallelizable tasks [P]):
 - Effective reduction: 25–30% (2–3 weeks saved on full scope)
 - Realistic timeline with team: **6–9 weeks for full feature**
@@ -330,8 +330,8 @@ MERGE: Foundation ready
 
 ## Generated Files
 
-**File**: `/Users/lennart/git/robot_sf_ll7/specs/339-extend-occupancy-grid/tasks.md`
-**Size**: ~1850 lines
+**File**: `/Users/lennart/git/robot_sf_ll7/specs/339-extend-occupancy-grid/tasks.md`  
+**Size**: ~1850 lines  
 **Content**:
 - Phase 1–8 task lists (118 tasks total)
 - Task format validation
@@ -366,3 +366,4 @@ MERGE: Foundation ready
 - [x] Parallel execution opportunities documented
 
 **Status**: Ready for team execution. All planning phases (0, 1, 2) complete. Feature is fully scoped, designed, and tasked.
+

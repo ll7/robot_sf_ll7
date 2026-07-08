@@ -36,13 +36,13 @@ Created a new helper function in `robot_sf/gym_env/env_util.py`:
 def prepare_pedestrian_actions(simulator) -> np.ndarray:
     """
     Prepare pedestrian action visualization data.
-
+    
     This helper function creates pedestrian action vectors for visualization
     by combining pedestrian positions with their velocity vectors.
-
+    
     Args:
         simulator: The simulator object containing pysf_sim with pedestrian data
-
+        
     Returns:
         np.ndarray: Array of shape (n_peds, 2, 2) where each pedestrian has
                    a start position [x, y] and end position [x, y] representing

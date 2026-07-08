@@ -25,7 +25,7 @@ that optimization-based baselines should be elevated alongside ORCA as part of b
 
 **Recommended Methods:**
 - **Non-holonomic ORCA** (Optimal Reciprocal Collision Avoidance for Multiple Non-Holonomic Robots, DARS 2013)
-- **Relaxing ORCA Limitations** (RA-L 2024) - addresses ORCA's limitations in crowded scenarios
+- **Relaxing ORCA Limitations** (RA-L 2024) - addresses ORCA's limitations in crowded scenarios  
 - **ORCA-DD** (IROS 2010) - specifically for differential-drive constraints
 
 **Rationale:**
@@ -192,7 +192,7 @@ benchmark value they would add right now.
 - **MPC approaches**: Explicit constraint handling
 - **Foundation models**: Designed for generalization
 
-### Action Projection Issues
+### Action Projection Issues  
 **Solution:** Focus on methods with direct control:
 - **ORCA variants**: Direct velocity commands
 - **MPC approaches**: Optimized control outputs
@@ -225,7 +225,7 @@ benchmark value they would add right now.
 
 Based on the phased approach:
 - **Phase 1 (2 weeks)**: 1-2 engineers
-- **Phase 2 (4 weeks)**: 2-3 engineers
+- **Phase 2 (4 weeks)**: 2-3 engineers  
 - **Phase 3 (ongoing)**: 1 engineer for exploration
 
 ## Risk Assessment

@@ -10,7 +10,7 @@ The HEIGHT model shows poor performance (1.42% success rate) on the Robot SF ben
 
 **Issue**: HEIGHT was trained exclusively on `circle_crossing` scenarios using the `CrowdSim3DTbObs-v0` environment, but the benchmark evaluates it on 141 diverse scenarios including complex social interactions that HEIGHT was never trained on.
 
-**Detailed Evidence**:
+**Detailed Evidence**: 
 - **Upstream Training Configuration** (`output/repos/CrowdNav_HEIGHT/README.md:67-68`):
   ```python
   env.scenario = "circle_crossing"  # Only trained on this scenario type
@@ -48,7 +48,7 @@ The HEIGHT model shows poor performance (1.42% success rate) on the Robot SF ben
 2. **Stateful Velocity Accumulation** (Upstream vs Adapter):
    - **Upstream** (`crowd_sim_tb2.py`):
      ```python
-     self.desiredVelocity[0] = np.clip(self.desiredVelocity[0] + delta_v,
+     self.desiredVelocity[0] = np.clip(self.desiredVelocity[0] + delta_v, 
                                       self.config.robot.v_min, self.config.robot.v_max)
      ```
    - **Adapter** (`crowdnav_height.py:738-749`): Identical logic but with additional clipping
@@ -162,7 +162,7 @@ Based on this investigation, the primary causes of HEIGHT's poor performance are
 3. **State Tracking**: Monitor RNN hidden state and velocity accumulation patterns
 
 ### Medium-term (Adapter Improvements)
-1. **Action Space Adaptation**:
+1. **Action Space Adaptation**: 
    - Increase discrete action increments for faster response
    - Reduce or eliminate double clipping
    - Consider continuous action projection

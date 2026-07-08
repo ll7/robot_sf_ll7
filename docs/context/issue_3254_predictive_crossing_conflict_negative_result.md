@@ -55,3 +55,4 @@ uv run python scripts/validation/check_docs_proof_consistency.py \
 
 This is an analysis-only negative training result. It is not benchmark-strength planner evidence,
 not a safety claim, not model promotion, and not paper-facing evidence.
+

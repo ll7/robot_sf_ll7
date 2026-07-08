@@ -217,58 +217,58 @@ Metadata handling:
 
 ## Notes
 ### Decisions (current)
-- **Observation/action interface target**: SocNav structured + occupancy grid, unicycle actions.
+- **Observation/action interface target**: SocNav structured + occupancy grid, unicycle actions.  
   *Why:* benchmark plan selected this contract; keeps planners comparable and grid provides obstacle context.
-- **Grid frame**: ego frame (per benchmark plan).
+- **Grid frame**: ego frame (per benchmark plan).  
   *Why:* ego-frame invariance simplifies policy inputs and aligns ped velocity frame.
-- **Grid resolution/extent**: 0.5 m, 32×32 m (per benchmark plan) → 64×64 cells.
+- **Grid resolution/extent**: 0.5 m, 32×32 m (per benchmark plan) → 64×64 cells.  
   *Why:* balances obstacle context with runtime cost; fixed for reproducibility.
-- **Next waypoint signal**: required in observation (goal "next" / next_target_angle).
+- **Next waypoint signal**: required in observation (goal "next" / next_target_angle).  
   *Why:* local planners need near-term routing guidance with fixed global route.
-- **Next waypoint representation**: vector in the robot’s local (ego) frame.
+- **Next waypoint representation**: vector in the robot’s local (ego) frame.  
   *Why:* provides directional info without global coordinate dependence.
-- **Training duration**: 10M steps per seed for full runs.
+- **Training duration**: 10M steps per seed for full runs.  
   *Why:* aligns with existing PPO baselines and gives room for stable learning.
-- **Seed count**: start with 5 seeds; increase to 10 if variance is too high.
+- **Seed count**: start with 5 seeds; increase to 10 if variance is too high.  
   *Why:* 5 seeds gives usable uncertainty bands; expand only if CI is unstable.
 - **Variance threshold for expanding seeds**: increase to 10 if 95% CI half‑width on
-  primary success rate is > 0.10 at 10M steps.
+  primary success rate is > 0.10 at 10M steps.  
   *Why:* keeps uncertainty bands interpretable without over‑allocating compute.
-- **Pedestrian forces**: enable **both** obstacle forces and ped‑robot repulsion.
-  *Why:* most plausible scenario—peds avoid static obstacles and respond to the robot.
+- **Pedestrian forces**: enable **both** obstacle forces and ped‑robot repulsion.  
+  *Why:* most plausible scenario—peds avoid static obstacles and respond to the robot.  
   *Config:* `peds_have_obstacle_forces=True`, `sim_config.prf_config.is_active=True`.
-- **n_envs selection**: auto-set to `cores-1` by default (with manual override).
+- **n_envs selection**: auto-set to `cores-1` by default (with manual override).  
   *Why:* maximizes throughput while leaving headroom for system overhead.
-- **Grid metadata in policy input**: excluded (fixed grid config; keep for debug only).
+- **Grid metadata in policy input**: excluded (fixed grid config; keep for debug only).  
   *Why:* metadata is constant/noisy for a fixed grid; policy should focus on dynamics.
-- **Evaluation cadence**: enabled (periodic evaluation during training).
+- **Evaluation cadence**: enabled (periodic evaluation during training).  
   *Why:* required for learning curves, curriculum comparisons, and ablation analysis.
 - **Evaluation cadence schedule**: 0.5M-step evals for the first 3M steps, then
-  every 1M steps for the remainder.
+  every 1M steps for the remainder.  
   *Why:* higher resolution early where learning is fastest; lower overhead later.
 - **Training scenario sources**: use both `configs/scenarios/classic_interactions.yaml`
-  and `configs/scenarios/francis2023.yaml`.
+  and `configs/scenarios/francis2023.yaml`.  
   *Why:* increases diversity and reduces overfitting to a single scenario distribution.
-- **Training scenario config file**: `configs/scenarios/classic_interactions_francis2023.yaml`.
+- **Training scenario config file**: `configs/scenarios/classic_interactions_francis2023.yaml`.  
   *Why:* training pipeline expects a single scenario_config input; merged file ensures
   both sets are consistently used.
 - **Scenario sampling for training**: use a wrapper that selects a scenario at each reset
-  (Option A).
+  (Option A).  
   *Why:* enables a single policy to see both scenario sets with deterministic, balanced
   exposure; minimal changes to the training entry point.
-- **Hold-out split**: adopt the proposed split (see below).
+- **Hold-out split**: adopt the proposed split (see below).  
   *Why:* preserves diverse training coverage while reserving distinct geometry/behavior
   cases for generalization evaluation.
-- **Main baseline uses grid**: train the primary policy with SocNav + occupancy grid.
+- **Main baseline uses grid**: train the primary policy with SocNav + occupancy grid.  
   *Why:* grid provides obstacle context missing from SocNav fields; aligns with benchmark contract.
-- **Feature extractor baseline**: simple grid CNN + flattened SocNav MLP (no ped encoder).
+- **Feature extractor baseline**: simple grid CNN + flattened SocNav MLP (no ped encoder).  
   *Why:* minimizes complexity for first run; advanced encoders are tracked as ablations.
-- **Checkpoint evaluation**: periodic evaluations throughout training (not final-only).
+- **Checkpoint evaluation**: periodic evaluations throughout training (not final-only).  
   *Why:* needed for learning curves and curriculum/ablation comparisons.
-- **Experiment tracking**: enable TensorBoard **and** W&B for main runs.
+- **Experiment tracking**: enable TensorBoard **and** W&B for main runs.  
   *Why:* TensorBoard for live local monitoring; W&B for multi‑seed comparison + metadata.
 - **Scenario feasibility gate**: keep all scenarios in training until after a full
-  10M‑step policy run; exclude only if success rate < 0.20.
+  10M‑step policy run; exclude only if success rate < 0.20.  
   *Why:* avoids premature filtering while still allowing cleanup of truly unsolvable cases.
 
 ### Open Questions (must answer)
@@ -299,19 +299,19 @@ Metadata handling:
 
 ### Proposed Hold-out Split (draft)
 **Classic interactions (hold out all densities):**
-- `classic_bottleneck_*`
+- `classic_bottleneck_*`  
   *Why:* narrow choke-points are distinct and failure‑prone.
-- `classic_group_crossing_*`
+- `classic_group_crossing_*`  
   *Why:* only group‑behavior archetype; tests generalization to group dynamics.
 
 **Francis 2023 (hold out specific scenarios):**
-- `francis2023_crowd_navigation`
+- `francis2023_crowd_navigation`  
   *Why:* only crowd‑density scenario in the Francis set (multi‑ped dynamic).
-- `francis2023_intersection_wait`
+- `francis2023_intersection_wait`  
   *Why:* introduces explicit pedestrian wait/yield behavior.
-- `francis2023_blind_corner`
+- `francis2023_blind_corner`  
   *Why:* occlusion/visibility challenge not covered by other Francis maps.
-- `francis2023_narrow_doorway`
+- `francis2023_narrow_doorway`  
   *Why:* tight passage geometry (distinct from classic bottleneck layout).
 
 This keeps ~75–80% of scenarios for training while reserving a diverse

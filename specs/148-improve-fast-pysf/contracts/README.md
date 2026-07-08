@@ -1,7 +1,7 @@
 # API Contracts: fast-pysf Integration Quality Improvements
 
-**Feature**: 148-improve-fast-pysf
-**Date**: 2025-10-29
+**Feature**: 148-improve-fast-pysf  
+**Date**: 2025-10-29  
 **Phase**: 1 (Design & Contracts)
 
 ## Overview

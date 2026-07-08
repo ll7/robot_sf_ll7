@@ -1,8 +1,8 @@
 # Feature Specification: Improve fast-pysf Integration
 
-**Feature Branch**: `148-improve-fast-pysf`
-**Created**: October 29, 2025
-**Status**: Draft
+**Feature Branch**: `148-improve-fast-pysf`  
+**Created**: October 29, 2025  
+**Status**: Draft  
 **Input**: User description: "Improve the fast-pysf integration. Streamline the setup process and the dependency management for fast-pysf. Consider what can be integrated in robot-sf from fast-pysf. Before changing anything, make sure the tests run. 1) Add the fast-pysf tests to the pytest configuration. Make sure they run properly. 2) Create a list of all review comments from pr 236. Create an Implementation plan and finally resolve the plan. 3) Activate ruff, ty and test coverage for fast-pysf. 4) Fix as many annotations as possible while ensuring the code runs as intended."
 
 ## User Scenarios & Testing *(mandatory)*

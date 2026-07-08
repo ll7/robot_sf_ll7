@@ -37,14 +37,14 @@
 Optimize the CI system package installation step to reduce execution time from 2min 26sec to under 1min 13sec (50% reduction) while maintaining package availability and zero installation failures. Acceptable approaches include package caching, faster package managers, pre-built Docker images, and parallel installation within GitHub Actions Ubuntu environment.
 
 ## Technical Context
-**Language/Version**: YAML (GitHub Actions workflows), Python 3.13 (repository)
-**Primary Dependencies**: GitHub Actions, Ubuntu system packages (ffmpeg, libglib2.0-0, libgl1, fonts-dejavu-core)
-**Storage**: N/A
-**Testing**: GitHub Actions CI pipeline validation
-**Target Platform**: GitHub Actions Ubuntu runners
-**Project Type**: Single Python project
-**Performance Goals**: Reduce package installation time to under 1min 13sec (50% reduction from 2min 26sec)
-**Constraints**: Must work within GitHub Actions environment, maintain package availability for headless testing, zero installation failures
+**Language/Version**: YAML (GitHub Actions workflows), Python 3.13 (repository)  
+**Primary Dependencies**: GitHub Actions, Ubuntu system packages (ffmpeg, libglib2.0-0, libgl1, fonts-dejavu-core)  
+**Storage**: N/A  
+**Testing**: GitHub Actions CI pipeline validation  
+**Target Platform**: GitHub Actions Ubuntu runners  
+**Project Type**: Single Python project  
+**Performance Goals**: Reduce package installation time to under 1min 13sec (50% reduction from 2min 26sec)  
+**Constraints**: Must work within GitHub Actions environment, maintain package availability for headless testing, zero installation failures  
 **Scale/Scope**: Single CI job optimization affecting all CI runs
 
 ## Constitution Check
@@ -183,7 +183,7 @@ ios/ or android/
 
 **Estimated Output**: 12-15 numbered, ordered tasks in tasks.md
 - 3 contract test tasks
-- 4 user story validation tasks
+- 4 user story validation tasks  
 - 2 data model implementation tasks
 - 3 CI workflow modification tasks
 - 2 performance validation tasks
@@ -193,8 +193,8 @@ ios/ or android/
 ## Phase 3+: Future Implementation
 *These phases are beyond the scope of the /plan command*
 
-**Phase 3**: Task execution (/tasks command creates tasks.md)
-**Phase 4**: Implementation (execute tasks.md following constitutional principles)
+**Phase 3**: Task execution (/tasks command creates tasks.md)  
+**Phase 4**: Implementation (execute tasks.md following constitutional principles)  
 **Phase 5**: Validation (run tests, execute quickstart.md, performance validation)
 
 ## Complexity Tracking

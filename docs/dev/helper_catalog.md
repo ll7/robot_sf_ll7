@@ -155,3 +155,4 @@ Module: `scripts.generate_video_contact_sheet`
   - Raises a clear error when no frame image paths are available. Rows that only
     contain MP4 paths should be pre-extracted to frame images before calling
     this helper.
+

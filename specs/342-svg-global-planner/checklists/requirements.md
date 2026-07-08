@@ -1,7 +1,7 @@
 # Specification Quality Checklist: SVG-Based Global Planner
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: December 10, 2025
+**Purpose**: Validate specification completeness and quality before proceeding to planning  
+**Created**: December 10, 2025  
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality

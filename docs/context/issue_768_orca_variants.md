@@ -107,5 +107,5 @@ The main implementation risk found during verification was a CLI regression: the
 
 ## Status
 
-* Implementation complete. Verified by tests and metrics.
+* Implementation complete. Verified by tests and metrics.  
 * Next step: promote `socnav_orca_dd` with full seed coverage and documentation/CHANGELOG changes.

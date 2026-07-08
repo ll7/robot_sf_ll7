@@ -1,7 +1,7 @@
 # Data Model: Configuration Hierarchy
 
-**Feature**: 244-document-config-hierarchy
-**Date**: 2025-11-11
+**Feature**: 244-document-config-hierarchy  
+**Date**: 2025-11-11  
 **Status**: Complete
 
 ## Overview

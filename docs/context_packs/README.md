@@ -27,3 +27,4 @@ Each manifest uses the same required fields:
 - `exclude`: files or globs that must stay out of generated packs.
 - `do_not_read_by_default`: high-volume, generated, historical, or optional surfaces that require a
   specific reason before reading.
+

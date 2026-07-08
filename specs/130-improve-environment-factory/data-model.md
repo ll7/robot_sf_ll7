@@ -19,7 +19,7 @@
 | video_path | str | None | Output MP4 path; if None buffer only | If provided must end with .mp4 |
 | max_frames | int | None | Override global cap (ties to env var) | >0 |
 | codec | str | "libx264" | Preferred encoding codec | Non-empty |
-| bitrate | str | None | Optional bitrate hint | If set matches pattern |
+| bitrate | str | None | Optional bitrate hint | If set matches pattern | 
 
 ### DeprecationMap (internal)
 | Legacy Name | New Target | Notes |

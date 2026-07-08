@@ -1,6 +1,6 @@
 # Issue 1044 H500 Follow-Up Benchmark Plan
 
-Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1044>
+Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1044>  
 Depends on mechanism analysis: <https://github.com/ll7/robot_sf_ll7/issues/1045>
 
 ## Decision

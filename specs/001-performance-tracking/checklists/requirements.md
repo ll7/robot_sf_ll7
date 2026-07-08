@@ -1,7 +1,7 @@
 # Specification Quality Checklist: Performance Tracking & Telemetry for Imitation Pipeline
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2025-11-19
+**Purpose**: Validate specification completeness and quality before proceeding to planning  
+**Created**: 2025-11-19  
 **Feature**: [specs/001-performance-tracking/spec.md](../spec.md)
 
 ## Content Quality

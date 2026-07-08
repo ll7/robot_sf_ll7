@@ -7,15 +7,15 @@
 Provide an out-of-the-box, code-configured (no CLI) demonstration that replays one or more classic interaction scenarios using a pre-trained PPO policy with optional recording. Focus is qualitative inspection, deterministic seed ordering, and minimal external dependencies. Future extensibility: multi-scenario chaining, frame decimation, richer overlays.
 
 ## Technical Context
-**Language/Version**: Python 3.13 (repo standard)
-**Primary Dependencies**: Stable-Baselines3 (PPO), Gymnasium, project env factories, SimulationView (pygame), moviepy (optional)
-**Storage**: Local filesystem (model zip, scenario YAML, optional MP4 outputs)
-**Testing**: pytest (add smoke tests)
-**Target Platform**: macOS/Linux dev machines; headless CI (recording skip)
-**Project Type**: Single-library (benchmark + examples)
-**Performance Goals**: Interactive rendering > ~10 FPS on typical dev laptop; episode setup < 3s; recording overhead acceptable (<2x wall time)
-**Constraints**: Must run with missing moviepy (graceful skip), headless safe; no CLI per user direction
-**Scale/Scope**: Small (single example + helper utilities) — no distributed workloads
+**Language/Version**: Python 3.13 (repo standard)  
+**Primary Dependencies**: Stable-Baselines3 (PPO), Gymnasium, project env factories, SimulationView (pygame), moviepy (optional)  
+**Storage**: Local filesystem (model zip, scenario YAML, optional MP4 outputs)  
+**Testing**: pytest (add smoke tests)  
+**Target Platform**: macOS/Linux dev machines; headless CI (recording skip)  
+**Project Type**: Single-library (benchmark + examples)  
+**Performance Goals**: Interactive rendering > ~10 FPS on typical dev laptop; episode setup < 3s; recording overhead acceptable (<2x wall time)  
+**Constraints**: Must run with missing moviepy (graceful skip), headless safe; no CLI per user direction  
+**Scale/Scope**: Small (single example + helper utilities) — no distributed workloads  
 
 Outstanding clarifications from spec (carry over):
 - Multi-scenario sequential mode? (FR-022)

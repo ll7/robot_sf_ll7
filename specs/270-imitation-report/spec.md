@@ -1,8 +1,8 @@
 # Feature Specification: Automated Research Reporting for Imitation Learning
 
-**Feature Branch**: `270-imitation-report`
-**Created**: 2025-11-21
-**Status**: Draft
+**Feature Branch**: `270-imitation-report`  
+**Created**: 2025-11-21  
+**Status**: Draft  
 **Input**: User description: "Create automated research reporting for imitation learning pipeline: multi-seed experiment orchestration, metrics aggregation (sample efficiency, success rate, collision rate), statistical analysis (bootstrap CIs, effect size, p-values), automated figure generation, markdown + LaTeX report export, reproducibility metadata (git hash, configs, hardware), ablation support (dataset size, BC epochs), hypothesis evaluation, success criteria tracking."
 
 ## User Scenarios & Testing *(mandatory)*
@@ -11,7 +11,7 @@
   IMPORTANT: User stories should be PRIORITIZED as user journeys ordered by importance.
   Each user story/journey must be INDEPENDENTLY TESTABLE - meaning if you implement just ONE of them,
   you should still have a viable MVP (Minimum Viable Product) that delivers value.
-
+  
   Assign priorities (P1, P2, P3, etc.) to each story, where P1 is the most critical.
   Think of each story as a standalone slice of functionality that can be:
   - Developed independently

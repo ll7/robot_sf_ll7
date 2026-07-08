@@ -1,7 +1,7 @@
 # Analysis Report: Feature 144 - Paper Metrics Implementation
 
-**Generated**: 2025-01-15
-**Feature Branch**: `144-implement-metrics-from`
+**Generated**: 2025-01-15  
+**Feature Branch**: `144-implement-metrics-from`  
 **Analysis Phase**: Pre-implementation validation per speckit.analyze.prompt.md
 
 ---

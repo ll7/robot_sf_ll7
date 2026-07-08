@@ -1,6 +1,6 @@
 # Implementation Plan: Consolidate Utility Modules
 
-**Branch**: `241-consolidate-utility-modules` | **Date**: November 10, 2025 | **Spec**: [spec.md](./spec.md)
+**Branch**: `241-consolidate-utility-modules` | **Date**: November 10, 2025 | **Spec**: [spec.md](./spec.md)  
 **Input**: Feature specification from `/specs/241-consolidate-utility-modules/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
@@ -11,19 +11,19 @@ Consolidate three fragmented utility module directories (`robot_sf/util/`, `robo
 
 ## Technical Context
 
-**Language/Version**: Python 3.11+ (project requires Python 3.11 minimum per pyproject.toml)
-**Primary Dependencies**: None for refactoring (uses standard Python module system)
-**Storage**: Filesystem (source code files only)
-**Testing**: pytest (existing 893-test suite), type checking via ty/mypy
-**Target Platform**: Cross-platform Python (macOS/Linux/Windows)
-**Project Type**: Python library refactoring (internal reorganization)
-**Performance Goals**: No performance impact (pure file movement and import updates)
-**Constraints**:
+**Language/Version**: Python 3.11+ (project requires Python 3.11 minimum per pyproject.toml)  
+**Primary Dependencies**: None for refactoring (uses standard Python module system)  
+**Storage**: Filesystem (source code files only)  
+**Testing**: pytest (existing 893-test suite), type checking via ty/mypy  
+**Target Platform**: Cross-platform Python (macOS/Linux/Windows)  
+**Project Type**: Python library refactoring (internal reorganization)  
+**Performance Goals**: No performance impact (pure file movement and import updates)  
+**Constraints**: 
 - Zero breaking changes to external API
 - All 893 tests must pass post-migration
 - Import updates must be comprehensive (no orphaned imports)
 - Linting (Ruff) and type checking must pass
-**Scale/Scope**:
+**Scale/Scope**: 
 - 3 directories to consolidate → 1 directory
 - ~50 import statements to update
 - 4 files to move/rename
@@ -34,27 +34,27 @@ Consolidate three fragmented utility module directories (`robot_sf/util/`, `robo
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
 ### ✅ Principle II: Factory-Based Environment Abstraction
-**Status**: PASS
+**Status**: PASS  
 **Rationale**: This refactoring does not touch environment factories or public interfaces. Utility modules are internal infrastructure. No changes to how users create environments.
 
 ### ✅ Principle VII: Backward Compatibility & Evolution Gates
-**Status**: PASS
+**Status**: PASS  
 **Rationale**: While import paths change internally, this is a codebase-internal refactoring. External users importing from `robot_sf` package see no changes. Internal imports are updated comprehensively in a single PR. Version bump (2.0 → 2.1 MINOR) signals internal reorganization for any external code that may have imported internal utilities.
 
 ### ✅ Principle VIII: Documentation as an API Surface
-**Status**: PASS
+**Status**: PASS  
 **Rationale**: Plan includes updating `docs/dev_guide.md` with new import patterns and adding migration notes to CHANGELOG.md. Documentation will clearly state "all utilities live in robot_sf/common/".
 
 ### ✅ Principle IX: Test Coverage for Public Behavior
-**Status**: PASS
+**Status**: PASS  
 **Rationale**: Existing 893-test suite provides comprehensive coverage. Plan includes verification that all tests pass post-migration. No new behavior introduced (pure reorganization), so existing tests are sufficient.
 
 ### ✅ Principle XI: Library Reuse & Helper Documentation
-**Status**: PASS
+**Status**: PASS  
 **Rationale**: Consolidation improves helper discoverability. Utility modules (types, errors, seed, compat) remain well-documented. No new helpers introduced; existing docstrings preserved during file moves.
 
 ### ✅ Principle XII: Preferred Logging & Observability
-**Status**: PASS
+**Status**: PASS  
 **Rationale**: Refactoring does not introduce new logging. Existing error handling utilities (`errors.py`) already use appropriate patterns. File moves preserve existing logging behavior.
 
 ### Summary
@@ -112,7 +112,7 @@ scripts/**/*.py          # Script imports to update (if any)
 
 ## Phase 0: Research
 
-✅ **Status**: Complete
+✅ **Status**: Complete  
 📄 **Document**: [`research.md`](./research.md)
 
 **Key Decisions**:

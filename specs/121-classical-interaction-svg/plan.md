@@ -24,7 +24,7 @@ Purpose: Provide implementation pathway and validation steps for classical human
 | Risk | Impact | Mitigation |
 |------|--------|-----------|
 | Overcrowded high-density maps cause instability | Medium | Limit high density to suitable archetypes (exclude overtaking high) |
-| CLI argument order regression | Low | Add intermixed parsing shim & test |
+| CLI argument order regression | Low | Add intermixed parsing shim & test | 
 | Future extension needs map thumbnails | Low | Provide follow-up task placeholder |
 
 ## Work Segments

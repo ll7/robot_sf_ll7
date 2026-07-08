@@ -1,8 +1,8 @@
 # Tasks: Accelerate Slow Benchmark Tests
 
-Feature Dir: /Users/lennart/git/robot_sf_ll7/specs/124-title-accelerate-slow
-Branch: 124-title-accelerate-slow
-Spec: spec.md
+Feature Dir: /Users/lennart/git/robot_sf_ll7/specs/124-title-accelerate-slow  
+Branch: 124-title-accelerate-slow  
+Spec: spec.md  
 Plan: plan.md
 
 Legend:
@@ -11,16 +11,16 @@ Legend:
 - TDD principle: introduce/adjust tests & fixtures before optimization code where feasible
 
 ## Policy Reference
-Soft threshold: 20s
-Hard timeout: 60s
-Report top N: 10
-Relax env var: ROBOT_SF_PERF_RELAX
+Soft threshold: 20s  
+Hard timeout: 60s  
+Report top N: 10  
+Relax env var: ROBOT_SF_PERF_RELAX  
 Potential enforce env var (future): ROBOT_SF_PERF_ENFORCE
 
 ## Task List
 
 ### Setup & Baseline Capture
-T001. Capture current slow test baseline (durations) by running pytest with --durations=25 and store summarized output in `progress/slow_tests_pre.json` (script or manual capture). Output includes test node id and wall time.
+T001. Capture current slow test baseline (durations) by running pytest with --durations=25 and store summarized output in `progress/slow_tests_pre.json` (script or manual capture). Output includes test node id and wall time.  
 T002. Add a helper script `scripts/collect_slow_tests.py` that parses `pytest --durations` output (stdin or file) into JSON (fields: test_identifier, duration_seconds, timestamp). [P]
 
 ### Shared Helpers & Fixtures
@@ -84,3 +84,4 @@ Guidance (T006) → Report (T005) & Guidance tests (T016)
 - Relax env var honored; enforce env var optional
 - Documentation & changelog updated
 - Before/after comparison recorded
+

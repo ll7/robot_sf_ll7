@@ -1,7 +1,7 @@
 # Research Reporting: Automated Analysis for Imitation Learning
 
-**Feature**: 270-imitation-report
-**Status**: In Development
+**Feature**: 270-imitation-report  
+**Status**: In Development  
 **Purpose**: Transform multi-seed imitation learning experiments into publication-ready research reports
 
 [← Back to Documentation Index](./README.md)
@@ -176,7 +176,7 @@ Generated `report.md` includes:
 
 1. **Abstract**: Auto-populated with hypothesis, primary findings, quantified improvement
 2. **Experimental Setup**: Seeds, configs, hardware profile, software versions
-3. **Results**:
+3. **Results**: 
    - Learning curves (timesteps vs success rate)
    - Sample efficiency comparison (bar chart + table)
    - Success/collision rate distributions

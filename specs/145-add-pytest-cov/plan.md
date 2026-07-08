@@ -11,14 +11,14 @@ Add pytest-cov integration to enable non-intrusive code coverage collection, CI/
 
 ## Technical Context
 
-**Language/Version**: Python 3.11+ (verified in pyproject.toml)
-**Primary Dependencies**: pytest 8.3.3+, pytest-cov (to be added), coverage.py (via pytest-cov)
-**Storage**: Filesystem-based (.coverage database, coverage.json, HTML reports); Git cache for CI baseline
-**Testing**: pytest with parallel execution (pytest-xdist already in use per CI workflow)
-**Target Platform**: Cross-platform (Linux CI, macOS/Windows local development)
-**Project Type**: Single Python library project (`robot_sf/`) with examples, scripts, and test suites
-**Performance Goals**: Coverage collection overhead < 10% of test runtime (approximately 18-20 seconds added to ~3 minute test suite)
-**Constraints**: Non-blocking CI (warnings only), no configuration required for default use, headless execution support
+**Language/Version**: Python 3.11+ (verified in pyproject.toml)  
+**Primary Dependencies**: pytest 8.3.3+, pytest-cov (to be added), coverage.py (via pytest-cov)  
+**Storage**: Filesystem-based (.coverage database, coverage.json, HTML reports); Git cache for CI baseline  
+**Testing**: pytest with parallel execution (pytest-xdist already in use per CI workflow)  
+**Target Platform**: Cross-platform (Linux CI, macOS/Windows local development)  
+**Project Type**: Single Python library project (`robot_sf/`) with examples, scripts, and test suites  
+**Performance Goals**: Coverage collection overhead < 10% of test runtime (approximately 18-20 seconds added to ~3 minute test suite)  
+**Constraints**: Non-blocking CI (warnings only), no configuration required for default use, headless execution support  
 **Scale/Scope**: ~15k-20k lines in robot_sf/ library, ~170 existing tests, 3 test suites (tests/, tests/pygame/, fast-pysf/tests)
 
 ## Constitution Check
@@ -128,7 +128,7 @@ pytest.ini or .coveragerc    # NEW: Coverage configuration (omit patterns, sourc
 └── tasks.json               # MODIFIED: Add coverage-enabled test tasks
 ```
 
-**Structure Decision**:
+**Structure Decision**: 
 This follows the existing single Python project structure. Coverage analysis utilities are placed in `robot_sf/coverage_tools/` as reusable library modules (Principle XI), with orchestration scripts in `scripts/coverage/`. Tests for new functionality follow the existing pattern in `tests/coverage_tools/`. Configuration changes are minimal and localized to standard files (pyproject.toml, pytest.ini). This maintains consistency with the repository's established organization while adhering to the library-first principle.
 
 ## Complexity Tracking

@@ -9,7 +9,7 @@
 ### Q1: Why are plots currently placeholders?
 **Decision**: Plots use hardcoded placeholder images instead of computing from actual benchmark data
 **Rationale**: Original implementation was incomplete - focused on benchmark execution but not visualization
-**Alternatives considered**:
+**Alternatives considered**: 
 - Generate plots from synthetic data (rejected: defeats purpose of real benchmarking)
 - Skip plots entirely (rejected: violates visualization requirements)
 **Implementation**: Need to extract metrics from JSONL episode data and generate matplotlib plots
@@ -49,7 +49,7 @@
 - **Usage**: Core plotting library for PDF generation
 - **Best practices**: Use vector outputs (PDF), consistent styling, proper axis labels
 
-### MoviePy Integration
+### MoviePy Integration  
 - **Status**: Listed in pyproject.toml dependencies
 - **Usage**: Video rendering and composition
 - **Best practices**: Frame-by-frame rendering, proper encoding, error handling for missing frames
@@ -78,7 +78,7 @@
 - JSONL data parsing (already implemented for aggregation)
 - PDF output generation (standard matplotlib functionality)
 
-### Medium Risk Items
+### Medium Risk Items  
 - MoviePy video rendering (new integration, but library is mature)
 - Performance impact of video rendering (may slow down benchmark completion)
 
@@ -91,7 +91,7 @@
 
 All research questions resolved. Implementation approach is clear:
 1. Extract real metrics from episode data for plotting
-2. Use environment replay methods for video rendering
+2. Use environment replay methods for video rendering  
 3. Integrate both into benchmark pipeline
 4. Add proper error handling and validation
 

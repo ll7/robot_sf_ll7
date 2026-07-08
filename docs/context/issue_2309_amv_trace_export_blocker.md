@@ -1,11 +1,11 @@
 # Issue #2309 AMV Trace Export Blocker
 
-Issue: [#2309](https://github.com/ll7/robot_sf_ll7/issues/2309)
-Parent issue: [#2159](https://github.com/ll7/robot_sf_ll7/issues/2159)
+Issue: [#2309](https://github.com/ll7/robot_sf_ll7/issues/2309)  
+Parent issue: [#2159](https://github.com/ll7/robot_sf_ll7/issues/2159)  
 Related issues: [#2168](https://github.com/ll7/robot_sf_ll7/issues/2168),
 [#2269](https://github.com/ll7/robot_sf_ll7/issues/2269),
-[#2281](https://github.com/ll7/robot_sf_ll7/issues/2281)
-Date: 2026-06-05
+[#2281](https://github.com/ll7/robot_sf_ll7/issues/2281)  
+Date: 2026-06-05  
 Status: historical failed-closed trace-export blocker; partially superseded by Issue #2405.
 
 Update 2026-06-06: Issue #2405 added the missing benchmark-worker pass-through for

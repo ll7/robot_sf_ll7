@@ -9,7 +9,7 @@ selection decisions.
 ## Scope
 
 * Include all planners present in the all-planners camera-ready contract:
-`prediction_planner` , `goal` , `social_force` , `orca` , `ppo` , `socnav_sampling` , `sacadrl` ,
+`prediction_planner` , `goal` , `social_force` , `orca` , `ppo` , `socnav_sampling` , `sacadrl` , 
 `socnav_bench` .
 * Use benchmark release protocol entrypoint (`run_benchmark_release.py`) instead of ad-hoc campaign
   invocation to preserve release-provenance stamping and publication bundle behavior.
@@ -118,7 +118,7 @@ Live log path:
 * Asset validation evidence:
   + command: `/home/luttkule/git/robot_sf_ll7/.venv/bin/python scripts/tools/prepare_socnav_assets.py --report-json output/tmp/socnav_asset_report.json`
   + report: `output/tmp/socnav_asset_report.json`
-  + missing required directories: `wayptnav_data`,  `sd3dis/stanford_building_parser_dataset`,
+  + missing required directories: `wayptnav_data`,  `sd3dis/stanford_building_parser_dataset`, 
  `sd3dis/stanford_building_parser_dataset/traversibles`
 
 * Local machine search found a SocNavBench source clone at `output/repos/SocNavBench`, but it only

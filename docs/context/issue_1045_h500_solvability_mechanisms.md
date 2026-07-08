@@ -1,6 +1,6 @@
 # Issue 1045 H500 Solvability Mechanisms
 
-Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1045>
+Related issue: <https://github.com/ll7/robot_sf_ll7/issues/1045>  
 Follow-up planning issue: <https://github.com/ll7/robot_sf_ll7/issues/1044>
 
 ## Goal

@@ -25,8 +25,8 @@ from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.report_table import compute_table, format_markdown
 
 records = read_jsonl("output/benchmarks/episodes.jsonl")
-rows = compute_table(records, metrics=["collisions", "comfort_exposure"])
-md = format_markdown(rows, metrics=["collisions", "comfort_exposure"])
+rows = compute_table(records, metrics=["collisions", "comfort_exposure"]) 
+md = format_markdown(rows, metrics=["collisions", "comfort_exposure"]) 
 open("output/benchmarks/baseline_table.md", "w").write(md)
 ```
 

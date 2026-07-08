@@ -1,7 +1,7 @@
 # Configuration Hierarchy and Best Practices
 
-**Status**: Active
-**Last Updated**: 2025-01-11
+**Status**: Active  
+**Last Updated**: 2025-01-11  
 **Related**: [Development Guide](../dev_guide.md), [Environment Overview](../ENVIRONMENT.md)
 
 ## Overview

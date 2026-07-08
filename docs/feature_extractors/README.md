@@ -39,7 +39,7 @@ model.learn(total_timesteps=100_000)
 - **Parameters**: ~5K (conv mode) or 0 (flatten mode)
 - **Use Case**: Baseline comparison, established performance
 
-### 2. MLP Feature Extractor
+### 2. MLP Feature Extractor 
 - **File**: `robot_sf/feature_extractors/mlp_extractor.py`
 - **Description**: Simple Multi-Layer Perceptron approach
 - **Parameters**: 50K-250K (configurable)
@@ -168,7 +168,7 @@ tests/
 |-----------|------------|-------|----------|
 | Dynamics (Conv) | ~5K | Medium | Baseline, established |
 | Dynamics (Flatten) | 0 | Fast | Simple baseline |
-| MLP Small | ~55K | Fast | Quick experiments |
+| MLP Small | ~55K | Fast | Quick experiments |  
 | MLP Large | ~254K | Medium | Better performance |
 | Attention Small | ~35K | Medium | Interpretable results |
 | Attention Large | ~200K | Slow | Best context modeling |

@@ -169,10 +169,10 @@ the benchmark and its audit surfaces are fully healthy.
 
 A new tag is reasonable only if the release notes explicitly state:
 
-* benchmark execution completed successfully,
-* the paper-facing handoff is the authoritative metric source,
-* AMV coverage is still `warn`,
-* SNQI contract is still `warn`,
+* benchmark execution completed successfully, 
+* the paper-facing handoff is the authoritative metric source, 
+* AMV coverage is still `warn`, 
+* SNQI contract is still `warn`, 
 * several planners remain adapter-mediated.
 
 If the next tag is intended only to include the tracked publication snapshot in source control, that

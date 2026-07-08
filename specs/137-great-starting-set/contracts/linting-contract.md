@@ -8,7 +8,7 @@ This contract defines the behavioral guarantees and quality standards for the ex
 ### Rule Application Contract
 - **Precondition**: Valid Python source files in the repository
 - **Action**: Run `ruff check --fix .` on the codebase
-- **Postcondition**:
+- **Postcondition**: 
   - No syntax errors remain
   - Auto-fixable style issues are corrected
   - Non-fixable issues are flagged with clear error messages
@@ -23,7 +23,7 @@ This contract defines the behavioral guarantees and quality standards for the ex
 ### Per-File Ignore Contract
 - **Precondition**: Source files match defined glob patterns
 - **Action**: Apply per-file ignores during linting
-- **Postcondition**:
+- **Postcondition**: 
   - Tests can use assert statements without warnings
   - Scripts can use print statements without warnings
   - Examples and docs have appropriate leniencies
@@ -70,7 +70,7 @@ This contract defines the behavioral guarantees and quality standards for the ex
 ### CI Integration Contract
 - **Precondition**: Code changes committed
 - **Action**: CI runs linting
-- **Postcondition**:
+- **Postcondition**: 
   - Pass/fail status reported
   - Execution time logged
   - No regressions in failure count
@@ -78,7 +78,7 @@ This contract defines the behavioral guarantees and quality standards for the ex
 ### Local Development Contract
 - **Precondition**: Developer runs `ruff check --fix`
 - **Action**: Linting executes
-- **Postcondition**:
+- **Postcondition**: 
   - Fixes applied automatically where possible
   - Remaining issues reported clearly
   - No data loss or corruption

@@ -18,7 +18,7 @@
 ### Tests First (TDD Approach)
 
 - [x] T001 [P] Add test case `test_per_ped_force_quantiles_no_peds` in `tests/test_metrics.py` - verify K=0 returns NaN for all keys
-- [x] T002 [P] Add test case `test_per_ped_force_quantiles_single_ped` in `tests/test_metrics.py` - verify single ped quantiles equal individual quantiles
+- [x] T002 [P] Add test case `test_per_ped_force_quantiles_single_ped` in `tests/test_metrics.py` - verify single ped quantiles equal individual quantiles  
 - [x] T003 [P] Add test case `test_per_ped_force_quantiles_multi_ped_varying` in `tests/test_metrics.py` - verify multi-ped with varying forces shows per-ped mean differs from aggregated
 - [x] T004 [P] Add test case `test_per_ped_force_quantiles_all_identical` in `tests/test_metrics.py` - verify all identical forces yield identical quantiles
 - [x] T005 [P] Add test case `test_per_ped_force_quantiles_in_compute_all` in `tests/test_metrics.py` - verify keys present in compute_all_metrics output

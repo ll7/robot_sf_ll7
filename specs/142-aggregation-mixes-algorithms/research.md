@@ -1,7 +1,7 @@
 # Research Log – Preserve Algorithm Separation in Benchmark Aggregation
 
-**Spec**: [/specs/142-aggregation-mixes-algorithms/spec.md](spec.md)
-**Date**: 2025-10-06
+**Spec**: [/specs/142-aggregation-mixes-algorithms/spec.md](spec.md)  
+**Date**: 2025-10-06  
 **Participants**: GitHub Copilot automated planning agent
 
 ## Context Recap

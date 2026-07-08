@@ -20,3 +20,4 @@ Purpose: Define expected inputs/outputs and error modes for the visualization he
 ## Contract Tests (Phase 1 intent)
 - One failing test per function that imports the contract and asserts signature & common errors.
 - The tests live under `tests/unit/benchmark/` and will be implemented after moving the helpers.
+

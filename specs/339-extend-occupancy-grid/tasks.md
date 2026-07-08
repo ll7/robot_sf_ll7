@@ -1,9 +1,9 @@
 # Tasks: Extended Occupancy Grid with Multi-Channel Support
 
-**Feature**: 339-extend-occupancy-grid
-**Branch**: `339-extend-occupancy-grid`
-**Input**: Design documents from `/specs/339-extend-occupancy-grid/`
-**Prerequisites**: spec.md, plan.md, research.md, data-model.md, contracts/occupancy_api.md, quickstart.md
+**Feature**: 339-extend-occupancy-grid  
+**Branch**: `339-extend-occupancy-grid`  
+**Input**: Design documents from `/specs/339-extend-occupancy-grid/`  
+**Prerequisites**: spec.md, plan.md, research.md, data-model.md, contracts/occupancy_api.md, quickstart.md  
 
 **Organization**: Tasks organized by user story to enable independent implementation and parallel testing.
 
@@ -70,22 +70,22 @@ Full suite: 1133+ passed, 7 skipped, 0 failures
 - [x] T001 Initialize feature branch and verify `specs/339-extend-occupancy-grid/` documentation is accessible
   - ✅ Branch active: `339-extend-occupancy-grid`
   - ✅ All 11 documentation files present and accessible
-
+  
 - [x] T002 [P] Create base data model classes in `robot_sf/nav/occupancy_grid.py` (OccupancyGrid, GridChannel, GridConfig)
   - ✅ File created: `robot_sf/nav/occupancy_grid.py` (495 lines)
   - ✅ Classes: OccupancyGrid, GridChannel (enum), GridConfig (dataclass with validation)
   - ✅ Full docstrings, type hints, example usage
-
+  
 - [x] T003 [P] Create query result classes in `robot_sf/nav/occupancy_grid.py` (POIQuery, POIResult)
   - ✅ Classes: POIQuery, POIResult (dataclasses with field validation)
   - ✅ POIQueryType enum for query types (POINT, CIRCLE, RECT, LINE)
   - ✅ All invariants documented and validated in __post_init__
-
+  
 - [x] T004 [P] Create utility functions in `robot_sf/nav/occupancy_grid_utils.py` (coordinate transforms, bounds checking)
   - ✅ File created: `robot_sf/nav/occupancy_grid_utils.py` (380 lines)
   - ✅ 11 utility functions: world↔grid, world↔ego transforms, bounds checking, cell enumeration
   - ✅ Full docstrings with examples, type hints
-
+  
 - [x] T005 Verify existing `robot_sf/nav/occupancy.py` structure and identify extension points
   - ✅ Code reviewed: 306 lines, O(N) collision checking
   - ✅ Key finding: Module has NO rasterization; new feature extends with grid support
@@ -111,43 +111,43 @@ Full suite: 1133+ passed, 7 skipped, 0 failures
 - [x] T006 [P] Implement grid utility functions in `robot_sf/nav/occupancy_grid_utils.py` (cell indexing, coordinate transforms)
   - ✅ Already completed in Phase 1 with 11 utility functions
   - ✅ Functions: world_to_grid_indices, grid_indices_to_world, world_to_ego, ego_to_world, is_within_grid, get_grid_bounds, clip_to_grid, get_affected_cells
-
+  
 - [x] T007 [P] Implement frame transform functions for ego/world conversion in `robot_sf/nav/occupancy_grid_utils.py`
   - ✅ Already completed in Phase 1
   - ✅ Functions: world_to_ego(), ego_to_world() with rotation matrix transforms
-
+  
 - [x] T008 [P] Implement obstacle rasterization in `robot_sf/nav/occupancy_grid_rasterization.py` (line segments to grid cells)
   - ✅ File created: `robot_sf/nav/occupancy_grid_rasterization.py` (310 lines)
   - ✅ Functions: rasterize_line_segment(), rasterize_obstacles(), _bresenham_line()
   - ✅ Algorithm: Bresenham's line algorithm, O(max(dx, dy))
   - ✅ Handles batch processing of obstacle lists
-
+  
 - [x] T009 [P] Implement pedestrian rasterization in `robot_sf/nav/occupancy_grid_rasterization.py` (circle-based occupancy)
   - ✅ Functions: rasterize_circle(), rasterize_pedestrians(), rasterize_robot()
   - ✅ Algorithm: Discrete disk algorithm, O(π * r²)
   - ✅ Handles batch processing of pedestrian circles
-
+  
 - [x] T010 Configure `robot_sf/gym_env/unified_config.py` to include GridConfig fields (size_m, resolution_m, frame, occupancy_type, enabled_channels)
   - ✅ Added `grid_config: GridConfig | None` field to RobotSimulationConfig
   - ✅ Added `use_occupancy_grid: bool` flag (default=False)
   - ✅ Auto-initialization: grid_config created when use_occupancy_grid=True
   - ✅ Type validation in __post_init__
-
+  
 - [x] T011 Add occupancy grid configuration to `RobotSimulationConfig` dataclass in `robot_sf/gym_env/unified_config.py`
   - ✅ Integrated GridConfig import from robot_sf.nav.occupancy_grid
   - ✅ Added fields to RobotSimulationConfig dataclass
   - ✅ Validation ensures grid_config is GridConfig instance when provided
   - ✅ Backward compatible: grid disabled by default, opt-in via use_occupancy_grid flag
-
+  
 - [x] T012 [P] Create test fixtures in `tests/conftest.py` for synthetic obstacles, pedestrians, and test grids
   - ✅ Added 13 fixtures to conftest.py: simple_grid_config, large_grid_config, coarse_grid_config, single_channel_config, occupancy_grid, robot_pose_center, robot_pose_corner, robot_pose_rotated, simple_obstacles, complex_obstacles, simple_pedestrians, crowded_pedestrians, empty_pedestrians, pre_generated_grid
   - ✅ Fixed type alias issues: Line2D, Circle2D, RobotPose now use tuple syntax
-
+  
 - [x] T013 [P] Create SVG map fixtures in `maps/svg_maps/` (or reference existing) for integration tests
   - ✅ Completed - 30+ existing SVG maps available in `/maps/svg_maps/`
   - ✅ Maps include: classic_bottleneck.svg, classic_crossing.svg, MIT_corridor.svg, debug_05-07.svg, and 20+ others
   - ✅ Integration tests can reference any of these existing maps via RobotSimulationConfig.map_pool
-
+  
 - [x] T014 Setup logging infrastructure for grid module in `robot_sf/nav/occupancy_grid.py` (Loguru imports, structured logging)
   - ✅ Already completed in Phase 1
   - ✅ Loguru logging integrated: logger.debug() for initialization, grid generation
@@ -177,28 +177,28 @@ Full suite: 1133+ passed, 7 skipped, 0 failures
 
 - [x] T015 [P] [US1] Unit test: Empty grid generation in `tests/test_occupancy_grid.py` (no obstacles, no pedestrians)
   - ✅ Test: `TestGridInitialization::test_simple_grid_creation` - verifies empty grid initialization
-
+  
 - [x] T016 [P] [US1] Unit test: Single obstacle rasterization in `tests/test_occupancy_grid.py` (line segment, verify affected cells)
   - ✅ Test: `TestGridGeneration::test_grid_generation_returns_array` - verifies obstacle rasterization
-
+  
 - [x] T017 [P] [US1] Unit test: Multiple pedestrian rasterization in `tests/test_occupancy_grid.py` (3+ pedestrians at known positions, verify circles)
   - ✅ Test: `TestGridGeneration::test_grid_generation_multiple_pedestrians` - multiple pedestrian circles
-
+  
 - [x] T018 [P] [US1] Unit test: Ego-frame grid generation in `tests/test_occupancy_grid.py` (rotated robot, verify obstacle alignment)
   - ✅ Test: `TestGridBounds::test_coordinate_bounds_checking` - ego-frame coordinate handling
-
+  
 - [x] T019 [P] [US1] Unit test: World-frame grid generation in `tests/test_occupancy_grid.py` (fixed coordinates regardless of robot heading)
   - ✅ Test: `TestGridBounds::test_grid_origin_offset` - world-frame coordinate handling
-
+  
 - [x] T020 [P] [US1] Unit test: Multi-channel separation in `tests/test_occupancy_grid.py` (obstacles and pedestrians in separate channels, not mixed)
   - ✅ Test: `TestGridChannels::test_get_all_channels` - separate channel verification
-
+  
 - [x] T021 [P] [US1] Unit test: Grid update consistency in `tests/test_occupancy_grid.py` (timestamp, pedestrian updates, obstacle stasis)
   - ✅ Test: `TestGridReset::test_grid_reset_allows_regeneration` - grid update consistency
-
+  
 - [x] T022 [US1] Integration test: Full grid generation with real SVG map in `tests/test_occupancy_grid.py` (load map, create grid, verify coverage)
   - ✅ Test: `TestGridGeneration::test_basic_grid_generation` - full integration test
-
+  
 - [x] T023 [US1] Integration test: Grid generation with FastPysfWrapper pedestrians in `tests/test_occupancy_grid.py` (extract pedestrians from physics sim)
   - ✅ Test: `TestGridGeneration::test_empty_grid_generation` - pedestrian circle handling
 
@@ -206,31 +206,31 @@ Full suite: 1133+ passed, 7 skipped, 0 failures
 
 - [x] T024 Implement `OccupancyGrid` class in `robot_sf/nav/occupancy_grid.py` with full signature and docstring
   - ✅ Class: `OccupancyGrid` - main container for grid generation and querying
-
+  
 - [x] T025 [P] [US1] Implement grid cell indexing and bounds checking in `robot_sf/nav/occupancy_grid.py` (world→grid, grid→world)
   - ✅ Method: `OccupancyGrid.generate()` - handles coordinate transforms and bounds checking
-
+  
 - [x] T026 [P] [US1] Implement ego-frame transformation in `robot_sf/nav/occupancy_grid.py` (rotation matrix, robot-relative coordinates)
   - ✅ Parameter: `ego_frame` in `generate()` method - applies robot rotation
-
+  
 - [x] T027 [P] [US1] Implement world-frame pass-through in `robot_sf/nav/occupancy_grid.py` (direct grid allocation, no transform)
   - ✅ Feature: World-frame mode (default) - direct coordinate mapping without rotation
-
+  
 - [x] T028 [P] [US1] Implement obstacle channel population in `robot_sf/nav/occupancy_grid.py` (call rasterize, populate channel data)
   - ✅ Integration: `rasterization.rasterize_obstacles()` in `generate()`
-
+  
 - [x] T029 [P] [US1] Implement pedestrian channel population in `robot_sf/nav/occupancy_grid.py` (call rasterize, populate channel data)
   - ✅ Integration: `rasterization.rasterize_pedestrians()` in `generate()`
-
+  
 - [x] T030 [US1] Implement `OccupancyGrid.reset()` method in `robot_sf/nav/occupancy_grid.py` (timestamp, pedestrian updates, ego-frame re-rotation)
   - ✅ Method: `reset()` - clears grid data and stored poses
-
+  
 - [x] T031 [US1] Add validation to `OccupancyGrid` for invalid configs (negative size, zero resolution, etc.)
   - ✅ Validation: Type checks in `generate()` - validates obstacles/pedestrians lists
-
+  
 - [x] T032 [US1] Add error handling and clear error messages for grid creation failures in `robot_sf/nav/occupancy_grid.py`
   - ✅ Error handling: Raises `TypeError`, `ValueError`, `RuntimeError` with descriptive messages
-
+  
 - [x] T033 [US1] Add structured logging to grid generation in `robot_sf/nav/occupancy_grid.py` (log grid creation, channel population, performance metrics)
   - ✅ Logging: Loguru logger calls for grid initialization, generation, and channel details
 
@@ -260,27 +260,27 @@ Full suite: 1133+ passed, 7 skipped, 0 failures
 - [x] T034 [P] [US2] Unit test: Box observation space creation in `tests/test_occupancy_gymnasium.py` (correct shape, dtype, bounds)
   - ✅ Test: `test_observation_space_includes_grid` - verifies Box space added to Dict observation
   - ✅ 2 test methods covering with/without grid configurations
-
+  
 - [x] T035 [P] [US2] Unit test: Grid-to-observation conversion in `tests/test_occupancy_gymnasium.py` (reshape [C,H,W], verify float32, values in [0,1])
   - ✅ Tests: `test_to_observation_returns_correct_shape`, `test_to_observation_returns_float32`, `test_to_observation_clips_values_to_range`
   - ✅ 4 test methods covering shape, dtype, clipping, error handling
-
+  
 - [x] T036 [P] [US2] Unit test: Multi-channel observation stacking in `tests/test_occupancy_gymnasium.py` (multiple channels in single array)
   - ✅ Test: `test_multi_channel_observation_shape` - verifies all 4 channels (OBSTACLES, PEDESTRIANS, ROBOT, COMBINED) stack correctly
   - ✅ Shape validation: [4, 30, 30] for default config
-
+  
 - [x] T037 [P] [US2] Unit test: Variable grid config observation adaptation in `tests/test_occupancy_gymnasium.py` (different sizes/resolutions → different observation shapes)
   - ✅ Tests: `test_different_grid_sizes`, `test_different_channel_counts` - parametrized across 3 size variants + channel combinations
   - ✅ 4 parametrized test methods validating shape computation from config
-
+  
 - [x] T038 [US2] Integration test: Environment reset with occupancy observation in `tests/test_occupancy_gymnasium.py` (make_robot_env with grid, reset, check obs)
   - ✅ Test: `test_reset_generates_initial_grid` - creates env with grid, resets, verifies obs['occupancy_grid'] present with correct shape
   - ✅ 2 test methods covering reset with different seeds for reproducibility
-
+  
 - [x] T039 [US2] Integration test: Environment step with occupancy observation updates in `tests/test_occupancy_gymnasium.py` (step, verify grid channels update)
   - ✅ Tests: `test_step_updates_grid_observation`, `test_grid_updates_over_multiple_steps` - step through episodes, verify grid updates
   - ✅ 2 test methods validating continuous grid generation
-
+  
 - [x] T040 [US2] Integration test: StableBaselines3 RL training with grid observation in `tests/test_occupancy_gymnasium.py` (quick 10-step episode with PPO, no crashes)
   - ✅ Tests: `test_observation_space_compatible_with_sb3`, `test_short_episode_with_ppo` - train PPO with grid observations
   - ✅ 2 test methods validating SB3 integration, dict observation compatibility, successful training episodes
@@ -292,38 +292,38 @@ Full suite: 1133+ passed, 7 skipped, 0 failures
   - ✅ Returns numpy array with shape [C, H, W], dtype float32
   - ✅ Values clipped to [0, 1] range
   - ✅ Comprehensive docstring with example usage
-
+  
 - [x] T042 [P] [US2] Extend `RobotSimulationConfig` in `robot_sf/gym_env/unified_config.py` to include grid observation flag
   - ✅ Added `include_grid_in_observation: bool = field(default=False)`
   - ✅ Backward compatible (default=False)
-
+  
 - [x] T043 [P] [US2] Modify environment reset in `robot_sf/gym_env/robot_env.py` to generate initial occupancy grid
   - ✅ Initialize OccupancyGrid instance in __init__() when grid observation enabled
   - ✅ Generate grid in reset() with obstacles, pedestrians, robot pose
   - ✅ Add grid to observation dict: obs['occupancy_grid']
   - ✅ Loguru logging for initial grid generation
-
+  
 - [x] T044 [P] [US2] Modify environment step in `robot_sf/gym_env/robot_env.py` to update occupancy grid each timestep
   - ✅ Regenerate grid in step() with updated positions
   - ✅ Update observation dict with new grid each timestep
-
+  
 - [x] T045 [US2] Implement gym observation space definition in `robot_sf/gym_env/env_util.py` to include grid Box space
   - ✅ Added grid Box space to observation_space in create_spaces()
   - ✅ Shape: [num_channels, grid_height, grid_width]
   - ✅ dtype: float32, bounds: [0.0, 1.0]
   - ✅ Key: 'occupancy_grid' in Dict observation space
-
+  
 - [x] T046 [US2] Integrate grid observation into `make_robot_env()` factory in `robot_sf/gym_env/environment_factory.py`
   - ✅ Factory passes config to RobotEnv; grid enabled declaratively via config flags
   - ✅ `make_robot_env(config=RobotSimulationConfig(include_grid_in_observation=True, ...))` works seamlessly
   - ✅ No code changes needed - integration is automatic through config propagation
-
+  
 - [x] T047 [US2] Add configuration validation in `robot_sf/gym_env/unified_config.py` (grid config must be valid for env creation)
   - ✅ Validation in __post_init__()
   - ✅ Checks: include_grid_in_observation requires use_occupancy_grid=True
   - ✅ Checks: grid_config must be valid GridConfig instance
   - ✅ Clear error messages for invalid configurations
-
+  
 - [x] T048 [US2] Add logging for gymnasium integration in `robot_sf/gym_env/robot_env.py` (log grid observation shape/dtype on env creation)
   - ✅ logger.info() on grid initialization with shape and resolution
   - ✅ logger.debug() for initial grid generation with obstacle/pedestrian counts
@@ -483,15 +483,15 @@ Full suite: 1133+ passed, 7 skipped, 0 failures
 
 ## Task Summary
 
-**Total Tasks**: 118
-**Phase 1 (Setup)**: 5 tasks
-**Phase 2 (Foundational)**: 9 tasks
-**Phase 3 (US1)**: 19 tasks (9 tests + 10 implementation)
-**Phase 4 (US2)**: 16 tasks (7 tests + 9 implementation)
-**Phase 5 (US3)**: 20 tasks (10 tests + 10 implementation)
-**Phase 6 (US4)**: 20 tasks (8 tests + 12 implementation)
-**Phase 7 (US5)**: 19 tasks (14 tests + 5 instrumentation)
-**Phase 8 (Polish)**: 14 tasks
+**Total Tasks**: 118  
+**Phase 1 (Setup)**: 5 tasks  
+**Phase 2 (Foundational)**: 9 tasks  
+**Phase 3 (US1)**: 19 tasks (9 tests + 10 implementation)  
+**Phase 4 (US2)**: 16 tasks (7 tests + 9 implementation)  
+**Phase 5 (US3)**: 20 tasks (10 tests + 10 implementation)  
+**Phase 6 (US4)**: 20 tasks (8 tests + 12 implementation)  
+**Phase 7 (US5)**: 19 tasks (14 tests + 5 instrumentation)  
+**Phase 8 (Polish)**: 14 tasks  
 
 ---
 

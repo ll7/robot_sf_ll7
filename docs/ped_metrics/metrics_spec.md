@@ -55,7 +55,7 @@ Threshold provenance and reproducibility contract:
 
 #### Mean Interpersonal Distance
 - **Definition**: Average minimum distance per timestep
-- **Type**: Float (meters)
+- **Type**: Float (meters) 
 - **Range**: [0, ∞)
 - **Purpose**: Overall proximity behavior
 

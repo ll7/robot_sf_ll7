@@ -53,3 +53,4 @@ Run a broader matched `nominal_sanity` or purpose-built AMV actuation slice only
 surface can keep synthetic actuation metrics in the planner comparison. This PR updates
 `scripts/tools/compare_policy_search_candidates.py` so future comparisons preserve command clip,
 yaw saturation, and signed braking peak columns.
+

@@ -68,7 +68,7 @@ model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs)
 # Define different configurations
 extractors = {
     'baseline': FeatureExtractorPresets.dynamics_original(),
-    'fast': FeatureExtractorPresets.mlp_small(),
+    'fast': FeatureExtractorPresets.mlp_small(), 
     'powerful': FeatureExtractorPresets.mlp_large(),
     'interpretable': FeatureExtractorPresets.attention_small()
 }
@@ -77,15 +77,15 @@ extractors = {
 results = {}
 for name, config in extractors.items():
     print(f"Training with {name} extractor...")
-
+    
     policy_kwargs = config.get_policy_kwargs()
     model = PPO("MultiInputPolicy", env, policy_kwargs=policy_kwargs)
     model.learn(total_timesteps=50_000)
-
+    
     # Evaluate performance
     mean_reward = evaluate_policy(model, env, n_eval_episodes=10)[0]
     results[name] = mean_reward
-
+    
 print("Results:", results)
 ```
 
@@ -103,7 +103,7 @@ config = FeatureExtractorPresets.lightweight_cnn()
 
 # Short training with few environments
 env = make_vec_env(lambda: make_robot_env(), n_envs=4)
-model = PPO("MultiInputPolicy", env,
+model = PPO("MultiInputPolicy", env, 
            policy_kwargs=config.get_policy_kwargs(),
            n_steps=128)  # Smaller batch size
 model.learn(total_timesteps=50_000)
@@ -291,26 +291,26 @@ from optuna.integration import ChainedTrial
 
 def objective(trial):
     # Sample hyperparameters
-    ray_dims = [trial.suggest_categorical(f'ray_dim_{i}', [32, 64, 128, 256])
+    ray_dims = [trial.suggest_categorical(f'ray_dim_{i}', [32, 64, 128, 256]) 
                 for i in range(trial.suggest_int('n_ray_layers', 1, 3))]
     dropout = trial.suggest_float('dropout_rate', 0.0, 0.3)
-
+    
     # Create config
     config = create_feature_extractor_config(
         "mlp",
         ray_hidden_dims=ray_dims,
         dropout_rate=dropout
     )
-
+    
     # Train model
     env = make_vec_env(lambda: make_robot_env(), n_envs=4)
     model = PPO("MultiInputPolicy", env, policy_kwargs=config.get_policy_kwargs())
     model.learn(total_timesteps=100_000)
-
+    
     # Evaluate
     mean_reward = evaluate_policy(model, env, n_eval_episodes=5)[0]
     env.close()
-
+    
     return mean_reward
 
 # Run optimization
@@ -338,7 +338,7 @@ def ensemble_predict(obs):
     for model in models.values():
         action, _ = model.predict(obs, deterministic=True)
         predictions.append(action)
-
+    
     # Simple averaging (or use more sophisticated combination)
     return np.mean(predictions, axis=0)
 
@@ -356,7 +356,7 @@ base_model = PPO("MultiInputPolicy", env, policy_kwargs=base_config.get_policy_k
 base_model.learn(total_timesteps=1_000_000)
 
 # Fine-tune with different extractor
-finetune_config = FeatureExtractorPresets.attention_small()
+finetune_config = FeatureExtractorPresets.attention_small() 
 finetune_model = PPO("MultiInputPolicy", env, policy_kwargs=finetune_config.get_policy_kwargs())
 
 # Initialize policy network from base model (feature extractor will be different)
@@ -444,7 +444,7 @@ sbatch my_extractor_job.slurm
        config = create_feature_extractor_config("mlp", invalid_param=True)
    except Exception as e:
        print(f"Config error: {e}")
-
+   
    # Check available presets
    available = [attr for attr in dir(FeatureExtractorPresets) if not attr.startswith('_')]
    print("Available presets:", available)

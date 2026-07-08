@@ -1,7 +1,7 @@
 # Research & Technical Decisions: Automated Research Reporting
 
-**Feature**: 270-imitation-report
-**Phase**: 0 (Research)
+**Feature**: 270-imitation-report  
+**Phase**: 0 (Research)  
 **Date**: 2025-11-21
 
 ## Overview
@@ -150,7 +150,7 @@ manifest_path = tracker_root / run_id / "manifest.json"
 with manifest_path.open() as f:
     data = json.load(f)
     record = PipelineRunRecord(**data)
-
+    
 # Extract timing, telemetry samples, recommendations
 step_durations = {s.step_id: s.duration_seconds for s in record.steps}
 telemetry_count = record.summary.get("telemetry_samples", 0)
@@ -268,8 +268,8 @@ ablation_results = {
 
 **Caption Template**:
 ```
-Figure 1: Learning curves comparing baseline PPO (blue) and BC-pretrained PPO (orange)
-over training timesteps. Shaded regions indicate 95% bootstrap confidence intervals.
+Figure 1: Learning curves comparing baseline PPO (blue) and BC-pretrained PPO (orange) 
+over training timesteps. Shaded regions indicate 95% bootstrap confidence intervals. 
 Sample efficiency gain visible as earlier convergence. (n=3 seeds)
 ```
 

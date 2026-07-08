@@ -1,6 +1,6 @@
 # Test Contracts: Configuration Hierarchy Documentation
 
-**Feature**: 244-document-config-hierarchy
+**Feature**: 244-document-config-hierarchy  
 **Date**: 2025-11-11
 
 ## Test Requirements Overview
@@ -15,8 +15,8 @@ This feature requires:
 
 ### Test: Legacy Config Classes Emit DeprecationWarning
 
-**Given**: A user instantiates a legacy config class
-**When**: The class `__post_init__` method runs
+**Given**: A user instantiates a legacy config class  
+**When**: The class `__post_init__` method runs  
 **Then**: A `DeprecationWarning` is emitted with the canonical replacement class name
 
 **Test Cases**:
@@ -27,7 +27,7 @@ def test_env_settings_deprecated():
     with pytest.warns(DeprecationWarning, match="RobotSimulationConfig"):
         from robot_sf.gym_env.env_config import EnvSettings
         config = EnvSettings()
-
+    
 def test_ped_env_settings_deprecated():
     """PedEnvSettings emits DeprecationWarning mentioning PedestrianSimulationConfig"""
     with pytest.warns(DeprecationWarning, match="PedestrianSimulationConfig"):
@@ -61,8 +61,8 @@ def test_base_env_settings_deprecated():
 
 ### Test: Existing Tests Pass After Deprecation Warnings
 
-**Given**: Deprecation warnings added to legacy config classes
-**When**: The full test suite runs
+**Given**: Deprecation warnings added to legacy config classes  
+**When**: The full test suite runs  
 **Then**: All existing tests pass (no regressions)
 
 **Verification Command**:
@@ -84,8 +84,8 @@ uv run pytest tests -v
 
 ### Test: Configuration Documentation is Linked from Index
 
-**Given**: The new `docs/architecture/configuration.md` file exists
-**When**: A user navigates to `docs/README.md`
+**Given**: The new `docs/architecture/configuration.md` file exists  
+**When**: A user navigates to `docs/README.md`  
 **Then**: They find a link to the configuration documentation
 
 **Manual Verification**:
@@ -108,8 +108,8 @@ uv run pytest tests -v
 
 ### Test: Migration Code Examples Are Syntactically Correct
 
-**Given**: Migration examples in `docs/architecture/configuration.md`
-**When**: Examples are extracted and run through Python syntax checker
+**Given**: Migration examples in `docs/architecture/configuration.md`  
+**When**: Examples are extracted and run through Python syntax checker  
 **Then**: All examples parse without syntax errors
 
 **Verification Approach**:
@@ -121,10 +121,10 @@ def test_migration_examples_valid_syntax():
     doc_path = "docs/architecture/configuration.md"
     with open(doc_path) as f:
         content = f.read()
-
+    
     # Extract code blocks (simplified - actual implementation would be more robust)
     code_blocks = extract_python_code_blocks(content)
-
+    
     for i, code in enumerate(code_blocks):
         try:
             ast.parse(code)
@@ -146,8 +146,8 @@ def test_migration_examples_valid_syntax():
 
 ### Test: Runtime Parameters Override YAML and Code Defaults
 
-**Given**: A config with code default, YAML override, and runtime override
-**When**: The environment is created via factory function
+**Given**: A config with code default, YAML override, and runtime override  
+**When**: The environment is created via factory function  
 **Then**: Runtime parameter takes precedence
 
 **Example Test**:
@@ -157,16 +157,16 @@ def test_config_precedence_runtime_wins():
     # Code default: sim_time_in_secs = 200.0 (in SimulationSettings)
     # YAML override: sim_time_in_secs = 150.0 (hypothetical)
     # Runtime override: sim_time_in_secs = 100.0 (via config kwarg)
-
+    
     from robot_sf.gym_env.unified_config import RobotSimulationConfig
     from robot_sf.sim.sim_config import SimulationSettings
-
+    
     runtime_config = RobotSimulationConfig(
         sim_config=SimulationSettings(sim_time_in_secs=100.0)
     )
-
+    
     env = make_robot_env(config=runtime_config)
-
+    
     # Verify runtime value is used
     assert env.config.sim_config.sim_time_in_secs == 100.0
 ```
@@ -185,8 +185,8 @@ def test_config_precedence_runtime_wins():
 
 ### Test: Warning Messages Include Required Information
 
-**Given**: A legacy config class is instantiated
-**When**: The deprecation warning is emitted
+**Given**: A legacy config class is instantiated  
+**When**: The deprecation warning is emitted  
 **Then**: The message contains:
 - Legacy class name
 - Canonical replacement class name
@@ -198,16 +198,16 @@ def test_config_precedence_runtime_wins():
 def test_deprecation_message_format():
     """Deprecation warning includes all required information"""
     import warnings
-
+    
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         from robot_sf.gym_env.env_config import EnvSettings
         config = EnvSettings()
-
+        
         assert len(w) == 1
         assert issubclass(w[0].category, DeprecationWarning)
         message = str(w[0].message)
-
+        
         # Check required content
         assert "EnvSettings" in message
         assert "deprecated" in message.lower()
@@ -259,5 +259,5 @@ All contracts must pass for feature completion:
 - ⚠️ Contract 5: Config precedence behavior (optional)
 - ✅ Contract 6: Warning messages are complete
 
-Minimum viable: Contracts 1, 2, 3, 4, 6 must pass.
+Minimum viable: Contracts 1, 2, 3, 4, 6 must pass.  
 Optional enhancement: Contract 5 adds value but not required for initial release.

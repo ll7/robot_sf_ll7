@@ -24,7 +24,7 @@ The migration has been successfully completed! Here's what was accomplished:
 ### ✅ Files Updated
 - `pyproject.toml` - Consolidated main dependencies and configuration
 - `fast-pysf/pyproject.toml` - Modernized subproject configuration
-- `uv.toml` - Workspace-level uv configuration
+- `uv.toml` - Workspace-level uv configuration  
 - `README.md` - Updated installation and development instructions
 - `.github/workflows/ci.yml` - Updated CI to use uv
 - `fast-pysf/.github/workflows/ci.yml` - Updated subproject CI
@@ -34,7 +34,7 @@ The migration has been successfully completed! Here's what was accomplished:
 
 ### ✅ Legacy Files Removed
 - `requirements.txt` - Dependencies now in pyproject.toml
-- `fast-pysf/requirements.txt` - Dependencies now in fast-pysf/pyproject.toml
+- `fast-pysf/requirements.txt` - Dependencies now in fast-pysf/pyproject.toml  
 - `fast-pysf/setup.py` - Configuration now in fast-pysf/pyproject.toml
 
 The repository is now fully modernized with `uv` and ready for efficient Python development!
@@ -49,7 +49,7 @@ This document outlines the migration from the old pip/requirements.txt setup to 
 
 ### Before (Old Setup)
 - Separate `requirements.txt` files for main project and fast-pysf
-- Manual virtual environment management
+- Manual virtual environment management 
 - Mixed dependency specification across setup.py and requirements files
 - Complex installation process with multiple steps
 

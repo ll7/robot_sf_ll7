@@ -22,7 +22,7 @@ The trajectory visualization feature allows you to display movement trails of en
 ### Trajectory Controls
 - **V**: Toggle trajectory display on/off
 - **B**: Increase trail length (+20 points)
-- **C**: Decrease trail length (-20 points)
+- **C**: Decrease trail length (-20 points)  
 - **X**: Clear all trajectory histories
 
 ### Existing Playback Controls
@@ -106,7 +106,7 @@ analyzer overlay.
 ```python
 # Trajectory storage
 robot_trajectory: Deque[Tuple[float, float]]
-ped_trajectories: Dict[int, Deque[Tuple[float, float]]]
+ped_trajectories: Dict[int, Deque[Tuple[float, float]]]  
 ego_ped_trajectory: Deque[Tuple[float, float]]
 ```
 
@@ -120,7 +120,7 @@ ego_ped_trajectory: Deque[Tuple[float, float]]
 
 ### Trail Length
 - **Default**: 100 points
-- **Minimum**: 10 points
+- **Minimum**: 10 points  
 - **Maximum**: 500 points
 - **Adjustment**: ±20 points per key press
 

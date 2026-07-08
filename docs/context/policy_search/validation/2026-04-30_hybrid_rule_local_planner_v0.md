@@ -55,3 +55,4 @@ Paper-facing release runs remain out of scope for this first implementation step
   recovery, and ensemble variants require separate benchmark-driven iterations.
 - Existing experimental planners (`risk_dwa`, `mppi_social`, `teb`, `hybrid_portfolio`) provide
   useful implementation patterns but are not renamed or promoted by this work.
+

@@ -108,3 +108,4 @@ def adaptive_sampling_iteration(current_records: list[EpisodeRecord], cfg: Bench
 ## Test Surfaces (Planned)
 - Unit: plan_scenarios validation, aggregate_metrics bootstrap consistency (seeded), effect size formulas, precision evaluation logic (synthetic data).
 - Integration: smoke run creates all structural files; resume run skips existing; adaptive loop stops early when thresholds met.
+

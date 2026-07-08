@@ -1,6 +1,6 @@
 # OSM Map Workflow Guide (Phase 3, T042)
 
-**Last Updated**: December 19, 2025
+**Last Updated**: December 19, 2025  
 **Document Status**: Complete reference guide for OSM-based map generation workflow
 
 ---
@@ -625,12 +625,12 @@ See [examples/osm_programmatic_scenario.py](../examples/osm_programmatic_scenari
 
 ---
 
-**Questions?** See [FAQ](#faq) or check example scripts.
-**Found a bug?** Please report on GitHub.
+**Questions?** See [FAQ](#faq) or check example scripts.  
+**Found a bug?** Please report on GitHub.  
 **Want to contribute?** See CONTRIBUTING.md.
 
 ---
 
-**Document Version**: 1.0
-**Last Updated**: December 19, 2025
+**Document Version**: 1.0  
+**Last Updated**: December 19, 2025  
 **Status**: Complete

@@ -883,7 +883,7 @@ def _rollout_episode(env, horizon: int, dt: float, replay_cap):
                 env.sim_ui, "record_video", False
             ):
                 env.render()
-        except (RuntimeError, ValueError, TypeError, AttributeError, OSError):
+        except (RuntimeError, ValueError, TypeError, AttributeError, OSError, IndexError, KeyError):
             # Rendering is best-effort; ignore to keep rollout running
             pass
         step_meta = info.get("meta", {}) if isinstance(info, dict) else {}

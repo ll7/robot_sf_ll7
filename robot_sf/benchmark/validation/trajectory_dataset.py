@@ -401,6 +401,6 @@ class TrajectoryDatasetValidator:
         if hasattr(raw, "item"):
             try:
                 return raw.item()
-            except (ValueError, AttributeError):
+            except (ValueError, AttributeError, TypeError):
                 pass
         return {}

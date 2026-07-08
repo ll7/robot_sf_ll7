@@ -31,6 +31,7 @@ from datetime import (
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+import jsonschema
 import numpy as np
 import yaml
 from loguru import logger
@@ -1601,6 +1602,7 @@ def _run_batch_parallel(  # noqa: C901
             ValueError,
             TypeError,
             KeyError,
+            jsonschema.ValidationError,
         ) as e:  # pragma: no cover - write/validate path
             logger.exception(
                 "Benchmark batch write/validation failed for scenario_id={} seed={}",

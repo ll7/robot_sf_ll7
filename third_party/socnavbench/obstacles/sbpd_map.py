@@ -71,7 +71,7 @@ class SBPDMap(ObstacleMap):
     def dist_to_nearest_obs(self, pos_nk2):
         """
         Utilize the FMM Map's ability to compute nearest distances
-        from a given position to return just that. 
+        from a given position to return just that.
         """
         # with tf.name_scope('dist_to_obs'):
         distance_nk = self.fmm_map.fmm_distance_map.compute_voxel_function(
@@ -137,7 +137,7 @@ class SBPDMap(ObstacleMap):
         """
         Output a top-down grid view of the occupancy-grid-map
         Note: the map sohuld have 1's where the building is traversable
-        and 1's where there are obstacles. 
+        and 1's where there are obstacles.
         """
         p = self.p
         ax.imshow(self.occupancy_grid_map, cmap='gray_r',

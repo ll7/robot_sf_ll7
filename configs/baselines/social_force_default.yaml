@@ -1,5 +1,5 @@
 # Social Force Planner Default Configuration
-# 
+#
 # This configuration provides sensible defaults for the Social Force planner
 # that work well across a variety of scenarios. Parameters are documented
 # with their physical meaning and typical ranges.
@@ -23,7 +23,7 @@ lambda_anisotropy: 2.0  # Anisotropy factor - stronger repulsion in front
 sigma_phi: 90.0      # Field of view angle [degrees] for anisotropic forces
 cutoff_radius: 10.0  # Maximum interaction distance [m] - ignore distant agents
 
-# Obstacle Force Parameters  
+# Obstacle Force Parameters
 # These control repulsion from static obstacles (walls, barriers)
 A_obs: 10.0  # Obstacle force amplitude [N] - strength of wall repulsion
 B_obs: 0.0   # Obstacle force range parameter [m] - typically small for hard walls

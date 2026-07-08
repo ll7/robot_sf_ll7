@@ -6,7 +6,7 @@ This fork contains additional logic in `Agent.cpp` so agents can set a `collabCo
 - `collabCoeff = 0.5`: standard ORCA (each agent does 1/2 the work)
 - `collabCoeff in (0, 0.5)`: less cooperative agent, will barely adjust its velocity to avoid others
 - `collabCoeff = 0`: non-cooperative, will just follow its prefVel
-- `collabCoeff < 0`: anti-cooperative agent, will ignore its own prefVel and try to collide with the nearest agent (position-wise), 
+- `collabCoeff < 0`: anti-cooperative agent, will ignore its own prefVel and try to collide with the nearest agent (position-wise),
 collabCoeff trades off mimicing the other agent (collab=0 ==> prefVel = other->veloc) vs. trying to hit immediately (collab=-inf ==> prefVel=relPos)
 
 ----------
@@ -124,9 +124,9 @@ report for the RVO2 library itself to [geom@cs.unc.edu](mailto:geom@cs.unc.edu).
 
 The RVO2 authors may be contacted via:
 
-Jur van den Berg, Stephen J. Guy, Jamie Snape, Ming C. Lin, and Dinesh Manocha  
-Dept. of Computer Science  
-201 S. Columbia St.  
-Frederick P. Brooks, Jr. Computer Science Bldg.  
-Chapel Hill, N.C. 27599-3175  
+Jur van den Berg, Stephen J. Guy, Jamie Snape, Ming C. Lin, and Dinesh Manocha
+Dept. of Computer Science
+201 S. Columbia St.
+Frederick P. Brooks, Jr. Computer Science Bldg.
+Chapel Hill, N.C. 27599-3175
 United States of America

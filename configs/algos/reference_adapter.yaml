@@ -4,4 +4,3 @@ max_linear_speed: 1.0
 max_angular_speed: 1.0
 angular_gain: 1.0
 goal_tolerance: 0.25
-

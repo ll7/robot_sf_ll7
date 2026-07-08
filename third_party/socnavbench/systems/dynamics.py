@@ -21,7 +21,7 @@ class Dynamics:
 
     def reset_start_state(self, start_config):
         """
-        Reset the systems state to start_config (if necessary). 
+        Reset the systems state to start_config (if necessary).
         The system dynamics classes by default do not track state
         ."""
         return None

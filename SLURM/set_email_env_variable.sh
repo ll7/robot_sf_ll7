@@ -19,7 +19,7 @@ if [ -z "$SLURM_EMAIL" ]; then
     else
         echo "SLURM_EMAIL is already in ~/.bashrc"
     fi
-    
+
     # Set SLURM_EMAIL for the current session
     export SLURM_EMAIL="$1"
     echo "SLURM_EMAIL has been set to $SLURM_EMAIL for the current session"

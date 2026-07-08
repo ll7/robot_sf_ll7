@@ -14,7 +14,7 @@ class ObstacleMap:
     def dist_to_nearest_obs(self, pos_nk2):
         """
         Computes the distance to the nearest obstacle in
-        the obstacle mask map. 
+        the obstacle mask map.
         """
         raise NotImplementedError
 
@@ -39,7 +39,7 @@ class ObstacleMap:
         """
         Convert pos_2 in real world coordinates
         to a point on the map.
-        Note: p.dx only exists in the inherited classes that 
+        Note: p.dx only exists in the inherited classes that
         add more parameters to p
         """
         map_pos_2 = pos_2/self.p.dx - self.p.map_origin_2
@@ -51,9 +51,8 @@ class ObstacleMap:
         """
         Convert pos_2 in map coordinates
         to a real world coordinate.
-        Note: p.dx only exists in the inherited classes that 
+        Note: p.dx only exists in the inherited classes that
         add more parameters to p
         """
         world_pos_2 = (pos_2 + self.p.map_origin_2)*self.p.dx
         return world_pos_2.astype(dtype)
-

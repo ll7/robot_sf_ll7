@@ -13,8 +13,8 @@ The Social Navigation Quality Index (SNQI) is a composite metric that combines m
 
 The SNQI formula is:
 ```
-SNQI = w_success × success - w_time × time_norm - w_collisions × coll_norm 
-       - w_near × near_norm - w_comfort × comfort_exposure 
+SNQI = w_success × success - w_time × time_norm - w_collisions × coll_norm
+       - w_near × near_norm - w_comfort × comfort_exposure
        - w_force_exceed × force_norm - w_jerk × jerk_norm
 ```
 
@@ -145,7 +145,7 @@ Each line should contain an episode record:
 ```json
 {
   "episode_id": "scenario_1--seed_42",
-  "scenario_id": "scenario_1", 
+  "scenario_id": "scenario_1",
   "seed": 42,
   "metrics": {
     "success": true,
@@ -292,6 +292,6 @@ These scripts are designed to work with the social navigation benchmark implemen
 
 For integration with the benchmark pipeline:
 1. Use `robot_sf_bench baseline` to generate baseline statistics
-2. Use `robot_sf_bench run` to collect episode data  
+2. Use `robot_sf_bench run` to collect episode data
 3. Apply these scripts to optimize weights
 4. Use optimized weights in subsequent benchmark runs via the `snqi_weights` parameter

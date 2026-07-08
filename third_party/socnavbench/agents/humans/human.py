@@ -40,7 +40,7 @@ class HumanAppearance:
     @classmethod
     def generate_rand_human_appearance(cls):
         """
-        Sample a new human from known identity features, but unknown 
+        Sample a new human from known identity features, but unknown
         positional/speed arguments (and mesh rng)
         """
         # Set the Mesh seed. This is used to sample the actual mesh to be loaded

@@ -63,13 +63,13 @@ python scripts/multi_extractor_training.py \
 # Check if training completed successfully
 if [ $? -eq 0 ]; then
     echo "Training completed successfully!"
-    
+
     # Run analysis if results are available
     RESULTS_FILE="$OUTPUT_ROOT/complete_results.json"
     if [ -f "$RESULTS_FILE" ]; then
         echo "Running statistical analysis..."
         python scripts/analyze_feature_extractors.py "$RESULTS_FILE"
-        
+
         if [ $? -eq 0 ]; then
             echo "Analysis completed successfully!"
         else

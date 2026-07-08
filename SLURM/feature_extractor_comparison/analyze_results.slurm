@@ -57,12 +57,12 @@ for individual_dir in individual_dirs:
     elif extractor_name.startswith('single_'):
         extractor_name = extractor_name.replace('single_', '', 1)
     results_file = individual_dir / 'complete_results.json'
-    
+
     if results_file.exists():
         print(f'Loading results for {extractor_name}')
         with open(results_file) as f:
             data = json.load(f)
-            
+
         # Add to combined results
         if 'results' in data and extractor_name in data['results']:
             combined_results['results'][extractor_name] = data['results'][extractor_name]
@@ -76,11 +76,11 @@ if combined_results['results']:
     # Save combined results
     combined_dir = Path('output/training/feature_extractors/combined_analysis')
     combined_dir.mkdir(parents=True, exist_ok=True)
-    
+
     combined_file = combined_dir / 'complete_results.json'
     with open(combined_file, 'w') as f:
         json.dump(combined_results, f, indent=2)
-    
+
     print(f'Combined results saved to: {combined_file}')
     print(f'Found results for: {list(combined_results[\"results\"].keys())}')
 else:
@@ -93,7 +93,7 @@ COMBINED_RESULTS="output/training/feature_extractors/combined_analysis/complete_
 if [ -f "$COMBINED_RESULTS" ]; then
     echo "Running statistical analysis on combined results..."
     python scripts/analyze_feature_extractors.py "$COMBINED_RESULTS"
-    
+
     if [ $? -eq 0 ]; then
         echo "Analysis completed successfully!"
         echo "Results available in: $(dirname "$COMBINED_RESULTS")/analysis/"

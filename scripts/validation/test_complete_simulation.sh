@@ -7,7 +7,7 @@ set -e  # Exit on any error
 echo "Testing complete simulation..."
 
 export DISPLAY=
-export MPLBACKEND=Agg 
+export MPLBACKEND=Agg
 export SDL_VIDEODRIVER=dummy
 
 # Run a short simulation to validate end-to-end functionality

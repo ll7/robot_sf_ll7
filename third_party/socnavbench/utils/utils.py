@@ -131,7 +131,7 @@ def natural_sort(l: list[float or int]) -> list[str or int]:
     """Sorts a list of items naturally.
 
     Args:
-        l (list): the list of elements to sort. 
+        l (list): the list of elements to sort.
 
     Returns:
         A naturally sorted list with the same elements as l

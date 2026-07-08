@@ -8,6 +8,19 @@ repos:
         args: [ --fix ]
       # Run the formatter.
       - id: ruff-format
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(docs/|specs/|\.understand-anything/|maps/svg_maps/|fast-pysf/tests/test_maps/)
+      - id: end-of-file-fixer
+        exclude: ^(docs/|specs/|\.understand-anything/|maps/svg_maps/|fast-pysf/tests/test_maps/)
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
   - repo: local
     hooks:
       - id: prevent-schema-duplicates

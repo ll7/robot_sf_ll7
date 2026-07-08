@@ -31,7 +31,7 @@ class Planner:
     def optimize(self, start_config):
         """
         Optimize the objective over a trajectory
-        starting from start_config ending at speed vf. 
+        starting from start_config ending at speed vf.
         Returns the opt_waypt, opt_trajectory, opt_cost
         """
         raise NotImplementedError

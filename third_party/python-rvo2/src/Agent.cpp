@@ -386,7 +386,7 @@ namespace RVO {
 
 
                 // // Method 1: Move along vector in direction of vb+(pb-pa), normalized to maxspeed, scaled by -collabCoeff
-                // // Issue: Choosing a low collabCoeff (close to 0) probably will make the chosen direction not actually enter the VO  
+                // // Issue: Choosing a low collabCoeff (close to 0) probably will make the chosen direction not actually enter the VO
                 // prefVelocity_ = normalize(other->velocity_+relativePosition)*(-std::max(-1.f, collabCoeff_))*maxSpeed_;
 
                 // Method 2: Add two linear constraints for the two legs of the VO, but facing inward so the optimizer

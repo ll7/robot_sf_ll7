@@ -7,10 +7,6 @@ changes.
 
 from __future__ import annotations
 
-import json
-import tempfile
-from pathlib import Path
-
 from scripts.tools.mapf_oracle_diagnostic import (
     _build_time_blocked,
     _build_time_edges_blocked,
@@ -18,39 +14,6 @@ from scripts.tools.mapf_oracle_diagnostic import (
     cbs_search,
     sipp_search,
 )
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_svg(width: float, height: float, rects: list[dict]) -> Path:
-    """Write a minimal SVG with obstacle rects and return the path."""
-    lines = [
-        f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">',
-    ]
-    for r in rects:
-        label = r.get("label", "")
-        attrs = f'x="{r["x"]}" y="{r["y"]}" width="{r["w"]}" height="{r["h"]}"'
-        if label:
-            attrs += f' inkscape:label="{label}"'
-        lines.append(f"  <rect {attrs} />")
-    lines.append("</svg>")
-
-    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".svg", delete=False, encoding="utf-8")
-    tmp.write("\n".join(lines))
-    tmp.close()
-    return Path(tmp.name)
-
-
-def _make_dynamic_obstacles_json(obstacles: list[dict]) -> Path:
-    """Write a dynamic obstacles JSON file and return the path."""
-    data = {"dynamic_obstacles": obstacles}
-    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8")
-    json.dump(data, tmp)
-    tmp.close()
-    return Path(tmp.name)
-
 
 # ---------------------------------------------------------------------------
 # _build_time_edges_blocked unit tests

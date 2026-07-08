@@ -253,6 +253,12 @@ if [[ "$shard_count" =~ ^[0-9]+$ ]] && [[ "$shard_count" -gt 1 ]]; then
   echo "Resolved pytest-split shard: group $shard_index of $shard_count" >&2
 fi
 
+# Fast PR lane: when sharding is active (typically on PRs), run only fast tests
+# using the -m "not slow" marker. Full suite runs unsharded on main/nightly.
+if [[ "$sharding_active" == "1" ]]; then
+  cmd+=("-m" "not slow")
+fi
+
 coverage_requested="${ROBOT_SF_PYTEST_COVERAGE:-}"
 if [[ "$sharding_active" != "1" ]] && { [[ "${CI:-}" == "true" ]] || [[ "$coverage_requested" == "1" ]] || \
   [[ "$coverage_requested" == [Tt][Rr][Uu][Ee] ]] || \
@@ -304,7 +310,10 @@ elif [[ "$lane_mode" == "optional" && ${#explicit_test_targets[@]} -eq 0 ]]; the
 fi
 
 if [[ "$fast_fail" == "1" ]]; then
-  cmd+=("-x")
+  # When sharding, each shard should report all failures, not just the first
+  if [[ "$sharding_active" != "1" ]]; then
+    cmd+=("-x")
+  fi
 elif [[ "$fast_fail" != "0" ]]; then
   echo "Invalid PYTEST_FAST_FAIL value '$fast_fail' (expected 0 or 1)." >&2
   exit 2

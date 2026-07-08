@@ -4921,15 +4921,11 @@ dependencies = [
     { name = "rich" },
     { name = "scipy" },
     { name = "shapely" },
-    { name = "shimmy" },
     { name = "svgelements" },
-    { name = "toml" },
 ]
 
 [package.optional-dependencies]
 analysis = [
-    { name = "matplotlib" },
-    { name = "pandas" },
     { name = "seaborn" },
 ]
 analytics = [
@@ -4973,7 +4969,6 @@ training = [
     { name = "wandb" },
 ]
 viz = [
-    { name = "matplotlib" },
     { name = "seaborn" },
 ]
 
@@ -5013,8 +5008,6 @@ requires-dist = [
     { name = "jsonschema", specifier = ">=4.23.0" },
     { name = "loguru", specifier = ">=0.7.2" },
     { name = "matplotlib", specifier = ">=3.9.2" },
-    { name = "matplotlib", marker = "extra == 'analysis'", specifier = ">=3.9.2" },
-    { name = "matplotlib", marker = "extra == 'viz'", specifier = ">=3.9.2" },
     { name = "moviepy", specifier = ">=2.0.0" },
     { name = "networkx", specifier = ">=3.6.1,<4.0" },
     { name = "numba", specifier = ">=0.65.1" },
@@ -5024,7 +5017,6 @@ requires-dist = [
     { name = "orjson", specifier = ">=3.11.5" },
     { name = "osmnx", specifier = ">=1.9" },
     { name = "pandas", specifier = ">=2.2.3" },
-    { name = "pandas", marker = "extra == 'analysis'", specifier = ">=2.2.3" },
     { name = "pillow", specifier = ">=10.4.0" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.61.0" },
     { name = "psutil", specifier = ">=6.1.0" },
@@ -5044,12 +5036,10 @@ requires-dist = [
     { name = "seaborn", marker = "extra == 'analysis'", specifier = ">=0.13.2" },
     { name = "seaborn", marker = "extra == 'viz'", specifier = ">=0.13.2" },
     { name = "shapely", specifier = ">=2.1.2" },
-    { name = "shimmy", specifier = ">=1.0.0,<2.0.0" },
     { name = "stable-baselines3", marker = "extra == 'training'", specifier = ">=2.4.0" },
     { name = "svgelements", specifier = ">=1.9.6" },
     { name = "tensorboard", marker = "extra == 'training'", specifier = ">=2.21.0" },
     { name = "tensorflow", marker = "extra == 'sacadrl'", specifier = ">=2.15.0" },
-    { name = "toml", specifier = ">=0.10.2" },
     { name = "torch", marker = "extra == 'training'", specifier = ">=2.5.1" },
     { name = "torch", extras = ["cuda"], marker = "extra == 'gpu'", specifier = ">=2.5.1" },
     { name = "tqdm", marker = "extra == 'progress'", specifier = ">=4.68.3" },
@@ -5535,20 +5525,6 @@ wheels = [
 ]
 
 [[package]]
-name = "shimmy"
-version = "1.3.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "gymnasium", version = "0.29.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'group-8-robot-sf-imitation'" },
-    { name = "gymnasium", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-8-robot-sf-rllib' or extra != 'group-8-robot-sf-imitation'" },
-    { name = "numpy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/92/a7/e2c7e4674f060a4465be9f9f1f40f07e6a0b3acd8d03f9f84832111d45b6/Shimmy-1.3.0.tar.gz", hash = "sha256:f45fbeaa81a0e755abc8251d5741cd4b7d5dddd003aaccda7960e62bee82b493", size = 38891, upload-time = "2023-10-17T19:22:31.482Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/dc/f9/07ef16463db14ac1b30f149c379760f5cacf3fc677b295d29a92f3127914/Shimmy-1.3.0-py3-none-any.whl", hash = "sha256:de608fb53fab0130ad5dc8a50ae0e6b0122aa3b808cc2f3e7bde618053dcf30e", size = 37606, upload-time = "2023-10-17T19:22:28.75Z" },
-]
-
-[[package]]
 name = "six"
 version = "1.17.0"
 source = { registry = "https://pypi.org/simple" }
@@ -5971,15 +5947,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/7a/fd/7a5ee21fd08ff70d3d33a5781c255cbe779659bd03278feb98b19ee550f4/tinycss2-1.4.0.tar.gz", hash = "sha256:10c0972f6fc0fbee87c3edb76549357415e94548c1ae10ebccdea16fb404a9b7", size = 87085, upload-time = "2024-10-24T14:58:29.895Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e6/34/ebdc18bae6aa14fbee1a08b63c015c72b64868ff7dae68808ab500c492e2/tinycss2-1.4.0-py3-none-any.whl", hash = "sha256:3a49cf47b7675da0b15d0c6e1df8df4ebd96e9394bb905a5775adb0d884c5289", size = 26610, upload-time = "2024-10-24T14:58:28.029Z" },
-]
-
-[[package]]
-name = "toml"
-version = "0.10.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/be/ba/1f744cdc819428fc6b5084ec34d9b30660f6f9daaf70eead706e3203ec3c/toml-0.10.2.tar.gz", hash = "sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f", size = 22253, upload-time = "2020-11-01T01:40:22.204Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/44/6f/7120676b6d73228c96e17f1f794d8ab046fc910d781c8d151120c3f1569e/toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b", size = 16588, upload-time = "2020-11-01T01:40:20.672Z" },
 ]
 
 [[package]]

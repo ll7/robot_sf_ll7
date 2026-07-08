@@ -1525,3 +1525,172 @@ class TestTpgCli:
         finally:
             svg_path.unlink()
             agents_path.unlink()
+
+
+# ---------------------------------------------------------------------------
+# CBS dynamic-obstacle edge (swap) collision propagation
+# ---------------------------------------------------------------------------
+
+
+class TestCbsDynamicObstacleSwap:
+    """Regression tests for CBS propagating time_edges_blocked to SIPP.
+
+    Issue #4817: CBS ignored dynamic-obstacle edge (swap) collisions because
+    it never passed time_edges_blocked to its internal sipp_search calls.
+    """
+
+    def test_cbs_avoids_dynamic_obstacle_swap(self) -> None:
+        """CBS must avoid a swap collision with a single moving obstacle.
+
+        Agent 0 wants to move (0,0)->(1,0).  A dynamic obstacle moves
+        (1,0)->(0,0) at the same time step, forming a genuine swap.
+        Without time_edges_blocked propagation CBS would allow the swap;
+        with the fix the agent must detour or wait.
+        """
+        grid = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+        agents = [{"id": 0, "start": [0, 0], "goal": [1, 0]}]
+        dyn_obstacles = [{"id": 0, "trajectory": [[1, 0], [0, 0]]}]
+        time_blocked = _build_time_blocked(dyn_obstacles)
+        time_edges = _build_time_edges_blocked(dyn_obstacles)
+
+        result = cbs_search(
+            grid,
+            agents,
+            time_blocked,
+            max_time=50,
+            time_edges_blocked=time_edges,
+        )
+        assert result is not None
+        path = result["solution"][0]
+        # The direct swap move (0,0)@t0 -> (1,0)@t1 must be avoided.
+        if len(path) >= 2 and path[0] == (0, 0, 0) and path[1] == (1, 0, 1):
+            pytest.fail("CBS allowed a swap collision with a dynamic obstacle")
+
+    def test_cbs_multi_agent_with_dynamic_obstacle_swap(self) -> None:
+        """CBS with two agents avoids a dynamic-obstacle swap collision.
+
+        Agent 0 wants (0,0)->(2,0), agent 1 wants (2,0)->(0,0).
+        A dynamic obstacle moves (1,0)->(1,1) at t=0->t=1 (not a swap for
+        either agent, just a vertex block).  CBS must still produce valid
+        paths that avoid both agent-agent and agent-obstacle collisions.
+        """
+        grid = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+        agents = [
+            {"id": 0, "start": [0, 0], "goal": [2, 0]},
+            {"id": 1, "start": [2, 0], "goal": [0, 0]},
+        ]
+        dyn_obstacles = [{"id": 0, "trajectory": [[1, 0], [1, 1]]}]
+        time_blocked = _build_time_blocked(dyn_obstacles)
+        time_edges = _build_time_edges_blocked(dyn_obstacles)
+
+        result = cbs_search(
+            grid,
+            agents,
+            time_blocked,
+            max_time=50,
+            time_edges_blocked=time_edges,
+        )
+        assert result is not None
+        # Both agents reach their goals
+        assert result["solution"][0][-1][:2] == (2, 0)
+        assert result["solution"][1][-1][:2] == (0, 0)
+
+    def test_cbs_two_independent_obstacles_no_false_swap(self) -> None:
+        """Two independent obstacles must not cause a false swap block.
+
+        Obstacle A at (0,1)@t0 moving to (1,1)@t1, obstacle B at (1,0)@t0
+        moving to (0,0)@t1.  Agent 0 moves (0,0)->(0,1) at t0->t1.
+        Neither obstacle traverses the reverse edge (0,1)->(0,0), so the
+        move must be allowed (no over-blocking).
+        """
+        grid = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+        agents = [{"id": 0, "start": [0, 0], "goal": [0, 2]}]
+        dyn_obstacles = [
+            {"id": 0, "trajectory": [[0, 1], [1, 1]]},
+            {"id": 1, "trajectory": [[1, 0], [0, 0]]},
+        ]
+        time_blocked = _build_time_blocked(dyn_obstacles)
+        time_edges = _build_time_edges_blocked(dyn_obstacles)
+
+        result = cbs_search(
+            grid,
+            agents,
+            time_blocked,
+            max_time=50,
+            time_edges_blocked=time_edges,
+        )
+        assert result is not None
+        path = result["solution"][0]
+        # Optimal direct path should be allowed: (0,0)@0 -> (0,1)@1 -> (0,2)@2
+        assert path == [(0, 0, 0), (0, 1, 1), (0, 2, 2)]
+
+
+# ---------------------------------------------------------------------------
+# _load_agents duplicate ID validation
+# ---------------------------------------------------------------------------
+
+
+class TestLoadAgentsDuplicateId:
+    """Tests for _load_agents rejecting duplicate agent IDs (issue #4817)."""
+
+    def test_duplicate_agent_id_rejected(self) -> None:
+        path = _make_agents_json(
+            [
+                {"id": 0, "start": [0, 0], "goal": [5, 5]},
+                {"id": 0, "start": [5, 0], "goal": [0, 5]},
+            ]
+        )
+        try:
+            with pytest.raises(ValueError, match="Duplicate agent id"):
+                _load_agents(path)
+        finally:
+            path.unlink()
+
+    def test_unique_agent_ids_accepted(self) -> None:
+        path = _make_agents_json(
+            [
+                {"id": 0, "start": [0, 0], "goal": [5, 5]},
+                {"id": 1, "start": [5, 0], "goal": [0, 5]},
+            ]
+        )
+        try:
+            result = _load_agents(path)
+            assert len(result) == 2
+        finally:
+            path.unlink()
+
+    def test_duplicate_non_zero_id(self) -> None:
+        path = _make_agents_json(
+            [
+                {"id": 3, "start": [0, 0], "goal": [5, 5]},
+                {"id": 3, "start": [5, 0], "goal": [0, 5]},
+            ]
+        )
+        try:
+            with pytest.raises(ValueError, match="Duplicate agent id: 3"):
+                _load_agents(path)
+        finally:
+            path.unlink()
+
+
+# ---------------------------------------------------------------------------
+# _load_inputs return-type annotation
+# ---------------------------------------------------------------------------
+
+
+class TestLoadInputsAnnotation:
+    """Tests that _load_inputs returns a 3-tuple, not a 4-tuple (issue #4817)."""
+
+    def test_returns_three_tuple(self) -> None:
+        """_load_inputs must return (dyn_obstacles, agents, time_blocked)."""
+        import argparse
+
+        from scripts.tools.mapf_oracle_diagnostic import _load_inputs
+
+        args = argparse.Namespace(dynamic_obstacles=None, agents=None)
+        result = _load_inputs(args)
+        assert len(result) == 3
+        dyn_obstacles, agents, time_blocked = result
+        assert dyn_obstacles is None
+        assert agents is None
+        assert time_blocked == {}

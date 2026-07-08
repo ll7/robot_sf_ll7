@@ -10,6 +10,7 @@ import numpy as np
 from gymnasium import spaces
 
 from robot_sf.common.math_utils import clip_scalar, wrap_angle_pi
+from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 
 if TYPE_CHECKING:
     from robot_sf.common.types import PolarVec2D, RobotPose
@@ -21,7 +22,9 @@ _COMMAND_MODES = {"vx_vy", "unicycle_vw"}
 class HolonomicDriveSettings:
     """Configuration settings for a holonomic robot."""
 
-    radius: float = 1.0
+    # Collision radius for physics/metrics.
+    # References the authoritative default from robot_sf.common.robot_defaults.
+    radius: float = DEFAULT_ROBOT_RADIUS
     max_speed: float = 2.0
     max_angular_speed: float = 1.0
     command_mode: str = "vx_vy"

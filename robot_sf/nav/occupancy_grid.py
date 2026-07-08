@@ -184,6 +184,9 @@ class GridConfig:
     dtype: type = np.float32
     max_distance: float = 0.5
     use_ego_frame: bool = False
+    # NOTE: This default (0.3m) differs from the authoritative robot radius (1.0m)
+    # defined in robot_sf.common.robot_defaults. Changing this would affect grid
+    # rasterization and benchmark metrics. See issue #4856 for details.
     robot_radius: float = 0.3
     center_on_robot: bool = False
 

@@ -7,6 +7,7 @@ import numpy as np
 from gymnasium import spaces
 
 from robot_sf.common.math_utils import clip_scalar
+from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 from robot_sf.common.types import DifferentialDriveAction, PolarVec2D, RobotPose, Vec2D
 
 WheelSpeedState = tuple[float, float]
@@ -20,8 +21,9 @@ class DifferentialDriveSettings:
     characteristics and speed limitations.
     """
 
-    # Robot collision radius used by physics/metrics (not kinematics or grid rasterization)
-    radius: float = 1.0
+    # Robot collision radius used by physics/metrics (not kinematics or grid rasterization).
+    # References the authoritative default from robot_sf.common.robot_defaults.
+    radius: float = DEFAULT_ROBOT_RADIUS
     # Maximum linear velocity the robot can achieve
     max_linear_speed: float = 2.0
     # Maximum angular velocity the robot can achieve

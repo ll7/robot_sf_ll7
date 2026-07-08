@@ -1,0 +1,121 @@
+{
+  "derived_rows": [
+    {
+      "commanded_angular_velocity_rad_s": 0.22964471729284397,
+      "commanded_linear_velocity_m_s": 2.0,
+      "executed_speed_m_s": 0.05000000000000086,
+      "executed_vx_m_s": 0.010207396445647277,
+      "executed_vy_m_s": 0.0489470025415395,
+      "min_robot_ped_distance_m": 10.175824262364808,
+      "nearest_pedestrian_id": "0",
+      "pedestrian_count": 2,
+      "pedestrian_positions_json": "[{\"id\":\"0\",\"x_m\":18.095420357219222,\"y_m\":12.268968184868307},{\"id\":\"1\",\"x_m\":15.655392230495114,\"y_m\":26.662338792648395}]",
+      "robot_heading_rad": 1.3657772541046143,
+      "robot_x_m": 13.973398535335468,
+      "robot_y_m": 2.965402442721567,
+      "step": 0,
+      "time_s": 0.1
+    }
+  ],
+  "frames": [
+    {
+      "pedestrians": [
+        {
+          "id": 0,
+          "position": [
+            18.095420357219222,
+            12.268968184868307
+          ],
+          "track_confidence": null,
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "id": 1,
+          "position": [
+            15.655392230495114,
+            26.662338792648395
+          ],
+          "track_confidence": null,
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        }
+      ],
+      "planner": {
+        "ammv": {
+          "pedestrian_force_vectors": [
+            [
+              0.09412662057737793,
+              -0.2650943774508662
+            ],
+            [
+              0.06207829345967054,
+              -0.3070689198158197
+            ]
+          ]
+        },
+        "event": "step",
+        "selected_action": {
+          "angular_velocity": 0.22964471729284397,
+          "linear_velocity": 2.0
+        }
+      },
+      "rl": {
+        "reward": -4.9975028426099275,
+        "terminated": true,
+        "truncated": false
+      },
+      "robot": {
+        "heading": 1.3657772541046143,
+        "position": [
+          13.973398535335468,
+          2.965402442721567
+        ],
+        "velocity": [
+          0.010207396445647277,
+          0.0489470025415395
+        ]
+      },
+      "step": 0,
+      "time_s": 0.1
+    }
+  ],
+  "metadata": {
+    "campaign_id": "issue4206_trace_capable_h600_rerun_20260704",
+    "campaign_job": "13334",
+    "claim_boundary": "exemplar trace episode from retained campaign data; illustrative head-on corridor interaction only; no statistical, benchmark, or dissertation claim",
+    "episode_id": "classic_head_on_corridor_low--20--16886fd04d30582d",
+    "episode_status": "collision",
+    "generated_at_utc": "2026-07-08T23:13:21.062330+00:00",
+    "git_commit": "bb59e8b516a7fed1e014cc2d70b40af2478e747d",
+    "issue": "https://github.com/ll7/robot_sf_ll7/issues/4891",
+    "planner": "orca",
+    "scenario_id": "classic_head_on_corridor_low",
+    "schema_version": "issue-4891-exemplar-trace.v1",
+    "seed": 20,
+    "selection_metric": "path_efficiency",
+    "selection_metric_value": 1.0,
+    "selection_mode": "worst",
+    "summary": {
+      "episode_status": "collision",
+      "global_min_distance_step": 0,
+      "global_min_robot_ped_distance_m": 10.175824262364808,
+      "planner": "orca",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 20,
+      "step_count": 1,
+      "termination_reason": "collision"
+    }
+  },
+  "schema_version": "issue-4891-trace-series.v1"
+}

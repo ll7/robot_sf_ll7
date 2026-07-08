@@ -1,0 +1,27 @@
+{
+  "campaign_id": "issue4206_trace_capable_h600_rerun_20260704",
+  "campaign_job": "13334",
+  "claim_boundary": "exemplar trace episode from retained campaign data; illustrative head-on corridor interaction only; no statistical, benchmark, or dissertation claim",
+  "episode_id": "classic_head_on_corridor_medium--20--5bfb61c26b05cb4d",
+  "episode_status": "collision",
+  "generated_at_utc": "2026-07-08T23:13:18.753884+00:00",
+  "git_commit": "bb59e8b516a7fed1e014cc2d70b40af2478e747d",
+  "issue": "https://github.com/ll7/robot_sf_ll7/issues/4891",
+  "planner": "goal",
+  "scenario_id": "classic_head_on_corridor_medium",
+  "schema_version": "issue-4891-exemplar-trace.v1",
+  "seed": 20,
+  "selection_metric": "path_efficiency",
+  "selection_metric_value": 1.0,
+  "selection_mode": "median",
+  "summary": {
+    "episode_status": "collision",
+    "global_min_distance_step": 0,
+    "global_min_robot_ped_distance_m": 10.174671730649825,
+    "planner": "goal",
+    "scenario_id": "classic_head_on_corridor_medium",
+    "seed": 20,
+    "step_count": 1,
+    "termination_reason": "collision"
+  }
+}

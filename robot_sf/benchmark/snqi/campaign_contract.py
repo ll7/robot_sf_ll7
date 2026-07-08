@@ -899,7 +899,7 @@ def collect_episodes_from_campaign_runs(
                     continue
                 try:
                     payload = json.loads(line)
-                except Exception:
+                except (ValueError, TypeError):
                     continue
                 if not isinstance(payload, dict):
                     continue

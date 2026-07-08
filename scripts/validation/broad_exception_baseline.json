@@ -12,21 +12,15 @@
       "robot_sf/benchmark/full_classic/render_sim_view.py": 9,
       "robot_sf/benchmark/full_classic/validation.py": 1,
       "robot_sf/benchmark/full_classic/visual_deps.py": 1,
-      "robot_sf/benchmark/hazard_odd_coverage.py": 4,
       "robot_sf/benchmark/helper_catalog.py": 2,
       "robot_sf/benchmark/learned_predictor_capability_inventory.py": 1,
       "robot_sf/benchmark/map_runner.py": 2,
       "robot_sf/benchmark/map_runner_batch_runner.py": 3,
       "robot_sf/benchmark/map_runner_env.py": 1,
-      "robot_sf/benchmark/orca_preflight.py": 1,
-      "robot_sf/benchmark/planner_inclusion.py": 2,
       "robot_sf/benchmark/plots.py": 1,
-      "robot_sf/benchmark/predictive_planner_config.py": 1,
-      "robot_sf/benchmark/runner.py": 11,
-      "robot_sf/benchmark/snqi/campaign_contract.py": 1,
+      "robot_sf/benchmark/runner.py": 7,
       "robot_sf/benchmark/snqi/cli.py": 3,
       "robot_sf/benchmark/snqi/compute.py": 1,
-      "robot_sf/benchmark/snqi/weights_validation.py": 2,
       "scripts/analysis/amv_timeout_trace_analyzer.py": 1,
       "scripts/analysis/build_signalized_crossing_failure_pack_issue_2754.py": 2,
       "scripts/analysis/calibrate_scenario_priors_from_traces_issue_2726.py": 2,
@@ -116,7 +110,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 265
+    "total": 250
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -860,42 +854,6 @@
     },
     {
       "col_offset": 4,
-      "context": "_load_hazard_mapping",
-      "fingerprint": "9ab50e04f2a5e782",
-      "handler": "Exception",
-      "lineno": 247,
-      "path": "robot_sf/benchmark/hazard_odd_coverage.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 8,
-      "context": "_load_odd_contracts",
-      "fingerprint": "a24b38fa0af705d5",
-      "handler": "Exception",
-      "lineno": 261,
-      "path": "robot_sf/benchmark/hazard_odd_coverage.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 8,
-      "context": "_load_scenario_contracts",
-      "fingerprint": "93471f0401df2f51",
-      "handler": "Exception",
-      "lineno": 281,
-      "path": "robot_sf/benchmark/hazard_odd_coverage.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 8,
-      "context": "_load_scenario_certificates",
-      "fingerprint": "ffa074136b70ece5",
-      "handler": "Exception",
-      "lineno": 303,
-      "path": "robot_sf/benchmark/hazard_odd_coverage.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 4,
       "context": "prepare_classic_env",
       "fingerprint": "e66074fd967da159",
       "handler": "Exception",
@@ -977,47 +935,11 @@
     },
     {
       "col_offset": 4,
-      "context": "_ensure_rvo2_importable",
-      "fingerprint": "761e86439e262801",
-      "handler": "Exception",
-      "lineno": 89,
-      "path": "robot_sf/benchmark/orca_preflight.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 12,
-      "context": "_unwrap_json_value",
-      "fingerprint": "2ec5a13f47a89ec0",
-      "handler": "Exception",
-      "lineno": 72,
-      "path": "robot_sf/benchmark/planner_inclusion.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 12,
-      "context": "_unwrap_json_value",
-      "fingerprint": "2ec5a13f47a89ec0",
-      "handler": "Exception",
-      "lineno": 80,
-      "path": "robot_sf/benchmark/planner_inclusion.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 4,
       "context": "save_pareto_png",
       "fingerprint": "861c2653b1eadcf2",
       "handler": "Exception",
       "lineno": 285,
       "path": "robot_sf/benchmark/plots.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 4,
-      "context": "infer_predictive_checkpoint_feature_schema_name",
-      "fingerprint": "7d7ce771bf209840",
-      "handler": "Exception",
-      "lineno": 46,
-      "path": "robot_sf/benchmark/predictive_planner_config.py",
       "source": "except Exception:"
     },
     {
@@ -1028,24 +950,6 @@
       "lineno": 291,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as exc:  # pragma: no cover - defensive child-process path"
-    },
-    {
-      "col_offset": 12,
-      "context": "_annotate_and_check_video_perf",
-      "fingerprint": "dcd523fc21c608fb",
-      "handler": "Exception",
-      "lineno": 956,
-      "path": "robot_sf/benchmark/runner.py",
-      "source": "except Exception:  # pragma: no cover - logging optional"
-    },
-    {
-      "col_offset": 12,
-      "context": "_annotate_and_check_video_perf",
-      "fingerprint": "dcd523fc21c608fb",
-      "handler": "Exception",
-      "lineno": 978,
-      "path": "robot_sf/benchmark/runner.py",
-      "source": "except Exception:  # pragma: no cover - logging optional"
     },
     {
       "col_offset": 16,
@@ -1102,33 +1006,6 @@
       "source": "except Exception:  # pragma: no cover"
     },
     {
-      "col_offset": 8,
-      "context": "_run_batch_parallel",
-      "fingerprint": "baa1af696f71b54a",
-      "handler": "Exception",
-      "lineno": 1589,
-      "path": "robot_sf/benchmark/runner.py",
-      "source": "except Exception as e:  # pragma: no cover - write/validate path"
-    },
-    {
-      "col_offset": 4,
-      "context": "_finalize_batch",
-      "fingerprint": "fc7a1ebf15707983",
-      "handler": "Exception",
-      "lineno": 1803,
-      "path": "robot_sf/benchmark/runner.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 16,
-      "context": "collect_episodes_from_campaign_runs",
-      "fingerprint": "1a9d7eba8297c18d",
-      "handler": "Exception",
-      "lineno": 902,
-      "path": "robot_sf/benchmark/snqi/campaign_contract.py",
-      "source": "except Exception:"
-    },
-    {
       "col_offset": 4,
       "context": "cmd_recompute_weights",
       "fingerprint": "ca9342b89ea033bf",
@@ -1163,24 +1040,6 @@
       "lineno": 277,
       "path": "robot_sf/benchmark/snqi/compute.py",
       "source": "except Exception:"
-    },
-    {
-      "col_offset": 8,
-      "context": "_apply_weight_aliases",
-      "fingerprint": "f487adc20721c664",
-      "handler": "Exception",
-      "lineno": 63,
-      "path": "robot_sf/benchmark/snqi/weights_validation.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 8,
-      "context": "validate_weights_mapping",
-      "fingerprint": "6b684be37b2257bb",
-      "handler": "Exception",
-      "lineno": 101,
-      "path": "robot_sf/benchmark/snqi/weights_validation.py",
-      "source": "except Exception as e:"
     },
     {
       "col_offset": 4,

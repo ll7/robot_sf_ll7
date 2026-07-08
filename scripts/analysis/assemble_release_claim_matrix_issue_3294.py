@@ -506,6 +506,7 @@ def build_matrix(source_paths: SourcePaths) -> dict[str, Any]:
         classification_counts[classification] = classification_counts.get(classification, 0) + 1
     return {
         "schema_version": SCHEMA_VERSION,
+        "review_marker": "AI-GENERATED NEEDS-REVIEW",
         "generated_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "issue": 3294,
         "claim_boundary": CLAIM_BOUNDARY,
@@ -556,6 +557,8 @@ def _markdown_cell(value: Any) -> str:
 def render_markdown(matrix: dict[str, Any]) -> str:
     """Render a compact Markdown matrix for review."""
     lines = [
+        "<!-- AI-GENERATED (robot_sf#3294, 2026-07-08) - NEEDS-REVIEW -->",
+        "",
         "# Issue 3294 Release Claim Matrix",
         "",
         f"Schema: `{matrix['schema_version']}`",
@@ -611,7 +614,7 @@ def render_markdown(matrix: dict[str, Any]) -> str:
     )
     for key, value in matrix["sources"].items():
         lines.append(f"- `{key}`: `{_markdown_cell(value)}`")
-    lines.append("")
+    lines.extend(["", "<!-- /AI-GENERATED -->", ""])
     return "\n".join(lines)
 
 

@@ -266,6 +266,7 @@ def build_report(
 
     return {
         "schema_version": SCHEMA_VERSION,
+        "review_marker": "AI-GENERATED NEEDS-REVIEW",
         "issue": 2910,
         "created_at_utc": _created_at_utc(scenario_summary),
         "status": status,
@@ -395,6 +396,8 @@ def render_markdown(report: dict[str, Any]) -> str:
 
     summary = report["summary"]
     lines = [
+        "<!-- AI-GENERATED (robot_sf#2910, 2026-07-08) - NEEDS-REVIEW -->",
+        "",
         "# Issue #2910 Publication Suite Certification Report",
         "",
         f"Status: `{report['status']}`",
@@ -460,6 +463,8 @@ def render_markdown(report: dict[str, Any]) -> str:
             "## Next Empirical Action",
             "",
             report["next_empirical_action"],
+            "",
+            "<!-- /AI-GENERATED -->",
             "",
         ]
     )

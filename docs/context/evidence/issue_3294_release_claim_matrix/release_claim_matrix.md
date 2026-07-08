@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#3294, 2026-07-08) - NEEDS-REVIEW -->
+
 # Issue 3294 Release Claim Matrix
 
 Schema: `release_claim_matrix_issue_3294.v1`
@@ -47,3 +49,5 @@ Claim boundary: Issue #3294 assembles a review matrix from existing tracked meta
 - `scenario_certification_summary`: `docs/context/evidence/issue_2910_release_scenario_certification/summary.json`
 - `publication_suite_policy`: `configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml`
 - `leaderboard_sidecars`: `docs/leaderboards/amv_actuation.rows.json, docs/leaderboards/lidar_2d.rows.json, docs/leaderboards/nominal_sanity.rows.json, docs/leaderboards/smoke.rows.json`
+
+<!-- /AI-GENERATED -->

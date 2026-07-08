@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#2910, 2026-07-08) - NEEDS-REVIEW -->
+
 # Issue #2910 Publication Suite Certification Report
 
 Status: `blocked_pending_rebase`
@@ -44,3 +46,5 @@ Claim boundary: CPU-only integration report over tracked scenario_cert.v1 summar
 ## Next Empirical Action
 
 Publication-suite policy ratified for 2 excluded and 9 stress-only scenarios; badge deferred pending #4364 release re-base. Regenerate matrix after re-base to flip badge.
+
+<!-- /AI-GENERATED -->

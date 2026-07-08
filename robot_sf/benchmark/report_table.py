@@ -133,7 +133,11 @@ def format_markdown(rows: Sequence[TableRow], metrics: Sequence[str]) -> str:
     include_track = any(row.benchmark_track for row in rows)
     # Use formatted metric labels with units for headers
     metric_headers = [metric_label(m) for m in metrics]
-    headers = ["Benchmark Track", "Group", *metric_headers] if include_track else ["Group", *metric_headers]
+    headers = (
+        ["Benchmark Track", "Group", *metric_headers]
+        if include_track
+        else ["Group", *metric_headers]
+    )
     lines = [
         "| " + " | ".join(headers) + " |",
         "| " + " | ".join(["---"] * len(headers)) + " |",
@@ -232,7 +236,11 @@ def format_latex_booktabs(rows: Sequence[TableRow], metrics: Sequence[str]) -> s
     lines.append("\\toprule")
     # Use formatted metric labels with units for headers
     metric_headers = [metric_label(m) for m in metrics]
-    header = ["Benchmark Track", "Group", *metric_headers] if include_track else ["Group", *metric_headers]
+    header = (
+        ["Benchmark Track", "Group", *metric_headers]
+        if include_track
+        else ["Group", *metric_headers]
+    )
     header_escaped = [_latex_escape(h) for h in header]
     header_line = " & ".join(header_escaped)
     lines.append(header_line + " \\")

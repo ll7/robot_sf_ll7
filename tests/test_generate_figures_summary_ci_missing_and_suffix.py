@@ -71,7 +71,7 @@ def test_missing_ci_warning(tmp_path: Path):
     assert "Missing CI arrays" in proc.stderr
     md = (out_dir / "baseline_table.md").read_text(encoding="utf-8")
     # Column exists but blank cell after header line
-    assert "collisions_mean_ci_low" in md
+    assert "Collisions Mean Ci Low" in md
 
 
 def test_custom_ci_suffix(tmp_path: Path):
@@ -95,6 +95,6 @@ def test_custom_ci_suffix(tmp_path: Path):
     ]
     subprocess.check_call(cmd, env={**os.environ, "MPLBACKEND": "Agg"})
     md = (out_dir / "baseline_table.md").read_text(encoding="utf-8")
-    assert "collisions_mean_ci95_low" in md
+    assert "Collisions Mean Ci95 Low" in md
     tex = (out_dir / "baseline_table.tex").read_text(encoding="utf-8")
-    assert ("collisions_mean_ci95_low" in tex) or ("collisions\\_mean\\_ci95\\_low" in tex)
+    assert "Collisions Mean Ci95 Low" in tex

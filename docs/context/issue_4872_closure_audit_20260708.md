@@ -1,4 +1,6 @@
-# Closure-Audit Sweep — 2026-07-08
+# Issue #4872 — Closure-Audit Sweep
+
+Audit date: 2026-07-08.
 
 ## Scope
 

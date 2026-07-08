@@ -39,17 +39,23 @@ class TestRobotSettingsUseConstant:
     def test_differential_drive_settings_default_radius(self) -> None:
         """T003: Verify DifferentialDriveSettings uses the central constant."""
         settings = DifferentialDriveSettings()
-        assert settings.radius == DEFAULT_ROBOT_RADIUS, "DifferentialDriveSettings should use DEFAULT_ROBOT_RADIUS"
+        assert settings.radius == DEFAULT_ROBOT_RADIUS, (
+            "DifferentialDriveSettings should use DEFAULT_ROBOT_RADIUS"
+        )
 
     def test_bicycle_drive_settings_default_radius(self) -> None:
         """T004: Verify BicycleDriveSettings uses the central constant."""
         settings = BicycleDriveSettings()
-        assert settings.radius == DEFAULT_ROBOT_RADIUS, "BicycleDriveSettings should use DEFAULT_ROBOT_RADIUS"
+        assert settings.radius == DEFAULT_ROBOT_RADIUS, (
+            "BicycleDriveSettings should use DEFAULT_ROBOT_RADIUS"
+        )
 
     def test_holonomic_drive_settings_default_radius(self) -> None:
         """T005: Verify HolonomicDriveSettings uses the central constant."""
         settings = HolonomicDriveSettings()
-        assert settings.radius == DEFAULT_ROBOT_RADIUS, "HolonomicDriveSettings should use DEFAULT_ROBOT_RADIUS"
+        assert settings.radius == DEFAULT_ROBOT_RADIUS, (
+            "HolonomicDriveSettings should use DEFAULT_ROBOT_RADIUS"
+        )
 
 
 class TestDivergentDefaultsDocumented:
@@ -62,19 +68,31 @@ class TestDivergentDefaultsDocumented:
         config = GridConfig()
         # The occupancy grid default is 0.3m, which differs from DEFAULT_ROBOT_RADIUS
         # This is intentional to avoid changing benchmark metrics
-        assert config.robot_radius == 0.3, "GridConfig robot_radius should be 0.3m (divergent, documented)"
+        assert config.robot_radius == 0.3, (
+            "GridConfig robot_radius should be 0.3m (divergent, documented)"
+        )
 
     def test_base_env_planner_fallback_is_documented(self) -> None:
-        """T007: Verify base_env.py documents its divergent fallback (0.4m)."""
-        # This test verifies documentation exists; the actual fallback is in code
-        # The documentation is a comment in base_env.py near line 299-307
-        import inspect
+        """T007: Verify base_env.py keeps its divergent fallback behavior (0.4m)."""
+        from unittest.mock import MagicMock, patch
 
         from robot_sf.gym_env.base_env import attach_planner_to_map
 
-        source = inspect.getsource(attach_planner_to_map)
-        assert "0.4" in source and "fallback" in source.lower(), \
-            "base_env.py should document the 0.4m fallback default"
+        map_def = MagicMock()
+        map_def._use_planner = False
+        map_def._global_planner = None
+
+        env_config = MagicMock()
+        env_config.use_planner = True
+        env_config.planner_backend = "custom"
+        env_config.planner_clearance_margin = 0.3
+        env_config.robot_config = None
+
+        with patch("robot_sf.gym_env.base_env.GlobalPlanner") as mock_global_planner:
+            attach_planner_to_map(map_def, env_config)
+
+        planner_config = mock_global_planner.call_args[0][1]
+        assert planner_config.robot_radius == 0.4
 
 
 class TestSNQIProxyUsesConstant:
@@ -83,8 +101,10 @@ class TestSNQIProxyUsesConstant:
     def test_snqi_proxy_imports_constant(self) -> None:
         """T008: Verify snqi_proxy.py imports DEFAULT_ROBOT_RADIUS."""
         import robot_sf.gym_env.snqi_proxy as snqi_proxy_module
-        assert hasattr(snqi_proxy_module, 'DEFAULT_ROBOT_RADIUS'), \
+
+        assert hasattr(snqi_proxy_module, "DEFAULT_ROBOT_RADIUS"), (
             "snqi_proxy should import DEFAULT_ROBOT_RADIUS from robot_sf.common.robot_defaults"
+        )
 
     def test_snqi_proxy_default_matches_constant(self) -> None:
         """T009: Verify SNQI proxy's _resolve_robot_radius uses DEFAULT_ROBOT_RADIUS."""
@@ -96,5 +116,6 @@ class TestSNQIProxyUsesConstant:
 
         sim = MockSimulator()
         radius = _resolve_robot_radius(sim)
-        assert radius == DEFAULT_ROBOT_RADIUS, \
+        assert radius == DEFAULT_ROBOT_RADIUS, (
             "SNQI proxy fallback should use DEFAULT_ROBOT_RADIUS (1.0m)"
+        )

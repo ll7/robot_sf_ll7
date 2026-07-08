@@ -63,7 +63,7 @@ class OptimizationConfig:
 
     Attributes:
         parameter_space: Dict of parameter name to ParameterDefinition
-        optimizer_type: "random_search" (currently only supported)
+        optimizer_type: "random_search" or "differential_evolution"
         sample_budget: Number of candidates to evaluate
         optimizer_seed: Random seed for reproducibility
         scenario_family: Path to scenario YAML or list of scenario dicts
@@ -90,6 +90,10 @@ class OptimizationConfig:
     horizon: int = 80
     dt: float = 0.1
     max_workers: int = 1
+    # Differential-evolution-specific settings (ignored for random_search)
+    de_maxiter: int = 50
+    de_popsize: int = 15
+    de_seed: int | None = None
 
 
 @dataclass
@@ -179,6 +183,9 @@ def _parse_optimization_config(payload: dict[str, Any]) -> OptimizationConfig:
         horizon=int(payload.get("horizon", 80)),
         dt=float(payload.get("dt", 0.1)),
         max_workers=int(payload.get("max_workers", 1)),
+        de_maxiter=int(payload.get("de_maxiter", 50)),
+        de_popsize=int(payload.get("de_popsize", 15)),
+        de_seed=(int(payload["de_seed"]) if payload.get("de_seed") is not None else None),
     )
 
 
@@ -362,7 +369,100 @@ def _evaluate_candidate(  # noqa: C901, PLR0913
         )
 
 
-def run_criticality_optimization(  # noqa: C901
+def _run_differential_evolution(
+    config: OptimizationConfig,
+    scenario: dict[str, Any],
+    scenario_path: Path,
+    objective_config: CriticalityObjectiveConfig,
+    output_dir: Path,
+    resolved_algo: str,
+    resolved_algo_config_path: str | None,
+) -> list[CandidateResult]:
+    """Run differential evolution optimization.
+
+    DE minimizes, so we negate the criticality score (which should be maximized).
+    Only continuous parameters are supported; discrete params default to baseline.
+    """
+    from scipy.optimize import differential_evolution
+
+    # DE requires all-continuous params; extract bounds and names
+    continuous_names = [
+        name for name, p in config.parameter_space.items() if p.param_type == "continuous"
+    ]
+    if not continuous_names:
+        raise ValueError("differential_evolution requires at least one continuous parameter")
+
+    bounds = [
+        (config.parameter_space[name].min, config.parameter_space[name].max)
+        for name in continuous_names
+    ]
+
+    # Container for evaluated candidates (DE calls this callback per iteration)
+    de_candidates: list[CandidateResult] = []
+    trial_counter: int = 0
+
+    def _de_objective(x: list[float]) -> float:
+        """DE minimizes; return negative criticality score."""
+        nonlocal trial_counter
+        params = dict(zip(continuous_names, x, strict=True))
+        # Fill discrete params with baseline (first value)
+        for name, pdef in config.parameter_space.items():
+            if pdef.param_type == "discrete" and name not in params:
+                params[name] = pdef.values[0] if pdef.values else 0.0
+
+        trial_counter += 1
+        result = _evaluate_candidate(
+            candidate_id=f"de_trial_{trial_counter:04d}",
+            parameters=params,
+            scenario=scenario,
+            config=config,
+            objective_config=objective_config,
+            output_dir=output_dir,
+            scenario_path=scenario_path,
+            resolved_algo=resolved_algo,
+            resolved_algo_config_path=resolved_algo_config_path,
+        )
+        de_candidates.append(result)
+        # DE minimizes; negate criticality (higher is better -> lower negative)
+        if result.status == "evaluated":
+            return -result.criticality_score
+        # Unsuccessful evaluations: return large positive so DE avoids them
+        return 1e12
+
+    seed = config.de_seed if config.de_seed is not None else config.optimizer_seed
+    de_result = differential_evolution(
+        _de_objective,
+        bounds=bounds,
+        maxiter=config.de_maxiter,
+        popsize=config.de_popsize,
+        seed=seed,
+        polish=True,
+        updating="deferred",
+    )
+
+    # Add the DE optimum as a named candidate
+    optimum_params = dict(zip(continuous_names, de_result.x, strict=True))
+    for name, pdef in config.parameter_space.items():
+        if pdef.param_type == "discrete" and name not in optimum_params:
+            optimum_params[name] = pdef.values[0] if pdef.values else 0.0
+
+    de_best = _evaluate_candidate(
+        candidate_id="de_optimum",
+        parameters=optimum_params,
+        scenario=scenario,
+        config=config,
+        objective_config=objective_config,
+        output_dir=output_dir,
+        scenario_path=scenario_path,
+        resolved_algo=resolved_algo,
+        resolved_algo_config_path=resolved_algo_config_path,
+    )
+    de_candidates.append(de_best)
+
+    return de_candidates
+
+
+def run_criticality_optimization(  # noqa: C901, PLR0912, PLR0915
     config: OptimizationConfig,
     output_dir: Path | None = None,
 ) -> tuple[list[CandidateResult], dict[str, Any]]:
@@ -409,13 +509,13 @@ def run_criticality_optimization(  # noqa: C901
         stalled_time_weight=config.objective_weights.get("stalled_time", 0.5),
     )
 
-    # Pre-sample all candidate parameters for deterministic parallel execution
-    candidate_params: list[tuple[str, dict[str, float]]] = [
+    # Pre-sample all candidate parameters for random search
+    random_search_candidates: list[tuple[str, dict[str, float]]] = [
         ("baseline_unperturbed", baseline_params),
     ]
     for i in range(config.sample_budget):
         params = _sample_parameters(config.parameter_space, rng)
-        candidate_params.append((f"candidate_{i:04d}", params))
+        random_search_candidates.append((f"candidate_{i:04d}", params))
 
     # Resolve effective worker count: 0 means auto (cpu_count), 1 means sequential
     effective_workers = config.max_workers
@@ -427,7 +527,7 @@ def run_criticality_optimization(  # noqa: C901
     # high-core host, max_workers=0 (auto) would otherwise start dozens of idle
     # processes for a handful of candidates.
     if effective_workers > 1:
-        effective_workers = min(effective_workers, max(1, len(candidate_params)))
+        effective_workers = min(effective_workers, max(1, len(random_search_candidates)))
 
     # Pre-resolve planner spec once in the main process so parallel workers
     # avoid redundant YAML registry / candidate-config file I/O.
@@ -444,27 +544,11 @@ def run_criticality_optimization(  # noqa: C901
 
     candidates: list[CandidateResult] = []
 
-    if effective_workers <= 1:
-        # Sequential evaluation (original behavior)
-        for cand_id, params in candidate_params:
-            result = _evaluate_candidate(
-                candidate_id=cand_id,
-                parameters=params,
-                scenario=scenario,
-                config=config,
-                objective_config=objective_config,
-                output_dir=output_dir,
-                scenario_path=scenario_path,
-                resolved_algo=_resolved_algo,
-                resolved_algo_config_path=_resolved_algo_config_path,
-            )
-            candidates.append(result)
-    else:
-        # Parallel evaluation with ProcessPoolExecutor
-        with ProcessPoolExecutor(max_workers=effective_workers) as executor:
-            futures = {
-                executor.submit(
-                    _evaluate_candidate,
+    if config.optimizer_type == "random_search":
+        if effective_workers <= 1:
+            # Sequential evaluation
+            for cand_id, params in random_search_candidates:
+                result = _evaluate_candidate(
                     candidate_id=cand_id,
                     parameters=params,
                     scenario=scenario,
@@ -474,16 +558,62 @@ def run_criticality_optimization(  # noqa: C901
                     scenario_path=scenario_path,
                     resolved_algo=_resolved_algo,
                     resolved_algo_config_path=_resolved_algo_config_path,
-                ): cand_id
-                for cand_id, params in candidate_params
-            }
-            for future in as_completed(futures):
-                candidates.append(future.result())
-        # ProcessPoolExecutor completes futures in nondeterministic order.
-        # Restore a stable, reproducible ordering by candidate_id so the whole
-        # downstream (report listing, tie-breaking, manifest) matches the
-        # sequential path regardless of which worker finished first.
-        candidates.sort(key=lambda c: c.candidate_id)
+                )
+                candidates.append(result)
+        else:
+            # Parallel evaluation with ProcessPoolExecutor
+            with ProcessPoolExecutor(max_workers=effective_workers) as executor:
+                futures = {
+                    executor.submit(
+                        _evaluate_candidate,
+                        candidate_id=cand_id,
+                        parameters=params,
+                        scenario=scenario,
+                        config=config,
+                        objective_config=objective_config,
+                        output_dir=output_dir,
+                        scenario_path=scenario_path,
+                        resolved_algo=_resolved_algo,
+                        resolved_algo_config_path=_resolved_algo_config_path,
+                    ): cand_id
+                    for cand_id, params in random_search_candidates
+                }
+                for future in as_completed(futures):
+                    candidates.append(future.result())
+            # ProcessPoolExecutor completes futures in nondeterministic order.
+            # Restore a stable, reproducible ordering by candidate_id so the whole
+            # downstream (report listing, tie-breaking, manifest) matches the
+            # sequential path regardless of which worker finished first.
+            candidates.sort(key=lambda c: c.candidate_id)
+    elif config.optimizer_type == "differential_evolution":
+        de_results = _run_differential_evolution(
+            config=config,
+            scenario=scenario,
+            scenario_path=scenario_path,
+            objective_config=objective_config,
+            output_dir=output_dir,
+            resolved_algo=_resolved_algo,
+            resolved_algo_config_path=_resolved_algo_config_path,
+        )
+        # DE results include the optimum; prepend baseline
+        baseline_params = _build_baseline_parameters(config.parameter_space)
+        baseline_result = _evaluate_candidate(
+            candidate_id="baseline_unperturbed",
+            parameters=baseline_params,
+            scenario=scenario,
+            config=config,
+            objective_config=objective_config,
+            output_dir=output_dir,
+            scenario_path=scenario_path,
+            resolved_algo=_resolved_algo,
+            resolved_algo_config_path=_resolved_algo_config_path,
+        )
+        candidates = [baseline_result] + de_results
+    else:
+        raise ValueError(
+            f"unsupported optimizer_type {config.optimizer_type!r}; "
+            "supported: random_search, differential_evolution"
+        )
 
     evaluated = [c for c in candidates if c.status == "evaluated"]
     # Secondary key on candidate_id makes "best" selection reproducible: parallel
@@ -495,6 +625,15 @@ def run_criticality_optimization(  # noqa: C901
         (c for c in candidates if c.candidate_id == "baseline_unperturbed"), None
     )
     baseline_score = baseline_candidate.criticality_score if baseline_candidate else float("nan")
+
+    # DE-specific manifest fields
+    de_manifest = {}
+    if config.optimizer_type == "differential_evolution":
+        de_manifest = {
+            "de_maxiter": config.de_maxiter,
+            "de_popsize": config.de_popsize,
+            "de_seed": config.de_seed,
+        }
 
     manifest = {
         "issue": 4362,
@@ -528,6 +667,7 @@ def run_criticality_optimization(  # noqa: C901
         "baseline_score": baseline_score,
         "generated_at": datetime.now(UTC).isoformat(),
     }
+    manifest.update(de_manifest)
 
     return candidates, manifest
 

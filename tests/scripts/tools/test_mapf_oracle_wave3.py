@@ -158,10 +158,10 @@ class TestSippTimeEdgesBlockedPropagation:
         )
         assert path is not None
         # The direct swap move must be avoided
-        if len(path) >= 2:
-            assert not (path[0] == (0, 0, 0) and path[1] == (1, 0, 1)), (
-                "SIPP allowed a swap collision with time_edges_blocked"
-            )
+        assert len(path) >= 2, "expected a multi-step path (start != goal)"
+        assert not (path[0] == (0, 0, 0) and path[1] == (1, 0, 1)), (
+            "SIPP allowed a swap collision with time_edges_blocked"
+        )
 
     def test_sipp_with_two_obstacles_no_false_swap(self) -> None:
         """Two independent obstacles must not cause a false swap block."""
@@ -247,10 +247,10 @@ class TestSippTimeEdgesBlockedPropagation:
         )
         assert path is not None
         # Must avoid swap with obstacle 0: (0,0)->(1,0) is a swap
-        if len(path) >= 2:
-            assert not (path[0] == (0, 0, 0) and path[1] == (1, 0, 1)), (
-                "Swap with obstacle 0 not detected"
-            )
+        assert len(path) >= 2, "expected a multi-step path (start != goal)"
+        assert not (path[0] == (0, 0, 0) and path[1] == (1, 0, 1)), (
+            "Swap with obstacle 0 not detected"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -273,10 +273,10 @@ class TestCbsTimeEdgesBlockedPropagation:
         assert result is not None
         path = result["solution"][0]
         # The direct swap move must be avoided
-        if len(path) >= 2:
-            assert not (path[0] == (0, 0, 0) and path[1] == (1, 0, 1)), (
-                "CBS allowed a swap collision with a dynamic obstacle"
-            )
+        assert len(path) >= 2, "expected a multi-step path (start != goal)"
+        assert not (path[0] == (0, 0, 0) and path[1] == (1, 0, 1)), (
+            "CBS allowed a swap collision with a dynamic obstacle"
+        )
 
     def test_cbs_two_agents_with_obstacle_swap(self) -> None:
         """CBS with two agents avoids dynamic obstacle swap collision."""
@@ -354,10 +354,10 @@ class TestCbsTimeEdgesBlockedPropagation:
         assert result is not None
         path = result["solution"][0]
         # Must avoid swap with obstacle 0
-        if len(path) >= 2:
-            assert not (path[0] == (0, 0, 0) and path[1] == (1, 0, 1)), (
-                "Swap with obstacle 0 not detected"
-            )
+        assert len(path) >= 2, "expected a multi-step path (start != goal)"
+        assert not (path[0] == (0, 0, 0) and path[1] == (1, 0, 1)), (
+            "Swap with obstacle 0 not detected"
+        )
 
     def test_cbs_three_agents_with_obstacle_edges(self) -> None:
         """CBS with three agents and obstacle edge collisions."""

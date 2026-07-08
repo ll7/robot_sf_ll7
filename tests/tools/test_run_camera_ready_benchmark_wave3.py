@@ -136,7 +136,7 @@ class TestBuildParser:
 class TestPreflightManifestHandling:
     """Tests for preflight manifest handling."""
 
-    def test_preflight_manifest_keys(self, tmp_path: Path, monkeypatch) -> None:
+    def test_preflight_manifest_keys(self, tmp_path: Path, monkeypatch, capsys) -> None:
         """Preflight mode returns all required manifest keys."""
         config_path = tmp_path / "config.yaml"
         config_path.write_text("name: test\n", encoding="utf-8")
@@ -172,6 +172,23 @@ class TestPreflightManifestHandling:
 
         rc = run_camera_ready_benchmark.main(["--config", str(config_path), "--mode", "preflight"])
         assert rc == 0
+
+        # Verify the emitted manifest payload actually carries every required key
+        # (rc == 0 alone would pass even if main() dropped keys from the payload).
+        payload = json.loads(capsys.readouterr().out)
+        out = tmp_path / "out"
+        assert payload == {
+            "campaign_id": "cid",
+            "campaign_root": str(out),
+            "validate_config_path": str(out / "validate.json"),
+            "preview_scenarios_path": str(out / "preview.json"),
+            "matrix_summary_json": str(out / "summary.json"),
+            "matrix_summary_csv": str(out / "summary.csv"),
+            "amv_coverage_json": str(out / "amv.json"),
+            "amv_coverage_md": str(out / "amv.md"),
+            "comparability_json": str(out / "comp.json"),
+            "comparability_md": str(out / "comp.md"),
+        }
 
     def test_preflight_manifest_campaign_id_forwarded(
         self, tmp_path: Path, monkeypatch, capsys

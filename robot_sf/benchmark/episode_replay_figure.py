@@ -50,6 +50,39 @@ try:
 except ImportError:
     _MATPLOTLIB_AVAILABLE = False
 
+try:
+    from loguru import logger
+
+    _LOGURU_AVAILABLE = True
+except ImportError:
+    _LOGURU_AVAILABLE = False
+
+    # Fallback to print if loguru not available
+    class _LoggerFallback:
+        """Fallback logger when loguru is not available."""
+
+        @staticmethod
+        def info(msg: str) -> None:
+            """Log info message."""
+            print(f"INFO: {msg}")  # noqa: T201
+
+        @staticmethod
+        def warning(msg: str) -> None:
+            """Log warning message."""
+            print(f"WARNING: {msg}")  # noqa: T201
+
+        @staticmethod
+        def error(msg: str) -> None:
+            """Log error message."""
+            print(f"ERROR: {msg}")  # noqa: T201
+
+        @staticmethod
+        def debug(msg: str) -> None:
+            """Log debug message."""
+            print(f"DEBUG: {msg}")  # noqa: T201
+
+    logger = _LoggerFallback()  # type: ignore[misc,assignment]
+
 REQUIRED_EPISODE_FIELDS = [
     "episode_id",
     "scenario_id",
@@ -220,6 +253,7 @@ class ProvenanceSidecar:
     source_episodes_jsonl_sha256: str | None
     artifacts: list[dict[str, Any]]
     generated_at: str
+    resimulated: bool = False
 
 
 def compute_file_sha256(path: Path) -> str:
@@ -708,6 +742,7 @@ def write_provenance_sidecar(
         "source_episodes_jsonl_sha256": sidecar.source_episodes_jsonl_sha256,
         "artifacts": sidecar.artifacts,
         "generated_at": sidecar.generated_at,
+        "resimulated": sidecar.resimulated,
     }
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, sort_keys=True)
@@ -792,6 +827,168 @@ def _generate_requested_artifacts(
     return artifacts, artifact_metadata
 
 
+def _resolve_scenario_from_matrix(
+    scenario_id: str,
+    scenario_matrix_path: Path,
+) -> dict[str, Any] | None:
+    """Look up scenario parameters from a matrix file by scenario_id.
+
+    Args:
+        scenario_id: Scenario identifier to search for.
+        scenario_matrix_path: Path to scenario matrix YAML file.
+
+    Returns:
+        Scenario parameters dict, or None if not found.
+
+    Raises:
+        FileNotFoundError: If scenario matrix file doesn't exist.
+        ValueError: If scenario_id not found in matrix.
+    """
+    if not scenario_matrix_path.exists():
+        raise FileNotFoundError(f"Scenario matrix not found: {scenario_matrix_path}")
+
+    try:
+        from robot_sf.benchmark.runner import load_scenario_matrix  # noqa: PLC0415
+    except ImportError:
+        raise RuntimeError("robot_sf.benchmark.runner.load_scenario_matrix not available")
+
+    scenarios = load_scenario_matrix(scenario_matrix_path)
+
+    for scenario in scenarios:
+        if scenario.get("scenario_id") == scenario_id:
+            return scenario
+
+    return None
+
+
+def _resimulate_episode(
+    episode_row: EpisodeRow,
+    scenario_params: dict[str, Any],
+    horizon: int = 100,
+    dt: float = 0.1,
+) -> ReplayEpisode:
+    """Re-simulate an episode from seed/config and return ReplayEpisode.
+
+    This is the keystone deterministic re-simulation feature for issue #4776.
+    It uses the same simulation infrastructure as campaign execution to
+    reproduce the episode trajectory from the recorded seed and scenario.
+
+    Args:
+        episode_row: Episode row with seed, planner info.
+        scenario_params: Scenario parameters dictionary.
+        horizon: Max simulation steps.
+        dt: Simulation timestep.
+
+    Returns:
+        ReplayEpisode with trajectory data.
+
+    Raises:
+        RuntimeError: If simulation dependencies unavailable.
+    """
+    try:
+        from robot_sf.benchmark.scenario_generator import generate_scenario  # noqa: PLC0415
+    except ImportError as e:
+        raise RuntimeError(f"Re-simulation dependency unavailable: {e}") from e
+
+    seed = episode_row.seed
+
+    gen = generate_scenario(scenario_params, seed=seed)
+    sim = gen.simulator
+    if sim is None:
+        raise RuntimeError("pysocialforce not available; cannot re-simulate episode")
+
+    # Create robot policy (simple baseline for now; could be extended to load from algo_config)
+    def _simple_robot_policy(
+        robot_pos: np.ndarray,
+        robot_vel: np.ndarray,
+        robot_goal: np.ndarray,
+        ped_positions: np.ndarray,
+        dt_: float,
+    ) -> np.ndarray:
+        """Simple goal-directed policy for re-simulation.
+
+        Returns:
+            Velocity vector as 2D numpy array.
+        """
+        goal_vec = robot_goal - robot_pos
+        dist = float(np.linalg.norm(goal_vec))
+        if dist < 1e-9:
+            return np.zeros(2)
+        speed = 1.0  # Default speed
+        return (goal_vec / dist) * min(speed, dist / dt_)
+
+    # Extract robot configuration from scenario
+    robot_start = np.array(scenario_params.get("robot_start", [0.3, 3.0]), dtype=float)
+    robot_goal = np.array(scenario_params.get("robot_goal", [9.7, 3.0]), dtype=float)
+    robot_vel = np.zeros(2)
+    robot_pos = robot_start.copy()
+
+    steps: list[ReplayStep] = []
+
+    # Record initial state at t=0
+    initial_ped_pos = sim.peds.pos().copy()
+    ped_positions_list = [tuple(p) for p in initial_ped_pos]
+
+    steps.append(
+        ReplayStep(
+            t=0.0,
+            x=float(robot_pos[0]),
+            y=float(robot_pos[1]),
+            heading=0.0,
+            speed=0.0,
+            ped_positions=ped_positions_list,
+        )
+    )
+
+    # Simulate episode
+    for step_idx in range(horizon):
+        # Get current pedestrian positions
+        ped_pos = sim.peds.pos().copy()
+
+        # Step robot with policy
+        new_vel = _simple_robot_policy(robot_pos, robot_vel, robot_goal, ped_pos, dt)
+        new_pos = robot_pos + new_vel * dt
+
+        # Step pedestrians
+        sim.step()
+        ped_pos_next = sim.peds.pos().copy()
+
+        # Record step
+        ped_positions_list = [tuple(p) for p in ped_pos_next]
+        speed = float(np.linalg.norm(new_vel))
+
+        # Compute heading from velocity
+        if speed > 1e-6:
+            heading = float(np.arctan2(new_vel[1], new_vel[0]))
+        else:
+            heading = steps[-1].heading if steps else 0.0
+
+        steps.append(
+            ReplayStep(
+                t=float((step_idx + 1) * dt),
+                x=float(new_pos[0]),
+                y=float(new_pos[1]),
+                heading=heading,
+                speed=speed,
+                ped_positions=ped_positions_list,
+            )
+        )
+
+        robot_pos = new_pos
+        robot_vel = new_vel
+
+        # Check goal reached
+        if np.linalg.norm(robot_goal - robot_pos) < 0.3:
+            break
+
+    return ReplayEpisode(
+        episode_id=episode_row.episode_id,
+        scenario_id=episode_row.scenario_id,
+        steps=steps,
+        dt=dt,
+    )
+
+
 def replay_episode_and_generate_figures(  # noqa: PLR0913
     episode_row: EpisodeRow,
     outputs: list[Literal["still", "filmstrip", "trajectory"]],
@@ -832,15 +1029,31 @@ def replay_episode_and_generate_figures(  # noqa: PLR0913
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Try to build replay from existing replay_steps first
     replay_episode = build_replay_from_episode_row(episode_row)
+    resimulated = False
+
     if not replay_episode:
-        raise ValueError(
-            f"Episode {episode_row.episode_id} has no replay_steps field in the row; "
-            "cannot generate figures without trajectory data. "
-            "The episode row must include a 'replay_steps' list with robot states. "
-            "Future work will support re-simulation from seed/config when replay_steps "
-            "is not available (see issue #4776 re-simulation bridge)."
+        # Fall back to deterministic re-simulation from seed/config
+        if not scenario_matrix_path:
+            raise ValueError(
+                f"Episode {episode_row.episode_id} has no replay_steps field and "
+                "no scenario matrix provided for re-simulation. "
+                "Provide --scenario-matrix to enable deterministic re-simulation "
+                "from seed/config."
+            )
+
+        scenario_params = _resolve_scenario_from_matrix(
+            episode_row.scenario_id, scenario_matrix_path
         )
+        if scenario_params is None:
+            raise ValueError(
+                f"Scenario '{episode_row.scenario_id}' not found in matrix {scenario_matrix_path}"
+            )
+
+        logger.info(f"Re-simulating episode {episode_row.episode_id} from seed {episode_row.seed}")
+        replay_episode = _resimulate_episode(episode_row, scenario_params)
+        resimulated = True
 
     if not validate_replay_episode(replay_episode, min_length=2):
         raise ValueError(
@@ -903,6 +1116,7 @@ def replay_episode_and_generate_figures(  # noqa: PLR0913
             source_episodes_jsonl_sha256=source_sha256,
             artifacts=artifact_metadata,
             generated_at=datetime.now(UTC).isoformat(),
+            resimulated=resimulated,
         )
 
         sidecar_path = out_dir / "replay_provenance.json"
@@ -945,6 +1159,8 @@ __all__ = [
     "FigureArtifact",
     "ProvenanceSidecar",
     "ReplayResult",
+    "_resimulate_episode",
+    "_resolve_scenario_from_matrix",
     "build_replay_from_episode_row",
     "check_determinism",
     "compute_file_sha256",

@@ -11,7 +11,11 @@ from robot_sf.benchmark.heterogeneous_rank_sensitivity import compute_bootstrap_
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def main() -> int:
+def _format_probability(value: object) -> str:
+    return f"{value:.3f}" if isinstance(value, (int, float)) else "N/A"
+
+
+def main() -> int:  # noqa: C901
     """Generate and print the rank-sensitivity report."""
     output_dir = REPO_ROOT / "output/issue_4850_multiplier_sweep"
 
@@ -63,8 +67,9 @@ def main() -> int:
             for comparison in pairwise:
                 planner_a = comparison.get("planner_a", "N/A")
                 planner_b = comparison.get("planner_b", "N/A")
-                prob_a_beats_b = comparison.get("prob_a_beats_b", "N/A")
-                print(f"  {planner_a} vs {planner_b}: P({planner_a} wins) = {prob_a_beats_b:.3f}")
+                prob_a_beats_b = comparison.get("prob_a_beats_b")
+                prob_text = _format_probability(prob_a_beats_b)
+                print(f"  {planner_a} vs {planner_b}: P({planner_a} wins) = {prob_text}")
 
         if "rankings_by_arm" in report:
             print("\nRankings by arm:")
@@ -86,7 +91,9 @@ def main() -> int:
                     arm_b = reversal.get("arm_b", "N/A")
                     ranking_a = reversal.get("ranking_a", [])
                     ranking_b = reversal.get("ranking_b", [])
-                    print(f"  {pair}: {arm_a} ({' > '.join(ranking_a)}) vs {arm_b} ({' > '.join(ranking_b)})")
+                    print(
+                        f"  {pair}: {arm_a} ({' > '.join(ranking_a)}) vs {arm_b} ({' > '.join(ranking_b)})"
+                    )
             else:
                 print("  No rank reversals detected across arms.")
     else:

@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.map_runner import _build_policy
+from robot_sf.benchmark.map_runner import build_map_policy
 from robot_sf.benchmark.map_runner_episode import run_map_episode
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -100,10 +100,12 @@ def main() -> int:
                     scenario_path=Path(__file__),  # dummy path
                     record_planner_decision_trace=False,
                     record_simulation_step_trace=True,
-                    policy_builder=_build_policy,
+                    policy_builder=build_map_policy,
                 )
                 # Annotate with run metadata for ranking/analysis scripts
-                rec["population_arm"] = f"multiplier_{multiplier}"  # Use population_arm for compatibility with rank-sensitivity
+                rec["population_arm"] = (
+                    f"multiplier_{multiplier}"  # Use population_arm for compatibility with rank-sensitivity
+                )
                 rec["non_reactive_response_multiplier"] = multiplier
                 rec["planner"] = planner
                 rec["seed"] = seed
@@ -120,7 +122,9 @@ def main() -> int:
 
                 records.append(rec)
             except (RuntimeError, ValueError, KeyError, TypeError, OSError) as e:
-                print(f"Exception during simulation (multiplier={multiplier}, planner={planner}, seed={seed}): {e}")
+                print(
+                    f"Exception during simulation (multiplier={multiplier}, planner={planner}, seed={seed}): {e}"
+                )
                 raise
 
     # Write out JSONL

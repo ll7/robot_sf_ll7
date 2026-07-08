@@ -1,5 +1,6 @@
 """Tests for the external MPC baseline wrappers."""
 
+import math
 import os
 import sys
 import types
@@ -83,6 +84,57 @@ def test_sicnav_skip_without_external_repo() -> None:
         package_paths = [SICNAV_STAGE_PATH / name for name in package_names]
         assert any(path.exists() for path in package_paths)
         assert any(find_spec(name) is not None for name in package_names)
+
+
+def _campc_dependency_stack_available() -> bool:
+    """Return True only when the full open-source campc dependency stack is importable."""
+    return all(find_spec(name) is not None for name in ("casadi", "rvo2", "gym"))
+
+
+def test_sicnav_campc_step_runs_against_staged_upstream() -> None:
+    """Exercise the real CasADi/IPOPT CollisionAvoidMPC policy through wrapper.step().
+
+    This is the dependency-backed smoke for issue #4870: it proves the dormant wrapper
+    drives the pinned upstream on the redistributable path (CasADi + bundled IPOPT +
+    python-RVO2; Acados/HSL intentionally absent). It skips cleanly when the staged
+    checkout or the open-source dependency stack is not present (CI default).
+    """
+    if not SICNAV_STAGE_PATH.exists():
+        pytest.skip(f"SICNav external repo is not staged at {SICNAV_STAGE_PATH}")
+    if not _campc_dependency_stack_available():
+        pytest.skip("Open-source campc dependency stack (casadi/rvo2/gym) is not installed")
+
+    planner = SICNavPlanner(build_sicnav_config({}), seed=1)
+    obs = {
+        "dt": 0.25,
+        "robot": {
+            "position": [0.0, 0.0],
+            "velocity": [0.0, 0.0],
+            "goal": [6.0, 0.0],
+            "radius": 0.25,
+            "v_pref": 1.0,
+        },
+        "agents": [
+            {
+                "position": [3.0, 0.7 + 0.25 * i],
+                "velocity": [-0.4, 0.0],
+                "radius": 0.30,
+                "goal": [-3.0, 0.7 + 0.25 * i],
+            }
+            for i in range(2)
+        ],
+        "obstacles": [],
+    }
+
+    action = planner.step(obs)
+
+    assert set(action) == {"v", "omega"}
+    assert math.isfinite(action["v"])
+    assert math.isfinite(action["omega"])
+    assert 0.0 <= action["v"] <= planner.config.v_max
+    assert abs(action["omega"]) <= planner.config.omega_max + 1e-9
+    # The metadata should reflect the real dependency-backed capability, not a gap.
+    assert planner.get_metadata()["status"] == "ok"
 
 
 def test_dr_mpc_step_raises_when_dependency_missing() -> None:

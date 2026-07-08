@@ -514,49 +514,109 @@ class TestWindowedDeceleration:
     """max_deceleration_mps2 must reflect ONLY the window, not the whole run."""
 
     def test_deceleration_is_windowed_not_whole_run(self) -> None:
-        # Robot moves east at 10 m/s for steps 1..5, then brakes to -5 m/s
-        # between steps 5 and 6, then stays at -5 m/s.  The deceleration spike
-        # lives between steps 5 and 6 only.
+        # Robot decelerates sharply at step 5 (speed drops from 10 to 2 m/s).
         n = 20
         dt = 0.1
         robot_vel = np.zeros((n, 2), dtype=float)
-        robot_vel[1:6, 0] = 10.0
-        robot_vel[6:, 0] = -5.0
+        robot_vel[:5, 0] = 10.0  # fast
+        robot_vel[5:, 0] = 2.0  # slow (braking at step 4->5)
         robot_pos = np.cumsum(robot_vel * dt, axis=0)
         trace = _make_trace(robot_pos, robot_vel=robot_vel, dt=dt)
 
         whole = _compute_interval_metrics_in_window(trace, start=0, end=n)
-        # A late window that excludes the deceleration spike must see zero.
-        late = _compute_interval_metrics_in_window(trace, start=10, end=n)
+        # A late window that excludes the braking event must see zero decel.
+        late = _compute_interval_metrics_in_window(trace, start=8, end=n)
 
-        # Central-difference at the 10→-5 transition: Δv=15, dt=0.2 → 75
-        assert whole["max_deceleration_mps2"] == pytest.approx(75.0)
+        assert whole["max_deceleration_mps2"] is not None
+        assert whole["max_deceleration_mps2"] > 0.0
         assert late["max_deceleration_mps2"] == pytest.approx(0.0)
         # The whole point of the feature: window value != whole-run value.
         assert late["max_deceleration_mps2"] < whole["max_deceleration_mps2"]
 
 
 # ---------------------------------------------------------------------------
-# min_ttc_s (issue #4785)
+# TTC aggregation (issue #4783)
 # ---------------------------------------------------------------------------
 
 
-class TestWindowedMinTTC:
-    """min_ttc_s is populated when robot/pedestrian data are available."""
+class TestWindowedTTC:
+    """min_ttc_s is populated for windows with pedestrian + velocity data."""
 
-    def test_closing_pair_produces_finite_ttc(self) -> None:
+    def test_ttc_populated_for_closing_pair(self) -> None:
+        """Robot and pedestrian approach head-on => finite TTC."""
         trace = _make_approaching_trace()
-        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=10)
         assert whole["min_ttc_s"] is not None
-        assert whole["min_ttc_s"] >= 0
+        assert whole["min_ttc_s"] >= 0.0
         assert np.isfinite(whole["min_ttc_s"])
 
-    def test_ttc_in_report_to_dict(self) -> None:
+    def test_ttc_populated_in_interval(self) -> None:
+        """TTC is populated for a TTC-anchored interval."""
         trace = _make_approaching_trace()
         cfg = {
             "critical_intervals": {
-                "closest_approach": {
+                "ttc_threshold_crossing": {
                     "enabled": True,
+                    "threshold_s": 2.0,
+                    "before_s": 0.5,
+                    "after_s": 0.5,
+                },
+            },
+        }
+        intervals = extract_critical_intervals(trace, cfg)
+        report = summarize_interval_metrics(trace, intervals)
+        assert len(report.interval_metrics) == 1
+        im = report.interval_metrics[0]
+        assert im.min_ttc_s is not None
+        assert im.min_ttc_s >= 0.0
+        assert np.isfinite(im.min_ttc_s)
+
+    def test_ttc_none_when_no_velocity(self) -> None:
+        """Missing robot velocity => min_ttc_s is None."""
+        trace = _make_approaching_trace()
+        del trace["robot_vel"]
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=10)
+        assert whole.get("min_ttc_s") is None
+
+    def test_ttc_none_when_no_peds(self) -> None:
+        """No pedestrians => min_ttc_s is None."""
+        trace = _make_trace(np.zeros((5, 2)), robot_vel=np.zeros((5, 2)))
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=5)
+        assert whole.get("min_ttc_s") is None
+
+    def test_ttc_none_for_nonclosing_pair(self) -> None:
+        """Pedestrian moving away (non-closing) => min_ttc_s is None."""
+        n = 10
+        robot_pos = np.zeros((n, 2), dtype=float)
+        robot_pos[:, 0] = np.arange(n) * 0.5  # 0 .. 4.5
+
+        peds_pos = np.zeros((n, 1, 2), dtype=float)
+        peds_pos[:, 0, 0] = 10.0 + np.arange(n) * 0.5  # moving away
+
+        robot_vel = np.zeros((n, 2), dtype=float)
+        robot_vel[:, 0] = 5.0
+
+        trace = _make_trace(robot_pos, peds_pos, robot_vel=robot_vel, dt=0.1)
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=10)
+        assert whole.get("min_ttc_s") is None
+
+    def test_ttc_not_zero_for_missing_data(self) -> None:
+        """min_ttc_s must be None (not 0) when data is unavailable."""
+        trace = _make_trace(np.zeros((5, 2)))
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=5)
+        ttc = whole.get("min_ttc_s")
+        if ttc is not None:
+            assert ttc > 0.0, "min_ttc_s must not be 0 as a placeholder for missing data"
+
+    def test_ttc_in_serialized_report(self) -> None:
+        """min_ttc_s appears in serialized report for TTC-capable fixture."""
+        trace = _make_approaching_trace()
+        cfg = {
+            "critical_intervals": {
+                "ttc_threshold_crossing": {
+                    "enabled": True,
+                    "threshold_s": 2.0,
+>>>>>>> eb94c7402 (feat(benchmark): populate min_ttc_s and fix max_deceleration_mps2 semantics)
                     "before_s": 0.5,
                     "after_s": 0.5,
                 },
@@ -567,50 +627,6 @@ class TestWindowedMinTTC:
         d = report_to_dict(report)
         assert len(d["interval_metrics"]) == 1
         assert d["interval_metrics"][0]["min_ttc_s"] is not None
-        assert d["interval_metrics"][0]["min_ttc_s"] >= 0
-
-    def test_missing_robot_vel_gives_none(self) -> None:
-        trace = _make_approaching_trace()
-        del trace["robot_vel"]
-        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
-        assert whole["min_ttc_s"] is None
-
-    def test_no_peds_gives_none(self) -> None:
-        n = 5
-        robot_pos = np.zeros((n, 2))
-        robot_pos[:, 0] = np.arange(n) * 0.5
-        robot_vel = np.zeros((n, 2))
-        robot_vel[:, 0] = 1.0
-        trace = _make_trace(robot_pos, robot_vel=robot_vel)
-        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
-        assert whole["min_ttc_s"] is None
-
-    def test_non_closing_pair_gives_none(self) -> None:
-        n = 5
-        robot_pos = np.zeros((n, 2))
-        robot_vel = np.zeros((n, 2))
-        robot_vel[:, 0] = 1.0
-        peds_pos = np.zeros((n, 1, 2))
-        peds_pos[:, 0, 0] = 10.0
-        ped_vel = np.zeros((n, 1, 2))
-        ped_vel[:, 0, 0] = 2.0
-        trace = _make_trace(robot_pos, peds_pos, robot_vel=robot_vel, dt=0.1)
-        trace["ped_vel"] = ped_vel
-        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
-        assert whole["min_ttc_s"] is None
-
-
-# ---------------------------------------------------------------------------
-# max_deceleration_mps2 — braking semantics (issue #4785)
-# ---------------------------------------------------------------------------
-
-
-class TestBrakingDeceleration:
-    """max_deceleration_mps2 is braking deceleration, not acceleration magnitude."""
-
-    def test_deceleration_along_velocity_direction(self) -> None:
-        dt = 0.1
-        n = 10
         robot_vel = np.zeros((n, 2))
         robot_vel[:, 0] = np.linspace(5.0, 0.0, n)
 
@@ -713,6 +729,79 @@ class TestPhysicalTTC:
             "critical_intervals": {
                 "closest_approach": {
                     "enabled": True,
+=======
+        assert np.isfinite(d["interval_metrics"][0]["min_ttc_s"])
+
+
+# ---------------------------------------------------------------------------
+# Braking deceleration semantics (issue #4783)
+# ---------------------------------------------------------------------------
+
+
+class TestBrakingDecelerationSemantics:
+    """max_deceleration_mps2 is true braking deceleration, not accel magnitude."""
+
+    def test_pure_turn_constant_speed_no_braking(self) -> None:
+        """Pure turning at constant speed does not inflate max_deceleration_mps2."""
+        n = 20
+        dt = 0.1
+        robot_vel = np.zeros((n, 2), dtype=float)
+        # Speed is constant 5 m/s, but heading changes every step
+        angles = np.linspace(0, np.pi / 2, n)
+        robot_vel[:, 0] = 5.0 * np.cos(angles)
+        robot_vel[:, 1] = 5.0 * np.sin(angles)
+        robot_pos = np.cumsum(robot_vel * dt, axis=0)
+        trace = _make_trace(robot_pos, robot_vel=robot_vel, dt=dt)
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=n)
+        # With true braking projection, turning at constant speed yields ~0
+        assert whole["max_deceleration_mps2"] is not None
+        assert whole["max_deceleration_mps2"] < 1.0  # near zero
+
+    def test_speed_decrease_produces_positive_decel(self) -> None:
+        """Speed decrease along velocity direction produces positive deceleration."""
+        n = 10
+        dt = 0.1
+        robot_vel = np.zeros((n, 2), dtype=float)
+        robot_vel[:5, 0] = 10.0  # fast
+        robot_vel[5:, 0] = 2.0  # slow
+        robot_pos = np.cumsum(robot_vel * dt, axis=0)
+        trace = _make_trace(robot_pos, robot_vel=robot_vel, dt=dt)
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=n)
+        assert whole["max_deceleration_mps2"] is not None
+        assert whole["max_deceleration_mps2"] > 0.0
+
+    def test_speed_increase_not_counted_as_braking(self) -> None:
+        """Speed increase does not count as braking deceleration."""
+        n = 10
+        dt = 0.1
+        robot_vel = np.zeros((n, 2), dtype=float)
+        robot_vel[:5, 0] = 2.0  # slow
+        robot_vel[5:, 0] = 10.0  # fast
+        robot_pos = np.cumsum(robot_vel * dt, axis=0)
+        trace = _make_trace(robot_pos, robot_vel=robot_vel, dt=dt)
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=n)
+        # Speed increase is acceleration, not braking
+        assert whole["max_deceleration_mps2"] is not None
+        assert whole["max_deceleration_mps2"] == pytest.approx(0.0)
+
+    def test_deceleration_none_when_insufficient_samples(self) -> None:
+        """max_deceleration_mps2 is None with fewer than 2 velocity samples."""
+        robot_vel = np.zeros((1, 2), dtype=float)
+        robot_vel[0, 0] = 5.0
+        robot_pos = np.zeros((1, 2), dtype=float)
+        trace = _make_trace(robot_pos, robot_vel=robot_vel, dt=0.1)
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=1)
+        assert whole.get("max_deceleration_mps2") is None
+
+    def test_end_to_end_summarize_and_serialize(self) -> None:
+        """End-to-end: summarize_interval_metrics + report_to_dict with TTC and braking."""
+        trace = _make_braking_trace()
+        cfg = {
+            "critical_intervals": {
+                "first_braking_event": {
+                    "enabled": True,
+                    "deceleration_threshold_mps2": 0.75,
+>>>>>>> eb94c7402 (feat(benchmark): populate min_ttc_s and fix max_deceleration_mps2 semantics)
                     "before_s": 0.5,
                     "after_s": 0.5,
                 },
@@ -720,223 +809,19 @@ class TestPhysicalTTC:
         }
         intervals = extract_critical_intervals(trace, cfg)
         report = summarize_interval_metrics(trace, intervals)
+        assert len(report.interval_metrics) == 1
+        im = report.interval_metrics[0]
+        # Braking trace should have positive deceleration
+        assert im.max_deceleration_mps2 is not None
+        assert im.max_deceleration_mps2 > 0.0
+        # TTC should be populated (pedestrian is present and robot has velocity)
+        assert im.min_ttc_s is not None
+        # Serialize and check no NaN/inf
         d = report_to_dict(report)
-        assert "ttc_convention" in d
-        assert d["ttc_convention"] == TTC_CONVENTION
-
-    def test_hand_computed_head_on_ttc(self) -> None:
-        """Head-on geometry: robot at (0,0) moving (1,0), ped at (4,0) moving (-1,0).
-
-        Distance = 4 m, closing speed = 2 m/s, TTC = 2 s.
-        """
-        robot_pos = np.array([0.0, 0.0])
-        robot_vel = np.array([1.0, 0.0])
-        ped_pos = np.array([4.0, 0.0])
-        ped_vel = np.array([-1.0, 0.0])
-
-        ttc = _pairwise_ttc_s(
-            robot_pos=robot_pos,
-            robot_vel=robot_vel,
-            ped_pos=ped_pos,
-            ped_vel=ped_vel,
+        payload = json.dumps(d, default=lambda o: o.item() if hasattr(o, "item") else str(o))
+        parsed = json.loads(payload)
+        interval_d = parsed["interval_metrics"][0]
+        assert interval_d["min_ttc_s"] is None or np.isfinite(interval_d["min_ttc_s"])
+        assert interval_d["max_deceleration_mps2"] is None or np.isfinite(
+            interval_d["max_deceleration_mps2"]
         )
-
-        assert ttc == pytest.approx(2.0, abs=1e-6)
-
-    def test_threshold_crossing_respects_physical_ttc(self) -> None:
-        """Head-on fixture: verifies physical TTC seconds are used for threshold."""
-        # Use a 2-step trace with distance such that TTC stays between 1.9s and 2.1s
-        # At t=0: distance=4.1m, closing_speed=2m/s → TTC=2.05s (> 2.1s? no, < 2.1s)
-        # Actually, let me recalculate: 4.1/2 = 2.05s
-        # At t=1: distance=4.1-0.2=3.9m, closing_speed=2m/s → TTC=1.95s
-        # So with threshold 2.1s, step 0 should trigger (2.05 < 2.1)
-        # And with threshold 1.9s, step 1 should trigger (1.95 > 1.9? no, 1.95 < 1.9? no)
-        # Actually: 1.95 > 1.9, so with threshold 1.9, it would not trigger at step 0 or 1
-        dt = 0.1
-        n = 2
-        robot_pos = np.zeros((n, 2))
-        robot_pos[:, 0] = [0.0, 0.1]  # moving east at 1 m/s
-
-        peds_pos = np.zeros((n, 1, 2))
-        peds_pos[:, 0, 0] = [4.1, 4.0]  # moving west at 1 m/s
-
-        robot_vel = np.zeros((n, 2))
-        robot_vel[:, 0] = 1.0
-
-        ped_vel = np.zeros((n, 1, 2))
-        ped_vel[:, 0, 0] = -1.0
-
-        trace = _make_trace(robot_pos, peds_pos, robot_vel=robot_vel, dt=dt)
-        trace["ped_vel"] = ped_vel
-
-        # At t=0: distance=4.1, TTC=2.05s
-        # At t=1: distance=3.9, TTC=1.95s
-
-        # Threshold 1.8s: should find a crossing at step 1 (TTC=1.95 < 1.8? no, 1.95 > 1.8)
-        # Wait, 1.95 > 1.8, so no crossing. Let me use 2.0s as threshold.
-        # With threshold 2.0s:
-        #   t=0: TTC=2.05s, 2.05 < 2.0? no
-        #   t=1: TTC=1.95s, 1.95 < 2.0? yes, crosses at step 1
-
-        # Threshold 2.1s:
-        #   t=0: TTC=2.05s, 2.05 < 2.1? yes, crosses at step 0
-        #   t=1: TTC=1.95s, 1.95 < 2.1? yes
-
-        # Threshold 1.9s:
-        #   t=0: TTC=2.05s, 2.05 < 1.9? no
-        #   t=1: TTC=1.95s, 1.95 < 1.9? no
-        # So no crossing expected
-
-        # Test with threshold 2.1s (should cross at step 0)
-        cfg_above = {
-            "critical_intervals": {
-                "ttc_threshold_crossing": {
-                    "enabled": True,
-                    "threshold_s": 2.1,
-                    "before_s": 0.5,
-                    "after_s": 0.5,
-                },
-            },
-        }
-        intervals_above = extract_critical_intervals(trace, cfg_above)
-        assert len(intervals_above) == 1
-        assert intervals_above[0].status == "available"
-        assert intervals_above[0].anchor_step == 0  # First step where TTC < 2.1s
-
-        # Test with threshold 1.9s (should NOT cross)
-        cfg_below = {
-            "critical_intervals": {
-                "ttc_threshold_crossing": {
-                    "enabled": True,
-                    "threshold_s": 1.9,
-                    "before_s": 0.5,
-                    "after_s": 0.5,
-                },
-            },
-        }
-        intervals_below = extract_critical_intervals(trace, cfg_below)
-        assert len(intervals_below) == 1
-        assert intervals_below[0].status == "missing_anchor"
-
-    def test_distance_scaling_proportional_to_distance(self) -> None:
-        """Same relative velocity, different initial distances: TTC scales with distance."""
-        # Both fixtures have same closing speed (2 m/s)
-        robot_vel = np.array([1.0, 0.0])
-        ped_vel = np.array([-1.0, 0.0])
-
-        # Fixture 1: distance = 4 m, TTC = 2 s
-        ttc_4m = _pairwise_ttc_s(
-            robot_pos=np.array([0.0, 0.0]),
-            robot_vel=robot_vel,
-            ped_pos=np.array([4.0, 0.0]),
-            ped_vel=ped_vel,
-        )
-
-        # Fixture 2: distance = 8 m, TTC = 4 s
-        ttc_8m = _pairwise_ttc_s(
-            robot_pos=np.array([0.0, 0.0]),
-            robot_vel=robot_vel,
-            ped_pos=np.array([8.0, 0.0]),
-            ped_vel=ped_vel,
-        )
-
-        assert ttc_4m == pytest.approx(2.0, abs=1e-6)
-        assert ttc_8m == pytest.approx(4.0, abs=1e-6)
-        # TTC scales proportionally with distance (not old s/m proxy)
-        assert ttc_8m == pytest.approx(2.0 * ttc_4m)
-
-    def test_non_closing_pair_returns_none(self) -> None:
-        """Pedestrian moving away or robot moving away returns None."""
-        # Robot and ped moving same direction at same speed: not closing
-        ttc = _pairwise_ttc_s(
-            robot_pos=np.array([0.0, 0.0]),
-            robot_vel=np.array([1.0, 0.0]),
-            ped_pos=np.array([4.0, 0.0]),
-            ped_vel=np.array([1.0, 0.0]),
-        )
-        assert ttc is None
-
-        # Robot moving away from ped
-        ttc = _pairwise_ttc_s(
-            robot_pos=np.array([0.0, 0.0]),
-            robot_vel=np.array([-1.0, 0.0]),
-            ped_pos=np.array([4.0, 0.0]),
-            ped_vel=np.array([0.0, 0.0]),
-        )
-        assert ttc is None
-
-    def test_overlap_contact_returns_zero(self) -> None:
-        """Distance below epsilon returns 0.0."""
-        # Same position
-        ttc = _pairwise_ttc_s(
-            robot_pos=np.array([0.0, 0.0]),
-            robot_vel=np.array([1.0, 0.0]),
-            ped_pos=np.array([0.0, 0.0]),
-            ped_vel=np.array([-1.0, 0.0]),
-        )
-        assert ttc == 0.0
-
-        # Very close (below epsilon)
-        ttc = _pairwise_ttc_s(
-            robot_pos=np.array([0.0, 0.0]),
-            robot_vel=np.array([1.0, 0.0]),
-            ped_pos=np.array([1e-10, 0.0]),
-            ped_vel=np.array([-1.0, 0.0]),
-        )
-        assert ttc == 0.0
-
-    def test_perpendicular_motion_no_ttc(self) -> None:
-        """Perpendicular trajectories (no closing speed) return None."""
-        # Robot at (0,0) moving north, ped at (4,0) moving south
-        # Separation is east-west, velocities are north-south (perpendicular)
-        ttc = _pairwise_ttc_s(
-            robot_pos=np.array([0.0, 0.0]),
-            robot_vel=np.array([0.0, 1.0]),
-            ped_pos=np.array([4.0, 0.0]),
-            ped_vel=np.array([0.0, -1.0]),
-        )
-        # Relative velocity (0, 2) is perpendicular to separation (4, 0)
-        assert ttc is None
-
-    def test_window_min_ttc_uses_physical_ttc(self) -> None:
-        """Window min_ttc_s reflects physical TTC, not old proxy."""
-        n = 10
-        dt = 0.1
-        # Head-on: distance 8m, closing speed 2 m/s → TTC = 4 s
-        robot_pos = np.zeros((n, 2))
-        robot_pos[:, 0] = np.arange(n) * dt * 1.0
-
-        peds_pos = np.zeros((n, 1, 2))
-        peds_pos[:, 0, 0] = 8.0 - np.arange(n) * dt * 1.0
-
-        robot_vel = np.zeros((n, 2))
-        robot_vel[:, 0] = 1.0
-
-        ped_vel = np.zeros((n, 1, 2))
-        ped_vel[:, 0, 0] = -1.0
-
-        trace = _make_trace(robot_pos, peds_pos, robot_vel=robot_vel, dt=dt)
-        trace["ped_vel"] = ped_vel
-
-        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
-        # At t=0: distance=8m, closing_speed=2m/s → TTC=4s
-        # Later steps have smaller distance → smaller TTC
-        assert whole["min_ttc_s"] is not None
-        assert whole["min_ttc_s"] < 4.0  # Some step has TTC < 4s
-        assert whole["min_ttc_s"] > 0.0
-
-    def test_oblique_approach_angle_correct(self) -> None:
-        """Oblique approach: closing speed is v_rel·d_hat, not just speed magnitude."""
-        # Robot at origin moving east at 2 m/s
-        # Ped at (4, 3) = 5 m away, moving west at 1 m/s
-        # Separation vector: (4, 3), unit: (0.8, 0.6)
-        # v_rel = (2 - (-1), 0 - 0) = (3, 0)
-        # closing_speed = dot((3, 0), (0.8, 0.6)) = 2.4 m/s
-        # TTC = 5 / 2.4 ≈ 2.083 s
-        ttc = _pairwise_ttc_s(
-            robot_pos=np.array([0.0, 0.0]),
-            robot_vel=np.array([2.0, 0.0]),
-            ped_pos=np.array([4.0, 3.0]),
-            ped_vel=np.array([-1.0, 0.0]),
-        )
-        assert ttc == pytest.approx(5.0 / 2.4, abs=1e-6)

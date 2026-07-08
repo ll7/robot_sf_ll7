@@ -244,9 +244,7 @@ def _scenario_certification_prerequisites(
     if status == "scenario_cert.v1:accepted":
         return []
     if status == "policy_accepted_blocked_pending_rebase":
-        return [
-            "publication-suite policy ratified; badge deferred pending #4364 release re-base"
-        ]
+        return ["publication-suite policy ratified; badge deferred pending #4364 release re-base"]
     raw_blocker = summary.get("publication_blocker")
     blocker = str(raw_blocker).strip() if raw_blocker is not None else ""
     if blocker:

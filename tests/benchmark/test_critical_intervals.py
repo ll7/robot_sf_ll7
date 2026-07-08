@@ -15,10 +15,12 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.critical_intervals import (
+    TTC_CONVENTION,
     CriticalInterval,
     IntervalMetrics,
     _compute_interval_metrics_in_window,
     _compute_max_braking_deceleration_mps2,
+    _pairwise_ttc_s,
     extract_critical_intervals,
     load_config,
     report_to_dict,
@@ -651,3 +653,251 @@ class TestBrakingDeceleration:
         robot_vel = np.array([[5.0, 0.0]])
         result = _compute_max_braking_deceleration_mps2(robot_vel, dt=0.1)
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Physical TTC convention (issue #4832)
+# ---------------------------------------------------------------------------
+
+
+class TestPhysicalTTC:
+    """TTC uses physical line-of-sight closing speed, not the old s/m proxy."""
+
+    def test_ttc_convention_constant(self) -> None:
+        """Module declares the TTC convention explicitly."""
+        assert TTC_CONVENTION == "line_of_sight_closing_speed_seconds.v1"
+
+    def test_report_includes_ttc_convention(self) -> None:
+        """Report output includes the TTC convention metadata."""
+        trace = _make_approaching_trace()
+        cfg = {
+            "critical_intervals": {
+                "closest_approach": {
+                    "enabled": True,
+                    "before_s": 0.5,
+                    "after_s": 0.5,
+                },
+            },
+        }
+        intervals = extract_critical_intervals(trace, cfg)
+        report = summarize_interval_metrics(trace, intervals)
+        d = report_to_dict(report)
+        assert "ttc_convention" in d
+        assert d["ttc_convention"] == TTC_CONVENTION
+
+    def test_hand_computed_head_on_ttc(self) -> None:
+        """Head-on geometry: robot at (0,0) moving (1,0), ped at (4,0) moving (-1,0).
+
+        Distance = 4 m, closing speed = 2 m/s, TTC = 2 s.
+        """
+        robot_pos = np.array([0.0, 0.0])
+        robot_vel = np.array([1.0, 0.0])
+        ped_pos = np.array([4.0, 0.0])
+        ped_vel = np.array([-1.0, 0.0])
+
+        ttc = _pairwise_ttc_s(
+            robot_pos=robot_pos,
+            robot_vel=robot_vel,
+            ped_pos=ped_pos,
+            ped_vel=ped_vel,
+        )
+
+        assert ttc == pytest.approx(2.0, abs=1e-6)
+
+    def test_threshold_crossing_respects_physical_ttc(self) -> None:
+        """Head-on fixture: verifies physical TTC seconds are used for threshold."""
+        # Use a 2-step trace with distance such that TTC stays between 1.9s and 2.1s
+        # At t=0: distance=4.1m, closing_speed=2m/s → TTC=2.05s (> 2.1s? no, < 2.1s)
+        # Actually, let me recalculate: 4.1/2 = 2.05s
+        # At t=1: distance=4.1-0.2=3.9m, closing_speed=2m/s → TTC=1.95s
+        # So with threshold 2.1s, step 0 should trigger (2.05 < 2.1)
+        # And with threshold 1.9s, step 1 should trigger (1.95 > 1.9? no, 1.95 < 1.9? no)
+        # Actually: 1.95 > 1.9, so with threshold 1.9, it would not trigger at step 0 or 1
+        dt = 0.1
+        n = 2
+        robot_pos = np.zeros((n, 2))
+        robot_pos[:, 0] = [0.0, 0.1]  # moving east at 1 m/s
+
+        peds_pos = np.zeros((n, 1, 2))
+        peds_pos[:, 0, 0] = [4.1, 4.0]  # moving west at 1 m/s
+
+        robot_vel = np.zeros((n, 2))
+        robot_vel[:, 0] = 1.0
+
+        ped_vel = np.zeros((n, 1, 2))
+        ped_vel[:, 0, 0] = -1.0
+
+        trace = _make_trace(robot_pos, peds_pos, robot_vel=robot_vel, dt=dt)
+        trace["ped_vel"] = ped_vel
+
+        # At t=0: distance=4.1, TTC=2.05s
+        # At t=1: distance=3.9, TTC=1.95s
+
+        # Threshold 1.8s: should find a crossing at step 1 (TTC=1.95 < 1.8? no, 1.95 > 1.8)
+        # Wait, 1.95 > 1.8, so no crossing. Let me use 2.0s as threshold.
+        # With threshold 2.0s:
+        #   t=0: TTC=2.05s, 2.05 < 2.0? no
+        #   t=1: TTC=1.95s, 1.95 < 2.0? yes, crosses at step 1
+
+        # Threshold 2.1s:
+        #   t=0: TTC=2.05s, 2.05 < 2.1? yes, crosses at step 0
+        #   t=1: TTC=1.95s, 1.95 < 2.1? yes
+
+        # Threshold 1.9s:
+        #   t=0: TTC=2.05s, 2.05 < 1.9? no
+        #   t=1: TTC=1.95s, 1.95 < 1.9? no
+        # So no crossing expected
+
+        # Test with threshold 2.1s (should cross at step 0)
+        cfg_above = {
+            "critical_intervals": {
+                "ttc_threshold_crossing": {
+                    "enabled": True,
+                    "threshold_s": 2.1,
+                    "before_s": 0.5,
+                    "after_s": 0.5,
+                },
+            },
+        }
+        intervals_above = extract_critical_intervals(trace, cfg_above)
+        assert len(intervals_above) == 1
+        assert intervals_above[0].status == "available"
+        assert intervals_above[0].anchor_step == 0  # First step where TTC < 2.1s
+
+        # Test with threshold 1.9s (should NOT cross)
+        cfg_below = {
+            "critical_intervals": {
+                "ttc_threshold_crossing": {
+                    "enabled": True,
+                    "threshold_s": 1.9,
+                    "before_s": 0.5,
+                    "after_s": 0.5,
+                },
+            },
+        }
+        intervals_below = extract_critical_intervals(trace, cfg_below)
+        assert len(intervals_below) == 1
+        assert intervals_below[0].status == "missing_anchor"
+
+    def test_distance_scaling_proportional_to_distance(self) -> None:
+        """Same relative velocity, different initial distances: TTC scales with distance."""
+        # Both fixtures have same closing speed (2 m/s)
+        robot_vel = np.array([1.0, 0.0])
+        ped_vel = np.array([-1.0, 0.0])
+
+        # Fixture 1: distance = 4 m, TTC = 2 s
+        ttc_4m = _pairwise_ttc_s(
+            robot_pos=np.array([0.0, 0.0]),
+            robot_vel=robot_vel,
+            ped_pos=np.array([4.0, 0.0]),
+            ped_vel=ped_vel,
+        )
+
+        # Fixture 2: distance = 8 m, TTC = 4 s
+        ttc_8m = _pairwise_ttc_s(
+            robot_pos=np.array([0.0, 0.0]),
+            robot_vel=robot_vel,
+            ped_pos=np.array([8.0, 0.0]),
+            ped_vel=ped_vel,
+        )
+
+        assert ttc_4m == pytest.approx(2.0, abs=1e-6)
+        assert ttc_8m == pytest.approx(4.0, abs=1e-6)
+        # TTC scales proportionally with distance (not old s/m proxy)
+        assert ttc_8m == pytest.approx(2.0 * ttc_4m)
+
+    def test_non_closing_pair_returns_none(self) -> None:
+        """Pedestrian moving away or robot moving away returns None."""
+        # Robot and ped moving same direction at same speed: not closing
+        ttc = _pairwise_ttc_s(
+            robot_pos=np.array([0.0, 0.0]),
+            robot_vel=np.array([1.0, 0.0]),
+            ped_pos=np.array([4.0, 0.0]),
+            ped_vel=np.array([1.0, 0.0]),
+        )
+        assert ttc is None
+
+        # Robot moving away from ped
+        ttc = _pairwise_ttc_s(
+            robot_pos=np.array([0.0, 0.0]),
+            robot_vel=np.array([-1.0, 0.0]),
+            ped_pos=np.array([4.0, 0.0]),
+            ped_vel=np.array([0.0, 0.0]),
+        )
+        assert ttc is None
+
+    def test_overlap_contact_returns_zero(self) -> None:
+        """Distance below epsilon returns 0.0."""
+        # Same position
+        ttc = _pairwise_ttc_s(
+            robot_pos=np.array([0.0, 0.0]),
+            robot_vel=np.array([1.0, 0.0]),
+            ped_pos=np.array([0.0, 0.0]),
+            ped_vel=np.array([-1.0, 0.0]),
+        )
+        assert ttc == 0.0
+
+        # Very close (below epsilon)
+        ttc = _pairwise_ttc_s(
+            robot_pos=np.array([0.0, 0.0]),
+            robot_vel=np.array([1.0, 0.0]),
+            ped_pos=np.array([1e-10, 0.0]),
+            ped_vel=np.array([-1.0, 0.0]),
+        )
+        assert ttc == 0.0
+
+    def test_perpendicular_motion_no_ttc(self) -> None:
+        """Perpendicular trajectories (no closing speed) return None."""
+        # Robot at (0,0) moving north, ped at (4,0) moving south
+        # Separation is east-west, velocities are north-south (perpendicular)
+        ttc = _pairwise_ttc_s(
+            robot_pos=np.array([0.0, 0.0]),
+            robot_vel=np.array([0.0, 1.0]),
+            ped_pos=np.array([4.0, 0.0]),
+            ped_vel=np.array([0.0, -1.0]),
+        )
+        # Relative velocity (0, 2) is perpendicular to separation (4, 0)
+        assert ttc is None
+
+    def test_window_min_ttc_uses_physical_ttc(self) -> None:
+        """Window min_ttc_s reflects physical TTC, not old proxy."""
+        n = 10
+        dt = 0.1
+        # Head-on: distance 8m, closing speed 2 m/s → TTC = 4 s
+        robot_pos = np.zeros((n, 2))
+        robot_pos[:, 0] = np.arange(n) * dt * 1.0
+
+        peds_pos = np.zeros((n, 1, 2))
+        peds_pos[:, 0, 0] = 8.0 - np.arange(n) * dt * 1.0
+
+        robot_vel = np.zeros((n, 2))
+        robot_vel[:, 0] = 1.0
+
+        ped_vel = np.zeros((n, 1, 2))
+        ped_vel[:, 0, 0] = -1.0
+
+        trace = _make_trace(robot_pos, peds_pos, robot_vel=robot_vel, dt=dt)
+        trace["ped_vel"] = ped_vel
+
+        whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
+        # At t=0: distance=8m, closing_speed=2m/s → TTC=4s
+        # Later steps have smaller distance → smaller TTC
+        assert whole["min_ttc_s"] is not None
+        assert whole["min_ttc_s"] < 4.0  # Some step has TTC < 4s
+        assert whole["min_ttc_s"] > 0.0
+
+    def test_oblique_approach_angle_correct(self) -> None:
+        """Oblique approach: closing speed is v_rel·d_hat, not just speed magnitude."""
+        # Robot at origin moving east at 2 m/s
+        # Ped at (4, 3) = 5 m away, moving west at 1 m/s
+        # Separation vector: (4, 3), unit: (0.8, 0.6)
+        # v_rel = (2 - (-1), 0 - 0) = (3, 0)
+        # closing_speed = dot((3, 0), (0.8, 0.6)) = 2.4 m/s
+        # TTC = 5 / 2.4 ≈ 2.083 s
+        ttc = _pairwise_ttc_s(
+            robot_pos=np.array([0.0, 0.0]),
+            robot_vel=np.array([2.0, 0.0]),
+            ped_pos=np.array([4.0, 3.0]),
+            ped_vel=np.array([-1.0, 0.0]),
+        )
+        assert ttc == pytest.approx(5.0 / 2.4, abs=1e-6)

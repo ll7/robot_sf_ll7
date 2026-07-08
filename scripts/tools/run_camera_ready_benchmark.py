@@ -29,6 +29,13 @@ from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+# Defense-in-depth against GPU memory fragmentation during long campaigns
+# (issue #4826). expandable_segments:True allows the allocator to grow
+# segments instead of failing on large contiguous allocations.
+import os
+
+os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
+
 
 def _build_parser() -> argparse.ArgumentParser:
     """Create the CLI parser for camera-ready campaign execution."""

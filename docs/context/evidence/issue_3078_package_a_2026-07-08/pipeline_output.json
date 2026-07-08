@@ -1,0 +1,24 @@
+{
+  "artifacts": {
+    "baseline_table": "output/benchmarks/issue_3078_package_a/baseline_table.csv",
+    "claim_card": "output/benchmarks/issue_3078_package_a/claim_card.json",
+    "seed_sufficiency_analysis": "output/benchmarks/issue_3078_package_a/seed_sufficiency/seed_sufficiency_analysis.json",
+    "summary_markdown": "output/benchmarks/issue_3078_package_a/package_a_summary.md",
+    "transfer_delta": "output/benchmarks/issue_3078_package_a/transfer_delta.csv",
+    "transfer_delta_figure": "output/benchmarks/issue_3078_package_a/fig_transfer_delta.png"
+  },
+  "classification": "diagnostic",
+  "classification_vocabulary": [
+    "benchmark",
+    "diagnostic",
+    "negative",
+    "null",
+    "invalid",
+    "blocked"
+  ],
+  "reasons": [
+    "synthetic_fixture_heldout_used",
+    "diagnostic: claim-card review required before promotion"
+  ],
+  "schema_version": "package_a_pipeline_output.v1"
+}

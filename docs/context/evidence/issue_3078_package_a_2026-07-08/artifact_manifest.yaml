@@ -1,0 +1,83 @@
+schema_version: artifact-manifest.v1
+issue: 3078
+parent_issue: 3057
+package: A
+generated_at: "2026-07-08T06:59:01.184728+00:00"
+classification: diagnostic
+
+artifacts:
+  - name: pipeline_output
+    path: pipeline_output.json
+    description: Top-level pipeline payload with classification and artifact paths
+    content_type: application/json
+    evidence_role: primary
+
+  - name: seed_sufficiency_analysis
+    path: seed_sufficiency_analysis.json
+    description: Seed-sufficiency analysis from retained campaign bundles (issue_1484, issue_1454)
+    content_type: application/json
+    evidence_role: analysis
+
+  - name: baseline_table
+    path: baseline_table.csv
+    description: Per-planner metric means with confidence intervals
+    content_type: text/csv
+    evidence_role: table
+
+  - name: transfer_delta
+    path: transfer_delta.csv
+    description: Benchmark-set vs held-out-family transfer deltas per planner
+    content_type: text/csv
+    evidence_role: table
+
+  - name: claim_card
+    path: claim_card.json
+    description: Preliminary claim card with classification and reasons
+    content_type: application/json
+    evidence_role: claim
+
+  - name: transfer_delta_figure
+    path: fig_transfer_delta.png
+    description: Visualization of transfer deltas across planners
+    content_type: image/png
+    evidence_role: figure
+
+  - name: reproduction_notes
+    path: reproduction.md
+    description: Human-readable summary and reproduction commands
+    content_type: text/markdown
+    evidence_role: documentation
+
+checksums:
+  algorithm: sha256
+  file: checksums.sha256
+
+claim_boundary: |
+  Diagnostic evidence only. This output does not establish planner superiority,
+  generalization claims, or paper-facing benchmark results. Claim-card review
+  and real held-out-family campaign execution are required before promotion to
+  benchmark classification or any paper-facing use.
+
+retained_campaign_sources:
+  - label: issue_1484_broader_cross_kinematics_2026-05-28
+    root: docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28
+    seed_count: 1
+    note: Advisory single-seed surface; treat as diagnostic only
+
+  - label: issue_1454_s10_h500_candidates_2026-05-23
+    root: docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23
+    seed_count: 10
+    note: S10 seed schedule; statistical sufficiency available
+
+synthetic_fixtures:
+  - component: heldout_family_transfer
+    reason: No retained campaign bundle contains held-out-family evaluation data
+    implication: Transfer deltas use synthetic heldout surfaces; classification remains diagnostic
+
+classification_vocabulary:
+  - benchmark
+  - diagnostic
+  - negative
+  - null
+  - invalid
+  - blocked

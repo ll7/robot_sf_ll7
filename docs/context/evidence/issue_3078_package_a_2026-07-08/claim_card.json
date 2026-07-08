@@ -1,0 +1,30 @@
+{
+  "artifacts": {
+    "baseline_table": "output/benchmarks/issue_3078_package_a/baseline_table.csv",
+    "seed_sufficiency_analysis": "output/benchmarks/issue_3078_package_a/seed_sufficiency/seed_sufficiency_analysis.json",
+    "transfer_delta_figure": "output/benchmarks/issue_3078_package_a/fig_transfer_delta.png",
+    "transfer_delta_table": "output/benchmarks/issue_3078_package_a/transfer_delta.csv"
+  },
+  "claim_boundary": "Diagnostic evidence only. Claim-card review and real campaign execution required before benchmark-classification promotion.",
+  "classification": "diagnostic",
+  "classification_vocabulary": [
+    "benchmark",
+    "diagnostic",
+    "negative",
+    "null",
+    "invalid",
+    "blocked"
+  ],
+  "generated_at_utc": "2026-07-08T06:59:01.184636+00:00",
+  "issue": 3078,
+  "output_dir": "output/benchmarks/issue_3078_package_a",
+  "partition_manifests": [
+    "configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml"
+  ],
+  "promotion_allowed": false,
+  "reasons": [
+    "synthetic_fixture_heldout_used",
+    "diagnostic: claim-card review required before promotion"
+  ],
+  "schema_version": "package_a_claim_card.v1"
+}

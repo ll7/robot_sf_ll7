@@ -204,11 +204,15 @@ def test_window_metrics_full_straight_trace_table() -> None:
     assert result["mean_speed_ms"] == pytest.approx(1.0)
     assert result["max_speed_ms"] == pytest.approx(1.0)
     assert result["max_deceleration_mps2"] == pytest.approx(0.0)  # constant speed
-    # ``heading_oscillation`` is ``np.var`` over the *flattened* unit-direction
-    # vectors, so a perfectly straight (constant (1, 0)) path yields 0.25 (the
-    # variance between the constant 1 and 0 components), NOT 0.0. This is the
-    # pinned current behavior; the PR body flags it as a candidate follow-up bug.
-    assert result["heading_oscillation"] == pytest.approx(0.25)
+    # ``heading_oscillation`` is now computed per-component (``np.var`` over
+    # ``axis=0`` of the unit-direction vectors, summed), so a perfectly
+    # straight (constant (1, 0)) path yields 0.0, as an oscillation metric
+    # should. Issue #4886 fixed the earlier flattened-variance form, which
+    # returned 0.25 here (variance of [1, 0, 1, 0, ...] around its 0.5 mean)
+    # and could not separate straight motion from a small wiggle. Focused
+    # proof of the fix lives in ``TestHeadingOscillationBaseline`` in
+    # ``test_critical_intervals.py``.
+    assert result["heading_oscillation"] == pytest.approx(0.0)
 
 
 def test_window_metrics_subwindow_slicing() -> None:

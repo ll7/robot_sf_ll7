@@ -1,0 +1,28 @@
+{
+  "campaign_id": "issue4206_trace_capable_h600_rerun_20260704",
+  "campaign_job": "13334",
+  "claim_boundary": "exemplar trace episode from retained campaign data; illustrative group-crossing interaction only; no statistical, benchmark, or dissertation claim",
+  "episode_id": "classic_group_crossing_high--24--8d4d9f457cc120c5",
+  "episode_status": "success",
+  "generated_at_utc": "2026-07-08T10:20:54.778886+00:00",
+  "git_commit": "50c36e7e5eea05f6951c127019eee019bc2a8b70",
+  "issue": "https://github.com/ll7/robot_sf_ll7/issues/4848",
+  "planner": "goal",
+  "scenario_id": "classic_group_crossing_high",
+  "schema_version": "issue-4848-exemplar-trace.v1",
+  "seed": 24,
+  "selection_metric": "path_efficiency",
+  "selection_metric_value": 1.0,
+  "selection_mode": "best",
+  "summary": {
+    "episode_status": "success",
+    "global_min_distance_step": 94,
+    "global_min_robot_ped_distance_m": 2.57806669950191,
+    "planner": "goal",
+    "scenario_id": "classic_group_crossing_high",
+    "seed": 24,
+    "step_count": 176,
+    "termination_reason": "success"
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+}

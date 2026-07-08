@@ -198,7 +198,7 @@ Required Python packages:
 - `numpy`: Numerical computations
 - `scipy`: Optimization and statistics
 - `matplotlib`: Plotting (for sensitivity analysis)
-- `seaborn`: Statistical visualizations
+- `seaborn`: Statistical visualizations (optional; install via `uv sync --extra analysis`)
 - `pandas`: Data manipulation
 
 Install with:

@@ -237,7 +237,7 @@ def generate_benchmark_plots_from_data(
         # Update source_data to include filter info
         artifact.source_data = f"{len(filtered_episodes)} episodes{filter_str}"
         artifacts.append(artifact)
-    except (ValueError, TypeError, RuntimeError, AttributeError) as e:
+    except (ValueError, TypeError, RuntimeError, AttributeError, OSError) as e:
         logger.warning(f"Failed to generate metrics plot: {e}")
         artifacts.append(
             VisualArtifact(
@@ -266,7 +266,7 @@ def generate_benchmark_plots_from_data(
         # Update source_data to include filter info
         artifact.source_data = f"{len(filtered_episodes)} episodes{filter_str}"
         artifacts.append(artifact)
-    except (ValueError, TypeError, RuntimeError, AttributeError) as e:
+    except (ValueError, TypeError, RuntimeError, AttributeError, OSError) as e:
         logger.warning(f"Failed to generate scenario comparison plot: {e}")
         artifacts.append(
             VisualArtifact(

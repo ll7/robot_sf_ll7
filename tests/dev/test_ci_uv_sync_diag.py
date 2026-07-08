@@ -183,27 +183,40 @@ def test_ci_uv_sync_diag_cache_sizing_is_single_pass(tmp_path: Path) -> None:
 
 
 def test_workflow_uv_cache_paths_match_setup_uv_cache_dir() -> None:
-    """Workflow uv caching must match the UV_CACHE_DIR configured by setup-uv."""
-    inline_cache_workflows = [
+    """uv payload caching must live at the setup-uv cache dir, centralized in setup-ci-python.
+
+    perf-nightly and pr-promoted-planner-smoke delegate to the shared
+    ``setup-ci-python`` composite action, which owns the uv payload cache. The
+    cache paths must match the UV_CACHE_DIR configured by setup-uv (never the
+    user-local ``~/.cache/uv`` default) so a restored cache is actually reused
+    by the subsequent ``uv sync``.
+    """
+    delegated_workflows = [
+        ".github/workflows/ci.yml",
         ".github/workflows/perf-nightly.yml",
         ".github/workflows/pr-promoted-planner-smoke.yml",
     ]
     expected_archive = "${{ runner.temp }}/setup-uv-cache/archive-v0"
     expected_wheels = "${{ runner.temp }}/setup-uv-cache/wheels-v6"
 
-    ci_workflow_text = (_repo_root() / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    ci_action_text = (_repo_root() / ".github/actions/setup-ci-python/action.yml").read_text(
+    action_text = (_repo_root() / ".github/actions/setup-ci-python/action.yml").read_text(
         encoding="utf-8"
     )
-    assert "uses: ./.github/actions/setup-ci-python" in ci_workflow_text
-    assert "astral-sh/setup-uv@" in ci_action_text
-    assert "~/.cache/uv" not in ci_workflow_text
-    assert "~/.cache/uv" not in ci_action_text
+    # The shared action owns the cache and must pin it to setup-uv's location.
+    assert "astral-sh/setup-uv@" in action_text
+    assert expected_archive in action_text
+    assert expected_wheels in action_text
+    assert (
+        "uv-sync-payloads-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}"
+        in action_text
+    )
+    assert "~/.cache/uv" not in action_text
 
-    for workflow_path in inline_cache_workflows:
+    # Every consumer delegates to the shared action and must not re-declare a
+    # local uv cache path.
+    for workflow_path in delegated_workflows:
         workflow_text = (_repo_root() / workflow_path).read_text(encoding="utf-8")
-        assert expected_archive in workflow_text, workflow_path
-        assert expected_wheels in workflow_text, workflow_path
+        assert "uses: ./.github/actions/setup-ci-python" in workflow_text, workflow_path
         assert "~/.cache/uv" not in workflow_text, workflow_path
 
 

@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#4848, 2026-07-08) - NEEDS-REVIEW -->
+
 # Issue #4848 Group-Crossing Exemplar Selection Report
 
 Generated: 2026-07-08T10:21:00.152419+00:00
@@ -33,3 +35,6 @@ Group-crossing scenarios were chosen as the second exemplar class to complement 
 - **social_force**: Physics-based social navigation (explicit social force model)
 
 These three planners span the classical-to-social spectrum and provide diverse interaction behaviors for visualization and worked examples.
+
+
+<!-- /AI-GENERATED -->

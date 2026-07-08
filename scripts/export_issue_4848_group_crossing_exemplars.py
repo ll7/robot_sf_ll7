@@ -41,6 +41,7 @@ DEFAULT_CAMPAIGN_ROOT = Path("output/issue4206-trace-rerun/13334/runs")
 @dataclass(frozen=True)
 class SelectedEpisode:
     """One selected exemplar episode."""
+
     planner: str
     scenario_id: str
     seed: int
@@ -53,6 +54,7 @@ class SelectedEpisode:
 @dataclass(frozen=True)
 class TraceRows:
     """Derived figure-ready rows from one recorded episode."""
+
     trace_rows: list[dict[str, Any]]
     min_distance_rows: list[dict[str, Any]]
     summary: dict[str, Any]
@@ -230,8 +232,7 @@ def select_exemplars_for_planner(
     """Select median, best, worst exemplar episodes for one planner."""
     # Filter for group_crossing scenarios only
     group_crossing_eps = [
-        ep for ep in episodes
-        if ep.get("scenario_id") in GROUP_CROSSING_SCENARIOS
+        ep for ep in episodes if ep.get("scenario_id") in GROUP_CROSSING_SCENARIOS
     ]
 
     if not group_crossing_eps:
@@ -402,34 +403,42 @@ def write_selection_report(
         "",
     ]
 
-    for sel in sorted(all_selections, key=lambda s: (s.planner, s.scenario_id, s.seed, s.selection_mode)):
-        report_lines.extend([
-            f"- **{sel.planner}** / {sel.scenario_id} / seed {sel.seed} / {sel.selection_mode}: "
-            f"{SELECTION_METRIC}={sel.metric_value:.4f}",
-        ])
+    for sel in sorted(
+        all_selections, key=lambda s: (s.planner, s.scenario_id, s.seed, s.selection_mode)
+    ):
+        report_lines.extend(
+            [
+                f"- **{sel.planner}** / {sel.scenario_id} / seed {sel.seed} / {sel.selection_mode}: "
+                f"{SELECTION_METRIC}={sel.metric_value:.4f}",
+            ]
+        )
 
-    report_lines.extend([
-        "",
-        "## Scenario Class Rationale",
-        "",
-        "Group-crossing scenarios were chosen as the second exemplar class to complement "
-        "the doorway scenario from issue_4253/4268. Group-crossing introduces bidirectional "
-        "pedestrian flow with social group dynamics (50% of pedestrians in groups), providing "
-        "richer interaction diversity than single-agent avoidance scenarios. The three density "
-        "levels (low/medium/high) capture different interaction regimes: sparse crossing, "
-        "moderate crowd navigation, and high-density stress conditions.",
-        "",
-        "## Planner Rationale",
-        "",
-        "- **goal**: Classical baseline that ignores pedestrians (provides lower bound)",
-        "- **orca**: Classical collision-avoidance with time-based navigation (contrast to learned)",
-        "- **social_force**: Physics-based social navigation (explicit social force model)",
-        "",
-        "These three planners span the classical-to-social spectrum and provide diverse "
-        "interaction behaviors for visualization and worked examples.",
-    ])
+    report_lines.extend(
+        [
+            "",
+            "## Scenario Class Rationale",
+            "",
+            "Group-crossing scenarios were chosen as the second exemplar class to complement "
+            "the doorway scenario from issue_4253/4268. Group-crossing introduces bidirectional "
+            "pedestrian flow with social group dynamics (50% of pedestrians in groups), providing "
+            "richer interaction diversity than single-agent avoidance scenarios. The three density "
+            "levels (low/medium/high) capture different interaction regimes: sparse crossing, "
+            "moderate crowd navigation, and high-density stress conditions.",
+            "",
+            "## Planner Rationale",
+            "",
+            "- **goal**: Classical baseline that ignores pedestrians (provides lower bound)",
+            "- **orca**: Classical collision-avoidance with time-based navigation (contrast to learned)",
+            "- **social_force**: Physics-based social navigation (explicit social force model)",
+            "",
+            "These three planners span the classical-to-social spectrum and provide diverse "
+            "interaction behaviors for visualization and worked examples.",
+        ]
+    )
 
-    (output_dir / "SELECTION_REPORT.md").write_text("\n".join(report_lines) + "\n", encoding="utf-8")
+    (output_dir / "SELECTION_REPORT.md").write_text(
+        "\n".join(report_lines) + "\n", encoding="utf-8"
+    )
 
 
 def _process_planner(
@@ -462,9 +471,7 @@ def _process_planner(
             continue
 
         bundle_dir = (
-            output_dir
-            / sel.planner
-            / f"{sel.scenario_id}_seed{sel.seed}_{sel.selection_mode}"
+            output_dir / sel.planner / f"{sel.scenario_id}_seed{sel.seed}_{sel.selection_mode}"
         )
         bundle_dir.mkdir(parents=True, exist_ok=True)
 
@@ -478,14 +485,14 @@ def _process_planner(
     return selections
 
 
-def _find_episode(
-    episodes: list[dict[str, Any]], sel: SelectedEpisode
-) -> dict[str, Any] | None:
+def _find_episode(episodes: list[dict[str, Any]], sel: SelectedEpisode) -> dict[str, Any] | None:
     """Find the full episode record for a selection."""
     for ep in episodes:
-        if (ep.get("scenario_id") == sel.scenario_id
-                and ep.get("seed") == sel.seed
-                and ep.get("episode_id") == sel.episode_id):
+        if (
+            ep.get("scenario_id") == sel.scenario_id
+            and ep.get("seed") == sel.seed
+            and ep.get("episode_id") == sel.episode_id
+        ):
             return ep
     return None
 
@@ -539,4 +546,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     import sys
+
     raise SystemExit(main())

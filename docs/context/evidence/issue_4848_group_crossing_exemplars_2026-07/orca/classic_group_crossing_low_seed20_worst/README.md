@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#4848, 2026-07-08) - NEEDS-REVIEW -->
+
 # Issue #4848 Exemplar Trace: classic_group_crossing_low (orca)
 
 Plain-language summary: this directory contains one exemplar trace episode from the
@@ -30,3 +32,6 @@ statistical benchmark or dissertation claim.
 This bundle is `illustrative_exemplar` evidence for one group-crossing episode.
 It should be used for visualization and worked example input only. It is not a full
 benchmark campaign, not a Slurm or GPU result, and not a statistical comparison.
+
+
+<!-- /AI-GENERATED -->

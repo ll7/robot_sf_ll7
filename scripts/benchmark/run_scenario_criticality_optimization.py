@@ -193,9 +193,7 @@ def _parse_optimization_config(payload: dict[str, Any]) -> OptimizationConfig:
         cma_es_maxiter=int(payload.get("cma_es_maxiter", 30)),
         cma_es_sigma0=float(payload.get("cma_es_sigma0", 0.5)),
         cma_es_seed=(
-            int(payload["cma_es_seed"])
-            if payload.get("cma_es_seed") is not None
-            else None
+            int(payload["cma_es_seed"]) if payload.get("cma_es_seed") is not None else None
         ),
     )
 
@@ -477,7 +475,6 @@ def _run_differential_evolution(
     return de_candidates
 
 
-
 def _run_cma_es(
     config: OptimizationConfig,
     scenario: dict[str, Any],
@@ -507,7 +504,6 @@ def _run_cma_es(
     ]
     if not continuous_names:
         raise ValueError("cma_es requires at least one continuous parameter")
-
 
     # Compute the search range midpoint and initial sigma
     midpoints = [
@@ -588,7 +584,6 @@ def _run_cma_es(
     cma_candidates.append(cma_best)
 
     return cma_candidates
-
 
 
 def run_criticality_optimization(  # noqa: C901, PLR0912, PLR0915

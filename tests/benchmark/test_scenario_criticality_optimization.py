@@ -678,9 +678,7 @@ def test_cma_es_requires_continuous_params() -> None:
 
     config = mod.OptimizationConfig(
         parameter_space={
-            "mode": mod.ParameterDefinition(
-                param_type="discrete", values=[1.0, 2.0]
-            ),
+            "mode": mod.ParameterDefinition(param_type="discrete", values=[1.0, 2.0]),
         },
         optimizer_type="cma_es",
         cma_es_maxiter=2,
@@ -758,8 +756,7 @@ def test_cma_es_optimum_score_finite() -> None:
     )
     candidates, _ = mod.run_criticality_optimization(config)
 
-    baseline = next(c for c in candidates
-                    if c.candidate_id == "baseline_unperturbed")
+    baseline = next(c for c in candidates if c.candidate_id == "baseline_unperturbed")
     optimum = next(
         (c for c in candidates if c.candidate_id == "cma_optimum"),
         None,
@@ -780,9 +777,7 @@ def test_cma_es_import_error_message() -> None:
 
     config = mod.OptimizationConfig(
         parameter_space={
-            "x": mod.ParameterDefinition(
-                param_type="continuous", min=0.0, max=1.0
-            ),
+            "x": mod.ParameterDefinition(param_type="continuous", min=0.0, max=1.0),
         },
         optimizer_type="cma_es",
         cma_es_maxiter=1,

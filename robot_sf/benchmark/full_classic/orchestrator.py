@@ -829,7 +829,13 @@ def _init_env_for_job(job, cfg, horizon: int, *, episode_id: str, scenario):
     if sim is not None:
         try:
             goal_vec = np.asarray(sim.goal_pos[0], dtype=float)
-        except (ValueError, TypeError, IndexError, KeyError, AttributeError):  # pragma: no cover - defensive fallback
+        except (
+            ValueError,
+            TypeError,
+            IndexError,
+            KeyError,
+            AttributeError,
+        ):  # pragma: no cover - defensive fallback
             goal_vec = np.zeros(2, dtype=float)
     return env, dt, replay_cap, goal_vec
 
@@ -896,7 +902,12 @@ def _close_env(env):
         pass
     try:
         env.close()
-    except (RuntimeError, AttributeError, TypeError, OSError):  # pragma: no cover - gym close best-effort
+    except (
+        RuntimeError,
+        AttributeError,
+        TypeError,
+        OSError,
+    ):  # pragma: no cover - gym close best-effort
         pass
 
 

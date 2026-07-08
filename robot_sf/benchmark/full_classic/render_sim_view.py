@@ -86,7 +86,13 @@ def generate_frames(  # noqa: PLR0912
     if getattr(episode, "map_path", None):
         try:
             map_def = convert_map(str(episode.map_path))  # type: ignore[arg-type]
-        except (OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:  # pragma: no cover - fallback path
+        except (
+            OSError,
+            ValueError,
+            KeyError,
+            TypeError,
+            RuntimeError,
+        ) as exc:  # pragma: no cover - fallback path
             try:
                 logger = importlib.import_module("loguru").logger
                 logger.debug("convert_map failed for %s: %s", episode.map_path, exc)
@@ -138,7 +144,13 @@ def generate_frames(  # noqa: PLR0912
                     frame = np.zeros((360, 640, 3), dtype=np.uint8)
             except (AttributeError, RuntimeError, ImportError):
                 frame = np.zeros((360, 640, 3), dtype=np.uint8)
-            except (ValueError, IndexError, TypeError, KeyError, OSError) as exc:  # pragma: no cover - defensive
+            except (
+                ValueError,
+                IndexError,
+                TypeError,
+                KeyError,
+                OSError,
+            ) as exc:  # pragma: no cover - defensive
                 try:
                     logger = importlib.import_module("loguru").logger
                     logger.debug("generate_frames render capture failed: %s", exc)

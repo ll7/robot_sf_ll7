@@ -44,7 +44,12 @@ def simulation_view_ready() -> bool:  # T030
         ready = width > 0 and height > 0
     except (ImportError, OSError):
         return False
-    except (RuntimeError, AttributeError, TypeError, ValueError) as exc:  # pragma: no cover - defensive
+    except (
+        RuntimeError,
+        AttributeError,
+        TypeError,
+        ValueError,
+    ) as exc:  # pragma: no cover - defensive
         # Unexpected failure during lightweight sim view probe -> treat as not ready
         # but log at debug level for diagnostics.
         try:

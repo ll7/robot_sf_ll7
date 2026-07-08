@@ -953,7 +953,12 @@ def _annotate_and_check_video_perf(
                     seed=record.get("seed"),
                     renderer=vid.get("renderer"),
                 )
-            except (ValueError, TypeError, KeyError, AttributeError):  # pragma: no cover - logging optional
+            except (
+                ValueError,
+                TypeError,
+                KeyError,
+                AttributeError,
+            ):  # pragma: no cover - logging optional
                 pass
     elif overhead_ratio > soft:
         if enforce:
@@ -975,7 +980,12 @@ def _annotate_and_check_video_perf(
                     seed=record.get("seed"),
                     renderer=vid.get("renderer"),
                 )
-            except (ValueError, TypeError, KeyError, AttributeError):  # pragma: no cover - logging optional
+            except (
+                ValueError,
+                TypeError,
+                KeyError,
+                AttributeError,
+            ):  # pragma: no cover - logging optional
                 pass
 
 
@@ -1586,7 +1596,12 @@ def _run_batch_parallel(  # noqa: C901
         try:
             _write_validated_record(out_path, schema, results_by_idx[idx])
             wrote += 1
-        except (OSError, ValueError, TypeError, KeyError) as e:  # pragma: no cover - write/validate path
+        except (
+            OSError,
+            ValueError,
+            TypeError,
+            KeyError,
+        ) as e:  # pragma: no cover - write/validate path
             logger.exception(
                 "Benchmark batch write/validation failed for scenario_id={} seed={}",
                 results_by_idx[idx].get("scenario_id", "unknown"),

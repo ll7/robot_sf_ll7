@@ -2183,6 +2183,7 @@ def _apply_simulation_overrides(
         "response_law_composition",
         "response_law_seed",
         "population_size",
+        "non_reactive_response_multiplier",
     ):
         if attr in overrides:
             _set_simulation_override_attr(config, attr, overrides)

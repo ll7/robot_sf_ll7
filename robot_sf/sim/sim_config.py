@@ -249,12 +249,21 @@ class SimulationSettings:
     attribute is type-checked and discoverable on ``SimulationSettings``.
     """
 
+    non_reactive_response_multiplier: float = 0.0
+    """Response multiplier for non-reactive/non-yielding pedestrians (issue #4850).
+
+    This knob controls the strength of pedestrian-robot repulsion for pedestrians
+    configured with response_law='non_reactive' or 'non_yielding'. The default value
+    of 0.0 preserves the existing semantics where such pedestrians do not respond
+    to the robot at all.
+    """
+
     peds_reset_follow_route_at_start: bool = False
     """Whether pedestrians following routes should reset to the start of their routes"""
     debug_without_robot_movement: bool = False
     """Whether to disable robot movement in the simulator for debugging purposes"""
 
-    def __post_init__(self):
+    def __post_init__(self):  # noqa: C901
         """
         Validate the simulation settings.
 
@@ -295,6 +304,9 @@ class SimulationSettings:
         if self.ped_radius <= 0:
             raise ValueError("Pedestrian radius mustn't be negative or zero!")
         self._validate_pedestrian_uncertainty_envelope_config()
+        # Check that the non-reactive response multiplier is finite and >= 0
+        if not isfinite(self.non_reactive_response_multiplier) or self.non_reactive_response_multiplier < 0:
+            raise ValueError("non_reactive_response_multiplier must be a finite value >= 0!")
         # Check that the goal radius is positive
         if self.goal_radius <= 0:
             raise ValueError("Goal radius mustn't be negative or zero!")

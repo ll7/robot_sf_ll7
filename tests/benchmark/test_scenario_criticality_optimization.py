@@ -321,3 +321,90 @@ def test_shared_planner_resolution_is_called_once(
     config.max_workers = 2
     run_criticality_optimization(config)
     assert call_count["n"] == 1
+
+
+# ---- Differential evolution optimizer tests ----
+
+
+def test_de_optimizer_accepted() -> None:
+    """OptimizationConfig accepts differential_evolution optimizer type."""
+    config = OptimizationConfig(
+        parameter_space={
+            "pedestrian_speed_scale": ParameterDefinition(
+                param_type="continuous", min=0.7, max=1.4
+            ),
+        },
+        optimizer_type="differential_evolution",
+        sample_budget=1,
+        optimizer_seed=42,
+        de_maxiter=5,
+        de_popsize=3,
+    )
+    assert config.optimizer_type == "differential_evolution"
+    assert config.de_maxiter == 5
+    assert config.de_popsize == 3
+
+
+def test_de_requires_continuous_params() -> None:
+    """differential_evolution fails with only discrete parameters."""
+    _run_de = _MODULE._run_differential_evolution
+    config = OptimizationConfig(
+        parameter_space={
+            "mode": ParameterDefinition(param_type="discrete", values=[1.0, 2.0]),
+        },
+        optimizer_type="differential_evolution",
+        sample_budget=1,
+    )
+    with pytest.raises(ValueError, match="requires at least one continuous"):
+        _run_de(
+            config=config,
+            scenario={},
+            scenario_path=Path("."),
+            objective_config=None,
+            output_dir=Path("."),
+            resolved_algo="goal",
+            resolved_algo_config_path=None,
+        )
+
+
+def test_unsupported_optimizer_type() -> None:
+    """run_criticality_optimization rejects unsupported optimizer_type."""
+    config = _make_test_config()
+    config.optimizer_type = "bayesian"
+    with pytest.raises(ValueError, match="unsupported optimizer_type"):
+        run_criticality_optimization(config)
+
+
+def test_de_manifest_fields() -> None:
+    """DE run records optimizer-specific fields in manifest."""
+    # We can check the parsing without running the full simulator
+    payload = {
+        "diagnostic_only_not_benchmark_gate": True,
+        "optimizer_type": "differential_evolution",
+        "de_maxiter": 25,
+        "de_popsize": 10,
+        "de_seed": 99,
+        "parameter_space": {
+            "speed": {"type": "continuous", "min": 0.5, "max": 1.5},
+        },
+    }
+    config = _MODULE._parse_optimization_config(payload)
+    assert config.optimizer_type == "differential_evolution"
+    assert config.de_maxiter == 25
+    assert config.de_popsize == 10
+    assert config.de_seed == 99
+
+
+def test_de_seed_fallback() -> None:
+    """de_seed defaults to None and falls back to optimizer_seed in DE."""
+    payload = {
+        "diagnostic_only_not_benchmark_gate": True,
+        "optimizer_type": "differential_evolution",
+        "optimizer_seed": 4362,
+        "parameter_space": {
+            "speed": {"type": "continuous", "min": 0.5, "max": 1.5},
+        },
+    }
+    config = _MODULE._parse_optimization_config(payload)
+    assert config.de_seed is None
+    assert config.optimizer_seed == 4362

@@ -7,6 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 from scripts.validation import run_topology_reselection_cross_slice as runner
@@ -28,6 +29,16 @@ def test_checked_in_manifest_names_required_slice_roles() -> None:
         manifest["candidates"]["progress_gated"]
         == "topology_guided_hybrid_rule_v0_progress_gated_reselection"
     )
+
+
+def test_load_manifest_rejects_non_mapping_root(tmp_path: Path) -> None:
+    """Manifest root must be a mapping so validation fails closed."""
+
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest_path.write_text("- not\n- a\n- mapping\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Manifest must be a mapping"):
+        runner.load_manifest(manifest_path)
 
 
 def test_build_rows_expands_candidates_and_thresholds(tmp_path: Path) -> None:
@@ -407,6 +418,8 @@ def test_issue_3463_manifest_uses_monotone_progress_gated_candidate() -> None:
 
     assert manifest["issue"] == 3463
     assert manifest["stage"] == "corrective_monotone_sensitivity"
+    assert manifest["min_total_slices"] == 3
+    assert manifest["min_hard_slices"] == 2
     assert (
         manifest["candidates"]["progress_gated"]
         == "topology_guided_hybrid_rule_v0_progress_gated_reselection_monotone"

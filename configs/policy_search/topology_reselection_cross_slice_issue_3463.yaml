@@ -12,9 +12,11 @@ description: >
   (baseline, reuse_penalty, and all progress_gated thresholds) hit obstacle_collision
   on classic_doorway_medium (collision_rate: 1.0, route_progress_m: -12.0). This is a
   scenario-level failure mode that affects all candidates equally and is not a topology-
-  specific bug. The slice is documented in PR #4746 as a blocker; removing it unblocks
+  specific bug. The slice is documented in PR #4751 as a blocker; removing it unblocks
   the diagnostic packet at diagnostic-only strength while preserving the investigation
   record for future behavioral work.
+min_total_slices: 3
+min_hard_slices: 2
 stage: corrective_monotone_sensitivity
 horizon: 160
 seed: 111

@@ -92,16 +92,13 @@ def load_manifest(path: Path) -> dict[str, Any]:
 
     manifest = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(manifest, dict):
-        raise TypeError(f"Manifest must be a mapping: {path}")
+        raise ValueError(f"Manifest must be a mapping: {path}")
     if manifest.get("schema") != "topology_reselection_cross_slice.v1":
         raise ValueError("Unsupported manifest schema")
     slices = manifest.get("slices")
     issue_number = _manifest_issue_number(manifest)
 
-    # Issue #3463 is allowed to have only 3 total slices (2 hard + 1 negative_control)
-    # after doorway_transfer removal due to obstacle_collision on classic_doorway_medium
-    # (all candidates affected). See PR #4746 and issue_3463_state.yaml for the blocker record.
-    min_total_slices = 3 if issue_number == 3463 else 4
+    min_total_slices = manifest.get("min_total_slices", 4)
     if not isinstance(slices, list) or len(slices) < min_total_slices:
         raise ValueError(
             f"Manifest must include at least {min_total_slices} slices "
@@ -111,8 +108,7 @@ def load_manifest(path: Path) -> dict[str, Any]:
     hard_count = sum(1 for row in slices if row.get("role") == "hard")
     control_count = sum(1 for row in slices if row.get("role") == "negative_control")
 
-    # Issue #3463 is allowed to have only 2 hard slices after doorway_transfer removal.
-    min_hard_slices = 2 if issue_number == 3463 else 3
+    min_hard_slices = manifest.get("min_hard_slices", 3)
     if hard_count < min_hard_slices or control_count < 1:
         raise ValueError(
             f"Manifest must include >={min_hard_slices} hard slices and >=1 negative-control slice "

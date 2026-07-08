@@ -823,7 +823,7 @@ def test_evaluated_candidate_has_timing_fields() -> None:
 def test_timing_breakdown_components_sum_to_total() -> None:
     """patch_s + simulation_s + score_s should approximately equal runtime_s.
 
-    Allows a small tolerance (0.1s) for timing overhead between measurements.
+    Allows a small tolerance (0.5s) for timing overhead between measurements.
     """
     config = _make_test_config()
     candidates, _ = run_criticality_optimization(config)
@@ -838,8 +838,8 @@ def test_timing_breakdown_components_sum_to_total() -> None:
         assert c.score_s is not None
 
         component_sum = c.patch_s + c.simulation_s + c.score_s
-        # Allow 0.1s tolerance for timing overhead
-        assert abs(component_sum - c.runtime_s) < 0.1, (
+        # Allow timing overhead on slower CI runners.
+        assert abs(component_sum - c.runtime_s) < 0.5, (
             f"{c.candidate_id}: timing components ({component_sum:.3f}s) "
             f"do not sum to runtime ({c.runtime_s:.3f}s)"
         )

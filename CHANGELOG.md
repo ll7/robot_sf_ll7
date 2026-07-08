@@ -137,7 +137,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   statements in place across 13 files: renamed module path `robot_sf/sim/FastPysfWrapper.py` →
   `fast_pysf_wrapper.py` (SUBTREE_MIGRATION, dev_guide); fixed the `02_trained_model.py` JSONL output path
   `output/benchmarks/` → `output/results/` and the `tests/test_gym_env.py` → `tests/test_gymnasium_env_contracts.py`
-  example (dev_guide); corrected the `robot_sf_bench` CLI subcommand count 15 → 32 (docs/README); corrected the
+  example (dev_guide); corrected the `robot_sf_bench` CLI subcommand count 15 → 30 top-level commands (docs/README); corrected the
   benchmark scenario-schema location (`schema/` singular holds `scenarios.schema.json`, `schemas/` holds the
   episode schema); fixed OSM API examples to real kwargs (`osm_to_map_definition`/`render_osm_background`),
   `MapDefinition.bounds` (not `map_bounds`), and removed the non-existent `zones_config` `RobotSimulationConfig`

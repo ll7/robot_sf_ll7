@@ -134,3 +134,4 @@ class CampaignConfig:
     snqi_contract: SnqiContractConfig = field(default_factory=SnqiContractConfig)
     route_clearance_certifications_path: Path | None = None
     observation_noise: dict[str, Any] | None = None
+    arm_isolation: str = "in_process"  # "in_process" or "subprocess" (issue #4826)

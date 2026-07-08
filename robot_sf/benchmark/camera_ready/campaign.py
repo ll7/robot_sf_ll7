@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import gc
 import json
+import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass
@@ -154,6 +155,7 @@ def run_campaign(  # noqa: PLR0913
     run_batch: Callable[..., dict[str, Any]] | None = None,
     compute_aggregates_with_ci: Callable[..., dict[str, Any]] | None = None,
     export_publication_bundle: Callable[..., Any] | None = None,
+    arm_isolation: str | None = None,
 ) -> dict[str, Any]:
     """Execute a camera-ready planner campaign and emit campaign artifacts.
 
@@ -161,6 +163,20 @@ def run_campaign(  # noqa: PLR0913
     ``export_publication_bundle`` collaborators are injected so the legacy
     ``camera_ready_campaign`` facade can pass its own monkeypatchable bindings; when omitted
     the canonical implementations are imported lazily.
+
+    Args:
+        cfg: Campaign configuration.
+        output_root: Optional campaign base output directory.
+        label: Optional label suffix embedded into campaign_id.
+        campaign_id: Optional exact campaign directory id for resume.
+        skip_publication_bundle: Skip publication bundle export even if enabled in config.
+        invoked_command: Full command line that invoked this run.
+        prepare_campaign_preflight: Optional preflight collaborator override.
+        run_batch: Optional batch run collaborator override.
+        compute_aggregates_with_ci: Optional aggregates collaborator override.
+        export_publication_bundle: Optional publication bundle collaborator override.
+        arm_isolation: Optional override for arm isolation mode ("in_process" or "subprocess").
+            If None, uses cfg.arm_isolation (issue #4826).
 
     Returns:
         Campaign execution summary with output paths and high-level counters.
@@ -186,6 +202,7 @@ def run_campaign(  # noqa: PLR0913
         skip_publication_bundle=skip_publication_bundle,
         invoked_command=invoked_command,
         dependencies=dependencies,
+        arm_isolation=arm_isolation,
     )
 
 
@@ -627,6 +644,284 @@ def _run_campaign_planner_variant(
     )
 
 
+def _run_campaign_planner_variant_subprocess(
+    context: _CampaignPlannerMatrixContext,
+    *,
+    planner: PlannerSpec,
+    kinematics: str,
+    active_observation_mode: str,
+) -> _CampaignPlannerVariantResult:
+    """Run a single planner/kinematics arm via subprocess isolation.
+
+    This variant spawns a subprocess to execute one arm. When the subprocess
+    exits, the OS reclaims all GPU memory regardless of planner implementation
+    details. This is the robust fix for issue #4826.
+
+    Args:
+        context: Campaign matrix context with config and dependencies.
+        planner: Planner specification.
+        kinematics: Kinematics variant to run.
+        active_observation_mode: Observation mode for this run.
+
+    Returns:
+        Campaign variant result with run_entries, planner_rows, etc.
+    """
+    cfg = context.cfg
+
+    # Import subprocess worker module
+    from robot_sf.benchmark.camera_ready.resource_lifecycle import (  # noqa: PLC0415
+        _SubprocessArmParams,
+    )
+
+    run = _prepare_campaign_planner_variant_run(
+        context,
+        planner=planner,
+        kinematics=kinematics,
+        active_observation_mode=active_observation_mode,
+        log_run=True,
+    )
+
+    # Build subprocess parameters
+    arm_params = _SubprocessArmParams(
+        planner_key=planner.key,
+        planner_algo=planner.algo,
+        planner_human_model_variant=planner.human_model_variant,
+        planner_human_model_source=planner.human_model_source,
+        planner_group=planner.planner_group,
+        benchmark_profile=planner.benchmark_profile,
+        socnav_missing_prereq_policy=planner.socnav_missing_prereq_policy,
+        adapter_impact_eval=planner.adapter_impact_eval,
+        kinematics=kinematics,
+        observation_mode=active_observation_mode,
+        workers=run.effective_workers,
+        horizon=run.effective_horizon,
+        dt=run.effective_dt,
+        scenario_matrix_path=cfg.scenario_matrix_path,
+        episodes_path=run.episodes_path,
+        summary_path=run.planner_dir / "summary.json",
+        record_forces=cfg.record_forces,
+        record_planner_decision_trace=cfg.record_planner_decision_trace,
+        record_simulation_step_trace=cfg.record_simulation_step_trace,
+        observation_noise=cfg.observation_noise,
+        synthetic_actuation_profile=cfg.synthetic_actuation_profile,
+        latency_stress_profile=cfg.latency_stress_profile,
+        snqi_weights=context.snqi_weights,
+        snqi_baseline=context.snqi_baseline,
+        algo_config_path=planner.algo_config_path,
+    )
+
+    # Spawn subprocess to run the arm
+    worker_script = Path(__file__).parent / "resource_lifecycle.py"
+
+    # Serialize parameters for subprocess
+    arm_params_json = json.dumps(asdict(arm_params))
+    proc = subprocess.run(
+        [sys.executable, str(worker_script)],
+        input=arm_params_json,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if proc.returncode != 0:
+        logger.error(
+            "Subprocess arm failed: planner={} kinematics={} returncode={} stderr={}",
+            planner.key,
+            kinematics,
+            proc.returncode,
+            proc.stderr,
+        )
+        # Create a failed result
+        status = "failed"
+        summary = {
+            "status": "failed",
+            "error": f"Subprocess failed with return code {proc.returncode}: {proc.stderr}",
+            "total_jobs": 0,
+            "written": 0,
+            "failed_jobs": 0,
+            "failures": [],
+        }
+        warnings = [f"Subprocess failed: {proc.stderr}"]
+        planner_rows = []
+        seed_variability_records = []
+        stop_requested = cfg.stop_on_failure and status in {"failed", "partial-failure"}
+
+        run_entries = [
+            {
+                "planner": {
+                    "key": planner.key,
+                    "algo": planner.algo,
+                    "human_model_variant": planner.human_model_variant,
+                    "human_model_source": planner.human_model_source,
+                    "planner_group": planner.planner_group,
+                    "benchmark_profile": planner.benchmark_profile,
+                    "kinematics": kinematics,
+                    "algo_config_path": (
+                        _repo_relative(planner.algo_config_path)
+                        if planner.algo_config_path is not None
+                        else None
+                    ),
+                    "socnav_missing_prereq_policy": planner.socnav_missing_prereq_policy,
+                    "adapter_impact_eval": planner.adapter_impact_eval,
+                    "observation_mode": active_observation_mode,
+                    "workers": run.effective_workers,
+                    "horizon": run.effective_horizon,
+                    "dt": run.effective_dt,
+                },
+                "status": status,
+                "started_at_utc": _utc_now(),
+                "finished_at_utc": _utc_now(),
+                "runtime_sec": 0.0,
+                "episodes_path": _repo_relative(run.episodes_path),
+                "summary_path": _repo_relative(run.planner_dir / "summary.json"),
+                "summary": summary,
+                "aggregates": None,
+                "subprocess_isolation": True,
+            }
+        ]
+
+        return _CampaignPlannerVariantResult(
+            run_entries=run_entries,
+            planner_rows=planner_rows,
+            warnings=warnings,
+            seed_variability_records=seed_variability_records,
+            stop_requested=stop_requested,
+        )
+
+    # Parse subprocess result
+    try:
+        subprocess_result = json.loads(proc.stdout.strip())
+    except json.JSONDecodeError as exc:
+        logger.error("Failed to parse subprocess output: {}", exc)
+        status = "failed"
+        summary = {
+            "status": "failed",
+            "error": f"Failed to parse subprocess output: {exc}",
+            "total_jobs": 0,
+            "written": 0,
+            "failed_jobs": 0,
+            "failures": [],
+        }
+        warnings = [f"Subprocess output parse failed: {exc}"]
+        subprocess_result = {
+            "summary": summary,
+            "cleanup_metrics": {},
+            "warnings": warnings,
+            "episodes_total": 0,
+        }
+
+    summary = subprocess_result.get("summary", {})
+    cleanup_metrics = subprocess_result.get("cleanup_metrics", {})
+    warnings.extend(subprocess_result.get("warnings", []))
+    status = summary.get("status", "unknown")
+
+    # Build run entry with subprocess isolation marker
+    planner_started_at_utc = summary.get("started_at_utc", _utc_now())
+    planner_finished_at_utc = summary.get("finished_at_utc", _utc_now())
+    runtime_sec = summary.get("runtime_sec", 0.0)
+
+    # Read episodes for aggregates
+    records: list[dict[str, Any]] = []
+    seed_variability_records: list[dict[str, Any]] = []
+    if run.episodes_path.exists() and run.episodes_path.stat().st_size > 0:
+        records = read_jsonl(str(run.episodes_path))
+        if status == "ok":
+            for record in records:
+                annotated = dict(record)
+                annotated["planner_key"] = planner.key
+                annotated["planner_group"] = planner.planner_group
+                annotated["benchmark_profile"] = planner.benchmark_profile
+                annotated["kinematics"] = kinematics
+                seed_variability_records.append(annotated)
+
+    # Compute aggregates
+    aggregates: dict[str, Any] | None = None
+    if records and status == "ok":
+        try:
+            aggregates = context.dependencies.compute_aggregates_with_ci(
+                records,
+                group_by="scenario_params.algo",
+                bootstrap_samples=cfg.bootstrap_samples,
+                bootstrap_confidence=cfg.bootstrap_confidence,
+                bootstrap_seed=cfg.bootstrap_seed,
+            )
+        except Exception as exc:
+            warnings.append(
+                f"Aggregation failed for planner '{planner.key}' ({kinematics}): {exc}",
+            )
+
+    # Build planner row
+    row = _planner_report_row(
+        planner,
+        summary,
+        aggregates,
+        kinematics=kinematics,
+        synthetic_actuation_profile=cfg.synthetic_actuation_profile,
+        records=records,
+    )
+    planner_rows = [row]
+
+    # Build run entry
+    run_entries = [
+        {
+            "planner": {
+                "key": planner.key,
+                "algo": planner.algo,
+                "human_model_variant": planner.human_model_variant,
+                "human_model_source": planner.human_model_source,
+                "planner_group": planner.planner_group,
+                "benchmark_profile": planner.benchmark_profile,
+                "kinematics": kinematics,
+                "algo_config_path": (
+                    _repo_relative(planner.algo_config_path)
+                    if planner.algo_config_path is not None
+                    else None
+                ),
+                "socnav_missing_prereq_policy": planner.socnav_missing_prereq_policy,
+                "adapter_impact_eval": planner.adapter_impact_eval,
+                "observation_mode": active_observation_mode,
+                "workers": run.effective_workers,
+                "horizon": run.effective_horizon,
+                "dt": run.effective_dt,
+            },
+            "status": status,
+            "started_at_utc": planner_started_at_utc,
+            "finished_at_utc": planner_finished_at_utc,
+            "runtime_sec": runtime_sec,
+            "episodes_path": _repo_relative(run.episodes_path),
+            "summary_path": _repo_relative(run.planner_dir / "summary.json"),
+            "summary": summary,
+            "aggregates": aggregates,
+            "subprocess_isolation": True,
+            "gpu_cleanup": cleanup_metrics,
+        }
+    ]
+
+    # Check for stop_on_failure
+    stop_requested = False
+    if classify_planner_row_status(status) == "unexpected_failure" and cfg.stop_on_failure:
+        logger.warning(
+            "Campaign stop_on_failure triggered: planner key={} kinematics={} status={} "
+            "(halting remaining planners).",
+            planner.key,
+            kinematics,
+            status,
+        )
+        warnings.append(
+            f"Campaign halted by subprocess arm failure: planner='{planner.key}' "
+            f"kinematics='{kinematics}' status='{status}'"
+        )
+        stop_requested = True
+
+    return _CampaignPlannerVariantResult(
+        run_entries=run_entries,
+        planner_rows=planner_rows,
+        warnings=warnings,
+        seed_variability_records=seed_variability_records,
+        stop_requested=stop_requested,
+    )
+
+
 def _run_campaign_planner_matrix(
     *,
     cfg: CampaignConfig,
@@ -635,12 +930,31 @@ def _run_campaign_planner_matrix(
     snqi_baseline: dict[str, Any] | None,
     runs_dir: Path,
     dependencies: _CampaignRuntimeDependencies,
+    arm_isolation: str | None = None,
 ) -> _CampaignPlannerRunResults:
+    """Run the planner matrix with optional arm isolation override.
+
+    Args:
+        cfg: Campaign configuration.
+        scenarios: Scenario list to run.
+        snqi_weights: Optional SNQI weights dict.
+        snqi_baseline: Optional SNQI baseline dict.
+        runs_dir: Output directory for run results.
+        dependencies: Runtime dependency collaborators.
+        arm_isolation: Optional override for arm isolation mode ("in_process" or "subprocess").
+            If None, uses cfg.arm_isolation (issue #4826).
+
+    Returns:
+        Campaign planner run results with run_entries, planner_rows, warnings, and
+        seed_variability_records.
+    """
     run_entries: list[dict[str, Any]] = []
     planner_rows: list[dict[str, Any]] = []
     warnings: list[str] = []
     seed_variability_records: list[dict[str, Any]] = []
     kinematics_matrix = _kinematics_matrix_or_default(cfg.kinematics_matrix)
+    # Use arm_isolation override if provided, otherwise use cfg value
+    effective_arm_isolation = arm_isolation if arm_isolation is not None else cfg.arm_isolation
     context = _CampaignPlannerMatrixContext(
         cfg=cfg,
         scenarios=scenarios,
@@ -656,21 +970,37 @@ def _run_campaign_planner_matrix(
             continue
         active_observation_mode = planner.observation_mode or cfg.observation_mode
         for kinematics in kinematics_matrix:
-            variant_result = _run_campaign_planner_variant(
-                context,
-                planner=planner,
-                kinematics=kinematics,
-                active_observation_mode=active_observation_mode,
-            )
-            # Clean up GPU memory after each arm to prevent VRAM leaks
-            # across campaign iterations (issue #4826).
-            memory_metrics = _cleanup_gpu_memory_between_arms(
-                planner_key=planner.key,
-                kinematics=kinematics,
-            )
-            # Attach diagnostics to the run entry created by this variant.
-            if variant_result.run_entries:
-                variant_result.run_entries[-1]["gpu_cleanup"] = memory_metrics
+            # Dispatch based on arm_isolation mode (issue #4826)
+            use_subprocess = effective_arm_isolation == "subprocess"
+
+            if use_subprocess:
+                logger.info(
+                    "Running arm with subprocess isolation: planner={} kinematics={}",
+                    planner.key,
+                    kinematics,
+                )
+                variant_result = _run_campaign_planner_variant_subprocess(
+                    context,
+                    planner=planner,
+                    kinematics=kinematics,
+                    active_observation_mode=active_observation_mode,
+                )
+            else:
+                variant_result = _run_campaign_planner_variant(
+                    context,
+                    planner=planner,
+                    kinematics=kinematics,
+                    active_observation_mode=active_observation_mode,
+                )
+                # Clean up GPU memory after each arm to prevent VRAM leaks
+                # across campaign iterations (issue #4826).
+                memory_metrics = _cleanup_gpu_memory_between_arms(
+                    planner_key=planner.key,
+                    kinematics=kinematics,
+                )
+                # Attach diagnostics to the run entry created by this variant.
+                if variant_result.run_entries:
+                    variant_result.run_entries[-1]["gpu_cleanup"] = memory_metrics
 
             run_entries.extend(variant_result.run_entries)
             planner_rows.extend(variant_result.planner_rows)
@@ -725,7 +1055,24 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
     skip_publication_bundle: bool = False,
     invoked_command: str | None = None,
     dependencies: _CampaignRuntimeDependencies,
+    arm_isolation: str | None = None,
 ) -> dict[str, Any]:
+    """Execute the campaign orchestrator with optional arm isolation override.
+
+    Args:
+        cfg: Campaign configuration.
+        output_root: Optional campaign base output directory.
+        label: Optional label suffix embedded into campaign_id.
+        campaign_id: Optional exact campaign directory id for resume.
+        skip_publication_bundle: Skip publication bundle export even if enabled in config.
+        invoked_command: Full command line that invoked this run.
+        dependencies: Runtime dependency collaborators.
+        arm_isolation: Optional override for arm isolation mode ("in_process" or "subprocess").
+            If None, uses cfg.arm_isolation (issue #4826).
+
+    Returns:
+        Campaign execution summary with output paths and counters.
+    """
     start = time.perf_counter()
     prepared = dependencies.prepare_campaign_preflight(
         cfg,
@@ -771,6 +1118,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
         snqi_baseline=snqi_baseline,
         runs_dir=runs_dir,
         dependencies=dependencies,
+        arm_isolation=arm_isolation,
     )
     run_entries = planner_run_results.run_entries
     planner_rows = planner_run_results.planner_rows

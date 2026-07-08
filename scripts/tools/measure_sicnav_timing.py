@@ -72,6 +72,8 @@ def _run(n: int) -> dict:
         times.append(dt)
         actions.append((float(action["v"]), float(action["omega"])))
     steady = times[1:]
+    if not steady:
+        raise ValueError(f"SICNAV_STEPS={STEPS} leaves no steady-state steps; use at least 2")
     return {
         "neighbors": n,
         "steps": STEPS,

@@ -128,6 +128,7 @@ def test_sicnav_campc_step_runs_against_staged_upstream() -> None:
 
     action = planner.step(obs)
 
+    assert type(planner._policy).__name__ == "_CampcPolicyRunner"
     assert set(action) == {"v", "omega"}
     assert math.isfinite(action["v"])
     assert math.isfinite(action["omega"])

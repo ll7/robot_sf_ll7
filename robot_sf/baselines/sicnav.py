@@ -20,6 +20,7 @@ import configparser
 import hashlib
 import importlib
 import json
+import math
 import random
 import sys
 import threading
@@ -106,12 +107,14 @@ class _CampcPolicyRunner:
         Returns:
             Any: An upstream ``FullState`` describing one robot or pedestrian.
         """
-        px, py = float(agent["position"][0]), float(agent["position"][1])
-        vx = float(agent.get("velocity", (0.0, 0.0))[0])
-        vy = float(agent.get("velocity", (0.0, 0.0))[1])
-        radius = float(agent.get("radius", 0.3))
-        if "goal" in agent:
-            gx, gy = float(agent["goal"][0]), float(agent["goal"][1])
+        pos = agent.get("position") or (0.0, 0.0)
+        vel = agent.get("velocity") or (0.0, 0.0)
+        px, py = float(pos[0]), float(pos[1])
+        vx, vy = float(vel[0]), float(vel[1])
+        radius = float(agent.get("radius") if agent.get("radius") is not None else 0.3)
+        goal = agent.get("goal")
+        if goal is not None:
+            gx, gy = float(goal[0]), float(goal[1])
         else:
             # Constant-velocity goal projection mirrors the non-priviledged predict() path.
             gx, gy = px + vx * 2.0, py + vy * 2.0
@@ -146,10 +149,14 @@ class _CampcPolicyRunner:
         action = self._policy.predict(joint_state)
         # Upstream ActionRot.r is the angular-velocity control integrated over one step
         # (``mpc_omega * time_step``); convert back to a rad/s unicycle omega.
-        omega = float(action.r) / self._time_step
+        velocity = float(action.v)
+        raw_omega = float(action.r)
+        if not math.isfinite(velocity) or not math.isfinite(raw_omega):
+            raise RuntimeError("SICNav CAMPc returned non-finite action")
+        omega = raw_omega / self._time_step if self._time_step > 0.0 else 0.0
         omega = max(-self._omega_max, min(omega, self._omega_max))
         self._env.global_time += self._time_step
-        return {"v": float(action.v), "omega": omega}
+        return {"v": velocity, "omega": omega}
 
 
 @dataclass
@@ -207,6 +214,8 @@ class SICNavPlanner:
             or name.startswith("sicnav.")
             or name == "sicnav_diffusion"
             or name.startswith("sicnav_diffusion.")
+            or name == "crowd_sim_plus"
+            or name.startswith("crowd_sim_plus.")
         )
 
     @staticmethod
@@ -337,10 +346,18 @@ class SICNavPlanner:
         repo_root = self._resolve_repo_root(self.config.repo_root)
         if not repo_root.is_dir():
             return None
-        policy_config_path = Path(
-            self.config.policy_config_path or (repo_root / _DEFAULT_POLICY_CONFIG)
-        )
-        env_config_path = Path(self.config.env_config_path or (repo_root / _DEFAULT_ENV_CONFIG))
+        if self.config.policy_config_path:
+            policy_config_path = Path(self.config.policy_config_path)
+            if not policy_config_path.is_file():
+                raise FileNotFoundError(f"Policy config file not found: {policy_config_path}")
+        else:
+            policy_config_path = repo_root / _DEFAULT_POLICY_CONFIG
+        if self.config.env_config_path:
+            env_config_path = Path(self.config.env_config_path)
+            if not env_config_path.is_file():
+                raise FileNotFoundError(f"Env config file not found: {env_config_path}")
+        else:
+            env_config_path = repo_root / _DEFAULT_ENV_CONFIG
         if not policy_config_path.is_file() or not env_config_path.is_file():
             return None
 
@@ -459,16 +476,24 @@ class SICNavPlanner:
         if self.config.safety_clamp:
             if "vx" in action and "vy" in action:
                 speed = float(np.hypot(action["vx"], action["vy"]))
+                if not math.isfinite(speed):
+                    raise RuntimeError("SICNav policy returned non-finite velocity action")
                 if speed > self.config.v_max and speed > 1e-9:
                     scale = self.config.v_max / speed
                     action["vx"] *= scale
                     action["vy"] *= scale
             if "v" in action:
-                action["v"] = max(0.0, min(float(action["v"]), self.config.v_max))
+                velocity = float(action["v"])
+                if not math.isfinite(velocity):
+                    raise RuntimeError("SICNav policy returned non-finite velocity action")
+                action["v"] = max(0.0, min(velocity, self.config.v_max))
             if "omega" in action:
+                omega = float(action["omega"])
+                if not math.isfinite(omega):
+                    raise RuntimeError("SICNav policy returned non-finite angular action")
                 action["omega"] = max(
                     -self.config.omega_max,
-                    min(float(action["omega"]), self.config.omega_max),
+                    min(omega, self.config.omega_max),
                 )
 
     def close(self) -> None:

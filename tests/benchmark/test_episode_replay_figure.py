@@ -727,6 +727,131 @@ class TestCLI:
         )
         assert ret == 0
 
+    def test_cli_end_to_end_full_workflow(self, tmp_path):
+        """End-to-end test: complete workflow from episode row to rendered artifacts.
+
+        This test validates the full command-to-artifact pipeline:
+        1. Episode row loading from JSONL
+        2. Replay figure generation (all output types)
+        3. Artifact file creation and validation
+        4. Provenance sidecar completeness
+        5. Determinism check execution
+
+        Corresponds to acceptance criterion: "One command maps an episode row to
+        replay-derived figure artifacts with determinism check and provenance."
+        """
+        from scripts.replay_episode_figure import main
+
+        # Create comprehensive episode row with full provenance
+        episode_data = {
+            "episode_id": "e2e_test_ep",
+            "scenario_id": "crossing_scenario",
+            "seed": 123,
+            "planner": "social_force",
+            "campaign_id": "test_campaign_001",
+            "config_hash": "abc123def",
+            "repo_commit": "a1b2c3d4",
+            "final_robot_position": [5.0, 2.5],
+            "final_progress": 0.75,
+            "success": True,
+            "collision": False,
+            "replay_steps": [
+                {"t": 0.0, "x": 0.0, "y": 0.0, "heading": 0.0, "speed": 0.0},
+                {"t": 1.0, "x": 1.0, "y": 0.5, "heading": 0.1, "speed": 1.0},
+                {"t": 2.0, "x": 2.0, "y": 1.0, "heading": 0.2, "speed": 1.0},
+                {"t": 3.0, "x": 3.0, "y": 1.5, "heading": 0.3, "speed": 1.0},
+                {"t": 4.0, "x": 4.0, "y": 2.0, "heading": 0.4, "speed": 1.0},
+                {"t": 5.0, "x": 5.0, "y": 2.5, "heading": 0.5, "speed": 0.0},
+            ],
+            "replay_dt": 1.0,
+        }
+
+        episodes_jsonl = tmp_path / "episodes.jsonl"
+        import json
+
+        with open(episodes_jsonl, "w") as f:
+            json.dump(episode_data, f)
+            f.write("\n")
+
+        output_dir = tmp_path / "output"
+
+        # Run CLI with all output types
+        ret = main(
+            [
+                "--episodes",
+                str(episodes_jsonl),
+                "--episode-id",
+                "e2e_test_ep",
+                "--outputs",
+                "still,filmstrip,trajectory",
+                "--out-dir",
+                str(output_dir),
+                "--tolerance-m",
+                "0.1",
+            ]
+        )
+        assert ret == 0, "CLI should complete successfully"
+
+        # Verify all expected artifact files exist
+        # Note: still is generated at midpoint (len(steps)//2) when no frame_steps provided
+        expected_artifacts = [
+            "still_3.png",  # Midpoint of 6 steps (indices 0-5)
+            "filmstrip.png",
+            "trajectory.png",
+        ]
+        for artifact in expected_artifacts:
+            artifact_path = output_dir / artifact
+            assert artifact_path.exists(), f"Artifact {artifact} should be generated"
+            assert artifact_path.stat().st_size > 0, f"Artifact {artifact} should not be empty"
+
+        # Verify provenance sidecar exists and contains all required fields
+        provenance_path = output_dir / "replay_provenance.json"
+        assert provenance_path.exists(), "Provenance sidecar should be generated"
+
+        with open(provenance_path) as f:
+            provenance = json.load(f)
+
+        # Required provenance fields per issue acceptance criteria
+        required_fields = [
+            "campaign_id",
+            "episode_id",
+            "scenario_id",
+            "seed",
+            "determinism_check_status",
+            "artifacts",
+            "generated_at",
+        ]
+        for field in required_fields:
+            assert field in provenance, f"Provenance must contain {field}"
+
+        # Verify provenance values match input
+        assert provenance["episode_id"] == "e2e_test_ep"
+        assert provenance["scenario_id"] == "crossing_scenario"
+        assert provenance["seed"] == 123
+        assert provenance["campaign_id"] == "test_campaign_001"
+        assert provenance["determinism_check_status"] in ["pass", "fail", "not_evaluable"]
+
+        # Verify artifacts list matches generated files
+        artifact_names = [Path(a["path"]).name for a in provenance["artifacts"]]
+        assert "still_3.png" in artifact_names
+        assert "filmstrip.png" in artifact_names
+        assert "trajectory.png" in artifact_names
+
+        # Verify each artifact has metadata
+        for artifact in provenance["artifacts"]:
+            assert "type" in artifact
+            assert "sha256" in artifact
+            assert len(artifact["sha256"]) == 64  # SHA-256 hex digest length
+
+        # Verify caption fragment exists
+        caption_path = output_dir / "caption_fragment.tex"
+        assert caption_path.exists(), "Caption fragment should be generated"
+
+        with open(caption_path) as f:
+            caption_content = f.read()
+        assert len(caption_content) > 0, "Caption fragment should not be empty"
+        assert "e2e_test_ep" in caption_content or "crossing_scenario" in caption_content
+
 
 class TestResimulation:
     """Tests for deterministic re-simulation functionality."""

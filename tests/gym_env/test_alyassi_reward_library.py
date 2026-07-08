@@ -178,7 +178,9 @@ def test_alyassi_reward_f_guard_rejects_non_finite_values(non_finite: float) -> 
 
     scores = alyassi_component_scores(meta)
     # All affected components should use default values (0.0), not NaN/Inf
-    assert scores["social"] == 0.0, f"Social component should fall back to 0.0, got {scores['social']}"
+    assert scores["social"] == 0.0, (
+        f"Social component should fall back to 0.0, got {scores['social']}"
+    )
     assert scores["human_preference"] == 0.0, (
         f"Human preference should fall back to 0.0, got {scores['human_preference']}"
     )

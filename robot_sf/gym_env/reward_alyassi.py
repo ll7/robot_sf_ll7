@@ -170,7 +170,9 @@ def _collision_component(meta: Mapping[str, object], near_miss_dist: float) -> f
     if min_dist >= near_miss_dist:
         prox_term = 0.0
     else:
-        prox_term = -max(0.0, (near_miss_dist - min_dist) / max(near_miss_dist, _DENOMINATOR_GUARD_EPSILON))
+        prox_term = -max(
+            0.0, (near_miss_dist - min_dist) / max(near_miss_dist, _DENOMINATOR_GUARD_EPSILON)
+        )
     return collision_term + prox_term
 
 

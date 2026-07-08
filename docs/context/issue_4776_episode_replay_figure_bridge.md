@@ -170,6 +170,41 @@ Every artifact includes:
 
 Do not use replay-derived figures as evidence of benchmark performance unless the source episode row itself is valid benchmark evidence with full provenance.
 
+## Current Limitations and Future Work
+
+### Re-simulation Not Yet Implemented
+
+**Current state (PR #4796)**: The tool renders replay steps from a pre-existing `replay_steps` field in the episode row. If this field is missing, the tool raises a `ValueError` indicating that trajectory data is required.
+
+**Issue requirement**: The full issue #4776 requires deterministic re-simulation from the recorded seed and planner configuration, not just rendering of pre-recorded steps. This would enable figure generation from any episode row (even those without `replay_steps`) by re-running the episode headless with full-state recording.
+
+**Future work** (successor slice to PR #4796):
+1. Implement headless re-simulation from `scenario_id + seed + planner_config`
+2. Resolve planner configuration via campaign registry or explicit CLI parameters
+3. Record full state during re-simulation for rendering
+4. Assert determinism by comparing re-simulated endpoint to recorded metrics
+5. This would close the gap where campaigns "persist rows but not replayable recordings"
+
+For now, episodes must have `replay_steps` persisted during the original campaign execution to be renderable as figures.
+
+### Determinism Endpoint Comparison
+
+**Current state**: The determinism check compares final robot position when available. This works for rendering-based validation.
+
+**Future work**: When re-simulation is implemented, the comparison should be:
+- Quantitative: compare replay-vs-recorded endpoints with explicit tolerance
+- Comprehensive: check position, success flag, collision flag, and progress metrics
+- Loud failure: report exact drift values when re-simulation diverges
+
+### Input Robustness Hardening
+
+**Current state**: The module already includes:
+- Validation of `final_robot_position` as finite 2-tuple before determinism math (`_parse_final_position`)
+- Filtering of non-finite (NaN/Inf) values during trajectory numeric parsing (`_finite_floats`)
+- Guard against empty `frame_steps` and out-of-range indices in `generate_filmstrip`
+
+These protections were implemented in PR #4796 to address gemini review feedback.
+
 ## Implementation Details
 
 ### Replay Episode Construction

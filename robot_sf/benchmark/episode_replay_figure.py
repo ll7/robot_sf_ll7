@@ -835,8 +835,11 @@ def replay_episode_and_generate_figures(  # noqa: PLR0913
     replay_episode = build_replay_from_episode_row(episode_row)
     if not replay_episode:
         raise ValueError(
-            f"Episode {episode_row.episode_id} has no replay_steps; "
-            "cannot generate figures without trajectory data"
+            f"Episode {episode_row.episode_id} has no replay_steps field in the row; "
+            "cannot generate figures without trajectory data. "
+            "The episode row must include a 'replay_steps' list with robot states. "
+            "Future work will support re-simulation from seed/config when replay_steps "
+            "is not available (see issue #4776 re-simulation bridge)."
         )
 
     if not validate_replay_episode(replay_episode, min_length=2):

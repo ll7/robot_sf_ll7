@@ -532,14 +532,14 @@ class TestReplayEpisodeAndGenerateFigures:
         assert result["determinism_check_status"] == "skipped"
 
     def test_full_workflow_no_replay_steps(self, output_dir, episodes_jsonl_file):
-        """Test workflow fails without replay steps."""
+        """Test workflow fails without replay steps with helpful error message."""
         row = EpisodeRow(
-            episode_id="test",
+            episode_id="test_missing_replay",
             scenario_id="scen",
             seed=1,
         )
 
-        with pytest.raises(ValueError, match="no replay_steps"):
+        with pytest.raises(ValueError, match="no replay_steps.*Future work will support re-simulation"):
             replay_episode_and_generate_figures(
                 episode_row=row,
                 outputs=["trajectory"],

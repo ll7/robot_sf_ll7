@@ -152,6 +152,69 @@ staging; license CC BY-NC-SA 3.0 (manual, license-gated, no approved download UR
 uv run python scripts/tools/manage_external_data.py --json sdd-preflight
 ```
 
+## Issue #4079 — Kaggle-reduced SDD Provenance Decision (2026-07-08)
+
+Issue #4079 investigates whether the Kaggle-reduced SDD annotation package (aryashah2k/stanford-drone-dataset)
+is byte/content-equivalent to the official Stanford SDD archive. The conclusion is that the Kaggle
+source remains a **local BYO staging option only**; canonical equivalence cannot be verified because
+the official archive is unreachable.
+
+### Official Source Availability
+
+- Official archive URL: `http://vatic2.stanford.edu/stanford_campus_dataset.zip`
+- Official project page: <https://cvgl.stanford.edu/projects/uav_data/>
+- Availability status: **blocked_official_source_unavailable**
+- Verification date: 2026-07-02 (verified from two independent networks)
+- Network observation: TCP 80 and 443 refused/filtered; DNS resolves (171.64.68.58) but host does
+  not serve HTTP/HTTPS traffic. The archive is unreachable and cannot be fetched for comparison.
+
+### Kaggle-Reduced Source
+
+- Kaggle source: <https://www.kaggle.com/datasets/aryashah2k/stanford-drone-dataset>
+- Staged local checksum (annotations only, 60 files):
+  ```
+  66dec2c82b0a01b23bf9fa9acef352af86549e7ea749811ea4ef9c47003d4acf
+  ```
+- Source classification: `local_byo_staging_only`
+- Byte-equivalence to official archive: **unknown and unverified** (official archive unavailable)
+
+### Provenance Decision
+
+Because the official Stanford SDD archive is unreachable, byte-equivalence between the Kaggle-reduced
+package and the canonical source cannot be established. The project treats the Kaggle-staged files as
+a local bring-your-own staging convenience only, not as a canonical-equivalent source.
+
+This means:
+
+1. The Kaggle checksum (`66dec2c82...`) is **NOT** promoted to `configs/data/sdd_staging_manifest.yaml`
+   as an accepted canonical checksum.
+2. Any benchmark-facing claim using SDD-derived priors **MUST** cite the provenance caveat that the
+   annotation source is a non-canonical Kaggle-reduced copy, not the official Stanford archive.
+3. If the official archive becomes available in the future, a fresh equivalence comparison should be
+   run before promoting any checksum to canonical status.
+
+### Benchmark Claim Caveat
+
+When using SDD-derived scenario priors or any benchmark result that depends on SDD annotations,
+the provenance caveat must be stated:
+
+> "Annotation source: Kaggle-reduced SDD (aryashah2k/stanford-drone-dataset), local BYO staging
+> only. Byte-equivalence to the official Stanford SDD archive (cvgl.stanford.edu) is unverified;
+> the official archive was unreachable as of 2026-07-02."
+
+No claim may state or imply that the staged annotations are from the official Stanford source without
+explicit qualification.
+
+### Validation Commands
+
+```bash
+# Check current SDD staging status (including provenance note):
+uv run python scripts/tools/manage_external_data.py --json sdd-status
+
+# Validate any locally-staged copy (official or Kaggle-derived):
+uv run python scripts/tools/manage_external_data.py --json sdd-validate
+```
+
 ## Validation Checklist
 
 - [x] Source URL and version tag are recorded.
@@ -161,3 +224,5 @@ uv run python scripts/tools/manage_external_data.py --json sdd-preflight
 - [x] Robot SF use decision is reference-only / smoke-only until hydrated.
 - [x] Missing artifacts fail closed with an actionable message and force `proxy_schema_smoke`.
 - [x] No restricted raw data is committed; staging dir is git-ignored.
+- [x] Official SDD archive unavailability is documented with verification date.
+- [x] Kaggle-reduced source is classified as local BYO only (not canonical-equivalent).

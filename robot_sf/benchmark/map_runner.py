@@ -590,6 +590,48 @@ def _ppo_paper_gate_status(config: dict[str, Any]) -> tuple[bool, str | None]:
     return True, None
 
 
+def _resolve_planner_obs_mode(planner: Any, default: str) -> str:
+    """Return the lowercased ``obs_mode`` from a planner config (dict or attribute).
+
+    Args:
+        planner: Planner exposing a ``config`` dict or attribute object.
+        default: Fallback obs-mode when the planner config does not specify one.
+
+    Returns:
+        str: Lowercased obs-mode label.
+    """
+    planner_cfg = getattr(planner, "config", None)
+    if isinstance(planner_cfg, dict):
+        return str(planner_cfg.get("obs_mode", default)).strip().lower()
+    return str(getattr(planner_cfg, "obs_mode", default)).strip().lower()
+
+
+def _enforce_ppo_paper_profile(
+    algo_config: dict[str, Any],
+) -> tuple[bool, str | None]:
+    """Validate the PPO paper profile gate, raising if it fails.
+
+    Returns:
+        tuple[bool, str | None]: ``(paper_ready, paper_reason)`` for metadata recording.
+        Raises ``ValueError`` when a paper/paper-baseline profile is requested but the
+        provenance/quality gate is not satisfied.
+    """
+    paper_ready, paper_reason = _ppo_paper_gate_status(algo_config)
+    if (
+        str(algo_config.get("profile", "experimental")).strip().lower()
+        in {
+            "paper",
+            "paper-baseline",
+        }
+        and not paper_ready
+    ):
+        raise ValueError(
+            "PPO paper profile requested but gate failed: "
+            f"{paper_reason}. Provide provenance + quality_gate in algo config.",
+        )
+    return paper_ready, paper_reason
+
+
 def _evaluate_learned_policy_contract(
     *,
     algo: str,
@@ -1086,6 +1128,271 @@ def _build_external_mpc_policy(
     )
 
 
+def _build_ppo_policy(  # noqa: C901
+    algo_key: str,
+    algo_config: dict[str, Any],
+    *,
+    meta: dict[str, Any],
+    robot_kinematics: str | None,
+    normalized_robot_command_mode: str | None,
+    adapter_impact_eval: bool,
+) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
+    """Build the PPO mixed-adapter policy and enriched metadata.
+
+    Returns:
+        tuple[Callable, dict[str, Any]]: Policy callable and enriched metadata.
+    """
+    paper_ready, paper_reason = _enforce_ppo_paper_profile(algo_config)
+    ppo_planner = PPOPlanner(algo_config, seed=None)
+    ppo_obs_mode = _resolve_planner_obs_mode(ppo_planner, "vector")
+    if hasattr(ppo_planner, "get_metadata"):
+        planner_meta = ppo_planner.get_metadata()
+        if isinstance(planner_meta, dict):
+            meta.update(planner_meta)
+    meta = enrich_algorithm_metadata(
+        algo=algo_key,
+        metadata=meta,
+        execution_mode="mixed",
+        adapter_name="ppo_action_to_unicycle",
+        robot_kinematics=robot_kinematics,
+        adapter_impact_requested=adapter_impact_eval,
+    )
+    _init_feasibility_metadata(meta)
+    planner_meta = meta.get("planner_kinematics")
+    if isinstance(planner_meta, dict):
+        planner_meta["planner_command_space"] = _default_robot_command_space(
+            robot_kinematics,
+            algo_config,
+            robot_command_mode=normalized_robot_command_mode,
+        )
+    ppo_kinematics_model = resolve_benchmark_kinematics_model(
+        robot_kinematics=robot_kinematics,
+        command_limits=algo_config,
+    )
+
+    def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+        """Run PPO planner inference and convert output into benchmark command space.
+
+        Returns:
+            tuple[float, float]: Linear and angular command after conversion/projection.
+        """
+        if ppo_obs_mode in {"dict", "native_dict", "multi_input"}:
+            ppo_obs = obs
+        else:
+            ppo_obs = _obs_to_ppo_format(obs)
+        action = ppo_planner.step(ppo_obs)
+        if not isinstance(action, dict):
+            raise TypeError(f"PPO planner returned non-dict action: {type(action)}")
+        linear, angular, conversion_mode = _ppo_action_to_unicycle(
+            action,
+            obs,
+            algo_config,
+            robot_kinematics=robot_kinematics,
+            kinematics_model=ppo_kinematics_model,
+            project_command=False,
+        )
+        linear, angular = _project_with_feasibility(
+            model=ppo_kinematics_model,
+            command=(float(linear), float(angular)),
+            meta=meta,
+        )
+        _update_adapter_impact_metrics(meta, conversion_mode)
+        return linear, angular
+
+    _policy._planner_close = ppo_planner.close
+    ppo_bind_env = getattr(ppo_planner, "bind_env", None)
+    if callable(ppo_bind_env):
+        _policy._planner_bind_env = ppo_bind_env
+    if "status" not in meta:
+        meta["status"] = "ok"
+    meta.setdefault("algorithm", "ppo")
+    meta.setdefault("config", algo_config)
+    meta["profile"] = str(algo_config.get("profile", "experimental")).strip().lower()
+    provenance = algo_config.get("provenance")
+    if isinstance(provenance, dict):
+        meta["provenance"] = provenance
+    quality_gate = algo_config.get("quality_gate")
+    if isinstance(quality_gate, dict):
+        meta["quality_gate"] = quality_gate
+    meta["paper_ready"] = bool(paper_ready)
+    if paper_reason:
+        meta["paper_gate_reason"] = paper_reason
+    meta["config_hash"] = _config_hash(meta.get("config", algo_config))
+    return _policy, meta
+
+
+def _build_sac_policy(
+    algo_key: str,
+    algo_config: dict[str, Any],
+    *,
+    meta: dict[str, Any],
+    robot_kinematics: str | None,
+    normalized_robot_command_mode: str | None,
+    adapter_impact_eval: bool,
+) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
+    """Build the SAC mixed-adapter policy and enriched metadata.
+
+    Returns:
+        tuple[Callable, dict[str, Any]]: Policy callable and enriched metadata.
+    """
+    sac_planner = SACPlanner(algo_config, seed=None)
+    sac_obs_mode = _resolve_planner_obs_mode(sac_planner, "dict")
+    if hasattr(sac_planner, "get_metadata"):
+        planner_meta = sac_planner.get_metadata()
+        if isinstance(planner_meta, dict):
+            meta.update(planner_meta)
+    meta = enrich_algorithm_metadata(
+        algo=algo_key,
+        metadata=meta,
+        execution_mode="mixed",
+        adapter_name="ppo_action_to_unicycle",
+        robot_kinematics=robot_kinematics,
+        adapter_impact_requested=adapter_impact_eval,
+    )
+    _init_feasibility_metadata(meta)
+    planner_meta = meta.get("planner_kinematics")
+    if isinstance(planner_meta, dict):
+        planner_meta["planner_command_space"] = _default_robot_command_space(
+            robot_kinematics,
+            algo_config,
+            robot_command_mode=normalized_robot_command_mode,
+        )
+    sac_kinematics_model = resolve_benchmark_kinematics_model(
+        robot_kinematics=robot_kinematics,
+        command_limits=algo_config,
+    )
+
+    sac_action_semantics = str(algo_config.get("action_semantics", "delta")).strip().lower()
+    sac_action_space = str(algo_config.get("action_space", "unicycle")).strip().lower()
+    # Native bypass is only valid for delta-unicycle outputs from the SAC model itself.
+    # Fallback steps emit absolute goal-directed commands that must go through the
+    # command→env-action conversion path.  We decide per step by checking the planner
+    # status *after* each sac_planner.step() call.
+    _sac_can_be_native = sac_action_semantics == "delta" and sac_action_space == "unicycle"
+
+    def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+        """Run SAC planner inference and handle native-vs-fallback action semantics.
+
+        Returns:
+            tuple[float, float]: Linear and angular command for the environment.
+        """
+        if sac_obs_mode in {"dict", "native_dict", "multi_input"}:
+            sac_obs = obs
+        else:
+            sac_obs = _obs_to_ppo_format(obs)
+        action = sac_planner.step(sac_obs)
+        if not isinstance(action, dict):
+            raise TypeError(f"SAC planner returned non-dict action: {type(action)}")
+        # Track per step whether this output is a native env action (model ran) or an
+        # absolute goal-directed fallback command (planner in fallback mode).
+        _policy._last_step_native = (
+            _sac_can_be_native and getattr(sac_planner, "_status", "fallback") == "ok"
+        )
+        linear, angular, conversion_mode = _ppo_action_to_unicycle(
+            action,
+            obs,
+            algo_config,
+            robot_kinematics=robot_kinematics,
+            kinematics_model=sac_kinematics_model,
+            project_command=False,
+        )
+        linear, angular = _project_with_feasibility(
+            model=sac_kinematics_model,
+            command=(float(linear), float(angular)),
+            meta=meta,
+        )
+        _update_adapter_impact_metrics(meta, conversion_mode)
+        return linear, angular
+
+    _policy._planner_close = sac_planner.close
+    _policy._planner_native_env_action = _sac_can_be_native
+    if "status" not in meta:
+        meta["status"] = "ok"
+    meta.setdefault("algorithm", "sac")
+    meta.setdefault("config", algo_config)
+    meta["profile"] = str(algo_config.get("profile", "experimental")).strip().lower()
+    meta["config_hash"] = _config_hash(meta.get("config", algo_config))
+    return _policy, meta
+
+
+def _build_drl_vo_policy(
+    algo_key: str,
+    algo_config: dict[str, Any],
+    *,
+    meta: dict[str, Any],
+    robot_kinematics: str | None,
+    normalized_robot_command_mode: str | None,
+    adapter_impact_eval: bool,
+) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
+    """Build the DRL-VO mixed-adapter policy and enriched metadata.
+
+    Returns:
+        tuple[Callable, dict[str, Any]]: Policy callable and enriched metadata.
+    """
+    drl_planner = DrlVoPlanner(algo_config, seed=None)
+    if hasattr(drl_planner, "get_metadata"):
+        planner_meta = drl_planner.get_metadata()
+        if isinstance(planner_meta, dict):
+            meta.update(planner_meta)
+
+    meta = enrich_algorithm_metadata(
+        algo=algo_key,
+        metadata=meta,
+        execution_mode="mixed",
+        adapter_name="drl_vo_action_to_unicycle",
+        robot_kinematics=robot_kinematics,
+        adapter_impact_requested=adapter_impact_eval,
+    )
+    _init_feasibility_metadata(meta)
+    planner_meta = meta.get("planner_kinematics")
+    if isinstance(planner_meta, dict):
+        planner_meta["planner_command_space"] = _default_robot_command_space(
+            robot_kinematics,
+            algo_config,
+            robot_command_mode=normalized_robot_command_mode,
+        )
+
+    drl_kinematics_model = resolve_benchmark_kinematics_model(
+        robot_kinematics=robot_kinematics,
+        command_limits=algo_config,
+    )
+
+    def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+        """Run DRL-VO inference through the PPO-format observation adapter.
+
+        Returns:
+            tuple[float, float]: Linear and angular command after conversion/projection.
+        """
+        drl_obs = _obs_to_ppo_format(obs)
+        action = drl_planner.step(drl_obs)
+        if not isinstance(action, dict):
+            raise TypeError(f"DRL-VO planner returned non-dict action: {type(action)}")
+        linear, angular, conversion_mode = _ppo_action_to_unicycle(
+            action,
+            obs,
+            algo_config,
+            robot_kinematics=robot_kinematics,
+            kinematics_model=drl_kinematics_model,
+            project_command=False,
+        )
+        linear, angular = _project_with_feasibility(
+            model=drl_kinematics_model,
+            command=(float(linear), float(angular)),
+            meta=meta,
+        )
+        _update_adapter_impact_metrics(meta, conversion_mode)
+        return linear, angular
+
+    _policy._planner_close = drl_planner.close
+    _attach_planner_reset(_policy, drl_planner)
+    if "status" not in meta:
+        meta["status"] = "ok"
+    meta.setdefault("algorithm", "drl_vo")
+    meta.setdefault("config", algo_config)
+    meta["config_hash"] = _config_hash(meta.get("config", algo_config))
+    return _policy, meta
+
+
 def _build_policy(  # noqa: C901, PLR0912, PLR0915
     algo: str,
     algo_config: dict[str, Any],
@@ -1206,245 +1513,32 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     elif algo_key in {"social_force", "sf"}:
         adapter = SocialForcePlannerAdapter(config=socnav_cfg)
     elif algo_key in {"ppo"}:
-        paper_ready, paper_reason = _ppo_paper_gate_status(algo_config)
-        if (
-            str(algo_config.get("profile", "experimental")).strip().lower()
-            in {
-                "paper",
-                "paper-baseline",
-            }
-            and not paper_ready
-        ):
-            raise ValueError(
-                "PPO paper profile requested but gate failed: "
-                f"{paper_reason}. Provide provenance + quality_gate in algo config.",
-            )
-        ppo_planner = PPOPlanner(algo_config, seed=None)
-        planner_cfg = getattr(ppo_planner, "config", None)
-        if isinstance(planner_cfg, dict):
-            ppo_obs_mode = str(planner_cfg.get("obs_mode", "vector")).strip().lower()
-        else:
-            ppo_obs_mode = str(getattr(planner_cfg, "obs_mode", "vector")).strip().lower()
-        if hasattr(ppo_planner, "get_metadata"):
-            planner_meta = ppo_planner.get_metadata()
-            if isinstance(planner_meta, dict):
-                meta.update(planner_meta)
-        meta = enrich_algorithm_metadata(
-            algo=algo_key,
-            metadata=meta,
-            execution_mode="mixed",
-            adapter_name="ppo_action_to_unicycle",
+        return _build_ppo_policy(
+            algo_key,
+            algo_config,
+            meta=meta,
             robot_kinematics=robot_kinematics,
-            adapter_impact_requested=adapter_impact_eval,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            adapter_impact_eval=adapter_impact_eval,
         )
-        _init_feasibility_metadata(meta)
-        planner_meta = meta.get("planner_kinematics")
-        if isinstance(planner_meta, dict):
-            planner_meta["planner_command_space"] = _default_robot_command_space(
-                robot_kinematics,
-                algo_config,
-                robot_command_mode=normalized_robot_command_mode,
-            )
-        ppo_kinematics_model = resolve_benchmark_kinematics_model(
-            robot_kinematics=robot_kinematics,
-            command_limits=algo_config,
-        )
-
-        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
-            """Run PPO planner inference and convert output into benchmark command space.
-
-            Returns:
-                tuple[float, float]: Linear and angular command after conversion/projection.
-            """
-            if ppo_obs_mode in {"dict", "native_dict", "multi_input"}:
-                ppo_obs = obs
-            else:
-                ppo_obs = _obs_to_ppo_format(obs)
-            action = ppo_planner.step(ppo_obs)
-            if not isinstance(action, dict):
-                raise TypeError(f"PPO planner returned non-dict action: {type(action)}")
-            linear, angular, conversion_mode = _ppo_action_to_unicycle(
-                action,
-                obs,
-                algo_config,
-                robot_kinematics=robot_kinematics,
-                kinematics_model=ppo_kinematics_model,
-                project_command=False,
-            )
-            linear, angular = _project_with_feasibility(
-                model=ppo_kinematics_model,
-                command=(float(linear), float(angular)),
-                meta=meta,
-            )
-            _update_adapter_impact_metrics(meta, conversion_mode)
-            return linear, angular
-
-        _policy._planner_close = ppo_planner.close
-        ppo_bind_env = getattr(ppo_planner, "bind_env", None)
-        if callable(ppo_bind_env):
-            _policy._planner_bind_env = ppo_bind_env
-        if "status" not in meta:
-            meta["status"] = "ok"
-        meta.setdefault("algorithm", "ppo")
-        meta.setdefault("config", algo_config)
-        meta["profile"] = str(algo_config.get("profile", "experimental")).strip().lower()
-        provenance = algo_config.get("provenance")
-        if isinstance(provenance, dict):
-            meta["provenance"] = provenance
-        quality_gate = algo_config.get("quality_gate")
-        if isinstance(quality_gate, dict):
-            meta["quality_gate"] = quality_gate
-        meta["paper_ready"] = bool(paper_ready)
-        if paper_reason:
-            meta["paper_gate_reason"] = paper_reason
-        meta["config_hash"] = _config_hash(meta.get("config", algo_config))
-        return _policy, meta
     elif algo_key in {"sac"}:
-        sac_planner = SACPlanner(algo_config, seed=None)
-        planner_cfg = getattr(sac_planner, "config", None)
-        if isinstance(planner_cfg, dict):
-            sac_obs_mode = str(planner_cfg.get("obs_mode", "dict")).strip().lower()
-        else:
-            sac_obs_mode = str(getattr(planner_cfg, "obs_mode", "dict")).strip().lower()
-        if hasattr(sac_planner, "get_metadata"):
-            planner_meta = sac_planner.get_metadata()
-            if isinstance(planner_meta, dict):
-                meta.update(planner_meta)
-        meta = enrich_algorithm_metadata(
-            algo=algo_key,
-            metadata=meta,
-            execution_mode="mixed",
-            adapter_name="ppo_action_to_unicycle",
+        return _build_sac_policy(
+            algo_key,
+            algo_config,
+            meta=meta,
             robot_kinematics=robot_kinematics,
-            adapter_impact_requested=adapter_impact_eval,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            adapter_impact_eval=adapter_impact_eval,
         )
-        _init_feasibility_metadata(meta)
-        planner_meta = meta.get("planner_kinematics")
-        if isinstance(planner_meta, dict):
-            planner_meta["planner_command_space"] = _default_robot_command_space(
-                robot_kinematics,
-                algo_config,
-                robot_command_mode=normalized_robot_command_mode,
-            )
-        sac_kinematics_model = resolve_benchmark_kinematics_model(
-            robot_kinematics=robot_kinematics,
-            command_limits=algo_config,
-        )
-
-        sac_action_semantics = str(algo_config.get("action_semantics", "delta")).strip().lower()
-        sac_action_space = str(algo_config.get("action_space", "unicycle")).strip().lower()
-        # Native bypass is only valid for delta-unicycle outputs from the SAC model itself.
-        # Fallback steps emit absolute goal-directed commands that must go through the
-        # command→env-action conversion path.  We decide per step by checking the planner
-        # status *after* each sac_planner.step() call.
-        _sac_can_be_native = sac_action_semantics == "delta" and sac_action_space == "unicycle"
-
-        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
-            """Run SAC planner inference and handle native-vs-fallback action semantics.
-
-            Returns:
-                tuple[float, float]: Linear and angular command for the environment.
-            """
-            if sac_obs_mode in {"dict", "native_dict", "multi_input"}:
-                sac_obs = obs
-            else:
-                sac_obs = _obs_to_ppo_format(obs)
-            action = sac_planner.step(sac_obs)
-            if not isinstance(action, dict):
-                raise TypeError(f"SAC planner returned non-dict action: {type(action)}")
-            # Track per step whether this output is a native env action (model ran) or an
-            # absolute goal-directed fallback command (planner in fallback mode).
-            _policy._last_step_native = (
-                _sac_can_be_native and getattr(sac_planner, "_status", "fallback") == "ok"
-            )
-            linear, angular, conversion_mode = _ppo_action_to_unicycle(
-                action,
-                obs,
-                algo_config,
-                robot_kinematics=robot_kinematics,
-                kinematics_model=sac_kinematics_model,
-                project_command=False,
-            )
-            linear, angular = _project_with_feasibility(
-                model=sac_kinematics_model,
-                command=(float(linear), float(angular)),
-                meta=meta,
-            )
-            _update_adapter_impact_metrics(meta, conversion_mode)
-            return linear, angular
-
-        _policy._planner_close = sac_planner.close
-        _policy._planner_native_env_action = _sac_can_be_native
-        if "status" not in meta:
-            meta["status"] = "ok"
-        meta.setdefault("algorithm", "sac")
-        meta.setdefault("config", algo_config)
-        meta["profile"] = str(algo_config.get("profile", "experimental")).strip().lower()
-        meta["config_hash"] = _config_hash(meta.get("config", algo_config))
-        return _policy, meta
     elif algo_key == "drl_vo":
-        drl_planner = DrlVoPlanner(algo_config, seed=None)
-        if hasattr(drl_planner, "get_metadata"):
-            planner_meta = drl_planner.get_metadata()
-            if isinstance(planner_meta, dict):
-                meta.update(planner_meta)
-
-        meta = enrich_algorithm_metadata(
-            algo=algo_key,
-            metadata=meta,
-            execution_mode="mixed",
-            adapter_name="drl_vo_action_to_unicycle",
+        return _build_drl_vo_policy(
+            algo_key,
+            algo_config,
+            meta=meta,
             robot_kinematics=robot_kinematics,
-            adapter_impact_requested=adapter_impact_eval,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            adapter_impact_eval=adapter_impact_eval,
         )
-        _init_feasibility_metadata(meta)
-        planner_meta = meta.get("planner_kinematics")
-        if isinstance(planner_meta, dict):
-            planner_meta["planner_command_space"] = _default_robot_command_space(
-                robot_kinematics,
-                algo_config,
-                robot_command_mode=normalized_robot_command_mode,
-            )
-
-        drl_kinematics_model = resolve_benchmark_kinematics_model(
-            robot_kinematics=robot_kinematics,
-            command_limits=algo_config,
-        )
-
-        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
-            """Run DRL-VO inference through the PPO-format observation adapter.
-
-            Returns:
-                tuple[float, float]: Linear and angular command after conversion/projection.
-            """
-            drl_obs = _obs_to_ppo_format(obs)
-            action = drl_planner.step(drl_obs)
-            if not isinstance(action, dict):
-                raise TypeError(f"DRL-VO planner returned non-dict action: {type(action)}")
-            linear, angular, conversion_mode = _ppo_action_to_unicycle(
-                action,
-                obs,
-                algo_config,
-                robot_kinematics=robot_kinematics,
-                kinematics_model=drl_kinematics_model,
-                project_command=False,
-            )
-            linear, angular = _project_with_feasibility(
-                model=drl_kinematics_model,
-                command=(float(linear), float(angular)),
-                meta=meta,
-            )
-            _update_adapter_impact_metrics(meta, conversion_mode)
-            return linear, angular
-
-        _policy._planner_close = drl_planner.close
-        _attach_planner_reset(_policy, drl_planner)
-        if "status" not in meta:
-            meta["status"] = "ok"
-        meta.setdefault("algorithm", "drl_vo")
-        meta.setdefault("config", algo_config)
-        meta["config_hash"] = _config_hash(meta.get("config", algo_config))
-        return _policy, meta
     elif algo_key in {"guarded_ppo"}:
         ppo_allowed = {field.name for field in fields(PPOPlannerConfig)}
         ppo_config = {key: value for key, value in algo_config.items() if key in ppo_allowed}

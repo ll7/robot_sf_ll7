@@ -169,7 +169,7 @@ def _load_json(path: Path) -> dict[str, Any] | None:
         Loaded mapping, or None on read/parse failure / non-object content.
     """
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError):
         return None
@@ -569,7 +569,7 @@ def _get_git_commit(campaign_root: Path) -> str | None:
     metadata_path = campaign_root / "metadata.json"
     if metadata_path.exists():
         try:
-            with open(metadata_path) as f:
+            with open(metadata_path, encoding="utf-8") as f:
                 metadata = json.load(f)
             return metadata.get("git_commit") or metadata.get("commit")
         except (OSError, json.JSONDecodeError):

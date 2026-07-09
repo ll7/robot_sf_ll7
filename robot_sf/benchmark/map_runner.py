@@ -1515,9 +1515,7 @@ def _build_guarded_ppo_policy(  # noqa: C901, PLR0915
                 else None
             )
             if isinstance(action_adaptation, dict):
-                residual_stats["decision_count"] = (
-                    int(residual_stats.get("decision_count", 0)) + 1
-                )
+                residual_stats["decision_count"] = int(residual_stats.get("decision_count", 0)) + 1
                 if bool(action_adaptation.get("residual_clipped", False)):
                     residual_stats["clipped_count"] = (
                         int(residual_stats.get("clipped_count", 0)) + 1
@@ -2094,9 +2092,7 @@ def _build_common_adapter_policy(  # noqa: C901
         planner_bind_env = _bind_env
     elif hasattr(adapter, "bind_env"):
         planner_bind_env = adapter.bind_env
-    if _is_holonomic_world_velocity_mode(
-        algo_key, robot_kinematics, normalized_robot_command_mode
-    ):
+    if _is_holonomic_world_velocity_mode(algo_key, robot_kinematics, normalized_robot_command_mode):
         return _build_holonomic_world_velocity_policy(
             adapter,
             algo_key=algo_key,

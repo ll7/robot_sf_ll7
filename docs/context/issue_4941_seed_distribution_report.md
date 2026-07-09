@@ -10,7 +10,7 @@ Adds `seed_distribution_report.v1` — a unified reporting surface that normaliz
 |------|---------|
 | `robot_sf/benchmark/seed_distribution_report.py` | Schema, dataclass model, adapters, and builder |
 | `scripts/benchmark/build_seed_distribution_report.py` | CLI entry point for report generation |
-| `tests/benchmark/test_seed_distribution_report.py` | Fixture-backed tests (36 tests) |
+| `tests/benchmark/test_seed_distribution_report.py` | Fixture-backed tests (41 tests) |
 
 ## Schema
 

@@ -233,7 +233,7 @@ def _git_head() -> str | None:
 
 def _classify_diagnostics(
     seed_count: int,
-    ci_half_width: float | float,
+    ci_half_width: float,
     *,
     insufficient_seed_threshold: int = DEFAULT_INSUFFICIENT_SEED_THRESHOLD,
     wide_interval_threshold: float = DEFAULT_WIDE_INTERVAL_THRESHOLD,
@@ -314,9 +314,7 @@ def _build_surface_from_seed_variability_row(
 
     raw_counts: RawCounts | None = None
     if primary_metric in ("success", "collisions", "near_misses"):
-        numerator = (
-            round(point_estimate * episode_count) if math.isfinite(point_estimate) else None
-        )
+        numerator = round(point_estimate * episode_count) if math.isfinite(point_estimate) else None
         raw_counts = RawCounts(numerator=numerator, denominator=episode_count)
 
     diagnostics = _classify_diagnostics(
@@ -622,7 +620,10 @@ def format_report_markdown(report: SeedDistributionReport) -> str:
     lines.append("| Surface | Metric | Seeds | Estimate | CI | Status |")
     lines.append("|---------|--------|-------|----------|-----|--------|")
     for surf in report.surfaces:
-        ci_str = f"[{surf.interval.lower:.4f}, {surf.interval.upper:.4f}]"
+        if math.isfinite(surf.interval.lower) and math.isfinite(surf.interval.upper):
+            ci_str = f"[{surf.interval.lower:.4f}, {surf.interval.upper:.4f}]"
+        else:
+            ci_str = "[na, na]"
         flags: list[str] = []
         if surf.diagnostics.insufficient_seed_count:
             flags.append("insufficient")

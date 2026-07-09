@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -16,12 +19,20 @@ from robot_sf.benchmark.seed_distribution_report import (
     _classify_diagnostics,
     adapt_rank_stability_report,
     adapt_seed_variability_report,
+    build_report_from_campaign_dir,
     build_seed_distribution_report,
     format_report_markdown,
     validate_report_schema_version,
 )
 
 SEED_DISTRIBUTION_REPORT_SCHEMA_VERSION = "seed_distribution_report.v1"
+
+_CLI_SCRIPT = (
+    Path(__file__).resolve().parents[2]
+    / "scripts"
+    / "benchmark"
+    / "build_seed_distribution_report.py"
+)
 
 
 # --- Fixtures ---
@@ -46,9 +57,21 @@ def _seed_variability_payload() -> dict:
                 "episode_count": 6,
                 "seed_list": [101, 102, 103],
                 "per_seed": [
-                    {"seed": 101, "episode_count": 2, "metrics": {"success": 1.0, "collisions": 0.0}},
-                    {"seed": 102, "episode_count": 2, "metrics": {"success": 0.5, "collisions": 0.5}},
-                    {"seed": 103, "episode_count": 2, "metrics": {"success": 1.0, "collisions": 0.0}},
+                    {
+                        "seed": 101,
+                        "episode_count": 2,
+                        "metrics": {"success": 1.0, "collisions": 0.0},
+                    },
+                    {
+                        "seed": 102,
+                        "episode_count": 2,
+                        "metrics": {"success": 0.5, "collisions": 0.5},
+                    },
+                    {
+                        "seed": 103,
+                        "episode_count": 2,
+                        "metrics": {"success": 1.0, "collisions": 0.0},
+                    },
                 ],
                 "summary": {
                     "success": {
@@ -255,9 +278,7 @@ def _unstable_surface() -> SurfaceRecord:
         point_estimate=0.50,
         interval=IntervalEstimate("bootstrap", 0.20, 0.80, 0.95),
         metrics_summary={
-            "success": MetricSummary(
-                0.50, 0.30, 0.60, 2.0, 0.20, 0.80, 0.30, "bootstrap", 0.95
-            ),
+            "success": MetricSummary(0.50, 0.30, 0.60, 2.0, 0.20, 0.80, 0.30, "bootstrap", 0.95),
         },
         diagnostics=SeedDistributionDiagnostics(True, None, True, True),
         provenance=SurfaceProvenance("test.json", "v1", "seed_variability"),
@@ -277,9 +298,7 @@ def _insufficient_surface() -> SurfaceRecord:
         point_estimate=1.0,
         interval=IntervalEstimate("bootstrap", 1.0, 1.0, 0.95),
         metrics_summary={
-            "success": MetricSummary(
-                1.0, 0.0, float("nan"), 1.0, 1.0, 1.0, 0.0, "bootstrap", 0.95
-            ),
+            "success": MetricSummary(1.0, 0.0, float("nan"), 1.0, 1.0, 1.0, 0.0, "bootstrap", 0.95),
         },
         diagnostics=SeedDistributionDiagnostics(True, None, False, True),
         provenance=SurfaceProvenance("test.json", "v1", "seed_variability"),
@@ -537,9 +556,7 @@ def test_build_report_commit_tracking() -> None:
 def test_build_report_report_paths() -> None:
     """Builder tracks input report paths in source provenance."""
     surfaces = _stable_surfaces()
-    report = build_seed_distribution_report(
-        surfaces, report_paths=["/a/b.json", "/a/c.json"]
-    )
+    report = build_seed_distribution_report(surfaces, report_paths=["/a/b.json", "/a/c.json"])
     assert len(report.source.report_paths) == 2
 
 
@@ -595,3 +612,81 @@ def test_provenance_adapter_name() -> None:
     rs_payload = _rank_stability_payload()
     rs_surfaces = adapt_rank_stability_report(rs_payload)
     assert rs_surfaces[0].provenance.adapter == "rank_stability"
+
+
+# --- Campaign-directory builder tests ---
+
+
+def test_build_from_campaign_dir_seed_variability(tmp_path: Path) -> None:
+    """build_report_from_campaign_dir consumes a reports/ dir with seed variability."""
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "seed_variability_by_scenario.json").write_text(
+        json.dumps(_seed_variability_payload()), encoding="utf-8"
+    )
+    report = build_report_from_campaign_dir(tmp_path)
+    assert report.schema_version == SEED_DISTRIBUTION_REPORT_SCHEMA_VERSION
+    assert len(report.surfaces) == 2
+    # input path is recorded in source provenance
+    assert report.source.report_paths
+    assert all("seed_variability_by_scenario.json" in p for p in report.source.report_paths)
+    validate_report_schema_version(report.to_dict())
+
+
+def test_build_from_campaign_dir_missing_optional_artifact(tmp_path: Path) -> None:
+    """Only one of two optional artifacts present still succeeds (advisory, not hard fail)."""
+    # seed variability present directly under campaign root; rank stability absent.
+    (tmp_path / "seed_variability_by_scenario.json").write_text(
+        json.dumps(_seed_variability_payload()), encoding="utf-8"
+    )
+    report = build_report_from_campaign_dir(tmp_path)
+    assert len(report.surfaces) == 2
+
+
+def test_build_from_campaign_dir_no_artifacts_raises(tmp_path: Path) -> None:
+    """Hard failure when no supported seed-level artifacts are found."""
+    with pytest.raises(FileNotFoundError, match="No supported seed-level artifacts"):
+        build_report_from_campaign_dir(tmp_path)
+
+
+# --- CLI entry-point tests ---
+
+
+def test_cli_main_writes_json(tmp_path: Path) -> None:
+    """CLI builds a report from a campaign dir and writes valid JSON, exit 0."""
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "seed_variability_by_scenario.json").write_text(
+        json.dumps(_seed_variability_payload()), encoding="utf-8"
+    )
+    out_json = tmp_path / "out.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(_CLI_SCRIPT),
+            "--campaign-root",
+            str(tmp_path),
+            "--out-json",
+            str(out_json),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert out_json.exists()
+    parsed = json.loads(out_json.read_text(encoding="utf-8"))
+    assert parsed["schema_version"] == SEED_DISTRIBUTION_REPORT_SCHEMA_VERSION
+    assert len(parsed["surfaces"]) == 2
+
+
+def test_cli_main_no_artifacts_exit_1(tmp_path: Path) -> None:
+    """CLI exits 1 when no supported seed-level artifacts are found."""
+    result = subprocess.run(
+        [sys.executable, str(_CLI_SCRIPT), "--campaign-root", str(tmp_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert "No supported seed-level artifacts" in result.stderr

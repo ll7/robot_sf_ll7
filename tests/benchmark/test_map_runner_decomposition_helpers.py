@@ -12,6 +12,7 @@ stay green across further decomposition of the same helpers.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -34,6 +35,7 @@ from robot_sf.benchmark.map_runner_episode import (
     _build_tracking_precision_summary,
     _compute_post_loop_metrics,
     _finalize_episode_record,
+    _min_finite_or_inf,
     _prepare_policy_and_observation_contract,
     _resolve_episode_run_context,
     _run_episode_step_loop,
@@ -81,6 +83,7 @@ class TestHolonomicWorldVelocityHelpers:
             "hrvo",
             "socnav_hrvo",
             "social_force",
+            "sf",
             "social_navigation_pyenvs_orca",
             "social_nav_pyenvs_orca",
             "sonic_crowdnav",
@@ -107,6 +110,21 @@ class TestHolonomicWorldVelocityHelpers:
         assert "social-force" in _holonomic_world_velocity_boundary("social_force")
         assert "SoNIC" in _holonomic_world_velocity_boundary("sonic_crowdnav")
         assert "GenSafeNav Ours_GST" in _holonomic_world_velocity_boundary("gensafenav_ours_gst")
+
+    def test_sf_alias_yields_social_force_provenance(self) -> None:
+        """The ``sf`` alias must resolve to the social-force provenance string.
+
+        Regression for issue #4950 item 4: ``_HOLONOMIC_WORLD_VELOCITY_ALGO_KEYS``
+        treats ``sf`` as an alias of ``social_force``, so the boundary text must also
+        resolve it to the social-force description instead of falling through to the
+        generic Social-Navigation-PyEnvs text.
+        """
+        sf_boundary = _holonomic_world_velocity_boundary("sf")
+        social_force_boundary = _holonomic_world_velocity_boundary("social_force")
+        assert sf_boundary == social_force_boundary
+        assert "social-force" in sf_boundary
+        # It must NOT fall through to the generic SocNav-PyEnvs force-model text.
+        assert "Social-Navigation-PyEnvs" not in sf_boundary
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +156,25 @@ class TestPlannerObsModeAndPaperGate:
         """A planner with no config attribute must fall back to the default."""
         planner = SimpleNamespace(spec=1)
         assert _resolve_planner_obs_mode(planner, "vector") == "vector"
+
+    def test_resolve_obs_mode_normalizes_explicit_none_to_default(self) -> None:
+        """An explicit ``obs_mode: None`` must normalize to the default, not ``"none"``.
+
+        Regression for issue #4950 item 2: ``dict.get`` only substitutes the default
+        for a *missing* key, so an explicit ``None`` would stringify to ``"none"``.
+        Both dict and attribute configs must coerce ``None`` to the supplied default.
+        """
+        dict_planner = SimpleNamespace(config={"obs_mode": None})
+        assert _resolve_planner_obs_mode(dict_planner, "vector") == "vector"
+        attr_planner = SimpleNamespace(config=SimpleNamespace(obs_mode=None))
+        assert _resolve_planner_obs_mode(attr_planner, "dict") == "dict"
+
+    def test_resolve_obs_mode_normalizes_empty_string_to_default(self) -> None:
+        """An explicit empty/whitespace ``obs_mode`` must normalize to the default."""
+        dict_planner = SimpleNamespace(config={"obs_mode": "   "})
+        assert _resolve_planner_obs_mode(dict_planner, "vector") == "vector"
+        attr_planner = SimpleNamespace(config=SimpleNamespace(obs_mode=""))
+        assert _resolve_planner_obs_mode(attr_planner, "Dict") == "dict"
 
     def test_paper_gate_passes_for_experimental_profile(self) -> None:
         """An experimental profile must pass the gate with no reason."""
@@ -223,6 +260,29 @@ class TestBuildPolicyUsesDecomposedHelpers:
         assert meta["algorithm"] == "orca"
         assert meta["status"] == "ok"
 
+    def test_holonomic_path_returns_dict_command_payload(self) -> None:
+        """The holonomic world-velocity path must return a dict (not tuple[float, float]).
+
+        Regression for issue #4950 item 3: ``_build_policy`` is annotated to return a
+        ``tuple[float, float]`` command callable, but the holonomic world-velocity path
+        returns a ``dict[str, float | str]`` command payload. The annotation was widened
+        to ``Callable[..., Any]``; this test exercises the dict-returning path so the
+        widening stays justified and the holonomic policy stays callable end-to-end.
+        """
+        policy, meta = _build_policy(
+            "social_force",
+            {},
+            robot_kinematics="holonomic",
+            robot_command_mode="vx_vy",
+        )
+        assert meta["algorithm"] == "social_force"
+        assert meta["status"] == "ok"
+        command = policy({"goal_in_robot_frame": np.array([5.0, 0.0, 0.0], dtype=float)})
+        # The holonomic path returns a dict command payload, not a (v, w) tuple.
+        assert isinstance(command, dict)
+        assert command["command_kind"] == "holonomic_vxy_world"
+        assert {"vx", "vy"}.issubset(command.keys())
+
 
 # ---------------------------------------------------------------------------
 # map_runner_episode: tracking-precision summary helper
@@ -262,6 +322,37 @@ class TestTrackingPrecisionSummary:
         assert summary["contract_honored_rate"] == pytest.approx(2 / 3)
         assert summary["min_separation_corrupted_m"] == 0.25
         assert summary["last_step"] == {"contract_honored": True, "step": 2}
+
+    def test_min_finite_filters_nan_and_nonfinite(self) -> None:
+        """The finite-filter helper must ignore NaN/inf and return the min finite value.
+
+        Regression for issue #4950 item 1: an unfiltered ``min()`` over a list
+        containing NaN is order-dependent and non-deterministic.
+        """
+        # NaN present alongside a finite value must not propagate.
+        assert _min_finite_or_inf([float("nan"), 0.5, 0.25]) == 0.25
+        # Order independence: NaN-first must give the same answer as NaN-last.
+        assert _min_finite_or_inf([float("nan"), 0.5]) == 0.5
+        assert _min_finite_or_inf([0.5, float("nan")]) == 0.5
+        # +inf and -inf must be filtered out too.
+        assert _min_finite_or_inf([float("inf"), float("-inf"), 1.0]) == 1.0
+        # All-non-finite must fall back to +inf.
+        assert _min_finite_or_inf([float("nan"), float("inf")]) == float("inf")
+        assert math.isinf(_min_finite_or_inf([float("nan"), float("inf")]))
+
+    def test_min_finite_empty_yields_inf(self) -> None:
+        """An empty list must yield +inf."""
+        assert _min_finite_or_inf([]) == float("inf")
+
+    def test_summary_ignores_nan_in_min_separation_stream(self) -> None:
+        """The summary must compute min_separation_corrupted_m from finite values only."""
+        records = [{"contract_honored": True, "step": 0}]
+        summary = _build_tracking_precision_summary(
+            spec={"enabled": True, "target_motp_m": 0.05},
+            records=records,
+            min_separation_corrupted_values=[float("nan"), 0.8, 0.4],
+        )
+        assert summary["min_separation_corrupted_m"] == 0.4
 
 
 # ---------------------------------------------------------------------------

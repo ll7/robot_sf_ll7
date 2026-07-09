@@ -47,10 +47,10 @@ def scenario_family_from_id(scenario_id: str) -> str:
     """Extract scenario_family from scenario_id."""
     if scenario_id.startswith("classic_"):
         # Remove 'classic_' prefix and difficulty suffix (_high, _low, _medium)
-        parts = scenario_id[len("classic_"):].rsplit("_", 1)
+        parts = scenario_id[len("classic_") :].rsplit("_", 1)
         return parts[0]
     elif scenario_id.startswith("francis2023_"):
-        return scenario_id[len("francis2023_"):]
+        return scenario_id[len("francis2023_") :]
     return scenario_id
 
 
@@ -76,9 +76,7 @@ def load_episodes(base_runs: str) -> list[dict]:
                 row = {
                     "planner": planner,
                     "scenario_id": ep.get("scenario_id", ""),
-                    "scenario_family": scenario_family_from_id(
-                        ep.get("scenario_id", "")
-                    ),
+                    "scenario_family": scenario_family_from_id(ep.get("scenario_id", "")),
                     "seed": ep.get("seed"),
                 }
                 for field in FIELDS:
@@ -87,9 +85,7 @@ def load_episodes(base_runs: str) -> list[dict]:
     return episodes
 
 
-def percentile_table(
-    episodes: list[dict], group_col: str, value_col: str
-) -> dict[str, dict]:
+def percentile_table(episodes: list[dict], group_col: str, value_col: str) -> dict[str, dict]:
     """Compute percentile stats per group."""
     grouped = defaultdict(list)
     for ep in episodes:
@@ -294,8 +290,12 @@ def _hybrid_command_source_table(episodes: list[dict]) -> list[str]:
 def _hybrid_scenario_family_table(episodes: list[dict]) -> list[str]:
     """Build hybrid planners per-scenario-family table."""
     lines = ["\n### Hybrid Planners: Per-Scenario-Family Profile\n"]
-    lines.append("| Scenario Family | Planner | N | progress_ratio median | command_source_changes mean |")
-    lines.append("|-----------------|---------|---|----------------------|----------------------------|")
+    lines.append(
+        "| Scenario Family | Planner | N | progress_ratio median | command_source_changes mean |"
+    )
+    lines.append(
+        "|-----------------|---------|---|----------------------|----------------------------|"
+    )
     hybrid_eps = [ep for ep in episodes if ep["planner"] in HYBRID_PLANNERS]
     families = sorted({ep["scenario_family"] for ep in hybrid_eps})
     for family in families:
@@ -350,17 +350,11 @@ def main():
     write_per_planner_csv(episodes, output_dir / "per_planner_percentiles.csv")
 
     # 2. Hybrid per-scenario-family CSV
-    write_hybrid_scenario_csv(
-        episodes, output_dir / "hybrid_scenario_family_profile.csv"
-    )
+    write_hybrid_scenario_csv(episodes, output_dir / "hybrid_scenario_family_profile.csv")
 
     # 3. Plots
-    plot_progress_ratio_distribution(
-        episodes, output_dir / "progress_ratio_distribution.png"
-    )
-    plot_command_source_changes(
-        episodes, output_dir / "command_source_changes_rate.png"
-    )
+    plot_progress_ratio_distribution(episodes, output_dir / "progress_ratio_distribution.png")
+    plot_command_source_changes(episodes, output_dir / "command_source_changes_rate.png")
 
     # 4. Summary text
     summary = build_summary(episodes)

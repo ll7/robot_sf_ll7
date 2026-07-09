@@ -954,41 +954,234 @@ def _topology_guided_episode_diagnostics(
     }
 
 
-def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
-    scenario: dict[str, Any],
-    seed: int,
+def _apply_safety_wrapper_step(
+    command: Any,
     *,
-    horizon: int | None,
-    dt: float | None,
-    record_forces: bool,
-    snqi_weights: dict[str, float] | None,
-    snqi_baseline: dict[str, dict[str, float]] | None,
-    algo: str,
-    scenario_path: Path,
-    algo_config: dict[str, Any] | None = None,
-    algo_config_path: str | None = None,
-    adapter_impact_eval: bool = False,
-    experimental_ped_impact: bool = False,
-    ped_impact_radius_m: float = 2.0,
-    ped_impact_window_steps: int = 5,
-    observation_mode: str | None = None,
-    observation_level: str | None = None,
-    benchmark_track: str | None = None,
-    track_schema_version: str | None = None,
-    observation_noise: dict[str, Any] | None = None,
-    tracking_precision: dict[str, Any] | None = None,
-    synthetic_actuation_profile: dict[str, Any] | None = None,
-    latency_stress_profile: dict[str, Any] | None = None,
-    safety_wrapper: dict[str, Any] | None = None,
-    cbf_safety_filter: dict[str, Any] | None = None,
-    record_planner_decision_trace: bool = False,
-    record_simulation_step_trace: bool = False,
-    policy_builder: PolicyBuilder,
-) -> dict[str, Any]:
-    """Run one scenario/seed episode and return a benchmark JSONL record.
+    runtime: Any,
+    env: Any,
+    config: Any,
+    step_idx: int,
+    step_is_native: bool,
+    previous_ped_positions: np.ndarray | None,
+    deadlock_monitor: Any,
+) -> tuple[Any, dict[str, Any]]:
+    """Run one safety-wrapper correction or record an ineligible step.
+
+    Error/fallback path for ``safety_wrapper``: native actions and unsupported command
+    shapes either raise (when the runtime is configured to fail closed) or emit an
+    ineligible step record; otherwise the runtime corrects the command in place.
 
     Returns:
-        dict[str, Any]: Episode record with metrics, provenance, and planner metadata.
+        tuple[Any, dict[str, Any]]: ``(command, record)`` where ``command`` is the
+        corrected command (tail preserved) on the applied path, or the unchanged
+        command on an ineligible path; ``record`` is appended to the wrapper trace.
+    """
+    if step_is_native:
+        if runtime.fail_on_native_action:
+            raise ValueError(
+                "safety_wrapper.enabled requires absolute commands; "
+                "native environment actions cannot be wrapped safely"
+            )
+        return command, ineligible_safety_wrapper_step_record(
+            runtime=runtime,
+            step_idx=step_idx,
+            reason="native_environment_action",
+        )
+    if not isinstance(command, (tuple, list, np.ndarray)) or len(command) < 2:
+        if runtime.fail_on_unsupported_command:
+            raise TypeError(
+                "safety_wrapper.enabled expects commands shaped like "
+                "(linear_velocity, angular_velocity)"
+            )
+        return command, ineligible_safety_wrapper_step_record(
+            runtime=runtime,
+            step_idx=step_idx,
+            reason="unsupported_command_shape",
+        )
+    corrected_command, wrapper_record = apply_runtime_safety_wrapper(
+        command=command,
+        env=env,
+        config=config,
+        runtime=runtime,
+        previous_ped_positions=previous_ped_positions,
+        step_idx=step_idx,
+        deadlock_monitor=deadlock_monitor,
+    )
+    corrected = (
+        corrected_command[0],
+        corrected_command[1],
+        *tuple(command[2:]),
+    )
+    return corrected, wrapper_record
+
+
+def _apply_cbf_safety_filter_step(
+    command: Any,
+    *,
+    runtime: Any,
+    env: Any,
+    config: Any,
+    step_idx: int,
+    step_is_native: bool,
+    previous_ped_positions: np.ndarray | None,
+) -> tuple[Any, dict[str, Any]]:
+    """Run one CBF safety-filter correction or record an ineligible step.
+
+    Error/fallback path for ``cbf_safety_filter``: native actions and unsupported
+    command shapes either raise (when the runtime is configured to fail closed) or
+    emit an ineligible step record; otherwise the CBF filter corrects the command.
+
+    Returns:
+        tuple[Any, dict[str, Any]]: ``(command, record)`` where ``command`` is the
+        corrected command (tail preserved) on the applied path, or the unchanged
+        command on an ineligible path; ``record`` is appended to the filter trace.
+    """
+    if step_is_native:
+        if runtime.fail_on_native_action:
+            raise ValueError(
+                "cbf_safety_filter.enabled requires absolute commands; "
+                "native environment actions cannot be filtered safely"
+            )
+        return command, ineligible_cbf_safety_filter_step_record(
+            runtime=runtime,
+            step_idx=step_idx,
+            reason="native_environment_action",
+        )
+    if not isinstance(command, (tuple, list, np.ndarray)) or len(command) < 2:
+        if runtime.fail_on_unsupported_command:
+            raise TypeError(
+                "cbf_safety_filter.enabled expects commands shaped like "
+                "(linear_velocity, angular_velocity)"
+            )
+        return command, ineligible_cbf_safety_filter_step_record(
+            runtime=runtime,
+            step_idx=step_idx,
+            reason="unsupported_command_shape",
+        )
+    corrected_command, cbf_record = apply_runtime_cbf_safety_filter(
+        command=command,
+        env=env,
+        config=config,
+        runtime=runtime,
+        previous_ped_positions=previous_ped_positions,
+        step_idx=step_idx,
+    )
+    corrected = (
+        corrected_command[0],
+        corrected_command[1],
+        *tuple(command[2:]),
+    )
+    return corrected, cbf_record
+
+
+def _build_tracking_precision_summary(
+    *,
+    spec: dict[str, Any],
+    records: list[dict[str, Any]],
+    min_separation_corrupted_values: list[float],
+) -> dict[str, Any]:
+    """Build the tracking-precision summary block for episode algorithm metadata.
+
+    Args:
+        spec: Normalized tracking-precision spec.
+        records: Per-step tracking-precision records emitted during the episode loop.
+        min_separation_corrupted_values: Per-step min robot-ped separation under corrupted obs.
+
+    Returns:
+        dict[str, Any]: Tracking-precision summary with contract-honored rates and the
+        last step record (when present).
+    """
+    summary: dict[str, Any] = {
+        "spec": spec,
+        "hash": tracking_precision_hash(spec),
+        "step_count": len(records),
+        "min_separation_corrupted_m": (
+            float(min(min_separation_corrupted_values))
+            if min_separation_corrupted_values
+            else float("inf")
+        ),
+        "contract_honored": (
+            all(bool(record.get("contract_honored", False)) for record in records)
+            if records
+            else True
+        ),
+        "contract_honored_rate": (
+            float(sum(bool(record.get("contract_honored", False)) for record in records))
+            / float(len(records))
+            if records
+            else 1.0
+        ),
+    }
+    if records:
+        summary["last_step"] = dict(records[-1])
+    return summary
+
+
+@dataclass(frozen=True, slots=True)
+class _EpisodeRunContext:
+    """Resolved inputs and runtime config for one episode run.
+
+    Bundles the normalization/env-config/horizon/profile/policy-cfg resolution phase of
+    ``run_map_episode`` so the episode loop and metadata assembly receive a single
+    immutable context object instead of recomputing the same locals inline.
+    """
+
+    scenario: dict[str, Any]
+    scenario_id: str
+    ts_start: str
+    start_time: float
+    ped_impact_radius_m: float
+    ped_impact_window_steps: int
+    benchmark_track: str | None
+    track_schema_version: str | None
+    noise_spec: dict[str, Any]
+    noise_rng: Any
+    noise_state: Any
+    noise_stats: Any
+    tracking_precision_spec: dict[str, Any]
+    tracking_precision_rng: Any
+    safety_wrapper_runtime: Any
+    cbf_runtime: Any
+    safety_wrapper_deadlock_monitor: Any
+    config: Any
+    horizon_val: int
+    robot_kinematics: str
+    robot_command_mode: str
+    actuation_profile: Any
+    latency_profile: Any
+    algo: str
+    policy_cfg: dict[str, Any]
+
+
+def _resolve_episode_run_context(  # noqa: PLR0913
+    *,
+    scenario: dict[str, Any],
+    seed: int,
+    horizon: int | None,
+    dt: float | None,
+    algo: str,
+    scenario_path: Path,
+    algo_config: dict[str, Any] | None,
+    algo_config_path: str | None,
+    experimental_ped_impact: bool,
+    ped_impact_radius_m: float,
+    ped_impact_window_steps: int,
+    observation_mode: str | None,
+    observation_level: str | None,
+    benchmark_track: str | None,
+    track_schema_version: str | None,
+    observation_noise: dict[str, Any] | None,
+    tracking_precision: dict[str, Any] | None,
+    synthetic_actuation_profile: dict[str, Any] | None,
+    latency_stress_profile: dict[str, Any] | None,
+    safety_wrapper: dict[str, Any] | None,
+    cbf_safety_filter: dict[str, Any] | None,
+) -> _EpisodeRunContext:
+    """Normalize episode inputs, build the env config, and resolve the policy cfg.
+
+    Returns:
+        _EpisodeRunContext: Immutable bundle of resolved scenario/track/noise/profile/
+        kinematics/policy-cfg values consumed by the rest of ``run_map_episode``.
     """
     ped_impact_radius_m, ped_impact_window_steps = _normalize_pedestrian_impact_controls(
         experimental_ped_impact=experimental_ped_impact,
@@ -1022,12 +1215,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         raise ValueError(
             "safety_wrapper and cbf_safety_filter cannot both be enabled in #3948 first slice"
         )
-    tracking_precision_records: list[dict[str, Any]] = []
-    safety_wrapper_trace: list[dict[str, Any]] = []
-    # Stateful fourth wrapper stage; one monitor per episode (no-op while disabled).
     safety_wrapper_deadlock_monitor = make_deadlock_recovery_monitor(safety_wrapper_runtime)
-    cbf_filter_trace: list[dict[str, Any]] = []
-    min_separation_corrupted_values: list[float] = []
     config = _build_env_config(scenario, scenario_path=scenario_path)
     max_steps = int(scenario.get("simulation_config", {}).get("max_episode_steps", 0) or 0)
     horizon_val = int(horizon) if horizon and horizon > 0 else max_steps
@@ -1072,6 +1260,278 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         seed=int(seed),
     )
     policy_cfg = _apply_scenario_uncertainty_envelope_config(algo, policy_cfg, scenario)
+    return _EpisodeRunContext(
+        scenario=scenario,
+        scenario_id=scenario_id,
+        ts_start=ts_start,
+        start_time=start_time,
+        ped_impact_radius_m=ped_impact_radius_m,
+        ped_impact_window_steps=ped_impact_window_steps,
+        benchmark_track=benchmark_track,
+        track_schema_version=track_schema_version,
+        noise_spec=noise_spec,
+        noise_rng=noise_rng,
+        noise_state=noise_state,
+        noise_stats=noise_stats,
+        tracking_precision_spec=tracking_precision_spec,
+        tracking_precision_rng=tracking_precision_rng,
+        safety_wrapper_runtime=safety_wrapper_runtime,
+        cbf_runtime=cbf_runtime,
+        safety_wrapper_deadlock_monitor=safety_wrapper_deadlock_monitor,
+        config=config,
+        horizon_val=horizon_val,
+        robot_kinematics=robot_kinematics,
+        robot_command_mode=robot_command_mode,
+        actuation_profile=actuation_profile,
+        latency_profile=latency_profile,
+        algo=algo,
+        policy_cfg=policy_cfg,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _EpisodePostLoopResult:
+    """Trajectory arrays and raw metrics computed after the episode step loop.
+
+    Bundles the post-loop phase of ``run_map_episode``: trajectory stacking, visibility
+    evidence reduction, safety predicates, obstacle sampling, and raw metric computation.
+    """
+
+    robot_pos_arr: np.ndarray
+    robot_vel_arr: np.ndarray
+    robot_acc_arr: np.ndarray
+    ped_pos_arr: np.ndarray
+    ped_forces_arr: np.ndarray
+    safety_predicates: dict[str, Any]
+    obstacles: Any
+    shortest_path: float
+    metrics_raw: dict[str, Any]
+
+
+def _compute_post_loop_metrics(  # noqa: PLR0913
+    *,
+    robot_positions: list[np.ndarray],
+    robot_headings: list[float],
+    ped_positions: list[np.ndarray],
+    ped_forces: list[np.ndarray],
+    visibility_trace: list[np.ndarray | None],
+    track_confidence_trace: list[np.ndarray | None],
+    visibility_evidence_statuses: list[str],
+    visibility_evidence_reasons: list[str | None],
+    reached_goal_step: int | None,
+    collision_seen: bool,
+    ped_collision_seen: bool,
+    obstacle_collision_seen: bool,
+    robot_collision_seen: bool,
+    map_def: Any,
+    goal_vec: np.ndarray,
+    scenario: dict[str, Any],
+    config: Any,
+    horizon_val: int,
+    record_forces: bool,
+    experimental_ped_impact: bool,
+    ped_impact_radius_m: float,
+    ped_impact_window_steps: int,
+) -> _EpisodePostLoopResult:
+    """Stack the episode trajectory, derive safety predicates, and compute raw metrics.
+
+    Returns:
+        _EpisodePostLoopResult: Trajectory arrays plus safety predicates, sampled
+        obstacles, shortest-path length, and the raw (pre-post-process) metrics dict.
+    """
+    robot_pos_arr = np.asarray(robot_positions, dtype=float)
+    robot_vel_arr, robot_acc_arr = _vel_and_acc(
+        robot_pos_arr, config.sim_config.time_per_step_in_secs
+    )
+    ped_pos_arr = _stack_ped_positions(ped_positions)
+    ped_forces_arr = (
+        _stack_ped_positions(ped_forces, fill_value=np.nan)
+        if record_forces
+        else np.zeros_like(ped_pos_arr, dtype=float)
+    )
+    visibility_arr = _stack_visibility_values(
+        visibility_trace,
+        fill_value=False,
+        dtype=bool,
+    )
+    track_confidence_arr = _stack_visibility_values(
+        track_confidence_trace,
+        fill_value=0.0,
+        dtype=float,
+    )
+    if "unavailable" in visibility_evidence_statuses:
+        visibility_evidence_status = "unavailable"
+    elif visibility_evidence_statuses and all(
+        status == "not_applicable" for status in visibility_evidence_statuses
+    ):
+        visibility_evidence_status = "not_applicable"
+    else:
+        visibility_evidence_status = "available"
+    visibility_evidence_reason = next(
+        (reason for reason in visibility_evidence_reasons if reason),
+        None,
+    )
+    safety_predicates = _safety_predicates_for_episode(
+        robot_pos_arr=robot_pos_arr,
+        robot_vel_arr=robot_vel_arr,
+        robot_headings=robot_headings,
+        ped_pos_arr=ped_pos_arr,
+        dt=float(config.sim_config.time_per_step_in_secs),
+        visibility_evidence=VisibilityEvidenceTrace(
+            visibility=visibility_arr,
+            track_confidence=track_confidence_arr,
+            status=visibility_evidence_status,
+            reason=visibility_evidence_reason,
+        ),
+    )
+
+    obstacles = (
+        sample_obstacle_points(map_def.obstacles, map_def.bounds) if map_def is not None else None
+    )
+    if robot_pos_arr.size:
+        shortest_path = compute_shortest_path_length(map_def, robot_pos_arr[0], goal_vec)
+    else:
+        shortest_path = float("nan")
+
+    if robot_pos_arr.size == 0:
+        metrics_raw = {
+            "success": 0.0,
+            "time_to_goal_norm": float("nan"),
+            "collisions": 0.0,
+        }
+    else:
+        robot_config = getattr(config, "robot_config", None)
+        ep = EpisodeData(
+            robot_pos=robot_pos_arr,
+            robot_vel=robot_vel_arr,
+            robot_acc=robot_acc_arr,
+            peds_pos=ped_pos_arr,
+            ped_forces=ped_forces_arr,
+            obstacles=obstacles,
+            goal=goal_vec,
+            dt=float(config.sim_config.time_per_step_in_secs),
+            reached_goal_step=reached_goal_step,
+            robot_radius=float(getattr(robot_config, "radius", 1.0)),
+            ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
+            episode_metadata=_episode_metadata_for_benchmark_metrics(scenario, map_def),
+        )
+        metrics_raw = compute_all_metrics(
+            ep,
+            horizon=horizon_val,
+            shortest_path_len=shortest_path,
+            robot_max_speed=_robot_max_speed(config),
+            experimental_ped_impact=experimental_ped_impact,
+            ped_impact_radius_m=ped_impact_radius_m,
+            ped_impact_window_steps=ped_impact_window_steps,
+        )
+    _floor_collision_metrics_from_flags(
+        metrics_raw,
+        collision_seen=collision_seen,
+        ped_collision_seen=ped_collision_seen,
+        obstacle_collision_seen=obstacle_collision_seen,
+        robot_collision_seen=robot_collision_seen,
+    )
+    return _EpisodePostLoopResult(
+        robot_pos_arr=robot_pos_arr,
+        robot_vel_arr=robot_vel_arr,
+        robot_acc_arr=robot_acc_arr,
+        ped_pos_arr=ped_pos_arr,
+        ped_forces_arr=ped_forces_arr,
+        safety_predicates=safety_predicates,
+        obstacles=obstacles,
+        shortest_path=shortest_path,
+        metrics_raw=metrics_raw,
+    )
+
+
+def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
+    scenario: dict[str, Any],
+    seed: int,
+    *,
+    horizon: int | None,
+    dt: float | None,
+    record_forces: bool,
+    snqi_weights: dict[str, float] | None,
+    snqi_baseline: dict[str, dict[str, float]] | None,
+    algo: str,
+    scenario_path: Path,
+    algo_config: dict[str, Any] | None = None,
+    algo_config_path: str | None = None,
+    adapter_impact_eval: bool = False,
+    experimental_ped_impact: bool = False,
+    ped_impact_radius_m: float = 2.0,
+    ped_impact_window_steps: int = 5,
+    observation_mode: str | None = None,
+    observation_level: str | None = None,
+    benchmark_track: str | None = None,
+    track_schema_version: str | None = None,
+    observation_noise: dict[str, Any] | None = None,
+    tracking_precision: dict[str, Any] | None = None,
+    synthetic_actuation_profile: dict[str, Any] | None = None,
+    latency_stress_profile: dict[str, Any] | None = None,
+    safety_wrapper: dict[str, Any] | None = None,
+    cbf_safety_filter: dict[str, Any] | None = None,
+    record_planner_decision_trace: bool = False,
+    record_simulation_step_trace: bool = False,
+    policy_builder: PolicyBuilder,
+) -> dict[str, Any]:
+    """Run one scenario/seed episode and return a benchmark JSONL record.
+
+    Returns:
+        dict[str, Any]: Episode record with metrics, provenance, and planner metadata.
+    """
+    ctx = _resolve_episode_run_context(
+        scenario=scenario,
+        seed=seed,
+        horizon=horizon,
+        dt=dt,
+        algo=algo,
+        scenario_path=scenario_path,
+        algo_config=algo_config,
+        algo_config_path=algo_config_path,
+        experimental_ped_impact=experimental_ped_impact,
+        ped_impact_radius_m=ped_impact_radius_m,
+        ped_impact_window_steps=ped_impact_window_steps,
+        observation_mode=observation_mode,
+        observation_level=observation_level,
+        benchmark_track=benchmark_track,
+        track_schema_version=track_schema_version,
+        observation_noise=observation_noise,
+        tracking_precision=tracking_precision,
+        synthetic_actuation_profile=synthetic_actuation_profile,
+        latency_stress_profile=latency_stress_profile,
+        safety_wrapper=safety_wrapper,
+        cbf_safety_filter=cbf_safety_filter,
+    )
+    scenario = ctx.scenario
+    scenario_id = ctx.scenario_id
+    ts_start = ctx.ts_start
+    start_time = ctx.start_time
+    ped_impact_radius_m = ctx.ped_impact_radius_m
+    ped_impact_window_steps = ctx.ped_impact_window_steps
+    benchmark_track = ctx.benchmark_track
+    track_schema_version = ctx.track_schema_version
+    noise_spec = ctx.noise_spec
+    noise_rng = ctx.noise_rng
+    noise_state = ctx.noise_state
+    noise_stats = ctx.noise_stats
+    tracking_precision_spec = ctx.tracking_precision_spec
+    tracking_precision_rng = ctx.tracking_precision_rng
+    safety_wrapper_runtime = ctx.safety_wrapper_runtime
+    cbf_runtime = ctx.cbf_runtime
+    safety_wrapper_deadlock_monitor = ctx.safety_wrapper_deadlock_monitor
+    config = ctx.config
+    horizon_val = ctx.horizon_val
+    robot_kinematics = ctx.robot_kinematics
+    actuation_profile = ctx.actuation_profile
+    latency_profile = ctx.latency_profile
+    robot_command_mode = ctx.robot_command_mode
+    algo = ctx.algo
+    policy_cfg = ctx.policy_cfg
+    tracking_precision_records: list[dict[str, Any]] = []
+    safety_wrapper_trace: list[dict[str, Any]] = []
+    cbf_filter_trace: list[dict[str, Any]] = []
+    min_separation_corrupted_values: list[float] = []
     learned_observation_contract = resolve_learned_checkpoint_observation_contract(
         algo,
         policy_cfg,
@@ -1278,96 +1738,28 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 )
                 tracking_precision_records.append(tracking_record)
             if safety_wrapper_runtime.enabled:
-                if step_is_native:
-                    if safety_wrapper_runtime.fail_on_native_action:
-                        raise ValueError(
-                            "safety_wrapper.enabled requires absolute commands; "
-                            "native environment actions cannot be wrapped safely"
-                        )
-                    safety_wrapper_trace.append(
-                        ineligible_safety_wrapper_step_record(
-                            runtime=safety_wrapper_runtime,
-                            step_idx=step_idx,
-                            reason="native_environment_action",
-                        )
-                    )
-                elif (
-                    not isinstance(policy_command, (tuple, list, np.ndarray))
-                    or len(policy_command) < 2
-                ):
-                    if safety_wrapper_runtime.fail_on_unsupported_command:
-                        raise TypeError(
-                            "safety_wrapper.enabled expects commands shaped like "
-                            "(linear_velocity, angular_velocity)"
-                        )
-                    safety_wrapper_trace.append(
-                        ineligible_safety_wrapper_step_record(
-                            runtime=safety_wrapper_runtime,
-                            step_idx=step_idx,
-                            reason="unsupported_command_shape",
-                        )
-                    )
-                else:
-                    corrected_command, wrapper_record = apply_runtime_safety_wrapper(
-                        command=policy_command,
-                        env=env,
-                        config=config,
-                        runtime=safety_wrapper_runtime,
-                        previous_ped_positions=previous_trace_ped_pos,
-                        step_idx=step_idx,
-                        deadlock_monitor=safety_wrapper_deadlock_monitor,
-                    )
-                    policy_command = (
-                        corrected_command[0],
-                        corrected_command[1],
-                        *tuple(policy_command[2:]),
-                    )
-                    safety_wrapper_trace.append(wrapper_record)
+                policy_command, wrapper_record = _apply_safety_wrapper_step(
+                    policy_command,
+                    runtime=safety_wrapper_runtime,
+                    env=env,
+                    config=config,
+                    step_idx=step_idx,
+                    step_is_native=step_is_native,
+                    previous_ped_positions=previous_trace_ped_pos,
+                    deadlock_monitor=safety_wrapper_deadlock_monitor,
+                )
+                safety_wrapper_trace.append(wrapper_record)
             if cbf_runtime.enabled:
-                if step_is_native:
-                    if cbf_runtime.fail_on_native_action:
-                        raise ValueError(
-                            "cbf_safety_filter.enabled requires absolute commands; "
-                            "native environment actions cannot be filtered safely"
-                        )
-                    cbf_filter_trace.append(
-                        ineligible_cbf_safety_filter_step_record(
-                            runtime=cbf_runtime,
-                            step_idx=step_idx,
-                            reason="native_environment_action",
-                        )
-                    )
-                elif (
-                    not isinstance(policy_command, (tuple, list, np.ndarray))
-                    or len(policy_command) < 2
-                ):
-                    if cbf_runtime.fail_on_unsupported_command:
-                        raise TypeError(
-                            "cbf_safety_filter.enabled expects commands shaped like "
-                            "(linear_velocity, angular_velocity)"
-                        )
-                    cbf_filter_trace.append(
-                        ineligible_cbf_safety_filter_step_record(
-                            runtime=cbf_runtime,
-                            step_idx=step_idx,
-                            reason="unsupported_command_shape",
-                        )
-                    )
-                else:
-                    corrected_command, cbf_record = apply_runtime_cbf_safety_filter(
-                        command=policy_command,
-                        env=env,
-                        config=config,
-                        runtime=cbf_runtime,
-                        previous_ped_positions=previous_trace_ped_pos,
-                        step_idx=step_idx,
-                    )
-                    policy_command = (
-                        corrected_command[0],
-                        corrected_command[1],
-                        *tuple(policy_command[2:]),
-                    )
-                    cbf_filter_trace.append(cbf_record)
+                policy_command, cbf_record = _apply_cbf_safety_filter_step(
+                    policy_command,
+                    runtime=cbf_runtime,
+                    env=env,
+                    config=config,
+                    step_idx=step_idx,
+                    step_is_native=step_is_native,
+                    previous_ped_positions=previous_trace_ped_pos,
+                )
+                cbf_filter_trace.append(cbf_record)
             selected_action_payload = _command_action_payload(policy_command)
             ammv_command_actions.append(selected_action_payload)
             if step_is_native:
@@ -1629,98 +2021,38 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 logger.debug("Planner close hook failed", exc_info=True)
         env.close()
 
-    robot_pos_arr = np.asarray(robot_positions, dtype=float)
-    robot_vel_arr, robot_acc_arr = _vel_and_acc(
-        robot_pos_arr, config.sim_config.time_per_step_in_secs
-    )
-    ped_pos_arr = _stack_ped_positions(ped_positions)
-    ped_forces_arr = (
-        _stack_ped_positions(ped_forces, fill_value=np.nan)
-        if record_forces
-        else np.zeros_like(ped_pos_arr, dtype=float)
-    )
-    visibility_arr = _stack_visibility_values(
-        visibility_trace,
-        fill_value=False,
-        dtype=bool,
-    )
-    track_confidence_arr = _stack_visibility_values(
-        track_confidence_trace,
-        fill_value=0.0,
-        dtype=float,
-    )
-    if "unavailable" in visibility_evidence_statuses:
-        visibility_evidence_status = "unavailable"
-    elif visibility_evidence_statuses and all(
-        status == "not_applicable" for status in visibility_evidence_statuses
-    ):
-        visibility_evidence_status = "not_applicable"
-    else:
-        visibility_evidence_status = "available"
-    visibility_evidence_reason = next(
-        (reason for reason in visibility_evidence_reasons if reason),
-        None,
-    )
-    safety_predicates = _safety_predicates_for_episode(
-        robot_pos_arr=robot_pos_arr,
-        robot_vel_arr=robot_vel_arr,
+    post_loop = _compute_post_loop_metrics(
+        robot_positions=robot_positions,
         robot_headings=robot_headings,
-        ped_pos_arr=ped_pos_arr,
-        dt=float(config.sim_config.time_per_step_in_secs),
-        visibility_evidence=VisibilityEvidenceTrace(
-            visibility=visibility_arr,
-            track_confidence=track_confidence_arr,
-            status=visibility_evidence_status,
-            reason=visibility_evidence_reason,
-        ),
-    )
-
-    obstacles = (
-        sample_obstacle_points(map_def.obstacles, map_def.bounds) if map_def is not None else None
-    )
-    if robot_pos_arr.size:
-        shortest_path = compute_shortest_path_length(map_def, robot_pos_arr[0], goal_vec)
-    else:
-        shortest_path = float("nan")
-
-    if robot_pos_arr.size == 0:
-        metrics_raw = {
-            "success": 0.0,
-            "time_to_goal_norm": float("nan"),
-            "collisions": 0.0,
-        }
-    else:
-        robot_config = getattr(config, "robot_config", None)
-        ep = EpisodeData(
-            robot_pos=robot_pos_arr,
-            robot_vel=robot_vel_arr,
-            robot_acc=robot_acc_arr,
-            peds_pos=ped_pos_arr,
-            ped_forces=ped_forces_arr,
-            obstacles=obstacles,
-            goal=goal_vec,
-            dt=float(config.sim_config.time_per_step_in_secs),
-            reached_goal_step=reached_goal_step,
-            robot_radius=float(getattr(robot_config, "radius", 1.0)),
-            ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
-            episode_metadata=_episode_metadata_for_benchmark_metrics(scenario, map_def),
-        )
-        metrics_raw = compute_all_metrics(
-            ep,
-            horizon=horizon_val,
-            shortest_path_len=shortest_path,
-            robot_max_speed=_robot_max_speed(config),
-            experimental_ped_impact=experimental_ped_impact,
-            ped_impact_radius_m=ped_impact_radius_m,
-            ped_impact_window_steps=ped_impact_window_steps,
-        )
-    _floor_collision_metrics_from_flags(
-        metrics_raw,
+        ped_positions=ped_positions,
+        ped_forces=ped_forces,
+        visibility_trace=visibility_trace,
+        track_confidence_trace=track_confidence_trace,
+        visibility_evidence_statuses=visibility_evidence_statuses,
+        visibility_evidence_reasons=visibility_evidence_reasons,
+        reached_goal_step=reached_goal_step,
         collision_seen=collision_seen,
         ped_collision_seen=ped_collision_seen,
         obstacle_collision_seen=obstacle_collision_seen,
         robot_collision_seen=robot_collision_seen,
+        map_def=map_def,
+        goal_vec=goal_vec,
+        scenario=scenario,
+        config=config,
+        horizon_val=horizon_val,
+        record_forces=record_forces,
+        experimental_ped_impact=experimental_ped_impact,
+        ped_impact_radius_m=ped_impact_radius_m,
+        ped_impact_window_steps=ped_impact_window_steps,
     )
+    robot_pos_arr = post_loop.robot_pos_arr
+    robot_vel_arr = post_loop.robot_vel_arr
+    ped_pos_arr = post_loop.ped_pos_arr
+    ped_forces_arr = post_loop.ped_forces_arr
+    safety_predicates = post_loop.safety_predicates
+    metrics_raw = post_loop.metrics_raw
+    if robot_pos_arr.size:
+        robot_config = getattr(config, "robot_config", None)
     impact = algo_meta.get("adapter_impact")
     if isinstance(impact, dict) and bool(impact.get("requested", False)):
         native_steps = int(impact.get("native_steps", 0))
@@ -1780,36 +2112,11 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             robot_radius=float(getattr(robot_config, "radius", 1.0)),
             ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
         )
-    tracking_precision_summary: dict[str, Any] = {
-        "spec": tracking_precision_spec,
-        "hash": tracking_precision_hash(tracking_precision_spec),
-        "step_count": len(tracking_precision_records),
-        "min_separation_corrupted_m": (
-            float(min(min_separation_corrupted_values))
-            if min_separation_corrupted_values
-            else float("inf")
-        ),
-        "contract_honored": (
-            all(
-                bool(record.get("contract_honored", False)) for record in tracking_precision_records
-            )
-            if tracking_precision_records
-            else True
-        ),
-        "contract_honored_rate": (
-            float(
-                sum(
-                    bool(record.get("contract_honored", False))
-                    for record in tracking_precision_records
-                )
-            )
-            / float(len(tracking_precision_records))
-            if tracking_precision_records
-            else 1.0
-        ),
-    }
-    if tracking_precision_records:
-        tracking_precision_summary["last_step"] = dict(tracking_precision_records[-1])
+    tracking_precision_summary = _build_tracking_precision_summary(
+        spec=tracking_precision_spec,
+        records=tracking_precision_records,
+        min_separation_corrupted_values=min_separation_corrupted_values,
+    )
     algo_meta["tracking_precision"] = tracking_precision_summary
     safety_wrapper_summary: dict[str, Any] | None = None
     if safety_wrapper_runtime.enabled:

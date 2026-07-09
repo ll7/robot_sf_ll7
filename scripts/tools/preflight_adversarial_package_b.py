@@ -16,7 +16,14 @@ from robot_sf.benchmark.adversarial_package_b_preflight import (
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse package-B preflight CLI arguments."""
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Example:\n"
+            "  uv run python scripts/tools/preflight_adversarial_package_b.py [--manifest <path>]"
+        ),
+    )
     parser.add_argument(
         "--manifest",
         type=Path,

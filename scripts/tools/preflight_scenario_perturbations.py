@@ -16,7 +16,14 @@ from robot_sf.scenario_certification import (
 
 def _build_parser() -> argparse.ArgumentParser:
     """Build the scenario perturbation preflight parser."""
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Example:\n"
+            "  uv run python scripts/tools/preflight_scenario_perturbations.py <manifest.yaml>"
+        ),
+    )
     parser.add_argument("manifest", type=Path, help="Scenario perturbation manifest YAML.")
     parser.add_argument("--output", type=Path, help="Write the JSON preflight report to this path.")
     parser.add_argument(

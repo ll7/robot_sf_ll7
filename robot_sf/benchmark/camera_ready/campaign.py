@@ -670,6 +670,7 @@ def _run_campaign_planner_variant_subprocess(
 
     # Import subprocess worker module
     from robot_sf.benchmark.camera_ready.resource_lifecycle import (  # noqa: PLC0415
+        _serialize_subprocess_arm_params,
         _SubprocessArmParams,
     )
 
@@ -710,8 +711,11 @@ def _run_campaign_planner_variant_subprocess(
         algo_config_path=planner.algo_config_path,
     )
 
-    # Serialize parameters for subprocess
-    arm_params_json = json.dumps(asdict(arm_params))
+    # Serialize parameters for subprocess. The Path-typed fields on
+    # _SubprocessArmParams must be str-converted before json.dumps or the
+    # handoff crashes (issue #4957); _serialize_subprocess_arm_params is the
+    # single serialization point and is covered by a regression test.
+    arm_params_json = _serialize_subprocess_arm_params(arm_params)
     proc = subprocess.run(
         [sys.executable, "-m", "robot_sf.benchmark.camera_ready.resource_lifecycle"],
         input=arm_params_json,

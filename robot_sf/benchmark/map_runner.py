@@ -593,6 +593,10 @@ def _ppo_paper_gate_status(config: dict[str, Any]) -> tuple[bool, str | None]:
 def _resolve_planner_obs_mode(planner: Any, default: str) -> str:
     """Return the lowercased ``obs_mode`` from a planner config (dict or attribute).
 
+    An explicit ``None`` or empty value is normalized to ``default``. ``dict.get``
+    only substitutes ``default`` for a *missing* key, so an explicit ``obs_mode: None``
+    in config would otherwise stringify to ``"none"`` instead of the intended default.
+
     Args:
         planner: Planner exposing a ``config`` dict or attribute object.
         default: Fallback obs-mode when the planner config does not specify one.
@@ -602,8 +606,12 @@ def _resolve_planner_obs_mode(planner: Any, default: str) -> str:
     """
     planner_cfg = getattr(planner, "config", None)
     if isinstance(planner_cfg, dict):
-        return str(planner_cfg.get("obs_mode", default)).strip().lower()
-    return str(getattr(planner_cfg, "obs_mode", default)).strip().lower()
+        raw_obs_mode = planner_cfg.get("obs_mode", default)
+    else:
+        raw_obs_mode = getattr(planner_cfg, "obs_mode", default)
+    if raw_obs_mode is None or str(raw_obs_mode).strip() == "":
+        raw_obs_mode = default
+    return str(raw_obs_mode).strip().lower()
 
 
 def _enforce_ppo_paper_profile(
@@ -1764,7 +1772,7 @@ def _holonomic_world_velocity_boundary(algo_key: str) -> str:
             "selected world-frame velocity directly into the holonomic vx_vy benchmark "
             "action space."
         )
-    if algo_key == "social_force":
+    if algo_key in {"social_force", "sf"}:
         return (
             "Compute the local social-force translational command as a world-frame velocity "
             "vector, then forward that world-frame velocity directly into the holonomic "
@@ -2138,7 +2146,7 @@ def _build_policy(  # noqa: C901
     robot_kinematics: str | None = None,
     robot_command_mode: str | None = None,
     adapter_impact_eval: bool = False,
-) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
+) -> tuple[Callable[[dict[str, Any]], Any], dict[str, Any]]:
     """Build an action policy and algorithm metadata for map-based benchmarking.
 
     Args:
@@ -2149,9 +2157,12 @@ def _build_policy(  # noqa: C901
         adapter_impact_eval: Whether to collect native-vs-adapter step counters.
 
     Returns:
-        tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
-        Policy callable and enriched metadata dictionary. For PPO, adapter-impact
-        counters are mutated in-place in the returned metadata during episode rollout.
+        tuple[Callable[[dict[str, Any]], Any], dict[str, Any]]:
+        Policy callable and enriched metadata dictionary. The callable's return payload
+        is intentionally ``Any`` because the holonomic world-velocity path returns a
+        ``dict[str, float | str]`` command while other paths return ``tuple[float, float]``.
+        For PPO, adapter-impact counters are mutated in-place in the returned metadata
+        during episode rollout.
     """
     algo_key = algo.lower().strip()
     meta: dict[str, Any] = {"algorithm": algo_key}

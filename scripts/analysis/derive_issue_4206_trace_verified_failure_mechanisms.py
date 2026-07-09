@@ -228,14 +228,14 @@ def _derive_timeout_label(
     )
 
 
-def _derive_mechanism_label(row: dict[str, Any]) -> dict[str, Any]:
+def _derive_mechanism_label(row: dict[str, Any]) -> dict[str, Any] | None:
     """Derive a trace-verified mechanism label from episode trace surfaces.
 
     Returns a validated taxonomy record, or an unknown record with explicit caveat.
     """
     outcome = row.get("outcome") or {}
     if not _is_failure(outcome):
-        return None  # type: ignore[return-value]
+        return None
 
     event_ledger = _get_event_ledger(row)
     metrics = _get_metrics(row)
@@ -435,6 +435,21 @@ def _label_failure_episodes(
     return labeled, unlabeled
 
 
+def _planner_key_of(ep: dict[str, Any]) -> str:
+    """Resolve the planner key from an episode, checking for None explicitly.
+
+    Falsy-but-valid identifiers (e.g. ``""``) are handled with explicit ``is not None``
+    checks rather than ``or`` so they are not silently replaced by the fallback.
+    """
+    algo = ep.get("algo")
+    if algo is not None:
+        return algo
+    planner_run = ep.get("_planner_run")
+    if planner_run is not None:
+        return planner_run.split("__")[0]
+    return ""
+
+
 def _compute_planner_failures(
     failure_episodes: list[dict[str, Any]],
     labeled: list[dict[str, Any]],
@@ -443,9 +458,7 @@ def _compute_planner_failures(
     planner_failures: dict[str, dict] = defaultdict(lambda: {"total": 0, "labeled": 0})
 
     for ep in failure_episodes:
-        pk = ep.get("algo") or (
-            ep.get("_planner_run", "").split("__")[0] if ep.get("_planner_run") else ""
-        )
+        pk = _planner_key_of(ep)
         planner_failures[pk]["total"] += 1
 
     for r in labeled:
@@ -486,17 +499,6 @@ def build_mechanism_sidecar(
 
     label_counts = Counter(r.get("mechanism_label", "unknown") for r in labeled)
     confidence_counts = Counter(r.get("mechanism_confidence", "unknown") for r in labeled)
-    planner_failures: dict[str, dict] = defaultdict(lambda: {"total": 0, "labeled": 0})
-
-    for ep in failure_episodes:
-        pk = ep.get("algo") or (
-            ep.get("_planner_run", "").split("__")[0] if ep.get("_planner_run") else ""
-        )
-        planner_failures[pk]["total"] += 1
-
-    for r in labeled:
-        pk = r.get("planner_key", "")
-        planner_failures[pk]["labeled"] += 1
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -705,7 +707,7 @@ def _write_input_audit(
     guarded_ppo_found = False
     guarded_ppo_accepted_unavailable = False
     for ep in all_episodes:
-        planner_key = ep.get("algo") or ep.get("_planner_run", "").split("__")[0]
+        planner_key = _planner_key_of(ep)
         if planner_key == "guarded_ppo":
             guarded_ppo_found = True
             if ep.get("status") != "ok":

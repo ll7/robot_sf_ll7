@@ -4099,15 +4099,3 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4831_trace_verified_failure_mechanisms/input_audit.json
-  status: evidence
-  freshness: evidence
-  area: benchmark_evidence
-- path: docs/context/evidence/issue_4831_trace_verified_failure_mechanisms/crosscut_interpretation.json
-  status: evidence
-  freshness: evidence
-  area: benchmark_evidence
-- path: docs/context/evidence/issue_4831_trace_verified_failure_mechanisms/SHA256SUMS
-  status: evidence
-  freshness: evidence
-  area: benchmark_evidence

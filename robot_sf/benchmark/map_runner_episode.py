@@ -954,6 +954,126 @@ def _topology_guided_episode_diagnostics(
     }
 
 
+def _apply_safety_wrapper_step(
+    command: Any,
+    *,
+    runtime: Any,
+    env: Any,
+    config: Any,
+    step_idx: int,
+    step_is_native: bool,
+    previous_ped_positions: np.ndarray | None,
+    deadlock_monitor: Any,
+) -> tuple[Any, dict[str, Any]]:
+    """Run one safety-wrapper correction or record an ineligible step.
+
+    Error/fallback path for ``safety_wrapper``: native actions and unsupported command
+    shapes either raise (when the runtime is configured to fail closed) or emit an
+    ineligible step record; otherwise the runtime corrects the command in place.
+
+    Returns:
+        tuple[Any, dict[str, Any]]: ``(command, record)`` where ``command`` is the
+        corrected command (tail preserved) on the applied path, or the unchanged
+        command on an ineligible path; ``record`` is appended to the wrapper trace.
+    """
+    if step_is_native:
+        if runtime.fail_on_native_action:
+            raise ValueError(
+                "safety_wrapper.enabled requires absolute commands; "
+                "native environment actions cannot be wrapped safely"
+            )
+        return command, ineligible_safety_wrapper_step_record(
+            runtime=runtime,
+            step_idx=step_idx,
+            reason="native_environment_action",
+        )
+    if not isinstance(command, (tuple, list, np.ndarray)) or len(command) < 2:
+        if runtime.fail_on_unsupported_command:
+            raise TypeError(
+                "safety_wrapper.enabled expects commands shaped like "
+                "(linear_velocity, angular_velocity)"
+            )
+        return command, ineligible_safety_wrapper_step_record(
+            runtime=runtime,
+            step_idx=step_idx,
+            reason="unsupported_command_shape",
+        )
+    corrected_command, wrapper_record = apply_runtime_safety_wrapper(
+        command=command,
+        env=env,
+        config=config,
+        runtime=runtime,
+        previous_ped_positions=previous_ped_positions,
+        step_idx=step_idx,
+        deadlock_monitor=deadlock_monitor,
+    )
+    corrected = (
+        corrected_command[0],
+        corrected_command[1],
+        *tuple(command[2:]),
+    )
+    return corrected, wrapper_record
+
+
+def _apply_cbf_safety_filter_step(
+    command: Any,
+    *,
+    runtime: Any,
+    env: Any,
+    config: Any,
+    step_idx: int,
+    step_is_native: bool,
+    previous_ped_positions: np.ndarray | None,
+) -> tuple[Any, dict[str, Any]]:
+    """Run one CBF safety-filter correction or record an ineligible step.
+
+    Error/fallback path for ``cbf_safety_filter``: native actions and unsupported
+    command shapes either raise (when the runtime is configured to fail closed) or
+    emit an ineligible step record; otherwise the CBF filter corrects the command.
+
+    Returns:
+        tuple[Any, dict[str, Any]]: ``(command, record)`` where ``command`` is the
+        corrected command (tail preserved) on the applied path, or the unchanged
+        command on an ineligible path; ``record`` is appended to the filter trace.
+    """
+    if step_is_native:
+        if runtime.fail_on_native_action:
+            raise ValueError(
+                "cbf_safety_filter.enabled requires absolute commands; "
+                "native environment actions cannot be filtered safely"
+            )
+        return command, ineligible_cbf_safety_filter_step_record(
+            runtime=runtime,
+            step_idx=step_idx,
+            reason="native_environment_action",
+        )
+    if not isinstance(command, (tuple, list, np.ndarray)) or len(command) < 2:
+        if runtime.fail_on_unsupported_command:
+            raise TypeError(
+                "cbf_safety_filter.enabled expects commands shaped like "
+                "(linear_velocity, angular_velocity)"
+            )
+        return command, ineligible_cbf_safety_filter_step_record(
+            runtime=runtime,
+            step_idx=step_idx,
+            reason="unsupported_command_shape",
+        )
+    corrected_command, cbf_record = apply_runtime_cbf_safety_filter(
+        command=command,
+        env=env,
+        config=config,
+        runtime=runtime,
+        previous_ped_positions=previous_ped_positions,
+        step_idx=step_idx,
+    )
+    corrected = (
+        corrected_command[0],
+        corrected_command[1],
+        *tuple(command[2:]),
+    )
+    return corrected, cbf_record
+
+
 @dataclass(frozen=True, slots=True)
 class _EpisodeRunContext:
     """Resolved inputs and runtime config for one episode run.
@@ -1420,96 +1540,28 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 )
                 tracking_precision_records.append(tracking_record)
             if safety_wrapper_runtime.enabled:
-                if step_is_native:
-                    if safety_wrapper_runtime.fail_on_native_action:
-                        raise ValueError(
-                            "safety_wrapper.enabled requires absolute commands; "
-                            "native environment actions cannot be wrapped safely"
-                        )
-                    safety_wrapper_trace.append(
-                        ineligible_safety_wrapper_step_record(
-                            runtime=safety_wrapper_runtime,
-                            step_idx=step_idx,
-                            reason="native_environment_action",
-                        )
-                    )
-                elif (
-                    not isinstance(policy_command, (tuple, list, np.ndarray))
-                    or len(policy_command) < 2
-                ):
-                    if safety_wrapper_runtime.fail_on_unsupported_command:
-                        raise TypeError(
-                            "safety_wrapper.enabled expects commands shaped like "
-                            "(linear_velocity, angular_velocity)"
-                        )
-                    safety_wrapper_trace.append(
-                        ineligible_safety_wrapper_step_record(
-                            runtime=safety_wrapper_runtime,
-                            step_idx=step_idx,
-                            reason="unsupported_command_shape",
-                        )
-                    )
-                else:
-                    corrected_command, wrapper_record = apply_runtime_safety_wrapper(
-                        command=policy_command,
-                        env=env,
-                        config=config,
-                        runtime=safety_wrapper_runtime,
-                        previous_ped_positions=previous_trace_ped_pos,
-                        step_idx=step_idx,
-                        deadlock_monitor=safety_wrapper_deadlock_monitor,
-                    )
-                    policy_command = (
-                        corrected_command[0],
-                        corrected_command[1],
-                        *tuple(policy_command[2:]),
-                    )
-                    safety_wrapper_trace.append(wrapper_record)
+                policy_command, wrapper_record = _apply_safety_wrapper_step(
+                    policy_command,
+                    runtime=safety_wrapper_runtime,
+                    env=env,
+                    config=config,
+                    step_idx=step_idx,
+                    step_is_native=step_is_native,
+                    previous_ped_positions=previous_trace_ped_pos,
+                    deadlock_monitor=safety_wrapper_deadlock_monitor,
+                )
+                safety_wrapper_trace.append(wrapper_record)
             if cbf_runtime.enabled:
-                if step_is_native:
-                    if cbf_runtime.fail_on_native_action:
-                        raise ValueError(
-                            "cbf_safety_filter.enabled requires absolute commands; "
-                            "native environment actions cannot be filtered safely"
-                        )
-                    cbf_filter_trace.append(
-                        ineligible_cbf_safety_filter_step_record(
-                            runtime=cbf_runtime,
-                            step_idx=step_idx,
-                            reason="native_environment_action",
-                        )
-                    )
-                elif (
-                    not isinstance(policy_command, (tuple, list, np.ndarray))
-                    or len(policy_command) < 2
-                ):
-                    if cbf_runtime.fail_on_unsupported_command:
-                        raise TypeError(
-                            "cbf_safety_filter.enabled expects commands shaped like "
-                            "(linear_velocity, angular_velocity)"
-                        )
-                    cbf_filter_trace.append(
-                        ineligible_cbf_safety_filter_step_record(
-                            runtime=cbf_runtime,
-                            step_idx=step_idx,
-                            reason="unsupported_command_shape",
-                        )
-                    )
-                else:
-                    corrected_command, cbf_record = apply_runtime_cbf_safety_filter(
-                        command=policy_command,
-                        env=env,
-                        config=config,
-                        runtime=cbf_runtime,
-                        previous_ped_positions=previous_trace_ped_pos,
-                        step_idx=step_idx,
-                    )
-                    policy_command = (
-                        corrected_command[0],
-                        corrected_command[1],
-                        *tuple(policy_command[2:]),
-                    )
-                    cbf_filter_trace.append(cbf_record)
+                policy_command, cbf_record = _apply_cbf_safety_filter_step(
+                    policy_command,
+                    runtime=cbf_runtime,
+                    env=env,
+                    config=config,
+                    step_idx=step_idx,
+                    step_is_native=step_is_native,
+                    previous_ped_positions=previous_trace_ped_pos,
+                )
+                cbf_filter_trace.append(cbf_record)
             selected_action_payload = _command_action_payload(policy_command)
             ammv_command_actions.append(selected_action_payload)
             if step_is_native:

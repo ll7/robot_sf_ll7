@@ -990,6 +990,102 @@ _POLICY_BUILDERS: dict[str, _policy_builder_registry.PolicyBuilder] = {
 }
 
 
+def _build_predictive_mppi_policy(
+    algo_key: str,
+    algo_config: dict[str, Any],
+    *,
+    meta: dict[str, Any],
+    robot_kinematics: str | None,
+    normalized_robot_command_mode: str | None,
+) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
+    """Build the PredictiveMPPI adapter policy and enriched metadata.
+
+    Returns:
+        tuple[Callable, dict[str, Any]]: Policy callable and enriched metadata.
+    """
+    allow_fallback = bool(algo_config.get("allow_fallback", False))
+    adapter = PredictiveMPPIAdapter(
+        config=build_predictive_mppi_config(algo_config),
+        allow_fallback=allow_fallback,
+    )
+    meta.update(
+        {
+            "status": "ok",
+            "config": algo_config,
+            "config_hash": _config_hash(algo_config),
+        }
+    )
+    meta = enrich_algorithm_metadata(
+        algo=algo_key,
+        metadata=meta,
+        execution_mode="adapter",
+        adapter_name="PredictiveMPPIAdapter",
+        robot_kinematics=robot_kinematics,
+    )
+    _init_feasibility_metadata(meta)
+    planner_meta = meta.get("planner_kinematics")
+    if isinstance(planner_meta, dict):
+        planner_meta["planner_command_space"] = _default_robot_command_space(
+            robot_kinematics,
+            algo_config,
+            robot_command_mode=normalized_robot_command_mode,
+        )
+    adapter_kinematics_model = resolve_benchmark_kinematics_model(
+        robot_kinematics=robot_kinematics,
+        command_limits=algo_config,
+    )
+
+    def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+        """Run a SocNav adapter and project command feasibility.
+
+        Returns:
+            tuple[float, float]: Projected linear and angular command.
+        """
+        linear, angular = adapter.plan(obs)
+        return _project_with_feasibility(
+            model=adapter_kinematics_model,
+            command=(float(linear), float(angular)),
+            meta=meta,
+        )
+
+    _attach_planner_reset(_policy, adapter)
+    return _policy, meta
+
+
+def _build_external_mpc_policy(
+    planner: Any,
+    *,
+    algo_key: str,
+    algo_config: dict[str, Any],
+    meta: dict[str, Any],
+    robot_kinematics: str | None,
+    normalized_robot_command_mode: str | None,
+    planner_name: str,
+    limitations: str,
+) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
+    """Wrap an external MPC planner (SICNav / DR-MPC) in the adapter policy path.
+
+    Returns:
+        tuple[Callable, dict[str, Any]]: Policy callable and enriched metadata.
+    """
+    adapter = _ExternalMPCAdapter(
+        planner,
+        algo_config=algo_config,
+        robot_kinematics=robot_kinematics,
+        planner_name=planner_name,
+    )
+    return _build_adapter_policy(
+        algo_key=algo_key,
+        algo_config=algo_config,
+        meta=meta,
+        adapter=adapter,
+        adapter_name=planner_name,
+        robot_kinematics=robot_kinematics,
+        normalized_robot_command_mode=normalized_robot_command_mode,
+        limitations=limitations,
+    )
+
+
 def _build_policy(  # noqa: C901, PLR0912, PLR0915
     algo: str,
     algo_config: dict[str, Any],
@@ -1055,53 +1151,13 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         )
 
     if algo_key == "predictive_mppi":
-        allow_fallback = bool(algo_config.get("allow_fallback", False))
-        adapter = PredictiveMPPIAdapter(
-            config=build_predictive_mppi_config(algo_config),
-            allow_fallback=allow_fallback,
-        )
-        meta.update(
-            {
-                "status": "ok",
-                "config": algo_config,
-                "config_hash": _config_hash(algo_config),
-            }
-        )
-        meta = enrich_algorithm_metadata(
-            algo=algo_key,
-            metadata=meta,
-            execution_mode="adapter",
-            adapter_name="PredictiveMPPIAdapter",
+        return _build_predictive_mppi_policy(
+            algo_key,
+            algo_config,
+            meta=meta,
             robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
         )
-        _init_feasibility_metadata(meta)
-        planner_meta = meta.get("planner_kinematics")
-        if isinstance(planner_meta, dict):
-            planner_meta["planner_command_space"] = _default_robot_command_space(
-                robot_kinematics,
-                algo_config,
-                robot_command_mode=normalized_robot_command_mode,
-            )
-        adapter_kinematics_model = resolve_benchmark_kinematics_model(
-            robot_kinematics=robot_kinematics,
-            command_limits=algo_config,
-        )
-
-        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
-            """Run a SocNav adapter and project command feasibility.
-
-            Returns:
-                tuple[float, float]: Projected linear and angular command.
-            """
-            linear, angular = adapter.plan(obs)
-            return _project_with_feasibility(
-                model=adapter_kinematics_model,
-                command=(float(linear), float(angular)),
-                meta=meta,
-            )
-
-        _attach_planner_reset(_policy, adapter)
-        return _policy, meta
 
     if algo_key == "sicnav":
         planner = SICNavPlanner(build_sicnav_config(algo_config), seed=None)
@@ -1111,20 +1167,14 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 "SICNav dependency is missing or unresolved. "
                 "Point `repo_root` at a checked-out upstream repo or install the package."
             )
-        adapter = _ExternalMPCAdapter(
+        return _build_external_mpc_policy(
             planner,
-            algo_config=algo_config,
-            robot_kinematics=robot_kinematics,
-            planner_name="SICNavPlanner",
-        )
-        return _build_adapter_policy(
             algo_key=algo_key,
             algo_config=algo_config,
             meta=meta,
-            adapter=adapter,
-            adapter_name="SICNavPlanner",
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
+            planner_name="SICNavPlanner",
             limitations="external_mpc_dependency_sensitive",
         )
 
@@ -1136,20 +1186,14 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 "DR-MPC dependency is missing or unresolved. "
                 "Point `repo_root` at a checked-out upstream repo or install the package."
             )
-        adapter = _ExternalMPCAdapter(
+        return _build_external_mpc_policy(
             planner,
-            algo_config=algo_config,
-            robot_kinematics=robot_kinematics,
-            planner_name="DRMPCPlanner",
-        )
-        return _build_adapter_policy(
             algo_key=algo_key,
             algo_config=algo_config,
             meta=meta,
-            adapter=adapter,
-            adapter_name="DRMPCPlanner",
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
+            planner_name="DRMPCPlanner",
             limitations="external_mpc_dependency_sensitive",
         )
 

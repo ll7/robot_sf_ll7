@@ -524,7 +524,9 @@ def main() -> int:
     bundle_metadata: dict[str, Any] | None = None
     for planner in args.planners:
         selections, metadata = _process_planner(
-            planner, campaign_root, output_dir,
+            planner,
+            campaign_root,
+            output_dir,
             pin_generated_at=args.pin_generated_at,
         )
         all_selections.extend(selections)

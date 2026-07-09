@@ -51,6 +51,31 @@ jobs:
           path: output/validation/xdist-race/
           if-no-files-found: warn
 
+      # Non-gating evidence step (issue #4942): measures how xdist peak memory
+      # scales with worker count on this runner and classifies the projection
+      # against the ~16 GiB ceiling, producing the local root-cause evidence
+      # behind the SIGTERM-143 runner eviction. ``continue-on-error`` keeps it
+      # from ever breaking the nightly; the sweep is capped at 4 workers so it
+      # stays far under the ceiling that the old 32-worker setting crossed.
+      - name: Measure xdist worker-memory scaling (issue #4942 evidence)
+        continue-on-error: true
+        run: |
+          uv run python scripts/dev/measure_xdist_worker_memory.py \
+            --workers 1 2 4 \
+            --ceiling-gb 16 \
+            --auto-workers 4 \
+            --output-json output/validation/xdist-memory/memory_diagnostic.json \
+            --output-markdown output/validation/xdist-memory/memory_diagnostic.md \
+            --quiet
+
+      - name: Upload xdist worker-memory diagnostic
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: xdist-worker-memory-diagnostic
+          path: output/validation/xdist-memory/
+          if-no-files-found: warn
+
       - name: Restore trend history cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

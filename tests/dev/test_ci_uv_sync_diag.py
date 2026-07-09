@@ -227,9 +227,34 @@ def test_perf_nightly_runs_xdist_race_validation_route() -> None:
     )
 
     assert "Run xdist race validation" in workflow_text
-    assert 'XDIST_RACE_WORKERS: "32"' in workflow_text
+    # PR #4948 mitigation (issue #4942): the nightly uses "auto" (4 workers on
+    # the 4-vCPU runner) instead of the old hardcoded "32", which saturated the
+    # ~16 GiB runner and tripped GitHub's SIGTERM/143 eviction watchdog.
+    assert 'XDIST_RACE_WORKERS: "auto"' in workflow_text
     assert 'XDIST_RACE_TIMEOUT_SECONDS: "7200"' in workflow_text
     assert "PYTEST_XDIST_DIST: worksteal" in workflow_text
     assert "scripts/dev/run_xdist_race_validation.sh" in workflow_text
     assert "Upload xdist race validation artifacts" in workflow_text
     assert "path: output/validation/xdist-race/" in workflow_text
+
+
+def test_perf_nightly_includes_xdist_memory_diagnostic_step() -> None:
+    """Nightly should produce the worker-memory evidence behind issue #4942.
+
+    The diagnostic measures how xdist peak memory scales with worker count and
+    classifies the projection against the ~16 GiB runner ceiling, turning the
+    one-shot local reproduction of the SIGTERM/143 eviction into a tracked,
+    re-runnable nightly artifact. The step is non-gating so it can never break
+    the nightly, and the sweep is capped well under the ceiling the old 32-worker
+    setting crossed.
+    """
+    workflow_text = (_repo_root() / ".github/workflows/perf-nightly.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "Measure xdist worker-memory scaling" in workflow_text
+    assert "scripts/dev/measure_xdist_worker_memory.py" in workflow_text
+    assert "continue-on-error: true" in workflow_text
+    assert "--ceiling-gb 16" in workflow_text
+    assert "output/validation/xdist-memory/memory_diagnostic.json" in workflow_text
+    assert "Upload xdist worker-memory diagnostic" in workflow_text
+    assert "path: output/validation/xdist-memory/" in workflow_text

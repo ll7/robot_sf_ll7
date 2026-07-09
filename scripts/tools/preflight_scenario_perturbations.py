@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from robot_sf.scenario_certification import (
@@ -29,7 +30,17 @@ def _build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     """Run scenario perturbation preflight."""
     args = _build_parser().parse_args()
-    report = preflight_perturbation_manifest(args.manifest)
+    try:
+        report = preflight_perturbation_manifest(args.manifest)
+    except (FileNotFoundError, ValueError) as exc:
+        # Bad input (nonexistent manifest path or malformed/non-mapping
+        # manifest): print one actionable line to stderr and exit non-zero
+        # instead of dumping a raw traceback. Mirrors validate_report.py's clean
+        # failure UX. ``str(exc)`` renders OSError readably (e.g.
+        # ``[Errno 2] No such file or directory: ...``) and the loader's
+        # ValueError wording verbatim.
+        print(f"FAILED: {exc}", file=sys.stderr)
+        return 2
     payload = preflight_to_dict(report)
     output = json.dumps(payload, indent=2, sort_keys=True) + "\n"
     if args.output:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 import pytest
@@ -11,6 +12,7 @@ from scripts.tools.validate_socnav_map_batch import (
     BLOCKED,
     READY,
     conversion_readiness,
+    main,
     validate_batch,
 )
 
@@ -214,3 +216,107 @@ def test_validate_batch_rejects_absolute_relative_path(tmp_path: Path) -> None:
             socnav_root=tmp_path / "socnavbench",
             batch_id="eth_first",
         )
+
+
+def test_main_unknown_batch_id_prints_actionable_error(monkeypatch, tmp_path: Path, capsys) -> None:
+    """An unknown --batch-id prints one actionable line and exits non-zero, no traceback."""
+    manifest = tmp_path / "manifest.yaml"
+    _write_manifest(manifest)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "validate_socnav_map_batch.py",
+            "--manifest",
+            str(manifest),
+            "--batch-id",
+            "no_such_batch",
+        ],
+    )
+
+    exit_code = main()
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "FAILED: Unknown SocNavBench import batch: no_such_batch" in captured.err
+    assert "Traceback" not in captured.err
+    assert captured.out == ""
+
+
+def test_main_nonexistent_manifest_prints_actionable_error(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    """A nonexistent manifest path prints one path-qualified line and exits non-zero."""
+    missing = tmp_path / "does_not_exist.yaml"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "validate_socnav_map_batch.py",
+            "--manifest",
+            str(missing),
+            "--batch-id",
+            "eth_first",
+        ],
+    )
+
+    exit_code = main()
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "FAILED:" in captured.err
+    assert "No such file or directory" in captured.err
+    assert str(missing) in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_main_non_mapping_manifest_prints_actionable_error(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    """A non-mapping manifest prints one actionable line and exits non-zero, no traceback."""
+    bad_manifest = tmp_path / "bad.yaml"
+    bad_manifest.write_text("- foo\n- bar\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "validate_socnav_map_batch.py",
+            "--manifest",
+            str(bad_manifest),
+            "--batch-id",
+            "eth_first",
+        ],
+    )
+
+    exit_code = main()
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert f"FAILED: Expected YAML mapping: {bad_manifest}" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_main_valid_batch_emits_report_and_exits_zero(monkeypatch, tmp_path: Path, capsys) -> None:
+    """A valid manifest with staged assets still emits the JSON report and exits 0."""
+    manifest = tmp_path / "manifest.yaml"
+    _write_manifest(manifest)
+    root = tmp_path / "socnavbench"
+    _stage_eth_assets(root)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "validate_socnav_map_batch.py",
+            "--manifest",
+            str(manifest),
+            "--socnav-root",
+            str(root),
+            "--batch-id",
+            "eth_first",
+        ],
+    )
+
+    exit_code = main()
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "FAILED:" not in captured.err
+    report = json.loads(captured.out)
+    assert report["ok"] is True
+    assert report["batch_id"] == "eth_first"

@@ -405,14 +405,33 @@ class TestBuildMechanismSidecar:
                 mechanism_fields = {k: record[k] for k in record if k.startswith("mechanism_")}
                 validate_failure_mechanism_record(mechanism_fields)
 
-    def test_missing_campaign_root_raises(self, tmp_path: Path) -> None:
+    def test_missing_campaign_root_blocks(self, tmp_path: Path) -> None:
         campaign = tmp_path / "nonexistent"
         output_dir = tmp_path / "output"
 
-        def call_build() -> None:
-            build_mechanism_sidecar(campaign, output_dir, "now")
+        summary = build_mechanism_sidecar(campaign, output_dir, "2026-01-01T00:00:00Z")
 
-        assert not campaign.exists()
+        # Missing campaign must block with an explicit status, not raise and not
+        # silently emit a vacuous "completed" packet.
+        assert summary["status"] == "blocked_missing_input_artifacts"
+        assert "reason" in summary
+        assert not (output_dir / "mechanism_labels.csv").exists()
+        assert not (output_dir / "README.md").exists()
+        assert (output_dir / "input_status.json").is_file()
+
+    def test_empty_campaign_blocks(self, tmp_path: Path) -> None:
+        campaign = tmp_path / "empty_campaign"
+        runs = campaign / "runs"
+        planner_run = runs / "goal__differential_drive"
+        planner_run.mkdir(parents=True)
+        (planner_run / "episodes.jsonl").write_text("", encoding="utf-8")
+        output_dir = tmp_path / "output"
+
+        summary = build_mechanism_sidecar(campaign, output_dir, "2026-01-01T00:00:00Z")
+
+        # A campaign dir present but with zero episode rows must also block.
+        assert summary["status"] == "blocked_missing_input_artifacts"
+        assert not (output_dir / "mechanism_labels.csv").exists()
 
 
 class TestGuardedPPOExclusion:

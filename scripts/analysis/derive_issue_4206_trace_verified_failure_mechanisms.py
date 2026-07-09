@@ -254,6 +254,43 @@ def _derive_mechanism_label(row: dict[str, Any]) -> dict[str, Any]:  # noqa: C90
     return record
 
 
+def _blocked_input_summary(
+    campaign_root: Path, output_dir: Path, generated_at: str
+) -> dict[str, Any]:
+    """Write a blocked-input marker and return the blocked summary.
+
+    Phase 1 input audit: a missing/empty campaign must produce an explicit
+    ``blocked_missing_input_artifacts`` status and stop before derivation,
+    rather than emitting a vacuous "completed" packet (anti-fabrication guard
+    for the issue's "blocks cleanly until hydrated" criterion).
+    """
+    reason = (
+        "no episode rows found under runs/*/episodes.jsonl"
+        if campaign_root.is_dir()
+        else "campaign_root is not a directory"
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _write_jsonl(
+        output_dir / "input_status.json",
+        [
+            {
+                "schema_version": SCHEMA_VERSION,
+                "issue": 4831,
+                "generated_at": generated_at,
+                "status": "blocked_missing_input_artifacts",
+                "campaign_root": str(campaign_root),
+                "reason": reason,
+            }
+        ],
+    )
+    return {
+        "status": "blocked_missing_input_artifacts",
+        "issue": 4831,
+        "generated_at": generated_at,
+        "reason": reason,
+    }
+
+
 def _scan_episode_jsonl(runs_dir: Path) -> list[dict[str, Any]]:
     """Scan all planner run directories for episodes.jsonl files."""
     all_episodes: list[dict[str, Any]] = []
@@ -274,7 +311,7 @@ def _scan_episode_jsonl(runs_dir: Path) -> list[dict[str, Any]]:
     return all_episodes
 
 
-def build_mechanism_sidecar(
+def build_mechanism_sidecar(  # noqa: C901
     campaign_root: Path,
     output_dir: Path,
     generated_at: str,
@@ -294,6 +331,13 @@ def build_mechanism_sidecar(
 
     all_episodes = _scan_episode_jsonl(runs_dir)
     total = len(all_episodes)
+
+    # Phase 1 input audit: block cleanly when campaign artifacts are absent.
+    # A missing/empty campaign must NOT produce a vacuous "completed" packet,
+    # because that would look indistinguishable from a genuine zero-failure run
+    # (anti-fabrication guard for the issue's "blocks cleanly until hydrated" criterion).
+    if not campaign_root.is_dir() or total == 0:
+        return _blocked_input_summary(campaign_root, output_dir, generated_at)
 
     failure_episodes = []
     success_episodes = 0
@@ -512,6 +556,13 @@ def main(argv: list[str] | None = None) -> int:
     except DerivationError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+
+    if summary.get("status") == "blocked_missing_input_artifacts":
+        print(
+            f"status: {summary.get('status')}: {summary.get('reason')}",
+            file=sys.stderr,
+        )
+        return 1
 
     if args.json:
         print(json.dumps(summary, indent=2, sort_keys=True))

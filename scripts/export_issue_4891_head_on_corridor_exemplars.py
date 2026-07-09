@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Export exemplar trace-episode bundles for issue #4848 group-crossing scenarios.
+"""Export exemplar trace-episode bundles for issue #4891 head-on corridor scenarios.
 
 Reads retained campaign data from issue4206_trace_capable_h600_rerun_20260704 (job 13334),
-selects exemplar episodes (median + best/worst) from group_crossing scenarios for 2-3 planners,
-and exports trace-episode bundles in the same format as issue_4253/4268.
+selects exemplar episodes (median + best/worst) from head-on corridor scenarios for 2-3 planners,
+and exports trace-episode bundles in the same format as issue_4253/4268 and issue_4848.
 """
 
 from __future__ import annotations
@@ -28,11 +28,10 @@ from robot_sf.evidence.writers import (
 # Target planners for exemplar selection (classical + social navigation diversity)
 TARGET_PLANNERS = ["goal", "orca", "social_force"]
 
-# Scenario class filter
-GROUP_CROSSING_SCENARIOS = {
-    "classic_group_crossing_low",
-    "classic_group_crossing_medium",
-    "classic_group_crossing_high",
+# Scenario class filter: head-on corridor variants
+HEAD_ON_CORRIDOR_SCENARIOS = {
+    "classic_head_on_corridor_low",
+    "classic_head_on_corridor_medium",
 }
 
 # Selection metric (path_efficiency: higher is better)
@@ -40,7 +39,7 @@ SELECTION_METRIC = "path_efficiency"
 SELECTION_MODES = ["median", "best", "worst"]
 
 # Output directory
-DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_4848_group_crossing_exemplars_2026-07")
+DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07")
 DEFAULT_CAMPAIGN_ROOT = Path("output/issue4206-trace-rerun/13334/runs")
 
 
@@ -212,17 +211,15 @@ def select_exemplars_for_planner(
     episodes: list[dict[str, Any]], planner: str
 ) -> list[SelectedEpisode]:
     """Select median, best, worst exemplar episodes for one planner."""
-    # Filter for group_crossing scenarios only
-    group_crossing_eps = [
-        ep for ep in episodes if ep.get("scenario_id") in GROUP_CROSSING_SCENARIOS
-    ]
+    # Filter for head-on corridor scenarios only
+    corridor_eps = [ep for ep in episodes if ep.get("scenario_id") in HEAD_ON_CORRIDOR_SCENARIOS]
 
-    if not group_crossing_eps:
+    if not corridor_eps:
         return []
 
     # Extract metric values
     scored: list[tuple[float, dict[str, Any]]] = []
-    for ep in group_crossing_eps:
+    for ep in corridor_eps:
         metrics = ep.get("metrics", {})
         val = metrics.get(SELECTION_METRIC)
         if val is not None and isinstance(val, (int, float)):
@@ -270,11 +267,11 @@ def write_bundle(
     derived = derive_trace_rows(episode_record)
 
     metadata = {
-        "schema_version": "issue-4848-exemplar-trace.v1",
-        "issue": "https://github.com/ll7/robot_sf_ll7/issues/4848",
+        "schema_version": "issue-4891-exemplar-trace.v1",
+        "issue": "https://github.com/ll7/robot_sf_ll7/issues/4891",
         "claim_boundary": (
             "exemplar trace episode from retained campaign data; "
-            "illustrative group-crossing interaction only; "
+            "illustrative head-on corridor interaction only; "
             "no statistical, benchmark, or dissertation claim"
         ),
         "generated_at_utc": datetime.now(UTC).isoformat(),
@@ -293,7 +290,7 @@ def write_bundle(
     }
 
     trace_payload = {
-        "schema_version": "issue-4848-trace-series.v1",
+        "schema_version": "issue-4891-trace-series.v1",
         "metadata": metadata,
         "frames": episode_record["algorithm_metadata"]["simulation_step_trace"]["steps"],
         "derived_rows": derived.trace_rows,
@@ -310,12 +307,12 @@ def write_bundle(
 
 def _write_readme(output_dir: Path, metadata: dict[str, Any]) -> None:
     """Write the human-facing evidence bundle README."""
-    readme = f"""{review_marker("robot_sf#4848")}
-# Issue #4848 Exemplar Trace: {metadata["scenario_id"]} ({metadata["planner"]})
+    readme = f"""{review_marker("robot_sf#4891")}
+# Issue #4891 Exemplar Trace: {metadata["scenario_id"]} ({metadata["planner"]})
 
 Plain-language summary: this directory contains one exemplar trace episode from the
 retained `issue4206_trace_capable_h600_rerun_20260704` campaign (job 13334).
-It is an illustrative group-crossing interaction episode and does not establish a
+It is an illustrative head-on corridor interaction episode and does not establish a
 statistical benchmark or dissertation claim.
 
 ## Contents
@@ -340,7 +337,7 @@ statistical benchmark or dissertation claim.
 
 ## Claim Boundary
 
-This bundle is `illustrative_exemplar` evidence for one group-crossing episode.
+This bundle is `illustrative_exemplar` evidence for one head-on corridor episode.
 It should be used for visualization and worked example input only. It is not a full
 benchmark campaign, not a Slurm or GPU result, and not a statistical comparison.
 """
@@ -353,15 +350,15 @@ def write_selection_report(
 ) -> None:
     """Write the selection report listing all selected episodes."""
     report_lines = [
-        review_marker("robot_sf#4848"),
-        "# Issue #4848 Group-Crossing Exemplar Selection Report",
+        review_marker("robot_sf#4891"),
+        "# Issue #4891 Head-On Corridor Exemplar Selection Report",
         "",
         f"Generated: {datetime.now(UTC).isoformat()}",
         f"Total exemplars selected: {len(all_selections)}",
         "",
         "## Selection Criteria",
         "",
-        "- Scenario class: group_crossing (low/medium/high density)",
+        "- Scenario class: head-on corridor (low/medium density)",
         f"- Planners: {', '.join(TARGET_PLANNERS)}",
         f"- Selection metric: {SELECTION_METRIC} (higher is better)",
         f"- Selection modes: {', '.join(SELECTION_MODES)}",
@@ -385,12 +382,20 @@ def write_selection_report(
             "",
             "## Scenario Class Rationale",
             "",
-            "Group-crossing scenarios were chosen as the second exemplar class to complement "
-            "the doorway scenario from issue_4253/4268. Group-crossing introduces bidirectional "
-            "pedestrian flow with social group dynamics (50% of pedestrians in groups), providing "
-            "richer interaction diversity than single-agent avoidance scenarios. The three density "
-            "levels (low/medium/high) capture different interaction regimes: sparse crossing, "
-            "moderate crowd navigation, and high-density stress conditions.",
+            "Head-on corridor scenarios were chosen as the third exemplar class to complement "
+            "the doorway scenario (issue_4253/4268) and group-crossing scenario (issue #4848). "
+            "Head-on corridor introduces opposing pedestrian flows in a constrained space, creating "
+            "rich navigation challenges where the robot must negotiate right-of-way with oncoming "
+            "pedestrians. The two density levels (low/medium) capture different interaction "
+            "regimes: sparse head-on encounters and moderate corridor crowding.",
+            "",
+            "## Interaction Diversity",
+            "",
+            "Head-on corridor provides richer interaction diversity than bottleneck scenarios:",
+            "- Consistent pedestrian presence (2-4 pedestrians per episode)",
+            "- Opposing flow patterns requiring negotiation",
+            "- Constrained space amplifying social navigation challenges",
+            "- Mix of success and collision outcomes showing planner sensitivity",
             "",
             "## Planner Rationale",
             "",

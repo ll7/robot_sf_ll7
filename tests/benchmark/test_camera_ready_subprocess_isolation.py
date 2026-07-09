@@ -6,11 +6,14 @@ These tests verify that:
 3. In-process mode still works with arm_isolation="in_process"
 4. CLI flag for arm-isolation is recognized
 5. Resource lifecycle cleanup is called in subprocess mode
+6. The parent->worker serialization is JSON-safe and the subprocess path emits
+   the ``subprocess_isolation`` + ``cleanup_metrics`` evidence (issue #4957).
 """
 
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -20,8 +23,40 @@ import pytest
 from robot_sf.benchmark.camera_ready.resource_lifecycle import (
     _cleanup_gpu_memory_before_exit,
     _main_subprocess_worker,
+    _serialize_subprocess_arm_params,
     _SubprocessArmParams,
 )
+
+
+def _make_arm_params(*, algo_config_path: Path | None = None) -> _SubprocessArmParams:
+    """Build a representative _SubprocessArmParams for serialization tests."""
+    return _SubprocessArmParams(
+        planner_key="test",
+        planner_algo="test_algo",
+        planner_human_model_variant=None,
+        planner_human_model_source=None,
+        planner_group="core",
+        benchmark_profile="speed",
+        socnav_missing_prereq_policy="error",
+        adapter_impact_eval="disabled",
+        kinematics="differential_drive",
+        observation_mode="lidar",
+        workers=1,
+        horizon=100,
+        dt=0.1,
+        scenario_matrix_path=Path("scenarios.yaml"),
+        episodes_path=Path("/tmp/episodes.jsonl"),
+        summary_path=Path("/tmp/summary.json"),
+        record_forces=True,
+        record_planner_decision_trace=False,
+        record_simulation_step_trace=False,
+        observation_noise=None,
+        synthetic_actuation_profile=None,
+        latency_stress_profile=None,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo_config_path=algo_config_path,
+    )
 
 
 class TestSubprocessIsolationEntryPoints:
@@ -300,48 +335,60 @@ class TestSubprocessIsolationIntegration:
         assert hasattr(rl, "_cleanup_gpu_memory_before_exit")
         assert hasattr(rl, "_main_subprocess_worker")
 
-    def test_subprocess_arm_params_is_serializable(self):
-        """Verify _SubprocessArmParams can be serialized to JSON."""
-        params = _SubprocessArmParams(
-            planner_key="test",
-            planner_algo="test_algo",
-            planner_human_model_variant=None,
-            planner_human_model_source=None,
-            planner_group="core",
-            benchmark_profile="speed",
-            socnav_missing_prereq_policy="error",
-            adapter_impact_eval="disabled",
-            kinematics="differential_drive",
-            observation_mode="lidar",
-            workers=1,
-            horizon=100,
-            dt=0.1,
-            scenario_matrix_path=Path("scenarios.yaml"),
-            episodes_path=Path("/tmp/episodes.jsonl"),
-            summary_path=Path("/tmp/summary.json"),
-            record_forces=True,
-            record_planner_decision_trace=False,
-            record_simulation_step_trace=False,
-            observation_noise=None,
-            synthetic_actuation_profile=None,
-            latency_stress_profile=None,
-            snqi_weights=None,
-            snqi_baseline=None,
-            algo_config_path=None,
-        )
+    @pytest.mark.parametrize("algo_config_path", [None, Path("/tmp/algo.yaml")])
+    def test_subprocess_arm_params_is_serializable(self, algo_config_path):
+        """Verify _SubprocessArmParams serializes to JSON via the real serializer.
 
-        # Should be serializable with dataclass.asdict after converting paths to strings
-        from dataclasses import asdict
+        This is the regression guard for issue #4957: the production
+        serialization at ``campaign.py`` previously called
+        ``json.dumps(asdict(arm_params))`` directly, which crashes with
+        ``TypeError: Object of type PosixPath is not JSON serializable`` because
+        ``_SubprocessArmParams`` holds ``pathlib.Path`` fields. The smoke worker
+        (issue #4826 comment) found that the prior version of this test
+        hand-converted the Path fields *inside the test*, so it never exercised
+        the implementation's own serialization and missed the crash.
 
-        params_dict = asdict(params)
+        This test calls the REAL ``_serialize_subprocess_arm_params`` helper (the
+        single serialization point used by production) with no hand-conversion,
+        and covers both the ``algo_config_path=None`` and ``Path`` branches.
+        """
+        params = _make_arm_params(algo_config_path=algo_config_path)
+
+        # Must not raise; exercises the production serialization path directly.
+        serialized = _serialize_subprocess_arm_params(params)
+        assert isinstance(serialized, str)
+
+        # Round-trips through json.loads and every path field is a JSON string.
+        params_dict = json.loads(serialized)
         assert isinstance(params_dict, dict)
-        # Convert Path objects to strings for JSON serialization
-        params_dict["scenario_matrix_path"] = str(params_dict["scenario_matrix_path"])
-        params_dict["episodes_path"] = str(params_dict["episodes_path"])
-        params_dict["summary_path"] = str(params_dict["summary_path"])
+        for field_name in ("scenario_matrix_path", "episodes_path", "summary_path"):
+            assert isinstance(params_dict[field_name], str)
+        if algo_config_path is not None:
+            assert isinstance(params_dict["algo_config_path"], str)
+            assert params_dict["algo_config_path"] == str(algo_config_path)
+        else:
+            assert params_dict["algo_config_path"] is None
+
+    def test_subprocess_arm_params_serialization_round_trips_to_worker(self):
+        """Parent-sends-strings / worker-parses-strings contract (issue #4957).
+
+        The parent serializes with ``_serialize_subprocess_arm_params`` (path
+        fields become JSON strings); the worker (``_main_subprocess_worker``)
+        re-parses str->Path for the same fields. This test verifies the full
+        round trip so a mismatch between the two sides cannot regress silently.
+        """
+        params = _make_arm_params(algo_config_path=Path("/tmp/algo.yaml"))
+        serialized = _serialize_subprocess_arm_params(params)
+
+        # Mirror the worker's str->Path re-parse (resource_lifecycle.py).
+        params_dict = json.loads(serialized)
+        for field_name in ("scenario_matrix_path", "episodes_path", "summary_path"):
+            params_dict[field_name] = Path(params_dict[field_name])
         if params_dict["algo_config_path"] is not None:
-            params_dict["algo_config_path"] = str(params_dict["algo_config_path"])
-        assert json.dumps(params_dict)  # Should not raise
+            params_dict["algo_config_path"] = Path(params_dict["algo_config_path"])
+
+        rebuilt = _SubprocessArmParams(**params_dict)
+        assert rebuilt == params
 
     def test_cleanup_metrics_attached_to_subprocess_result(self):
         """Verify cleanup_metrics are included in subprocess result."""
@@ -369,6 +416,203 @@ class TestSubprocessIsolationIntegration:
         assert "cleanup_metrics" in result
         assert "torch_available" in result["cleanup_metrics"]
         assert "cuda_available" in result["cleanup_metrics"]
+
+
+class TestSubprocessIsolationMetricEmission:
+    """Regression tests for issue #4957: the subprocess path must emit the
+    ``subprocess_isolation`` + ``cleanup_metrics`` evidence that #4826's
+    acceptance criteria require.
+
+    Before the #4957 fix, ``_run_campaign_planner_variant_subprocess`` crashed
+    at the ``json.dumps(asdict(arm_params))`` serialization (PosixPath not JSON
+    serializable) *before* the subprocess was ever spawned, so neither
+    ``subprocess_isolation: true`` nor ``cleanup_metrics`` could be produced.
+    These tests exercise the real production path (serialization + subprocess
+    dispatch + result parsing + run-entry emission) and assert the metrics land
+    in the run entry.
+    """
+
+    def _make_context(self, tmp_path):
+        from robot_sf.benchmark.camera_ready._config_types import (
+            CampaignConfig,
+            PlannerSpec,
+        )
+        from robot_sf.benchmark.camera_ready.campaign import (
+            _CampaignPlannerMatrixContext,
+            _CampaignPlannerVariantRun,
+            _CampaignRuntimeDependencies,
+        )
+
+        planner = PlannerSpec(
+            key="test_planner",
+            algo="test_algo",
+            planner_group="core",
+            benchmark_profile="speed",
+            enabled=True,
+        )
+        cfg = CampaignConfig(
+            name="test",
+            scenario_matrix_path=Path("scenarios.yaml"),
+            planners=(planner,),
+        )
+        dependencies = _CampaignRuntimeDependencies(
+            prepare_campaign_preflight=Mock(return_value={}),
+            run_batch=Mock(return_value={}),
+            compute_aggregates_with_ci=Mock(return_value=None),
+            export_publication_bundle=Mock(return_value=None),
+        )
+        context = _CampaignPlannerMatrixContext(
+            cfg=cfg,
+            scenarios=[],
+            snqi_weights=None,
+            snqi_baseline=None,
+            runs_dir=tmp_path,
+            dependencies=dependencies,
+        )
+        episodes_path = tmp_path / "episodes.jsonl"
+        run = _CampaignPlannerVariantRun(
+            kinematics="differential_drive",
+            active_observation_mode="lidar",
+            planner_dir=tmp_path,
+            episodes_path=episodes_path,
+            effective_workers=1,
+            effective_horizon=100,
+            effective_dt=0.1,
+            scoped_scenarios=[],
+        )
+        return planner, context, run
+
+    def test_subprocess_path_emits_isolation_and_cleanup_metrics(self, tmp_path):
+        """Assert ``subprocess_isolation: True`` + ``cleanup_metrics`` are emitted.
+
+        Exercises the real ``_run_campaign_planner_variant_subprocess`` path with
+        ``subprocess.run`` mocked to return a successful arm result carrying
+        ``cleanup_metrics``. This proves the serialization fix (#4957) lets the
+        path reach the emission code that was previously unreachable, and that
+        the per-arm cleanup metrics propagate into the run entry.
+        """
+        from robot_sf.benchmark.camera_ready.campaign import (
+            _run_campaign_planner_variant_subprocess,
+        )
+
+        planner, context, run = self._make_context(tmp_path)
+
+        cleanup_metrics = {
+            "planner_key": planner.key,
+            "kinematics": "differential_drive",
+            "torch_available": True,
+            "cuda_available": True,
+            "allocated_mb": 1.0,
+            "reserved_mb": 2.0,
+            "high_water_mark_mb": 3.0,
+            "allocated_freed_mb": 0.5,
+            "reserved_freed_mb": 1.5,
+        }
+        worker_stdout = json.dumps(
+            {
+                "summary": {
+                    "status": "ok",
+                    "total_jobs": 1,
+                    "written": 1,
+                    "failed_jobs": 0,
+                    "failures": [],
+                },
+                "cleanup_metrics": cleanup_metrics,
+                "warnings": [],
+                "episodes_total": 1,
+            }
+        )
+
+        captured_input = {}
+
+        def fake_subprocess_run(cmd, *, input, capture_output, text, check):  # noqa: A002
+            captured_input["json"] = input
+            return subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout=worker_stdout, stderr=""
+            )
+
+        with (
+            patch(
+                "robot_sf.benchmark.camera_ready.campaign._prepare_campaign_planner_variant_run",
+                return_value=run,
+            ),
+            patch(
+                "robot_sf.benchmark.camera_ready.campaign.subprocess.run",
+                side_effect=fake_subprocess_run,
+            ),
+            patch(
+                "robot_sf.benchmark.camera_ready.campaign._planner_report_row",
+                return_value={"planner_key": planner.key, "status": "ok"},
+            ),
+            patch("robot_sf.benchmark.camera_ready.campaign.read_jsonl", return_value=[]),
+            patch(
+                "robot_sf.benchmark.camera_ready.campaign.classify_planner_row_status",
+                return_value="ok",
+            ),
+        ):
+            result = _run_campaign_planner_variant_subprocess(
+                context,
+                planner=planner,
+                kinematics="differential_drive",
+                active_observation_mode="lidar",
+            )
+
+        # The serialization fix is in effect: the handoff JSON the parent built
+        # is valid JSON (would have raised TypeError before #4957) and the path
+        # fields are strings, not PosixPath.
+        handoff = json.loads(captured_input["json"])
+        assert isinstance(handoff["scenario_matrix_path"], str)
+        assert isinstance(handoff["episodes_path"], str)
+        assert isinstance(handoff["summary_path"], str)
+
+        # Issue #4957 acceptance: the metrics are emitted in the run entry.
+        assert len(result.run_entries) == 1
+        entry = result.run_entries[0]
+        assert entry["subprocess_isolation"] is True
+        assert entry["gpu_cleanup"] == cleanup_metrics
+        assert entry["gpu_cleanup"]["allocated_freed_mb"] == 0.5
+        assert entry["gpu_cleanup"]["reserved_freed_mb"] == 1.5
+        assert entry["status"] == "ok"
+
+    def test_subprocess_path_emits_isolation_marker_on_failure(self, tmp_path):
+        """The ``subprocess_isolation: True`` marker is emitted even when the
+        subprocess arm fails, so the evidence that isolation was engaged is
+        never lost (issue #4957 / #4826).
+        """
+        from robot_sf.benchmark.camera_ready.campaign import (
+            _run_campaign_planner_variant_subprocess,
+        )
+
+        planner, context, run = self._make_context(tmp_path)
+
+        with (
+            patch(
+                "robot_sf.benchmark.camera_ready.campaign._prepare_campaign_planner_variant_run",
+                return_value=run,
+            ),
+            patch(
+                "robot_sf.benchmark.camera_ready.campaign.subprocess.run",
+                return_value=subprocess.CompletedProcess(
+                    args=[], returncode=1, stdout="", stderr="boom"
+                ),
+            ),
+            patch("robot_sf.benchmark.camera_ready.campaign.read_jsonl", return_value=[]),
+            patch(
+                "robot_sf.benchmark.camera_ready.campaign.classify_planner_row_status",
+                return_value="unexpected_failure",
+            ),
+        ):
+            result = _run_campaign_planner_variant_subprocess(
+                context,
+                planner=planner,
+                kinematics="differential_drive",
+                active_observation_mode="lidar",
+            )
+
+        assert len(result.run_entries) == 1
+        entry = result.run_entries[0]
+        assert entry["subprocess_isolation"] is True
+        assert entry["status"] == "failed"
 
 
 if __name__ == "__main__":

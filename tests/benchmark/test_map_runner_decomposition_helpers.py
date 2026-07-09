@@ -13,6 +13,7 @@ stay green across further decomposition of the same helpers.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -32,7 +33,12 @@ from robot_sf.benchmark.map_runner_episode import (
     _apply_cbf_safety_filter_step,
     _apply_safety_wrapper_step,
     _build_tracking_precision_summary,
+    _compute_post_loop_metrics,
+    _finalize_episode_record,
     _min_finite_or_inf,
+    _prepare_policy_and_observation_contract,
+    _resolve_episode_run_context,
+    _run_episode_step_loop,
 )
 from robot_sf.benchmark.safety_wrapper_runtime import SafetyWrapperRuntimeConfig
 
@@ -543,3 +549,275 @@ class TestCbfSafetyFilterStepHelper:
             mod.apply_runtime_cbf_safety_filter = original
         assert command == (0.3, -0.1, "tail")
         assert record == {"filtered": True, "step_idx": 4}
+
+
+# ---------------------------------------------------------------------------
+# map_runner_episode: policy-contract / step-loop / record-finalization helpers
+#
+# The successor slice of issue #4944 extracts the episode step-loop and
+# metadata-finalization phases out of ``run_map_episode``. These tests pin the
+# three new single-responsibility helpers directly: the policy-contract builder,
+# the step-loop runner, and the record finalizer. The #4927 baseline still pins
+# the god-function behavior end-to-end; these pin the extracted units.
+# ---------------------------------------------------------------------------
+
+
+def _stub_config() -> SimpleNamespace:
+    """Build a minimal config stub matching the characterization fixtures."""
+    from robot_sf.robot.differential_drive import DifferentialDriveSettings
+
+    return SimpleNamespace(
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.1, ped_radius=0.4),
+        robot_config=DifferentialDriveSettings(max_linear_speed=2.0),
+    )
+
+
+class _StepLoopDummySim:
+    """Simulator stub exposing the attributes read by the step-loop phase."""
+
+    def __init__(self) -> None:
+        self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+        self.ped_pos = np.zeros((0, 2), dtype=float)
+        self.goal_pos = [np.array([1.0, 1.0], dtype=float)]
+        self.map_def = None
+        self.last_ped_forces = np.zeros((0, 2), dtype=float)
+
+
+class _StepLoopDummyEnv:
+    """Environment stub for direct step-loop helper tests."""
+
+    def __init__(self) -> None:
+        self.simulator = _StepLoopDummySim()
+
+    def reset(self, seed: int | None = None):
+        obs = {"robot": {"position": [0.0, 0.0]}, "goal": {"current": [1.0, 1.0]}}
+        return obs, {}
+
+    def step(self, action):
+        obs = {"robot": {"position": [0.0, 0.0]}, "goal": {"current": [1.0, 1.0]}}
+        return obs, 0.0, True, False, {"success": True, "meta": {"is_route_complete": True}}
+
+    def close(self) -> None:
+        return None
+
+
+class TestPreparePolicyAndObservationContract:
+    """Pin the policy/observation-contract preparation helper output shape."""
+
+    def test_goal_policy_contract_has_required_fields(self) -> None:
+        """The goal planner contract must expose callable policy + metadata fields."""
+        policy_fn, _ = _build_policy("goal", {}, robot_kinematics="differential_drive")
+        contract = _prepare_policy_and_observation_contract(
+            scenario={"name": "t"},
+            algo="goal",
+            policy_cfg={},
+            config=_stub_config(),
+            observation_mode=None,
+            observation_level=None,
+            robot_kinematics="differential_drive",
+            robot_command_mode="vx_vy",
+            adapter_impact_eval=False,
+            benchmark_track=None,
+            track_schema_version=None,
+            actuation_profile=None,
+            policy_builder=lambda *a, **kw: (
+                policy_fn,
+                _build_policy("goal", {}, robot_kinematics="differential_drive")[1],
+            ),
+        )
+        assert callable(contract.policy_fn)
+        assert isinstance(contract.algo_meta, dict)
+        assert contract.algo_meta["algorithm"] == "goal"
+        assert contract.active_observation_mode == "goal_state"
+        assert contract.active_observation_level == "oracle_full_state"
+        # The goal planner sets no synthetic-actuation controller and no lifecycle hooks.
+        assert contract.actuation_controller is None
+        assert contract.planner_native_action is False
+        assert isinstance(contract.single_pedestrian_intent_metadata, list)
+        assert isinstance(contract.single_pedestrian_vru_metadata, list)
+
+
+class TestRunEpisodeStepLoop:
+    """Pin the episode step-loop helper output shape and termination handling."""
+
+    def test_step_loop_returns_result_with_populated_trajectory(self, monkeypatch) -> None:
+        """A one-step stubbed episode must populate trajectory lists and mark success."""
+        import robot_sf.benchmark.map_runner_episode as mod
+
+        monkeypatch.setattr(mod, "make_robot_env", lambda config, seed, debug: _StepLoopDummyEnv())
+        policy_fn, _ = _build_policy("goal", {}, robot_kinematics="differential_drive")
+        result = _run_episode_step_loop(
+            seed=1,
+            config=_stub_config(),
+            horizon_val=1,
+            policy_fn=policy_fn,
+            planner_bind_env=None,
+            planner_reset=None,
+            planner_close=None,
+            planner_stats=None,
+            planner_native_action=False,
+            noise_spec={"enabled": False},
+            noise_rng=None,
+            noise_state=None,
+            noise_stats={},
+            tracking_precision_spec={"enabled": False, "target_motp_m": 0.05},
+            tracking_precision_rng=None,
+            safety_wrapper_runtime=mod.runtime_config_from_mapping(None),
+            safety_wrapper_deadlock_monitor=None,
+            cbf_runtime=mod.cbf_runtime_config_from_mapping(None),
+            actuation_controller=None,
+            algo_meta={"algorithm": "goal"},
+            record_forces=True,
+            record_planner_decision_trace=False,
+            record_simulation_step_trace=False,
+            single_pedestrian_intent_metadata=[],
+            single_pedestrian_vru_metadata=[],
+        )
+        # Trajectory buffers must carry one step (horizon_val=1) and a success break.
+        assert len(result.robot_positions) == 1
+        assert result.robot_headings == [pytest.approx(0.0)]
+        assert result.collision_seen is False
+        assert result.reached_goal_step == 0
+        assert result.termination_reason == "success"
+        assert result.planner_runtime_snapshot is None
+        assert result.view_integrity is not None
+        # AMMV command actions must record the single selected action payload.
+        assert len(result.ammv_command_actions) == 1
+
+
+class TestFinalizeEpisodeRecord:
+    """Pin the record-finalization helper output shape from assembled inputs."""
+
+    def test_finalize_returns_record_with_required_keys(self, monkeypatch) -> None:
+        """The finalizer must assemble a full record from ctx/loop_result/post_loop."""
+        import robot_sf.benchmark.map_runner_episode as mod
+
+        monkeypatch.setattr(mod, "make_robot_env", lambda config, seed, debug: _StepLoopDummyEnv())
+        monkeypatch.setattr(mod, "compute_all_metrics", lambda *a, **kw: {"success": 1.0})
+        monkeypatch.setattr(mod, "post_process_metrics", lambda metrics, **kw: metrics)
+        ctx = _resolve_episode_run_context(
+            scenario={
+                "name": "fin_test",
+                "simulation_config": {"max_episode_steps": 1},
+                "robot_config": {"type": "differential_drive"},
+            },
+            seed=1,
+            horizon=None,
+            dt=0.1,
+            algo="goal",
+            scenario_path=Path("."),
+            algo_config=None,
+            algo_config_path=None,
+            experimental_ped_impact=False,
+            ped_impact_radius_m=2.0,
+            ped_impact_window_steps=5,
+            observation_mode=None,
+            observation_level=None,
+            benchmark_track=None,
+            track_schema_version=None,
+            observation_noise=None,
+            tracking_precision=None,
+            synthetic_actuation_profile=None,
+            latency_stress_profile=None,
+            safety_wrapper=None,
+            cbf_safety_filter=None,
+        )
+        policy_fn, _ = _build_policy("goal", {}, robot_kinematics="differential_drive")
+        contract = _prepare_policy_and_observation_contract(
+            scenario=ctx.scenario,
+            algo=ctx.algo,
+            policy_cfg=ctx.policy_cfg,
+            config=ctx.config,
+            observation_mode=None,
+            observation_level=None,
+            robot_kinematics=ctx.robot_kinematics,
+            robot_command_mode=ctx.robot_command_mode,
+            adapter_impact_eval=False,
+            benchmark_track=ctx.benchmark_track,
+            track_schema_version=ctx.track_schema_version,
+            actuation_profile=ctx.actuation_profile,
+            policy_builder=lambda *a, **kw: (
+                policy_fn,
+                _build_policy("goal", {}, robot_kinematics="differential_drive")[1],
+            ),
+        )
+        loop_result = _run_episode_step_loop(
+            seed=1,
+            config=ctx.config,
+            horizon_val=ctx.horizon_val,
+            policy_fn=contract.policy_fn,
+            planner_bind_env=contract.planner_bind_env,
+            planner_reset=contract.planner_reset,
+            planner_close=contract.planner_close,
+            planner_stats=contract.planner_stats,
+            planner_native_action=contract.planner_native_action,
+            noise_spec=ctx.noise_spec,
+            noise_rng=ctx.noise_rng,
+            noise_state=ctx.noise_state,
+            noise_stats=ctx.noise_stats,
+            tracking_precision_spec=ctx.tracking_precision_spec,
+            tracking_precision_rng=ctx.tracking_precision_rng,
+            safety_wrapper_runtime=ctx.safety_wrapper_runtime,
+            safety_wrapper_deadlock_monitor=ctx.safety_wrapper_deadlock_monitor,
+            cbf_runtime=ctx.cbf_runtime,
+            actuation_controller=contract.actuation_controller,
+            algo_meta=contract.algo_meta,
+            record_forces=True,
+            record_planner_decision_trace=False,
+            record_simulation_step_trace=False,
+            single_pedestrian_intent_metadata=contract.single_pedestrian_intent_metadata,
+            single_pedestrian_vru_metadata=contract.single_pedestrian_vru_metadata,
+        )
+        post_loop = _compute_post_loop_metrics(
+            robot_positions=loop_result.robot_positions,
+            robot_headings=loop_result.robot_headings,
+            ped_positions=loop_result.ped_positions,
+            ped_forces=loop_result.ped_forces,
+            visibility_trace=loop_result.visibility_trace,
+            track_confidence_trace=loop_result.track_confidence_trace,
+            visibility_evidence_statuses=loop_result.visibility_evidence_statuses,
+            visibility_evidence_reasons=loop_result.visibility_evidence_reasons,
+            reached_goal_step=loop_result.reached_goal_step,
+            collision_seen=loop_result.collision_seen,
+            ped_collision_seen=loop_result.ped_collision_seen,
+            obstacle_collision_seen=loop_result.obstacle_collision_seen,
+            robot_collision_seen=loop_result.robot_collision_seen,
+            map_def=loop_result.map_def,
+            goal_vec=loop_result.goal_vec,
+            scenario=ctx.scenario,
+            config=ctx.config,
+            horizon_val=ctx.horizon_val,
+            record_forces=True,
+            experimental_ped_impact=False,
+            ped_impact_radius_m=ctx.ped_impact_radius_m,
+            ped_impact_window_steps=ctx.ped_impact_window_steps,
+        )
+        record = _finalize_episode_record(
+            ctx=ctx,
+            loop_result=loop_result,
+            post_loop=post_loop,
+            algo_meta=contract.algo_meta,
+            actuation_controller=contract.actuation_controller,
+            active_observation_mode=contract.active_observation_mode,
+            active_observation_level=contract.active_observation_level,
+            single_pedestrian_intent_metadata=contract.single_pedestrian_intent_metadata,
+            single_pedestrian_vru_metadata=contract.single_pedestrian_vru_metadata,
+            seed=1,
+            horizon=None,
+            dt=0.1,
+            safety_wrapper=None,
+            cbf_safety_filter=None,
+            snqi_weights=None,
+            snqi_baseline=None,
+            record_forces=True,
+            record_planner_decision_trace=False,
+            record_simulation_step_trace=False,
+        )
+        assert record["scenario_id"] == "fin_test"
+        assert record["seed"] == 1
+        assert record["observation_mode"] == "goal_state"
+        assert record["observation_level"] == "oracle_full_state"
+        assert "metrics" in record and isinstance(record["metrics"], dict)
+        assert "algorithm_metadata" in record
+        assert "result_provenance" in record
+        assert record["result_provenance"]["schema_version"] == "benchmark_row_provenance.v1"

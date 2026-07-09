@@ -21,7 +21,7 @@ import json
 # Set PyTorch allocator policy for subprocess isolation (defense-in-depth)
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +57,46 @@ class _SubprocessArmParams:
     snqi_weights: dict[str, Any] | None
     snqi_baseline: dict[str, Any] | None
     algo_config_path: Path | None
+
+
+# Path-typed fields on _SubprocessArmParams. dataclasses.asdict() returns these as
+# PosixPath objects, which json.dumps cannot serialize, so the serializer below
+# str-converts them first. The subprocess worker (_main_subprocess_worker)
+# re-parses str->Path for these same fields. This is the single serialization
+# point for the subprocess-isolation parent->worker handoff (issue #4826 / #4957);
+# tests must exercise THIS function rather than a hand-converted copy so a
+# regression here is caught.
+_SUBPROCESS_ARM_PATH_FIELDS: tuple[str, ...] = (
+    "scenario_matrix_path",
+    "episodes_path",
+    "summary_path",
+    "algo_config_path",
+)
+
+
+def _serialize_subprocess_arm_params(params: _SubprocessArmParams) -> str:
+    """Serialize arm params to JSON for handoff to the subprocess worker.
+
+    ``_SubprocessArmParams`` holds ``pathlib.Path`` fields
+    (``scenario_matrix_path``, ``episodes_path``, ``summary_path``,
+    ``algo_config_path``). ``dataclasses.asdict`` returns those as ``PosixPath``
+    objects, which ``json.dumps`` cannot serialize (this was the crash at
+    ``campaign.py`` that prevented ``--arm-isolation subprocess`` from ever
+    running end-to-end — issue #4957). This helper str-converts the path fields
+    first so the parent->worker handoff is JSON-safe.
+
+    Args:
+        params: Arm execution parameters built by the parent campaign process.
+
+    Returns:
+        JSON string consumable by ``_main_subprocess_worker``.
+    """
+    params_dict = asdict(params)
+    for field_name in _SUBPROCESS_ARM_PATH_FIELDS:
+        value = params_dict.get(field_name)
+        if value is not None:
+            params_dict[field_name] = str(value)
+    return json.dumps(params_dict)
 
 
 def _cleanup_gpu_memory_before_exit(

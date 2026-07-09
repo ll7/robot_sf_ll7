@@ -15,7 +15,13 @@ from scripts.tools.scenario_authoring import (
 def _build_parser() -> argparse.ArgumentParser:
     """Build the scenario validation CLI parser."""
 
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Example:\n  uv run python scripts/tools/validate_scenario.py <scenario_config.yaml>"
+        ),
+    )
     parser.add_argument("scenario_config", type=Path, help="Scenario YAML file to validate.")
     parser.add_argument(
         "--allow-legacy-metadata",

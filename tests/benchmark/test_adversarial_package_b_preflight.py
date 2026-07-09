@@ -639,3 +639,21 @@ def test_package_b_preflight_cli_writes_report_and_returns_nonzero_on_blocker(
     assert exit_code == 1
     assert report["blocked"] is True
     assert report["checks"]["samplers"] is False
+
+
+def test_package_b_preflight_cli_nonexistent_manifest_prints_actionable_error(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    """A nonexistent manifest path prints one actionable line and exits non-zero, no traceback."""
+    missing = tmp_path / "does_not_exist.yaml"
+
+    exit_code = preflight_adversarial_package_b.main(
+        ["--manifest", str(missing), "--repo-root", str(tmp_path)]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    # The loader reports the path repo-relative; assert that wording verbatim.
+    assert "FAILED: Manifest file not found: does_not_exist.yaml" in captured.err
+    assert "Traceback" not in captured.err

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -239,7 +240,13 @@ def conversion_readiness(
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Example:\n  uv run python scripts/tools/validate_socnav_map_batch.py [--batch-id <id>]"
+        ),
+    )
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--socnav-root", type=Path, default=DEFAULT_SOCNAV_ROOT)
     parser.add_argument("--batch-id", default="eth_first")
@@ -259,20 +266,32 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     """Validate or preflight one SocNavBench import batch and return an exit code."""
     args = parse_args()
-    if args.preflight:
-        report = conversion_readiness(
-            manifest_path=args.manifest.resolve(),
-            socnav_root=args.socnav_root.resolve(),
-            batch_id=str(args.batch_id),
-        )
-        ok = bool(report["conversion_ready"])
-    else:
-        report = validate_batch(
-            manifest_path=args.manifest.resolve(),
-            socnav_root=args.socnav_root.resolve(),
-            batch_id=str(args.batch_id),
-        )
-        ok = bool(report["ok"])
+    try:
+        if args.preflight:
+            report = conversion_readiness(
+                manifest_path=args.manifest.resolve(),
+                socnav_root=args.socnav_root.resolve(),
+                batch_id=str(args.batch_id),
+            )
+            ok = bool(report["conversion_ready"])
+        else:
+            report = validate_batch(
+                manifest_path=args.manifest.resolve(),
+                socnav_root=args.socnav_root.resolve(),
+                batch_id=str(args.batch_id),
+            )
+            ok = bool(report["ok"])
+    except (FileNotFoundError, KeyError, TypeError, ValueError) as exc:
+        # Bad input (nonexistent manifest path, non-mapping manifest, or unknown
+        # --batch-id): print one actionable line to stderr and exit non-zero
+        # instead of dumping a raw traceback. Mirrors validate_report.py's clean
+        # failure UX. ``str(exc)`` renders OSError/FileNotFoundError readably
+        # (e.g. ``[Errno 2] No such file or directory: ...``); KeyError
+        # repr-quotes its single message arg, so unwrap it to keep the loader's
+        # verbatim, informative wording.
+        message = str(exc.args[0]) if isinstance(exc, KeyError) and exc.args else str(exc)
+        print(f"FAILED: {message}", file=sys.stderr)
+        return 2
     if args.report_json is not None:
         args.report_json.parent.mkdir(parents=True, exist_ok=True)
         args.report_json.write_text(json.dumps(report, indent=2), encoding="utf-8")

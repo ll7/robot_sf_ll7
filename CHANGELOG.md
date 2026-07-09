@@ -147,6 +147,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **issue #4908 diagnostic CLI `--help` omits the canonical `uv run` invocation.** The seven
+  developer-facing diagnostic CLIs under `scripts/tools/` (`validate_scenario`,
+  `validate_socnav_map_batch`, `validate_experiment_registry`, `validate_report`,
+  `check_artifact_root`, `preflight_scenario_perturbations`, `preflight_adversarial_package_b`) now
+  end `--help` with an `Example:` block showing the copy-pasteable
+  `uv run python scripts/tools/<name>.py <required-arg>` command, so a new contributor no longer has
+  to guess the invocation (the bare `python scripts/tools/<name>.py ...` path still dies with
+  `ModuleNotFoundError: No module named 'scripts'` because these tools import `scripts.tools.*`).
+  Help-text only: each parser gained an `epilog` plus `RawDescriptionHelpFormatter`; no runtime
+  behavior, exit codes, or non-`--help` output changed. New
+  `tests/tools/test_diagnostic_cli_help.py` asserts each `--help` contains `Example:` and the exact
+  canonical line.
 * **issue #4896 three pre-existing failures in tests/dev/test_pr_ready_preflight.py on main.**
   PR #4865 ("allowlist triplication") made `scripts/dev/pr_ready_check.sh` hard-require
   `tests/support/optional_test_allowlist.txt` — `is_optional_readiness_path` reads it to classify

@@ -920,7 +920,15 @@ def _apply_labels_from_cli_args(
 
 def main(argv: list[str] | None = None) -> int:
     """Run the experiment registry validator CLI."""
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Example:\n"
+            "  uv run python scripts/tools/validate_experiment_registry.py "
+            "[experiments/registry.yaml]"
+        ),
+    )
     parser.add_argument(
         "registry",
         nargs="?",

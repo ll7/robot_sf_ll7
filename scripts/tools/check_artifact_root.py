@@ -119,7 +119,11 @@ def _build_parser() -> argparse.ArgumentParser:
     Returns:
         TODO docstring.
     """
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=("Example:\n  uv run python scripts/tools/check_artifact_root.py"),
+    )
     parser.add_argument(
         "--repo-root",
         type=Path,

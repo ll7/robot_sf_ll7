@@ -104,6 +104,46 @@ class TestSelectExemplars:
         selected = _export_module.select_exemplars_for_planner(episodes, "goal")
         assert selected == []
 
+    def test_tie_break_prefers_richer_trace_for_best(self) -> None:
+        """When path_efficiency ties, best gets the MOST steps, worst the FEWEST.
+
+        Regression guard for issue #4912: a descending step-count secondary sort
+        inverts best/worst and would starve the best exemplar of trace content.
+        """
+        episodes = [
+            self._make_episode("classic_head_on_corridor_low", 1, 1.0),
+            self._make_episode("classic_head_on_corridor_low", 2, 1.0),
+            self._make_episode("classic_head_on_corridor_low", 3, 1.0),
+        ]
+        episodes[0]["metrics"]["step_count"] = 10
+        episodes[1]["metrics"]["step_count"] = 50
+        episodes[2]["metrics"]["step_count"] = 100
+
+        selected = _export_module.select_exemplars_for_planner(episodes, "orca")
+        best = next(s for s in selected if s.selection_mode == "best")
+        worst = next(s for s in selected if s.selection_mode == "worst")
+        # episode_id is f"{scenario_id}_s{seed}"; seed 3 == 100 steps (richest)
+        assert best.episode_id.endswith("_s3")
+        assert worst.episode_id.endswith("_s1")
+
+    def test_filters_single_step_episodes(self) -> None:
+        """Single-step episodes (step_count < MIN_STEP_COUNT) are excluded."""
+        episodes = [
+            self._make_episode("classic_head_on_corridor_low", 1, 0.1),
+            self._make_episode("classic_head_on_corridor_low", 2, 0.5),
+            self._make_episode("classic_head_on_corridor_low", 3, 0.7),
+            self._make_episode("classic_head_on_corridor_low", 4, 0.9),
+        ]
+        episodes[0]["metrics"]["step_count"] = 1  # single-step: filtered out
+        episodes[1]["metrics"]["step_count"] = 20
+        episodes[2]["metrics"]["step_count"] = 30
+        episodes[3]["metrics"]["step_count"] = 40
+
+        selected = _export_module.select_exemplars_for_planner(episodes, "orca")
+        selected_ids = {s.episode_id for s in selected}
+        assert "classic_head_on_corridor_low_s1" not in selected_ids
+        assert len(selected) == 3
+
 
 class TestDeriveTraceRows:
     """Test the derive_trace_rows function."""
@@ -149,7 +189,9 @@ class TestSha256File:
         test_file = tmp_path / "test.txt"
         test_file.write_text("hello\n", encoding="utf-8")
         digest = sha256_file(test_file)
-        assert len(digest) == 64
+        assert len(digest) == 64  # SHA-256 hex length
+        # Known SHA-256 of the literal bytes "hello\n"; pins the helper's correctness
+        # rather than merely asserting the digest length.
         assert digest == "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"
 
 

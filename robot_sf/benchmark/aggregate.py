@@ -528,7 +528,15 @@ def _ensure_snqi(
         return
     try:
         rec["metrics"]["snqi"] = float(snqi_fn(rec["metrics"], weights, baseline_stats=baseline))
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, KeyError, AttributeError):
+        # Diagnostic-mode logging contract (#4919): this is the explicit, named
+        # set of failures ``snqi_fn`` can surface — ``ValueError``/``TypeError``
+        # for malformed numeric inputs, ``KeyError`` for missing metric keys, and
+        # ``AttributeError`` for unexpected record shapes (the "unexpected SNQI
+        # failure" class). Diagnostic mode (``strict=False``) logs and continues
+        # below; strict mode logs and re-raises. This must stay a finite tuple —
+        # widening to a bare ``except Exception:`` would re-introduce the
+        # broad-except class #4887 eliminated and regress the BLE001 ratchet.
         logger.bind(
             event="aggregation_snqi_compute_failed",
             episode_id=rec.get("episode_id"),

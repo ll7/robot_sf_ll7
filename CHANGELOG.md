@@ -147,6 +147,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **issue #4919 SNQI aggregate diagnostic-mode logging regression from exception narrowing.** The
+  `robot_sf/benchmark/aggregate.py::_ensure_snqi` exception handler, narrowed from a bare
+  `except Exception:` to `except (ValueError, TypeError):` by #4887's broad-except ratchet, dropped
+  the diagnostic-mode logging contract: in `observation_track_mode="diagnostic-cross-track"`,
+  `KeyError` (missing metric keys) and `AttributeError` (the "unexpected SNQI failure" class) from
+  `snqi_fn` now propagated uncaught instead of being logged and swallowed, failing
+  `test_aggregate_snqi_recompute.py::test_compute_aggregates_logs_key_error_snqi_failure_in_diagnostic_mode`
+  and `..._logs_unexpected_snqi_failure_in_diagnostic_mode`. The handler now catches the explicit,
+  finite tuple `(ValueError, TypeError, KeyError, AttributeError)` — diagnostic mode logs and
+  continues, strict mode logs and re-raises — without re-widening to a broad `except Exception:`.
+  Acceptance met: both named tests pass; the broad-exception ratchet baseline stays at 217 and
+  `ruff check --select BLE001` on `robot_sf/benchmark/` remains clean (a named tuple is not a
+  broad-except site). Refs #4887, #4900.
 * **issue #4908 diagnostic CLI `--help` omits the canonical `uv run` invocation.** The seven
   developer-facing diagnostic CLIs under `scripts/tools/` (`validate_scenario`,
   `validate_socnav_map_batch`, `validate_experiment_registry`, `validate_report`,

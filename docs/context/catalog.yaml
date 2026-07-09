@@ -4087,3 +4087,15 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_4831_trace_verified_failure_mechanisms/mechanism_labels.csv
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_4831_trace_verified_failure_mechanisms/mechanism_labels.jsonl
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_4831_trace_verified_failure_mechanisms/label_coverage.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

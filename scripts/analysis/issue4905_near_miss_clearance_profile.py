@@ -83,12 +83,17 @@ def extract_episode_fields(ep: dict) -> dict | None:
     near_miss = se.get("near_miss", False)
     clearance_breach = se.get("clearance_breach", False)
 
-    algo = ep.get("algo", ep.get("_planner_dir", "unknown"))
+    # Planner identity = the run directory (runs/<planner>__differential_drive),
+    # NOT the in-record `algo` field. `algo` is the internal planner-object label and
+    # is stale/misleading for composite runs: e.g. scenario_adaptive_hybrid_orca_v1
+    # records carry algo="hybrid_rule_local_planner"/"orca", which would otherwise
+    # conflate that planner into two others and make it vanish from the profile.
+    planner = ep.get("_planner_dir") or ep.get("algo") or "unknown"
     scenario_id = ep.get("scenario_id", "unknown")
     scenario_family = ep.get("scenario_family") or derive_scenario_family(scenario_id)
 
     return {
-        "planner": algo,
+        "planner": planner,
         "scenario_id": scenario_id,
         "scenario_family": scenario_family,
         "minimum_distance_m": min_dist,

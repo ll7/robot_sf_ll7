@@ -1557,6 +1557,145 @@ def _build_guarded_ppo_policy(  # noqa: C901, PLR0915
     return _policy, meta
 
 
+def _build_sonic_guarded_policy(
+    algo_key: str,
+    algo_config: dict[str, Any],
+    *,
+    meta: dict[str, Any],
+    robot_kinematics: str | None,
+    normalized_robot_command_mode: str | None,
+    adapter_impact_eval: bool,
+) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
+    """Build the guarded SoNIC / GenSafeNav policy and enriched metadata.
+
+    Returns:
+        tuple[Callable, dict[str, Any]]: Policy callable and enriched metadata.
+    """
+    holonomic_vx_vy_mode = (
+        str(robot_kinematics or "").strip().lower() in {"holonomic", "omni", "omnidirectional"}
+        and normalized_robot_command_mode == "vx_vy"
+    )
+    if holonomic_vx_vy_mode:
+        raise ValueError(
+            "Guarded SoNIC / GenSafeNav wrappers do not support holonomic vx_vy benchmark "
+            "action space yet. The upstream checkpoint emits ActionXY world velocities, but "
+            "the current short-horizon guard and goal fallback only evaluate unicycle_vw "
+            "commands, so this path fails closed instead of collapsing ActionXY through a "
+            "lossy (v, w) round-trip."
+        )
+
+    guarded_root = {
+        "gensafenav_ours_gst_guarded",
+        "ours_gst_guarded",
+    }
+    model_name = (
+        str(algo_config.get("model_name", "Ours_GST"))
+        if algo_key in guarded_root
+        else str(algo_config.get("model_name", "GST_predictor_rand"))
+    )
+    sonic_adapter_cls, sonic_config_builder = _sonic_crowdnav_symbols()
+    sonic_adapter = sonic_adapter_cls(
+        config=sonic_config_builder(
+            {
+                **algo_config,
+                "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
+                "model_name": model_name,
+                "checkpoint_name": algo_config.get("checkpoint_name", "05207.pt"),
+            }
+        )
+    )
+    guard_adapter = GuardedPPOAdapter(
+        config=build_guarded_ppo_config(algo_config),
+        fallback_adapter=_GoalFallbackAdapter(
+            max_speed=float(algo_config.get("guard_fallback_max_speed", 1.0)),
+        ),
+    )
+    meta.update(
+        {
+            "status": "ok",
+            "config": algo_config,
+            "config_hash": _config_hash(algo_config),
+        }
+    )
+    meta = enrich_algorithm_metadata(
+        algo=algo_key,
+        metadata=meta,
+        execution_mode="mixed",
+        adapter_name="sonic_guarded_goal_fallback",
+        robot_kinematics=robot_kinematics,
+        adapter_impact_requested=adapter_impact_eval,
+    )
+    _init_feasibility_metadata(meta)
+    meta["guard_stats"] = {
+        "ppo_clear": 0,
+        "ppo_safe": 0,
+        "fallback_safe": 0,
+        "stop_safe": 0,
+        "fallback_best_effort": 0,
+        "stop_best_effort": 0,
+        "uncertainty_fallback_stop": 0,
+        "uncertainty_fallback_slow_down": 0,
+        "uncertainty_fallback_configured": 0,
+        "goal_reached": 0,
+    }
+    meta["safety_shield_contract"] = shield_contract_metadata(
+        shield_name="GuardedPPOAdapter",
+        prediction_source="short_horizon_rollout",
+        fallback_policy="goal",
+    )
+    meta["shield_stats"] = new_shield_stats()
+    planner_meta = meta.get("planner_kinematics")
+    if isinstance(planner_meta, dict):
+        planner_meta["planner_command_space"] = _default_robot_command_space(
+            robot_kinematics,
+            algo_config,
+            robot_command_mode=normalized_robot_command_mode,
+        )
+        planner_meta["guard_strategy"] = "short_horizon_safety_gate"
+        planner_meta["fallback_policy"] = "goal"
+
+    guarded_kinematics_model = resolve_benchmark_kinematics_model(
+        robot_kinematics=robot_kinematics,
+        command_limits=algo_config,
+    )
+
+    def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+        """Run SONIC behind the short-horizon safety guard.
+
+        Returns:
+            tuple[float, float]: Guard-selected and projected command.
+        """
+        sonic_command = sonic_adapter.plan(obs)
+        shield_decision = _choose_shield_command(
+            guard_adapter,
+            obs,
+            (float(sonic_command[0]), float(sonic_command[1])),
+        )
+        chosen, decision = shield_decision.as_command_result()
+        linear, angular = _project_with_feasibility(
+            model=guarded_kinematics_model,
+            command=(float(chosen[0]), float(chosen[1])),
+            meta=meta,
+        )
+        guard_stats = meta.get("guard_stats")
+        if isinstance(guard_stats, dict):
+            guard_stats[decision] = int(guard_stats.get(decision, 0)) + 1
+        shield_stats = meta.get("shield_stats")
+        if isinstance(shield_stats, dict):
+            update_shield_stats(shield_stats, shield_decision)
+        _update_adapter_impact_metrics(
+            meta,
+            "adapter",
+            count_native=False,
+        )
+        return linear, angular
+
+    _attach_planner_reset(_policy, sonic_adapter)
+    if hasattr(sonic_adapter, "close"):
+        _policy._planner_close = sonic_adapter.close
+    return _policy, meta
+
+
 def _build_policy(  # noqa: C901, PLR0912, PLR0915
     algo: str,
     algo_config: dict[str, Any],
@@ -1718,129 +1857,14 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         "gensafenav_gst_predictor_rand_guarded",
         "gst_predictor_rand_guarded",
     }:
-        holonomic_vx_vy_mode = (
-            str(robot_kinematics or "").strip().lower() in {"holonomic", "omni", "omnidirectional"}
-            and normalized_robot_command_mode == "vx_vy"
-        )
-        if holonomic_vx_vy_mode:
-            raise ValueError(
-                "Guarded SoNIC / GenSafeNav wrappers do not support holonomic vx_vy benchmark "
-                "action space yet. The upstream checkpoint emits ActionXY world velocities, but "
-                "the current short-horizon guard and goal fallback only evaluate unicycle_vw "
-                "commands, so this path fails closed instead of collapsing ActionXY through a "
-                "lossy (v, w) round-trip."
-            )
-
-        guarded_root = {
-            "gensafenav_ours_gst_guarded",
-            "ours_gst_guarded",
-        }
-        model_name = (
-            str(algo_config.get("model_name", "Ours_GST"))
-            if algo_key in guarded_root
-            else str(algo_config.get("model_name", "GST_predictor_rand"))
-        )
-        sonic_adapter_cls, sonic_config_builder = _sonic_crowdnav_symbols()
-        sonic_adapter = sonic_adapter_cls(
-            config=sonic_config_builder(
-                {
-                    **algo_config,
-                    "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
-                    "model_name": model_name,
-                    "checkpoint_name": algo_config.get("checkpoint_name", "05207.pt"),
-                }
-            )
-        )
-        guard_adapter = GuardedPPOAdapter(
-            config=build_guarded_ppo_config(algo_config),
-            fallback_adapter=_GoalFallbackAdapter(
-                max_speed=float(algo_config.get("guard_fallback_max_speed", 1.0)),
-            ),
-        )
-        meta.update(
-            {
-                "status": "ok",
-                "config": algo_config,
-                "config_hash": _config_hash(algo_config),
-            }
-        )
-        meta = enrich_algorithm_metadata(
-            algo=algo_key,
-            metadata=meta,
-            execution_mode="mixed",
-            adapter_name="sonic_guarded_goal_fallback",
+        return _build_sonic_guarded_policy(
+            algo_key,
+            algo_config,
+            meta=meta,
             robot_kinematics=robot_kinematics,
-            adapter_impact_requested=adapter_impact_eval,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            adapter_impact_eval=adapter_impact_eval,
         )
-        _init_feasibility_metadata(meta)
-        meta["guard_stats"] = {
-            "ppo_clear": 0,
-            "ppo_safe": 0,
-            "fallback_safe": 0,
-            "stop_safe": 0,
-            "fallback_best_effort": 0,
-            "stop_best_effort": 0,
-            "uncertainty_fallback_stop": 0,
-            "uncertainty_fallback_slow_down": 0,
-            "uncertainty_fallback_configured": 0,
-            "goal_reached": 0,
-        }
-        meta["safety_shield_contract"] = shield_contract_metadata(
-            shield_name="GuardedPPOAdapter",
-            prediction_source="short_horizon_rollout",
-            fallback_policy="goal",
-        )
-        meta["shield_stats"] = new_shield_stats()
-        planner_meta = meta.get("planner_kinematics")
-        if isinstance(planner_meta, dict):
-            planner_meta["planner_command_space"] = _default_robot_command_space(
-                robot_kinematics,
-                algo_config,
-                robot_command_mode=normalized_robot_command_mode,
-            )
-            planner_meta["guard_strategy"] = "short_horizon_safety_gate"
-            planner_meta["fallback_policy"] = "goal"
-
-        guarded_kinematics_model = resolve_benchmark_kinematics_model(
-            robot_kinematics=robot_kinematics,
-            command_limits=algo_config,
-        )
-
-        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
-            """Run SONIC behind the short-horizon safety guard.
-
-            Returns:
-                tuple[float, float]: Guard-selected and projected command.
-            """
-            sonic_command = sonic_adapter.plan(obs)
-            shield_decision = _choose_shield_command(
-                guard_adapter,
-                obs,
-                (float(sonic_command[0]), float(sonic_command[1])),
-            )
-            chosen, decision = shield_decision.as_command_result()
-            linear, angular = _project_with_feasibility(
-                model=guarded_kinematics_model,
-                command=(float(chosen[0]), float(chosen[1])),
-                meta=meta,
-            )
-            guard_stats = meta.get("guard_stats")
-            if isinstance(guard_stats, dict):
-                guard_stats[decision] = int(guard_stats.get(decision, 0)) + 1
-            shield_stats = meta.get("shield_stats")
-            if isinstance(shield_stats, dict):
-                update_shield_stats(shield_stats, shield_decision)
-            _update_adapter_impact_metrics(
-                meta,
-                "adapter",
-                count_native=False,
-            )
-            return linear, angular
-
-        _attach_planner_reset(_policy, sonic_adapter)
-        if hasattr(sonic_adapter, "close"):
-            _policy._planner_close = sonic_adapter.close
-        return _policy, meta
     elif algo_key in {"orca"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = ORCAPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)

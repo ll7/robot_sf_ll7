@@ -4,10 +4,11 @@
   "claim_boundary": "exemplar trace episode from retained campaign data; illustrative group-crossing interaction only; no statistical, benchmark, or dissertation claim",
   "episode_id": "classic_group_crossing_medium--22--478bcc96e739013f",
   "episode_status": "success",
-  "generated_at_utc": "2026-07-08T10:20:56.902615+00:00",
-  "git_commit": "50c36e7e5eea05f6951c127019eee019bc2a8b70",
+  "generated_at_utc": "2026-07-09T12:00:00+00:00",
+  "git_commit": "62e08add1c2a5a750a6fd68a823319280c2dccd6",
   "issue": "https://github.com/ll7/robot_sf_ll7/issues/4848",
   "planner": "orca",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "scenario_id": "classic_group_crossing_medium",
   "schema_version": "issue-4848-exemplar-trace.v1",
   "seed": 22,
@@ -23,6 +24,5 @@
     "seed": 22,
     "step_count": 91,
     "termination_reason": "success"
-  },
-  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+  }
 }

@@ -1,8 +1,7 @@
 <!-- AI-GENERATED (robot_sf#4891, 2026-07-09) - NEEDS-REVIEW -->
-
 # Issue #4891 Head-On Corridor Exemplar Selection Report
 
-Generated: 2026-07-08T23:13:25.893838+00:00
+Generated: 2026-07-09T12:00:00+00:00
 Total exemplars selected: 9
 
 ## Selection Criteria
@@ -14,14 +13,14 @@ Total exemplars selected: 9
 
 ## Selected Episodes
 
-- **goal** / classic_head_on_corridor_low / seed 20 / worst: path_efficiency=1.0000
-- **goal** / classic_head_on_corridor_medium / seed 20 / median: path_efficiency=1.0000
-- **goal** / classic_head_on_corridor_medium / seed 24 / best: path_efficiency=1.0000
-- **orca** / classic_head_on_corridor_low / seed 20 / worst: path_efficiency=1.0000
-- **orca** / classic_head_on_corridor_medium / seed 20 / median: path_efficiency=1.0000
+- **goal** / classic_head_on_corridor_low / seed 24 / best: path_efficiency=1.0000
+- **goal** / classic_head_on_corridor_medium / seed 21 / median: path_efficiency=1.0000
+- **goal** / classic_head_on_corridor_medium / seed 23 / worst: path_efficiency=1.0000
+- **orca** / classic_head_on_corridor_low / seed 22 / median: path_efficiency=1.0000
+- **orca** / classic_head_on_corridor_medium / seed 23 / worst: path_efficiency=1.0000
 - **orca** / classic_head_on_corridor_medium / seed 24 / best: path_efficiency=1.0000
-- **social_force** / classic_head_on_corridor_low / seed 23 / median: path_efficiency=1.0000
-- **social_force** / classic_head_on_corridor_medium / seed 23 / best: path_efficiency=1.0000
+- **social_force** / classic_head_on_corridor_medium / seed 21 / median: path_efficiency=1.0000
+- **social_force** / classic_head_on_corridor_medium / seed 22 / best: path_efficiency=1.0000
 - **social_force** / classic_head_on_corridor_medium / seed 24 / worst: path_efficiency=0.6836
 
 ## Scenario Class Rationale
@@ -43,3 +42,5 @@ Head-on corridor provides richer interaction diversity than bottleneck scenarios
 - **social_force**: Physics-based social navigation (explicit social force model)
 
 These three planners span the classical-to-social spectrum and provide diverse interaction behaviors for visualization and worked examples.
+
+<!-- /AI-GENERATED -->

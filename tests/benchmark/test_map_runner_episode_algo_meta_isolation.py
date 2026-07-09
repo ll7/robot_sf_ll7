@@ -27,10 +27,6 @@ import numpy as np
 from robot_sf.benchmark import map_runner_episode
 
 
-class _Robot:
-    theta = np.array([0.0], dtype=float)
-
-
 class _EpisodeSim:
     def __init__(self) -> None:
         self.robot_pos = [np.array([0.0, 0.0], dtype=float)]

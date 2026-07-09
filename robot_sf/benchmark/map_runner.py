@@ -1696,117 +1696,30 @@ def _build_sonic_guarded_policy(
     return _policy, meta
 
 
-def _build_policy(  # noqa: C901, PLR0912, PLR0915
+def _build_socnav_family_adapter(  # noqa: C901, PLR0912, PLR0915
+    algo_key: str,
     algo: str,
     algo_config: dict[str, Any],
     *,
-    robot_kinematics: str | None = None,
-    robot_command_mode: str | None = None,
-    adapter_impact_eval: bool = False,
-) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
-    """Build an action policy and algorithm metadata for map-based benchmarking.
+    meta: dict[str, Any],
+) -> Any:
+    """Construct the SocNav-family planner adapter for ``algo_key``.
+
+    Covers the classical/adapter planners that build an adapter object and share the
+    common adapter policy tail (ORCA/HRVO, force models, SoNIC/GenSafeNav/CrowdNav,
+    SACADRL, prediction, hybrid portfolios, NMPC, RVO/DWA placeholders). A couple of
+    branches mutate ``meta`` in place (prediction overrides, selector boundary,
+    placeholder status).
 
     Args:
-        algo: Algorithm key to instantiate.
+        algo_key: Lowercased algorithm key used for branching.
+        algo: Original algorithm label (used only for the unknown-algorithm error).
         algo_config: Algorithm configuration payload.
-        robot_kinematics: Runtime robot kinematics label for metadata enrichment.
-        robot_command_mode: Runtime robot command mode (for holonomic metadata labels).
-        adapter_impact_eval: Whether to collect native-vs-adapter step counters.
+        meta: Algorithm metadata dict; mutated in place for a few planner variants.
 
     Returns:
-        tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
-        Policy callable and enriched metadata dictionary. For PPO, adapter-impact
-        counters are mutated in-place in the returned metadata during episode rollout.
+        Any: The constructed planner adapter.
     """
-    algo_key = algo.lower().strip()
-    meta: dict[str, Any] = {"algorithm": algo_key}
-    registered_policy = _policy_builder_registry.build_registered_policy(
-        algo_key,
-        algo_config,
-        builders=_POLICY_BUILDERS,
-        robot_kinematics=robot_kinematics,
-        robot_command_mode=robot_command_mode,
-        adapter_impact_eval=adapter_impact_eval,
-    )
-    if registered_policy is not None:
-        return registered_policy
-
-    normalized_robot_command_mode = (
-        str(robot_command_mode).strip().lower() if robot_command_mode is not None else None
-    )
-    registered_adapter_spec = build_registered_adapter_policy_spec(algo_key, algo_config)
-    if registered_adapter_spec is not None:
-        meta["algorithm"] = registered_adapter_spec.algo_key
-        return _build_adapter_policy(
-            algo_key=registered_adapter_spec.algo_key,
-            algo_config=registered_adapter_spec.algo_config,
-            meta=meta,
-            adapter=registered_adapter_spec.adapter,
-            adapter_name=registered_adapter_spec.adapter_name,
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            limitations=registered_adapter_spec.limitations,
-        )
-
-    if algo_key == "mppi_social":
-        adapter = MPPISocialPlannerAdapter(config=build_mppi_social_config(algo_config))
-        return _build_adapter_policy(
-            algo_key=algo_key,
-            algo_config=algo_config,
-            meta=meta,
-            adapter=adapter,
-            adapter_name="MPPISocialPlannerAdapter",
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-        )
-
-    if algo_key == "predictive_mppi":
-        return _build_predictive_mppi_policy(
-            algo_key,
-            algo_config,
-            meta=meta,
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-        )
-
-    if algo_key == "sicnav":
-        planner = SICNavPlanner(build_sicnav_config(algo_config), seed=None)
-        planner_meta = planner.get_metadata()
-        if planner_meta.get("status") != "ok":
-            raise RuntimeError(
-                "SICNav dependency is missing or unresolved. "
-                "Point `repo_root` at a checked-out upstream repo or install the package."
-            )
-        return _build_external_mpc_policy(
-            planner,
-            algo_key=algo_key,
-            algo_config=algo_config,
-            meta=meta,
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            planner_name="SICNavPlanner",
-            limitations="external_mpc_dependency_sensitive",
-        )
-
-    if algo_key == "dr_mpc":
-        planner = DRMPCPlanner(build_dr_mpc_config(algo_config), seed=None)
-        planner_meta = planner.get_metadata()
-        if planner_meta.get("status") != "ok":
-            raise RuntimeError(
-                "DR-MPC dependency is missing or unresolved. "
-                "Point `repo_root` at a checked-out upstream repo or install the package."
-            )
-        return _build_external_mpc_policy(
-            planner,
-            algo_key=algo_key,
-            algo_config=algo_config,
-            meta=meta,
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            planner_name="DRMPCPlanner",
-            limitations="external_mpc_dependency_sensitive",
-        )
-
     socnav_cfg = _build_socnav_config(algo_config)
 
     if algo_key in {"socnav_sampling", "sampling"}:
@@ -1815,56 +1728,6 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         adapter = SamplingPlannerAdapter(config=socnav_cfg)
     elif algo_key in {"social_force", "sf"}:
         adapter = SocialForcePlannerAdapter(config=socnav_cfg)
-    elif algo_key in {"ppo"}:
-        return _build_ppo_policy(
-            algo_key,
-            algo_config,
-            meta=meta,
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            adapter_impact_eval=adapter_impact_eval,
-        )
-    elif algo_key in {"sac"}:
-        return _build_sac_policy(
-            algo_key,
-            algo_config,
-            meta=meta,
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            adapter_impact_eval=adapter_impact_eval,
-        )
-    elif algo_key == "drl_vo":
-        return _build_drl_vo_policy(
-            algo_key,
-            algo_config,
-            meta=meta,
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            adapter_impact_eval=adapter_impact_eval,
-        )
-    elif algo_key in {"guarded_ppo"}:
-        return _build_guarded_ppo_policy(
-            algo_key,
-            algo_config,
-            meta=meta,
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            adapter_impact_eval=adapter_impact_eval,
-        )
-    elif algo_key in {
-        "gensafenav_ours_gst_guarded",
-        "ours_gst_guarded",
-        "gensafenav_gst_predictor_rand_guarded",
-        "gst_predictor_rand_guarded",
-    }:
-        return _build_sonic_guarded_policy(
-            algo_key,
-            algo_config,
-            meta=meta,
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            adapter_impact_eval=adapter_impact_eval,
-        )
     elif algo_key in {"orca"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = ORCAPlannerAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
@@ -2012,6 +1875,177 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         meta.update({"status": "placeholder", "fallback_reason": "unimplemented"})
     else:
         raise ValueError(f"Unknown map-based algorithm '{algo}'.")
+    return adapter
+
+
+def _build_policy(  # noqa: C901, PLR0912, PLR0915
+    algo: str,
+    algo_config: dict[str, Any],
+    *,
+    robot_kinematics: str | None = None,
+    robot_command_mode: str | None = None,
+    adapter_impact_eval: bool = False,
+) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
+    """Build an action policy and algorithm metadata for map-based benchmarking.
+
+    Args:
+        algo: Algorithm key to instantiate.
+        algo_config: Algorithm configuration payload.
+        robot_kinematics: Runtime robot kinematics label for metadata enrichment.
+        robot_command_mode: Runtime robot command mode (for holonomic metadata labels).
+        adapter_impact_eval: Whether to collect native-vs-adapter step counters.
+
+    Returns:
+        tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
+        Policy callable and enriched metadata dictionary. For PPO, adapter-impact
+        counters are mutated in-place in the returned metadata during episode rollout.
+    """
+    algo_key = algo.lower().strip()
+    meta: dict[str, Any] = {"algorithm": algo_key}
+    registered_policy = _policy_builder_registry.build_registered_policy(
+        algo_key,
+        algo_config,
+        builders=_POLICY_BUILDERS,
+        robot_kinematics=robot_kinematics,
+        robot_command_mode=robot_command_mode,
+        adapter_impact_eval=adapter_impact_eval,
+    )
+    if registered_policy is not None:
+        return registered_policy
+
+    normalized_robot_command_mode = (
+        str(robot_command_mode).strip().lower() if robot_command_mode is not None else None
+    )
+    registered_adapter_spec = build_registered_adapter_policy_spec(algo_key, algo_config)
+    if registered_adapter_spec is not None:
+        meta["algorithm"] = registered_adapter_spec.algo_key
+        return _build_adapter_policy(
+            algo_key=registered_adapter_spec.algo_key,
+            algo_config=registered_adapter_spec.algo_config,
+            meta=meta,
+            adapter=registered_adapter_spec.adapter,
+            adapter_name=registered_adapter_spec.adapter_name,
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations=registered_adapter_spec.limitations,
+        )
+
+    if algo_key == "mppi_social":
+        adapter = MPPISocialPlannerAdapter(config=build_mppi_social_config(algo_config))
+        return _build_adapter_policy(
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            adapter=adapter,
+            adapter_name="MPPISocialPlannerAdapter",
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+        )
+
+    if algo_key == "predictive_mppi":
+        return _build_predictive_mppi_policy(
+            algo_key,
+            algo_config,
+            meta=meta,
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+        )
+
+    if algo_key == "sicnav":
+        planner = SICNavPlanner(build_sicnav_config(algo_config), seed=None)
+        planner_meta = planner.get_metadata()
+        if planner_meta.get("status") != "ok":
+            raise RuntimeError(
+                "SICNav dependency is missing or unresolved. "
+                "Point `repo_root` at a checked-out upstream repo or install the package."
+            )
+        return _build_external_mpc_policy(
+            planner,
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            planner_name="SICNavPlanner",
+            limitations="external_mpc_dependency_sensitive",
+        )
+
+    if algo_key == "dr_mpc":
+        planner = DRMPCPlanner(build_dr_mpc_config(algo_config), seed=None)
+        planner_meta = planner.get_metadata()
+        if planner_meta.get("status") != "ok":
+            raise RuntimeError(
+                "DR-MPC dependency is missing or unresolved. "
+                "Point `repo_root` at a checked-out upstream repo or install the package."
+            )
+        return _build_external_mpc_policy(
+            planner,
+            algo_key=algo_key,
+            algo_config=algo_config,
+            meta=meta,
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            planner_name="DRMPCPlanner",
+            limitations="external_mpc_dependency_sensitive",
+        )
+
+    if algo_key in {"ppo"}:
+        return _build_ppo_policy(
+            algo_key,
+            algo_config,
+            meta=meta,
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            adapter_impact_eval=adapter_impact_eval,
+        )
+    elif algo_key in {"sac"}:
+        return _build_sac_policy(
+            algo_key,
+            algo_config,
+            meta=meta,
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            adapter_impact_eval=adapter_impact_eval,
+        )
+    elif algo_key == "drl_vo":
+        return _build_drl_vo_policy(
+            algo_key,
+            algo_config,
+            meta=meta,
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            adapter_impact_eval=adapter_impact_eval,
+        )
+    elif algo_key in {"guarded_ppo"}:
+        return _build_guarded_ppo_policy(
+            algo_key,
+            algo_config,
+            meta=meta,
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            adapter_impact_eval=adapter_impact_eval,
+        )
+    elif algo_key in {
+        "gensafenav_ours_gst_guarded",
+        "ours_gst_guarded",
+        "gensafenav_gst_predictor_rand_guarded",
+        "gst_predictor_rand_guarded",
+    }:
+        return _build_sonic_guarded_policy(
+            algo_key,
+            algo_config,
+            meta=meta,
+            robot_kinematics=robot_kinematics,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            adapter_impact_eval=adapter_impact_eval,
+        )
+    else:
+        adapter = _build_socnav_family_adapter(
+            algo_key,
+            algo,
+            algo_config,
+            meta=meta,
+        )
 
     if "status" not in meta:
         meta["status"] = "ok"

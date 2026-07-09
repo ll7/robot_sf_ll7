@@ -3,7 +3,7 @@
 import os
 import sys
 
-import GPUtil  # type: ignore[import]
+import GPUtil  # type: ignore  # optional GPU dep; absent in CI/ty environment
 import psutil
 from loguru import logger
 from stable_baselines3 import PPO

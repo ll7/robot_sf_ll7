@@ -6,6 +6,7 @@ import pytest
 
 from scripts.dev.resolve_pytest_workers import (
     LOW_CPU_THRESHOLD,
+    MACOS_MAX_WORKERS,
     _cap_workers_for_host,
     _resolve_worker_spec,
 )
@@ -97,3 +98,16 @@ def test_cap_workers_for_host_no_change_when_within_limit() -> None:
     capped, reason = _cap_workers_for_host(requested=8, cpu_count=2, system="Linux")
     assert capped == 8
     assert reason == ""
+
+
+def test_cap_workers_macos_low_cpu_uses_macos_cap_not_low_cpu_cap() -> None:
+    """A low-CPU macOS host must be governed by the macOS cap, never the low-CPU cap.
+
+    Regression guard for the platform-isolation early return: even with a CPU
+    count below LOW_CPU_THRESHOLD, macOS overrides must collapse to
+    MACOS_MAX_WORKERS (8) rather than LOW_CPU_WORKER_CAP (16).
+    """
+    capped, reason = _cap_workers_for_host(requested=12, cpu_count=2, system="Darwin")
+    assert capped == MACOS_MAX_WORKERS
+    assert "macOS" in reason
+    assert "low-CPU" not in reason

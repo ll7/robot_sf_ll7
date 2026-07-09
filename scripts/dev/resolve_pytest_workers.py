@@ -43,6 +43,10 @@ def _cap_workers_for_host(
                 f"capped explicit from {requested} to {capped} "
                 f"(macOS max={MACOS_MAX_WORKERS}, floor={MACOS_MIN_WORKERS})"
             )
+        # macOS uses its own explicit caps; return early so the low-CPU cap
+        # below can never shadow the platform-specific strategy if the two
+        # constants are ever reordered.
+        return requested, ""
 
     if cpu_count < LOW_CPU_THRESHOLD:
         capped = min(requested, LOW_CPU_WORKER_CAP)

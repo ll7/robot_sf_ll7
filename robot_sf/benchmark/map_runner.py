@@ -2029,7 +2029,113 @@ def _build_socnav_family_adapter(  # noqa: C901, PLR0912, PLR0915
     return adapter
 
 
-def _build_policy(  # noqa: C901, PLR0912, PLR0915
+def _build_common_adapter_policy(  # noqa: C901
+    adapter: Any,
+    *,
+    algo_key: str,
+    algo_config: dict[str, Any],
+    meta: dict[str, Any],
+    robot_kinematics: str | None,
+    normalized_robot_command_mode: str | None,
+) -> tuple[Callable[[dict[str, Any]], Any], dict[str, Any]]:
+    """Finalize adapter metadata and build the common SocNav-family adapter policy.
+
+    Applies the shared adapter metadata (status/config/provenance/config_hash,
+    enrichment, feasibility, planner command space), resolves the planner bind-env
+    hook, and returns either the holonomic world-velocity policy (early return) or
+    the generic adapter policy closure with feasibility projection.
+
+    Returns:
+        tuple[Callable, dict[str, Any]]: Policy callable and enriched metadata.
+    """
+    if "status" not in meta:
+        meta["status"] = "ok"
+    meta["config"] = algo_config
+    provenance = algo_config.get("provenance")
+    if isinstance(provenance, dict):
+        meta["provenance"] = provenance
+    meta["config_hash"] = _config_hash(algo_config)
+    meta = enrich_algorithm_metadata(
+        algo=algo_key,
+        metadata=meta,
+        execution_mode="adapter",
+        robot_kinematics=robot_kinematics,
+    )
+    _init_feasibility_metadata(meta)
+    planner_meta = meta.get("planner_kinematics")
+    if isinstance(planner_meta, dict):
+        planner_meta["planner_command_space"] = _default_robot_command_space(
+            robot_kinematics,
+            algo_config,
+            robot_command_mode=normalized_robot_command_mode,
+        )
+    adapter_kinematics_model = resolve_benchmark_kinematics_model(
+        robot_kinematics=robot_kinematics,
+        command_limits=algo_config,
+    )
+    planner_bind_env = None
+    if algo_key in {"hrvo", "socnav_hrvo"} and hasattr(adapter, "bind_static_obstacle_points"):
+
+        def _bind_env(env: Any) -> None:
+            """Bind sampled static obstacle points from the environment to HRVO."""
+            simulator = getattr(env, "simulator", None)
+            if simulator is None or not hasattr(simulator, "iter_obstacle_segments"):
+                return
+            spacing = max(
+                float(getattr(adapter.config, "orca_obstacle_margin", 0.12)) * 2.0,
+                0.25,
+            )
+            points = sample_obstacle_points(
+                simulator.iter_obstacle_segments(),
+                spacing=spacing,
+            )
+            adapter.bind_static_obstacle_points(points, spacing=spacing)
+
+        planner_bind_env = _bind_env
+    elif hasattr(adapter, "bind_env"):
+        planner_bind_env = adapter.bind_env
+    if _is_holonomic_world_velocity_mode(
+        algo_key, robot_kinematics, normalized_robot_command_mode
+    ):
+        return _build_holonomic_world_velocity_policy(
+            adapter,
+            algo_key=algo_key,
+            meta=meta,
+            planner_bind_env=planner_bind_env,
+        )
+
+    def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+        """Run a generic SocNav adapter and project command feasibility.
+
+        Returns:
+            tuple[float, float]: Projected linear and angular command.
+        """
+        linear, angular = adapter.plan(obs)
+        return _project_with_feasibility(
+            model=adapter_kinematics_model,
+            command=(float(linear), float(angular)),
+            meta=meta,
+        )
+
+    _attach_planner_reset(_policy, adapter)
+    _policy._planner_adapter = adapter
+    if planner_bind_env is not None:
+        _policy._planner_bind_env = planner_bind_env
+    if hasattr(adapter, "diagnostics"):
+
+        def _planner_stats() -> dict[str, Any]:
+            """Expose generic adapter diagnostics for episode metadata.
+
+            Returns:
+                dict[str, Any]: Adapter diagnostic payload.
+            """
+            return adapter.diagnostics()
+
+        _policy._planner_stats = _planner_stats
+    return _policy, meta
+
+
+def _build_policy(  # noqa: C901
     algo: str,
     algo_config: dict[str, Any],
     *,
@@ -2198,92 +2304,14 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             meta=meta,
         )
 
-    if "status" not in meta:
-        meta["status"] = "ok"
-    meta["config"] = algo_config
-    provenance = algo_config.get("provenance")
-    if isinstance(provenance, dict):
-        meta["provenance"] = provenance
-    meta["config_hash"] = _config_hash(algo_config)
-    meta = enrich_algorithm_metadata(
-        algo=algo_key,
-        metadata=meta,
-        execution_mode="adapter",
+    return _build_common_adapter_policy(
+        adapter,
+        algo_key=algo_key,
+        algo_config=algo_config,
+        meta=meta,
         robot_kinematics=robot_kinematics,
+        normalized_robot_command_mode=normalized_robot_command_mode,
     )
-    _init_feasibility_metadata(meta)
-    planner_meta = meta.get("planner_kinematics")
-    if isinstance(planner_meta, dict):
-        planner_meta["planner_command_space"] = _default_robot_command_space(
-            robot_kinematics,
-            algo_config,
-            robot_command_mode=normalized_robot_command_mode,
-        )
-    adapter_kinematics_model = resolve_benchmark_kinematics_model(
-        robot_kinematics=robot_kinematics,
-        command_limits=algo_config,
-    )
-    planner_bind_env = None
-    if algo_key in {"hrvo", "socnav_hrvo"} and hasattr(adapter, "bind_static_obstacle_points"):
-
-        def _bind_env(env: Any) -> None:
-            """Bind sampled static obstacle points from the environment to HRVO."""
-            simulator = getattr(env, "simulator", None)
-            if simulator is None or not hasattr(simulator, "iter_obstacle_segments"):
-                return
-            spacing = max(
-                float(getattr(adapter.config, "orca_obstacle_margin", 0.12)) * 2.0,
-                0.25,
-            )
-            points = sample_obstacle_points(
-                simulator.iter_obstacle_segments(),
-                spacing=spacing,
-            )
-            adapter.bind_static_obstacle_points(points, spacing=spacing)
-
-        planner_bind_env = _bind_env
-    elif hasattr(adapter, "bind_env"):
-        planner_bind_env = adapter.bind_env
-    holonomic_world_velocity_mode = _is_holonomic_world_velocity_mode(
-        algo_key, robot_kinematics, normalized_robot_command_mode
-    )
-    if holonomic_world_velocity_mode:
-        return _build_holonomic_world_velocity_policy(
-            adapter,
-            algo_key=algo_key,
-            meta=meta,
-            planner_bind_env=planner_bind_env,
-        )
-
-    def _policy(obs: dict[str, Any]) -> tuple[float, float]:
-        """Run a generic SocNav adapter and project command feasibility.
-
-        Returns:
-            tuple[float, float]: Projected linear and angular command.
-        """
-        linear, angular = adapter.plan(obs)
-        return _project_with_feasibility(
-            model=adapter_kinematics_model,
-            command=(float(linear), float(angular)),
-            meta=meta,
-        )
-
-    _attach_planner_reset(_policy, adapter)
-    _policy._planner_adapter = adapter
-    if planner_bind_env is not None:
-        _policy._planner_bind_env = planner_bind_env
-    if hasattr(adapter, "diagnostics"):
-
-        def _planner_stats() -> dict[str, Any]:
-            """Expose generic adapter diagnostics for episode metadata.
-
-            Returns:
-                dict[str, Any]: Adapter diagnostic payload.
-            """
-            return adapter.diagnostics()
-
-        _policy._planner_stats = _planner_stats
-    return _policy, meta
 
 
 def build_map_policy(

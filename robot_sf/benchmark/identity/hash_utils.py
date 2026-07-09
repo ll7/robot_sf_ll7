@@ -143,14 +143,26 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
     -------
     list[dict[str, Any]]
         Parsed records.
+
+    Raises
+    ------
+    ValueError
+        If a non-blank line does not decode to a JSON object, matching the
+        ``list[dict]`` contract and the fail-closed behavior of
+        :func:`load_json`. The message includes the 1-based line number and
+        file path.
     """
 
     records: list[dict[str, Any]] = []
     with path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if line:
-                records.append(json.loads(line))
+        for line_no, raw in enumerate(handle, start=1):
+            line = raw.strip()
+            if not line:
+                continue
+            record = json.loads(line)
+            if not isinstance(record, dict):
+                raise ValueError(f"{path}:{line_no} is not a JSON object")
+            records.append(record)
     return records
 
 

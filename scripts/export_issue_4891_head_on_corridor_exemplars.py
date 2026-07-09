@@ -263,9 +263,13 @@ def select_exemplars_for_planner(
     if not filtered_scored:
         filtered_scored = scored
 
-    # Sort by metric value (ascending for median index invariance),
-    # then by step count descending as tie-breaker (prefer richer traces)
-    filtered_scored.sort(key=lambda x: (x[0], -x[1]))
+    # Sort by metric value (ascending for median index invariance), then by
+    # step count ascending. Within a tied path_efficiency group this places the
+    # richest trace (most steps) at the highest index, so the "best" exemplar
+    # (highest path_efficiency, last index) lands on the episode with the most
+    # steps rather than the fewest. A descending secondary key here would
+    # invert best/worst and starve the best exemplar of trace content.
+    filtered_scored.sort(key=lambda x: (x[0], x[1]))
 
     selected: list[SelectedEpisode] = []
     for mode in SELECTION_MODES:
@@ -296,13 +300,13 @@ def _extract_step_count(record: dict[str, Any]) -> int | None:
     """Extract step count from an episode record."""
     # Direct step_count field
     val = record.get("step_count")
-    if isinstance(val, (int, float)) and val > 0:
+    if isinstance(val, (int, float)) and math.isfinite(val) and val > 0:
         return int(val)
 
     # From summary or metrics
     for path in ("summary.step_count", "metrics.step_count"):
         val = _get_nested(record, path)
-        if isinstance(val, (int, float)) and val > 0:
+        if isinstance(val, (int, float)) and math.isfinite(val) and val > 0:
             return int(val)
 
     # From trace data

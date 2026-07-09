@@ -234,8 +234,8 @@ class TestTieBreaking:
         assert selected[0].episode_id == "ep_long"
         assert "tie_breaker" in selected[0].reason
 
-    def test_tie_breaker_with_lower_is_better(self) -> None:
-        """Tie-breaker works correctly with lower-is-better metrics."""
+    def test_tie_breaker_worst_selects_lowest_secondary(self) -> None:
+        """With a higher-is-better primary, worst (first in ascending sort) gets the lowest tie-breaker value."""
         episodes = [
             _make_episode("ep1", "orca", "s1", 1, 1.0),
             _make_episode("ep2", "orca", "s1", 2, 1.0),

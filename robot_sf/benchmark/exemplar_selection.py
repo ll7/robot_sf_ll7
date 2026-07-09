@@ -250,13 +250,13 @@ def _extract_step_count(record: dict[str, Any]) -> int | None:
     """
     # Direct step_count field
     val = record.get("step_count")
-    if isinstance(val, (int, float)) and val > 0:
+    if isinstance(val, (int, float)) and math.isfinite(val) and val > 0:
         return int(val)
 
     # From summary or metrics
     for path in ("summary.step_count", "metrics.step_count"):
         val = _get_nested(record, path)
-        if isinstance(val, (int, float)) and val > 0:
+        if isinstance(val, (int, float)) and math.isfinite(val) and val > 0:
             return int(val)
 
     # From trace data

@@ -284,7 +284,7 @@ def _download_from_github_release(entry: dict[str, Any], *, cache_dir: str | Pat
     model_id = str(entry.get("model_id", "unknown-model"))
     asset_name = str(release.get("asset_name") or "").strip()
     url = str(release.get("url") or "").strip()
-    expected_sha256 = _github_release_expectedsha256_file(release)
+    expected_sha256 = _github_release_expected_sha256(release)
     if not asset_name:
         raise ValueError(f"Registry entry '{model_id}' github_release.asset_name is required.")
     _validate_github_release_asset_name(asset_name, model_id=model_id)
@@ -319,7 +319,7 @@ def _download_from_github_release(entry: dict[str, Any], *, cache_dir: str | Pat
     return cached_path
 
 
-def _github_release_expectedsha256_file(release: dict[str, Any]) -> str:
+def _github_release_expected_sha256(release: dict[str, Any]) -> str:
     """Return normalized expected SHA256 while preserving non-null YAML scalars."""
     raw_sha256 = release.get("sha256")
     return "" if raw_sha256 is None else str(raw_sha256).strip().lower()

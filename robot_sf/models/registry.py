@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,8 +13,6 @@ from urllib.request import urlopen
 
 import yaml
 from loguru import logger
-
-from robot_sf.benchmark.identity.hash_utils import sha256_file
 
 try:  # pragma: no cover - optional dependency
     import wandb  # type: ignore
@@ -271,6 +270,15 @@ def resolve_model_path(
     return _download_from_wandb(entry, cache_dir=cache_dir)
 
 
+def _sha256(path: Path) -> str:
+    """Return the SHA256 digest for a local file."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _download_from_github_release(entry: dict[str, Any], *, cache_dir: str | Path | None) -> Path:
     """Download a model artifact from a GitHub release asset.
 
@@ -365,7 +373,7 @@ def _validate_github_release_url(url: str, *, model_id: str) -> None:
 def _cached_release_path_is_valid(path: Path, expected_sha256: str) -> bool:
     """Return whether a cached release asset can be reused."""
     if expected_sha256:
-        observed = sha256_file(path)
+        observed = _sha256(path)
         if observed != expected_sha256:
             logger.warning(
                 "Cached GitHub release model artifact checksum mismatch; redownloading: {}",
@@ -400,7 +408,7 @@ def _verify_download_checksum(
     """Validate a downloaded artifact checksum."""
     if not expected_sha256:
         return
-    observed = sha256_file(path)
+    observed = _sha256(path)
     if observed != expected_sha256:
         path.unlink(missing_ok=True)
         raise ValueError(

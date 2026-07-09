@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 import os
 from collections.abc import Iterable, Mapping
@@ -14,7 +15,6 @@ from typing import Any
 import yaml
 from loguru import logger
 
-from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.gym_env.unified_config import (
     ObservationVisibilitySettings,
     RobotSimulationConfig,
@@ -677,6 +677,15 @@ def _coerce_validation_status(raw: Any) -> str | None:
     return status if isinstance(status, str) else None
 
 
+def _sha256_file(path: Path) -> str:
+    """Return the SHA-256 digest for a file."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _validate_catalog_header(data: Mapping[str, Any], *, registry_path: Path) -> None:
     """Fail closed when a v2 catalog has stale schema/parser headers."""
     version = data.get("version")
@@ -755,7 +764,7 @@ def _validate_map_catalog_entry(
     required_profile: str,
 ) -> None:
     """Validate a resolved catalog entry for a requested map profile."""
-    if entry.source_sha256 is not None and sha256_file(entry.path) != entry.source_sha256:
+    if entry.source_sha256 is not None and _sha256_file(entry.path) != entry.source_sha256:
         raise ValueError(
             f"Scenario in '{source}' requested profile '{required_profile}' for map_id "
             f"'{entry.map_id}', but registry source_sha256 is stale for {entry.path}."

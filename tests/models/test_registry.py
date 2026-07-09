@@ -280,7 +280,7 @@ def test_resolve_model_path_downloads_github_release_asset(
     payload = b"checkpoint"
     source = tmp_path / "source.zip"
     source.write_bytes(payload)
-    expected_sha = registry.sha256_file(source)
+    expected_sha = registry._sha256(source)
     registry_path = tmp_path / "registry.yaml"
     registry_path.write_text(
         f"""

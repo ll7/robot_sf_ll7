@@ -321,6 +321,8 @@ class TestWriteBundleFixture:
         assert f", {marker_date})" in readme
         # Must contain NEEDS-REVIEW
         assert "NEEDS-REVIEW" in readme
+        # Must end with closing tag
+        assert "<!-- /AI-GENERATED -->" in readme
 
     def test_sha256sums_has_marker(self, tmp_path: Path) -> None:
         record = self._make_minimal_record()
@@ -437,6 +439,25 @@ class TestWriteSelectionReport:
         report = (out / "SELECTION_REPORT.md").read_text(encoding="utf-8")
         assert report.lstrip().startswith("<!-- AI-GENERATED")
 
+    def test_report_has_closing_tag(self, tmp_path: Path) -> None:
+        """SELECTION_REPORT.md ends with closing AI-GENERATED tag."""
+        selections = [
+            _export_module.SelectedEpisode(
+                planner="goal",
+                scenario_id="classic_group_crossing_low",
+                seed=1,
+                selection_mode="worst",
+                metric_value=0.4,
+                episode_id="test_s1",
+                status="success",
+            ),
+        ]
+        out = tmp_path / "report_dir"
+        out.mkdir()
+        _export_module.write_selection_report(selections, out, marker_date="2026-07-08")
+        report = (out / "SELECTION_REPORT.md").read_text(encoding="utf-8")
+        assert "<!-- /AI-GENERATED -->" in report
+
 
 class TestTupleReturnProcessPlanner:
     """Verify _process_planner returns tuple[list[SelectedEpisode], dict | None].
@@ -511,6 +532,57 @@ class TestBundleReproducibleByteIdentical:
             h1 = sha256_file(dirs[0] / csv_name)
             h2 = sha256_file(dirs[1] / csv_name)
             assert h1 == h2, f"{csv_name} not byte-identical across runs"
+
+    def test_pin_generated_at_byte_identical_metadata(self, tmp_path: Path) -> None:
+        """pin_generated_at makes metadata.json byte-identical across runs."""
+        pin = "2026-07-08T23:13:18.753884+00:00"
+        record = self._make_minimal_record(pin)
+        sel = _export_module.SelectedEpisode(
+            planner="goal",
+            scenario_id="classic_group_crossing_low",
+            seed=1,
+            selection_mode="best",
+            metric_value=0.8,
+            episode_id="classic_group_crossing_low_s1",
+            status="success",
+        )
+        dirs = [tmp_path / "run1", tmp_path / "run2"]
+        for d in dirs:
+            d.mkdir()
+            _export_module.write_bundle(
+                episode_record=record,
+                selection=sel,
+                output_dir=d,
+                pin_generated_at=pin,
+            )
+        for fname in ("metadata.json", "trace_series.json"):
+            h1 = sha256_file(dirs[0] / fname)
+            h2 = sha256_file(dirs[1] / fname)
+            assert h1 == h2, f"{fname} not byte-identical across runs with pin_generated_at"
+
+    def test_pin_generated_at_overrides_wall_clock(self, tmp_path: Path) -> None:
+        """pin_generated_at replaces datetime.now in the written metadata."""
+        pin = "2025-01-15T10:30:00+00:00"
+        record = self._make_minimal_record(pin)
+        sel = _export_module.SelectedEpisode(
+            planner="orca",
+            scenario_id="classic_group_crossing_low",
+            seed=1,
+            selection_mode="median",
+            metric_value=0.5,
+            episode_id="classic_group_crossing_low_s1",
+            status="success",
+        )
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+        _export_module.write_bundle(
+            episode_record=record,
+            selection=sel,
+            output_dir=bundle_dir,
+            pin_generated_at=pin,
+        )
+        meta = json.loads((bundle_dir / "metadata.json").read_text(encoding="utf-8"))
+        assert meta["generated_at_utc"] == pin
 
 
 class TestExtractMarkerDateShared:

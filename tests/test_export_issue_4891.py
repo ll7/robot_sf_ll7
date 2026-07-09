@@ -4,6 +4,7 @@ from __future__ import annotations
 
 # Import the module under test
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -225,3 +226,102 @@ class TestConstants:
 
     def test_selection_modes(self) -> None:
         assert _export_module.SELECTION_MODES == ["median", "best", "worst"]
+
+
+class TestPinGeneratedAt:
+    """Test the pin_generated_at parameter of write_bundle."""
+
+    def _make_minimal_record(self) -> dict[str, Any]:
+        steps = [
+            {
+                "step": i,
+                "time_s": float(i),
+                "robot": {"position": [float(i), 0.0], "velocity": [1.0, 0.0], "heading": 0.0},
+                "planner": {"selected_action": {"linear_velocity": 1.0, "angular_velocity": 0.0}},
+                "pedestrians": [{"id": "p1", "position": [5.0, 0.0]}],
+            }
+            for i in range(3)
+        ]
+        return {
+            "algorithm_metadata": {
+                "simulation_step_trace": {"steps": steps},
+                "algorithm": "goal",
+            },
+            "scenario_id": "classic_head_on_corridor_low",
+            "seed": 20,
+            "episode_id": "test_episode",
+            "status": "collision",
+        }
+
+    def test_pin_generated_at_overrides_wall_clock(self, tmp_path: Path) -> None:
+        """pin_generated_at replaces datetime.now in the written metadata."""
+        pin = "2025-01-15T10:30:00+00:00"
+        record = self._make_minimal_record()
+        sel = _export_module.SelectedEpisode(
+            planner="goal",
+            scenario_id="classic_head_on_corridor_low",
+            seed=20,
+            selection_mode="median",
+            metric_value=1.0,
+            episode_id="test_episode",
+            status="collision",
+        )
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+        _export_module.write_bundle(
+            episode_record=record,
+            selection=sel,
+            output_dir=bundle_dir,
+            pin_generated_at=pin,
+        )
+        meta = json.loads((bundle_dir / "metadata.json").read_text(encoding="utf-8"))
+        assert meta["generated_at_utc"] == pin
+
+    def test_pin_generated_at_byte_identical(self, tmp_path: Path) -> None:
+        """pin_generated_at makes metadata.json and trace_series.json byte-identical."""
+        pin = "2026-07-08T23:13:18.753884+00:00"
+        record = self._make_minimal_record()
+        sel = _export_module.SelectedEpisode(
+            planner="goal",
+            scenario_id="classic_head_on_corridor_low",
+            seed=20,
+            selection_mode="median",
+            metric_value=1.0,
+            episode_id="test_episode",
+            status="collision",
+        )
+        dirs = [tmp_path / "run1", tmp_path / "run2"]
+        for d in dirs:
+            d.mkdir()
+            _export_module.write_bundle(
+                episode_record=record,
+                selection=sel,
+                output_dir=d,
+                pin_generated_at=pin,
+            )
+        for fname in ("metadata.json", "trace_series.json"):
+            h1 = sha256_file(dirs[0] / fname)
+            h2 = sha256_file(dirs[1] / fname)
+            assert h1 == h2, f"{fname} not byte-identical across runs with pin_generated_at"
+
+    def test_pin_none_uses_wall_clock(self, tmp_path: Path) -> None:
+        """Without pin_generated_at, generated_at_utc is wall-clock (not None)."""
+        record = self._make_minimal_record()
+        sel = _export_module.SelectedEpisode(
+            planner="goal",
+            scenario_id="classic_head_on_corridor_low",
+            seed=20,
+            selection_mode="median",
+            metric_value=1.0,
+            episode_id="test_episode",
+            status="collision",
+        )
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+        _export_module.write_bundle(
+            episode_record=record,
+            selection=sel,
+            output_dir=bundle_dir,
+        )
+        meta = json.loads((bundle_dir / "metadata.json").read_text(encoding="utf-8"))
+        assert "2026" in meta["generated_at_utc"]

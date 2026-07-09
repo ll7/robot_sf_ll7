@@ -9,14 +9,26 @@ simulations.
 
 ## Supported inputs
 
-The builder currently adapts three existing report surfaces:
+The builder searches for supported artifacts in the campaign root **and** its
+`reports/` subdirectory (the layout real campaigns use). It currently adapts
+three existing report surfaces, reading their real on-disk shapes:
 
-1. **seed_variability.json** (from camera-ready campaign)
-   Provides per-scenario/planner seed means, across-seed CI, and raw counts.
-2. **statistical_sufficiency.json** (from campaign sufficiency rows)
-   Provides CI half-widths and sufficiency status per scenario/planner/metric.
-3. **issue_3216_headline_ci_rank_stability.json** (from CI rank stability report)
-   Provides bootstrap CI and rank-unstable flags per scenario/planner/metric.
+1. **`seed_variability_by_scenario.json`** (camera-ready seed-variability export)
+   Provides per-scenario/planner `summary` stat dicts (`mean`, `std`, `ci_low`,
+   `ci_high`, `ci_half_width`) and the per-seed means list from `per_seed`.
+   Schema version `benchmark-seed-variability-by-scenario.v1`.
+2. **`statistical_sufficiency.json`** (seed-sufficiency gate output)
+   Provides per-metric CI half-widths (`ci_half_width`) and sufficiency status
+   per scenario/planner. This surface reports precision, not point estimates, so
+   `point_estimate` is null and the interval records `half_width`. Schema version
+   `benchmark-seed-statistical-sufficiency.v1`.
+3. **headline CI rank-stability report** (`result.json` or
+   `issue_3216_headline_ci_rank_stability.json`)
+   Provides a flat `cells` list; each cell carries per-metric
+   `mean`/`ci_low`/`ci_high` and a `counted` flag. Cells excluded from the
+   headline ranking (`counted == false`) are retained and flagged `advisory_only`.
+   The generic `result.json` name is accepted only when its `schema_version`
+   starts with `issue_3216`, so an unrelated `result.json` is ignored.
 
 ## Diagnostic fields
 
@@ -25,15 +37,19 @@ Each surface entry includes a `diagnostics` block with boolean flags:
 - **`insufficient_seed_count`**: `true` when `seed_count < 10`. Low seed counts make
   point estimates unreliable for comparison. Treat these as preliminary evidence only.
 - **`unstable_rank`**: `true` when rank ordering changed across seed resamples.
-  This means the scenario winner or planner ordering is not reproducible under the
-  current seed budget.
+  Today's source artifacts do not emit per-surface rank drift, so this field is
+  null (collapsed to `false`) unless a future/source row provides
+  `rank_changed_across_seeds` (seed-variability) or `rank_unstable` (CI rank cell).
+  Campaign-level rank stability remains available in the CI rank report's
+  `rank_stability` / `decision_packet` blocks.
 - **`wide_interval`**: `true` when the confidence interval width exceeds a
   metric-specific threshold. Thresholds are tuned per metric type (e.g., 0.15 for
-  success, 0.10 for collisions). Wide intervals indicate high uncertainty in the
+  success, 0.10 for collisions); for sufficiency surfaces the width is taken as
+  `2 * ci_half_width`. Wide intervals indicate high uncertainty in the
   point estimate.
 - **`advisory_only`**: `true` when the source surface reported its evidence as
-  insufficient or diagnostic-only. These entries should not be cited as definitive
-  benchmark evidence.
+  insufficient or was excluded from the headline ranking. These entries should not
+  be cited as definitive benchmark evidence.
 
 ## Evidence boundary
 

@@ -114,8 +114,11 @@ def collect_writers() -> dict[str, list[dict]]:
 
 # ── Phase 2: collect named SCHEMA constants ─────────────────────────────────
 
+# Tolerates an optional type annotation between the constant name and ``=``
+# (e.g. ``EPISODE_SCHEMA_VERSION: str = "v1"``); without this, type-annotated
+# constants are missed and their values get misclassified as ungoverned.
 CONST_RE = re.compile(
-    r'^(\S+\.py):(\d+):(\w*(?:SCHEMA|VERSION)\w*)\s*=\s*"([^"]+)"',
+    r'^(\S+\.py):(\d+):(\w*(?:SCHEMA|VERSION)\w*)\s*(?::[^=\n]*)?=\s*"([^"]+)"',
     re.MULTILINE,
 )
 

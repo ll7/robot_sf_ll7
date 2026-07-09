@@ -109,6 +109,23 @@ def collect_writers() -> dict[str, list[dict]]:
             continue
         writers[val].append({"file": fpath, "line": lineno, "pattern": "assign"})
 
+    # Patterns 2 (kwarg) and 3 (assign) match the same physical lines
+    # (``schema_version = "x"`` and ``schema_version="x"`` satisfy both regexes),
+    # so every kwarg/assign writer site is recorded twice. Deduplicate by
+    # (file, line) — keeping the first record — so the inventory's writer lists
+    # and site counts are not inflated. Classification is per distinct value and
+    # uses ``all``/``any`` over writes, so dedup cannot change any bucket.
+    for val, writes in writers.items():
+        seen: set[tuple[str, int]] = set()
+        deduped: list[dict] = []
+        for w in writes:
+            key = (w["file"], w["line"])
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(w)
+        writers[val] = deduped
+
     return writers
 
 

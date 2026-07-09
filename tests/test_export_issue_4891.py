@@ -365,9 +365,8 @@ class TestSelectionReportDeterminism:
             _export_module.write_selection_report(
                 self._selections(), d, marker_date="2026-07-09", generated_at=pin
             )
-        assert (
-            sha256_file(dirs[0] / "SELECTION_REPORT.md")
-            == sha256_file(dirs[1] / "SELECTION_REPORT.md")
+        assert sha256_file(dirs[0] / "SELECTION_REPORT.md") == sha256_file(
+            dirs[1] / "SELECTION_REPORT.md"
         ), "SELECTION_REPORT.md not byte-identical across pinned re-runs"
 
     def test_wall_clock_fallback_when_unpinned(self, tmp_path: Path) -> None:

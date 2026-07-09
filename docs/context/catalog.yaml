@@ -4083,3 +4083,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_4831_trace_verified_failure_mechanisms
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

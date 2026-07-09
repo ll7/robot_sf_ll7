@@ -27,6 +27,11 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 SCHEMA_VERSION = "issue_4831_mechanism_label.v1"
+# Evidence-hygiene marker required on every new docs/context/evidence artifact
+# (see scripts/ci/pr_contract_check.py: AI-GENERATED / NEEDS-REVIEW convention).
+REVIEW_MARKER = "AI-GENERATED NEEDS-REVIEW"
+_CSV_MARKER_COMMENT = f"# {REVIEW_MARKER}"
+_README_MARKER_COMMENT = "<!-- AI-GENERATED (robot_sf#4831) - NEEDS-REVIEW -->"
 OUTPUT_DIR_DEFAULT = Path("docs/context/evidence/issue_4831_trace_verified_failure_mechanisms")
 CAMPAIGN_ROOT_DEFAULT = Path(
     "output/benchmarks/camera_ready/issue4206_trace_capable_h600_rerun_20260704"
@@ -58,6 +63,7 @@ def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def _write_csv_path(path: Path, fieldnames: list[str], rows: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8", newline="") as fh:
+        fh.write(f"{_CSV_MARKER_COMMENT}\n")
         writer = csv.DictWriter(fh, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         for row in rows:
@@ -378,6 +384,7 @@ def build_mechanism_sidecar(  # noqa: C901
             "seed": seed,
             "source_run": ep.get("_planner_run", ""),
             "source_file": ep.get("_episodes_file", ""),
+            "review_marker": REVIEW_MARKER,
         }
 
         label = record.get("mechanism_label", "unknown")
@@ -428,9 +435,12 @@ def build_mechanism_sidecar(  # noqa: C901
     if unlabeled:
         _write_jsonl_path(residual_path, unlabeled)
     else:
-        residual_path.write_text("", encoding="utf-8")
+        # No residual rows: keep the file empty of data but carry the
+        # evidence-hygiene marker as a JSONL comment line.
+        residual_path.write_text(f"{_CSV_MARKER_COMMENT}\n", encoding="utf-8")
 
     coverage = {
+        "review_marker": REVIEW_MARKER,
         "schema_version": SCHEMA_VERSION,
         "issue": 4831,
         "generated_at": generated_at,
@@ -451,6 +461,7 @@ def build_mechanism_sidecar(  # noqa: C901
     _write_jsonl(output_dir / "label_coverage.json", [coverage])
 
     selection_manifest = {
+        "review_marker": REVIEW_MARKER,
         "failure_selection_policy": "collision_or_timeout_or_failure_to_progress",
         "selected_failure_episode_count": len(failure_episodes),
         "excluded_success_episode_count": success_episodes,
@@ -476,6 +487,8 @@ def _write_readmes(
     output_dir: Path, coverage: Mapping[str, Any], summary: Mapping[str, Any]
 ) -> None:
     lines = [
+        _README_MARKER_COMMENT,
+        "",
         "# Issue #4831: Trace-Verified Failure-Mechanism Labels",
         "",
         f"Generated: {coverage.get('generated_at', summary.get('generated_at', 'N/A'))}",

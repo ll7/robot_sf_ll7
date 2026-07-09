@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#4831) - NEEDS-REVIEW -->
+
 # Issue #4831: Trace-Verified Failure-Mechanism Labels
 
 Generated: 2026-07-09T04:23:17+00:00

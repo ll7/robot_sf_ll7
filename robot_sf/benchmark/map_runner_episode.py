@@ -2066,6 +2066,16 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     metrics_raw = post_loop.metrics_raw
     if robot_pos_arr.size:
         robot_config = getattr(config, "robot_config", None)
+    # Finalization phase: isolate the episode metadata from the builder-provided
+    # ``algo_meta`` so the finalization writes below (adapter_impact status,
+    # tracking_precision, safety_wrapper, planner_runtime, etc.) cannot leak back
+    # into a builder that reuses/caches the same dict across episodes (#4954).
+    # The episode loop has finished, so every runtime write the policy made into
+    # ``algo_meta`` (e.g. adapter_impact counters, shield_stats) is already present
+    # and is captured by this deep copy. ``enrich_algorithm_metadata`` only shallow-
+    # copies, so nested mutable structures (notably ``adapter_impact``) would
+    # otherwise still be shared with the builder and mutated in place here.
+    algo_meta = deepcopy(algo_meta)
     impact = algo_meta.get("adapter_impact")
     if isinstance(impact, dict) and bool(impact.get("requested", False)):
         native_steps = int(impact.get("native_steps", 0))

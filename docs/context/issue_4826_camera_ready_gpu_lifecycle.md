@@ -51,6 +51,18 @@ Implementation:
 - Worker entrypoint runs one arm and writes `summary.json` + `episodes.jsonl` to the planned `planner_dir`
 - Parent launches one subprocess per arm, waits, reads summary, and continues
 - Parent still owns campaign-level artifacts, aggregation, report generation, and stop-on-failure policy
+- Parent->worker handoff serializes `_SubprocessArmParams` via `_serialize_subprocess_arm_params` (str-converts the `pathlib.Path` fields); the worker re-parses str->Path. The run entry emits `subprocess_isolation: true` + `gpu_cleanup` (per-arm `cleanup_metrics`).
+
+> **Note (#4957):** the Phase 2 code landed in PR #4846 but had *never run end-to-end*
+> until #4957. A 2026-07-09 GPU smoke (job 13344) found the parent's
+> `json.dumps(asdict(arm_params))` crashed with
+> `TypeError: Object of type PosixPath is not JSON serializable` *before* the
+> subprocess spawned, so no `subprocess_isolation`/`cleanup_metrics` evidence
+> was ever produced. #4957 moves serialization into
+> `_serialize_subprocess_arm_params` (str-converting the four Path fields) and
+> adds a regression test that exercises the real serialization + emission path.
+> The at-scale GPU smoke (Phase 5) still must be re-run to confirm VRAM release;
+> this code fix only unblocks that smoke.
 
 ### Phase 3: PYTORCH_ALLOC_CONF hardening
 Status: Complete (PR #4836)

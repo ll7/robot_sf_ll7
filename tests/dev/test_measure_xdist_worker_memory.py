@@ -302,3 +302,38 @@ def test_sample_process_tree_peak_already_exited(tmp_path) -> None:
     peak_gb, samples = sample_process_tree_peak(popen, interval_seconds=0.01)
     assert peak_gb >= 0.0
     assert samples == 0
+
+
+def test_terminate_process_tree_kills_running_child() -> None:
+    """A still-running child must be killed by the finally-guard helper.
+
+    Regression for the leaked-tree robustness gap: if sampling is interrupted
+    (e.g. KeyboardInterrupt) the spawned pytest tree must not be orphaned.
+    """
+    import subprocess
+
+    from scripts.dev.measure_xdist_worker_memory import _terminate_process_tree
+
+    # A child that would otherwise sleep well past the test's lifetime.
+    popen = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        assert popen.poll() is None, "child should still be running before termination"
+        _terminate_process_tree(popen)
+        # After termination the child must have exited promptly.
+        assert popen.wait(timeout=10) is not None
+    finally:
+        if popen.poll() is None:
+            popen.kill()
+            popen.wait(timeout=10)
+
+
+def test_terminate_process_tree_noop_on_exited_child() -> None:
+    """Terminating an already-exited process must be a safe no-op."""
+    import subprocess
+
+    from scripts.dev.measure_xdist_worker_memory import _terminate_process_tree
+
+    popen = subprocess.Popen([sys.executable, "-c", "pass"])
+    popen.wait(timeout=10)
+    # Must not raise even though the pid may already be reaped/reused.
+    _terminate_process_tree(popen)

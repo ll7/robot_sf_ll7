@@ -287,7 +287,7 @@ def sample_process_tree_peak(
     # sample; return a clean zero-peak result instead of raising.
     try:
         root = psutil.Process(popen.pid)
-    except psutil.NoSuchProcess:
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
         return 0.0, 0
     peak = 0.0
     samples = 0
@@ -300,6 +300,35 @@ def sample_process_tree_peak(
         samples += 1
         time.sleep(interval_seconds)
     return peak, samples
+
+
+def _terminate_process_tree(popen: subprocess.Popen[bytes]) -> None:
+    """Best-effort kill of *popen* and all its descendants if still running.
+
+    Called from a ``finally`` guard so an interrupt (e.g. ``KeyboardInterrupt``)
+    or unexpected error during sampling cannot leave a multi-worker pytest
+    process tree orphaned in the background.
+    """
+    if popen.poll() is not None:
+        return
+    try:
+        root = psutil.Process(popen.pid)
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        return
+    procs = [root]
+    try:
+        procs.extend(root.children(recursive=True))
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        pass
+    for pr in procs:
+        try:
+            pr.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    try:
+        popen.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 def run_one_sweep(
@@ -326,8 +355,12 @@ def run_one_sweep(
     ]
     start = time.monotonic()
     popen = psutil.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    peak_gb, samples = sample_process_tree_peak(popen, interval_seconds=sample_interval_seconds)
-    exit_code = popen.wait()
+    try:
+        peak_gb, samples = sample_process_tree_peak(popen, interval_seconds=sample_interval_seconds)
+        exit_code = popen.wait()
+    finally:
+        # Never leave an interrupted multi-worker pytest tree running.
+        _terminate_process_tree(popen)
     wall = time.monotonic() - start
     return SweepPoint(
         n_workers=n_workers,

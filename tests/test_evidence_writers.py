@@ -25,6 +25,14 @@ class TestReviewMarker:
         marker = review_marker("robot_sf#4891")
         assert marker == "<!-- AI-GENERATED (robot_sf#4891) - NEEDS-REVIEW -->"
 
+    def test_review_marker_with_date(self) -> None:
+        marker = review_marker("robot_sf#4891", marker_date="2026-07-09")
+        assert marker == "<!-- AI-GENERATED (robot_sf#4891, 2026-07-09) - NEEDS-REVIEW -->"
+
+    def test_review_marker_none_date_omits_date(self) -> None:
+        marker = review_marker("robot_sf#4891", marker_date=None)
+        assert marker == "<!-- AI-GENERATED (robot_sf#4891) - NEEDS-REVIEW -->"
+
     def test_review_marker_json(self) -> None:
         assert review_marker_json() == "AI-GENERATED NEEDS-REVIEW"
 

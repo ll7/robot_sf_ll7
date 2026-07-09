@@ -195,6 +195,22 @@ class TestSha256File:
         assert digest == "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"
 
 
+class TestExtractMarkerDate:
+    """Test the _extract_marker_date helper."""
+
+    def test_extracts_date_from_iso_timestamp(self) -> None:
+        metadata = {"generated_at_utc": "2026-07-08T23:13:18.867110+00:00"}
+        assert _export_module._extract_marker_date(metadata) == "2026-07-08"
+
+    def test_empty_generated_at_uses_today(self) -> None:
+        metadata: dict[str, str] = {}
+        result = _export_module._extract_marker_date(metadata)
+        # Should be a valid YYYY-MM-DD string (today's date)
+        assert len(result) == 10
+        assert result[4] == "-"
+        assert result[7] == "-"
+
+
 class TestConstants:
     """Test module constants are set correctly."""
 

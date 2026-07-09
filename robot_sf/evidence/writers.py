@@ -52,12 +52,19 @@ def sha256_file(path: Path) -> str:
     return hasher.hexdigest()
 
 
-def review_marker(issue_ref: str) -> str:
+def review_marker(issue_ref: str, marker_date: str | None = None) -> str:
     """Return the standard review marker comment for a given issue reference.
 
     Args:
         issue_ref: Issue identifier like "robot_sf#4891" or "robot_sf#4848"
+        marker_date: Optional ISO date (YYYY-MM-DD) pinned to the bundle's
+            provenance timestamp.  When provided the marker includes the date
+            so that re-runs from the same bundle produce byte-identical output.
+            Must never be wall-clock time; derive from metadata or pass
+            explicitly via ``--marker-date``.
     """
+    if marker_date is not None:
+        return f"<!-- AI-GENERATED ({issue_ref}, {marker_date}) - NEEDS-REVIEW -->"
     return f"<!-- AI-GENERATED ({issue_ref}) - NEEDS-REVIEW -->"
 
 

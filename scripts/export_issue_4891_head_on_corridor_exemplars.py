@@ -25,6 +25,16 @@ from robot_sf.evidence.writers import (
     write_sha256sums,
 )
 
+
+def _extract_marker_date(metadata: dict[str, Any]) -> str:
+    """Extract YYYY-MM-DD from the bundle's generated_at_utc provenance field.
+
+    This is the deterministic marker-date per the maintainer decision on #4903:
+    pinned to the bundle's provenance timestamp, never wall-clock.
+    """
+    generated_at = metadata.get("generated_at_utc", "")
+    return generated_at[:10] if generated_at else datetime.now(UTC).strftime("%Y-%m-%d")
+
 # Target planners for exemplar selection (classical + social navigation diversity)
 TARGET_PLANNERS = ["goal", "orca", "social_force"]
 
@@ -359,7 +369,8 @@ def write_bundle(
 
 def _write_readme(output_dir: Path, metadata: dict[str, Any]) -> None:
     """Write the human-facing evidence bundle README."""
-    readme = f"""{review_marker("robot_sf#4891")}
+    date = _extract_marker_date(metadata)
+    readme = f"""{review_marker("robot_sf#4891", marker_date=date)}
 # Issue #4891 Exemplar Trace: {metadata["scenario_id"]} ({metadata["planner"]})
 
 Plain-language summary: this directory contains one exemplar trace episode from the
@@ -399,10 +410,11 @@ benchmark campaign, not a Slurm or GPU result, and not a statistical comparison.
 def write_selection_report(
     all_selections: list[SelectedEpisode],
     output_dir: Path,
+    marker_date: str | None = None,
 ) -> None:
     """Write the selection report listing all selected episodes."""
     report_lines = [
-        review_marker("robot_sf#4891"),
+        review_marker("robot_sf#4891", marker_date=marker_date),
         "# Issue #4891 Head-On Corridor Exemplar Selection Report",
         "",
         f"Generated: {datetime.now(UTC).isoformat()}",
@@ -469,17 +481,17 @@ def _process_planner(
     planner: str,
     campaign_root: Path,
     output_dir: Path,
-) -> list[SelectedEpisode]:
+) -> tuple[list[SelectedEpisode], dict[str, Any] | None]:
     """Process one planner: read episodes, select exemplars, write bundles."""
     planner_dir = campaign_root / f"{planner}__differential_drive"
     if not planner_dir.exists():
         print(f"Warning: planner directory not found: {planner_dir}")
-        return []
+        return [], None
 
     episodes_path = planner_dir / "episodes.jsonl"
     if not episodes_path.exists():
         print(f"Warning: episodes.jsonl not found: {episodes_path}")
-        return []
+        return [], None
 
     print(f"Reading episodes from {episodes_path}")
     episodes = read_jsonl(episodes_path)
@@ -488,6 +500,7 @@ def _process_planner(
     selections = select_exemplars_for_planner(episodes, planner)
     print(f"Selected {len(selections)} exemplars for {planner}")
 
+    first_metadata: dict[str, Any] | None = None
     for sel in selections:
         episode_record = _find_episode(episodes, sel)
         if episode_record is None:
@@ -500,13 +513,15 @@ def _process_planner(
         bundle_dir.mkdir(parents=True, exist_ok=True)
 
         print(f"Writing bundle to {bundle_dir}")
-        write_bundle(
+        metadata = write_bundle(
             episode_record=episode_record,
             selection=sel,
             output_dir=bundle_dir,
         )
+        if first_metadata is None:
+            first_metadata = metadata
 
-    return selections
+    return selections, first_metadata
 
 
 def _find_episode(episodes: list[dict[str, Any]], sel: SelectedEpisode) -> dict[str, Any] | None:
@@ -557,10 +572,15 @@ def main() -> int:
         return 1
 
     all_selections: list[SelectedEpisode] = []
+    bundle_metadata: dict[str, Any] | None = None
     for planner in args.planners:
-        all_selections.extend(_process_planner(planner, campaign_root, output_dir))
+        selections, metadata = _process_planner(planner, campaign_root, output_dir)
+        all_selections.extend(selections)
+        if bundle_metadata is None and metadata is not None:
+            bundle_metadata = metadata
 
-    write_selection_report(all_selections, output_dir)
+    marker_date = _extract_marker_date(bundle_metadata) if bundle_metadata else None
+    write_selection_report(all_selections, output_dir, marker_date=marker_date)
 
     print(f"\nExport complete. {len(all_selections)} exemplar bundles written to {output_dir}")
     print(f"Selection report: {output_dir / 'SELECTION_REPORT.md'}")

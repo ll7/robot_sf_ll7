@@ -37,27 +37,26 @@ from pysocialforce.forces import Force as PySFForce
 from pysocialforce.forces import ObstacleForce, SocialForce
 from pysocialforce.simulator import make_forces as pysf_make_forces
 
-from robot_sf.common.types import Line2D, PedPose, RobotAction, RobotPose, Vec2D
-
 if TYPE_CHECKING:
+    from robot_sf.common.types import Line2D, PedPose, RobotAction, RobotPose, Vec2D
     from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, SimulationSettings
     from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
+    from robot_sf.ped_ego.unicycle_drive import UnicycleAction, UnicycleDrivePedestrian
+    from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
+    from robot_sf.robot.robot_state import Robot
 
 from robot_sf.nav.map_config import MapDefinition, SocialGroupDefinition
 from robot_sf.nav.navigation import RouteNavigator, get_prepared_obstacles, sample_route
 from robot_sf.nav.occupancy import circle_collides_any_lines
-from robot_sf.ped_ego.unicycle_drive import UnicycleAction, UnicycleDrivePedestrian
 from robot_sf.ped_npc.adversial_ped_force import (
     AdversarialPedForce,
     AdversarialPedForceConfig,
 )
 from robot_sf.ped_npc.ped_archetypes import assign_archetype_labels
 from robot_sf.ped_npc.ped_behavior import PedestrianBehavior, SinglePedestrianBehavior
-from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
 from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_simulation
 from robot_sf.ped_npc.ped_robot_force import PedRobotForce, PedRobotForceConfig
 from robot_sf.ped_npc.ped_zone import sample_zone
-from robot_sf.robot.robot_state import Robot
 from robot_sf.sim.pedestrian_model_variants import (
     HSFM_ALIGNMENT_TORQUE_V1,
     HSFM_ANISOTROPIC_FOV_V1,

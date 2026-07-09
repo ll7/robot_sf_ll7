@@ -22,9 +22,12 @@ Example:
     >>> for sim in sims:
     ...     sim.step_once([action1, action2])"""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field, replace
 from math import atan2, ceil, cos, pi, sin
 from random import sample, uniform
+from typing import TYPE_CHECKING
 
 import numpy as np
 from loguru import logger
@@ -35,8 +38,11 @@ from pysocialforce.forces import ObstacleForce, SocialForce
 from pysocialforce.simulator import make_forces as pysf_make_forces
 
 from robot_sf.common.types import Line2D, PedPose, RobotAction, RobotPose, Vec2D
-from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, SimulationSettings
-from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
+
+if TYPE_CHECKING:
+    from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, SimulationSettings
+    from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
+
 from robot_sf.nav.map_config import MapDefinition, SocialGroupDefinition
 from robot_sf.nav.navigation import RouteNavigator, get_prepared_obstacles, sample_route
 from robot_sf.nav.occupancy import circle_collides_any_lines

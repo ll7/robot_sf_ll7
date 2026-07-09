@@ -196,7 +196,71 @@ class ProbabilisticPredictor(Protocol):
         """
 
 
+@dataclass(frozen=True)
+class PedestrianState:
+    """One pedestrian state at a single timestep.
+
+    Canonical pedestrian state used by nav predictors and benchmark baselines.
+    Intent and signal fields are optional semantic context; when absent the
+    state reduces to position + velocity.
+    """
+
+    id: int
+    position: np.ndarray
+    velocity: np.ndarray
+    intent: str | None = None
+    signal: str | None = None
+    signal_available: bool = False
+    actor_type: str = "pedestrian"
+
+    @classmethod
+    def from_trace(cls, payload: dict[str, Any]) -> PedestrianState:
+        """Build a state from ``simulation_step_trace.steps[].pedestrians[]``.
+
+        Returns:
+            Trace-compatible pedestrian state.
+        """
+
+        signal_state = payload.get("signal_state")
+        signal_available = False
+        signal: str | None = None
+        if isinstance(signal_state, dict):
+            signal_available = bool(
+                signal_state.get("available")
+                if "available" in signal_state
+                else signal_state.get("label") is not None
+            )
+            if signal_available and signal_state.get("label") is not None:
+                signal = str(signal_state["label"])
+        elif payload.get("signal_label") is not None:
+            signal_available = True
+            signal = str(payload["signal_label"])
+
+        return cls(
+            id=int(payload["id"]),
+            position=np.asarray(payload["position"], dtype=float),
+            velocity=np.asarray(payload["velocity"], dtype=float),
+            intent=str(payload["intent_label"])
+            if payload.get("intent_label") is not None
+            else None,
+            signal=signal,
+            signal_available=signal_available,
+            actor_type=str(payload.get("actor_type") or "pedestrian"),
+        )
+
+
+@dataclass(frozen=True)
+class NeighborContext:
+    """Snapshot of a neighboring pedestrian's state for interaction-aware forecasts."""
+
+    position: np.ndarray
+    velocity: np.ndarray
+    actor_type: str = "pedestrian"
+
+
 __all__ = [
+    "NeighborContext",
+    "PedestrianState",
     "ProbabilisticPrediction",
     "ProbabilisticPredictor",
     "TrajectoryDistribution",

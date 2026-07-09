@@ -181,3 +181,18 @@ def test_parse_sha256sums(tmp_path: Path) -> None:
         "path/to/file1.txt": "abc123",
         "path/to/file2.csv": "def456",
     }
+
+
+def test_render_summary_claim_independent_of_sha() -> None:
+    """The 'Claim boundary present' row must track claim status, not SHA status."""
+    lines = audit_mod._render_summary(
+        all_sha_ok=False,
+        all_meta_ok=True,
+        all_derived=True,
+        all_claim_ok=True,
+        total_bundles=18,
+        grand_total=13_844_906,
+    )
+    joined = "\n".join(lines)
+    assert "| SHA256SUMS verification | **FAIL** |" in joined
+    assert "| Claim boundary present | **PASS** |" in joined

@@ -136,6 +136,11 @@ def verify_checksums(bundle_dir: Path, repo_root: Path) -> tuple[bool, list[str]
     return len(errors) == 0, errors
 
 
+def _claim_guard_ok(claim: str) -> bool:
+    """Return True if claim_boundary is non-empty and carries an illustrative-only guard."""
+    return bool(claim) and ("illustrative" in claim.lower() or "no statistical" in claim.lower())
+
+
 def check_metadata(bundle_dir: Path) -> tuple[bool, list[str], str]:
     """Check metadata.json for required fields and claim boundary."""
     meta_path = bundle_dir / "metadata.json"
@@ -153,7 +158,7 @@ def check_metadata(bundle_dir: Path) -> tuple[bool, list[str], str]:
     claim = meta.get("claim_boundary", "")
     if not claim:
         errors.append("  claim_boundary is empty")
-    elif "illustrative" not in claim.lower() and "no statistical" not in claim.lower():
+    elif not _claim_guard_ok(claim):
         errors.append(f"  claim_boundary may lack illustrative-only guard: {claim[:80]}...")
 
     review_marker = meta.get("review_marker", "")
@@ -181,7 +186,7 @@ def audit_bundle(bundle_dir: Path, repo_root: Path) -> BundleAuditResult:
     result.metadata_ok, result.metadata_errors, result.claim_boundary_text = check_metadata(
         bundle_dir
     )
-    result.claim_boundary_ok = result.metadata_ok
+    result.claim_boundary_ok = _claim_guard_ok(result.claim_boundary_text)
 
     for f in bundle_dir.iterdir():
         if f.is_file() and f.suffix in RAW_DUMP_EXTENSIONS:
@@ -385,7 +390,8 @@ def _render_metadata_section(classes: list[ClassAuditResult]) -> list[str]:
                 lines.append("")
 
     if all_meta_ok:
-        lines.append("**All 18 bundles have complete metadata with:**")
+        total = sum(len(c.bundles) for c in classes)
+        lines.append(f"**All {total} bundles have complete metadata with:**")
         lines.append("- `campaign_id` and `campaign_job` (source campaign provenance)")
         lines.append("- `claim_boundary` with explicit illustrative-only guard")
         lines.append("- `review_marker: AI-GENERATED NEEDS-REVIEW`")
@@ -462,7 +468,12 @@ def _render_policy_section(
 
 
 def _render_summary(
-    all_sha_ok: bool, all_meta_ok: bool, all_derived: bool, total_bundles: int, grand_total: int
+    all_sha_ok: bool,
+    all_meta_ok: bool,
+    all_derived: bool,
+    all_claim_ok: bool,
+    total_bundles: int,
+    grand_total: int,
 ) -> list[str]:
     """Render summary section."""
     lines: list[str] = []
@@ -471,12 +482,13 @@ def _render_summary(
     sha_status = "PASS" if all_sha_ok else "FAIL"
     meta_status = "PASS" if all_meta_ok else "FAIL"
     derived_status = "PASS" if all_derived else "FAIL"
+    claim_status = "PASS" if all_claim_ok else "FAIL"
     lines.append("| Check | Result |")
     lines.append("|-------|--------|")
     lines.append(f"| SHA256SUMS verification | **{sha_status}** |")
     lines.append(f"| Metadata completeness | **{meta_status}** |")
     lines.append(f"| Derived-only content (no raw dumps) | **{derived_status}** |")
-    lines.append(f"| Claim boundary present | **{sha_status}** |")
+    lines.append(f"| Claim boundary present | **{claim_status}** |")
     lines.append(f"| Bundle count | {total_bundles} |")
     lines.append(f"| Total exemplar size | {format_size(grand_total)} |")
     lines.append("")
@@ -500,11 +512,16 @@ def generate_report(classes: list[ClassAuditResult], repo_root: Path) -> str:
 
     lines.extend(_render_metadata_section(classes))
     all_meta_ok = all(b.metadata_ok for c in classes for b in c.bundles)
+    all_claim_ok = bool(classes) and all(b.claim_boundary_ok for c in classes for b in c.bundles)
 
     evidence_total = compute_docs_context_size(repo_root)
     lines.extend(_render_policy_section(grand_total, total_bundles, evidence_total, classes))
 
-    lines.extend(_render_summary(all_sha_ok, all_meta_ok, all_derived, total_bundles, grand_total))
+    lines.extend(
+        _render_summary(
+            all_sha_ok, all_meta_ok, all_derived, all_claim_ok, total_bundles, grand_total
+        )
+    )
 
     return "\n".join(lines)
 

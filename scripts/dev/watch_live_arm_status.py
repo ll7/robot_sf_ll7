@@ -11,12 +11,20 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
-
 DEFAULT_FAILURE_STATES = frozenset({"failed", "error", "contract_error"})
 DEFAULT_EVENT_LOG = "arm_status.jsonl"
 DEFAULT_LIVE_STATUS = "live_arm_status.json"
 CANCEL_EXIT_CODE = 20
+
+
+def _load_json(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    with path.open(encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    return payload
 
 
 @dataclass(frozen=True, slots=True)

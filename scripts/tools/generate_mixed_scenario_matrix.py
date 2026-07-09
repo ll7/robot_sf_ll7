@@ -16,7 +16,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+
+def _load_json(path: Path) -> dict[str, Any] | None:
+    """Load a JSON file, returning ``None`` when absent."""
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
 
 DEFAULT_LEDGER = Path("docs/context/evidence/issue_2760_dissertation_evidence_ledger/ledger.json")
 DEFAULT_SIGNAL_SUMMARY = Path("docs/context/evidence/issue_2799_signalized_runtime/summary.json")

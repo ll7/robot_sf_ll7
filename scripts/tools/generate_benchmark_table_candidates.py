@@ -11,7 +11,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+
+def _load_json(path: Path) -> dict[str, Any] | None:
+    """Load a JSON mapping, returning ``None`` when the source is absent."""
+    if not path.exists():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Expected JSON object at {path}")
+    return payload
+
 
 DEFAULT_LEDGER = Path("docs/context/evidence/issue_2760_dissertation_evidence_ledger/ledger.json")
 DEFAULT_CLAIM_MAP = Path("docs/context/issue_1542_manuscript_claim_evidence_map.md")

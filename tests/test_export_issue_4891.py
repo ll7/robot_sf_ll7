@@ -202,13 +202,14 @@ class TestExtractMarkerDate:
         metadata = {"generated_at_utc": "2026-07-08T23:13:18.867110+00:00"}
         assert _export_module._extract_marker_date(metadata) == "2026-07-08"
 
-    def test_empty_generated_at_uses_today(self) -> None:
-        metadata: dict[str, str] = {}
-        result = _export_module._extract_marker_date(metadata)
-        # Should be a valid YYYY-MM-DD string (today's date)
-        assert len(result) == 10
-        assert result[4] == "-"
-        assert result[7] == "-"
+    def test_missing_generated_at_returns_none(self) -> None:
+        # Per #4903 the marker date is provenance-pinned with no wall-clock
+        # fallback: missing provenance must yield no date, not today's date.
+        assert _export_module._extract_marker_date({}) is None
+
+    def test_empty_generated_at_returns_none(self) -> None:
+        metadata: dict[str, str] = {"generated_at_utc": ""}
+        assert _export_module._extract_marker_date(metadata) is None
 
 
 class TestConstants:

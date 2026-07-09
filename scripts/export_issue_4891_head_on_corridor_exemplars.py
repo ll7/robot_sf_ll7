@@ -26,14 +26,18 @@ from robot_sf.evidence.writers import (
 )
 
 
-def _extract_marker_date(metadata: dict[str, Any]) -> str:
+def _extract_marker_date(metadata: dict[str, Any]) -> str | None:
     """Extract YYYY-MM-DD from the bundle's generated_at_utc provenance field.
 
-    This is the deterministic marker-date per the maintainer decision on #4903:
-    pinned to the bundle's provenance timestamp, never wall-clock.
+    Deterministic per the maintainer decision on #4903: the marker date is
+    pinned to the bundle's provenance timestamp and never falls back to
+    wall-clock time. When the provenance field is absent or empty, returns
+    ``None`` so the marker omits the date rather than fabricating one from the
+    current time.
     """
     generated_at = metadata.get("generated_at_utc", "")
-    return generated_at[:10] if generated_at else datetime.now(UTC).strftime("%Y-%m-%d")
+    return generated_at[:10] if generated_at else None
+
 
 # Target planners for exemplar selection (classical + social navigation diversity)
 TARGET_PLANNERS = ["goal", "orca", "social_force"]

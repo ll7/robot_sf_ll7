@@ -10,6 +10,8 @@ from typing import Any
 
 import pytest
 
+from robot_sf.evidence.writers import sha256_file
+
 # Load the export script as a module
 _SCRIPT_PATH = (
     Path(__file__).parent.parent / "scripts" / "export_issue_4891_head_on_corridor_exemplars.py"
@@ -186,7 +188,7 @@ class TestSha256File:
     def test_known_content(self, tmp_path: Path) -> None:
         test_file = tmp_path / "test.txt"
         test_file.write_text("hello\n", encoding="utf-8")
-        digest = _export_module.sha256_file(test_file)
+        digest = sha256_file(test_file)
         assert len(digest) == 64  # SHA-256 hex length
         # Known SHA-256 of the literal bytes "hello\n"; pins the helper's correctness
         # rather than merely asserting the digest length.

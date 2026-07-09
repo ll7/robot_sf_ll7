@@ -9,15 +9,21 @@ and exports trace-episode bundles in the same format as issue_4253/4268.
 from __future__ import annotations
 
 import argparse
-import csv
-import hashlib
 import json
 import math
 import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from robot_sf.evidence.writers import (
+    review_marker,
+    write_csv,
+    write_json,
+    write_sha256sums,
+)
 
 # Target planners for exemplar selection (classical + social navigation diversity)
 TARGET_PLANNERS = ["goal", "orca", "social_force"]
@@ -83,15 +89,6 @@ def _git_commit() -> str:
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
     return result.stdout.strip()
-
-
-def sha256_file(path: Path) -> str:
-    """Compute a SHA-256 hex digest for ``path``."""
-    hasher = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 16), b""):
-            hasher.update(chunk)
-    return hasher.hexdigest()
 
 
 def _min_distance(
@@ -200,21 +197,6 @@ def derive_trace_rows(record: dict[str, Any]) -> TraceRows:
     return TraceRows(trace_rows=rows, min_distance_rows=min_rows, summary=summary)
 
 
-def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
-    """Write CSV rows with stable column ordering."""
-    if not rows:
-        raise ValueError(f"cannot write empty CSV: {path}")
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()), lineterminator="\n")
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    """Write deterministic JSON."""
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     """Read JSONL file into a list of dicts."""
     records = []
@@ -317,18 +299,19 @@ def write_bundle(
         "derived_rows": derived.trace_rows,
     }
 
-    _write_json(output_dir / "metadata.json", metadata)
-    _write_json(output_dir / "trace_series.json", trace_payload)
-    _write_csv(output_dir / "trace_timeseries.csv", derived.trace_rows)
-    _write_csv(output_dir / "min_distance_series.csv", derived.min_distance_rows)
+    write_json(output_dir / "metadata.json", metadata)
+    write_json(output_dir / "trace_series.json", trace_payload)
+    write_csv(output_dir / "trace_timeseries.csv", derived.trace_rows)
+    write_csv(output_dir / "min_distance_series.csv", derived.min_distance_rows)
     _write_readme(output_dir, metadata)
-    _write_sha256sums(output_dir)
+    write_sha256sums(output_dir)
     return metadata
 
 
 def _write_readme(output_dir: Path, metadata: dict[str, Any]) -> None:
     """Write the human-facing evidence bundle README."""
-    readme = f"""# Issue #4848 Exemplar Trace: {metadata["scenario_id"]} ({metadata["planner"]})
+    readme = f"""{review_marker("robot_sf#4848")}
+# Issue #4848 Exemplar Trace: {metadata["scenario_id"]} ({metadata["planner"]})
 
 Plain-language summary: this directory contains one exemplar trace episode from the
 retained `issue4206_trace_capable_h600_rerun_20260704` campaign (job 13334).
@@ -364,29 +347,13 @@ benchmark campaign, not a Slurm or GPU result, and not a statistical comparison.
     (output_dir / "README.md").write_text(readme, encoding="utf-8")
 
 
-def _write_sha256sums(output_dir: Path) -> None:
-    """Write SHA256SUMS for all generated bundle files except itself."""
-    files = sorted(
-        path for path in output_dir.iterdir() if path.is_file() and path.name != "SHA256SUMS"
-    )
-    lines = [f"{sha256_file(path)}  {_manifest_label(path)}" for path in files]
-    (output_dir / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def _manifest_label(path: Path) -> str:
-    """Return the SHA256SUMS entry label for a bundle file (repo-relative when possible)."""
-    try:
-        return path.resolve().relative_to(_repo_root()).as_posix()
-    except ValueError:
-        return path.name
-
-
 def write_selection_report(
     all_selections: list[SelectedEpisode],
     output_dir: Path,
 ) -> None:
     """Write the selection report listing all selected episodes."""
     report_lines = [
+        review_marker("robot_sf#4848"),
         "# Issue #4848 Group-Crossing Exemplar Selection Report",
         "",
         f"Generated: {datetime.now(UTC).isoformat()}",
@@ -545,6 +512,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    import sys
-
     raise SystemExit(main())

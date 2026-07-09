@@ -159,8 +159,8 @@ class TestBaselineProbabilisticPredictor:
 
         monkeypatch.setattr(
             baseline_predictor_module,
-            "constant_velocity_gaussian_baseline",
-            fake_baseline,
+            "_baseline_for_variant",
+            lambda _variant: fake_baseline,
         )
         predictor = BaselineProbabilisticPredictor(variant="cv", horizons_s=(0.2,), dt_s=0.1)
 
@@ -191,8 +191,8 @@ class TestBaselineProbabilisticPredictor:
 
         monkeypatch.setattr(
             baseline_predictor_module,
-            "constant_velocity_gaussian_baseline",
-            fake_baseline,
+            "_baseline_for_variant",
+            lambda _variant: fake_baseline,
         )
         predictor = BaselineProbabilisticPredictor(variant="cv", horizons_s=(0.2,), dt_s=0.1)
         result = predictor.predict(_make_socnav_obs(ped_count=1))

@@ -13,24 +13,27 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from robot_sf.benchmark.pedestrian_forecast import (
-    ForecastBaselineFunction,
-    NeighborContext,
-    PedestrianState,
-    constant_velocity_gaussian_baseline,
-    interaction_aware_cv_baseline,
-    risk_filtered_cv_baseline,
-    semantic_cv_baseline,
-)
 from robot_sf.common.forecast_variants import FORECAST_VARIANT_CHOICES
 from robot_sf.nav.predictive_types import (
+    NeighborContext,
+    PedestrianState,
     ProbabilisticPrediction,
     TrajectoryDistribution,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from robot_sf.benchmark.pedestrian_forecast import PedestrianForecast
+
+    ForecastBaselineFunction = Callable[
+        [PedestrianState, list[float] | tuple[float, ...]],
+        PedestrianForecast,
+    ]
 
 DEFAULT_BASELINE_HORIZONS_S: tuple[float, ...] = (0.5, 1.0, 2.0)
 DEFAULT_BASELINE_DT_S: float = 0.1
@@ -48,6 +51,12 @@ def _baseline_for_variant(variant: str) -> ForecastBaselineFunction:
         additional keyword arguments required by interaction-aware and risk-filtered
         variants (``neighbors`` and ``robot_position`` respectively).
     """
+    from robot_sf.benchmark.pedestrian_forecast import (  # noqa: PLC0415
+        constant_velocity_gaussian_baseline,
+        interaction_aware_cv_baseline,
+        risk_filtered_cv_baseline,
+        semantic_cv_baseline,
+    )
 
     if variant == "cv":
         return constant_velocity_gaussian_baseline

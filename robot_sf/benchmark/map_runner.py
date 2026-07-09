@@ -1393,6 +1393,170 @@ def _build_drl_vo_policy(
     return _policy, meta
 
 
+def _build_guarded_ppo_policy(  # noqa: C901, PLR0915
+    algo_key: str,
+    algo_config: dict[str, Any],
+    *,
+    meta: dict[str, Any],
+    robot_kinematics: str | None,
+    normalized_robot_command_mode: str | None,
+    adapter_impact_eval: bool,
+) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
+    """Build the Guarded-PPO mixed-adapter policy and enriched metadata.
+
+    Returns:
+        tuple[Callable, dict[str, Any]]: Policy callable and enriched metadata.
+    """
+    ppo_allowed = {field.name for field in fields(PPOPlannerConfig)}
+    ppo_config = {key: value for key, value in algo_config.items() if key in ppo_allowed}
+    ppo_planner = PPOPlanner(ppo_config, seed=None)
+    guard_adapter = GuardedPPOAdapter(
+        config=build_guarded_ppo_config(algo_config),
+        fallback_adapter=build_guarded_ppo_fallback(algo_config),
+        prior_adapter=build_guarded_ppo_prior(algo_config),
+    )
+    ppo_obs_mode = _resolve_planner_obs_mode(ppo_planner, "vector")
+    if hasattr(ppo_planner, "get_metadata"):
+        planner_meta = ppo_planner.get_metadata()
+        if isinstance(planner_meta, dict):
+            meta.update(planner_meta)
+    meta = enrich_algorithm_metadata(
+        algo=algo_key,
+        metadata=meta,
+        execution_mode="mixed",
+        adapter_name="guarded_ppo_action_to_unicycle",
+        robot_kinematics=robot_kinematics,
+        adapter_impact_requested=adapter_impact_eval,
+    )
+    _init_feasibility_metadata(meta)
+    meta["guard_stats"] = {
+        "ppo_clear": 0,
+        "ppo_safe": 0,
+        "fallback_safe": 0,
+        "prior_blend_safe": 0,
+        "prior_residual_safe": 0,
+        "prior_safe": 0,
+        "stop_safe": 0,
+        "fallback_best_effort": 0,
+        "stop_best_effort": 0,
+        "uncertainty_fallback_stop": 0,
+        "uncertainty_fallback_slow_down": 0,
+        "uncertainty_fallback_configured": 0,
+        "goal_reached": 0,
+    }
+    meta["residual_clipping_stats"] = {
+        "schema_version": "orca-residual-clipping-stats.v1",
+        "decision_count": 0,
+        "clipped_count": 0,
+    }
+    meta["safety_shield_contract"] = shield_contract_metadata(
+        shield_name="GuardedPPOAdapter",
+        prediction_source="short_horizon_rollout",
+        fallback_policy=type(guard_adapter.fallback_adapter).__name__,
+    )
+    meta["shield_stats"] = new_shield_stats()
+    planner_meta = meta.get("planner_kinematics")
+    if isinstance(planner_meta, dict):
+        planner_meta["planner_command_space"] = _default_robot_command_space(
+            robot_kinematics,
+            algo_config,
+            robot_command_mode=normalized_robot_command_mode,
+        )
+    ppo_kinematics_model = resolve_benchmark_kinematics_model(
+        robot_kinematics=robot_kinematics,
+        command_limits=algo_config,
+    )
+
+    def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+        """Run Guarded PPO and apply the short-horizon safety gate.
+
+        Returns:
+            tuple[float, float]: Selected and projected command.
+        """
+        if ppo_obs_mode in {"dict", "native_dict", "multi_input"}:
+            ppo_obs = obs
+        else:
+            ppo_obs = _obs_to_ppo_format(obs)
+        action = ppo_planner.step(ppo_obs)
+        if not isinstance(action, dict):
+            raise TypeError(f"Guarded PPO planner returned non-dict action: {type(action)}")
+        linear, angular, conversion_mode = _ppo_action_to_unicycle(
+            action,
+            obs,
+            algo_config,
+            robot_kinematics=robot_kinematics,
+            kinematics_model=ppo_kinematics_model,
+            project_command=False,
+        )
+        shield_decision = _choose_shield_command(
+            guard_adapter,
+            obs,
+            (float(linear), float(angular)),
+        )
+        chosen, decision = shield_decision.as_command_result()
+        linear, angular = _project_with_feasibility(
+            model=ppo_kinematics_model,
+            command=(float(chosen[0]), float(chosen[1])),
+            meta=meta,
+        )
+        guard_stats = meta.get("guard_stats")
+        if isinstance(guard_stats, dict):
+            guard_stats[decision] = int(guard_stats.get(decision, 0)) + 1
+        shield_stats = meta.get("shield_stats")
+        if isinstance(shield_stats, dict):
+            update_shield_stats(shield_stats, shield_decision)
+        residual_stats = meta.get("residual_clipping_stats")
+        if isinstance(residual_stats, dict):
+            decision_metadata = shield_decision.to_metadata()
+            fallback_state = decision_metadata.get("fallback_controller_state")
+            action_adaptation = (
+                fallback_state.get("action_adaptation")
+                if isinstance(fallback_state, dict)
+                else None
+            )
+            if isinstance(action_adaptation, dict):
+                residual_stats["decision_count"] = (
+                    int(residual_stats.get("decision_count", 0)) + 1
+                )
+                if bool(action_adaptation.get("residual_clipped", False)):
+                    residual_stats["clipped_count"] = (
+                        int(residual_stats.get("clipped_count", 0)) + 1
+                    )
+        _update_adapter_impact_metrics(
+            meta,
+            conversion_mode,
+            count_native=conversion_mode == "native" and decision in {"ppo_clear", "ppo_safe"},
+        )
+        return linear, angular
+
+    _attach_planner_reset(_policy, guard_adapter)
+
+    def _close_guarded_ppo() -> None:
+        """Close PPO and guard adapter resources when present."""
+        ppo_planner.close()
+        guard_close = getattr(guard_adapter, "close", None)
+        if callable(guard_close):
+            guard_close()
+
+    _policy._planner_close = _close_guarded_ppo
+    ppo_bind_env = getattr(ppo_planner, "bind_env", None)
+    guard_bind_env = getattr(guard_adapter, "bind_env", None)
+    bind_hooks = [hook for hook in (ppo_bind_env, guard_bind_env) if callable(hook)]
+    if bind_hooks:
+
+        def _bind_guarded_ppo_env(env: Any) -> None:
+            """Bind PPO runtime observation space and guard map context."""
+            for hook in bind_hooks:
+                hook(env)
+
+        _policy._planner_bind_env = _bind_guarded_ppo_env
+    meta.setdefault("algorithm", "guarded_ppo")
+    meta.setdefault("status", "ok")
+    meta.setdefault("config", algo_config)
+    meta["config_hash"] = _config_hash(meta.get("config", algo_config))
+    return _policy, meta
+
+
 def _build_policy(  # noqa: C901, PLR0912, PLR0915
     algo: str,
     algo_config: dict[str, Any],
@@ -1540,158 +1704,14 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             adapter_impact_eval=adapter_impact_eval,
         )
     elif algo_key in {"guarded_ppo"}:
-        ppo_allowed = {field.name for field in fields(PPOPlannerConfig)}
-        ppo_config = {key: value for key, value in algo_config.items() if key in ppo_allowed}
-        ppo_planner = PPOPlanner(ppo_config, seed=None)
-        guard_adapter = GuardedPPOAdapter(
-            config=build_guarded_ppo_config(algo_config),
-            fallback_adapter=build_guarded_ppo_fallback(algo_config),
-            prior_adapter=build_guarded_ppo_prior(algo_config),
-        )
-        planner_cfg = getattr(ppo_planner, "config", None)
-        if isinstance(planner_cfg, dict):
-            ppo_obs_mode = str(planner_cfg.get("obs_mode", "vector")).strip().lower()
-        else:
-            ppo_obs_mode = str(getattr(planner_cfg, "obs_mode", "vector")).strip().lower()
-        if hasattr(ppo_planner, "get_metadata"):
-            planner_meta = ppo_planner.get_metadata()
-            if isinstance(planner_meta, dict):
-                meta.update(planner_meta)
-        meta = enrich_algorithm_metadata(
-            algo=algo_key,
-            metadata=meta,
-            execution_mode="mixed",
-            adapter_name="guarded_ppo_action_to_unicycle",
+        return _build_guarded_ppo_policy(
+            algo_key,
+            algo_config,
+            meta=meta,
             robot_kinematics=robot_kinematics,
-            adapter_impact_requested=adapter_impact_eval,
+            normalized_robot_command_mode=normalized_robot_command_mode,
+            adapter_impact_eval=adapter_impact_eval,
         )
-        _init_feasibility_metadata(meta)
-        meta["guard_stats"] = {
-            "ppo_clear": 0,
-            "ppo_safe": 0,
-            "fallback_safe": 0,
-            "prior_blend_safe": 0,
-            "prior_residual_safe": 0,
-            "prior_safe": 0,
-            "stop_safe": 0,
-            "fallback_best_effort": 0,
-            "stop_best_effort": 0,
-            "uncertainty_fallback_stop": 0,
-            "uncertainty_fallback_slow_down": 0,
-            "uncertainty_fallback_configured": 0,
-            "goal_reached": 0,
-        }
-        meta["residual_clipping_stats"] = {
-            "schema_version": "orca-residual-clipping-stats.v1",
-            "decision_count": 0,
-            "clipped_count": 0,
-        }
-        meta["safety_shield_contract"] = shield_contract_metadata(
-            shield_name="GuardedPPOAdapter",
-            prediction_source="short_horizon_rollout",
-            fallback_policy=type(guard_adapter.fallback_adapter).__name__,
-        )
-        meta["shield_stats"] = new_shield_stats()
-        planner_meta = meta.get("planner_kinematics")
-        if isinstance(planner_meta, dict):
-            planner_meta["planner_command_space"] = _default_robot_command_space(
-                robot_kinematics,
-                algo_config,
-                robot_command_mode=normalized_robot_command_mode,
-            )
-        ppo_kinematics_model = resolve_benchmark_kinematics_model(
-            robot_kinematics=robot_kinematics,
-            command_limits=algo_config,
-        )
-
-        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
-            """Run Guarded PPO and apply the short-horizon safety gate.
-
-            Returns:
-                tuple[float, float]: Selected and projected command.
-            """
-            if ppo_obs_mode in {"dict", "native_dict", "multi_input"}:
-                ppo_obs = obs
-            else:
-                ppo_obs = _obs_to_ppo_format(obs)
-            action = ppo_planner.step(ppo_obs)
-            if not isinstance(action, dict):
-                raise TypeError(f"Guarded PPO planner returned non-dict action: {type(action)}")
-            linear, angular, conversion_mode = _ppo_action_to_unicycle(
-                action,
-                obs,
-                algo_config,
-                robot_kinematics=robot_kinematics,
-                kinematics_model=ppo_kinematics_model,
-                project_command=False,
-            )
-            shield_decision = _choose_shield_command(
-                guard_adapter,
-                obs,
-                (float(linear), float(angular)),
-            )
-            chosen, decision = shield_decision.as_command_result()
-            linear, angular = _project_with_feasibility(
-                model=ppo_kinematics_model,
-                command=(float(chosen[0]), float(chosen[1])),
-                meta=meta,
-            )
-            guard_stats = meta.get("guard_stats")
-            if isinstance(guard_stats, dict):
-                guard_stats[decision] = int(guard_stats.get(decision, 0)) + 1
-            shield_stats = meta.get("shield_stats")
-            if isinstance(shield_stats, dict):
-                update_shield_stats(shield_stats, shield_decision)
-            residual_stats = meta.get("residual_clipping_stats")
-            if isinstance(residual_stats, dict):
-                decision_metadata = shield_decision.to_metadata()
-                fallback_state = decision_metadata.get("fallback_controller_state")
-                action_adaptation = (
-                    fallback_state.get("action_adaptation")
-                    if isinstance(fallback_state, dict)
-                    else None
-                )
-                if isinstance(action_adaptation, dict):
-                    residual_stats["decision_count"] = (
-                        int(residual_stats.get("decision_count", 0)) + 1
-                    )
-                    if bool(action_adaptation.get("residual_clipped", False)):
-                        residual_stats["clipped_count"] = (
-                            int(residual_stats.get("clipped_count", 0)) + 1
-                        )
-            _update_adapter_impact_metrics(
-                meta,
-                conversion_mode,
-                count_native=conversion_mode == "native" and decision in {"ppo_clear", "ppo_safe"},
-            )
-            return linear, angular
-
-        _attach_planner_reset(_policy, guard_adapter)
-
-        def _close_guarded_ppo() -> None:
-            """Close PPO and guard adapter resources when present."""
-            ppo_planner.close()
-            guard_close = getattr(guard_adapter, "close", None)
-            if callable(guard_close):
-                guard_close()
-
-        _policy._planner_close = _close_guarded_ppo
-        ppo_bind_env = getattr(ppo_planner, "bind_env", None)
-        guard_bind_env = getattr(guard_adapter, "bind_env", None)
-        bind_hooks = [hook for hook in (ppo_bind_env, guard_bind_env) if callable(hook)]
-        if bind_hooks:
-
-            def _bind_guarded_ppo_env(env: Any) -> None:
-                """Bind PPO runtime observation space and guard map context."""
-                for hook in bind_hooks:
-                    hook(env)
-
-            _policy._planner_bind_env = _bind_guarded_ppo_env
-        meta.setdefault("algorithm", "guarded_ppo")
-        meta.setdefault("status", "ok")
-        meta.setdefault("config", algo_config)
-        meta["config_hash"] = _config_hash(meta.get("config", algo_config))
-        return _policy, meta
     elif algo_key in {
         "gensafenav_ours_gst_guarded",
         "ours_gst_guarded",

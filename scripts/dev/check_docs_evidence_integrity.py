@@ -29,6 +29,7 @@ The check is independent from the full Python test suite.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -38,10 +39,25 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
-
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
+
+
+def _sha256(path: Path) -> str:
+    """Return sha256 digest for a file.
+
+    Kept local (no ``robot_sf`` import) so this changed-path-scoped guard runs
+    in the lightweight docs-evidence-integrity CI job, which installs only
+    PyYAML and not the package. See #4926/#4929 regression: importing
+    ``robot_sf.benchmark.identity.hash_utils`` here broke every docs/evidence PR
+    with ``ModuleNotFoundError: No module named 'robot_sf'``.
+    """
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
 
 _CATALOG_PATH = Path("docs/context/catalog.yaml")
 _EVIDENCE_DIR = Path("docs/context/evidence")

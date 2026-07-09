@@ -1696,6 +1696,157 @@ def _build_sonic_guarded_policy(
     return _policy, meta
 
 
+_HOLONOMIC_WORLD_VELOCITY_ALGO_KEYS = frozenset(
+    {
+        "orca",
+        "hrvo",
+        "socnav_hrvo",
+        "social_force",
+        "sf",
+        "social_navigation_pyenvs_orca",
+        "social_nav_pyenvs_orca",
+        "social_navigation_pyenvs_socialforce",
+        "social_nav_pyenvs_socialforce",
+        "social_navigation_pyenvs_sfm_helbing",
+        "social_nav_pyenvs_sfm_helbing",
+        "sonic_crowdnav",
+        "sonic_gst",
+        "gensafenav_ours_gst",
+        "gensafe_ours_gst",
+        "ours_gst",
+        "gensafenav_gst_predictor_rand",
+        "gensafe_gst_predictor_rand",
+        "gst_predictor_rand",
+    }
+)
+
+
+def _is_holonomic_world_velocity_mode(
+    algo_key: str,
+    robot_kinematics: str | None,
+    normalized_robot_command_mode: str | None,
+) -> bool:
+    """Return whether a planner runs in holonomic world-velocity (vx_vy) mode.
+
+    Args:
+        algo_key: Lowercased algorithm key.
+        robot_kinematics: Runtime robot kinematics label.
+        normalized_robot_command_mode: Lowercased robot command mode (e.g. ``vx_vy``).
+
+    Returns:
+        bool: True when the planner emits ActionXY world velocities forwarded directly
+        into the holonomic vx_vy benchmark action space.
+    """
+    return (
+        algo_key in _HOLONOMIC_WORLD_VELOCITY_ALGO_KEYS
+        and str(robot_kinematics or "").strip().lower() in {"holonomic", "omni", "omnidirectional"}
+        and normalized_robot_command_mode == "vx_vy"
+    )
+
+
+def _holonomic_world_velocity_boundary(algo_key: str) -> str:
+    """Return the provenance boundary description for a holonomic world-velocity planner.
+
+    Args:
+        algo_key: Lowercased algorithm key.
+
+    Returns:
+        str: Human-readable boundary describing how the planner's world velocity reaches
+        the holonomic vx_vy benchmark action space.
+    """
+    if algo_key == "orca":
+        return (
+            "Use upstream Python-RVO2 to solve reciprocal-avoidance velocity in world "
+            "coordinates, then forward that world-frame velocity directly into the "
+            "holonomic vx_vy benchmark action space."
+        )
+    if algo_key in {"hrvo", "socnav_hrvo"}:
+        return (
+            "Run the local HRVO geometry solver in world velocity space, then forward the "
+            "selected world-frame velocity directly into the holonomic vx_vy benchmark "
+            "action space."
+        )
+    if algo_key == "social_force":
+        return (
+            "Compute the local social-force translational command as a world-frame velocity "
+            "vector, then forward that world-frame velocity directly into the holonomic "
+            "vx_vy benchmark action space."
+        )
+    if algo_key in {"social_navigation_pyenvs_orca", "social_nav_pyenvs_orca"}:
+        return (
+            "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
+            "JointState contract, run upstream ORCA predict(), and forward the resulting "
+            "ActionXY world velocity directly into the holonomic vx_vy benchmark action space."
+        )
+    if algo_key in {"sonic_crowdnav", "sonic_gst"}:
+        return (
+            "Run the upstream SoNIC checkpoint through the model-only Robot SF wrapper and "
+            "forward the resulting ActionXY world velocity directly into the holonomic vx_vy "
+            "benchmark action space."
+        )
+    if algo_key in {"gensafenav_ours_gst", "gensafe_ours_gst", "ours_gst"}:
+        return (
+            "Run the upstream GenSafeNav Ours_GST checkpoint through the model-only Robot SF "
+            "wrapper and forward the resulting ActionXY world velocity directly into the "
+            "holonomic vx_vy benchmark action space."
+        )
+    if algo_key in {
+        "gensafenav_gst_predictor_rand",
+        "gensafe_gst_predictor_rand",
+        "gst_predictor_rand",
+    }:
+        return (
+            "Run the upstream GenSafeNav GST_predictor_rand checkpoint through the model-only "
+            "Robot SF wrapper and forward the resulting ActionXY world velocity directly into "
+            "the holonomic vx_vy benchmark action space."
+        )
+    return (
+        "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
+        "JointState contract, run the upstream force-model policy predict(), and forward "
+        "the resulting ActionXY world velocity directly into the holonomic vx_vy "
+        "benchmark action space."
+    )
+
+
+def _build_holonomic_world_velocity_policy(
+    adapter: Any,
+    *,
+    algo_key: str,
+    meta: dict[str, Any],
+    planner_bind_env: Any,
+) -> tuple[Callable[[dict[str, Any]], dict[str, float | str]], dict[str, Any]]:
+    """Build the holonomic world-velocity (vx_vy) policy and metadata for a planner.
+
+    Returns:
+        tuple[Callable, dict[str, Any]]: Policy callable returning a holonomic
+        world-velocity command payload, and enriched metadata.
+    """
+    adapter_boundary = _holonomic_world_velocity_boundary(algo_key)
+    _apply_direct_world_velocity_metadata(meta, adapter_boundary=adapter_boundary)
+
+    def _policy(obs: dict[str, Any]) -> dict[str, float | str]:
+        """Run holonomic upstream ORCA and return world-velocity action payload.
+
+        Returns:
+            dict[str, float | str]: Holonomic world-velocity command.
+        """
+        velocity_world = np.asarray(adapter.plan_velocity_world(obs), dtype=float).reshape(-1)
+        if velocity_world.size < 2:
+            raise ValueError(
+                "Holonomic ORCA path expected a world-frame velocity with two components."
+            )
+        return _holonomic_world_velocity_command(
+            float(velocity_world[0]),
+            float(velocity_world[1]),
+        )
+
+    _attach_planner_reset(_policy, adapter)
+    _policy._planner_adapter = adapter
+    if planner_bind_env is not None:
+        _policy._planner_bind_env = planner_bind_env
+    return _policy, meta
+
+
 def _build_socnav_family_adapter(  # noqa: C901, PLR0912, PLR0915
     algo_key: str,
     algo: str,
@@ -2093,109 +2244,16 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         planner_bind_env = _bind_env
     elif hasattr(adapter, "bind_env"):
         planner_bind_env = adapter.bind_env
-    holonomic_world_velocity_mode = (
-        algo_key
-        in {
-            "orca",
-            "hrvo",
-            "socnav_hrvo",
-            "social_force",
-            "sf",
-            "social_navigation_pyenvs_orca",
-            "social_nav_pyenvs_orca",
-            "social_navigation_pyenvs_socialforce",
-            "social_nav_pyenvs_socialforce",
-            "social_navigation_pyenvs_sfm_helbing",
-            "social_nav_pyenvs_sfm_helbing",
-            "sonic_crowdnav",
-            "sonic_gst",
-            "gensafenav_ours_gst",
-            "gensafe_ours_gst",
-            "ours_gst",
-            "gensafenav_gst_predictor_rand",
-            "gensafe_gst_predictor_rand",
-            "gst_predictor_rand",
-        }
-        and str(robot_kinematics or "").strip().lower() in {"holonomic", "omni", "omnidirectional"}
-        and normalized_robot_command_mode == "vx_vy"
+    holonomic_world_velocity_mode = _is_holonomic_world_velocity_mode(
+        algo_key, robot_kinematics, normalized_robot_command_mode
     )
     if holonomic_world_velocity_mode:
-        if algo_key == "orca":
-            adapter_boundary = (
-                "Use upstream Python-RVO2 to solve reciprocal-avoidance velocity in world "
-                "coordinates, then forward that world-frame velocity directly into the "
-                "holonomic vx_vy benchmark action space."
-            )
-        elif algo_key in {"hrvo", "socnav_hrvo"}:
-            adapter_boundary = (
-                "Run the local HRVO geometry solver in world velocity space, then forward the "
-                "selected world-frame velocity directly into the holonomic vx_vy benchmark "
-                "action space."
-            )
-        elif algo_key == "social_force":
-            adapter_boundary = (
-                "Compute the local social-force translational command as a world-frame velocity "
-                "vector, then forward that world-frame velocity directly into the holonomic "
-                "vx_vy benchmark action space."
-            )
-        elif algo_key in {"social_navigation_pyenvs_orca", "social_nav_pyenvs_orca"}:
-            adapter_boundary = (
-                "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
-                "JointState contract, run upstream ORCA predict(), and forward the resulting "
-                "ActionXY world velocity directly into the holonomic vx_vy benchmark action space."
-            )
-        elif algo_key in {"sonic_crowdnav", "sonic_gst"}:
-            adapter_boundary = (
-                "Run the upstream SoNIC checkpoint through the model-only Robot SF wrapper and "
-                "forward the resulting ActionXY world velocity directly into the holonomic vx_vy "
-                "benchmark action space."
-            )
-        elif algo_key in {"gensafenav_ours_gst", "gensafe_ours_gst", "ours_gst"}:
-            adapter_boundary = (
-                "Run the upstream GenSafeNav Ours_GST checkpoint through the model-only Robot SF "
-                "wrapper and forward the resulting ActionXY world velocity directly into the "
-                "holonomic vx_vy benchmark action space."
-            )
-        elif algo_key in {
-            "gensafenav_gst_predictor_rand",
-            "gensafe_gst_predictor_rand",
-            "gst_predictor_rand",
-        }:
-            adapter_boundary = (
-                "Run the upstream GenSafeNav GST_predictor_rand checkpoint through the model-only "
-                "Robot SF wrapper and forward the resulting ActionXY world velocity directly into "
-                "the holonomic vx_vy benchmark action space."
-            )
-        else:
-            adapter_boundary = (
-                "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
-                "JointState contract, run the upstream force-model policy predict(), and forward "
-                "the resulting ActionXY world velocity directly into the holonomic vx_vy "
-                "benchmark action space."
-            )
-        _apply_direct_world_velocity_metadata(meta, adapter_boundary=adapter_boundary)
-
-        def _policy(obs: dict[str, Any]) -> dict[str, float | str]:
-            """Run holonomic upstream ORCA and return world-velocity action payload.
-
-            Returns:
-                dict[str, float | str]: Holonomic world-velocity command.
-            """
-            velocity_world = np.asarray(adapter.plan_velocity_world(obs), dtype=float).reshape(-1)
-            if velocity_world.size < 2:
-                raise ValueError(
-                    "Holonomic ORCA path expected a world-frame velocity with two components."
-                )
-            return _holonomic_world_velocity_command(
-                float(velocity_world[0]),
-                float(velocity_world[1]),
-            )
-
-        _attach_planner_reset(_policy, adapter)
-        _policy._planner_adapter = adapter
-        if planner_bind_env is not None:
-            _policy._planner_bind_env = planner_bind_env
-        return _policy, meta
+        return _build_holonomic_world_velocity_policy(
+            adapter,
+            algo_key=algo_key,
+            meta=meta,
+            planner_bind_env=planner_bind_env,
+        )
 
     def _policy(obs: dict[str, Any]) -> tuple[float, float]:
         """Run a generic SocNav adapter and project command feasibility.

@@ -6,7 +6,6 @@ execution outputs and paper-facing statements.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import subprocess
 import sys
@@ -16,6 +15,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.common.artifact_paths import get_repository_root
 
 BENCHMARK_CLAIM_SCHEMA_VERSION = "benchmark_claim.v1"
@@ -25,15 +25,6 @@ _HEX_SHA256_LENGTH = 64
 
 class BenchmarkClaimError(ValueError):
     """Raised when claim inputs cannot support a benchmark claim artifact."""
-
-
-def _sha256_file(path: Path) -> str:
-    """Return the SHA-256 digest for ``path``."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _repo_relative(path: Path) -> str:
@@ -135,7 +126,7 @@ def _load_policy_metadata(path: Path) -> dict[str, Any]:
 
     return {
         "path": _repo_relative(resolved),
-        "sha256": _sha256_file(resolved),
+        "sha256": sha256_file(resolved),
         "schema_version": schema_version,
         "policies": policies,
     }
@@ -195,7 +186,7 @@ def _episode_artifact(path: Path, field_name: str) -> dict[str, Any]:
         raise BenchmarkClaimError(f"{field_name} must contain at least one episode record")
     return {
         "path": _repo_relative(resolved),
-        "sha256": _sha256_file(resolved),
+        "sha256": sha256_file(resolved),
         "schema_version": ",".join(sorted(schema_versions)),
         "episode_count": count,
         "seed_suite": sorted(seeds),
@@ -224,7 +215,7 @@ def _aggregate_artifact(path: Path, index: int) -> dict[str, Any]:
     payload = _load_json_mapping(resolved, f"aggregate_reports[{index}]")
     return {
         "path": _repo_relative(resolved),
-        "sha256": _sha256_file(resolved),
+        "sha256": sha256_file(resolved),
         "schema_version": _schema_version_from_payload(payload, f"aggregate_reports[{index}]"),
     }
 
@@ -287,7 +278,7 @@ def build_benchmark_claim(  # noqa: PLR0913
 
     matrix = _require_file(scenario_matrix_path, "scenario_matrix")
     expected_matrix_hash = _require_sha256(scenario_matrix_sha256, "scenario_matrix_sha256")
-    actual_matrix_hash = _sha256_file(matrix)
+    actual_matrix_hash = sha256_file(matrix)
     if actual_matrix_hash != expected_matrix_hash:
         raise BenchmarkClaimError("scenario_matrix_sha256 does not match scenario_matrix")
     final_paths = list(final_benchmark_episodes)
@@ -304,7 +295,7 @@ def build_benchmark_claim(  # noqa: PLR0913
             "git_sha": _git_sha(),
             "python_version": sys.version.split()[0],
             "dependency_group": str(dependency_group).strip() or "dev",
-            "uv_lock_sha256": _sha256_file(uv_lock_path),
+            "uv_lock_sha256": sha256_file(uv_lock_path),
             "container_image_digest": container_image_digest,
         },
         "evidence": {

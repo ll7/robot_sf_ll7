@@ -9,12 +9,13 @@ after checking the issue, replay limitation, and expected file contract.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from robot_sf.benchmark.identity.hash_utils import sha256_file
 
 ISSUE = 3637
 ANALYSIS_SCHEMA = "reactivity-replay-rank-study-analysis.v1"
@@ -43,14 +44,6 @@ def _load_json(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise PromotionError(f"{path} must contain a JSON object")
     return payload
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _validate_analysis(analysis_dir: Path) -> dict[str, Any]:
@@ -85,7 +78,7 @@ def _validate_analysis(analysis_dir: Path) -> dict[str, Any]:
 def _write_manifest(evidence_dir: Path, copied: list[str]) -> None:
     lines = []
     for name in sorted(copied):
-        lines.append(f"{_sha256(evidence_dir / name)}  {name}")
+        lines.append(f"{sha256_file(evidence_dir / name)}  {name}")
     (evidence_dir / "manifest.sha256").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

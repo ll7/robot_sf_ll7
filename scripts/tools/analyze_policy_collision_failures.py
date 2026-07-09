@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.identity.hash_utils import read_jsonl
+
 _COLLISION_METRICS = (
     "ped_collision_count",
     "obstacle_collision_count",
@@ -187,34 +189,12 @@ def _rate(numerator: int, denominator: int) -> float:
     return float(numerator / denominator) if denominator else 0.0
 
 
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
-    """Read episode records from a JSONL file.
-
-    Returns:
-        List of JSON object records.
-    """
-    records: list[dict[str, Any]] = []
-    with path.open("r", encoding="utf-8") as handle:
-        for line_number, line in enumerate(handle, start=1):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                record = json.loads(line)
-            except json.JSONDecodeError as exc:
-                raise ValueError(f"{path}:{line_number}: invalid JSON: {exc}") from exc
-            if not isinstance(record, dict):
-                raise ValueError(f"{path}:{line_number}: expected JSON object")
-            records.append(record)
-    return records
-
-
 def analyze_run(run_root: Path) -> dict[str, Any]:
     """Analyze one policy-analysis output directory."""
     episodes_path = run_root / "episodes.jsonl"
     if not episodes_path.is_file():
         raise FileNotFoundError(f"missing episodes.jsonl under {run_root}")
-    records = _read_jsonl(episodes_path)
+    records = read_jsonl(episodes_path)
     scenario_stats: defaultdict[str, ScenarioStats] = defaultdict(ScenarioStats)
     totals = ScenarioStats()
     for record in records:

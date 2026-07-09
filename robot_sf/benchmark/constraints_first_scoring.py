@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any
 
 from scipy.stats import beta
 
+from robot_sf.benchmark.identity.hash_utils import read_jsonl
 from robot_sf.benchmark.metric_layers import LAYER_ORDER, METRIC_LAYER_SCHEMA_VERSION
 
 if TYPE_CHECKING:
@@ -315,24 +316,6 @@ def group_episodes_by_planner(
     return grouped
 
 
-def _load_jsonl(path: Path) -> list[dict[str, Any]]:
-    """Load a JSONL file of episode records.
-
-    Returns:
-        list[dict[str, Any]]: One dict per non-empty JSONL line.
-    """
-    records: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        record = json.loads(stripped)
-        if not isinstance(record, dict):
-            raise ValueError(f"{path}: each JSONL line must be a JSON object")
-        records.append(record)
-    return records
-
-
 def _build_parser() -> argparse.ArgumentParser:
     """Build the constraints-first report CLI parser.
 
@@ -361,7 +344,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
     args = _build_parser().parse_args(sys.argv[1:] if argv is None else argv)
     try:
-        records = _load_jsonl(args.episodes)
+        records = read_jsonl(args.episodes)
         planner_episodes = group_episodes_by_planner(records, planner_key=args.planner_key)
         compensatory = None
         if args.compensatory is not None:

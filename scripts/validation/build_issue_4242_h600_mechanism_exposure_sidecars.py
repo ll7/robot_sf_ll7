@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
 import json
 from collections import Counter
 from datetime import UTC, datetime
@@ -19,6 +18,7 @@ from robot_sf.benchmark.failure_mechanism_taxonomy import (
     unknown_failure_mechanism_record,
     validate_failure_mechanism_record,
 )
+from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.interaction_exposure import (
     compute_interaction_exposure_fields,
     not_derivable_interaction_exposure,
@@ -88,14 +88,6 @@ def _write_csv(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) ->
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _repo_path(path: Path, *, repo_root: Path) -> Path:
@@ -367,7 +359,7 @@ def _write_sha256sums(output_dir: Path) -> None:
     rows = []
     for path in sorted(output_dir.iterdir()):
         if path.is_file() and path.name != "SHA256SUMS":
-            rows.append(f"{_sha256(path)}  {path.as_posix()}")
+            rows.append(f"{sha256_file(path)}  {path.as_posix()}")
     (output_dir / "SHA256SUMS").write_text("\n".join(rows) + "\n", encoding="utf-8")
 
 

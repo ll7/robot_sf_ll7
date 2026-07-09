@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,6 +12,8 @@ from urllib.request import urlopen
 
 import yaml
 from loguru import logger
+
+from robot_sf.benchmark.identity.hash_utils import sha256_file
 
 try:  # pragma: no cover - optional dependency
     import wandb  # type: ignore
@@ -270,15 +271,6 @@ def resolve_model_path(
     return _download_from_wandb(entry, cache_dir=cache_dir)
 
 
-def _sha256(path: Path) -> str:
-    """Return the SHA256 digest for a local file."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _download_from_github_release(entry: dict[str, Any], *, cache_dir: str | Path | None) -> Path:
     """Download a model artifact from a GitHub release asset.
 
@@ -292,7 +284,7 @@ def _download_from_github_release(entry: dict[str, Any], *, cache_dir: str | Pat
     model_id = str(entry.get("model_id", "unknown-model"))
     asset_name = str(release.get("asset_name") or "").strip()
     url = str(release.get("url") or "").strip()
-    expected_sha256 = _github_release_expected_sha256(release)
+    expected_sha256 = _github_release_expectedsha256_file(release)
     if not asset_name:
         raise ValueError(f"Registry entry '{model_id}' github_release.asset_name is required.")
     _validate_github_release_asset_name(asset_name, model_id=model_id)
@@ -327,7 +319,7 @@ def _download_from_github_release(entry: dict[str, Any], *, cache_dir: str | Pat
     return cached_path
 
 
-def _github_release_expected_sha256(release: dict[str, Any]) -> str:
+def _github_release_expectedsha256_file(release: dict[str, Any]) -> str:
     """Return normalized expected SHA256 while preserving non-null YAML scalars."""
     raw_sha256 = release.get("sha256")
     return "" if raw_sha256 is None else str(raw_sha256).strip().lower()
@@ -373,7 +365,7 @@ def _validate_github_release_url(url: str, *, model_id: str) -> None:
 def _cached_release_path_is_valid(path: Path, expected_sha256: str) -> bool:
     """Return whether a cached release asset can be reused."""
     if expected_sha256:
-        observed = _sha256(path)
+        observed = sha256_file(path)
         if observed != expected_sha256:
             logger.warning(
                 "Cached GitHub release model artifact checksum mismatch; redownloading: {}",
@@ -408,7 +400,7 @@ def _verify_download_checksum(
     """Validate a downloaded artifact checksum."""
     if not expected_sha256:
         return
-    observed = _sha256(path)
+    observed = sha256_file(path)
     if observed != expected_sha256:
         path.unlink(missing_ok=True)
         raise ValueError(

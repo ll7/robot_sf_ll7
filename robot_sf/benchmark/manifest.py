@@ -53,6 +53,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
+from robot_sf.benchmark.identity.hash_utils import sha256_file
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -87,15 +88,6 @@ def _stat_of(path: Path) -> _Stat:
     return _Stat(size=int(st.st_size), mtime_ns=int(st.st_mtime_ns))
 
 
-def _sha256_file(path: Path) -> str:
-    """Return a SHA256 checksum for a provenance artifact."""
-    hasher = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            hasher.update(chunk)
-    return hasher.hexdigest()
-
-
 def _sha256_jsonable(payload: object) -> str:
     """Return a stable SHA256 digest for JSON-serializable provenance identity."""
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -128,7 +120,7 @@ def _artifact_entry(path: Path, *, required: bool = False) -> dict[str, object]:
     return {
         "path": str(path),
         "artifact_status": "available",
-        "sha256": _sha256_file(path),
+        "sha256": sha256_file(path),
         "size": stat.size,
         "mtime_ns": stat.mtime_ns,
     }

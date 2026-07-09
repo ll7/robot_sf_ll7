@@ -16,6 +16,8 @@ from pathlib import Path
 from statistics import mean
 from typing import Any
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file
+
 SCHEMA_VERSION = "issue_4195_h600_aggregation.v1"
 DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_3810_h600_interpretation_2026-07")
 DEFAULT_CONFIRM_REPORTS = Path("output/issue3810-h600-longhorizon-confirm-run/13268/reports")
@@ -131,16 +133,6 @@ def _read_csv_rows(path: Path) -> list[dict[str, str]]:
 
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle))
-
-
-def _sha256(path: Path) -> str:
-    """Return the SHA-256 digest of a file."""
-
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _float_or_none(value: Any) -> float | None:
@@ -538,8 +530,8 @@ def _build_rows_for_run(
             "git_hash": campaign.get("git_hash"),
         },
         "source_sha256": {
-            "campaign_summary.json": _sha256(summary_path),
-            "seed_episode_rows.csv": _sha256(seed_rows_path),
+            "campaign_summary.json": sha256_file(summary_path),
+            "seed_episode_rows.csv": sha256_file(seed_rows_path),
         },
         "planner_keys": sorted(planner_rows),
         "seed_episode_columns": sorted(seed_columns),
@@ -1127,7 +1119,7 @@ def _write_sha256sums(output_dir: Path) -> None:
     for path in sorted(output_dir.iterdir()):
         if path.name == "SHA256SUMS" or not path.is_file():
             continue
-        lines.append(f"{_sha256(path)}  {_public_path(path)}")
+        lines.append(f"{sha256_file(path)}  {_public_path(path)}")
     (output_dir / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

@@ -13,6 +13,7 @@ from robot_sf.benchmark.frozen_trace_reconciliation import (
     build_frozen_trace_reconciliation_report,
     build_missing_frozen_trace_export_report,
 )
+from robot_sf.benchmark.identity.hash_utils import read_jsonl
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -53,24 +54,6 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     return parser.parse_args(argv)
-
-
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
-    """Read non-empty JSON object lines from ``path``."""
-
-    rows: list[dict[str, Any]] = []
-    with path.open(encoding="utf-8") as handle:
-        for line_number, line in enumerate(handle, start=1):
-            if not line.strip():
-                continue
-            try:
-                payload = json.loads(line)
-            except json.JSONDecodeError as err:
-                raise ValueError(f"{path}:{line_number}: invalid JSON: {err}") from err
-            if not isinstance(payload, dict):
-                raise ValueError(f"{path}:{line_number}: expected JSON object")
-            rows.append(payload)
-    return rows
 
 
 def _read_artifact_manifest(path: Path | None) -> list[dict[str, Any]]:
@@ -134,8 +117,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     report = build_frozen_trace_reconciliation_report(
-        _read_jsonl(args.old_ledgers),
-        _read_jsonl(args.new_ledgers),
+        read_jsonl(args.old_ledgers),
+        read_jsonl(args.new_ledgers),
         artifact_manifest=_read_artifact_manifest(args.artifact_manifest),
         old_label=args.old_label,
         new_label=args.new_label,

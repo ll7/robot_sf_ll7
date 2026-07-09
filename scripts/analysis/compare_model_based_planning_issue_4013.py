@@ -16,6 +16,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.identity.hash_utils import read_jsonl
+
 SCHEMA_VERSION = "issue_4013.model_based_planning_comparison.v1"
 EXPECTED_EVIDENCE_TIER = "diagnostic-only"
 EXPECTED_CLAIM_BOUNDARY = (
@@ -76,7 +78,7 @@ def _load_runs(
             continue
         role = str(run.get("role", ""))
         episodes_path = _resolve_path(config_path, run.get("episodes_jsonl"))
-        loaded.append((role, _read_jsonl_objects(episodes_path), episodes_path))
+        loaded.append((role, read_jsonl(episodes_path), episodes_path))
     return loaded
 
 
@@ -292,23 +294,6 @@ def _load_yaml_mapping(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"{path} must contain a YAML mapping")
     return payload
-
-
-def _read_jsonl_objects(path: Path) -> list[dict[str, Any]]:
-    records: list[dict[str, Any]] = []
-    with path.open("r", encoding="utf-8") as handle:
-        for line_number, line in enumerate(handle, start=1):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                payload = json.loads(line)
-            except json.JSONDecodeError as err:
-                raise ValueError(f"{path}:{line_number} contains malformed JSON: {err}") from err
-            if not isinstance(payload, dict):
-                raise ValueError(f"{path}:{line_number} must contain a JSON object")
-            records.append(payload)
-    return records
 
 
 def _resolve_path(config_path: Path, raw_path: Any) -> Path:

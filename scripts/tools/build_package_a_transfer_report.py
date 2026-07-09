@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
 import json
 import math
 import sys
@@ -21,6 +20,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file
 from scripts.tools.campaign_result_store import read_parquet_frame
 from scripts.validation.check_package_a_readiness import build_decision_packet
 
@@ -332,7 +332,7 @@ def _write_artifact_manifest(output_dir: Path, files: list[str]) -> None:
         "issue": 3078,
         "artifact_policy": "compact_tracked_evidence_only",
         "files": [
-            {"path": filename, "sha256": _sha256(output_dir / filename)} for filename in files
+            {"path": filename, "sha256": sha256_file(output_dir / filename)} for filename in files
         ],
     }
     (output_dir / "artifact_manifest.yaml").write_text(
@@ -345,16 +345,8 @@ def _write_checksums(output_dir: Path) -> None:
     lines = []
     for path in sorted(output_dir.rglob("*")):
         if path.is_file() and path.name != "checksums.sha256":
-            lines.append(f"{_sha256(path)}  {path.relative_to(output_dir).as_posix()}")
+            lines.append(f"{sha256_file(path)}  {path.relative_to(output_dir).as_posix()}")
     (output_dir / "checksums.sha256").write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def render_report(

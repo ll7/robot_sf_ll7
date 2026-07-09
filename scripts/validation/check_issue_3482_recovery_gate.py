@@ -10,6 +10,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.identity.hash_utils import load_json
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BOUNDARY_MANIFEST = (
     REPO_ROOT
@@ -54,14 +56,6 @@ class GateViolation:
 
     field: str
     message: str
-
-
-def _load_json_object(path: Path) -> dict[str, Any]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        msg = f"{path}: expected JSON object"
-        raise ValueError(msg)
-    return payload
 
 
 def _validate_boundary(boundary: dict[str, Any]) -> list[GateViolation]:  # noqa: C901
@@ -219,8 +213,8 @@ def validate_gate(boundary: dict[str, Any], recovery: dict[str, Any]) -> list[Ga
 def build_report(boundary_manifest: Path, recovery_manifest: Path) -> dict[str, Any]:
     """Build deterministic issue #3482 recovery gate report."""
 
-    boundary = _load_json_object(boundary_manifest)
-    recovery = _load_json_object(recovery_manifest)
+    boundary = load_json(boundary_manifest)
+    recovery = load_json(recovery_manifest)
     violations = validate_gate(boundary, recovery)
     collision_count_status = (boundary.get("claim_boundaries") or {}).get(
         "collision_count_metric_status"

@@ -954,41 +954,71 @@ def _topology_guided_episode_diagnostics(
     }
 
 
-def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
+@dataclass(frozen=True, slots=True)
+class _EpisodeRunContext:
+    """Resolved inputs and runtime config for one episode run.
+
+    Bundles the normalization/env-config/horizon/profile/policy-cfg resolution phase of
+    ``run_map_episode`` so the episode loop and metadata assembly receive a single
+    immutable context object instead of recomputing the same locals inline.
+    """
+
+    scenario: dict[str, Any]
+    scenario_id: str
+    ts_start: str
+    start_time: float
+    ped_impact_radius_m: float
+    ped_impact_window_steps: int
+    benchmark_track: str | None
+    track_schema_version: str | None
+    noise_spec: dict[str, Any]
+    noise_rng: Any
+    noise_state: Any
+    noise_stats: Any
+    tracking_precision_spec: dict[str, Any]
+    tracking_precision_rng: Any
+    safety_wrapper_runtime: Any
+    cbf_runtime: Any
+    safety_wrapper_deadlock_monitor: Any
+    config: Any
+    horizon_val: int
+    robot_kinematics: str
+    robot_command_mode: str
+    actuation_profile: Any
+    latency_profile: Any
+    algo: str
+    policy_cfg: dict[str, Any]
+
+
+def _resolve_episode_run_context(  # noqa: PLR0913
+    *,
     scenario: dict[str, Any],
     seed: int,
-    *,
     horizon: int | None,
     dt: float | None,
-    record_forces: bool,
-    snqi_weights: dict[str, float] | None,
-    snqi_baseline: dict[str, dict[str, float]] | None,
     algo: str,
     scenario_path: Path,
-    algo_config: dict[str, Any] | None = None,
-    algo_config_path: str | None = None,
-    adapter_impact_eval: bool = False,
-    experimental_ped_impact: bool = False,
-    ped_impact_radius_m: float = 2.0,
-    ped_impact_window_steps: int = 5,
-    observation_mode: str | None = None,
-    observation_level: str | None = None,
-    benchmark_track: str | None = None,
-    track_schema_version: str | None = None,
-    observation_noise: dict[str, Any] | None = None,
-    tracking_precision: dict[str, Any] | None = None,
-    synthetic_actuation_profile: dict[str, Any] | None = None,
-    latency_stress_profile: dict[str, Any] | None = None,
-    safety_wrapper: dict[str, Any] | None = None,
-    cbf_safety_filter: dict[str, Any] | None = None,
-    record_planner_decision_trace: bool = False,
-    record_simulation_step_trace: bool = False,
-    policy_builder: PolicyBuilder,
-) -> dict[str, Any]:
-    """Run one scenario/seed episode and return a benchmark JSONL record.
+    algo_config: dict[str, Any] | None,
+    algo_config_path: str | None,
+    experimental_ped_impact: bool,
+    ped_impact_radius_m: float,
+    ped_impact_window_steps: int,
+    observation_mode: str | None,
+    observation_level: str | None,
+    benchmark_track: str | None,
+    track_schema_version: str | None,
+    observation_noise: dict[str, Any] | None,
+    tracking_precision: dict[str, Any] | None,
+    synthetic_actuation_profile: dict[str, Any] | None,
+    latency_stress_profile: dict[str, Any] | None,
+    safety_wrapper: dict[str, Any] | None,
+    cbf_safety_filter: dict[str, Any] | None,
+) -> _EpisodeRunContext:
+    """Normalize episode inputs, build the env config, and resolve the policy cfg.
 
     Returns:
-        dict[str, Any]: Episode record with metrics, provenance, and planner metadata.
+        _EpisodeRunContext: Immutable bundle of resolved scenario/track/noise/profile/
+        kinematics/policy-cfg values consumed by the rest of ``run_map_episode``.
     """
     ped_impact_radius_m, ped_impact_window_steps = _normalize_pedestrian_impact_controls(
         experimental_ped_impact=experimental_ped_impact,
@@ -1022,12 +1052,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         raise ValueError(
             "safety_wrapper and cbf_safety_filter cannot both be enabled in #3948 first slice"
         )
-    tracking_precision_records: list[dict[str, Any]] = []
-    safety_wrapper_trace: list[dict[str, Any]] = []
-    # Stateful fourth wrapper stage; one monitor per episode (no-op while disabled).
     safety_wrapper_deadlock_monitor = make_deadlock_recovery_monitor(safety_wrapper_runtime)
-    cbf_filter_trace: list[dict[str, Any]] = []
-    min_separation_corrupted_values: list[float] = []
     config = _build_env_config(scenario, scenario_path=scenario_path)
     max_steps = int(scenario.get("simulation_config", {}).get("max_episode_steps", 0) or 0)
     horizon_val = int(horizon) if horizon and horizon > 0 else max_steps
@@ -1072,6 +1097,123 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         seed=int(seed),
     )
     policy_cfg = _apply_scenario_uncertainty_envelope_config(algo, policy_cfg, scenario)
+    return _EpisodeRunContext(
+        scenario=scenario,
+        scenario_id=scenario_id,
+        ts_start=ts_start,
+        start_time=start_time,
+        ped_impact_radius_m=ped_impact_radius_m,
+        ped_impact_window_steps=ped_impact_window_steps,
+        benchmark_track=benchmark_track,
+        track_schema_version=track_schema_version,
+        noise_spec=noise_spec,
+        noise_rng=noise_rng,
+        noise_state=noise_state,
+        noise_stats=noise_stats,
+        tracking_precision_spec=tracking_precision_spec,
+        tracking_precision_rng=tracking_precision_rng,
+        safety_wrapper_runtime=safety_wrapper_runtime,
+        cbf_runtime=cbf_runtime,
+        safety_wrapper_deadlock_monitor=safety_wrapper_deadlock_monitor,
+        config=config,
+        horizon_val=horizon_val,
+        robot_kinematics=robot_kinematics,
+        robot_command_mode=robot_command_mode,
+        actuation_profile=actuation_profile,
+        latency_profile=latency_profile,
+        algo=algo,
+        policy_cfg=policy_cfg,
+    )
+
+
+def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
+    scenario: dict[str, Any],
+    seed: int,
+    *,
+    horizon: int | None,
+    dt: float | None,
+    record_forces: bool,
+    snqi_weights: dict[str, float] | None,
+    snqi_baseline: dict[str, dict[str, float]] | None,
+    algo: str,
+    scenario_path: Path,
+    algo_config: dict[str, Any] | None = None,
+    algo_config_path: str | None = None,
+    adapter_impact_eval: bool = False,
+    experimental_ped_impact: bool = False,
+    ped_impact_radius_m: float = 2.0,
+    ped_impact_window_steps: int = 5,
+    observation_mode: str | None = None,
+    observation_level: str | None = None,
+    benchmark_track: str | None = None,
+    track_schema_version: str | None = None,
+    observation_noise: dict[str, Any] | None = None,
+    tracking_precision: dict[str, Any] | None = None,
+    synthetic_actuation_profile: dict[str, Any] | None = None,
+    latency_stress_profile: dict[str, Any] | None = None,
+    safety_wrapper: dict[str, Any] | None = None,
+    cbf_safety_filter: dict[str, Any] | None = None,
+    record_planner_decision_trace: bool = False,
+    record_simulation_step_trace: bool = False,
+    policy_builder: PolicyBuilder,
+) -> dict[str, Any]:
+    """Run one scenario/seed episode and return a benchmark JSONL record.
+
+    Returns:
+        dict[str, Any]: Episode record with metrics, provenance, and planner metadata.
+    """
+    ctx = _resolve_episode_run_context(
+        scenario=scenario,
+        seed=seed,
+        horizon=horizon,
+        dt=dt,
+        algo=algo,
+        scenario_path=scenario_path,
+        algo_config=algo_config,
+        algo_config_path=algo_config_path,
+        experimental_ped_impact=experimental_ped_impact,
+        ped_impact_radius_m=ped_impact_radius_m,
+        ped_impact_window_steps=ped_impact_window_steps,
+        observation_mode=observation_mode,
+        observation_level=observation_level,
+        benchmark_track=benchmark_track,
+        track_schema_version=track_schema_version,
+        observation_noise=observation_noise,
+        tracking_precision=tracking_precision,
+        synthetic_actuation_profile=synthetic_actuation_profile,
+        latency_stress_profile=latency_stress_profile,
+        safety_wrapper=safety_wrapper,
+        cbf_safety_filter=cbf_safety_filter,
+    )
+    scenario = ctx.scenario
+    scenario_id = ctx.scenario_id
+    ts_start = ctx.ts_start
+    start_time = ctx.start_time
+    ped_impact_radius_m = ctx.ped_impact_radius_m
+    ped_impact_window_steps = ctx.ped_impact_window_steps
+    benchmark_track = ctx.benchmark_track
+    track_schema_version = ctx.track_schema_version
+    noise_spec = ctx.noise_spec
+    noise_rng = ctx.noise_rng
+    noise_state = ctx.noise_state
+    noise_stats = ctx.noise_stats
+    tracking_precision_spec = ctx.tracking_precision_spec
+    tracking_precision_rng = ctx.tracking_precision_rng
+    safety_wrapper_runtime = ctx.safety_wrapper_runtime
+    cbf_runtime = ctx.cbf_runtime
+    safety_wrapper_deadlock_monitor = ctx.safety_wrapper_deadlock_monitor
+    config = ctx.config
+    horizon_val = ctx.horizon_val
+    robot_kinematics = ctx.robot_kinematics
+    actuation_profile = ctx.actuation_profile
+    latency_profile = ctx.latency_profile
+    robot_command_mode = ctx.robot_command_mode
+    algo = ctx.algo
+    policy_cfg = ctx.policy_cfg
+    tracking_precision_records: list[dict[str, Any]] = []
+    safety_wrapper_trace: list[dict[str, Any]] = []
+    cbf_filter_trace: list[dict[str, Any]] = []
+    min_separation_corrupted_values: list[float] = []
     learned_observation_contract = resolve_learned_checkpoint_observation_contract(
         algo,
         policy_cfg,

@@ -459,6 +459,60 @@ class TestWriteSelectionReport:
         assert "<!-- /AI-GENERATED -->" in report
 
 
+class TestSelectionReportDeterminism:
+    """write_selection_report must be byte-stable when generated_at is pinned.
+
+    Regression guard for the #4903 reproducibility gap: SELECTION_REPORT.md's
+    ``Generated:`` line previously used wall-clock time, so two re-runs with the
+    same ``--pin-generated-at`` diverged. The pinned ``generated_at`` must flow
+    into the report so the whole export is byte-identical.
+    """
+
+    def _selections(self) -> list[Any]:
+        return [
+            _export_module.SelectedEpisode(
+                planner="goal",
+                scenario_id="classic_group_crossing_low",
+                seed=1,
+                selection_mode="worst",
+                metric_value=0.4,
+                episode_id="test_s1",
+                status="success",
+            )
+        ]
+
+    def test_generated_at_pinned_in_report(self, tmp_path: Path) -> None:
+        pin = "2026-07-09T12:00:00+00:00"
+        out = tmp_path / "report_dir"
+        out.mkdir()
+        _export_module.write_selection_report(
+            self._selections(), out, marker_date="2026-07-09", generated_at=pin
+        )
+        report = (out / "SELECTION_REPORT.md").read_text(encoding="utf-8")
+        assert f"Generated: {pin}" in report
+
+    def test_byte_identical_with_pinned_generated_at(self, tmp_path: Path) -> None:
+        pin = "2026-07-09T12:00:00+00:00"
+        dirs = [tmp_path / "r1", tmp_path / "r2"]
+        for d in dirs:
+            d.mkdir()
+            _export_module.write_selection_report(
+                self._selections(), d, marker_date="2026-07-09", generated_at=pin
+            )
+        assert (
+            sha256_file(dirs[0] / "SELECTION_REPORT.md")
+            == sha256_file(dirs[1] / "SELECTION_REPORT.md")
+        ), "SELECTION_REPORT.md not byte-identical across pinned re-runs"
+
+    def test_wall_clock_fallback_when_unpinned(self, tmp_path: Path) -> None:
+        """Without generated_at the report still renders (wall-clock fallback)."""
+        out = tmp_path / "report_dir"
+        out.mkdir()
+        _export_module.write_selection_report(self._selections(), out)
+        report = (out / "SELECTION_REPORT.md").read_text(encoding="utf-8")
+        assert "Generated:" in report
+
+
 class TestTupleReturnProcessPlanner:
     """Verify _process_planner returns tuple[list[SelectedEpisode], dict | None].
 

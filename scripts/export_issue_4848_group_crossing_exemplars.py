@@ -356,13 +356,21 @@ def write_selection_report(
     all_selections: list[SelectedEpisode],
     output_dir: Path,
     marker_date: str | None = None,
+    generated_at: str | None = None,
 ) -> None:
-    """Write the selection report listing all selected episodes."""
+    """Write the selection report listing all selected episodes.
+
+    ``generated_at`` is the provenance timestamp shared with the bundle
+    metadata (pinned via ``--pin-generated-at`` for deterministic re-runs).
+    When provided, the report's ``Generated:`` line is byte-stable across
+    re-runs; it only falls back to wall-clock for interactive, unpinned runs
+    (consistent with the metadata behaviour).
+    """
     report_lines = [
         review_marker("robot_sf#4848", marker_date=marker_date),
         "# Issue #4848 Group-Crossing Exemplar Selection Report",
         "",
-        f"Generated: {datetime.now(UTC).isoformat()}",
+        f"Generated: {generated_at or datetime.now(UTC).isoformat()}",
         f"Total exemplars selected: {len(all_selections)}",
         "",
         "## Selection Criteria",
@@ -534,7 +542,10 @@ def main() -> int:
             bundle_metadata = metadata
 
     marker_date = extract_marker_date(bundle_metadata) if bundle_metadata else None
-    write_selection_report(all_selections, output_dir, marker_date=marker_date)
+    generated_at = bundle_metadata.get("generated_at_utc") if bundle_metadata else None
+    write_selection_report(
+        all_selections, output_dir, marker_date=marker_date, generated_at=generated_at
+    )
 
     print(f"\nExport complete. {len(all_selections)} exemplar bundles written to {output_dir}")
     print(f"Selection report: {output_dir / 'SELECTION_REPORT.md'}")

@@ -1074,6 +1074,49 @@ def _apply_cbf_safety_filter_step(
     return corrected, cbf_record
 
 
+def _build_tracking_precision_summary(
+    *,
+    spec: dict[str, Any],
+    records: list[dict[str, Any]],
+    min_separation_corrupted_values: list[float],
+) -> dict[str, Any]:
+    """Build the tracking-precision summary block for episode algorithm metadata.
+
+    Args:
+        spec: Normalized tracking-precision spec.
+        records: Per-step tracking-precision records emitted during the episode loop.
+        min_separation_corrupted_values: Per-step min robot-ped separation under corrupted obs.
+
+    Returns:
+        dict[str, Any]: Tracking-precision summary with contract-honored rates and the
+        last step record (when present).
+    """
+    summary: dict[str, Any] = {
+        "spec": spec,
+        "hash": tracking_precision_hash(spec),
+        "step_count": len(records),
+        "min_separation_corrupted_m": (
+            float(min(min_separation_corrupted_values))
+            if min_separation_corrupted_values
+            else float("inf")
+        ),
+        "contract_honored": (
+            all(bool(record.get("contract_honored", False)) for record in records)
+            if records
+            else True
+        ),
+        "contract_honored_rate": (
+            float(sum(bool(record.get("contract_honored", False)) for record in records))
+            / float(len(records))
+            if records
+            else 1.0
+        ),
+    }
+    if records:
+        summary["last_step"] = dict(records[-1])
+    return summary
+
+
 @dataclass(frozen=True, slots=True)
 class _EpisodeRunContext:
     """Resolved inputs and runtime config for one episode run.
@@ -2069,36 +2112,11 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             robot_radius=float(getattr(robot_config, "radius", 1.0)),
             ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
         )
-    tracking_precision_summary: dict[str, Any] = {
-        "spec": tracking_precision_spec,
-        "hash": tracking_precision_hash(tracking_precision_spec),
-        "step_count": len(tracking_precision_records),
-        "min_separation_corrupted_m": (
-            float(min(min_separation_corrupted_values))
-            if min_separation_corrupted_values
-            else float("inf")
-        ),
-        "contract_honored": (
-            all(
-                bool(record.get("contract_honored", False)) for record in tracking_precision_records
-            )
-            if tracking_precision_records
-            else True
-        ),
-        "contract_honored_rate": (
-            float(
-                sum(
-                    bool(record.get("contract_honored", False))
-                    for record in tracking_precision_records
-                )
-            )
-            / float(len(tracking_precision_records))
-            if tracking_precision_records
-            else 1.0
-        ),
-    }
-    if tracking_precision_records:
-        tracking_precision_summary["last_step"] = dict(tracking_precision_records[-1])
+    tracking_precision_summary = _build_tracking_precision_summary(
+        spec=tracking_precision_spec,
+        records=tracking_precision_records,
+        min_separation_corrupted_values=min_separation_corrupted_values,
+    )
     algo_meta["tracking_precision"] = tracking_precision_summary
     safety_wrapper_summary: dict[str, Any] | None = None
     if safety_wrapper_runtime.enabled:

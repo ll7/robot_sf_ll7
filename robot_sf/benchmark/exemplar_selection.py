@@ -242,6 +242,31 @@ def _extract_metric(record: dict[str, Any], metric: str) -> float | None:
     return None
 
 
+def _extract_step_count(record: dict[str, Any]) -> int | None:
+    """Extract step count from an episode record for tie-breaking.
+
+    Returns:
+        Step count or ``None`` when missing.
+    """
+    # Direct step_count field
+    val = record.get("step_count")
+    if isinstance(val, (int, float)) and val > 0:
+        return int(val)
+
+    # From summary or metrics
+    for path in ("summary.step_count", "metrics.step_count"):
+        val = _get_nested(record, path)
+        if isinstance(val, (int, float)) and val > 0:
+            return int(val)
+
+    # From trace data
+    trace = record.get("algorithm_metadata", {}).get("simulation_step_trace")
+    if trace and "steps" in trace:
+        return len(trace["steps"])
+
+    return None
+
+
 def _build_cell_key(group_values: dict[str, str]) -> str:
     """Build a deterministic cell key from group values.
 
@@ -252,23 +277,89 @@ def _build_cell_key(group_values: dict[str, str]) -> str:
     return "|".join(parts)
 
 
+def _filter_by_step_count(
+    cell_episodes: list[dict[str, Any]],
+    min_step_count: int,
+    cell_key: str,
+) -> list[dict[str, Any]] | SkippedCell:
+    """Filter episodes by minimum step count.
+
+    Returns:
+        Filtered episodes list, or SkippedCell if all episodes are filtered out.
+    """
+    filtered = []
+    for ep in cell_episodes:
+        steps = _extract_step_count(ep)
+        if steps is not None and steps >= min_step_count:
+            filtered.append(ep)
+    if not filtered:
+        return SkippedCell(
+            cell_key=cell_key,
+            reason=f"all {len(cell_episodes)} episodes have step_count < {min_step_count}",
+        )
+    return filtered
+
+
+def _build_sort_key(
+    effective_tie_breaker: str | None,
+) -> Any:
+    """Build sort key function for scored episodes.
+
+    Returns:
+        Sort key function.
+    """
+
+    def _sort_key(item: tuple[float, dict[str, Any]]) -> tuple:
+        primary_val, ep = item
+        if effective_tie_breaker:
+            tb_val = _extract_metric(ep, effective_tie_breaker)
+            if tb_val is None:
+                return (primary_val, float("-inf"))
+            return (primary_val, tb_val)
+        return (primary_val,)
+
+    return _sort_key
+
+
 def _select_in_cell(
     cell_episodes: list[dict[str, Any]],
     metric: str,
     metric_direction: MetricDirection,
     modes: Sequence[SelectionMode],
     group_values: dict[str, str],
+    *,
+    tie_breaker: str | None = None,
+    min_step_count: int | None = None,
 ) -> tuple[list[SelectedEpisode], SkippedCell | None]:
     """Select exemplars within one cell.
+
+    Args:
+        cell_episodes: Episodes in this cell.
+        metric: Primary ranking metric.
+        metric_direction: ``"lower"`` or ``"higher"``.
+        modes: Selection modes to apply.
+        group_values: Grouping key values for this cell.
+        tie_breaker: Optional secondary metric for tie-breaking when
+            primary metric values are equal.
+        min_step_count: Optional minimum step count filter. Episodes with
+            fewer steps are excluded before selection.
 
     Returns:
         Tuple of (selected episodes, optional skipped cell).
     """
     cell_key = _build_cell_key(group_values)
 
+    # Filter by minimum step count if specified
+    filtered_episodes = cell_episodes
+    if min_step_count is not None:
+        result = _filter_by_step_count(cell_episodes, min_step_count, cell_key)
+        if isinstance(result, SkippedCell):
+            return [], result
+        filtered_episodes = result
+
     # Extract metric values
     scored: list[tuple[float, dict[str, Any]]] = []
-    for ep in cell_episodes:
+    for ep in filtered_episodes:
         val = _extract_metric(ep, metric)
         if val is not None:
             scored.append((val, ep))
@@ -276,13 +367,33 @@ def _select_in_cell(
     if not scored:
         return [], SkippedCell(
             cell_key=cell_key,
-            reason=f"metric '{metric}' missing or non-finite for all {len(cell_episodes)} episodes",
+            reason=f"metric '{metric}' missing or non-finite for all {len(filtered_episodes)} episodes",
         )
 
-    # Canonical ascending sort by metric value so median index is
-    # invariant to metric_direction.  Direction only affects best/worst.
-    scored.sort(key=lambda x: x[0])
+    # Determine effective tie-breaker
+    effective_tie_breaker = tie_breaker
+    if effective_tie_breaker is None and min_step_count is not None:
+        effective_tie_breaker = "step_count"
 
+    # Sort with optional tie-breaker
+    scored.sort(key=_build_sort_key(effective_tie_breaker))
+
+    return _build_selections(scored, modes, metric_direction, group_values, effective_tie_breaker)
+
+
+def _build_selections(
+    scored: list[tuple[float, dict[str, Any]]],
+    modes: Sequence[SelectionMode],
+    metric_direction: MetricDirection,
+    group_values: dict[str, str],
+    effective_tie_breaker: str | None,
+) -> tuple[list[SelectedEpisode], None]:
+    """Build SelectedEpisode list from scored episodes.
+
+    Returns:
+        Tuple of (selected episodes, None).
+    """
+    cell_key = _build_cell_key(group_values)
     planner_key = group_values.get("planner_key", "unknown_planner")
     results: list[SelectedEpisode] = []
 
@@ -299,6 +410,12 @@ def _select_in_cell(
         scenario_id = ep.get("scenario_id", "")
         seed = ep.get("seed", 0)
 
+        reason_parts = [f"{mode} within {cell_key}"]
+        if effective_tie_breaker and len(scored) > 1:
+            tb_val = _extract_metric(ep, effective_tie_breaker)
+            if tb_val is not None:
+                reason_parts.append(f"tie_breaker={effective_tie_breaker}={tb_val}")
+
         results.append(
             SelectedEpisode(
                 episode_id=str(episode_id),
@@ -308,7 +425,7 @@ def _select_in_cell(
                 selection_mode=mode,
                 selection_rank=idx,
                 metric_value=val,
-                reason=f"{mode} within {cell_key}",
+                reason=", ".join(reason_parts),
             )
         )
 
@@ -322,6 +439,8 @@ def select_exemplars(
     metric: str,
     metric_direction: MetricDirection | None = None,
     modes: Sequence[SelectionMode] = ("median", "best", "worst"),
+    tie_breaker: str | None = None,
+    min_step_count: int | None = None,
 ) -> tuple[list[SelectedEpisode], list[SkippedCell]]:
     """Select exemplar episodes grouped by cell keys.
 
@@ -332,6 +451,10 @@ def select_exemplars(
         metric_direction: ``"lower"`` or ``"higher"``.  Auto-detected from
             ``METRIC_DIRECTIONS`` when ``None``.
         modes: Selection modes to apply per cell.
+        tie_breaker: Optional secondary metric for tie-breaking when
+            primary metric values are equal (e.g., ``"step_count"``).
+        min_step_count: Optional minimum step count filter. Episodes with
+            fewer steps are excluded before selection.
 
     Returns:
         Tuple of (selected episodes, skipped cells).
@@ -367,6 +490,8 @@ def select_exemplars(
             metric_direction,
             modes,
             cell_group_values[cell_key],
+            tie_breaker=tie_breaker,
+            min_step_count=min_step_count,
         )
         all_selected.extend(selected)
         if skipped is not None:

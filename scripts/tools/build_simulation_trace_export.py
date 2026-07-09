@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import sys
@@ -16,37 +15,10 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
     SimulationTraceExportValidationError,
     simulation_trace_export_from_dict,
 )
+from robot_sf.benchmark.identity.hash_utils import read_jsonl as _load_jsonl
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 
 SCHEMA_VERSION = SIMULATION_TRACE_EXPORT_SCHEMA_VERSION
-
-
-def _load_jsonl(path: Path) -> list[dict[str, Any]]:
-    """Load and validate JSONL payload records.
-
-    Returns:
-        Parsed JSON objects.
-
-    Raises:
-        ValueError: on malformed JSON, empty input, or non-object records.
-    """
-
-    records: list[dict[str, Any]] = []
-    with path.open("r", encoding="utf-8") as handle:
-        for line_number, raw_line in enumerate(handle, start=1):
-            line = raw_line.strip()
-            if not line:
-                continue
-            try:
-                value = json.loads(line)
-            except json.JSONDecodeError as exc:
-                raise ValueError(f"{path}:{line_number} is not valid JSON") from exc
-            if not isinstance(value, dict):
-                raise ValueError(f"{path}:{line_number} is not a JSON object")
-            records.append(value)
-
-    if not records:
-        raise ValueError(f"{path} has no JSONL records")
-    return records
 
 
 def _source_metadata_path(source: Path) -> Path | None:
@@ -82,16 +54,6 @@ def _load_source_metadata(source_path: Path) -> dict[str, Any]:
     if not isinstance(metadata, dict):
         raise ValueError(f"metadata file {metadata_path} must contain a JSON object")
     return metadata
-
-
-def _sha256(path: Path) -> str:
-    """Compute a short SHA-256 digest prefix for provenance."""
-
-    hasher = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 16), b""):
-            hasher.update(chunk)
-    return hasher.hexdigest()
 
 
 def _pose(record_state: dict[str, Any]) -> tuple[float, float, float]:

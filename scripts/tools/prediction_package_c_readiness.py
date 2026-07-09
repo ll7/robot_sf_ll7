@@ -22,6 +22,8 @@ from typing import Any, Literal
 
 import yaml
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+
 SCHEMA_VERSION = "prediction-package-c-readiness.v1"
 ISSUE = 3080
 ArmStatus = Literal["ready", "blocked", "missing"]
@@ -156,17 +158,6 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     try:
         loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError:
-        return {}
-    return loaded if isinstance(loaded, dict) else {}
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    """Load a JSON object, returning ``{}`` if absent or malformed."""
-    if not path.exists():
-        return {}
-    try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
         return {}
     return loaded if isinstance(loaded, dict) else {}
 

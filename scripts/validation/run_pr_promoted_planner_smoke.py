@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.aggregate import compute_aggregates, read_jsonl
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MATRIX = ROOT / "configs/scenarios/single/pr_promoted_planner_smoke.yaml"
@@ -59,14 +60,6 @@ def _repo_relative(path: Path) -> str:
         return path.resolve().relative_to(ROOT).as_posix()
     except ValueError:
         return str(path)
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    """Load a JSON object from disk."""
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"Expected JSON object in {path}")
-    return payload
 
 
 def _metric_value(summary: dict[str, Any], algorithm: str, metric: str) -> float | None:

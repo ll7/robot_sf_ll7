@@ -12,6 +12,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
 from robot_sf.training.orca_residual_lineage_packet import (
     OrcaResidualLineagePacketError,
     validate_smoke_nominal_gate,
@@ -49,18 +50,6 @@ class CriterionAudit:
 
 def _repo_root_from(path: Path) -> Path:
     return path.resolve()
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise SystemExit(f"failed to read {path}: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise SystemExit(f"failed to parse {path}: {exc}") from exc
-    if not isinstance(data, dict):
-        raise SystemExit(f"{path} must contain a JSON object")
-    return data
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:

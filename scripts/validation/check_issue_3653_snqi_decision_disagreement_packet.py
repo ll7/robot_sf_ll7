@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import sys
@@ -13,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 
 DEFAULT_PACKET = Path("configs/benchmarks/issue_3653_snqi_decision_disagreement_packet.yaml")
 SCHEMA_VERSION = "issue-3653-snqi-decision-disagreement-application-packet.v1"
@@ -96,14 +97,6 @@ def _repo_relative_path(value: Any, key: str) -> Path:
     path = Path(value)
     _require(not path.is_absolute(), f"{key} must be repo-relative")
     return path
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as file:
-        for chunk in iter(lambda: file.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _validate_evidence_packet(campaign: Mapping[str, Any], *, repo_root: Path) -> Path:

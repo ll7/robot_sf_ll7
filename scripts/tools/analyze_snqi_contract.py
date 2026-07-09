@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.benchmark.snqi.campaign_contract import (
     SnqiContractThresholds,
     build_positioning_recommendation,
@@ -69,15 +70,6 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     if args.dominance_warn_threshold >= args.dominance_fail_threshold:
         parser.error("--dominance-warn-threshold must be less than --dominance-fail-threshold")
     return args
-
-
-def _sha256_file(path: Path) -> str:
-    """Return a SHA-256 digest for one file."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _payload_hash(payload: dict[str, Any]) -> str:

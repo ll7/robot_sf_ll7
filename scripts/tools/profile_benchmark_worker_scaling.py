@@ -10,15 +10,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    """Load a JSON object from path."""
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise TypeError(f"{path}: expected JSON object")
-    return payload
 
 
 def _worker_label(worker_count: int) -> str:

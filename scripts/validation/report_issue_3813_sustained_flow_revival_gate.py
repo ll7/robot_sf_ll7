@@ -8,6 +8,7 @@ import json
 import sys
 from pathlib import Path
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
 from robot_sf.benchmark.sustained_flow_revival_gate import (
     DEFAULT_H600_CLAIM_IMPACT_EVIDENCE,
     DEFAULT_H600_INTERACTION_EXPOSURE_EVIDENCE,
@@ -34,14 +35,6 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--json", action="store_true", help="Emit full JSON report.")
     return parser.parse_args(argv)
-
-
-def _load_json(path: Path) -> dict:
-    with path.open(encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if not isinstance(payload, dict):
-        raise ValueError(f"{path} must contain a JSON object")
-    return payload
 
 
 def main(argv: list[str] | None = None) -> int:

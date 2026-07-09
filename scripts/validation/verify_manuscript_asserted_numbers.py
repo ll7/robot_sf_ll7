@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import re
@@ -14,6 +13,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 
 DEFAULT_DECLARATIONS = Path("configs/validation/issue_4366_manuscript_asserted_numbers.yaml")
 DEFAULT_REPORT = Path("docs/context/evidence/issue_4366_manuscript_asserted_numbers_report.md")
@@ -125,15 +126,6 @@ def _values_equal(expected: Any, actual: Any, *, tolerance: float) -> bool:
         except (TypeError, ValueError):
             return False
     return expected == actual
-
-
-def _sha256_file(path: Path) -> str:
-    """Return the SHA-256 digest for a source artifact."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _verify_locator_table_hash(

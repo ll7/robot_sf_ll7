@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
 import json
 from collections import Counter
 from pathlib import Path
@@ -25,6 +24,7 @@ from robot_sf.benchmark.certification_transfer import (
     INTERACTION_NEAR_FIELD_M,
     classify_interaction_status,
 )
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 
 CELL_COLUMNS = (
     "planner_key",
@@ -173,14 +173,6 @@ def _markdown(
         "safety, benchmark-strength, or paper/dissertation claim.",
     ]
     return "\n".join(lines) + "\n"
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def main(argv: list[str] | None = None) -> int:

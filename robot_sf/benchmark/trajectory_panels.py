@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 import re
 from dataclasses import asdict, dataclass
@@ -11,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 import matplotlib
+
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -487,17 +488,3 @@ def _manifest_artifact(
         },
         "trace_source": asdict(episode.trace.source),
     }
-
-
-def _sha256_file(path: Path) -> str:
-    """Compute the SHA-256 digest for a file.
-
-    Returns:
-        Hex-encoded SHA-256 digest.
-    """
-
-    hasher = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 16), b""):
-            hasher.update(chunk)
-    return hasher.hexdigest()

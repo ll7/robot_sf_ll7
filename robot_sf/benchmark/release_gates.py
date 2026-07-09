@@ -8,7 +8,6 @@ provisional threshold is release-approved.
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 import math
 from collections import defaultdict
@@ -20,6 +19,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 
 RELEASE_GATE_REPORT_SCHEMA_VERSION = "benchmark_release_gate_report.v1"
 RELEASE_GATE_SPEC_SCHEMA_VERSION = "benchmark_release_gate_spec.v1"
@@ -543,14 +544,6 @@ def _path_provenance(path: Path | None) -> dict[str, str] | None:
         return None
     resolved = path.resolve()
     return {"path": str(path), "sha256": _sha256_file(resolved)}
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _markdown_cell(value: Any) -> str:

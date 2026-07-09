@@ -12,6 +12,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+
 SCHEMA_VERSION = "issue_2910_publication_suite_certification_report.v1"
 DEFAULT_SCENARIO_CERTIFICATION_SUMMARY = Path(
     "docs/context/evidence/issue_2910_release_scenario_certification/summary.json"
@@ -46,16 +48,6 @@ def _repo_relative(path: Path) -> str:
         return path.relative_to(Path.cwd()).as_posix()
     except ValueError:
         return path.as_posix()
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    """Load ``path`` as a JSON object."""
-
-    with path.open(encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if not isinstance(payload, dict):
-        raise ValueError(f"{path} must contain a JSON object")
-    return payload
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
 import json
 import math
 from collections import defaultdict
@@ -20,6 +19,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 from robot_sf.benchmark.rank_metrics import (
     kendall_tau,
     rank_by,
@@ -102,14 +103,6 @@ def _rel_provenance(path: Path | None) -> dict[str, str | None]:
     return provenance
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _load_config(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle) or {}
@@ -117,14 +110,6 @@ def _load_config(path: Path) -> dict[str, Any]:
         raise ValueError(f"config at {path} must be a mapping, got {type(data).__name__}")
     if data.get("schema_version") != SCHEMA_VERSION:
         raise ValueError(f"unsupported config schema_version: {data.get('schema_version')!r}")
-    return data
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as handle:
-        data = json.load(handle)
-    if not isinstance(data, dict):
-        raise ValueError(f"{path} must contain a JSON object")
     return data
 
 

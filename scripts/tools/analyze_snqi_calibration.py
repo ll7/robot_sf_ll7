@@ -4,12 +4,13 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.benchmark.snqi.calibration import (
     analyze_snqi_calibration,
     derive_planner_rows_from_episodes,
@@ -65,27 +66,6 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-md", type=Path, required=True)
     parser.add_argument("--output-csv", type=Path, required=True)
     return parser.parse_args(argv)
-
-
-def _sha256_file(path: Path) -> str:
-    """Return a SHA-256 digest for one file."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    """Load a JSON object from disk.
-
-    Returns:
-        dict[str, Any]: Parsed JSON object.
-    """
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"Expected object JSON in {path}")
-    return payload
 
 
 def _load_campaign(campaign_root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str]:

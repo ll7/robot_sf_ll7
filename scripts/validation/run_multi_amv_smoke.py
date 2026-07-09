@@ -14,6 +14,7 @@ from typing import Any
 import numpy as np
 
 from robot_sf.benchmark.aggregate import compute_aggregates
+from robot_sf.benchmark.identity.hash_utils import read_jsonl as _read_jsonl
 from robot_sf.benchmark.multi_amv import (
     MultiAmvSettings,
     ensure_multi_amv_planner_supported,
@@ -207,19 +208,6 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     """Write a JSON payload with stable formatting."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
-    """Read JSON objects from a JSONL file."""
-    records: list[dict[str, Any]] = []
-    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        if not line.strip():
-            continue
-        payload = json.loads(line)
-        if not isinstance(payload, dict):
-            raise ValueError(f"{path}:{line_number} is not a JSON object")
-        records.append(payload)
-    return records
 
 
 def _read_json(path: Path) -> dict[str, Any]:

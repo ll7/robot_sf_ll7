@@ -16,6 +16,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.benchmark.release_gates import GateSpec, load_release_gate_spec
 from robot_sf.benchmark.release_protocol import BenchmarkReleaseManifest, load_release_manifest
 from robot_sf.common.artifact_paths import get_repository_root
@@ -30,16 +31,6 @@ class ReleaseAssuranceEvidenceProblem:
     evidence_id: str
     path: str
     reason: str
-
-
-def _sha256_file(path: Path) -> str:
-    """Return SHA-256 digest for ``path``."""
-
-    digest = __import__("hashlib").sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _repo_relative(path: Path, repo_root: Path) -> str:

@@ -8,11 +8,12 @@ baseline training budget, and carries an explicit no-training-result-claim statu
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
 import pytest
 import yaml
+
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _PACKET_PATH = _REPO_ROOT / "configs/training/ppo_curriculum_issue_3068_launch_packet.yaml"
@@ -23,11 +24,6 @@ _DOC_PATH = _REPO_ROOT / "docs/context/issue_3068_ppo_curriculum_launch_packet.m
 def packet() -> dict[str, object]:
     """Load the checked-in #3068 curriculum launch packet."""
     return yaml.safe_load(_PACKET_PATH.read_text(encoding="utf-8"))
-
-
-def _sha256(path: Path) -> str:
-    """Return the sha256 hex digest of a file."""
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def test_packet_parses_and_has_required_top_level_keys(packet: dict[str, object]) -> None:

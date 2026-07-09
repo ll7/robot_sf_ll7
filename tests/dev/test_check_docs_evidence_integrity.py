@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from typing import TYPE_CHECKING
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 from scripts.dev.check_docs_evidence_integrity import check_files, main
 
 if TYPE_CHECKING:
@@ -31,11 +31,6 @@ def _write_catalog(root: Path, paths: list[str]) -> None:
         f"{entries}\n",
         encoding="utf-8",
     )
-
-
-def _sha256(path: Path) -> str:
-    """Return sha256 digest for a test fixture file."""
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def test_valid_files_pass(tmp_path: Path) -> None:

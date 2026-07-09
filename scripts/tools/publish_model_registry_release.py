@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.models import registry as model_registry
 
@@ -126,11 +127,6 @@ def _asset_name_for(entry: dict[str, Any], source_path: Path) -> str:
     model_id = _safe_component(str(entry["model_id"]))
     file_name = _safe_component(str(entry.get("wandb_file") or source_path.name))
     return f"{model_id}-{file_name}"
-
-
-def _sha256(path: Path) -> str:
-    """Return a SHA256 digest for a local file."""
-    return model_registry._sha256(path)
 
 
 def _source_path_for(

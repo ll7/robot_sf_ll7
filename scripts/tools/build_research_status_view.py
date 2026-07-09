@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
 from scripts.tools.campaign_result_store import read_parquet_frame, validate_result_store
 
 if TYPE_CHECKING:
@@ -448,14 +449,6 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError(f"{path} must contain a YAML mapping")
-    return payload
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    """Load a JSON mapping."""
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"{path} must contain a JSON object")
     return payload
 
 

@@ -6,7 +6,6 @@ along with Markdown and SVG representations.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from collections import defaultdict
 from datetime import UTC, datetime
@@ -15,16 +14,8 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.common.artifact_paths import get_repository_root
-
-
-def _sha256_file(path: Path) -> str:
-    """Return the SHA-256 digest of the file."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _repo_relative(path: Path, repo_root: Path) -> str:

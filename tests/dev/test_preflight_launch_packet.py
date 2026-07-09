@@ -2,19 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path  # noqa: TC003
 
 import yaml
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 from scripts.dev.preflight_launch_packet import _queue_hint, main, preflight_launch_packet
-
-
-def _sha256(path: Path) -> str:
-    """Return SHA-256 for fixture file."""
-
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def test_queue_hint_deepcopies_explicit_nested_metadata() -> None:

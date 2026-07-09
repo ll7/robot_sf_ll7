@@ -13,6 +13,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+
 SCHEMA_VERSION = "issue-2557-seed-variance-report.v1"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PACKET = Path(
@@ -87,14 +89,6 @@ RESCUED_TOP_UPS: tuple[dict[str, Any], ...] = (
 )
 
 METRICS = ("snqi", "success_rate", "collision_rate")
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if not isinstance(payload, dict):
-        raise ValueError(f"{path} must contain a JSON object")
-    return payload
 
 
 def _finite_float(value: Any, *, field: str, job_id: int) -> float:

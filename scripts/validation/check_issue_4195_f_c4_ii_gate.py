@@ -21,13 +21,14 @@ inputs fail closed; nothing is inferred or repaired by assumption.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_DIR = REPO_ROOT / "docs/context/evidence/issue_3810_h600_interpretation_2026-07"
@@ -67,13 +68,6 @@ class GateViolation:
 
     field: str
     message: str
-
-
-def _sha256(path: Path) -> str:
-    """Return the hex SHA-256 digest of ``path``."""
-    digest = hashlib.sha256()
-    digest.update(path.read_bytes())
-    return digest.hexdigest()
 
 
 def _parse_sha256sums(text: str) -> dict[str, str]:

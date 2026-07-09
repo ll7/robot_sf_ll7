@@ -11,6 +11,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+
 DEFAULT_LEDGER = Path("docs/context/evidence/issue_2760_dissertation_evidence_ledger/ledger.json")
 DEFAULT_CLAIM_MAP = Path("docs/context/issue_1542_manuscript_claim_evidence_map.md")
 DEFAULT_SIGNAL_SUMMARY = Path("docs/context/evidence/issue_2799_signalized_runtime/summary.json")
@@ -44,16 +46,6 @@ class SourceInputs:
     claim_map: Path
     signal_summary: Path
     observation_noise_summary: Path
-
-
-def _load_json(path: Path) -> dict[str, Any] | None:
-    """Load a JSON mapping, returning ``None`` when the source is absent."""
-    if not path.exists():
-        return None
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"Expected JSON object at {path}")
-    return payload
 
 
 def _extract_markdown_table(markdown: str, heading_pattern: str) -> str:

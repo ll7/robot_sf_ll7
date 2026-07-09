@@ -2,22 +2,15 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
 from robot_sf.benchmark.manifest_lineage import validate_lineage_contract
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE_DIR = REPO_ROOT / "docs/context/evidence/issue_2523_scenario_prior_smoke"
 ARTIFACT_PATH = EVIDENCE_DIR / "scenario_prior.v1.json"
 SUMMARY_PATH = EVIDENCE_DIR / "summary.json"
-
-
-def _load_json(path: Path) -> dict[str, object]:
-    """Load a JSON object from a tracked evidence path."""
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    assert isinstance(payload, dict)
-    return payload
 
 
 def test_scenario_prior_proxy_artifact_preserves_claim_boundary() -> None:

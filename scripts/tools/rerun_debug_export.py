@@ -8,28 +8,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.identity.hash_utils import read_jsonl as _load_jsonl
+
 SCHEMA_VERSION = "robot-sf-debug-timeline.v1"
 ANNOTATION_KEYS = ("clearance", "min_clearance", "min_ttc", "pet", "ttc")
-
-
-def _load_jsonl(path: Path) -> list[dict[str, Any]]:
-    """Load JSONL episode records from ``path``."""
-    records: list[dict[str, Any]] = []
-    with path.open("r", encoding="utf-8") as handle:
-        for line_number, raw_line in enumerate(handle, start=1):
-            line = raw_line.strip()
-            if not line:
-                continue
-            try:
-                payload = json.loads(line)
-            except json.JSONDecodeError as exc:
-                raise ValueError(f"{path}:{line_number} is not valid JSON") from exc
-            if not isinstance(payload, dict):
-                raise ValueError(f"{path}:{line_number} is not a JSON object")
-            records.append(payload)
-    if not records:
-        raise ValueError(f"No episode records found in {path}")
-    return records
 
 
 def _pose(value: Any) -> dict[str, float | None] | None:

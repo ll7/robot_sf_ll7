@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import json
-from typing import TYPE_CHECKING
-
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
 from scripts.analysis.build_issue_2910_publication_suite_certification_report import (
     DEFAULT_RELEASE_CLAIM_MATRIX,
     DEFAULT_SCENARIO_CERTIFICATION_SUMMARY,
@@ -14,9 +12,6 @@ from scripts.analysis.build_issue_2910_publication_suite_certification_report im
     render_markdown,
 )
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
 
 def _default_inputs() -> InputPaths:
     """Return default tracked input paths."""
@@ -25,12 +20,6 @@ def _default_inputs() -> InputPaths:
         scenario_certification_summary=DEFAULT_SCENARIO_CERTIFICATION_SUMMARY,
         release_claim_matrix=DEFAULT_RELEASE_CLAIM_MATRIX,
     )
-
-
-def _load_json(path: Path) -> dict:
-    """Load a JSON object from ``path``."""
-
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def test_report_maps_current_remaining_scenarios_and_keeps_gate_blocked() -> None:

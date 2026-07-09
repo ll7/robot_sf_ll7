@@ -23,6 +23,8 @@ from robot_sf.benchmark.cbf_safety_filter_runtime import (
 from robot_sf.benchmark.cbf_safety_filter_runtime import (
     runtime_config_from_mapping as cbf_runtime_config_from_mapping,
 )
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_path
 from robot_sf.benchmark.safety_wrapper_runtime import (
     WRAPPER_OFF_ARM,
     WRAPPER_ON_ARM,
@@ -80,25 +82,6 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ContractError(f"{path} must contain YAML mapping")
     return data
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    """Load JSON file as a mapping."""
-    if not path.exists():
-        raise ContractError(f"missing JSON file: {path}")
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise ContractError(f"{path} must contain JSON mapping")
-    return data
-
-
-def _sha256_path(path: Path) -> str:
-    """Return SHA-256 for a local file."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _repo_file_sha256(value: object) -> str:

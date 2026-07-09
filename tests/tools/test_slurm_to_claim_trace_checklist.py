@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from typing import TYPE_CHECKING
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 from scripts.tools import slurm_to_claim_trace_checklist
 
 if TYPE_CHECKING:
@@ -18,12 +18,6 @@ def _write_json(path: Path, payload: dict) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
-
-
-def _sha256(path: Path) -> str:
-    """Return file SHA-256 digest."""
-
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _write_evidence_dir(repo_root: Path) -> Path:

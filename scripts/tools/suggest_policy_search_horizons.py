@@ -12,6 +12,9 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+from robot_sf.benchmark.identity.hash_utils import read_jsonl as _load_jsonl
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
@@ -35,34 +38,6 @@ def parse_args() -> argparse.Namespace:
         default=Path("output/policy_search/horizon_recommendations.md"),
     )
     return parser.parse_args()
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    """Load a summary JSON object from disk.
-
-    Returns:
-        Parsed JSON object.
-    """
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise TypeError(f"Expected JSON object: {path}")
-    return payload
-
-
-def _load_jsonl(path: Path) -> list[dict[str, Any]]:
-    """Load episode records from a JSONL artifact.
-
-    Returns:
-        List of JSON object rows, skipping blank lines.
-    """
-    rows: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        payload = json.loads(line)
-        if isinstance(payload, dict):
-            rows.append(payload)
-    return rows
 
 
 def _resolve_jsonl_path(summary_path: Path, payload: dict[str, Any]) -> Path:

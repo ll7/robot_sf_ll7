@@ -11,10 +11,16 @@ import sys
 MACOS_MAX_WORKERS = 8
 MACOS_MIN_WORKERS = 2
 
-# GitHub Actions ubuntu-latest runners (and other compact CI hosts) have 2 vCPUs
-# and limited memory. Spawning more workers than this cap will OOM the runner.
-# Only applies to low-CPU hosts (fewer than 8 logical CPUs); high-CPU hosts keep
-# the explicit value so local CI or larger runners are unaffected.
+# GitHub Actions ubuntu-latest runners are compact shared hosts (currently
+# 4 vCPUs, ~16 GB RAM per the Nightly Performance run logs). Spawning far more
+# xdist workers than cores — e.g. the old hardcoded 32 on a 4-core runner —
+# saturates runner memory and triggers GitHub's runner eviction: the job
+# receives a "shutdown signal" and exits 143 (SIGTERM), which is what repeatedly
+# killed the Nightly Performance xdist-race job. (Note: this is the runner
+# watchdog reclaiming the VM under pressure, not the kernel OOM-killer, which
+# would deliver SIGKILL / exit 137.) Cap explicit integer overrides on low-CPU
+# hosts; high-CPU hosts keep the explicit value so local CI and larger runners
+# are unaffected. "auto" always bypasses these caps.
 LOW_CPU_WORKER_CAP = 16
 LOW_CPU_THRESHOLD = 8
 

@@ -319,6 +319,7 @@ def write_bundle(
     episode_record: dict[str, Any],
     selection: SelectedEpisode,
     output_dir: Path,
+    pin_generated_at: str | None = None,
 ) -> dict[str, Any]:
     """Write a trace episode bundle for one selected episode."""
     derived = derive_trace_rows(episode_record)
@@ -331,7 +332,7 @@ def write_bundle(
             "illustrative head-on corridor interaction only; "
             "no statistical, benchmark, or dissertation claim"
         ),
-        "generated_at_utc": datetime.now(UTC).isoformat(),
+        "generated_at_utc": pin_generated_at or datetime.now(UTC).isoformat(),
         "git_commit": _git_commit(),
         "campaign_id": "issue4206_trace_capable_h600_rerun_20260704",
         "campaign_job": "13334",
@@ -398,6 +399,8 @@ statistical benchmark or dissertation claim.
 This bundle is `illustrative_exemplar` evidence for one head-on corridor episode.
 It should be used for visualization and worked example input only. It is not a full
 benchmark campaign, not a Slurm or GPU result, and not a statistical comparison.
+
+<!-- /AI-GENERATED -->
 """
     (output_dir / "README.md").write_text(readme, encoding="utf-8")
 
@@ -464,6 +467,8 @@ def write_selection_report(
             "",
             "These three planners span the classical-to-social spectrum and provide diverse "
             "interaction behaviors for visualization and worked examples.",
+            "",
+            "<!-- /AI-GENERATED -->",
         ]
     )
 
@@ -476,6 +481,7 @@ def _process_planner(
     planner: str,
     campaign_root: Path,
     output_dir: Path,
+    pin_generated_at: str | None = None,
 ) -> tuple[list[SelectedEpisode], dict[str, Any] | None]:
     """Process one planner: read episodes, select exemplars, write bundles."""
     planner_dir = campaign_root / f"{planner}__differential_drive"
@@ -512,6 +518,7 @@ def _process_planner(
             episode_record=episode_record,
             selection=sel,
             output_dir=bundle_dir,
+            pin_generated_at=pin_generated_at,
         )
         if first_metadata is None:
             first_metadata = metadata
@@ -552,6 +559,14 @@ def main() -> int:
         default=TARGET_PLANNERS,
         help=f"Planners to select exemplars from (default: {' '.join(TARGET_PLANNERS)})",
     )
+    parser.add_argument(
+        "--pin-generated-at",
+        default=None,
+        help=(
+            "Override generated_at_utc in all bundle metadata with this ISO 8601 string. "
+            "For deterministic re-runs only; do not use wall-clock time."
+        ),
+    )
     args = parser.parse_args()
 
     repo_root = _repo_root()
@@ -569,7 +584,12 @@ def main() -> int:
     all_selections: list[SelectedEpisode] = []
     bundle_metadata: dict[str, Any] | None = None
     for planner in args.planners:
-        selections, metadata = _process_planner(planner, campaign_root, output_dir)
+        selections, metadata = _process_planner(
+            planner,
+            campaign_root,
+            output_dir,
+            pin_generated_at=args.pin_generated_at,
+        )
         all_selections.extend(selections)
         if bundle_metadata is None and metadata is not None:
             bundle_metadata = metadata

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Per-planner control-wandering + hybrid command-source-switch profile.
 
-Parses retained h600 oscillation predicates from issue4206 trace-capable rerun
-(6480 episodes) and produces:
+Parses oscillation predicates from the retained issue4206 trace-capable h600 rerun
+(6291 of 6480 episodes carry a populated oscillatory_control_predicate) and produces:
   1. Per-planner percentile CSV for progress_ratio, heading_rate_sign_changes,
      command_source_changes (with N per cell).
   2. Per-scenario-family wandering + command-source-switch profile for hybrid planners.

@@ -195,6 +195,23 @@ class TestSha256File:
         assert digest == "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"
 
 
+class TestExtractMarkerDate:
+    """Test the _extract_marker_date helper."""
+
+    def test_extracts_date_from_iso_timestamp(self) -> None:
+        metadata = {"generated_at_utc": "2026-07-08T23:13:18.867110+00:00"}
+        assert _export_module._extract_marker_date(metadata) == "2026-07-08"
+
+    def test_missing_generated_at_returns_none(self) -> None:
+        # Per #4903 the marker date is provenance-pinned with no wall-clock
+        # fallback: missing provenance must yield no date, not today's date.
+        assert _export_module._extract_marker_date({}) is None
+
+    def test_empty_generated_at_returns_none(self) -> None:
+        metadata: dict[str, str] = {"generated_at_utc": ""}
+        assert _export_module._extract_marker_date(metadata) is None
+
+
 class TestConstants:
     """Test module constants are set correctly."""
 

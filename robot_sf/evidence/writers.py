@@ -52,13 +52,36 @@ def sha256_file(path: Path) -> str:
     return hasher.hexdigest()
 
 
-def review_marker(issue_ref: str) -> str:
+def review_marker(issue_ref: str, marker_date: str | None = None) -> str:
     """Return the standard review marker comment for a given issue reference.
 
     Args:
         issue_ref: Issue identifier like "robot_sf#4891" or "robot_sf#4848"
+        marker_date: Optional ISO date (YYYY-MM-DD) pinned to the bundle's
+            provenance timestamp.  When provided the marker includes the date
+            so that re-runs from the same bundle produce byte-identical output.
+            Must never be wall-clock time; derive from metadata or pass
+            explicitly via ``--marker-date``.
     """
+    if marker_date is not None:
+        return f"<!-- AI-GENERATED ({issue_ref}, {marker_date}) - NEEDS-REVIEW -->"
     return f"<!-- AI-GENERATED ({issue_ref}) - NEEDS-REVIEW -->"
+
+
+def extract_marker_date(metadata: dict[str, Any]) -> str | None:
+    """Extract YYYY-MM-DD from a bundle's ``generated_at_utc`` provenance field.
+
+    Deterministic per the maintainer decision on #4903: the marker date is
+    pinned to the bundle's provenance timestamp and never falls back to
+    wall-clock time. When the provenance field is absent or empty, returns
+    ``None`` so the marker omits the date rather than fabricating one from the
+    current time.
+
+    Returns:
+        The ``YYYY-MM-DD`` date string, or ``None`` when provenance is absent.
+    """
+    generated_at = metadata.get("generated_at_utc", "")
+    return generated_at[:10] if generated_at else None
 
 
 def review_marker_json() -> str:

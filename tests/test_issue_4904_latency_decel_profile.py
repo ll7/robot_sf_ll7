@@ -1,5 +1,6 @@
 """Tests for issue_4904_latency_decel_profile.py."""
 
+import csv
 import json
 from pathlib import Path
 
@@ -7,6 +8,7 @@ from scripts.analysis.issue_4904_latency_decel_profile import (
     compute_percentiles,
     extract_profiles,
     load_episodes,
+    write_percentile_csv,
 )
 
 
@@ -121,6 +123,24 @@ class TestExtractProfiles:
         assert p["latency_populated"] == 0
         assert len(p["latencies"]) == 0
 
+    def test_filters_non_finite_values(self):
+        # json.loads silently accepts NaN/Infinity tokens; they must be treated as
+        # missing so they cannot poison the percentile inputs downstream.
+        raw = [
+            '{"_planner":"p","interaction_exposure":{"interaction_exposure_steps":1},'
+            '"safety_predicates":{"late_evasive_predicate":{"late_evasive":true,"fields":'
+            '{"response_latency_s":NaN,"required_deceleration_m_s2":Infinity}}}}',
+            '{"_planner":"p","interaction_exposure":{"interaction_exposure_steps":1},'
+            '"safety_predicates":{"late_evasive_predicate":{"late_evasive":true,"fields":'
+            '{"response_latency_s":2.0,"required_deceleration_m_s2":0.5}}}}',
+        ]
+        episodes = [json.loads(line) for line in raw]
+        profiles = extract_profiles(episodes)
+        p = profiles["p"]
+        assert p["latency_populated"] == 1  # NaN excluded; only the 2.0 counts
+        assert p["latencies"] == [2.0]
+        assert p["decels"] == [0.5]  # Infinity excluded
+
 
 class TestLoadEpisodes:
     """Tests for load_episodes helper."""
@@ -139,3 +159,122 @@ class TestLoadEpisodes:
         pdir.mkdir(parents=True, exist_ok=True)
         loaded = load_episodes(tmp_path)
         assert len(loaded) == 0
+
+    def test_skips_blank_trailing_line(self, tmp_path):
+        # A trailing blank line (common from editors) must not raise.
+        pdir = tmp_path / "pp__differential_drive"
+        pdir.mkdir(parents=True, exist_ok=True)
+        episode = _make_episode("pp", exposure_steps=1, seed=0)
+        (pdir / "episodes.jsonl").write_text(json.dumps(episode) + "\n\n")
+        loaded = load_episodes(tmp_path)
+        assert len(loaded) == 1
+
+
+class TestWritePercentileCsv:
+    """Tests for the CSV deliverable and the anomaly_gap/rate formulas."""
+
+    def test_anomaly_gap_rates_and_n(self, tmp_path):
+        episodes = [
+            # goal: late_evasive on every exposure episode, latency never populated
+            *_make_episodes(
+                "goal",
+                count=10,
+                exposure_steps=5,
+                late_evasive=True,
+                response_latency_s=None,
+                required_deceleration_m_s2=0.001,
+            ),
+            # alpha: 2 exposure episodes, 1 late_evasive, both latency populated
+            _make_episode(
+                "alpha",
+                exposure_steps=5,
+                late_evasive=True,
+                response_latency_s=2.0,
+                required_deceleration_m_s2=0.5,
+                seed=1,
+            ),
+            _make_episode(
+                "alpha",
+                exposure_steps=5,
+                late_evasive=False,
+                response_latency_s=4.0,
+                required_deceleration_m_s2=0.2,
+                seed=2,
+            ),
+        ]
+        profiles = extract_profiles(episodes)
+        out = tmp_path / "pct.csv"
+        write_percentile_csv(profiles, out)
+
+        rows = out.read_text().splitlines()
+        header = rows[0].split(",")
+        for col in (
+            "planner",
+            "lat_N",
+            "anomaly_gap",
+            "late_evasive_rate",
+            "latency_populated_rate",
+            "lat_p50",
+        ):
+            assert col in header
+
+        by_planner = {r["planner"]: r for r in csv.DictReader(rows)}
+
+        goal = by_planner["goal"]
+        assert goal["exposure_episodes"] == "10"
+        assert goal["late_evasive_true"] == "10"
+        assert goal["latency_populated"] == "0"
+        assert goal["lat_N"] == "0"
+        assert goal["late_evasive_rate"] == "1.0"
+        assert goal["latency_populated_rate"] == "0.0"
+        assert goal["anomaly_gap"] == "1.0"  # 1.0 - 0.0
+
+        alpha = by_planner["alpha"]
+        assert alpha["exposure_episodes"] == "2"
+        assert alpha["lat_N"] == "2"
+        assert alpha["decel_N"] == "2"
+        assert abs(float(alpha["lat_p50"]) - 3.0) < 1e-6  # median of [2.0, 4.0]
+        assert alpha["late_evasive_rate"] == "0.5"
+        assert alpha["latency_populated_rate"] == "1.0"
+        assert abs(float(alpha["anomaly_gap"]) - (-0.5)) < 1e-6  # 0.5 - 1.0
+
+    def test_csv_is_deterministic(self, tmp_path):
+        episodes = _make_episodes(
+            "p",
+            count=20,
+            exposure_steps=5,
+            response_latency_s=0.0,  # overridden per-episode below
+            required_deceleration_m_s2=0.1,
+        )
+        for i, ep in enumerate(episodes):
+            ep["safety_predicates"]["late_evasive_predicate"]["fields"]["response_latency_s"] = (
+                float(i)
+            )
+        profiles = extract_profiles(episodes)
+        out_a = tmp_path / "a.csv"
+        out_b = tmp_path / "b.csv"
+        write_percentile_csv(profiles, out_a)
+        write_percentile_csv(profiles, out_b)
+        assert out_a.read_text() == out_b.read_text()
+
+
+def _make_episodes(
+    planner: str,
+    count: int,
+    exposure_steps: int = 0,
+    late_evasive: bool = False,
+    response_latency_s: float | None = None,
+    required_deceleration_m_s2: float | None = None,
+) -> list[dict]:
+    """Build N minimal episode records with distinct seeds."""
+    return [
+        _make_episode(
+            planner,
+            exposure_steps=exposure_steps,
+            late_evasive=late_evasive,
+            response_latency_s=response_latency_s,
+            required_deceleration_m_s2=required_deceleration_m_s2,
+            seed=i,
+        )
+        for i in range(count)
+    ]

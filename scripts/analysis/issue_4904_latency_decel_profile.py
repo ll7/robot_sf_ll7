@@ -10,6 +10,7 @@ CPU-only, no simulation, no GPU, no campaign/Slurm.
 
 import csv
 import json
+import math
 from collections import defaultdict
 from pathlib import Path
 
@@ -35,10 +36,22 @@ def load_episodes(run_dir: Path) -> list[dict]:
             continue
         with open(episodes_file) as f:
             for line in f:
+                if not line.strip():
+                    continue
                 record = json.loads(line)
                 record["_planner"] = planner_name
                 episodes.append(record)
     return episodes
+
+
+def _is_finite_number(value) -> bool:
+    """True only for a real finite number.
+
+    json.loads silently accepts ``NaN``/``Infinity``/``-Infinity`` tokens, so a
+    non-finite field value would otherwise poison np.percentile/np.median. Booleans
+    (a subclass of int) are excluded too — a stray ``true`` must not read as ``1.0``.
+    """
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def extract_profiles(episodes: list[dict]) -> dict:
@@ -72,12 +85,12 @@ def extract_profiles(episodes: list[dict]) -> dict:
         latency = fields.get("response_latency_s")
         decel = fields.get("required_deceleration_m_s2")
 
-        if latency is not None:
+        if _is_finite_number(latency):
             prof["latency_populated"] += 1
-            prof["latencies"].append(latency)
+            prof["latencies"].append(float(latency))
 
-        if decel is not None:
-            prof["decels"].append(decel)
+        if _is_finite_number(decel):
+            prof["decels"].append(float(decel))
 
     return dict(profiles)
 

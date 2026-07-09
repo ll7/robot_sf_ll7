@@ -17,6 +17,16 @@ DEFAULT_LIVE_STATUS = "live_arm_status.json"
 CANCEL_EXIT_CODE = 20
 
 
+def _load_json(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    with path.open(encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    return payload
+
+
 @dataclass(frozen=True, slots=True)
 class ArmStatusDecision:
     """Single polling decision for a live campaign arm-status stream."""
@@ -29,16 +39,6 @@ class ArmStatusDecision:
     event_log_path: str
     scancel_command: list[str] | None
     executed: bool = False
-
-
-def _load_json(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    with path.open(encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if not isinstance(payload, dict):
-        raise ValueError(f"{path} must contain a JSON object")
-    return payload
 
 
 def _load_events(path: Path) -> list[dict[str, Any]]:

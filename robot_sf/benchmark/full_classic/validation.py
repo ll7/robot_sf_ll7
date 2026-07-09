@@ -16,10 +16,11 @@ Design:
 from __future__ import annotations
 
 import importlib
-import json
 from typing import TYPE_CHECKING
 
 from loguru import logger
+
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -29,16 +30,6 @@ MANIFEST_FILES = {
     "video_artifacts.json": "video_artifacts.schema.json",
     "performance_visuals.json": "performance_visuals.schema.json",
 }
-
-
-def _load_json(path: Path):  # type: ignore[no-untyped-def]
-    """Read JSON from disk.
-
-    Returns:
-        Parsed JSON payload.
-    """
-    with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
 
 
 def validate_visual_manifests(base_dir: Path, contracts_dir: Path) -> list[str]:

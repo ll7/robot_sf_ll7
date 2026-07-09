@@ -10,6 +10,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
@@ -27,18 +29,6 @@ def parse_args() -> argparse.Namespace:
         default=Path("output/analysis/h500_solvability_mechanisms"),
     )
     return parser.parse_args()
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    """Load a JSON object artifact.
-
-    Returns:
-        Parsed JSON object.
-    """
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise TypeError(f"Expected JSON object: {path}")
-    return payload
 
 
 def _metric(row: dict[str, Any], metric: str, field: str) -> float:

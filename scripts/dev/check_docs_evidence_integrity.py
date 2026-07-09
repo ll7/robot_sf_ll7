@@ -29,7 +29,6 @@ The check is independent from the full Python test suite.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import subprocess
@@ -38,6 +37,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
+
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -318,15 +319,6 @@ def _parse_checksum_line(line: str, *, manifest: Path, root: Path) -> tuple[str,
 
     target = _resolve_checksum_target(candidate, manifest=manifest, root=root)
     return match.group("hash").lower(), target
-
-
-def _sha256(path: Path) -> str:
-    """Return sha256 digest for a file."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _checksum_problems_for_manifest(manifest: Path, *, root: Path) -> list[str]:

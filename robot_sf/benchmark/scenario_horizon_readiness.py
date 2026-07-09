@@ -7,13 +7,13 @@ It does not rerun campaigns or promote evidence.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.fallback_policy import classify_planner_row_status
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 
 VALID = "valid"
 TABLE_REEXPORT_READY = "table_reexport_ready"
@@ -210,15 +210,6 @@ def _load_packet(path: Path) -> dict[str, Any]:
     if not isinstance(packet, dict):
         raise ValueError("readiness packet root is not object")
     return packet
-
-
-def _sha256(path: Path) -> str:
-    """Return SHA-256 digest for one local artifact.
-
-    Returns:
-        Hex-encoded SHA-256 digest.
-    """
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _matches_artifact_path(packet_path: Any, artifact_path: Path, artifact_str: str) -> bool:

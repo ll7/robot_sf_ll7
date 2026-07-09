@@ -21,6 +21,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.identity.hash_utils import read_jsonl as _load_jsonl
 from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.scenario_certification import materialize_perturbation_pilot_matrix
 from robot_sf.scenario_certification.criticality_summary import (
@@ -94,17 +95,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional compact tracked JSON summary path. Raw records are never copied here.",
     )
     return parser
-
-
-def _load_jsonl(path: Path) -> list[dict[str, Any]]:
-    """Load JSONL rows from a benchmark episode file."""
-    if not path.exists():
-        return []
-    rows: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            rows.append(json.loads(line))
-    return rows
 
 
 def _load_yaml_mapping(path: Path) -> dict[str, Any]:

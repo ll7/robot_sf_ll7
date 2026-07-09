@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 from dataclasses import dataclass
@@ -13,20 +12,12 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, load_campaign_config
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.common.artifact_paths import get_repository_root
 
 RELEASE_MANIFEST_SCHEMA_VERSION = "benchmark-release-manifest.v0.1"
 BENCHMARK_PROTOCOL_VERSION = "0.1.0"
 _SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
-
-
-def _sha256_file(path: Path) -> str:
-    """Return the SHA-256 digest for a file."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _load_mapping(path: Path) -> dict[str, Any]:

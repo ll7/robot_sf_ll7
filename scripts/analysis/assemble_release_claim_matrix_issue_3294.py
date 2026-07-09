@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -14,6 +13,8 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.benchmark_row_claim import validate_leaderboard_claims
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 
 SCHEMA_VERSION = "release_claim_matrix_issue_3294.v1"
 DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_3294_release_claim_matrix")
@@ -63,29 +64,12 @@ def _repo_relative(path: Path) -> str:
     return path.as_posix()
 
 
-def _load_json(path: Path) -> dict[str, Any]:
-    """Load a JSON object, failing clearly if the source is not object-shaped."""
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"{path} must contain a JSON object")
-    return payload
-
-
 def _load_yaml(path: Path) -> dict[str, Any]:
     """Load a YAML object, failing clearly if the source is not object-shaped."""
     payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError(f"{path} must contain a YAML object")
     return payload
-
-
-def _sha256(path: Path) -> str:
-    """Return the SHA-256 digest for a tracked source file."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _classify_row_claim(row: dict[str, Any]) -> str:

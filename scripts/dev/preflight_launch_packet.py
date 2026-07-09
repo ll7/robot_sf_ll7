@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import shlex
@@ -14,6 +13,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import yaml
+
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -47,16 +48,6 @@ class PathCheck:
     sha256_expected: str | None = None
     sha256_observed: str | None = None
     sha256_matches: bool | None = None
-
-
-def _sha256(path: Path) -> str:
-    """Return SHA-256 digest for *path*."""
-
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _repo_path(repo_root: Path, raw_path: str) -> Path:

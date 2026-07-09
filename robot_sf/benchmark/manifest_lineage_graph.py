@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
 from robot_sf.benchmark.manifest_lineage import MANDATORY_LINEAGE_FIELDS
 from robot_sf.benchmark.manifest_lineage_backfill import (
     FieldBackfillEntry,
@@ -214,11 +215,6 @@ def _parse_generated_at_utc(value: str) -> str:
             "2026-06-15T00:00:00+00:00"
         )
     return value
-
-
-def _load_json(path: Path) -> Any:
-    """Load a JSON file and return the parsed payload."""
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _resolve_manifest_path(

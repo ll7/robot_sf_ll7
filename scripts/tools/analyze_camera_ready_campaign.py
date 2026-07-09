@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.identity.hash_utils import read_jsonl as _read_jsonl
 from robot_sf.benchmark.scenario_difficulty import build_scenario_difficulty_analysis
 from robot_sf.benchmark.utils import (
     episode_collision_value,
@@ -136,19 +137,6 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
     """
     with path.open("r", encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle))
-
-
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
-    """Read JSONL episode records from an artifact.
-
-    Returns:
-        Parsed JSON object rows, or an empty list for missing/empty files.
-    """
-    if not path.exists() or path.stat().st_size == 0:
-        return []
-    return [
-        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
-    ]
 
 
 def _count_success_integrity_violations(episodes: list[dict[str, Any]]) -> int:

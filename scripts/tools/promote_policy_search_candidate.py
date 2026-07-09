@@ -10,6 +10,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
@@ -34,18 +36,6 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--output", type=Path, default=Path("output/policy_search/promotion"))
     return parser.parse_args()
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    """Load a JSON object from disk.
-
-    Returns:
-        dict[str, Any]: Parsed JSON mapping.
-    """
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise TypeError(f"Expected JSON object: {path}")
-    return payload
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:

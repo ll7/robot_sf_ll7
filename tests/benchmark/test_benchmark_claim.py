@@ -15,17 +15,9 @@ from robot_sf.benchmark.benchmark_claim import (
     load_benchmark_claim_schema,
 )
 from robot_sf.benchmark.cli import cli_main
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 
 FIXTURE_ROOT = Path("tests/fixtures/benchmark_claim/v1")
-
-
-def _sha256(path: Path) -> str:
-    """Return the SHA-256 digest for a fixture file."""
-    import hashlib
-
-    digest = hashlib.sha256()
-    digest.update(path.read_bytes())
-    return digest.hexdigest()
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:

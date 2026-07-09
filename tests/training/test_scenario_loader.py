@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
 import pytest
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.training import scenario_loader
 from robot_sf.training.scenario_loader import (
     _coerce_positive_float,
@@ -19,11 +19,6 @@ from robot_sf.training.scenario_loader import (
 def _write_yaml(path: Path, content: str) -> None:
     """Write a YAML fixture file."""
     path.write_text(content, encoding="utf-8")
-
-
-def _sha256_file(path: Path) -> str:
-    """Return the SHA-256 digest for a fixture file."""
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def test_load_scenarios_with_includes(tmp_path: Path) -> None:

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
 import json
 import shlex
 import subprocess
@@ -13,6 +12,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 from robot_sf.benchmark.runner import load_scenario_matrix
 from robot_sf.benchmark.scenario_thumbnails import resolve_scenario_label, save_scenario_thumbnails
 
@@ -298,15 +298,6 @@ def _write_manifest(
 def _escape_markdown(value: str) -> str:
     """Escape Markdown table separators."""
     return value.replace("|", "\\|").replace("\n", " ")
-
-
-def _sha256(path: Path) -> str:
-    """Return the SHA-256 digest for a file."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _path_ref(path: Path) -> str:

@@ -8,7 +8,6 @@ episode denominators before any benchmark execution or runtime exclusions.
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +15,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.training.scenario_loader import load_scenarios
 
 SCENARIO_DENOMINATOR_SCHEMA_VERSION = "scenario_denominator_manifest.v1"
@@ -122,20 +122,6 @@ def _repo_relative(path: Path, *, repo_root: Path) -> str:
         return resolved.relative_to(repo_root.resolve()).as_posix()
     except ValueError:
         return resolved.as_posix()
-
-
-def _sha256_file(path: Path) -> str:
-    """Return SHA256 hash for a source config or matrix file.
-
-    Returns:
-        Hex-encoded SHA256 digest.
-    """
-
-    hasher = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            hasher.update(chunk)
-    return hasher.hexdigest()
 
 
 def _normalize_string_list(raw: Any, *, field: str) -> list[str]:

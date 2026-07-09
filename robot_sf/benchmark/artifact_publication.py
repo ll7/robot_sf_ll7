@@ -8,7 +8,6 @@ This module provides reusable logic for:
 
 from __future__ import annotations
 
-import hashlib
 import json
 import mimetypes
 import shutil
@@ -23,6 +22,7 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.common.artifact_paths import get_repository_root
 
 PUBLICATION_BUNDLE_SCHEMA_VERSION = "benchmark-publication-bundle.v2"
@@ -113,22 +113,6 @@ class DissertationArtifactBundleResult:
 def _utc_now_iso() -> str:
     """Return current UTC timestamp formatted as ISO-8601 with trailing ``Z``."""
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
-
-
-def _sha256_file(path: Path) -> str:
-    """Compute SHA-256 for ``path`` using chunked reads.
-
-    Returns:
-        Hex-encoded SHA-256 digest.
-    """
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while True:
-            chunk = handle.read(1024 * 1024)
-            if not chunk:
-                break
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _kind_for_path(relative_path: Path) -> str:

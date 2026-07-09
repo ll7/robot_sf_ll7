@@ -17,6 +17,7 @@ from robot_sf.benchmark.fidelity_sensitivity import (
     build_rank_stability_summary,
     metric_drift,
 )
+from robot_sf.benchmark.identity.hash_utils import read_jsonl as _load_jsonl
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -55,20 +56,6 @@ def _number(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return number if math.isfinite(number) else None
-
-
-def _load_jsonl(path: pathlib.Path) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        row = json.loads(line)
-        if not isinstance(row, dict):
-            raise ValueError(f"{path} contains a non-object JSONL row")
-        rows.append(row)
-    if not rows:
-        raise ValueError(f"{path} does not contain any rows")
-    return rows
 
 
 def _parse_result_spec(spec: str) -> tuple[str, str, pathlib.Path]:

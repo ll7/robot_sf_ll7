@@ -12,6 +12,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+
 LEDGER_PATH = Path("docs/context/evidence/issue_2760_dissertation_evidence_ledger/ledger.json")
 REGISTER_PATH = Path("docs/context/evidence/issue_2762_negative_result_register/register.json")
 
@@ -29,13 +31,6 @@ CLAIM_BOUNDARIES = [
     "Every gap classification preserves the source evidence tier and classification "
     "without upgrade.",
 ]
-
-
-def _load_json(path: Path) -> dict:
-    """Load a JSON file or raise FileNotFoundError."""
-    if not path.is_file():
-        raise FileNotFoundError(f"source file not found: {path}")
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _classify_ledger_row(row: dict[str, Any]) -> str:

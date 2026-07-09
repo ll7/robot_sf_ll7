@@ -16,6 +16,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+
+def _load_json(path: Path) -> dict[str, Any] | None:
+    """Load a JSON file, returning ``None`` when absent."""
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 DEFAULT_LEDGER = Path("docs/context/evidence/issue_2760_dissertation_evidence_ledger/ledger.json")
 DEFAULT_SIGNAL_SUMMARY = Path("docs/context/evidence/issue_2799_signalized_runtime/summary.json")
 DEFAULT_OBS_NOISE_SUMMARY = Path(
@@ -54,17 +66,6 @@ EVIDENCE_COLUMNS = [
 ]
 
 MATRIX_SCHEMA = "mixed_scenario_matrix.v1"
-
-
-def _load_json(path: Path) -> dict[str, Any] | None:
-    """Load a JSON file, returning ``None`` when absent."""
-    if not path.exists():
-        return None
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None
-    return payload if isinstance(payload, dict) else None
 
 
 def _json_object_rows(value: Any) -> list[dict[str, Any]]:

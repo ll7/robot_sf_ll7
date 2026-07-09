@@ -10,13 +10,14 @@ become explicit fail-closed blockers instead of simulated success.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 from scripts.tools.reconcile_slurm_evidence import _load_finalizer_report
 
 SCHEMA_VERSION = "slurm-to-claim-trace-checklist.v1"
@@ -40,30 +41,6 @@ class ChecklistCheck:
     status: str
     detail: str
     remediation: str | None = None
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    """Load a JSON mapping with deterministic errors."""
-
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise RuntimeError(f"cannot read {path}: {exc}") from exc
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"invalid JSON in {path}: {exc}") from exc
-    if not isinstance(payload, dict):
-        raise RuntimeError(f"expected JSON object in {path}")
-    return payload
-
-
-def _sha256(path: Path) -> str:
-    """Return SHA-256 digest for one file."""
-
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _repo_relative(path: Path, *, repo_root: Path) -> str:

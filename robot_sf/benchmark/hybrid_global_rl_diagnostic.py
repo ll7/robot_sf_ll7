@@ -8,7 +8,6 @@ fallback or degraded rows from any route-conditioned effect evidence.
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -17,6 +16,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.models import get_registry_entry
 
 SCHEMA_VERSION = "issue-4183-hybrid-global-rl-diagnostic.v1"
@@ -711,11 +711,3 @@ def _blocker_lines(blockers: list[dict[str, Any]]) -> list[str]:
             details.append(f"row_classification={blocker['row_classification']}")
         lines.append(f"- {blocker['blocker']}: " + ", ".join(details))
     return lines
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()

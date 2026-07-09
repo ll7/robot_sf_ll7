@@ -17,6 +17,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+
+def _load_json(path: Path) -> dict[str, Any] | None:
+    """Load JSON file; return None if missing (degradation, not error)."""
+    if not path.is_file():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 SCHEMA_VERSION = "next_issue_shortlist.v1"
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -60,13 +68,6 @@ CLAIM_BOUNDARIES = [
 
 
 # -- Source loaders ---------------------------------------------------------
-
-
-def _load_json(path: Path) -> dict[str, Any] | None:
-    """Load JSON file; return None if missing (degradation, not error)."""
-    if not path.is_file():
-        return None
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _load_optional_json(path: Path | None) -> dict[str, Any] | list[Any] | None:

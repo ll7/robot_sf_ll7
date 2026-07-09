@@ -12,6 +12,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = Path(
     "configs/policy_search/ablation_manifests/issue_2170_one_factor_hybrid_component_manifest.yaml"
@@ -36,14 +38,6 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(payload, dict):
         raise TypeError(f"Expected YAML mapping: {path}")
-    return payload
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    """Load a JSON mapping."""
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise TypeError(f"Expected JSON mapping: {path}")
     return payload
 
 

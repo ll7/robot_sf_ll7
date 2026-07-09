@@ -15,6 +15,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -58,16 +60,6 @@ def get_repository_root() -> Path:
     """Return repository root for default matrix and artifact path resolution."""
 
     return Path(__file__).resolve().parents[2]
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    """Load a JSON object from ``path``."""
-
-    with path.open(encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if not isinstance(payload, dict):
-        raise ValueError(f"{path} must contain a JSON object")
-    return payload
 
 
 def _row_id(row: dict[str, Any], index: int) -> str:

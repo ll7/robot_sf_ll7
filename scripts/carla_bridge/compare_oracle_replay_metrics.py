@@ -5,8 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
 from robot_sf_carla_bridge.parity import compare_oracle_replay_metrics
 
 
@@ -19,14 +19,6 @@ def parse_args() -> argparse.Namespace:
         "--output", required=True, type=Path, help="Output parity report JSON path."
     )
     return parser.parse_args()
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    """Load one JSON object from a path."""
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise TypeError(f"Expected JSON object in {path}")
-    return payload
 
 
 def main() -> int:

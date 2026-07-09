@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
 import json
 import math
 import shlex
@@ -31,6 +30,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     prepare_campaign_preflight,
     run_campaign,
 )
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.benchmark.synthetic_actuation import (
     SYNTHETIC_ACTUATION_CLAIM_BOUNDARY,
     SyntheticActuationProfile,
@@ -138,15 +138,6 @@ def _repo_path(path: Path | str, *, root: Path | None = None) -> Path:
         return parsed
     root = _repo_root() if root is None else root
     return root / parsed
-
-
-def _sha256_file(path: Path) -> str:
-    """Return a SHA-256 digest for one file."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _write_json(path: Path, payload: Any) -> None:

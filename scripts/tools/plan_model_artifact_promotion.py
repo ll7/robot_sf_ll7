@@ -9,7 +9,6 @@ does not upload, copy, or commit checkpoint artifacts.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 from datetime import UTC, datetime
@@ -18,6 +17,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 from robot_sf.benchmark.local_model_artifacts import (
     BlocklistMetadata,
     display_path,
@@ -97,15 +97,6 @@ def _github_release_is_public_pointer(release: Any) -> bool:
         or (release.get("repo") and release.get("tag") and release.get("asset_name"))
     )
     return bool(has_location and release.get("sha256"))
-
-
-def _sha256(path: Path) -> str:
-    """Compute a SHA256 checksum for a local artifact."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _safe_model_id(config_path: str) -> str:

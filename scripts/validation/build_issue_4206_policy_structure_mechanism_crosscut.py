@@ -24,6 +24,7 @@ from robot_sf.benchmark.failure_mechanism_taxonomy import (
     FailureMechanismTaxonomyError,
     validate_failure_mechanism_record,
 )
+from robot_sf.benchmark.identity.hash_utils import read_jsonl as _read_jsonl
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -90,19 +91,6 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 def _read_csv(path: Path) -> list[dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle))
-
-
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    with path.open("r", encoding="utf-8") as handle:
-        for line_number, line in enumerate(handle, start=1):
-            if not line.strip():
-                continue
-            row = json.loads(line)
-            if not isinstance(row, dict):
-                raise BuildError(f"{path}:{line_number} must be a JSON object")
-            rows.append(row)
-    return rows
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:

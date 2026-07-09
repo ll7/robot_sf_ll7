@@ -17,6 +17,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_VERSION = "robot-sf-slurm-job-finalization.v1"
 CONTROL_PLANE_RUN_ARTIFACTS = (
@@ -75,15 +77,6 @@ def _resolve_path(path: str | Path, *, repo_root: Path) -> Path:
     """Resolve an artifact path relative to the repository root."""
     value = Path(path)
     return value if value.is_absolute() else repo_root / value
-
-
-def _sha256_file(path: Path) -> str:
-    """Compute a streaming SHA256 checksum for one file."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _directory_digest(path: Path) -> tuple[int, str]:

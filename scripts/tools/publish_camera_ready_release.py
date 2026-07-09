@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
 from robot_sf.common.artifact_paths import get_repository_root
 
 if TYPE_CHECKING:
@@ -48,14 +49,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional file path for writing the publish plan JSON payload.",
     )
     return parser
-
-
-def _load_json(path: Path) -> dict[str, object]:
-    """Load and validate JSON object from disk."""
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"Expected JSON object at {path}")
-    return payload
 
 
 def _resolve_publication_path(publication: dict[str, object], key: str, repo_root: Path) -> Path:

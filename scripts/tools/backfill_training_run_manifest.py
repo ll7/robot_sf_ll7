@@ -28,12 +28,12 @@ root). Pass ``--benchmarks-dir`` to point directly at a ``benchmarks`` tree.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
 from robot_sf.benchmark.imitation_manifest import (
     write_training_run_manifest,
 )
@@ -47,15 +47,6 @@ from robot_sf.common import (
 
 class BackfillError(RuntimeError):
     """Raised when the retained artefacts are insufficient to rebuild a manifest."""
-
-
-def _load_json(path: Path) -> Any:
-    """Load a JSON file, raising :class:`BackfillError` with context on failure."""
-    try:
-        with path.open("r", encoding="utf-8") as handle:
-            return json.load(handle)
-    except (OSError, json.JSONDecodeError) as exc:  # pragma: no cover - defensive
-        raise BackfillError(f"Could not read {path}: {exc}") from exc
 
 
 def _single(paths: list[Path], label: str, *, required: bool = True) -> Path | None:

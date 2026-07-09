@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+    from pathlib import Path
 
 
 def canonical_dumps(obj: Any) -> str:
@@ -89,9 +90,88 @@ def make_episode_id(scenario_params: Mapping[str, Any], seed: int, prefix: str =
     return f"{prefix}_{digest[:12]}"
 
 
+def load_json(path: Path) -> dict[str, Any]:
+    """Load a JSON object from a file path.
+
+    Parameters
+    ----------
+    path : Path
+        Path to a JSON file.
+
+    Returns
+    -------
+    dict[str, Any]
+        Parsed JSON object.
+    """
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise TypeError(f"Expected JSON object in {path}")
+    return payload
+
+
+def sha256_file(path: Path) -> str:
+    """Return hex digest of file contents using SHA-256.
+
+    Parameters
+    ----------
+    path : Path
+        Path to file to hash.
+
+    Returns
+    -------
+    str
+        Hexadecimal digest string.
+    """
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Read a single JSONL file into a list of records.
+
+    Parameters
+    ----------
+    path : Path
+        Path to a JSONL file (one JSON object per line).
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Parsed records.
+
+    Raises
+    ------
+    ValueError
+        If a non-blank line does not decode to a JSON object, matching the
+        ``list[dict]`` contract and the fail-closed behavior of
+        :func:`load_json`. The message includes the 1-based line number and
+        file path.
+    """
+
+    records: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as handle:
+        for line_no, raw in enumerate(handle, start=1):
+            line = raw.strip()
+            if not line:
+                continue
+            record = json.loads(line)
+            if not isinstance(record, dict):
+                raise ValueError(f"{path}:{line_no} is not a JSON object")
+            records.append(record)
+    return records
+
+
 __all__ = [
     "canonical_dumps",
     "episode_identity_components",
+    "load_json",
     "make_episode_id",
+    "read_jsonl",
+    "sha256_file",
     "stable_hash",
 ]

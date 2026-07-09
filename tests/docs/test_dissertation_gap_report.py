@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 LEDGER_PATH = (
@@ -38,10 +39,6 @@ REQUIRED_GAP_FIELDS = {
 VALID_BUCKETS = {"supported", "blocked", "negative_revise_only", "remove_weaken"}
 LEDGER_ROW_COUNT = 7
 REGISTER_ENTRY_COUNT = 5
-
-
-def _load_json(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 class TestGapReportExists:

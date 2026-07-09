@@ -1,5 +1,4 @@
-<!-- AI-GENERATED (robot_sf#4848, 2026-07-08) - NEEDS-REVIEW -->
-
+<!-- AI-GENERATED (robot_sf#4848, 2026-07-09) - NEEDS-REVIEW -->
 # Issue #4848 Exemplar Trace: classic_group_crossing_low (orca)
 
 Plain-language summary: this directory contains one exemplar trace episode from the
@@ -25,13 +24,12 @@ statistical benchmark or dissertation claim.
 - Seed: `20`
 - Selection mode: `worst`
 - Selection metric: `path_efficiency = 1.0`
-- Git commit at generation: `50c36e7e5eea05f6951c127019eee019bc2a8b70`
+- Git commit at generation: `62e08add1c2a5a750a6fd68a823319280c2dccd6`
 
 ## Claim Boundary
 
 This bundle is `illustrative_exemplar` evidence for one group-crossing episode.
 It should be used for visualization and worked example input only. It is not a full
 benchmark campaign, not a Slurm or GPU result, and not a statistical comparison.
-
 
 <!-- /AI-GENERATED -->

@@ -1,3 +1,0 @@
-# AI-GENERATED NEEDS-REVIEW
-step,time_s,robot_x_m,robot_y_m,robot_heading_rad,executed_vx_m_s,executed_vy_m_s,executed_speed_m_s,commanded_linear_velocity_m_s,commanded_angular_velocity_rad_s,nearest_pedestrian_id,min_robot_ped_distance_m,pedestrian_count,pedestrian_positions_json
-0,0.1,13.973349683562331,2.9651637276827385,1.3653944730758667,0.009718878714277679,0.04655985215325398,0.04756339386540566,0.9512678773081642,0.15309647864250797,0,10.174671730649825,4,"[{""id"":""0"",""x_m"":18.09608572383561,""y_m"":12.26715235209615},{""id"":""1"",""x_m"":15.655392230495114,""y_m"":26.662338792648395},{""id"":""2"",""x_m"":17.55859998350127,""y_m"":14.43196572759264},{""id"":""3"",""x_m"":18.610917542622747,""y_m"":13.550043792895892}]"

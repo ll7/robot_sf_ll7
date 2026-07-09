@@ -1,5 +1,4 @@
 <!-- AI-GENERATED (robot_sf#4891, 2026-07-09) - NEEDS-REVIEW -->
-
 # Issue #4891 Exemplar Trace: classic_head_on_corridor_medium (social_force)
 
 Plain-language summary: this directory contains one exemplar trace episode from the
@@ -25,10 +24,12 @@ statistical benchmark or dissertation claim.
 - Seed: `24`
 - Selection mode: `worst`
 - Selection metric: `path_efficiency = 0.6836209993728016`
-- Git commit at generation: `bb59e8b516a7fed1e014cc2d70b40af2478e747d`
+- Git commit at generation: `62e08add1c2a5a750a6fd68a823319280c2dccd6`
 
 ## Claim Boundary
 
 This bundle is `illustrative_exemplar` evidence for one head-on corridor episode.
 It should be used for visualization and worked example input only. It is not a full
 benchmark campaign, not a Slurm or GPU result, and not a statistical comparison.
+
+<!-- /AI-GENERATED -->

@@ -3867,123 +3867,123 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_low_seed20_worst/README.md
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_low_seed24_best/README.md
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_low_seed20_worst/SHA256SUMS
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_low_seed24_best/SHA256SUMS
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_low_seed20_worst/metadata.json
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_low_seed24_best/metadata.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_low_seed20_worst/min_distance_series.csv
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_low_seed24_best/min_distance_series.csv
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_low_seed20_worst/trace_series.json
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_low_seed24_best/trace_series.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_low_seed20_worst/trace_timeseries.csv
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_low_seed24_best/trace_timeseries.csv
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed20_median/README.md
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed21_median/README.md
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed20_median/SHA256SUMS
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed21_median/SHA256SUMS
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed20_median/metadata.json
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed21_median/metadata.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed20_median/min_distance_series.csv
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed21_median/min_distance_series.csv
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed20_median/trace_series.json
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed21_median/trace_series.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed20_median/trace_timeseries.csv
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed21_median/trace_timeseries.csv
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed24_best/README.md
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed23_worst/README.md
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed24_best/SHA256SUMS
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed23_worst/SHA256SUMS
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed24_best/metadata.json
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed23_worst/metadata.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed24_best/min_distance_series.csv
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed23_worst/min_distance_series.csv
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed24_best/trace_series.json
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed23_worst/trace_series.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed24_best/trace_timeseries.csv
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/goal/classic_head_on_corridor_medium_seed23_worst/trace_timeseries.csv
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_low_seed20_worst/README.md
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_low_seed22_median/README.md
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_low_seed20_worst/SHA256SUMS
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_low_seed22_median/SHA256SUMS
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_low_seed20_worst/metadata.json
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_low_seed22_median/metadata.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_low_seed20_worst/min_distance_series.csv
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_low_seed22_median/min_distance_series.csv
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_low_seed20_worst/trace_series.json
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_low_seed22_median/trace_series.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_low_seed20_worst/trace_timeseries.csv
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_low_seed22_median/trace_timeseries.csv
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_medium_seed20_median/README.md
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_medium_seed23_worst/README.md
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_medium_seed20_median/SHA256SUMS
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_medium_seed23_worst/SHA256SUMS
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_medium_seed20_median/metadata.json
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_medium_seed23_worst/metadata.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_medium_seed20_median/min_distance_series.csv
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_medium_seed23_worst/min_distance_series.csv
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_medium_seed20_median/trace_series.json
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_medium_seed23_worst/trace_series.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_medium_seed20_median/trace_timeseries.csv
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_medium_seed23_worst/trace_timeseries.csv
   status: evidence
   freshness: evidence
   area: benchmark_evidence
@@ -4011,51 +4011,51 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_low_seed23_median/README.md
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_medium_seed21_median/README.md
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_low_seed23_median/SHA256SUMS
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_medium_seed21_median/SHA256SUMS
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_low_seed23_median/metadata.json
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_medium_seed21_median/metadata.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_low_seed23_median/min_distance_series.csv
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_medium_seed21_median/min_distance_series.csv
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_low_seed23_median/trace_series.json
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_medium_seed21_median/trace_series.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_low_seed23_median/trace_timeseries.csv
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_medium_seed21_median/trace_timeseries.csv
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_medium_seed23_best/README.md
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_medium_seed22_best/README.md
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_medium_seed23_best/SHA256SUMS
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_medium_seed22_best/SHA256SUMS
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_medium_seed23_best/metadata.json
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_medium_seed22_best/metadata.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_medium_seed23_best/min_distance_series.csv
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_medium_seed22_best/min_distance_series.csv
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_medium_seed23_best/trace_series.json
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_medium_seed22_best/trace_series.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_medium_seed23_best/trace_timeseries.csv
+- path: docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/social_force/classic_head_on_corridor_medium_seed22_best/trace_timeseries.csv
   status: evidence
   freshness: evidence
   area: benchmark_evidence

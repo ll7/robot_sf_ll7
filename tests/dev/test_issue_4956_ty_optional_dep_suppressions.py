@@ -130,7 +130,8 @@ def _resolve_ty_python() -> Path | None:
     except (subprocess.CalledProcessError, OSError, FileNotFoundError):
         pass
     for cand in candidates:
-        if (cand / "bin" / "python").exists():
+        # POSIX venvs use ``bin/python``; Windows venvs use ``Scripts/python.exe``.
+        if (cand / "bin" / "python").exists() or (cand / "Scripts" / "python.exe").exists():
             return cand
     return None
 
@@ -147,7 +148,10 @@ def test_ty_check_touched_files_reports_no_named_diagnostics() -> None:
     venv = _resolve_ty_python()
     if venv is None:
         pytest.skip("no resolvable Python environment for ty (venv missing)")
-    cmd = ["uvx", "ty", "check", "--exit-zero", "--python", str(venv)]
+    # Resolve uvx to an absolute path for robustness (Windows: uvx may be a
+    # batch/cmd script that subprocess cannot launch by bare name without a shell).
+    uvx_path = shutil.which("uvx") or "uvx"
+    cmd = [uvx_path, "ty", "check", "--exit-zero", "--python", str(venv)]
     cmd += [str(GPUTIL_SCRIPT), str(SVG_CONV_SCRIPT), str(IMITATION_NOTEBOOK)]
     result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=300)
     combined = result.stdout + result.stderr

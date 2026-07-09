@@ -68,6 +68,22 @@ def review_marker(issue_ref: str, marker_date: str | None = None) -> str:
     return f"<!-- AI-GENERATED ({issue_ref}) - NEEDS-REVIEW -->"
 
 
+def extract_marker_date(metadata: dict[str, Any]) -> str | None:
+    """Extract YYYY-MM-DD from a bundle's ``generated_at_utc`` provenance field.
+
+    Deterministic per the maintainer decision on #4903: the marker date is
+    pinned to the bundle's provenance timestamp and never falls back to
+    wall-clock time. When the provenance field is absent or empty, returns
+    ``None`` so the marker omits the date rather than fabricating one from the
+    current time.
+
+    Returns:
+        The ``YYYY-MM-DD`` date string, or ``None`` when provenance is absent.
+    """
+    generated_at = metadata.get("generated_at_utc", "")
+    return generated_at[:10] if generated_at else None
+
+
 def review_marker_json() -> str:
     """Return the review marker value for JSON metadata."""
     return "AI-GENERATED NEEDS-REVIEW"

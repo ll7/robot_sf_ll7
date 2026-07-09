@@ -19,24 +19,15 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.evidence.writers import (
+    extract_marker_date,
     review_marker,
     write_csv,
     write_json,
     write_sha256sums,
 )
 
-
-def _extract_marker_date(metadata: dict[str, Any]) -> str | None:
-    """Extract YYYY-MM-DD from the bundle's generated_at_utc provenance field.
-
-    Deterministic per the maintainer decision on #4903: the marker date is
-    pinned to the bundle's provenance timestamp and never falls back to
-    wall-clock time. When the provenance field is absent or empty, returns
-    ``None`` so the marker omits the date rather than fabricating one from the
-    current time.
-    """
-    generated_at = metadata.get("generated_at_utc", "")
-    return generated_at[:10] if generated_at else None
+# Back-compat alias for the shared helper (kept for the module-attribute tests).
+_extract_marker_date = extract_marker_date
 
 
 # Target planners for exemplar selection (classical + social navigation diversity)
@@ -373,7 +364,7 @@ def write_bundle(
 
 def _write_readme(output_dir: Path, metadata: dict[str, Any]) -> None:
     """Write the human-facing evidence bundle README."""
-    date = _extract_marker_date(metadata)
+    date = extract_marker_date(metadata)
     readme = f"""{review_marker("robot_sf#4891", marker_date=date)}
 # Issue #4891 Exemplar Trace: {metadata["scenario_id"]} ({metadata["planner"]})
 
@@ -583,7 +574,7 @@ def main() -> int:
         if bundle_metadata is None and metadata is not None:
             bundle_metadata = metadata
 
-    marker_date = _extract_marker_date(bundle_metadata) if bundle_metadata else None
+    marker_date = extract_marker_date(bundle_metadata) if bundle_metadata else None
     write_selection_report(all_selections, output_dir, marker_date=marker_date)
 
     print(f"\nExport complete. {len(all_selections)} exemplar bundles written to {output_dir}")

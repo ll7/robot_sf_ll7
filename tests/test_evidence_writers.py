@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from robot_sf.evidence.writers import (
+    extract_marker_date,
     review_marker,
     review_marker_comment,
     review_marker_json,
@@ -38,6 +39,21 @@ class TestReviewMarker:
 
     def test_review_marker_comment(self) -> None:
         assert review_marker_comment() == "# AI-GENERATED NEEDS-REVIEW"
+
+
+class TestExtractMarkerDate:
+    """Test the shared extract_marker_date provenance helper."""
+
+    def test_extracts_date_from_iso_timestamp(self) -> None:
+        assert (
+            extract_marker_date({"generated_at_utc": "2026-07-08T12:34:56+00:00"}) == "2026-07-08"
+        )
+
+    def test_missing_generated_at_returns_none(self) -> None:
+        assert extract_marker_date({}) is None
+
+    def test_empty_generated_at_returns_none(self) -> None:
+        assert extract_marker_date({"generated_at_utc": ""}) is None
 
 
 class TestSha256File:

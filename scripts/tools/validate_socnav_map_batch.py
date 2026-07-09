@@ -239,7 +239,13 @@ def conversion_readiness(
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Example:\n  uv run python scripts/tools/validate_socnav_map_batch.py [--batch-id <id>]"
+        ),
+    )
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--socnav-root", type=Path, default=DEFAULT_SOCNAV_ROOT)
     parser.add_argument("--batch-id", default="eth_first")

@@ -144,7 +144,9 @@ def validate_report(report_dir: Path) -> bool:
 def main() -> None:
     """CLI entry point for report validation."""
     parser = argparse.ArgumentParser(
-        description="Validate research report structure and schema compliance."
+        description="Validate research report structure and schema compliance.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=("Example:\n  uv run python scripts/tools/validate_report.py --report-dir <dir>"),
     )
     parser.add_argument("--report-dir", type=str, required=True, help="Path to report directory")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")

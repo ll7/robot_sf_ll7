@@ -1246,6 +1246,161 @@ def _resolve_episode_run_context(  # noqa: PLR0913
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _EpisodePostLoopResult:
+    """Trajectory arrays and raw metrics computed after the episode step loop.
+
+    Bundles the post-loop phase of ``run_map_episode``: trajectory stacking, visibility
+    evidence reduction, safety predicates, obstacle sampling, and raw metric computation.
+    """
+
+    robot_pos_arr: np.ndarray
+    robot_vel_arr: np.ndarray
+    robot_acc_arr: np.ndarray
+    ped_pos_arr: np.ndarray
+    ped_forces_arr: np.ndarray
+    safety_predicates: dict[str, Any]
+    obstacles: Any
+    shortest_path: float
+    metrics_raw: dict[str, Any]
+
+
+def _compute_post_loop_metrics(  # noqa: PLR0913
+    *,
+    robot_positions: list[np.ndarray],
+    robot_headings: list[float],
+    ped_positions: list[np.ndarray],
+    ped_forces: list[np.ndarray],
+    visibility_trace: list[np.ndarray | None],
+    track_confidence_trace: list[np.ndarray | None],
+    visibility_evidence_statuses: list[str],
+    visibility_evidence_reasons: list[str | None],
+    reached_goal_step: int | None,
+    collision_seen: bool,
+    ped_collision_seen: bool,
+    obstacle_collision_seen: bool,
+    robot_collision_seen: bool,
+    map_def: Any,
+    goal_vec: np.ndarray,
+    scenario: dict[str, Any],
+    config: Any,
+    horizon_val: int,
+    record_forces: bool,
+    experimental_ped_impact: bool,
+    ped_impact_radius_m: float,
+    ped_impact_window_steps: int,
+) -> _EpisodePostLoopResult:
+    """Stack the episode trajectory, derive safety predicates, and compute raw metrics.
+
+    Returns:
+        _EpisodePostLoopResult: Trajectory arrays plus safety predicates, sampled
+        obstacles, shortest-path length, and the raw (pre-post-process) metrics dict.
+    """
+    robot_pos_arr = np.asarray(robot_positions, dtype=float)
+    robot_vel_arr, robot_acc_arr = _vel_and_acc(
+        robot_pos_arr, config.sim_config.time_per_step_in_secs
+    )
+    ped_pos_arr = _stack_ped_positions(ped_positions)
+    ped_forces_arr = (
+        _stack_ped_positions(ped_forces, fill_value=np.nan)
+        if record_forces
+        else np.zeros_like(ped_pos_arr, dtype=float)
+    )
+    visibility_arr = _stack_visibility_values(
+        visibility_trace,
+        fill_value=False,
+        dtype=bool,
+    )
+    track_confidence_arr = _stack_visibility_values(
+        track_confidence_trace,
+        fill_value=0.0,
+        dtype=float,
+    )
+    if "unavailable" in visibility_evidence_statuses:
+        visibility_evidence_status = "unavailable"
+    elif visibility_evidence_statuses and all(
+        status == "not_applicable" for status in visibility_evidence_statuses
+    ):
+        visibility_evidence_status = "not_applicable"
+    else:
+        visibility_evidence_status = "available"
+    visibility_evidence_reason = next(
+        (reason for reason in visibility_evidence_reasons if reason),
+        None,
+    )
+    safety_predicates = _safety_predicates_for_episode(
+        robot_pos_arr=robot_pos_arr,
+        robot_vel_arr=robot_vel_arr,
+        robot_headings=robot_headings,
+        ped_pos_arr=ped_pos_arr,
+        dt=float(config.sim_config.time_per_step_in_secs),
+        visibility_evidence=VisibilityEvidenceTrace(
+            visibility=visibility_arr,
+            track_confidence=track_confidence_arr,
+            status=visibility_evidence_status,
+            reason=visibility_evidence_reason,
+        ),
+    )
+
+    obstacles = (
+        sample_obstacle_points(map_def.obstacles, map_def.bounds) if map_def is not None else None
+    )
+    if robot_pos_arr.size:
+        shortest_path = compute_shortest_path_length(map_def, robot_pos_arr[0], goal_vec)
+    else:
+        shortest_path = float("nan")
+
+    if robot_pos_arr.size == 0:
+        metrics_raw = {
+            "success": 0.0,
+            "time_to_goal_norm": float("nan"),
+            "collisions": 0.0,
+        }
+    else:
+        robot_config = getattr(config, "robot_config", None)
+        ep = EpisodeData(
+            robot_pos=robot_pos_arr,
+            robot_vel=robot_vel_arr,
+            robot_acc=robot_acc_arr,
+            peds_pos=ped_pos_arr,
+            ped_forces=ped_forces_arr,
+            obstacles=obstacles,
+            goal=goal_vec,
+            dt=float(config.sim_config.time_per_step_in_secs),
+            reached_goal_step=reached_goal_step,
+            robot_radius=float(getattr(robot_config, "radius", 1.0)),
+            ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
+            episode_metadata=_episode_metadata_for_benchmark_metrics(scenario, map_def),
+        )
+        metrics_raw = compute_all_metrics(
+            ep,
+            horizon=horizon_val,
+            shortest_path_len=shortest_path,
+            robot_max_speed=_robot_max_speed(config),
+            experimental_ped_impact=experimental_ped_impact,
+            ped_impact_radius_m=ped_impact_radius_m,
+            ped_impact_window_steps=ped_impact_window_steps,
+        )
+    _floor_collision_metrics_from_flags(
+        metrics_raw,
+        collision_seen=collision_seen,
+        ped_collision_seen=ped_collision_seen,
+        obstacle_collision_seen=obstacle_collision_seen,
+        robot_collision_seen=robot_collision_seen,
+    )
+    return _EpisodePostLoopResult(
+        robot_pos_arr=robot_pos_arr,
+        robot_vel_arr=robot_vel_arr,
+        robot_acc_arr=robot_acc_arr,
+        ped_pos_arr=ped_pos_arr,
+        ped_forces_arr=ped_forces_arr,
+        safety_predicates=safety_predicates,
+        obstacles=obstacles,
+        shortest_path=shortest_path,
+        metrics_raw=metrics_raw,
+    )
+
+
 def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     scenario: dict[str, Any],
     seed: int,
@@ -1823,98 +1978,38 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 logger.debug("Planner close hook failed", exc_info=True)
         env.close()
 
-    robot_pos_arr = np.asarray(robot_positions, dtype=float)
-    robot_vel_arr, robot_acc_arr = _vel_and_acc(
-        robot_pos_arr, config.sim_config.time_per_step_in_secs
-    )
-    ped_pos_arr = _stack_ped_positions(ped_positions)
-    ped_forces_arr = (
-        _stack_ped_positions(ped_forces, fill_value=np.nan)
-        if record_forces
-        else np.zeros_like(ped_pos_arr, dtype=float)
-    )
-    visibility_arr = _stack_visibility_values(
-        visibility_trace,
-        fill_value=False,
-        dtype=bool,
-    )
-    track_confidence_arr = _stack_visibility_values(
-        track_confidence_trace,
-        fill_value=0.0,
-        dtype=float,
-    )
-    if "unavailable" in visibility_evidence_statuses:
-        visibility_evidence_status = "unavailable"
-    elif visibility_evidence_statuses and all(
-        status == "not_applicable" for status in visibility_evidence_statuses
-    ):
-        visibility_evidence_status = "not_applicable"
-    else:
-        visibility_evidence_status = "available"
-    visibility_evidence_reason = next(
-        (reason for reason in visibility_evidence_reasons if reason),
-        None,
-    )
-    safety_predicates = _safety_predicates_for_episode(
-        robot_pos_arr=robot_pos_arr,
-        robot_vel_arr=robot_vel_arr,
+    post_loop = _compute_post_loop_metrics(
+        robot_positions=robot_positions,
         robot_headings=robot_headings,
-        ped_pos_arr=ped_pos_arr,
-        dt=float(config.sim_config.time_per_step_in_secs),
-        visibility_evidence=VisibilityEvidenceTrace(
-            visibility=visibility_arr,
-            track_confidence=track_confidence_arr,
-            status=visibility_evidence_status,
-            reason=visibility_evidence_reason,
-        ),
-    )
-
-    obstacles = (
-        sample_obstacle_points(map_def.obstacles, map_def.bounds) if map_def is not None else None
-    )
-    if robot_pos_arr.size:
-        shortest_path = compute_shortest_path_length(map_def, robot_pos_arr[0], goal_vec)
-    else:
-        shortest_path = float("nan")
-
-    if robot_pos_arr.size == 0:
-        metrics_raw = {
-            "success": 0.0,
-            "time_to_goal_norm": float("nan"),
-            "collisions": 0.0,
-        }
-    else:
-        robot_config = getattr(config, "robot_config", None)
-        ep = EpisodeData(
-            robot_pos=robot_pos_arr,
-            robot_vel=robot_vel_arr,
-            robot_acc=robot_acc_arr,
-            peds_pos=ped_pos_arr,
-            ped_forces=ped_forces_arr,
-            obstacles=obstacles,
-            goal=goal_vec,
-            dt=float(config.sim_config.time_per_step_in_secs),
-            reached_goal_step=reached_goal_step,
-            robot_radius=float(getattr(robot_config, "radius", 1.0)),
-            ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
-            episode_metadata=_episode_metadata_for_benchmark_metrics(scenario, map_def),
-        )
-        metrics_raw = compute_all_metrics(
-            ep,
-            horizon=horizon_val,
-            shortest_path_len=shortest_path,
-            robot_max_speed=_robot_max_speed(config),
-            experimental_ped_impact=experimental_ped_impact,
-            ped_impact_radius_m=ped_impact_radius_m,
-            ped_impact_window_steps=ped_impact_window_steps,
-        )
-    _floor_collision_metrics_from_flags(
-        metrics_raw,
+        ped_positions=ped_positions,
+        ped_forces=ped_forces,
+        visibility_trace=visibility_trace,
+        track_confidence_trace=track_confidence_trace,
+        visibility_evidence_statuses=visibility_evidence_statuses,
+        visibility_evidence_reasons=visibility_evidence_reasons,
+        reached_goal_step=reached_goal_step,
         collision_seen=collision_seen,
         ped_collision_seen=ped_collision_seen,
         obstacle_collision_seen=obstacle_collision_seen,
         robot_collision_seen=robot_collision_seen,
+        map_def=map_def,
+        goal_vec=goal_vec,
+        scenario=scenario,
+        config=config,
+        horizon_val=horizon_val,
+        record_forces=record_forces,
+        experimental_ped_impact=experimental_ped_impact,
+        ped_impact_radius_m=ped_impact_radius_m,
+        ped_impact_window_steps=ped_impact_window_steps,
     )
+    robot_pos_arr = post_loop.robot_pos_arr
+    robot_vel_arr = post_loop.robot_vel_arr
+    ped_pos_arr = post_loop.ped_pos_arr
+    ped_forces_arr = post_loop.ped_forces_arr
+    safety_predicates = post_loop.safety_predicates
+    metrics_raw = post_loop.metrics_raw
+    if robot_pos_arr.size:
+        robot_config = getattr(config, "robot_config", None)
     impact = algo_meta.get("adapter_impact")
     if isinstance(impact, dict) and bool(impact.get("requested", False)):
         native_steps = int(impact.get("native_steps", 0))

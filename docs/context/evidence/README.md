@@ -749,4 +749,53 @@ decision-disagreement CSV, Markdown, Pareto SVG, and provenance; raw episode JSO
   It keeps #1475 fail-closed: two criteria are met, two are partially met, and
   two remain not met until a Slurm-capable smoke rerun passes the nominal gate.
 
+- `issue_4848_group_crossing_exemplars_2026-07/`: 9 exemplar trace-episode bundles
+  for group-crossing scenarios (3 planners x 3 density/selection combos). Each bundle
+  contains derived CSV timeseries, JSON trace frames, metadata with campaign provenance,
+  and SHA256SUMS. Total: ~7.7 MB. Illustrative-only, no benchmark or dissertation claim.
+
+- `issue_4891_head_on_corridor_exemplars_2026-07/`: 9 exemplar trace-episode bundles
+  for head-on corridor scenarios (3 planners x 3 density/selection combos). Same format
+  as issue_4848. Total: ~5.5 MB. Illustrative-only, no benchmark or dissertation claim.
+
+## Exemplar-Bundle Artifact Policy (Issue #4920)
+
+Audited 2026-07-09. The following policy governs future exemplar-bundle additions to
+`docs/context/evidence/`.
+
+### Size Budget
+
+| Constraint | Limit | Current usage |
+|------------|-------|---------------|
+| Per-bundle size cap | 5 MB | max 2.06 MB |
+| Per-class bundle count | 12 bundles | 9 per class |
+| Cumulative exemplar budget | 50 MB | 13.20 MB |
+| `docs/context/evidence/` total | advisory | 47.50 MB |
+
+### Content Rules
+
+1. **Derived-only**: bundles must contain only derived/compact files (CSV, JSON,
+   Markdown). No raw JSONL episode dumps, Slurm logs, model checkpoints, or binary
+   artifacts.
+2. **SHA256SUMS mandatory**: every bundle directory must include a SHA256SUMS file
+   covering all data files (excluding itself). Paths must be repo-root-relative.
+3. **Metadata contract**: every bundle must include `metadata.json` with at minimum:
+   `campaign_id`, `campaign_job`, `claim_boundary` (with explicit illustrative-only
+   or diagnostic-only guard), `review_marker`, `schema_version`, `selection_metric`,
+   `selection_mode`, `seed`, and `git_commit`.
+4. **Claim boundary**: each bundle's `claim_boundary` must state the conservative
+   interpretation (e.g., "illustrative only; no statistical, benchmark, or
+   dissertation claim").
+5. **LFS threshold**: if a single file exceeds 1 MB, evaluate whether it can be
+   summarized or split before considering Git LFS. Current largest files (~1.9 MB
+   trace_series.json) are within the per-bundle cap.
+6. **Selection report**: each exemplar class must include a `SELECTION_REPORT.md`
+   documenting selection criteria, scenario rationale, and planner rationale.
+
+### Audit Script
+
+Run `uv run python scripts/audit_exemplar_bundles.py` to re-verify SHA256SUMS,
+size accounting, derived-only content, and metadata completeness. Use `--json` for
+structured output.
+
 <!-- /AI-GENERATED -->

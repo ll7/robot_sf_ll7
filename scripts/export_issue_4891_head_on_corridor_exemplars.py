@@ -229,38 +229,58 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 def select_exemplars_for_planner(
     episodes: list[dict[str, Any]], planner: str
 ) -> list[SelectedEpisode]:
-    """Select median, best, worst exemplar episodes for one planner."""
+    """Select median, best, worst exemplar episodes for one planner.
+
+    Uses quality-aware tie-breaking: when path_efficiency is tied,
+    prefers episodes with more steps (richer trace content) and
+    filters out single-step collision episodes that lack visualization value.
+    """
     # Filter for head-on corridor scenarios only
     corridor_eps = [ep for ep in episodes if ep.get("scenario_id") in HEAD_ON_CORRIDOR_SCENARIOS]
 
     if not corridor_eps:
         return []
 
-    # Extract metric values
-    scored: list[tuple[float, dict[str, Any]]] = []
+    # Extract metric values with step count for quality filtering
+    scored: list[tuple[float, int, dict[str, Any]]] = []
     for ep in corridor_eps:
         metrics = ep.get("metrics", {})
         val = metrics.get(SELECTION_METRIC)
         if val is not None and isinstance(val, (int, float)):
             if math.isfinite(float(val)):
-                scored.append((float(val), ep))
+                # Extract step count for tie-breaking
+                step_count = _extract_step_count(ep)
+                scored.append((float(val), step_count or 0, ep))
 
     if not scored:
         return []
 
-    # Sort by metric value (ascending for median index invariance)
-    scored.sort(key=lambda x: x[0])
+    # Filter out single-step episodes (no visualization content)
+    MIN_STEP_COUNT = 2
+    filtered_scored = [(val, steps, ep) for val, steps, ep in scored if steps >= MIN_STEP_COUNT]
+
+    # Fall back to unfiltered if all episodes are single-step
+    if not filtered_scored:
+        filtered_scored = scored
+
+    # Sort by metric value (ascending for median index invariance), then by
+    # step count ascending. Within a tied path_efficiency group this places the
+    # richest trace (most steps) at the highest index, so the "best" exemplar
+    # (highest path_efficiency, last index) lands on the episode with the most
+    # steps rather than the fewest. A descending secondary key here would
+    # invert best/worst and starve the best exemplar of trace content.
+    filtered_scored.sort(key=lambda x: (x[0], x[1]))
 
     selected: list[SelectedEpisode] = []
     for mode in SELECTION_MODES:
         if mode == "best":
-            idx = len(scored) - 1  # higher is better for path_efficiency
+            idx = len(filtered_scored) - 1  # higher is better for path_efficiency
         elif mode == "worst":
             idx = 0  # lower is worse for path_efficiency
         else:  # median
-            idx = len(scored) // 2
+            idx = len(filtered_scored) // 2
 
-        val, ep = scored[idx]
+        val, step_count, ep = filtered_scored[idx]
         selected.append(
             SelectedEpisode(
                 planner=planner,
@@ -274,6 +294,38 @@ def select_exemplars_for_planner(
         )
 
     return selected
+
+
+def _extract_step_count(record: dict[str, Any]) -> int | None:
+    """Extract step count from an episode record."""
+    # Direct step_count field
+    val = record.get("step_count")
+    if isinstance(val, (int, float)) and math.isfinite(val) and val > 0:
+        return int(val)
+
+    # From summary or metrics
+    for path in ("summary.step_count", "metrics.step_count"):
+        val = _get_nested(record, path)
+        if isinstance(val, (int, float)) and math.isfinite(val) and val > 0:
+            return int(val)
+
+    # From trace data
+    trace = record.get("algorithm_metadata", {}).get("simulation_step_trace")
+    if trace and "steps" in trace:
+        return len(trace["steps"])
+
+    return None
+
+
+def _get_nested(record: dict[str, Any], path: str, default: Any = None) -> Any:
+    """Resolve a dotted-path value from a dict."""
+    cur: Any = record
+    for part in path.split("."):
+        if isinstance(cur, dict) and part in cur:
+            cur = cur[part]
+        else:
+            return default
+    return cur
 
 
 def write_bundle(

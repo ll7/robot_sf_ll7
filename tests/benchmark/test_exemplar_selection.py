@@ -210,6 +210,127 @@ class TestTieBreaking:
         assert best.episode_id == "ep_c"
         assert worst.episode_id == "ep_a"
 
+    def test_tie_breaker_with_step_count(self) -> None:
+        """Tie-breaker metric selects episode with higher step count when primary metric is tied."""
+        episodes = [
+            _make_episode("ep_short", "orca", "s1", 1, 1.0),
+            _make_episode("ep_medium", "orca", "s1", 2, 1.0),
+            _make_episode("ep_long", "orca", "s1", 3, 1.0),
+        ]
+        # Add step counts to metrics
+        episodes[0]["metrics"]["step_count"] = 5
+        episodes[1]["metrics"]["step_count"] = 50
+        episodes[2]["metrics"]["step_count"] = 100
+
+        selected, _ = select_exemplars(
+            episodes,
+            group_by=["planner_key"],
+            metric="path_efficiency",
+            metric_direction="higher",
+            modes=["best"],
+            tie_breaker="step_count",
+        )
+        # With tie_breaker=step_count (higher is better), best should be ep_long
+        assert selected[0].episode_id == "ep_long"
+        assert "tie_breaker" in selected[0].reason
+
+    def test_tie_breaker_worst_selects_lowest_secondary(self) -> None:
+        """With a higher-is-better primary, worst (first in ascending sort) gets the lowest tie-breaker value."""
+        episodes = [
+            _make_episode("ep1", "orca", "s1", 1, 1.0),
+            _make_episode("ep2", "orca", "s1", 2, 1.0),
+            _make_episode("ep3", "orca", "s1", 3, 1.0),
+        ]
+        # Add step counts
+        episodes[0]["metrics"]["step_count"] = 100
+        episodes[1]["metrics"]["step_count"] = 50
+        episodes[2]["metrics"]["step_count"] = 5
+
+        selected, _ = select_exemplars(
+            episodes,
+            group_by=["planner_key"],
+            metric="path_efficiency",
+            metric_direction="higher",
+            modes=["worst"],
+            tie_breaker="step_count",
+        )
+        # worst (higher direction) = first in ascending sort
+        # With tie_breaker=step_count ascending, worst should be ep3 (lowest step_count)
+        assert selected[0].episode_id == "ep3"
+
+
+class TestMinStepCount:
+    """Test minimum step count filtering."""
+
+    def test_filters_out_single_step_episodes(self) -> None:
+        """Episodes with step_count < min_step_count are excluded."""
+        episodes = [
+            _make_episode("ep_single", "orca", "s1", 1, 0.9),
+            _make_episode("ep_short", "orca", "s1", 2, 0.5),
+            _make_episode("ep_long", "orca", "s1", 3, 0.1),
+        ]
+        # Add step counts
+        episodes[0]["metrics"]["step_count"] = 1
+        episodes[1]["metrics"]["step_count"] = 10
+        episodes[2]["metrics"]["step_count"] = 100
+
+        selected, _ = select_exemplars(
+            episodes,
+            group_by=["planner_key"],
+            metric="path_efficiency",
+            metric_direction="higher",
+            modes=["best", "worst"],
+            min_step_count=2,
+        )
+        # ep_single should be filtered out
+        selected_ids = {s.episode_id for s in selected}
+        assert "ep_single" not in selected_ids
+        assert len(selected) == 2
+
+    def test_skips_cell_when_all_below_min_step(self) -> None:
+        """Cell is skipped when all episodes have step_count < min_step_count."""
+        episodes = [
+            _make_episode("ep1", "orca", "s1", 1, 0.9),
+            _make_episode("ep2", "orca", "s1", 2, 0.5),
+        ]
+        episodes[0]["metrics"]["step_count"] = 1
+        episodes[1]["metrics"]["step_count"] = 1
+
+        selected, skipped = select_exemplars(
+            episodes,
+            group_by=["planner_key"],
+            metric="path_efficiency",
+            metric_direction="higher",
+            modes=["best"],
+            min_step_count=2,
+        )
+        assert len(selected) == 0
+        assert len(skipped) == 1
+        assert "step_count" in skipped[0].reason.lower()
+
+    def test_min_step_count_with_tie_breaker(self) -> None:
+        """min_step_count and tie_breaker work together."""
+        episodes = [
+            _make_episode("ep_single", "orca", "s1", 1, 1.0),
+            _make_episode("ep_short", "orca", "s1", 2, 1.0),
+            _make_episode("ep_long", "orca", "s1", 3, 1.0),
+        ]
+        episodes[0]["metrics"]["step_count"] = 1  # Will be filtered
+        episodes[1]["metrics"]["step_count"] = 10
+        episodes[2]["metrics"]["step_count"] = 100
+
+        selected, _ = select_exemplars(
+            episodes,
+            group_by=["planner_key"],
+            metric="path_efficiency",
+            metric_direction="higher",
+            modes=["best"],
+            tie_breaker="step_count",
+            min_step_count=2,
+        )
+        # ep_single filtered out; ep_long has highest step_count
+        assert selected[0].episode_id == "ep_long"
+
 
 class TestGrouping:
     """Test multi-key grouping."""

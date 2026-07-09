@@ -9,7 +9,7 @@ import json
 import os
 import sys
 
-from svgelements import SVG, Path, Point  # type: ignore[attr-defined]
+from svgelements import SVG, Path, Point  # type: ignore  # members not statically resolvable
 
 from robot_sf.common.types import RgbColor, Vec2D
 

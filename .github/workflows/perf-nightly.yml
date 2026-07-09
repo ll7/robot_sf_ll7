@@ -38,7 +38,7 @@ jobs:
 
       - name: Run xdist race validation
         env:
-          XDIST_RACE_WORKERS: "32"
+          XDIST_RACE_WORKERS: "auto"
           XDIST_RACE_TIMEOUT_SECONDS: "7200"
           PYTEST_XDIST_DIST: worksteal
         run: scripts/dev/run_xdist_race_validation.sh

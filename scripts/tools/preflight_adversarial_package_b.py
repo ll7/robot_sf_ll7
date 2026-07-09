@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from robot_sf.benchmark.adversarial_package_b_preflight import (
@@ -40,7 +41,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     """Run preflight and return non-zero when blockers are present."""
     args = parse_args(argv)
-    result = preflight_package_b_manifest(args.manifest, repo_root=args.repo_root)
+    try:
+        result = preflight_package_b_manifest(args.manifest, repo_root=args.repo_root)
+    except FileNotFoundError as exc:
+        # Bad input (nonexistent manifest path): print one actionable line to
+        # stderr and exit non-zero instead of dumping a raw traceback. Mirrors
+        # validate_report.py's clean failure UX. The loader's message is already
+        # path-qualified ("Manifest file not found: ..."), so emit it verbatim.
+        print(f"FAILED: {exc}", file=sys.stderr)
+        return 2
     dump_preflight_payload(result, args.output)
     print(json.dumps(result.to_payload(), sort_keys=True))
     return 0 if result.ready else 1

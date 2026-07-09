@@ -339,7 +339,10 @@ class TestRunMapEpisodeCharacterization:
             algo=algo,
             scenario_path=Path("."),
             algo_config=algo_config,
-            policy_builder=lambda *a, **kw: (policy, _build_policy(algo, algo_config or {}, robot_kinematics="differential_drive")[1]),
+            policy_builder=lambda *a, **kw: (
+                policy,
+                _build_policy(algo, algo_config or {}, robot_kinematics="differential_drive")[1],
+            ),
         )
 
     def test_episode_record_has_required_top_level_keys(
@@ -367,16 +370,12 @@ class TestRunMapEpisodeCharacterization:
         record = self._run_stubbed_episode(monkeypatch)
         assert record["scenario_id"] == "char_test"
 
-    def test_episode_record_seed_matches_input(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_episode_record_seed_matches_input(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Seed in record must match input seed."""
         record = self._run_stubbed_episode(monkeypatch)
         assert record["seed"] == 1
 
-    def test_episode_record_metrics_is_dict(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_episode_record_metrics_is_dict(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Metrics must be a dictionary with expected keys."""
         record = self._run_stubbed_episode(monkeypatch)
         assert isinstance(record["metrics"], dict)
@@ -420,9 +419,7 @@ class TestRunMapEpisodeCharacterization:
         assert "infeasible_native_count" in feasibility
         assert "projected_count" in feasibility
 
-    def test_episode_record_has_ammv_feasibility(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_episode_record_has_ammv_feasibility(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Algorithm metadata must carry AMMV feasibility block."""
         record = self._run_stubbed_episode(monkeypatch, algo="goal")
         algo_md = record["algorithm_metadata"]
@@ -432,9 +429,7 @@ class TestRunMapEpisodeCharacterization:
         assert ammv["proxy_kind"] == "internal_non_hardware"
         assert isinstance(ammv["feasible"], bool)
 
-    def test_episode_record_has_scenario_params(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_episode_record_has_scenario_params(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Scenario params must mirror observation mode/level."""
         record = self._run_stubbed_episode(monkeypatch, algo="goal")
         assert record["scenario_params"]["observation_mode"] == "goal_state"
@@ -469,7 +464,9 @@ class TestErrorPathCharacterization:
             robot_kinematics="differential_drive",
         )
         scenario = _dummy_scenario()
-        with pytest.raises(ValueError, match="safety_wrapper and cbf_safety_filter cannot both be enabled"):
+        with pytest.raises(
+            ValueError, match="safety_wrapper and cbf_safety_filter cannot both be enabled"
+        ):
             run_map_episode(
                 scenario,
                 seed=1,
@@ -482,7 +479,10 @@ class TestErrorPathCharacterization:
                 scenario_path=Path("."),
                 safety_wrapper={"enabled": True, "arm_key": "wrapper_on"},
                 cbf_safety_filter={"enabled": True, "arm_key": "cbf_collision_cone_on"},
-                policy_builder=lambda *a, **kw: (policy, _build_policy("goal", {}, robot_kinematics="differential_drive")[1]),
+                policy_builder=lambda *a, **kw: (
+                    policy,
+                    _build_policy("goal", {}, robot_kinematics="differential_drive")[1],
+                ),
             )
 
     def test_ppo_paper_profile_without_provenance_raises(self) -> None:
@@ -658,14 +658,15 @@ class TestMultiPlannerMetadataKeyStability:
         "kinematics_feasibility",
     }
 
-    @pytest.mark.parametrize("algo,algo_config", [
-        ("goal", {}),
-        ("social_force", {"max_speed": 1.0}),
-        ("socnav_sampling", {"max_speed": 1.0}),
-    ])
-    def test_required_metadata_keys_present(
-        self, algo: str, algo_config: dict[str, Any]
-    ) -> None:
+    @pytest.mark.parametrize(
+        "algo,algo_config",
+        [
+            ("goal", {}),
+            ("social_force", {"max_speed": 1.0}),
+            ("socnav_sampling", {"max_speed": 1.0}),
+        ],
+    )
+    def test_required_metadata_keys_present(self, algo: str, algo_config: dict[str, Any]) -> None:
         """All planners must return the required metadata keys."""
         _, meta = _build_policy(
             algo,

@@ -1074,6 +1074,23 @@ def _apply_cbf_safety_filter_step(
     return corrected, cbf_record
 
 
+def _min_finite_or_inf(values: list[float]) -> float:
+    """Return the minimum finite value, falling back to ``+inf`` when none are finite.
+
+    Non-finite entries (NaN, +inf, -inf) are filtered out so a stray NaN in the
+    per-step separation stream cannot produce order-dependent, non-deterministic
+    results from ``min()``. An empty or all-non-finite list yields ``+inf``.
+
+    Args:
+        values: Per-step float measurements (may contain non-finite values).
+
+    Returns:
+        float: The minimum finite value, or ``float("inf")`` when no finite value exists.
+    """
+    finite = [v for v in values if math.isfinite(v)]
+    return float(min(finite)) if finite else float("inf")
+
+
 def _build_tracking_precision_summary(
     *,
     spec: dict[str, Any],
@@ -1095,11 +1112,7 @@ def _build_tracking_precision_summary(
         "spec": spec,
         "hash": tracking_precision_hash(spec),
         "step_count": len(records),
-        "min_separation_corrupted_m": (
-            float(min(min_separation_corrupted_values))
-            if min_separation_corrupted_values
-            else float("inf")
-        ),
+        "min_separation_corrupted_m": _min_finite_or_inf(min_separation_corrupted_values),
         "contract_honored": (
             all(bool(record.get("contract_honored", False)) for record in records)
             if records

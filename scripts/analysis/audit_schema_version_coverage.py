@@ -16,10 +16,11 @@ Output: output/schema_version_audit_inventory.json
 from __future__ import annotations
 
 import json
+import os
 import re
-import subprocess
 from collections import defaultdict
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -28,15 +29,60 @@ EXCLUDE_DIRS = {".venv", ".claude", "output", "__pycache__", ".git"}
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 
+def _iter_py_files(root: Path):
+    """Yield every ``*.py`` file under ``root``, pruning excluded/hidden dirs.
+
+    Directories in :data:`EXCLUDE_DIRS` and any dot-prefixed directory are
+    skipped. This mirrors ripgrep's default behaviour (respect the excludes and
+    skip hidden paths), so the scan sees the same file set the previous ``rg``
+    calls did.
+    """
+    for dirpath, dirnames, filenames in os.walk(root):
+        # Prune in place so os.walk does not descend into skipped trees.
+        dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS and not d.startswith(".")]
+        for fn in filenames:
+            if fn.endswith(".py"):
+                yield Path(dirpath) / fn
+
+
+@lru_cache(maxsize=4)
+def _py_file_index(root_str: str) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Return ``((relpath, lines), ...)`` for every ``*.py`` file under root.
+
+    Files are read once and cached so the multiple pattern scans below do not
+    re-read the tree. Undecodable files are skipped (ripgrep skips them too).
+    """
+    root = Path(root_str)
+    index: list[tuple[str, tuple[str, ...]]] = []
+    for path in _iter_py_files(root):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        rel = path.relative_to(root).as_posix()
+        index.append((rel, tuple(text.splitlines())))
+    # Sort by relative path for deterministic, byte-reproducible output
+    # (ripgrep's parallel traversal order was not stable across runs).
+    index.sort(key=lambda item: item[0])
+    return tuple(index)
+
+
 def _rg(pattern: str, globs: list[str] | None = None, cwd: Path = REPO_ROOT) -> str:
-    """Run ripgrep and return stdout."""
-    cmd = ["rg", "--no-heading", "-n", pattern]
-    if globs:
-        cmd += globs
-    for d in EXCLUDE_DIRS:
-        cmd += ["--glob", f"!{d}/*"]
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, check=False)
-    return result.stdout
+    """Grep ``*.py`` files with the stdlib and emit ripgrep-style records.
+
+    Drop-in replacement for the former ripgrep subprocess: for every line
+    matching ``pattern`` it emits ``relpath:lineno:line`` (1-based line
+    numbers), joined by newlines — the exact format the downstream parsers
+    expect. Requires no external binary. ``globs`` is retained for call-site
+    compatibility; every caller scans ``*.py``, which is what this does.
+    """
+    regex = re.compile(pattern)
+    out: list[str] = []
+    for rel, lines in _py_file_index(str(cwd)):
+        for lineno, line in enumerate(lines, start=1):
+            if regex.search(line):
+                out.append(f"{rel}:{lineno}:{line}")
+    return "\n".join(out) + "\n" if out else ""
 
 
 # ── Phase 1: collect all inline schema_version string-literal writers ────────

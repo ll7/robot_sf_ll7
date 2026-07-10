@@ -1,3 +1,4 @@
+# AI-GENERATED NEEDS-REVIEW
 scenario_id,archetype,density,seeds,n_episodes,route_complete,timeouts_max_steps,collisions,median_steps,median_avg_speed_mps,median_min_clearance_m
 classic_bottleneck_low,bottleneck,low,131;132;133,3,0,3,0,100,0.6854,1.6031
 classic_bottleneck_medium,bottleneck,medium,131;132;133,3,0,3,0,100,0.6854,1.6031

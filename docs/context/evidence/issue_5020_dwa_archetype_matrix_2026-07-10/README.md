@@ -1,3 +1,4 @@
+<!-- AI-GENERATED (robot_sf#5020, 2026-07-10) - NEEDS-REVIEW -->
 # Issue #5020 — DWA Across the Standard Archetype Matrix (Executed Evidence)
 
 Date: 2026-07-10

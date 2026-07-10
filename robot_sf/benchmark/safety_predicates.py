@@ -67,7 +67,9 @@ def oscillatory_control_predicate(
         headings: ``(N,)`` robot headings (radians); unwrapped internally.
         linear_velocities: ``(N,)`` signed forward velocity (m/s).
         dt: Per-step timestep (s, > 0).
-        command_sources: Optional ``(N,)`` per-step command-source labels.
+        command_sources: Optional ``(N,)`` per-step command-source labels. A ``None``
+            label marks unavailable evidence for that step; transitions touching it
+            are not counted.
         min_heading_rate_sign_changes: Classification threshold on heading-rate flips.
         max_progress_ratio: Classification threshold on net/path progress ratio.
 
@@ -97,7 +99,13 @@ def oscillatory_control_predicate(
 
     command_source_changes = 0
     if command_sources is not None:
-        command_source_changes = int(sum(1 for a, b in pairwise(command_sources) if a != b))
+        command_source_changes = int(
+            sum(
+                1
+                for a, b in pairwise(command_sources)
+                if a is not None and b is not None and a != b
+            )
+        )
 
     step_vectors = np.diff(pos, axis=0)
     path_length = float(np.sum(np.linalg.norm(step_vectors, axis=1)))

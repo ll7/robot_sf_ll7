@@ -73,6 +73,16 @@ def test_command_source_changes_are_counted() -> None:
     assert result["fields"]["command_source_changes"] == 2
 
 
+def test_command_sources_must_align_with_trajectory_steps() -> None:
+    """A shifted or truncated source trace must fail closed instead of miscounting."""
+    with pytest.raises(ValueError, match="command_sources must have length N"):
+        oscillatory_control_predicate(
+            **_straight_trajectory(),
+            dt=_DT,
+            command_sources=["planner", "fallback"],
+        )
+
+
 def test_velocity_sign_changes_counted() -> None:
     """Linear-velocity sign changes must reflect forward/reverse oscillation."""
     result = oscillatory_control_predicate(**_oscillatory_trajectory(), dt=_DT)

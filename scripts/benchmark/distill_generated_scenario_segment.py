@@ -18,8 +18,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output", type=Path, required=True, help="Output catalog-entry JSON file."
     )
-    parser.add_argument("--pre-margin-s", type=float, default=1.0)
-    parser.add_argument("--post-margin-s", type=float, default=1.0)
+    parser.add_argument("--pre-margin-s", type=float, default=None)
+    parser.add_argument("--post-margin-s", type=float, default=None)
     return parser.parse_args()
 
 

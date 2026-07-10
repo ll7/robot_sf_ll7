@@ -77,6 +77,15 @@ def test_distiller_is_deterministic_for_one_trace() -> None:
     assert extract_critical_segment(_episode()) == extract_critical_segment(_episode())
 
 
+def test_distiller_preserves_explicit_zero_margins() -> None:
+    """An explicit zero margin selects only the critical frame, not the default window."""
+
+    entry = extract_critical_segment(_episode(), pre_margin_s=0.0, post_margin_s=0.0)
+
+    assert entry["segment"]["window_start_s"] == 1.0
+    assert entry["segment"]["window_end_s"] == 1.0
+
+
 def test_catalog_entry_schema_is_a_valid_json_schema() -> None:
     """The stored contract is itself valid before an entry relies on it."""
 

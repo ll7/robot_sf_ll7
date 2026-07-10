@@ -17,8 +17,8 @@ _CLAIM_BOUNDARY = "generated scenario hypotheses only"
 def extract_critical_segment(
     episode: Mapping[str, Any],
     *,
-    pre_margin_s: float = 1.0,
-    post_margin_s: float = 1.0,
+    pre_margin_s: float | None = None,
+    post_margin_s: float | None = None,
 ) -> dict[str, Any]:
     """Extract the closest robot--pedestrian window into a catalog entry.
 
@@ -36,6 +36,8 @@ def extract_critical_segment(
         ValueError: If the trace lacks a finite, ordered robot/pedestrian record.
     """
 
+    pre_margin_s = 1.0 if pre_margin_s is None else pre_margin_s
+    post_margin_s = 1.0 if post_margin_s is None else post_margin_s
     _validate_margin("pre_margin_s", pre_margin_s)
     _validate_margin("post_margin_s", post_margin_s)
     episode_id = _required_string(episode, "episode_id")
@@ -188,7 +190,9 @@ def _first_frame_at_or_after(frames: list[dict[str, Any]], threshold_s: float) -
 
 
 def _last_frame_at_or_before(frames: list[dict[str, Any]], threshold_s: float) -> int:
-    return max(index for index, frame in enumerate(frames) if frame["time_s"] <= threshold_s)
+    return next(
+        index for index in reversed(range(len(frames))) if frames[index]["time_s"] <= threshold_s
+    )
 
 
 def _stable_scenario_id(

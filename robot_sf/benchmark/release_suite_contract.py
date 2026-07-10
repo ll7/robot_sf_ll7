@@ -16,6 +16,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.errors import RobotSfError
+
 RELEASE_SUITE_CONTRACT_SCHEMA_VERSION = "benchmark-release-suite-contract.v0.1"
 RELEASE_SUITE_CONTRACT_REPORT_SCHEMA_VERSION = "benchmark-release-suite-contract-report.v0.1"
 REQUIRED_SUITE_METADATA_FIELDS = (
@@ -32,7 +34,7 @@ CLAIM_BOUNDARY = (
 )
 
 
-class ReleaseSuiteContractError(ValueError):
+class ReleaseSuiteContractError(RobotSfError, ValueError):
     """Raised when a release suite manifest cannot be evaluated safely."""
 
 

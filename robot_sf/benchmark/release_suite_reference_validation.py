@@ -29,6 +29,7 @@ from robot_sf.benchmark.release_suite_contract import (
     ReleaseSuiteContractManifest,
     ReleaseSuiteDeclaration,
 )
+from robot_sf.errors import RobotSfError
 
 RELEASE_SUITE_REFERENCE_REPORT_SCHEMA_VERSION = "benchmark-release-suite-reference-report.v0.1"
 REFERENCE_VALIDATION_CLAIM_BOUNDARY = (
@@ -38,7 +39,7 @@ REFERENCE_VALIDATION_CLAIM_BOUNDARY = (
 )
 
 
-class ReleaseSuiteReferenceError(ValueError):
+class ReleaseSuiteReferenceError(RobotSfError, ValueError):
     """Raised when reference validation cannot be evaluated safely."""
 
 

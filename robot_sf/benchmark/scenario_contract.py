@@ -13,6 +13,7 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from robot_sf.common.json_pointer import json_pointer
+from robot_sf.errors import RobotSfError
 
 CONTRACT_SCHEMA_VERSION = "scenario_contract.v1"
 CERT_SCHEMA_VERSION = "scenario_cert.v1"
@@ -162,7 +163,7 @@ class ScenarioContract:
         return payload
 
 
-class ScenarioContractValidationError(ValueError):
+class ScenarioContractValidationError(RobotSfError, ValueError):
     """Raised when a scenario contract fails schema or reference validation."""
 
     def __init__(self, errors: list[str], *, source: str | Path | None = None):

@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from robot_sf.common.types import Line2D, Vec2D
+from robot_sf.errors import RobotSfError
 
 PREDICTIVE_OBSTACLE_FEATURE_SCHEMA = "predictive_obstacle_features_v1"
 PREDICTIVE_OBSTACLE_FEATURE_DIM = 6
@@ -24,7 +25,7 @@ PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME = "same_seed_hardcase_runtime_robot_speed
 PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE = "standalone_rollout_velocity_xy_preferred_v1"
 
 
-class ObstacleFeatureSchemaError(ValueError):
+class ObstacleFeatureSchemaError(RobotSfError, ValueError):
     """Raised when obstacle-feature metadata is incompatible with the expected schema."""
 
 

@@ -11,9 +11,10 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+from robot_sf.errors import RobotSfError
 
 
-class LearnedPolicyAdapterContractError(ValueError):
+class LearnedPolicyAdapterContractError(RobotSfError, ValueError):
     """Raised when a learned-policy adapter request violates its declared contract."""
 
 

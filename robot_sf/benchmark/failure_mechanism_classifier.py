@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.aggregate import read_jsonl
+from robot_sf.errors import RobotSfError
 
 SCHEMA_VERSION = "failure_mechanism_classification.v1"
 CLASSIFICATION_SOURCE = "failure_mechanism_classifier.v1"
@@ -54,7 +55,7 @@ _REQUIRED_PAIRED_METRICS = (
 )
 
 
-class FailureMechanismClassificationError(ValueError):
+class FailureMechanismClassificationError(RobotSfError, ValueError):
     """Raised when failure-mechanism classification inputs are malformed."""
 
 

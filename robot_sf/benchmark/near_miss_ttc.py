@@ -60,6 +60,7 @@ from robot_sf.benchmark.metrics import _compute_ped_velocities
 
 if TYPE_CHECKING:
     from robot_sf.benchmark.metrics import EpisodeData
+from robot_sf.errors import RobotSfError
 
 # Uncalibrated diagnostic placeholder (decision-required, issue #3700). This is
 # NOT a benchmark-calibrated threshold; it only gives the diagnostic a concrete
@@ -76,7 +77,7 @@ _MIN_RELATIVE_SPEED: float = 1e-9
 _MIN_APPROACH_DISTANCE: float = 1e-9
 
 
-class NearMissTtcInputError(RuntimeError):
+class NearMissTtcInputError(RobotSfError, RuntimeError):
     """Raised when TTC near-miss inputs fail the fail-closed readiness contract.
 
     Carries the structured readiness report so callers can surface exactly which

@@ -48,12 +48,12 @@ from robot_sf.benchmark.figures.style import (
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-
+from robot_sf.errors import RobotSfError
 
 OVERLAY_PROVENANCE_SCHEMA = "multi_planner_overlay.v1"
 
 
-class MultiPlannerOverlayError(Exception):
+class MultiPlannerOverlayError(RobotSfError):
     """Raised when overlay inputs are invalid or incomplete."""
 
 

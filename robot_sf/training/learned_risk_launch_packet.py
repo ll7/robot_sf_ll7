@@ -10,6 +10,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.errors import RobotSfError
+
 _SCHEMA_VERSION = "learned-risk-launch-packet.v1"
 _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _DURABLE_URI_PREFIXES = ("wandb-artifact://", "artifact://", "s3://", "gs://", "https://")
@@ -22,7 +24,7 @@ _REQUIRED_DIAGNOSTICS = (
 )
 
 
-class LearnedRiskLaunchPacketError(ValueError):
+class LearnedRiskLaunchPacketError(RobotSfError, ValueError):
     """Raised when a learned-risk launch packet fails validation."""
 
 

@@ -17,6 +17,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
+from robot_sf.errors import RobotSfError
 from robot_sf.models import get_registry_entry
 
 SCHEMA_VERSION = "issue-4183-hybrid-global-rl-diagnostic.v1"
@@ -48,7 +49,7 @@ CSV_FIELDS = [
 ]
 
 
-class HybridGlobalRLDiagnosticError(ValueError):
+class HybridGlobalRLDiagnosticError(RobotSfError, ValueError):
     """Raised when issue #4183 diagnostic inputs violate the pairing contract."""
 
 

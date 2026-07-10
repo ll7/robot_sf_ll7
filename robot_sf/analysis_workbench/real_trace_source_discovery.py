@@ -19,6 +19,7 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from robot_sf.common.json_pointer import json_pointer
+from robot_sf.errors import RobotSfError
 
 REAL_TRACE_SOURCE_DISCOVERY_SCHEMA_VERSION = "real_trace_source_discovery.v1"
 SOURCE_DISCOVERY_EVIDENCE_BOUNDARY = "public_source_discovery_only_no_real_world_validation"
@@ -37,7 +38,7 @@ USABLE_COVERAGE_STATUSES = {"direct"}
 SCHEMA_FILE = Path(__file__).resolve().parent / "schemas" / "real_trace_source_discovery.v1.json"
 
 
-class RealTraceSourceDiscoveryError(ValueError):
+class RealTraceSourceDiscoveryError(RobotSfError, ValueError):
     """Raised when a real-trace source discovery ledger is malformed."""
 
     def __init__(self, errors: list[str], *, source: str | Path | None = None):

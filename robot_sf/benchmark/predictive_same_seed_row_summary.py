@@ -11,6 +11,7 @@ from typing import Any
 import yaml
 
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.errors import RobotSfError
 from robot_sf.planner.obstacle_features import (
     ObstacleFeatureSchemaError,
     predictive_ego_motion_channel_producer_key,
@@ -59,7 +60,7 @@ _ISSUE_RE = re.compile(r"^#\d+$")
 _GIT_SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 
 
-class PredictiveSameSeedRowSummaryValidationError(ValueError):
+class PredictiveSameSeedRowSummaryValidationError(RobotSfError, ValueError):
     """Raised when a predictive same-seed row-summary payload cannot be loaded."""
 
 

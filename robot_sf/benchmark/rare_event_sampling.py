@@ -17,10 +17,12 @@ from dataclasses import dataclass
 from statistics import NormalDist
 from typing import Any
 
+from robot_sf.errors import RobotSfError
+
 SCHEMA_VERSION = "rare_event_sampling.v1"
 
 
-class RareEventSamplingError(ValueError):
+class RareEventSamplingError(RobotSfError, ValueError):
     """Raised when the rare-event sampling contract is malformed or unsafe."""
 
 

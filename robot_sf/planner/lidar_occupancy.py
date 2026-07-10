@@ -8,6 +8,8 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.errors import RobotSfError
+
 
 @dataclass(frozen=True)
 class LidarOccupancyGridConfig:
@@ -27,7 +29,7 @@ class LidarOccupancyGridConfig:
     robot_radius: float = 0.3
 
 
-class LidarOccupancyAdapterError(ValueError):
+class LidarOccupancyAdapterError(RobotSfError, ValueError):
     """Raised when a LiDAR observation cannot be converted safely."""
 
 

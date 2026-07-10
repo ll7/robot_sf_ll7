@@ -17,6 +17,7 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from robot_sf.common.json_pointer import json_pointer
+from robot_sf.errors import RobotSfError
 
 ODD_HAZARD_COVERAGE_SCHEMA_VERSION = "odd_hazard_coverage.v1"
 ODD_HAZARD_COVERAGE_SCHEMA_FILE = (
@@ -93,7 +94,7 @@ class OddHazardCoverageMatrix:
         return payload
 
 
-class OddHazardCoverageValidationError(ValueError):
+class OddHazardCoverageValidationError(RobotSfError, ValueError):
     """Raised when an ODD hazard coverage matrix fails validation."""
 
     def __init__(self, errors: list[str], *, source: str | Path | None = None):

@@ -13,6 +13,7 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from robot_sf.common.json_pointer import json_pointer
+from robot_sf.errors import RobotSfError
 
 HAZARD_TRACEABILITY_SCHEMA_VERSION = "hazard_traceability.v1"
 HAZARD_COVERAGE_SUMMARY_SCHEMA_VERSION = "hazard-traceability-coverage.v1"
@@ -78,7 +79,7 @@ class HazardTraceability:
         return payload
 
 
-class HazardTraceabilityValidationError(ValueError):
+class HazardTraceabilityValidationError(RobotSfError, ValueError):
     """Raised when a hazard traceability mapping fails validation."""
 
     def __init__(self, errors: list[str], *, source: str | Path | None = None):

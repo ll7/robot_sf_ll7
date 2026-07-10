@@ -8,6 +8,7 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
+from robot_sf.errors import RobotSfError
 from robot_sf.scenario_certification.sustained_flow import (
     EXPECTED_CONTINUOUS_SPAWN_DEFINITION,
     EXPECTED_ROUTE_RESPAWN_RUNTIME_CONFIG,
@@ -112,7 +113,7 @@ class SustainedFlowPreflight:
         }
 
 
-class SustainedFlowPreflightError(ValueError):
+class SustainedFlowPreflightError(RobotSfError, ValueError):
     """Raised when a sustained-flow matrix is malformed enough to fail."""
 
 

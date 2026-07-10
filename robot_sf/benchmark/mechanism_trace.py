@@ -10,10 +10,12 @@ from typing import Any
 
 import jsonschema
 
+from robot_sf.errors import RobotSfError
+
 SCHEMA_VERSION = "mechanism_trace.v1"
 
 
-class MechanismTraceValidationError(ValueError):
+class MechanismTraceValidationError(RobotSfError, ValueError):
     """Raised when mechanism trace inputs violate the JSON schema or constraints."""
 
 

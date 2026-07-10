@@ -34,6 +34,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from robot_sf.errors import RobotSfError
 from robot_sf.training.learned_risk_launch_packet import (
     LearnedRiskLaunchPacketError,
     validate_launch_packet,
@@ -58,7 +59,7 @@ _GATE_PASSED = "passed"
 _GATE_BLOCKED = "blocked"
 
 
-class LearnedRiskCampaignReadinessError(ValueError):
+class LearnedRiskCampaignReadinessError(RobotSfError, ValueError):
     """Raised when a campaign-readiness input file is missing or unreadable.
 
     This is reserved for operator error (a config path that does not point at a

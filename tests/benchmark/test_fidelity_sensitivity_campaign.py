@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 import pytest
 import yaml
 
+from robot_sf.sim.sim_config import SimulationSettings
+
 if TYPE_CHECKING:
     from types import ModuleType
 
@@ -65,7 +67,7 @@ def test_variant_specs_bind_all_declared_fidelity_axes_to_runtime_effects() -> N
 
 def test_action_latency_variant_binds_to_the_environment_configuration() -> None:
     """The latency campaign axis changes the env-loop queue rather than metadata only."""
-    config = SimpleNamespace(sim_config=SimpleNamespace(action_latency_steps=0))
+    config = SimpleNamespace(sim_config=SimulationSettings(action_latency_ms=250.0))
     variant = campaign_runner.VariantSpec(
         axis="control_action_latency",
         key="control_action_latency__three_step_300ms",
@@ -79,6 +81,8 @@ def test_action_latency_variant_binds_to_the_environment_configuration() -> None
     campaign_runner.apply_variant(config, variant, seed=111)
 
     assert config.sim_config.action_latency_steps == 3
+    assert config.sim_config.action_latency_ms is None
+    assert config.sim_config.resolved_action_latency_steps == 3
 
 
 def test_timestep_variant_preserves_simulated_duration() -> None:

@@ -20,7 +20,7 @@ import math
 import pathlib
 import subprocess
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -646,8 +646,10 @@ def apply_variant(config: Any, variant: VariantSpec, *, seed: int) -> None:
             variant.patch["sim_config"]["pedestrian_integration_scheme"]
         )
     elif variant.runtime_binding == "sim_config.action_latency_steps":
-        config.sim_config.action_latency_steps = int(
-            variant.patch["sim_config"]["action_latency_steps"]
+        config.sim_config = replace(
+            config.sim_config,
+            action_latency_steps=int(variant.patch["sim_config"]["action_latency_steps"]),
+            action_latency_ms=None,
         )
     elif variant.runtime_binding == "sim_config.archetype_composition":
         config.sim_config.archetype_composition = {

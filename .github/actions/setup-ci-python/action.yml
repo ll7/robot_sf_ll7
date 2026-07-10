@@ -61,7 +61,9 @@ runs:
     - name: Sync dependencies (locked, with transient-failure retry)
       shell: bash
       env:
-        CI_STEP_TIMEOUT_SECONDS: "1200"
+        # macOS hosted runners do not provide GNU timeout(1), which the timer
+        # deliberately requires when a timeout is requested.
+        CI_STEP_TIMEOUT_SECONDS: ${{ runner.os == 'Linux' && '1200' || '' }}
       run: bash scripts/dev/ci_step_timer.sh "Sync dependencies (locked)" bash scripts/dev/uv_sync_retry.sh -- ${{ inputs.sync-args }}
 
     - name: Report uv cache state after sync

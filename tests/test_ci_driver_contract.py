@@ -23,6 +23,7 @@ CI_JOB_TIMEOUTS = {
     "fast-feedback": 45,
     "compat-matrix": 30,
     "smoke-artifacts": 30,
+    "xdist-scratch-isolation": 15,
     "wheel-smoke-install": 20,
     "examples-smoke": 30,
     "ci": 5,
@@ -240,6 +241,9 @@ def test_ci_setup_action_supports_core_matrix_dependencies_on_macos() -> None:
 
     assert action["inputs"]["sync-args"]["default"] == "--all-extras --frozen"
     assert system_packages_step["if"] == "runner.os == 'Linux'"
+    assert sync_step["env"]["CI_STEP_TIMEOUT_SECONDS"] == (
+        "${{ runner.os == 'Linux' && '1200' || '' }}"
+    )
     assert "${{ inputs.sync-args }}" in sync_step["run"]
 
 

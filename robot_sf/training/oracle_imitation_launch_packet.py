@@ -9,6 +9,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.errors import RobotSfError
 from robot_sf.training.oracle_trace_uri_registry import (
     OracleTraceUriRegistryError,
     validate_trace_uri_registry,
@@ -23,7 +24,7 @@ _DURABLE_URI_PREFIXES = ("wandb-artifact://", "artifact://", "s3://", "gs://", "
 _REQUIRED_COLLECTION_ROOTS = ("log_root", "dataset_output_root", "manifest_destination")
 
 
-class LaunchPacketError(ValueError):
+class LaunchPacketError(RobotSfError, ValueError):
     """Raised when an oracle-imitation launch packet fails validation."""
 
 

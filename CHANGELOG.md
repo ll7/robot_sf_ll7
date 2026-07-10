@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+* **issue #4993 complete RobotSfError migration.** Re-parents the remaining 76 ad-hoc
+  exception classes across `analysis_workbench`, `benchmark` (individual files), `common`,
+  `data_ingestion`, `examples`, `nav`, `planner`, `research`, and `training` subpackages onto
+  `RobotSfError` while preserving all existing `ValueError` / `RuntimeError` / `Exception`
+  ancestry. `except ValueError` and `except SpecificError` clauses are unaffected; new code
+  can now also target `except RobotSfError` for broad-package catches. Covered by
+  `tests/test_robot_sf_error_migration_4993.py` (59 compatibility tests).
+
 ### Added
 
 * **issue #4978 scenario flakiness audit applied to a real multi-planner campaign.** Ships a

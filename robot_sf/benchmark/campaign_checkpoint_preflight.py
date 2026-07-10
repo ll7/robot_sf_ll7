@@ -43,6 +43,7 @@ from robot_sf.models import get_registry_entry, resolve_model_path
 
 if TYPE_CHECKING:
     from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, PlannerSpec
+from robot_sf.errors import RobotSfError
 
 # Config keys, at any nesting depth of an arm's algo_config, that name a policy checkpoint.
 # ``model_id`` resolves through the registry; ``model_path`` is a direct filesystem reference.
@@ -57,7 +58,7 @@ _REMOTE_SOURCE_KEYS: tuple[str, ...] = (
 )
 
 
-class CampaignCheckpointPreflightError(RuntimeError):
+class CampaignCheckpointPreflightError(RobotSfError, RuntimeError):
     """Typed campaign checkpoint preflight failure for library-facing callers."""
 
     def __init__(

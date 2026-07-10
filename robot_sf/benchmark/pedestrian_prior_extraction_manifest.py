@@ -52,6 +52,7 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from robot_sf.common.json_pointer import json_pointer
+from robot_sf.errors import RobotSfError
 
 PEDESTRIAN_PRIOR_EXTRACTION_MANIFEST_SCHEMA_VERSION = "pedestrian_prior_extraction_manifest.v1"
 PEDESTRIAN_PRIOR_EXTRACTION_MANIFEST_SCHEMA_FILE = (
@@ -118,7 +119,7 @@ CONTRACT_STATUS_PROXY_ONLY = "proxy-only"
 _PLACEHOLDER_VALUES = frozenset({"", "tbd", "unknown", "unspecified", "n/a", "pending"})
 
 
-class PedestrianPriorExtractionManifestError(ValueError):
+class PedestrianPriorExtractionManifestError(RobotSfError, ValueError):
     """Raised when a pedestrian-prior extraction manifest fails schema checks."""
 
     def __init__(self, errors: list[str], *, source: str | Path | None = None):

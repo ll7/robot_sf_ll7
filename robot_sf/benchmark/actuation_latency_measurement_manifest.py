@@ -48,6 +48,7 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from robot_sf.common.json_pointer import json_pointer
+from robot_sf.errors import RobotSfError
 
 AMV_ACTUATION_LATENCY_MEASUREMENT_MANIFEST_SCHEMA_VERSION = (
     "amv_actuation_latency_measurement_manifest.v1"
@@ -140,7 +141,7 @@ ISSUE_3283_NEXT_EMPIRICAL_ACTION = (
 )
 
 
-class AmvActuationLatencyManifestError(ValueError):
+class AmvActuationLatencyManifestError(RobotSfError, ValueError):
     """Raised when an AMV actuation-latency measurement manifest fails schema checks."""
 
     def __init__(self, errors: list[str], *, source: str | Path | None = None):

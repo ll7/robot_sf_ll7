@@ -16,6 +16,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.errors import RobotSfError
+
 __all__ = [
     "ExampleCategory",
     "ExampleManifest",
@@ -25,7 +27,7 @@ __all__ = [
 ]
 
 
-class ManifestValidationError(ValueError):
+class ManifestValidationError(RobotSfError, ValueError):
     """Raised when the manifest data fails structural or semantic validation."""
 
 

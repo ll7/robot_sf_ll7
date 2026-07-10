@@ -32,6 +32,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.errors import RobotSfError
 from robot_sf.training.learned_risk_launch_packet import (
     _DURABLE_URI_PREFIXES,
     _REQUIRED_LABELS,
@@ -54,7 +55,7 @@ _LABEL_PRESENT = "present"
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
-class LearnedRiskTraceManifestError(ValueError):
+class LearnedRiskTraceManifestError(RobotSfError, ValueError):
     """Raised when a learned-risk trace manifest is structurally invalid."""
 
 

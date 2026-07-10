@@ -43,6 +43,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.errors import RobotSfError
+
 # Stage status vocabulary shared with sibling readiness validators
 # (see scripts/validation/validate_learned_prediction_readiness.py).
 STATUS_PASSED = "passed"
@@ -153,7 +155,7 @@ _PUBLIC_SURFACE_SNAPSHOT: tuple[dict[str, str], ...] = (
 )
 
 
-class PredictiveV2ComparisonReadinessError(Exception):
+class PredictiveV2ComparisonReadinessError(RobotSfError):
     """Raised when the comparison contract cannot be loaded or parsed."""
 
 

@@ -57,6 +57,7 @@ from robot_sf.benchmark.issue_4142_dpcbf_dense_readiness import (
     evaluate_readiness,
     load_packet,
 )
+from robot_sf.errors import RobotSfError
 
 #: Output-contract schema for the resolved run plan.
 PLAN_SCHEMA_VERSION = "robot_sf.issue_4142_dpcbf_dense_comparison_plan.v1"
@@ -84,11 +85,11 @@ RUNNER_GATES: tuple[str, ...] = (
 )
 
 
-class DenseComparisonRunnerError(ValueError):
+class DenseComparisonRunnerError(RobotSfError, ValueError):
     """Raised when the packet cannot be consumed into a run plan at all."""
 
 
-class DenseComparisonExecutionGatedError(RuntimeError):
+class DenseComparisonExecutionGatedError(RobotSfError, RuntimeError):
     """Raised when execution is attempted; execution stays authorization-gated here."""
 
 

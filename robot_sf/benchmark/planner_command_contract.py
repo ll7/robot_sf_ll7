@@ -8,11 +8,12 @@ from robot_sf.benchmark.algorithm_metadata import planner_contract_for_algorithm
 
 if TYPE_CHECKING:
     from robot_sf.planner.kinematics_model import KinematicsModel
+from robot_sf.errors import RobotSfError
 
 _DEFAULT_KINEMATICS = "differential_drive"
 
 
-class PlannerContractValidationError(ValueError):
+class PlannerContractValidationError(RobotSfError, ValueError):
     """Raised when planner observation/action metadata does not match a run request."""
 
 

@@ -17,13 +17,14 @@ from jsonschema import Draft202012Validator
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.errors import RobotSfError
 
 BENCHMARK_CLAIM_SCHEMA_VERSION = "benchmark_claim.v1"
 BENCHMARK_CLAIM_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/benchmark_claim.schema.v1.json")
 _HEX_SHA256_LENGTH = 64
 
 
-class BenchmarkClaimError(ValueError):
+class BenchmarkClaimError(RobotSfError, ValueError):
     """Raised when claim inputs cannot support a benchmark claim artifact."""
 
 

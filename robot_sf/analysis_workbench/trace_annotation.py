@@ -18,6 +18,7 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
     load_simulation_trace_export,
 )
 from robot_sf.common.json_pointer import json_pointer
+from robot_sf.errors import RobotSfError
 
 TRACE_ANNOTATION_SET_SCHEMA_VERSION = "trace_annotation_set.v1"
 TRACE_ANNOTATION_SET_SCHEMA_FILE = (
@@ -99,7 +100,7 @@ class TraceAnnotationSet:
         return payload
 
 
-class TraceAnnotationSetValidationError(ValueError):
+class TraceAnnotationSetValidationError(RobotSfError, ValueError):
     """Raised when a trace annotation set fails validation."""
 
     def __init__(self, errors: list[str], *, source: str | Path | None = None):

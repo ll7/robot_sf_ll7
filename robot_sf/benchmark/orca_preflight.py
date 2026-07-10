@@ -15,12 +15,13 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, PlannerSpec
+from robot_sf.errors import RobotSfError
 
 _SYNC_COMMAND_EXTRA = "uv sync --extra orca"
 _SYNC_COMMAND_ALL = "uv sync --all-extras"
 
 
-class OrcaRvo2PreflightError(RuntimeError):
+class OrcaRvo2PreflightError(RobotSfError, RuntimeError):
     """Typed ORCA preflight failure for library-facing campaign callers."""
 
     def __init__(

@@ -24,6 +24,7 @@ from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+from robot_sf.errors import RobotSfError
 
 SCHEMA_VERSION = "benchmark_result_provenance.v1"
 ROW_SCHEMA_VERSION = "benchmark_row_provenance.v1"
@@ -35,7 +36,7 @@ _REQUIRED_CAMPAIGN = ("scenario_matrix_hash", "total_jobs", "written")
 _REQUIRED_ROW = ("episode_id", "scenario_id", "seed", "config_hash", "repo_commit")
 
 
-class ProvenanceValidationError(ValueError):
+class ProvenanceValidationError(RobotSfError, ValueError):
     """Raised when a provenance manifest fails validation."""
 
 

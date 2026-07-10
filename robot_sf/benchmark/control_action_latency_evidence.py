@@ -59,6 +59,7 @@ from robot_sf.benchmark.control_action_latency_preflight import (
     check_control_action_latency_axis,
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.errors import RobotSfError
 
 PROMOTION_SCHEMA_VERSION = "control-action-latency-sweep-evidence-promotion.v1"
 ISSUE = 5034
@@ -88,7 +89,7 @@ EXCLUSION_POLICY = (
 )
 
 
-class LatencyEvidenceError(RuntimeError):
+class LatencyEvidenceError(RobotSfError, RuntimeError):
     """Raised when raw rows are not promotable as latency-sweep evidence (fail closed)."""
 
 

@@ -14,6 +14,7 @@ from jsonschema import Draft202012Validator
 
 from robot_sf.benchmark.observation_quality import ObservationQuality
 from robot_sf.common.json_pointer import json_pointer
+from robot_sf.errors import RobotSfError
 
 ODD_CONTRACT_SCHEMA_VERSION = "odd_contract.v1"
 ODD_CONTRACT_SCHEMA_FILE = Path(__file__).with_name("schemas") / "odd_contract.v1.json"
@@ -117,7 +118,7 @@ class OddContract:
         return payload
 
 
-class OddContractValidationError(ValueError):
+class OddContractValidationError(RobotSfError, ValueError):
     """Raised when an ODD contract fails schema or semantic validation."""
 
     def __init__(self, errors: list[str], *, source: str | Path | None = None):

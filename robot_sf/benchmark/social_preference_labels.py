@@ -16,6 +16,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.errors import RobotSfError
+
 SOCIAL_PREFERENCE_LABEL_SCHEMA_VERSION = "social-preference-labels.v1"
 REQUIRED_LABEL_IDS = frozenset(
     {
@@ -46,7 +48,7 @@ REQUIRED_LABEL_FIELDS = frozenset(
 ANNOTATION_METHODS = frozenset({"threshold_band", "manual", "not_available"})
 
 
-class SocialPreferenceLabelConfigError(ValueError):
+class SocialPreferenceLabelConfigError(RobotSfError, ValueError):
     """Raised when a social preference label config violates the v1 contract."""
 
 

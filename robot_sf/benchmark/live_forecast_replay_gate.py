@@ -56,6 +56,7 @@ from robot_sf.benchmark.pedestrian_forecast import (
 )
 from robot_sf.common.forecast_variants import FORECAST_VARIANT_CHOICES
 from robot_sf.common.issue_provenance import LIVE_FORECAST_REPLAY_GATE_CONTRACT_ISSUE
+from robot_sf.errors import RobotSfError
 from robot_sf.gym_env.unified_config import EnvSettings
 from robot_sf.nav.baseline_probabilistic_predictor import BaselineProbabilisticPredictor
 from robot_sf.nav.predictive_types import ProbabilisticPrediction, ProbabilisticPredictor
@@ -128,7 +129,7 @@ class LiveForecastReplayGateConfig:
     )
 
 
-class LiveForecastReplayGateError(ValueError):
+class LiveForecastReplayGateError(RobotSfError, ValueError):
     """Raised when the gate cannot produce a valid report."""
 
 

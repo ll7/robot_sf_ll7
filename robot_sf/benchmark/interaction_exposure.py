@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from typing import Any
+from robot_sf.errors import RobotSfError
 
 INTERACTION_EXPOSURE_SCHEMA_VERSION = "interaction_exposure.v1"
 
@@ -37,7 +38,7 @@ def is_not_derivable_status(status: object) -> bool:
     return isinstance(status, str) and status.strip().startswith(NOT_DERIVABLE_STATUS_PREFIX)
 
 
-class InteractionExposureError(ValueError):
+class InteractionExposureError(RobotSfError, ValueError):
     """Raised when interaction-exposure inputs are malformed."""
 
 

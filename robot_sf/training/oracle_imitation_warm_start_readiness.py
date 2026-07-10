@@ -38,6 +38,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.errors import RobotSfError
 from robot_sf.training.oracle_imitation_launch_packet import (
     LaunchPacketError,
     validate_launch_packet,
@@ -77,7 +78,7 @@ _DURABLE_OUTPUT_MANIFEST_PREFIX = "docs/context/evidence/"
 _DURABLE_OUTPUT_MANIFEST_SUFFIXES: tuple[str, ...] = (".json", ".yaml", ".yml")
 
 
-class WarmStartReadinessError(ValueError):
+class WarmStartReadinessError(RobotSfError, ValueError):
     """Raised when a warm-start readiness manifest is malformed.
 
     This is distinct from an unmet prerequisite: a missing dataset or config is a

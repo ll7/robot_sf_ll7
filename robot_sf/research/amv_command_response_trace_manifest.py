@@ -52,6 +52,7 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from robot_sf.common.json_pointer import json_pointer
+from robot_sf.errors import RobotSfError
 
 AMV_TRACE_MANIFEST_SCHEMA_VERSION = "amv_command_response_trace_manifest.v1"
 AMV_TRACE_MANIFEST_SCHEMA_FILE = (
@@ -80,7 +81,7 @@ MANIFEST_STATUS_INVALID = "invalid"
 _LIVE_AVAILABLE_STATUSES = frozenset({"available", "staged"})
 
 
-class AmvTraceManifestError(ValueError):
+class AmvTraceManifestError(RobotSfError, ValueError):
     """Raised when an AMV command-response trace manifest fails schema checks."""
 
     def __init__(self, errors: list[str], *, source: str | Path | None = None):

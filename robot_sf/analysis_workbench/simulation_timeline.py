@@ -17,6 +17,7 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
     SimulationTraceFrame,
     load_simulation_trace_export,
 )
+from robot_sf.errors import RobotSfError
 
 SIMULATION_TIMELINE_SCHEMA_VERSION = "simulation_timeline.v1"
 SIMULATION_TIMELINE_SCHEMA_FILE = (
@@ -36,7 +37,7 @@ DEFAULT_FIXTURE = (
 )
 
 
-class SimulationTimelineValidationError(ValueError):
+class SimulationTimelineValidationError(RobotSfError, ValueError):
     """Raised when a ``simulation_timeline.v1`` payload fails schema validation."""
 
     def __init__(self, errors: list[str], *, source: str | Path | None = None):

@@ -34,6 +34,7 @@ from typing import Any
 import numpy as np
 import yaml
 
+from robot_sf.errors import RobotSfError
 from robot_sf.training.learned_risk_campaign_readiness import (
     CAMPAIGN_READY,
     evaluate_campaign_readiness,
@@ -72,7 +73,7 @@ _REQUIRED_EPISODE_FIELDS = (
 )
 
 
-class LearnedRiskTrainerError(ValueError):
+class LearnedRiskTrainerError(RobotSfError, ValueError):
     """Raised when the trainer config or its input traces are contract-invalid.
 
     This is reserved for operator/contract error (a malformed config, a config

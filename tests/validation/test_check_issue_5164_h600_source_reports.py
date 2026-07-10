@@ -88,6 +88,23 @@ def test_output_path_is_rejected_before_file_checks() -> None:
         _MODULE.validate_source_reports(manifest, REPO_ROOT)
 
 
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("run_label", "different_run"),
+        ("campaign_id", "different_campaign"),
+        ("source_git_hash", "0" * 40),
+    ],
+)
+def test_run_identity_drift_is_rejected(field: str, replacement: str) -> None:
+    """The source provenance cannot drift while its report digests remain unchanged."""
+    manifest = _manifest()
+    manifest["required_runs"][0][field] = replacement
+
+    with pytest.raises(_MODULE.ContractError, match=f"{field} mismatch"):
+        _MODULE.validate_source_reports(manifest, REPO_ROOT)
+
+
 def test_cli_emits_machine_readable_blocked_packet() -> None:
     """Automation receives an explicit blocked packet and nonzero gate status."""
     completed = subprocess.run(
@@ -102,3 +119,19 @@ def test_cli_emits_machine_readable_blocked_packet() -> None:
     assert payload["status"] == "blocked"
     assert payload["missing_file_count"] == 6
     assert payload["downstream_export_allowed"] is False
+
+
+def test_cli_default_manifest_is_independent_of_calling_directory(tmp_path: Path) -> None:
+    """The default contract remains diagnosable when automation runs outside the checkout."""
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--json"],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    payload = json.loads(completed.stdout)
+    assert payload["status"] == "blocked"
+    assert payload["missing_file_count"] == 6

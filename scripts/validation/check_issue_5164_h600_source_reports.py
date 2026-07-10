@@ -21,6 +21,9 @@ EXPECTED_FILES = frozenset(
 )
 EXPECTED_RUNS = {
     "13268": {
+        "run_label": "confirm",
+        "campaign_id": "issue3810_h600_longhorizon_confirm_run_20260702",
+        "source_git_hash": "1cb7dc31a018fdf21892beb0e74ca47699e41d9a",
         "reports_dir": (
             "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_reports/13268"
         ),
@@ -37,6 +40,9 @@ EXPECTED_RUNS = {
         },
     },
     "13273": {
+        "run_label": "extended_roster",
+        "campaign_id": "issue3810_h600_extroster_run_20260702",
+        "source_git_hash": "4da0879fa897783fe35f65d52ef488d14e526ccc",
         "reports_dir": (
             "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_reports/13273"
         ),
@@ -118,6 +124,8 @@ def validate_source_reports(
         seen_jobs.add(job_id)
 
         expected_run = EXPECTED_RUNS[job_id]
+        for field in ("run_label", "campaign_id", "source_git_hash"):
+            _require(run.get(field) == expected_run[field], f"{job_id}: {field} mismatch")
         reports_dir = run.get("reports_dir")
         _require(reports_dir == expected_run["reports_dir"], f"{job_id}: reports_dir mismatch")
         reports_path = Path(str(reports_dir))
@@ -183,7 +191,11 @@ def validate_source_reports(
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        help="Manifest path; defaults to the tracked contract relative to the repository root.",
+    )
     parser.add_argument("--json", action="store_true", help="Emit a machine-readable report.")
     return parser
 
@@ -191,8 +203,9 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     """Check the source-report contract; return nonzero until all six files verify."""
     args = _parser().parse_args(argv)
+    manifest_path = args.manifest or _repo_root() / DEFAULT_MANIFEST
     try:
-        report = validate_source_reports(_load_manifest(args.manifest))
+        report = validate_source_reports(_load_manifest(manifest_path))
     except ContractError as exc:
         report = {"status": "malformed", "issue": 5164, "error": str(exc)}
         if args.json:

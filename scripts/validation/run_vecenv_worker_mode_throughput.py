@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """CPU VecEnv worker-mode throughput comparator.
 
-Loads a standard training config, constructs ``dummy``, ``subproc``, and
-``threaded`` VecEnv modes, runs bounded warmup and step loops, and writes
-machine-readable JSON with throughput and host/config provenance.
+Loads a standard training config, constructs ``dummy``, ``subproc``,
+``threaded``, and ``threaded_lidar_batch`` VecEnv modes, runs bounded warmup
+and step loops, and writes machine-readable JSON with throughput and
+host/config provenance.
 
 Usage
 -----
@@ -48,8 +49,8 @@ Notes
 -----
 - ``subproc`` mode spawns sub-processes; the script uses ``spawn`` start
   method and must be invoked as an executable file (not via ``python -c``).
-- ``threaded_lidar_batch`` mode is not included here; it awaits the merge of
-  PR #5123 (``worker_mode: threaded_lidar_batch``).
+- ``threaded_lidar_batch`` uses the same in-process workers as ``threaded``
+  while enabling its cross-environment LiDAR batch coordinator.
 
 Found while implementing #4981; tracked as issue #5118.
 """
@@ -72,7 +73,7 @@ from typing import Any
 _REPO_ROOT = Path(__file__).parent.parent.parent.resolve()
 _DEFAULT_CONFIG = _REPO_ROOT / "configs/training/lidar/lidar_ppo_mlp_smoke_issue_1662.yaml"
 _SCHEMA = "vecenv_throughput_comparator.v1"
-_SUPPORTED_MODES = ("dummy", "subproc", "threaded")
+_SUPPORTED_MODES = ("dummy", "subproc", "threaded", "threaded_lidar_batch")
 _RECOVERABLE_MODE_ERRORS = (
     EOFError,
     BrokenPipeError,
@@ -217,6 +218,8 @@ def _build_vec_env(mode: str, env_fns: list[_EnvFactory]):
         return SubprocVecEnv(env_fns, start_method="spawn")
     if mode == "threaded":
         return ThreadedVecEnv(env_fns)
+    if mode == "threaded_lidar_batch":
+        return ThreadedVecEnv(env_fns, batch_lidar=True)
     raise ValueError(f"Unsupported mode: {mode!r}; expected one of {_SUPPORTED_MODES}")
 
 
@@ -291,7 +294,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser for the VecEnv throughput comparator."""
     parser = argparse.ArgumentParser(
         description=(
-            "Compare CPU VecEnv worker-mode throughput (dummy / subproc / threaded). "
+            "Compare CPU VecEnv worker-mode throughput "
+            "(dummy / subproc / threaded / threaded_lidar_batch). "
             "Writes machine-readable JSON with provenance for acceptance audits."
         )
     )

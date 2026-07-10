@@ -8,6 +8,7 @@ import numpy as np
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
 from robot_sf.training.scenario_loader import load_scenarios
+from robot_sf.training.threaded_vec_env import ThreadedVecEnv
 from scripts.training import train_ppo
 
 _SCENARIO_PATH = Path("configs/scenarios/single/planner_sanity_simple.yaml").resolve()
@@ -62,3 +63,10 @@ def test_ppo_training_factory_supports_subproc_spawn_vec_env() -> None:
     env_fns = [_ppo_training_env_factory(200), _ppo_training_env_factory(201)]
 
     _assert_vec_env_reset_step_close(SubprocVecEnv(env_fns, start_method="spawn"))
+
+
+def test_ppo_training_factory_supports_threaded_vec_env() -> None:
+    """Primary PPO environment factories should support in-process threaded rollouts."""
+    env_fns = [_ppo_training_env_factory(300), _ppo_training_env_factory(301)]
+
+    _assert_vec_env_reset_step_close(ThreadedVecEnv(env_fns))

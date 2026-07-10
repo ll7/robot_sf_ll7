@@ -22,6 +22,16 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+def test_resolve_worker_mode_accepts_threaded_and_keeps_single_env_fallback() -> None:
+    """PPO config must expose threaded rollouts without changing the one-env fallback."""
+
+    class _ThreadedConfig:
+        worker_mode = "threaded"
+
+    assert train_ppo._resolve_worker_mode(_ThreadedConfig(), num_envs=2) == "threaded"
+    assert train_ppo._resolve_worker_mode(_ThreadedConfig(), num_envs=1) == "dummy"
+
+
 def test_make_training_env_factory_is_pickleable_for_spawn(tmp_path: Path) -> None:
     """SubprocVecEnv spawn mode requires environment callables to be pickleable."""
     single_scenario_factory = train_ppo._make_training_env(

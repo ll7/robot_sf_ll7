@@ -202,12 +202,13 @@ def test_ci_workflow_adds_a_nonblocking_core_compatibility_matrix() -> None:
     """Exercise declared Python support on Linux and macOS without gating CI yet."""
     workflow = yaml.safe_load(_workflow_text())
     compat_matrix = workflow["jobs"]["compat-matrix"]
+    steps = compat_matrix.get("steps", [])
     setup_step = next(
-        step
-        for step in compat_matrix["steps"]
-        if step.get("uses") == "./.github/actions/setup-ci-python"
+        (step for step in steps if step.get("uses") == "./.github/actions/setup-ci-python"),
+        None,
     )
-    test_steps = [step.get("run", "") for step in compat_matrix["steps"]]
+    assert setup_step is not None, "setup-ci-python step not found in compat-matrix job"
+    test_steps = [step.get("run", "") for step in steps]
 
     assert compat_matrix["continue-on-error"] is True
     assert compat_matrix["strategy"]["fail-fast"] is False
@@ -232,13 +233,18 @@ def test_ci_workflow_adds_a_nonblocking_core_compatibility_matrix() -> None:
 def test_ci_setup_action_supports_core_matrix_dependencies_on_macos() -> None:
     """Keep the shared setup action usable by the backend-light macOS matrix."""
     action = yaml.safe_load(CI_SETUP_ACTION.read_text(encoding="utf-8"))
+    steps = action.get("runs", {}).get("steps", [])
     system_packages_step = next(
-        step for step in action["runs"]["steps"] if step["name"] == "System packages for headless"
+        (step for step in steps if step.get("name") == "System packages for headless"),
+        None,
     )
     sync_step = next(
-        step for step in action["runs"]["steps"] if step["name"].startswith("Sync dependencies")
+        (step for step in steps if step.get("name", "").startswith("Sync dependencies")),
+        None,
     )
 
+    assert system_packages_step is not None, "System packages step not found"
+    assert sync_step is not None, "Sync dependencies step not found"
     assert action["inputs"]["sync-args"]["default"] == "--all-extras --frozen"
     assert system_packages_step["if"] == "runner.os == 'Linux'"
     assert sync_step["env"]["CI_STEP_TIMEOUT_SECONDS"] == (

@@ -26,6 +26,10 @@ class BenchmarkConfig:  # lightweight test double; replaced by real implementati
     bootstrap_samples: int = 1000
     bootstrap_confidence: float = 0.95
     master_seed: int = 123
+    # Resampling mode (issue #5139): "flat" (default) or "hierarchical"; the
+    # cluster field is "scenario" (scenario_id) or "seed".
+    bootstrap_mode: str = "flat"
+    bootstrap_cluster: str = "scenario"
     initial_episodes: int = 1  # keep smoke-fast for real execution
     batch_size: int = 1
     max_episodes: int = 2

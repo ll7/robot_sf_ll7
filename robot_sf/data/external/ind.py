@@ -177,6 +177,11 @@ def _resolve_dataset_paths(root: Path) -> tuple[IndDatasetPaths | None, list[str
         if missing:
             issues.append(f"recording '{recording_id or '<root>'}' missing {', '.join(missing)}")
             continue
+        # The ``missing`` guard above guarantees these three siblings resolved
+        # to real paths; narrow ``Path | None`` -> ``Path`` for the constructor.
+        assert tracks_meta is not None
+        assert recording_meta is not None
+        assert background is not None
         recordings.append(
             IndRecordingPaths(
                 recording_id=recording_id,

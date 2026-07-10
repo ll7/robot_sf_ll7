@@ -136,6 +136,11 @@ Policy caveats:
   scenarios plus 9 stress-only scenarios that must be excluded, repaired, or
   routed before matrix publication.
 
+- `issue_2910_release_suite_freeze_2026-07-10.md`: configuration-contract evidence
+  for the first concrete v0.1 nominal, stress, adversarial, and autonomous mobile
+  vehicle suite roster. It records exact membership and 24 dereferenceable metadata
+  pointers while keeping semantic validation and the #4364 publication re-base blocked.
+
 - `issue_3215_scenario_family_oracle_packet_2026-07-05/`: diagnostic-only
 CPU launch packet for Issue #3215's post-synthesis scenario-family promotion
 step. Defines the oracle future-trajectory forecast arm, paired-seed floor,

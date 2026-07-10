@@ -1,6 +1,6 @@
 schema_version: issue_state.v1
 issue: 2910
-updated_at_utc: "2026-07-06T17:03:42Z"
+updated_at_utc: "2026-07-10T19:06:59Z"
 state_surface: high_churn_single_file
 claim_boundary: >
   Durable issue-state propagation for benchmark v0.1 publication work. This file
@@ -49,3 +49,27 @@ events:
       No CPU-only publication-suite blocker remains in the tracked report or gate.
       Release/tag/upload, full campaign reruns, and paper/dissertation claim edits
       remain out of scope.
+  - at_utc: "2026-07-08T13:22:31Z"
+    source: "PR #4671"
+    status: merged
+    summary: >
+      Corrected the earlier proposed state under the maintainer's option-b ruling:
+      the scenario reclassification policy is accepted, but the committed evidence
+      remains policy_accepted_blocked_pending_rebase and has no publication badge.
+    remaining: >
+      Wait for the issue #4364 freeze window and regenerated release evidence before
+      intentionally changing the publication-gate invariant.
+  - at_utc: "2026-07-10T19:06:59Z"
+    source: "this PR"
+    status: proposed
+    summary: >
+      Freezes one nominal, stress, adversarial, and autonomous-mobile-vehicle-specific
+      suite definition with explicit membership and six durable metadata references
+      per suite. Focused tests require all 24 references to resolve.
+    artifacts:
+      - configs/benchmarks/releases/benchmark_v0_1_release_suites.yaml
+      - docs/context/evidence/issue_2910_release_suite_freeze_2026-07-10.md
+    remaining: >
+      Semantically validate each referenced metadata owner against the frozen suite
+      membership, then regenerate the release evidence under issue #4364 after its
+      timing gate opens. Publication remains blocked pending that re-base.

@@ -1,0 +1,123 @@
+schema_version: benchmark-release-suite-contract.v0.1
+release_id: paper_experiment_matrix_v1_v0_1_0
+freeze_status: frozen_definition_pending_semantic_validation
+publication_status: blocked_pending_release_rebase
+publication_blocker: >
+  The four suite definitions are frozen, but publication remains blocked until
+  issue #4364 regenerates the release evidence during the maintainer-approved
+  freeze window and the referenced metadata owners pass semantic validation.
+claim_boundary: >
+  This manifest freezes suite membership and durable metadata references only.
+  It does not establish that every referenced record is semantically complete,
+  run a benchmark campaign, promote fallback or degraded rows, or authorize
+  publication.
+selection_basis:
+  nominal_and_stress: >
+    Apply the maintainer-accepted PR #4671 policy to the 48-scenario release
+    matrix: 37 eligible scenarios remain nominal, 9 knife-edge scenarios are
+    stress-only, and 2 geometrically infeasible scenarios are excluded.
+  adversarial: >
+    Reuse the already frozen two-family issue #1500 adversarial comparison
+    manifest and its durable issue #1502 row-status/archive evidence.
+  autonomous_mobile_vehicle_specific: >
+    Reuse the executed issue #1344 paired nominal AMV config instead of the
+    proposal-only issue #2456 suite. This remains simulation evidence and does
+    not establish hardware-calibrated AMV validity.
+suites:
+  - suite_id: nominal
+    suite_kind: nominal
+    suite_definition: configs/benchmarks/paper_experiment_matrix_v1.yaml
+    selection_source: configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml
+    scenario_ids:
+      - classic_bottleneck_low
+      - classic_bottleneck_medium
+      - classic_bottleneck_high
+      - classic_realworld_double_bottleneck_high
+      - classic_station_platform_medium
+      - classic_group_crossing_low
+      - classic_group_crossing_medium
+      - classic_group_crossing_high
+      - classic_head_on_corridor_low
+      - classic_head_on_corridor_medium
+      - classic_merging_low
+      - classic_merging_medium
+      - classic_overtaking_low
+      - classic_overtaking_medium
+      - classic_t_intersection_low
+      - classic_t_intersection_medium
+      - classic_urban_crossing_medium
+      - francis2023_frontal_approach
+      - francis2023_pedestrian_obstruction
+      - francis2023_pedestrian_overtaking
+      - francis2023_robot_overtaking
+      - francis2023_down_path
+      - francis2023_intersection_no_gesture
+      - francis2023_blind_corner
+      - francis2023_narrow_hallway
+      - francis2023_intersection_wait
+      - francis2023_intersection_proceed
+      - francis2023_following_human
+      - francis2023_leading_human
+      - francis2023_accompanying_peer
+      - francis2023_join_group
+      - francis2023_leave_group
+      - francis2023_crowd_navigation
+      - francis2023_parallel_traffic
+      - francis2023_perpendicular_traffic
+      - francis2023_circular_crossing
+      - francis2023_robot_crowding
+    odd_contract: configs/benchmarks/odd_contracts/low_speed_public_space_v1.yaml
+    scenario_contract: configs/scenarios/classic_interactions_francis2023.yaml
+    scenario_certification: docs/context/evidence/issue_2910_release_scenario_certification/summary.json
+    planner_row_status: docs/context/evidence/issue_3294_release_claim_matrix/release_claim_matrix.json
+    seed_schedule: configs/benchmarks/seed_sets_v1.yaml
+    artifact_manifest: docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json
+
+  - suite_id: stress
+    suite_kind: stress
+    suite_definition: configs/benchmarks/issue_1344_paired_stress_primary.yaml
+    selection_source: configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml
+    scenario_ids:
+      - classic_cross_trap_low
+      - classic_cross_trap_medium
+      - classic_cross_trap_high
+      - classic_doorway_low
+      - classic_doorway_medium
+      - classic_doorway_high
+      - francis2023_entering_room
+      - francis2023_exiting_room
+      - francis2023_entering_elevator
+    odd_contract: configs/benchmarks/odd_contracts/low_speed_public_space_v1.yaml
+    scenario_contract: configs/scenarios/classic_interactions_francis2023.yaml
+    scenario_certification: docs/context/evidence/issue_2910_release_scenario_certification/summary.json
+    planner_row_status: docs/context/evidence/issue_3294_release_claim_matrix/release_claim_matrix.json
+    seed_schedule: configs/benchmarks/seed_sets_v1.yaml
+    artifact_manifest: docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json
+
+  - suite_id: adversarial
+    suite_kind: adversarial
+    suite_definition: configs/adversarial/issue_1500_adversarial_comparison_manifest.v1.yaml
+    scenario_family_ids:
+      - crossing_ttc
+      - classic_head_on_corridor
+    odd_contract: configs/benchmarks/odd_contracts/low_speed_public_space_v1.yaml
+    scenario_contract: configs/adversarial/issue_1500_adversarial_comparison_manifest.v1.yaml
+    scenario_certification: docs/context/evidence/issue_2910_release_scenario_certification/summary.json
+    planner_row_status: docs/context/evidence/issue_1502_adversarial_two_family_2026-05-31/row_status_summary.json
+    seed_schedule: configs/benchmarks/seed_sets_v1.yaml
+    artifact_manifest: docs/context/evidence/issue_1502_adversarial_two_family_2026-05-31/archive.json
+
+  - suite_id: amv_specific
+    suite_kind: autonomous_mobile_vehicle_specific
+    suite_definition: configs/benchmarks/issue_1344_paired_nominal_v1_primary.yaml
+    scenario_ids:
+      - empty_map_8_directions_east
+      - single_ped_crossing_orthogonal
+      - classic_doorway_low
+      - classic_bottleneck_low
+    odd_contract: configs/benchmarks/odd_contracts/low_speed_public_space_v1.yaml
+    scenario_contract: configs/scenarios/nominal_v1.yaml
+    scenario_certification: docs/context/evidence/issue_2910_release_scenario_certification/summary.json
+    planner_row_status: docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/nominal_campaign_summary.json
+    seed_schedule: configs/benchmarks/seed_sets_v1.yaml
+    artifact_manifest: docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json

@@ -24,6 +24,10 @@ Modes:
 * `--aggregate-only` — print per-module counts without reading/writing a baseline.
 * `--ty-output FILE` — parse a pre-rendered ty gitlab-JSON report instead of
   re-running ty (offline / test / no-network mode).
+* `--emit-baseline-fixture [--fixture FILE]` — reconstruct a deterministic
+  raw-findings fixture from the committed baseline (no live ty run). The fixture
+  aggregates to exactly the baseline's per-module counts, so the
+  baseline-reproduction test is host-independent. See **Issue #5070** below.
 
 The downward ratchet gates on the **general** bucket. The
 **optional-import** category is recorded for visibility but EXCLUDED from the
@@ -41,6 +45,41 @@ gate to avoid overlap with sibling issues:
 Sibling issues that own the excluded categories: #4990 (optional-import guard
 inventory), #4995 (guard-spelling standardization), #4988 (benchmark-CLI typed
 errors).
+
+## Issue #5070 — host-independent baseline reproduction
+
+The live `ty` per-module counts are **host-dependent**: they depend on each
+host's dependency-resolution state (which optional deps are installed/resolved).
+The original acceptance test `test_committed_baseline_reproduces_on_clean_checkout`
+ran the live `uvx ty check` and gated on `returncode == 0`, so a perfectly clean
+branch failed the readiness gate whenever its host resolved differently from the
+baseline-generation host (e.g. total `2540 -> 2541` on one host and
+`2540 -> 2478` on another, with large per-module swings in *both* directions).
+
+Fix (per the issue's suggested change):
+
+* A **deterministic raw-findings fixture**
+  (`scripts/validation/ty_advisory_findings_fixture.json`) is reconstructed from
+  the committed baseline via `--emit-baseline-fixture`. It aggregates to exactly
+  the baseline's per-module `general`/`optional_import_excluded`/`total` counts.
+* The baseline-reproduction test now parses this committed fixture
+  (`test_committed_baseline_reproduces_from_fixture`) and asserts `--check` passes
+  against it. This is deterministic and host-independent — it holds on every
+  clean worktree. A sync guard (`test_committed_baseline_fixture_is_in_sync`)
+  fails loudly if the baseline and fixture drift apart.
+* The **live scan remains a separate advisory diagnostic**
+  (`test_live_ty_advisory_scan`): opt-in via `TY_ADVISORY_LIVE=1`, skipped when
+  `uvx`/`ty` is unavailable, and non-gating (it asserts the diagnostic ran and
+  emitted a ratchet summary, not that the host matched the baseline). The CI
+  workflow (`.github/workflows/ty-advisory-ratchet.yml`) keeps running the live
+  `--check` as a non-gating (`continue-on-error`) companion.
+
+Refresh the fixture after a baseline refresh:
+
+```bash
+uv run python scripts/dev/ty_advisory_ratchet.py --write-baseline   # after reducing findings
+uv run python scripts/dev/ty_advisory_ratchet.py --emit-baseline-fixture
+```
 
 ## CI wiring
 
@@ -78,5 +117,11 @@ uv run pytest tests/dev/test_ty_advisory_ratchet.py -v
 uv run python scripts/dev/ty_advisory_ratchet.py --check
 uv run python scripts/dev/ty_advisory_ratchet.py --aggregate-only | head
 uv run ruff check scripts/dev/ty_advisory_ratchet.py tests/dev/test_ty_advisory_ratchet.py
+# Deterministic, host-independent baseline reproduction (#5070):
+uv run python scripts/dev/ty_advisory_ratchet.py --emit-baseline-fixture
+uv run python scripts/dev/ty_advisory_ratchet.py --check \
+  --ty-output scripts/validation/ty_advisory_findings_fixture.json
+# Opt-in live advisory diagnostic (#5070):
+TY_ADVISORY_LIVE=1 uv run pytest tests/dev/test_ty_advisory_ratchet.py::test_live_ty_advisory_scan -v
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 ```

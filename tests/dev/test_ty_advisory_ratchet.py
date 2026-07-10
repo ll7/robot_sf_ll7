@@ -5,6 +5,12 @@ the downward-ratchet gate) and the CLI end-to-end via ``--ty-output`` so no live
 ``ty`` invocation is required in the unit suite. They also assert the acceptance
 criteria: a committed baseline exists, the worked-example module was driven to
 zero, and the ratchet fails on a net-new finding in a clean module.
+
+Issue #5070: the live ``ty`` per-module counts are host-dependent (they depend
+on each host's dependency-resolution state), so baseline *reproduction* is checked
+against a committed deterministic fixture
+(``scripts/validation/ty_advisory_findings_fixture.json``), NOT a live ty run.
+The live scan remains available as a separate opt-in advisory diagnostic.
 """
 
 from __future__ import annotations
@@ -20,6 +26,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "dev" / "ty_advisory_ratchet.py"
 BASELINE = ROOT / "scripts" / "validation" / "ty_advisory_baseline.json"
+# Deterministic, host-independent raw-findings fixture reconstructed from the
+# committed baseline. The baseline-reproduction test parses THIS file, never a
+# live ty run, so reproduction holds on every clean worktree (issue #5070).
+FIXTURE = ROOT / "scripts" / "validation" / "ty_advisory_findings_fixture.json"
 
 # Import the helper as a source module (it lives under scripts/dev, not a package).
 _spec = importlib.util.spec_from_file_location("ty_advisory_ratchet", SCRIPT)
@@ -292,18 +302,97 @@ def test_worked_example_module_robot_sf_data_is_driven_to_zero() -> None:
     )
 
 
-def test_committed_baseline_reproduces_on_clean_checkout() -> None:
-    """Acceptance: re-running ty and diffing against the baseline passes.
+def test_committed_baseline_reproduces_from_fixture() -> None:
+    """Acceptance (#5070): the committed baseline reproduces deterministically.
 
-    Runs the real ``uvx ty check`` (advisory) and asserts the committed baseline
-    reproduces with no per-module increase. Skipped when ``ty`` / network for
-    ``uvx`` is unavailable so this remains a CPU-only, offline-friendly suite.
+    The live ``ty`` per-module counts are host-dependent (they depend on each
+    host's dependency-resolution state), which made the previous live-gate
+    reproduction test fail on clean worktrees that had nothing to do with the
+    branch under test. Reproduction is now checked against the committed
+    deterministic fixture reconstructed from the baseline, so it holds on every
+    clean worktree regardless of host state. The live scan stays available as a
+    separate opt-in advisory diagnostic (see ``test_live_ty_advisory_scan``).
     """
+    assert FIXTURE.exists(), (
+        "ty advisory findings fixture is missing; regenerate with "
+        "`uv run python scripts/dev/ty_advisory_ratchet.py --emit-baseline-fixture`"
+    )
+    res = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--check",
+            "--ty-output",
+            str(FIXTURE),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert res.returncode == 0, (
+        "ty advisory ratchet did not reproduce from the committed fixture:\n"
+        f"stdout:\n{res.stdout}\nstderr:\n{res.stderr}"
+    )
+    assert "ty advisory ratchet passed" in res.stdout
+
+
+def test_committed_baseline_fixture_is_in_sync(tmp_path: Path) -> None:
+    """Guard (#5070): the committed fixture must match the committed baseline.
+
+    If the baseline is refreshed without regenerating the fixture (or vice
+    versa), the deterministic reproduction test would silently drift. This test
+    regenerates the fixture from the baseline through the production serializer
+    and compares bytes with the checked-in fixture, so a stale fixture or a
+    formatting change fails loudly.
+    """
+    assert BASELINE.exists() and FIXTURE.exists()
+    baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
+    regenerated = tyratchet.materialize_findings_from_baseline(baseline)
+    generated_fixture = tmp_path / "ty_advisory_findings_fixture.json"
+    tyratchet.write_json(generated_fixture, regenerated)
+    assert generated_fixture.read_bytes() == FIXTURE.read_bytes(), (
+        "ty advisory findings fixture is out of sync with the baseline; "
+        "regenerate with `uv run python scripts/dev/ty_advisory_ratchet.py "
+        "--emit-baseline-fixture`"
+    )
+
+
+def test_materialize_findings_reproduces_baseline_counts() -> None:
+    """Unit (#5070): materialized findings aggregate back to the baseline counts."""
+    baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
+    findings = tyratchet.materialize_findings_from_baseline(baseline)
+    agg = tyratchet.aggregate(findings)
+    # Per-module general/optional/total counts must round-trip exactly.
+    for mod, counts in baseline["modules"].items():
+        assert agg["modules"][mod] == {
+            "general": int(counts["general"]),
+            "optional_import_excluded": int(counts.get("optional_import_excluded", 0)),
+            "total": int(counts["total"]),
+        }, f"module {mod} did not round-trip through materialize->aggregate"
+    assert agg["general_total"] == baseline["summary"]["general_findings"]
+    assert agg["total"] == baseline["summary"]["total_findings"]
+
+
+def test_live_ty_advisory_scan() -> None:
+    """Advisory diagnostic (#5070): the live ``ty`` scan, opt-in and non-gating.
+
+    The live per-module counts are host-dependent, so they are NOT a PR gate
+    (see ``test_committed_baseline_reproduces_from_fixture`` for the
+    deterministic contract). This test keeps the live scan available as a
+    separate advisory diagnostic: it is skipped unless ``TY_ADVISORY_LIVE=1``
+    is set, skipped when ``uvx``/``ty`` is unavailable, and when it runs it
+    only asserts the helper executed and emitted a ratchet summary line (it
+    intentionally does NOT assert pass/fail, so host drift never blocks the
+    suite). Run it locally to see the live vs baseline delta for your host.
+    """
+    import os
     import shutil
 
+    if os.environ.get("TY_ADVISORY_LIVE") != "1":
+        pytest.skip("live ty advisory scan is opt-in; set TY_ADVISORY_LIVE=1 to run")
     if shutil.which("uvx") is None:
-        import pytest
-
         pytest.skip("uvx not available; cannot run live ty check")
     res = subprocess.run(
         [sys.executable, str(SCRIPT), "--check"],
@@ -313,11 +402,12 @@ def test_committed_baseline_reproduces_on_clean_checkout() -> None:
         text=True,
         timeout=300,
     )
-    assert res.returncode == 0, (
-        "ty advisory ratchet did not reproduce on a clean checkout:\n"
-        f"stdout:\n{res.stdout}\nstderr:\n{res.stderr}"
+    # Advisory: assert the diagnostic RAN and reported a ratchet summary, but do
+    # NOT assert returncode == 0 — host drift may legitimately make the live
+    # ratchet fail without indicating a branch regression (#5070).
+    assert "ty advisory ratchet" in res.stdout, (
+        f"live ty advisory scan produced no ratchet summary:\n{res.stdout}\n{res.stderr}"
     )
-    assert "ty advisory ratchet passed" in res.stdout
 
 
 # --------------------------------------------------------------------------- #

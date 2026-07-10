@@ -116,6 +116,19 @@ from robot_sf.training.task_bundles import (
 
 DEFAULT_SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
+# CLI commands translate malformed files, configuration values, and benchmark records into
+# their documented nonzero exit codes.  Programmer errors intentionally remain visible.
+_CLI_INPUT_ERRORS = (
+    OSError,
+    json.JSONDecodeError,
+    yaml.YAMLError,
+    EpisodeRecordInputError,
+    ValueError,
+    TypeError,
+)
+_CLI_OPTIONAL_DEPENDENCY_ERRORS = (ImportError, ModuleNotFoundError, AttributeError)
+_CLI_LOGGING_ERRORS = (OSError, ValueError, AttributeError, ImportError)
+
 
 def _handle_baseline(args) -> int:
     """Execute baseline command to compute baseline statistics.
@@ -150,11 +163,11 @@ def _handle_baseline(args) -> int:
             logging.info("Baseline stats written to %s", args.out)
             if getattr(args, "jsonl", None):
                 logging.info("Intermediate episodes JSONL written to %s", args.jsonl)
-        except Exception:
+        except _CLI_LOGGING_ERRORS:
             # Defensive: do not let logging interfere with success path
             pass
         return 0
-    except Exception:  # pragma: no cover - error path
+    except _CLI_INPUT_ERRORS:  # pragma: no cover - error path
         return 2
 
 
@@ -187,7 +200,7 @@ def _handle_list_algorithms(_args) -> int:
             print(algo)
 
         return 0
-    except Exception:  # pragma: no cover - error path
+    except (ImportError, AttributeError, OSError):  # pragma: no cover - optional registry boundary
         return 2
 
 
@@ -238,7 +251,7 @@ def _progress_cb_factory(quiet: bool):
             tqdm_module = importlib.import_module("tqdm")
             tqdm = tqdm_module.tqdm
             pbar = tqdm(total=0, unit="ep", disable=False)
-        except Exception:
+        except _CLI_OPTIONAL_DEPENDENCY_ERRORS:
             logging.debug("tqdm import failed or pbar unavailable", exc_info=True)
             pbar = None
 
@@ -254,7 +267,7 @@ def _progress_cb_factory(quiet: bool):
                     pbar.reset(total=total)
                 pbar.update(1)
                 pbar.set_description(f"{sid} seed={seed} {status}")
-            except Exception:
+            except _CLI_LOGGING_ERRORS:
                 logging.debug("Progress bar set_description/update failed", exc_info=True)
         else:
             msg = f"[{i}/{total}] {sid} seed={seed}: {status}"
@@ -289,7 +302,7 @@ def _handle_run(args) -> int:
         # Optional: load SNQI weights/baseline for inline SNQI computation
         try:
             snqi_weights, snqi_baseline = _load_snqi_inputs(args)
-        except Exception:  # pragma: no cover - error path
+        except _CLI_INPUT_ERRORS:  # pragma: no cover - error path
             _emit_structured(
                 {"event": "benchmark.run.error", "error": "failed_loading_snqi_inputs"},
             )
@@ -361,7 +374,7 @@ def _handle_run(args) -> int:
                 failure_count,
                 args.out,
             )
-        except Exception:
+        except _CLI_LOGGING_ERRORS:
             logging.debug("Logging 'Episodes written' failed", exc_info=True)
         if total_jobs > 0 and written == 0:
             try:
@@ -370,7 +383,7 @@ def _handle_run(args) -> int:
                     total_jobs,
                     failure_count,
                 )
-            except Exception:
+            except _CLI_LOGGING_ERRORS:
                 logging.debug("Logging zero-episode failure failed", exc_info=True)
             if str(getattr(args, "structured_output", "none")).lower() == "jsonl" and isinstance(
                 failed, list
@@ -400,7 +413,7 @@ def _handle_run(args) -> int:
             )
             try:
                 logging.error("Benchmark run marked non-success: %s", reason)
-            except Exception:
+            except _CLI_LOGGING_ERRORS:
                 logging.debug("Logging benchmark availability failure failed", exc_info=True)
             _emit_structured(
                 {
@@ -426,7 +439,7 @@ def _handle_run(args) -> int:
             },
         )
         return 0
-    except Exception:  # pragma: no cover - error path
+    except _CLI_INPUT_ERRORS:  # pragma: no cover - error path
         _emit_structured({"event": "benchmark.run.error", "error": "unhandled_exception"})
         return 2
 
@@ -466,10 +479,10 @@ def _handle_summary(args) -> int:
         summarize_to_plots(args.in_path, args.out_dir)
         try:
             logging.info("Summary plots written to %s", args.out_dir)
-        except Exception:
+        except _CLI_LOGGING_ERRORS:
             logging.debug("Logging 'Summary plots written' failed", exc_info=True)
         return 0
-    except Exception as exc:  # pragma: no cover - error path
+    except _CLI_INPUT_ERRORS as exc:  # pragma: no cover - error path
         logging.exception("Summary generation failed: %s", exc)
         return 2
 
@@ -524,10 +537,10 @@ def _handle_aggregate(args) -> int:
             json.dump(summary, f, indent=2)
         try:
             logging.info("Aggregated summary written to %s", out_path)
-        except Exception:
+        except _CLI_LOGGING_ERRORS:
             logging.debug("Logging 'Aggregated summary' failed", exc_info=True)
         return 0
-    except Exception as exc:  # pragma: no cover - error path
+    except _CLI_INPUT_ERRORS as exc:  # pragma: no cover - error path
         logging.exception("Aggregation failed: %s", exc)
         return 2
 
@@ -591,7 +604,7 @@ def _handle_claim(args) -> int:
     except BenchmarkClaimError as exc:
         print(f"Benchmark claim error: {exc}", file=sys.stderr)
         return 2
-    except Exception:  # pragma: no cover - error path
+    except (OSError, ValueError, TypeError):  # pragma: no cover - input/output boundary
         logging.exception("Unexpected error during benchmark claim generation")
         return 2
 
@@ -614,7 +627,7 @@ def _handle_validate_row_claims(args) -> int:
     except BenchmarkRowClaimError as exc:
         print(f"Benchmark row claim error: {exc}", file=sys.stderr)
         return 2
-    except Exception:  # pragma: no cover - error path
+    except (OSError, ValueError, TypeError):  # pragma: no cover - input/output boundary
         logging.exception("Unexpected error during benchmark row claim validation")
         return 2
 
@@ -644,7 +657,7 @@ def _handle_stress_coverage_report(args) -> int:
         out_path = write_stress_uncertainty_coverage_report(payload, args.out)
         logging.info("Stress/uncertainty coverage report written to %s", out_path)
         return 0
-    except Exception:
+    except _CLI_INPUT_ERRORS:
         logging.exception("Stress/uncertainty coverage report failed")
         return 2
 
@@ -670,7 +683,7 @@ def _handle_classify_failure_mechanisms(args) -> int:
             args.out_json,
         )
         return 0
-    except Exception:
+    except _CLI_INPUT_ERRORS:
         logging.exception("Failure mechanism classification failed")
         return 2
 
@@ -724,7 +737,7 @@ def _handle_export_parquet(args) -> int:
             result.record_count,
         )
         return 0
-    except Exception:
+    except _CLI_INPUT_ERRORS:
         logging.exception("Parquet analytics export failed")
         return 2
 
@@ -774,10 +787,10 @@ def _handle_snqi_ablate(args) -> int:
             logging.info("Ablation results written to %s", out_path)
             if getattr(args, "summary_out", None):
                 logging.info("Ablation summary written to %s", summary_out)
-        except Exception:
+        except _CLI_LOGGING_ERRORS:
             logging.debug("Logging 'Ablation results' failed", exc_info=True)
         return 0
-    except Exception:  # pragma: no cover - defensive
+    except _CLI_INPUT_ERRORS:  # pragma: no cover - input/output boundary
         return 2
 
 
@@ -806,10 +819,10 @@ def _handle_seed_variance(args) -> int:
             json.dump(summary, f, indent=2)
         try:
             logging.info("Seed-variance summary written to %s", out_path)
-        except Exception:
+        except _CLI_LOGGING_ERRORS:
             logging.debug("Logging 'Seed-variance summary' failed", exc_info=True)
         return 0
-    except Exception:  # pragma: no cover - error path
+    except _CLI_INPUT_ERRORS:  # pragma: no cover - error path
         return 2
 
 
@@ -842,10 +855,10 @@ def _handle_extract_failures(args) -> int:
                     f.write(json.dumps(rec) + "\n")
         try:
             logging.info("Wrote failures to %s", out_path)
-        except Exception:
+        except _CLI_LOGGING_ERRORS:
             logging.debug("Logging 'Wrote failures' failed", exc_info=True)
         return 0
-    except Exception:  # pragma: no cover - error path
+    except _CLI_INPUT_ERRORS:  # pragma: no cover - error path
         return 2
 
 
@@ -881,10 +894,10 @@ def _handle_rank(args) -> int:
             out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         try:
             logging.info("Ranking output written to %s", out_path)
-        except Exception:
+        except _CLI_LOGGING_ERRORS:
             logging.debug("Logging 'Ranking output' failed", exc_info=True)
         return 0
-    except Exception:  # pragma: no cover - error path
+    except _CLI_INPUT_ERRORS:  # pragma: no cover - error path
         return 2
 
 
@@ -921,10 +934,10 @@ def _handle_table(args) -> int:
             out_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         try:
             logging.info("Table output written to %s", out_path)
-        except Exception:
+        except _CLI_LOGGING_ERRORS:
             logging.debug("Logging 'Table output' failed", exc_info=True)
         return 0
-    except Exception:  # pragma: no cover - error path
+    except _CLI_INPUT_ERRORS:  # pragma: no cover - error path
         return 2
 
 
@@ -960,7 +973,7 @@ def _handle_export_canonical_table(args) -> int:
             )
         )
         return 0
-    except Exception as exc:  # pragma: no cover - error path
+    except (OSError, ValueError, TypeError) as exc:  # pragma: no cover - input/output boundary
         logging.exception("Canonical table export failed: %s", exc)
         return 2
 
@@ -983,7 +996,7 @@ def _handle_debug_seeds(args) -> int:
             # For interactive use, print the debug payload to stdout (machine-friendly)
             print(json.dumps(payload))
         return 0
-    except Exception:  # pragma: no cover - error path
+    except (OSError, ValueError, TypeError):  # pragma: no cover - input/output boundary
         return 2
 
 
@@ -1010,7 +1023,7 @@ def _handle_plot_pareto(args) -> int:
             observation_track_mode=str(args.observation_track_mode),
         )
         return 0
-    except Exception:  # pragma: no cover - error path
+    except _CLI_INPUT_ERRORS:  # pragma: no cover - input/output boundary
         return 2
 
 
@@ -1042,7 +1055,7 @@ def _handle_plot_distributions(args) -> int:
             ci_seed=(int(args.ci_seed) if getattr(args, "ci_seed", None) is not None else None),
         )
         return 0
-    except Exception:  # pragma: no cover - error path
+    except _CLI_INPUT_ERRORS:  # pragma: no cover - input/output boundary
         return 2
 
 
@@ -1067,7 +1080,7 @@ def _handle_plot_planner_tradeoff(args) -> int:
             metadata_path.parent.mkdir(parents=True, exist_ok=True)
             metadata_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
         return 0
-    except Exception as exc:  # pragma: no cover - error path
+    except (OSError, ValueError, TypeError) as exc:  # pragma: no cover - input/output boundary
         logging.exception("Planner tradeoff plot failed: %s", exc)
         return 2
 
@@ -1104,7 +1117,7 @@ def _handle_plot_scenarios(args) -> int:
             payload.update({"montage": meta})
         print(json.dumps(payload))
         return 0
-    except Exception:  # pragma: no cover - error path
+    except _CLI_INPUT_ERRORS:  # pragma: no cover - input/output boundary
         return 2
 
 
@@ -1153,7 +1166,7 @@ def _handle_list_scenarios(args) -> int:
         for sid in ids:
             print(sid)
         return 0
-    except Exception:  # pragma: no cover - error path
+    except _CLI_INPUT_ERRORS:  # pragma: no cover - error path
         return 2
 
 
@@ -1173,7 +1186,7 @@ def _extract_matrix_source(matrix_path: str | Path) -> dict[str, object]:
     try:
         with path.open("r", encoding="utf-8") as handle:
             docs = list(yaml.safe_load_all(handle))
-    except Exception:
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
         return {
             "path": str(path),
             "format": format_hint,
@@ -1234,7 +1247,7 @@ def _load_matrix_metadata(matrix_path: str | Path) -> object:
     try:
         with Path(matrix_path).open("r", encoding="utf-8") as handle:
             return next(yaml.safe_load_all(handle), None)
-    except Exception:
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
         return None
 
 
@@ -1471,7 +1484,7 @@ def _handle_validate_config(args) -> int:
         }
         print(json.dumps(report))
         return 0 if not errors else 2
-    except Exception:  # pragma: no cover - error path
+    except _CLI_INPUT_ERRORS:  # pragma: no cover - input/config boundary
         return 2
 
 
@@ -1495,7 +1508,7 @@ def _handle_preview_scenarios(args) -> int:
         }
         print(json.dumps(report))
         return 0
-    except Exception:  # pragma: no cover - error path
+    except _CLI_INPUT_ERRORS:  # pragma: no cover - input/config boundary
         return 2
 
 
@@ -1530,7 +1543,7 @@ def _handle_planner_inclusion_check(args) -> int:
         )
         print(json.dumps(to_jsonable_payload(report), indent=2, allow_nan=False))
         return 0 if report.get("decision") == "pass" else 1
-    except Exception:  # pragma: no cover - error path
+    except _CLI_INPUT_ERRORS:  # pragma: no cover - input/runtime boundary
         return 2
 
 
@@ -3026,7 +3039,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
                     "scripts/snqi_weight_optimization.py",
                     "snqi_optimize_script",
                 )
-            except Exception:  # pragma: no cover - load error
+            except (OSError, ImportError):  # pragma: no cover - load error
                 traceback.print_exc()
                 return None
         return _get_opt_run(_OPT_MOD)
@@ -3060,7 +3073,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
                     "scripts/recompute_snqi_weights.py",
                     "snqi_recompute_script",
                 )
-            except Exception:  # pragma: no cover - load error
+            except (OSError, ImportError):  # pragma: no cover - load error
                 traceback.print_exc()
                 return 2
         run_fn = _get_recompute_run(_RECOMP_MOD)
@@ -3138,11 +3151,11 @@ def _configure_parser() -> argparse.ArgumentParser:
                             j += 1
                         rewritten = [*hoisted, subcmd, *filtered]
                         args = rewritten
-                except Exception:  # pragma: no cover - fallback safety
+                except (TypeError, ValueError):  # pragma: no cover - fallback safety
                     pass
             try:  # pragma: no cover (normal success path still covered elsewhere)
                 return parser.parse_intermixed_args(args, namespace)  # type: ignore[attr-defined]
-            except Exception:
+            except (TypeError, ValueError):
                 return _orig(args, namespace)
 
         parser.parse_args = _mixed_parse  # type: ignore[assignment]
@@ -3172,7 +3185,7 @@ def get_parser() -> argparse.ArgumentParser:
             """
             try:  # pragma: no cover - fallback path only hit if feature absent/fails
                 return parser.parse_intermixed_args(args, namespace)  # type: ignore[attr-defined]
-            except Exception:
+            except (TypeError, ValueError):
                 return _orig(args, namespace)
 
         parser.parse_args = _mixed_parse  # type: ignore[assignment]
@@ -3195,7 +3208,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         try:
             multiprocessing_module = importlib.import_module("multiprocessing")
             multiprocessing_module.set_start_method("spawn", force=False)
-        except Exception:
+        except (ImportError, RuntimeError):
             logging.debug("Failed to set multiprocessing start method to spawn", exc_info=True)
 
     # Access dynamic loaders if present

@@ -1,4 +1,4 @@
-"""Tests for the REST-backed GitHub issue-with-comments helper (issue #5021).
+"""Tests for the GitHub issue-with-comments helper (issues #5021 and #5092).
 
 These tests mock ``gh api`` so they run offline and never hit the network. They
 cover the success path, comment pagination, field normalization (the drop-in
@@ -15,10 +15,12 @@ import pytest
 
 from scripts.dev.gh_issue_rest import (
     COMMENTS_PAGE_SIZE,
+    PROJECT_CARDS_ERROR_MARKER,
     fetch_comments,
     fetch_issue,
     fetch_issue_with_comments,
     main,
+    read_complete_issue_thread,
     render_issue_plain,
 )
 
@@ -163,6 +165,80 @@ def test_fetch_issue_with_comments_propagates_issue_error() -> None:
     assert mock_api.call_count == 1
 
 
+def test_complete_thread_uses_native_output_when_available() -> None:
+    """The concise CLI path should remain the fast path when it succeeds."""
+    with (
+        patch("scripts.dev.gh_issue_rest._gh_issue_view") as mock_view,
+        patch("scripts.dev.gh_issue_rest.fetch_issue_with_comments") as mock_rest,
+    ):
+        mock_view.return_value = _proc(stdout="native thread\n")
+        result = read_complete_issue_thread(5092)
+    assert result == {
+        "number": 5092,
+        "status": "ok",
+        "source": "gh_issue_view",
+        "text": "native thread\n",
+    }
+    mock_rest.assert_not_called()
+
+
+def test_complete_thread_falls_back_to_rest_and_preserves_comment_order() -> None:
+    """The known projectCards failure should use the complete REST thread in API order."""
+    comments = [
+        {**_raw_comment(cid=10, login="first"), "body": "first comment"},
+        {**_raw_comment(cid=20, login="second"), "body": "second comment"},
+    ]
+    with (
+        patch("scripts.dev.gh_issue_rest._gh_issue_view") as mock_view,
+        patch("scripts.dev.gh_issue_rest._gh_api") as mock_api,
+    ):
+        mock_view.return_value = _proc(
+            returncode=1,
+            stderr=f"GraphQL: Projects (classic) is deprecated ({PROJECT_CARDS_ERROR_MARKER})",
+        )
+        mock_api.side_effect = [
+            _proc(stdout=json.dumps(_raw_issue(number=5092))),
+            _proc(stdout=json.dumps(comments)),
+        ]
+        result = read_complete_issue_thread(5092, max_comment_pages=7)
+    assert result["status"] == "ok"
+    assert result["source"] == "rest_fallback"
+    assert result["text"].index("first comment") < result["text"].index("second comment")
+    assert [call.args[0] for call in mock_api.call_args_list] == [
+        "repos/ll7/robot_sf_ll7/issues/5092",
+        "repos/ll7/robot_sf_ll7/issues/5092/comments?per_page=100&page=1",
+    ]
+
+
+def test_complete_thread_does_not_mask_unrelated_native_failure() -> None:
+    """Authentication and other native errors must fail closed without REST retry."""
+    with (
+        patch("scripts.dev.gh_issue_rest._gh_issue_view") as mock_view,
+        patch("scripts.dev.gh_issue_rest.fetch_issue_with_comments") as mock_rest,
+    ):
+        mock_view.return_value = _proc(returncode=1, stderr="HTTP 401: Bad credentials")
+        result = read_complete_issue_thread(5092)
+    assert result["status"] == "error"
+    assert result["source"] == "gh_issue_view"
+    assert "Bad credentials" in result["error"]
+    mock_rest.assert_not_called()
+
+
+def test_complete_thread_reports_rest_fallback_failure() -> None:
+    """A failed fallback must report both the triggering path and REST error."""
+    with (
+        patch("scripts.dev.gh_issue_rest._gh_issue_view") as mock_view,
+        patch("scripts.dev.gh_issue_rest.fetch_issue_with_comments") as mock_rest,
+    ):
+        mock_view.return_value = _proc(returncode=1, stderr=PROJECT_CARDS_ERROR_MARKER)
+        mock_rest.return_value = {"status": "error", "error": "comments page 2 failed"}
+        result = read_complete_issue_thread(5092)
+    assert result["status"] == "error"
+    assert result["source"] == "rest_fallback"
+    assert PROJECT_CARDS_ERROR_MARKER in result["error"]
+    assert "comments page 2 failed" in result["error"]
+
+
 def test_render_issue_plain_resembles_gh_issue_view_comments() -> None:
     """Plain rendering should expose title, state, url, body, and the thread."""
     payload = {
@@ -206,6 +282,25 @@ def test_cli_view_plain_outputs_thread(capsys: pytest.CaptureFixture[str]) -> No
     assert rc == 0
     assert "friction" in captured.out
     assert "## Implementation plan" in captured.out
+
+
+def test_cli_thread_outputs_rest_fallback(capsys: pytest.CaptureFixture[str]) -> None:
+    """``thread`` should expose fallback output without adding source metadata."""
+    with patch("scripts.dev.gh_issue_rest.read_complete_issue_thread") as mock_read:
+        mock_read.return_value = {
+            "status": "ok",
+            "source": "rest_fallback",
+            "text": "complete fallback thread\n",
+        }
+        rc = main(["thread", "5092", "--repo", "ll7/robot_sf_ll7"])
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert captured.out == "complete fallback thread\n"
+    mock_read.assert_called_once_with(
+        5092,
+        repo="ll7/robot_sf_ll7",
+        max_comment_pages=10,
+    )
 
 
 def test_cli_view_json_without_comments_omits_thread(capsys: pytest.CaptureFixture[str]) -> None:

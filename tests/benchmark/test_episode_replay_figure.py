@@ -852,6 +852,136 @@ class TestCLI:
         assert len(caption_content) > 0, "Caption fragment should not be empty"
         assert "e2e_test_ep" in caption_content or "crossing_scenario" in caption_content
 
+    def test_cli_end_to_end_determinism_and_caption_completeness(self, tmp_path):
+        """Assert deterministic figure output and caption completeness (issue #5007).
+
+        Strengthens the replay-figure CLI E2E path with two hardening invariants:
+
+        1. Deterministic output: two consecutive CLI runs on identical inputs must
+           produce byte-identical figure artifacts. The assertion compares a SHA-256
+           content hash of each generated figure (still, filmstrip, trajectory) across
+           the two runs, and additionally verifies the ``sha256`` provenance fields are
+           stable and match the actual on-disk bytes.
+        2. Caption completeness: every generated figure is described by a non-empty
+           caption that carries the required provenance markers (episode id, scenario
+           id, seed, planner, and determinism-check status), which define the claim
+           boundary for the replay figure.
+        """
+        import hashlib
+
+        from scripts.replay_episode_figure import main
+
+        episode_data = {
+            "episode_id": "e2e_det_ep",
+            "scenario_id": "crossing_scenario",
+            "seed": 123,
+            "planner": "social_force",
+            "campaign_id": "test_campaign_001",
+            "config_hash": "abc123def",
+            "repo_commit": "a1b2c3d4",
+            "final_robot_position": [5.0, 2.5],
+            "final_progress": 0.75,
+            "success": True,
+            "collision": False,
+            "replay_steps": [
+                {"t": 0.0, "x": 0.0, "y": 0.0, "heading": 0.0, "speed": 0.0},
+                {"t": 1.0, "x": 1.0, "y": 0.5, "heading": 0.1, "speed": 1.0},
+                {"t": 2.0, "x": 2.0, "y": 1.0, "heading": 0.2, "speed": 1.0},
+                {"t": 3.0, "x": 3.0, "y": 1.5, "heading": 0.3, "speed": 1.0},
+                {"t": 4.0, "x": 4.0, "y": 2.0, "heading": 0.4, "speed": 1.0},
+                {"t": 5.0, "x": 5.0, "y": 2.5, "heading": 0.5, "speed": 0.0},
+            ],
+            "replay_dt": 1.0,
+        }
+
+        episodes_jsonl = tmp_path / "episodes.jsonl"
+        with open(episodes_jsonl, "w") as f:
+            json.dump(episode_data, f)
+            f.write("\n")
+
+        figure_names = ["still_3.png", "filmstrip.png", "trajectory.png"]
+        provenances = []
+        captions = []
+
+        # Two consecutive runs on identical inputs into isolated output directories.
+        for run_idx in (1, 2):
+            out_dir = tmp_path / f"run{run_idx}"
+            ret = main(
+                [
+                    "--episodes",
+                    str(episodes_jsonl),
+                    "--episode-id",
+                    "e2e_det_ep",
+                    "--outputs",
+                    "still,filmstrip,trajectory",
+                    "--out-dir",
+                    str(out_dir),
+                    "--tolerance-m",
+                    "0.1",
+                ]
+            )
+            assert ret == 0, f"CLI run {run_idx} should complete successfully"
+
+            for name in figure_names:
+                assert (out_dir / name).exists(), f"run {run_idx}: {name} should exist"
+
+            with open(out_dir / "replay_provenance.json") as f:
+                provenances.append(json.load(f))
+            captions.append((out_dir / "caption_fragment.tex").read_text())
+
+        # --- Invariant 1: deterministic figure output (byte-identity via content hash) ---
+        run1_fig_hashes = {
+            name: hashlib.sha256((tmp_path / "run1" / name).read_bytes()).hexdigest()
+            for name in figure_names
+        }
+        run2_fig_hashes = {
+            name: hashlib.sha256((tmp_path / "run2" / name).read_bytes()).hexdigest()
+            for name in figure_names
+        }
+        for name in figure_names:
+            assert run1_fig_hashes[name] == run2_fig_hashes[name], (
+                f"Figure {name} must be byte-identical across runs: "
+                f"run1={run1_fig_hashes[name]} run2={run2_fig_hashes[name]}"
+            )
+
+        # The provenance sha256 fields must also be stable across runs and must match
+        # the actual on-disk figure bytes (guards against a stale/lying manifest).
+        def _provenance_sha_by_name(prov):
+            return {Path(a["path"]).name: a["sha256"] for a in prov["artifacts"]}
+
+        prov1 = _provenance_sha_by_name(provenances[0])
+        prov2 = _provenance_sha_by_name(provenances[1])
+        for name in figure_names:
+            assert name in prov1 and name in prov2, f"{name} missing from provenance artifacts"
+            assert len(prov1[name]) == 64, f"{name} provenance sha256 must be a hex digest"
+            assert prov1[name] == prov2[name], (
+                f"Provenance sha256 for {name} must be stable across runs: "
+                f"run1={prov1[name]} run2={prov2[name]}"
+            )
+            assert prov1[name] == run1_fig_hashes[name], (
+                f"Provenance sha256 for {name} must match on-disk bytes: "
+                f"prov={prov1[name]} disk={run1_fig_hashes[name]}"
+            )
+
+        # --- Invariant 2: caption completeness (non-empty + required provenance markers) ---
+        # Every generated figure is described by the shared caption fragment, which must
+        # carry the provenance markers that define the figure's claim boundary.
+        assert len(captions[0]) > 0, "Caption fragment must not be empty"
+        assert captions[0] == captions[1], "Caption fragment must be deterministic across runs"
+
+        required_markers = {
+            "episode id": "e2e_det_ep",
+            "scenario id": "crossing_scenario",
+            "seed": "123",
+            "planner": "social_force",
+            "determinism-check status": "pass",
+        }
+        missing = [label for label, marker in required_markers.items() if marker not in captions[0]]
+        assert not missing, (
+            f"Caption fragment is missing required provenance markers: {missing}. "
+            f"Caption was: {captions[0]!r}"
+        )
+
 
 class TestResimulation:
     """Tests for deterministic re-simulation functionality."""

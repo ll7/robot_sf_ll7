@@ -6,9 +6,12 @@ reported in world units and clipped/noised to match the configured scanner
 settings before they are exposed as Gymnasium observation spaces.
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import lru_cache
 from math import cos, sin
+from threading import Barrier, BrokenBarrierError, Lock, local
 
 import numba
 import numpy as np
@@ -199,7 +202,7 @@ class LidarScannerSettings:
         return cls()
 
 
-@numba.njit(fastmath=True)
+@numba.njit(fastmath=True, nogil=True)
 def raycast_pedestrians(
     out_ranges: np.ndarray,
     scanner_pos: Vec2D,
@@ -231,7 +234,7 @@ def raycast_pedestrians(
     raycast_circles(out_ranges, scanner_pos, max_scan_range, circles, ray_angles)
 
 
-@numba.njit(fastmath=True)
+@numba.njit(fastmath=True, nogil=True)
 def raycast_circles(
     out_ranges: np.ndarray,
     scanner_pos: Vec2D,
@@ -278,7 +281,7 @@ def raycast_circles(
         out_ranges[i] = best_range
 
 
-@numba.njit(fastmath=True)
+@numba.njit(fastmath=True, nogil=True)
 def raycast_obstacles(
     out_ranges: np.ndarray,
     scanner_pos: Vec2D,
@@ -307,7 +310,10 @@ def raycast_obstacles(
             out_ranges[i] = min(coll_dist, out_ranges[i])
 
 
-@numba.njit(fastmath=True)  # pragma: no cover - exercised via caller; not line-traceable.
+@numba.njit(  # pragma: no cover - exercised via caller; not line-traceable.
+    fastmath=True,
+    nogil=True,
+)
 def _raycast_obstacles_batch_kernel(
     out_ranges: np.ndarray,
     scanner_positions: np.ndarray,
@@ -402,7 +408,164 @@ def raycast_obstacles_batch(
     )
 
 
-@numba.njit()
+@dataclass(slots=True)
+class _LidarBatchEntry:
+    """One environment's static-obstacle raycast inputs for a coordinated step."""
+
+    out_ranges: np.ndarray
+    scanner_position: np.ndarray
+    obstacles: np.ndarray
+    ray_angles: np.ndarray
+
+
+class LidarBatchCoordinator:
+    """Collect one homogeneous LiDAR request per environment and dispatch it together.
+
+    The coordinator is intended for a fixed group of in-process rollout workers. Each
+    worker owns one ``env_index`` and submits exactly one request per coordination cycle.
+    A timeout or incompatible row aborts the coordinator so partial batches cannot hang
+    or silently fall back to scalar execution.
+    """
+
+    def __init__(self, batch_size: int, *, timeout_seconds: float = 30.0) -> None:
+        """Initialize a reusable fixed-size synchronization barrier."""
+        if batch_size < 2:
+            raise ValueError("LiDAR batch coordination requires at least two environments")
+        if timeout_seconds <= 0:
+            raise ValueError("LiDAR batch coordination timeout must be positive")
+        self.batch_size = int(batch_size)
+        self.timeout_seconds = float(timeout_seconds)
+        self._entries: list[_LidarBatchEntry | None] = [None] * self.batch_size
+        self._error: BaseException | None = None
+        self._error_lock = Lock()
+        self._barrier = Barrier(self.batch_size, action=self._dispatch)
+
+    def submit(
+        self,
+        env_index: int,
+        out_ranges: np.ndarray,
+        scanner_position: np.ndarray,
+        obstacles: np.ndarray,
+        ray_angles: np.ndarray,
+    ) -> None:
+        """Submit one row and wait until the complete batch has been dispatched."""
+        if not 0 <= env_index < self.batch_size:
+            raise ValueError(f"env_index must be within [0, {self.batch_size})")
+        self._raise_if_failed()
+        self._entries[env_index] = _LidarBatchEntry(
+            out_ranges=out_ranges,
+            scanner_position=np.asarray(scanner_position),
+            obstacles=np.asarray(obstacles),
+            ray_angles=np.asarray(ray_angles),
+        )
+        try:
+            self._barrier.wait(timeout=self.timeout_seconds)
+        except BrokenBarrierError as exc:
+            self._raise_if_failed()
+            raise RuntimeError("coordinated LiDAR batch did not receive every environment") from exc
+        self._raise_if_failed()
+
+    def abort(self, error: BaseException) -> None:
+        """Abort pending and future batches after an environment-step failure."""
+        self._record_error(error)
+        self._barrier.abort()
+
+    def _dispatch(self) -> None:
+        """Validate, pad, and dispatch the complete barrier generation."""
+        try:
+            entries = list(self._entries)
+            if any(entry is None for entry in entries):
+                raise RuntimeError("coordinated LiDAR batch is missing an environment row")
+            rows = [entry for entry in entries if entry is not None]
+            first = rows[0]
+            num_rays = first.out_ranges.shape
+            out_dtype = first.out_ranges.dtype
+            ray_dtype = first.ray_angles.dtype
+            scanner_dtype = first.scanner_position.dtype
+            obstacle_dtype = first.obstacles.dtype
+            for row in rows:
+                if row.out_ranges.shape != num_rays or row.ray_angles.shape != num_rays:
+                    raise ValueError("coordinated LiDAR rows must use one common ray count")
+                if row.scanner_position.shape != (2,):
+                    raise ValueError("coordinated LiDAR scanner positions must have shape (2,)")
+                if row.obstacles.ndim != 2 or row.obstacles.shape[1] != 4:
+                    raise ValueError("coordinated LiDAR obstacles must have shape (N, 4)")
+                if (
+                    row.out_ranges.dtype != out_dtype
+                    or row.ray_angles.dtype != ray_dtype
+                    or row.scanner_position.dtype != scanner_dtype
+                    or row.obstacles.dtype != obstacle_dtype
+                ):
+                    raise TypeError("coordinated LiDAR rows must use homogeneous dtypes")
+
+            out_ranges = np.stack([row.out_ranges for row in rows])
+            scanner_positions = np.stack([row.scanner_position for row in rows])
+            ray_angles = np.stack([row.ray_angles for row in rows])
+            obstacle_counts = np.asarray(
+                [row.obstacles.shape[0] for row in rows],
+                dtype=np.int64,
+            )
+            max_obstacles = int(obstacle_counts.max(initial=0))
+            padded_obstacles = np.zeros(
+                (self.batch_size, max_obstacles, 4),
+                dtype=obstacle_dtype,
+            )
+            for env_index, row in enumerate(rows):
+                padded_obstacles[env_index, : row.obstacles.shape[0]] = row.obstacles
+
+            raycast_obstacles_batch(
+                out_ranges,
+                scanner_positions,
+                padded_obstacles,
+                obstacle_counts,
+                ray_angles,
+            )
+            for env_index, row in enumerate(rows):
+                row.out_ranges[:] = out_ranges[env_index]
+        except BaseException as exc:  # noqa: BLE001 - propagate one batch failure to every worker.
+            self._record_error(exc)
+
+    def _record_error(self, error: BaseException) -> None:
+        """Retain the first failure as the canonical batch error."""
+        with self._error_lock:
+            if self._error is None:
+                self._error = error
+
+    def _raise_if_failed(self) -> None:
+        """Raise the canonical failure for all participating workers."""
+        if self._error is not None:
+            raise RuntimeError("coordinated LiDAR batch failed") from self._error
+
+
+@dataclass(frozen=True, slots=True)
+class _LidarBatchBinding:
+    """Thread-local coordinator binding for one vector-environment worker."""
+
+    coordinator: LidarBatchCoordinator
+    env_index: int
+
+
+_LIDAR_BATCH_CONTEXT = local()
+
+
+@contextmanager
+def lidar_batch_context(
+    coordinator: LidarBatchCoordinator,
+    env_index: int,
+) -> Iterator[None]:
+    """Bind a rollout worker's LiDAR calls to a shared batch coordinator."""
+    previous = getattr(_LIDAR_BATCH_CONTEXT, "binding", None)
+    _LIDAR_BATCH_CONTEXT.binding = _LidarBatchBinding(coordinator, env_index)
+    try:
+        yield
+    finally:
+        if previous is None:
+            del _LIDAR_BATCH_CONTEXT.binding
+        else:
+            _LIDAR_BATCH_CONTEXT.binding = previous
+
+
+@numba.njit(nogil=True)
 def raycast(  # noqa: PLR0913
     scanner_pos: Vec2D,
     obstacles: np.ndarray,
@@ -491,7 +654,7 @@ def _dynamic_objects_to_circle_array(occ: ContinuousOccupancy) -> np.ndarray | N
     return np.array(rows, dtype=np.float64)
 
 
-@numba.njit(fastmath=True)
+@numba.njit(fastmath=True, nogil=True)
 def range_postprocessing(out_ranges: np.ndarray, scan_noise: np.ndarray, max_scan_dist: float):
     """Clip and optionally corrupt ray ranges in place.
 
@@ -569,8 +732,12 @@ def _lidar_ray_scan_impl(
     np.add(robot_orient, settings.ray_offsets, out=ray_angles_out)
     np.mod(ray_angles_out, 2.0 * np.pi, out=ray_angles_out)
 
-    if isinstance(occ, EgoPedContinuousOccupancy):
-        enemy_pos = np.array([occ.enemy_coords])
+    binding: _LidarBatchBinding | None = getattr(_LIDAR_BATCH_CONTEXT, "binding", None)
+    if binding is None:
+        enemy_pos = (
+            np.array([occ.enemy_coords]) if isinstance(occ, EgoPedContinuousOccupancy) else None
+        )
+        enemy_radius = occ.enemy_radius if isinstance(occ, EgoPedContinuousOccupancy) else 0.0
         ranges = raycast(
             (pos_x, pos_y),
             obstacles,
@@ -579,19 +746,43 @@ def _lidar_ray_scan_impl(
             occ.ped_radius,
             ray_angles_out,
             enemy_pos=enemy_pos,
-            enemy_radius=occ.enemy_radius,
+            enemy_radius=enemy_radius,
             other_robot_circles=dynamic_robot_circles,
         )
     else:
-        ranges = raycast(
+        ranges = np.full(ray_angles_out.shape[0], np.inf)
+        raycast_pedestrians(
+            ranges,
             (pos_x, pos_y),
-            obstacles,
             scan_dist,
             ped_pos,
             occ.ped_radius,
             ray_angles_out,
-            other_robot_circles=dynamic_robot_circles,
         )
+        binding.coordinator.submit(
+            binding.env_index,
+            ranges,
+            np.asarray((pos_x, pos_y)),
+            obstacles,
+            ray_angles_out,
+        )
+        if isinstance(occ, EgoPedContinuousOccupancy):
+            raycast_pedestrians(
+                ranges,
+                (pos_x, pos_y),
+                scan_dist,
+                np.array([occ.enemy_coords]),
+                occ.enemy_radius,
+                ray_angles_out,
+            )
+        if dynamic_robot_circles is not None:
+            raycast_circles(
+                ranges,
+                (pos_x, pos_y),
+                scan_dist,
+                dynamic_robot_circles,
+                ray_angles_out,
+            )
     range_postprocessing(ranges, scan_noise, scan_dist)
     return ranges, ray_angles_out
 

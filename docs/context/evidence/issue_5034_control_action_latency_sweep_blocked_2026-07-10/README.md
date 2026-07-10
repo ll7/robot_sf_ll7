@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#5061, 2026-07-10) - NEEDS-REVIEW -->
+
 # Issue #5034 — Control-action-latency fidelity sweep: fail-closed blocker (2026-07-10)
 
 Fail-closed decision packet for issue #5034 ("execute the control-action-latency

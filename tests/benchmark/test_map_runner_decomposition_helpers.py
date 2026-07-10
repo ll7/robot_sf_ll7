@@ -681,8 +681,111 @@ class TestRunEpisodeStepLoop:
         assert result.termination_reason == "success"
         assert result.planner_runtime_snapshot is None
         assert result.view_integrity is not None
+        assert result.hybrid_command_sources is None
         # AMMV command actions must record the single selected action payload.
         assert len(result.ammv_command_actions) == 1
+
+    @pytest.mark.parametrize(
+        ("canonical_algorithm", "source_key", "sources"),
+        [
+            ("hybrid_portfolio", "selected_head", ["risk_dwa", "orca", "prediction"]),
+            (
+                "hybrid_rule_local_planner",
+                "selected_source",
+                ["dynamic_window", "path_follow", "dynamic_window"],
+            ),
+        ],
+    )
+    def test_step_loop_collects_aligned_hybrid_sources_without_trace_flag(
+        self,
+        monkeypatch,
+        canonical_algorithm: str,
+        source_key: str,
+        sources: list[str],
+    ) -> None:
+        """Both hybrid families must emit one normalized source per executed step."""
+        import robot_sf.benchmark.map_runner_episode as mod
+
+        class _ThreeStepEnv(_StepLoopDummyEnv):
+            def __init__(self) -> None:
+                super().__init__()
+                self.step_index = 0
+
+            def step(self, action):
+                _ = action
+                self.step_index += 1
+                self.simulator.robot_pos[0] = np.array([0.1 * self.step_index, 0.0])
+                terminated = self.step_index == len(sources)
+                obs = {
+                    "robot": {"position": self.simulator.robot_pos[0].tolist()},
+                    "goal": {"current": [1.0, 1.0]},
+                }
+                return (
+                    obs,
+                    0.0,
+                    terminated,
+                    False,
+                    {
+                        "success": terminated,
+                        "meta": {"is_route_complete": terminated},
+                    },
+                )
+
+        decision: dict[str, str] = {}
+        policy_calls = 0
+
+        def _policy(obs):
+            nonlocal policy_calls
+            _ = obs
+            decision.clear()
+            decision[source_key] = sources[policy_calls]
+            policy_calls += 1
+            return 0.5, 0.0
+
+        def _planner_stats() -> dict[str, object]:
+            return {"last_decision": dict(decision)}
+
+        monkeypatch.setattr(mod, "make_robot_env", lambda config, seed, debug: _ThreeStepEnv())
+        result = _run_episode_step_loop(
+            seed=1,
+            config=_stub_config(),
+            horizon_val=len(sources),
+            policy_fn=_policy,
+            planner_bind_env=None,
+            planner_reset=None,
+            planner_close=None,
+            planner_stats=_planner_stats,
+            planner_native_action=False,
+            noise_spec={"enabled": False},
+            noise_rng=None,
+            noise_state=None,
+            noise_stats={},
+            tracking_precision_spec={"enabled": False, "target_motp_m": 0.05},
+            tracking_precision_rng=None,
+            safety_wrapper_runtime=mod.runtime_config_from_mapping(None),
+            safety_wrapper_deadlock_monitor=None,
+            cbf_runtime=mod.cbf_runtime_config_from_mapping(None),
+            actuation_controller=None,
+            algo_meta={"canonical_algorithm": canonical_algorithm},
+            record_forces=False,
+            record_planner_decision_trace=False,
+            record_simulation_step_trace=False,
+            single_pedestrian_intent_metadata=[],
+            single_pedestrian_vru_metadata=[],
+        )
+
+        assert result.hybrid_command_sources == sources
+        assert len(result.hybrid_command_sources) == len(result.robot_positions)
+        assert result.planner_decision_trace == []
+        predicate = mod._safety_predicates_for_episode(
+            robot_pos_arr=np.asarray(result.robot_positions),
+            robot_vel_arr=np.tile(np.asarray([[0.5, 0.0]]), (len(sources), 1)),
+            robot_headings=result.robot_headings,
+            ped_pos_arr=np.zeros((len(sources), 0, 2), dtype=float),
+            dt=0.1,
+            command_sources=result.hybrid_command_sources,
+        )
+        assert predicate["oscillatory_control_predicate"]["fields"]["command_source_changes"] == 2
 
 
 class TestFinalizeEpisodeRecord:

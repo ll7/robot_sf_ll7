@@ -8,6 +8,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "audit_exemplar_bundles.py"
 SPEC = importlib.util.spec_from_file_location("audit_exemplar_bundles", SCRIPT_PATH)
 assert SPEC is not None
@@ -170,6 +172,25 @@ def test_format_size() -> None:
     assert audit_mod.format_size(500) == "500 B"
     assert "KB" in audit_mod.format_size(5000)
     assert "MB" in audit_mod.format_size(5_000_000)
+
+
+def test_assess_exemplar_budget_preserves_migration_headroom() -> None:
+    """Verify the 45 MiB trigger reserves headroom below the hard 50 MiB cap."""
+    assert audit_mod.assess_exemplar_budget(44 * audit_mod.MEBIBYTE) == ("WITHIN_BUDGET", False)
+    assert audit_mod.assess_exemplar_budget(45 * audit_mod.MEBIBYTE) == (
+        "OFF_TREE_MIGRATION_REQUIRED",
+        True,
+    )
+    assert audit_mod.assess_exemplar_budget(50 * audit_mod.MEBIBYTE) == (
+        "OFF_TREE_MIGRATION_REQUIRED",
+        True,
+    )
+    assert audit_mod.assess_exemplar_budget(50 * audit_mod.MEBIBYTE + 1) == (
+        "EXCEEDS_BUDGET",
+        True,
+    )
+    with pytest.raises(ValueError, match="must not be negative"):
+        audit_mod.assess_exemplar_budget(-1)
 
 
 def test_parse_sha256sums(tmp_path: Path) -> None:

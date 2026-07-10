@@ -758,10 +758,11 @@ decision-disagreement CSV, Markdown, Pareto SVG, and provenance; raw episode JSO
   for head-on corridor scenarios (3 planners x 3 density/selection combos). Same format
   as issue_4848. Total: ~5.5 MB. Illustrative-only, no benchmark or dissertation claim.
 
-## Exemplar-Bundle Artifact Policy (Issue #4920)
+## Exemplar-Bundle Artifact Policy (Issues #4920 and #5005)
 
-Audited 2026-07-09. The following policy governs future exemplar-bundle additions to
-`docs/context/evidence/`.
+Re-audited on 2026-07-10 after #4938 regenerated the committed exemplar bundles. The 50 MiB
+cumulative budget is ratified for tracked exemplar-bundle classes only; it is not a cap on the
+whole `docs/context/evidence/` tree.
 
 ### Size Budget
 
@@ -769,8 +770,13 @@ Audited 2026-07-09. The following policy governs future exemplar-bundle addition
 |------------|-------|---------------|
 | Per-bundle size cap | 5 MB | max 2.06 MB |
 | Per-class bundle count | 12 bundles | 9 per class |
-| Cumulative exemplar budget | 50 MB | 13.20 MB |
-| `docs/context/evidence/` total | advisory | 47.50 MB |
+| Cumulative exemplar budget | 50 MiB (52,428,800 bytes) | 16.36 MiB |
+| `docs/context/evidence/` total | advisory, not this budget's scope | 53.93 MiB |
+
+Before committing a derived trace that would bring the cumulative exemplar total to **45 MiB or
+more**, move the trace to release assets or external artifact storage and retain only a compact,
+checksummed manifest/provenance pointer in git. This preserves 5 MiB of headroom below the hard
+50 MiB cap. The current 16.36 MiB exemplar total is below that trigger.
 
 ### Content Rules
 

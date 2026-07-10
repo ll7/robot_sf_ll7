@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from typing import Any
@@ -83,7 +84,18 @@ def _gh_issue_view(
     """Run the concise native complete-thread read without raising on missing ``gh``."""
     args = ["gh", "issue", "view", str(number), "--repo", repo, "--comments"]
     try:
-        return subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
+        # ``gh issue view`` renders nothing when stdout is not a terminal.  Force
+        # its normal human-readable output so a successful native read is never
+        # mistaken for an empty complete thread in automation.
+        env = {**os.environ, "GH_FORCE_TTY": "100%", "GH_PAGER": "cat", "NO_COLOR": "1"}
+        return subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+            env=env,
+        )
     except FileNotFoundError:
         return subprocess.CompletedProcess(
             args=args,

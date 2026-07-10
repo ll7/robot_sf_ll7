@@ -182,6 +182,19 @@ def test_complete_thread_uses_native_output_when_available() -> None:
     mock_rest.assert_not_called()
 
 
+def test_native_thread_read_forces_human_output_when_stdout_is_captured() -> None:
+    """Automation must receive the native thread instead of a successful empty read."""
+    with patch("scripts.dev.gh_issue_rest.subprocess.run") as mock_run:
+        mock_run.return_value = _proc(stdout="native thread\n")
+        result = read_complete_issue_thread(5092)
+
+    assert result["status"] == "ok"
+    env = mock_run.call_args.kwargs["env"]
+    assert env["GH_FORCE_TTY"] == "100%"
+    assert env["GH_PAGER"] == "cat"
+    assert env["NO_COLOR"] == "1"
+
+
 def test_complete_thread_falls_back_to_rest_and_preserves_comment_order() -> None:
     """The known projectCards failure should use the complete REST thread in API order."""
     comments = [

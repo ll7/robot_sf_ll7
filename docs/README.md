@@ -383,6 +383,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 ### Simulation & UI
 
 * **[Simulation View](./SIM_VIEW.md)** - Visualization and rendering system
+* **[LiDAR Configuration Reference](./lidar_configuration.md)** - Canonical robot and ego-pedestrian scan defaults, including ray count, field of view, range, and noise
 * **[Helper Catalog](./dev/helper_catalog.md)** - Reusable render helpers for frame capture, output directories, and video contact sheets
 * **[SVG Map Editor](./SVG_MAP_EDITOR.md)** - SVG-based map creation tools and usage
 * **[OSM Map Generation](./osm_map_workflow.md)** - Programmatic, reproducible maps from OpenStreetMap data (PBF import, zone/route definition, scenario creation)

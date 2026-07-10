@@ -3,6 +3,7 @@
   "issue": 3482,
   "release_tag": "0.0.2",
   "generated_on": "2026-07-01",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "purpose": "Machine-readable claim boundary for release 0.0.2 collision-count metrics after EpisodeEventLedger.v1 exact/derived reconciliation surfaced a discrepancy and exact-event provenance recovery did not find the source artifacts.",
   "source": {
     "type": "issue_comment_summary_plus_negative_recovery_disposition",

@@ -1,14 +1,13 @@
 """Regression fixtures for runtime-collision termination metric correctness.
 
 Issue #5097: SNQI and success_rate consumed the withdrawn derived collision count.
-These tests verify that when a pedestrian is close enough to trigger the geometry-derived
-collision threshold (D_COLL), compute_all_metrics() produces collisions >= 1 and
-success = 0 — closing the regression path that was silent in release 0.0.2.
+These tests verify that a pedestrian inside the runtime geometric-contact envelope
+causes compute_all_metrics() to produce collisions >= 1 and success = 0.
 
-The release 0.0.2 discrepancy arose because the runtime trigger fires at ~1.4m
-(robot+ped radius sum) while D_COLL = 0.25m. Episodes that terminated via runtime
-trigger had derived counts of zero. These tests use the D_COLL threshold so that the
-derived geometry DOES detect the collision.
+The release 0.0.2 discrepancy arose when the runtime trigger used the robot and
+pedestrian radius sum while the released aggregation used a narrower derived count.
+The fixtures therefore include a contact just inside the radius-sum boundary, not
+only a trivial zero-distance overlap.
 """
 
 from __future__ import annotations
@@ -32,11 +31,12 @@ def _make_collision_episode(
     *,
     horizon: int = 100,
     ped_at_robot: bool = True,
+    ped_distance_m: float = 0.0,
 ) -> EpisodeData:
     """Episode where the robot and pedestrian overlap at step 2.
 
-    With ped_at_robot=True, the ped is placed at robot position — distance 0.0 m,
-    well below D_COLL = 0.25 m. The robot does not reach goal (reached_goal_step=None).
+    With ped_at_robot=True, the ped is placed ``ped_distance_m`` from the robot at
+    step 2. The robot does not reach goal (reached_goal_step=None).
     """
     T = 10
     robot_pos = np.zeros((T, 2), dtype=float)
@@ -44,10 +44,10 @@ def _make_collision_episode(
     robot_acc = np.zeros((T, 2), dtype=float)
     goal = np.array([10.0, 0.0], dtype=float)
 
-    # pedestrian starts far away, then overlaps robot at step 2
+    # Pedestrian starts far away, then enters the configured contact envelope at step 2.
     peds_pos = np.full((T, 1, 2), fill_value=100.0, dtype=float)
     if ped_at_robot:
-        peds_pos[2, 0] = robot_pos[2]  # distance 0.0 m at step 2
+        peds_pos[2, 0] = robot_pos[2] + np.array([ped_distance_m, 0.0])
 
     ped_forces = np.zeros((T, 1, 2), dtype=float)
 
@@ -112,6 +112,16 @@ def test_ped_at_robot_position_produces_collision_count_ge_1() -> None:
     """collision_count() >= 1 when ped overlaps robot — closes the release 0.0.2 gap."""
     data = _make_collision_episode()
     assert collision_count(data) >= 1
+
+
+def test_radius_sum_contact_produces_collision_count_and_failure() -> None:
+    """A pedestrian just inside the runtime radius-sum contact boundary is a collision."""
+    contact_distance = 1.0 + 0.4 - 0.01  # EpisodeData synthetic-fixture radii.
+    data = _make_collision_episode(ped_distance_m=contact_distance)
+
+    assert human_collisions(data) >= 1
+    assert collision_count(data) >= 1
+    assert success_rate(data, horizon=100) == 0.0
 
 
 # --- Regression: success_rate must be 0 on collision ---

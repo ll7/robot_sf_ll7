@@ -88,6 +88,9 @@ from robot_sf.benchmark.report_table import format_markdown as _tbl_format_md
 from robot_sf.benchmark.report_table import to_json as _tbl_to_json
 from robot_sf.benchmark.runner import load_scenario_matrix, run_batch
 from robot_sf.benchmark.scenario_flakiness import (
+    DEFAULT_OBSERVATION_TRACK_MODE as _DEFAULT_FLAKINESS_TRACK_MODE,
+)
+from robot_sf.benchmark.scenario_flakiness import (
     compute_flakiness_audit as _compute_flakiness_audit,
 )
 from robot_sf.benchmark.scenario_schema import (
@@ -845,6 +848,7 @@ def _handle_flakiness_audit(args) -> int:
             seed_field=str(args.seed_field),
             stability_threshold=float(args.stability_threshold),
             min_seeds=int(args.min_seeds),
+            observation_track_mode=str(args.observation_track_mode),
         )
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2413,6 +2417,16 @@ def _add_flakiness_audit_subparser(
         type=int,
         default=2,
         help="Minimum distinct seeds before a cell's stability is assessed (default: 2)",
+    )
+    p.add_argument(
+        "--observation-track-mode",
+        choices=["strict", "diagnostic-cross-track"],
+        default=_DEFAULT_FLAKINESS_TRACK_MODE,
+        help=(
+            "How to handle mixed benchmark_track values. Default strict fails closed "
+            "rather than pooling incompatible observation contracts; "
+            "diagnostic-cross-track partitions cells per track with an explicit caveat."
+        ),
     )
     p.set_defaults(cmd="flakiness-audit")
 

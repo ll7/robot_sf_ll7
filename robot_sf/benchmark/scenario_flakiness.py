@@ -21,6 +21,19 @@ The audit fails closed: an empty record set raises, cells with too few seeds are
 reported as *not assessable* rather than silently counted as stable, and
 determinism is reported as ``None`` (unknown) when no exact-repeat data exists
 instead of being asserted without evidence.
+
+Observation-track policy
+------------------------
+The audit enforces the benchmark observation-track boundary (issue #5072). By
+default (``strict`` mode) it refuses to pool records that declare different
+``benchmark_track`` values into one stability cell, because those rows use
+incompatible observation contracts and must not be compared. Callers that
+*intentionally* want a cross-track diagnostic may opt in with
+``observation_track_mode="diagnostic-cross-track"``: the audit then keeps the
+tracks visibly separated by partitioning cells per track (``track :: scenario ::
+planner``) and emits a cross-track caveat. This reuses the canonical
+``observation-track`` policy helpers shared by the aggregate/report CLIs so the
+behavior is consistent across benchmark subcommands.
 """
 
 from __future__ import annotations
@@ -29,6 +42,11 @@ import math
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.benchmark.aggregate import (
+    ensure_observation_track_policy,
+    normalize_observation_track_mode,
+    resolve_benchmark_track,
+)
 from robot_sf.benchmark.grouping import (
     DEFAULT_REPORT_FALLBACK_GROUP_BY,
     DEFAULT_REPORT_GROUP_BY,
@@ -51,6 +69,11 @@ DEFAULT_STABILITY_THRESHOLD = 0.8
 
 #: Minimum distinct seeds required before a cell's stability can be assessed.
 DEFAULT_MIN_SEEDS = 2
+
+#: Default observation-track pooling policy. ``strict`` refuses to compare rows
+#: that declare different ``benchmark_track`` values; opt in to
+#: ``diagnostic-cross-track`` for an explicitly caveated per-track partition.
+DEFAULT_OBSERVATION_TRACK_MODE = "strict"
 
 #: Cap on how many concrete examples are embedded in the report for each list so
 #: the JSON stays compact on large campaigns.
@@ -127,14 +150,31 @@ def _ingest_records(
     group_by: str,
     fallback_group_by: str,
     seed_field: str,
-) -> tuple[dict[str, tuple[str, str]], dict[str, dict[str, list[int]]], int, int]:
-    """Group episode outcomes into ``(scenario, planner)`` cells by seed.
+    observation_track_mode: str,
+) -> tuple[
+    dict[str, tuple[str, str, str]],
+    dict[str, dict[str, list[int]]],
+    int,
+    int,
+]:
+    """Group episode outcomes into ``(scenario, planner[, track])`` cells by seed.
+
+    In ``diagnostic-cross-track`` mode each cell is additionally partitioned by
+    its resolved ``benchmark_track`` so stability numbers are never computed
+    across incompatible observation contracts. In ``strict`` mode the caller has
+    already guaranteed a single pooled track, so the cell key stays
+    ``scenario::planner``.
 
     Returns:
-        ``(cell_meta, cell_seed_outcomes, n_missing_outcome, n_missing_scenario)``
-        where ``cell_seed_outcomes[cell][seed]`` lists that seed's binary outcomes.
+        ``(cell_meta, cell_seed_outcomes, n_missing_outcome,
+        n_missing_scenario)`` where ``cell_meta[cell]`` is
+        ``(scenario_id, planner, track)`` and
+        ``cell_seed_outcomes[cell][seed]`` lists that seed's binary outcomes.
     """
-    cell_meta: dict[str, tuple[str, str]] = {}
+    cross_track = (
+        normalize_observation_track_mode(observation_track_mode) == "diagnostic_cross_track"
+    )
+    cell_meta: dict[str, tuple[str, str, str]] = {}
     cell_seed_outcomes: dict[str, dict[str, list[int]]] = defaultdict(lambda: defaultdict(list))
     n_missing_outcome = 0
     n_missing_scenario = 0
@@ -157,8 +197,12 @@ def _ingest_records(
         if outcome is None:
             n_missing_outcome += 1
             continue
-        cell_key = f"{scenario_id}::{planner}"
-        cell_meta[cell_key] = (str(scenario_id), str(planner))
+        track = resolve_benchmark_track(record)
+        if cross_track:
+            cell_key = f"{track}::{scenario_id}::{planner}"
+        else:
+            cell_key = f"{scenario_id}::{planner}"
+        cell_meta[cell_key] = (str(scenario_id), str(planner), track)
         cell_seed_outcomes[cell_key][_seed_key(record, seed_field)].append(outcome)
 
     return cell_meta, cell_seed_outcomes, n_missing_outcome, n_missing_scenario
@@ -168,6 +212,7 @@ def _audit_cell(
     cell_key: str,
     scenario_id: str,
     planner: str,
+    benchmark_track: str,
     seed_map: dict[str, list[int]],
     *,
     stability_threshold: float,
@@ -224,6 +269,7 @@ def _audit_cell(
         "cell_key": cell_key,
         "scenario_id": scenario_id,
         "planner": planner,
+        "benchmark_track": benchmark_track,
         "n_seeds": n_seeds,
         "n_episodes": n_episodes,
         "success_rate": success_rate,
@@ -246,6 +292,7 @@ def compute_flakiness_audit(
     seed_field: str = "seed",
     stability_threshold: float = DEFAULT_STABILITY_THRESHOLD,
     min_seeds: int = DEFAULT_MIN_SEEDS,
+    observation_track_mode: str = DEFAULT_OBSERVATION_TRACK_MODE,
 ) -> dict[str, Any]:
     """Audit scenario-level outcome flakiness from benchmark episode records.
 
@@ -264,14 +311,19 @@ def compute_flakiness_audit(
         stability_threshold: Majority-agreement fraction below which a cell is
             flagged ``knife_edge``.
         min_seeds: Minimum distinct seeds before a cell's stability is assessed.
+        observation_track_mode: ``strict`` (default) fails closed when records
+            declare mixed ``benchmark_track`` values; ``diagnostic-cross-track``
+            partitions cells per track and emits an explicit caveat.
 
     Returns:
         A schema-versioned audit report (see module docstring for structure).
 
     Raises:
         ValueError: When ``records`` has no usable episode evidence, when
-            ``stability_threshold`` is outside ``(0, 1]``, or when
-            ``min_seeds`` is not positive.
+            ``stability_threshold`` is outside ``(0, 1]``, when ``min_seeds``
+            is not positive, when ``observation_track_mode`` is neither
+            ``strict`` nor ``diagnostic-cross-track``, or when a mixed-track
+            input is supplied in strict mode.
     """
     if not records:
         raise ValueError(
@@ -282,6 +334,12 @@ def compute_flakiness_audit(
         raise ValueError(f"stability_threshold must be in (0, 1], got {stability_threshold}")
     if min_seeds < 1:
         raise ValueError(f"min_seeds must be at least 1, got {min_seeds}")
+    # Validate the mode early and, in strict mode, refuse to pool incompatible
+    # observation contracts into one stability cell (fail closed).
+    track_meta = ensure_observation_track_policy(
+        records,
+        observation_track_mode=observation_track_mode,
+    )
 
     cell_meta, cell_seed_outcomes, n_missing_outcome, n_missing_scenario = _ingest_records(
         records,
@@ -289,6 +347,7 @@ def compute_flakiness_audit(
         group_by=group_by,
         fallback_group_by=fallback_group_by,
         seed_field=seed_field,
+        observation_track_mode=observation_track_mode,
     )
     if not cell_seed_outcomes:
         raise ValueError(
@@ -302,11 +361,12 @@ def compute_flakiness_audit(
     nondeterministic_repeat_groups = 0
 
     for cell_key in sorted(cell_seed_outcomes):
-        scenario_id, planner = cell_meta[cell_key]
+        scenario_id, planner, benchmark_track = cell_meta[cell_key]
         cell_report, examples, checked, nondeterministic = _audit_cell(
             cell_key,
             scenario_id,
             planner,
+            benchmark_track,
             cell_seed_outcomes[cell_key],
             stability_threshold=stability_threshold,
             min_seeds=min_seeds,
@@ -334,6 +394,8 @@ def compute_flakiness_audit(
         "fallback_group_by": fallback_group_by,
         "stability_threshold": stability_threshold,
         "min_seeds": min_seeds,
+        "observation_track_mode": track_meta["mode"],
+        "observation_tracks": track_meta,
         "exact_repeat": {
             "checked_repeat_groups": checked_repeat_groups,
             "nondeterministic_repeat_groups": nondeterministic_repeat_groups,

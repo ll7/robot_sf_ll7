@@ -96,6 +96,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cells below `min_seeds` are reported as not assessable rather than counted as stable, and
   determinism is reported as `null` (unknown) when no exact-repeat data exists. Claim boundary:
   new diagnostic capability validated on synthetic and CPU fixtures; no benchmark campaign run.
+  *(Issue #5072 adds fail-closed observation-track handling to this audit; see the #5072 entry
+  below.)*
+* **issue #5072 flakiness audit observation-track handling is now fail-closed.** The
+  `robot_sf_bench flakiness-audit` audit (`robot_sf/benchmark/scenario_flakiness.py` from #4978)
+  now enforces the benchmark observation-track boundary it previously deferred. By default
+  (`--observation-track-mode strict`) it refuses to pool records that declare different
+  `benchmark_track` values into one stability cell, raising `AggregationMetadataError` (CLI exit
+  code 2) so rows with incompatible observation contracts are never silently compared. An opt-in
+  `--observation-track-mode diagnostic-cross-track` mode partitions cells per track
+  (`track :: scenario :: planner`) and emits an explicit `cross_track_caveat` for an explicitly
+  caveated cross-track diagnostic. This reuses the canonical `observation-track` policy helpers
+  shared by the aggregate/report CLIs (`robot_sf/benchmark/aggregate.py`) so the behavior is
+  consistent across benchmark subcommands. Reports gain an `observation_track_mode` field and an
+  `observation_tracks` metadata block, and each cell gains a `benchmark_track` field, making the
+  track policy reproducible. Single-track and undeclared-track fixtures remain compatible in
+  strict mode. Read-only diagnostic claim boundary is preserved; no ranking, summary, or metric
+  semantics change. Deferred from PR #5069 as a distinct benchmark-input contract; validated on
+  CPU fixtures only.
 * **issue #3574 realized-distribution audit for heterogeneous-population traces.**
   `robot_sf/benchmark/heterogeneous_population_metrics.py` gains `realized_distribution_audit` and
   `summarize_distribution` (plus a `RealizedDistributionSpec`), covering DoD item 5: configured

@@ -39,8 +39,14 @@ def _aggregate_fixture() -> str:
 
 def _assert_or_bless_golden(*, actual: str, golden_path: Path) -> None:
     """Compare output to the golden, or deliberately rewrite it with a visible diff."""
-    expected = golden_path.read_text(encoding="utf-8") if golden_path.exists() else ""
-    if os.environ.get(_BLESS_ENV) == "1":
+    is_bless = os.environ.get(_BLESS_ENV) == "1"
+    if not is_bless and not golden_path.is_file():
+        raise FileNotFoundError(
+            f"Golden file not found at {golden_path}. "
+            f"Run with {_BLESS_ENV}=1 only for a reviewed intentional update."
+        )
+    expected = golden_path.read_text(encoding="utf-8") if golden_path.is_file() else ""
+    if is_bless:
         if actual != expected:
             print(
                 "".join(
@@ -87,3 +93,15 @@ def test_bless_path_rewrites_a_golden_and_prints_its_diff(
 
     assert golden_path.read_text(encoding="utf-8") == actual
     assert '-  "before": true' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("path_name", ["missing.json", "directory"])
+def test_non_bless_path_must_be_a_regular_golden_file(tmp_path: Path, path_name: str) -> None:
+    """Missing and directory golden paths fail loudly before any comparison can pass."""
+
+    golden_path = tmp_path / path_name
+    if path_name == "directory":
+        golden_path.mkdir()
+
+    with pytest.raises(FileNotFoundError, match="Golden file not found"):
+        _assert_or_bless_golden(actual="{}\n", golden_path=golden_path)

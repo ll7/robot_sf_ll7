@@ -5,13 +5,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import torch
+
 from scripts.validation import evaluate_predictive_planner as mod
 
 
 def test_evaluate_predictive_planner_smoke(monkeypatch, tmp_path: Path) -> None:
     """Evaluation CLI should run with mocked map runner and produce summary artifacts."""
     checkpoint = tmp_path / "predictive_model.pt"
-    checkpoint.write_text("stub", encoding="utf-8")
+    torch.save({}, checkpoint)
     scenario_matrix = tmp_path / "scenarios.yaml"
     scenario_matrix.write_text("scenarios: []\n", encoding="utf-8")
     output_dir = tmp_path / "eval_out"
@@ -78,7 +80,7 @@ def test_evaluate_predictive_planner_fails_closed_without_collision_metric(
 ) -> None:
     """Evaluation quality gates should reject rows without explicit collision metrics."""
     checkpoint = tmp_path / "predictive_model.pt"
-    checkpoint.write_text("stub", encoding="utf-8")
+    torch.save({}, checkpoint)
     scenario_matrix = tmp_path / "scenarios.yaml"
     scenario_matrix.write_text("scenarios: []\n", encoding="utf-8")
     output_dir = tmp_path / "eval_out"

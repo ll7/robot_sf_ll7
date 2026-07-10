@@ -76,7 +76,7 @@ def run(config_path: Path, output_dir: Path) -> dict[str, Any]:
             if line.strip()
         ]
         raw_artifacts[key] = {
-            "path": episodes_path.as_posix(),
+            "relative_path": episodes_path.relative_to(output_dir).as_posix(),
             "sha256": hashlib.sha256(episodes_path.read_bytes()).hexdigest(),
             "row_count": len(arm_records[key]),
         }
@@ -89,7 +89,7 @@ def run(config_path: Path, output_dir: Path) -> dict[str, Any]:
             "--config",
             config_path.as_posix(),
             "--output",
-            output_dir.as_posix(),
+            "<fresh-artifact-dir>",
         ]
     )
     report = analyze_smoke_results(
@@ -98,7 +98,7 @@ def run(config_path: Path, output_dir: Path) -> dict[str, Any]:
         arm_summaries=arm_summaries,
         config_path=config_path.as_posix(),
         run_commit=git_head(repo_root),
-        raw_artifact_root=output_dir.as_posix(),
+        raw_artifact_root="local-scratch-not-retained",
         raw_artifacts=raw_artifacts,
         reproduction_command=reproduction_command,
     )

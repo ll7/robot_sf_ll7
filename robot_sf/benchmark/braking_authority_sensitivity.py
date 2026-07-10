@@ -393,9 +393,10 @@ def format_report_markdown(report: Mapping[str, Any]) -> str:
             str(report["reproduction_command"]),
             "```",
             "",
-            "Raw episode JSONL remains disposable under `output/`; `report.json` plus this "
-            "README are the tracked compact evidence. Fallback/degraded execution is excluded, "
-            "and this smoke makes no calibrated safety or paper-facing claim.",
+            "Replace `<fresh-artifact-dir>` with an empty local scratch directory. Raw episode "
+            "JSONL remains disposable and untracked; `report.json` plus this README are the "
+            "tracked compact evidence. Fallback/degraded execution is excluded, and this smoke "
+            "makes no calibrated safety or paper-facing claim.",
             "",
         ]
     )

@@ -59,6 +59,35 @@ def _parse_json(result: subprocess.CompletedProcess[str], *, source: str) -> dic
     return payload
 
 
+def _parse_annotation_pages(
+    result: subprocess.CompletedProcess[str],
+) -> list[dict[str, Any]] | None:
+    """Flatten ``gh api --paginate --slurp`` annotations or reject an empty response."""
+    if result.returncode != 0:
+        detail = result.stderr.strip() or f"gh exited with code {result.returncode}"
+        print(f"Could not recover check-run annotations: {detail}", file=sys.stderr)
+        return None
+    try:
+        pages = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        print(f"Could not parse check-run annotations JSON: {exc}", file=sys.stderr)
+        return None
+    if not isinstance(pages, list) or not all(isinstance(page, list) for page in pages):
+        print(
+            "Could not recover check-run annotations: expected paginated JSON lists",
+            file=sys.stderr,
+        )
+        return None
+    annotations = [item for page in pages for item in page]
+    if not annotations:
+        print(
+            "Could not recover check-run annotations: the endpoint returned no annotations",
+            file=sys.stderr,
+        )
+        return None
+    return annotations
+
+
 def _annotations_path(check_run_url: object) -> str | None:
     """Convert GitHub's absolute check-run API URL into a ``gh api`` path."""
     if not isinstance(check_run_url, str) or not check_run_url.startswith(API_PREFIX):
@@ -113,12 +142,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print("Falling back to check-run annotations.", file=sys.stderr)
-    annotations_result = _gh(["api", "--paginate", annotations_path])
-    if annotations_result.returncode != 0 or not annotations_result.stdout.strip():
-        detail = annotations_result.stderr.strip() or "the endpoint returned no annotations"
-        print(f"Could not recover check-run annotations: {detail}", file=sys.stderr)
+    annotations_result = _gh(["api", "--paginate", "--slurp", annotations_path])
+    annotations = _parse_annotation_pages(annotations_result)
+    if annotations is None:
         return 1
-    sys.stdout.write(annotations_result.stdout)
+    print(json.dumps(annotations))
     return 0
 
 

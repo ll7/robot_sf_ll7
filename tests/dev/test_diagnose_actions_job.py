@@ -65,7 +65,7 @@ def test_main_falls_back_to_check_run_annotations_when_logs_are_absent(monkeypat
                 ),
             ),
             _result(1, stderr="HTTP 404: Not Found"),
-            _result(0, json.dumps([{"message": "No space left on device"}]) + "\n"),
+            _result(0, json.dumps([[{"message": "No space left on device"}]]) + "\n"),
         ]
     )
 
@@ -100,3 +100,27 @@ def test_main_fails_closed_when_annotation_fallback_is_unavailable(monkeypatch, 
 
     assert diagnose_actions_job.main(["123", "--repo", "owner/repo"]) == 1
     assert "Could not recover check-run annotations: HTTP 403: Forbidden" in capsys.readouterr().err
+
+
+def test_main_fails_closed_when_annotations_are_empty(monkeypatch, capsys) -> None:
+    """An empty annotations list is not a successful diagnosis."""
+    results = iter(
+        [
+            _result(
+                0,
+                json.dumps(
+                    {
+                        "run_id": 456,
+                        "check_run_url": "https://api.github.com/repos/owner/repo/check-runs/789",
+                    }
+                ),
+            ),
+            _result(1, stderr="HTTP 404: Not Found"),
+            _result(0, json.dumps([[]]) + "\n"),
+        ]
+    )
+
+    monkeypatch.setattr(diagnose_actions_job, "_gh", lambda _args: next(results))
+
+    assert diagnose_actions_job.main(["123", "--repo", "owner/repo"]) == 1
+    assert "the endpoint returned no annotations" in capsys.readouterr().err

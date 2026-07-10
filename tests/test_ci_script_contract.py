@@ -95,7 +95,10 @@ def test_run_tests_parallel_exposes_xdist_distribution_mode() -> None:
     assert "explicit_test_targets=(" in script_text
     assert 'cmd+=("--ignore=$optional_test_path")' in script_text
     assert 'pytest_args+=("$optional_test_path")' in script_text
-    assert 'pytest_args+=("$core_test_path")' in script_text
+    assert 'append_unique_pytest_arg "$core_test_path"' in script_text
+    assert "changed_top_level_core_test_paths=()" in script_text
+    assert ":(top,glob)tests/test_*.py" in script_text
+    assert 'append_unique_pytest_arg "$changed_test_path"' in script_text
     assert "Core pytest lane cannot run optional-extra path" in script_text
 
 
@@ -158,6 +161,101 @@ def test_run_tests_parallel_invalid_dist_fails_before_worker_resolution() -> Non
     ) in result.stderr
     assert "Resolved pytest-xdist workers" not in result.stderr
     assert "resolve_pytest_workers.py" not in result.stderr
+
+
+def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(tmp_path: Path) -> None:
+    """New top-level core tests must reach PR-readiness pytest collection (issue #5108)."""
+    repo = tmp_path / "repo"
+    script_dir = repo / "scripts" / "dev"
+    fake_bin = repo / "fake-bin"
+    optional_allowlist = repo / "tests" / "support" / "optional_test_allowlist.txt"
+    script_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+    optional_allowlist.parent.mkdir(parents=True)
+
+    for script_name in ("run_tests_parallel.sh", "common_setup.sh"):
+        source = ROOT / "scripts" / "dev" / script_name
+        target = script_dir / script_name
+        target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        target.chmod(0o755)
+    optional_allowlist.write_text("tests/test_optional_top_level.py\n", encoding="utf-8")
+
+    captured_args = repo / "captured-pytest-args.txt"
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                'if [[ "$1" == "run" && "$2" == "python" ]]; then',
+                '  printf "1\\n"',
+                "  exit 0",
+                "fi",
+                'printf "%s\\n" "$*" > "$UV_CAPTURED_ARGS"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "config", "user.email", "agent@example.invalid"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Agent"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "commit", "-m", "base fixture"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    (repo / "tests" / "test_new_top_level.py").write_text(
+        "def test_new(): pass\n", encoding="utf-8"
+    )
+    (repo / "tests" / "test_optional_top_level.py").write_text(
+        "def test_optional(): pass\n", encoding="utf-8"
+    )
+    subprocess.run(["git", "add", "tests"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "commit", "-m", "add top-level tests"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    result = subprocess.run(
+        [str(script_dir / "run_tests_parallel.sh"), "--lane", "core", "--no-ordering"],
+        cwd=repo,
+        env={
+            **os.environ,
+            "BASE_REF": "HEAD~1",
+            "PYTEST_NUM_WORKERS": "1",
+            "PYTEST_FAST_FAIL": "0",
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+            "UV_CAPTURED_ARGS": str(captured_args),
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    pytest_args = captured_args.read_text(encoding="utf-8")
+    assert "tests/test_new_top_level.py" in pytest_args
+    assert "tests/test_optional_top_level.py" not in pytest_args
 
 
 def test_xdist_race_validation_wraps_parallel_tests_and_artifact_scan() -> None:
@@ -629,6 +727,10 @@ def test_worktree_shared_venv_helper_has_freshness_check_wiring() -> None:
     assert 'cmp -s "$src_file" "$installed_file"' in script_text
     assert "Shared virtualenv is stale relative to this checkout" in script_text
     assert "diverging module: pysocialforce/" in script_text
+    # Standalone commands with a verified no-project-import boundary can skip project drift safely.
+    assert "--standalone" in script_text
+    assert "use --standalone for a command verified not to import project packages" in script_text
+    assert 'if [[ -z "$standalone" ]]; then' in script_text
     # The gate is skippable for advanced users with a confirmed-matching env.
     assert "--no-freshness-check" in script_text
     assert "ROBOT_SF_VENV_FRESHNESS_CHECK:-" in script_text
@@ -672,7 +774,8 @@ def _make_freshness_fixture_repo(
 
     fake_uv = fake_bin / "uv"
     fake_uv.write_text(
-        '#!/usr/bin/env bash\nprintf "uv-reached %s\\n" "$*" >&2\nexit 7\n',
+        '#!/usr/bin/env bash\nprintf "uv-reached %s\\n" "$*" >&2\n'
+        'printf "pythonpath=%s\\n" "${PYTHONPATH-}" >&2\nexit 7\n',
         encoding="utf-8",
     )
     fake_uv.chmod(0o755)
@@ -705,6 +808,7 @@ def _make_freshness_fixture_repo(
         **os.environ,
         "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
     }
+    env.pop("PYTHONPATH", None)
     return repo, venv, env
 
 
@@ -803,6 +907,40 @@ def test_worktree_shared_venv_freshness_check_flag_bypasses_stale_env(
     assert result.returncode == 7
     assert "uv-reached" in result.stderr
     assert "Shared virtualenv is stale" not in result.stderr
+
+
+def test_worktree_shared_venv_standalone_mode_bypasses_stale_project_env(
+    tmp_path: Path,
+) -> None:
+    """--standalone reaches dependency-light tools without exposing project source."""
+    repo, venv, env = _make_freshness_fixture_repo(
+        tmp_path,
+        installed_scene="# stale install without normalize_integration_scheme\n",
+    )
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--standalone",
+            "--",
+            "python",
+            "scripts/dev/check_docs_evidence_integrity.py",
+            "--help",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 7
+    assert "uv-reached" in result.stderr
+    assert "Shared virtualenv is stale" not in result.stderr
+    assert "pythonpath=\n" in result.stderr
 
 
 def test_worktree_shared_venv_freshness_check_env_var_bypasses_stale_env(

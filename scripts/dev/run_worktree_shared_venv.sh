@@ -19,9 +19,16 @@ therefore runs a cheap freshness check comparing the installed `pysocialforce` p
 checkout's fast-pysf/pysocialforce source and fails early with an actionable message when they
 diverge. Refresh the owning checkout with `uv sync --all-extras` to clear the divergence.
 
+Standalone commands with a verified boundary that does not import project packages can use
+--standalone. That mode skips the project-source freshness check and does not add the worktree root
+to PYTHONPATH, while still reusing the shared environment for third-party dependencies.
+
 Options:
   --venv PATH            Shared virtualenv path exported as UV_PROJECT_ENVIRONMENT. Defaults to the
                          main checkout .venv for linked worktrees.
+  --standalone           Run a command that is verified not to import project packages. This skips
+                         the project-source freshness check and does not prepend the worktree root
+                         to PYTHONPATH.
   --no-freshness-check   Skip the shared-venv freshness check. Use only when you have confirmed the
                          reused env matches this checkout (e.g. an editable install that already
                          points at this source). Also skippable via
@@ -31,6 +38,8 @@ Options:
 Examples:
   scripts/dev/run_worktree_shared_venv.sh -- pytest tests/test_ci_script_contract.py -q
   scripts/dev/run_worktree_shared_venv.sh --venv ../robot_sf_ll7/.venv -- ruff check scripts/dev
+  scripts/dev/run_worktree_shared_venv.sh --standalone -- \
+    python scripts/dev/check_docs_evidence_integrity.py --files docs/dev_guide.md
 
 Use a full local .venv plus PR_READY_MODE=final for final PR proof; this helper is for quick,
 targeted validation in sibling worktrees.
@@ -39,6 +48,7 @@ EOF
 
 venv_override=""
 skip_freshness=""
+standalone=""
 cmd=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -49,6 +59,10 @@ while [[ $# -gt 0 ]]; do
       fi
       venv_override="$2"
       shift 2
+      ;;
+    --standalone)
+      standalone=1
+      shift
       ;;
     --no-freshness-check)
       skip_freshness=1
@@ -133,15 +147,16 @@ Shared virtualenv is stale relative to this checkout: $venv
   diverging module: pysocialforce/$rel_path
 The reused env (UV_NO_SYNC=1) lacks source present in fast-pysf/pysocialforce, so imports can
 fail mid-run with a confusing ImportError. Refresh the owning checkout with 'uv sync --all-extras',
-or rerun with --no-freshness-check (or ROBOT_SF_VENV_FRESHNESS_CHECK=skip) once you have confirmed
-the env matches this checkout.
+use --standalone for a command verified not to import project packages, or rerun with
+--no-freshness-check (or ROBOT_SF_VENV_FRESHNESS_CHECK=skip) once you have confirmed the env matches
+this checkout.
 EOF
       return 1
     fi
   done < <(find "$src_pkg" -type f -name '*.py' -print0)
 }
 
-if [[ -z "$skip_freshness" && "${ROBOT_SF_VENV_FRESHNESS_CHECK:-}" != "skip" ]]; then
+if [[ -z "$standalone" && -z "$skip_freshness" && "${ROBOT_SF_VENV_FRESHNESS_CHECK:-}" != "skip" ]]; then
   if ! check_shared_venv_freshness "$venv_path"; then
     exit 2
   fi
@@ -149,7 +164,9 @@ fi
 
 export UV_PROJECT_ENVIRONMENT="$venv_path"
 export UV_NO_SYNC=1
-export PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}"
+if [[ -z "$standalone" ]]; then
+  export PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}"
+fi
 
 if [[ -z "${COVERAGE_FILE:-}" && "$git_common_dir" != "$repo_root/.git" ]]; then
   worktree_id="$(printf '%s' "$repo_root" | git hash-object --stdin | cut -c1-12)"

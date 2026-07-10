@@ -596,19 +596,22 @@ def load_latency_rows(raw_rows_path: str | Path) -> list[dict[str, Any]]:
     """
     path = Path(raw_rows_path)
     rows: list[dict[str, Any]] = []
-    with path.open("r", encoding="utf-8") as handle:
-        for line_number, line in enumerate(handle, start=1):
-            stripped = line.strip()
-            if not stripped:
-                continue
-            try:
-                row = json.loads(stripped)
-            except json.JSONDecodeError as exc:
-                raise LatencyEvidenceError(
-                    f"raw rows file {path} has invalid JSON on line {line_number}: {exc}"
-                ) from exc
-            if isinstance(row, dict):
-                rows.append(row)
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, start=1):
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    row = json.loads(stripped)
+                except json.JSONDecodeError as exc:
+                    raise LatencyEvidenceError(
+                        f"raw rows file {path} has invalid JSON on line {line_number}: {exc}"
+                    ) from exc
+                if isinstance(row, dict):
+                    rows.append(row)
+    except OSError as exc:
+        raise LatencyEvidenceError(f"raw rows file {path} cannot be read: {exc}") from exc
     return rows
 
 

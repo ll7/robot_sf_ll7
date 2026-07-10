@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   asserts no TF/simulator-registry noise and startup within a 5 s budget for canonically
   lightweight sub-modules. No benchmark metric semantics were changed.
 
+* **issue #5091 fresh worktree virtualenv bootstrap now fails closed.** Added
+  `scripts/dev/bootstrap_worktree.sh`, a helper that runs `uv venv .venv` before
+  `uv sync --all-extras` and verifies `.venv/bin/python` exists afterward. Without the
+  explicit `uv venv .venv` step, `uv sync` in a fresh linked worktree may silently reuse the
+  main checkout's `.venv` without creating one locally, leaving `.venv/bin/activate` missing.
+  Updated `AGENTS.md` Fresh Worktree Bootstrap instructions to document the required order and
+  reference the new helper. Nine targeted contract tests added to
+  `tests/test_ci_script_contract.py`. No benchmark metric or schema changes.
+
 * **issue #4988 benchmark CLI surfaces typed errors (not raw tracebacks) for malformed input.**
   `robot_sf/benchmark/parquet_export.py` now raises the canonical `EpisodeRecordInputError`
   (a `ValueError` subclass, so backward-compatible) instead of a bare `ValueError` when a JSONL line

@@ -1,0 +1,165 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "arms": [
+    {
+      "availability_status": "available",
+      "benchmark_success": true,
+      "episode_count": 3,
+      "episodes": [
+        {
+          "min_clearance": 0.6431955343051303,
+          "near_misses": 0.0,
+          "seed": 101,
+          "status": "failure",
+          "time_to_collision_min": 5.4484065019778996,
+          "time_to_collision_min_status": "available"
+        },
+        {
+          "min_clearance": -0.02462745694562174,
+          "near_misses": 0.0,
+          "seed": 102,
+          "status": "collision",
+          "time_to_collision_min": null,
+          "time_to_collision_min_status": "unsupported_trace_too_short"
+        },
+        {
+          "min_clearance": 0.2655233386613918,
+          "near_misses": 5.0,
+          "seed": 103,
+          "status": "failure",
+          "time_to_collision_min": 2.5740957310004866,
+          "time_to_collision_min_status": "available"
+        }
+      ],
+      "execution_mode": "adapter",
+      "key": "weak_braking",
+      "max_linear_decel_m_s2": 0.25,
+      "metric_means": {
+        "min_clearance": 0.29469713867363345,
+        "near_misses": 1.6666666666666667,
+        "time_to_collision_min": 4.011251116489193
+      },
+      "metric_valid_counts": {
+        "min_clearance": 3,
+        "near_misses": 3,
+        "time_to_collision_min": 2
+      },
+      "outcome_counts": {
+        "collision": 1,
+        "failure": 2
+      },
+      "readiness_status": "adapter",
+      "stopping_distance_at_max_speed_m": 8.0
+    },
+    {
+      "availability_status": "available",
+      "benchmark_success": true,
+      "episode_count": 3,
+      "episodes": [
+        {
+          "min_clearance": 0.8561181822182826,
+          "near_misses": 0.0,
+          "seed": 101,
+          "status": "failure",
+          "time_to_collision_min": 5.478898405744022,
+          "time_to_collision_min_status": "available"
+        },
+        {
+          "min_clearance": -0.02462745694562174,
+          "near_misses": 0.0,
+          "seed": 102,
+          "status": "collision",
+          "time_to_collision_min": null,
+          "time_to_collision_min_status": "unsupported_trace_too_short"
+        },
+        {
+          "min_clearance": 0.2655233386613918,
+          "near_misses": 5.0,
+          "seed": 103,
+          "status": "failure",
+          "time_to_collision_min": 2.5740957310004866,
+          "time_to_collision_min_status": "available"
+        }
+      ],
+      "execution_mode": "adapter",
+      "key": "strong_braking",
+      "max_linear_decel_m_s2": 2.0,
+      "metric_means": {
+        "min_clearance": 0.3656713546446842,
+        "near_misses": 1.6666666666666667,
+        "time_to_collision_min": 4.0264970683722545
+      },
+      "metric_valid_counts": {
+        "min_clearance": 3,
+        "near_misses": 3,
+        "time_to_collision_min": 2
+      },
+      "outcome_counts": {
+        "collision": 1,
+        "failure": 2
+      },
+      "readiness_status": "adapter",
+      "stopping_distance_at_max_speed_m": 1.0
+    }
+  ],
+  "claim_boundary": "targeted-smoke diagnostic evidence only; this comparison does not calibrate braking, establish safety, or support paper/dissertation claims",
+  "comparison": {
+    "absolute_tolerance": 1e-09,
+    "activated_metrics": [
+      "min_clearance",
+      "time_to_collision_min"
+    ],
+    "changed_seed_counts": {
+      "min_clearance": 1,
+      "near_misses": 0,
+      "time_to_collision_min": 1
+    },
+    "comparable_seed_counts": {
+      "min_clearance": 3,
+      "near_misses": 3,
+      "time_to_collision_min": 2
+    },
+    "comparator_arm": "weak_braking",
+    "metric_deltas_stronger_minus_comparator": {
+      "min_clearance": 0.07097421597105075,
+      "near_misses": 0.0,
+      "time_to_collision_min": 0.015245951883061437
+    },
+    "signal_activated": true,
+    "stronger_braking_arm": "strong_braking"
+  },
+  "config_path": "configs/benchmarks/issue_5088_braking_authority_sensitivity_smoke.yaml",
+  "config_sha256": "4fd8617908344e302f582f66b60a334f61694340e325bb2eb03f3ddb48caccb2",
+  "evidence_tier": "targeted-smoke",
+  "fallback_degraded_exclusion": "fallback, degraded, partial-failure, failed, and not_available runs fail closed",
+  "issue": 5088,
+  "planner": {
+    "algo": "social_force",
+    "benchmark_profile": "baseline-safe"
+  },
+  "raw_artifact_classification": "local-scratch; not durable evidence",
+  "raw_artifact_root": "local-scratch-not-retained",
+  "raw_artifacts": {
+    "strong_braking": {
+      "relative_path": "arms/strong_braking/episodes.jsonl",
+      "row_count": 3,
+      "sha256": "8db737e1571711130ec8dfebbb144cd6122614928d8499131e0331b8d7986c01"
+    },
+    "weak_braking": {
+      "relative_path": "arms/weak_braking/episodes.jsonl",
+      "row_count": 3,
+      "sha256": "7ee628879bc7c6dc7e11e2e4ed9f0282174e9cae6beaf9da47a04419e753ebca"
+    }
+  },
+  "reproduction_command": "DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/tools/run_braking_authority_sensitivity_smoke.py --config configs/benchmarks/issue_5088_braking_authority_sensitivity_smoke.yaml --output '<fresh-artifact-dir>'",
+  "run_commit": "e4e5d8b6fcd92c3688f8c05a5d1a64addfad278f",
+  "scenario_name": "classic_cross_trap_high",
+  "scenario_path": "configs/scenarios/classic_interactions.yaml",
+  "schema_version": "braking-authority-sensitivity-report.v1",
+  "seeds": [
+    101,
+    102,
+    103
+  ],
+  "status": "signal_activated"
+}

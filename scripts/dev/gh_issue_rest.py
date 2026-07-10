@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shared REST-backed GitHub issue-with-comments helper for autonomous workflows.
+"""Shared GitHub issue-with-comments helper with a fail-closed REST fallback.
 
 Why this exists
 ---------------
@@ -10,12 +10,10 @@ versions with an error like::
     GraphQL: Projects (classic) is being deprecated ... (repository.issue.projectCards)
 
 That breaks autonomous workflows that read an issue and its comments before
-editing (see issue #5021). This module reads issues and comments through the
-REST API via ``gh api``, which never touches the deprecated classic-Projects
-GraphQL field, so callers get a deterministic issue-with-comments read
-regardless of the installed ``gh`` version. This aligns with the repository's
-batch-first GitHub workflow, which already prefers REST-backed reads for
-ordinary issue/PR objects (see ``docs/context/issue_713_batch_first_issue_workflow.md``).
+editing (see issues #5021 and #5092). The ``thread`` command first tries the
+concise GitHub CLI route and falls back to paginated REST reads only for the
+known ``repository.issue.projectCards`` failure. The existing ``view`` command
+and library functions remain explicit REST-backed interfaces.
 
 Public library API
 ------------------
@@ -23,17 +21,22 @@ Public library API
 - :func:`fetch_comments`        -- all comments via REST (paginated)
 - :func:`fetch_issue_with_comments` -- combined issue + comments payload
 - :func:`render_issue_plain`    -- gh-like human-readable thread rendering
+- :func:`read_complete_issue_thread` -- native read with targeted REST fallback
 
 CLI
 ---
 ::
 
+    python scripts/dev/gh_issue_rest.py thread <number> [--repo <owner/repo>]
+        [--max-comment-pages N]
+
     python scripts/dev/gh_issue_rest.py view <number> [--repo <owner/repo>]
         [--comments] [--json <fields>] [--plain] [--max-comment-pages N]
 
-Use this as a drop-in replacement for ``gh issue view <number> --comments`` in
-autonomous workflows. It fails closed (nonzero exit, clear stderr) when the REST
-read fails or returns malformed JSON.
+Use ``thread`` as a drop-in replacement for ``gh issue view <number> --comments``
+in autonomous workflows. It fails closed (nonzero exit, clear stderr) when a
+non-matching native error occurs or when the REST fallback cannot read the full
+thread.
 
 Field normalization
 -------------------
@@ -48,6 +51,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from typing import Any
@@ -55,6 +59,7 @@ from typing import Any
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_MAX_COMMENT_PAGES = 10
 COMMENTS_PAGE_SIZE = 100
+PROJECT_CARDS_ERROR_MARKER = "repository.issue.projectCards"
 
 # Fields exposed in the normalized issue payload, in a stable order.
 ISSUE_FIELDS = (
@@ -71,6 +76,33 @@ ISSUE_FIELDS = (
     "updated_at",
 )
 COMMENT_FIELDS = ("id", "user", "author_association", "created_at", "updated_at", "url", "body")
+
+
+def _gh_issue_view(
+    number: int, *, repo: str = DEFAULT_REPO, timeout: int = 30
+) -> subprocess.CompletedProcess:
+    """Run the concise native complete-thread read without raising on missing ``gh``."""
+    args = ["gh", "issue", "view", str(number), "--repo", repo, "--comments"]
+    try:
+        # ``gh issue view`` renders nothing when stdout is not a terminal.  Force
+        # its normal human-readable output so a successful native read is never
+        # mistaken for an empty complete thread in automation.
+        env = {**os.environ, "GH_FORCE_TTY": "100%", "GH_PAGER": "cat", "NO_COLOR": "1"}
+        return subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+            env=env,
+        )
+    except FileNotFoundError:
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=127,
+            stdout="",
+            stderr="gh CLI not found on PATH; install GitHub CLI (https://cli.github.com/)",
+        )
 
 
 def _gh_api(
@@ -304,6 +336,62 @@ def render_issue_plain(payload: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def read_complete_issue_thread(
+    number: int,
+    *,
+    repo: str = DEFAULT_REPO,
+    max_comment_pages: int = DEFAULT_MAX_COMMENT_PAGES,
+) -> dict[str, Any]:
+    """Read a complete issue thread, falling back to REST for ``projectCards`` failures.
+
+    Other native failures remain errors so authentication, authorization, and
+    connectivity problems are not masked by an unrelated fallback path.
+    """
+    native = _gh_issue_view(number, repo=repo)
+    if native.returncode == 0:
+        return {
+            "number": number,
+            "status": "ok",
+            "source": "gh_issue_view",
+            "text": native.stdout,
+        }
+
+    native_error = (
+        "\n".join(output for output in (native.stderr.strip(), native.stdout.strip()) if output)
+        or f"gh issue view exited with code {native.returncode}"
+    )
+    if PROJECT_CARDS_ERROR_MARKER not in native_error:
+        return {
+            "number": number,
+            "status": "error",
+            "source": "gh_issue_view",
+            "error": f"issue {number} thread read failed: {native_error}",
+        }
+
+    payload = fetch_issue_with_comments(
+        number,
+        repo=repo,
+        max_comment_pages=max_comment_pages,
+    )
+    if payload.get("status") != "ok":
+        fallback_error = str(payload.get("error", "unknown REST fallback error"))
+        return {
+            "number": number,
+            "status": "error",
+            "source": "rest_fallback",
+            "error": (
+                f"issue {number} native thread read hit {PROJECT_CARDS_ERROR_MARKER}; "
+                f"REST fallback failed: {fallback_error}"
+            ),
+        }
+    return {
+        "number": number,
+        "status": "ok",
+        "source": "rest_fallback",
+        "text": render_issue_plain(payload),
+    }
+
+
 def _select_fields(payload: dict[str, Any], fields: list[str]) -> dict[str, Any]:
     """Return only the requested fields from a normalized payload."""
     if not fields:
@@ -342,17 +430,48 @@ def _cmd_view(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_thread(args: argparse.Namespace) -> int:
+    """Implement the native-first complete-thread command."""
+    result = read_complete_issue_thread(
+        args.number,
+        repo=args.repo,
+        max_comment_pages=args.max_comment_pages,
+    )
+    if result.get("status") != "ok":
+        print(result.get("error", "unknown error"), file=sys.stderr)
+        return 1
+    sys.stdout.write(str(result["text"]))
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(
         prog="gh_issue_rest.py",
         description=(
-            "REST-backed GitHub issue-with-comments helper. Drop-in replacement "
-            "for 'gh issue view <number> --comments' that avoids the deprecated "
-            "classic-Projects GraphQL field (issue #5021)."
+            "GitHub issue-with-comments helper with a targeted REST fallback for "
+            "the deprecated classic-Projects GraphQL field (issues #5021 and #5092)."
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True)
+
+    thread = sub.add_parser(
+        "thread",
+        help="Read a complete thread via gh issue view, with targeted REST fallback.",
+    )
+    thread.add_argument("number", type=int, help="Issue number.")
+    thread.add_argument(
+        "--repo",
+        default=DEFAULT_REPO,
+        help=f"owner/repo to read (default: {DEFAULT_REPO}).",
+    )
+    thread.add_argument(
+        "--max-comment-pages",
+        type=int,
+        default=DEFAULT_MAX_COMMENT_PAGES,
+        help=f"Maximum REST fallback pages to read (each {COMMENTS_PAGE_SIZE} comments).",
+    )
+    thread.set_defaults(func=_cmd_thread)
 
     view = sub.add_parser("view", help="Read an issue and (optionally) its comments via REST.")
     view.add_argument("number", type=int, help="Issue number.")

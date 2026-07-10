@@ -58,10 +58,11 @@ Delegated queue-scout output is only route evidence until verified by the main a
 repository. Before using a scout recommendation to select, claim, or branch for an issue, run:
 
 ```bash
-gh issue view <number> --repo ll7/robot_sf_ll7 --json number,title,state,labels,body,comments,url
+uv run python scripts/dev/gh_issue_rest.py thread <number> --repo ll7/robot_sf_ll7
 ```
 
-or an equivalent REST read. Confirm the URL belongs to
+This tries the concise `gh issue view --comments` path and falls back to paginated REST only for the
+known `repository.issue.projectCards` GraphQL failure. Confirm the URL belongs to
 `ll7/robot_sf_ll7`, the issue is still open, ready labels/state are current, recent comments do not
 block or supersede the work, and no linked/open PR already covers it. Treat stale state, wrong
 repo-owner URLs, omitted recent comments, and duplicate PR coverage as expected scout failure modes.
@@ -71,8 +72,9 @@ repo-owner URLs, omitted recent comments, and duplicate PR coverage as expected 
 1. Run preflight for required local tooling and the Scout publication linter:
    `uv run python scripts/dev/check_skills.py --preflight gh-issue-autopilot`.
    Then refresh credentials and branch baseline (`gh auth status`, `git fetch origin`).
-2. Resolve queue candidate and re-check issue state with local `gh issue view` or REST evidence
-   before claim or branch, especially when a delegated scout proposed the issue.
+2. Resolve the queue candidate and re-check the complete issue thread with
+   `uv run python scripts/dev/gh_issue_rest.py thread <number> --repo ll7/robot_sf_ll7` before claim
+   or branch, especially when a delegated scout proposed the issue.
 3. Check open PRs for duplicate coverage using the linked issue, head branch/scope, and title.
    Stop or update routing when an existing PR covers the work.
 4. If issue statement is ambiguous:

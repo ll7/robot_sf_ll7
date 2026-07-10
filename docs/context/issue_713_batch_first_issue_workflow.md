@@ -46,7 +46,8 @@ Use the cheapest source of truth for the question:
 | --- | --- | --- |
 | Working tree, branch, changed files, merge base, commits | local `git` | Do not ask GitHub for state already present locally. |
 | Interactive issue, PR, and project inspection | GitHub MCP / GitHub app tools | Prefer this for ad-hoc triage, review context, commenting, and linking when authorized. Fall back to REST, local `git`, or narrow GraphQL when MCP/app tools are unavailable or would hide a costly GraphQL path. |
-| Issue body, labels, comments, assignees, open/closed state | `scripts/dev/gh_issue_rest.py view <n> --comments`, or REST via `gh api repos/ll7/robot_sf_ll7/issues/...` directly | Avoid `gh issue view/list` for autonomous workflows: those commands request the deprecated `repository.issue.projectCards` GraphQL field and fail on some `gh` versions (issue #5021). `gh_issue_rest.py` is the shared REST-backed issue-with-comments helper that never touches that field. |
+| Complete issue thread before implementation | `scripts/dev/gh_issue_rest.py thread <n>` | Tries concise `gh issue view --comments`, then falls back to paginated REST only for the known `repository.issue.projectCards` failure (issue #5092). |
+| Structured issue fields or explicit REST reads | `scripts/dev/gh_issue_rest.py view <n> --comments`, or REST via `gh api repos/ll7/robot_sf_ll7/issues/...` directly | The `view` interface remains REST-only and normalizes fields for machine consumers (issue #5021). |
 | PR metadata, branch refs, commits, workflow runs | REST via `gh api` | Poll sparingly; use event/check URLs from known PRs when available. |
 | Project #5 item status, priority, duration, reviewed date | GraphQL / `gh project item-*` | Projects v2 is GraphQL-only; batch and cache aggressively. |
 | Review-thread resolution or nested review data | GraphQL | Keep queries narrow and use known node IDs. |
@@ -58,14 +59,13 @@ Git command can answer the same question.
 
 `gh issue view <number> --comments` fails on some GitHub CLI versions because it requests the
 deprecated classic-Projects GraphQL field `repository.issue.projectCards` (issue #5021). Autonomous
-workflows that must read an issue together with its comment thread should use the shared REST-backed
-helper instead:
+workflows that must read an issue together with its comment thread should use the shared helper:
 
 ```bash
-# human-readable thread (drop-in for `gh issue view <n> --comments`)
-uv run python scripts/dev/gh_issue_rest.py view <number> --comments --plain
+# preferred complete read: native CLI first, targeted REST fallback
+uv run python scripts/dev/gh_issue_rest.py thread <number> --repo ll7/robot_sf_ll7
 
-# selected JSON fields, normalized to match `gh issue view --json`
+# explicit REST and normalized JSON fields for machine consumers
 uv run python scripts/dev/gh_issue_rest.py view <number> --json number title state url labels
 
 # library use for Python callers
@@ -73,9 +73,11 @@ from scripts.dev.gh_issue_rest import fetch_issue_with_comments
 payload = fetch_issue_with_comments(<number>)
 ```
 
-The helper reads through `gh api` (REST only), paginates comments, fails closed on errors or when a
-thread exceeds the page budget, and normalizes `state`/`url` to the shapes `gh issue view --json`
-consumers already expect.
+The `thread` command preserves successful native output. It falls back only when stderr names the
+known `repository.issue.projectCards` field; authentication, authorization, and other failures stay
+visible instead of being masked. The REST path preserves API comment order, paginates comments, and
+fails closed when a thread exceeds the page budget. The `view` command remains REST-only and
+normalizes `state`/`url` for `gh issue view --json` consumers.
 
 ## Project #5 Cache
 

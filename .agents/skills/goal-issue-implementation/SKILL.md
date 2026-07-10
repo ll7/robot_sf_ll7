@@ -225,13 +225,21 @@ If these local filters appear exhausted or dominated by blocked/SLURM-only work,
 broad queue scout before declaring the queue empty. Prefer a cheap local or Qwen scan plus one
 substantial Copilot pass when available; treat scout output as route evidence only until the main
 agent verifies it locally. Before selecting, claiming, branching for, or reporting a scout-proposed
-issue as ready, run:
+issue as ready, run the canonical complete-thread read (issue #5148):
 
 ```bash
-gh issue view <number> --repo ll7/robot_sf_ll7 --json number,title,state,labels,body,comments,url
+uv run python scripts/dev/gh_issue_rest.py thread <number> --repo ll7/robot_sf_ll7
 ```
 
-or an equivalent REST read. Confirm the repository
+This tries the concise `gh issue view --comments` path and falls back to paginated REST only for
+the known `repository.issue.projectCards` GraphQL failure that breaks `gh issue view --comments`
+and `gh issue view --json ...comments` on some GitHub CLI versions. For structured fields, use
+`uv run python scripts/dev/gh_issue_rest.py view <number> --json number title state url labels
+comments` (REST-only, normalized). Plain `gh issue view <number> --repo ll7/robot_sf_ll7 --json
+number,title,state,labels,body,comments,url` is NOT a reliable first-step read because it requests
+the deprecated classic-Projects field and exits before returning content on affected hosts; treat
+it as an equivalent REST read only when you have already confirmed it works on the host. Confirm
+the repository
 owner/name, open state, labels, body, recent comments, linked/covering PRs, and ready eligibility
 against current GitHub state. Known scout failure modes include stale open/closed/blocked state,
 wrong repo-owner URLs, missing recent comments, and duplicate PR coverage; do not acquire

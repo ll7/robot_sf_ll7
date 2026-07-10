@@ -24,7 +24,10 @@ decision trail. Keep the issue small, stable, and ready for implementation.
 
 ## Workflow
 
-1. Read issue state (`gh issue view`) and linked context (PRs, comments, labels, milestone).
+1. Read issue state with the canonical complete-thread read
+   `uv run python scripts/dev/gh_issue_rest.py thread <number> --repo ll7/robot_sf_ll7` (issue
+   #5148: plain `gh issue view --comments` fails on some GitHub CLI versions because it requests
+   the deprecated classic-Projects field) and linked context (PRs, comments, labels, milestone).
 2. Classify ambiguity:
    - Problem, scope, solution, or validation ambiguity.
 3. If multiple valid options exist, draft a minimal options set:

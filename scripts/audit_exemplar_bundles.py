@@ -259,6 +259,8 @@ def format_size(n: int) -> str:
 
 def assess_exemplar_budget(total_bytes: int) -> tuple[str, bool]:
     """Classify a total against the ratified cap and pre-commit migration trigger."""
+    if total_bytes < 0:
+        raise ValueError("total_bytes must not be negative")
     if total_bytes > EXEMPLAR_BUDGET_BYTES:
         return "EXCEEDS_BUDGET", True
     if total_bytes >= OFF_TREE_MIGRATION_TRIGGER_BYTES:

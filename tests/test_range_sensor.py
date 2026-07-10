@@ -674,8 +674,8 @@ def test_lidar_ray_scan_ranges_only_matches_first_element():
         np.testing.assert_array_equal(ranges_only, ranges_ref)
 
 
-def test_lidar_ray_scan_ranges_only_buffer_reuse():
-    """Repeated calls with different headings correctly overwrite the buffer."""
+def test_lidar_ray_scan_ranges_only_thread_local_buffer_reuse():
+    """Repeated calls with different headings correctly reuse the thread-local buffer."""
     obstacle_coords = np.array([[3.0, -1.0, 3.0, 1.0]])
     ped_coords = np.empty((0, 2), dtype=np.float64)
     occ = ContinuousOccupancy(
@@ -702,7 +702,7 @@ def test_lidar_ray_scan_ranges_only_buffer_reuse():
 
 
 def test_lidar_ray_scan_angles_isolated_from_ranges_only_buffer():
-    """Public lidar_ray_scan returned angles remain correct after buffer mutation."""
+    """Public lidar_ray_scan returned angles remain correct after thread-local buffer mutation."""
     obstacle_coords = np.array([[3.0, -1.0, 3.0, 1.0]])
     ped_coords = np.empty((0, 2), dtype=np.float64)
     occ = ContinuousOccupancy(
@@ -726,10 +726,10 @@ def test_lidar_ray_scan_angles_isolated_from_ranges_only_buffer():
     # First scan with full API
     _ranges_1, angles_1 = lidar_ray_scan(((1.0, 1.0), heading_1), occ, settings)
 
-    # Ranges-only call mutates private buffer
+    # Ranges-only call mutates the active thread's private buffer.
     lidar_ray_scan_ranges_only(((1.0, 1.0), heading_2), occ, settings)
 
-    # Second full scan — must not alias or be contaminated by the buffer
+    # Second full scan — must not alias or be contaminated by that buffer.
     _ranges_2, angles_2 = lidar_ray_scan(((1.0, 1.0), heading_1), occ, settings)
 
     expected = np.mod(heading_1 + settings.ray_offsets, 2.0 * np.pi)

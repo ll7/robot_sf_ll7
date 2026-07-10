@@ -9,6 +9,7 @@ residue-class fix as disjoint.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -21,6 +22,13 @@ from scripts.tools.pr_gate_scopes import (
     main,
     residue_scopes_disjoint,
     validate_active_gates,
+)
+
+LIVE_PRIVATE_OPS_PROMPT_MANIFEST = (
+    Path(__file__).resolve().parents[1]
+    / "fixtures"
+    / "pr_gate_scopes"
+    / "live_private_ops_prompt_manifest.json"
 )
 
 # --- ResidueScope construction / ownership ---------------------------------
@@ -129,6 +137,29 @@ def test_issue_5059_residue_fix_is_disjoint_and_passes():
     even, odd = gates[0].scope, gates[1].scope
     for pr in range(5037, 5058):
         assert not (even.owns(pr) and odd.owns(pr))
+
+
+def test_live_private_ops_prompt_manifest_is_disjoint_and_records_migration():
+    """The deployed prompt fixture has immutable scopes and the exact two-gate migration."""
+    payload = json.loads(LIVE_PRIVATE_OPS_PROMPT_MANIFEST.read_text(encoding="utf-8"))
+
+    gates = load_gates(payload)
+    report = validate_active_gates(gates)
+    assert report.ok is True
+    assert [(gate.gate_id, gate.scope) for gate in gates] == [
+        ("999997", ResidueScope(modulus=3, residue=0)),
+        ("999996", ResidueScope(modulus=3, residue=1)),
+        ("999995", ResidueScope(modulus=3, residue=2)),
+    ]
+
+    migration = {
+        entry["gate_id"]: (entry["legacy_scope"], entry["residue_scope"])
+        for entry in payload["migration_mapping"]
+    }
+    assert migration == {
+        "999997": ({"range": [5037]}, {"modulus": 2, "residue": 0}),
+        "999996": ({"range": [5047, 5057]}, {"modulus": 2, "residue": 1}),
+    }
 
 
 def test_two_residue_gates_same_residue_overlap_reported_with_witness():

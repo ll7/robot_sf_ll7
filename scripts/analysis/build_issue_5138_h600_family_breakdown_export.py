@@ -367,7 +367,6 @@ def _write_csv(path: Path, rows: list[dict[str, str]], columns: tuple[str, ...])
     """Write ``rows`` to ``path`` with a fixed column schema."""
 
     with path.open("w", newline="", encoding="utf-8") as handle:
-        handle.write(f"# {REVIEW_MARKER}\n")
         writer = csv.DictWriter(handle, fieldnames=list(columns), lineterminator="\n")
         writer.writeheader()
         for row in rows:

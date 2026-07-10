@@ -246,7 +246,7 @@ def _make_bundle(tmp_path: Path) -> tuple[Path, list[RunSource]]:
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
     with path.open("r", newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(line for line in handle if not line.startswith("#")))
+        return list(csv.DictReader(handle))
 
 
 def test_build_export_produces_all_artifacts_with_release_schema(tmp_path: Path) -> None:
@@ -376,22 +376,29 @@ def test_readme_section_appended_and_is_idempotent(tmp_path: Path) -> None:
     ) == 1
 
 
-def test_generated_evidence_files_carry_review_markers(tmp_path: Path) -> None:
-    """Generated durable evidence remains visibly marked for review."""
+def test_generated_evidence_preserves_csv_schema_and_records_review_provenance(
+    tmp_path: Path,
+) -> None:
+    """CSV exports retain their schema while the manifest records their review marker."""
     output_dir, runs = _make_bundle(tmp_path)
     build_export(output_dir, runs)
-    for name in (
-        "README.md",
-        "SHA256SUMS",
+    manifest = json.loads((output_dir / "source_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert set(manifest["issue_5138_family_breakdown_export"]["generated_outputs"]) == {
         "h600_scenario_cell_breakdown.csv",
         "h600_scenario_cell_breakdown.md",
         "h600_scenario_family_breakdown.csv",
         "h600_scenario_family_breakdown.md",
         "h600_universally_hard_families_summary.csv",
         "h600_universally_hard_families_summary.md",
-        "source_manifest.json",
+    }
+    for name, columns in (
+        ("h600_scenario_cell_breakdown.csv", CELL_COLUMNS),
+        ("h600_scenario_family_breakdown.csv", FAMILY_COLUMNS),
+        ("h600_universally_hard_families_summary.csv", HARD_SUMMARY_COLUMNS),
     ):
-        assert "AI-GENERATED NEEDS-REVIEW" in (output_dir / name).read_text(encoding="utf-8")
+        with (output_dir / name).open(newline="", encoding="utf-8") as handle:
+            assert tuple(csv.DictReader(handle).fieldnames or ()) == columns
 
 
 def test_build_export_fails_closed_when_canonical_breakdown_missing(tmp_path: Path) -> None:

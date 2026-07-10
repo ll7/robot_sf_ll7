@@ -1,4 +1,3 @@
-# AI-GENERATED NEEDS-REVIEW
 run_label,job_id,scenario_matrix_hash,planner_key,algo,scenario_family,episodes,success_mean,near_misses_mean,collisions_mean,zero_completion
 confirm,13268,c10df617a87c,goal,goal,bottleneck,12,0.1667,14.4167,0.8333,no
 confirm,13268,c10df617a87c,goal,goal,cross_trap,9,0.0000,7.3333,1.0000,yes

@@ -2166,6 +2166,7 @@ def _apply_simulation_overrides(
         config.sim_config.max_peds_per_group = int(overrides["max_peds_per_group"])
     for attr in (
         "peds_speed_mult",
+        "pedestrian_integration_scheme",
         "ped_radius",
         "pedestrian_uncertainty_envelope_enabled",
         "pedestrian_uncertainty_alpha_mps",

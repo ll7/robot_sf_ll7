@@ -12,6 +12,21 @@ Line2D = tuple[float, float, float, float]
 Point2D = tuple[float, float]
 Group = list[int]
 
+EXPLICIT_EULER = "explicit_euler"
+SEMI_IMPLICIT_EULER = "semi_implicit_euler"
+SUPPORTED_INTEGRATION_SCHEMES = frozenset({EXPLICIT_EULER, SEMI_IMPLICIT_EULER})
+
+
+def normalize_integration_scheme(value: str | None) -> str:
+    """Return a supported pedestrian integration scheme or raise a clear error."""
+    if value is None:
+        value = SEMI_IMPLICIT_EULER
+    normalized = str(value).strip()
+    if normalized in SUPPORTED_INTEGRATION_SCHEMES:
+        return normalized
+    supported = ", ".join(sorted(SUPPORTED_INTEGRATION_SCHEMES))
+    raise ValueError(f"Unsupported integration_scheme {value!r}. Supported values: {supported}.")
+
 
 class PedState:
     """Track pedestrian kinematic state and optional social groups."""
@@ -26,6 +41,7 @@ class PedState:
         """
         self.default_tau = config.tau
         self.d_t = config.dt_secs
+        self.integration_scheme = normalize_integration_scheme(config.integration_scheme)
         self.agent_radius = config.agent_radius
         self.max_speed_multiplier = config.max_speed_multiplier
 
@@ -107,15 +123,18 @@ class PedState:
             force: Per-pedestrian force vectors.
             groups: Optional updated group assignments.
         """
-        # desired velocity
-        desired_velocity = self.vel() + self.d_t * force
+        previous_velocity = self.vel().copy()
+        desired_velocity = previous_velocity + self.d_t * force
         desired_velocity = self.capped_velocity(desired_velocity, self.max_speeds)
         # stop when arrived
         # desired_velocity[stateutils.desired_directions(self.state)[1] < 0.5] = [0, 0]
 
         # update state
         next_state = self.state
-        next_state[:, 0:2] += desired_velocity * self.d_t
+        position_velocity = (
+            previous_velocity if self.integration_scheme == EXPLICIT_EULER else desired_velocity
+        )
+        next_state[:, 0:2] += position_velocity * self.d_t
         next_state[:, 2:4] = desired_velocity
         next_groups = groups if groups is not None else self.groups
         self.update(next_state, next_groups)

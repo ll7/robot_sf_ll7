@@ -4,6 +4,8 @@ from dataclasses import dataclass, field, replace
 from math import ceil, isfinite
 from typing import Any
 
+from pysocialforce.scene import normalize_integration_scheme
+
 from robot_sf.ped_npc.adversial_ped_force import AdversarialPedForceConfig
 from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
 from robot_sf.sim.pedestrian_model_variants import (
@@ -169,6 +171,9 @@ class SimulationSettings:
     time_per_step_in_secs: float = 0.1
     """Time per step in seconds"""
 
+    pedestrian_integration_scheme: str = "semi_implicit_euler"
+    """Pedestrian position-update scheme; defaults to the historical semi-implicit update."""
+
     peds_speed_mult: float = 1.3
     """Pedestrian speed multiplier"""
 
@@ -276,6 +281,9 @@ class SimulationSettings:
         # Check that the time per step is positive
         if self.time_per_step_in_secs <= 0:
             raise ValueError("Step time mustn't be negative or zero!")
+        self.pedestrian_integration_scheme = normalize_integration_scheme(
+            self.pedestrian_integration_scheme
+        )
         # Check that the pedestrian speed multiplier is positive
         if self.peds_speed_mult <= 0:
             raise ValueError("Pedestrian speed mustn't be negative or zero!")

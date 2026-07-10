@@ -70,3 +70,10 @@ def test_ppo_training_factory_supports_threaded_vec_env() -> None:
     env_fns = [_ppo_training_env_factory(300), _ppo_training_env_factory(301)]
 
     _assert_vec_env_reset_step_close(ThreadedVecEnv(env_fns))
+
+
+def test_ppo_training_factory_supports_threaded_lidar_batch_vec_env() -> None:
+    """Primary PPO rollouts should execute the opt-in coordinated LiDAR batch path."""
+    env_fns = [_ppo_training_env_factory(400), _ppo_training_env_factory(401)]
+
+    _assert_vec_env_reset_step_close(ThreadedVecEnv(env_fns, batch_lidar=True))

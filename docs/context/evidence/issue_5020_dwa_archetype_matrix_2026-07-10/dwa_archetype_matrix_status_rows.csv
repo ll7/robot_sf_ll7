@@ -1,0 +1,25 @@
+# AI-GENERATED NEEDS-REVIEW
+scenario_id,archetype,density,seeds,n_episodes,route_complete,timeouts_max_steps,collisions,median_steps,median_avg_speed_mps,median_min_clearance_m
+classic_bottleneck_low,bottleneck,low,131;132;133,3,0,3,0,100,0.6854,1.6031
+classic_bottleneck_medium,bottleneck,medium,131;132;133,3,0,3,0,100,0.6854,1.6031
+classic_bottleneck_high,bottleneck,high,131;132;133,3,0,3,0,100,0.6854,1.6031
+classic_realworld_double_bottleneck_high,bottleneck,high,201;202;203,3,0,3,0,100,0.6854,4.5910
+classic_station_platform_medium,station_platform,medium,301;302;303,3,0,2,1,100,0.6854,3.1365
+classic_cross_trap_low,cross_trap,low,101;102;103,3,0,3,0,100,0.6854,4.6575
+classic_cross_trap_medium,cross_trap,medium,101;102;103,3,0,3,0,100,0.6854,4.6575
+classic_cross_trap_high,cross_trap,high,101;102;103,3,0,2,1,100,0.6854,4.6575
+classic_doorway_low,doorway,low,141;142;143,3,0,2,1,100,0.6854,1.4081
+classic_doorway_medium,doorway,medium,141;142;143,3,0,2,1,100,0.6854,1.2535
+classic_doorway_high,doorway,high,141;142;143,3,0,2,1,100,0.6854,1.3200
+classic_group_crossing_low,group_crossing,low,171;172;173,3,0,3,0,100,0.6854,2.5731
+classic_group_crossing_medium,group_crossing,medium,171;172;173,3,0,3,0,100,0.6854,2.5731
+classic_group_crossing_high,group_crossing,high,171;172;173,3,0,3,0,100,0.6854,2.5731
+classic_head_on_corridor_low,head_on_corridor,low,111;112;113,3,0,3,0,100,0.6854,1.7189
+classic_head_on_corridor_medium,head_on_corridor,medium,111;112;113,3,0,3,0,100,0.6854,1.7189
+classic_merging_low,merging,low,151;152;153,3,0,3,0,100,0.6854,1.7839
+classic_merging_medium,merging,medium,151;152;153,3,0,3,0,100,0.6854,1.7839
+classic_overtaking_low,overtaking,low,121;122;123,3,0,2,1,100,0.6689,1.2451
+classic_overtaking_medium,overtaking,medium,121;122;123,3,0,2,1,100,0.6689,1.2451
+classic_t_intersection_low,t_intersection,low,161;162;163,3,0,0,3,78,0.5977,0.9937
+classic_t_intersection_medium,t_intersection,medium,161;162;163,3,0,0,3,78,0.5977,0.9937
+classic_urban_crossing_medium,crossing,medium,101;102;103,3,0,3,0,100,0.6854,2.6513

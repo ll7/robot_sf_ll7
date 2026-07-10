@@ -244,6 +244,14 @@ run_phase() {
     typecheck)
       echo "Running ty in advisory mode (--exit-zero); findings are reported but do not fail this phase."
       uvx ty check . --exit-zero
+      # Advisory downward ratchet over the ty baseline (issue #5004). Surfaced but
+      # non-gating here to match the advisory --exit-zero posture above; promote to
+      # gating via the dedicated .github/workflows/ty-advisory-ratchet.yml workflow.
+      if uv run python scripts/dev/ty_advisory_ratchet.py --check; then
+        echo "ty advisory ratchet: held (no per-module increase)."
+      else
+        echo "ty advisory ratchet: net-new findings detected (advisory, not failing this phase); see scripts/dev/ty_advisory_ratchet.py."
+      fi
       ;;
     test)
       "$SCRIPT_DIR/check_event_ledger_reconciliation_guard.sh"

@@ -1,0 +1,34 @@
+[
+  {
+    "episode_id": "golden-orca-corridor-17",
+    "param_path": "algo",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": null,
+    "value_text": "orca"
+  },
+  {
+    "episode_id": "golden-orca-crossing-23",
+    "param_path": "algo",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": null,
+    "value_text": "orca"
+  },
+  {
+    "episode_id": "golden-social-force-corridor-17",
+    "param_path": "algo",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": null,
+    "value_text": "social_force"
+  },
+  {
+    "episode_id": "golden-social-force-crossing-23",
+    "param_path": "algo",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": null,
+    "value_text": "social_force"
+  }
+]

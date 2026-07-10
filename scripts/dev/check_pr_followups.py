@@ -77,6 +77,10 @@ FREEFORM_DOMAIN_TRIGGER_RE = re.compile(
 # because describing the absence of a claim is the opposite of making one. Without this, honestly
 # stating an evidence boundary in a PR body would (perversely) require domain approval.
 _NEGATED_TRIGGER_RE = re.compile(r"\b(no|not|without|never|non)\b[\s\w-]{0,24}$", re.IGNORECASE)
+# Free-form triggers are prose *mentions* of an evidence concept (e.g. a docs page that discusses
+# "benchmark interpretation"), a weaker signal than a filled Research Result Guidance declaration.
+# Only free-form triggers may be opted out of with the documented docs-only/not-required branch.
+_FREEFORM_TRIGGER_PREFIX = "free-form evidence marker: "
 BOT_ONLY_MARKERS = (
     "auto-generated comment: release notes by coderabbit.ai",
     "auto-generated comment: summarize by coderabbit.ai",
@@ -328,6 +332,57 @@ def _domain_value_not_required(text: str) -> bool:
     return any(_has_value_prefix(value, prefix) for prefix in DOMAIN_APPROVAL_NOT_REQUIRED)
 
 
+def _domain_required_opts_out(required: str) -> bool:
+    """Return whether the 'Required for this PR' field explicitly opts out with a reason.
+
+    The PR template documents ``Required for this PR: no - reason`` as the docs-only branch. A bare
+    empty value or an unselected ``yes / no`` option list is *not* a deliberate opt-out, so those
+    stay on the strict path that demands an explicit answer.
+    """
+    if _is_empty_or_option_placeholder(required):
+        return False
+    value = _clean_value(required).lower()
+    return any(
+        _has_value_prefix(value, prefix)
+        for prefix in ("no", "n/a", "na", "not applicable", "docs-only", "docs only")
+    )
+
+
+def _domain_status_opts_out(status_value: str) -> bool:
+    """Return whether an approval status explicitly selects the not-required/waived branch."""
+    if re.search(r"\bnot\s+required\b", status_value) or re.search(r"\bwaiv", status_value):
+        return True
+    return status_value in {"na", "n/a", "not applicable", "none"}
+
+
+def _domain_triggers_are_freeform_only(sensitive_terms: tuple[str, ...]) -> bool:
+    """Return whether every trigger is a weak free-form prose mention (never a structured field).
+
+    Structured Research Result Guidance declarations (a filled ``Evidence tier`` / ``Result
+    classification``) are a strong self-declaration and must keep the strict approval path. Only
+    prose *mentions* of an evidence concept are eligible for the docs-only opt-out.
+    """
+    return bool(sensitive_terms) and all(
+        term.startswith(_FREEFORM_TRIGGER_PREFIX) for term in sensitive_terms
+    )
+
+
+def _is_docs_only_domain_opt_out(
+    sensitive_terms: tuple[str, ...], required: str, status_value: str
+) -> bool:
+    """Return whether the documented docs-only / not-required approval opt-out applies.
+
+    True only when every trigger is a weak free-form prose mention, the ``Required for this PR``
+    field explicitly opts out with a reason, and the ``Status`` selects the not-required/waived
+    branch. This keeps structured Research Result Guidance declarations on the strict path.
+    """
+    return (
+        _domain_triggers_are_freeform_only(sensitive_terms)
+        and _domain_required_opts_out(required)
+        and _domain_status_opts_out(status_value)
+    )
+
+
 def _has_value_prefix(value: str, prefix: str) -> bool:
     """Return whether *value* starts with *prefix* as a standalone token."""
     if not value.startswith(prefix):
@@ -341,7 +396,7 @@ def _domain_approval_triggers(body: str) -> tuple[str, ...]:
     section = _extract_section(body, "Research Result Guidance")
     if not section:
         return tuple(
-            f"free-form evidence marker: {match.group(1)}"
+            f"{_FREEFORM_TRIGGER_PREFIX}{match.group(1)}"
             for match in FREEFORM_DOMAIN_TRIGGER_RE.finditer(body)
             if not _NEGATED_TRIGGER_RE.search(body[: match.start()])
         )
@@ -508,6 +563,35 @@ def analyze_body(body: str, *, source: str, require_open_issues: bool = False) -
     )
 
 
+def _domain_status_report(
+    status_value: str,
+    *,
+    source: str,
+    sensitive_terms: tuple[str, ...],
+    required: str,
+    approval_status: str,
+    approval_note: str,
+    checklist_errors: tuple[str, ...],
+) -> DomainApprovalReport | None:
+    """Return a report when the approval status is not a clean approved/waived value, else None."""
+    unapproved = re.search(r"\b(blocked?|blocker|no|not|pending|awaiting)\b", status_value)
+    if unapproved or not re.search(r"\b(approved?|waived|waiver)\b", status_value):
+        pending = bool(re.search(r"\b(blocked?|blocker|pending|awaiting)\b", status_value))
+        return DomainApprovalReport(
+            status="pending_domain_approval" if pending else "invalid_domain_approval_status",
+            source=source,
+            sensitive_terms=sensitive_terms,
+            required=required,
+            approval_status=approval_status,
+            approval_note=approval_note,
+            checklist_errors=checklist_errors,
+            message=(
+                "Domain-aware approval status must say approved or waived before final readiness."
+            ),
+        )
+    return None
+
+
 def analyze_domain_approval(body: str, *, source: str) -> DomainApprovalReport:
     """Return whether domain-sensitive PR bodies carry explicit approval or blocker status."""
     sensitive_terms = _domain_approval_triggers(body)
@@ -551,6 +635,26 @@ def analyze_domain_approval(body: str, *, source: str) -> DomainApprovalReport:
     required_value = _clean_value(required).lower()
     status_value = _clean_value(approval_status).lower()
     note_value = _clean_value(approval_note)
+
+    # Documented docs-only / not-required branch. A PR that only *mentions* an evidence concept in
+    # prose (a free-form trigger, e.g. a docs page discussing "benchmark interpretation") may take
+    # the template's opt-out: `Required for this PR: no - reason` with `Status: not required`. A
+    # structured Research Result Guidance declaration is a stronger self-declaration and stays on the
+    # strict path below, so this cannot be used to wave through a genuinely evidence-sensitive PR.
+    if _is_docs_only_domain_opt_out(sensitive_terms, required, status_value):
+        return DomainApprovalReport(
+            status="ok",
+            source=source,
+            sensitive_terms=sensitive_terms,
+            required=required,
+            approval_status=approval_status,
+            approval_note=note_value,
+            checklist_errors=(),
+            message=(
+                "Domain-aware approval is explicitly not required for this docs-only/support PR; "
+                "the evidence term is a prose mention, not a structured evidence declaration."
+            ),
+        )
 
     if _is_empty_or_option_placeholder(required) or any(
         _has_value_prefix(required_value, prefix)
@@ -603,36 +707,17 @@ def analyze_domain_approval(body: str, *, source: str) -> DomainApprovalReport:
                 f"{', '.join(checklist_errors)}."
             ),
         )
-    if re.search(r"\b(blocked?|blocker|no|not|pending|awaiting)\b", status_value):
-        return DomainApprovalReport(
-            status=(
-                "pending_domain_approval"
-                if re.search(r"\b(blocked?|blocker|pending|awaiting)\b", status_value)
-                else "invalid_domain_approval_status"
-            ),
-            source=source,
-            sensitive_terms=sensitive_terms,
-            required=required,
-            approval_status=approval_status,
-            approval_note=approval_note,
-            checklist_errors=checklist_errors,
-            message=(
-                "Domain-aware approval status must say approved or waived before final readiness."
-            ),
-        )
-    if not re.search(r"\b(approved?|waived|waiver)\b", status_value):
-        return DomainApprovalReport(
-            status="invalid_domain_approval_status",
-            source=source,
-            sensitive_terms=sensitive_terms,
-            required=required,
-            approval_status=approval_status,
-            approval_note=approval_note,
-            checklist_errors=checklist_errors,
-            message=(
-                "Domain-aware approval status must say approved or waived before final readiness."
-            ),
-        )
+    status_report = _domain_status_report(
+        status_value,
+        source=source,
+        sensitive_terms=sensitive_terms,
+        required=required,
+        approval_status=approval_status,
+        approval_note=approval_note,
+        checklist_errors=checklist_errors,
+    )
+    if status_report is not None:
+        return status_report
 
     return DomainApprovalReport(
         status="ok",

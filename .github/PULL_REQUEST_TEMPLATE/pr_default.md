@@ -43,7 +43,9 @@ Required when `Evidence tier` is not `NA`/`docs-only`, or `Result classification
 Use this for PRs that change evidence classification, experimental comparison methodology, figure
 eligibility, benchmark interpretation, or paper-facing claim surfaces. This approval concerns
 experimental validity and claim boundaries; normal implementation integrity still comes from code
-review, tests, and CI.
+review, tests, and CI. Docs-only/support PRs that only *mention* an evidence concept in prose (and do
+not fill a concrete `Evidence tier`/`Result classification`) may opt out with
+`Required for this PR: no - reason` and `Status: not required`.
 
 - Required for this PR: yes / no - reason
 - Domains reviewed: evidence classification / experimental comparison / figure eligibility / benchmark interpretation / paper-facing claims / NA

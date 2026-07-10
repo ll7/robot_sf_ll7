@@ -1083,6 +1083,8 @@ parser-smoke validation for `maps/svg_maps/socnavbench/socnavbench_eth.svg`.
   [issue_1436_reproducibility_flaky_acceptance.md](issue_1436_reproducibility_flaky_acceptance.md)
 * Issue #1363 Learned Local Policy Eligibility Checklist:
   [policy_search/contracts/learned_local_policy_eligibility.md](policy_search/contracts/learned_local_policy_eligibility.md)
+* Issue #5004 ty advisory diagnostic baseline + per-module downward ratchet:
+  [issue_5004_ty_advisory_ratchet.md](issue_5004_ty_advisory_ratchet.md)
 * Note-maintenance skill:
   [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 

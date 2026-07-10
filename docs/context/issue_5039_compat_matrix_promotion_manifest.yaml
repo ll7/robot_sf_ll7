@@ -26,13 +26,14 @@ promotion_gate:
   runtime_budget_minutes: 30
 
 # --- Recorded hosted-run evidence (empty => blocked / fail-closed) ---
-# Populate one entry per green hosted run once PR #5037 is merged and running on main.
+# Populate one entry per eligible green hosted run from the advisory matrix.
 # Each entry: {os, python, run_url, conclusion: success|failure, duration_minutes, sha}
 recorded_runs: []
 
 # --- Coverage floor decision (issue acceptance criterion) ---
 coverage_floor:
   status: split_recommended
+  follow_up_issue: 5071
   rationale: >-
     An absolute coverage floor is an independent CI policy decision -- which floor
     percentage, measured over which packages, blocking vs advisory -- orthogonal to matrix
@@ -45,14 +46,13 @@ coverage_floor:
 state:
   status: blocked
   blockers_remaining:
-    - "PR #5037 (advisory compat-matrix) is not merged; the job does not yet exist on main."
-    - "No hosted green-run evidence recorded for any of the four required cells."
+    - "No eligible hosted green-run evidence is recorded for any of the four required cells."
   next_empirical_action: >-
-    Merge PR #5037, let the advisory compat-matrix run on main, collect >= 3 green hosted runs
-    per required cell within the 30-minute budget, populate recorded_runs above, then run
+    Collect >= 3 green hosted runs per required cell within the 30-minute budget, populate
+    recorded_runs above, then run
     scripts/ci/check_compat_matrix_promotion_readiness.py --require-ready and open the promotion
-    PR that adds compat-matrix to the required aggregate CI gate (and, per the coverage_floor
-    decision, a separately linked coverage-floor issue).
+    PR that adds compat-matrix to the required aggregate CI gate. The separately tracked absolute
+    coverage-floor policy is issue #5071.
   forbidden_actions_confirmed:
     compute_submit: false
     merge: false

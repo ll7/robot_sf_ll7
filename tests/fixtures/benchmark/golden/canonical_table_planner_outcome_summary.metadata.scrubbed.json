@@ -1,0 +1,34 @@
+{
+  "columns": [
+    "planner_key",
+    "execution_mode",
+    "success_mean",
+    "collisions_mean",
+    "near_misses_mean",
+    "snqi_mean",
+    "runtime_mean_sec",
+    "row_status"
+  ],
+  "command": "benchmark-golden-harness#5014",
+  "description": "Planner-level outcome summary with row status preserved.",
+  "formats": [
+    "csv",
+    "md",
+    "tex"
+  ],
+  "outputs": {
+    "csv": "planner_outcome_summary.csv",
+    "md": "planner_outcome_summary.md",
+    "tex": "planner_outcome_summary.tex"
+  },
+  "precision": 4,
+  "row_count": 2,
+  "schema_version": "benchmark_canonical_table_export.v1",
+  "sort_by": [
+    "planner_key",
+    "execution_mode",
+    "row_status"
+  ],
+  "source_files": [],
+  "table_id": "planner_outcome_summary"
+}

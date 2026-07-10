@@ -106,7 +106,9 @@ class ObstacleForceConfig:
     Attributes:
         factor: Scaling factor for obstacle force magnitude.
         sigma: Additional radius inflation term for obstacle interaction.
-        threshold: Base distance offset used in obstacle activation logic.
+        threshold: Additive distance offset (m), subtracted like a radius from
+            the pedestrian-obstacle distance. Negative values inflate the
+            effective distance and soften near-wall repulsion.
     """
 
     factor: float = 10.0

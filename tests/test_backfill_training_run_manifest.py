@@ -99,3 +99,13 @@ def test_backfill_dry_run_writes_nothing(tmp_path: Path) -> None:
     _make_run_tree(tmp_path, run_id)
     target = backfill.backfill(run_dir=tmp_path, dry_run=True)
     assert not target.exists()
+
+
+def test_backfill_rejects_object_eval_by_scenario_artifact(tmp_path: Path) -> None:
+    """The retained evaluation artifact must preserve its row-array contract."""
+    run_id = "ppo_expert_demo_20260622T142053"
+    bench = _make_run_tree(tmp_path, run_id)
+    _write(bench / "ppo_imitation" / "eval_by_scenario" / f"{run_id}.json", {})
+
+    with pytest.raises(backfill.BackfillError, match="Expected JSON array"):
+        backfill.backfill(run_dir=tmp_path)

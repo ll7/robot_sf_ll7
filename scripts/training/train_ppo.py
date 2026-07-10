@@ -42,7 +42,7 @@ try:  # pragma: no cover - imported lazily in tests when available
     from stable_baselines3 import PPO
     from stable_baselines3.common.callbacks import BaseCallback, CallbackList
     from stable_baselines3.common.logger import configure as configure_sb3_logger
-    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecEnv
 except ImportError as exc:  # pragma: no cover - surfaced during runtime usage
     raise RuntimeError(
         "Stable-Baselines3 must be installed to run expert PPO training.",
@@ -98,6 +98,7 @@ from robot_sf.training.snqi_utils import (
     compute_training_snqi,
     resolve_training_snqi_context,
 )
+from robot_sf.training.threaded_vec_env import ThreadedVecEnv
 
 MetricSamples = dict[str, list[float]]
 
@@ -551,13 +552,13 @@ def _resolve_num_envs(config: ExpertTrainingConfig) -> int:
 
 
 def _resolve_worker_mode(config: ExpertTrainingConfig, num_envs: int) -> str:
-    """Resolve worker mode ('dummy' or 'subproc') based on config and env count."""
+    """Resolve worker mode based on config and environment count."""
     mode = config.worker_mode.lower()
     if mode == "auto":
         return "subproc" if num_envs > 1 else "dummy"
-    if mode not in {"dummy", "subproc"}:
-        raise ValueError("worker_mode must be one of {'auto', 'dummy', 'subproc'}")
-    if mode == "subproc" and num_envs == 1:
+    if mode not in {"dummy", "subproc", "threaded"}:
+        raise ValueError("worker_mode must be one of {'auto', 'dummy', 'subproc', 'threaded'}")
+    if mode in {"subproc", "threaded"} and num_envs == 1:
         return "dummy"
     return mode
 
@@ -1928,7 +1929,7 @@ def _execute_training(
     )
 
 
-def _collect_scenario_coverage(vec_env: DummyVecEnv | SubprocVecEnv | None) -> dict[str, int]:
+def _collect_scenario_coverage(vec_env: VecEnv | None) -> dict[str, int]:
     """Aggregate scenario coverage counts from scenario-switching workers."""
     coverage: dict[str, int] = {}
     if vec_env is None:
@@ -2515,7 +2516,7 @@ def _init_training_model(
     run_id: str,
     tensorboard_log: Path | None,
     resume_from: Path | None,
-) -> tuple[PPO, DummyVecEnv | SubprocVecEnv, Path | None, int, str]:
+) -> tuple[PPO, VecEnv, Path | None, int, str]:
     """Initialize PPO and the vectorized training environment.
 
     If ``resume_from`` is provided, load the checkpoint and continue training.
@@ -2552,6 +2553,8 @@ def _init_training_model(
     if worker_mode == "subproc":
         with _subproc_worker_log_environment(worker_mode):
             vec_env = SubprocVecEnv(env_fns, start_method="spawn")
+    elif worker_mode == "threaded":
+        vec_env = ThreadedVecEnv(env_fns)
     else:
         vec_env = DummyVecEnv(env_fns)
     policy_class, policy_kwargs, critic_profile = _resolve_policy_selection(config)

@@ -49,12 +49,36 @@ def test_variant_specs_bind_all_declared_fidelity_axes_to_runtime_effects() -> N
     axes = {variant.axis for variant in variants if not variant.baseline}
     bindings = {variant.runtime_binding for variant in variants}
 
-    assert {"integration_timestep", "social_force_speed_archetypes", "observation_noise"} <= axes
+    assert {
+        "integration_timestep",
+        "social_force_speed_archetypes",
+        "observation_noise",
+        "control_action_latency",
+    } <= axes
     assert "clearance_radius" in axes
     assert "sim_config.time_per_step_in_secs" in bindings
     assert "sim_config.archetype_composition" in bindings
     assert "planner_observation_noise" in bindings
+    assert "sim_config.action_latency_steps" in bindings
     assert "unsupported" not in bindings
+
+
+def test_action_latency_variant_binds_to_the_environment_configuration() -> None:
+    """The latency campaign axis changes the env-loop queue rather than metadata only."""
+    config = SimpleNamespace(sim_config=SimpleNamespace(action_latency_steps=0))
+    variant = campaign_runner.VariantSpec(
+        axis="control_action_latency",
+        key="control_action_latency__three_step_300ms",
+        source_key="three_step_300ms",
+        baseline=False,
+        patch={"sim_config": {"action_latency_steps": 3}},
+        observation_noise={},
+        runtime_binding="sim_config.action_latency_steps",
+    )
+
+    campaign_runner.apply_variant(config, variant, seed=111)
+
+    assert config.sim_config.action_latency_steps == 3
 
 
 def test_timestep_variant_preserves_simulated_duration() -> None:

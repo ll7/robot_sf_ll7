@@ -171,6 +171,17 @@ class SimulationSettings:
     time_per_step_in_secs: float = 0.1
     """Time per step in seconds"""
 
+    action_latency_steps: int = 0
+    """Discrete control-to-actuation delay; zero preserves immediate action execution."""
+
+    action_latency_ms: float | None = None
+    """Optional requested control-to-actuation delay in milliseconds.
+
+    The simulator executes only whole steps. When this field is set, it takes
+    precedence over ``action_latency_steps`` and is rounded up to the first
+    whole step that does not understate the requested delay.
+    """
+
     pedestrian_integration_scheme: str = "semi_implicit_euler"
     """Pedestrian position-update scheme; defaults to the historical semi-implicit update."""
 
@@ -268,6 +279,50 @@ class SimulationSettings:
     debug_without_robot_movement: bool = False
     """Whether to disable robot movement in the simulator for debugging purposes"""
 
+    @property
+    def resolved_action_latency_steps(self) -> int:
+        """Return the whole-step delay enforced by the environment action queue."""
+        if self.action_latency_ms is None:
+            return int(self.action_latency_steps)
+        step_ms = float(self.time_per_step_in_secs) * 1000.0
+        return ceil(float(self.action_latency_ms) / step_ms)
+
+    def action_latency_metadata(self) -> dict[str, int | float | None]:
+        """Return JSON-safe requested and effective action-latency settings."""
+        effective_steps = self.resolved_action_latency_steps
+        return {
+            "configured_steps": int(self.action_latency_steps),
+            "configured_ms": (
+                None if self.action_latency_ms is None else float(self.action_latency_ms)
+            ),
+            "effective_steps": effective_steps,
+            "effective_ms": round(
+                float(effective_steps * self.time_per_step_in_secs * 1000.0),
+                12,
+            ),
+        }
+
+    def _validate_action_latency_config(self) -> None:
+        """Reject ambiguous or non-realizable action-latency configuration values."""
+        if isinstance(self.action_latency_steps, bool) or not isinstance(
+            self.action_latency_steps,
+            int,
+        ):
+            raise TypeError("action_latency_steps must be an integer")
+        if self.action_latency_steps < 0:
+            raise ValueError("action_latency_steps must be >= 0")
+        if self.action_latency_ms is None:
+            return
+        if isinstance(self.action_latency_ms, bool) or not isinstance(
+            self.action_latency_ms,
+            int | float,
+        ):
+            raise TypeError("action_latency_ms must be a number when set")
+        if not isfinite(float(self.action_latency_ms)) or self.action_latency_ms < 0:
+            raise ValueError("action_latency_ms must be finite and >= 0 when set")
+        if self.action_latency_steps != 0:
+            raise ValueError("action_latency_steps and action_latency_ms cannot both be configured")
+
     def __post_init__(self):  # noqa: C901
         """
         Validate the simulation settings.
@@ -281,6 +336,7 @@ class SimulationSettings:
         # Check that the time per step is positive
         if self.time_per_step_in_secs <= 0:
             raise ValueError("Step time mustn't be negative or zero!")
+        self._validate_action_latency_config()
         self.pedestrian_integration_scheme = normalize_integration_scheme(
             self.pedestrian_integration_scheme
         )

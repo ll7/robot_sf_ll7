@@ -280,6 +280,38 @@ def test_build_robot_config_applies_pedestrian_uncertainty_envelope_fields(
     assert config.sim_config.pedestrian_uncertainty_alpha_mps == 0.1
 
 
+def test_build_robot_config_applies_action_latency_overrides(tmp_path: Path) -> None:
+    """Scenario configuration exposes both discrete and millisecond action delay forms."""
+    step_config = build_robot_config_from_scenario(
+        {
+            "name": "action-latency-step-runtime-smoke",
+            "simulation_config": {"action_latency_steps": 2},
+        },
+        scenario_path=tmp_path / "scenario.yaml",
+    )
+    ms_config = build_robot_config_from_scenario(
+        {
+            "name": "action-latency-ms-runtime-smoke",
+            "simulation_config": {"action_latency_ms": 250.0},
+        },
+        scenario_path=tmp_path / "scenario.yaml",
+    )
+
+    assert step_config.sim_config.resolved_action_latency_steps == 2
+    assert ms_config.sim_config.resolved_action_latency_steps == 3
+
+
+def test_build_robot_config_rejects_ambiguous_action_latency_overrides(tmp_path: Path) -> None:
+    """A scenario cannot choose both step and millisecond delay representations."""
+    scenario = {
+        "name": "ambiguous-action-latency",
+        "simulation_config": {"action_latency_steps": 1, "action_latency_ms": 100.0},
+    }
+
+    with pytest.raises(ValueError, match="cannot both be configured"):
+        build_robot_config_from_scenario(scenario, scenario_path=tmp_path / "scenario.yaml")
+
+
 def test_build_robot_config_rejects_negative_uncertainty_alpha(tmp_path: Path) -> None:
     """Negative scenario alpha fails closed at config-construction time."""
     scenario = {

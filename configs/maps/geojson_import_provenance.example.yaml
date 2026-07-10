@@ -1,0 +1,10 @@
+# Copy beside a locally acquired public GeoJSON extract; do not commit the raw extract by default.
+schema_version: robot_sf.geojson_import_provenance.v1
+classification: exploratory_only
+source:
+  url: https://www.openstreetmap.org/copyright
+  accessed_on: YYYY-MM-DD
+  license: Open Data Commons Open Database License (ODbL) v1.0
+  citation: OpenStreetMap contributors
+raw_input:
+  sha256: replace-with-sha256-of-the-local-geojson

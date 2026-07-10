@@ -1,0 +1,30 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {"highway": "pedestrian"},
+      "geometry": {"type": "Polygon", "coordinates": [[[13.4000, 52.5200], [13.4008, 52.5200], [13.4008, 52.5204], [13.4000, 52.5204], [13.4000, 52.5200]]]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"building": "yes"},
+      "geometry": {"type": "Polygon", "coordinates": [[[13.40035, 52.52014], [13.40048, 52.52014], [13.40048, 52.52027], [13.40035, 52.52027], [13.40035, 52.52014]]]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"robot_sf_role": "robot_spawn", "robot_sf_id": "west"},
+      "geometry": {"type": "Polygon", "coordinates": [[[13.40005, 52.52005], [13.40017, 52.52005], [13.40017, 52.52014], [13.40005, 52.52014], [13.40005, 52.52005]]]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"robot_sf_role": "robot_goal", "robot_sf_id": "east"},
+      "geometry": {"type": "Polygon", "coordinates": [[[13.40063, 52.52027], [13.40075, 52.52027], [13.40075, 52.52036], [13.40063, 52.52036], [13.40063, 52.52027]]]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"robot_sf_role": "robot_route", "robot_sf_spawn": "west", "robot_sf_goal": "east"},
+      "geometry": {"type": "LineString", "coordinates": [[13.40011, 52.520095], [13.40023, 52.52008], [13.40056, 52.52032], [13.40069, 52.520315]]}
+    }
+  ]
+}

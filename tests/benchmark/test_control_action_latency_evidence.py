@@ -136,6 +136,16 @@ def test_degraded_availability_is_exclusion() -> None:
     assert "unavailable:degraded" in cell.exclusion_reason
 
 
+def test_missing_required_result_metric_is_exclusion() -> None:
+    """A row cannot fabricate an absent outcome metric as zero-valued evidence."""
+    row = _latency_row(step=1)
+    row["metrics"].pop("success_rate")
+    cell = classify_latency_row(row)
+    assert cell.classification == "exclusion"
+    assert "missing_or_invalid_metric:success_rate" in cell.exclusion_reason
+    assert cell.success_rate is None
+
+
 # --- extract_latency_cells ------------------------------------------------
 
 
@@ -268,6 +278,23 @@ def test_build_evidence_fails_closed_when_all_step3_rows_are_excluded() -> None:
         assert "[3]" in str(exc)
     else:  # pragma: no cover - defensive
         raise AssertionError("expected LatencyEvidenceError when all 3-step rows excluded")
+
+
+def test_build_evidence_fails_closed_when_required_metrics_are_missing() -> None:
+    """Rows without outcome metrics cannot provide a required latency cell."""
+    rows = _full_native_row_set()
+    for row in rows:
+        if row["action_latency"]["effective_steps"] == 3:
+            row["metrics"].pop("collision_rate")
+    with pytest.raises(LatencyEvidenceError, match=r"missing=\[3\]"):
+        build_latency_evidence(
+            rows,
+            config=_load_real_config(),
+            config_path="configs/research/fidelity_sensitivity_v1.yaml",
+            git_head="abc123",
+            date="2026-07-10",
+            raw_rows_path="output/x/episode_rows.jsonl",
+        )
 
 
 def test_build_evidence_records_exclusions_without_promoting_them() -> None:

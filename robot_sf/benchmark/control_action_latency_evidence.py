@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -107,8 +108,8 @@ class LatencyCell:
     baseline_variant: bool
     seed: int
     scenario_id: str
-    success_rate: float
-    collision_rate: float
+    success_rate: float | None
+    collision_rate: float | None
     min_clearance: float | None
     classification: str
     exclusion_reason: str | None
@@ -143,6 +144,18 @@ def _row_availability_status(row: Mapping[str, Any]) -> str:
     """Return a row's availability status, defaulting to ``available`` when unset."""
     status = row.get("availability_status")
     return str(status) if isinstance(status, str) and status else "available"
+
+
+def _numeric_metric(metrics: Mapping[str, Any], name: str) -> float | None:
+    """Return a finite numeric metric value, or ``None`` when it is unusable."""
+    value = metrics.get(name)
+    if (
+        isinstance(value, int | float)
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+    ):
+        return float(value)
+    return None
 
 
 def _latency_step_from_row(row: Mapping[str, Any]) -> int | None:
@@ -184,19 +197,19 @@ def classify_latency_row(row: Mapping[str, Any]) -> LatencyCell:
     """Classify one episode row as a latency ``result`` cell or an ``exclusion``.
 
     The row must belong to the ``control_action_latency`` axis. A row is a
-    ``result`` only when it carries action-latency metadata AND its execution mode
-    is native/adapter AND its availability status is available. Anything else
-    (fallback / degraded / non-native / missing latency metadata) becomes an
-    ``exclusion`` with a precise reason, so fallback execution can never enter the
-    latency result set.
+    ``result`` only when it carries action-latency metadata, finite required
+    outcome metrics, a native/adapter execution mode, and an available status.
+    Anything else (fallback / degraded / non-native / missing metadata or
+    required metrics) becomes an ``exclusion`` with a precise reason, so malformed
+    or fallback execution can never enter the latency result set.
 
     Returns:
         The classified :class:`LatencyCell` for the row.
     """
     metrics = row.get("metrics")
     metric_map = metrics if isinstance(metrics, Mapping) else {}
-    success_rate = float(metric_map.get("success_rate", 0.0) or 0.0)
-    collision_rate = float(metric_map.get("collision_rate", 0.0) or 0.0)
+    success_rate = _numeric_metric(metric_map, "success_rate")
+    collision_rate = _numeric_metric(metric_map, "collision_rate")
     raw_min_clearance = metric_map.get("min_clearance")
     min_clearance = (
         float(raw_min_clearance)
@@ -216,6 +229,9 @@ def classify_latency_row(row: Mapping[str, Any]) -> LatencyCell:
         reasons.append(f"non_native_execution_mode:{execution_mode}")
     if availability_status not in AVAILABLE_AVAILABILITY_STATUSES:
         reasons.append(f"unavailable:{availability_status}")
+    for name, value in (("success_rate", success_rate), ("collision_rate", collision_rate)):
+        if value is None:
+            reasons.append(f"missing_or_invalid_metric:{name}")
 
     return LatencyCell(
         planner=str(row.get("planner") or "unknown"),
@@ -289,8 +305,12 @@ def aggregate_latency_metrics(cells: Sequence[LatencyCell]) -> list[dict[str, An
                 ),
                 "cell_count": len(bucket),
                 "seeds": sorted({c.seed for c in bucket}),
-                "success_rate": _mean([c.success_rate for c in bucket]),
-                "collision_rate": _mean([c.collision_rate for c in bucket]),
+                "success_rate": _mean(
+                    [c.success_rate for c in bucket if c.success_rate is not None]
+                ),
+                "collision_rate": _mean(
+                    [c.collision_rate for c in bucket if c.collision_rate is not None]
+                ),
                 "min_clearance": _mean(min_clearances) if min_clearances else None,
             }
         )

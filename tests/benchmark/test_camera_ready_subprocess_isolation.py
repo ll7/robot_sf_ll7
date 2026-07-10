@@ -8,6 +8,10 @@ These tests verify that:
 5. Resource lifecycle cleanup is called in subprocess mode
 6. The parent->worker serialization is JSON-safe and the subprocess path emits
    the ``subprocess_isolation`` + ``cleanup_metrics`` evidence (issue #4957).
+
+These are one-real-path tests as defined in ``docs/dev_guide.md``: they invoke
+the serializer and subprocess dispatch production uses instead of pre-converting
+fixtures in the test.
 """
 
 from __future__ import annotations
@@ -350,7 +354,8 @@ class TestSubprocessIsolationIntegration:
 
         This test calls the REAL ``_serialize_subprocess_arm_params`` helper (the
         single serialization point used by production) with no hand-conversion,
-        and covers both the ``algo_config_path=None`` and ``Path`` branches.
+        and covers both the ``algo_config_path=None`` and ``Path`` branches. See
+        the one-real-path-test rule in ``docs/dev_guide.md``.
         """
         params = _make_arm_params(algo_config_path=algo_config_path)
 

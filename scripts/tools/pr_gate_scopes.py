@@ -309,7 +309,7 @@ def validate_active_gates(gates: list[Gate], *, require_residue: bool = True) ->
 def _scope_from_dict(data: dict[str, Any]) -> Scope:
     if "modulus" in data or "residue" in data:
         try:
-            return ResidueScope(modulus=int(data["modulus"]), residue=int(data["residue"]))
+            return ResidueScope(modulus=data["modulus"], residue=data["residue"])
         except KeyError as exc:
             raise GateScopeError(
                 f"residue scope requires 'modulus' and 'residue': {data!r}"
@@ -322,7 +322,7 @@ def _scope_from_dict(data: dict[str, Any]) -> Scope:
             low, high = data.get("low"), data.get("high")
         if low is None:
             raise GateScopeError(f"range scope requires 'low': {data!r}")
-        return RangeScope(low=int(low), high=None if high is None else int(high))
+        return RangeScope(low=low, high=high)
     raise GateScopeError(
         f"scope must declare a residue (modulus/residue) or range (low/high): {data!r}"
     )

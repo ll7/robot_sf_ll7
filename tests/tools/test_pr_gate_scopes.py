@@ -194,6 +194,12 @@ def test_load_gates_requires_scope():
         load_gates([{"gate_id": "a"}])
 
 
+def test_load_gates_rejects_boolean_scope_values():
+    """Boolean JSON values must not normalize into a valid residue scope."""
+    with pytest.raises(GateScopeError):
+        load_gates([{"gate_id": "a", "scope": {"modulus": True, "residue": False}}])
+
+
 def test_cli_passes_on_disjoint_residue_manifest(tmp_path, capsys):
     """CLI exits 0 on a disjoint residue-scope manifest."""
     manifest = tmp_path / "gates.json"

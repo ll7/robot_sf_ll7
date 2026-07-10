@@ -128,6 +128,17 @@ reimplement. If the issue is a follow-up that depends on an unmerged source PR, 
 blocked/unavailable for clean-main work with the unblock condition "source PR merged to
 `origin/main`", unless the user explicitly chooses a stacked-PR route.
 
+### Exact merged-fix stale-evidence guard
+
+Before auto-admitting a ready candidate, search recently merged PR titles and bodies, then verify
+the candidate's failure signature, named symbol, and failing file/line against current
+`origin/main` history and code. Classify the issue as `covered_by_pr` and stop before claim or
+branch only when an exact merged fix implements the stated boundary and its regression proof covers
+the reported failure. Record the covering PR rather than treating a loose keyword, a change in the
+same file, or historical failure output alone as duplicate evidence. The #5145 / PR #4958
+`PosixPath` serialization regression is the required fixture: it was stale because current main
+already replaced `json.dumps(asdict(arm_params))` with the tested subprocess-boundary serializer.
+
 For token-efficient orientation, collect a compact snapshot before broad parent reads:
 
 ```bash

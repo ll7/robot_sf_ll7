@@ -32,6 +32,17 @@ It orchestrates:
 It does not define child-skill mechanics; it standardizes cycle policy, preflight
 validation, and delegation failure recovery across the loop.
 
+## Exact merged-fix stale-evidence guard
+
+Before this loop auto-admits or delegates a ready candidate, search recently merged PR titles and
+bodies, then verify the candidate's failure signature, named symbol, and failing file/line against
+current `origin/main` history and code. Classify the issue as `covered_by_pr` and stop before claim
+or branch only when an exact merged fix implements the stated boundary and its regression proof
+covers the reported failure. Record the covering PR rather than treating a loose keyword, a change
+in the same file, or historical failure output alone as duplicate evidence. The #5145 / PR #4958
+`PosixPath` serialization regression is the required fixture: it was stale because current main
+already replaced `json.dumps(asdict(arm_params))` with the tested subprocess-boundary serializer.
+
 ## Default Token-Efficient Mode
 
 When the user asks for goal autopilot, a continuous goal loop, or best-quality

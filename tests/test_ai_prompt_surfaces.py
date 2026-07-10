@@ -28,6 +28,13 @@ ISSUE_THREAD_READ_SKILLS = (
     "goal-issue-implementation",
     "goal-autopilot",
 )
+# Ready-queue skills that can admit a candidate directly or delegate its admission. Issue #5172
+# requires an exact merged-fix check so historical failure evidence cannot route duplicate work.
+MERGED_FIX_GUARD_SKILLS = (
+    "gh-issue-autopilot",
+    "goal-issue-implementation",
+    "goal-autopilot",
+)
 
 
 def test_ai_skill_files_exist() -> None:
@@ -232,3 +239,32 @@ def test_ready_queue_skills_use_issue_thread_rest_fallback() -> None:
             f"helper {canonical_ref} (issue #5148); live-issue review is unreliable on hosts "
             f"where `gh issue view --comments` hits the deprecated projectCards field"
         )
+
+
+def test_ready_queue_skills_reject_stale_evidence_after_an_exact_merged_fix() -> None:
+    """Ready-queue admission must distinguish an exact merged fix from loose similarity.
+
+    Issue #5172: #5145 was auto-admitted from a pre-fix `PosixPath` serialization failure even
+    though PR #4958 had already replaced the failing call, restored the subprocess-boundary
+    contract, and added regression proof. The admission-capable skill surfaces therefore need all
+    three anchors before they skip work: the failure signature, named symbol, and failing file/line
+    checked against current main and a merged PR.
+    """
+
+    required_fragments = (
+        "Exact merged-fix stale-evidence guard",
+        "recently merged PR titles and bodies",
+        "failure signature, named symbol, and failing file/line",
+        "`origin/main` history and code",
+        "covered_by_pr",
+        "#5145 / PR #4958",
+    )
+    for skill_name in MERGED_FIX_GUARD_SKILLS:
+        skill_path = SKILL_DIR / skill_name / "SKILL.md"
+        assert skill_path.exists(), f"missing ready-queue skill: {skill_path}"
+        text = " ".join(skill_path.read_text(encoding="utf-8").split())
+        for fragment in required_fragments:
+            assert fragment in text, (
+                f"ready-queue skill {skill_name} lacks {fragment!r}; it can auto-admit stale "
+                "evidence after an exact merged fix"
+            )

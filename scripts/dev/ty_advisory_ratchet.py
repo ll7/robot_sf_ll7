@@ -233,7 +233,15 @@ def materialize_findings_from_baseline(baseline: dict[str, Any]) -> list[dict[st
         # ``robot_sf/<sub>/...`` path back to ``robot_sf/<sub>``, and any other
         # top-level dir back to itself, so the materialized path re-keying is
         # consistent with how real ty findings are bucketed.
-        base_path = f"{mod}/_ty_baseline_fixture.py"
+        # The docs/evidence integrity check validates cited ``scripts/*.py``
+        # paths even inside JSON.  Use this real script for the synthetic
+        # ``scripts`` module while keeping all other module paths synthetic;
+        # both choices aggregate back to the same module key.
+        base_path = (
+            "scripts/dev/ty_advisory_ratchet.py"
+            if mod == "scripts"
+            else f"{mod}/_ty_baseline_fixture.py"
+        )
         for i in range(general_n):
             findings.append(
                 {

@@ -76,6 +76,12 @@ class BenchmarkCLIConfig:
     bootstrap_samples: int = 1000
     bootstrap_confidence: float = 0.95
     bootstrap_seed: int | None = None
+    # Resampling mode (issue #5139): "flat" (i.i.d. episode bootstrap, default)
+    # or "hierarchical" (two-stage cluster bootstrap). In hierarchical mode the
+    # cluster field is selected by bootstrap_cluster ("scenario" -> scenario_id,
+    # "seed" -> seed).
+    bootstrap_mode: str = "flat"
+    bootstrap_cluster: str = "scenario"
     # Video / plots toggles
     disable_videos: bool = False
     max_videos: int = 1
@@ -193,6 +199,27 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Bootstrap RNG seed (default: master seed)",
     )
     parser.add_argument(
+        "--bootstrap-mode",
+        default="flat",
+        choices=("flat", "hierarchical"),
+        help=(
+            "Resampling mode for aggregate confidence intervals (issue #5139): "
+            "'flat' i.i.d. episode bootstrap (default) or 'hierarchical' "
+            "two-stage cluster bootstrap (scenario-then-episode)."
+        ),
+    )
+    parser.add_argument(
+        "--bootstrap-cluster",
+        default="scenario",
+        choices=("scenario", "seed"),
+        help=(
+            "Cluster field for hierarchical bootstrap mode (issue #5139): "
+            "'scenario' groups episodes by scenario_id (default), 'seed' by seed "
+            "for a seed-level cluster bootstrap. Only used when bootstrap-mode is "
+            "hierarchical."
+        ),
+    )
+    parser.add_argument(
         "--metrics-subset",
         default="",
         help="Comma-separated metric subset for freeze-contract tracking",
@@ -267,6 +294,8 @@ def _args_to_config(ns: argparse.Namespace) -> BenchmarkCLIConfig:
         bootstrap_samples=ns.bootstrap_samples,
         bootstrap_confidence=ns.bootstrap_confidence,
         bootstrap_seed=ns.bootstrap_seed,
+        bootstrap_mode=ns.bootstrap_mode,
+        bootstrap_cluster=ns.bootstrap_cluster,
         disable_videos=ns.disable_videos,
         max_videos=ns.max_videos,
         video_renderer=ns.video_renderer,

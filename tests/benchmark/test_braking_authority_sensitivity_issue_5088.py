@@ -11,6 +11,8 @@ from robot_sf.benchmark.braking_authority_sensitivity import (
     analyze_smoke_results,
     load_smoke_config,
     materialize_arm_scenario,
+    validate_smoke_config,
+    write_report,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -69,8 +71,33 @@ def test_materialized_arms_only_change_braking_authority_and_arm_metadata() -> N
     assert weak["seeds"] == strong["seeds"] == [101, 102]
 
 
+def test_config_validation_fails_closed_on_invalid_control_contracts() -> None:
+    """Malformed comparison controls must fail before any episode executes."""
+    valid = load_smoke_config(CONFIG)
+    cases = [
+        (("schema_version",), "wrong", "schema_version"),
+        (("issue",), 1, "issue must be 5088"),
+        (("claim_boundary",), "benchmark success", "claim_boundary"),
+        (("scenario", "name"), "", "scenario.path and scenario.name"),
+        (("seeds",), [101, 101], "seeds must be unique"),
+        (("planner", "benchmark_profile"), "unsafe", "benchmark_profile"),
+        (("run", "workers"), 2, "workers must be 1"),
+        (("signal", "metrics"), ["unsupported"], "signal.metrics"),
+    ]
+
+    for path, value, match in cases:
+        invalid = deepcopy(valid)
+        target = invalid
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = value
+        with pytest.raises(ValueError, match=match):
+            validate_smoke_config(invalid)
+
+
 def test_report_detects_metric_signal_and_preserves_runtime_boundaries(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """A changed metric activates the smoke without upgrading its evidence tier."""
     config = load_smoke_config(CONFIG)
@@ -117,6 +144,19 @@ def test_report_detects_metric_signal_and_preserves_runtime_boundaries(
         "time_to_collision_min": 1,
     }
     assert report["raw_artifact_classification"] == "local-scratch; not durable evidence"
+
+    write_report(report, tmp_path)
+    markdown = (tmp_path / "README.md").read_text(encoding="utf-8")
+    assert "Metric-sensitivity signal activated: `True`" in markdown
+    assert "Changed-seed counts:" in markdown
+    assert "## Reproduce" in markdown
+    assert "Replace `<fresh-artifact-dir>` with an empty local scratch directory." in markdown
+    assert (tmp_path / "report.json").is_file()
+    checksum_lines = (tmp_path / "checksums.sha256").read_text(encoding="utf-8").splitlines()
+    assert [line.split(maxsplit=1)[1] for line in checksum_lines] == [
+        "README.md",
+        "report.json",
+    ]
 
 
 def test_report_fails_closed_for_degraded_runtime(monkeypatch: pytest.MonkeyPatch) -> None:

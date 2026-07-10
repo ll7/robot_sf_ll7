@@ -1,4 +1,4 @@
-# Issue 5020: DWA across the Standard Archetype Matrix (executed evidence)
+# Issue #5020 — DWA Across the Standard Archetype Matrix (Executed Evidence)
 
 Date: 2026-07-10
 

@@ -87,6 +87,22 @@ def _heading_from_velocity(velocity_xy: np.ndarray, fallback_heading: float) -> 
     return float(atan2(float(velocity_xy[1]), float(velocity_xy[0])))
 
 
+def _apply_ped_desired_speed_config(
+    pysf_config: PySFSimConfig, settings: SimulationSettings
+) -> None:
+    """Propagate decoupled desired-speed settings onto the PySF scene config.
+
+    Forwards the optional ``desired_speed_mean``/``desired_speed_std``/``desired_speed_seed``
+    from :class:`SimulationSettings` (which may have been derived from ``ped_speed_tier``)
+    onto ``pysf_config.scene_config`` so :class:`pysocialforce.scene.PedState` samples a
+    decoupled preferred walking speed instead of ``peds_speed_mult * initial_speed``
+    (issue #4972). A ``None`` mean preserves the legacy spawn-coupled default.
+    """
+    pysf_config.scene_config.desired_speed_mean = settings.desired_speed_mean
+    pysf_config.scene_config.desired_speed_std = settings.desired_speed_std
+    pysf_config.scene_config.desired_speed_seed = settings.desired_speed_seed
+
+
 def _make_ped_forces(
     sim: PySFSimulator,
     config: PySFSimConfig,
@@ -196,6 +212,7 @@ class Simulator:
         pysf_config = PySFSimConfig()
         pysf_config.scene_config.dt_secs = self.config.time_per_step_in_secs
         pysf_config.scene_config.integration_scheme = self.config.pedestrian_integration_scheme
+        _apply_ped_desired_speed_config(pysf_config, self.config)
         spawn_config = PedSpawnConfig(
             self.config.peds_per_area_m2,
             self.config.max_peds_per_group,
@@ -652,6 +669,7 @@ class PedSimulator(Simulator):
         pysf_config = PySFSimConfig()
         pysf_config.scene_config.dt_secs = self.config.time_per_step_in_secs
         pysf_config.scene_config.integration_scheme = self.config.pedestrian_integration_scheme
+        _apply_ped_desired_speed_config(pysf_config, self.config)
         spawn_config = PedSpawnConfig(
             self.config.peds_per_area_m2,
             self.config.max_peds_per_group,

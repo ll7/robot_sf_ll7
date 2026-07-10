@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from scripts.dev._gh_pagination import is_likely_truncated
 from scripts.dev.check_pr_ci_status import (
     FAILURE_CONCLUSIONS,
     PENDING_STATUSES,
@@ -490,6 +491,8 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
             "schema": SCHEMA_VERSION,
             "repo": repo,
             "mode": "active",
+            "truncated": False,
+            "truncation_note": "",
             "route_health_overview": {"healthy": 0, "stale": 0, "blocked": 0, "unknown": 0},
             "prs": [
                 {
@@ -505,6 +508,8 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
             "schema": SCHEMA_VERSION,
             "repo": repo,
             "mode": "active",
+            "truncated": False,
+            "truncation_note": "",
             "route_health_overview": {"healthy": 0, "stale": 0, "blocked": 0, "unknown": 0},
             "prs": [
                 {
@@ -518,6 +523,8 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
             "schema": SCHEMA_VERSION,
             "repo": repo,
             "mode": "active",
+            "truncated": False,
+            "truncation_note": "",
             "route_health_overview": {"healthy": 0, "stale": 0, "blocked": 0, "unknown": 0},
             "prs": [
                 {
@@ -532,10 +539,18 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
         for pr in listed
         if isinstance(pr, dict)
     ]
+    truncated = is_likely_truncated(len(listed), limit=limit)
     return {
         "schema": SCHEMA_VERSION,
         "repo": repo,
         "mode": "active",
+        "truncated": truncated,
+        "truncation_note": (
+            "gh pr list may be capped: got "
+            f"{len(listed)} rows at --limit {limit}; raise --limit or paginate"
+            if truncated
+            else ""
+        ),
         "route_health_overview": _route_health_overview(prs),
         "prs": prs,
     }

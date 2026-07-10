@@ -30,15 +30,21 @@ Diagnostic classification: `oscillation = (heading_rate_sign_changes ≥ T_h) an
 overridable, and the raw fields are always emitted so a different threshold can be applied
 downstream without recomputation.
 
-## Producer 2 — `safety_predicate.late_evasive.v1`
+## Producer 2 — `safety_predicate.late_evasive.v2`
 
 `late_evasive_predicate(hazard_distances, hazard_visible, speeds, *, dt, …)` emits
 `first_hazard_visible_step`, `conflict_zone_entry_step`,
 `first_clearance_restoring_action_step`, `minimum_distance_m`,
-`required_deceleration_m_s2`, `response_latency_s`, `n_steps`. The clearance-restoring
+`required_deceleration_m_s2`, `response_latency_s`, `latency_unavailable_reason`,
+`n_steps`. The clearance-restoring
 action is the first deceleration past `decel_threshold_m_s2` at/after the hazard becomes
 visible. Diagnostic classification: `late_evasive` when the hazard is visible and the
 reaction is absent, slower than `max_response_latency_s`, or only after conflict-zone entry.
+`v2` (issue #5000): when `response_latency_s` is `null`, `latency_unavailable_reason` names
+why — `no_clearance_restoring_action` (hazard was visible but the robot never decelerated hard
+enough, the dominant goal-planner case) or `hazard_never_visible`. A late-evasive event thus
+never emits a silent-empty latency; downstream consumers can distinguish "never reacted" from a
+data gap. It is `null` exactly when `response_latency_s` is finite.
 
 ## Producer 3 — `safety_predicate.occlusion_near_miss.v1`
 

@@ -24,6 +24,16 @@ not isolate heterogeneity from a population-mean shift and could not compute per
 - `mean_matched_heterogeneity_effect(homogeneous_mean, heterogeneous_mean,
   homogeneous_is_mean_matched)`: effect delta, flagged `isolated` only when the homogeneous arm uses
   the population mean (`theta_i = E[theta]`); otherwise `confounded_by_mean_shift`.
+- `realized_distribution_audit(control_trace, metric_specs)`: configured-target vs. realized
+  per-step distributions (overall and per-archetype) from one control trace, covering DoD item 5
+  ("log configured vs. realized speed/clearance/yielding distributions"). Each `RealizedDistributionSpec`
+  names a realized per-step field (e.g. `speed_m_s`) and an optional per-pedestrian configured label
+  (e.g. `desired_speed_factor`). The realized side reports the distribution the #3206 smoke could not
+  compute; the configured side is drawn one-per-pedestrian from trace labels. A numeric
+  configured→realized mean shift is reported only when the caller sets `configured_is_comparable`
+  (both sides same-unit), so a unitless factor vs. a metric observation is never reported as a real
+  shift. Missing or non-finite fields fail closed as blockers; `summarize_distribution` supplies the
+  `n/mean/std/min/max/p05/p50/p95` summary and rejects empty or non-finite samples.
 
 ## Per-Pedestrian Control Trace (`pedestrian-control-trace.v1`)
 
@@ -53,6 +63,9 @@ does not submit Slurm jobs, and does not claim heterogeneous-population effects.
 - `tests/benchmark/test_heterogeneous_population_metrics.py`: Conditional Value at Risk tail
   direction and alpha validation, plus per-archetype aggregation for higher- and lower-is-safer
   metrics.
+- `tests/benchmark/test_heterogeneous_population_distribution_audit.py`: realized-distribution audit
+  summaries, per-archetype breakdown, comparable-shift computation, and fail-closed handling of
+  missing realized/configured fields, empty traces, and duplicate spec names.
 - `tests/benchmark/test_pedestrian_control_trace.py`: emitted control-trace shape, archetype
   detection, and fail-closed non-finite or missing-archetype handling.
 - `tests/benchmark/test_map_runner_utils.py`: episode metadata integration for the map-runner trace

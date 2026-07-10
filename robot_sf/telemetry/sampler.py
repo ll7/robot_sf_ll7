@@ -11,23 +11,17 @@ from typing import TYPE_CHECKING, Protocol
 
 from loguru import logger
 
-try:  # pragma: no cover - optional dependency
-    import psutil  # type: ignore
-except ImportError:  # pragma: no cover - psutil not installed
-    psutil = None  # type: ignore
+from robot_sf.common.optional_import import try_import
+from robot_sf.telemetry.gpu import collect_gpu_sample
+from robot_sf.telemetry.models import TelemetrySnapshot
 
-try:  # pragma: no cover - platform dependent fallback
-    import resource
-except ImportError:  # pragma: no cover - resource missing on some platforms
-    resource = None  # type: ignore
+psutil = try_import("psutil")  # optional dependency; None when unavailable
+resource = try_import("resource")  # platform-dependent stdlib (Unix); None elsewhere
 
 if psutil is not None:  # pragma: no branch - constant per interpreter
     _PSUTIL_ERRORS: tuple[type[Exception], ...] = (psutil.Error, OSError)
 else:  # pragma: no cover - psutil missing
     _PSUTIL_ERRORS = (OSError,)
-
-from robot_sf.telemetry.gpu import collect_gpu_sample
-from robot_sf.telemetry.models import TelemetrySnapshot
 
 if TYPE_CHECKING:  # pragma: no cover - import hints only
     from collections.abc import Callable

@@ -38,6 +38,7 @@ if TYPE_CHECKING:
 import psutil
 from loguru import logger
 
+from robot_sf.common.optional_import import try_import
 from robot_sf.research.aggregation import (
     aggregate_metrics,
     compute_completeness_score,
@@ -48,10 +49,7 @@ from robot_sf.research.metadata import collect_reproducibility_metadata
 from robot_sf.research.report_template import MarkdownReportRenderer
 from robot_sf.research.statistics import evaluate_hypothesis
 
-try:
-    import yaml  # type: ignore
-except ImportError:  # pragma: no cover - optional dependency
-    yaml = None  # type: ignore[assignment]
+yaml = try_import("yaml")  # optional dependency; None when unavailable
 
 
 def _iso() -> str:  # small helper

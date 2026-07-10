@@ -729,6 +729,7 @@ def test_worktree_shared_venv_helper_has_freshness_check_wiring() -> None:
     assert 'cmp -s "$src_file" "$installed_file"' in script_text
     assert "Shared virtualenv is stale relative to this checkout" in script_text
     assert "diverging module: pysocialforce/" in script_text
+    assert "uv sync --all-extras --reinstall-package robot-sf" in script_text
     # Standalone commands with a verified no-project-import boundary can skip project drift safely.
     assert "--standalone" in script_text
     assert "use --standalone for a command verified not to import project packages" in script_text
@@ -844,7 +845,7 @@ def test_worktree_shared_venv_freshness_check_fails_early_on_stale_env(
     assert result.returncode == 2
     assert "Shared virtualenv is stale relative to this checkout" in result.stderr
     assert "diverging module: pysocialforce/scene.py" in result.stderr
-    assert "uv sync --all-extras" in result.stderr
+    assert "uv sync --all-extras --reinstall-package robot-sf" in result.stderr
     # The freshness gate must fire before the underlying command is executed.
     assert "uv-reached" not in result.stderr
 

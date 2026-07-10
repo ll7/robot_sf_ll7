@@ -501,6 +501,18 @@ Use the snapshot JSON to seed worker prompts and active ledgers. Redirect broad
 search output or raw GitHub bodies to private agent-run artifacts; return only
 the compact snapshot, context capsule path, validation command, exit status, and
 short evidence excerpt to the parent Codex thread.
+
+For routine repository discovery, exclude the dense tracked evidence archive unless the archive is
+the explicit search target. Start with a focused command such as:
+
+```bash
+rg -n "<concept>" AGENTS.md docs scripts tests robot_sf .agents \
+  --glob '!docs/context/evidence/**' --glob '!output/**'
+```
+
+Omit the evidence exclusion only when the task is to inspect or validate evidence artifacts. This
+keeps ordinary code and workflow matches visible without treating the archive as unimportant.
+
 For implementation-thread validation, prefer `scripts/dev/run_focused_tests.sh`
 for focused pytest targets. It stores the full pytest log under the common
 Git-dir agent-run artifacts and prints only a bounded pass/fail summary by

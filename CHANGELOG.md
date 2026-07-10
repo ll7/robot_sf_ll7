@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5034 control-action-latency sweep fail-closed preflight + blocker packet.** New
+  `robot_sf/benchmark/control_action_latency_preflight.py` (`check_control_action_latency_axis`) and
+  CLI `scripts/benchmark/preflight_control_action_latency_sweep.py` guard the issue-#5034 sweep: they
+  fail closed unless the fidelity-sensitivity study config carries a `control_action_latency` axis
+  whose variants cover the required action-latency steps `[0, 1, 3]` (the 0/100/300 ms-equivalent
+  delays). On current `main` the axis is absent (it is wired by unmerged PR #5026, parent issue
+  #4977), so the preflight reports `decision: blocked` and names the exact unmet prerequisite; it
+  flips to `ready` automatically once #5026 lands. Durable fail-closed decision packet at
+  `docs/context/evidence/issue_5034_control_action_latency_sweep_blocked_2026-07-10/`. Claim boundary:
+  launch/readiness preflight only — not benchmark evidence, not paper-facing; no campaign run and no
+  Slurm/GPU submission were performed.
 * **issue #4871 CrowdNav_Prediction_AttnGraph external learned-baseline feasibility smoke.** New
   `robot_sf/planner/crowdnav_pred_attng.py` is the thinnest model-only adapter proving the shipped
   ICRA 2023 attention-graph SRNN checkpoint (`41200.pt`, MIT, pinned at upstream `3907731`) loads and

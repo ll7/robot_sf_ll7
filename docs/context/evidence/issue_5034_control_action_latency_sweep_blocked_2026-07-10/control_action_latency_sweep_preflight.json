@@ -1,0 +1,30 @@
+{
+  "axis_key": "control_action_latency",
+  "axis_present": false,
+  "blockers": [
+    "control_action_latency axis absent from configs/research/fidelity_sensitivity_v1.yaml; depends on PR #5026 (parent issue #4977), which wires the axis and the sim_config.action_latency_steps field. Merge that PR before this sweep can be executed or promoted as the control-action-latency sweep."
+  ],
+  "claim_boundary": "Launch/readiness preflight only: verifies the fidelity-sensitivity study config carries a control_action_latency axis whose variants cover the required action-latency step set before the sweep is executed or promoted as the control-action-latency sweep. ready is a pre-registration gate, not an execution-ready or runtime-availability signal; it is not benchmark evidence, not simulator-realism evidence, not sim-to-real evidence, and not paper-facing evidence.",
+  "config_path": "configs/research/fidelity_sensitivity_v1.yaml",
+  "date": "2026-07-10",
+  "decision": "blocked",
+  "depends_on_pr": "#5026",
+  "evidence_status": "launch_readiness_preflight_not_benchmark_evidence",
+  "git_head": "e128d3fa20d0b621b3ab6d12f720ace648ded78a",
+  "issue": 5034,
+  "missing_latency_steps": [
+    0,
+    1,
+    3
+  ],
+  "next_command_template": "uv run python scripts/benchmark/run_fidelity_sensitivity_campaign.py --config configs/research/fidelity_sensitivity_v1.yaml --fixed-scope-plan-only --require-launchable --plan-out output/fidelity_latency_plan",
+  "observed_latency_steps": [],
+  "parent_issue": 4977,
+  "ready": false,
+  "required_latency_steps": [
+    0,
+    1,
+    3
+  ],
+  "schema_version": "control-action-latency-sweep-preflight.v1"
+}

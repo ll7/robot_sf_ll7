@@ -147,6 +147,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **issue #5027 fresh-worktree `.venv` symlink was untracked.** The `.gitignore` virtual-environment
+  rules (`.venv/`, `venv/`) used a trailing slash, which matches directories but not symlinks, so a
+  linked worktree that points `.venv` at the main checkout's virtualenv via a symlink (a shared-venv
+  runner setup) showed up as untracked (`?? .venv`). Dropped the trailing slash (`.venv`, `venv`) so
+  the ignore rule covers directory, symlink, and file forms. Guarded by
+  `tests/dev/test_gitignore_venv_symlink.py`. No behavior change for the common real-directory `.venv`.
 * **issue #4919 SNQI aggregate diagnostic-mode logging regression from exception narrowing.** The
   `robot_sf/benchmark/aggregate.py::_ensure_snqi` exception handler, narrowed from a bare
   `except Exception:` to `except (ValueError, TypeError):` by #4887's broad-except ratchet, dropped

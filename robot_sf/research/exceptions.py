@@ -15,8 +15,10 @@ Exception Hierarchy:
 
 from __future__ import annotations
 
+from robot_sf.errors import RobotSfError
 
-class ResearchError(Exception):
+
+class ResearchError(RobotSfError):
     """Base exception for all research module errors."""
 
 

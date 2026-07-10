@@ -83,6 +83,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   regression coverage lives in `tests/dev/test_gh_list_truncation_remaining.py` and
   `tests/tools/test_project_priority_score_truncation.py`. Tooling/evidence-integrity only — no
   benchmark, metric, or paper-facing claim.
+* **issue #4978 scenario flakiness audit — exact-repeat determinism + per-cell outcome-stability.**
+  New `robot_sf/benchmark/scenario_flakiness.py` (`compute_flakiness_audit`, schema
+  `scenario_flakiness.v1`) and a `robot_sf_bench flakiness-audit` CLI subcommand measure two forms of
+  outcome instability from existing episode JSONL: (1) exact-repeat determinism — when a
+  `(scenario, planner, seed)` cell is executed more than once, whether repeats share the same binary
+  outcome (a `False` verdict is a reproducibility bug the audit doubles as a detector for); and
+  (2) per-cell outcome stability — the fraction of seeds in a `(scenario, planner)` cell that agree
+  with the majority outcome, flagging `knife_edge` cells below a configurable threshold (default
+  0.8). The audit is advisory and read-only: it emits a schema-versioned report and does not change
+  rankings, campaign summaries, or metric semantics. Fail-closed by design — empty input raises,
+  cells below `min_seeds` are reported as not assessable rather than counted as stable, and
+  determinism is reported as `null` (unknown) when no exact-repeat data exists. Claim boundary:
+  new diagnostic capability validated on synthetic and CPU fixtures; no benchmark campaign run.
 * **issue #3574 realized-distribution audit for heterogeneous-population traces.**
   `robot_sf/benchmark/heterogeneous_population_metrics.py` gains `realized_distribution_audit` and
   `summarize_distribution` (plus a `RealizedDistributionSpec`), covering DoD item 5: configured

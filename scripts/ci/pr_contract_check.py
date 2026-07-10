@@ -220,7 +220,10 @@ def check_evidence_tree_hygiene(changed_files: list[str], base_ref: str) -> list
         # 1. Marker check for new evidence files
         is_new = (f in new_files) or is_file_new(f, base_ref)
         if is_new:
-            if "AI-GENERATED" not in content or "NEEDS-REVIEW" not in content:
+            has_marker = "AI-GENERATED" in content and "NEEDS-REVIEW" in content
+            if not has_marker and f_rel.endswith(".csv"):
+                has_marker = _csv_has_manifest_review_marker(f)
+            if not has_marker:
                 blockers.append(
                     f"BLOCKER: New evidence file '{f}' is missing the required AI-GENERATED "
                     f"and NEEDS-REVIEW marker convention."
@@ -314,6 +317,21 @@ def _check_distance_convention_for_file(path: str, content: str) -> str | None:
         f"distance_convention in the file or a sibling metadata.json to one of: "
         f"center_center, surface_clearance, center_segment."
     )
+
+
+def _csv_has_manifest_review_marker(path: str) -> bool:
+    """Allow schema-sensitive CSV evidence to inherit a reviewed bundle marker."""
+    manifest_path = os.path.join(os.path.dirname(path), "source_manifest.json")
+    try:
+        with open(manifest_path, encoding="utf-8") as manifest_file:
+            manifest = json.load(manifest_file)
+    except _BEST_EFFORT_ERRORS:
+        return False
+    if not isinstance(manifest, dict) or "AI-GENERATED" not in str(
+        manifest.get("review_marker", "")
+    ):
+        return False
+    return os.path.basename(path) in json.dumps(manifest, sort_keys=True)
 
 
 def check_successor_discipline(title: str, body: str, repo: str) -> list[str]:

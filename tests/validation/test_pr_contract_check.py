@@ -102,6 +102,16 @@ def test_check_evidence_tree_hygiene(
     blockers = pr_contract_check.check_evidence_tree_hygiene([str(f2)], "origin/main")
     assert not blockers
 
+    csv_file = tmp_path / "docs/context/evidence/bundle/report.csv"
+    csv_file.parent.mkdir(parents=True, exist_ok=True)
+    csv_file.write_text("value\n1\n", encoding="utf-8")
+    (csv_file.parent / "source_manifest.json").write_text(
+        '{"review_marker": "AI-GENERATED NEEDS-REVIEW", "generated_outputs": ["report.csv"]}',
+        encoding="utf-8",
+    )
+    blockers = pr_contract_check.check_evidence_tree_hygiene([str(csv_file)], "origin/main")
+    assert not blockers
+
     # Case 3: README claim without provenance
     f3 = tmp_path / "docs/context/evidence/README.md"
     f3.write_text(

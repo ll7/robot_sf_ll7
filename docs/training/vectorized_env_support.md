@@ -34,3 +34,16 @@ the primary training path, plus unit coverage that secondary entry points reques
 
 Supported vector-env smoke tests intentionally use tiny scenario/config slices. They validate
 construction and Gymnasium reset/step/close behavior, not training quality or policy performance.
+
+## Opt-in light detection and ranging (LiDAR) kernel batching
+
+`robot_sf.sensor.range_sensor.raycast_obstacles_batch` provides one central processing unit
+(CPU)-safe cross-environment kernel path for callers that can collect several LiDAR inputs together.
+It accepts one padded static-obstacle tensor, explicit obstacle counts, scanner positions, and ray
+angles, then invokes the established obstacle-raycast arithmetic for every environment in one
+compiled dispatch.
+
+The adapter is opt-in and is not selected automatically by `ThreadedVecEnv` or any training config.
+A batch of one calls the scalar `raycast_obstacles` kernel directly. Multi-environment contract
+tests require bit-identical rows compared with independent scalar calls. These tests establish
+compatibility only; no rollout throughput or speedup claim is attached to this path.

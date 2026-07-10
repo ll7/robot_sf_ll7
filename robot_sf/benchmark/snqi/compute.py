@@ -61,6 +61,29 @@ Weights = Mapping[str, float]
 Metrics = Mapping[str, float | int | bool]
 
 
+def _weighted_term(weight: float, value: float) -> float:
+    """Weighted contribution of one SNQI term with an explicit zero-weight contract.
+
+    A zero weight means the term is excluded from the score, so it must contribute
+    exactly ``0.0`` -- even when ``value`` is ``NaN``. IEEE 754 makes ``0.0 * NaN``
+    equal ``NaN``, which would otherwise silently collapse the whole score (issue
+    #5132: a legitimately absent ``comfort_exposure`` with ``w_comfort = 0.0``).
+    Short-circuiting on a zero weight keeps the score finite without masking real
+    signals: a non-zero weight still multiplies through, so a genuine ``NaN`` under
+    a non-zero weight still propagates as before.
+
+    Args:
+        weight: Weight coefficient for the term.
+        value: Pre-normalized (or raw) metric value for the term.
+
+    Returns:
+        ``weight * value``, or ``0.0`` when ``weight == 0.0``.
+    """
+    if weight == 0.0:
+        return 0.0
+    return weight * value
+
+
 def normalize_metric(name: str, value: float | int | bool, baseline_stats: BaselineStats) -> float:
     """Normalize a raw metric using median/p95 baseline statistics.
 
@@ -104,6 +127,13 @@ def compute_snqi_v0(metrics: Metrics, weights: Weights, baseline_stats: Baseline
 
     Returns:
         SNQI score (higher is better).
+
+    Notes:
+        - A term whose weight is ``0.0`` is excluded from the score and never
+          propagates ``NaN`` (e.g. a legitimately absent ``comfort_exposure``
+          when ``w_comfort = 0.0``). A non-zero weight still multiplies through,
+          so a genuine ``NaN`` under a non-zero weight propagates as before
+          (issue #5132).
     """
     success_raw = metrics.get("success", 0.0)
     success = 1.0 if isinstance(success_raw, bool) and success_raw else float(success_raw)
@@ -120,13 +150,13 @@ def compute_snqi_v0(metrics: Metrics, weights: Weights, baseline_stats: Baseline
     jerk_norm = normalize_metric("jerk_mean", metrics.get("jerk_mean", 0.0), baseline_stats)
 
     score = (
-        weights.get("w_success", 1.0) * success
-        - weights.get("w_time", 1.0) * time_norm
-        - weights.get("w_collisions", 1.0) * coll_norm
-        - weights.get("w_near", 1.0) * near_norm
-        - weights.get("w_comfort", 1.0) * comfort_exposure
-        - weights.get("w_force_exceed", 1.0) * force_exceed_norm
-        - weights.get("w_jerk", 1.0) * jerk_norm
+        _weighted_term(weights.get("w_success", 1.0), success)
+        - _weighted_term(weights.get("w_time", 1.0), time_norm)
+        - _weighted_term(weights.get("w_collisions", 1.0), coll_norm)
+        - _weighted_term(weights.get("w_near", 1.0), near_norm)
+        - _weighted_term(weights.get("w_comfort", 1.0), comfort_exposure)
+        - _weighted_term(weights.get("w_force_exceed", 1.0), force_exceed_norm)
+        - _weighted_term(weights.get("w_jerk", 1.0), jerk_norm)
     )
     return float(score)
 
@@ -154,6 +184,10 @@ def compute_snqi_v1(metrics: Metrics, weights: Weights, baseline_stats: Baseline
 
     Returns:
         Versioned SNQI score where every penalty term is baseline-normalized.
+
+    Notes:
+        - Shares the zero-weight contract of :func:`compute_snqi_v0`: a term with
+          weight ``0.0`` never propagates ``NaN`` (issue #5132).
     """
     success_raw = metrics.get("success", 0.0)
     success = 1.0 if isinstance(success_raw, bool) and success_raw else float(success_raw)
@@ -190,13 +224,13 @@ def compute_snqi_v1(metrics: Metrics, weights: Weights, baseline_stats: Baseline
     )
 
     score = (
-        weights.get("w_success", 1.0) * success
-        - weights.get("w_time", 1.0) * time_norm
-        - weights.get("w_collisions", 1.0) * coll_norm
-        - weights.get("w_near", 1.0) * near_norm
-        - weights.get("w_comfort", 1.0) * comfort_norm
-        - weights.get("w_force_exceed", 1.0) * force_exceed_norm
-        - weights.get("w_jerk", 1.0) * jerk_norm
+        _weighted_term(weights.get("w_success", 1.0), success)
+        - _weighted_term(weights.get("w_time", 1.0), time_norm)
+        - _weighted_term(weights.get("w_collisions", 1.0), coll_norm)
+        - _weighted_term(weights.get("w_near", 1.0), near_norm)
+        - _weighted_term(weights.get("w_comfort", 1.0), comfort_norm)
+        - _weighted_term(weights.get("w_force_exceed", 1.0), force_exceed_norm)
+        - _weighted_term(weights.get("w_jerk", 1.0), jerk_norm)
     )
 
     return float(score)

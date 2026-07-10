@@ -11,8 +11,6 @@ explode later as ``AttributeError`` downstream.
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from robot_sf.benchmark.identity.hash_utils import read_jsonl
@@ -38,12 +36,10 @@ def test_read_jsonl_rejects_non_object_line_with_context(tmp_path):
     assert f"{path}:2" in message
 
 
-def test_read_jsonl_propagates_malformed_json(tmp_path):
-    """Malformed JSON keeps the standard json decode error (a ValueError subclass)."""
+def test_read_jsonl_rejects_malformed_json_with_context(tmp_path):
+    """Malformed JSON fails closed with the source path and line number."""
     path = tmp_path / "bad.jsonl"
     path.write_text('{"a": 1}\n{"b": oops}\n', encoding="utf-8")
 
-    # Malformed JSON keeps the standard json decode error (a ValueError subclass),
-    # matching the pre-consolidation behavior.
-    with pytest.raises(json.JSONDecodeError):
+    with pytest.raises(ValueError, match=r"bad\.jsonl:2 is not valid JSON"):
         read_jsonl(path)

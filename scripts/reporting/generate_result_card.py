@@ -341,7 +341,9 @@ def render_latex_table(card: ResultCard) -> str:
     """Render a compact LaTeX tabular snippet for the metric list."""
     rows = ["\\begin{tabular}{ll}", "Metric & Value \\\\", "\\hline"]
     for key, value in card.metrics.items():
-        rows.append(f"{key.replace('_', '\\_')} & {str(value).replace('_', '\\_')} \\\\")
+        escaped_key = key.replace("_", "\\_")
+        escaped_value = str(value).replace("_", "\\_")
+        rows.append(f"{escaped_key} & {escaped_value} \\\\")
     rows.append("\\end{tabular}")
     return "\n".join(rows) + "\n"
 

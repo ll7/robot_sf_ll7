@@ -243,6 +243,7 @@ def _make_step_env(
     env._snqi_proxy = SimpleNamespace(compute_step_metrics=lambda *args, **kwargs: {})
     env.action_space = SimpleNamespace()
     env.last_action = None
+    env._action_latency_steps = 0
     env.reward_func = lambda _meta: 1.0
     env._telemetry_session = None
     env.recording_enabled = False
@@ -338,7 +339,7 @@ def test_robot_simulation_config_rollover_proxy_default_keeps_step_semantics() -
 
 def test_missing_rollover_config_attributes_keep_proxy_disabled() -> None:
     """Older/minimal config objects without rollover attributes stay compatible."""
-    env = _make_step_env(env_config=SimpleNamespace())
+    env = _make_step_env(env_config=SimpleNamespace(sim_config=EnvSettings().sim_config))
 
     _obs, reward, terminated, truncated, info = env.step(np.array([2.0, 2.0]))
 

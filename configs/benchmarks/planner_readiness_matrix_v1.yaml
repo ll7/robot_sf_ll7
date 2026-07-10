@@ -183,6 +183,25 @@ rows:
     reason: Risk-DWA style planners are testing-only and require explicit opt-in plus promotion proof.
     validation_command: uv run pytest tests/benchmark/test_algorithm_readiness_contract.py
 
+  - planner_id: dwa
+    family: orca_dwa_style
+    representative_entrypoint: configs/algos/dwa_classic.yaml
+    tier: experimental
+    requires_explicit_opt_in: true
+    execution_mode: adapter
+    readiness_status: adapter
+    availability_status: available
+    row_status: degraded
+    counts_as_success_evidence: false
+    artifact_dependency: none
+    source_paths:
+      - robot_sf/planner/dwa.py
+      - robot_sf/benchmark/algorithm_readiness.py
+      - configs/algos/dwa_classic.yaml
+      - docs/baselines/dwa.md
+    reason: Classical DWA is implemented and deterministic, but has no accepted benchmark campaign evidence.
+    validation_command: uv run pytest tests/planner/test_dwa.py tests/benchmark/test_algorithm_readiness_contract.py
+
   - planner_id: hybrid_rule_local_planner
     family: hybrid_planner_candidate
     representative_entrypoint: configs/algos/hybrid_rule_v3_static_margin0_waypoint2.yaml

@@ -77,7 +77,16 @@ def test_planner_readiness_matrix_covers_issue_3060_families() -> None:
     assert matrix["schema_version"] == "planner-readiness-matrix.v1"
     assert matrix["issue"] == 3060
     assert REQUIRED_FAMILIES <= families
-    assert {"goal", "random", "social_force", "orca", "hrvo", "ppo", "risk_dwa"} <= planner_ids
+    assert {
+        "goal",
+        "random",
+        "social_force",
+        "orca",
+        "hrvo",
+        "ppo",
+        "risk_dwa",
+        "dwa",
+    } <= planner_ids
     assert {"hybrid_rule_local_planner", "hybrid_portfolio"} <= planner_ids
 
 

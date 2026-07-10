@@ -109,3 +109,16 @@ def test_backfill_rejects_object_eval_by_scenario_artifact(tmp_path: Path) -> No
 
     with pytest.raises(backfill.BackfillError, match="Expected JSON array"):
         backfill.backfill(run_dir=tmp_path)
+
+
+def test_backfill_rejects_non_object_eval_by_scenario_row(tmp_path: Path) -> None:
+    """Every retained evaluation row must be a JSON object."""
+    run_id = "ppo_expert_demo_20260622T142053"
+    bench = _make_run_tree(tmp_path, run_id)
+    _write(
+        bench / "ppo_imitation" / "eval_by_scenario" / f"{run_id}.json",
+        [{"scenario_id": "classic_doorway_low", "eval_step": 1000000, "episodes": 7}, 3],
+    )
+
+    with pytest.raises(backfill.BackfillError, match="Expected JSON object at index 1"):
+        backfill.backfill(run_dir=tmp_path)

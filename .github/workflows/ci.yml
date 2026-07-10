@@ -118,6 +118,31 @@ jobs:
             output/coverage/htmlcov/
             output/coverage/.coverage
 
+  compat-matrix:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.11", "3.13"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up matrixed core CI environment
+        uses: ./.github/actions/setup-ci-python
+        with:
+          python-version: ${{ matrix.python }}
+          sync-args: "--frozen"
+
+      - name: Run core compatibility tests
+        run: >-
+          uv run pytest tests/common tests/contract tests/factories tests/gym_env tests/maps
+          tests/nav tests/ped_npc tests/render tests/scenarios tests/sensor tests/sim tests/unit
+          -q -m "not slow"
+
   smoke-artifacts:
     runs-on: ubuntu-latest
     timeout-minutes: 30

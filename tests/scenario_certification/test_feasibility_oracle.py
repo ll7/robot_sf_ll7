@@ -51,7 +51,8 @@ from robot_sf.scenario_certification.v1 import (
     ScenarioCertificate,
 )
 
-_SCENARIO_PATH = Path("configs/scenarios/archetypes/classic_head_on_corridor.yaml")
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SCENARIO_PATH = _REPO_ROOT / "configs/scenarios/archetypes/classic_head_on_corridor.yaml"
 
 
 def _route_certificate(
@@ -635,20 +636,19 @@ def test_oracle_end_to_end_on_committed_head_on_corridor_scenario() -> None:
     builds the simulator; it does NOT make any benchmark claim.
     """
     pytest.importorskip("robot_sf.benchmark.map_runner")
-    scenario_path = Path("configs/scenarios/archetypes/classic_head_on_corridor.yaml")
-    if not scenario_path.exists():
+    if not _SCENARIO_PATH.exists():
         pytest.skip("head-on-corridor archetype scenario not available in this checkout")
 
     from robot_sf.training.scenario_loader import load_scenarios
 
-    scenarios = load_scenarios(scenario_path)
+    scenarios = load_scenarios(_SCENARIO_PATH)
     assert scenarios, "head-on-corridor archetype must define at least one scenario"
     scenario = scenarios[0]
 
     verdict = run_feasibility_oracle(
         scenario,
         config=FeasibilityOracleConfig(
-            scenario_path=scenario_path,
+            scenario_path=_SCENARIO_PATH,
             envelope_radii_m=(1.0,),
             rollout_seed=int(scenario.get("seeds", [111])[0]),
         ),

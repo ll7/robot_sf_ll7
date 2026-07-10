@@ -97,7 +97,7 @@ def test_synthetic_fixture_passes(tmp_path: Path) -> None:
 
 def test_sha256sums_comment_marker_is_ignored() -> None:
     """A review marker comment does not invalidate a standard checksum ledger."""
-    parsed = _MODULE._parse_sha256sums(  # noqa: SLF001 - focused parser contract test.
+    parsed = _MODULE._parse_sha256sums(
         "# AI-GENERATED NEEDS-REVIEW\n"
         "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  "
         "docs/context/evidence/x/sample.json\n"

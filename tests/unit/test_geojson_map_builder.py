@@ -16,7 +16,8 @@ from robot_sf.nav.geojson_map_provenance import validate_import_provenance
 from robot_sf.training.scenario_loader import resolve_map_definition
 from scripts.validation.check_geojson_import import main as check_geojson_import
 
-FIXTURE = Path("tests/fixtures/maps/geojson/annotated_plaza.geojson")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+FIXTURE = REPO_ROOT / "tests/fixtures/maps/geojson/annotated_plaza.geojson"
 
 
 def test_geojson_converter_emits_loadable_segment_map(tmp_path: Path) -> None:
@@ -71,6 +72,19 @@ def test_geojson_converter_requires_zone_metadata(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="robot_sf_role=robot_goal"):
         geojson_to_map_structure(missing_goal)
+
+
+def test_geojson_converter_ignores_null_optional_properties(tmp_path: Path) -> None:
+    """Null GeoJSON properties do not create invalid masks or literal metadata identifiers."""
+    data = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    data["features"][0]["properties"]["robot_sf_role"] = None
+    data["features"][2]["properties"]["unused_optional_property"] = None
+    null_properties = tmp_path / "null-properties.geojson"
+    null_properties.write_text(json.dumps(data), encoding="utf-8")
+
+    result = geojson_to_map_structure(null_properties)
+
+    assert len(result["robot_spawn_zones"]) == 1
 
 
 def test_public_import_checker_requires_matching_checksum_and_loads_output(tmp_path: Path) -> None:

@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import geopandas
+import pandas
 import yaml
 from loguru import logger
 from shapely.affinity import translate
@@ -231,7 +232,7 @@ def _role_mask(features: geopandas.GeoDataFrame, role: str) -> Any:
     mask = features.geometry.is_empty & False
     for key in _ROLE_KEYS:
         if key in features.columns:
-            mask |= features[key].astype("string").str.lower() == role
+            mask |= features[key].astype(str).str.lower() == role
     return mask
 
 
@@ -239,15 +240,18 @@ def _column_values_in(features: geopandas.GeoDataFrame, key: str, values: Iterab
     """Return a row mask when a GeoJSON property contains one of ``values``."""
     if key not in features.columns:
         return features.geometry.is_empty & False
-    return features[key].astype("string").str.lower().isin({value.lower() for value in values})
+    return features[key].astype(str).str.lower().isin({value.lower() for value in values})
 
 
 def _feature_value(feature: Any, keys: Iterable[str]) -> str | None:
     """Return the first non-empty metadata value from ``keys`` for a GeoJSON row."""
     for key in keys:
         value = feature.get(key)
-        if value is not None and str(value).strip():
-            return str(value).strip()
+        if value is None or pandas.isna(value):
+            continue
+        normalized = str(value).strip()
+        if normalized:
+            return normalized
     return None
 
 

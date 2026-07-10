@@ -11,6 +11,7 @@ import sys
 from datetime import UTC, datetime
 from typing import Any
 
+from scripts.dev._gh_pagination import is_likely_truncated
 from scripts.dev.issue_claim import short_claim_ref, status_issue
 
 BODY_EXCERPT_CHARS = 300
@@ -392,11 +393,19 @@ def snapshot_claimable_issues(
     ]
     if body_limit <= 0:
         body_limit = BODY_EXCERPT_CHARS
+    truncated = is_likely_truncated(len(listed), limit=limit)
     return {
         "schema": "issue_batch_snapshot.v1",
         "repo": repo,
         "body_excerpt_chars": body_limit,
         "mode": "claimable",
+        "truncated": truncated,
+        "truncation_note": (
+            f"gh issue list may be capped: got {len(listed)} rows at --limit {limit}; "
+            "raise --limit or paginate"
+            if truncated
+            else ""
+        ),
         "include_blocked_external": include_blocked_external,
         "excluded_counts": {
             "blocked_external": sum(

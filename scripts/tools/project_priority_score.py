@@ -24,6 +24,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from scripts.dev._gh_pagination import assert_not_truncated
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
@@ -342,7 +344,12 @@ class GhProjectClient:
             ),
             as_json=True,
         )
-        return list(payload["items"])
+        items = list(payload["items"])
+        # Fail closed: this list drives score write-backs, so a result at the cap
+        # (indistinguishable from a full page) could silently skip items beyond the
+        # limit. Raise instead of writing a partial sync (issue #5048 / #4991).
+        assert_not_truncated(items, limit=limit, context="gh project item-list")
+        return items
 
     def update_number_field(
         self,

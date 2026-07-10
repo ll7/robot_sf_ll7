@@ -20,6 +20,8 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from scripts.dev._gh_pagination import is_likely_truncated
+
 SCHEMA_VERSION = "compact_ci_snapshot.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_WORKFLOW = "CI"
@@ -58,6 +60,7 @@ class DriftSample:
     sample_count: int
     median_seconds: int | None
     recommended_budget_seconds: int | None
+    truncated: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -353,6 +356,11 @@ def _fetch_drift_sample(
             recommended_budget_seconds=None,
         )
 
+    # Sampling call: a raw result at the cap means the drift window was capped, so
+    # record it as a structured marker rather than treat the sample as exhaustive
+    # (issue #5048 / #4991).
+    truncated = is_likely_truncated(len(runs), limit=sample_limit)
+
     durations: list[int] = []
     for run in runs:
         if not isinstance(run, dict):
@@ -370,6 +378,7 @@ def _fetch_drift_sample(
             sample_count=0,
             median_seconds=None,
             recommended_budget_seconds=None,
+            truncated=truncated,
         )
 
     median_seconds = math.ceil(statistics.median(durations))
@@ -379,6 +388,7 @@ def _fetch_drift_sample(
         sample_count=len(durations),
         median_seconds=median_seconds,
         recommended_budget_seconds=math.ceil(median_seconds * 1.3),
+        truncated=truncated,
     )
 
 

@@ -18,6 +18,7 @@ on:
       - "pyproject.toml"
       - "scripts/dev/ty_advisory_ratchet.py"
       - "scripts/validation/ty_advisory_baseline.json"
+      - "scripts/validation/ty_advisory_findings_fixture.json"
       - "tests/dev/test_ty_advisory_ratchet.py"
       - ".github/workflows/ty-advisory-ratchet.yml"
   schedule:

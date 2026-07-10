@@ -19,7 +19,9 @@ SCHEMA_VERSION = "issue_3482_release_0_0_2_collision_count_boundary.v1"
 EXPECTED_RELEASE = "0.0.2"
 EXPECTED_COLLISION_COUNT_STATUS = "withdrawn_exact_event_provenance_unavailable"
 EXPECTED_EXACT_OUTCOME_STATUS = "bounded_diagnostic_only"
+EXPECTED_DERIVED_CONSUMER_STATUS = "withdrawn_derived_collision_source"
 REQUIRED_OPEN_GATES: set[str] = set()
+REQUIRED_DERIVED_CONSUMER_KEYS = {"snqi_collision_term", "success_rate_collision_gate"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +124,70 @@ def _validate_claim_boundaries(payload: dict[str, Any]) -> list[BoundaryViolatio
                 "withdrawn collision-count claims must not advertise open promotion gates",
             )
         )
+
+    snqi_status = boundaries.get("snqi_collision_term_status")
+    if snqi_status != EXPECTED_DERIVED_CONSUMER_STATUS:
+        violations.append(
+            BoundaryViolation(
+                "claim_boundaries.snqi_collision_term_status",
+                f"expected {EXPECTED_DERIVED_CONSUMER_STATUS}; "
+                "SNQI collision term consumes withdrawn derived collision count",
+            )
+        )
+
+    sr_status = boundaries.get("success_rate_collision_status")
+    if sr_status != EXPECTED_DERIVED_CONSUMER_STATUS:
+        violations.append(
+            BoundaryViolation(
+                "claim_boundaries.success_rate_collision_status",
+                f"expected {EXPECTED_DERIVED_CONSUMER_STATUS}; "
+                "success_rate collision gate consumes withdrawn derived collision count",
+            )
+        )
+
+    return violations
+
+
+def _validate_derived_collision_consumers(payload: dict[str, Any]) -> list[BoundaryViolation]:
+    """Validate that SNQI and success_rate are documented as derived-collision consumers."""
+    violations: list[BoundaryViolation] = []
+    consumers = payload.get("derived_collision_consumers")
+    if not isinstance(consumers, dict):
+        violations.append(
+            BoundaryViolation(
+                "derived_collision_consumers",
+                "must document snqi_collision_term and success_rate_collision_gate "
+                "as withdrawn derived-collision consumers (issue #5097)",
+            )
+        )
+        return violations
+
+    for key in REQUIRED_DERIVED_CONSUMER_KEYS:
+        entry = consumers.get(key)
+        if not isinstance(entry, dict):
+            violations.append(
+                BoundaryViolation(
+                    f"derived_collision_consumers.{key}",
+                    "entry missing; must document this field as a derived-collision consumer",
+                )
+            )
+            continue
+        status = entry.get("status")
+        if status != EXPECTED_DERIVED_CONSUMER_STATUS:
+            violations.append(
+                BoundaryViolation(
+                    f"derived_collision_consumers.{key}.status",
+                    f"expected {EXPECTED_DERIVED_CONSUMER_STATUS}",
+                )
+            )
+        if not entry.get("note"):
+            violations.append(
+                BoundaryViolation(
+                    f"derived_collision_consumers.{key}.note",
+                    "note field required to explain why this consumer is withdrawn",
+                )
+            )
+
     return violations
 
 
@@ -146,6 +212,7 @@ def validate_manifest(payload: dict[str, Any]) -> list[BoundaryViolation]:
     violations.extend(_validate_diagnostic_summary(payload))
     violations.extend(_validate_claim_boundaries(payload))
     violations.extend(_validate_forbidden_claims(payload))
+    violations.extend(_validate_derived_collision_consumers(payload))
 
     return violations
 
@@ -154,17 +221,18 @@ def build_report(manifest_path: Path) -> dict[str, Any]:
     """Build the deterministic release collision-boundary report."""
     payload = _load_manifest(manifest_path)
     violations = validate_manifest(payload)
+    boundaries = (
+        payload.get("claim_boundaries") if isinstance(payload.get("claim_boundaries"), dict) else {}
+    )
     return {
         "schema_version": "release_0_0_2_collision_count_boundary_report.v1",
         "manifest": str(manifest_path),
         "status": "pass" if not violations else "fail",
         "issue": payload.get("issue"),
         "release_tag": payload.get("release_tag"),
-        "collision_count_metric_status": (
-            payload.get("claim_boundaries", {}).get("collision_count_metric_status")
-            if isinstance(payload.get("claim_boundaries"), dict)
-            else None
-        ),
+        "collision_count_metric_status": boundaries.get("collision_count_metric_status"),
+        "snqi_collision_term_status": boundaries.get("snqi_collision_term_status"),
+        "success_rate_collision_status": boundaries.get("success_rate_collision_status"),
         "violations": [asdict(violation) for violation in violations],
     }
 

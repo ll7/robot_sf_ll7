@@ -4,7 +4,8 @@ from pathlib import Path
 
 import yaml
 
-LEDGER_PATH = Path("docs/context/issue_4984_improvement_batch_dependency_ledger.yaml")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+LEDGER_PATH = REPO_ROOT / "docs/context/issue_4984_improvement_batch_dependency_ledger.yaml"
 EXPECTED_SEQUENCE = [
     4966,
     4967,

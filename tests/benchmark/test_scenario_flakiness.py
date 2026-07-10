@@ -181,3 +181,20 @@ def test_invalid_threshold_rejected():
     """A threshold outside (0, 1] is rejected."""
     with pytest.raises(ValueError, match="stability_threshold"):
         compute_flakiness_audit([_rec("s1", "ppo", 0, 1)], stability_threshold=1.5)
+
+
+@pytest.mark.parametrize("min_seeds", [0, -1])
+def test_nonpositive_min_seeds_rejected(min_seeds: int):
+    """A nonpositive evidence minimum cannot silently assess every cell."""
+    with pytest.raises(ValueError, match="min_seeds"):
+        compute_flakiness_audit([_rec("s1", "ppo", 0, 1)], min_seeds=min_seeds)
+
+
+def test_all_unusable_records_fail_closed():
+    """Records without a usable scenario/outcome cannot yield an empty success report."""
+    records = [
+        {"scenario_id": "s1", "algo": "ppo", "seed": 0, "metrics": {}},
+        {"algo": "ppo", "seed": 1, "metrics": {"success": 1}},
+    ]
+    with pytest.raises(ValueError, match="no usable evidence"):
+        compute_flakiness_audit(records, group_by="algo")

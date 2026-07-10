@@ -72,3 +72,25 @@ def test_cli_flakiness_audit_missing_input_fails_closed(tmp_path: Path):
     )
     assert rc == 2
     assert not out_json.exists()
+
+
+def test_cli_flakiness_audit_rejects_nonpositive_min_seeds(tmp_path: Path):
+    """The CLI rejects a semantic configuration that removes the evidence floor."""
+    episodes = tmp_path / "episodes.jsonl"
+    _write_episodes(episodes)
+    out_json = tmp_path / "flakiness.json"
+
+    rc = cli_main(
+        [
+            "flakiness-audit",
+            "--in",
+            str(episodes),
+            "--out",
+            str(out_json),
+            "--min-seeds",
+            "0",
+        ],
+    )
+
+    assert rc == 2
+    assert not out_json.exists()

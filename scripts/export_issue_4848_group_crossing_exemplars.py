@@ -45,6 +45,10 @@ DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_4848_group_crossing_exemp
 DEFAULT_CAMPAIGN_ROOT = Path("output/issue4206-trace-rerun/13334/runs")
 
 
+class ExemplarExportInputError(ValueError):
+    """Raised when an exemplar export input cannot support valid evidence output."""
+
+
 @dataclass(frozen=True)
 class SelectedEpisode:
     """One selected exemplar episode."""
@@ -199,13 +203,18 @@ def derive_trace_rows(record: dict[str, Any]) -> TraceRows:
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
-    """Read JSONL file into a list of dicts."""
+    """Read a non-empty JSONL file or fail before an empty export can be emitted."""
+    if not path.is_file():
+        raise ExemplarExportInputError(f"episodes JSONL is not a file: {path}")
+
     records = []
     with path.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
                 records.append(json.loads(line))
+    if not records:
+        raise ExemplarExportInputError(f"episodes JSONL is empty: {path}")
     return records
 
 
@@ -219,7 +228,9 @@ def select_exemplars_for_planner(
     ]
 
     if not group_crossing_eps:
-        return []
+        raise ExemplarExportInputError(
+            f"planner {planner!r}: no eligible group-crossing episodes for exemplar selection"
+        )
 
     # Extract metric values
     scored: list[tuple[float, dict[str, Any]]] = []
@@ -231,7 +242,10 @@ def select_exemplars_for_planner(
                 scored.append((float(val), ep))
 
     if not scored:
-        return []
+        raise ExemplarExportInputError(
+            f"planner {planner!r}: no finite selection metric {SELECTION_METRIC!r} "
+            f"among {len(group_crossing_eps)} eligible episodes"
+        )
 
     # Sort by metric value (ascending for median index invariance)
     scored.sort(key=lambda x: x[0])
@@ -431,15 +445,14 @@ def _process_planner(
     pin_generated_at: str | None = None,
 ) -> tuple[list[SelectedEpisode], dict[str, Any] | None]:
     """Process one planner: read episodes, select exemplars, write bundles."""
+    if not campaign_root.is_dir():
+        raise ExemplarExportInputError(f"campaign root is not a directory: {campaign_root}")
+
     planner_dir = campaign_root / f"{planner}__differential_drive"
-    if not planner_dir.exists():
-        print(f"Warning: planner directory not found: {planner_dir}")
-        return [], None
+    if not planner_dir.is_dir():
+        raise ExemplarExportInputError(f"planner directory is not a directory: {planner_dir}")
 
     episodes_path = planner_dir / "episodes.jsonl"
-    if not episodes_path.exists():
-        print(f"Warning: episodes.jsonl not found: {episodes_path}")
-        return [], None
 
     print(f"Reading episodes from {episodes_path}")
     episodes = read_jsonl(episodes_path)
@@ -524,22 +537,22 @@ def main() -> int:
     if not output_dir.is_absolute():
         output_dir = repo_root / output_dir
 
-    if not campaign_root.exists():
-        print(f"Error: campaign root not found: {campaign_root}", file=sys.stderr)
-        return 1
-
-    all_selections: list[SelectedEpisode] = []
-    bundle_metadata: dict[str, Any] | None = None
-    for planner in args.planners:
-        selections, metadata = _process_planner(
-            planner,
-            campaign_root,
-            output_dir,
-            pin_generated_at=args.pin_generated_at,
-        )
-        all_selections.extend(selections)
-        if bundle_metadata is None and metadata is not None:
-            bundle_metadata = metadata
+    try:
+        all_selections: list[SelectedEpisode] = []
+        bundle_metadata: dict[str, Any] | None = None
+        for planner in args.planners:
+            selections, metadata = _process_planner(
+                planner,
+                campaign_root,
+                output_dir,
+                pin_generated_at=args.pin_generated_at,
+            )
+            all_selections.extend(selections)
+            if bundle_metadata is None and metadata is not None:
+                bundle_metadata = metadata
+    except ExemplarExportInputError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
 
     marker_date = extract_marker_date(bundle_metadata) if bundle_metadata else None
     generated_at = bundle_metadata.get("generated_at_utc") if bundle_metadata else None

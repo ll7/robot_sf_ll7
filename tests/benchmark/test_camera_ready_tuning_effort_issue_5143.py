@@ -283,7 +283,28 @@ def test_validate_campaign_config_error_gate_fails_when_arm_missing_tuning() -> 
         scenario_candidates=ScenarioCandidateSelection(),
         tuning_effort_enforcement="error",
     )
-    with pytest.raises(ValueError, match="missing tuning block for: b"):
+    with pytest.raises(ValueError, match="missing declared tuning block for: b"):
+        _validate_campaign_config(cfg)
+
+
+@pytest.mark.parametrize("source", [TUNING_SOURCE_BACKFILLED, "unknown"])
+def test_validate_campaign_config_error_gate_rejects_non_declared_tuning(source: str) -> None:
+    """Strict enforcement cannot accept a backfilled or unknown record as a new-arm declaration."""
+    cfg = CampaignConfig(
+        name="gate",
+        scenario_matrix_path=Path("does-not-matter.yaml"),
+        planners=(
+            PlannerSpec(
+                key="a",
+                algo="goal",
+                tuning=TuningSpec(source=source),
+            ),
+        ),
+        seed_policy=SeedPolicy(),
+        scenario_candidates=ScenarioCandidateSelection(),
+        tuning_effort_enforcement="error",
+    )
+    with pytest.raises(ValueError, match="missing declared tuning block for: a"):
         _validate_campaign_config(cfg)
 
 
@@ -353,7 +374,7 @@ def test_load_campaign_config_error_gate_rejects_missing_tuning(tmp_path: Path) 
         planners_yaml="  - key: a\n    algo: goal\n    planner_group: core\n",
         extra_top_level="tuning_effort_enforcement: error",
     )
-    with pytest.raises(ValueError, match="missing tuning block for: a"):
+    with pytest.raises(ValueError, match="missing declared tuning block for: a"):
         load_campaign_config(config_path)
 
 
@@ -429,7 +450,7 @@ def test_prepare_campaign_preflight_error_gate_aborts_before_artifacts(tmp_path:
         scenario_candidates=ScenarioCandidateSelection(),
         tuning_effort_enforcement="error",
     )
-    with pytest.raises(ValueError, match="missing tuning block for: a"):
+    with pytest.raises(ValueError, match="missing declared tuning block for: a"):
         prepare_campaign_preflight(cfg, output_root=tmp_path / "out", label="issue5143")
     # No campaign root should have been created on the fail-closed path.
     assert not (tmp_path / "out").exists() or not list(

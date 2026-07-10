@@ -20,6 +20,8 @@ from robot_sf.examples.manifest_loader import ExampleManifest, ExampleScript, lo
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _MANIFEST: ExampleManifest = load_manifest(validate_paths=True)
 _CI_EXAMPLES: tuple[ExampleScript, ...] = tuple(_MANIFEST.iter_ci_enabled_examples())
+_DATA_ANALYSIS_EXAMPLE = _REPO_ROOT / "examples" / "plotting" / "data_analysis_example.py"
+_TRACKED_DATASET = _REPO_ROOT / "examples" / "datasets" / "2024-12-06_15-39-44.json"
 
 
 def _id(example: ExampleScript) -> str:
@@ -150,3 +152,26 @@ def test_example_runs_without_error(
 def test_manifest_has_ci_enabled_entries() -> None:
     """Test that the manifest contains at least one CI-enabled example, ensuring this smoke test is meaningful and not a false positive due to misconfiguration."""
     assert _CI_EXAMPLES, "Expected at least one CI-enabled example in manifest"
+
+
+def test_data_analysis_fast_demo_writes_to_artifact_root(
+    example_env: dict[str, str], tmp_path: Path
+) -> None:
+    """Keep the smoke export from rewriting the tracked example dataset."""
+    tracked_bytes = _TRACKED_DATASET.read_bytes()
+    artifact_root = tmp_path / "artifacts"
+    env = {**example_env, "ROBOT_SF_ARTIFACT_ROOT": str(artifact_root)}
+
+    completed = subprocess.run(
+        [sys.executable, str(_DATA_ANALYSIS_EXAMPLE)],
+        cwd=_REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120.0,
+        check=False,
+    )
+
+    assert completed.returncode == 0, _tail(completed.stdout + "\n" + completed.stderr)
+    assert _TRACKED_DATASET.read_bytes() == tracked_bytes
+    assert (artifact_root / "examples" / "datasets" / _TRACKED_DATASET.name).is_file()

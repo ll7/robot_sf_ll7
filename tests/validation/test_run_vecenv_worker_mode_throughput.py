@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
+from gymnasium import Env, spaces
 
 _REPO_ROOT = Path(__file__).parent.parent.parent.resolve()
 
@@ -17,6 +18,7 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 from scripts.validation.run_vecenv_worker_mode_throughput import (  # noqa: E402
     _build_env_fns,
+    _build_vec_env,
     _env_factory_kwargs,
     _EnvFactory,
     _resolve_num_envs,
@@ -118,6 +120,46 @@ def test_build_env_fns_length():
     assert len(env_fns) == 3
     assert env_fns[0].seed == 10
     assert env_fns[2].seed == 12
+
+
+class _SyntheticEnv(Env):
+    """Deterministic environment for worker-mode transition equivalence tests."""
+
+    metadata = {"render_modes": []}
+
+    def __init__(self, offset: float) -> None:
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-10.0, high=10.0, shape=(1,), dtype=np.float32)
+        self._offset = offset
+
+    def reset(self, *, seed: int | None = None, options: dict | None = None):
+        super().reset(seed=seed)
+        return np.array([self._offset], dtype=np.float32), {}
+
+    def step(self, action: np.ndarray):
+        observation = np.asarray(action, dtype=np.float32) + self._offset
+        return observation, float(observation[0]), False, False, {}
+
+
+def test_threaded_lidar_batch_matches_threaded_synthetic_transitions():
+    """The comparator's batch mode preserves synthetic threaded transitions exactly."""
+    env_fns = [lambda: _SyntheticEnv(0.0), lambda: _SyntheticEnv(1.0)]
+    actions = np.array([[0.25], [0.75]], dtype=np.float32)
+    threaded = _build_vec_env("threaded", env_fns)
+    batched = _build_vec_env("threaded_lidar_batch", env_fns)
+    try:
+        np.testing.assert_array_equal(batched.reset(), threaded.reset())
+        batched_transition = batched.step(actions)
+        threaded_transition = threaded.step(actions)
+    finally:
+        batched.close()
+        threaded.close()
+
+    for batched_value, threaded_value in zip(batched_transition, threaded_transition, strict=True):
+        if isinstance(batched_value, np.ndarray):
+            np.testing.assert_array_equal(batched_value, threaded_value)
+        else:
+            assert batched_value == threaded_value
 
 
 # ---------------------------------------------------------------------------
@@ -235,6 +277,43 @@ def test_main_threaded_mode_writes_json(tmp_path):
     not _SMOKE_CONFIG.exists(),
     reason="smoke config not found",
 )
+def test_main_threaded_lidar_batch_mode_writes_json(tmp_path):
+    """The comparator accepts the batched LiDAR worker mode and records it unchanged."""
+    out = tmp_path / "result.json"
+    with patch(
+        "scripts.validation.run_vecenv_worker_mode_throughput._build_vec_env",
+        side_effect=_patch_build_vec_env,
+    ):
+        rc = main(
+            [
+                "--config",
+                str(_SMOKE_CONFIG),
+                "--modes",
+                "dummy",
+                "threaded_lidar_batch",
+                "--num-envs",
+                "2",
+                "--warmup-steps",
+                "2",
+                "--measure-steps",
+                "5",
+                "--output",
+                str(out),
+            ]
+        )
+    assert rc == 0
+    data = json.loads(out.read_text())
+    assert [record["mode"] for record in data["results"]] == [
+        "dummy",
+        "threaded_lidar_batch",
+    ]
+    assert all(record["status"] == "ok" for record in data["results"])
+
+
+@pytest.mark.skipif(
+    not _SMOKE_CONFIG.exists(),
+    reason="smoke config not found",
+)
 def test_main_construction_failure_reflected_in_output(tmp_path):
     """Construction failure status is recorded; main returns 2."""
     out = tmp_path / "result.json"
@@ -274,6 +353,17 @@ def test_main_missing_config_returns_1(tmp_path):
     out = tmp_path / "result.json"
     rc = main(["--config", str(tmp_path / "nonexistent.yaml"), "--output", str(out)])
     assert rc == 1
+
+
+def test_main_missing_scenario_config_returns_1(tmp_path, capsys):
+    """A config without its required scenario input must fail before env construction."""
+    config = tmp_path / "missing_scenario_config.yaml"
+    config.write_text("num_envs: 2\n", encoding="utf-8")
+
+    rc = main(["--config", str(config), "--output", str(tmp_path / "result.json")])
+
+    assert rc == 1
+    assert "scenario_config must be a non-empty path string" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(

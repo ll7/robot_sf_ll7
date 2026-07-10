@@ -512,22 +512,82 @@ class TestSelectionReportDeterminism:
         assert "Generated:" in report
 
 
-class TestTupleReturnProcessPlanner:
-    """Verify _process_planner returns tuple[list[SelectedEpisode], dict | None].
+class TestProcessPlanner:
+    """Verify the 4848 planner-processing input contract."""
 
-    The 4848 export script was migrated to return a tuple (PR #4910/#4925),
-    matching the 4891 contract.  This regression test ensures the signature
-    remains correct.
-    """
+    def test_missing_planner_dir_fails_closed(self, tmp_path: Path) -> None:
+        """A missing planner directory raises the typed exporter input error."""
+        campaign_root = tmp_path / "runs"
+        campaign_root.mkdir()
+        with pytest.raises(_export_module.ExemplarExportInputError, match="planner directory"):
+            _export_module._process_planner("nonexistent", campaign_root, tmp_path / "output")
 
-    def test_returns_tuple_with_empty_planner_dir(self, tmp_path: Path) -> None:
-        """When planner dir doesn't exist, returns ([], None)."""
-        selections, metadata = _export_module._process_planner(
-            "nonexistent", tmp_path / "runs", tmp_path / "output"
+
+class TestFailClosedInputs:
+    """Regression coverage for issue #5003 evidence-input failure paths."""
+
+    def test_missing_campaign_root_returns_nonzero(
+        self, tmp_path: Path, monkeypatch, capsys
+    ) -> None:
+        """The CLI reports a missing campaign root and exits with a nonzero status."""
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "export",
+                "--campaign-root",
+                str(tmp_path / "missing"),
+                "--output-dir",
+                str(tmp_path / "out"),
+            ],
         )
-        assert isinstance(selections, list)
-        assert selections == []
-        assert metadata is None
+        assert _export_module.main() == 2
+        assert "campaign root is not a directory" in capsys.readouterr().err
+
+    def test_missing_episodes_jsonl_fails_closed(self, tmp_path: Path) -> None:
+        """A planner directory without episodes.jsonl is rejected as a typed input error."""
+        campaign_root = tmp_path / "runs"
+        (campaign_root / "goal__differential_drive").mkdir(parents=True)
+        with pytest.raises(_export_module.ExemplarExportInputError, match="not a file"):
+            _export_module._process_planner("goal", campaign_root, tmp_path / "output")
+
+    def test_directory_at_episodes_jsonl_path_fails_closed(self, tmp_path: Path) -> None:
+        """A directory named episodes.jsonl cannot be accepted as an episode file."""
+        campaign_root = tmp_path / "runs"
+        (campaign_root / "goal__differential_drive" / "episodes.jsonl").mkdir(parents=True)
+        with pytest.raises(_export_module.ExemplarExportInputError, match="not a file"):
+            _export_module._process_planner("goal", campaign_root, tmp_path / "output")
+
+    def test_empty_episodes_jsonl_fails_closed(self, tmp_path: Path) -> None:
+        """An empty episode file cannot yield an empty-but-successful export."""
+        episodes_path = tmp_path / "runs" / "goal__differential_drive" / "episodes.jsonl"
+        episodes_path.parent.mkdir(parents=True)
+        episodes_path.write_text("\n", encoding="utf-8")
+        with pytest.raises(_export_module.ExemplarExportInputError, match="is empty"):
+            _export_module._process_planner("goal", episodes_path.parents[1], tmp_path / "output")
+
+    def test_all_nonfinite_selection_metrics_fail_closed(self) -> None:
+        """NaN and infinity cannot silently produce a selected exemplar."""
+        episodes = [
+            self._episode("classic_group_crossing_low", 1, float("nan")),
+            self._episode("classic_group_crossing_low", 2, float("inf")),
+            self._episode("classic_group_crossing_low", 3, float("-inf")),
+        ]
+        with pytest.raises(
+            _export_module.ExemplarExportInputError, match="no finite selection metric"
+        ):
+            _export_module.select_exemplars_for_planner(episodes, "goal")
+
+    @staticmethod
+    def _episode(scenario_id: str, seed: int, value: float) -> dict[str, Any]:
+        """Build a minimally valid group-crossing episode for selection tests."""
+        return {
+            "scenario_id": scenario_id,
+            "seed": seed,
+            "episode_id": f"{scenario_id}_s{seed}",
+            "status": "success",
+            "metrics": {"path_efficiency": value},
+        }
 
 
 class TestBundleReproducibleByteIdentical:

@@ -391,6 +391,16 @@ run debugging, inspect job metadata first; fetch direct job-log excerpts only fo
 suspect step, and avoid `gh run view --log` dumps until the run is complete enough for that command
 to return useful output.
 
+When a completed job's normal log is absent (for example, a runner infrastructure failure omitted
+the job from the log archive), recover its retained check-run annotations with:
+
+```bash
+uv run python scripts/dev/diagnose_actions_job.py <job-id>
+```
+
+The helper prints normal logs when they are available and otherwise prints the annotations linked
+from the job metadata. It exits nonzero if neither source provides diagnostics.
+
 For routine goal-autopilot orientation, prefer the compact state snapshot helper before broad parent
 thread reads:
 

@@ -559,6 +559,7 @@ def _safety_predicates_for_episode(
     robot_headings: list[float],
     ped_pos_arr: np.ndarray,
     dt: float,
+    command_sources: list[str | None] | None = None,
     visibility_evidence: VisibilityEvidenceTrace | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Build diagnostic safety predicate records for a completed episode.
@@ -599,6 +600,7 @@ def _safety_predicates_for_episode(
             headings,
             speeds,
             dt=dt,
+            command_sources=command_sources,
         ),
         "late_evasive_predicate": late_evasive_predicate(
             hazard_distances,
@@ -1325,6 +1327,7 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
     *,
     robot_positions: list[np.ndarray],
     robot_headings: list[float],
+    hybrid_command_sources: list[str | None] | None = None,
     ped_positions: list[np.ndarray],
     ped_forces: list[np.ndarray],
     visibility_trace: list[np.ndarray | None],
@@ -1390,6 +1393,7 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
         robot_headings=robot_headings,
         ped_pos_arr=ped_pos_arr,
         dt=float(config.sim_config.time_per_step_in_secs),
+        command_sources=hybrid_command_sources,
         visibility_evidence=VisibilityEvidenceTrace(
             visibility=visibility_arr,
             track_confidence=track_confidence_arr,
@@ -1620,6 +1624,7 @@ class _EpisodeStepLoopResult:
     cbf_filter_trace: list[dict[str, Any]]
     ammv_command_actions: list[dict[str, Any]]
     synthetic_actuation_trace: list[dict[str, Any]]
+    hybrid_command_sources: list[str | None] | None
     planner_decision_trace: list[dict[str, Any]]
     simulation_step_trace: list[dict[str, Any]]
     view_integrity: dict[str, Any] | None
@@ -1669,6 +1674,16 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
     planner_runtime_snapshot: dict[str, Any] | None = None
     current_command = (0.0, 0.0)
     synthetic_actuation_trace: list[dict[str, Any]] = []
+    canonical_algorithm = (
+        str(algo_meta.get("canonical_algorithm", algo_meta.get("algorithm", ""))).strip().lower()
+    )
+    hybrid_source_field = {
+        "hybrid_portfolio": "selected_head",
+        "hybrid_rule_local_planner": "selected_source",
+    }.get(canonical_algorithm)
+    hybrid_command_sources: list[str | None] | None = (
+        [] if hybrid_source_field is not None else None
+    )
     planner_decision_trace: list[dict[str, Any]] = []
     simulation_step_trace: list[dict[str, Any]] = []
     visibility_trace: list[np.ndarray | None] = []
@@ -1755,7 +1770,11 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     raise DegeneratePlannerViewError(integrity)
             actuation_step = None
             planner_step_decision = None
-            if record_planner_decision_trace and callable(planner_stats):
+            # Hybrid handoff telemetry is part of the episode predicate contract, so
+            # sample it even when the larger planner-decision trace is not requested.
+            if (record_planner_decision_trace or hybrid_command_sources is not None) and callable(
+                planner_stats
+            ):
                 try:
                     planner_runtime = planner_stats()
                 except (RuntimeError, ValueError, TypeError):
@@ -1764,6 +1783,14 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     planner_runtime.get("last_decision"), dict
                 ):
                     planner_step_decision = dict(planner_runtime["last_decision"])
+            if hybrid_command_sources is not None:
+                source = (
+                    planner_step_decision.get(hybrid_source_field)
+                    if planner_step_decision is not None and hybrid_source_field is not None
+                    else None
+                )
+                normalized_source = str(source).strip() if source is not None else ""
+                hybrid_command_sources.append(normalized_source or None)
             # Use per-step flag when available (e.g. SAC with fallback); fall back to the
             # static cached value for planners that set _planner_native_env_action once.
             step_is_native = getattr(policy_fn, "_last_step_native", planner_native_action)
@@ -1959,7 +1986,7 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
                         "robot_y_m": float(robot_pos[1]),
                     }
                 )
-            if planner_step_decision is not None:
+            if record_planner_decision_trace and planner_step_decision is not None:
                 selected_terms = planner_step_decision.get("selected_terms")
                 selected_terms = selected_terms if isinstance(selected_terms, dict) else {}
                 progress_windows_raw = planner_step_decision.get("progress_windows")
@@ -2115,6 +2142,7 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
         cbf_filter_trace=cbf_filter_trace,
         ammv_command_actions=ammv_command_actions,
         synthetic_actuation_trace=synthetic_actuation_trace,
+        hybrid_command_sources=hybrid_command_sources,
         planner_decision_trace=planner_decision_trace,
         simulation_step_trace=simulation_step_trace,
         view_integrity=view_integrity,
@@ -2626,6 +2654,7 @@ def run_map_episode(  # noqa: PLR0913
     post_loop = _compute_post_loop_metrics(
         robot_positions=loop_result.robot_positions,
         robot_headings=loop_result.robot_headings,
+        hybrid_command_sources=loop_result.hybrid_command_sources,
         ped_positions=loop_result.ped_positions,
         ped_forces=loop_result.ped_forces,
         visibility_trace=loop_result.visibility_trace,

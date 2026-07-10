@@ -65,3 +65,23 @@ def test_map_runner_safety_predicates_feed_event_ledger_surrogates() -> None:
         surrogate_events["oscillatory_control_predicate"]["schema_version"]
         == "safety_predicate.oscillatory_control.v1"
     )
+
+
+def test_map_runner_threads_aligned_command_sources_into_oscillation_fields() -> None:
+    """Hybrid source handoffs should reach the emitted predicate record."""
+    robot_pos_arr = np.asarray([[float(step), 0.0] for step in range(5)])
+    robot_vel_arr = np.tile(np.asarray([[1.0, 0.0]]), (5, 1))
+    ped_pos_arr = np.zeros((5, 0, 2), dtype=float)
+
+    predicates = _safety_predicates_for_episode(
+        robot_pos_arr=robot_pos_arr,
+        robot_vel_arr=robot_vel_arr,
+        robot_headings=[0.0] * 5,
+        ped_pos_arr=ped_pos_arr,
+        dt=0.1,
+        command_sources=["risk_dwa", "orca", None, "prediction", "risk_dwa"],
+    )
+
+    # The missing third-step label blocks only the two transitions touching it;
+    # it must not create artificial handoffs or shift source/trajectory alignment.
+    assert predicates["oscillatory_control_predicate"]["fields"]["command_source_changes"] == 2

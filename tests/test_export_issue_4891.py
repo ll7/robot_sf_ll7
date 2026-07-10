@@ -407,6 +407,32 @@ class TestPinGeneratedAt:
         meta = json.loads((bundle_dir / "metadata.json").read_text(encoding="utf-8"))
         assert "2026" in meta["generated_at_utc"]
 
+    def test_distance_convention_field_is_center_center(self, tmp_path: Path) -> None:
+        """Issue #5141: min_robot_ped_distance_m is center-to-center; declare it."""
+        record = self._make_minimal_record()
+        sel = _export_module.SelectedEpisode(
+            planner="goal",
+            scenario_id="classic_head_on_corridor_low",
+            seed=20,
+            selection_mode="median",
+            metric_value=1.0,
+            episode_id="test_episode",
+            status="collision",
+        )
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+        _export_module.write_bundle(
+            episode_record=record,
+            selection=sel,
+            output_dir=bundle_dir,
+        )
+        meta = json.loads((bundle_dir / "metadata.json").read_text(encoding="utf-8"))
+        assert meta["distance_convention"] == "center_center"
+        trace = json.loads((bundle_dir / "trace_series.json").read_text(encoding="utf-8"))
+        assert trace["metadata"]["distance_convention"] == "center_center"
+        csv_content = (bundle_dir / "min_distance_series.csv").read_text(encoding="utf-8")
+        assert "# distance_convention: center_center" in csv_content
+
 
 class TestSelectionReportDeterminism:
     """write_selection_report must be byte-stable when generated_at is pinned.

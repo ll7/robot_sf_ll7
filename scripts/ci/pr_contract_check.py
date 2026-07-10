@@ -24,6 +24,12 @@ from pathlib import Path
 # OSError covers FileNotFoundError when git/gh is absent.
 _BEST_EFFORT_ERRORS = (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError)
 
+from robot_sf.evidence.distance_convention import (  # noqa: E402
+    DISTANCE_CONVENTION_FIELD,
+    has_distance_like_columns,
+    is_distance_like_filename,
+)
+
 # Match keywords followed by #N or a GitHub issue URL
 CLOSING_PATTERN = re.compile(
     r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+`?(?:#(\d+)|https?://github\.com/[^/\s]+/[^/\s]+/issues/(\d+))\b",
@@ -183,7 +189,7 @@ def check_state_refresh_only(changed_files: list[str], title: str, body: str) ->
     return []
 
 
-def check_evidence_tree_hygiene(changed_files: list[str], base_ref: str) -> list[str]:  # noqa: C901
+def check_evidence_tree_hygiene(changed_files: list[str], base_ref: str) -> list[str]:  # noqa: C901, PLR0912
     """Rule 4: Evidence tree marker and provenance checks."""
     blockers = []
     new_files = get_new_files(base_ref)
@@ -244,7 +250,70 @@ def check_evidence_tree_hygiene(changed_files: list[str], base_ref: str) -> list
                         f"BLOCKER: Evidence README '{f}' contains claim '{claim}', "
                         f"but is missing required provenance fields: {', '.join(missing)}."
                     )
+
+        # 3. Distance-convention field on distance-like series (issue #5141).
+        # Only enforced for NEW evidence files so the pre-existing evidence tree
+        # (which predates the field) is not retroactively flagged.
+        if is_new:
+            blocker = _check_distance_convention_for_file(f, content)
+            if blocker is not None:
+                blockers.append(blocker)
     return blockers
+
+
+def _check_distance_convention_for_file(path: str, content: str) -> str | None:
+    """Issue #5141: require a ``distance_convention`` declaration on distance-like series.
+
+    A distance-like series is either (a) a file whose name carries a distance
+    token (``distance``/``clearance``), or (b) a CSV whose header line declares a
+    distance-like column. The declaration is satisfied when the file itself
+    contains the ``distance_convention`` key/header, or a sibling ``metadata.json``
+    carries it.
+
+    Returns a BLOCKER message string when the field is missing, else ``None``.
+    """
+    basename = os.path.basename(path)
+    lowered = basename.lower()
+
+    name_is_distance_like = is_distance_like_filename(basename)
+    column_is_distance_like = False
+    if lowered.endswith(".csv"):
+        # The first non-comment, non-marker line is the CSV header.
+        header_line = ""
+        for line in content.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            header_line = stripped
+            break
+        column_is_distance_like = has_distance_like_columns(header_line)
+
+    if not (name_is_distance_like or column_is_distance_like):
+        return None
+
+    field_key = DISTANCE_CONVENTION_FIELD
+    # In-file declaration: JSON key, or a `# distance_convention:` CSV/text header line.
+    if f'"{field_key}"' in content or f"{field_key}:" in content:
+        return None
+
+    # Fallback: a sibling metadata.json carries the declaration for the bundle.
+    try:
+        directory = os.path.dirname(path) or "."
+        metadata_path = os.path.join(directory, "metadata.json")
+        if os.path.exists(metadata_path):
+            with open(metadata_path, encoding="utf-8") as meta_handle:
+                meta_content = meta_handle.read()
+            if f'"{field_key}"' in meta_content:
+                return None
+    except _BEST_EFFORT_ERRORS:
+        pass
+
+    return (
+        f"BLOCKER: New evidence series '{path}' is a distance-like series but does not "
+        f"declare the required '{field_key}' metadata field (issue #5141). Set "
+        f"distance_convention in the file or a sibling metadata.json to one of: "
+        f"center_center, surface_clearance, center_segment."
+    )
 
 
 def check_successor_discipline(title: str, body: str, repo: str) -> list[str]:

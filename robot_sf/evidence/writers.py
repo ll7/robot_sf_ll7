@@ -13,6 +13,12 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.distance_convention import (
+    DISTANCE_CONVENTION_FIELD,
+    DistanceConvention,
+    require_distance_convention,
+)
+
 
 def _repo_root() -> Path:
     """Return the current git worktree root."""
@@ -107,6 +113,41 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         raise ValueError(f"cannot write empty CSV: {path}")
     with path.open("w", newline="", encoding="utf-8") as handle:
         handle.write(review_marker_comment() + "\n")
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()), lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def write_distance_series_csv(
+    path: Path,
+    rows: list[dict[str, Any]],
+    *,
+    convention: DistanceConvention | str,
+    series_name: str | None = None,
+) -> None:
+    """Write a distance-like series CSV with an explicit convention annotation.
+
+    Issue #5141: distance-like series exports must declare which distance
+    convention they carry so a center-to-center value is never misread as
+    surface clearance. This writer prepends a ``# distance_convention: <x>``
+    header line next to the review marker and validates the convention value.
+
+    Args:
+        path: Output CSV path.
+        rows: CSV rows (must be non-empty).
+        convention: A :class:`DistanceConvention` or its string value
+            (``center_center`` / ``surface_clearance`` / ``center_segment``).
+        series_name: Optional series identifier for error messages; defaults
+            to the file name.
+    """
+    resolved = require_distance_convention(
+        {DISTANCE_CONVENTION_FIELD: convention}, series_name or path.name
+    )
+    if not rows:
+        raise ValueError(f"cannot write empty CSV: {path}")
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        handle.write(review_marker_comment() + "\n")
+        handle.write(f"# {DISTANCE_CONVENTION_FIELD}: {resolved.value}\n")
         writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)

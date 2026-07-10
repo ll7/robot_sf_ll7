@@ -121,3 +121,26 @@ def test_csv_and_checksum_outputs_are_stable(tmp_path: Path) -> None:
     assert "metadata.json" in checksums
     assert "trace_timeseries.csv" in checksums
     assert "SHA256SUMS" not in checksums
+
+
+def test_min_distance_series_carries_center_center_convention(tmp_path: Path) -> None:
+    """Issue #5141: min_distance_series.csv must declare its distance convention.
+
+    min_robot_ped_distance_m is computed via math.dist(robot_xy, ped_position),
+    i.e. center-to-center; the export must annotate the CSV so the value is not
+    misread as surface clearance.
+    """
+    derived = exporter.derive_trace_rows(_sample_record())
+    csv_path = tmp_path / "min_distance_series.csv"
+
+    exporter._write_distance_csv(
+        csv_path, derived.min_distance_rows, convention=exporter.DistanceConvention.CENTER_CENTER
+    )
+
+    content = csv_path.read_text(encoding="utf-8")
+    assert "# distance_convention: center_center" in content
+    # CSV header and rows are still intact below the convention line.
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        data_lines = [line for line in handle if not line.lstrip().startswith("#")]
+    rows = list(csv.DictReader(data_lines))
+    assert rows[0]["min_robot_ped_distance_m"] == str(2**0.5)

@@ -18,10 +18,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.distance_convention import DistanceConvention
 from robot_sf.evidence.writers import (
     extract_marker_date,
     review_marker,
     write_csv,
+    write_distance_series_csv,
     write_json,
     write_sha256sums,
 )
@@ -358,6 +360,10 @@ def write_bundle(
         "selection_metric_value": selection.metric_value,
         "episode_id": selection.episode_id,
         "episode_status": selection.status,
+        # Issue #5141: min_robot_ped_distance_m is computed as math.dist(robot_xy,
+        # ped_position), i.e. center-to-center; declared explicitly to prevent a
+        # surface-clearance misreading of the exported series.
+        "distance_convention": DistanceConvention.CENTER_CENTER.value,
         "summary": derived.summary,
     }
 
@@ -371,7 +377,11 @@ def write_bundle(
     write_json(output_dir / "metadata.json", metadata)
     write_json(output_dir / "trace_series.json", trace_payload)
     write_csv(output_dir / "trace_timeseries.csv", derived.trace_rows)
-    write_csv(output_dir / "min_distance_series.csv", derived.min_distance_rows)
+    write_distance_series_csv(
+        output_dir / "min_distance_series.csv",
+        derived.min_distance_rows,
+        convention=DistanceConvention.CENTER_CENTER,
+    )
     _write_readme(output_dir, metadata)
     write_sha256sums(output_dir)
     return metadata
@@ -393,6 +403,8 @@ statistical benchmark or dissertation claim.
 - `trace_timeseries.csv`: per-timestep robot state, commanded action, executed velocity,
   pedestrian positions, and nearest robot-pedestrian distance.
 - `min_distance_series.csv`: figure-ready `(step, time_s, min_robot_ped_distance_m)` series.
+  Distance convention: `center_center` (robot-to-pedestrian center distance; footprint radii
+  are NOT subtracted). Do not read these values as surface clearance.
 - `trace_series.json`: raw recorded frames plus derived rows.
 - `metadata.json`: provenance, selection criteria, and claim boundary.
 - `SHA256SUMS`: checksums for the files above.

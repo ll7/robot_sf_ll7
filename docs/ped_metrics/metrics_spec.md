@@ -24,6 +24,36 @@ Threshold provenance and reproducibility contract:
 - The sensitivity workflow in `scripts/benchmark_threshold_sensitivity.py` quantifies
   how metric summaries change across threshold grids per scenario family.
 
+## Distance Conventions
+
+Distance quantities cross this benchmark in three incompatible conventions. A
+value with no stated convention is ambiguous and has already caused a misreading
+(a center-to-center distance of 1.37 m was read as surface clearance, flipping a
+collision attribution, issue #5141). Every exported distance-like series and
+metric must therefore carry an explicit `distance_convention` field drawn from
+this enum:
+
+| Convention | Meaning | Where it is used |
+| --- | --- | --- |
+| `center_center` | Euclidean distance between two point centers (footprint radii are NOT subtracted). The runtime collision trigger compares center distance against the summed radii. | Trace export `min_robot_ped_distance_m` columns (`min_distance_series.csv`); the `center_distance_m` geometric diagnostic; `agent_collisions` / `wall_collisions` legacy predicates. |
+| `surface_clearance` | Center-to-center distance minus the summed footprint radii: `clearance = center_distance - robot_radius - ped_radius`. A collision is `clearance < 0`. | The canonical pedestrian safety metric `surface_clearance_m`; `collisions`, `near_misses`, `min_clearance`, `mean_clearance`; SNQI and policy-search near-miss metrics. |
+| `center_segment` | Shortest distance from a point center to a wall/obstacle segment. | Wall/obstacle collision geometry (`min_m ||robot_pos - obstacles[m]||`) and wall-collision tests. |
+
+### Required metadata field
+
+The enum and field name are canonicalized in
+`robot_sf/evidence/distance_convention.py` (`DistanceConvention`, field
+`distance_convention`). Export scripts attach the field to their series/metric
+metadata (`metadata.json` and the embedded `trace_series.json` metadata), and the
+distance-series CSVs carry a `# distance_convention: <value>` header line.
+
+The evidence-writer lint (`scripts/ci/pr_contract_check.py` rule 4, paired with
+the evidence-writer adoption plan #4921) fails new distance-like series under
+`docs/context/evidence/` that omit the field — either in the file itself or in a
+sibling `metadata.json`. Use `robot_sf.evidence.writers.write_distance_series_csv`
+for new distance-series exports so the field and review marker are written
+consistently.
+
 ## Core Metrics
 
 ### Safety Metrics

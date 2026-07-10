@@ -727,6 +727,10 @@ def test_worktree_shared_venv_helper_has_freshness_check_wiring() -> None:
     assert 'cmp -s "$src_file" "$installed_file"' in script_text
     assert "Shared virtualenv is stale relative to this checkout" in script_text
     assert "diverging module: pysocialforce/" in script_text
+    # Standalone commands with a verified no-project-import boundary can skip project drift safely.
+    assert "--standalone" in script_text
+    assert "use --standalone for a command verified not to import project packages" in script_text
+    assert 'if [[ -z "$standalone" ]]; then' in script_text
     # The gate is skippable for advanced users with a confirmed-matching env.
     assert "--no-freshness-check" in script_text
     assert "ROBOT_SF_VENV_FRESHNESS_CHECK:-" in script_text
@@ -770,7 +774,8 @@ def _make_freshness_fixture_repo(
 
     fake_uv = fake_bin / "uv"
     fake_uv.write_text(
-        '#!/usr/bin/env bash\nprintf "uv-reached %s\\n" "$*" >&2\nexit 7\n',
+        '#!/usr/bin/env bash\nprintf "uv-reached %s\\n" "$*" >&2\n'
+        'printf "pythonpath=%s\\n" "${PYTHONPATH-}" >&2\nexit 7\n',
         encoding="utf-8",
     )
     fake_uv.chmod(0o755)
@@ -803,6 +808,7 @@ def _make_freshness_fixture_repo(
         **os.environ,
         "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
     }
+    env.pop("PYTHONPATH", None)
     return repo, venv, env
 
 
@@ -901,6 +907,40 @@ def test_worktree_shared_venv_freshness_check_flag_bypasses_stale_env(
     assert result.returncode == 7
     assert "uv-reached" in result.stderr
     assert "Shared virtualenv is stale" not in result.stderr
+
+
+def test_worktree_shared_venv_standalone_mode_bypasses_stale_project_env(
+    tmp_path: Path,
+) -> None:
+    """--standalone reaches dependency-light tools without exposing project source."""
+    repo, venv, env = _make_freshness_fixture_repo(
+        tmp_path,
+        installed_scene="# stale install without normalize_integration_scheme\n",
+    )
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--standalone",
+            "--",
+            "python",
+            "scripts/dev/check_docs_evidence_integrity.py",
+            "--help",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 7
+    assert "uv-reached" in result.stderr
+    assert "Shared virtualenv is stale" not in result.stderr
+    assert "pythonpath=\n" in result.stderr
 
 
 def test_worktree_shared_venv_freshness_check_env_var_bypasses_stale_env(

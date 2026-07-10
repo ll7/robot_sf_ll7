@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 CI_SETUP_ACTION = ROOT / ".github" / "actions" / "setup-ci-python" / "action.yml"
+CODEQL_WORKFLOW = ROOT / ".github" / "workflows" / "codeql.yml"
 WHEEL_INSTALL_SMOKE = ROOT / "scripts" / "validation" / "wheel_install_smoke.sh"
 PYPROJECT = ROOT / "pyproject.toml"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
@@ -98,6 +99,19 @@ def _workflow_job_phases(job_name: str) -> set[str]:
 def _workflow_text() -> str:
     """Return the raw CI workflow text."""
     return CI_WORKFLOW.read_text(encoding="utf-8")
+
+
+def test_main_push_workflows_queue_while_pull_request_runs_supersede() -> None:
+    """Keep post-merge validation from being starved while retaining fast PR feedback.
+
+    GitHub Actions groups all runs for ``refs/heads/main`` together.  The explicit
+    expression queues those main runs, but still cancels superseded pull-request runs.
+    """
+
+    expected = "${{ github.ref != 'refs/heads/main' }}"
+    for workflow_file in (CI_WORKFLOW, CODEQL_WORKFLOW):
+        workflow = yaml.safe_load(workflow_file.read_text(encoding="utf-8")) or {}
+        assert workflow["concurrency"]["cancel-in-progress"] == expected
 
 
 def _workflow_files() -> list[Path]:

@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 
+from scripts.dev._gh_pagination import is_likely_truncated
+
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 LIVE_STATE_LABELS = ("state:ready", "state:running", "state:blocked")
 JSON_FIELDS = "number,title,url,state,labels"
@@ -267,13 +269,47 @@ def fix_stale_issues(
     return actions
 
 
+def build_label_truncations(
+    rows_by_label: dict[str, list[dict[str, object]]],
+    *,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Return per-label truncation markers for the bounded ``gh search`` results.
+
+    Each closed-issue search is capped at ``--limit`` rows; a result at the cap is
+    indistinguishable from a full page, so any ``truncated: true`` marker means the
+    hygiene sweep may have missed stale-labelled issues beyond the cap.
+    """
+    markers: list[dict[str, Any]] = []
+    for label, rows in rows_by_label.items():
+        row_count = len(rows)
+        truncated = is_likely_truncated(row_count, limit=limit)
+        markers.append(
+            {
+                "label": label,
+                "truncated": truncated,
+                "row_count": row_count,
+                "limit": limit,
+                "note": (
+                    f"gh search issues may be capped: got {row_count} rows at --limit {limit}; "
+                    "raise --limit or paginate"
+                    if truncated
+                    else ""
+                ),
+            }
+        )
+    return markers
+
+
 def build_report(
     *,
     repo: str,
     checked_labels: tuple[str, ...],
     stale_issues: list[StaleIssue],
+    truncations: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build the machine-readable audit report."""
+    truncations = truncations or []
     return {
         "schema": "closed_state_label_hygiene.v1",
         "ok": not stale_issues,
@@ -282,6 +318,8 @@ def build_report(
         "repo": repo,
         "checked_labels": list(checked_labels),
         "stale_count": len(stale_issues),
+        "truncated_any": any(marker.get("truncated") for marker in truncations),
+        "truncations": truncations,
         "issues": [issue.to_payload() for issue in stale_issues],
         "failure_summary": {
             "reason": "closed_issues_with_live_state_labels",
@@ -351,7 +389,13 @@ def main(argv: list[str] | None = None) -> int:
             limit=args.limit,
         )
         stale_issues = collect_stale_issues(rows_by_label, watched_labels=labels)
-        report = build_report(repo=args.repo, checked_labels=labels, stale_issues=stale_issues)
+        truncations = build_label_truncations(rows_by_label, limit=args.limit)
+        report = build_report(
+            repo=args.repo,
+            checked_labels=labels,
+            stale_issues=stale_issues,
+            truncations=truncations,
+        )
         if args.fix:
             fix_actions = fix_stale_issues(
                 repo=args.repo,

@@ -28,6 +28,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5048 gh list truncation guard extended to the remaining bounded callers.** The shared
+  `scripts/dev/_gh_pagination.py` guard (from #4991 / PR #5040) is now applied to the six remaining
+  bounded `gh ... list --limit N` call sites so a result at the cap is never silently mistaken for a
+  full page. `snapshot_issue_batch.snapshot_claimable_issues`, `closed_state_label_hygiene`, and
+  `open_issue_closure_audit` add structured `truncated` / `truncation_note` markers (per-label and
+  per-issue where applicable) to their JSON reports; `compact_ci_snapshot` adds a `truncated` field
+  to its `DriftSample`; `watch_pr_ci_status.fetch_recent_successful_ci_durations` logs a structured
+  truncation warning on a capped drift sample; and `project_priority_score.GhProjectClient.item_list`
+  fails closed with `GhListTruncated` because it drives Priority Score write-backs. Focused
+  regression coverage lives in `tests/dev/test_gh_list_truncation_remaining.py` and
+  `tests/tools/test_project_priority_score_truncation.py`. Tooling/evidence-integrity only — no
+  benchmark, metric, or paper-facing claim.
 * **issue #3574 realized-distribution audit for heterogeneous-population traces.**
   `robot_sf/benchmark/heterogeneous_population_metrics.py` gains `realized_distribution_audit` and
   `summarize_distribution` (plus a `RealizedDistributionSpec`), covering DoD item 5: configured

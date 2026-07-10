@@ -220,6 +220,26 @@ def test_bicycle_rejects_non_positive_braking_authority() -> None:
         BicycleDriveSettings(max_decel=0.0)
 
 
+@pytest.mark.parametrize("invalid_braking", [True, float("inf"), float("nan"), "1.0"])
+def test_bicycle_rejects_non_numeric_or_non_finite_braking_authority(
+    invalid_braking: object,
+) -> None:
+    """Bicycle braking authority is validated before motion code consumes it."""
+
+    with pytest.raises(ValueError, match="max_decel"):
+        BicycleDriveSettings(max_decel=invalid_braking)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("invalid_braking", [True, float("inf"), float("nan"), "1.0"])
+def test_diff_drive_rejects_non_numeric_or_non_finite_braking_authority(
+    invalid_braking: object,
+) -> None:
+    """Differential-drive braking authority is validated before action clipping."""
+
+    with pytest.raises(ValueError, match="max_linear_decel"):
+        DifferentialDriveSettings(max_linear_decel=invalid_braking)  # type: ignore[arg-type]
+
+
 # ---------------------------------------------------------------------------
 # Stopping-distance envelope surfaces in run metadata (issue #4976 acceptance)
 # ---------------------------------------------------------------------------

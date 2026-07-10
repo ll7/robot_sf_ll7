@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from math import cos, isfinite, sin, tan
+from numbers import Real
 
 import numpy as np
 from gymnasium import spaces
@@ -46,7 +47,8 @@ class BicycleDriveSettings:
             self.max_decel = self.max_accel
         if (
             isinstance(self.max_decel, bool)
-            or not isfinite(float(self.max_decel))
+            or not isinstance(self.max_decel, Real)
+            or not isfinite(self.max_decel)
             or self.max_decel <= 0.0
         ):
             raise ValueError("max_decel must be positive")

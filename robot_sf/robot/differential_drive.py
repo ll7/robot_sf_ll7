@@ -1,7 +1,8 @@
 """Differential Drive Robot Model"""
 
 from dataclasses import dataclass, field
-from math import cos, sin
+from math import cos, isfinite, sin
+from numbers import Real
 
 import numpy as np
 from gymnasium import spaces
@@ -75,7 +76,12 @@ class DifferentialDriveSettings:
         # clip). Only an explicit max_linear_decel decouples them (issue #4976).
         if self.max_linear_decel is None:
             self.max_linear_decel = self.max_linear_accel
-        if self.max_linear_decel <= 0:
+        if (
+            isinstance(self.max_linear_decel, bool)
+            or not isinstance(self.max_linear_decel, Real)
+            or not isfinite(self.max_linear_decel)
+            or self.max_linear_decel <= 0
+        ):
             raise ValueError(
                 "Robot's max. linear braking deceleration (max_linear_decel) "
                 "must be positive and non-zero!",

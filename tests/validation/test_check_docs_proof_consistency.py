@@ -878,6 +878,89 @@ entries:
     assert diagnostics == []
 
 
+def test_clean_new_catalog_entry_passes_when_legacy_entries_exist(tmp_path: Path) -> None:
+    """A new clean evidence entry must not inherit failures from legacy dirty entries.
+
+    Regression for issue #5116: catalog updates inherited 41 pre-existing
+    ``output/`` evidence failures, blocking any otherwise-valid new row.
+    """
+    repo_root = tmp_path
+    (repo_root / "docs/context/evidence").mkdir(parents=True)
+
+    # Pre-existing entry that references output/ — marked legacy_dirty_evidence.
+    legacy = repo_root / "docs/context/evidence/legacy_report.json"
+    legacy.write_text('{"source": "output/local/report.json"}\n', encoding="utf-8")
+
+    # New clean entry with no output/ references.
+    clean = repo_root / "docs/context/evidence/new_clean_summary.json"
+    clean.write_text('{"status": "ok", "note": "no local paths here"}\n', encoding="utf-8")
+
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.write_text(
+        "version: 1\n"
+        "entries:\n"
+        "- path: docs/context/evidence/legacy_report.json\n"
+        "  status: evidence\n"
+        "  freshness: evidence\n"
+        "  legacy_dirty_evidence: true\n"
+        "- path: docs/context/evidence/new_clean_summary.json\n"
+        "  status: evidence\n"
+        "  freshness: evidence\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = _context_catalog_diagnostics(
+        Path("docs/context/catalog.yaml"),
+        repo_root=repo_root,
+    )
+
+    assert diagnostics == [], (
+        "Expected no diagnostics: legacy entry is marked and new entry is clean, "
+        f"but got: {diagnostics}"
+    )
+
+
+def test_new_dirty_evidence_entry_fails_even_with_legacy_entries(tmp_path: Path) -> None:
+    """A new dirty entry must still fail even when other legacy entries are marked.
+
+    Regression for issue #5116: the legacy_dirty_evidence escape hatch must not
+    suppress failures for newly added dirty entries.
+    """
+    repo_root = tmp_path
+    (repo_root / "docs/context/evidence").mkdir(parents=True)
+
+    # Pre-existing entry correctly marked as legacy.
+    legacy = repo_root / "docs/context/evidence/legacy_report.json"
+    legacy.write_text('{"source": "output/local/report.json"}\n', encoding="utf-8")
+
+    # New entry that also references output/ — but NOT marked legacy_dirty_evidence.
+    new_dirty = repo_root / "docs/context/evidence/new_dirty_report.json"
+    new_dirty.write_text('{"artifact": "output/run_123/result.json"}\n', encoding="utf-8")
+
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.write_text(
+        "version: 1\n"
+        "entries:\n"
+        "- path: docs/context/evidence/legacy_report.json\n"
+        "  status: evidence\n"
+        "  freshness: evidence\n"
+        "  legacy_dirty_evidence: true\n"
+        "- path: docs/context/evidence/new_dirty_report.json\n"
+        "  status: evidence\n"
+        "  freshness: evidence\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = _context_catalog_diagnostics(
+        Path("docs/context/catalog.yaml"),
+        repo_root=repo_root,
+    )
+
+    assert any("ignored output/ artifacts" in d.message for d in diagnostics), (
+        "Expected a diagnostic for the new dirty entry, but none was reported."
+    )
+
+
 def test_context_catalog_skips_binary_evidence_scan(tmp_path: Path) -> None:
     """Binary evidence entries should not crash text-only provenance checks."""
     repo_root = tmp_path

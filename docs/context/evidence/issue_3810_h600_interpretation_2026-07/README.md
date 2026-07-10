@@ -1,3 +1,4 @@
+<!-- AI-GENERATED (robot_sf#5164, 2026-07-10) — NEEDS-REVIEW -->
 # Issue 4195 h600 Aggregation Artifact
 
 This directory contains diagnostic-only h600 interpretation artifacts for jobs 13268, 13273.
@@ -24,6 +25,9 @@ This directory contains diagnostic-only h600 interpretation artifacts for jobs 1
 - `hybrid_roster_h600_transfer_packet.md`: pre-registered h600 hybrid-roster campaign (job 13282, issue #4230) — the F-C4(ii) gate input leg; AI-generated, needs review, promotes nothing.
 - `f_c4_ii_interpretation_gate.md`: integrates the hybrid-roster packet (13282) with the confirm/extended bundle (13268/13273) into the diagnostic F-C4(ii) boundary (supported / diagnostic-only / not-supported) so issue #4195 checklist reading comes from committed artifacts. Records the maintainer sign-off (2026-07-03, F-C4 draft→supported, diss `0d853df`) as durable provenance; the evidence stays diagnostic-tier and this note promotes nothing on its own.
 - `source_manifest.json`: input paths, campaign metadata, and source file SHA-256 digests.
+- `h600_source_reports_manifest.json`: fail-closed acquisition contract for the six compact source
+  reports needed by issue #5138's family-breakdown export. It pins their intended tracked paths and
+  SHA-256 digests; until all six resolve, the downstream export remains blocked and diagnostic-only.
 - `SHA256SUMS`: checksums for generated files in this directory.
 
 ## F-C4(ii) integration gate

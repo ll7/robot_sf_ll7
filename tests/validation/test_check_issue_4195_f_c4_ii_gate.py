@@ -95,6 +95,18 @@ def test_synthetic_fixture_passes(tmp_path: Path) -> None:
     assert report["status"] == "pass", report["violations"]
 
 
+def test_sha256sums_comment_marker_is_ignored() -> None:
+    """A review marker comment does not invalidate a standard checksum ledger."""
+    parsed = _MODULE._parse_sha256sums(
+        "# AI-GENERATED NEEDS-REVIEW\n"
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  "
+        "docs/context/evidence/x/sample.json\n"
+    )
+    assert parsed == {
+        "sample.json": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    }
+
+
 def test_unlisted_evidence_file_fails_closed(tmp_path: Path) -> None:
     """An evidence file absent from SHA256SUMS is a coverage violation."""
     _make_valid_fixture(tmp_path)

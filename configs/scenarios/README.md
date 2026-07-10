@@ -20,6 +20,29 @@ This directory supports a mix of **per-scenario**, **per-archetype**, and
 scaffold. It is disabled from default benchmark campaigns and records only synthetic proxy intent,
 not real-world user-group evidence or paper-facing results.
 
+## Classic-archetype campaign dispositions
+
+Every `archetypes/classic_*.yaml` scenario config is either admitted by the standard
+`classic_interactions.yaml` manifest or declares why it is not. This keeps a designed classic
+scenario from silently dropping out of the campaign definition; it does not say that a campaign
+was executed or establish benchmark evidence.
+
+Configs outside the manifest must use this header-level metadata:
+
+```yaml
+evaluation: excluded # or planned
+evaluation_reason: Why the config is excluded or which next campaign wave will admit it.
+```
+
+For an excluded compatibility alias, also record the replacement config when one exists:
+
+```yaml
+evaluation_replacement: classic_cross_trap.yaml
+```
+
+`tests/test_classic_archetype_density_index.py` checks this contract. A new classic config that is
+neither in the manifest nor explicitly dispositioned fails the test.
+
 ## Plausibility tracking
 
 Scenario metadata includes a `plausibility` block used to record verification

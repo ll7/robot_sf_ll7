@@ -103,6 +103,8 @@ knowledge, not every transient iteration detail.
   [research_month_one_synthesis_2026-06.md](research_month_one_synthesis_2026-06.md)
 * Issue #2946 mechanism-evidence figure pack: [issue_2946_mechanism_figure_pack.md](issue_2946_mechanism_figure_pack.md)
 * Issue #3279 Social Mini-Game scenario families (v0): [issue_3279_social_mini_game_families.md](issue_3279_social_mini_game_families.md)
+* Issue #4932 data-driven scenario generation:
+  [issue_4932_data_driven_scenario_generation.md](issue_4932_data_driven_scenario_generation.md)
 * Goal-driven agent loops:
   [goal_driven_agent_loops_2026-05-13.md](goal_driven_agent_loops_2026-05-13.md)
 * Skill Consolidation Audit Issue #3189 2026-06-20:

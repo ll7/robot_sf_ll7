@@ -10,6 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 from robot_sf.benchmark.failure_mechanism_taxonomy import (
@@ -113,6 +114,7 @@ def test_happy_path_writes_expected_outputs_and_checksums(tmp_path: Path) -> Non
         "f_c4ii_probe_predictive_dominance.csv",
         "f_c4ii_probe_local_minimum_failures.csv",
         "geometry_vs_mechanism_agreement.csv",
+        "scenario_geometry_bucket_mapping.csv",
         "missing_instrumentation.json",
         "claim_boundary.md",
         "SHA256SUMS",
@@ -812,3 +814,181 @@ def test_declared_sidecar_supplies_trace_labels_unblocks_tables(tmp_path: Path) 
     assert summary["accepted_rows"] >= len(planners)
     probe = _read_csv(output / "f_c4ii_probe_predictive_dominance.csv")
     assert probe != []
+
+
+# --- geometry_vs_mechanism_agreement.csv non-empty guard ---
+
+
+def test_nonempty_guard_raises_on_header_only_csv(tmp_path: Path) -> None:
+    """check_geometry_export_nonempty fails closed when the CSV has no data rows."""
+    path = tmp_path / "geometry_vs_mechanism_agreement.csv"
+    path.write_text(
+        "geometry_bucket,mechanism_label,planner_key,structural_class,"
+        "old_geometry_rank,new_mechanism_rank,agreement_status,conclusion_survives,caveat\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(_MODULE.BuildError, match="header-only"):
+        _MODULE.check_geometry_export_nonempty(path)
+
+
+def test_nonempty_guard_passes_on_populated_csv(tmp_path: Path) -> None:
+    """check_geometry_export_nonempty passes when the CSV has at least one data row."""
+    path = tmp_path / "geometry_vs_mechanism_agreement.csv"
+    path.write_text(
+        "geometry_bucket,mechanism_label,planner_key,structural_class,"
+        "old_geometry_rank,new_mechanism_rank,agreement_status,conclusion_survives,caveat\n"
+        "cross_trap,static_deadlock_or_local_minimum,ppo,learned_policy,,1,"
+        "geometry_present_not_rank_compared,,old ranks not recomputed\n",
+        encoding="utf-8",
+    )
+
+    _MODULE.check_geometry_export_nonempty(path)  # must not raise
+
+
+def test_nonempty_guard_raises_when_file_missing(tmp_path: Path) -> None:
+    """check_geometry_export_nonempty fails closed when the CSV is absent."""
+    with pytest.raises(_MODULE.BuildError, match="not found"):
+        _MODULE.check_geometry_export_nonempty(tmp_path / "geometry_vs_mechanism_agreement.csv")
+
+
+def test_geometry_vs_mechanism_csv_nonempty_after_successful_build(tmp_path: Path) -> None:
+    """A successful build writes a populated geometry_vs_mechanism_agreement.csv (guard passes)."""
+    confirm = tmp_path / "confirm"
+    extended = tmp_path / "extended"
+    rows = [
+        _base_row("prediction_planner", 1.0),
+        _base_row("ppo", 0.7),
+    ]
+    _write_rows(confirm, rows)
+    _write_rows(extended, rows)
+    output = tmp_path / "evidence"
+
+    summary = _MODULE.build_packet(
+        config_path=CONFIG,
+        confirm_root=confirm,
+        extended_root=extended,
+        job13175_packet=tmp_path / "packet.json",
+        output_dir=output,
+        generated_at="2026-07-10T00:00:00Z",
+    )
+
+    assert summary["status"] == "analysis_ready_trace_verified"
+    agreement = _read_csv(output / "geometry_vs_mechanism_agreement.csv")
+    assert agreement, (
+        "geometry_vs_mechanism_agreement.csv must not be header-only after a successful build"
+    )
+    assert all(row["geometry_bucket"] for row in agreement)
+
+
+# --- per-scenario geometry bucket mapping ---
+
+
+def test_scenario_geometry_mapping_extracted_from_blocked_rows(tmp_path: Path) -> None:
+    """Per-scenario geometry mapping is written even when mechanism labels are absent."""
+    confirm = tmp_path / "confirm"
+    extended = tmp_path / "extended"
+    row = _base_row("prediction_planner", 1.0)
+    for field in _MODULE.REQUIRED_MECHANISM_FIELDS:
+        row.pop(field, None)
+    _write_rows(confirm, [row])
+    _write_rows(extended, [row])
+    output = tmp_path / "evidence"
+
+    summary = _MODULE.build_packet(
+        config_path=CONFIG,
+        confirm_root=confirm,
+        extended_root=extended,
+        job13175_packet=tmp_path / "packet.json",
+        output_dir=output,
+        generated_at="2026-07-10T00:00:00Z",
+    )
+
+    assert summary["status"] == "blocked_missing_trace_verified_mechanism_labels"
+    mapping = _read_csv(output / "scenario_geometry_bucket_mapping.csv")
+    assert mapping, (
+        "scenario_geometry_bucket_mapping.csv must be non-empty when rows carry geometry data"
+    )
+    assert mapping[0]["geometry_bucket"] == "cross_trap"
+    assert mapping[0]["scenario_id"] == "classic_static_deadlock"
+
+
+def test_scenario_geometry_mapping_header_only_when_no_geometry_data(tmp_path: Path) -> None:
+    """When episode rows carry no geometry fields, the mapping CSV is header-only (fail-closed)."""
+    confirm = tmp_path / "confirm"
+    extended = tmp_path / "extended"
+    row = _base_row("prediction_planner", 1.0)
+    row.pop("geometry_bucket", None)
+    for field in _MODULE.REQUIRED_MECHANISM_FIELDS:
+        row.pop(field, None)
+    _write_rows(confirm, [row])
+    _write_rows(extended, [row])
+    output = tmp_path / "evidence"
+
+    _MODULE.build_packet(
+        config_path=CONFIG,
+        confirm_root=confirm,
+        extended_root=extended,
+        job13175_packet=tmp_path / "packet.json",
+        output_dir=output,
+        generated_at="2026-07-10T00:00:00Z",
+    )
+
+    mapping = _read_csv(output / "scenario_geometry_bucket_mapping.csv")
+    assert mapping == [], "mapping must be empty when no geometry fields are present in loaded rows"
+
+
+def test_extract_scenario_geometry_mapping_deduplicates_same_bucket(tmp_path: Path) -> None:
+    """_extract_scenario_geometry_mapping deduplicates identical (scenario_id, bucket) pairs."""
+    rows = [
+        {
+            "scenario_id": "scen_a",
+            "geometry_bucket": "cross_trap",
+            "scenario_family": "trap",
+        },
+        {
+            "scenario_id": "scen_a",
+            "geometry_bucket": "cross_trap",
+            "scenario_family": "trap",
+        },
+        {
+            "scenario_id": "scen_b",
+            "geometry_bucket": "bottleneck",
+            "scenario_family": "",
+        },
+    ]
+
+    result = _MODULE._extract_scenario_geometry_mapping(rows)
+
+    assert len(result) == 2
+    buckets = {row["geometry_bucket"] for row in result}
+    assert buckets == {"cross_trap", "bottleneck"}
+
+
+def test_extract_scenario_geometry_mapping_skips_rows_without_geometry() -> None:
+    """_extract_scenario_geometry_mapping ignores rows with no geometry_bucket field."""
+    rows = [
+        {"scenario_id": "scen_a", "mechanism_label": "static_deadlock_or_local_minimum"},
+        {"scenario_id": "scen_b", "geometry_bucket": ""},
+        {"scenario_id": "scen_c", "geometry_bucket": "portal"},
+    ]
+
+    result = _MODULE._extract_scenario_geometry_mapping(rows)
+
+    assert len(result) == 1
+    assert result[0]["geometry_bucket"] == "portal"
+
+
+def test_scenario_geometry_mapping_uses_fallback_geometry_fields() -> None:
+    """_extract_scenario_geometry_mapping accepts geometry_label and scenario_geometry_bucket."""
+    rows = [
+        {"scenario_id": "scen_a", "geometry_label": "crowding"},
+        {"scenario_id": "scen_b", "scenario_geometry_bucket": "portal"},
+        {"scenario_id": "scen_c", "geometry_bucket": "bottleneck"},
+    ]
+
+    result = _MODULE._extract_scenario_geometry_mapping(rows)
+
+    assert len(result) == 3
+    buckets = {row["geometry_bucket"] for row in result}
+    assert buckets == {"crowding", "portal", "bottleneck"}

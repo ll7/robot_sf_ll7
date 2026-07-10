@@ -678,6 +678,7 @@ def _blocked_outputs(
     loaded_row_count: int,
     input_provenance: Mapping[str, Any],
     status: str = BLOCKED_STATUS,
+    all_loaded_rows: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     reason = _blocked_reason(status, config, missing_rows)
@@ -758,6 +759,16 @@ def _blocked_outputs(
         ],
     }.items():
         _write_csv(output_dir / filename, [], fieldnames)
+    # Per-scenario geometry mapping: extracted independently of mechanism labels so the
+    # scenario → bucket structure is re-derivable even while the builder is blocked. The
+    # mapping is populated when episode rows carry geometry_bucket / geometry_label fields,
+    # and left header-only when no geometry data is present in the loaded rows.
+    geometry_mapping = _extract_scenario_geometry_mapping(all_loaded_rows)
+    _write_csv(
+        output_dir / "scenario_geometry_bucket_mapping.csv",
+        geometry_mapping,
+        list(_SCENARIO_GEOMETRY_MAPPING_FIELDS),
+    )
     (output_dir / "mechanism_crosscut_report.md").write_text(
         _markdown_report(status, []), encoding="utf-8"
     )
@@ -805,6 +816,63 @@ edits, and no causal-mechanism claim from geometry buckets alone.
 """
     (output_dir / "README.md").write_text(readme, encoding="utf-8")
     (output_dir / "claim_boundary.md").write_text(claim_boundary, encoding="utf-8")
+
+
+def _extract_scenario_geometry_mapping(
+    rows: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Extract per-scenario geometry bucket mapping without requiring mechanism labels.
+
+    Captures (scenario_id, geometry_bucket, scenario_family) from episode rows so the
+    geometry structure is re-derivable even when the mechanism-level cross-cut is blocked.
+    Each (scenario_id, geometry_bucket, scenario_family) triple is de-duplicated.
+    Returns an empty list when no rows carry geometry data.
+    """
+    seen: set[tuple[str, str, str]] = set()
+    mapping: list[dict[str, Any]] = []
+    for row in rows:
+        scenario_id = str(row.get("scenario_id") or "")
+        geometry_bucket = str(
+            row.get("geometry_bucket")
+            or row.get("scenario_geometry_bucket")
+            or row.get("geometry_label")
+            or ""
+        )
+        scenario_family = str(row.get("scenario_family") or "")
+        if not geometry_bucket:
+            continue
+        key = (scenario_id, geometry_bucket, scenario_family)
+        if key in seen:
+            continue
+        seen.add(key)
+        mapping.append(
+            {
+                "scenario_id": scenario_id,
+                "geometry_bucket": geometry_bucket,
+                "scenario_family": scenario_family,
+            }
+        )
+    return sorted(mapping, key=lambda r: (r["geometry_bucket"], r["scenario_id"]))
+
+
+def check_geometry_export_nonempty(path: Path) -> None:
+    """Fail-closed guard: raise BuildError when the geometry CSV has no data rows.
+
+    The geometry_vs_mechanism_agreement.csv starts header-only while the builder is
+    blocked on mechanism labels. Once inputs are available and the builder produces a
+    populated export, this guard prevents a silent regression to a header-only state.
+    """
+    if not path.exists():
+        raise BuildError(f"geometry export not found: {path}")
+    rows = _read_csv(path)
+    if not rows:
+        raise BuildError(
+            f"geometry export is header-only (no data rows): {path} — "
+            "re-run the builder with trace-verified mechanism labels to populate it"
+        )
+
+
+_SCENARIO_GEOMETRY_MAPPING_FIELDS = ("scenario_id", "geometry_bucket", "scenario_family")
 
 
 def _write_sha256sums(output_dir: Path) -> None:
@@ -928,6 +996,7 @@ def build_packet(  # noqa: C901
             loaded_row_count=len(rows),
             input_provenance=input_provenance,
             status=_resolve_block_status(missing_rows),
+            all_loaded_rows=rows,
         )
 
     accepted_confidences = {
@@ -959,6 +1028,7 @@ def build_packet(  # noqa: C901
             ],
             loaded_row_count=len(rows),
             input_provenance=input_provenance,
+            all_loaded_rows=rows,
         )
 
     observed_count = sum(
@@ -1068,6 +1138,15 @@ def build_packet(  # noqa: C901
             "conclusion_survives",
             "caveat",
         ],
+    )
+    # Fail-closed guard: a successful build must not silently produce a header-only agreement table.
+    check_geometry_export_nonempty(output_dir / "geometry_vs_mechanism_agreement.csv")
+    # Per-scenario geometry mapping: always written from all loaded rows (with or without mechanism
+    # labels) so the scenario → bucket structure is independently re-derivable.
+    _write_csv(
+        output_dir / "scenario_geometry_bucket_mapping.csv",
+        _extract_scenario_geometry_mapping(enriched),
+        list(_SCENARIO_GEOMETRY_MAPPING_FIELDS),
     )
     if not (output_dir / "missing_instrumentation.json").exists():
         _write_json(

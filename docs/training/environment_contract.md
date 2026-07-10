@@ -57,7 +57,9 @@ not benchmark success evidence.
 Training reward is an optimization signal. It may be dense, curriculum-driven, shaped, or tuned for
 sample efficiency. In PPO runs it is resolved from `env_factory_kwargs` by
 `scripts/training/train_ppo.py`; the default profile is `route_completion_v2` unless a reward name,
-custom callable, or curriculum is supplied.
+custom callable, or curriculum is supplied. For the full per-term weight table (all named profiles
+and legacy reward functions), the collision-penalty FAQ, and the checkpoint-profile recipe, see
+[Reward Profiles Reference](./reward_profiles.md).
 
 Benchmark success is an evaluation contract. Benchmark claims must rely on:
 

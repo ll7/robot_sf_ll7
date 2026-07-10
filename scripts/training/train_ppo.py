@@ -3031,6 +3031,14 @@ def _build_training_notes(  # noqa: C901
         f"Converged at {config.total_timesteps} timesteps",
         f"eval_steps={eval_steps}",
     ]
+    # Record the resolved reward profile so training artifacts are self-describing
+    # (issue #4967). Pairs the human-readable name with any reward_kwargs weights.
+    notes.append(f"reward_profile={_resolved_reward_name(config.env_factory_kwargs)}")
+    reward_kwargs = config.env_factory_kwargs.get("reward_kwargs")
+    if isinstance(reward_kwargs, Mapping):
+        weights = reward_kwargs.get("weights")
+        if isinstance(weights, Mapping):
+            notes.append(f"reward_weights={json.dumps(dict(weights), sort_keys=True)}")
     if _randomize_seeds(config):
         notes.append("randomize_seeds=true")
     else:

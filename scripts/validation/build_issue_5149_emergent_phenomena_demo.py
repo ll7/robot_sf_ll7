@@ -168,8 +168,8 @@ def _write_readme(
         "Plain-language summary: this bundle demonstrates whether THIS repository's "
         "pedestrian simulator (the bundled `fast-pysf` / PySocialForce Social Force "
         "model) reproduces the three canonical crowd-dynamics emergent phenomena "
-        "(lane formation in bidirectional flow, doorway oscillation, and exit "
-        "arching/clogging), run at the released-default speed calibration (~0.65 m/s "
+        "(lane formation in bidirectional flow, doorway oscillation, and an exit "
+        "arching diagnostic), run at the released-default speed calibration (~0.65 m/s "
         "desired) and at a literature-typical calibration (~1.3 m/s)."
     )
     lines.append("")

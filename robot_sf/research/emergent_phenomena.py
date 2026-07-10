@@ -9,7 +9,7 @@ emergent phenomena of crowd dynamics:
 
 - **Lane formation** in bidirectional corridor flow.
 - **Oscillation** (alternating direction) at a narrow doorway bottleneck.
-- **Arching / clogging** at a high-density exit.
+- **Arching** at a high-density exit, measured as a local-density diagnostic.
 
 Design notes
 ------------
@@ -95,11 +95,11 @@ def released_default_config() -> SimulatorConfig:
 
     Returns:
         SimulatorConfig: the released-default configuration (slow speed regime,
-        default force factors, groups disabled for the substrate-only demo).
+        default force factors, and the default group-force setting).
     """
     return SimulatorConfig(
         scene_config=SceneConfig(
-            enable_group=False,
+            enable_group=True,
             agent_radius=0.35,
             dt_secs=0.1,
             max_speed_multiplier=MAX_SPEED_MULTIPLIER,
@@ -401,8 +401,9 @@ def build_high_density_exit(
     """Build a high-density room with a single narrow exit on the ``+x`` wall.
 
     Pedestrians fill a square room and all head for one narrow exit; at high
-    density this is the classic arching/clogging setup (a semicircular arch
-    forms at the exit and throughput drops below free flow).
+    density this is the classic arching setup. This diagnostic measures local
+    density and lateral spread near the exit; it does not establish a throughput
+    reduction or independently classify clogging.
 
     Args:
         config: Scenario configuration; ``extra`` may carry ``exit_half_width``
@@ -668,14 +669,14 @@ def doorway_oscillation(
 def exit_arching(
     trajectory: TrajectoryRecord, exit_x: float, exit_radius: float = 1.5
 ) -> dict[str, float]:
-    """Measure arching/clogging near a high-density exit.
+    """Measure an arching diagnostic near a high-density exit.
 
     Two signals:
 
     - ``exit_density_ratio``: ratio of mean local density within ``exit_radius``
       of the exit to the mean bulk density (over the steady-state window). A
-      clogging arch produces a pronounced density cusp at the exit, so this
-      ratio is ``> 1`` (often substantially) when arching occurs.
+      density concentration near the exit raises this ratio above 1; it is an
+      arching signal, not an independent clogging or throughput measure.
     - ``arch_lateral_spread``: standard deviation of the lateral (``y``)
       position of pedestrians within ``exit_radius`` of the exit, normalized by
       ``exit_radius``. An arch spreads pedestrians angularly around the door

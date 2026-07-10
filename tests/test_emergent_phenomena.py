@@ -62,7 +62,7 @@ def test_released_default_speed_matches_substrate_derivation():
 def test_released_default_config_pins_substrate_defaults():
     """released_default_config must reproduce the fast-pysf dataclass defaults."""
     cfg = released_default_config()
-    assert cfg.scene_config.enable_group is False
+    assert cfg.scene_config.enable_group is True
     assert cfg.scene_config.agent_radius == pytest.approx(0.35)
     assert cfg.scene_config.dt_secs == pytest.approx(0.1)
     assert cfg.scene_config.max_speed_multiplier == pytest.approx(1.3)

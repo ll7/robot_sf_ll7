@@ -24,6 +24,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5149_emergent_phenomena_2026-07
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_4991_closure_audit_2026-07-10.md
   status: evidence
   freshness: evidence

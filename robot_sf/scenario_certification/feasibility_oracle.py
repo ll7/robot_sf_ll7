@@ -104,10 +104,7 @@ class FeasibilityOracleConfig:
             raise ValueError("envelope_radii_m must contain at least one radius")
         if any(not (r > 0.0) for r in self.envelope_radii_m):
             raise ValueError("envelope_radii_m must all be positive and non-zero")
-        # Nominal envelope is conventionally the largest probe; keep input order but warn-free.
-        if max(self.envelope_radii_m) != self.envelope_radii_m[0] and len(
-            {round(r, 6) for r in self.envelope_radii_m}
-        ) != len(self.envelope_radii_m):
+        if len({round(r, 6) for r in self.envelope_radii_m}) != len(self.envelope_radii_m):
             raise ValueError("envelope_radii_m must not contain duplicates")
 
 
@@ -651,6 +648,11 @@ def _classify_envelope_sensitivity(
     any_reduced_feasible = any(v.feasible is True for v in reduced)
     if any_reduced_feasible:
         return ENVELOPE_SENSITIVE_HARD
+    # A blocked reduced probe cannot support a definitive map-artifact or horizon verdict.
+    # Preserve the oracle's fail-closed boundary unless another reduced probe already proved
+    # envelope sensitivity above.
+    if any(v.status == BLOCKED or v.feasible is None for v in reduced):
+        return BLOCKED
     # If the nominal failure is purely time truncation and no reduced envelope helps, the
     # cell is time-limited rather than route-infeasible by construction.
     if nominal.status == TIME_TRUNCATED and all(

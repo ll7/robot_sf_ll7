@@ -377,10 +377,36 @@ def test_envelope_sweep_blocks_when_nominal_verdict_is_blocked() -> None:
     assert verdict.category == BLOCKED
 
 
+def test_envelope_sweep_blocks_when_a_reduced_probe_is_unobserved() -> None:
+    """A blocked reduced probe cannot establish a map-artifact classification."""
+
+    def certifier(scenario, _p):
+        radius = float((scenario.get("robot_config") or {}).get("radius", 1.0))
+        if radius < 0.6:
+            raise RuntimeError("reduced probe unavailable")
+        return _certificate(GEOMETRICALLY_INFEASIBLE, eligibility="excluded")
+
+    verdict = run_envelope_sensitivity_sweep(
+        _scenario(),
+        config=_oracle_config((1.0, 0.5)),
+        certifier=certifier,
+    )
+
+    assert verdict.nominal_verdict.status == INFEASIBLE_BY_CONSTRUCTION
+    assert verdict.reduced_verdicts[0].status == BLOCKED
+    assert verdict.category == BLOCKED
+
+
 def test_envelope_sweep_rejects_empty_radii() -> None:
     """An empty envelope-radii configuration is rejected."""
     with pytest.raises(ValueError, match="envelope_radii_m"):
         FeasibilityOracleConfig(scenario_path=_SCENARIO_PATH, envelope_radii_m=())
+
+
+def test_envelope_sweep_rejects_duplicate_radii_in_nominal_first_order() -> None:
+    """Duplicate nominal-first probes are rejected instead of silently re-running a radius."""
+    with pytest.raises(ValueError, match="envelope_radii_m"):
+        FeasibilityOracleConfig(scenario_path=_SCENARIO_PATH, envelope_radii_m=(1.0, 1.0, 0.5))
 
 
 # ---------------------------------------------------------------------------

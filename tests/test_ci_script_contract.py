@@ -7,10 +7,11 @@ handle both forms as cheap success paths: exit 0, print usage to stdout,
 and return before sourcing common_setup.sh or invoking heavy dependencies
 (uv, ruff, pytest, gh, etc.).
 
-Covered scripts (10 total):
+Covered scripts (11 total):
   pr_ready_check.sh, gh_comment.sh, run_worktree_shared_venv.sh,
   run_tests_parallel.sh, run_xdist_race_validation.sh, run_ci_local.sh, local_signoff.sh,
-  ci_driver.sh, check_runtime_requirements.sh, check_carla_runtime.sh
+  ci_driver.sh, check_runtime_requirements.sh, check_carla_runtime.sh,
+  bootstrap_worktree.sh
 
 Also covered (in tests/dev/): ci_step_timer.sh
 
@@ -43,6 +44,7 @@ LOCAL_SIGNOFF = ROOT / "scripts" / "dev" / "local_signoff.sh"
 PR_READY_CHECK = ROOT / "scripts" / "dev" / "pr_ready_check.sh"
 PR_BODY_CONTRACTS_WORKFLOW = ROOT / ".github" / "workflows" / "pr-body-contracts.yml"
 RUN_WORKTREE_SHARED_VENV = ROOT / "scripts" / "dev" / "run_worktree_shared_venv.sh"
+BOOTSTRAP_WORKTREE = ROOT / "scripts" / "dev" / "bootstrap_worktree.sh"
 CHECK_RUNTIME_REQUIREMENTS = ROOT / "scripts" / "dev" / "check_runtime_requirements.sh"
 CHECK_CARLA_RUNTIME = ROOT / "scripts" / "dev" / "check_carla_runtime.sh"
 
@@ -1276,6 +1278,292 @@ def test_run_ci_local_help_does_not_invoke_setup(tmp_path: Path) -> None:
     )
     result = subprocess.run(
         [str(script_dir / "run_ci_local.sh"), "--help"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "uv should not be called" not in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# bootstrap_worktree.sh contract tests (issue #5091)
+# ---------------------------------------------------------------------------
+
+
+def test_bootstrap_worktree_script_exists() -> None:
+    """bootstrap_worktree.sh must exist and be executable."""
+    assert BOOTSTRAP_WORKTREE.exists(), f"Missing: {BOOTSTRAP_WORKTREE}"
+    assert BOOTSTRAP_WORKTREE.stat().st_mode & 0o111, "bootstrap_worktree.sh is not executable"
+
+
+def test_bootstrap_worktree_shell_syntax_is_valid() -> None:
+    """bootstrap_worktree.sh must pass bash -n (no syntax errors)."""
+    result = subprocess.run(
+        ["bash", "-n", str(BOOTSTRAP_WORKTREE)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_bootstrap_worktree_help_long() -> None:
+    """bootstrap_worktree.sh --help prints usage and exits 0."""
+    result = subprocess.run(
+        [str(BOOTSTRAP_WORKTREE), "--help"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "uv venv .venv" in result.stdout  # must document the explicit venv-create step
+    assert "uv sync --all-extras" in result.stdout  # must document the sync step
+    assert "source .venv/bin/activate" in result.stdout
+
+
+def test_bootstrap_worktree_help_short() -> None:
+    """bootstrap_worktree.sh -h prints usage and exits 0."""
+    result = subprocess.run(
+        [str(BOOTSTRAP_WORKTREE), "-h"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+
+
+def test_bootstrap_worktree_rejects_unknown_flag() -> None:
+    """bootstrap_worktree.sh rejects unknown flags with exit 2."""
+    result = subprocess.run(
+        [str(BOOTSTRAP_WORKTREE), "--not-a-real-flag"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "unknown argument" in result.stderr
+
+
+def test_bootstrap_worktree_creates_venv_before_sync() -> None:
+    """bootstrap_worktree.sh must call `uv venv .venv` before `uv sync --all-extras` in code.
+
+    Searches only the code body (after the show_help function definition) to avoid
+    false positives from comment or help-text occurrences of these strings.
+    """
+    script_text = BOOTSTRAP_WORKTREE.read_text(encoding="utf-8")
+
+    # Isolate the code body: everything after the show_help function definition ends.
+    # The help function closes with `}` on its own line; the main code follows.
+    help_end_marker = "\nshow_help"
+    code_start = script_text.find(help_end_marker)
+    assert code_start != -1, "Could not locate show_help function in bootstrap_worktree.sh"
+    # Advance past the show_help block to the arg-parsing / main code body.
+    body = script_text[code_start:]
+
+    venv_create = "uv venv .venv"
+    sync_cmd = "uv sync --all-extras"
+    assert venv_create in body, "bootstrap_worktree.sh code body must contain 'uv venv .venv'"
+    assert sync_cmd in body, "bootstrap_worktree.sh code body must contain 'uv sync --all-extras'"
+    assert body.find(venv_create) < body.find(sync_cmd), (
+        "In the code body, 'uv venv .venv' must appear before 'uv sync --all-extras'"
+    )
+
+
+def test_bootstrap_worktree_fails_closed_on_missing_python(tmp_path: Path) -> None:
+    """bootstrap_worktree.sh must exit 1 with an actionable message when .venv/bin/python
+    is absent after uv sync (the core fail-closed contract for issue #5091).
+
+    Simulated with a fake `uv` that prints the expected sync output but does NOT
+    create .venv/bin/python, reproducing the exact failure mode from the issue.
+    """
+    repo = tmp_path / "repo"
+    script_dir = repo / "scripts" / "dev"
+    fake_bin = repo / "fake-bin"
+    script_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+
+    (script_dir / "bootstrap_worktree.sh").write_text(
+        BOOTSTRAP_WORKTREE.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (script_dir / "bootstrap_worktree.sh").chmod(0o755)
+
+    # Fake uv: prints plausible sync output but never creates .venv/bin/python.
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                'if [[ "$1" == "venv" ]]; then',
+                '  mkdir -p "$2"',
+                "  exit 0",
+                "fi",
+                'if [[ "$1" == "sync" ]]; then',
+                '  echo "Resolved 302 packages in 1ms"',
+                '  echo "Checked 256 packages in 12ms"',
+                "  exit 0",
+                "fi",
+                'echo "unexpected uv invocation: $*" >&2',
+                "exit 99",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "config", "user.email", "agent@example.invalid"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Agent"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "commit", "-m", "bootstrap test fixture"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    result = subprocess.run(
+        [str(script_dir / "bootstrap_worktree.sh"), "--no-symlink-machine"],
+        cwd=repo,
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 1, (
+        f"Expected exit 1 (fail-closed) but got {result.returncode}. "
+        f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
+    assert ".venv/bin/python" in result.stderr
+    assert "uv venv .venv" in result.stderr
+    assert "uv sync --all-extras" in result.stderr
+
+
+def test_bootstrap_worktree_succeeds_when_python_present(tmp_path: Path) -> None:
+    """bootstrap_worktree.sh exits 0 when .venv/bin/python exists after uv sync."""
+    repo = tmp_path / "repo"
+    script_dir = repo / "scripts" / "dev"
+    fake_bin = repo / "fake-bin"
+    script_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+
+    (script_dir / "bootstrap_worktree.sh").write_text(
+        BOOTSTRAP_WORKTREE.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (script_dir / "bootstrap_worktree.sh").chmod(0o755)
+
+    # Fake uv: creates .venv/bin/python on `uv venv .venv`, succeeds on sync.
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                'if [[ "$1" == "venv" ]]; then',
+                '  venv_dir="$2"',
+                '  mkdir -p "$venv_dir/bin"',
+                "  # Create a working python stub so the -x check passes.",
+                '  printf "#!/usr/bin/env bash\\nexit 0\\n" > "$venv_dir/bin/python"',
+                '  chmod 0755 "$venv_dir/bin/python"',
+                "  exit 0",
+                "fi",
+                'if [[ "$1" == "sync" ]]; then',
+                '  echo "Resolved 302 packages in 1ms"',
+                '  echo "Checked 256 packages in 12ms"',
+                "  exit 0",
+                "fi",
+                'echo "unexpected uv invocation: $*" >&2',
+                "exit 99",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "config", "user.email", "agent@example.invalid"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Agent"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "commit", "-m", "bootstrap success fixture"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    result = subprocess.run(
+        [str(script_dir / "bootstrap_worktree.sh"), "--no-symlink-machine"],
+        cwd=repo,
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, (
+        f"Expected success but got {result.returncode}. "
+        f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
+    assert ".venv/bin/python is ready" in result.stdout
+    assert "source .venv/bin/activate" in result.stdout
+
+
+def test_bootstrap_worktree_help_does_not_invoke_uv(tmp_path: Path) -> None:
+    """bootstrap_worktree.sh --help exits 0 before invoking uv."""
+    repo, script_dir, env = _make_help_fixture_repo(
+        tmp_path,
+        ("bootstrap_worktree.sh",),
+    )
+    result = subprocess.run(
+        [str(script_dir / "bootstrap_worktree.sh"), "--help"],
         cwd=repo,
         env=env,
         capture_output=True,

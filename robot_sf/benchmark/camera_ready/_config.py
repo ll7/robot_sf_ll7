@@ -686,8 +686,9 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
             f"Unsupported snqi_contract.enforcement '{cfg.snqi_contract.enforcement}'. {known}"
         )
     # Per-arm tuning-effort enforcement (issue #5143). Validate the vocabulary; the fail-closed
-    # (error) gate below requires every enabled arm to declare a tuning block, mirroring #4970's
-    # checkpoint-provenance fail-closed spirit.
+    # (error) gate below requires every enabled arm to have an author-declared tuning block,
+    # mirroring #4970's checkpoint-provenance fail-closed spirit. A backfilled or unknown record
+    # remains useful auditability metadata, but cannot satisfy this strict new-arm gate.
     if cfg.tuning_effort_enforcement not in _TUNING_EFFORT_ENFORCEMENT:
         known = ", ".join(_TUNING_EFFORT_ENFORCEMENT)
         raise ValueError(
@@ -696,13 +697,16 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
         )
     if cfg.tuning_effort_enforcement == "error":
         missing = [
-            planner.key for planner in cfg.planners if planner.enabled and planner.tuning is None
+            planner.key
+            for planner in cfg.planners
+            if planner.enabled
+            and (planner.tuning is None or planner.tuning.source != TUNING_SOURCE_DECLARED)
         ]
         if missing:
             names = ", ".join(sorted(missing))
             raise ValueError(
-                "tuning_effort_enforcement='error' requires a 'tuning' block for every enabled "
-                f"arm; missing tuning block for: {names}"
+                "tuning_effort_enforcement='error' requires an author-declared 'tuning' block "
+                f"for every enabled arm; missing declared tuning block for: {names}"
             )
     threshold_values = {
         "rank_alignment_warn_threshold": cfg.snqi_contract.rank_alignment_warn_threshold,

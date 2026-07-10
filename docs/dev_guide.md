@@ -1192,6 +1192,27 @@ uv run pytest tests/test_gymnasium_env_contracts.py -v
 python -c "import json; print(json.load(open('output/coverage/coverage.json'))['totals'])"
 ```
 
+#### Known limitation: focused `--cov` with Torch
+
+Passing `--cov` directly to `uv run pytest` on a focused test file can trigger a
+`RuntimeError: function '_has_torch_function' already has a docstring` from `torch/overrides.py`
+when pytest-cov's trace hook causes a Torch C-extension to be partially re-initialised.
+This was fixed in `robot_sf/telemetry/tensorboard_adapter.py` (#5101) but the underlying
+pytest-cov+torch incompatibility persists on CPython 3.13 + torch ≥ 2.10.
+
+Use the canonical wrapper for any coverage run that imports Torch:
+
+```bash
+# Correct: wrapper sets up coverage in a Torch-safe import order
+ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests/test_batched_lidar_kernel.py -v
+
+# Incorrect: direct --cov flag may crash conftest collection
+# uv run pytest tests/test_batched_lidar_kernel.py --cov=robot_sf.sensor.range_sensor
+```
+
+If you need focused changed-line coverage during development, run the test without `--cov` first
+to confirm it passes, then use the wrapper for the coverage snapshot.
+
 For coverage gap analysis, trend tracking, and CI integration, see `docs/coverage_guide.md` (created as part of US2/US3).
 
 ### Must-have checklist

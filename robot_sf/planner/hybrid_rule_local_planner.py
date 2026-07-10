@@ -27,6 +27,7 @@ from robot_sf.nav.proxemic_costmap import (
 from robot_sf.nav.proxemic_costmap import (
     config_hash as proxemic_config_hash,
 )
+from robot_sf.planner import hybrid_route_corridor
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
@@ -809,16 +810,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             np.ndarray | None: Point array, or ``None`` when unavailable.
         """
-        if not isinstance(route_corridor, dict):
-            return None
-        raw = route_corridor.get(key)
-        try:
-            point = np.asarray(raw, dtype=float).reshape(-1)[:2]
-        except (TypeError, ValueError):
-            return None
-        if point.shape[0] != 2 or not np.all(np.isfinite(point)):
-            return None
-        return point
+        # Delegates to the extracted route-corridor geometry helper (issue #4987).
+        return hybrid_route_corridor.route_point(route_corridor, key)
 
     def _route_float(self, route_corridor: dict[str, Any] | None, key: str) -> float | None:
         """Read one finite scalar from route-corridor diagnostics.
@@ -826,12 +819,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             float | None: Finite scalar, or ``None`` when unavailable.
         """
-        if not isinstance(route_corridor, dict):
-            return None
-        value = route_corridor.get(key)
-        if isinstance(value, int | float | np.integer | np.floating) and np.isfinite(value):
-            return float(value)
-        return None
+        # Delegates to the extracted route-corridor geometry helper (issue #4987).
+        return hybrid_route_corridor.route_float(route_corridor, key)
 
     def _route_progress_pair(
         self, route_corridor: dict[str, Any] | None
@@ -841,35 +830,13 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             tuple[float, float] | None: Progress over 1s and 3s, or ``None`` when unavailable.
         """
-        if not isinstance(route_corridor, dict):
-            return None
-        route_progress = route_corridor.get("route_arc_progress_windows")
-        if not isinstance(route_progress, dict):
-            return None
-        try:
-            route_progress_1s = float(route_progress["1s"])
-            route_progress_3s = float(route_progress["3s"])
-        except (KeyError, TypeError, ValueError):
-            return None
-        if not np.isfinite(route_progress_1s) or not np.isfinite(route_progress_3s):
-            return None
-        return route_progress_1s, route_progress_3s
+        # Delegates to the extracted route-corridor geometry helper (issue #4987).
+        return hybrid_route_corridor.route_progress_pair(route_corridor)
 
     def _route_tangent_heading(self, route_corridor: dict[str, Any] | None) -> float | None:
         """Return a finite route tangent heading, deriving it from route points if needed."""
-        heading = self._route_float(route_corridor, "route_tangent_heading")
-        if heading is not None:
-            return heading
-        start = self._route_point(route_corridor, "route_start_world")
-        stop = self._route_point(route_corridor, "route_next_world")
-        if stop is None:
-            stop = self._route_point(route_corridor, "route_waypoint_world")
-        if start is None or stop is None:
-            return None
-        delta = stop - start
-        if float(np.linalg.norm(delta)) <= _EPS:
-            return None
-        return float(np.arctan2(delta[1], delta[0]))
+        # Delegates to the extracted route-corridor geometry helper (issue #4987).
+        return hybrid_route_corridor.route_tangent_heading(route_corridor)
 
     @staticmethod
     def _lateral_offset_to_segment(
@@ -878,12 +845,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         segment_stop: np.ndarray,
     ) -> float | None:
         """Return lateral distance from ``point`` to a world-space segment."""
-        segment = segment_stop - segment_start
-        length = float(np.linalg.norm(segment))
-        if length <= _EPS:
-            return None
-        relative = point - segment_start
-        return float(abs(segment[0] * relative[1] - segment[1] * relative[0]) / length)
+        # Delegates to the extracted route-corridor geometry helper (issue #4987).
+        return hybrid_route_corridor.lateral_offset_to_segment(point, segment_start, segment_stop)
 
     def _corridor_subgoal_activation(
         self,

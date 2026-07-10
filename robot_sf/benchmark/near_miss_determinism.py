@@ -45,6 +45,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
+
+from robot_sf.benchmark.metrics import _compute_robot_ped_distance_summary
+
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
@@ -87,8 +91,8 @@ DEFAULT_REQUIRED_METRICS: tuple[str, ...] = (
 
 
 def metric_path_is_deterministic(
-    robot_pos: "Sequence[Any]",
-    peds_pos: "Sequence[Any]",
+    robot_pos: Sequence[Any],
+    peds_pos: Sequence[Any],
     *,
     robot_radius: float,
     ped_radius: float,
@@ -128,17 +132,11 @@ def metric_path_is_deterministic(
         ValueError: When ``n_invocations`` is less than 2, or when the supplied
             trajectories are empty.
     """
-    # Local import keeps the module importable without pulling the full metrics
-    # graph until the harness is actually exercised.
-    from robot_sf.benchmark.metrics import _compute_robot_ped_distance_summary
-
     if n_invocations < 2:
         raise ValueError(f"n_invocations must be >= 2, got {n_invocations}")
 
-    import numpy as _np
-
-    robot_arr = _np.asarray(robot_pos)
-    peds_arr = _np.asarray(peds_pos)
+    robot_arr = np.asarray(robot_pos)
+    peds_arr = np.asarray(peds_pos)
     if (
         robot_arr.ndim != 2
         or robot_arr.shape[0] == 0
@@ -153,7 +151,7 @@ def metric_path_is_deterministic(
     class _EpisodeData:
         """Minimal attribute container matching the metric's data contract."""
 
-        __slots__ = ("robot_pos", "peds_pos", "robot_radius", "ped_radius")
+        __slots__ = ("ped_radius", "peds_pos", "robot_pos", "robot_radius")
 
     def _build() -> _EpisodeData:
         d = _EpisodeData()
@@ -167,8 +165,7 @@ def metric_path_is_deterministic(
     first = _compute_robot_ped_distance_summary(_build())
 
     tracked = ("near_misses", "min_clearance", "human_collisions", "min_distance", "mean_clearance")
-    distinct: set[tuple[Any, ...]] = set()
-    distinct.add(tuple(first[k] for k in tracked))
+    distinct: set[tuple[Any, ...]] = {tuple(first[k] for k in tracked)}
     for _ in range(n_invocations - 1):
         agg = _compute_robot_ped_distance_summary(_build())
         distinct.add(tuple(agg[k] for k in tracked))
@@ -184,14 +181,14 @@ def metric_path_is_deterministic(
 
 
 def measure_exact_repeat_nondeterminism(
-    scenario_params: "Mapping[str, Any]",
+    scenario_params: Mapping[str, Any],
     seed: int,
     *,
     n_repeats: int = DEFAULT_N_REPEATS,
     horizon: int = 60,
     dt: float = 0.1,
-    tracked_metrics: "Sequence[str]" = DEFAULT_TRACKED_METRICS,
-    required_metrics: "Sequence[str]" | None = None,
+    tracked_metrics: Sequence[str] = DEFAULT_TRACKED_METRICS,
+    required_metrics: Sequence[str] | None = None,
     run_episode: Any | None = None,
 ) -> dict[str, Any]:
     """Run ``N`` exact-repeat episodes and report per-metric rerun deviation.
@@ -248,10 +245,56 @@ def measure_exact_repeat_nondeterminism(
     required_set = set(required_metrics)
 
     if run_episode is None:
-        from robot_sf.benchmark.runner import run_episode as _run_episode
+        from robot_sf.benchmark.runner import run_episode as _run_episode  # noqa: PLC0415
 
         run_episode = _run_episode
 
+    collected, unavailable = _gather_repeat_values(
+        run_episode,
+        scenario_params,
+        seed,
+        n_repeats,
+        horizon,
+        dt,
+        tracked_metrics,
+        required_set,
+    )
+
+    per_metric, any_nondeterministic, near_miss_max_dev = _summarize_repeat_values(
+        collected, unavailable, tracked_metrics
+    )
+
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "exact_repeat": per_metric,
+        "summary": {
+            "n_repeats": n_repeats,
+            "seed": seed,
+            "scenario_id": scenario_params.get("id"),
+            "horizon": horizon,
+            "dt": dt,
+            "any_nondeterministic_metric": any_nondeterministic,
+            "near_misses_max_deviation": near_miss_max_dev,
+        },
+        "diagnostics": _capture_diagnostics(),
+    }
+
+
+def _gather_repeat_values(
+    run_episode: Any,
+    scenario_params: Mapping[str, Any],
+    seed: int,
+    n_repeats: int,
+    horizon: int,
+    dt: float,
+    tracked_metrics: Sequence[str],
+    required_set: set[str],
+) -> tuple[dict[str, list[float]], set[str]]:
+    """Execute ``n_repeats`` exact-repeat runs and collect per-metric values.
+
+    Returns:
+        ``(collected, unavailable)``. Raises if a required metric is missing.
+    """
     collected: dict[str, list[float]] = {k: [] for k in tracked_metrics}
     unavailable: set[str] = set()
     for _ in range(n_repeats):
@@ -267,7 +310,6 @@ def measure_exact_repeat_nondeterminism(
             value = metrics.get(key)
             if value is None:
                 if key in required_set:
-                    # A missing required metric must never look like zero deviation.
                     raise ValueError(
                         f"exact-repeat measurement: required metric {key!r} absent "
                         "from episode record; refusing to report a zero-deviation "
@@ -276,7 +318,19 @@ def measure_exact_repeat_nondeterminism(
                 unavailable.add(key)
                 continue
             collected[key].append(float(value))
+    return collected, unavailable
 
+
+def _summarize_repeat_values(
+    collected: dict[str, list[float]],
+    unavailable: set[str],
+    tracked_metrics: Sequence[str],
+) -> tuple[dict[str, Any], bool, float | None]:
+    """Turn collected per-run values into the per-metric deviation report.
+
+    Returns:
+        ``(per_metric, any_nondeterministic, near_misses_max_deviation)``.
+    """
     per_metric: dict[str, Any] = {}
     any_nondeterministic = False
     near_miss_max_dev: float | None = None
@@ -311,23 +365,7 @@ def measure_exact_repeat_nondeterminism(
             "max": v_max,
             "values": vals,
         }
-
-    diagnostics = _capture_diagnostics()
-
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "exact_repeat": per_metric,
-        "summary": {
-            "n_repeats": n_repeats,
-            "seed": seed,
-            "scenario_id": scenario_params.get("id"),
-            "horizon": horizon,
-            "dt": dt,
-            "any_nondeterministic_metric": any_nondeterministic,
-            "near_misses_max_deviation": near_miss_max_dev,
-        },
-        "diagnostics": diagnostics,
-    }
+    return per_metric, any_nondeterministic, near_miss_max_dev
 
 
 def _capture_diagnostics() -> dict[str, Any]:
@@ -338,15 +376,13 @@ def _capture_diagnostics() -> dict[str, Any]:
         values are reported as ``None`` rather than raising, since diagnostics
         are advisory.
     """
-    import numpy as np
-
     diag: dict[str, Any] = {"numpy_version": np.__version__}
     try:
-        import numba
+        import numba  # noqa: PLC0415
 
         diag["numba_version"] = numba.__version__
         diag["numba_num_threads"] = int(getattr(numba.config, "NUMBA_NUM_THREADS", 0)) or None
-    except Exception:  # pragma: no cover - numba is optional for the diagnostic
+    except ImportError:  # pragma: no cover - numba is an optional diagnostic dep
         diag["numba_version"] = None
         diag["numba_num_threads"] = None
     return diag

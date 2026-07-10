@@ -112,7 +112,8 @@ def _fake_runner_factory(deviate_after: int, metric_value: float, deviated_value
 
     state = {"i": 0}
 
-    def _run(scenario, *, seed, horizon, dt, record_forces):  # noqa: ARG001
+    def _run(scenario, *, seed, horizon, dt, record_forces):
+        del scenario, seed, horizon, dt, record_forces  # stub signature mirrors the real runner
         i = state["i"]
         state["i"] += 1
         nm = deviated_value if i >= deviate_after else metric_value
@@ -168,7 +169,10 @@ def test_exact_repeat_measurement_rejects_invalid_arguments():
 
 
 def test_exact_repeat_measurement_fails_closed_on_missing_required_metric():
-    def _runner(scenario, *, seed, horizon, dt, record_forces):  # noqa: ARG001
+    """A missing required metric must raise rather than look like zero deviation."""
+
+    def _runner(scenario, *, seed, horizon, dt, record_forces):
+        del scenario, seed, horizon, dt, record_forces  # stub signature mirrors the real runner
         # Emits near_misses but omits the other required metrics.
         return {"metrics": {"near_misses": 1.0}}
 
@@ -181,7 +185,8 @@ def test_exact_repeat_measurement_fails_closed_on_missing_required_metric():
 def test_exact_repeat_measurement_skips_optional_absent_metric():
     """A tracked-but-optional metric is recorded unavailable, not raised."""
 
-    def _runner(scenario, *, seed, horizon, dt, record_forces):  # noqa: ARG001
+    def _runner(scenario, *, seed, horizon, dt, record_forces):
+        del scenario, seed, horizon, dt, record_forces  # stub signature mirrors the real runner
         # All required metrics present; the optional time_to_goal absent.
         metrics = {k: 1.0 for k in DEFAULT_TRACKED_METRICS}
         metrics.pop("time_to_goal", None)
@@ -251,6 +256,7 @@ def test_snqi_bound_without_baseline_is_clip_capped_only():
 
 
 def test_snqi_bound_zero_tolerance_is_zero_linear():
+    """A zero near-miss tolerance yields a zero SNQI propagation bound."""
     bound = snqi_near_miss_propagation_bound(
         near_miss_tolerance=0.0, baseline_med=10.0, baseline_p95=30.0
     )
@@ -259,6 +265,7 @@ def test_snqi_bound_zero_tolerance_is_zero_linear():
 
 
 def test_snqi_bound_rejects_invalid_arguments():
+    """Invalid tolerances, weights, and baseline spreads must raise."""
     with pytest.raises(ValueError, match="non-negative"):
         snqi_near_miss_propagation_bound(-1.0)
     with pytest.raises(ValueError, match="w_near"):

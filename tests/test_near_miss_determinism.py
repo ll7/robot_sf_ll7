@@ -161,6 +161,22 @@ def test_exact_repeat_measurement_detects_injected_variance():
     assert nm["max"] == 7.0
 
 
+def test_exact_repeat_measurement_uses_exact_float_identity():
+    """Values differing below a decimal rounding threshold are not bit-identical."""
+    runner = _fake_runner_factory(
+        deviate_after=2,
+        metric_value=1.0,
+        deviated_value=float(np.nextafter(1.0, 2.0)),
+    )
+    report = measure_exact_repeat_nondeterminism(
+        SMOKE_SCENARIO, seed=123, n_repeats=4, horizon=5, run_episode=runner
+    )
+
+    near_misses = report["exact_repeat"]["near_misses"]
+    assert near_misses["bit_identical"] is False
+    assert near_misses["n_distinct_values"] == 2
+
+
 def test_exact_repeat_measurement_rejects_invalid_arguments():
     """Too few repeats and an empty metric list must raise."""
     runner = _fake_runner_factory(999, 1.0, 1.0)
@@ -181,6 +197,19 @@ def test_exact_repeat_measurement_fails_closed_on_missing_required_metric():
         return {"metrics": {"near_misses": 1.0}}
 
     with pytest.raises(ValueError, match="required metric"):
+        measure_exact_repeat_nondeterminism(
+            SMOKE_SCENARIO, seed=1, n_repeats=2, horizon=5, run_episode=_runner
+        )
+
+
+def test_exact_repeat_measurement_fails_closed_on_non_finite_metric():
+    """A non-finite metric cannot be presented as a deterministic result."""
+
+    def _runner(scenario, *, seed, horizon, dt, record_forces):
+        del scenario, seed, horizon, dt, record_forces
+        return {"metrics": dict.fromkeys(DEFAULT_TRACKED_METRICS, float("nan"))}
+
+    with pytest.raises(ValueError, match="not finite"):
         measure_exact_repeat_nondeterminism(
             SMOKE_SCENARIO, seed=1, n_repeats=2, horizon=5, run_episode=_runner
         )

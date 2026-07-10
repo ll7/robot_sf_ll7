@@ -317,7 +317,13 @@ def _gather_repeat_values(
                     )
                 unavailable.add(key)
                 continue
-            collected[key].append(float(value))
+            numeric_value = float(value)
+            if not np.isfinite(numeric_value):
+                raise ValueError(
+                    f"exact-repeat measurement: metric {key!r} is not finite; "
+                    "refusing to report a determinism result for a non-finite value"
+                )
+            collected[key].append(numeric_value)
     return collected, unavailable
 
 
@@ -347,7 +353,10 @@ def _summarize_repeat_values(
                 "values": [],
             }
             continue
-        distinct = sorted({round(v, 12) for v in vals})
+        # Compare IEEE-754 encodings, not decimal-rounded values: rounding would
+        # incorrectly classify two nearby but distinct results as bit-identical.
+        value_bits = np.asarray(vals, dtype=np.float64).view(np.uint64)
+        distinct = set(value_bits.tolist())
         v_min = min(vals)
         v_max = max(vals)
         max_dev = v_max - v_min

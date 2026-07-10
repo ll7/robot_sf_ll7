@@ -122,12 +122,13 @@ conditions (same commit, same manifest, `workers: 1`) on 2026-04-10:
     property of the metric definition.
   - **Tolerance quantification.** `measure_exact_repeat_nondeterminism` runs `N`
     exact-repeat episodes and reports the per-metric maximum deviation. On the
-    supported CI CPU (NumPy 2.3.5, Numba 0.65.1), exact-repeat `near_misses`
-    deviation is **0.0** across low/medium/high-density scenarios (8 repeats,
-    `horizon=60`) — i.e. the metric is bit-identical within one machine. The
-    ±0.01–0.31 figure from the full release reflects *cross-run* divergence
-    surfaced at knife-edge crossings under the full campaign pipeline; treat it
-    as the empirical bound on a single machine, not a guarantee across CPUs.
+    supported test environment, the committed low-density smoke scenario has
+    exact-repeat `near_misses` deviation **0.0** (5 repeats, `horizon=30`) —
+    i.e. it is bit-identical for that scenario on one machine. The ±0.01–0.31
+    figure from the full release reflects *cross-run* divergence surfaced at
+    knife-edge crossings under the full campaign pipeline; it is not a
+    cross-machine guarantee. A broader measurement must be recorded as a
+    reproducible, durable campaign artifact before this contract is generalized.
   - **SNQI propagation bound.** The near-miss SNQI term is
     `-w_near * clamp((nm - med) / (p95 - med), 0, 1)` with
     `w_near = 0.3082583` (camera-ready v3). A raw near-miss tolerance `delta`

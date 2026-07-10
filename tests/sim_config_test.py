@@ -80,3 +80,54 @@ def test_non_reactive_response_multiplier_default_and_validation():
 
     with pytest.raises(ValueError, match="non_reactive_response_multiplier"):
         SimulationSettings(non_reactive_response_multiplier=float("inf"))
+
+
+def test_desired_speed_default_preserves_legacy_behavior():
+    """Default SimulationSettings must not set a decoupled desired speed (issue #4972).
+
+    With no tier / explicit mean, desired_speed_mean stays None so the simulator
+    keeps the legacy ``peds_speed_mult * initial_speed`` derivation.
+    """
+    settings = SimulationSettings()
+    assert settings.ped_speed_tier is None
+    assert settings.desired_speed_mean is None
+    assert settings.desired_speed_std is None
+
+
+def test_ped_speed_tier_derives_desired_speed_params():
+    """A speed tier should derive literature-calibrated desired-speed params (issue #4972)."""
+    settings = SimulationSettings(ped_speed_tier="typical")
+    assert settings.ped_speed_tier == "typical"
+    assert settings.desired_speed_mean == pytest.approx(1.3)
+    assert settings.desired_speed_std == pytest.approx(0.2)
+
+    slow = SimulationSettings(ped_speed_tier="slow")
+    assert slow.desired_speed_mean == pytest.approx(0.65)
+
+    brisk = SimulationSettings(ped_speed_tier="Brisk")
+    assert brisk.ped_speed_tier == "brisk"
+    assert brisk.desired_speed_mean == pytest.approx(1.6)
+
+
+def test_explicit_desired_speed_overrides_tier():
+    """Explicit desired_speed_mean/std must take precedence over the tier mapping."""
+    settings = SimulationSettings(
+        ped_speed_tier="typical", desired_speed_mean=1.0, desired_speed_std=0.1
+    )
+    assert settings.desired_speed_mean == pytest.approx(1.0)
+    assert settings.desired_speed_std == pytest.approx(0.1)
+
+
+def test_desired_speed_validation_rejects_invalid_values():
+    """Bad tier keys and negative/non-finite desired-speed values must raise."""
+    with pytest.raises(ValueError, match="Unsupported ped_speed_tier"):
+        SimulationSettings(ped_speed_tier="sprint")
+
+    with pytest.raises(ValueError, match="desired_speed_mean"):
+        SimulationSettings(desired_speed_mean=-0.1)
+
+    with pytest.raises(ValueError, match="desired_speed_mean"):
+        SimulationSettings(desired_speed_mean=float("inf"))
+
+    with pytest.raises(ValueError, match="desired_speed_std"):
+        SimulationSettings(desired_speed_mean=1.3, desired_speed_std=-0.2)

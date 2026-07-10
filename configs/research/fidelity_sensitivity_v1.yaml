@@ -143,6 +143,22 @@ axes:
         patch:
           sim_config:
             ped_radius: 0.50
+  - key: control_action_latency
+    rationale: Measure how a reset-safe control-to-actuation queue changes safety outcomes.
+    variants:
+      - key: zero_step_nominal
+        baseline: true
+        patch:
+          sim_config:
+            action_latency_steps: 0
+      - key: one_step_100ms
+        patch:
+          sim_config:
+            action_latency_steps: 1
+      - key: three_step_300ms
+        patch:
+          sim_config:
+            action_latency_steps: 3
 
 result_contract:
   required_outputs:

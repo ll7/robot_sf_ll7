@@ -51,7 +51,7 @@ def _valid_packet(tmp_path: Path) -> dict[str, object]:
             "guarded_algo_config": "configs/algos/guarded_ppo_relaxed_v2.yaml",
             "checksums": {
                 "configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml": (
-                    "a374a624eb38402e5e4e2612f92440c0f80ff1eb0554a34f33dd36c16920a426"
+                    "91f9d9a7c0bcb54f3628beef9140181a64277ab8bdf9b12dcdc37f0251a7d437"
                 ),
                 "configs/policy_search/candidates/risk_guarded_ppo_v1.yaml": (
                     "69030a865be80be5e3ba98db447551c3707f966de8ac5f216e66044d9ea50735"

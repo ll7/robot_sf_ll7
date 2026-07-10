@@ -46,13 +46,36 @@ Use the cheapest source of truth for the question:
 | --- | --- | --- |
 | Working tree, branch, changed files, merge base, commits | local `git` | Do not ask GitHub for state already present locally. |
 | Interactive issue, PR, and project inspection | GitHub MCP / GitHub app tools | Prefer this for ad-hoc triage, review context, commenting, and linking when authorized. Fall back to REST, local `git`, or narrow GraphQL when MCP/app tools are unavailable or would hide a costly GraphQL path. |
-| Issue body, labels, comments, assignees, open/closed state | REST via `gh api repos/ll7/robot_sf_ll7/issues/...` | Avoid `gh issue view/list` if GraphQL quota is low because those commands may use GraphQL. |
+| Issue body, labels, comments, assignees, open/closed state | `scripts/dev/gh_issue_rest.py view <n> --comments`, or REST via `gh api repos/ll7/robot_sf_ll7/issues/...` directly | Avoid `gh issue view/list` for autonomous workflows: those commands request the deprecated `repository.issue.projectCards` GraphQL field and fail on some `gh` versions (issue #5021). `gh_issue_rest.py` is the shared REST-backed issue-with-comments helper that never touches that field. |
 | PR metadata, branch refs, commits, workflow runs | REST via `gh api` | Poll sparingly; use event/check URLs from known PRs when available. |
 | Project #5 item status, priority, duration, reviewed date | GraphQL / `gh project item-*` | Projects v2 is GraphQL-only; batch and cache aggressively. |
 | Review-thread resolution or nested review data | GraphQL | Keep queries narrow and use known node IDs. |
 
 Do not use a broad GraphQL query for ordinary issue or PR cleanup when a REST endpoint or local
 Git command can answer the same question.
+
+### Issue-with-comments helper
+
+`gh issue view <number> --comments` fails on some GitHub CLI versions because it requests the
+deprecated classic-Projects GraphQL field `repository.issue.projectCards` (issue #5021). Autonomous
+workflows that must read an issue together with its comment thread should use the shared REST-backed
+helper instead:
+
+```bash
+# human-readable thread (drop-in for `gh issue view <n> --comments`)
+uv run python scripts/dev/gh_issue_rest.py view <number> --comments --plain
+
+# selected JSON fields, normalized to match `gh issue view --json`
+uv run python scripts/dev/gh_issue_rest.py view <number> --json number title state url labels
+
+# library use for Python callers
+from scripts.dev.gh_issue_rest import fetch_issue_with_comments
+payload = fetch_issue_with_comments(<number>)
+```
+
+The helper reads through `gh api` (REST only), paginates comments, fails closed on errors or when a
+thread exceeds the page budget, and normalizes `state`/`url` to the shapes `gh issue view --json`
+consumers already expect.
 
 ## Project #5 Cache
 

@@ -14,6 +14,7 @@ import hashlib
 import json
 import time
 import uuid
+from collections import deque
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import asdict, is_dataclass
@@ -564,6 +565,9 @@ class RobotEnv(BaseEnv):
 
         # Store last action executed by the robot
         self.last_action = None
+        self._action_latency_steps = env_config.sim_config.resolved_action_latency_steps
+        self._action_latency_queue: deque[tuple[Any, ...]] = deque()
+        self._reset_action_latency_queue()
         self.applied_seed: int | None = None
         self._latest_observation: Any = None
         # Enable occupancy grid overlay visualization if requested
@@ -579,6 +583,26 @@ class RobotEnv(BaseEnv):
         self._grid_obstacle_cache_key: _GridObstacleCacheKey | None = None
         self._grid_obstacle_cache_value: _GridObstacleCacheValue | None = None
         self._prime_snqi_proxy_state()
+
+    def _reset_action_latency_queue(self) -> None:
+        """Clear queued controls and prime the configured delay with zero commands."""
+        zero_raw = np.zeros(self.action_space.shape, dtype=self.action_space.dtype)
+        zero_action = tuple(self.simulator.robots[0].parse_action(zero_raw))
+        self._action_latency_queue = deque(
+            [zero_action] * self._action_latency_steps,
+            maxlen=None,
+        )
+
+    def _apply_action_latency(self, requested_action: tuple[Any, ...]) -> tuple[Any, ...]:
+        """Enqueue one requested action and return the command due this simulation step.
+
+        Returns:
+            The action to execute in the current simulator step.
+        """
+        if self._action_latency_steps == 0:
+            return requested_action
+        self._action_latency_queue.append(requested_action)
+        return self._action_latency_queue.popleft()
 
     def _prime_snqi_proxy_state(self) -> None:
         """Reset and prime step-level SNQI proxy state for a fresh episode."""
@@ -957,10 +981,11 @@ class RobotEnv(BaseEnv):
             tuple: ``(obs, reward, terminated, truncated, info)`` per Gymnasium API.
         """
         if self.debug_without_robot_movement:
-            action = (0.0, 0.0)
+            requested_action = (0.0, 0.0)
         else:
             # Process the action through the simulator only when debug mode is disabled.
-            action = self.simulator.robots[0].parse_action(action)
+            requested_action = tuple(self.simulator.robots[0].parse_action(action))
+        action = self._apply_action_latency(requested_action)
 
         # Perform simulation step
         self.simulator.step_once([action])
@@ -1018,6 +1043,8 @@ class RobotEnv(BaseEnv):
         reward_dict["action_space"] = self.action_space
         # add action to dict
         reward_dict["action"] = action
+        reward_dict["requested_action"] = requested_action
+        reward_dict["action_latency"] = self.env_config.sim_config.action_latency_metadata()
         # Add last_action to reward_dict
         reward_dict["last_action"] = self.last_action
         # Determine if the episode has reached terminal state
@@ -1084,6 +1111,7 @@ class RobotEnv(BaseEnv):
             self._telemetry_episode_id += 1
             # Reset last_action
             self.last_action = None
+            self._reset_action_latency_queue()
             # Reset internal simulator state
             self.simulator.reset_state()
             # Reset the environment's state and return the initial observation
@@ -1166,6 +1194,7 @@ class RobotEnv(BaseEnv):
                 map_def=self.map_def,
                 applied_seed=self.applied_seed,
             )
+            info["action_latency"] = self.env_config.sim_config.action_latency_metadata()
             _attach_goal_posterior_planner_input(info, self.env_config, self.simulator)
             # Reset telemetry timing on new episode
             self._last_wall_time = time.perf_counter()

@@ -37,13 +37,13 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, TypeAlias, runtime_checkable
 
 import numpy as np
 
 # Horizon-indexed spatial inflation function. Maps a non-negative prediction
 # horizon step index to an additive radius (metres).
-type SpatialInflationPolicy = Callable[[int], float]
+SpatialInflationPolicy: TypeAlias = Callable[[int], float]  # noqa: UP040
 
 # Machine-readable schema version for the diagnostics/provenance payload.
 ENVELOPE_SCHEMA_VERSION = "pedestrian_uncertainty_envelope.v1"

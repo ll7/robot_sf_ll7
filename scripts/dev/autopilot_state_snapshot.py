@@ -16,6 +16,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from scripts.dev._gh_pagination import is_likely_truncated
+
 FAILURE_CONCLUSIONS = {
     "action_required",
     "cancelled",
@@ -369,11 +371,17 @@ def claim_snapshot(
 
 def issue_queue_snapshot(
     searches: list[str], *, limit: int
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
-    """Return compact issue rows for one or more GitHub issue searches."""
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], list[dict[str, Any]]]:
+    """Return compact issue rows for one or more GitHub issue searches.
+
+    The fourth tuple element records, per search, whether the bounded
+    ``gh issue list --limit`` result may have been silently capped. Downstream
+    consumers should treat any ``truncated: true`` marker as incomplete evidence.
+    """
     rows: list[dict[str, Any]] = []
     sources: list[dict[str, Any]] = []
     errors: list[str] = []
+    truncations: list[dict[str, Any]] = []
     seen: set[int] = set()
     for search in searches:
         command = [
@@ -393,7 +401,29 @@ def issue_queue_snapshot(
         if error:
             errors.append(f"issue search {search!r}: {error}")
             continue
-        for issue in data if isinstance(data, list) else []:
+        if not isinstance(data, list):
+            errors.append(
+                f"issue search {search!r}: expected JSON array, got {type(data).__name__}"
+            )
+            continue
+        search_rows = data
+        row_count = len(search_rows)
+        truncated = is_likely_truncated(row_count, limit=limit)
+        truncations.append(
+            {
+                "search": search,
+                "truncated": truncated,
+                "row_count": row_count,
+                "limit": limit,
+                "note": (
+                    "gh issue list may be capped: got "
+                    f"{row_count} rows at --limit {limit}; raise --limit or paginate"
+                    if truncated
+                    else ""
+                ),
+            }
+        )
+        for issue in search_rows:
             number = issue.get("number")
             if not isinstance(number, int) or number in seen:
                 continue
@@ -413,7 +443,7 @@ def issue_queue_snapshot(
                     "url": issue.get("url", ""),
                 }
             )
-    return rows, sources, errors
+    return rows, sources, errors, truncations
 
 
 def _rollup_conclusion(check: dict[str, Any]) -> str:
@@ -517,7 +547,9 @@ def build_snapshot(args: argparse.Namespace) -> dict[str, Any]:
     sources.extend(claim_sources)
     errors.extend(claim_errors)
 
-    issues, issue_sources, issue_errors = issue_queue_snapshot(args.issue_search, limit=args.limit)
+    issues, issue_sources, issue_errors, issue_truncations = issue_queue_snapshot(
+        args.issue_search, limit=args.limit
+    )
     sources.extend(issue_sources)
     errors.extend(issue_errors)
 
@@ -543,6 +575,8 @@ def build_snapshot(args: argparse.Namespace) -> dict[str, Any]:
         "git": git,
         "claims": claims,
         "issues": issues,
+        "issues_truncated_any": any(marker.get("truncated") for marker in issue_truncations),
+        "issues_truncated": issue_truncations,
         "prs": prs,
         "controller_checkpoint": checkpoint,
         "errors": errors,

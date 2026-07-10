@@ -31,7 +31,7 @@ A 2 MiB allocation failing on a 44 GiB card after 14 hours means the leak is sev
 ### Phase 0: CPU-safe telemetry abstraction
 Status: Complete (PR #4836)
 
-A `cleanup_gpu_memory_between_arms()` helper in `scripts/tools/run_camera_ready_benchmark.py` provides:
+The `_cleanup_gpu_memory_between_arms()` helper in `robot_sf/benchmark/camera_ready/campaign.py` provides:
 - RSS measurement via `psutil.Process().memory_info().rss`
 - CUDA allocated/reserved/max allocated tracking when PyTorch is available
 - `torch.cuda.empty_cache()` and `torch.cuda.synchronize()` calls
@@ -40,7 +40,7 @@ A `cleanup_gpu_memory_between_arms()` helper in `scripts/tools/run_camera_ready_
 ### Phase 1: Per-arm cleanup in in-process runner
 Status: Complete (PR #4836)
 
-`_run_campaign_planner_matrix()` in `robot_sf/benchmark/camera_ready/campaign.py` now calls `cleanup_gpu_memory_between_arms()` after each planner/kinematics variant completes.
+`_run_campaign_planner_matrix()` in `robot_sf/benchmark/camera_ready/campaign.py` now calls `_cleanup_gpu_memory_between_arms()` after each planner/kinematics variant completes.
 
 ### Phase 2: Subprocess isolation per arm
 Status: Complete (PR #4846)

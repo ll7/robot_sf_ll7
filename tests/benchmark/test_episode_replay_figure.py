@@ -411,7 +411,7 @@ class TestProvenanceSidecar:
         write_provenance_sidecar(out_path, sidecar)
 
         assert out_path.exists()
-        with open(out_path) as f:
+        with open(out_path, encoding="utf-8") as f:
             data = json.load(f)
         assert data["episode_id"] == "ep_001"
         assert data["seed"] == 42
@@ -420,7 +420,7 @@ class TestProvenanceSidecar:
     def test_compute_file_sha256(self, tmp_path):
         """Test file SHA-256 computation."""
         test_file = tmp_path / "test.txt"
-        test_file.write_text("hello world")
+        test_file.write_text("hello world", encoding="utf-8")
         sha = compute_file_sha256(test_file)
         assert len(sha) == 64
         assert isinstance(sha, str)
@@ -616,7 +616,9 @@ class TestCLI:
         from scripts.replay_episode_figure import main as cli_main
 
         episodes_file = tmp_path / "episodes.jsonl"
-        episodes_file.write_text('{"episode_id": "ep1", "scenario_id": "s", "seed": 1}\n')
+        episodes_file.write_text(
+            '{"episode_id": "ep1", "scenario_id": "s", "seed": 1}\n', encoding="utf-8"
+        )
 
         ret = cli_main(
             [
@@ -769,7 +771,7 @@ class TestCLI:
         episodes_jsonl = tmp_path / "episodes.jsonl"
         import json
 
-        with open(episodes_jsonl, "w") as f:
+        with open(episodes_jsonl, "w", encoding="utf-8") as f:
             json.dump(episode_data, f)
             f.write("\n")
 
@@ -808,7 +810,7 @@ class TestCLI:
         provenance_path = output_dir / "replay_provenance.json"
         assert provenance_path.exists(), "Provenance sidecar should be generated"
 
-        with open(provenance_path) as f:
+        with open(provenance_path, encoding="utf-8") as f:
             provenance = json.load(f)
 
         # Required provenance fields per issue acceptance criteria
@@ -847,7 +849,7 @@ class TestCLI:
         caption_path = output_dir / "caption_fragment.tex"
         assert caption_path.exists(), "Caption fragment should be generated"
 
-        with open(caption_path) as f:
+        with open(caption_path, encoding="utf-8") as f:
             caption_content = f.read()
         assert len(caption_content) > 0, "Caption fragment should not be empty"
         assert "e2e_test_ep" in caption_content or "crossing_scenario" in caption_content
@@ -895,7 +897,7 @@ class TestCLI:
         }
 
         episodes_jsonl = tmp_path / "episodes.jsonl"
-        with open(episodes_jsonl, "w") as f:
+        with open(episodes_jsonl, "w", encoding="utf-8") as f:
             json.dump(episode_data, f)
             f.write("\n")
 
@@ -925,9 +927,9 @@ class TestCLI:
             for name in figure_names:
                 assert (out_dir / name).exists(), f"run {run_idx}: {name} should exist"
 
-            with open(out_dir / "replay_provenance.json") as f:
+            with open(out_dir / "replay_provenance.json", encoding="utf-8") as f:
                 provenances.append(json.load(f))
-            captions.append((out_dir / "caption_fragment.tex").read_text())
+            captions.append((out_dir / "caption_fragment.tex").read_text(encoding="utf-8"))
 
         # --- Invariant 1: deterministic figure output (byte-identity via content hash) ---
         run1_fig_hashes = {
@@ -1002,7 +1004,7 @@ class TestResimulation:
         matrix_path = tmp_path / "scenarios.yaml"
         import yaml
 
-        with open(matrix_path, "w") as f:
+        with open(matrix_path, "w", encoding="utf-8") as f:
             yaml.dump(scenarios, f)
         return matrix_path
 
@@ -1030,7 +1032,7 @@ class TestResimulation:
                 "n_agents": 0,
             }
         ]
-        with open(matrix_path, "w") as f:
+        with open(matrix_path, "w", encoding="utf-8") as f:
             yaml.dump(scenarios, f)
 
         scenario = _resolve_scenario_from_matrix("test_scenario", matrix_path)
@@ -1141,7 +1143,7 @@ class TestResimulation:
         episodes_jsonl = tmp_path / "episodes.jsonl"
         import json
 
-        with open(episodes_jsonl, "w") as f:
+        with open(episodes_jsonl, "w", encoding="utf-8") as f:
             json.dump(row_dict, f)
             f.write("\n")
 
@@ -1161,7 +1163,7 @@ class TestResimulation:
         assert Path(result["provenance_sidecar"]).exists()
 
         # Check that provenance shows resimulation occurred
-        with open(result["provenance_sidecar"]) as f:
+        with open(result["provenance_sidecar"], encoding="utf-8") as f:
             provenance = json.load(f)
         assert provenance["resimulated"] is True
         assert provenance["scenario_id"] == "test_scenario"
@@ -1187,7 +1189,7 @@ class TestResimulation:
         matrix_path = tmp_path / "scenarios.yaml"
         import yaml
 
-        with open(matrix_path, "w") as f:
+        with open(matrix_path, "w", encoding="utf-8") as f:
             yaml.dump(scenarios, f)
 
         # Create episode row with expected final position after the finite 100-step replay horizon.
@@ -1202,7 +1204,7 @@ class TestResimulation:
         episodes_jsonl = tmp_path / "episodes.jsonl"
         import json
 
-        with open(episodes_jsonl, "w") as f:
+        with open(episodes_jsonl, "w", encoding="utf-8") as f:
             json.dump(row_dict, f)
             f.write("\n")
 
@@ -1237,7 +1239,7 @@ class TestResimulation:
         episodes_jsonl = tmp_path / "episodes.jsonl"
         import json
 
-        with open(episodes_jsonl, "w") as f:
+        with open(episodes_jsonl, "w", encoding="utf-8") as f:
             json.dump(row_dict, f)
             f.write("\n")
 
@@ -1263,7 +1265,7 @@ class TestResimulation:
         matrix_path = tmp_path / "scenarios.yaml"
         import yaml
 
-        with open(matrix_path, "w") as f:
+        with open(matrix_path, "w", encoding="utf-8") as f:
             yaml.dump(scenarios, f)
 
         # Create episode row for non-existent scenario
@@ -1277,7 +1279,7 @@ class TestResimulation:
         episodes_jsonl = tmp_path / "episodes.jsonl"
         import json
 
-        with open(episodes_jsonl, "w") as f:
+        with open(episodes_jsonl, "w", encoding="utf-8") as f:
             json.dump(row_dict, f)
             f.write("\n")
 

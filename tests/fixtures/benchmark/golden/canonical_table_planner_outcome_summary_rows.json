@@ -1,0 +1,22 @@
+[
+  {
+    "planner_key": "social_force",
+    "execution_mode": "native",
+    "success_mean": 1.0,
+    "collisions_mean": 0.0,
+    "near_misses_mean": 2.0,
+    "snqi_mean": 0.8,
+    "runtime_mean_sec": 1.5,
+    "row_status": "native"
+  },
+  {
+    "planner_key": "orca",
+    "execution_mode": "native",
+    "success_mean": 0.5,
+    "collisions_mean": 0.5,
+    "near_misses_mean": 2.0,
+    "snqi_mean": 0.7,
+    "runtime_mean_sec": 1.2,
+    "row_status": "native"
+  }
+]

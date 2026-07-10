@@ -2138,6 +2138,9 @@ def _set_simulation_override_attr(
         if alpha < 0.0:
             raise ValueError("simulation_config.pedestrian_uncertainty_alpha_mps must be >= 0.")
         setattr(config.sim_config, attr, alpha)
+    elif attr in {"action_latency_steps", "action_latency_ms"}:
+        setattr(config.sim_config, attr, overrides[attr])
+        config.sim_config._validate_action_latency_config()
     else:
         setattr(config.sim_config, attr, overrides[attr])
 
@@ -2166,6 +2169,8 @@ def _apply_simulation_overrides(
         config.sim_config.max_peds_per_group = int(overrides["max_peds_per_group"])
     for attr in (
         "peds_speed_mult",
+        "action_latency_steps",
+        "action_latency_ms",
         "pedestrian_integration_scheme",
         "ped_radius",
         "pedestrian_uncertainty_envelope_enabled",

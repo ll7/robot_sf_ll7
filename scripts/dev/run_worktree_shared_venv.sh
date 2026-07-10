@@ -11,10 +11,22 @@ The helper pins imports to this worktree by prepending PYTHONPATH=$PWD and sets 
 For linked worktrees, the helper also derives a per-worktree COVERAGE_FILE unless one is already
 set, preventing parallel focused pytest runs from sharing output/coverage/.coverage state.
 
+Because the shared env is reused without resync (UV_NO_SYNC=1), a stale owning-checkout .venv can
+lag the current worktree source. The vendored `pysocialforce` package (force-included from
+fast-pysf/pysocialforce and NOT shadowed by PYTHONPATH=$PWD) is especially drift-prone: importing
+a newer API from a stale install fails mid-collection with a confusing ImportError. The helper
+therefore runs a cheap freshness check comparing the installed `pysocialforce` package against this
+checkout's fast-pysf/pysocialforce source and fails early with an actionable message when they
+diverge. Refresh the owning checkout with `uv sync --all-extras` to clear the divergence.
+
 Options:
-  --venv PATH   Shared virtualenv path exported as UV_PROJECT_ENVIRONMENT. Defaults to the main
-                checkout .venv for linked worktrees.
-  -h, --help    Show this help message.
+  --venv PATH            Shared virtualenv path exported as UV_PROJECT_ENVIRONMENT. Defaults to the
+                         main checkout .venv for linked worktrees.
+  --no-freshness-check   Skip the shared-venv freshness check. Use only when you have confirmed the
+                         reused env matches this checkout (e.g. an editable install that already
+                         points at this source). Also skippable via
+                         ROBOT_SF_VENV_FRESHNESS_CHECK=skip.
+  -h, --help             Show this help message.
 
 Examples:
   scripts/dev/run_worktree_shared_venv.sh -- pytest tests/test_ci_script_contract.py -q
@@ -26,6 +38,7 @@ EOF
 }
 
 venv_override=""
+skip_freshness=""
 cmd=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -36,6 +49,10 @@ while [[ $# -gt 0 ]]; do
       fi
       venv_override="$2"
       shift 2
+      ;;
+    --no-freshness-check)
+      skip_freshness=1
+      shift
       ;;
     -h|--help)
       show_help
@@ -76,6 +93,58 @@ if [[ ! -x "$venv_path/bin/python" ]]; then
   echo "Shared virtualenv not found or incomplete: $venv_path" >&2
   echo "Create it with 'uv sync --all-extras' in the owning checkout, or use a local .venv." >&2
   exit 2
+fi
+
+check_shared_venv_freshness() {
+  # Guard the shared-venv fast path against a stale owning-checkout environment.
+  #
+  # The vendored `pysocialforce` package is force-included from fast-pysf/pysocialforce and is NOT
+  # shadowed by PYTHONPATH=$PWD (the package lives at fast-pysf/pysocialforce, not at the repo
+  # root). With UV_NO_SYNC=1 a reused env can lag the current worktree source, so importing a newer
+  # API from a stale install fails mid-collection with a confusing ImportError. Compare the
+  # installed package's .py files against this checkout's source and fail early on divergence.
+  local venv="$1"
+  local src_pkg="$repo_root/fast-pysf/pysocialforce"
+
+  if [[ ! -d "$src_pkg" ]]; then
+    return 0
+  fi
+
+  local installed_pkg=""
+  local candidate
+  for candidate in "$venv"/lib/python*/site-packages/pysocialforce; do
+    if [[ -d "$candidate" ]]; then
+      installed_pkg="$candidate"
+      break
+    fi
+  done
+
+  if [[ -z "$installed_pkg" ]]; then
+    return 0
+  fi
+
+  local src_file rel_path installed_file
+  while IFS= read -r -d '' src_file; do
+    rel_path="${src_file#"$src_pkg"/}"
+    installed_file="$installed_pkg/$rel_path"
+    if [[ ! -f "$installed_file" ]] || ! cmp -s "$src_file" "$installed_file"; then
+      cat >&2 <<EOF
+Shared virtualenv is stale relative to this checkout: $venv
+  diverging module: pysocialforce/$rel_path
+The reused env (UV_NO_SYNC=1) lacks source present in fast-pysf/pysocialforce, so imports can
+fail mid-run with a confusing ImportError. Refresh the owning checkout with 'uv sync --all-extras',
+or rerun with --no-freshness-check (or ROBOT_SF_VENV_FRESHNESS_CHECK=skip) once you have confirmed
+the env matches this checkout.
+EOF
+      return 1
+    fi
+  done < <(find "$src_pkg" -type f -name '*.py' -print0)
+}
+
+if [[ -z "$skip_freshness" && "${ROBOT_SF_VENV_FRESHNESS_CHECK:-}" != "skip" ]]; then
+  if ! check_shared_venv_freshness "$venv_path"; then
+    exit 2
+  fi
 fi
 
 export UV_PROJECT_ENVIRONMENT="$venv_path"

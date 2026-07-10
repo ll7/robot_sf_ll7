@@ -16,6 +16,52 @@ EXPLICIT_EULER = "explicit_euler"
 SEMI_IMPLICIT_EULER = "semi_implicit_euler"
 SUPPORTED_INTEGRATION_SCHEMES = frozenset({EXPLICIT_EULER, SEMI_IMPLICIT_EULER})
 
+#: Default spread (m/s) for the desired-speed distribution when a mean is
+#: configured without an explicit standard deviation.
+DEFAULT_DESIRED_SPEED_STD = 0.2
+
+
+def sample_truncated_normal_speeds(
+    num_peds: int,
+    mean: float,
+    std: float,
+    high: float,
+    seed: int | None = None,
+) -> np.ndarray:
+    """Sample non-negative desired walking speeds from a truncated normal.
+
+    Speeds are drawn from ``N(mean, std)`` and truncated to ``[0, high]``. This
+    decouples the preferred walking speed from the spawn velocity (issue #4972).
+    Negative samples are clipped to ``0`` and samples above ``high`` are clipped
+    to ``high``; for literature-calibrated means (~1.3 m/s) with a 0.2 m/s spread
+    the truncation is negligible in practice.
+
+    Args:
+        num_peds: Number of pedestrian desired speeds to sample.
+        mean: Desired-speed distribution mean in m/s.
+        std: Desired-speed distribution standard deviation in m/s.
+        high: Inclusive upper bound for the truncated distribution (m/s).
+        seed: Optional RNG seed for deterministic sampling.
+
+    Returns:
+        np.ndarray: Non-negative desired speeds with shape ``(num_peds,)``.
+    """
+    if not np.isfinite(mean) or mean < 0:
+        raise ValueError("desired speed mean must be finite and non-negative")
+    if not np.isfinite(std) or std < 0:
+        raise ValueError("desired speed std must be finite and non-negative")
+    if not np.isfinite(high) or high < 0:
+        raise ValueError("desired speed high bound must be finite and non-negative")
+    if num_peds <= 0:
+        return np.zeros((0,), dtype=float)
+    rng = np.random.default_rng(seed)
+    std_eff = std if std is not None and std > 0 else 0.0
+    if std_eff > 0.0:
+        speeds = rng.normal(loc=mean, scale=std_eff, size=num_peds)
+    else:
+        speeds = np.full(num_peds, float(mean), dtype=float)
+    return np.clip(speeds, 0.0, float(high))
+
 
 def normalize_integration_scheme(value: str | None) -> str:
     """Return a supported pedestrian integration scheme or raise a clear error."""
@@ -44,10 +90,35 @@ class PedState:
         self.integration_scheme = normalize_integration_scheme(config.integration_scheme)
         self.agent_radius = config.agent_radius
         self.max_speed_multiplier = config.max_speed_multiplier
+        self.desired_speed_mean = config.desired_speed_mean
+        self.desired_speed_std = config.desired_speed_std
+        self.desired_speed_high = config.desired_speed_high
+        self.desired_speed_seed = config.desired_speed_seed
 
         self.max_speeds: np.ndarray | None = None
         self.initial_speeds: np.ndarray | None = None
+        # Explicitly assigned desired speeds decouple the goal-driving speed
+        # (``max_speeds``) from the spawn speed (issue #4972). When ``None`` the
+        # legacy ``max_speed_multiplier * initial_speed`` derivation is used.
+        self._explicit_desired_speeds: np.ndarray | None = None
         self.update(state, groups)
+        # After the initial state is cached, optionally sample a decoupled
+        # desired-speed distribution from the scene configuration.
+        if self.desired_speed_mean is not None:
+            std = (
+                self.desired_speed_std
+                if self.desired_speed_std is not None
+                else DEFAULT_DESIRED_SPEED_STD
+            )
+            self.assign_desired_speeds(
+                sample_truncated_normal_speeds(
+                    self.size(),
+                    float(self.desired_speed_mean),
+                    float(std),
+                    float(self.desired_speed_high),
+                    seed=self.desired_speed_seed,
+                )
+            )
 
     def update(self, state: np.ndarray, groups: list[list[int]]) -> None:
         """Update pedestrian state and group memberships.
@@ -59,8 +130,55 @@ class PedState:
         self.state = state
         self.groups = groups
 
+    def assign_desired_speeds(self, desired_speeds: np.ndarray | None) -> None:
+        """Assign per-pedestrian desired speeds decoupled from the spawn speed.
+
+        When set, these speeds drive the goal-directed force (``max_speeds``)
+        instead of the legacy ``max_speed_multiplier * initial_speed`` derivation.
+        Pass ``None`` (or call :meth:`clear_desired_speeds`) to restore the
+        legacy behavior. The assignment is length-checked against the current
+        pedestrian count and re-applied on every state refresh so it survives
+        repeated integration steps (issue #4972).
+
+        Args:
+            desired_speeds: Non-negative desired speeds in m/s, one per pedestrian.
+        """
+        if desired_speeds is None:
+            self.clear_desired_speeds()
+            return
+        speeds = np.asarray(desired_speeds, dtype=float)
+        if speeds.ndim != 1 or speeds.shape[0] != self.size():
+            raise ValueError(
+                "desired_speeds must be a 1D array with one entry per pedestrian "
+                f"(got shape {speeds.shape} for {self.size()} pedestrians)"
+            )
+        if not np.all(np.isfinite(speeds)) or np.any(speeds < 0):
+            raise ValueError("desired_speeds must be finite and non-negative")
+        self._explicit_desired_speeds = speeds
+        self._refresh_max_speeds()
+
+    def clear_desired_speeds(self) -> None:
+        """Restore the legacy spawn-coupled desired-speed derivation.
+
+        Clears any explicit desired speeds and recomputes ``max_speeds`` from
+        ``max_speed_multiplier * initial_speed`` (issue #4972).
+        """
+        self._explicit_desired_speeds = None
+        self._refresh_max_speeds()
+
+    def _refresh_max_speeds(self) -> None:
+        """Refresh the goal-driving cap from explicit or legacy desired speeds."""
+        if self._explicit_desired_speeds is not None:
+            self.max_speeds = self._explicit_desired_speeds.copy()
+        else:
+            self.max_speeds = self.max_speed_multiplier * self.initial_speeds
+
     def _update_state(self, state: np.ndarray) -> None:
         """Normalize and cache state-derived fields.
+
+        When explicit desired speeds are assigned they drive ``max_speeds``
+        directly (decoupled from spawn speed, issue #4972); otherwise the legacy
+        ``max_speed_multiplier * initial_speed`` derivation is preserved.
 
         Args:
             state: Pedestrian state matrix with or without explicit ``tau`` column.
@@ -72,7 +190,7 @@ class PedState:
             self._state = state
         if self.initial_speeds is None:
             self.initial_speeds = self.speeds()
-        self.max_speeds = self.max_speed_multiplier * self.initial_speeds
+        self._refresh_max_speeds()
 
     @property
     def state(self) -> np.ndarray:

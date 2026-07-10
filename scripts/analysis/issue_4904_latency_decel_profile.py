@@ -11,7 +11,7 @@ CPU-only, no simulation, no GPU, no campaign/Slurm.
 import csv
 import json
 import math
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import matplotlib
@@ -63,6 +63,9 @@ def extract_profiles(episodes: list[dict]) -> dict:
             "late_evasive_true": 0,
             "latency_populated": 0,
             "total_exposure": 0,
+            # Fail-closed reason tally for late_evasive=true episodes with no finite latency
+            # (issue #5000). A silent empty here previously hid the goal-planner anomaly.
+            "latency_unavailable_reasons": Counter(),
         }
     )
 
@@ -88,6 +91,11 @@ def extract_profiles(episodes: list[dict]) -> dict:
         if _is_finite_number(latency):
             prof["latency_populated"] += 1
             prof["latencies"].append(float(latency))
+        elif late_evasive:
+            # Fail closed: a late_evasive event with no finite latency must not be a silent gap.
+            # Record the producer-supplied reason; tag legacy records lacking one as "unspecified".
+            reason = fields.get("latency_unavailable_reason") or "unspecified"
+            prof["latency_unavailable_reasons"][str(reason)] += 1
 
         if _is_finite_number(decel):
             prof["decels"].append(float(decel))
@@ -144,6 +152,8 @@ def write_percentile_csv(profiles: dict, output_path: Path) -> None:
         "late_evasive_rate",
         "latency_populated_rate",
         "anomaly_gap",
+        "late_evasive_no_latency",
+        "dominant_latency_unavailable_reason",
     ]
     with open(output_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -155,6 +165,9 @@ def write_percentile_csv(profiles: dict, output_path: Path) -> None:
             total = prof["total_exposure"]
             le_rate = prof["late_evasive_true"] / total if total > 0 else 0
             lp_rate = prof["latency_populated"] / total if total > 0 else 0
+            reasons = prof["latency_unavailable_reasons"]
+            no_latency = sum(reasons.values())
+            dominant_reason = reasons.most_common(1)[0][0] if reasons else ""
             writer.writerow(
                 {
                     "planner": planner,
@@ -178,6 +191,8 @@ def write_percentile_csv(profiles: dict, output_path: Path) -> None:
                     "late_evasive_rate": round(le_rate, 4),
                     "latency_populated_rate": round(lp_rate, 4),
                     "anomaly_gap": round(le_rate - lp_rate, 4),
+                    "late_evasive_no_latency": no_latency,
+                    "dominant_latency_unavailable_reason": dominant_reason,
                 }
             )
 
@@ -255,8 +270,16 @@ def print_summary(profiles: dict) -> None:
         lat_pop = prof["latency_populated"]
         anomaly = le_true > 0 and lat_pop == 0
         if anomaly or planner == "goal":
+            reasons = prof["latency_unavailable_reasons"]
+            reason_str = (
+                ", ".join(f"{name}={count}" for name, count in sorted(reasons.items()))
+                if reasons
+                else "none"
+            )
             print(
-                f"  {planner}: exposure>0={total}, late_evasive_true={le_true}, latency_populated={lat_pop}, anomaly={anomaly}"
+                f"  {planner}: exposure>0={total}, late_evasive_true={le_true}, "
+                f"latency_populated={lat_pop}, anomaly={anomaly}; "
+                f"late_evasive_no_latency_reasons=[{reason_str}]"
             )
 
 

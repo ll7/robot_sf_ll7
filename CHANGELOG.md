@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* **issue #5031 docs-only PR bodies can now select "domain approval not required".** The PR
+  follow-up checker (`scripts/dev/check_pr_followups.py::analyze_domain_approval`) previously forced
+  `domain_approval_required` on any body that merely *mentioned* an evidence concept in prose (e.g. a
+  docs page discussing "benchmark interpretation" or "diagnostic-only"), so a genuinely docs-only PR
+  could not use the template's documented `Required for this PR: no - reason` / `Status: not required`
+  opt-out. `analyze_domain_approval` now accepts that opt-out when the only triggers are weak
+  free-form prose mentions. A filled Research Result Guidance declaration (a concrete `Evidence tier`
+  / `Result classification`) remains a strong self-declaration and keeps the strict approval path, so
+  this cannot wave through an evidence-sensitive PR. Found while implementing #4967. No benchmark
+  metric semantics change.
+
+* **issue #5000 goal-planner late-evasive latency instrumentation (fail-closed).** The
+  `late_evasive_predicate` (`robot_sf/benchmark/safety_predicates.py`, schema bumped
+  `safety_predicate.late_evasive.v1` → `.v2`) now emits a `latency_unavailable_reason` alongside
+  `response_latency_s`, so a `late_evasive=true` event is never a silent-empty latency. Root cause of
+  the reported 109/110 goal-planner anomaly: the goal planner almost never produces a
+  clearance-restoring deceleration after the hazard becomes visible, so `late_evasive` fires via the
+  no-action branch (`first_clearance_restoring_action_step is None`) while `response_latency_s` is
+  genuinely undefined — not a false positive and not a missing timestamp. The reason value is
+  `no_clearance_restoring_action` (dominant goal case) or `hazard_never_visible`, and `null` exactly
+  when latency is finite. The trace-surface `_late_evasive_reaction`
+  (`robot_sf/analysis_workbench/trace_failure_predicates.py`) gains a seconds-valued
+  `response_latency_s` companion to its `reaction_delay_steps`. The downstream
+  `scripts/analysis/issue_4904_latency_decel_profile.py` derivation now surfaces the reason tally
+  (`late_evasive_no_latency`, `dominant_latency_unavailable_reason`) instead of a silent gap. Claim
+  boundary: telemetry/analysis-surface correctness only — no benchmark metric semantics change, no
+  hybrid-/goal-planner effectiveness claim on the 0-latency data.
+
 ### Added
 
 * **issue #5034 control-action-latency sweep fail-closed preflight + blocker packet.** New
@@ -20,6 +50,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docs/context/evidence/issue_5034_control_action_latency_sweep_blocked_2026-07-10/`. Claim boundary:
   launch/readiness preflight only — not benchmark evidence, not paper-facing; no campaign run and no
   Slurm/GPU submission were performed.
+* **issue #5048 gh list truncation guard extended to the remaining bounded callers.** The shared
+  `scripts/dev/_gh_pagination.py` guard (from #4991 / PR #5040) is now applied to the six remaining
+  bounded `gh ... list --limit N` call sites so a result at the cap is never silently mistaken for a
+  full page. `snapshot_issue_batch.snapshot_claimable_issues`, `closed_state_label_hygiene`, and
+  `open_issue_closure_audit` add structured `truncated` / `truncation_note` markers (per-label and
+  per-issue where applicable) to their JSON reports; `compact_ci_snapshot` adds a `truncated` field
+  to its `DriftSample`; `watch_pr_ci_status.fetch_recent_successful_ci_durations` logs a structured
+  truncation warning on a capped drift sample; and `project_priority_score.GhProjectClient.item_list`
+  fails closed with `GhListTruncated` because it drives Priority Score write-backs. Focused
+  regression coverage lives in `tests/dev/test_gh_list_truncation_remaining.py` and
+  `tests/tools/test_project_priority_score_truncation.py`. Tooling/evidence-integrity only — no
+  benchmark, metric, or paper-facing claim.
+* **issue #3574 realized-distribution audit for heterogeneous-population traces.**
+  `robot_sf/benchmark/heterogeneous_population_metrics.py` gains `realized_distribution_audit` and
+  `summarize_distribution` (plus a `RealizedDistributionSpec`), covering DoD item 5: configured
+  target vs. realized per-step distributions (overall and per-archetype) from one control trace, so
+  the interaction/truncation shift the #3206 smoke could not compute is made explicit. A numeric
+  configured→realized mean shift is reported only when the caller declares the two sides comparable,
+  and missing or non-finite trace fields fail closed as blockers. Pure analysis only — no ablation
+  campaign, Slurm submission, or heterogeneity/realism claim. Tests in
+  `tests/benchmark/test_heterogeneous_population_distribution_audit.py`.
 * **issue #4871 CrowdNav_Prediction_AttnGraph external learned-baseline feasibility smoke.** New
   `robot_sf/planner/crowdnav_pred_attng.py` is the thinnest model-only adapter proving the shipped
   ICRA 2023 attention-graph SRNN checkpoint (`41200.pt`, MIT, pinned at upstream `3907731`) loads and
@@ -158,6 +209,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **issue #5027 fresh-worktree `.venv` symlink was untracked.** The `.gitignore` virtual-environment
+  rules (`.venv/`, `venv/`) used a trailing slash, which matches directories but not symlinks, so a
+  linked worktree that points `.venv` at the main checkout's virtualenv via a symlink (a shared-venv
+  runner setup) showed up as untracked (`?? .venv`). Dropped the trailing slash (`.venv`, `venv`) so
+  the ignore rule covers directory, symlink, and file forms. Guarded by
+  `tests/dev/test_gitignore_venv_symlink.py`. No behavior change for the common real-directory `.venv`.
 * **issue #4919 SNQI aggregate diagnostic-mode logging regression from exception narrowing.** The
   `robot_sf/benchmark/aggregate.py::_ensure_snqi` exception handler, narrowed from a bare
   `except Exception:` to `except (ValueError, TypeError):` by #4887's broad-except ratchet, dropped

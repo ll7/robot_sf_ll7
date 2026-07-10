@@ -122,7 +122,13 @@ _HAZARD_VISIBLE = np.array([False, True, True, True, True, True])
 
 
 def test_late_evasive_when_no_clearance_action_taken() -> None:
-    """Hazard visible but constant speed (no deceleration) ⇒ late evasive."""
+    """Hazard visible but constant speed (no deceleration) ⇒ late evasive.
+
+    This is the dominant goal-planner pattern (issue #5000): the robot never decelerates hard
+    enough after the hazard becomes visible, so ``late_evasive`` fires via the no-action branch
+    while ``response_latency_s`` is genuinely undefined. The event must never be a silent empty —
+    it carries an explicit ``latency_unavailable_reason`` instead.
+    """
     result = late_evasive_predicate(_HAZARD_DISTANCES, _HAZARD_VISIBLE, np.ones(6), dt=_DT)
 
     assert result["late_evasive"] is True
@@ -130,6 +136,9 @@ def test_late_evasive_when_no_clearance_action_taken() -> None:
     assert fields["first_hazard_visible_step"] == 1
     assert fields["first_clearance_restoring_action_step"] is None
     assert fields["minimum_distance_m"] == pytest.approx(0.5)
+    # Fail closed: null latency for a late_evasive event must carry a machine-readable reason.
+    assert fields["response_latency_s"] is None
+    assert fields["latency_unavailable_reason"] == "no_clearance_restoring_action"
 
 
 def test_prompt_deceleration_is_not_late() -> None:
@@ -140,6 +149,29 @@ def test_prompt_deceleration_is_not_late() -> None:
     assert result["late_evasive"] is False
     assert result["fields"]["first_clearance_restoring_action_step"] == 2
     assert result["fields"]["response_latency_s"] == pytest.approx(0.1)
+    # A finite latency implies no unavailability reason.
+    assert result["fields"]["latency_unavailable_reason"] is None
+
+
+def test_latency_unavailable_reason_is_null_when_latency_finite() -> None:
+    """A late-but-finite reaction still populates latency and leaves the reason null (#5000)."""
+    speeds = np.array([1.0, 1.0, 0.5, 0.2, 0.1, 0.0])
+    result = late_evasive_predicate(
+        _HAZARD_DISTANCES, _HAZARD_VISIBLE, speeds, dt=_DT, max_response_latency_s=0.05
+    )
+
+    assert result["late_evasive"] is True
+    assert result["fields"]["response_latency_s"] == pytest.approx(0.1)
+    assert result["fields"]["latency_unavailable_reason"] is None
+
+
+def test_latency_reason_when_hazard_never_visible() -> None:
+    """No visible hazard: not late-evasive, but the null latency is still explained (#5000)."""
+    result = late_evasive_predicate(_HAZARD_DISTANCES, np.zeros(6, dtype=bool), np.ones(6), dt=_DT)
+
+    assert result["late_evasive"] is False
+    assert result["fields"]["response_latency_s"] is None
+    assert result["fields"]["latency_unavailable_reason"] == "hazard_never_visible"
 
 
 def test_latency_threshold_can_flag_a_borderline_reaction() -> None:

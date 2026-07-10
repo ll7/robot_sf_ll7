@@ -12,6 +12,37 @@ The RobotSF benchmark system uses a consolidated schema management approach to e
 
 **See also**: [SNQI Weight Tools](./snqi-weight-tools/README.md) for weight recomputation and optimization, and [Distribution Plots](./distribution_plots.md) for visualization guidance.
 
+## Pedestrian Walking-Speed Calibration
+
+**Caveat for interpreting benchmark results.** The default simulated pedestrian
+walks at approximately **0.65 m/s** for the whole episode. This is a side effect
+of coupling the desired (preferred) walking speed to the spawn speed: the
+spawn velocity defaults to 0.5 m/s (`PedSpawnConfig.initial_speed`) and the
+goal-driving speed is derived as `peds_speed_mult * initial_speed` (1.3 × 0.5).
+This is roughly **half** the ~1.3 m/s preferred walking speed reported for
+unimpeded adults (Moussaïd et al. 2010, "The walking behaviour of pedestrian
+social groups", doi:10.1371/journal.pone.0010047). Two consequences:
+
+1. The default interaction regime is systematically gentler/slower than typical
+   sidewalk traffic, which flatters reactive planners (more time to react).
+2. Coupling desired speed to *spawn* speed is surprising: making pedestrians
+   walk faster required spawning them faster.
+
+Until a major campaign re-base, the **legacy default is intentionally preserved**
+so existing benchmark numbers stay reproducible. Issue #4972 adds a decoupled
+*desired-speed* axis and a **speed-tier** selector (`slow` / `typical` / `brisk`)
+on `SimulationSettings` (`ped_speed_tier`) and `SceneConfig`
+(`desired_speed_mean` / `desired_speed_std`):
+
+- `slow` (~0.65 m/s) reproduces the legacy default as an explicit tier value;
+- `typical` (~1.3 m/s) matches the literature preferred walking speed;
+- `brisk` (~1.6 m/s) stress-tests reactive planners.
+
+Benchmark reports and comparisons that vary pedestrian pace **must** record the
+speed tier or desired-speed distribution alongside results, and should treat any
+ranking computed only at the slow default as conditional on that regime. See
+`robot_sf/sim/pedestrian_speed_tiers.py` for the tier mapping.
+
 ## Local Smoke Benchmark Demo
 
 For a quick local sanity check that the benchmark runner can execute a small map scenario with two

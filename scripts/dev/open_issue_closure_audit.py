@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 
+from scripts.dev._gh_pagination import is_likely_truncated
+
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 ISSUE_FIELDS = "number,title,url,state"
 PR_FIELDS = "number,title,url,state,closedAt"
@@ -263,7 +265,56 @@ def fetch_merged_pr_rows_by_issue(
     return rows_by_issue
 
 
-def build_report(*, repo: str, candidates: list[ClosureAuditCandidate]) -> dict[str, Any]:
+def build_truncations(
+    *,
+    open_issue_rows: list[dict[str, object]],
+    issue_limit: int,
+    merged_pr_rows_by_issue: dict[int, list[dict[str, object]]],
+    pr_limit_per_issue: int,
+) -> dict[str, Any]:
+    """Return structured truncation markers for both bounded ``gh search`` calls.
+
+    A capped open-issue scan may silently drop issues that should have been audited;
+    a capped per-issue merged-PR search may miss title-linked PRs for an issue. Both
+    are recorded so downstream consumers treat a ``truncated: true`` audit as partial.
+    """
+    open_row_count = len(open_issue_rows)
+    open_truncated = is_likely_truncated(open_row_count, limit=issue_limit)
+    per_issue = [
+        {
+            "issue_number": issue_number,
+            "row_count": len(rows),
+            "truncated": True,
+        }
+        for issue_number, rows in sorted(merged_pr_rows_by_issue.items())
+        if is_likely_truncated(len(rows), limit=pr_limit_per_issue)
+    ]
+    return {
+        "open_issues": {
+            "truncated": open_truncated,
+            "row_count": open_row_count,
+            "limit": issue_limit,
+            "note": (
+                f"gh search issues may be capped: got {open_row_count} rows at "
+                f"--limit {issue_limit}; raise --issue-limit or paginate"
+                if open_truncated
+                else ""
+            ),
+        },
+        "merged_prs_per_issue": {
+            "limit": pr_limit_per_issue,
+            "truncated_issues": per_issue,
+        },
+        "truncated_any": bool(open_truncated or per_issue),
+    }
+
+
+def build_report(
+    *,
+    repo: str,
+    candidates: list[ClosureAuditCandidate],
+    truncations: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Build a machine-readable closure-audit report."""
     parent_count = sum(candidate.classification == "parent_or_roadmap" for candidate in candidates)
     review_count = len(candidates) - parent_count
@@ -274,6 +325,8 @@ def build_report(*, repo: str, candidates: list[ClosureAuditCandidate]) -> dict[
         "issue_writes": False,
         "project_writes": False,
         "repo": repo,
+        "truncations": truncations or {},
+        "truncated_any": bool(truncations and truncations.get("truncated_any")),
         "candidate_count": len(candidates),
         "closure_review_count": review_count,
         "parent_or_roadmap_count": parent_count,
@@ -324,6 +377,12 @@ def main(argv: list[str] | None = None) -> int:
         report = build_report(
             repo=args.repo,
             candidates=collect_candidates(open_issue_rows, merged_pr_rows_by_issue),
+            truncations=build_truncations(
+                open_issue_rows=open_issue_rows,
+                issue_limit=args.issue_limit,
+                merged_pr_rows_by_issue=merged_pr_rows_by_issue,
+                pr_limit_per_issue=args.pr_limit_per_issue,
+            ),
         )
     except (RuntimeError, ValueError) as exc:
         _dump_json(

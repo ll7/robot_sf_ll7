@@ -31,8 +31,10 @@ output/
 wandb
 
 # Python virtual environments
-.venv/
-venv/
+# No trailing slash so a `.venv`/`venv` symlink (e.g. a shared-venv worktree
+# runner) is ignored too; a directory-only rule (`.venv/`) skips symlinks.
+.venv
+venv
 env/
 ENV/
 

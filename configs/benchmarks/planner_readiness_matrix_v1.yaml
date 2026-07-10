@@ -199,7 +199,12 @@ rows:
       - robot_sf/benchmark/algorithm_readiness.py
       - configs/algos/dwa_classic.yaml
       - docs/baselines/dwa.md
-    reason: Classical DWA is implemented and deterministic, but has no accepted benchmark campaign evidence.
+      - docs/context/evidence/issue_5020_dwa_archetype_matrix_2026-07-10/README.md
+    reason: >-
+      Classical DWA is implemented and deterministic. Executed archetype-matrix smoke
+      evidence exists (issue #5020, 23 rows x 3 fixed seeds, native/adapter, no fallback/
+      degraded exclusions) but reached no goals; it is smoke/nominal evidence only and does
+      not promote the row to benchmark-strength success evidence without a comparator.
     validation_command: uv run pytest tests/planner/test_dwa.py tests/benchmark/test_algorithm_readiness_contract.py
 
   - planner_id: hybrid_rule_local_planner

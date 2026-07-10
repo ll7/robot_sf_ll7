@@ -10,6 +10,37 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.planner.socnav import SocNavPlannerPolicy
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
+from robot_sf.sim.sim_config import SimulationSettings
+
+
+def test_robot_env_delays_actions_and_resets_the_queue_between_episodes() -> None:
+    """The configured delay applies in the environment loop, not just campaign provenance."""
+    env = RobotEnv(
+        env_config=RobotSimulationConfig(
+            sim_config=SimulationSettings(action_latency_steps=1),
+        )
+    )
+    _obs, reset_info = env.reset(seed=123)
+
+    assert reset_info["action_latency"]["effective_steps"] == 1
+    _obs, _reward, _terminated, _truncated, first_info = env.step(
+        np.array([1.0, 0.0], dtype=np.float32)
+    )
+    assert first_info["meta"]["requested_action"] == pytest.approx((1.0, 0.0))
+    assert first_info["meta"]["action"] == pytest.approx((0.0, 0.0))
+    assert env.simulator.robots[0].current_speed == pytest.approx((0.0, 0.0))
+
+    _obs, _reward, _terminated, _truncated, second_info = env.step(
+        np.array([0.0, 0.0], dtype=np.float32)
+    )
+    assert second_info["meta"]["action"] == pytest.approx((1.0, 0.0))
+    assert env.simulator.robots[0].current_speed[0] > 0.0
+
+    env.reset(seed=123)
+    _obs, _reward, _terminated, _truncated, reset_step_info = env.step(
+        np.array([0.0, 0.0], dtype=np.float32)
+    )
+    assert reset_step_info["meta"]["action"] == pytest.approx((0.0, 0.0))
 
 
 def test_socnav_policy_runs_single_step():

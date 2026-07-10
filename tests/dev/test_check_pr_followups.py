@@ -432,6 +432,84 @@ def test_domain_approval_rejects_not_required_for_sensitive_result() -> None:
     assert report.status == "domain_approval_required"
 
 
+def test_domain_approval_accepts_docs_only_opt_out_for_freeform_prose_trigger() -> None:
+    """A docs-only PR that only *mentions* an evidence concept may take the not-required branch.
+
+    Regression for #5031: PR #4967-style docs pages discuss terms like "benchmark interpretation" in
+    prose, tripping the free-form trigger. The template documents `Required for this PR: no - reason`
+    with `Status: not required`; that opt-out must be accepted when the trigger is a prose mention
+    rather than a filled Research Result Guidance declaration.
+    """
+    body = """## Summary
+Adds a single reference table for reward profiles to aid benchmark interpretation.
+
+## Domain-Aware Approval
+- Required for this PR: no - docs-only reference table, no evidence classification change
+- Domains reviewed: NA
+- Status: not required
+- Approver/review source or waiver: NA - docs-only
+"""
+    report = analyze_domain_approval(body, source="fixture")
+
+    assert report.status == "ok"
+    assert report.sensitive_terms == ("free-form evidence marker: benchmark interpretation",)
+
+
+def test_domain_approval_docs_only_opt_out_uses_default_template_values() -> None:
+    """The template's documented docs-only opt-out values pass when the trigger is prose-only."""
+    body = """## Summary
+Documentation-only update discussing paper-facing claim wording.
+
+## Domain-Aware Approval
+- Required for this PR: no - docs-only, no research claim
+- Domains reviewed: NA
+- Status: not required
+- Approver/review source or waiver:
+- Validity checklist:
+  - Target claim/hypothesis: NA
+  - Comparator or split/evidence validity: NA
+  - Fallback/degraded exclusions: NA
+  - Claim boundary: NA
+  - Implementation integrity vs experimental validity: NA
+"""
+    report = analyze_domain_approval(body, source="fixture")
+
+    assert report.status == "ok"
+
+
+def test_domain_approval_docs_only_opt_out_requires_not_required_status() -> None:
+    """A free-form trigger with a contradictory (pending) status is not waved through."""
+    body = """## Summary
+Adds notes on benchmark interpretation.
+
+## Domain-Aware Approval
+- Required for this PR: no - docs-only
+- Domains reviewed: NA
+- Status: pending
+- Approver/review source or waiver: waiting for reviewer
+"""
+    report = analyze_domain_approval(body, source="fixture")
+
+    assert report.status == "domain_approval_required"
+
+
+def test_domain_approval_structured_declaration_cannot_use_docs_only_opt_out() -> None:
+    """A filled Research Result Guidance declaration keeps the strict path even with prose mentions."""
+    body = _domain_body(
+        evidence_tier="targeted smoke",
+        result_classification="blocker-resolution",
+        domain_section="""## Domain-Aware Approval
+- Required for this PR: no - docs-only
+- Domains reviewed: NA
+- Status: not required
+- Approver/review source or waiver: NA
+""",
+    )
+    report = analyze_domain_approval(body, source="fixture")
+
+    assert report.status == "domain_approval_required"
+
+
 def test_domain_approval_required_value_does_not_treat_nominal_as_no() -> None:
     """Required explanations starting with nominal/narrowed stay in the required path."""
     report = analyze_domain_approval(

@@ -338,19 +338,21 @@ def test_committed_baseline_reproduces_from_fixture() -> None:
     assert "ty advisory ratchet passed" in res.stdout
 
 
-def test_committed_baseline_fixture_is_in_sync() -> None:
+def test_committed_baseline_fixture_is_in_sync(tmp_path: Path) -> None:
     """Guard (#5070): the committed fixture must match the committed baseline.
 
     If the baseline is refreshed without regenerating the fixture (or vice
     versa), the deterministic reproduction test would silently drift. This test
-    regenerates the fixture from the baseline in memory and asserts it matches
-    the checked-in fixture byte-for-byte, so a stale fixture fails loudly.
+    regenerates the fixture from the baseline through the production serializer
+    and compares bytes with the checked-in fixture, so a stale fixture or a
+    formatting change fails loudly.
     """
     assert BASELINE.exists() and FIXTURE.exists()
     baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
     regenerated = tyratchet.materialize_findings_from_baseline(baseline)
-    committed = json.loads(FIXTURE.read_text(encoding="utf-8"))
-    assert regenerated == committed, (
+    generated_fixture = tmp_path / "ty_advisory_findings_fixture.json"
+    tyratchet.write_json(generated_fixture, regenerated)
+    assert generated_fixture.read_bytes() == FIXTURE.read_bytes(), (
         "ty advisory findings fixture is out of sync with the baseline; "
         "regenerate with `uv run python scripts/dev/ty_advisory_ratchet.py "
         "--emit-baseline-fixture`"

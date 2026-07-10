@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#2910, 2026-07-10) - NEEDS-REVIEW -->
+
 # Issue #2910 Benchmark v0.1 Four-Suite Freeze (2026-07-10)
 
 This note records the first concrete four-suite roster for benchmark v0.1 and keeps publication

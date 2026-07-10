@@ -14,6 +14,10 @@ from robot_sf.sim.pedestrian_model_variants import (
     HSFM_TTC_PREDICTIVE_V1,
     normalize_pedestrian_model,
 )
+from robot_sf.sim.pedestrian_speed_tiers import (
+    desired_speed_params_for_tier,
+    normalize_ped_speed_tier,
+)
 
 
 @dataclass(frozen=True)
@@ -265,6 +269,23 @@ class SimulationSettings:
 
     peds_reset_follow_route_at_start: bool = False
     """Whether pedestrians following routes should reset to the start of their routes"""
+    ped_speed_tier: str | None = None
+    """Pedestrian desired-speed tier axis (issue #4972): ``slow`` (~0.65 m/s,
+    matches the legacy default), ``typical`` (~1.3 m/s preferred walking speed,
+    Moussaïd et al. 2010), or ``brisk`` (~1.6 m/s). ``None`` (default)
+    preserves the legacy spawn-coupled ``peds_speed_mult * initial_speed``
+    derivation. Explicit ``desired_speed_mean``/``desired_speed_std`` override
+    the tier mapping."""
+    desired_speed_mean: float | None = None
+    """Optional decoupled per-pedestrian desired (preferred) walking speed mean
+    (m/s). When set, the goal-driving speed is drawn from a truncated normal
+    distribution instead of ``peds_speed_mult * initial_speed`` (issue #4972)."""
+    desired_speed_std: float | None = None
+    """Optional standard deviation (m/s) of the decoupled desired-speed
+    distribution. Ignored unless ``desired_speed_mean`` (or ``ped_speed_tier``)
+    is set."""
+    desired_speed_seed: int | None = None
+    """Optional RNG seed for deterministic desired-speed sampling (issue #4972)."""
     debug_without_robot_movement: bool = False
     """Whether to disable robot movement in the simulator for debugging purposes"""
 
@@ -330,6 +351,7 @@ class SimulationSettings:
         if self.apf_config is None or not isinstance(self.apf_config, AdversarialPedForceConfig):
             raise ValueError("Adversarial-ped-force settings need to be specified!")
         self._validate_route_spawn_config()
+        self._validate_desired_speed_config()
 
     def _validate_pedestrian_uncertainty_envelope_config(self) -> None:
         """Validate planner-facing uncertainty-envelope simulation settings."""
@@ -345,6 +367,32 @@ class SimulationSettings:
             )
         if self.route_spawn_jitter_frac < 0:
             raise ValueError("route_spawn_jitter_frac must be >= 0")
+
+    def _validate_desired_speed_config(self) -> None:
+        """Validate and normalize the decoupled desired-speed / tier config (issue #4972).
+
+        Normalizes ``ped_speed_tier`` to a canonical key, validates explicit
+        desired-speed mean/std, and derives ``desired_speed_mean``/``desired_speed_std``
+        from the tier when the tier is set and the explicit values are not. Explicit
+        ``desired_speed_mean``/``desired_speed_std`` always take precedence over the
+        tier mapping.
+        """
+        tier = normalize_ped_speed_tier(self.ped_speed_tier)
+        # ``object.__setattr__`` is unnecessary for a non-frozen dataclass, but we
+        # assign via the field name to stay robust against future freezing.
+        self.ped_speed_tier = tier
+        if self.desired_speed_mean is not None:
+            if not isfinite(self.desired_speed_mean) or self.desired_speed_mean < 0:
+                raise ValueError("desired_speed_mean must be a finite value >= 0!")
+        if self.desired_speed_std is not None:
+            if not isfinite(self.desired_speed_std) or self.desired_speed_std < 0:
+                raise ValueError("desired_speed_std must be a finite value >= 0!")
+        if tier is not None and self.desired_speed_mean is None:
+            tier_mean, tier_std = desired_speed_params_for_tier(tier)
+            self.desired_speed_mean = tier_mean
+            self.desired_speed_std = (
+                self.desired_speed_std if self.desired_speed_std is not None else tier_std
+            )
 
     @property
     def max_sim_steps(self) -> int:

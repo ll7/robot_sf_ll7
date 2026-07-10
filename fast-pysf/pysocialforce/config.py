@@ -13,12 +13,29 @@ class SceneConfig:
         enable_group: Enable group-related forces (coherence, repulsion, gaze).
         agent_radius: Pedestrian radius used for collision/interaction geometry (meters).
         dt_secs: Integration step size in seconds.
-        max_speed_multiplier: Upper bound multiplier for desired speeds.
+        max_speed_multiplier: Upper bound multiplier for desired speeds. Used to
+            derive desired speeds from the spawn speed when ``desired_speed_mean``
+            is not set (legacy behavior, ~0.65 m/s for default spawning).
         tau: Relaxation time constant used by force models (seconds).
         resolution: Spatial resolution used for obstacle preprocessing.
         integration_scheme: Pedestrian position-update scheme. ``semi_implicit_euler``
             advances position with the newly integrated velocity; ``explicit_euler``
             advances with the pre-step velocity.
+        desired_speed_mean: Optional per-pedestrian desired (preferred) walking
+            speed mean in m/s, decoupled from the spawn speed (issue #4972). When
+            set, each pedestrian's goal-driving speed is drawn from a truncated
+            normal distribution ``N(desired_speed_mean, desired_speed_std)`` clipped
+            to ``[0, desired_speed_high]`` instead of ``max_speed_multiplier *
+            initial_speed``. ``None`` preserves the legacy spawn-coupled default.
+        desired_speed_std: Optional standard deviation (m/s) of the desired-speed
+            distribution. Ignored unless ``desired_speed_mean`` is set; defaults to
+            a small spread when ``desired_speed_mean`` is set without an explicit
+            ``desired_speed_std``.
+        desired_speed_high: Inclusive upper bound (m/s) for the truncated desired-
+            speed distribution. Defaults to a high ceiling so only the non-negative
+            side is truncated in practice.
+        desired_speed_seed: Optional RNG seed for deterministic desired-speed
+            sampling. When ``None`` the global NumPy RNG is used.
     """
 
     enable_group: bool = True
@@ -28,6 +45,10 @@ class SceneConfig:
     tau: float = 0.5
     resolution: float = 10
     integration_scheme: str = "semi_implicit_euler"
+    desired_speed_mean: float | None = None
+    desired_speed_std: float | None = None
+    desired_speed_high: float = 3.0
+    desired_speed_seed: int | None = None
 
 
 @dataclass

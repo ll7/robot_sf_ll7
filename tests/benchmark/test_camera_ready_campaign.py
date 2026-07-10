@@ -127,6 +127,7 @@ def test_camera_ready_config_types_keep_legacy_import_identity() -> None:
         "ScenarioCandidateSelection",
         "SeedPolicy",
         "SnqiContractConfig",
+        "TuningSpec",
     )
 
     for name in public_names:

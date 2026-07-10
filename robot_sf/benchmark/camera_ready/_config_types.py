@@ -18,6 +18,20 @@ if TYPE_CHECKING:
 DEFAULT_SEED_SETS_PATH = Path("configs/benchmarks/seed_sets_v1.yaml")
 _AMV_DIMENSIONS = ("use_case", "context", "speed_regime", "maneuver_type")
 
+# Per-arm tuning-effort provenance (issue #5143). A tuning block is "declared" when an author
+# records it explicitly in the campaign config; "backfilled" marks a best-effort reconstruction
+# from config history (asymmetry still visible, not silent); "unknown" is the honest placeholder
+# for arms whose tuning effort has not yet been recorded.
+TUNING_SOURCE_DECLARED = "declared"
+TUNING_SOURCE_BACKFILLED = "backfilled"
+TUNING_SOURCE_UNKNOWN = "unknown"
+_TUNING_SOURCES = (TUNING_SOURCE_DECLARED, TUNING_SOURCE_BACKFILLED, TUNING_SOURCE_UNKNOWN)
+# Campaign-level enforcement for the per-arm tuning-effort block (issue #5143, fail-closed spirit
+# of #4970's checkpoint provenance). "off" = best-effort, never fail; "warn" = record missing
+# blocks in the manifest but do not fail; "error" = fail closed when any enabled arm lacks a
+# declared tuning block.
+_TUNING_EFFORT_ENFORCEMENT = ("off", "warn", "error")
+
 
 @dataclass(frozen=True)
 class AmvProfileConfig:
@@ -50,6 +64,29 @@ class ScenarioCandidateSelection:
 
 
 @dataclass(frozen=True)
+class TuningSpec:
+    """Per-arm tuning-effort provenance block (issue #5143).
+
+    Records which parameters were tuned for an arm, against which scenarios, with what
+    approximate budget, and whether the tuning set is disjoint from the evaluation set. This
+    makes cross-arm tuning asymmetry (e.g. classical vs learned vs MPC arms) visible in campaign
+    artifacts instead of silent, countering the under-tuning objection.
+
+    A block is ``None`` on ``PlannerSpec`` when the config did not declare one; the manifest writer
+    synthesizes a best-effort ``backfill_pending`` block so the asymmetry is always recorded.
+    """
+
+    parameters_touched: tuple[str, ...] = ()
+    tuning_scenario_ids: tuple[str, ...] = ()
+    eval_set_disjoint: bool | None = None
+    budget_runs: int | None = None
+    budget_hours: float | None = None
+    tuned_by: str | None = None
+    tuned_at_utc: str | None = None
+    source: str = TUNING_SOURCE_UNKNOWN
+
+
+@dataclass(frozen=True)
 class PlannerSpec:
     """One planner entry in a benchmark campaign matrix."""
 
@@ -70,6 +107,10 @@ class PlannerSpec:
     enabled: bool = True
     planner_group: str = "experimental"
     planner_group_explicit: bool = False
+    # Per-arm tuning-effort provenance (issue #5143). ``None`` means the config did not declare a
+    # block; the manifest synthesizes a best-effort backfill-pending entry so the asymmetry is
+    # always visible. Required (fail-closed) when ``tuning_effort_enforcement == "error"``.
+    tuning: TuningSpec | None = None
 
 
 @dataclass(frozen=True)
@@ -135,3 +176,8 @@ class CampaignConfig:
     route_clearance_certifications_path: Path | None = None
     observation_noise: dict[str, Any] | None = None
     arm_isolation: str = "in_process"  # "in_process" or "subprocess" (issue #4826)
+    # Per-arm tuning-effort enforcement (issue #5143, fail-closed spirit of #4970's checkpoint
+    # provenance). "off" = best-effort (default, backwards compatible); "warn" = record missing
+    # blocks in the manifest but do not fail; "error" = fail closed when any enabled arm lacks a
+    # declared tuning block.
+    tuning_effort_enforcement: str = "off"

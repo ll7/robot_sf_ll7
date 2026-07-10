@@ -18,6 +18,9 @@ from robot_sf.benchmark.camera_ready._config import (
     _resolved_seed_inventory,
     _scenario_horizon_summary,
 )
+from robot_sf.benchmark.camera_ready._config_types import (
+    TUNING_SOURCE_DECLARED,
+)
 from robot_sf.benchmark.camera_ready._route_clearance import (
     _assert_route_clearance_feasible,
     _build_route_clearance_warnings,
@@ -56,13 +59,85 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from robot_sf.benchmark.camera_ready._config_types import CampaignConfig
+    from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, PlannerSpec
 
 CheckpointPreflightMode = Literal["metadata_only", "enforced_staged"]
 _CHECKPOINT_PREFLIGHT_REPORT_NAME: dict[str, str] = {
     "metadata_only": "checkpoint_resolvability.json",
     "enforced_staged": "checkpoint_staging.json",
 }
+
+# Honest label for an arm whose tuning effort has not been recorded or reconstructed yet. This is
+# distinct from a declared ``backfilled`` source: it makes the cross-arm asymmetry visible in the
+# manifest without inventing tuning parameters the author never recorded (issue #5143).
+_TUNING_BACKFILL_PENDING = "backfill_pending"
+
+
+def _tuning_effort_block(planner: PlannerSpec) -> dict[str, Any]:
+    """Return the per-arm tuning-effort manifest block (issue #5143).
+
+    When an arm declares no ``tuning`` block, synthesize a best-effort ``backfill_pending`` entry
+    so the under-tuning asymmetry is always visible in campaign artifacts rather than silent. A
+    declared block is emitted verbatim.
+
+    Returns:
+        JSON-serializable tuning-effort manifest block for one arm.
+    """
+    tuning = planner.tuning
+    if tuning is None:
+        return {
+            "parameters_touched": [],
+            "tuning_scenario_ids": [],
+            "eval_set_disjoint": None,
+            "budget_runs": None,
+            "budget_hours": None,
+            "tuned_by": None,
+            "tuned_at_utc": None,
+            "source": _TUNING_BACKFILL_PENDING,
+            "note": (
+                "No tuning block declared for this arm; tuning effort is unrecorded. "
+                "Synthesized as backfill_pending so the cross-arm asymmetry is visible."
+            ),
+        }
+    block: dict[str, Any] = {
+        "parameters_touched": list(tuning.parameters_touched),
+        "tuning_scenario_ids": list(tuning.tuning_scenario_ids),
+        "eval_set_disjoint": tuning.eval_set_disjoint,
+        "budget_runs": tuning.budget_runs,
+        "budget_hours": tuning.budget_hours,
+        "tuned_by": tuning.tuned_by,
+        "tuned_at_utc": tuning.tuned_at_utc,
+        "source": tuning.source,
+    }
+    if tuning.source != TUNING_SOURCE_DECLARED:
+        block["note"] = (
+            "Tuning block is recorded as best-effort reconstruction or unknown; not author-declared."
+        )
+    return block
+
+
+def _tuning_effort_summary(planners: tuple[PlannerSpec, ...]) -> dict[str, Any]:
+    """Summarize per-arm tuning-effort coverage for the manifest (issue #5143).
+
+    Returns:
+        JSON-serializable summary of declared vs backfill-pending arm counts.
+    """
+    enabled = [planner for planner in planners if planner.enabled]
+    declared = [planner for planner in enabled if planner.tuning is not None]
+    backfill_pending = [planner for planner in enabled if planner.tuning is None]
+    by_source: dict[str, int] = {}
+    for planner in declared:
+        source = planner.tuning.source if planner.tuning is not None else _TUNING_BACKFILL_PENDING
+        by_source[source] = by_source.get(source, 0) + 1
+    for planner in backfill_pending:
+        by_source[_TUNING_BACKFILL_PENDING] = by_source.get(_TUNING_BACKFILL_PENDING, 0) + 1
+    return {
+        "enabled_arm_count": len(enabled),
+        "declared_count": len(declared),
+        "backfill_pending_count": len(backfill_pending),
+        "arms_missing_tuning": sorted(planner.key for planner in backfill_pending),
+        "by_source": by_source,
+    }
 
 
 def _scenario_display_name(scenario: dict[str, Any]) -> str:
@@ -546,9 +621,12 @@ def prepare_campaign_preflight(  # noqa: PLR0913
                 ),
                 "observation_mode": planner.observation_mode,
                 "enabled": planner.enabled,
+                "tuning": _tuning_effort_block(planner),
             }
             for planner in cfg.planners
         ],
+        "tuning_effort_enforcement": cfg.tuning_effort_enforcement,
+        "tuning_effort_summary": _tuning_effort_summary(cfg.planners),
         "kinematics_matrix": list(cfg.kinematics_matrix),
         "holonomic_command_mode": cfg.holonomic_command_mode,
         "observation_mode": cfg.observation_mode,

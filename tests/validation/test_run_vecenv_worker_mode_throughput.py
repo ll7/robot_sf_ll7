@@ -47,8 +47,10 @@ class TestResolveNumEnvs:
     def test_missing_returns_default(self):
         assert _resolve_num_envs({}, None) == 4
 
-    def test_clamp_to_one(self):
-        assert _resolve_num_envs({}, 0) == 1
+    def test_nonpositive_override_is_rejected(self):
+        """A zero environment count is invalid, not a request for one environment."""
+        with pytest.raises(ValueError, match="positive integer"):
+            _resolve_num_envs({}, 0)
 
 
 class TestEnvFactoryKwargs:
@@ -272,3 +274,29 @@ def test_main_missing_config_returns_1(tmp_path):
     out = tmp_path / "result.json"
     rc = main(["--config", str(tmp_path / "nonexistent.yaml"), "--output", str(out)])
     assert rc == 1
+
+
+@pytest.mark.parametrize(
+    ("flag", "value", "expected"),
+    [
+        ("--num-envs", "0", "num_envs must be a positive integer"),
+        ("--modes", "threaded", "--modes must begin with dummy"),
+        ("--warmup-steps", "-1", "--warmup-steps must be >= 0"),
+        ("--measure-steps", "0", "--measure-steps must be >= 1"),
+    ],
+)
+def test_main_rejects_invalid_measurement_parameters(tmp_path, capsys, flag, value, expected):
+    """Invalid inputs must fail instead of being silently normalized into a measurement."""
+    rc = main(
+        [
+            "--config",
+            str(_SMOKE_CONFIG),
+            flag,
+            value,
+            "--output",
+            str(tmp_path / "result.json"),
+        ]
+    )
+
+    assert rc == 1
+    assert expected in capsys.readouterr().err

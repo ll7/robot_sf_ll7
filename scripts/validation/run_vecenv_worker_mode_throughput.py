@@ -57,6 +57,7 @@ Found while implementing #4981; tracked as issue #5118.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import dataclasses
 import hashlib
 import json
@@ -72,6 +73,15 @@ _REPO_ROOT = Path(__file__).parent.parent.parent.resolve()
 _DEFAULT_CONFIG = _REPO_ROOT / "configs/training/lidar/lidar_ppo_mlp_smoke_issue_1662.yaml"
 _SCHEMA = "vecenv_throughput_comparator.v1"
 _SUPPORTED_MODES = ("dummy", "subproc", "threaded")
+_RECOVERABLE_MODE_ERRORS = (
+    EOFError,
+    BrokenPipeError,
+    ImportError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -116,8 +126,14 @@ class _EnvFactory:
 def _load_yaml_raw(path: Path) -> dict[str, Any]:
     import yaml
 
-    with path.open() as fh:
-        return dict(yaml.safe_load(fh))
+    try:
+        with path.open(encoding="utf-8") as fh:
+            payload = yaml.safe_load(fh)
+    except (OSError, yaml.YAMLError) as exc:
+        raise ValueError(f"could not load config {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"config {path} must contain a YAML mapping")
+    return dict(payload)
 
 
 def _sha256_file(path: Path) -> str:
@@ -140,24 +156,32 @@ def _git_commit(repo_root: Path) -> str:
 
 def _resolve_scenario_path(config: dict[str, Any], config_path: Path) -> Path:
     """Resolve the scenario_config path relative to the config file."""
-    raw = config.get("scenario_config", "")
-    scenario = Path(str(raw))
+    raw = config.get("scenario_config")
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError("config scenario_config must be a non-empty path string")
+    scenario = Path(raw)
     if scenario.is_absolute():
         return scenario
     return (config_path.parent / scenario).resolve()
 
 
 def _resolve_num_envs(config: dict[str, Any], override: int | None) -> int:
-    if override is not None:
-        return max(1, int(override))
-    raw = config.get("num_envs")
+    raw = override if override is not None else config.get("num_envs")
     if raw is None or str(raw).strip().lower().startswith("auto"):
         return 4
-    return max(1, int(raw))
+    try:
+        num_envs = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"num_envs must be a positive integer, got {raw!r}") from exc
+    if num_envs < 1:
+        raise ValueError(f"num_envs must be a positive integer, got {num_envs}")
+    return num_envs
 
 
 def _env_factory_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     raw = config.get("env_factory_kwargs") or {}
+    if not isinstance(raw, dict):
+        raise ValueError("config env_factory_kwargs must be a mapping when provided")
     return dict(raw)
 
 
@@ -212,7 +236,7 @@ def _measure_mode(
 
     try:
         vec_env = _build_vec_env(mode, env_fns)
-    except Exception as exc:  # noqa: BLE001
+    except _RECOVERABLE_MODE_ERRORS as exc:
         return {
             "mode": mode,
             "transitions_per_second": None,
@@ -245,7 +269,7 @@ def _measure_mode(
             "status": "ok",
             "error": None,
         }
-    except Exception as exc:  # noqa: BLE001
+    except _RECOVERABLE_MODE_ERRORS as exc:
         return {
             "mode": mode,
             "transitions_per_second": None,
@@ -254,7 +278,8 @@ def _measure_mode(
             "error": str(exc),
         }
     finally:
-        vec_env.close()
+        with contextlib.suppress(OSError, RuntimeError):
+            vec_env.close()
 
 
 # ---------------------------------------------------------------------------
@@ -374,6 +399,16 @@ def _print_table(results: list[dict[str, Any]]) -> None:
         print(f"{rec['mode']:<20} {tps_str:>12} {speedup_str:>10} {rec['status']:<20}")
 
 
+def _validate_run_parameters(args: argparse.Namespace) -> None:
+    """Reject invalid timing inputs instead of silently emitting misleading measurements."""
+    if not args.modes or args.modes[0] != "dummy":
+        raise ValueError("--modes must begin with dummy so speedup has a stable baseline")
+    if args.warmup_steps < 0:
+        raise ValueError("--warmup-steps must be >= 0")
+    if args.measure_steps < 1:
+        raise ValueError("--measure-steps must be >= 1")
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point: measure and report VecEnv worker-mode throughput."""
     parser = build_arg_parser()
@@ -384,14 +419,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: config not found: {config_path}", file=sys.stderr)
         return 1
 
-    raw_config = _load_yaml_raw(config_path)
-    scenario_path = _resolve_scenario_path(raw_config, config_path)
+    try:
+        _validate_run_parameters(args)
+        raw_config = _load_yaml_raw(config_path)
+        scenario_path = _resolve_scenario_path(raw_config, config_path)
+        num_envs = _resolve_num_envs(raw_config, args.num_envs)
+        env_factory_kwargs = _env_factory_kwargs(raw_config)
+    except ValueError as exc:
+        print(f"ERROR: invalid comparator configuration: {exc}", file=sys.stderr)
+        return 1
     if not scenario_path.exists():
         print(f"ERROR: scenario not found: {scenario_path}", file=sys.stderr)
         return 1
-
-    num_envs = _resolve_num_envs(raw_config, args.num_envs)
-    env_factory_kwargs = _env_factory_kwargs(raw_config)
 
     modes = list(args.modes)
     if args.skip_subproc and "subproc" in modes:

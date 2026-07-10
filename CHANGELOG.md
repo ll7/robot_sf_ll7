@@ -71,6 +71,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docs/context/evidence/issue_5034_control_action_latency_sweep_blocked_2026-07-10/`. Claim boundary:
   launch/readiness preflight only — not benchmark evidence, not paper-facing; no campaign run and no
   Slurm/GPU submission were performed.
+* **issue #5034 control-action-latency sweep metric-evidence promoter (successor slice).** New
+  `robot_sf/benchmark/control_action_latency_evidence.py` (`build_latency_evidence`,
+  `promote_latency_evidence`) and CLI `scripts/benchmark/promote_control_action_latency_evidence.py`
+  promote raw fidelity-campaign episode rows into a durable compact control-action-latency evidence
+  summary: they isolate the `control_action_latency` axis, report the action-latency metadata plus
+  `success_rate`, `collision_rate`, and `min_clearance` per native latency cell (0/100/300 ms-equivalent
+  steps `[0, 1, 3]`), and classify every fallback / degraded / non-native row (per the issue #691
+  benchmark fallback policy) as an exclusion that never contributes to the result metrics. The promoter
+  fails closed when the latency preflight is not ready or when the native result rows do not cover all
+  required steps, so a partial or non-latency run cannot be promoted as the latency sweep. Successor
+  slice to PR #5061 (which added the fail-closed preflight + historical blocker packet); it adds NEW
+  metric-evidence promotion capability and does not duplicate #5061. It runs no episode and makes no
+  benchmark / simulator-realism / sim-to-real / paper-facing claim; focused coverage lives in
+  `tests/benchmark/test_control_action_latency_evidence.py`. The native campaign run remains out of
+  scope for this slice.
 * **issue #5048 gh list truncation guard extended to the remaining bounded callers.** The shared
   `scripts/dev/_gh_pagination.py` guard (from #4991 / PR #5040) is now applied to the six remaining
   bounded `gh ... list --limit N` call sites so a result at the cap is never silently mistaken for a

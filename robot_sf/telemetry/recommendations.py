@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from robot_sf.common.optional_import import try_import
 from robot_sf.telemetry.models import (
     PerformanceRecommendation,
     RecommendationSeverity,
@@ -17,10 +18,7 @@ from robot_sf.telemetry.models import (
 if TYPE_CHECKING:  # pragma: no cover - hints only
     from collections.abc import Iterable
 
-try:  # pragma: no cover - optional dependency
-    import psutil  # type: ignore
-except ImportError:  # pragma: no cover - psutil not installed
-    psutil = None  # type: ignore
+psutil = try_import("psutil")  # optional dependency; None when unavailable
 
 
 @dataclass(slots=True)

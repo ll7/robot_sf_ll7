@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Diagnostic probe for uv sync steps in CI.
 #
-# Prints runner, uv cache, and virtual-environment state in a compact,
+# Prints runner, disk, uv cache, and virtual-environment state in a compact,
 # GitHub-Actions-friendly grouped log. Safe to run before and after sync.
 # All errors are advisory: the script exits 0 so a diagnostic step never
 # masks a real CI failure.
@@ -35,7 +35,6 @@ else
     echo "  uv_version=not_installed"
 fi
 
-echo "uv_sync_diag cache_size"
 # Respect UV_CACHE_DIR if set; otherwise fall back to what uv reports, then ~/.cache/uv.
 cache_dir=""
 if [[ -n "${UV_CACHE_DIR:-}" ]]; then
@@ -47,6 +46,26 @@ if [[ -z "${cache_dir:-}" ]]; then
     cache_dir="${HOME:-}/.cache/uv"
 fi
 
+echo "uv_sync_diag disk_info"
+disk_target="."
+if [[ -e "$cache_dir" ]]; then
+    disk_target="$cache_dir"
+fi
+disk_info="$(df -Pk "$disk_target" 2>/dev/null | awk '
+    NR == 2 {
+        print "  filesystem_size_kb=" $2
+        print "  filesystem_used_kb=" $3
+        print "  filesystem_available_kb=" $4
+        print "  filesystem_used_percent=" $5
+    }
+' || true)"
+if [[ -n "$disk_info" ]]; then
+    printf '%s\n' "$disk_info"
+else
+    echo "  filesystem_probe=unavailable"
+fi
+
+echo "uv_sync_diag cache_size"
 if [[ -d "$cache_dir" ]]; then
     echo "  cache_dir=${cache_dir}"
     # Single-pass cache sizing (issue #3703): `du -h -d 1` walks the cache tree

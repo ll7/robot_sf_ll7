@@ -324,22 +324,21 @@ def test_setup_ci_python_uses_uv_sync_retry_wrapper() -> None:
     assert "uv sync --all-extras --frozen\n" not in action_text
 
 
-def test_setup_ci_python_caches_setup_uv_payloads() -> None:
-    """The setup action must cache uv payloads at the setup-uv cache location."""
+def test_setup_ci_python_uses_pruned_setup_uv_cache() -> None:
+    """Use setup-uv's pruned cache, never the unbounded duplicate payload cache."""
     action_text = _action_path().read_text(encoding="utf-8")
-    assert "${{ runner.temp }}/setup-uv-cache/archive-v0" in action_text
-    assert "${{ runner.temp }}/setup-uv-cache/wheels-v6" in action_text
-    assert (
-        "uv-sync-payloads-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}"
-        in action_text
-    )
+    assert 'enable-cache: "true"' in action_text
+    assert 'prune-cache: "true"' in action_text
+    assert "actions/cache@" not in action_text
+    assert "archive-v0" not in action_text
+    assert "uv-sync-payloads-" not in action_text
 
 
 def test_setup_ci_python_reports_cache_restore_outputs() -> None:
-    """The pre-sync diagnostic must surface the actions/cache restore outputs."""
+    """The pre-sync diagnostic must surface setup-uv's cache-hit output."""
     action_text = _action_path().read_text(encoding="utf-8")
-    assert "steps.cache-uv.outputs.cache-hit" in action_text
-    assert "steps.cache-uv.outputs.cache-matched-key" in action_text
+    assert "id: setup-uv" in action_text
+    assert "steps.setup-uv.outputs.cache-hit" in action_text
 
 
 def test_setup_ci_python_has_no_local_uv_cache_path() -> None:

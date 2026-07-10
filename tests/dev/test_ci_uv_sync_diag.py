@@ -112,6 +112,8 @@ def test_ci_uv_sync_diag_reports_runner_and_uv_state() -> None:
     assert "::group::uv-available-test" in output
     assert "uv_sync_diag runner_info" in output
     assert "uv_sync_diag uv_info" in output
+    assert "uv_sync_diag disk_info" in output
+    assert "filesystem_available_kb=" in output
     assert "uv_sync_diag cache_size" in output
     assert "uv_sync_diag venv_info" in output
     assert "::endgroup::" in output
@@ -182,34 +184,28 @@ def test_ci_uv_sync_diag_cache_sizing_is_single_pass(tmp_path: Path) -> None:
     assert "cache_git-v0_size=1.0K" in output
 
 
-def test_workflow_uv_cache_paths_match_setup_uv_cache_dir() -> None:
-    """uv payload caching must live at the setup-uv cache dir, centralized in setup-ci-python.
+def test_workflow_uv_cache_is_pruned_by_setup_uv() -> None:
+    """CI must use setup-uv's pruned cache without a second unbounded payload cache.
 
     perf-nightly and pr-promoted-planner-smoke delegate to the shared
-    ``setup-ci-python`` composite action, which owns the uv payload cache. The
-    cache paths must match the UV_CACHE_DIR configured by setup-uv (never the
-    user-local ``~/.cache/uv`` default) so a restored cache is actually reused
-    by the subsequent ``uv sync``.
+    ``setup-ci-python`` composite action, which owns the uv cache contract.
+    A second actions/cache layer previously saved setup-uv's unpruned
+    ``archive-v0`` tree and restored 11 GB into hosted runners (issue #5087).
     """
     delegated_workflows = [
         ".github/workflows/ci.yml",
         ".github/workflows/perf-nightly.yml",
         ".github/workflows/pr-promoted-planner-smoke.yml",
     ]
-    expected_archive = "${{ runner.temp }}/setup-uv-cache/archive-v0"
-    expected_wheels = "${{ runner.temp }}/setup-uv-cache/wheels-v6"
-
     action_text = (_repo_root() / ".github/actions/setup-ci-python/action.yml").read_text(
         encoding="utf-8"
     )
-    # The shared action owns the cache and must pin it to setup-uv's location.
     assert "astral-sh/setup-uv@" in action_text
-    assert expected_archive in action_text
-    assert expected_wheels in action_text
-    assert (
-        "uv-sync-payloads-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}"
-        in action_text
-    )
+    assert 'enable-cache: "true"' in action_text
+    assert 'prune-cache: "true"' in action_text
+    assert "actions/cache@" not in action_text
+    assert "archive-v0" not in action_text
+    assert "uv-sync-payloads-" not in action_text
     assert "~/.cache/uv" not in action_text
 
     # Every consumer delegates to the shared action and must not re-declare a

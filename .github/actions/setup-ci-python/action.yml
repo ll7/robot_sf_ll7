@@ -19,24 +19,17 @@ runs:
   using: composite
   steps:
     - name: Install uv
+      id: setup-uv
       uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
       with:
         version: ${{ inputs.uv-version }}
-
-    - name: Cache uv sync package payloads
-      id: cache-uv
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: |
-          ${{ runner.temp }}/setup-uv-cache/archive-v0
-          ${{ runner.temp }}/setup-uv-cache/wheels-v6
-        key: uv-sync-payloads-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+        enable-cache: "true"
+        prune-cache: "true"
 
     - name: Report uv cache state before sync
       shell: bash
       run: |
-        echo "cache-hit=${{ steps.cache-uv.outputs.cache-hit }}"
-        echo "cache-matched-key=${{ steps.cache-uv.outputs.cache-matched-key }}"
+        echo "cache-hit=${{ steps.setup-uv.outputs.cache-hit }}"
         bash scripts/dev/ci_uv_sync_diag.sh "uv-cache-pre-sync"
 
     - name: Set up Python

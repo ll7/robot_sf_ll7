@@ -136,3 +136,6 @@ propagation is deferred and name the issue or note that will carry it.
 ## Reviewer Notes
 - Anything a reviewer should verify closely:
 - Any known limitations:
+- Shared-helper migration: include a per-call-site contract table (return schema, missing/malformed
+  behavior and exit code, import footprint, read strategy, `path:line` context, ordering), or state
+  why a row is inapplicable. Process-boundary changes need one test on the real production path.

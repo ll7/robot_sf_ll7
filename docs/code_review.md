@@ -190,6 +190,13 @@ Apply Principle XIII from `.specify/memory/constitution.md`:
 - require proof that new tests or fixes meaningfully validate the intended contract,
 - keep validation commands in PR text explicit and reproducible.
 
+For shared-helper consolidations, require a per-call-site contract table and tests for every
+applicable behavior: return schema, missing and malformed input error/exit behavior, standalone
+import footprint, read strategy, `path:line` context, and output ordering. For serialization,
+subprocess, GPU-isolation, artifact-promotion, and CLI-handoff changes, require at least one
+one-real-path test that invokes production's serializer and dispatch path without manually
+pre-transforming the fixture.
+
 See `docs/context/issue_1436_reproducibility_flaky_acceptance.md` for the canonical
 classification of deterministic, environment-class, and stochastic failures, and the
 explicit rerun boundary.

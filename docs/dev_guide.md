@@ -1260,6 +1260,19 @@ Rationale: Centralized logging enables deterministic capture/suppression in benc
 - Reviewers should check for correctness, style, test coverage, and documentation.
 - Use GitHub’s review tools to leave comments and approve changes.
 
+#### One-real-path-test rule
+
+For serialization, subprocess, GPU-isolation, artifact-promotion, and CLI-handoff code, keep at
+least one test on the same serialization and invocation path production uses. Do not manually
+pre-transform a fixture before the boundary: it can bypass the exact conversion or dispatch defect
+the test is meant to catch. The subprocess-isolation regression test at
+`tests/benchmark/test_camera_ready_subprocess_isolation.py` is the reference pattern.
+
+For a shared-helper migration, record a per-call-site contract table in the PR and test every
+applicable row: return type/top-level schema, missing and malformed input behavior (including
+caller exit code), minimal import footprint, eager versus streaming reads, `path:line` context, and
+output ordering. Mark genuinely inapplicable rows explicitly.
+
 #### Docstrings
 
 - Every module, function, class, and method should have a docstring.

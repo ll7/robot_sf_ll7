@@ -1,0 +1,106 @@
+# Canonical durable state surface for issue #5001.
+#
+# Purpose: classify the retained-trace result of "0 command_source_changes across
+# 1,165 episodes" (from issue #4914) as genuine non-activation vs telemetry failure,
+# and record the deterministic activation evidence delivered by this slice.
+#
+# Scope discipline: this file tracks durable issue state only. It does not encode
+# transient ready-queue routing, target hosts, packet lineage pointers, campaign
+# launch state, benchmark results, or paper/dissertation claims.
+issue: 5001
+state_surface: hybrid_arbitration_activation_telemetry
+entries:
+  - recorded_at_utc: "2026-07-10T12:59:18Z"
+    host: auxme-imech036
+    lane: implementation_cpu_only
+    base_commit: "81a8cc1f1"
+    status: telemetry_gap_classified__deterministic_activation_proven__runner_wiring_deferred
+    classification: telemetry_failure
+    classification_summary: >-
+      The retained-trace "0 command_source_changes across 1,165 episodes" is a
+      TELEMETRY WIRING GAP, not genuine non-activation. The hybrid arbitration
+      mechanism is reachable and, when its per-step source labels are threaded into
+      the predicate, produces a nonzero command_source_changes count. The episode
+      runner never supplies the required per-step signal, so the field result is
+      structurally forced to 0 for every episode.
+    evidence:
+      - claim: "Hybrid arbitration activates and changes its selected source across regimes."
+        evidence: >-
+          robot_sf/planner/hybrid_portfolio.py:88-120,176-200 selects a planner head
+          per step (`_desired_head` -> `_switch_head` -> `_record_decision`) and stores
+          the per-step `selected_head`. The new test
+          tests/benchmark/test_hybrid_arbitration_activation_issue_5001.py drives the
+          real arbitration through open-cruise -> emergency -> caution regimes and
+          observes 3 head handoffs (risk_dwa -> orca -> prediction -> risk_dwa).
+      - claim: "The mechanism yields a nonzero count when the telemetry is wired."
+        evidence: >-
+          Feeding the captured per-step source sequence into
+          robot_sf/benchmark/safety_predicates.py::oscillatory_control_predicate
+          (via the optional `command_sources` argument) reports
+          command_source_changes == 3.
+      - claim: "The episode runner never supplies command_sources, forcing 0."
+        evidence: >-
+          robot_sf/benchmark/map_runner_episode.py:597 calls
+          `oscillatory_control_predicate(positions, headings, speeds, dt=dt)` with no
+          `command_sources`. When that optional signal is absent,
+          safety_predicates.py:98-100 hard-wires command_source_changes to 0 for every
+          episode regardless of real handoffs. The per-step `selected_source` is read
+          into the planner decision trace at map_runner_episode.py:1974 but is never
+          collected into a list and passed to the predicate.
+      - claim: "hybrid_portfolio uses `selected_head`; hybrid_rule_local uses `selected_source`."
+        evidence: >-
+          robot_sf/planner/hybrid_portfolio.py:153-161 records `selected_head`, while
+          robot_sf/planner/hybrid_rule_local_planner.py:2741 records `selected_source`.
+          Both are affected identically by the missing runner wiring.
+    claim_boundary: >-
+      Deterministic activation + telemetry-classification slice only. This slice adds a
+      focused fixture-backed test and this durable classification. It does NOT change
+      benchmark metric semantics and attaches NO hybrid-effectiveness claim to the
+      retained-trace surface. No full benchmark campaign, Slurm/GPU submission, issue
+      comment, paper/dissertation claim edit, release, merge, or deletion was performed.
+    remaining_work:
+      - item: episode_runner_command_source_wiring
+        why: >-
+          Threading the hybrid planner's per-step selected source into
+          oscillatory_control_predicate inside map_runner_episode.py would change
+          benchmark telemetry output (command_source_changes would become nonzero for
+          real handoffs). That is a benchmark-metric-semantics change and is therefore
+          deferred to POST-FREEZE work (freeze 2026-07-18) per the issue's freeze-safe
+          scope.
+        expected_next_surface: >-
+          A post-freeze PR that collects per-step `selected_source`/`selected_head`
+          during episode execution and passes it as `command_sources`, plus a re-run of
+          the retained-trace analysis to obtain the genuine per-episode handoff counts.
+    acceptance_evidence:
+      - criterion: >-
+          A deterministic test triggers at least one hybrid source handoff and observes
+          a nonzero command_source_changes.
+        status: met
+        evidence: >-
+          tests/benchmark/test_hybrid_arbitration_activation_issue_5001.py::
+          test_hybrid_portfolio_arbitration_produces_source_handoff (3 handoffs) and
+          test_command_source_changes_counted_when_wired (command_source_changes == 3).
+      - criterion: >-
+          The 0/1,165 result is classified as genuine-non-activation OR
+          telemetry-failure, with evidence.
+        status: met
+        evidence: >-
+          Classified as telemetry_failure. See the `evidence` block above and
+          test_episode_runner_callsite_always_reports_zero, which pins the structural
+          zero produced by the runner call signature.
+      - criterion: >-
+          No hybrid-effectiveness claim is attached to the retained-trace surface until
+          activation is demonstrated.
+        status: met
+        evidence: >-
+          This slice attaches no effectiveness claim; it records only mechanism
+          reachability and the telemetry gap. Effectiveness interpretation stays blocked
+          until the post-freeze runner wiring produces genuine per-episode counts.
+    out_of_scope_confirmed:
+      full_benchmark_campaign_run: false
+      slurm_or_gpu_submission: false
+      paper_or_dissertation_claim_edit: false
+      issue_comment: false
+      release: false
+      merge: false
+      deletion: false

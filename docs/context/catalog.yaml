@@ -28,10 +28,12 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_1126_final_integration_2026-07-06.md
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_1134_closure_audit_2026-07-06.md
   status: evidence
   freshness: evidence
@@ -60,6 +62,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4018_density_curriculum_matched_smoke_2026-07-06/README.md
   status: evidence
   freshness: evidence
@@ -108,6 +111,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/issue_1475_state.yaml
   status: current
   freshness: maintained
@@ -165,6 +169,7 @@ entries:
   status: evidence
   freshness: evidence
   area: workflow_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/issue_4164_state.yaml
   status: current
   freshness: dated
@@ -193,6 +198,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4216_licca_full_suite_env_failures
   status: evidence
   freshness: evidence
@@ -221,6 +227,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4013_learned_model_based_planning/training_metrics.v1.json
   status: evidence
   freshness: evidence
@@ -229,6 +236,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4013_learned_model_based_planning/comparison_report.v1.md
   status: evidence
   freshness: evidence
@@ -245,6 +253,7 @@ entries:
   status: evidence
   freshness: evidence
   area: training
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4016_distributional_rl_smoke/distributional_rl_risk_comparison.md
   status: evidence
   freshness: evidence
@@ -253,22 +262,27 @@ entries:
   status: evidence
   freshness: evidence
   area: training
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4016_distributional_rl_smoke/acceptance_audit.md
   status: evidence
   freshness: evidence
   area: training
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4016_distributional_rl_smoke/qr_dqn_cvar_manifest.json
   status: evidence
   freshness: evidence
   area: training
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4016_distributional_rl_smoke/qr_dqn_mean_manifest.json
   status: evidence
   freshness: evidence
   area: training
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4016_distributional_rl_smoke/summary.json
   status: evidence
   freshness: evidence
   area: training
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4013_learned_model_based_planning/real_trajectory_readiness.v1.json
   status: evidence
   freshness: evidence
@@ -317,10 +331,12 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4163_static_constriction_rare_event_smoke/summary.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4166_release_gates/README.md
   status: evidence
   freshness: evidence
@@ -393,6 +409,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4183_hybrid_global_rl_diagnostic/paired_rows.csv
   status: evidence
   freshness: evidence
@@ -401,6 +418,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_3484_feasibility_diagnostics_2026-07-02/README.md
   status: evidence
   freshness: evidence
@@ -449,10 +467,12 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_3952_robustness_smoke/summary.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_3952_robustness_smoke/robustness_delta.csv
   status: evidence
   freshness: evidence
@@ -469,6 +489,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4011_rl_trajectory_dataset_smoke_2026-07-02/issue_4011_smoke.preview.jsonl
   status: evidence
   freshness: evidence
@@ -3387,6 +3408,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4245_offline_pretrain_finetune_smoke/README.md
   status: evidence
   freshness: evidence
@@ -3435,14 +3457,17 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_3556_seed_sufficiency_closure_2026-07-03/README.md
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_3556_seed_sufficiency_closure_2026-07-03/summary.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_3275_rerun_closure_2026-07-03/README.md
   status: evidence
   freshness: evidence
@@ -3451,14 +3476,17 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4328_h600_seed_sufficiency_candidates_2026-07-03/README.md
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4328_h600_seed_sufficiency_candidates_2026-07-03/summary.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4328_terminality_2026-07-04/README.md
   status: evidence
   freshness: evidence
@@ -3479,6 +3507,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_5034_control_action_latency_sweep_blocked_2026-07-10/README.md
   status: evidence
   freshness: evidence
@@ -3487,10 +3516,12 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4302_snqi_provenance_terminality_2026-07-04.md
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4366_manuscript_asserted_numbers_report.md
   status: evidence
   freshness: evidence
@@ -3503,6 +3534,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_3300_structured_false_positive_actor_injection_2026-07-04/false_positive_replay_report.md
   status: evidence
   freshness: evidence
@@ -3515,6 +3547,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_3190_closure_audit_2026-07-04/README.md
   status: evidence
   freshness: evidence
@@ -3535,6 +3568,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_3300_stronger_matrix_closure_audit_2026-07-04/false_positive_replay_report.md
   status: evidence
   freshness: evidence
@@ -3547,6 +3581,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4400_closure_audit_2026-07-04.md
   status: evidence
   freshness: evidence
@@ -3559,6 +3594,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_3207_integration_status_2026-07-05.md
   status: evidence
   freshness: evidence
@@ -3595,10 +3631,12 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_3204_closure_audit_20260705.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_2312_closure_audit.md
   status: evidence
   freshness: evidence
@@ -3615,6 +3653,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_4232_closure_audit_2026-07-06/README.md
   status: evidence
   freshness: evidence
@@ -4111,6 +4150,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_5020_dwa_archetype_matrix_2026-07-10
   status: evidence
   freshness: evidence
@@ -4119,6 +4159,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_5020_dwa_archetype_matrix_2026-07-10/dwa_archetype_matrix_status_rows.csv
   status: evidence
   freshness: evidence

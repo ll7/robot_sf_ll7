@@ -11,6 +11,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -44,7 +46,12 @@ def test_venv_symlink_is_ignored_by_repo_patterns(tmp_path: Path) -> None:
 
     real_venv = repo / "shared-venv"
     real_venv.mkdir()
-    (repo / ".venv").symlink_to(real_venv)
+    try:
+        # target_is_directory matters on Windows; symlink creation there may also
+        # require Developer Mode / admin, so skip cleanly when unsupported.
+        (repo / ".venv").symlink_to(real_venv, target_is_directory=True)
+    except OSError as exc:  # pragma: no cover - platform-dependent
+        pytest.skip(f"symlink creation unsupported on this platform: {exc}")
 
     result = subprocess.run(
         ["git", "check-ignore", ".venv"],

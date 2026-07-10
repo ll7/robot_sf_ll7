@@ -89,6 +89,7 @@ def test_metric_path_is_deterministic_detects_mutation():
 
 
 def test_metric_path_rejects_invalid_arguments():
+    """Invalid invocation counts and empty trajectories must raise."""
     robot_pos, peds_pos = _straddling_trajectories()
     with pytest.raises(ValueError, match="n_invocations"):
         metric_path_is_deterministic(
@@ -126,6 +127,7 @@ def _fake_runner_factory(deviate_after: int, metric_value: float, deviated_value
 
 
 def test_exact_repeat_measurement_reports_zero_deviation_when_deterministic():
+    """A deterministic runner yields zero deviation and a bit-identical report."""
     runner = _fake_runner_factory(deviate_after=999, metric_value=5.0, deviated_value=5.0)
     report = measure_exact_repeat_nondeterminism(
         SMOKE_SCENARIO, seed=123, n_repeats=4, horizon=5, run_episode=runner
@@ -144,6 +146,7 @@ def test_exact_repeat_measurement_reports_zero_deviation_when_deterministic():
 
 
 def test_exact_repeat_measurement_detects_injected_variance():
+    """A runner that flips near_misses on a later repeat is detected as nondeterministic."""
     runner = _fake_runner_factory(deviate_after=2, metric_value=5.0, deviated_value=7.0)
     report = measure_exact_repeat_nondeterminism(
         SMOKE_SCENARIO, seed=123, n_repeats=4, horizon=5, run_episode=runner
@@ -159,6 +162,7 @@ def test_exact_repeat_measurement_detects_injected_variance():
 
 
 def test_exact_repeat_measurement_rejects_invalid_arguments():
+    """Too few repeats and an empty metric list must raise."""
     runner = _fake_runner_factory(999, 1.0, 1.0)
     with pytest.raises(ValueError, match="n_repeats"):
         measure_exact_repeat_nondeterminism(SMOKE_SCENARIO, seed=1, n_repeats=1, run_episode=runner)
@@ -188,7 +192,7 @@ def test_exact_repeat_measurement_skips_optional_absent_metric():
     def _runner(scenario, *, seed, horizon, dt, record_forces):
         del scenario, seed, horizon, dt, record_forces  # stub signature mirrors the real runner
         # All required metrics present; the optional time_to_goal absent.
-        metrics = {k: 1.0 for k in DEFAULT_TRACKED_METRICS}
+        metrics = dict.fromkeys(DEFAULT_TRACKED_METRICS, 1.0)
         metrics.pop("time_to_goal", None)
         return {"metrics": metrics}
 
@@ -211,9 +215,7 @@ def test_exact_repeat_near_miss_is_deterministic_on_smoke_scenario():
     genuine fastmath-driven divergence, this test becomes the detector (mirrors
     issue #4978's exact-repeat determinism contract).
     """
-    report = measure_exact_repeat_nondeterminism(
-        SMOKE_SCENARIO, seed=123, n_repeats=5, horizon=30
-    )
+    report = measure_exact_repeat_nondeterminism(SMOKE_SCENARIO, seed=123, n_repeats=5, horizon=30)
     assert report["exact_repeat"]["near_misses"]["bit_identical"] is True
     assert report["summary"]["near_misses_max_deviation"] == 0.0
 
@@ -222,6 +224,7 @@ def test_exact_repeat_near_miss_is_deterministic_on_smoke_scenario():
 
 
 def test_snqi_bound_linear_region_matches_formula():
+    """In the linear region the bound equals w_near * tol / (p95 - med)."""
     bound = snqi_near_miss_propagation_bound(
         near_miss_tolerance=2.0,
         w_near=CANONICAL_W_NEAR_V3,
@@ -236,6 +239,7 @@ def test_snqi_bound_linear_region_matches_formula():
 
 
 def test_snqi_bound_clips_when_linear_exceeds_weight():
+    """When the linear bound exceeds w_near, the [0,1] clamp caps it at w_near."""
     # A huge tolerance relative to the spread would exceed w_near; the clip caps it.
     bound = snqi_near_miss_propagation_bound(
         near_miss_tolerance=1_000.0,
@@ -249,6 +253,7 @@ def test_snqi_bound_clips_when_linear_exceeds_weight():
 
 
 def test_snqi_bound_without_baseline_is_clip_capped_only():
+    """Without baseline stats only the unconditional clip-capped bound is reported."""
     bound = snqi_near_miss_propagation_bound(near_miss_tolerance=0.0)
     assert bound["linear_region_bound"] is None
     assert bound["clip_capped_bound"] == pytest.approx(CANONICAL_W_NEAR_V3)

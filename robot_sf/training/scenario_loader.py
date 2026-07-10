@@ -1402,6 +1402,18 @@ def _differential_robot_settings(overrides: Mapping[str, Any]) -> DifferentialDr
         kwargs["max_angular_speed"] = _coerce_finite_float(
             overrides["max_angular_speed"], field_name="max_angular_speed"
         )
+    if "max_linear_accel" in overrides:
+        kwargs["max_linear_accel"] = _coerce_finite_float(
+            overrides["max_linear_accel"], field_name="max_linear_accel"
+        )
+    if "max_linear_decel" in overrides:
+        kwargs["max_linear_decel"] = _coerce_finite_float(
+            overrides["max_linear_decel"], field_name="max_linear_decel"
+        )
+    if "max_angular_accel" in overrides:
+        kwargs["max_angular_accel"] = _coerce_finite_float(
+            overrides["max_angular_accel"], field_name="max_angular_accel"
+        )
     if "wheel_radius" in overrides:
         kwargs["wheel_radius"] = _coerce_finite_float(
             overrides["wheel_radius"], field_name="wheel_radius"
@@ -1437,6 +1449,8 @@ def _bicycle_robot_settings(overrides: Mapping[str, Any]) -> BicycleDriveSetting
         )
     if "max_accel" in overrides:
         kwargs["max_accel"] = _coerce_finite_float(overrides["max_accel"], field_name="max_accel")
+    if "max_decel" in overrides:
+        kwargs["max_decel"] = _coerce_finite_float(overrides["max_decel"], field_name="max_decel")
     if "allow_backwards" in overrides:
         kwargs["allow_backwards"] = _coerce_bool(
             overrides["allow_backwards"],

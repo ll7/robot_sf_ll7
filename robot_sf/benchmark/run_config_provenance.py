@@ -31,6 +31,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from robot_sf.robot.actuation_envelope import (
+    ACTUATION_ENVELOPE_INTERPRETATION,
+    ACTUATION_ENVELOPE_SCHEMA,
+    actuation_envelope_for_run_config,
+)
+
 #: Collision-handling regime where any collision ends the episode (the robot
 #: benchmark contract). See ``robot_sf/robot/robot_state.py``.
 COLLISION_REGIME_TERMINATE_ON_CONTACT = "terminate_on_contact"
@@ -133,7 +139,14 @@ def metric_affecting_run_config(
     static_obstacle_forces = getattr(config, "peds_have_static_obstacle_forces", None)
     robot_repulsion = getattr(config, "peds_have_robot_repulsion", None)
 
-    return {
+    # The braking-feasibility envelope is a metric-affecting setting: near-miss /
+    # TTC readings are only interpretable against the robot's actual braking
+    # authority (issue #4976). Surfaced here so per-run metadata records it
+    # alongside sensor noise and collision regime. Omitted (None) when the drive
+    # model exposes no first-class deceleration cap.
+    envelope = actuation_envelope_for_run_config(config)
+
+    result: dict[str, Any] = {
         "schema": METRIC_AFFECTING_CONFIG_SCHEMA,
         "sensor_noise": {
             "scan_noise": scan_noise,
@@ -150,3 +163,10 @@ def metric_affecting_run_config(
         },
         "interpretation": METRIC_AFFECTING_CONFIG_INTERPRETATION,
     }
+    if envelope is not None:
+        result["actuation_envelope"] = {
+            "schema": ACTUATION_ENVELOPE_SCHEMA,
+            **envelope,
+            "interpretation": ACTUATION_ENVELOPE_INTERPRETATION,
+        }
+    return result

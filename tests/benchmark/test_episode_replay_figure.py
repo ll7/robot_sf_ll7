@@ -769,7 +769,7 @@ class TestCLI:
         episodes_jsonl = tmp_path / "episodes.jsonl"
         import json
 
-        with open(episodes_jsonl, "w") as f:
+        with open(episodes_jsonl, "w", encoding="utf-8") as f:
             json.dump(episode_data, f)
             f.write("\n")
 
@@ -925,9 +925,9 @@ class TestCLI:
             for name in figure_names:
                 assert (out_dir / name).exists(), f"run {run_idx}: {name} should exist"
 
-            with open(out_dir / "replay_provenance.json") as f:
+            with open(out_dir / "replay_provenance.json", encoding="utf-8") as f:
                 provenances.append(json.load(f))
-            captions.append((out_dir / "caption_fragment.tex").read_text())
+            captions.append((out_dir / "caption_fragment.tex").read_text(encoding="utf-8"))
 
         # --- Invariant 1: deterministic figure output (byte-identity via content hash) ---
         run1_fig_hashes = {

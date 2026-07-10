@@ -48,14 +48,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5039 compat-matrix promotion readiness gate.** New
+  `scripts/ci/check_compat_matrix_promotion_readiness.py` turns "is the advisory
+  `compat-matrix` job proven enough to promote to a required CI gate?" into a machine-checkable,
+  fail-closed decision. It reads
+  `docs/context/issue_5039_compat_matrix_promotion_manifest.yaml` (recorded hosted-run evidence
+  plus the objective gate: all four `ubuntu`/`macos` × Python 3.11/3.13 cells green ≥3 times each
+  within the 30-minute budget) and reports `ready`/`blocked`; `--require-ready` exits non-zero
+  until the evidence exists. Current state is `blocked`: the advisory matrix (PR #5037) is now on
+  `main`, but no eligible hosted evidence has been recorded in the manifest — so promotion is
+  deferred to an evidence-carrying follow-up. The absolute coverage floor is tracked separately in
+  issue #5071. Covered by `tests/test_compat_matrix_promotion_readiness.py`.
+  Claim boundary: readiness bookkeeping only; no CI gate is changed and no benchmark/paper claim
+  is asserted.
 * **issue #5034 control-action-latency sweep fail-closed preflight + blocker packet.** New
   `robot_sf/benchmark/control_action_latency_preflight.py` (`check_control_action_latency_axis`) and
   CLI `scripts/benchmark/preflight_control_action_latency_sweep.py` guard the issue-#5034 sweep: they
   fail closed unless the fidelity-sensitivity study config carries a `control_action_latency` axis
   whose variants cover the required action-latency steps `[0, 1, 3]` (the 0/100/300 ms-equivalent
-  delays). On current `main` the axis is absent (it is wired by unmerged PR #5026, parent issue
-  #4977), so the preflight reports `decision: blocked` and names the exact unmet prerequisite; it
-  flips to `ready` automatically once #5026 lands. Durable fail-closed decision packet at
+  delays). Its durable packet records the historical blocked result before PR #5026 landed the axis;
+  the same preflight now returns `ready` on `main`. Durable fail-closed decision packet at
   `docs/context/evidence/issue_5034_control_action_latency_sweep_blocked_2026-07-10/`. Claim boundary:
   launch/readiness preflight only — not benchmark evidence, not paper-facing; no campaign run and no
   Slurm/GPU submission were performed.

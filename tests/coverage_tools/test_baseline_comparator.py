@@ -6,6 +6,9 @@ for CI/CD coverage monitoring.
 """
 
 import json
+import subprocess
+import sys
+import time
 
 import pytest
 
@@ -17,6 +20,23 @@ from robot_sf.coverage_tools.baseline_comparator import (
     generate_warning,
     load_baseline,
 )
+
+
+def test_baseline_comparator_import_avoids_optional_startup_dependencies():
+    """The standalone comparator must not initialize TensorFlow-like backends."""
+    started = time.monotonic()
+    result = subprocess.run(
+        [sys.executable, "-c", "import robot_sf.coverage_tools.baseline_comparator"],
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=5,
+    )
+    elapsed = time.monotonic() - started
+
+    assert result.returncode == 0, result.stderr
+    assert "tensorflow" not in f"{result.stdout}\n{result.stderr}".lower()
+    assert elapsed < 2.0, f"Comparator import took {elapsed:.2f}s"
 
 
 def test_coverage_snapshot_from_json(sample_coverage_data):

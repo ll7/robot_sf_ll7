@@ -211,10 +211,10 @@ def test_real_config_is_preflight_ready() -> None:
     )
     assert packet["decision"] == DECISION_READY
     scope = packet["materialized_scope"]
-    # 3 planner groups x 12 variants (4 axes x 3) x 3 seeds = 108 cells.
+    # 3 planner groups x 14 variants (four 3-variant axes plus one 2-variant axis) x 3 seeds = 126.
     assert scope["planner_group_count"] == 3
-    assert scope["variant_count"] == 12
-    assert scope["run_cells_per_scenario"] == 108
+    assert scope["variant_count"] == 14
+    assert scope["run_cells_per_scenario"] == 126
     # Every resolved planner maps to a canonical catalog name.
     assert all(record["canonical_name"] for record in packet["planner_resolution"])
 

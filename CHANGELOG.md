@@ -98,6 +98,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   regression coverage lives in `tests/dev/test_gh_list_truncation_remaining.py` and
   `tests/tools/test_project_priority_score_truncation.py`. Tooling/evidence-integrity only — no
   benchmark, metric, or paper-facing claim.
+* **issue #5059 disjoint modulo scopes for concurrent PR gates.** New
+  `scripts/tools/pr_gate_scopes.py` gives the autonomous PR-gate orchestrator a canonical,
+  immutable dispatch contract: an active gate owns a *residue class* (`pr % modulus == residue`)
+  rather than an ad-hoc PR range, so a gate told to "process newly appearing PRs" can never drift
+  into another gate's PRs on a re-list pass. `validate_active_gates()` is the fail-closed regression
+  check — it rejects any non-residue (range) scope as non-immutable and reports any pair of live
+  gates that could own the same PR (with the smallest crossing PR as a witness); residue
+  disjointness is decided exactly by the CRT criterion `(r_a - r_b) % gcd(N_a, N_b) != 0`. Includes a
+  CLI (`python -m scripts.tools.pr_gate_scopes --gates gates.json`) for checking a live gate manifest
+  before admitting a second gate, and a docs note at
+  `docs/dev/agents/pr_gate_scope_contract.md`. Pure arithmetic over gate descriptors — no GitHub
+  calls, no benchmark/metric semantics. Tests in `tests/tools/test_pr_gate_scopes.py`.
 * **issue #4978 scenario flakiness audit — exact-repeat determinism + per-cell outcome-stability.**
   New `robot_sf/benchmark/scenario_flakiness.py` (`compute_flakiness_audit`, schema
   `scenario_flakiness.v1`) and a `robot_sf_bench flakiness-audit` CLI subcommand measure two forms of

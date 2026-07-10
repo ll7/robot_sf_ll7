@@ -9,6 +9,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.errors import RobotSfError
+
 _SCHEMA_VERSION = "shielded-ppo-repair-launch-packet.v1"
 _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _DURABLE_URI_PREFIXES = ("wandb-artifact://", "artifact://", "s3://", "gs://", "https://")
@@ -23,7 +25,7 @@ _REQUIRED_STOP_STAGES = ("smoke", "nominal_sanity")
 _REQUIRED_REFERENCES = ("ppo_baseline", "risk_guarded_ppo_v1")
 
 
-class ShieldedPPOLaunchPacketError(ValueError):
+class ShieldedPPOLaunchPacketError(RobotSfError, ValueError):
     """Raised when a shielded-PPO launch packet fails validation."""
 
 

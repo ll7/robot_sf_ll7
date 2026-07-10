@@ -46,6 +46,7 @@ try:
     from python_motion_planning.common import Visualizer
 except ImportError:
     from python_motion_planning.common.visualizer import Visualizer2D as Visualizer
+from robot_sf.errors import RobotSfError
 
 
 def _plot_grid_map_supports_alpha_3d() -> bool:
@@ -642,7 +643,7 @@ class ClassicPlannerConfig:
             )
 
 
-class PlanningError(Exception):
+class PlanningError(RobotSfError):
     """Raised when path planning fails."""
 
     pass

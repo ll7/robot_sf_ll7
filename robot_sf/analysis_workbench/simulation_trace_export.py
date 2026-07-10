@@ -12,6 +12,7 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from robot_sf.common.json_pointer import json_pointer
+from robot_sf.errors import RobotSfError
 
 SIMULATION_TRACE_EXPORT_SCHEMA_VERSION = "simulation_trace_export.v1"
 SIMULATION_TRACE_EXPORT_SCHEMA_FILE = (
@@ -63,7 +64,7 @@ class SimulationTraceExport:
         return asdict(self)
 
 
-class SimulationTraceExportValidationError(ValueError):
+class SimulationTraceExportValidationError(RobotSfError, ValueError):
     """Raised when a simulation trace export fails validation."""
 
     def __init__(self, errors: list[str], *, source: str | Path | None = None):

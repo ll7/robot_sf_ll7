@@ -21,6 +21,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
+from robot_sf.errors import RobotSfError
 
 RELEASE_GATE_REPORT_SCHEMA_VERSION = "benchmark_release_gate_report.v1"
 RELEASE_GATE_SPEC_SCHEMA_VERSION = "benchmark_release_gate_spec.v1"
@@ -45,7 +46,7 @@ _DEFAULT_FAMILY_KEYS = (
 )
 
 
-class ReleaseGateSpecError(ValueError):
+class ReleaseGateSpecError(RobotSfError, ValueError):
     """Raised when release-gate YAML cannot be evaluated safely."""
 
 

@@ -47,6 +47,7 @@ from robot_sf.common.artifact_paths import get_repository_root
 
 if TYPE_CHECKING:
     from pathlib import Path
+from robot_sf.errors import RobotSfError
 
 # Tolerance for "weights sum to 1" (normalized simplex) detection.
 _SIMPLEX_TOL = 1e-3
@@ -331,7 +332,7 @@ class WeightInventoryReport:
         }
 
 
-class SNQIWeightProvenanceError(RuntimeError):
+class SNQIWeightProvenanceError(RobotSfError, RuntimeError):
     """Raised by the fail-closed preflight when a blocking conflict exists."""
 
 

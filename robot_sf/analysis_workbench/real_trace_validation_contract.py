@@ -44,6 +44,7 @@ from robot_sf.analysis_workbench.trace_failure_predicates import (
     matrix_required_fields_for_predicate,
 )
 from robot_sf.common.json_pointer import json_pointer
+from robot_sf.errors import RobotSfError
 
 REAL_TRACE_VALIDATION_CONTRACT_SCHEMA_VERSION = "real_trace_validation_contract.v1"
 REAL_TRACE_VALIDATION_CONTRACT_SCHEMA_FILE = (
@@ -94,7 +95,7 @@ CONTRACT_STATUS_READY = "ready"
 CONTRACT_STATUS_BLOCKED = "blocked"
 
 
-class RealTraceValidationContractError(ValueError):
+class RealTraceValidationContractError(RobotSfError, ValueError):
     """Raised when a real-trace validation-contract descriptor fails schema checks."""
 
     def __init__(self, errors: list[str], *, source: str | Path | None = None):

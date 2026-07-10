@@ -52,6 +52,7 @@ from robot_sf.benchmark.cbf_safety_filter_runtime import (
     CBF_OFF_ARM,
     runtime_config_from_mapping,
 )
+from robot_sf.errors import RobotSfError
 
 #: Output-contract schema for this readiness surface.
 SCHEMA_VERSION = "issue-4142-dpcbf-dense-readiness.v1"
@@ -104,7 +105,7 @@ CAMPAIGN_GATES: tuple[str, ...] = (
 )
 
 
-class DpcbfDenseReadinessError(ValueError):
+class DpcbfDenseReadinessError(RobotSfError, ValueError):
     """Raised when the packet cannot be loaded or parsed at all."""
 
 

@@ -12,8 +12,10 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from robot_sf.errors import RobotSfError
 
-class LongHorizonRouteError(ValueError):
+
+class LongHorizonRouteError(RobotSfError, ValueError):
     """Raised when a route definition or metric input cannot be scored safely."""
 
 

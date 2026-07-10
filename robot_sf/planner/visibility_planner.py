@@ -15,6 +15,7 @@ from shapely.geometry import LineString, Point, Polygon
 from shapely.ops import nearest_points
 
 from robot_sf.common.types import Vec2D
+from robot_sf.errors import RobotSfError
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.planner.path_smoother import douglas_peucker
 from robot_sf.planner.visibility_graph import VisibilityGraph
@@ -83,7 +84,7 @@ def _prune_collinear(points: list[Vec2D], tol: float = 1e-6) -> list[Vec2D]:
     return pruned
 
 
-class PlanningFailedError(Exception):
+class PlanningFailedError(RobotSfError):
     """Raised when no valid path exists between start and goal."""
 
     def __init__(self, start: Vec2D, goal: Vec2D, reason: str):

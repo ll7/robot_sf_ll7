@@ -16,6 +16,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
+from robot_sf.errors import RobotSfError
 from robot_sf.training.scenario_loader import load_scenarios
 
 SCENARIO_DENOMINATOR_SCHEMA_VERSION = "scenario_denominator_manifest.v1"
@@ -46,7 +47,7 @@ _TABLE_INT_COLUMNS = {
 }
 
 
-class DenominatorManifestError(ValueError):
+class DenominatorManifestError(RobotSfError, ValueError):
     """Raised when configs or consumer tables cannot produce a closed denominator audit."""
 
 

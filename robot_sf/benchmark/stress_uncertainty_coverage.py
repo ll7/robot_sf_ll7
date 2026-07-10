@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.aggregate import read_jsonl
+from robot_sf.errors import RobotSfError
 
 SCHEMA_VERSION = "stress_uncertainty_coverage.v1"
 LEGACY_AGGREGATE_SCHEMA_VERSION = "aggregate.schema.v1"
@@ -44,7 +45,7 @@ _SCENARIO_PARAMETER_KEYS = (
 )
 
 
-class StressUncertaintyCoverageError(ValueError):
+class StressUncertaintyCoverageError(RobotSfError, ValueError):
     """Raised when a stress/uncertainty coverage report fails closed."""
 
 

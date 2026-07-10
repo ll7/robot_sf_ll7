@@ -22,11 +22,12 @@ from robot_sf.benchmark.pedestrian_prior_extraction_manifest import (
     PRIOR_EXTRACTION_EVIDENCE_BOUNDARY,
     REQUIRED_PRIOR_PARAMETERS,
 )
+from robot_sf.errors import RobotSfError
 
 PEDESTRIAN_PRIOR_EXTRACTION_REPORT_SCHEMA_VERSION = "pedestrian_prior_extraction_report.v1"
 
 
-class PedestrianPriorExtractionError(ValueError):
+class PedestrianPriorExtractionError(RobotSfError, ValueError):
     """Raised when trajectory input cannot support prior extraction."""
 
 

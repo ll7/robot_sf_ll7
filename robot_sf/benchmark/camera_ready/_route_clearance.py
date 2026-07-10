@@ -11,6 +11,7 @@ from loguru import logger
 from shapely.geometry import LineString, Polygon
 
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.errors import RobotSfError
 from robot_sf.nav.svg_map_parser import convert_map
 
 _ROUTE_CLEARANCE_WARN_THRESHOLD_M = 0.5
@@ -26,7 +27,7 @@ _ROUTE_CLEARANCE_CERTIFICATION_STATUSES = {
 }
 
 
-class RouteClearanceError(RuntimeError):
+class RouteClearanceError(RobotSfError, RuntimeError):
     """Raised when a scenario route is geometrically impossible for the robot footprint.
 
     This signals a fail-closed condition: at least one route centerline lies closer to a static

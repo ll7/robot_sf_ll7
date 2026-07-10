@@ -11,6 +11,7 @@ from typing import Any
 import yaml
 
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.errors import RobotSfError
 
 EVALUATION_SLICES = frozenset({"not_run", "smoke", "nominal_sanity", "stress_slice", "full_matrix"})
 EVIDENCE_TIERS = frozenset(
@@ -104,7 +105,7 @@ _ISSUE_RE = re.compile(r"^#\d+$")
 _GIT_SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 
 
-class HybridEvidenceMatrixValidationError(ValueError):
+class HybridEvidenceMatrixValidationError(RobotSfError, ValueError):
     """Raised when the validator cannot parse the input payload."""
 
 

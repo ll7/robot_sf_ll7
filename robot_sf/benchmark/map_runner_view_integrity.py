@@ -41,12 +41,13 @@ import numpy as np
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+from robot_sf.errors import RobotSfError
 
 #: Canonical degraded-reason code recorded when the guard trips (named in issue #3634/#3568).
 DEGENERATE_PLANNER_VIEW_REASON = "degenerate_planner_view"
 
 
-class DegeneratePlannerViewError(RuntimeError):
+class DegeneratePlannerViewError(RobotSfError, RuntimeError):
     """Raised to fail a benchmark episode closed when a planner's effective view is degenerate.
 
     Carrying the structured diagnostic lets callers record an explicit non-success row

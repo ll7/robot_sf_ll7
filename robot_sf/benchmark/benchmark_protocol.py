@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.errors import RobotSfError
 
 #: Default path to the AMMV benchmark protocol manifest, relative to the
 #: repository root.
@@ -32,7 +33,7 @@ _REQUIRED_CLAIM_RULES = frozenset(
 )
 
 
-class BenchmarkProtocolError(ValueError):
+class BenchmarkProtocolError(RobotSfError, ValueError):
     """Raised when a benchmark protocol manifest is missing or invalid."""
 
 

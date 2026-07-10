@@ -61,6 +61,7 @@ from robot_sf.benchmark.issue_4142_dpcbf_dense_runner import (
     DenseComparisonRunnerError,
     build_run_plan,
 )
+from robot_sf.errors import RobotSfError
 
 #: Output-contract schema for this comparison summary surface.
 SUMMARY_SCHEMA_VERSION = "robot_sf.issue_4142_dpcbf_dense_comparison_summary.v1"
@@ -83,7 +84,7 @@ CLAIM_BOUNDARY = (
 )
 
 
-class DenseComparisonSummaryError(ValueError):
+class DenseComparisonSummaryError(RobotSfError, ValueError):
     """Raised when the run plan cannot be built into a summary at all."""
 
 

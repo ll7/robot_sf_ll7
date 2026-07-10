@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **issue #5031 docs-only PR bodies can now select "domain approval not required".** The PR
+  follow-up checker (`scripts/dev/check_pr_followups.py::analyze_domain_approval`) previously forced
+  `domain_approval_required` on any body that merely *mentioned* an evidence concept in prose (e.g. a
+  docs page discussing "benchmark interpretation" or "diagnostic-only"), so a genuinely docs-only PR
+  could not use the template's documented `Required for this PR: no - reason` / `Status: not required`
+  opt-out. `analyze_domain_approval` now accepts that opt-out when the only triggers are weak
+  free-form prose mentions. A filled Research Result Guidance declaration (a concrete `Evidence tier`
+  / `Result classification`) remains a strong self-declaration and keeps the strict approval path, so
+  this cannot wave through an evidence-sensitive PR. Found while implementing #4967. No benchmark
+  metric semantics change.
+
 * **issue #5000 goal-planner late-evasive latency instrumentation (fail-closed).** The
   `late_evasive_predicate` (`robot_sf/benchmark/safety_predicates.py`, schema bumped
   `safety_predicate.late_evasive.v1` → `.v2`) now emits a `latency_unavailable_reason` alongside

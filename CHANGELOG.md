@@ -244,7 +244,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   loaded checkpoint — in open space and with a pedestrian in the path — with the predictor reporting
   `evidence_tier=checkpoint_loaded` (no fallback), plus a fail-closed check for a missing checkpoint.
   This exercises the "model-based action selection runs on a smoke scenario" acceptance criterion of
-  #4013 end to end (previously only the predictor `predict()` path and metadata registration were
+  Issue #4013 end to end (previously only the predictor `predict()` path and metadata registration were
   tested). Claim boundary: diagnostic-only path execution; not benchmark, navigation-quality, or
   paper/dissertation evidence. The paired 3-arm smoke comparison (learned vs `cv_prediction_mpc` vs a
   model-free baseline) and Phase 3 real-trajectory training remain open on #4013. No benchmark
@@ -410,7 +410,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Recorded the **issue #2918 closure audit** at
   `docs/context/evidence/issue_2918_closure_audit.md` (linked from the #2918 preflight context
   note). It maps each acceptance criterion to its merged PR (#3754 staging/preflight contract,
-  #4566 fixture extraction pipeline + CLI) and to a reproduced validation run (23 focused tests
+  Issue #4566 fixture extraction pipeline + CLI) and to a reproduced validation run (23 focused tests
   pass; fixture smoke emits bounded proxy-placeholder priors; the manifest checker fails closed
   with `contract_status: blocked` and `manage_external_data.py list` shows all external datasets
   `missing`/`incomplete`). The agent-executable slice is complete; the only residual — a
@@ -440,7 +440,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docs/context/evidence/issue_1456_closure_audit.md` (registered in `docs/context/catalog.yaml`).
   It maps every acceptance criterion — original issue body plus the appended `agent-exec-spec:v1`
   slice — to merged-PR evidence (#1924 external-data assistant, #2400 status note, #1596 row policy,
-  #3755 fail-closed readiness vs placeholder shells, #4526 tightened `socnavbench-control` contract)
+  Issue #3755 fail-closed readiness vs placeholder shells, #4526 tightened `socnavbench-control` contract)
   and to a reproduced fail-closed validation (`manage_external_data.py --json check
   socnavbench-control` / `socnavbench-s3dis-eth` exit `2`, `prepare_socnav_assets.py` exit `2`
   `MISSING_REQUIRED_ASSETS`, 43 focused socnav map/asset tests pass). Decision: **keep #1456 open,
@@ -456,12 +456,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`validate_oracle_imitation_launch_packet.py` → `status=valid`, 6 scenarios, 12 episodes; 54
   focused imitation tests pass). The lane's trace-collection scope is complete (closeout state
   `dataset_ready`); the residual durable trace-URI registry (`training_ready=true`) is owned by
-  #2655 and the imitation-training benchmark by #1496, both out of #1470's scope. Docs-only; no
+  Issue #2655 and the imitation-training benchmark by #1496, both out of #1470's scope. Docs-only; no
   trace/NPZ materialization, training run, Slurm/GPU submission, or research claim.
 * Recorded the **issue #2312 closure audit** at
   `docs/context/evidence/issue_2312_closure_audit.md` (linked from the #2312 context note). It maps
   each acceptance criterion to its merged PR (#3762 manifest+validator, #3772 #1472 campaign gate,
-  #4549 status packet) and to a reproduced fail-closed validation run
+  Issue #4549 status packet) and to a reproduced fail-closed validation run
   (`validate_learned_risk_trace_manifest.py --status-json` exits `3` /
   `artifact_retrieval_blocked`; 24 focused tests pass). The agent-executable slice is complete; the
   only residual — a resolvable baseline/trace URI with `retrieval_status: available` — is
@@ -566,7 +566,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docs/context/issue_4224_external_dataset_registry.md` rows now cite the delivering issue #4357 and
   program parent #4224. Registry/docs discoverability only — no dataset bytes, no automated
   acquisition, and no new loader/benchmark/paper claim (the shape-contract loaders landed earlier in
-  #4346). Both assets still fail closed with `status: missing` when unstaged.
+  Issue #4346). Both assets still fail closed with `status: missing` when unstaged.
 * Extended the **issue #3207 fidelity-sensitivity campaign runner to consume the fixed-scope preflight
   plan** (`scripts/benchmark/run_fidelity_sensitivity_campaign.py`). A new `--fixed-scope-plan-only`
   mode builds the preflight packet and enumerates the concrete full run plan — every
@@ -659,7 +659,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   authorizes no campaign, submits no Slurm/GPU job, and makes no safety-performance,
   collision-reduction, or paper/dissertation claim.
 * Added license-safe **CrowdBot and SCAND shape-contract loaders** plus skip-if-absent tests for the
-  #4224 external-data program (public slice b). `robot_sf/data/external/crowdbot.py` and
+  Issue #4224 external-data program (public slice b). `robot_sf/data/external/crowdbot.py` and
   `robot_sf/data/external/scand.py` only inspect locally staged files — they never download, vendor,
   or redistribute dataset bytes — and validate a cheap structural contract (documented
   recording + license/readme layout present; every staged CSV export non-empty and rectangular;
@@ -748,7 +748,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `scripts/benchmark/run_certification_transfer_issue_4207.py` now records repo-relative (portable)
   config/gate-spec provenance paths.
 * Documented the **runtime uncertainty-triggered fallback** for guarded PPO (#3974), which merged in
-  #4193 without a CHANGELOG entry. This is the successor slice the earlier #4138 entry below called
+  Issue #4193 without a CHANGELOG entry. This is the successor slice the earlier #4138 entry below called
   out as "not included"; that statement is now stale — the fallback ships in
   `robot_sf/planner/guarded_ppo.py`. When `uncertainty_fallback_enabled` is set (default off), the
   `GuardedPPOAdapter` guard can override a PPO command that is nominally clearance-safe but intrudes
@@ -1102,7 +1102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Added a **fail-closed release-readiness / claim-audit preflight checklist** for research-package
   releases (#3081). New module `robot_sf/benchmark/release_preflight.py` evaluates a declarative
   checklist (`load_release_preflight_checklist` + `evaluate_release_preflight`) that maps issue
-  #3081's four acceptance criteria to concrete, mechanically checkable prerequisites: a reproduction
+  Issue #3081's four acceptance criteria to concrete, mechanically checkable prerequisites: a reproduction
   record (`artifact_present`), regenerated tables/figures bound to canonical-source digests
   (`checksum_manifest`), promoted claim cards that exclude fallback/degraded/unavailable execution
   modes (`claim_audit`), and a sprint-issue classification ledger (`issue_classification_ledger`).
@@ -1193,7 +1193,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `scripts/validation/validate_predictive_v2_comparison_readiness.py` exposes the check with
   decision-coded exit status (`0` ready, `2` blocked/incomplete, `1` contract load error). Against the
   committed contract the preflight reports metadata-complete-but-`blocked`, mirroring the recorded
-  #1490 decision. This is **coordination/preflight readiness only**: it does not train, evaluate, tune
+  Issue #1490 decision. This is **coordination/preflight readiness only**: it does not train, evaluate, tune
   planners, run benchmarks, or submit SLURM.
 * Added a **fail-closed campaign-readiness gate for the learned-risk model v1 Slurm campaign**
   (#1472). New module `robot_sf/training/learned_risk_campaign_readiness.py` exposes
@@ -1392,7 +1392,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   diagnostic-only**: it does **not** modify the canonical distance-based `near_misses` metric, wire
   anything into SNQI or any scoring path, calibrate the threshold (the default
   `DIAGNOSTIC_TTC_THRESHOLD_S` is an explicit uncalibrated placeholder, `decision-required` per
-  #3700), or assert any safety result. The diagnostic fails closed — raising `NearMissTtcInputError`
+  Issue #3700), or assert any safety result. The diagnostic fails closed — raising `NearMissTtcInputError`
   rather than returning zeros — when the timing/velocity inputs are missing or invalid. Tests cover
   fast-closing vs. opening synthetic trajectories, the fail-closed contract for missing timing
   fields, and that the canonical `near_misses` output is unchanged.
@@ -1573,7 +1573,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entry points, the declared same-seed plan (`[111, 2868]` read from the #2915/#2916 configs), the
   declared output roots, and the named blockers, then classifies the arm as fail-closed
   `ready` / `blocked` / `missing`. Per the issue-audit on 2026-06-22, Package C is gated solely on
-  #2916 producing a durable campaign result store, so the default status is `blocked` until a
+  Issue #2916 producing a durable campaign result store, so the default status is `blocked` until a
   `--coupling-result-store` with a canonical `summary.json` is supplied; `blocked`/`missing` are never
   treated as success evidence. The helper inspects the repository only — it does **not** execute any
   benchmark campaign, alter predictor semantics, or claim forecast performance. Text and `--markdown`
@@ -1680,7 +1680,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 * Fixed a **docs-proof readiness false-blocker for docs/context note PRs** (#4178, successor to
-  #4191). The `scripts/dev/check_docs_proof_consistency_diff.sh` wrapper unconditionally injected
+  Issue #4191). The `scripts/dev/check_docs_proof_consistency_diff.sh` wrapper unconditionally injected
   `docs/context/catalog.yaml` into the `--path` selection for *any* docs/context-only diff, which
   forced full catalog schema/provenance validation and surfaced pre-existing, unrelated catalog
   debt (evidence rows that point at ignored `output/` artifacts). A PR that only edited a context
@@ -2144,7 +2144,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recentering activates (recenter term positive from step 7) and the on-arm reaches the goal where
   the off-arm fails; the topology command activates but the on-arm *degrades* the outcome versus the
   off-arm — reported honestly as a single-row degradation, not a benefit (consistent with the prior
-  #2752 "no useful topology alternative" diagnosis). Together with the AMV/AMMV panel sub-target this
+  Issue #2752 "no useful topology alternative" diagnosis). Together with the AMV/AMMV panel sub-target this
   completes #2227. Tracked panels + captions + provenance under
   `docs/context/evidence/issue_2227_recenter_topology_panels_2026-06-23/` (#2227).
 * Added a canonical [`docs/glossary.md`](docs/glossary.md) defining the project's acronyms and

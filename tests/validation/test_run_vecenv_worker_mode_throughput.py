@@ -20,7 +20,9 @@ from scripts.validation.run_vecenv_worker_mode_throughput import (  # noqa: E402
     _build_env_fns,
     _build_vec_env,
     _env_factory_kwargs,
+    _env_overrides,
     _EnvFactory,
+    _measure_mode,
     _resolve_num_envs,
     _sha256_file,
     main,
@@ -70,6 +72,12 @@ class TestEnvFactoryKwargs:
         assert _env_factory_kwargs({"env_factory_kwargs": None}) == {}
 
 
+def test_env_overrides_passthrough():
+    """Training environment overrides remain part of the measured workload."""
+    overrides = {"observation_mode": "socnav_struct", "use_occupancy_grid": True}
+    assert _env_overrides({"env_overrides": overrides}) == overrides
+
+
 class TestSha256File:
     """Tests for _sha256_file helper."""
 
@@ -107,6 +115,40 @@ class TestEnvFactory:
         assert restored.seed == 1
         assert restored.scenario_path == tmp_path / "scenario.yaml"
 
+    def test_applies_production_training_overrides(self, tmp_path):
+        """The comparator builds the same overridden workload declared by PPO training."""
+        config = object()
+        expected_env = object()
+        factory = _EnvFactory(
+            scenario_path=tmp_path / "scenario.yaml",
+            env_factory_kwargs={"reward_name": "route_completion_v2"},
+            seed=7,
+            env_overrides={"observation_mode": "socnav_struct"},
+        )
+
+        with (
+            patch(
+                "robot_sf.training.scenario_loader.load_scenarios",
+                return_value=[{"scenario_id": "smoke"}],
+            ),
+            patch(
+                "robot_sf.training.scenario_loader.build_robot_config_from_scenario",
+                return_value=config,
+            ),
+            patch("scripts.training.train_ppo._apply_env_overrides") as apply_overrides,
+            patch(
+                "robot_sf.gym_env.environment_factory.make_robot_env",
+                return_value=expected_env,
+            ),
+        ):
+            env = factory()
+
+        apply_overrides.assert_called_once_with(
+            config,
+            {"observation_mode": "socnav_struct"},
+        )
+        assert env is expected_env
+
 
 # ---------------------------------------------------------------------------
 # Integration contract: _build_env_fns length
@@ -120,6 +162,21 @@ def test_build_env_fns_length():
     assert len(env_fns) == 3
     assert env_fns[0].seed == 10
     assert env_fns[2].seed == 12
+
+
+def test_build_env_fns_copies_training_overrides():
+    """Each worker receives an independent copy of the training overrides."""
+    overrides = {"observation_mode": "socnav_struct"}
+    env_fns = _build_env_fns(
+        Path("/tmp/scenario.yaml"),
+        {},
+        num_envs=2,
+        base_seed=10,
+        env_overrides=overrides,
+    )
+
+    assert all(factory.env_overrides == overrides for factory in env_fns)
+    assert env_fns[0].env_overrides is not env_fns[1].env_overrides
 
 
 class _SyntheticEnv(Env):
@@ -162,12 +219,38 @@ def test_threaded_lidar_batch_matches_threaded_synthetic_transitions():
             assert batched_value == threaded_value
 
 
+def test_measure_mode_reports_median_and_repetition_records():
+    """Repeated measurements retain samples and summarize them with the median."""
+    samples = [10.0, 30.0, 20.0]
+
+    def _fake_measure(*args, **kwargs):
+        return {
+            "mode": "dummy",
+            "transitions_per_second": samples.pop(0),
+            "speedup_vs_baseline": None,
+            "status": "ok",
+            "error": None,
+        }
+
+    with patch(
+        "scripts.validation.run_vecenv_worker_mode_throughput._measure_mode_once",
+        side_effect=_fake_measure,
+    ):
+        record = _measure_mode("dummy", [], 1, 2, repetitions=3, base_seed=42)
+
+    assert record["transitions_per_second"] == pytest.approx(20.0)
+    assert [sample["repetition"] for sample in record["repetition_results"]] == [0, 1, 2]
+
+
 # ---------------------------------------------------------------------------
 # Smoke test: main() with a fake DummyVecEnv (no real env construction)
 # ---------------------------------------------------------------------------
 
 
 class _FakeActionSpace:
+    def seed(self, seed):
+        self.seed_value = seed
+
     def sample(self):
         return np.zeros(2, dtype=np.float32)
 
@@ -227,14 +310,26 @@ def test_main_dummy_mode_writes_json(tmp_path):
         )
     assert rc == 0
     data = json.loads(out.read_text())
-    assert data["schema"] == "vecenv_throughput_comparator.v1"
+    assert data["schema"] == "vecenv_throughput_comparator.v2"
+    assert data["status"] == "ok"
+    assert data["config_path"] == ("configs/training/lidar/lidar_ppo_mlp_smoke_issue_1662.yaml")
+    assert len(data["config_sha256"]) == 64
+    assert data["scenario_path"] == "configs/scenarios/classic_interactions.yaml"
+    assert len(data["scenario_sha256"]) == 64
+    assert data["scenario_selection"] == {"strategy": "first", "index": 0}
+    assert data["host"]
+    assert data["commit"]
     assert data["num_envs"] == 2
+    assert data["baseline_num_envs"] == 1
+    assert data["baseline"]["status"] == "ok"
+    assert data["baseline"]["speedup_vs_baseline"] == pytest.approx(1.0)
     assert len(data["results"]) == 1
     rec = data["results"][0]
     assert rec["mode"] == "dummy"
     assert rec["status"] == "ok"
     assert rec["transitions_per_second"] > 0
-    assert rec["speedup_vs_baseline"] == pytest.approx(1.0)
+    assert rec["speedup_vs_baseline"] > 0
+    assert len(rec["repetition_results"]) == 3
 
 
 @pytest.mark.skipif(
@@ -314,6 +409,40 @@ def test_main_threaded_lidar_batch_mode_writes_json(tmp_path):
     not _SMOKE_CONFIG.exists(),
     reason="smoke config not found",
 )
+def test_main_default_matrix_contains_all_four_modes(tmp_path):
+    """The default matrix emits every parent-issue worker mode in stable order."""
+    out = tmp_path / "result.json"
+    with patch(
+        "scripts.validation.run_vecenv_worker_mode_throughput._build_vec_env",
+        side_effect=_patch_build_vec_env,
+    ):
+        rc = main(
+            [
+                "--config",
+                str(_SMOKE_CONFIG),
+                "--num-envs",
+                "2",
+                "--repetitions",
+                "1",
+                "--warmup-steps",
+                "0",
+                "--measure-steps",
+                "1",
+                "--output",
+                str(out),
+            ]
+        )
+
+    assert rc == 0
+    data = json.loads(out.read_text())
+    assert data["modes"] == ["dummy", "subproc", "threaded", "threaded_lidar_batch"]
+    assert [record["mode"] for record in data["results"]] == data["modes"]
+
+
+@pytest.mark.skipif(
+    not _SMOKE_CONFIG.exists(),
+    reason="smoke config not found",
+)
 def test_main_construction_failure_reflected_in_output(tmp_path):
     """Construction failure status is recorded; main returns 2."""
     out = tmp_path / "result.json"
@@ -343,6 +472,11 @@ def test_main_construction_failure_reflected_in_output(tmp_path):
         )
     assert rc == 2
     data = json.loads(out.read_text())
+    assert data["status"] == "failed"
+    assert data["failures"] == [
+        {"scope": "baseline", "mode": "dummy", "error": "simulated env build failure"},
+        {"scope": "mode", "mode": "dummy", "error": "simulated env build failure"},
+    ]
     rec = data["results"][0]
     assert rec["status"] == "construction_failed"
     assert "simulated" in rec["error"]
@@ -353,6 +487,9 @@ def test_main_missing_config_returns_1(tmp_path):
     out = tmp_path / "result.json"
     rc = main(["--config", str(tmp_path / "nonexistent.yaml"), "--output", str(out)])
     assert rc == 1
+    data = json.loads(out.read_text())
+    assert data["status"] == "failed"
+    assert data["failures"][0]["scope"] == "configuration"
 
 
 def test_main_missing_scenario_config_returns_1(tmp_path, capsys):
@@ -373,6 +510,7 @@ def test_main_missing_scenario_config_returns_1(tmp_path, capsys):
         ("--modes", "threaded", "--modes must begin with dummy"),
         ("--warmup-steps", "-1", "--warmup-steps must be >= 0"),
         ("--measure-steps", "0", "--measure-steps must be >= 1"),
+        ("--repetitions", "0", "--repetitions must be >= 1"),
     ],
 )
 def test_main_rejects_invalid_measurement_parameters(tmp_path, capsys, flag, value, expected):

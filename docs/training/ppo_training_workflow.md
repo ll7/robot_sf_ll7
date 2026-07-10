@@ -20,6 +20,21 @@ uv run python scripts/training/train_ppo.py \
 `scripts/training_ppo.py` entrypoint fails closed with a migration command so old notes or shell
 history cannot silently launch an unsupported run.
 
+## Multi-Map Train/Test Protocol
+
+Issue #4982 adds a declared geometry-held-out PPO protocol at
+`configs/training/ppo/issue_4982_multi_map_train_test_protocol.yaml`. It keeps named training and
+held-out scenario IDs disjoint, evaluates both splits at every checkpoint, and writes
+`zero_shot_success_rate_decay` to the training manifest. Positive decay means the final held-out
+success rate was lower than the train-split success rate. This metric is a run readout, not
+generalization evidence until a predeclared campaign completes.
+
+The same config declares training-only domain randomization for pedestrian speed multiplier,
+route-spawn density multiplier, and route-spawn jitter. The sampled values are applied when a
+training scenario environment is created; held-out evaluation remains unrandomized. The protocol
+and randomization profile are recorded in the copied config, training-manifest notes, and optional
+Weights & Biases run config.
+
 For the environment boundary, reward ownership, benchmark-outcome distinction, and reviewer
 run-record checklist, see
 [Robot SF Environment Contract And Training Provenance](environment_contract.md).

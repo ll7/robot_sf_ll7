@@ -307,6 +307,101 @@ def raycast_obstacles(
             out_ranges[i] = min(coll_dist, out_ranges[i])
 
 
+@numba.njit(fastmath=True)  # pragma: no cover - exercised via caller; not line-traceable.
+def _raycast_obstacles_batch_kernel(
+    out_ranges: np.ndarray,
+    scanner_positions: np.ndarray,
+    obstacles: np.ndarray,
+    obstacle_counts: np.ndarray,
+    ray_angles: np.ndarray,
+):
+    """Run the scalar obstacle raycast for each row in one compiled dispatch."""
+    for env_idx in range(out_ranges.shape[0]):
+        raycast_obstacles(
+            out_ranges[env_idx],
+            scanner_positions[env_idx],
+            obstacles[env_idx, : obstacle_counts[env_idx]],
+            ray_angles[env_idx],
+        )
+
+
+def raycast_obstacles_batch(
+    out_ranges: np.ndarray,
+    scanner_positions: np.ndarray,
+    obstacles: np.ndarray,
+    obstacle_counts: np.ndarray,
+    ray_angles: np.ndarray,
+) -> None:
+    """Update several environments' light detection and ranging data in one CPU dispatch.
+
+    This opt-in adapter batches the existing :func:`raycast_obstacles` kernel without
+    changing its arithmetic or any environment default. Obstacle rows are padded to a
+    common length; ``obstacle_counts`` marks how many rows belong to each environment.
+    A one-environment batch calls the established scalar kernel directly so its output
+    remains bit-identical to the existing path.
+
+    Args:
+        out_ranges: Mutable floating-point array with shape ``(B, R)``.
+        scanner_positions: Scanner origins with shape ``(B, 2)``.
+        obstacles: Padded obstacle segments with shape ``(B, M, 4)``.
+        obstacle_counts: Integer array with shape ``(B,)`` and values in ``[0, M]``.
+        ray_angles: Absolute ray directions with shape ``(B, R)``.
+
+    Raises:
+        TypeError: If ``out_ranges`` is not a writable floating-point NumPy array or
+            ``obstacle_counts`` does not contain integers.
+        ValueError: If an input shape or obstacle count violates the batch contract.
+    """
+    if not isinstance(out_ranges, np.ndarray) or not np.issubdtype(out_ranges.dtype, np.floating):
+        raise TypeError("out_ranges must be a floating-point NumPy array")
+    if not out_ranges.flags.writeable:
+        raise TypeError("out_ranges must be writable")
+    if out_ranges.ndim != 2 or out_ranges.shape[0] == 0:
+        raise ValueError("out_ranges must have shape (B, R) with B >= 1")
+
+    batch_size, num_rays = out_ranges.shape
+    scanner_positions_array = np.asarray(scanner_positions)
+    obstacles_array = np.asarray(obstacles)
+    obstacle_counts_array = np.asarray(obstacle_counts)
+    ray_angles_array = np.asarray(ray_angles)
+
+    if scanner_positions_array.shape != (batch_size, 2):
+        raise ValueError("scanner_positions must have shape (B, 2)")
+    if (
+        obstacles_array.ndim != 3
+        or obstacles_array.shape[0] != batch_size
+        or obstacles_array.shape[2] != 4
+    ):
+        raise ValueError("obstacles must have shape (B, M, 4)")
+    if obstacle_counts_array.shape != (batch_size,) or not np.issubdtype(
+        obstacle_counts_array.dtype, np.integer
+    ):
+        raise TypeError("obstacle_counts must be an integer array with shape (B,)")
+    if np.any(obstacle_counts_array < 0) or np.any(
+        obstacle_counts_array > obstacles_array.shape[1]
+    ):
+        raise ValueError("obstacle_counts values must be within [0, M]")
+    if ray_angles_array.shape != (batch_size, num_rays):
+        raise ValueError("ray_angles must have shape (B, R) matching out_ranges")
+
+    if batch_size == 1:
+        raycast_obstacles(
+            out_ranges[0],
+            scanner_positions_array[0],
+            obstacles_array[0, : obstacle_counts_array[0]],
+            ray_angles_array[0],
+        )
+        return
+
+    _raycast_obstacles_batch_kernel(
+        out_ranges,
+        scanner_positions_array,
+        obstacles_array,
+        obstacle_counts_array,
+        ray_angles_array,
+    )
+
+
 @numba.njit()
 def raycast(  # noqa: PLR0913
     scanner_pos: Vec2D,

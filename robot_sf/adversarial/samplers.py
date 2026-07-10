@@ -227,7 +227,7 @@ def _import_optuna() -> Any:
     """Import Optuna or raise an actionable optional-dependency error."""
     try:
         return import_module("optuna")
-    except (ImportError, ModuleNotFoundError) as exc:
+    except ImportError as exc:
         raise RuntimeError(
             "OptunaCandidateSampler requires optuna. Install project dependencies with "
             "`uv sync --all-extras` before using the optimizer-backed adversarial sampler."

@@ -38,7 +38,7 @@ from loguru import logger
 
 try:
     from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
-except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+except ImportError:  # pragma: no cover - optional dependency
     ImageSequenceClip = None  # type: ignore[assignment]
 
 try:

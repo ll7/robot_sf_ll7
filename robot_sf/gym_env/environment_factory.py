@@ -54,7 +54,7 @@ try:  # pragma: no cover - import errors would surface in tests
 
     # Intentionally do NOT import robot_env_with_image here to avoid heavy first-call cost.
     RobotEnvWithImage = None  # type: ignore
-except (ImportError, ModuleNotFoundError):
+except ImportError:
     # Defer errors until factory invocation (lazy fallback)
     RobotEnv = None  # type: ignore
     RobotEnvWithImage = None  # type: ignore
@@ -172,7 +172,7 @@ def _optional_import(module_name: str):
     """
     try:
         return importlib.import_module(module_name)
-    except (ImportError, ModuleNotFoundError):
+    except ImportError:
         return None
 
 

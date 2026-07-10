@@ -1186,7 +1186,7 @@ def _episode_record_to_replay_episode(episode: dict):
     """
     try:
         ReplayEpisode, ReplayStep = _load_replay_types()
-    except (ImportError, ModuleNotFoundError) as exc:
+    except ImportError as exc:
         raise VisualizationError("ReplayEpisode not available", "video") from exc
 
     episode_id = episode["episode_id"]

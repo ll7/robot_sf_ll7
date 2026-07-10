@@ -16,7 +16,7 @@ from loguru import logger
 
 try:  # pragma: no cover - optional dependency
     import wandb  # type: ignore
-except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+except ImportError:  # pragma: no cover - optional dependency
     wandb = None  # type: ignore[assignment]
 
 DEFAULT_REGISTRY_PATH = Path("model/registry.yaml")

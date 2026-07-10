@@ -278,6 +278,19 @@ class SimulationSettings:
     to the robot at all.
     """
 
+    hesitating_response_multiplier: float = 1.0
+    """Repulsion multiplier for hesitating pedestrians (issue #4974).
+
+    Controls the strength of pedestrian-robot repulsion for pedestrians configured
+    with response_law='hesitating'. This is the model-side "optional hesitation
+    state": a value greater than 1.0 models the larger robot-clearance margins
+    documented in field observations of sidewalk delivery robots (Weinberg et al.
+    2023; Gehrke et al. 2023). The default of 1.0 preserves the existing force for
+    any pedestrian not explicitly marked hesitating. This is a clearance-margin
+    modeling proxy, not a calibrated dataset fit; plausible ranges are documented
+    in ``configs/scenarios/archetypes/issue_4974_field_observed_ped_robot.yaml``.
+    """
+
     peds_reset_follow_route_at_start: bool = False
     """Whether pedestrians following routes should reset to the start of their routes"""
     ped_speed_tier: str | None = None
@@ -395,6 +408,12 @@ class SimulationSettings:
             or self.non_reactive_response_multiplier < 0
         ):
             raise ValueError("non_reactive_response_multiplier must be a finite value >= 0!")
+        # Check that the hesitating response multiplier is finite and >= 0 (issue #4974)
+        if (
+            not isfinite(self.hesitating_response_multiplier)
+            or self.hesitating_response_multiplier < 0
+        ):
+            raise ValueError("hesitating_response_multiplier must be a finite value >= 0!")
         # Check that the goal radius is positive
         if self.goal_radius <= 0:
             raise ValueError("Goal radius mustn't be negative or zero!")

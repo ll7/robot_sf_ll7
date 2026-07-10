@@ -29,6 +29,7 @@ from robot_sf.nav.map_config import (
     serialize_map,
 )
 from robot_sf.nav.svg_map_parser import convert_map
+from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
@@ -2145,6 +2146,60 @@ def _set_simulation_override_attr(
         setattr(config.sim_config, attr, overrides[attr])
 
 
+_PRF_CONFIG_OVERRIDE_FIELDS = (
+    "is_active",
+    "robot_radius",
+    "activation_threshold",
+    "force_multiplier",
+)
+
+
+def _apply_prf_config_override(
+    config: RobotSimulationConfig,
+    overrides: Mapping[str, Any] | None,
+) -> None:
+    """Apply scenario-level pedestrian-robot force calibration overrides (issue #4974).
+
+    Exposes the ped-robot force's coefficient (``force_multiplier``), effective
+    radius (``robot_radius``), activation distance (``activation_threshold``), and
+    active flag (``is_active``) as a per-scenario calibration surface. Defaults are
+    preserved when a field is omitted, so existing scenarios are unchanged.
+    """
+    if overrides is None:
+        return
+    if not isinstance(overrides, Mapping):
+        raise ValueError("simulation_config.prf_config must be a mapping.")
+    unknown = sorted(set(overrides) - set(_PRF_CONFIG_OVERRIDE_FIELDS))
+    if unknown:
+        raise ValueError(
+            f"simulation_config.prf_config contains unknown keys: {', '.join(unknown)}."
+        )
+    base = config.sim_config.prf_config
+    kwargs: dict[str, Any] = {
+        "is_active": base.is_active,
+        "robot_radius": base.robot_radius,
+        "activation_threshold": base.activation_threshold,
+        "force_multiplier": base.force_multiplier,
+    }
+    if "is_active" in overrides:
+        kwargs["is_active"] = _coerce_bool(
+            overrides["is_active"], field_name="prf_config.is_active"
+        )
+    if "robot_radius" in overrides:
+        kwargs["robot_radius"] = _coerce_positive_float(
+            overrides["robot_radius"], field_name="prf_config.robot_radius"
+        )
+    if "activation_threshold" in overrides:
+        kwargs["activation_threshold"] = _coerce_positive_float(
+            overrides["activation_threshold"], field_name="prf_config.activation_threshold"
+        )
+    if "force_multiplier" in overrides:
+        kwargs["force_multiplier"] = _coerce_finite_float(
+            overrides["force_multiplier"], field_name="prf_config.force_multiplier"
+        )
+    config.sim_config.prf_config = PedRobotForceConfig(**kwargs)
+
+
 def _apply_simulation_overrides(
     config: RobotSimulationConfig,
     overrides: Mapping[str, Any] | None,
@@ -2190,9 +2245,15 @@ def _apply_simulation_overrides(
         "response_law_seed",
         "population_size",
         "non_reactive_response_multiplier",
+        "hesitating_response_multiplier",
     ):
         if attr in overrides:
             _set_simulation_override_attr(config, attr, overrides)
+    # Expose the pedestrian-robot force as a calibration surface (issue #4974):
+    # coefficient (force_multiplier), effective radius (robot_radius), activation
+    # distance, and active flag can be tuned per-scenario without touching defaults.
+    if "prf_config" in overrides:
+        _apply_prf_config_override(config, overrides["prf_config"])
 
 
 def _apply_map_pool(

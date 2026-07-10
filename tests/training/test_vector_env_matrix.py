@@ -11,7 +11,8 @@ from robot_sf.training.scenario_loader import load_scenarios
 from robot_sf.training.threaded_vec_env import ThreadedVecEnv
 from scripts.training import train_ppo
 
-_SCENARIO_PATH = Path("configs/scenarios/single/planner_sanity_simple.yaml").resolve()
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SCENARIO_PATH = _REPO_ROOT / "configs/scenarios/single/planner_sanity_simple.yaml"
 
 
 def _ppo_training_env_factory(seed: int):
@@ -70,3 +71,10 @@ def test_ppo_training_factory_supports_threaded_vec_env() -> None:
     env_fns = [_ppo_training_env_factory(300), _ppo_training_env_factory(301)]
 
     _assert_vec_env_reset_step_close(ThreadedVecEnv(env_fns))
+
+
+def test_ppo_training_factory_supports_threaded_lidar_batch_vec_env() -> None:
+    """Primary PPO rollouts should execute the opt-in coordinated LiDAR batch path."""
+    env_fns = [_ppo_training_env_factory(400), _ppo_training_env_factory(401)]
+
+    _assert_vec_env_reset_step_close(ThreadedVecEnv(env_fns, batch_lidar=True))

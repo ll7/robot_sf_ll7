@@ -5,7 +5,7 @@ targeted tests.
 
 | Entry point | DummyVecEnv | SubprocVecEnv | ThreadedVecEnv | Start method | Status |
 | --- | --- | --- | --- | --- | --- |
-| `scripts/training/train_ppo.py` | Supported | Supported | Supported with `worker_mode: threaded` | `spawn` for subprocess mode | Primary PPO path; threaded mode is an opt-in in-process rollout path. |
+| `scripts/training/train_ppo.py` | Supported | Supported | Supported with `worker_mode: threaded` or `threaded_lidar_batch` | `spawn` for subprocess mode | Primary PPO path; both threaded modes are opt-in in-process rollout paths. |
 | `scripts/training/train_ppo_with_pretrained_policy.py` | Supported | Supported | Not exposed | `spawn` | Supported PPO fine-tuning path. |
 | `scripts/training/train_sac_sb3.py` | Supported | Supported when `num_envs > 1` | Not exposed | `spawn` | Supported SAC path. |
 | `scripts/multi_extractor_training.py` | Supported for `single-thread` | Supported for `vectorized` | Not exposed | `spawn` | Legacy extractor-sweep path; retained for compatibility. |
@@ -14,8 +14,10 @@ targeted tests.
 preserving Stable-Baselines3's `VecEnv` result, auto-reset, and terminal-observation behavior. Use it
 only when each environment is safe to step concurrently in one process. It avoids subprocess
 serialization, but it does not provide process isolation and does not by itself establish a rollout
-throughput improvement. The default `worker_mode: auto` remains unchanged and chooses subprocess
-workers when more than one environment is requested.
+throughput improvement. The compiled LiDAR raycast and postprocessing sections release the Python
+global interpreter lock during execution; the surrounding environment step remains ordinary Python.
+The default `worker_mode: auto` remains unchanged and chooses subprocess workers when more than one
+environment is requested.
 
 Select the mode explicitly in a primary PPO config:
 
@@ -24,8 +26,17 @@ num_envs: 4
 worker_mode: threaded
 ```
 
-With `num_envs: 1`, `threaded` resolves to the existing `DummyVecEnv` fallback. This preserves the
-single-environment execution path; no performance result is implied by this configuration.
+To coordinate homogeneous static-obstacle LiDAR rows into one compiled batch during each threaded
+environment step, select the separate opt-in mode:
+
+```yaml
+num_envs: 4
+worker_mode: threaded_lidar_batch
+```
+
+With `num_envs: 1`, both threaded modes resolve to the existing `DummyVecEnv` fallback. This
+preserves the single-environment execution path; no performance result is implied by either
+configuration.
 
 `spawn` is the portable subprocess contract. It exercises actual child-process imports and catches
 closures, globals, and environment factories that only work under `fork`. Tests should cover
@@ -43,7 +54,14 @@ It accepts one padded static-obstacle tensor, explicit obstacle counts, scanner 
 angles, then invokes the established obstacle-raycast arithmetic for every environment in one
 compiled dispatch.
 
-The adapter is opt-in and is not selected automatically by `ThreadedVecEnv` or any training config.
-A batch of one calls the scalar `raycast_obstacles` kernel directly. Multi-environment contract
-tests require bit-identical rows compared with independent scalar calls. These tests establish
-compatibility only; no rollout throughput or speedup claim is attached to this path.
+The `threaded_lidar_batch` worker mode binds one coordinator to its environment-step workers. Each
+worker computes dynamic-object raycasts independently, submits its static-obstacle inputs, and waits
+while the coordinator pads obstacle rows and invokes the batch kernel once. Participating
+rows must share one ray count and array dtypes, and each worker must reach the same number of LiDAR
+calls per step. Incompatible or incomplete batches fail closed; reset-time scans remain scalar.
+
+A batch of one calls the scalar `raycast_obstacles` kernel directly, and primary PPO training
+resolves the one-environment worker mode to `DummyVecEnv` before constructing a coordinator.
+Multi-environment tests require complete LiDAR observations to be bit-identical to scalar threaded
+execution. These checks establish compatibility and rollout integration only; the standard-config
+throughput comparison required by issue #4981 remains separate.

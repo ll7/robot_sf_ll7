@@ -194,6 +194,28 @@ jobs:
           CI_STEP_TIMEOUT_SECONDS: "300"
         run: bash scripts/dev/ci_step_timer.sh "Enforce artifact root policy" scripts/dev/ci_driver.sh artifact-policy
 
+  xdist-scratch-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Run xdist scratch-isolation guard
+        run: |
+          uv run pytest -n 4 --dist worksteal \
+            tests/test_runner_policy_timeout.py::test_planner_step_timeout_fails_fast_and_reports_metadata \
+            tests/tools/test_release_evidence_gate.py::test_archive_integrity_pass_and_fail \
+            tests/benchmark/test_scenario_criticality_optimization.py::test_effective_workers_capped_at_candidate_count \
+            'tests/analysis/test_recenter_topology_panels_issue_2227.py::test_both_arm_traces_validate_against_schema[topology_result]' \
+            'tests/analysis/test_recenter_topology_panels_issue_2227.py::test_both_arm_traces_validate_against_schema[static_recenter_result]' \
+            tests/validation/test_evaluate_predictive_planner_smoke.py::test_evaluate_predictive_planner_fails_closed_without_collision_metric \
+            tests/validation/test_predictive_success_campaign_tags.py::test_main_writes_failure_summary_for_missing_jsonl \
+            tests/validation/test_predictive_success_campaign_tags.py::test_main_writes_failure_summary_for_malformed_jsonl
+
   wheel-smoke-install:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -237,6 +259,7 @@ jobs:
     needs:
       - fast-feedback
       - smoke-artifacts
+      - xdist-scratch-isolation
       - wheel-smoke-install
       - examples-smoke
     if: always()
@@ -253,6 +276,10 @@ jobs:
           fi
           if [[ "${{ needs.smoke-artifacts.result }}" != "success" ]]; then
             echo "smoke-artifacts finished with ${{ needs.smoke-artifacts.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.xdist-scratch-isolation.result }}" != "success" ]]; then
+            echo "xdist-scratch-isolation finished with ${{ needs.xdist-scratch-isolation.result }}" >&2
             exit 1
           fi
           if [[ "${{ needs.examples-smoke.result }}" != "success" ]]; then

@@ -1,0 +1,118 @@
+{
+  "_meta": {
+    "effective_group_key": "scenario_params.algo | algo | algorithm_metadata.algorithm | scenario_id",
+    "group_by": "scenario_params.algo",
+    "metric_parameters": {
+      "explicit_profile_records": 0,
+      "missing_profile_records": 4,
+      "threshold_profile": {
+        "center_distance_collision_definition": "center_distance_m < collision_distance_m",
+        "center_distance_pedestrian_role": "legacy_geometric_diagnostic",
+        "collision_distance_m": 0.25,
+        "comfort_force_threshold": 2.0,
+        "inferred_for_missing_metric_parameters": true,
+        "near_miss_definition": "collision_distance_m <= center_distance_m < near_miss_distance_m",
+        "near_miss_distance_m": 0.5,
+        "near_miss_speed_dependence": "disabled_distance_only",
+        "pedestrian_collision_definition": "center_distance_m < collision_distance_m",
+        "pedestrian_safety_metric": "center_distance_m",
+        "policy_search_near_miss_metric": "legacy_center_distance_m",
+        "profile_id": "legacy_missing_threshold_profile_v0",
+        "snqi_proxy_pedestrian_metric": "legacy_center_distance_m",
+        "sources": {
+          "constants": "robot_sf/benchmark/constants.py",
+          "metrics": "robot_sf/benchmark/metrics.py",
+          "spec": "docs/ped_metrics/metrics_spec.md"
+        },
+        "wall_agent_collision_definition": "center_distance_m < collision_distance_m"
+      },
+      "threshold_signature": "1efb179cef226e80162d4d0d1380805e3e0fb34a184228cc0f45d6683db4a546"
+    },
+    "missing_algorithms": [],
+    "observation_tracks": {
+      "caveat_policy": "Fallback, degraded, failed, and diagnostic-stub rows are caveats, not benchmark success evidence.",
+      "caveat_record_count": 0,
+      "mixed_tracks": false,
+      "mode": "strict",
+      "selected_track": "state",
+      "tracks": {
+        "state": 4
+      }
+    },
+    "warnings": []
+  },
+  "orca": {
+    "avg_speed": {
+      "mean": 1.0,
+      "median": 1.0,
+      "p95": 1.225
+    },
+    "collisions": {
+      "mean": 0.5,
+      "median": 0.5,
+      "p95": 0.95
+    },
+    "min_clearance": {
+      "mean": 0.35,
+      "median": 0.35,
+      "p95": 0.485
+    },
+    "near_misses": {
+      "mean": 2.0,
+      "median": 2.0,
+      "p95": 2.9
+    },
+    "path_length": {
+      "mean": 11.0,
+      "median": 11.0,
+      "p95": 11.9
+    },
+    "success": {
+      "mean": 0.5,
+      "median": 0.5,
+      "p95": 0.95
+    },
+    "time_to_goal": {
+      "mean": 10.0,
+      "median": 10.0,
+      "p95": 11.8
+    }
+  },
+  "social_force": {
+    "avg_speed": {
+      "mean": 0.95,
+      "median": 0.95,
+      "p95": 0.995
+    },
+    "collisions": {
+      "mean": 0.0,
+      "median": 0.0,
+      "p95": 0.0
+    },
+    "min_clearance": {
+      "mean": 0.4,
+      "median": 0.4,
+      "p95": 0.445
+    },
+    "near_misses": {
+      "mean": 2.0,
+      "median": 2.0,
+      "p95": 2.0
+    },
+    "path_length": {
+      "mean": 12.0,
+      "median": 12.0,
+      "p95": 12.9
+    },
+    "success": {
+      "mean": 1.0,
+      "median": 1.0,
+      "p95": 1.0
+    },
+    "time_to_goal": {
+      "mean": 10.0,
+      "median": 10.0,
+      "p95": 10.9
+    }
+  }
+}

@@ -140,6 +140,30 @@ def test_zero_shot_decay_uses_final_checkpoint_and_positive_drop() -> None:
     )
 
 
+def test_zero_shot_decay_keeps_step_zero_and_excludes_nonfinite_values() -> None:
+    """Initial evaluation is valid, while non-finite metric values cannot enter the aggregate."""
+    protocol = MultiMapTrainTestProtocol.from_raw(
+        {
+            "schema_version": "multi-map-train-test.v1",
+            "train_scenarios": ["train-map"],
+            "held_out_scenarios": ["held-out-map"],
+            "zero_shot_decay_metric": "success_rate",
+        }
+    )
+    assert protocol is not None
+    records = [
+        {"eval_step": 0, "split": "train", "metrics": {"success_rate": 1.0}},
+        {"eval_step": 0, "split": "train", "metrics": {"success_rate": float("nan")}},
+        {"eval_step": 0, "split": "held_out", "metrics": {"success_rate": 0.5}},
+        {"eval_step": 0, "split": "held_out", "metrics": {"success_rate": float("inf")}},
+    ]
+
+    assert train_ppo._zero_shot_decay_metric(records, protocol) == (
+        "zero_shot_success_rate_decay",
+        pytest.approx(0.5),
+    )
+
+
 def test_protocol_validates_known_scenarios_and_serializes() -> None:
     """Protocol IDs must resolve in the scenario manifest before PPO starts."""
     protocol = MultiMapTrainTestProtocol.from_raw(

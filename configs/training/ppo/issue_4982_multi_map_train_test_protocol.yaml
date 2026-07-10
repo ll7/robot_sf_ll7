@@ -16,7 +16,6 @@ scenario_sampling:
     - classic_t_intersection_medium
     - classic_urban_crossing_medium
 evaluation:
-  frequency_episodes: 10
   evaluation_episodes: 100
   hold_out_scenarios:
     - classic_bottleneck_medium

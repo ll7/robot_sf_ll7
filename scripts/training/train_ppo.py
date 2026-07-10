@@ -2926,20 +2926,24 @@ def _zero_shot_decay_metric(
     """
     if protocol is None:
         return None
-    eval_steps = [int(record.get("eval_step", -1) or -1) for record in episode_records]
+    eval_steps = [
+        int(record["eval_step"]) if record.get("eval_step") is not None else -1
+        for record in episode_records
+    ]
     if not eval_steps:
         return None
     final_step = max(eval_steps)
     split_values: dict[str, list[float]] = {"train": [], "held_out": []}
     for record in episode_records:
-        if int(record.get("eval_step", -1) or -1) != final_step:
+        step = record.get("eval_step")
+        if (int(step) if step is not None else -1) != final_step:
             continue
         split = str(record.get("split", ""))
         metrics = record.get("metrics")
         if split not in split_values or not isinstance(metrics, Mapping):
             continue
         value = metrics.get(protocol.zero_shot_decay_metric)
-        if value is not None:
+        if value is not None and np.isfinite(float(value)):
             split_values[split].append(float(value))
     if not split_values["train"] or not split_values["held_out"]:
         return None

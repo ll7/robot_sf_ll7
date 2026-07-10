@@ -56,7 +56,11 @@ def _require_mapping_fields(value: Any, name: str, fields: tuple[str, ...]) -> N
     """Require non-empty fields in one manifest mapping."""
     if not isinstance(value, dict):
         raise ValueError(f"{name} must be a mapping")
-    missing = [field for field in fields if not str(value.get(field, "")).strip()]
+    missing = [
+        field
+        for field in fields
+        if value.get(field) is None or not str(value.get(field, "")).strip()
+    ]
     if missing:
         raise ValueError(f"{name} missing required field(s): {', '.join(missing)}")
 

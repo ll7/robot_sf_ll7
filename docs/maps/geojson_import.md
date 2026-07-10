@@ -21,7 +21,7 @@ uv run python scripts/validation/check_geojson_import.py \
 ```
 
 `--line-buffer-m 1.5` is the default half-width applied to tagged LineString footways and obstacles.
-The input follows standard GeoJSON (WGS84 when no coordinate reference system is declared); the
+The input follows standard GeoJSON (World Geodetic System 1984 (WGS84) when no coordinate reference system is declared); the
 output coordinates are metres in a local Universal Transverse Mercator (UTM) frame.
 
 The converter recognises OSM `highway` values such as `footway`, `path`, and `pedestrian`, plus

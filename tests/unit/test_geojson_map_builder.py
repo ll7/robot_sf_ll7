@@ -124,3 +124,9 @@ def test_public_import_checker_requires_matching_checksum_and_loads_output(tmp_p
     manifest.write_text(yaml.safe_dump(data), encoding="utf-8")
     with pytest.raises(ValueError, match="classification must be 'exploratory_only'"):
         validate_import_provenance(manifest, FIXTURE)
+
+    data["classification"] = "exploratory_only"
+    data["source"]["url"] = None
+    manifest.write_text(yaml.safe_dump(data), encoding="utf-8")
+    with pytest.raises(ValueError, match=r"source missing required field\(s\): url"):
+        validate_import_provenance(manifest, FIXTURE)

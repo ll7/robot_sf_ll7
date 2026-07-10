@@ -30,6 +30,7 @@ issue #3971 synthetic flow harness, which never compares against real tracks.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -141,6 +142,7 @@ def load_split_tracks(
             non-finite, or narrower than the required columns).
     """
 
+    _validate_frame_period(frame_period_s)
     if split_path.format == "obsmat":
         tracks = _parse_obsmat(split_path, frame_period_s=frame_period_s)
         return EthUcyTrackSet(
@@ -175,6 +177,17 @@ def load_split_tracks(
         skipped_formats=(split_path.format,),
         frame_period_s=frame_period_s,
     )
+
+
+def _validate_frame_period(frame_period_s: float) -> None:
+    """Reject a frame period that cannot produce a valid time axis."""
+
+    if (
+        isinstance(frame_period_s, bool)
+        or not math.isfinite(frame_period_s)
+        or frame_period_s <= 0.0
+    ):
+        raise ValueError("frame_period_s must be finite and positive")
 
 
 def load_track_set(
@@ -320,6 +333,12 @@ def _read_numeric_rows(
         raise EthUcyDataError(
             f"ETH/UCY split '{split_path.split}' file {path} has no numeric data "
             f"rows. See {ACQUISITION_DOC}."
+        )
+    column_count = len(rows[0])
+    if any(len(row) != column_count for row in rows):
+        raise EthUcyDataError(
+            f"ETH/UCY split '{split_path.split}' file {path} is not rectangular; "
+            f"rows have varying column counts. See {ACQUISITION_DOC}."
         )
     matrix = np.asarray(rows, dtype=float)
     if matrix.shape[1] < required_columns:

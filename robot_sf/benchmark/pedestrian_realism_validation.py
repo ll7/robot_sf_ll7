@@ -359,19 +359,29 @@ def speed_density_points(
         raise ValueError("positions must have shape (T, K, 2)")
     if vel.shape != pos.shape:
         raise ValueError("velocities must have the same shape as positions")
+    if not math.isfinite(neighbor_radius_m) or neighbor_radius_m <= 0.0:
+        raise ValueError("neighbor_radius_m must be finite and positive")
     if pos.shape[0] == 0 or pos.shape[1] == 0:
         return np.empty((0, 2), dtype=float)
     speed = np.linalg.norm(vel, axis=2)
     density_area = math.pi * float(neighbor_radius_m) ** 2
-    density = np.zeros(pos.shape[:2], dtype=float)
+    # A gridded real track set uses NaNs before a pedestrian enters and after it
+    # leaves the scene.  Compute each frame over only the observed pedestrians;
+    # otherwise one absent pedestrian makes every pairwise distance NaN and
+    # silently reports zero density for the people that are present.
+    density = np.full(pos.shape[:2], np.nan, dtype=float)
     for t in range(pos.shape[0]):
         frame = pos[t]
+        observed = np.all(np.isfinite(frame), axis=1) & np.all(np.isfinite(vel[t]), axis=1)
+        if not np.any(observed):
+            continue
+        observed_frame = frame[observed]
         # Pairwise distance matrix for this frame (K may be large for big scenes,
         # but this harness is for short validation fixtures).
-        diff = frame[:, None, :] - frame[None, :, :]
+        diff = observed_frame[:, None, :] - observed_frame[None, :, :]
         dist = np.sqrt(np.sum(diff * diff, axis=2))
         neighbors = np.count_nonzero(dist <= float(neighbor_radius_m), axis=1) - 1
-        density[t] = np.maximum(neighbors, 0) / density_area
+        density[t, observed] = np.maximum(neighbors, 0) / density_area
     return np.stack((density.reshape(-1), speed.reshape(-1)), axis=1)
 
 
@@ -439,19 +449,33 @@ def lane_formation_score_curve(
 
     pos = np.asarray(positions, dtype=float)
     vel = np.asarray(velocities, dtype=float)
-    if pos.ndim != 3 or pos.shape[0] == 0 or pos.shape[1] < 2:
+    if pos.ndim != 3 or vel.shape != pos.shape:
+        raise ValueError("positions and velocities must have matching shape (T, K, 2)")
+    if movement_axis not in (0, 1) or lateral_axis not in (0, 1):
+        raise ValueError("movement_axis and lateral_axis must be 0 or 1")
+    if movement_axis == lateral_axis:
+        raise ValueError("movement_axis and lateral_axis must differ")
+    if pos.shape[0] == 0 or pos.shape[1] < 2:
         return np.empty((0,), dtype=float)
     movement = vel[:, :, movement_axis]
     lateral = pos[:, :, lateral_axis]
     positive = movement > movement_threshold_mps
     negative = movement < -movement_threshold_mps
     scores: list[float] = []
-    for lateral_t, pos_mask, neg_mask in zip(lateral, positive, negative, strict=True):
+    for frame_index, (lateral_t, pos_mask, neg_mask) in enumerate(
+        zip(lateral, positive, negative, strict=True)
+    ):
+        # A gridded track is NaN outside its observed lifespan.  Exclude it from
+        # both direction groups and the lateral spread without discarding the
+        # other observed pedestrians in the frame.
+        observed = np.isfinite(lateral_t) & np.all(np.isfinite(vel[frame_index]), axis=1)
+        pos_mask = pos_mask & observed
+        neg_mask = neg_mask & observed
         if np.count_nonzero(pos_mask) == 0 or np.count_nonzero(neg_mask) == 0:
             continue
         pos_mean = float(np.mean(lateral_t[pos_mask]))
         neg_mean = float(np.mean(lateral_t[neg_mask]))
-        spread = float(np.max(lateral_t) - np.min(lateral_t))
+        spread = float(np.max(lateral_t[observed]) - np.min(lateral_t[observed]))
         if spread > 0.0:
             scores.append(abs(pos_mean - neg_mean) / spread)
     return np.asarray(scores, dtype=float)

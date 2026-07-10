@@ -6,7 +6,7 @@ Plain-language summary: ETH/UCY is a public pedestrian-trajectory benchmark fami
 
 This page covers the ETH BIWI Walking Pedestrians data (`eth`, `hotel`) and the UCY Crowds-by-Example data commonly staged as `univ`, `zara01`, and `zara02` for pedestrian-trajectory prediction comparisons.
 
-This documentation does not add a loader, dataset bytes, benchmark scenarios, prediction-comparability results, or paper/dissertation claims. Until a later loader and shape-contract slice is implemented, the registry entry is acquisition and provenance metadata only.
+This documentation does not add dataset bytes, benchmark scenarios, prediction-comparability results, or paper/dissertation claims. The repository includes a license-safe parser for staged `obsmat.txt` and normalized four-column `.txt` tracks; the registry entry remains acquisition and provenance metadata only, and a locally staged dataset is not benchmark evidence.
 
 ## Sources And Citations
 
@@ -100,6 +100,8 @@ The manifest records source URL, access notes, matched required paths, file coun
 ## Loader And Shape Contract
 
 `robot_sf/data/external/eth_ucy.py` is a license-safe loader that only inspects locally staged files. It never downloads, vendors, or redistributes dataset bytes, and it makes no prediction-comparability claim. It checks a cheap, structural shape contract: the documented per-split layout exists and each trajectory file parses as finite numeric rows. It intentionally asserts no content values (no exact frame counts, coordinates, pedestrian ids, or scene-specific numbers).
+
+`robot_sf/data/external/eth_ucy_trajectories.py` builds on that structural contract to parse `obsmat.txt` and normalized four-column `.txt` files into per-pedestrian `(time_s, x, y)` tracks. It fails closed on absent or malformed data; `.vsp` spline files remain explicitly skipped with a recorded reason. These tracks support diagnostic-only realism scorecards, not a calibrated or paper-facing comparison.
 
 ### Expected splits
 

@@ -168,6 +168,21 @@ def test_speed_density_points_shape_and_values() -> None:
     assert np.allclose(points[:, 1], 1.0)
 
 
+def test_speed_density_ignores_absent_gridded_tracks_without_zeroing_neighbors() -> None:
+    """An absent track must not erase density for pedestrians present in a frame."""
+
+    pos, vel = _crowd(steps=2, k=3, speed=1.0, lateral=np.asarray([0.0, 0.2, 0.4]))
+    pos[0, 2] = np.nan
+    vel[0, 2] = np.nan
+
+    points = speed_density_points(pos, vel, neighbor_radius_m=1.0)
+
+    # The two observed pedestrians have one observed neighbor each.  Before the
+    # NaN-aware filtering this frame was incorrectly reported as zero density.
+    assert np.allclose(points[:2, 0], 1.0 / np.pi)
+    assert np.all(np.isnan(points[2]))
+
+
 def test_fundamental_diagram_comparison_zero_for_identical_crowds() -> None:
     """Identical sim and real crowds yield zero speed delta and distance."""
 
@@ -217,6 +232,24 @@ def test_lane_formation_score_curve_detects_two_lanes() -> None:
         pos_mix, vel_mix, movement_axis=0, lateral_axis=1, movement_threshold_mps=0.05
     )
     assert float(np.mean(score_split)) > float(np.mean(score_mixed))
+
+
+def test_lane_formation_ignores_absent_gridded_tracks() -> None:
+    """A missing track does not discard an otherwise scorable counter-flow frame."""
+
+    pos_a, vel_a = _crowd(steps=3, k=2, speed=1.0, lateral=np.asarray([0.0, 0.1]))
+    pos_b, vel_b = _crowd(steps=3, k=2, speed=-1.0, lateral=np.asarray([4.0, 4.1]))
+    pos = np.concatenate((pos_a, pos_b), axis=1)
+    vel = np.concatenate((vel_a, vel_b), axis=1)
+    pos[1, 3] = np.nan
+    vel[1, 3] = np.nan
+
+    scores = lane_formation_score_curve(
+        pos, vel, movement_axis=0, lateral_axis=1, movement_threshold_mps=0.05
+    )
+
+    assert scores.shape == (3,)
+    assert np.all(scores > 0.8)
 
 
 def test_lane_formation_comparison_status_ok_and_delta_zero_for_identical() -> None:
@@ -425,6 +458,28 @@ def test_parse_vsp_split_is_skipped_not_failed(tmp_path: Path) -> None:
 
     assert track_set.tracks == ()
     assert track_set.skipped_formats == ("vsp",)
+
+
+def test_track_parser_rejects_ragged_rows_fail_closed(tmp_path: Path) -> None:
+    """A malformed staged trajectory raises the public data error, never ValueError."""
+
+    path = tmp_path / "obsmat.txt"
+    path.write_text("1 1 2.5 0.0 4.5\n2 1 2.9 0.0\n", encoding="utf-8")
+    split_path = eth_ucy.EthUcySplitPath("eth", "eth", path, "obsmat")
+
+    with pytest.raises(eth_ucy.EthUcyDataError, match="not rectangular"):
+        load_split_tracks(split_path)
+
+
+def test_track_parser_rejects_nonpositive_frame_period(tmp_path: Path) -> None:
+    """A non-positive frame period cannot create a valid time axis."""
+
+    _stage_dataset(tmp_path / "eth-ucy")
+    dataset = eth_ucy.require_available(tmp_path / "eth-ucy")
+    eth_split = next(split for split in dataset.splits if split.split == "eth")
+
+    with pytest.raises(ValueError, match="frame_period_s"):
+        load_split_tracks(eth_split, frame_period_s=0.0)
 
 
 def test_load_track_set_unknown_split_raises(tmp_path: Path) -> None:

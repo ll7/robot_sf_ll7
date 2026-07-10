@@ -1,0 +1,44 @@
+{
+  "metrics.avg_speed": {
+    "ci_high": 1.1625,
+    "ci_low": 0.825,
+    "mean": 0.975,
+    "median": 0.95
+  },
+  "metrics.collisions": {
+    "ci_high": 0.75,
+    "ci_low": 0.0,
+    "mean": 0.25,
+    "median": 0.0
+  },
+  "metrics.min_clearance": {
+    "ci_high": 0.475,
+    "ci_low": 0.275,
+    "mean": 0.375,
+    "median": 0.4
+  },
+  "metrics.near_misses": {
+    "ci_high": 2.5,
+    "ci_low": 1.25,
+    "mean": 2.0,
+    "median": 2.0
+  },
+  "metrics.path_length": {
+    "ci_high": 12.631249999999994,
+    "ci_low": 10.5,
+    "mean": 11.5,
+    "median": 11.5
+  },
+  "metrics.success": {
+    "ci_high": 1.0,
+    "ci_low": 0.25,
+    "mean": 0.75,
+    "median": 1.0
+  },
+  "metrics.time_to_goal": {
+    "ci_high": 11.25,
+    "ci_low": 8.5,
+    "mean": 10.0,
+    "median": 10.0
+  }
+}

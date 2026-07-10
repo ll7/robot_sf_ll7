@@ -110,6 +110,16 @@ def _index_entries_by_config() -> dict[str, dict]:
     return {entry["config"]: entry for entry in index["archetypes"]}
 
 
+def _assert_evaluation_replacement_is_valid(config_path: Path, replacement: object) -> None:
+    """Require an explicit replacement to name an archetype config file."""
+    assert isinstance(replacement, str) and replacement.strip(), (
+        f"{config_path.name}: evaluation_replacement must be a non-empty string."
+    )
+    assert (ARCHETYPES_DIR / replacement).is_file(), (
+        f"{config_path.name}: evaluation_replacement={replacement!r} must name a real file."
+    )
+
+
 def test_index_file_exists_and_is_inert() -> None:
     """Index loads and has no ``scenarios`` key, so scenario loaders ignore it."""
     assert INDEX_FILE.exists(), f"Missing index: {INDEX_FILE}"
@@ -163,10 +173,16 @@ def test_every_classic_archetype_is_admitted_or_explicitly_dispositioned() -> No
     allowed_dispositions = {"excluded", "planned"}
 
     for config_path in _classic_config_paths():
+        config = _load_yaml(config_path)
+        if "evaluation_replacement" in config:
+            _assert_evaluation_replacement_is_valid(
+                config_path,
+                config["evaluation_replacement"],
+            )
+
         if config_path.name in matrix_files:
             continue
 
-        config = _load_yaml(config_path)
         disposition = config.get("evaluation")
         reason = config.get("evaluation_reason")
         assert disposition in allowed_dispositions, (
@@ -176,6 +192,27 @@ def test_every_classic_archetype_is_admitted_or_explicitly_dispositioned() -> No
         assert isinstance(reason, str) and reason.strip(), (
             f"{config_path.name}: evaluation={disposition!r} requires a non-empty "
             "evaluation_reason."
+        )
+
+
+@pytest.mark.parametrize(
+    ("replacement", "message"),
+    [
+        ("", "non-empty string"),
+        ("   ", "non-empty string"),
+        (["classic_cross_trap.yaml"], "non-empty string"),
+        ("missing_classic_config.yaml", "must name a real file"),
+    ],
+)
+def test_evaluation_replacement_fails_closed_when_invalid(
+    replacement: object,
+    message: str,
+) -> None:
+    """Disposition replacements must be usable archetype config paths."""
+    with pytest.raises(AssertionError, match=message):
+        _assert_evaluation_replacement_is_valid(
+            ARCHETYPES_DIR / "classic_example.yaml",
+            replacement,
         )
 
 

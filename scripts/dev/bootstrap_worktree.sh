@@ -11,9 +11,10 @@
 # silently succeeding and leaving the caller without a working .venv.
 #
 # Usage:
-#   scripts/dev/bootstrap_worktree.sh [--no-symlink-machine] [--help|-h]
+#   scripts/dev/bootstrap_worktree.sh [--extra NAME] [--no-symlink-machine] [--help|-h]
 #
 # Options:
+#   --extra NAME          Include an optional dependency extra (repeatable), such as training.
 #   --no-symlink-machine  Skip symlinking local.machine.md from the main checkout.
 #   -h, --help            Show this help and exit.
 #
@@ -27,30 +28,45 @@ set -euo pipefail
 
 show_help() {
     cat <<'EOF'
-Usage: scripts/dev/bootstrap_worktree.sh [--no-symlink-machine] [--help|-h]
+Usage: scripts/dev/bootstrap_worktree.sh [--extra NAME] [--no-symlink-machine] [--help|-h]
 
-Bootstrap a fresh linked Git worktree: run `uv venv .venv && uv sync --all-extras`,
-then verify .venv/bin/python exists before returning. Fails closed with an
-actionable error message if the environment is not usable after sync.
+Bootstrap a fresh linked Git worktree: run `uv venv .venv` and then, by default,
+`uv sync --all-extras`. Verify .venv/bin/python exists before returning. Fails
+closed with an actionable error message if the environment is not usable after sync.
+
+Use `--extra training` to make the training dependency route explicit for training
+or VecEnv validation. Supplying one or more `--extra` options syncs only those
+named extras instead of `--all-extras`.
 
 The explicit `uv venv .venv` step is required: `uv sync --all-extras` alone may
 silently reuse the main checkout's .venv without creating one in the worktree,
 leaving .venv/bin/activate missing (issue #5091).
 
 Options:
+  --extra NAME          Include an optional dependency extra (repeatable), such as training.
   --no-symlink-machine  Skip symlinking local.machine.md from the main checkout.
   -h, --help            Show this help and exit.
 
 Run from the worktree root you want to bootstrap. Example:
   cd ../robot_sf_ll7.worktrees/issue-1234-my-branch
-  scripts/dev/bootstrap_worktree.sh
+  scripts/dev/bootstrap_worktree.sh --extra training
   source .venv/bin/activate
 EOF
 }
 
 symlink_machine=1
+sync_extras=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --extra)
+            if [[ $# -lt 2 || -z "$2" ]]; then
+                echo "bootstrap_worktree: --extra requires a name" >&2
+                show_help >&2
+                exit 2
+            fi
+            sync_extras+=("$2")
+            shift 2
+            ;;
         --no-symlink-machine)
             symlink_machine=0
             shift
@@ -100,8 +116,17 @@ if [[ ! -d "$repo_root/.venv" ]]; then
     uv venv .venv
 fi
 
-echo "bootstrap_worktree: syncing dependencies (uv sync --all-extras) ..."
-uv sync --all-extras
+if [[ ${#sync_extras[@]} -eq 0 ]]; then
+    sync_args=(--all-extras)
+else
+    sync_args=()
+    for extra in "${sync_extras[@]}"; do
+        sync_args+=(--extra "$extra")
+    done
+fi
+
+echo "bootstrap_worktree: syncing dependencies (uv sync ${sync_args[*]}) ..."
+uv sync "${sync_args[@]}"
 
 # Fail closed: verify the environment is actually usable.
 if [[ ! -x "$repo_root/.venv/bin/python" ]]; then

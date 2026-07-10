@@ -45,6 +45,17 @@ uv sync --all-extras
 source .venv/bin/activate
 ```
 
+When using the linked-worktree bootstrap helper for a training or vectorized-environment
+(VecEnv) validation path, name the required optional dependency explicitly:
+
+```bash
+scripts/dev/bootstrap_worktree.sh --extra training
+source .venv/bin/activate
+```
+
+`--extra` is repeatable when a workflow needs more than one named optional dependency. Supplying it
+selects those named extras instead of the bootstrap helper's default `--all-extras` route.
+
 CARLA is deliberately excluded from `--all-extras`. Use `uv sync --all-extras --group carla` only
 on machines or worktrees that need the host-side CARLA Python client.
 

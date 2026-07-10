@@ -538,6 +538,18 @@ def _handle_aggregate(args) -> int:
                 recompute_snqi=bool(getattr(args, "recompute_snqi", False)),
                 observation_track_mode=str(args.observation_track_mode),
             )
+        if bool(getattr(args, "include_flakiness_audit", False)):
+            try:
+                flakiness_report = _compute_flakiness_audit(
+                    records,
+                    group_by=args.group_by,
+                    fallback_group_by=args.fallback_group_by,
+                    observation_track_mode=str(args.observation_track_mode),
+                )
+            except ValueError:
+                logging.exception("Aggregate scenario-flakiness audit failed")
+                return 2
+            summary.setdefault("_meta", {})["scenario_flakiness"] = flakiness_report
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with out_path.open("w", encoding="utf-8") as f:
@@ -2035,6 +2047,14 @@ def _add_aggregate_subparser(
         help=(
             "How to handle mixed benchmark_track values. Default strict fails closed; "
             "diagnostic-cross-track namespaces groups by track with caveats."
+        ),
+    )
+    p.add_argument(
+        "--include-flakiness-audit",
+        action="store_true",
+        help=(
+            "Embed the advisory scenario_flakiness.v1 per-cell stability report under "
+            "_meta.scenario_flakiness (default: disabled)."
         ),
     )
     p.add_argument(

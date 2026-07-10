@@ -194,6 +194,8 @@ class Simulator:
         Route spawning honors SimulationSettings route spawn options when provided.
         """
         pysf_config = PySFSimConfig()
+        pysf_config.scene_config.dt_secs = self.config.time_per_step_in_secs
+        pysf_config.scene_config.integration_scheme = self.config.pedestrian_integration_scheme
         spawn_config = PedSpawnConfig(
             self.config.peds_per_area_m2,
             self.config.max_peds_per_group,
@@ -269,7 +271,6 @@ class Simulator:
                 self.pedestrian_response_multipliers,
             ),
         )
-        self.pysf_sim.peds.step_width = self.config.time_per_step_in_secs
         self.pysf_sim.peds.max_speed_multiplier = self.config.peds_speed_mult
         self.robot_navs = [
             RouteNavigator(proximity_threshold=self.goal_proximity_threshold) for _ in self.robots
@@ -350,6 +351,9 @@ class Simulator:
             self.ped_headings,
             dt=self.config.time_per_step_in_secs,
             max_speeds=max_speeds,
+            integration_scheme=getattr(
+                self.config, "pedestrian_integration_scheme", "semi_implicit_euler"
+            ),
         )
         if self.pedestrian_model == HSFM_ALIGNMENT_TORQUE_V1:
             # Decouple body orientation from the instantaneous force direction (issue #3481):
@@ -646,6 +650,8 @@ class PedSimulator(Simulator):
         forces and robot interactions, and prepares robot navigation paths.
         """
         pysf_config = PySFSimConfig()
+        pysf_config.scene_config.dt_secs = self.config.time_per_step_in_secs
+        pysf_config.scene_config.integration_scheme = self.config.pedestrian_integration_scheme
         spawn_config = PedSpawnConfig(
             self.config.peds_per_area_m2,
             self.config.max_peds_per_group,
@@ -693,7 +699,6 @@ class PedSimulator(Simulator):
                 pedestrian_response_multipliers=None,
             ),
         )
-        self.pysf_sim.peds.step_width = self.config.time_per_step_in_secs
         self.pysf_sim.peds.max_speed_multiplier = self.config.peds_speed_mult
 
         self.robot_navs = [

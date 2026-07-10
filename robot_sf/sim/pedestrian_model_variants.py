@@ -5,6 +5,7 @@ from __future__ import annotations
 from math import atan2
 
 import numpy as np
+from pysocialforce.scene import EXPLICIT_EULER, normalize_integration_scheme
 
 SOCIAL_FORCE_DEFAULT = "social_force_default"
 HSFM_TOTAL_FORCE_V1 = "hsfm_total_force_v1"
@@ -658,6 +659,7 @@ def step_hsfm_total_force(
     *,
     dt: float,
     max_speeds: np.ndarray,
+    integration_scheme: str = "semi_implicit_euler",
     epsilon: float = 1e-9,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Step PySocialForce state while orienting pedestrians by total force.
@@ -685,7 +687,13 @@ def step_hsfm_total_force(
     np.minimum(factors, 1.0, out=factors)
     capped_velocity = desired_velocity * np.expand_dims(factors, axis=-1)
 
-    next_state[:, PYSF_POSITION_SLICE] += capped_velocity * float(dt)
+    normalized_scheme = normalize_integration_scheme(integration_scheme)
+    position_velocity = (
+        next_state[:, PYSF_VELOCITY_SLICE]
+        if normalized_scheme == EXPLICIT_EULER
+        else capped_velocity
+    )
+    next_state[:, PYSF_POSITION_SLICE] += position_velocity * float(dt)
     next_state[:, PYSF_VELOCITY_SLICE] = capped_velocity
     force_norms = np.linalg.norm(force_array, axis=-1)
     force_headings = np.arctan2(force_array[:, 1], force_array[:, 0])

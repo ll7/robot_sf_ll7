@@ -16,6 +16,9 @@ class SceneConfig:
         max_speed_multiplier: Upper bound multiplier for desired speeds.
         tau: Relaxation time constant used by force models (seconds).
         resolution: Spatial resolution used for obstacle preprocessing.
+        integration_scheme: Pedestrian position-update scheme. ``semi_implicit_euler``
+            advances position with the newly integrated velocity; ``explicit_euler``
+            advances with the pre-step velocity.
     """
 
     enable_group: bool = True
@@ -24,6 +27,7 @@ class SceneConfig:
     max_speed_multiplier: float = 1.3
     tau: float = 0.5
     resolution: float = 10
+    integration_scheme: str = "semi_implicit_euler"
 
 
 @dataclass

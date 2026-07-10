@@ -79,6 +79,18 @@ axes:
       - key: dt_0_20
         patch:
           dt: 0.20
+  - key: pedestrian_integration_scheme
+    rationale: Detect whether planner rankings depend on explicit versus semi-implicit pedestrian updates.
+    variants:
+      - key: semi_implicit_euler_nominal
+        baseline: true
+        patch:
+          sim_config:
+            pedestrian_integration_scheme: semi_implicit_euler
+      - key: explicit_euler
+        patch:
+          sim_config:
+            pedestrian_integration_scheme: explicit_euler
   - key: social_force_speed_archetypes
     rationale: Detect whether pedestrian speed heterogeneity changes ranking stability.
     variants:

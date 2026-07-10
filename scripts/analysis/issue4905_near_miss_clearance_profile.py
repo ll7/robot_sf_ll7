@@ -134,20 +134,26 @@ def compute_percentiles(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def compute_occlusion_share(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute per-planner share of episodes where was_occluded_before_min is true."""
+    """Compute per-planner occlusion shares without treating unavailable data as false.
+
+    A planner with no visibility observations has an ``unavailable`` measurement,
+    rather than an occlusion share of zero.
+    """
     mask = df["actual_minimum_separation_m"] < SENTINEL
     valid = df[mask]
     result = []
     for planner, group in valid.groupby("planner"):
         n = len(group)
-        occluded_true = group["was_occluded_before_min"].fillna(False).astype(bool).sum()
         occluded_none = group["was_occluded_before_min"].isna().sum()
+        measurement_available = occluded_none < n
+        occluded_true = group["was_occluded_before_min"].fillna(False).astype(bool).sum()
         result.append(
             {
                 "planner": planner,
                 "N": n,
                 "occluded_true": int(occluded_true),
-                "occluded_share": occluded_true / n if n > 0 else 0.0,
+                "occlusion_measurement": "available" if measurement_available else "unavailable",
+                "occluded_share": occluded_true / n if measurement_available else None,
                 "occluded_none": int(occluded_none),
             }
         )
@@ -273,7 +279,7 @@ def main() -> None:
     if occl_df["occluded_none"].sum() == occl_df["N"].sum():
         print(
             "NOTE: was_occluded_before_min is None for ALL exposure>0 episodes "
-            "(visibility observation disabled). Occlusion share is reported as 0.0."
+            "(visibility observation disabled). Occlusion measurement is unavailable."
         )
 
     print("\n=== COLLISION-ADJACENT PLANNERS ===")

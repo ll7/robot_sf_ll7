@@ -31,19 +31,19 @@ class GhListTruncated(RuntimeError):
     """
 
 
-def is_likely_truncated(row_count: int, *, limit: int) -> bool:
+def is_likely_truncated(row_count: int, *, limit: int | None) -> bool:
     """Return ``True`` when a bounded gh list result may be truncated.
 
-    A non-positive ``limit`` never reports truncation: there is no cap to hit
+    A non-positive or ``None`` ``limit`` never reports truncation: there is no cap to hit
     when pagination is effectively unbounded.
     """
-    return limit > 0 and row_count >= limit
+    return limit is not None and limit > 0 and row_count >= limit
 
 
 def assert_not_truncated(
     rows: Sized,
     *,
-    limit: int,
+    limit: int | None,
     context: str = "",
 ) -> None:
     """Raise :class:`GhListTruncated` when ``rows`` may be truncated by the cap.
@@ -53,7 +53,8 @@ def assert_not_truncated(
     rows:
         The sized container of rows returned by ``gh ... list --limit``.
     limit:
-        The numeric ``--limit`` value passed to ``gh``.
+        The numeric ``--limit`` value passed to ``gh``, or ``None`` for an
+        unbounded query.
     context:
         Optional short label (for example, the gh subcommand and search) that is
         included in the error message to aid diagnosis.

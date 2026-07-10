@@ -401,7 +401,12 @@ def issue_queue_snapshot(
         if error:
             errors.append(f"issue search {search!r}: {error}")
             continue
-        search_rows = data if isinstance(data, list) else []
+        if not isinstance(data, list):
+            errors.append(
+                f"issue search {search!r}: expected JSON array, got {type(data).__name__}"
+            )
+            continue
+        search_rows = data
         row_count = len(search_rows)
         truncated = is_likely_truncated(row_count, limit=limit)
         truncations.append(

@@ -43,11 +43,12 @@ def test_is_likely_truncated_false_when_below_limit() -> None:
     assert is_likely_truncated(0, limit=20) is False
 
 
-def test_is_likely_truncated_false_for_non_positive_limit() -> None:
-    """A non-positive limit means no cap was applied."""
+def test_is_likely_truncated_false_for_non_positive_or_none_limit() -> None:
+    """A non-positive or None limit means no cap was applied."""
     assert is_likely_truncated(0, limit=0) is False
     assert is_likely_truncated(100, limit=0) is False
     assert is_likely_truncated(100, limit=-1) is False
+    assert is_likely_truncated(100, limit=None) is False
 
 
 def test_assert_not_truncated_raises_when_rows_equal_limit() -> None:
@@ -74,10 +75,11 @@ def test_assert_not_truncated_message_without_context() -> None:
     assert "raise --limit or paginate" in str(exc_info.value)
 
 
-def test_assert_not_truncated_zero_limit_never_raises() -> None:
-    """A non-positive limit is unbounded and never reports truncation."""
+def test_assert_not_truncated_unbounded_limit_never_raises() -> None:
+    """A non-positive or None limit is unbounded and never reports truncation."""
     assert_not_truncated(list(range(100)), limit=0)
     assert_not_truncated(list(range(100)), limit=-5)
+    assert_not_truncated(list(range(100)), limit=None)
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +275,24 @@ def test_issue_queue_snapshot_no_truncation_marker_for_failed_search() -> None:
 
     assert truncations == []
     assert errors and "not found" in errors[0]
+
+
+def test_issue_queue_snapshot_rejects_non_list_json() -> None:
+    """A successful but malformed gh JSON response must not silently omit issues."""
+    with patch("scripts.dev.autopilot_state_snapshot._run") as mock_run:
+        mock_run.return_value = snapshot.CommandResult(
+            command=("gh", "issue", "list"),
+            returncode=0,
+            stdout=json.dumps({"number": 1}),
+            stderr="",
+        )
+        rows, _sources, errors, truncations = snapshot.issue_queue_snapshot(
+            ["is:issue is:open"], limit=20
+        )
+
+    assert rows == []
+    assert truncations == []
+    assert errors == ["issue search 'is:issue is:open': expected JSON array, got dict"]
 
 
 def test_build_snapshot_surfaces_issues_truncated_markers(monkeypatch) -> None:  # type: ignore[no-untyped-def]

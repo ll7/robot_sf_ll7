@@ -1216,6 +1216,13 @@ def build_robot_config_from_scenario(
 ) -> RobotSimulationConfig:
     """Create a ``RobotSimulationConfig`` derived from a scenario definition.
 
+    Args:
+        scenario: A single scenario definition mapping, such as one returned by
+            ``load_scenarios``.
+        scenario_path: Path to the scenario YAML file, not its containing directory.
+            Relative map and route-override references are resolved from
+            ``scenario_path.parent``.
+
     Returns:
         RobotSimulationConfig: Config populated with overrides and map pool.
     """

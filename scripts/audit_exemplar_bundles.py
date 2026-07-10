@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit exemplar-bundle artifact policy for issue #4920.
+"""Audit the ratified exemplar-bundle artifact policy for issues #4920 and #5005.
 
 Verifies SHA256SUMS, computes size accounting, confirms derived/compact contents,
 and checks metadata provenance for the issue_4848 and issue_4891 exemplar bundles.
@@ -54,6 +54,13 @@ REQUIRED_METADATA_FIELDS = {
 }
 
 RAW_DUMP_EXTENSIONS = {".jsonl"}
+
+# The cap applies only to tracked exemplar-bundle classes, not the whole evidence tree.
+MEBIBYTE = 1024 * 1024
+EXEMPLAR_BUDGET_BYTES = 50 * MEBIBYTE
+# Reserve one worst-case bundle of headroom before the hard cap. New derived traces at this
+# threshold belong in release assets or external artifact storage with a compact git manifest.
+OFF_TREE_MIGRATION_TRIGGER_BYTES = 45 * MEBIBYTE
 
 
 @dataclass
@@ -250,6 +257,15 @@ def format_size(n: int) -> str:
     return f"{n / (1024 * 1024):.2f} MB"
 
 
+def assess_exemplar_budget(total_bytes: int) -> tuple[str, bool]:
+    """Classify a total against the ratified cap and pre-commit migration trigger."""
+    if total_bytes > EXEMPLAR_BUDGET_BYTES:
+        return "EXCEEDS_BUDGET", True
+    if total_bytes >= OFF_TREE_MIGRATION_TRIGGER_BYTES:
+        return "OFF_TREE_MIGRATION_REQUIRED", True
+    return "WITHIN_BUDGET", False
+
+
 def _render_sha_section(classes: list[ClassAuditResult]) -> list[str]:
     """Render SHA256SUMS verification section."""
     lines: list[str] = []
@@ -413,9 +429,9 @@ def _render_metadata_section(classes: list[ClassAuditResult]) -> list[str]:
 def _render_policy_section(
     grand_total: int, total_bundles: int, evidence_total: int, classes: list[ClassAuditResult]
 ) -> list[str]:
-    """Render policy proposal section."""
+    """Render the ratified policy and current budget classification."""
     lines: list[str] = []
-    lines.append("## 5. Exemplar-Bundle Size Budget Policy Proposal")
+    lines.append("## 5. Ratified Exemplar-Bundle Size Budget Policy")
     lines.append("")
     lines.append("### Current State")
     lines.append(f"- 2 exemplar classes, {total_bundles} bundles, {format_size(grand_total)} total")
@@ -427,7 +443,18 @@ def _render_policy_section(
         lines.append(f"- Smallest bundle: {format_size(min(all_sizes))}")
     lines.append("")
 
-    lines.append("### Proposed Policy")
+    budget_status, off_tree_migration_required = assess_exemplar_budget(grand_total)
+    lines.append(
+        f"- Ratified 50 MiB exemplar-bundle cap: **{budget_status}** "
+        f"({format_size(grand_total)} / {format_size(EXEMPLAR_BUDGET_BYTES)})"
+    )
+    lines.append(
+        "- Pre-commit off-tree migration trigger (45 MiB): "
+        f"**{'REQUIRED' if off_tree_migration_required else 'not required'}**"
+    )
+    lines.append("")
+
+    lines.append("### Ratified Policy")
     lines.append("")
     lines.append(
         "1. **Per-bundle size cap**: 5 MB per bundle directory (current max ~2 MB, safe headroom)."
@@ -437,30 +464,37 @@ def _render_policy_section(
         "(3 planners x 4 selection modes is the natural maximum)."
     )
     lines.append(
-        "3. **Cumulative exemplar budget**: 50 MB for all exemplar-bundle classes "
-        f"combined (current: {format_size(grand_total)})."
+        "3. **Cumulative exemplar budget**: 50 MiB (52,428,800 bytes) for all tracked "
+        "exemplar-bundle classes combined. This does not cap the entire "
+        "`docs/context/evidence/` tree."
     )
     lines.append(
-        "4. **Derived-only content rule**: bundles must contain only derived/compact "
+        "4. **Off-tree migration trigger**: before committing a derived trace that would bring "
+        "the cumulative exemplar total to 45 MiB or more, store that trace in release assets "
+        "or external artifact storage and commit only its compact manifest/provenance pointer. "
+        "The 50 MiB cap remains a hard limit for tracked exemplar bundles."
+    )
+    lines.append(
+        "5. **Derived-only content rule**: bundles must contain only derived/compact "
         "files (CSV, JSON, Markdown). No raw JSONL episode dumps, Slurm logs, "
         "model checkpoints, or binary artifacts."
     )
     lines.append(
-        "5. **LFS threshold**: if a single file exceeds 1 MB, evaluate whether it "
+        "6. **LFS threshold**: if a single file exceeds 1 MB, evaluate whether it "
         "can be summarized or split before considering LFS. Current largest files "
-        "are trace_series.json (~1.9 MB); these are within the proposed cap."
+        "are trace_series.json (~1.9 MB); these are within the ratified cap."
     )
     lines.append(
-        "6. **SHA256SUMS mandatory**: every bundle must include a SHA256SUMS file "
+        "7. **SHA256SUMS mandatory**: every bundle must include a SHA256SUMS file "
         "covering all data files (excluding itself)."
     )
     lines.append(
-        "7. **Metadata contract**: every bundle must include metadata.json with "
+        "8. **Metadata contract**: every bundle must include metadata.json with "
         "campaign_id, campaign_job, claim_boundary (with illustrative-only guard), "
         "review_marker, and schema_version."
     )
     lines.append(
-        "8. **No restamping in this audit**: marker restamping is owned by "
+        "9. **No restamping in this audit**: marker restamping is owned by "
         "PR #4910/#4903. This policy defines future requirements only."
     )
     lines.append("")
@@ -498,7 +532,7 @@ def _render_summary(
 def generate_report(classes: list[ClassAuditResult], repo_root: Path) -> str:
     """Generate the full audit report as Markdown."""
     lines: list[str] = []
-    lines.append("# Exemplar-Bundle Artifact Policy Audit (Issue #4920)")
+    lines.append("# Exemplar-Bundle Artifact Policy Audit (Issues #4920 and #5005)")
     lines.append("")
 
     lines.extend(_render_sha_section(classes))
@@ -548,10 +582,20 @@ def main() -> None:
         classes.append(audit_class(class_path, repo_root))
 
     if args.json:
+        grand_total = sum(c.total_size_bytes for c in classes)
+        evidence_tree_total = compute_docs_context_size(repo_root)
+        budget_status, off_tree_migration_required = assess_exemplar_budget(grand_total)
         data: dict[str, Any] = {
             "classes": [],
-            "grand_total_bytes": sum(c.total_size_bytes for c in classes),
+            "grand_total_bytes": grand_total,
             "total_bundles": sum(len(c.bundles) for c in classes),
+            "evidence_tree_total_bytes": evidence_tree_total,
+            "ratified_policy": {
+                "exemplar_budget_bytes": EXEMPLAR_BUDGET_BYTES,
+                "off_tree_migration_trigger_bytes": OFF_TREE_MIGRATION_TRIGGER_BYTES,
+                "budget_status": budget_status,
+                "off_tree_migration_required": off_tree_migration_required,
+            },
         }
         for cls in classes:
             cls_data: dict[str, Any] = {

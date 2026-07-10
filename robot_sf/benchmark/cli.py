@@ -709,6 +709,7 @@ def _handle_collision_scenario_similarity(args) -> int:
             collision_threshold=args.collision_threshold,
             near_miss_threshold=args.near_miss_threshold,
             comfort_threshold=args.comfort_threshold,
+            require_trajectory_comparison=args.require_trajectory_comparison,
         )
         write_collision_scenario_similarity_report(
             report,
@@ -2187,6 +2188,14 @@ def _add_collision_scenario_similarity_subparser(
         type=float,
         default=0.2,
         help="Minimum comfort_exposure for selection.",
+    )
+    p.add_argument(
+        "--require-trajectory-comparison",
+        action="store_true",
+        help=(
+            "Fail unless at least two selected records contain raw robot and pedestrian "
+            "trajectory arrays."
+        ),
     )
     p.set_defaults(cmd="collision-scenario-similarity")
 

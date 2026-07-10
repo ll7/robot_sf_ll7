@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
 
+import pytest
+
+from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.benchmark.scenario_generation import (
     dump_generated_scenario_yaml,
     extract_critical_segment,
@@ -11,6 +15,8 @@ from robot_sf.benchmark.scenario_generation import (
     materialize_generated_scenario,
 )
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _entry() -> dict:
@@ -104,3 +110,55 @@ def test_materialized_yaml_marks_the_generated_hypothesis_as_manual_review_only(
     loaded = load_scenarios(scenario_path)
     assert loaded[0]["metadata"]["benchmark_evidence"] is False
     assert loaded[0]["metadata"]["required_manual_review"] is True
+
+
+def test_loader_fails_closed_for_an_unknown_generated_replay_field(tmp_path: Path) -> None:
+    """Generated-only runtime payloads reject undeclared semantics before simulation."""
+
+    result = materialize_generated_scenario(_entry())
+    scenario_path = tmp_path / "generated.yaml"
+    scenario_path.write_text(dump_generated_scenario_yaml(result), encoding="utf-8")
+    scenario = load_scenarios(scenario_path)[0]
+    scenario["generated_replay"]["undeclared_runtime_behavior"] = True
+
+    with pytest.raises(ValueError, match="generated_replay has unknown keys"):
+        build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+
+
+def test_loader_fails_closed_for_nonfinite_generated_replay_coordinates(tmp_path: Path) -> None:
+    """Generated replay data cannot inject non-finite positions into the map runtime."""
+
+    result = materialize_generated_scenario(_entry())
+    scenario_path = tmp_path / "generated.yaml"
+    scenario_path.write_text(dump_generated_scenario_yaml(result), encoding="utf-8")
+    scenario = load_scenarios(scenario_path)[0]
+    scenario["generated_replay"] = deepcopy(scenario["generated_replay"])
+    scenario["generated_replay"]["robot"]["start"] = [float("nan"), 5.0]
+
+    with pytest.raises(ValueError, match="must contain finite coordinates"):
+        build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+
+
+def test_materialized_yaml_executes_one_bounded_cpu_map_runner_job(tmp_path: Path) -> None:
+    """The production map runner executes a materialized generated-only scenario."""
+
+    result = materialize_generated_scenario(_entry(), max_episode_steps=3)
+    scenario_path = tmp_path / "generated.yaml"
+    scenario_path.write_text(dump_generated_scenario_yaml(result), encoding="utf-8")
+    episodes_path = tmp_path / "episodes.jsonl"
+
+    summary = run_map_batch(
+        scenario_path,
+        episodes_path,
+        REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json",
+        horizon=3,
+        dt=0.1,
+        record_forces=False,
+        algo="goal",
+        workers=1,
+        resume=False,
+    )
+
+    assert summary["successful_jobs"] == 1
+    assert summary["failed_jobs"] == 0
+    assert episodes_path.is_file()

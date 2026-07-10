@@ -6,7 +6,7 @@ import json
 import pickle
 import subprocess
 import sys
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 from robot_sf.feature_extractors.grid_socnav_extractor import GridSocNavExtractor
 from robot_sf.training.imitation_config import (
@@ -17,9 +17,6 @@ from robot_sf.training.imitation_config import (
 from robot_sf.training.ppo_policy import AsymmetricGridSocNavPolicy
 from robot_sf.training.snqi_utils import default_training_snqi_context
 from scripts.training import train_ppo
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def test_resolve_worker_mode_accepts_threaded_and_keeps_single_env_fallback() -> None:
@@ -84,6 +81,62 @@ def test_warn_frequency_episodes_deprecated_warns_once(monkeypatch) -> None:
 
     assert len(calls) == 1
     assert "ignored" in calls[0]
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_CANONICAL_V3_CONFIG = (
+    _REPO_ROOT / "configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml"
+)
+
+
+def _assert_no_frequency_episodes_warning(monkeypatch, load_callable) -> None:
+    """Fail if loading a config emits the ignored frequency_episodes deprecation warning."""
+    warnings: list[str] = []
+
+    def _record_warning(msg: str, *args) -> None:
+        warnings.append(msg.format(*args) if args else msg)
+
+    monkeypatch.setattr(train_ppo.logger, "warning", _record_warning)
+    monkeypatch.setattr(train_ppo, "_FREQUENCY_EPISODES_DEPRECATION_WARNED", False)
+
+    load_callable()
+
+    stale = [w for w in warnings if "frequency_episodes" in w and "ignored" in w]
+    assert not stale, f"canonical config emitted stale deprecation warning: {stale}"
+    assert train_ppo._FREQUENCY_EPISODES_DEPRECATION_WARNED is False
+
+
+def test_canonical_v3_ppo_config_emits_no_frequency_episodes_warning(monkeypatch) -> None:
+    """Regression for issue #5025: canonical v3 PPO config must not declare frequency_episodes."""
+    assert _CANONICAL_V3_CONFIG.is_file(), f"canonical v3 config missing: {_CANONICAL_V3_CONFIG}"
+
+    _assert_no_frequency_episodes_warning(
+        monkeypatch, lambda: train_ppo.load_expert_training_config(_CANONICAL_V3_CONFIG)
+    )
+
+
+def test_child_config_with_step_schedule_emits_no_frequency_episodes_warning(
+    monkeypatch, tmp_path
+) -> None:
+    """Regression for issue #5025: a child config using step_schedule inherits no stale warning."""
+    child = tmp_path / "child_step_schedule.yaml"
+    child.write_text(
+        "\n".join(
+            [
+                f"base_config: {_CANONICAL_V3_CONFIG}",
+                "policy_id: ppo_child_step_schedule_regression_issue_5025",
+                "total_timesteps: 1000",
+                "evaluation:",
+                "  step_schedule:",
+                "    - every_steps: 500",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    _assert_no_frequency_episodes_warning(
+        monkeypatch, lambda: train_ppo.load_expert_training_config(child)
+    )
 
 
 def test_prepare_seed_state_relaxes_determinism_for_lightweight_cnn(monkeypatch, tmp_path) -> None:

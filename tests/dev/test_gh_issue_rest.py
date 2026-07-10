@@ -223,6 +223,41 @@ def test_cli_view_json_without_comments_omits_thread(capsys: pytest.CaptureFixtu
     assert payload["state"] == "OPEN"
 
 
+def test_cli_view_json_comments_returns_thread(capsys: pytest.CaptureFixture[str]) -> None:
+    """``--json comments`` must return the thread, not an empty object (gate #5049 fix)."""
+    with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:
+        mock_api.side_effect = [
+            _proc(stdout=json.dumps(_raw_issue())),
+            _proc(stdout=json.dumps([_raw_comment(cid=7)])),
+        ]
+        rc = main(["view", "5021", "--json", "comments"])
+    captured = capsys.readouterr()
+    assert rc == 0
+    payload = json.loads(captured.out)
+    assert set(payload.keys()) == {"comments"}
+    assert len(payload["comments"]) == 1
+    assert payload["comments"][0]["id"] == 7
+
+
+def test_fetch_issue_maps_null_body_to_empty_string() -> None:
+    """A REST ``null`` body must normalize to ``""``, never the string ``"None"`` (gate #5049)."""
+    raw = _raw_issue()
+    raw["body"] = None
+    with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:
+        mock_api.return_value = _proc(stdout=json.dumps(raw))
+        payload = fetch_issue(5021)
+    assert payload["status"] == "ok"
+    assert payload["body"] == ""
+
+
+def test_fetch_issue_fails_closed_when_gh_cli_missing() -> None:
+    """A missing gh CLI must return an error payload, not raise (gate #5049 fix)."""
+    with patch("scripts.dev.gh_issue_rest.subprocess.run", side_effect=FileNotFoundError("gh")):
+        payload = fetch_issue(5021)
+    assert payload["status"] == "error"
+    assert "gh CLI not found" in payload["error"]
+
+
 def test_cli_view_fails_closed_on_rest_error(capsys: pytest.CaptureFixture[str]) -> None:
     """A REST failure should print the error to stderr and exit nonzero."""
     with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:

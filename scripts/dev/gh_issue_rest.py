@@ -84,7 +84,17 @@ def _gh_api(
     args = ["gh", "api", path]
     if params:
         args.extend(params)
-    return subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
+    try:
+        return subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
+    except FileNotFoundError:
+        # gh CLI not installed / not on PATH. Return a failed result instead of
+        # raising so callers keep the documented "returns error payload" contract.
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=127,
+            stdout="",
+            stderr="gh CLI not found on PATH; install GitHub CLI (https://cli.github.com/)",
+        )
 
 
 def _parse_json(
@@ -102,6 +112,16 @@ def _parse_json(
     except json.JSONDecodeError as exc:
         snippet = result.stdout.strip()[:200]
         return None, f"{what} returned invalid JSON: {exc}; stdout snippet: {snippet!r}"
+
+
+def _as_str(raw: Any) -> str:
+    """Coerce a JSON value to ``str``, mapping explicit ``None`` to ``""``.
+
+    Guards against ``str(None) -> "None"`` when a REST field is present but
+    ``null`` (e.g. an issue with an empty body), while preserving valid falsy
+    values such as ``0`` or ``""``.
+    """
+    return "" if raw is None else str(raw)
 
 
 def _normalize_state(raw: Any) -> str:
@@ -124,16 +144,16 @@ def _normalize_issue(raw: dict[str, Any]) -> dict[str, Any]:
     user = raw.get("user") or {}
     return {
         "number": int(raw.get("number", 0)),
-        "title": str(raw.get("title", "")),
-        "body": str(raw.get("body", "") or ""),
+        "title": _as_str(raw.get("title")),
+        "body": _as_str(raw.get("body")),
         "state": _normalize_state(raw.get("state", "")),
-        "url": str(raw.get("html_url", raw.get("url", ""))),
-        "user": str(user.get("login", "") if isinstance(user, dict) else ""),
-        "author_association": str(raw.get("author_association", "")),
+        "url": _as_str(raw.get("html_url", raw.get("url", ""))),
+        "user": _as_str(user.get("login") if isinstance(user, dict) else ""),
+        "author_association": _as_str(raw.get("author_association")),
         "labels": labels,
         "assignees": assignees,
-        "created_at": str(raw.get("created_at", "")),
-        "updated_at": str(raw.get("updated_at", "")),
+        "created_at": _as_str(raw.get("created_at")),
+        "updated_at": _as_str(raw.get("updated_at")),
     }
 
 
@@ -142,12 +162,12 @@ def _normalize_comment(raw: dict[str, Any]) -> dict[str, Any]:
     user = raw.get("user") or {}
     return {
         "id": int(raw.get("id", 0)),
-        "user": str(user.get("login", "") if isinstance(user, dict) else ""),
-        "author_association": str(raw.get("author_association", "")),
-        "created_at": str(raw.get("created_at", "")),
-        "updated_at": str(raw.get("updated_at", "")),
-        "url": str(raw.get("html_url", raw.get("url", ""))),
-        "body": str(raw.get("body", "") or ""),
+        "user": _as_str(user.get("login") if isinstance(user, dict) else ""),
+        "author_association": _as_str(raw.get("author_association")),
+        "created_at": _as_str(raw.get("created_at")),
+        "updated_at": _as_str(raw.get("updated_at")),
+        "url": _as_str(raw.get("html_url", raw.get("url", ""))),
+        "body": _as_str(raw.get("body")),
     }
 
 
@@ -305,7 +325,10 @@ def _cmd_view(args: argparse.Namespace) -> int:
     if payload.get("status") != "ok":
         print(payload.get("error", "unknown error"), file=sys.stderr)
         return 1
-    if not args.comments:
+    # Comments are opt-in (mirroring `gh issue view`, which omits them without
+    # --comments). Keep them when --comments is passed, or when --json explicitly
+    # requests the "comments" field (so `--json comments` returns the thread, not {}).
+    if not args.comments and "comments" not in args.fields:
         payload.pop("comments", None)
     if args.plain:
         sys.stdout.write(render_issue_plain(payload))
@@ -341,7 +364,7 @@ def _build_parser() -> argparse.ArgumentParser:
     view.add_argument(
         "--comments",
         action="store_true",
-        help="Include the comments thread (default unless --json restricts fields).",
+        help="Include the comments thread (also included when --json requests 'comments').",
     )
     view.add_argument(
         "--json",

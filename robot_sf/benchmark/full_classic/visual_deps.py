@@ -55,7 +55,7 @@ def simulation_view_ready() -> bool:  # T030
         try:
             logger = importlib.import_module("loguru").logger
             logger.debug("simulation_view_ready probe failed: %s", exc)
-        except (ImportError, ModuleNotFoundError):
+        except ImportError:
             # If logger import fails, silently ignore to remain graceful
             pass
         return False

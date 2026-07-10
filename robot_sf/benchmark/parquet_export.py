@@ -12,6 +12,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.errors import EpisodeRecordInputError
+
 try:  # Optional analytics dependency; validated when export is invoked.
     import pyarrow as pa
     import pyarrow.parquet as pq
@@ -411,7 +413,12 @@ def _read_jsonl_files(paths: Sequence[Path]) -> list[dict[str, Any]]:
                 try:
                     record = json.loads(text)
                 except json.JSONDecodeError as exc:
-                    raise ValueError(f"{path}:{line_number} is not valid JSON: {exc.msg}") from exc
+                    # Surface the canonical typed input error (a ValueError subclass, so
+                    # backward-compatible) so the export-parquet CLI boundary reports it as a
+                    # documented non-zero exit instead of a raw traceback. See issue #4988.
+                    raise EpisodeRecordInputError(
+                        f"{path}:{line_number} is not valid JSON: {exc.msg}"
+                    ) from exc
                 records.append(record)
     return records
 

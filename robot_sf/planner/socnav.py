@@ -23,24 +23,26 @@ from loguru import logger
 from robot_sf.common.forecast_variants import FORECAST_VARIANT_CHOICES
 from robot_sf.common.math_utils import wrap_angle_pi, wrap_angle_pi_closed
 
+# Convention: optional-import guards catch ImportError only (ModuleNotFoundError is a
+# subclass); bind the exception as `exc` for consistency across the codebase.
 try:  # pragma: no cover - optional dependency
     import torch
-except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+except ImportError:  # pragma: no cover - optional dependency
     torch = None  # type: ignore[assignment]
 
 try:  # pragma: no cover - optional dependency
     import tensorflow.compat.v1 as tf  # type: ignore
-except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+except ImportError:  # pragma: no cover - optional dependency
     tf = None  # type: ignore[assignment]
 
 try:  # pragma: no cover - optional dependency
     import rvo2  # type: ignore
-except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+except ImportError:  # pragma: no cover - optional dependency
     rvo2 = None  # type: ignore[assignment]
 
 try:  # pragma: no cover - optional dependency
     from pysocialforce import forces as sf_forces  # type: ignore
-except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+except ImportError:  # pragma: no cover - optional dependency
     sf_forces = None  # type: ignore[assignment]
 
 from robot_sf.models import resolve_model_path
@@ -64,7 +66,7 @@ try:  # pragma: no cover - exercised in minimal environments without torch
         PredictiveTrajectoryModel,
         load_predictive_checkpoint,
     )
-except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+except ImportError:  # pragma: no cover - optional dependency
     PredictiveTrajectoryModel = Any  # type: ignore[misc,assignment]
     load_predictive_checkpoint = None  # type: ignore[assignment]
 from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin
@@ -3464,7 +3466,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             raise RuntimeError(
                 f"PredictionPlannerAdapter: forecast predictor initialization failed for {variant!r}"
             ) from exc
-        except (ImportError, ModuleNotFoundError) as exc:
+        except ImportError as exc:
             logger.warning(
                 f"PredictionPlannerAdapter: forecast predictor unavailable for {variant!r}: {exc}"
             )

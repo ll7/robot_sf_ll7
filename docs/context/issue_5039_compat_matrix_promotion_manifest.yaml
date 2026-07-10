@@ -1,0 +1,60 @@
+schema_version: compat_matrix_promotion_manifest.v1
+issue: 5039
+title: "ci: promote proven compatibility matrix and add coverage floor"
+claim_boundary: >-
+  Promotion-readiness bookkeeping only. This manifest records whether the advisory
+  compat-matrix CI job has accumulated enough green hosted-run evidence to be promoted to a
+  required gate. It asserts no benchmark, metric, or paper claim and does not by itself change
+  any CI gate. Promotion is a separate, evidence-carrying follow-up PR that must pass
+  scripts/ci/check_compat_matrix_promotion_readiness.py --require-ready.
+
+# --- Objective promotion gate the eventual promotion PR must satisfy ---
+promotion_gate:
+  # Advisory job introduced by PR #5037; canonical source of the required cells.
+  advisory_job: compat-matrix
+  advisory_pr: 5037
+  # Every cell must accumulate green evidence; a missing cell fails closed.
+  required_cells:
+    - {os: ubuntu-latest, python: "3.11"}
+    - {os: ubuntu-latest, python: "3.13"}
+    - {os: macos-latest, python: "3.11"}
+    - {os: macos-latest, python: "3.13"}
+  # Minimum count of green hosted runs per cell before promotion is allowed.
+  min_green_runs_per_cell: 3
+  # Runtime budget ceiling (minutes) per cell. Matches the advisory job's
+  # timeout-minutes in PR #5037; a run over budget does not count as green evidence.
+  runtime_budget_minutes: 30
+
+# --- Recorded hosted-run evidence (empty => blocked / fail-closed) ---
+# Populate one entry per eligible green hosted run from the advisory matrix.
+# Each entry: {os, python, run_url, conclusion: success|failure, duration_minutes, sha}
+recorded_runs: []
+
+# --- Coverage floor decision (issue acceptance criterion) ---
+coverage_floor:
+  status: split_recommended
+  follow_up_issue: 5071
+  rationale: >-
+    An absolute coverage floor is an independent CI policy decision -- which floor
+    percentage, measured over which packages, blocking vs advisory -- orthogonal to matrix
+    promotion. The issue permits splitting it into a separately linked issue when it needs
+    independent policy design; it does. The existing baseline-relative advisory comparison
+    (scripts/coverage/compare_coverage.py) remains in force meanwhile, so no coverage
+    regression signal is lost by deferring the absolute floor.
+
+# --- Durable state ledger / issue-state surface for #5039 ---
+state:
+  status: blocked
+  blockers_remaining:
+    - "No eligible hosted green-run evidence is recorded for any of the four required cells."
+  next_empirical_action: >-
+    Collect >= 3 green hosted runs per required cell within the 30-minute budget, populate
+    recorded_runs above, then run
+    scripts/ci/check_compat_matrix_promotion_readiness.py --require-ready and open the promotion
+    PR that adds compat-matrix to the required aggregate CI gate. The separately tracked absolute
+    coverage-floor policy is issue #5071.
+  forbidden_actions_confirmed:
+    compute_submit: false
+    merge: false
+    release: false
+    delete: false

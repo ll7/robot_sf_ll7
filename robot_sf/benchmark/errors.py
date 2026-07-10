@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from robot_sf.errors import RobotSfError
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
 
-class AggregationMetadataError(ValueError):
+class AggregationMetadataError(RobotSfError, ValueError):
     """Raised when algorithm metadata required for aggregation is missing or invalid."""
 
     def __init__(
@@ -44,7 +46,7 @@ class AggregationMetadataError(ValueError):
         return payload
 
 
-class EpisodeRecordInputError(ValueError):
+class EpisodeRecordInputError(RobotSfError, ValueError):
     """Raised when benchmark episode JSONL input is missing or malformed."""
 
 

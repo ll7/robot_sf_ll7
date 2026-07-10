@@ -16,7 +16,7 @@
       "note": "Blessed broad catch: compiled-backend entry point may raise AttributeError when a native wheel component is absent.",
       "samples": [
         "robot_sf/baselines/sicnav.py:376",
-        "robot_sf/planner/socnav.py:777"
+        "robot_sf/planner/socnav.py:779"
       ]
     },
     "AttributeError+ImportError+IndexError+KeyError+OSError+RuntimeError+TypeError+ValueError": {
@@ -46,7 +46,7 @@
       "blessed": true,
       "note": "Blessed broad catch: defensive best-effort boundary. Very broad; do not extend further without strong justification.",
       "samples": [
-        "robot_sf/planner/socnav.py:642"
+        "robot_sf/planner/socnav.py:644"
       ]
     },
     "AttributeError+ImportError+OSError": {
@@ -90,13 +90,14 @@
       ]
     },
     "ImportError": {
-      "count_ceiling": 57,
-      "has_as_count": 11,
-      "pragma_no_cover_count": 17,
+      "count_ceiling": 71,
+      "has_as_count": 14,
+      "pragma_no_cover_count": 24,
       "blessed": true,
       "note": "Pure optional-import. Prefer robot_sf.common.optional_import.try_import for new plain cases.",
       "samples": [
         "robot_sf/adversarial/certification.py:99",
+        "robot_sf/adversarial/samplers.py:230",
         "robot_sf/baselines/dr_mpc.py:109",
         "robot_sf/baselines/dr_mpc.py:91",
         "robot_sf/baselines/drl_vo.py:24",
@@ -105,6 +106,7 @@
         "robot_sf/baselines/sicnav.py:420",
         "robot_sf/baselines/sicnav.py:298",
         "robot_sf/benchmark/cli.py:191",
+        "robot_sf/benchmark/distributions.py:131",
         "robot_sf/benchmark/episode_replay_figure.py:37",
         "robot_sf/benchmark/episode_replay_figure.py:50",
         "robot_sf/benchmark/episode_replay_figure.py:57",
@@ -125,26 +127,38 @@
         "robot_sf/benchmark/full_classic/videos.py:34",
         "robot_sf/benchmark/full_classic/visual_deps.py:79",
         "robot_sf/benchmark/full_classic/visual_deps.py:93",
+        "robot_sf/benchmark/full_classic/visual_deps.py:58",
         "robot_sf/benchmark/full_classic/visuals.py:49",
         "robot_sf/benchmark/helper_catalog.py:73",
         "robot_sf/benchmark/live_forecast_replay_gate.py:953",
         "robot_sf/benchmark/plots.py:28",
+        "robot_sf/benchmark/runner.py:41",
         "robot_sf/benchmark/runner.py:47",
         "robot_sf/benchmark/scenario_generator.py:48",
         "robot_sf/benchmark/scenario_schema.py:25",
         "robot_sf/benchmark/schema_validator.py:20",
+        "robot_sf/benchmark/visualization.py:1189",
         "robot_sf/common/matplotlib_utils.py:62",
         "robot_sf/common/optional_import.py:80",
         "robot_sf/common/seed.py:47",
         "robot_sf/feature_extractors/mamba_extractor.py:98",
         "robot_sf/gym_env/env_config.py:302",
+        "robot_sf/gym_env/environment_factory.py:57",
+        "robot_sf/gym_env/environment_factory.py:175",
         "robot_sf/maps/osm_zones_editor.py:72",
+        "robot_sf/models/registry.py:19",
         "robot_sf/nav/occupancy_grid.py:107",
         "robot_sf/planner/classic_global_planner.py:47",
         "robot_sf/planner/diffusion_policy.py:20",
         "robot_sf/planner/ompl_geometric_adapter.py:193",
         "robot_sf/planner/ompl_smoke.py:42",
         "robot_sf/planner/ompl_smoke.py:252",
+        "robot_sf/planner/socnav.py:30",
+        "robot_sf/planner/socnav.py:35",
+        "robot_sf/planner/socnav.py:40",
+        "robot_sf/planner/socnav.py:45",
+        "robot_sf/planner/socnav.py:69",
+        "robot_sf/planner/socnav.py:3469",
         "robot_sf/planner/theta_star_v2.py:33",
         "robot_sf/render/sim_view.py:34",
         "robot_sf/sim/registry.py:145",
@@ -153,29 +167,6 @@
         "robot_sf/telemetry/tensorboard_adapter.py:23",
         "robot_sf/telemetry/visualization.py:100",
         "robot_sf/training/diffusion_policy.py:33"
-      ]
-    },
-    "ImportError+ModuleNotFoundError": {
-      "count_ceiling": 14,
-      "has_as_count": 3,
-      "pragma_no_cover_count": 7,
-      "blessed": true,
-      "note": "Optional-import covering both ImportError spellings; acceptable. Prefer try_import for new plain cases.",
-      "samples": [
-        "robot_sf/adversarial/samplers.py:230",
-        "robot_sf/benchmark/distributions.py:131",
-        "robot_sf/benchmark/full_classic/visual_deps.py:58",
-        "robot_sf/benchmark/runner.py:41",
-        "robot_sf/benchmark/visualization.py:1189",
-        "robot_sf/gym_env/environment_factory.py:57",
-        "robot_sf/gym_env/environment_factory.py:175",
-        "robot_sf/models/registry.py:19",
-        "robot_sf/planner/socnav.py:28",
-        "robot_sf/planner/socnav.py:33",
-        "robot_sf/planner/socnav.py:38",
-        "robot_sf/planner/socnav.py:43",
-        "robot_sf/planner/socnav.py:67",
-        "robot_sf/planner/socnav.py:3467"
       ]
     },
     "ImportError+OSError": {

@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **issue #4988 benchmark CLI surfaces typed errors (not raw tracebacks) for malformed input.**
+  `robot_sf/benchmark/parquet_export.py` now raises the canonical `EpisodeRecordInputError`
+  (a `ValueError` subclass, so backward-compatible) instead of a bare `ValueError` when a JSONL line
+  is unparseable. This lands inside the `export-parquet` CLI boundary's typed `_CLI_INPUT_ERRORS`
+  handler, so a corrupt input file now exits `2` with a logged message rather than escaping
+  `cli_main` as a raw traceback. A new parametrized CLI-boundary contract test
+  (`tests/benchmark/test_cli_typed_error_contract.py`) ratchets the missing- and malformed-input
+  fail-closed behavior across 20 input-consuming subcommands. Claim boundary: error-surface/exit-code
+  behavior only — no success-path output or benchmark metric value changes.
 * **issue #5031 docs-only PR bodies can now select "domain approval not required".** The PR
   follow-up checker (`scripts/dev/check_pr_followups.py::analyze_domain_approval`) previously forced
   `domain_approval_required` on any body that merely *mentioned* an evidence concept in prose (e.g. a
@@ -39,6 +48,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5039 compat-matrix promotion readiness gate.** New
+  `scripts/ci/check_compat_matrix_promotion_readiness.py` turns "is the advisory
+  `compat-matrix` job proven enough to promote to a required CI gate?" into a machine-checkable,
+  fail-closed decision. It reads
+  `docs/context/issue_5039_compat_matrix_promotion_manifest.yaml` (recorded hosted-run evidence
+  plus the objective gate: all four `ubuntu`/`macos` × Python 3.11/3.13 cells green ≥3 times each
+  within the 30-minute budget) and reports `ready`/`blocked`; `--require-ready` exits non-zero
+  until the evidence exists. Current state is `blocked`: the advisory matrix (PR #5037) is now on
+  `main`, but no eligible hosted evidence has been recorded in the manifest — so promotion is
+  deferred to an evidence-carrying follow-up. The absolute coverage floor is tracked separately in
+  issue #5071. Covered by `tests/test_compat_matrix_promotion_readiness.py`.
+  Claim boundary: readiness bookkeeping only; no CI gate is changed and no benchmark/paper claim
+  is asserted.
+* **issue #5034 control-action-latency sweep fail-closed preflight + blocker packet.** New
+  `robot_sf/benchmark/control_action_latency_preflight.py` (`check_control_action_latency_axis`) and
+  CLI `scripts/benchmark/preflight_control_action_latency_sweep.py` guard the issue-#5034 sweep: they
+  fail closed unless the fidelity-sensitivity study config carries a `control_action_latency` axis
+  whose variants cover the required action-latency steps `[0, 1, 3]` (the 0/100/300 ms-equivalent
+  delays). Its durable packet records the historical blocked result before PR #5026 landed the axis;
+  the same preflight now returns `ready` on `main`. Durable fail-closed decision packet at
+  `docs/context/evidence/issue_5034_control_action_latency_sweep_blocked_2026-07-10/`. Claim boundary:
+  launch/readiness preflight only — not benchmark evidence, not paper-facing; no campaign run and no
+  Slurm/GPU submission were performed.
 * **issue #5048 gh list truncation guard extended to the remaining bounded callers.** The shared
   `scripts/dev/_gh_pagination.py` guard (from #4991 / PR #5040) is now applied to the six remaining
   bounded `gh ... list --limit N` call sites so a result at the cap is never silently mistaken for a

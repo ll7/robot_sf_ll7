@@ -128,7 +128,7 @@ def _maybe_kde(ax, data: np.ndarray, color: str) -> None:
             alpha=0.8,
             linewidth=1.0,
         )
-    except (ImportError, ModuleNotFoundError):
+    except ImportError:
         # scipy optional; silently skip KDE if unavailable
         pass
     except (TypeError, ValueError):

@@ -92,6 +92,9 @@ def test_expert_training_dry_run(tmp_path, monkeypatch):
     assert any(str(note).startswith("snqi_formula=") for note in notes)
     assert any(str(note).startswith("snqi_weights_source=") for note in notes)
     assert any(str(note).startswith("snqi_baseline_source=") for note in notes)
+    # Issue #4967: artifacts must be self-describing with their resolved reward profile.
+    assert any(str(note).startswith("reward_profile=route_completion_v2") for note in notes)
+    assert any(str(note).startswith("reward_weights=") for note in notes)
 
     log_dir = common.get_imitation_report_dir()
     assert any(log_dir.glob("episodes/*.jsonl"))

@@ -15,11 +15,13 @@ from packaging.requirements import Requirement
 ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+CI_SETUP_ACTION = ROOT / ".github" / "actions" / "setup-ci-python" / "action.yml"
 WHEEL_INSTALL_SMOKE = ROOT / "scripts" / "validation" / "wheel_install_smoke.sh"
 PYPROJECT = ROOT / "pyproject.toml"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
     "fast-feedback": 45,
+    "compat-matrix": 30,
     "smoke-artifacts": 30,
     "wheel-smoke-install": 20,
     "examples-smoke": 30,
@@ -193,6 +195,52 @@ def test_ci_workflow_splits_fast_feedback_from_smoke_artifacts() -> None:
     assert _workflow_job_phases("fast-feedback") == {"lint", "typecheck", "test"}
     assert _workflow_job_phases("smoke-artifacts") == {"smoke", "artifact-policy"}
     assert "needs" not in workflow["jobs"]["fast-feedback"]
+
+
+def test_ci_workflow_adds_a_nonblocking_core_compatibility_matrix() -> None:
+    """Exercise declared Python support on Linux and macOS without gating CI yet."""
+    workflow = yaml.safe_load(_workflow_text())
+    compat_matrix = workflow["jobs"]["compat-matrix"]
+    setup_step = next(
+        step
+        for step in compat_matrix["steps"]
+        if step.get("uses") == "./.github/actions/setup-ci-python"
+    )
+    test_steps = [step.get("run", "") for step in compat_matrix["steps"]]
+
+    assert compat_matrix["continue-on-error"] is True
+    assert compat_matrix["strategy"]["fail-fast"] is False
+    assert compat_matrix["strategy"]["matrix"] == {
+        "os": ["ubuntu-latest", "macos-latest"],
+        "python": ["3.11", "3.13"],
+    }
+    assert setup_step["with"] == {
+        "python-version": "${{ matrix.python }}",
+        "sync-args": "--frozen",
+    }
+    assert any(
+        "pytest tests/common tests/contract tests/factories tests/gym_env tests/maps" in step
+        and "tests/nav tests/ped_npc tests/render tests/scenarios" in step
+        and "tests/sensor tests/sim tests/unit" in step
+        and '-q -m "not slow"' in step
+        for step in test_steps
+    )
+    assert "compat-matrix" not in workflow["jobs"]["ci"]["needs"]
+
+
+def test_ci_setup_action_supports_core_matrix_dependencies_on_macos() -> None:
+    """Keep the shared setup action usable by the backend-light macOS matrix."""
+    action = yaml.safe_load(CI_SETUP_ACTION.read_text(encoding="utf-8"))
+    system_packages_step = next(
+        step for step in action["runs"]["steps"] if step["name"] == "System packages for headless"
+    )
+    sync_step = next(
+        step for step in action["runs"]["steps"] if step["name"].startswith("Sync dependencies")
+    )
+
+    assert action["inputs"]["sync-args"]["default"] == "--all-extras --frozen"
+    assert system_packages_step["if"] == "runner.os == 'Linux'"
+    assert "${{ inputs.sync-args }}" in sync_step["run"]
 
 
 def test_ci_workflow_examples_smoke_is_independent_and_required_by_aggregate() -> None:

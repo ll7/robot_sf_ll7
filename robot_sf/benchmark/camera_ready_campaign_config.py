@@ -14,6 +14,7 @@ from robot_sf.benchmark.camera_ready import (  # noqa: F401
     ScenarioCandidateSelection,
     SeedPolicy,
     SnqiContractConfig,
+    TuningSpec,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "ScenarioCandidateSelection",
     "SeedPolicy",
     "SnqiContractConfig",
+    "TuningSpec",
 ]

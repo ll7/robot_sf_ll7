@@ -18,13 +18,17 @@ import yaml
 
 from robot_sf.benchmark.camera_ready._config_types import (
     _AMV_DIMENSIONS,
+    _TUNING_EFFORT_ENFORCEMENT,
+    _TUNING_SOURCES,
     DEFAULT_SEED_SETS_PATH,
+    TUNING_SOURCE_DECLARED,
     AmvProfileConfig,
     CampaignConfig,
     PlannerSpec,
     ScenarioCandidateSelection,
     SeedPolicy,
     SnqiContractConfig,
+    TuningSpec,
 )
 from robot_sf.benchmark.camera_ready._util import _repo_relative
 from robot_sf.benchmark.latency_stress import (
@@ -79,6 +83,131 @@ def _normalize_kinematics_matrix(raw: Any) -> tuple[str, ...]:
         if text:
             normalized.append(text)
     return tuple(normalized)
+
+
+def _tuning_str_tuple(planner_key: str, field_name: str, value: Any) -> tuple[str, ...]:
+    """Coerce a tuning string-list field into a tuple of non-empty strings.
+
+    Returns:
+        Tuple of non-empty stripped string entries; empty when ``value`` is ``None``.
+    """
+    if value is None:
+        return ()
+    if isinstance(value, str | int | float):
+        text = str(value).strip()
+        return (text,) if text else ()
+    if not isinstance(value, list | tuple):
+        raise TypeError(f"Planner '{planner_key}' tuning.{field_name} must be a list of strings")
+    entries: list[str] = []
+    for item in value:
+        if item is None:
+            raise TypeError(f"Planner '{planner_key}' tuning.{field_name} entries must be strings")
+        text = str(item).strip()
+        if text:
+            entries.append(text)
+    return tuple(entries)
+
+
+def _tuning_eval_disjoint(planner_key: str, value: Any) -> bool | None:
+    """Parse the eval-set disjointness flag, requiring a boolean when provided.
+
+    Returns:
+        The disjointness flag, or ``None`` when not provided.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    raise TypeError(
+        f"Planner '{planner_key}' tuning.eval_set_disjoint must be a boolean when provided"
+    )
+
+
+def _tuning_budget_runs(planner_key: str, value: Any) -> int | None:
+    """Parse the approximate run-count budget as a non-negative integer.
+
+    Returns:
+        The non-negative run-count budget, or ``None`` when not provided.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(
+            f"Planner '{planner_key}' tuning.budget_runs must be an integer when provided"
+        )
+    if value < 0:
+        raise ValueError(f"Planner '{planner_key}' tuning.budget_runs must be non-negative")
+    return value
+
+
+def _tuning_budget_hours(planner_key: str, value: Any) -> float | None:
+    """Parse the approximate hours budget as a non-negative float.
+
+    Returns:
+        The non-negative hours budget, or ``None`` when not provided.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool | str):
+        raise TypeError(
+            f"Planner '{planner_key}' tuning.budget_hours must be a number when provided"
+        )
+    try:
+        hours = float(value)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(
+            f"Planner '{planner_key}' tuning.budget_hours must be a number when provided"
+        ) from exc
+    if hours < 0:
+        raise ValueError(f"Planner '{planner_key}' tuning.budget_hours must be non-negative")
+    return hours
+
+
+def _tuning_optional_str(value: Any) -> str | None:
+    """Coerce an optional provenance string field, treating blank as None.
+
+    Returns:
+        The stripped string, or ``None`` when blank or not provided.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _parse_tuning_spec(raw: Any, *, planner_key: str) -> TuningSpec | None:
+    """Parse an optional per-arm ``tuning`` block (issue #5143).
+
+    Returns ``None`` when no block is declared so the manifest writer can synthesize a best-effort
+    backfill-pending entry. Validates field types and the allowed ``source`` vocabulary.
+
+    Returns:
+        Parsed ``TuningSpec`` or ``None`` when no tuning block was declared.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(f"Planner '{planner_key}' tuning block must be a mapping when provided")
+
+    source = str(raw.get("source", TUNING_SOURCE_DECLARED)).strip().lower()
+    if source not in _TUNING_SOURCES:
+        known = ", ".join(_TUNING_SOURCES)
+        raise ValueError(f"Planner '{planner_key}' tuning.source '{source}' is not one of: {known}")
+
+    return TuningSpec(
+        parameters_touched=_tuning_str_tuple(
+            planner_key, "parameters_touched", raw.get("parameters_touched")
+        ),
+        tuning_scenario_ids=_tuning_str_tuple(
+            planner_key, "tuning_scenario_ids", raw.get("tuning_scenario_ids")
+        ),
+        eval_set_disjoint=_tuning_eval_disjoint(planner_key, raw.get("eval_set_disjoint")),
+        budget_runs=_tuning_budget_runs(planner_key, raw.get("budget_runs")),
+        budget_hours=_tuning_budget_hours(planner_key, raw.get("budget_hours")),
+        tuned_by=_tuning_optional_str(raw.get("tuned_by")),
+        tuned_at_utc=_tuning_optional_str(raw.get("tuned_at_utc")),
+        source=source,
+    )
 
 
 def _optional_synthetic_actuation_profile_mapping(
@@ -556,6 +685,25 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
         raise ValueError(
             f"Unsupported snqi_contract.enforcement '{cfg.snqi_contract.enforcement}'. {known}"
         )
+    # Per-arm tuning-effort enforcement (issue #5143). Validate the vocabulary; the fail-closed
+    # (error) gate below requires every enabled arm to declare a tuning block, mirroring #4970's
+    # checkpoint-provenance fail-closed spirit.
+    if cfg.tuning_effort_enforcement not in _TUNING_EFFORT_ENFORCEMENT:
+        known = ", ".join(_TUNING_EFFORT_ENFORCEMENT)
+        raise ValueError(
+            f"Unsupported tuning_effort_enforcement '{cfg.tuning_effort_enforcement}'. "
+            f"Expected one of: {known}"
+        )
+    if cfg.tuning_effort_enforcement == "error":
+        missing = [
+            planner.key for planner in cfg.planners if planner.enabled and planner.tuning is None
+        ]
+        if missing:
+            names = ", ".join(sorted(missing))
+            raise ValueError(
+                "tuning_effort_enforcement='error' requires a 'tuning' block for every enabled "
+                f"arm; missing tuning block for: {names}"
+            )
     threshold_values = {
         "rank_alignment_warn_threshold": cfg.snqi_contract.rank_alignment_warn_threshold,
         "rank_alignment_fail_threshold": cfg.snqi_contract.rank_alignment_fail_threshold,
@@ -712,6 +860,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
                 enabled=bool(entry.get("enabled", True)),
                 planner_group=planner_group,
                 planner_group_explicit=planner_group_explicit,
+                tuning=_parse_tuning_spec(entry.get("tuning"), planner_key=key),
             ),
         )
 
@@ -973,6 +1122,9 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
         observation_noise=_resolve_observation_noise(
             payload.get("observation_noise"),
             base_dir=config_path.parent,
+        ),
+        tuning_effort_enforcement=(
+            str(payload.get("tuning_effort_enforcement", "off")).strip().lower() or "off"
         ),
     )
     _validate_campaign_config(cfg)

@@ -18,6 +18,7 @@ from robot_sf.benchmark.camera_ready._config_types import (
     ScenarioCandidateSelection,
     SeedPolicy,
     SnqiContractConfig,
+    TuningSpec,
 )
 
 __all__ = [
@@ -28,5 +29,6 @@ __all__ = [
     "ScenarioCandidateSelection",
     "SeedPolicy",
     "SnqiContractConfig",
+    "TuningSpec",
     "load_campaign_config",
 ]

@@ -56,13 +56,19 @@ from robot_sf.benchmark.camera_ready._config import (  # noqa: F401 - re-exporte
 )
 from robot_sf.benchmark.camera_ready._config_types import (  # noqa: F401 - re-exported for back-compat
     _AMV_DIMENSIONS,
+    _TUNING_EFFORT_ENFORCEMENT,
+    _TUNING_SOURCES,
     DEFAULT_SEED_SETS_PATH,
+    TUNING_SOURCE_BACKFILLED,
+    TUNING_SOURCE_DECLARED,
+    TUNING_SOURCE_UNKNOWN,
     AmvProfileConfig,
     CampaignConfig,
     PlannerSpec,
     ScenarioCandidateSelection,
     SeedPolicy,
     SnqiContractConfig,
+    TuningSpec,
 )
 from robot_sf.benchmark.camera_ready._preflight import (  # noqa: F401 - re-exported back-compat
     _build_preflight_preview_payload,
@@ -272,6 +278,7 @@ __all__ = [
     "RouteClearanceError",
     "SeedPolicy",
     "SnqiContractConfig",
+    "TuningSpec",
     "build_campaign_credibility_scorecard",
     "load_campaign_config",
     "prepare_campaign_preflight",

@@ -44,7 +44,7 @@ top-level sections:
 | `schema_version` | Stable string such as `research-campaign-manifest.v0.1`. |
 | `campaign` | Campaign id, parent issue, purpose, evidence tier, and claim boundary. |
 | `scenario_suite` | Scenario matrix/config path, optional scenario ids or families, and suite hash policy. |
-| `planners` | Planner rows, adapter mode, config path, and expected availability. |
+| `planners` | Planner rows, adapter mode, config path, expected availability, and per-arm tuning-effort block (see [Per-arm tuning-effort block](#per-arm-tuning-effort-block)). |
 | `seed_policy` | Seed mode, seed list or seed set path, and repeat policy. |
 | `metrics` | Metric ids, summary fields, and any baseline or weight artifact pointers. |
 | `row_status_policy` | Allowed values and how fallback/degraded/not-available rows are reported. |
@@ -155,3 +155,45 @@ uv run python scripts/benchmark/build_scenario_denominator_manifest.py \
 The table contract is one row per `(config_name, family, planner)` with scenario count, cell count,
 unique seed count, denominator episodes, kinematics count, kinematics-expanded denominator
 episodes, and densities. Markdown tables may also be checked when they expose the same column names.
+
+## Per-arm tuning-effort block
+
+Each planner arm (a row in the campaign `planners` list) carries a `tuning` block in the camera-ready
+`campaign_manifest.json` so that cross-arm tuning asymmetry (e.g. classical vs learned vs MPC arms) is
+visible in the artifacts instead of silent. This directly counters the under-tuning objection:
+a reviewer can see which parameters were tuned for each arm, against which scenarios, with what
+approximate budget, and whether the tuning set is disjoint from the evaluation set.
+
+Declare a block per arm in the campaign config YAML:
+
+```yaml
+planners:
+  - key: learned_a
+    algo: ppo
+    planner_group: core
+    tuning:
+      parameters_touched: [lr, clip_range]
+      tuning_scenario_ids: [tune_a, tune_b]
+      eval_set_disjoint: true
+      budget_runs: 40
+      budget_hours: 3.0
+      tuned_by: j.doe
+      tuned_at_utc: '2026-07-10T00:00:00Z'
+      source: declared
+```
+
+`source` is one of `declared` (author-recorded), `backfilled` (best-effort reconstruction from
+config history), or `unknown`. When an arm declares no block, the manifest synthesizes a
+`backfill_pending` entry with empty fields so the asymmetry is still recorded rather than hidden.
+
+A top-level `tuning_effort_summary` records how many enabled arms are declared vs backfill-pending
+and which arms are still missing a tuning block.
+
+Fail-closed enforcement (mirrors #4970's checkpoint-provenance spirit): set
+`tuning_effort_enforcement: error` on the campaign config to abort preflight when any enabled arm
+lacks a declared `tuning` block. The default is `off` (best-effort, backwards compatible); `warn`
+records missing blocks in the manifest summary without failing. Use `error` for campaigns whose
+cross-arm comparisons must be protected against the under-tuning objection.
+
+This is auditability metadata, not benchmark evidence by itself: it records tuning effort so the
+asymmetry is reviewable; it does not change any measured outcome.

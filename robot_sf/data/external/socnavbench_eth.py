@@ -166,6 +166,6 @@ def load_shape_contract(root: Path | str | None = None) -> SocNavBenchEthShapeCo
 
     return SocNavBenchEthShapeContract(
         resolution=resolution_float,
-        traversible_shape=tuple(int(axis) for axis in traversible.shape),
+        traversible_shape=(int(traversible.shape[0]), int(traversible.shape[1])),
         traversible_dtype=str(traversible.dtype),
     )

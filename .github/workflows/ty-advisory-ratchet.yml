@@ -1,0 +1,67 @@
+name: ty advisory ratchet
+
+# Non-gating downward ratchet over the ty advisory type-check baseline (issue #5004).
+# Re-runs `ty check`, diffs the per-module general-bucket counts against the committed
+# baseline at scripts/validation/ty_advisory_baseline.json, and reports net-new findings
+# (regressions in clean modules, or any per-module increase) as a non-blocking failure.
+# Promote to gating by removing `continue-on-error: true` once the ratchet has settled.
+#
+# Scope boundary: the optional-dependency import-resolution subset of ty findings
+# (check_name `unresolved-import`, "Cannot resolve imported module ...") is recorded
+# for visibility but EXCLUDED from the gate; it is owned by #4990/#4995. See the
+# baseline `exclusion` block and scripts/dev/ty_advisory_ratchet.py.
+
+on:
+  pull_request:
+    paths:
+      - "**/*.py"
+      - "pyproject.toml"
+      - "scripts/dev/ty_advisory_ratchet.py"
+      - "scripts/validation/ty_advisory_baseline.json"
+      - "tests/dev/test_ty_advisory_ratchet.py"
+      - ".github/workflows/ty-advisory-ratchet.yml"
+  schedule:
+    - cron: "23 5 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ty-advisory-ratchet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Run ty advisory ratchet
+        id: ty_ratchet
+        continue-on-error: true
+        run: |
+          mkdir -p output/ty
+          uv run python scripts/dev/ty_advisory_ratchet.py --check 2>&1 | tee output/ty/ratchet.log
+
+      - name: Summarize ty ratchet outcome
+        if: always()
+        run: |
+          printf 'ty advisory ratchet exit: %s\n' "${{ steps.ty_ratchet.outcome }}"
+          printf 'Committed baseline general findings: '
+          python -c "import json;print(sum(m['general'] for m in json.load(open('scripts/validation/ty_advisory_baseline.json'))['modules'].values()))" || true
+
+      - name: Upload ty ratchet log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ty-advisory-ratchet-log
+          path: output/ty/ratchet.log
+          if-no-files-found: warn

@@ -1,3 +1,9 @@
+# simulation_config.ped_density unit: pedestrians per m^2 of SPAWNABLE
+# route/zone (sidewalk) area, not whole-map area and not per route meter.
+# Spawn count = ceil(total_sidewalks_area * ped_density). Classic band:
+# 0.02 (low) / 0.05 (medium) / 0.08 (high). ped_density: 0.0 with
+# metadata.spawn_mode: markers is a marker-controlled placeholder (peds
+# come from fixed single_ped markers), NOT an empty scene.
 scenarios:
 - name: classic_urban_crossing_medium
   map_file: ../../../maps/svg_maps/classic_urban_crossing.svg

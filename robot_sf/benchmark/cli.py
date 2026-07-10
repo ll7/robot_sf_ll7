@@ -1395,7 +1395,22 @@ def _collect_scenario_warnings(  # noqa: PLR0912,PLR0915
                         scenario_id,
                         (
                             "ped_density outside recommended [0.02, 0.08]; "
+                            "unit is peds per m^2 of spawnable area "
+                            "(route/zone sidewalk area, not whole-map); "
                             "may reduce benchmark comparability"
+                        ),
+                        "/simulation_config/ped_density",
+                    )
+                if not marker_placeholder_density and density_val > 0.15:
+                    warn(
+                        idx,
+                        scenario_id,
+                        (
+                            f"ped_density={density_val} is high; unit is "
+                            "peds per m^2 of spawnable area (recommended "
+                            "0.02-0.08). If this value was meant per "
+                            "whole-map area or per route meter, it is likely "
+                            "a unit confusion."
                         ),
                         "/simulation_config/ped_density",
                     )

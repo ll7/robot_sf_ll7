@@ -1359,6 +1359,107 @@ def test_bootstrap_worktree_rejects_unknown_flag() -> None:
     assert "unknown argument" in result.stderr
 
 
+def test_bootstrap_worktree_rejects_extra_without_name() -> None:
+    """bootstrap_worktree.sh should reject an incomplete --extra option before syncing."""
+    result = subprocess.run(
+        [str(BOOTSTRAP_WORKTREE), "--extra"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "--extra requires a name" in result.stderr
+
+
+def test_bootstrap_worktree_forwards_repeatable_extras_to_uv_sync(tmp_path: Path) -> None:
+    """Named bootstrap extras must reach uv sync for training-specific worktrees."""
+    repo = tmp_path / "repo"
+    script_dir = repo / "scripts" / "dev"
+    fake_bin = repo / "fake-bin"
+    captured_args = repo / "uv-sync-args.txt"
+    script_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+
+    (script_dir / "bootstrap_worktree.sh").write_text(
+        BOOTSTRAP_WORKTREE.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (script_dir / "bootstrap_worktree.sh").chmod(0o755)
+
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                'if [[ "$1" == "venv" ]]; then',
+                '  mkdir -p "$2/bin"',
+                '  printf "#!/usr/bin/env bash\\nexit 0\\n" > "$2/bin/python"',
+                '  chmod 0755 "$2/bin/python"',
+                "  exit 0",
+                "fi",
+                'if [[ "$1" == "sync" ]]; then',
+                '  printf "%s\\n" "$*" > "$UV_CAPTURED_ARGS"',
+                "  exit 0",
+                "fi",
+                'echo "unexpected uv invocation: $*" >&2',
+                "exit 99",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "config", "user.email", "agent@example.invalid"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Agent"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "commit", "-m", "bootstrap extra fixture"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    result = subprocess.run(
+        [
+            str(script_dir / "bootstrap_worktree.sh"),
+            "--no-symlink-machine",
+            "--extra",
+            "training",
+            "--extra",
+            "gpu",
+        ],
+        cwd=repo,
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+            "UV_CAPTURED_ARGS": str(captured_args),
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert captured_args.read_text(encoding="utf-8") == "sync --extra training --extra gpu\n"
+
+
 def test_bootstrap_worktree_creates_venv_before_sync() -> None:
     """bootstrap_worktree.sh must call `uv venv .venv` before `uv sync --all-extras` in code.
 

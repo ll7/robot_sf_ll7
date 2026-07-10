@@ -11,7 +11,8 @@ from robot_sf.training.scenario_loader import load_scenarios
 from robot_sf.training.threaded_vec_env import ThreadedVecEnv
 from scripts.training import train_ppo
 
-_SCENARIO_PATH = Path("configs/scenarios/single/planner_sanity_simple.yaml").resolve()
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SCENARIO_PATH = _REPO_ROOT / "configs/scenarios/single/planner_sanity_simple.yaml"
 
 
 def _ppo_training_env_factory(seed: int):

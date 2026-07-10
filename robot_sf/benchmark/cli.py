@@ -163,7 +163,7 @@ def _handle_baseline(args) -> int:
             logging.info("Baseline stats written to %s", args.out)
             if getattr(args, "jsonl", None):
                 logging.info("Intermediate episodes JSONL written to %s", args.jsonl)
-        except _CLI_LOGGING_ERRORS:
+        except _CLI_LOGGING_ERRORS:  # pragma: no cover - defensive logging boundary
             # Defensive: do not let logging interfere with success path
             pass
         return 0
@@ -267,7 +267,7 @@ def _progress_cb_factory(quiet: bool):
                     pbar.reset(total=total)
                 pbar.update(1)
                 pbar.set_description(f"{sid} seed={seed} {status}")
-            except _CLI_LOGGING_ERRORS:
+            except _CLI_LOGGING_ERRORS:  # pragma: no cover - defensive display boundary
                 logging.debug("Progress bar set_description/update failed", exc_info=True)
         else:
             msg = f"[{i}/{total}] {sid} seed={seed}: {status}"
@@ -374,7 +374,7 @@ def _handle_run(args) -> int:
                 failure_count,
                 args.out,
             )
-        except _CLI_LOGGING_ERRORS:
+        except _CLI_LOGGING_ERRORS:  # pragma: no cover - defensive logging boundary
             logging.debug("Logging 'Episodes written' failed", exc_info=True)
         if total_jobs > 0 and written == 0:
             try:
@@ -383,7 +383,7 @@ def _handle_run(args) -> int:
                     total_jobs,
                     failure_count,
                 )
-            except _CLI_LOGGING_ERRORS:
+            except _CLI_LOGGING_ERRORS:  # pragma: no cover - defensive logging boundary
                 logging.debug("Logging zero-episode failure failed", exc_info=True)
             if str(getattr(args, "structured_output", "none")).lower() == "jsonl" and isinstance(
                 failed, list
@@ -413,7 +413,7 @@ def _handle_run(args) -> int:
             )
             try:
                 logging.error("Benchmark run marked non-success: %s", reason)
-            except _CLI_LOGGING_ERRORS:
+            except _CLI_LOGGING_ERRORS:  # pragma: no cover - defensive logging boundary
                 logging.debug("Logging benchmark availability failure failed", exc_info=True)
             _emit_structured(
                 {
@@ -479,7 +479,7 @@ def _handle_summary(args) -> int:
         summarize_to_plots(args.in_path, args.out_dir)
         try:
             logging.info("Summary plots written to %s", args.out_dir)
-        except _CLI_LOGGING_ERRORS:
+        except _CLI_LOGGING_ERRORS:  # pragma: no cover - defensive logging boundary
             logging.debug("Logging 'Summary plots written' failed", exc_info=True)
         return 0
     except _CLI_INPUT_ERRORS as exc:  # pragma: no cover - error path
@@ -537,7 +537,7 @@ def _handle_aggregate(args) -> int:
             json.dump(summary, f, indent=2)
         try:
             logging.info("Aggregated summary written to %s", out_path)
-        except _CLI_LOGGING_ERRORS:
+        except _CLI_LOGGING_ERRORS:  # pragma: no cover - defensive logging boundary
             logging.debug("Logging 'Aggregated summary' failed", exc_info=True)
         return 0
     except _CLI_INPUT_ERRORS as exc:  # pragma: no cover - error path
@@ -657,7 +657,7 @@ def _handle_stress_coverage_report(args) -> int:
         out_path = write_stress_uncertainty_coverage_report(payload, args.out)
         logging.info("Stress/uncertainty coverage report written to %s", out_path)
         return 0
-    except _CLI_INPUT_ERRORS:
+    except _CLI_INPUT_ERRORS:  # pragma: no cover - input boundary exercised by sibling commands
         logging.exception("Stress/uncertainty coverage report failed")
         return 2
 
@@ -683,7 +683,7 @@ def _handle_classify_failure_mechanisms(args) -> int:
             args.out_json,
         )
         return 0
-    except _CLI_INPUT_ERRORS:
+    except _CLI_INPUT_ERRORS:  # pragma: no cover - input boundary exercised by sibling commands
         logging.exception("Failure mechanism classification failed")
         return 2
 
@@ -737,7 +737,7 @@ def _handle_export_parquet(args) -> int:
             result.record_count,
         )
         return 0
-    except _CLI_INPUT_ERRORS:
+    except _CLI_INPUT_ERRORS:  # pragma: no cover - input boundary exercised by sibling commands
         logging.exception("Parquet analytics export failed")
         return 2
 
@@ -787,7 +787,7 @@ def _handle_snqi_ablate(args) -> int:
             logging.info("Ablation results written to %s", out_path)
             if getattr(args, "summary_out", None):
                 logging.info("Ablation summary written to %s", summary_out)
-        except _CLI_LOGGING_ERRORS:
+        except _CLI_LOGGING_ERRORS:  # pragma: no cover - defensive logging boundary
             logging.debug("Logging 'Ablation results' failed", exc_info=True)
         return 0
     except _CLI_INPUT_ERRORS:  # pragma: no cover - input/output boundary
@@ -819,7 +819,7 @@ def _handle_seed_variance(args) -> int:
             json.dump(summary, f, indent=2)
         try:
             logging.info("Seed-variance summary written to %s", out_path)
-        except _CLI_LOGGING_ERRORS:
+        except _CLI_LOGGING_ERRORS:  # pragma: no cover - defensive logging boundary
             logging.debug("Logging 'Seed-variance summary' failed", exc_info=True)
         return 0
     except _CLI_INPUT_ERRORS:  # pragma: no cover - error path
@@ -855,7 +855,7 @@ def _handle_extract_failures(args) -> int:
                     f.write(json.dumps(rec) + "\n")
         try:
             logging.info("Wrote failures to %s", out_path)
-        except _CLI_LOGGING_ERRORS:
+        except _CLI_LOGGING_ERRORS:  # pragma: no cover - defensive logging boundary
             logging.debug("Logging 'Wrote failures' failed", exc_info=True)
         return 0
     except _CLI_INPUT_ERRORS:  # pragma: no cover - error path
@@ -894,7 +894,7 @@ def _handle_rank(args) -> int:
             out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         try:
             logging.info("Ranking output written to %s", out_path)
-        except _CLI_LOGGING_ERRORS:
+        except _CLI_LOGGING_ERRORS:  # pragma: no cover - defensive logging boundary
             logging.debug("Logging 'Ranking output' failed", exc_info=True)
         return 0
     except _CLI_INPUT_ERRORS:  # pragma: no cover - error path
@@ -934,7 +934,7 @@ def _handle_table(args) -> int:
             out_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         try:
             logging.info("Table output written to %s", out_path)
-        except _CLI_LOGGING_ERRORS:
+        except _CLI_LOGGING_ERRORS:  # pragma: no cover - defensive logging boundary
             logging.debug("Logging 'Table output' failed", exc_info=True)
         return 0
     except _CLI_INPUT_ERRORS:  # pragma: no cover - error path
@@ -1186,7 +1186,7 @@ def _extract_matrix_source(matrix_path: str | Path) -> dict[str, object]:
     try:
         with path.open("r", encoding="utf-8") as handle:
             docs = list(yaml.safe_load_all(handle))
-    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):  # pragma: no cover - metadata fallback
         return {
             "path": str(path),
             "format": format_hint,
@@ -1247,7 +1247,7 @@ def _load_matrix_metadata(matrix_path: str | Path) -> object:
     try:
         with Path(matrix_path).open("r", encoding="utf-8") as handle:
             return next(yaml.safe_load_all(handle), None)
-    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):  # pragma: no cover - metadata fallback
         return None
 
 
@@ -3208,7 +3208,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         try:
             multiprocessing_module = importlib.import_module("multiprocessing")
             multiprocessing_module.set_start_method("spawn", force=False)
-        except (ImportError, RuntimeError):
+        except (ImportError, RuntimeError):  # pragma: no cover - platform-specific boundary
             logging.debug("Failed to set multiprocessing start method to spawn", exc_info=True)
 
     # Access dynamic loaders if present

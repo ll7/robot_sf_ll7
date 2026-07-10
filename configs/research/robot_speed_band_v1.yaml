@@ -1,0 +1,199 @@
+# Robot speed-band campaign axis (issue #5144).
+#
+# Sweeps the drive-model peak forward speed upward toward the micromobility
+# regime (~25 km/h). Evaluated robot operating speeds today sit near 1.0-2.0 m/s
+# (~3.6-7.2 km/h); this axis raises the band in steps so interaction metrics,
+# near-miss exposure, and planner rankings can be measured at vehicle-class
+# closing speeds. The bicycle drive model is the primary target because it
+# already allows 3.0 m/s (`BicycleDriveSettings.max_velocity`); the differential
+# drive caps at 2.0 m/s and is supported as a fallback drive model.
+#
+# Prerequisite / sequencing (per issue #5144):
+# - #4976 (first-class acceleration/braking actuation limits + stopping-distance
+#   envelope) is closed and is a required prerequisite: braking realism must
+#   scale with the speed band. Each `robot_speed_band` variant therefore carries
+#   an explicit `max_decel` so the #4976 actuation envelope
+#   (`stopping_distance = v^2 / (2 * max_decel)`) grows with the swept cap.
+# - #4972 (decouple pedestrian desired speed from spawn speed + calibrated
+#   defaults) is closed. Both the robot speed-band axis and the pedestrian-speed
+#   axis shift closing speeds, so they are modeled as INDEPENDENT axes here
+#   (varied separately, not confounded).
+# - Campaign-scale execution is gated on #4826 (GPU VRAM lifecycle) like other
+#   sweeps. This file is the axis contract / launch packet, not benchmark
+#   evidence until the sweep is run and promoted through a compact evidence
+#   bundle.
+#
+# This config carries the same two compatible surfaces as
+# `fidelity_sensitivity_v1.yaml`: launch-packet metadata consumed by
+# `robot_sf.benchmark.fidelity_sensitivity` and analysis-contract metadata
+# consumed by `robot_sf.benchmark.fidelity_rank_stability`.
+schema_version: fidelity-sensitivity.v1
+issue: 5144
+study_id: issue_5144_robot_speed_band_v1
+status: launch_packet
+
+claim_boundary: >
+  Protocol and metric contract only. This config defines a robot speed-band
+  campaign axis that sweeps the drive-model peak forward speed toward the
+  micromobility regime, plus independent pedestrian-speed and actuation-latency
+  co-axes. It is not benchmark evidence, sensor-realism evidence, sim-to-real
+  evidence, or a paper-facing planner-ranking result until the sweep is run
+  (gated on #4826) and promoted through a compact evidence bundle.
+
+baseline:
+  key: nominal_speed_band
+  benchmark_config: configs/benchmarks/paper_experiment_matrix_v1.yaml
+  interpretation: current_nominal_robot_speed_band
+
+fixed_scope:
+  scenario_set: configs/benchmarks/paper_experiment_matrix_v1.yaml
+  seeds: [111, 112, 113]
+  planner_groups:
+    - orca
+    - default_social_force
+    - hybrid_rule_v0_minimal
+  planner_algorithms:
+    orca: orca
+    default_social_force: social_force
+    hybrid_rule_v0_minimal: hybrid_rule_v0_minimal
+  planner_configs:
+    hybrid_rule_v0_minimal: configs/algos/hybrid_rule_v0_minimal.yaml
+  planner_opt_ins:
+    hybrid_rule_v0_minimal:
+      allow_testing_algorithms: true
+      rationale: issue_5144_fixed_scope_prelaunch_opt_in
+
+ranking:
+  metric: snqi
+  higher_is_better: true
+  stability_min_kendall_tau: 0.8
+  rank_flip_requires_caveat: true
+
+metrics:
+  - name: snqi
+    direction: higher_is_better
+  - name: success
+    direction: higher_is_better
+  - name: collisions
+    direction: lower_is_better
+  - name: near_misses
+    direction: lower_is_better
+  - name: time_to_goal_norm
+    direction: lower_is_better
+
+axes:
+  # PRIMARY axis (issue #5144): sweep the drive-model peak forward speed upward.
+  # Bicycle model first; braking authority scales with the band via #4976.
+  - key: robot_speed_band
+    rationale: >
+      Detect how interaction metrics, near-miss exposure, and planner rankings
+      shift as the robot's drive-model speed cap rises toward the micromobility
+      regime. Bicycle drive first (it already allows 3.0 m/s); braking authority
+      (max_decel) is set per band so #4976 stopping-distance realism scales with
+      speed. Independent of the pedestrian-speed axis (#4972).
+    variants:
+      - key: bicycle_2_0_mps
+        baseline: true
+        patch:
+          robot_config:
+            type: bicycle_drive
+            max_velocity: 2.0
+            max_accel: 1.0
+            max_decel: 2.0
+      - key: bicycle_3_0_mps_nominal
+        patch:
+          robot_config:
+            type: bicycle_drive
+            max_velocity: 3.0
+            max_accel: 1.5
+            max_decel: 3.0
+      - key: bicycle_4_0_mps_micromobility
+        patch:
+          robot_config:
+            type: bicycle_drive
+            max_velocity: 4.0
+            max_accel: 2.0
+            max_decel: 4.0
+  # Co-axis (#4972): pedestrian desired-speed heterogeneity. Varied
+  # independently from the robot speed band so closing-speed shifts decompose
+  # into robot-side and pedestrian-side contributions.
+  - key: social_force_speed_archetypes
+    rationale: >
+      Detect whether pedestrian speed heterogeneity (issue #4972 surface)
+      changes ranking stability independently of the robot speed band.
+    variants:
+      - key: homogeneous_standard_nominal
+        baseline: true
+        patch:
+          pedestrian_archetypes:
+            standard: 1.0
+      - key: rush_hour
+        patch:
+          pedestrian_archetypes:
+            cautious: 0.20
+            standard: 0.30
+            hurried: 0.50
+  # Co-axis (#4976 prerequisite): actuation-latency queue. Ensures the
+  # braking-realism prerequisite is represented as an independent axis.
+  - key: control_action_latency
+    rationale: >
+      Measure how a reset-safe control-to-actuation queue (#4976 prerequisite)
+      changes safety outcomes independently of the robot speed band.
+    variants:
+      - key: zero_step_nominal
+        baseline: true
+        patch:
+          sim_config:
+            action_latency_steps: 0
+      - key: three_step_300ms
+        patch:
+          sim_config:
+            action_latency_steps: 3
+
+result_contract:
+  required_outputs:
+    - axis
+    - variant
+    - planner
+    - seed
+    - scenario_id
+    - metric_values
+    - rank_metric
+    - kendall_tau_vs_baseline
+    - rank_flip_count
+    - per_metric_drift_vs_baseline
+  caveat_rule: >
+    Any axis with a rank_flip_count greater than zero must be reported as a
+    validity-boundary caveat and calibration candidate before paper-facing
+    benchmark use. The robot speed-band axis additionally reports the resolved
+    drive model, peak forward speed, and #4976 actuation envelope per variant so
+    per-band metric shifts are attributable to the speed band.
+
+primary_metric: success_rate
+higher_is_better: true
+
+drift_metrics:
+  - success_rate
+  - collision_rate
+  - min_clearance
+
+nominal:
+  description: nominal robot speed band (current reporting baseline)
+
+# Robot speed-band axis values swept by the parent campaign. The bicycle drive
+# model is primary; 4.0 m/s is the first step toward the ~25 km/h micromobility
+# class (faster bands remain future work pending #4976 braking calibration).
+speed_band_axes:
+  robot_peak_forward_speed_mps:
+    description: drive-model peak forward speed (m/s) swept toward micromobility
+    drive_model: bicycle_drive
+    nominal: 2.0
+    values: [2.0, 3.0, 4.0]
+    braking_decel_m_s2: [2.0, 3.0, 4.0]
+
+decision_rule: >
+  If the planner ranking is stable across the robot speed-band axis (no rank
+  flips vs the nominal band), record the speed-band validity boundary as
+  benchmark-strengthening. Any ranking-flipping band is a required reporting
+  caveat and a candidate calibration target before paper-facing use at
+  vehicle-class closing speeds.

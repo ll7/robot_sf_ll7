@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pysocialforce.config import SceneConfig
-from pysocialforce.scene import PedState
+from pysocialforce.scene import PedState, normalize_integration_scheme
 
 from robot_sf.sim.pedestrian_model_variants import step_hsfm_total_force
 from robot_sf.sim.sim_config import SimulationSettings
@@ -52,6 +52,12 @@ def test_invalid_integration_scheme_fails_closed() -> None:
         SimulationSettings(pedestrian_integration_scheme="rk4")
 
 
+def test_none_integration_scheme_preserves_compatibility_default() -> None:
+    """A nullable configuration seam retains the historical semi-implicit behavior."""
+
+    assert normalize_integration_scheme(None) == "semi_implicit_euler"
+
+
 def test_hsfm_total_force_honors_explicit_position_update() -> None:
     """Opt-in headed variants share the same selected position-update contract."""
     state = np.array([[0.0, 0.0, 1.0, 0.0, 10.0, 0.0, 0.5]], dtype=float)
@@ -81,3 +87,16 @@ def test_scheme_sensitivity_report_covers_all_speed_archetypes() -> None:
     assert [row["archetype"] for row in rows] == ["cautious", "standard", "hurried"]
     assert all(np.isfinite(row["max_position_divergence_m"]) for row in rows)
     assert any(row["max_position_divergence_m"] > 0 for row in rows)
+
+
+def test_scheme_sensitivity_fails_closed_for_non_finite_divergence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A diagnostic report cannot silently summarize non-finite trajectories."""
+
+    import scripts.analysis.measure_pedestrian_integrator_scheme_sensitivity as diagnostic
+
+    monkeypatch.setattr(diagnostic, "_trajectory", lambda **_kwargs: np.array([[[np.nan, 0.0]]]))
+
+    with pytest.raises(ValueError, match="Non-finite trajectory divergence"):
+        diagnostic.measure_scheme_sensitivity(steps=1)

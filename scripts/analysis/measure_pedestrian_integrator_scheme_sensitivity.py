@@ -66,7 +66,9 @@ def _trajectory(*, speed: float, dt: float, steps: int, integration_scheme: str)
     return np.asarray(positions, dtype=float)
 
 
-def measure_scheme_sensitivity(*, dt: float = 0.1, steps: int = 60) -> dict[str, object]:
+def measure_scheme_sensitivity(
+    *, dt: float | None = None, steps: int | None = None
+) -> dict[str, object]:
     """Measure named-archetype trajectory divergence at one fixed timestep.
 
     Args:
@@ -76,6 +78,8 @@ def measure_scheme_sensitivity(*, dt: float = 0.1, steps: int = 60) -> dict[str,
     Returns:
         A JSON-serializable diagnostic report with per-archetype divergence metrics.
     """
+    dt = 0.1 if dt is None else dt
+    steps = 60 if steps is None else steps
     if not np.isfinite(dt) or dt <= 0:
         raise ValueError("dt must be finite and > 0")
     if steps <= 0:
@@ -96,6 +100,8 @@ def measure_scheme_sensitivity(*, dt: float = 0.1, steps: int = 60) -> dict[str,
             integration_scheme=SEMI_IMPLICIT_EULER,
         )
         divergence = np.linalg.norm(explicit - semi_implicit, axis=-1)
+        if not np.all(np.isfinite(divergence)):
+            raise ValueError(f"Non-finite trajectory divergence for archetype {archetype}")
         summaries.append(
             DivergenceSummary(
                 archetype=archetype,
@@ -121,8 +127,8 @@ def measure_scheme_sensitivity(*, dt: float = 0.1, steps: int = 60) -> dict[str,
 def build_parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dt", type=float, default=0.1, help="Fixed timestep in seconds.")
-    parser.add_argument("--steps", type=int, default=60, help="Steps per archetype.")
+    parser.add_argument("--dt", type=float, default=None, help="Fixed timestep in seconds.")
+    parser.add_argument("--steps", type=int, default=None, help="Steps per archetype.")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     return parser
 

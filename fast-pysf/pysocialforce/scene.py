@@ -17,8 +17,10 @@ SEMI_IMPLICIT_EULER = "semi_implicit_euler"
 SUPPORTED_INTEGRATION_SCHEMES = frozenset({EXPLICIT_EULER, SEMI_IMPLICIT_EULER})
 
 
-def normalize_integration_scheme(value: str) -> str:
+def normalize_integration_scheme(value: str | None) -> str:
     """Return a supported pedestrian integration scheme or raise a clear error."""
+    if value is None:
+        value = SEMI_IMPLICIT_EULER
     normalized = str(value).strip()
     if normalized in SUPPORTED_INTEGRATION_SCHEMES:
         return normalized

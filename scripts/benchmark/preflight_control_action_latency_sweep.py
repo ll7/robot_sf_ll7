@@ -3,9 +3,9 @@
 
 Verifies the fidelity-sensitivity study config carries a ``control_action_latency``
 axis whose variants cover the required action-latency step set (0, 1, 3 steps =
-0/100/300 ms-equivalent delays). Fails closed with the exact unmet prerequisite
-(PR #5026) when the axis or a required step is missing. Runs no benchmark episode
-and promotes no claim.
+0/100/300 ms-equivalent delays). Fails closed with the exact missing axis or
+step coverage when the config is malformed. Runs no benchmark episode and
+promotes no claim.
 """
 
 from __future__ import annotations

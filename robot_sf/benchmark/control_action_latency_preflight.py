@@ -47,7 +47,7 @@ REQUIRED_LATENCY_STEPS: tuple[int, ...] = (0, 1, 3)
 #: Location of the latency step inside each variant patch (PR #5026 schema).
 LATENCY_STEP_PATCH_KEYS: tuple[str, str] = ("sim_config", "action_latency_steps")
 
-#: The unmerged wiring this sweep depends on.
+#: The wiring PR that introduced this sweep's axis schema.
 DEPENDENCY_PR = "#5026"
 PARENT_ISSUE = 4977
 ISSUE = 5034

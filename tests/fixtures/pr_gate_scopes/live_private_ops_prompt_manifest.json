@@ -1,0 +1,21 @@
+{
+  "schema": "pr_gate_scope_manifest.v1",
+  "purpose": "Public-safe fixture for the deployed private-ops concurrent PR-gate prompt schema.",
+  "migration_mapping": [
+    {
+      "gate_id": "999997",
+      "legacy_scope": {"range": [5037]},
+      "residue_scope": {"modulus": 2, "residue": 0}
+    },
+    {
+      "gate_id": "999996",
+      "legacy_scope": {"range": [5047, 5057]},
+      "residue_scope": {"modulus": 2, "residue": 1}
+    }
+  ],
+  "gates": [
+    {"gate_id": "999997", "scope": {"modulus": 3, "residue": 0}},
+    {"gate_id": "999996", "scope": {"modulus": 3, "residue": 1}},
+    {"gate_id": "999995", "scope": {"modulus": 3, "residue": 2}}
+  ]
+}

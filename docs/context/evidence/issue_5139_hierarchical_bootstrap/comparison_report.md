@@ -1,3 +1,5 @@
+<!-- AI-GENERATED NEEDS-REVIEW -->
+
 # Flat vs Hierarchical Bootstrap Interval Comparison (issue #5139)
 
 **Evidence status:** `diagnostic-only`
@@ -15,6 +17,7 @@ Synthetic structured bundle: 90 episodes across 3 (archetype, density) groups, 6
 - bootstrap_samples: 1000
 - bootstrap_confidence: 0.95
 - master_seed: 123
+- bundle_seed: 20260710
 - modes compared: flat, hierarchical_scenario, hierarchical_seed
 
 ## Width ratios (hierarchical / flat)
@@ -23,58 +26,58 @@ ratio > 1 means the hierarchical interval is wider than flat (flat was anti-cons
 
 | archetype | density | metric | mode | flat_width | hierarchical_width | ratio |
 | --- | --- | --- | --- | --- | --- | --- |
-| bottleneck | low | collision_rate | hierarchical_scenario | 0.3309 | 0.6714 | 2.03 |
-| bottleneck | low | collision_rate | hierarchical_seed | 0.3309 | 0.1600 | 0.48 |
-| bottleneck | low | success_rate | hierarchical_scenario | 0.3309 | 0.6714 | 2.03 |
-| bottleneck | low | success_rate | hierarchical_seed | 0.3309 | 0.1600 | 0.48 |
-| bottleneck | low | time_to_goal | hierarchical_scenario | 1.8902 | 4.0945 | 2.17 |
-| bottleneck | low | time_to_goal | hierarchical_seed | 1.8902 | 1.8458 | 0.98 |
-| crossing | high | collision_rate | hierarchical_scenario | 0.3309 | 0.6073 | 1.84 |
-| crossing | high | collision_rate | hierarchical_seed | 0.3309 | 0.1600 | 0.48 |
-| crossing | high | success_rate | hierarchical_scenario | 0.3309 | 0.6073 | 1.84 |
-| crossing | high | success_rate | hierarchical_seed | 0.3309 | 0.1600 | 0.48 |
-| crossing | high | time_to_goal | hierarchical_scenario | 1.9643 | 4.4223 | 2.25 |
-| crossing | high | time_to_goal | hierarchical_seed | 1.9643 | 1.9706 | 1.00 |
-| crossing | low | collision_rate | hierarchical_scenario | 0.3343 | 0.6533 | 1.95 |
-| crossing | low | collision_rate | hierarchical_seed | 0.3343 | 0.2613 | 0.78 |
-| crossing | low | success_rate | hierarchical_scenario | 0.3343 | 0.6533 | 1.95 |
-| crossing | low | success_rate | hierarchical_seed | 0.3343 | 0.2613 | 0.78 |
-| crossing | low | time_to_goal | hierarchical_scenario | 1.8848 | 4.1709 | 2.21 |
-| crossing | low | time_to_goal | hierarchical_seed | 1.8848 | 1.8590 | 0.99 |
+| bottleneck | low | collision_rate | hierarchical_scenario | 0.3343 | 0.6840 | 2.05 |
+| bottleneck | low | collision_rate | hierarchical_seed | 0.3343 | 0.1600 | 0.48 |
+| bottleneck | low | success_rate | hierarchical_scenario | 0.3343 | 0.6840 | 2.05 |
+| bottleneck | low | success_rate | hierarchical_seed | 0.3343 | 0.1600 | 0.48 |
+| bottleneck | low | time_to_goal | hierarchical_scenario | 1.8847 | 3.8768 | 2.06 |
+| bottleneck | low | time_to_goal | hierarchical_seed | 1.8847 | 1.8340 | 0.97 |
+| crossing | high | collision_rate | hierarchical_scenario | 0.3363 | 0.6914 | 2.06 |
+| crossing | high | collision_rate | hierarchical_seed | 0.3363 | 0.3201 | 0.95 |
+| crossing | high | success_rate | hierarchical_scenario | 0.3363 | 0.6914 | 2.06 |
+| crossing | high | success_rate | hierarchical_seed | 0.3363 | 0.3201 | 0.95 |
+| crossing | high | time_to_goal | hierarchical_scenario | 1.8583 | 4.3738 | 2.35 |
+| crossing | high | time_to_goal | hierarchical_seed | 1.8583 | 1.9390 | 1.04 |
+| crossing | low | collision_rate | hierarchical_scenario | 0.3363 | 0.6611 | 1.97 |
+| crossing | low | collision_rate | hierarchical_seed | 0.3363 | 0.1307 | 0.39 |
+| crossing | low | success_rate | hierarchical_scenario | 0.3363 | 0.6611 | 1.97 |
+| crossing | low | success_rate | hierarchical_seed | 0.3363 | 0.1307 | 0.39 |
+| crossing | low | time_to_goal | hierarchical_scenario | 1.8672 | 4.1059 | 2.20 |
+| crossing | low | time_to_goal | hierarchical_seed | 1.8672 | 1.8529 | 0.99 |
 
 ## Summary
 
 ### Rate metrics - hierarchical_scenario mode (primary anti-conservatism comparison)
 
 - count: 6
-- min ratio: 1.84
-- median ratio: 1.95
-- mean ratio: 1.94
-- max ratio: 2.03
+- min ratio: 1.97
+- median ratio: 2.05
+- mean ratio: 2.02
+- max ratio: 2.06
 
 ### Rate metrics - hierarchical_seed mode (optional seed-cluster variant)
 
 - count: 6
-- min ratio: 0.48
+- min ratio: 0.39
 - median ratio: 0.48
-- mean ratio: 0.58
-- max ratio: 0.78
+- mean ratio: 0.61
+- max ratio: 0.95
 
 ### Continuous metrics - hierarchical_scenario mode
 
 - count: 3
-- min ratio: 2.17
-- median ratio: 2.21
-- mean ratio: 2.21
-- max ratio: 2.25
+- min ratio: 2.06
+- median ratio: 2.20
+- mean ratio: 2.20
+- max ratio: 2.35
 
 ### Continuous metrics - hierarchical_seed mode
 
 - count: 3
-- min ratio: 0.98
+- min ratio: 0.97
 - median ratio: 0.99
-- mean ratio: 0.99
-- max ratio: 1.00
+- mean ratio: 1.00
+- max ratio: 1.04
 
 ratio > 1 means the hierarchical interval is wider than the flat interval on the same records, i.e. the flat interval was anti-conservative (understated uncertainty) under clustering. The hierarchical_scenario (scenario-then-episode) mode is the documented successor-campaign procedure and is the primary anti-conservatism comparison; hierarchical_seed is the optional seed-level cluster variant. A seed-mode ratio < 1 can occur when the cell-level rate already absorbs most between-cell variance, leaving little between-seed dispersion.
 

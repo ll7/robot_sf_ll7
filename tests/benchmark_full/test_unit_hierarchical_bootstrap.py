@@ -28,6 +28,7 @@ import pytest
 
 from robot_sf.benchmark.full_classic.aggregation import (
     _bootstrap_ci,  # type: ignore[import-private-names]
+    _stable_group_seed,  # type: ignore[import-private-names]
     _wilson_interval,  # type: ignore[import-private-names]
     aggregate_metrics,
     cluster_robust_interval,
@@ -281,6 +282,13 @@ def test_aggregate_hierarchical_deterministic_same_seed():
     b = aggregate_metrics(deepcopy(recs), _Cfg(bootstrap_mode="hierarchical", master_seed=7))
     assert a[0].metrics["time_to_goal"].mean_ci == b[0].metrics["time_to_goal"].mean_ci
     assert a[0].metrics["time_to_goal"].median_ci == b[0].metrics["time_to_goal"].median_ci
+
+
+def test_group_seed_is_stable_and_order_sensitive() -> None:
+    """Bootstrap seeds must not depend on Python's randomized hash salt."""
+    seed = _stable_group_seed(123, "crossing", "low", "time_to_goal")
+    assert seed == _stable_group_seed(123, "crossing", "low", "time_to_goal")
+    assert seed != _stable_group_seed(123, "crossing", "high", "time_to_goal")
 
 
 def test_aggregate_hierarchical_missing_cluster_field_degrades_gracefully():

@@ -44,6 +44,7 @@ Design notes:
 
 from __future__ import annotations
 
+import hashlib
 import math
 import random
 from dataclasses import dataclass
@@ -443,6 +444,12 @@ def _collect_metric_values(recs: list[dict]) -> dict[str, list[float]]:
     return vals
 
 
+def _stable_group_seed(master_seed: int, arch: str, dens: str, metric_name: str) -> int:
+    """Return a process-independent bootstrap seed for one metric group."""
+    material = "\x1f".join((str(master_seed), arch, dens, metric_name)).encode()
+    return int.from_bytes(hashlib.sha256(material).digest()[:4], "big")
+
+
 def _aggregate_single_metric(
     values: list[float],
     arch: str,
@@ -483,7 +490,7 @@ def _aggregate_single_metric(
     m_mean = mean(sorted_vals) if sorted_vals else math.nan
     m_median = median(sorted_vals) if sorted_vals else math.nan
     m_p95 = _percentile(sorted_vals, 95.0) if sorted_vals else math.nan
-    group_seed = hash((master_seed, arch, dens, metric_name)) & 0xFFFFFFFF
+    group_seed = _stable_group_seed(master_seed, arch, dens, metric_name)
     rng = random.Random(group_seed)
     is_rate = metric_name in {"collision_rate", "success_rate"}
     finite_clusters = _finite_clusters(clustered_values)

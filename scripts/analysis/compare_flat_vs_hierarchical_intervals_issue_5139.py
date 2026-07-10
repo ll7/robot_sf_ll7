@@ -35,6 +35,7 @@ Outputs (under ``--output-dir``):
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import random
@@ -54,6 +55,13 @@ CLAIM_BOUNDARY = (
 )
 
 EVIDENCE_STATUS = "diagnostic-only"
+REVIEW_MARKER = "AI-GENERATED NEEDS-REVIEW"
+
+
+def _stable_cell_offset(archetype: str, density: str) -> int:
+    """Return a process-independent offset for a synthetic scenario family."""
+    material = f"{archetype}\x1f{density}".encode()
+    return int.from_bytes(hashlib.sha256(material).digest()[:4], "big")
 
 
 @dataclass
@@ -110,7 +118,9 @@ def build_synthetic_bundle(seed: int = 20260710) -> list[dict[str, Any]]:
     ep = 0
     for arch, dens in archetypes:
         for cell_idx in range(n_cells_per_group):
-            rate = cell_rate_grid[(cell_idx + hash((arch, dens))) % len(cell_rate_grid)]
+            rate = cell_rate_grid[
+                (cell_idx + _stable_cell_offset(arch, dens)) % len(cell_rate_grid)
+            ]
             rate = min(0.97, max(0.03, rate + rng.uniform(-0.05, 0.05)))
             scenario_id = f"{arch}_{dens}_scenario_{cell_idx}"
             for seed_value in range(seeds_per_cell):
@@ -188,7 +198,7 @@ def _compute_width_ratios(
     return width_ratios
 
 
-def collect_comparisons(records: list[dict[str, Any]]) -> ComparisonReport:
+def collect_comparisons(records: list[dict[str, Any]], *, bundle_seed: int) -> ComparisonReport:
     """Run flat and hierarchical aggregation and collect width comparisons."""
     from robot_sf.benchmark.full_classic.aggregation import aggregate_metrics
 
@@ -197,6 +207,7 @@ def collect_comparisons(records: list[dict[str, Any]]) -> ComparisonReport:
         "bootstrap_samples": 1000,
         "bootstrap_confidence": 0.95,
         "master_seed": 123,
+        "bundle_seed": bundle_seed,
         "smoke": False,
     }
     flat_groups = aggregate_metrics(
@@ -304,6 +315,8 @@ def collect_comparisons(records: list[dict[str, Any]]) -> ComparisonReport:
 def write_markdown(report: ComparisonReport, path: Path) -> None:
     """Write a human-readable Markdown comparison report."""
     lines: list[str] = []
+    lines.append(f"<!-- {REVIEW_MARKER} -->")
+    lines.append("")
     lines.append("# Flat vs Hierarchical Bootstrap Interval Comparison (issue #5139)")
     lines.append("")
     lines.append(f"**Evidence status:** `{report.evidence_status}`")
@@ -330,6 +343,7 @@ def write_markdown(report: ComparisonReport, path: Path) -> None:
     lines.append(f"- bootstrap_samples: {report.config['bootstrap_samples']}")
     lines.append(f"- bootstrap_confidence: {report.config['bootstrap_confidence']}")
     lines.append(f"- master_seed: {report.config['master_seed']}")
+    lines.append(f"- bundle_seed: {report.config['bundle_seed']}")
     lines.append(f"- modes compared: {', '.join(report.config['modes'])}")
     lines.append("")
     lines.append("## Width ratios (hierarchical / flat)")
@@ -400,6 +414,7 @@ def write_markdown(report: ComparisonReport, path: Path) -> None:
 def write_json(report: ComparisonReport, path: Path) -> None:
     """Write a machine-readable JSON report with provenance."""
     payload = {
+        "review_marker": REVIEW_MARKER,
         "claim_boundary": report.claim_boundary,
         "evidence_status": report.evidence_status,
         "issue": report.issue,
@@ -417,7 +432,7 @@ def write_bundle(records: list[dict[str, Any]], path: Path) -> None:
     """Write the synthetic episode bundle as JSONL for audit."""
     with path.open("w", encoding="utf-8") as f:
         for r in records:
-            f.write(json.dumps(r) + "\n")
+            f.write(json.dumps({**r, "review_marker": REVIEW_MARKER}) + "\n")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -436,7 +451,7 @@ def main(argv: list[str] | None = None) -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     records = build_synthetic_bundle(seed=args.seed)
-    report = collect_comparisons(records)
+    report = collect_comparisons(records, bundle_seed=args.seed)
 
     write_markdown(report, output_dir / "comparison_report.md")
     write_json(report, output_dir / "comparison_report.json")

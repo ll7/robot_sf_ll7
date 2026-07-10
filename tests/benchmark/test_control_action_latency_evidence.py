@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import csv
 import json
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +21,7 @@ from robot_sf.benchmark.control_action_latency_evidence import (
     build_latency_evidence,
     classify_latency_row,
     extract_latency_cells,
+    load_latency_rows,
     promote_latency_evidence,
     write_latency_evidence,
 )
@@ -26,6 +29,7 @@ from robot_sf.benchmark.control_action_latency_preflight import AXIS_KEY
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REAL_CONFIG = REPO_ROOT / "configs/research/fidelity_sensitivity_v1.yaml"
+PROMOTER = REPO_ROOT / "scripts/benchmark/promote_control_action_latency_evidence.py"
 
 
 def _latency_row(
@@ -320,6 +324,54 @@ def test_build_evidence_records_exclusions_without_promoting_them() -> None:
 
 
 # --- write_latency_evidence + promote_latency_evidence --------------------
+
+
+def test_load_rows_fails_closed_when_raw_rows_path_is_missing(tmp_path: Path) -> None:
+    """A missing raw-row file becomes a promotion error, never a filesystem traceback."""
+    missing_path = tmp_path / "missing_episode_rows.jsonl"
+    with pytest.raises(LatencyEvidenceError, match="cannot be read"):
+        load_latency_rows(missing_path)
+
+
+def test_load_rows_fails_closed_when_raw_rows_path_is_not_a_file(tmp_path: Path) -> None:
+    """An unreadable raw-row path becomes the same fail-closed promotion error."""
+    with pytest.raises(LatencyEvidenceError, match="cannot be read"):
+        load_latency_rows(tmp_path)
+
+
+def test_load_rows_fails_closed_when_raw_rows_contain_invalid_json(tmp_path: Path) -> None:
+    """Malformed JSONL reports a promotion error with its source line."""
+    raw_path = tmp_path / "malformed_episode_rows.jsonl"
+    raw_path.write_text("not-json\n", encoding="utf-8")
+
+    with pytest.raises(LatencyEvidenceError, match="invalid JSON on line 1"):
+        load_latency_rows(raw_path)
+
+
+def test_cli_missing_raw_rows_emits_blocked_json_without_traceback(tmp_path: Path) -> None:
+    """The check-only CLI reports a missing input as a compact fail-closed status."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(PROMOTER),
+            "--raw-rows",
+            str(tmp_path / "missing_episode_rows.jsonl"),
+            "--check-only",
+            "--require-ready",
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "Traceback" not in result.stdout
+    assert "Traceback" not in result.stderr
+    status = json.loads(result.stdout)
+    assert status["schema_version"] == PROMOTION_SCHEMA_VERSION
+    assert status["status"] == "blocked"
+    assert status["issue"] == 5034
+    assert "cannot be read" in status["reason"]
 
 
 def test_write_latency_evidence_writes_bundle(tmp_path: Path) -> None:

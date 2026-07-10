@@ -3077,7 +3077,11 @@ def post_process_metrics(
                     event="metrics_count_coercion_failed",
                     metric_key=count_key,
                     metric_value=repr(invalid_value),
-                ).warning("Dropping metric count value that could not be coerced to int.")
+                ).warning(
+                    "Dropping metric count value for key {!r}: {!r} could not be coerced to int.",
+                    count_key,
+                    invalid_value,
+                )
     for valid_key in (
         "time_to_goal_success_only_valid",
         "time_to_goal_ideal_ratio_valid",

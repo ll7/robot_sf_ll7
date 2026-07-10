@@ -48,6 +48,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #4978 scenario-flakiness scores can be embedded in aggregate summaries.** The
+  `robot_sf_bench aggregate` command now accepts `--include-flakiness-audit` to add the existing
+  advisory `scenario_flakiness.v1` report under `_meta.scenario_flakiness`. The opt-in report gives
+  campaign-summary consumers per-scenario/planner stability scores and explicit knife-edge flags
+  without changing rankings or default aggregate output. It fails closed when the input has no
+  usable binary outcome evidence. Claim boundary: summary integration only; no campaign was run and
+  no benchmark metric or ranking semantics changed.
 * **issue #5039 compat-matrix promotion readiness gate.** New
   `scripts/ci/check_compat_matrix_promotion_readiness.py` turns "is the advisory
   `compat-matrix` job proven enough to promote to a required CI gate?" into a machine-checkable,

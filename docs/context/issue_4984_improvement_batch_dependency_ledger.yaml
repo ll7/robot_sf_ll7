@@ -1,0 +1,312 @@
+schema_version: improvement-batch-dependency-ledger.v1
+issue: 4984
+issue_url: https://github.com/ll7/robot_sf_ll7/issues/4984
+title: 2026-07-10 improvement-batch dependency ledger
+summary: >-
+  Durable sequence, ownership, evidence-gate, and delivery-status map for issues
+  #4966 through #4983. It keeps the batch executable without treating a merged
+  capability slice or a fallback/degraded run as empirical evidence.
+snapshot:
+  observed_at_utc: "2026-07-10T16:31:18Z"
+  source_issue_updated_at_utc: "2026-07-10T11:12:22Z"
+  source_comment_count: 1
+  source: issue bodies, all issue comments, and linked merged pull requests
+owner_policy: >-
+  Each child issue owns its row. All child issues were unassigned at the snapshot,
+  so no personal owner is inferred; owner.issue is the durable accountability surface.
+sequence_policy: >-
+  Phase order is the recommended batch order, not a blanket merge blocker. Only an
+  item's implementation_prerequisites block that implementation. Evidence gates block
+  the stated empirical interpretation, not independent contract or configuration work.
+claim_boundary:
+  evidence_status: planning_and_delivery_status_only
+  establishes:
+    - "dependency and phase ordering recorded in issue #4984"
+    - live delivery boundaries recorded in the child issue threads at the snapshot
+  does_not_establish:
+    - benchmark performance or planner ranking
+    - pedestrian, actuation, map, or sensor realism
+    - paper-grade or dissertation-ready evidence
+
+phases:
+  - phase: 1
+    name: documentation_and_auditability
+    recommended_after: []
+    parallel_with: []
+    gate: Make defaults, units, scenario disposition, and artifact provenance truthful.
+  - phase: 2
+    name: pedestrian_realism
+    recommended_after: [1]
+    parallel_with: [3]
+    gate: Use the empirical validation harness before promoting realism claims.
+  - phase: 3
+    name: actuation_realism
+    recommended_after: [1]
+    parallel_with: [2]
+    gate: Land braking and latency axes before the combined actuation sweep.
+  - phase: 4
+    name: benchmark_robustness
+    recommended_after: [2, 3]
+    parallel_with: []
+    gate: Measure determinism and numerical-scheme sensitivity before scaling campaigns.
+  - phase: 5
+    name: scale_and_roster_breadth
+    recommended_after: [4]
+    parallel_with: []
+    gate: Expand maps, rollout throughput, held-out evaluation, and the planner roster.
+
+cross_cutting_gates:
+  - issue: 4224
+    applies_to: [issue_4975_dataset_assets]
+    boundary: Public dataset staging gates real-data validation, not diagnostic harness work.
+  - issue: 4826
+    applies_to: [phase_2_large_campaigns, phase_3_large_campaigns]
+    boundary: GPU lifecycle readiness gates large campaigns, not CPU-only implementation.
+  - issue: 4932
+    applies_to: [issue_4974_scenario_half]
+    boundary: Scenario-generation ownership; it does not gate force-parameter configuration.
+  - issue: 2910
+    applies_to: [issue_4970_provenance, issue_4978_stability]
+    boundary: Benchmark v0.1 should absorb the fields after their child contracts are ready.
+  - issue: 3207
+    applies_to: [phase_2_rebase, issue_4979_timestep_comparison]
+    boundary: Re-run fidelity sensitivity only after the pedestrian-realism configuration lands.
+  - issue: 3574
+    applies_to: [phase_2_rebase]
+    boundary: Re-run heterogeneity studies only after the pedestrian-realism configuration lands.
+
+items:
+  - issue: 4966
+    title: Obstacle threshold documentation
+    phase: 1
+    owner: {issue: 4966, assignees: []}
+    implementation_prerequisites: []
+    evidence_gates: []
+    completion:
+      github_state: closed
+      delivery_state: closed_complete
+      evidence: "PR #4997 corrected the semantics and force-model documentation."
+      remaining: none
+    evidence_boundary: Documentation correction only; no public API rename or force change.
+
+  - issue: 4967
+    title: Reward-profile reference and artifact metadata
+    phase: 1
+    owner: {issue: 4967, assignees: []}
+    implementation_prerequisites: []
+    evidence_gates: []
+    completion:
+      github_state: closed
+      delivery_state: closed_complete
+      evidence: "PR #5076 delivered the reference and reward-profile manifest metadata."
+      remaining: none
+    evidence_boundary: Documents and records resolved profiles; reward behavior is unchanged.
+
+  - issue: 4968
+    title: Canonical LiDAR defaults reference
+    phase: 1
+    owner: {issue: 4968, assignees: []}
+    implementation_prerequisites: []
+    evidence_gates: []
+    completion:
+      github_state: closed
+      delivery_state: closed_complete
+      evidence: "PR #5024 documented the defaults and completed the stale-phrasing audit."
+      remaining: none
+    evidence_boundary: Documents repository defaults; no sensor-realism or performance claim.
+
+  - issue: 4969
+    title: Pedestrian-density unit documentation
+    phase: 1
+    owner: {issue: 4969, assignees: []}
+    implementation_prerequisites: []
+    evidence_gates: []
+    completion:
+      github_state: closed
+      delivery_state: closed_complete
+      evidence: "PR #5078 delivered the unit, docs, CLI warning, and schema contract."
+      remaining: none
+    evidence_boundary: Clarifies and validates units; the density default is unchanged.
+
+  - issue: 4970
+    title: Checkpoint provenance and fail-closed policy
+    phase: 1
+    owner: {issue: 4970, assignees: []}
+    implementation_prerequisites: []
+    evidence_gates: []
+    completion:
+      github_state: open
+      delivery_state: open_no_delivery
+      evidence: No delivery comment or issue-linked pull request was found at the snapshot.
+      remaining: Per-arm model ID, hash, load/fallback status, and fail-closed campaign option.
+    evidence_boundary: A learned-baseline result is ineligible unless native loading is proven.
+
+  - issue: 4971
+    title: Archetype-to-manifest completeness
+    phase: 1
+    owner: {issue: 4971, assignees: []}
+    implementation_prerequisites: []
+    evidence_gates: []
+    completion:
+      github_state: closed
+      delivery_state: closed_with_follow_up_boundary
+      evidence: "PR #5022 delivered the classic-archetype disposition contract."
+      remaining: "Issue #5032 owns fail-closed optional evaluation-replacement paths."
+    evidence_boundary: Proves explicit disposition, not scenario quality or benchmark coverage.
+
+  - issue: 4975
+    title: Empirical pedestrian-model validation pipeline
+    phase: 2
+    owner: {issue: 4975, assignees: []}
+    implementation_prerequisites: [4224]
+    evidence_gates: []
+    completion:
+      github_state: open
+      delivery_state: open_partial_delivery
+      evidence: "PR #5083 delivered the parser, metric harness, and diagnostic scorecard."
+      remaining: "Reconstruct scenarios and produce the first staged-data scorecard after #4224."
+    evidence_boundary: Diagnostic harness only until licensed assets and real scorecards exist.
+
+  - issue: 4972
+    title: Desired-speed decoupling and calibrated speed tiers
+    phase: 2
+    owner: {issue: 4972, assignees: []}
+    implementation_prerequisites: []
+    evidence_gates: [4975]
+    completion:
+      github_state: closed
+      delivery_state: closed_with_follow_up_boundary
+      evidence: "PR #5042 delivered independent desired speed with legacy defaults preserved."
+      remaining: Documented default-regime and speed-tier campaign work remains empirical follow-up.
+    evidence_boundary: "Configuration capability is complete; realism effects require #4975 evidence."
+
+  - issue: 4973
+    title: Optional anticipatory pedestrian-force variant
+    phase: 2
+    owner: {issue: 4973, assignees: []}
+    implementation_prerequisites: [4972]
+    evidence_gates: [4975]
+    completion:
+      github_state: open
+      delivery_state: open_no_delivery
+      evidence: No delivery comment or issue-linked pull request was found at the snapshot.
+      remaining: Optional deterministic force variant plus head-on and empirical validation.
+    evidence_boundary: Default must remain reactive; no freezing-mitigation claim before validation.
+
+  - issue: 4974
+    title: Field-informed interaction archetypes and ped-robot force
+    phase: 2
+    owner: {issue: 4974, assignees: []}
+    implementation_prerequisites: []
+    evidence_gates: [4975]
+    completion:
+      github_state: closed
+      delivery_state: closed_complete
+      evidence: "PR #5086 delivered three archetypes, force overrides, and hesitation response."
+      remaining: "Trajectory-data calibration remains under #4975, outside #4974 closure."
+    evidence_boundary: "Qualitative field alignment only; calibrated realism requires #4975."
+
+  - issue: 4976
+    title: Acceleration, braking, and stopping-distance envelope
+    phase: 3
+    owner: {issue: 4976, assignees: []}
+    implementation_prerequisites: []
+    evidence_gates: []
+    completion:
+      github_state: open
+      delivery_state: open_partial_delivery
+      evidence: "PR #5082 delivered braking authority and actuation-envelope provenance."
+      remaining: "Issue #5088 owns the campaign-sensitivity smoke."
+    evidence_boundary: Capability proof only; safety interpretation awaits sensitivity evidence.
+
+  - issue: 4977
+    title: Configurable control latency and sweep axis
+    phase: 3
+    owner: {issue: 4977, assignees: []}
+    implementation_prerequisites: []
+    evidence_gates: [4976]
+    completion:
+      github_state: open
+      delivery_state: open_partial_delivery
+      evidence: "PRs #5026 and #5061 delivered latency configuration and readiness guards."
+      remaining: "Issue #5034 owns native campaign rows and evidence classification."
+    evidence_boundary: >-
+      Latency behavior is implemented; the combined actuation claim needs #4976 and #5034.
+
+  - issue: 4978
+    title: Scenario flakiness and stability audit
+    phase: 4
+    owner: {issue: 4978, assignees: []}
+    implementation_prerequisites: []
+    evidence_gates: []
+    completion:
+      github_state: open
+      delivery_state: open_partial_delivery
+      evidence: "PR #5069 delivered the read-only flakiness-audit CLI and schema."
+      remaining: Apply it to real campaigns and integrate approved aggregate behavior.
+    evidence_boundary: No stability, ranking, exclusion, or down-weighting claim without real rows.
+
+  - issue: 4979
+    title: Semi-implicit integrator and scheme sensitivity
+    phase: 4
+    owner: {issue: 4979, assignees: []}
+    implementation_prerequisites: []
+    evidence_gates: []
+    completion:
+      github_state: closed
+      delivery_state: closed_complete
+      evidence: "PR #5009 delivered the option, diagnostic, and finite fail-closed reporting."
+      remaining: A campaign is required only before a future default-policy change.
+    evidence_boundary: Explicit Euler stays default; diagnostics do not justify changing it.
+
+  - issue: 4983
+    title: Dynamic Window Approach baseline
+    phase: 5
+    owner: {issue: 4983, assignees: []}
+    implementation_prerequisites: [4976]
+    evidence_gates: []
+    completion:
+      github_state: open
+      delivery_state: open_partial_delivery
+      evidence: "PRs #5012 and #5053 delivered the experimental planner and matrix-evidence slice."
+      remaining: "The child thread still marks parent planner-arm work open after #5053."
+    evidence_boundary: Experimental baseline only; no benchmark or paper claim is promoted.
+
+  - issue: 4980
+    title: OSM and GeoJSON map importer
+    phase: 5
+    owner: {issue: 4980, assignees: []}
+    implementation_prerequisites: []
+    evidence_gates: []
+    completion:
+      github_state: open
+      delivery_state: open_partial_delivery
+      evidence: "PR #5010 delivered a fail-closed converter and synthetic fixture."
+      remaining: Retain one license-backed public extract and run it end to end.
+    evidence_boundary: Synthetic conversion proves the contract, not real-map readiness.
+
+  - issue: 4981
+    title: Vectorized multi-environment rollouts
+    phase: 5
+    owner: {issue: 4981, assignees: []}
+    implementation_prerequisites: []
+    evidence_gates: []
+    completion:
+      github_state: open
+      delivery_state: open_partial_delivery
+      evidence: "PRs #5017 and #5102 delivered threaded VecEnv and obstacle-raycast batching slices."
+      remaining: Wire homogeneous LiDAR collection and prove the greater-than-3x throughput target.
+    evidence_boundary: Capability slices only; no throughput claim until the standard comparison.
+
+  - issue: 4982
+    title: Multi-map protocol and zero-shot decay metric
+    phase: 5
+    owner: {issue: 4982, assignees: []}
+    implementation_prerequisites: []
+    evidence_gates: [4980, 4981]
+    completion:
+      github_state: closed
+      delivery_state: closed_complete
+      evidence: "PR #5016 delivered protocol, split records, metric plumbing, and randomization."
+      remaining: A predeclared multi-seed campaign is the next empirical action, not a closure gate.
+    evidence_boundary: Protocol plumbing only; no held-out generalization claim without a campaign.

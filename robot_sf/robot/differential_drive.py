@@ -37,6 +37,12 @@ class DifferentialDriveSettings:
     # Maximum linear acceleration (m/s^2) accepted as an action; the per-step
     # velocity delta is max_linear_accel * d_t (see issue #3711)
     max_linear_accel: float = 1.0
+    # Maximum linear braking deceleration magnitude (m/s^2), i.e. the most
+    # negative commanded linear acceleration honored. ``None`` (default) keeps
+    # the legacy symmetric behavior where braking authority equals forward
+    # acceleration; set explicitly to decouple braking from forward acceleration
+    # (issue #4976).
+    max_linear_decel: float | None = None
     # Maximum angular acceleration (rad/s^2) accepted as an action; the per-step
     # angular velocity delta is max_angular_accel * d_t (see issue #3711)
     max_angular_accel: float = 1.0
@@ -60,6 +66,16 @@ class DifferentialDriveSettings:
         if self.max_linear_accel <= 0 or self.max_angular_accel <= 0:
             raise ValueError(
                 "Robot's max. linear and angular accelerations must be positive and non-zero!",
+            )
+        # Resolve the braking-authority default for backward compatibility:
+        # when unset, braking equals forward acceleration (legacy symmetric
+        # clip). Only an explicit max_linear_decel decouples them (issue #4976).
+        if self.max_linear_decel is None:
+            self.max_linear_decel = self.max_linear_accel
+        if self.max_linear_decel <= 0:
+            raise ValueError(
+                "Robot's max. linear braking deceleration (max_linear_decel) "
+                "must be positive and non-zero!",
             )
         if self.interaxis_length <= 0:
             raise ValueError("Robot's interaxis length must be positive and non-zero!")
@@ -133,7 +149,7 @@ class DifferentialDriveMotion:
             PolarVec2D: The new velocity clipped by configured accel and speed limits.
         """
         linear_accel = clip_scalar(
-            action[0], -self.config.max_linear_accel, self.config.max_linear_accel
+            action[0], -self.config.max_linear_decel, self.config.max_linear_accel
         )
         angular_accel = clip_scalar(
             action[1], -self.config.max_angular_accel, self.config.max_angular_accel
@@ -291,7 +307,7 @@ class DifferentialDriveRobot:
             dtype=np.float32,
         )
         low = np.array(
-            [-self.config.max_linear_accel, -self.config.max_angular_accel],
+            [-self.config.max_linear_decel, -self.config.max_angular_accel],
             dtype=np.float32,
         )
         return spaces.Box(low=low, high=high, dtype=np.float32)

@@ -23,8 +23,24 @@ class BicycleDriveSettings:
     wheelbase: float = 1.0  # Distance between front and rear wheels
     max_steer: float = 0.78  # Maximum steering angle (45 degrees in radians)
     max_velocity: float = 3.0  # Maximum forward velocity
-    max_accel: float = 1.0  # Maximum acceleration
+    max_accel: float = 1.0  # Maximum forward acceleration (m/s^2)
+    # Maximum braking deceleration magnitude (m/s^2), i.e. the most negative
+    # commanded acceleration the model will honor. ``None`` (default) keeps the
+    # legacy symmetric behavior where braking authority equals forward
+    # acceleration; set explicitly to decouple braking from forward acceleration
+    # (issue #4976).
+    max_decel: float | None = None
     allow_backwards: bool = False  # Whether backwards movement is allowed
+
+    def __post_init__(self) -> None:
+        """Resolve the braking-authority default for backward compatibility.
+
+        When ``max_decel`` is unset, braking authority defaults to the forward
+        acceleration so existing symmetric-clip behavior is preserved. Only an
+        explicit ``max_decel`` decouples braking from forward acceleration.
+        """
+        if self.max_decel is None:
+            self.max_decel = self.max_accel
 
     @property
     def min_velocity(self) -> float:
@@ -95,8 +111,11 @@ class BicycleMotion:
         (x, y), orient = state.pose
         velocity = state.velocity
 
-        # Apply limits to the acceleration and calculate new velocity
-        acceleration = clip_scalar(acceleration, -self.config.max_accel, self.config.max_accel)
+        # Apply asymmetric acceleration/braking authority and calculate new
+        # velocity. Braking (negative command) is capped by ``max_decel``, which
+        # may exceed forward ``max_accel`` so the model can stop harder than it
+        # accelerates (issue #4976).
+        acceleration = clip_scalar(acceleration, -self.config.max_decel, self.config.max_accel)
         new_velocity = velocity + d_t * acceleration
         new_velocity = clip_scalar(new_velocity, self.config.min_velocity, self.config.max_velocity)
 
@@ -154,7 +173,7 @@ class BicycleDriveRobot:
             acceleration and steering limits.
         """
         high = np.array([self.config.max_accel, self.config.max_steer], dtype=np.float32)
-        low = np.array([-self.config.max_accel, -self.config.max_steer], dtype=np.float32)
+        low = np.array([-self.config.max_decel, -self.config.max_steer], dtype=np.float32)
         return spaces.Box(low=low, high=high, dtype=np.float32)
 
     @property

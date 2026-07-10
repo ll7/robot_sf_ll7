@@ -204,6 +204,57 @@ def test_build_robot_config_applies_bicycle_robot_overrides() -> None:
     assert bool(config.robot_config.allow_backwards) is True
 
 
+def test_build_robot_config_applies_braking_authority_overrides() -> None:
+    """Scenario overrides should expose the decoupled braking-authority fields (issue #4976)."""
+    scenario_path = Path("configs/scenarios/classic_interactions.yaml").resolve()
+
+    bike = build_robot_config_from_scenario(
+        {
+            "name": "demo",
+            "robot_config": {
+                "type": "bicycle_drive",
+                "max_accel": 0.8,
+                "max_decel": 2.0,
+            },
+        },
+        scenario_path=scenario_path,
+    )
+    assert bike.robot_config.__class__.__name__ == "BicycleDriveSettings"
+    assert float(bike.robot_config.max_accel) == 0.8
+    assert float(bike.robot_config.max_decel) == 2.0
+
+    diff = build_robot_config_from_scenario(
+        {
+            "name": "demo",
+            "robot_config": {
+                "type": "differential_drive",
+                "max_linear_accel": 0.6,
+                "max_linear_decel": 1.8,
+            },
+        },
+        scenario_path=scenario_path,
+    )
+    assert diff.robot_config.__class__.__name__ == "DifferentialDriveSettings"
+    assert float(diff.robot_config.max_linear_accel) == 0.6
+    assert float(diff.robot_config.max_linear_decel) == 1.8
+
+
+def test_build_robot_config_braking_defaults_to_accel_when_unset() -> None:
+    """Unset braking authority keeps the legacy symmetric default (issue #4976)."""
+    scenario_path = Path("configs/scenarios/classic_interactions.yaml").resolve()
+    diff = build_robot_config_from_scenario(
+        {
+            "name": "demo",
+            "robot_config": {
+                "type": "differential_drive",
+                "max_linear_accel": 0.4,
+            },
+        },
+        scenario_path=scenario_path,
+    )
+    assert float(diff.robot_config.max_linear_decel) == 0.4
+
+
 def test_build_robot_config_applies_holonomic_overrides() -> None:
     """Scenario robot_config should instantiate holonomic settings with command mode."""
     scenario_path = Path("configs/scenarios/classic_interactions.yaml").resolve()

@@ -139,6 +139,18 @@ def retry_count() -> int:
     assert _declaration_only_class_base_requirements(before, after) is None
 
 
+def test_declaration_only_base_change_rejects_an_unrepresentable_added_base() -> None:
+    """An added base without a direct proof name must fail closed."""
+    before = "class DatasetError(RuntimeError):\n    pass\n"
+    after = """from errors import RobotSfError
+
+class DatasetError(RobotSfError, marker(), RuntimeError):
+    pass
+"""
+
+    assert _declaration_only_class_base_requirements(before, after) is None
+
+
 def test_changed_test_proof_enables_declaration_only_coverage(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

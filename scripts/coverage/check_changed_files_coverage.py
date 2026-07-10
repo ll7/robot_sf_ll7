@@ -214,11 +214,13 @@ def _added_leading_bases(before: ast.ClassDef, after: ast.ClassDef) -> list[str]
         or _ast_dumps(before.body) != _ast_dumps(after.body)
     ):
         return None
-    return [
-        name
+    added_names = [
+        _expression_terminal_name(base)
         for base in after.bases[: len(after_bases) - len(before_bases)]
-        if (name := _expression_terminal_name(base)) is not None
     ]
+    if any(name is None for name in added_names):
+        return None
+    return [name for name in added_names if name is not None]
 
 
 def _import_bindings(node: ast.stmt) -> set[str]:

@@ -346,6 +346,27 @@ def test_missing_hydration_manifest_fails_before_outputs(tmp_path: Path) -> None
     assert not output_root.exists()
 
 
+def test_unreadable_hydration_manifest_fails_before_outputs(tmp_path: Path) -> None:
+    """Campaign execution is fail-closed when the manifest cannot be read."""
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.mkdir()
+    output_root = tmp_path / "campaign"
+
+    exit_code = _MODULE.main(
+        [
+            "--config",
+            str(BENCHMARK_CONFIG),
+            "--hydration-manifest",
+            str(manifest_path),
+            "--output-root",
+            str(output_root),
+            "--smoke",
+        ]
+    )
+    assert exit_code == 2
+    assert not output_root.exists()
+
+
 def test_missing_hydrated_checkpoint_fails_before_outputs(tmp_path: Path) -> None:
     """Submit contract rejects a manifest pointing at a missing checkpoint."""
     manifest_path = _hydration_manifest(tmp_path)

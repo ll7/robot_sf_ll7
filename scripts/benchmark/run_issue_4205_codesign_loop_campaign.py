@@ -679,7 +679,7 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
     manifest_path = Path(args.hydration_manifest)
     try:
         manifest_payload = _load_json(manifest_path)
-    except (FileNotFoundError, OSError) as exc:
+    except OSError as exc:
         # Fail closed on a missing/unreadable private hydration manifest instead
         # of letting the raw OSError propagate (#4960: regression after the
         # local _load_json was consolidated onto hash_utils.load_json, which

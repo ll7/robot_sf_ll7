@@ -1,3 +1,4 @@
+<!-- AI-GENERATED: closure-audit evidence; NEEDS-REVIEW: maintainer verification before reuse. -->
 # Issue #4991 Closure Audit
 
 Date: 2026-07-10

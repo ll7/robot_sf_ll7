@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 
+from robot_sf.scenario_certification import feasibility_oracle
 from robot_sf.scenario_certification.feasibility_oracle import (
     BLOCKED,
     CAMPAIGN_FEASIBILITY_ANNOTATION_SCHEMA,
@@ -377,6 +378,25 @@ def test_envelope_sweep_blocks_when_nominal_verdict_is_blocked() -> None:
     assert verdict.category == BLOCKED
 
 
+def test_oracle_blocks_when_default_runner_setup_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default-runner construction failures become blocked rather than escaping the oracle."""
+
+    def _raise(_config: FeasibilityOracleConfig):
+        raise ImportError("benchmark runner unavailable")
+
+    monkeypatch.setattr(feasibility_oracle, "_default_actor_free_runner", _raise)
+    verdict = run_feasibility_oracle(
+        _scenario(),
+        config=_oracle_config((1.0,)),
+        envelope_radius_m=1.0,
+        certifier=lambda _s, _p: _certificate(VALID),
+    )
+
+    assert verdict.status == BLOCKED
+    assert verdict.completion.status == BLOCKED
+    assert verdict.completion.blocker == "rollout_error: benchmark runner unavailable"
+
+
 def test_envelope_sweep_blocks_when_a_reduced_probe_is_unobserved() -> None:
     """A blocked reduced probe cannot establish a map-artifact classification."""
 
@@ -605,6 +625,7 @@ def test_default_envelope_radii_match_issue_nominal_and_reduced() -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_oracle_end_to_end_on_committed_head_on_corridor_scenario() -> None:
     """The oracle produces a coherent verdict on a real committed scenario.
 

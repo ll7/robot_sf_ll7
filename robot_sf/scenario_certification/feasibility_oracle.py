@@ -565,9 +565,9 @@ def _completion_margin(
             blocker="route_geometrically_infeasible_no_traversal_path",
         )
 
-    runner = episode_runner or _default_actor_free_runner(config)
-    actor_free = make_actor_free_scenario(scenario)
     try:
+        runner = episode_runner or _default_actor_free_runner(config)
+        actor_free = make_actor_free_scenario(scenario)
         record = dict(runner(actor_free, config.rollout_seed, horizon_steps, config.rollout_algo))
     except Exception as exc:  # noqa: BLE001 - oracle must fail closed on rollout errors.
         return CompletionMargin(

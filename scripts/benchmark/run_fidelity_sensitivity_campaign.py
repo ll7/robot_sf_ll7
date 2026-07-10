@@ -45,7 +45,7 @@ from robot_sf.planner.hybrid_rule_local_planner import (
 )
 from robot_sf.planner.socnav import ORCAPlannerAdapter, SocNavPlannerConfig
 from robot_sf.robot.actuation_envelope import actuation_envelope_from_drive_config
-from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
@@ -878,13 +878,20 @@ def _load_yaml_mapping(path: pathlib.Path) -> dict[str, Any]:
 def _robot_angular_cap(robot_config: Any) -> float:
     """Return the active drive model's angular command bound.
 
-    The bicycle drive has no angular-velocity cap; its steering bound
-    (``max_steer``) is the closest command limit and is fed as the angular
-    command bound so the unicycle-style planner command stays finite.
+    A bicycle drive accepts a steering angle, but planners emit angular velocity.
+    Its maximum planner-facing yaw rate therefore derives from the speed cap,
+    steering bound, and wheelbase (``v * tan(steer) / wheelbase``).
     """
-    return float(
-        getattr(robot_config, "max_angular_speed", None) or getattr(robot_config, "max_steer", 0.0)
-    )
+    max_angular_speed = getattr(robot_config, "max_angular_speed", None)
+    if max_angular_speed is not None:
+        return float(max_angular_speed)
+    if isinstance(robot_config, BicycleDriveSettings):
+        return float(
+            robot_config.max_velocity
+            * math.tan(robot_config.max_steer)
+            / max(robot_config.wheelbase, 1e-6)
+        )
+    return float(getattr(robot_config, "max_steer", 0.0))
 
 
 def _socnav_config(config: Any) -> SocNavPlannerConfig:
@@ -931,9 +938,23 @@ def _planner(planner: str, config: Any, *, seed: int) -> Any:
 
 
 def _env_action(env: Any, command: Mapping[str, float]) -> np.ndarray:
-    current_linear, current_angular = env.simulator.robots[0].current_speed
+    robot = env.simulator.robots[0]
+    current_linear, current_angular = robot.current_speed
     desired_linear = float(command.get("v", command.get("linear", 0.0)))
     desired_angular = float(command.get("omega", command.get("angular", 0.0)))
+    if isinstance(robot, BicycleDriveRobot):
+        config = robot.config
+        target_speed = float(np.clip(desired_linear, config.min_velocity, config.max_velocity))
+        time_step = float(env.env_config.sim_config.time_per_step_in_secs)
+        acceleration = (target_speed - float(current_linear)) / max(time_step, 1e-6)
+        if abs(target_speed) < 1e-6:
+            steering = 0.0
+        else:
+            steering = math.atan(
+                desired_angular * config.wheelbase / max(abs(target_speed), 1e-6)
+            ) * np.sign(target_speed)
+        action = np.array([acceleration, steering], dtype=float)
+        return np.clip(action, env.action_space.low, env.action_space.high)
     return np.array(
         [desired_linear - float(current_linear), desired_angular - float(current_angular)],
         dtype=float,

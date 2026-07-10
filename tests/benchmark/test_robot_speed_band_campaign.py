@@ -13,6 +13,7 @@ and no planner-ranking claim is made.
 from __future__ import annotations
 
 import importlib.util
+import math
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -188,6 +189,14 @@ def test_speed_band_variant_flows_to_real_bicycle_robot_action_space() -> None:
         # carries the band-scaled braking-authority prerequisite (#4976).
         assert env.action_space.high[0] == pytest.approx(robot.config.max_accel)
         env.reset(seed=111)
+        action = campaign_runner._env_action(env, {"v": 2.0, "omega": 1.5})
+        # The runner consumes unicycle-style velocity commands, whereas the
+        # bicycle environment consumes [acceleration, steering_angle]. A direct
+        # omega-as-steering pass-through would be a different (and incorrect)
+        # value for this non-zero target speed.
+        assert action[0] == pytest.approx(robot.config.max_accel)
+        assert action[1] == pytest.approx(math.atan(1.5 * robot.config.wheelbase / 2.0))
+        assert action[1] != pytest.approx(1.5)
         obs, _reward, terminated, _truncated, _info = env.step(env.action_space.sample())
         assert obs is not None
         assert terminated is False

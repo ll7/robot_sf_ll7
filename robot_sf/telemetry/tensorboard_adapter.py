@@ -17,10 +17,10 @@ if TYPE_CHECKING:  # pragma: no cover - typing helpers only
 
 try:  # pragma: no cover - optional dependency
     from torch.utils.tensorboard import SummaryWriter as _SummaryWriter
-except ImportError:  # pragma: no cover - optional dependency fallback
+except (ImportError, RuntimeError):  # pragma: no cover - RuntimeError: pytest-cov+torch docstring collision (#5101)
     try:
         from tensorboardX import SummaryWriter as _SummaryWriter  # type: ignore
-    except ImportError:  # pragma: no cover - tensorboard unavailable
+    except (ImportError, RuntimeError):  # pragma: no cover - tensorboard unavailable
         _SummaryWriter = None  # type: ignore
 
 __all__ = ["TensorBoardAdapter", "iter_telemetry_snapshots"]

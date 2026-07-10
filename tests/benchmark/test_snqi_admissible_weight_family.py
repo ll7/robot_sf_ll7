@@ -132,6 +132,22 @@ def test_loader_rejects_an_incomplete_weight_partition(tmp_path: Path) -> None:
         load_admissible_weight_family_config(malformed)
 
 
+def test_loader_rejects_an_infeasible_simplex_bound_or_partial_group_order(tmp_path: Path) -> None:
+    """A weight-family policy must admit a simplex vector and order every group."""
+    committed = _CONFIG.read_text(encoding="utf-8")
+    infeasible = tmp_path / "infeasible_family.yaml"
+    infeasible.write_text(committed.replace("minimum: 0.02", "minimum: 0.20"), encoding="utf-8")
+    with pytest.raises(ValueError, match="infeasible for a normalized simplex"):
+        load_admissible_weight_family_config(infeasible)
+
+    partial_order = tmp_path / "partial_order_family.yaml"
+    partial_order.write_text(
+        committed.replace("    - comfort_and_smoothness\n", ""), encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="must include every group"):
+        load_admissible_weight_family_config(partial_order)
+
+
 def test_cli_writes_weight_family_provenance_and_markdown_summary(tmp_path: Path) -> None:
     """The public CLI wires the tracked policy into JSON and human-readable output."""
     episodes = tmp_path / "episodes.jsonl"

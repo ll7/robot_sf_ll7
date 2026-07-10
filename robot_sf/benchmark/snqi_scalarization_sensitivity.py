@@ -696,6 +696,11 @@ def _validate_weight_family_header(family: Mapping[str, Any]) -> tuple[str, floa
         raise ValueError("component bounds require numeric minimum and maximum") from exc
     if not (0.0 <= minimum <= maximum <= 1.0):
         raise ValueError("component bounds must satisfy 0 <= minimum <= maximum <= 1")
+    component_count = len(WEIGHT_NAMES)
+    if minimum * component_count > 1.0 or maximum * component_count < 1.0:
+        raise ValueError(
+            "component bounds are infeasible for a normalized simplex across all SNQI weights"
+        )
     return family_id, minimum, maximum
 
 
@@ -751,6 +756,9 @@ def _validate_weight_family_order(
     unknown_groups = set(normalized_order).difference(groups)
     if unknown_groups:
         raise ValueError(f"admissible_family ordering has unknown groups: {unknown_groups}")
+    missing_groups = set(groups).difference(normalized_order)
+    if missing_groups:
+        raise ValueError(f"admissible_family ordering must include every group: {missing_groups}")
     return normalized_order
 
 

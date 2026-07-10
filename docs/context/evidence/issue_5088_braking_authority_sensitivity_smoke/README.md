@@ -3,7 +3,7 @@
 - Status: `signal_activated`
 - Evidence tier: `targeted-smoke`
 - Claim boundary: targeted-smoke diagnostic evidence only; this comparison does not calibrate braking, establish safety, or support paper/dissertation claims
-- Run commit: `92c0ca179d5c8e60ceb7d14bbe84503d2ea0a5ad`
+- Run commit: `e4e5d8b6fcd92c3688f8c05a5d1a64addfad278f`
 - Config: `configs/benchmarks/issue_5088_braking_authority_sensitivity_smoke.yaml`
 - Scenario: `configs/scenarios/classic_interactions.yaml` (`classic_cross_trap_high`)
 - Seeds: `101, 102, 103`

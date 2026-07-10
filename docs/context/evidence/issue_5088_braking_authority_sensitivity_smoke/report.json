@@ -142,16 +142,16 @@
     "strong_braking": {
       "relative_path": "arms/strong_braking/episodes.jsonl",
       "row_count": 3,
-      "sha256": "7cb3ec9d2c34eb0db8536922d96cc02dd7b0e5bc4ce416885e399576280d87de"
+      "sha256": "8db737e1571711130ec8dfebbb144cd6122614928d8499131e0331b8d7986c01"
     },
     "weak_braking": {
       "relative_path": "arms/weak_braking/episodes.jsonl",
       "row_count": 3,
-      "sha256": "08551fa1db7038d38ea45e1afffa74803c27404e5b6d6c3e376463eb7cae8fb0"
+      "sha256": "7ee628879bc7c6dc7e11e2e4ed9f0282174e9cae6beaf9da47a04419e753ebca"
     }
   },
   "reproduction_command": "DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/tools/run_braking_authority_sensitivity_smoke.py --config configs/benchmarks/issue_5088_braking_authority_sensitivity_smoke.yaml --output '<fresh-artifact-dir>'",
-  "run_commit": "92c0ca179d5c8e60ceb7d14bbe84503d2ea0a5ad",
+  "run_commit": "e4e5d8b6fcd92c3688f8c05a5d1a64addfad278f",
   "scenario_name": "classic_cross_trap_high",
   "scenario_path": "configs/scenarios/classic_interactions.yaml",
   "schema_version": "braking-authority-sensitivity-report.v1",

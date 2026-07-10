@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import math
 import statistics
 import subprocess
@@ -26,7 +27,10 @@ _REPO_ROOT = str(Path(__file__).resolve().parent.parent.parent)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
+from scripts.dev._gh_pagination import is_likely_truncated  # noqa: E402
 from scripts.dev.check_pr_ci_status import _fetch_ci_status  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_BASELINE_SECONDS = 920
 DEFAULT_MULTIPLIER = 1.3
@@ -138,6 +142,17 @@ def fetch_recent_successful_ci_durations(
         raise RuntimeError(f"Failed to parse gh run list JSON: {exc}") from exc
     if not isinstance(runs, list):
         raise RuntimeError("gh run list output is not a JSON array")
+    if is_likely_truncated(len(runs), limit=limit):
+        # Sampling call: hitting the cap is expected, but record a structured,
+        # greppable marker so a capped drift window is never mistaken for the
+        # full recent-run history (issue #5048 / #4991).
+        logger.warning(
+            "gh run list truncated: got %d rows at --limit %d for workflow %r; "
+            "drift sample is capped, raise --sample-limit for a wider window",
+            len(runs),
+            limit,
+            workflow,
+        )
     durations: list[int] = []
     for run in runs:
         if not isinstance(run, dict):

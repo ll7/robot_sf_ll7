@@ -1,0 +1,201 @@
+{
+  "description": "ty advisory diagnostic baseline + per-module downward ratchet (issue #5004). The ratchet gates on the 'general' bucket; the 'optional_import_excluded' bucket is recorded for visibility but owned by #4990/#4995. Refresh with `scripts/dev/ty_advisory_ratchet.py --write-baseline` after intentionally reducing findings.",
+  "exclusion": {
+    "owned_by_other_issues": [
+      "#4990",
+      "#4995",
+      "#4988"
+    ],
+    "rule": "Findings with check_name='unresolved-import' and description prefix 'unresolved-import: Cannot resolve imported module...' are treated as the optional-import category: recorded but EXCLUDED from the ratchet gate (owned by #4990/#4995)."
+  },
+  "generated_at": "2026-07-10T11:46:32Z",
+  "modules": {
+    "examples": {
+      "general": 151,
+      "optional_import_excluded": 2,
+      "total": 153
+    },
+    "experiments": {
+      "general": 3,
+      "optional_import_excluded": 0,
+      "total": 3
+    },
+    "fast-pysf": {
+      "general": 2,
+      "optional_import_excluded": 6,
+      "total": 8
+    },
+    "robot_sf": {
+      "general": 3,
+      "optional_import_excluded": 0,
+      "total": 3
+    },
+    "robot_sf/adversarial": {
+      "general": 48,
+      "optional_import_excluded": 0,
+      "total": 48
+    },
+    "robot_sf/analysis": {
+      "general": 6,
+      "optional_import_excluded": 0,
+      "total": 6
+    },
+    "robot_sf/analysis_workbench": {
+      "general": 2,
+      "optional_import_excluded": 0,
+      "total": 2
+    },
+    "robot_sf/baselines": {
+      "general": 16,
+      "optional_import_excluded": 0,
+      "total": 16
+    },
+    "robot_sf/benchmark": {
+      "general": 510,
+      "optional_import_excluded": 2,
+      "total": 512
+    },
+    "robot_sf/common": {
+      "general": 2,
+      "optional_import_excluded": 0,
+      "total": 2
+    },
+    "robot_sf/data_analysis": {
+      "general": 6,
+      "optional_import_excluded": 0,
+      "total": 6
+    },
+    "robot_sf/feature_extractors": {
+      "general": 3,
+      "optional_import_excluded": 0,
+      "total": 3
+    },
+    "robot_sf/gym_env": {
+      "general": 57,
+      "optional_import_excluded": 0,
+      "total": 57
+    },
+    "robot_sf/manual_control": {
+      "general": 1,
+      "optional_import_excluded": 0,
+      "total": 1
+    },
+    "robot_sf/maps": {
+      "general": 19,
+      "optional_import_excluded": 0,
+      "total": 19
+    },
+    "robot_sf/models": {
+      "general": 2,
+      "optional_import_excluded": 0,
+      "total": 2
+    },
+    "robot_sf/nav": {
+      "general": 52,
+      "optional_import_excluded": 0,
+      "total": 52
+    },
+    "robot_sf/ped_ego": {
+      "general": 4,
+      "optional_import_excluded": 0,
+      "total": 4
+    },
+    "robot_sf/ped_npc": {
+      "general": 5,
+      "optional_import_excluded": 0,
+      "total": 5
+    },
+    "robot_sf/planner": {
+      "general": 347,
+      "optional_import_excluded": 6,
+      "total": 353
+    },
+    "robot_sf/render": {
+      "general": 22,
+      "optional_import_excluded": 0,
+      "total": 22
+    },
+    "robot_sf/research": {
+      "general": 10,
+      "optional_import_excluded": 0,
+      "total": 10
+    },
+    "robot_sf/robot": {
+      "general": 8,
+      "optional_import_excluded": 0,
+      "total": 8
+    },
+    "robot_sf/scenario_certification": {
+      "general": 3,
+      "optional_import_excluded": 0,
+      "total": 3
+    },
+    "robot_sf/sensor": {
+      "general": 3,
+      "optional_import_excluded": 0,
+      "total": 3
+    },
+    "robot_sf/sim": {
+      "general": 14,
+      "optional_import_excluded": 0,
+      "total": 14
+    },
+    "robot_sf/telemetry": {
+      "general": 11,
+      "optional_import_excluded": 0,
+      "total": 11
+    },
+    "robot_sf/training": {
+      "general": 74,
+      "optional_import_excluded": 0,
+      "total": 74
+    },
+    "robot_sf_carla_bridge": {
+      "general": 2,
+      "optional_import_excluded": 0,
+      "total": 2
+    },
+    "scripts": {
+      "general": 960,
+      "optional_import_excluded": 19,
+      "total": 979
+    },
+    "third_party": {
+      "general": 194,
+      "optional_import_excluded": 114,
+      "total": 308
+    }
+  },
+  "rules": {
+    "call-non-callable": 10,
+    "deprecated": 1,
+    "index-out-of-bounds": 4,
+    "invalid-argument-type": 1443,
+    "invalid-assignment": 121,
+    "invalid-key": 1,
+    "invalid-method-override": 5,
+    "invalid-parameter-default": 4,
+    "invalid-return-type": 80,
+    "invalid-syntax": 7,
+    "invalid-type-form": 43,
+    "no-matching-overload": 59,
+    "not-iterable": 41,
+    "not-subscriptable": 80,
+    "redundant-cast": 4,
+    "too-many-positional-arguments": 1,
+    "unknown-argument": 5,
+    "unresolved-attribute": 498,
+    "unresolved-import": 168,
+    "unresolved-reference": 1,
+    "unsupported-operator": 71,
+    "unused-type-ignore-comment": 42
+  },
+  "schema_version": 1,
+  "summary": {
+    "general_findings": 2540,
+    "module_count": 31,
+    "optional_import_findings_excluded": 149,
+    "total_findings": 2689
+  },
+  "ty_version": "ty 0.0.58"
+}

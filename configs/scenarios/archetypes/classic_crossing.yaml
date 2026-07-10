@@ -4,6 +4,9 @@
 #
 # Evaluation disposition (issue #4971): excluded from the standard classic
 # interaction campaign because these aliases duplicate classic_cross_trap.
+#
+# simulation_config.ped_density unit: pedestrians per m^2 of spawnable
+# route/zone (sidewalk) area (not whole-map); 0.0 + markers is a placeholder.
 evaluation: excluded
 evaluation_reason: Deprecated compatibility aliases; use classic_cross_trap.yaml in new campaigns.
 evaluation_replacement: classic_cross_trap.yaml

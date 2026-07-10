@@ -31,6 +31,27 @@ Notes:
 - The CLI also checks for duplicate `id` values.
 - The validator uses Draft-07 JSON Schema.
 
+### `simulation_config.ped_density` unit
+
+`ped_density` is a pedestrian spawn density in **pedestrians per square meter of
+spawnable route/zone (sidewalk) area** — not per whole-map area and not per route
+meter. The runtime spawn count is computed as
+`ceil(total_sidewalks_area * ped_density)`
+(`robot_sf/ped_npc/ped_population.py`), where `total_sidewalks_area` is the
+spawnable sidewalk area derived from the map routes. The classic archetypes use
+`0.02` (low) / `0.05` (medium) / `0.08` (high) on this unit; the CLI flags values
+outside the recommended `[0.02, 0.08]` band and flags values above `0.15` as
+likely unit confusion (e.g. a value meant per whole-map area or per route meter).
+
+The value `0.0` is a **marker-controlled placeholder**, not an empty scene. When
+`metadata.spawn_mode` is `markers`, pedestrians are placed from fixed map
+(`single_ped`) markers and/or config `single_pedestrians`, and `ped_density: 0.0`
+simply disables route-density spawning. This is how the bottleneck archetypes
+control pedestrian counts. Outside marker mode, `ped_density: 0.0` means no
+route-spawned pedestrians.
+
+The schema enforces `ped_density >= 0`; negative values fail validation.
+
 Example:
 
 ```bash

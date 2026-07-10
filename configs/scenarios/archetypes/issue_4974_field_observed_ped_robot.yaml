@@ -1,0 +1,193 @@
+## Issue #4974 — field-observation-informed pedestrian-robot interaction archetypes
+#
+# Purpose:
+#   Add three field-informed interaction archetypes that are absent from the current
+#   scenario set: robot-blocking-narrow-path, pedestrian-hesitation (stop-and-wait near
+#   robot), and give-way asymmetry. These are modeled on qualitative behavior documented
+#   in field observations of sidewalk delivery robots:
+#     * Weinberg et al. 2023, "Sharing the Sidewalk: Observing Delivery Robot
+#       Interactions with Pedestrians" — larger clearance margins, hesitation/uncertainty
+#       about robot intent, path changes differing from person-person passing.
+#     * Gehrke et al. 2023 — observed sidewalk autonomous-delivery-robot PET study.
+#
+# Claim boundary (HONEST):
+#   These scenarios are mechanism/exploratory evidence only. They prove the new
+#   calibration surface (per-scenario ped-robot force coefficient + effective radius,
+#   issue #4974 model side) and the `hesitating` response law (issue #4974 optional
+#   hesitation state) reach scenario definitions. They are NOT calibrated against the
+#   cited field studies and make NO realism, benchmark, or planner-ranking claim. The
+#   cited studies are qualitative references for plausible ranges only. Calibration to
+#   real trajectory data is deferred to the trajectory-dataset validation pipeline
+#   (issue sequencing note).
+#
+# Evidence tier: exploratory / mechanism. Lives under the data-driven scenario epic #4932.
+# Sibling: vulnerable-user pack #3654.
+scenarios:
+  - name: issue_4974_robot_blocks_narrow_path
+    map_file: ../../../maps/svg_maps/classic_doorway.svg
+    simulation_config:
+      max_episode_steps: 300
+      ped_density: 0.04
+      route_spawn_distribution: spread
+      route_spawn_jitter_frac: 0.2
+      max_peds_per_group: 1
+      # Calibration surface (model side, issue #4974): a robot blocking a narrow path
+      # produces a larger effective repulsion footprint. Tune coefficient and effective
+      # radius per-scenario without touching defaults.
+      prf_config:
+        force_multiplier: 15.0
+        robot_radius: 1.2
+        activation_threshold: 2.5
+    robot_config: {}
+    metadata:
+      archetype: robot_blocks_narrow_path
+      issue: 4974
+      pack_id: field_observed_ped_robot_v0
+      epic: 4932
+      density: medium
+      flow: bi
+      groups: 0.0
+      interaction_basis: >
+        Field observations (Weinberg et al. 2023; Gehrke et al. 2023) document larger
+        clearance margins around sidewalk robots. This archetype raises the ped-robot
+        force coefficient and effective radius so a robot in a narrow doorway blocks the
+        path and pedestrians must negotiate larger margins.
+      evidence_tier: exploratory
+      benchmark_evidence: false
+      claim_boundary: >
+        Mechanism-only: proves the per-scenario prf_config calibration surface reaches
+        runtime. Not a calibrated fit to field data; not benchmark or realism evidence.
+      plausible_ranges_source:
+        - "Weinberg et al. 2023, Sharing the Sidewalk"
+        - "Gehrke et al. 2023, sidewalk delivery-robot PET study"
+      plausibility:
+        status: unverified
+        verified_on: null
+        verified_by: null
+        method: null
+        notes: "Metadata-only field-observed archetype; no benchmark evidence."
+        metrics:
+          min_distance: null
+          mean_distance: null
+          robot_ped_within_5m_frac: null
+          ped_force_mean: null
+          force_q95: null
+        metrics_updated_on: null
+    seeds: [4974, 4975, 4976]
+
+  - name: issue_4974_pedestrian_hesitation
+    map_file: ../../../maps/svg_maps/classic_head_on_corridor.svg
+    simulation_config:
+      max_episode_steps: 300
+      ped_density: 0.03
+      route_spawn_distribution: spread
+      route_spawn_jitter_frac: 0.2
+      max_peds_per_group: 1
+      # Model-side optional hesitation state (issue #4974): a fraction of pedestrians
+      # hesitate (heightened robot awareness / larger clearance) near the robot. The
+      # `hesitating` response law maps to hesitating_response_multiplier (default 1.0,
+      # here raised to model larger clearance margins per the field studies).
+      response_law_composition:
+        reactive: 0.6
+        hesitating: 0.4
+      hesitating_response_multiplier: 1.8
+      response_law_seed: 4974
+      prf_config:
+        force_multiplier: 10.0
+        robot_radius: 1.0
+        activation_threshold: 2.5
+    robot_config: {}
+    metadata:
+      archetype: pedestrian_hesitation
+      issue: 4974
+      pack_id: field_observed_ped_robot_v0
+      epic: 4932
+      density: medium
+      flow: head_on
+      groups: 0.0
+      interaction_basis: >
+        Field observations document pedestrian hesitation/uncertainty about robot intent
+        and stop-and-wait behavior near sidewalk robots (Weinberg et al. 2023). This
+        archetype marks a fraction of pedestrians as `hesitating`, raising their robot
+        repulsion to model larger clearance margins and heightened robot awareness.
+      evidence_tier: exploratory
+      benchmark_evidence: false
+      claim_boundary: >
+        Mechanism-only: proves the `hesitating` response law and
+        hesitating_response_multiplier reach runtime. The clearance-margin multiplier is
+        a modeling proxy, not true stop-and-wait kinematics; not calibrated to field data.
+      plausible_ranges_source:
+        - "Weinberg et al. 2023, Sharing the Sidewalk"
+        - "Gehrke et al. 2023, sidewalk delivery-robot PET study"
+      plausibility:
+        status: unverified
+        verified_on: null
+        verified_by: null
+        method: null
+        notes: "Metadata-only field-observed archetype; no benchmark evidence."
+        metrics:
+          min_distance: null
+          mean_distance: null
+          robot_ped_within_5m_frac: null
+          ped_force_mean: null
+          force_q95: null
+        metrics_updated_on: null
+    seeds: [4974, 4975, 4976]
+
+  - name: issue_4974_give_way_asymmetry
+    map_file: ../../../maps/svg_maps/classic_t_intersection.svg
+    simulation_config:
+      max_episode_steps: 300
+      ped_density: 0.03
+      route_spawn_distribution: spread
+      route_spawn_jitter_frac: 0.2
+      max_peds_per_group: 1
+      # Give-way asymmetry (issue #4974): an asymmetric population where most
+      # pedestrians yield (hesitate) to the robot and a minority do not react. Models
+      # the asymmetric path-change behavior documented in field studies, where pedestrian
+      # yielding to robots is common but not universal.
+      response_law_composition:
+        hesitating: 0.7
+        non_reactive: 0.3
+      hesitating_response_multiplier: 1.6
+      response_law_seed: 4975
+      prf_config:
+        force_multiplier: 10.0
+        robot_radius: 1.0
+        activation_threshold: 2.5
+    robot_config: {}
+    metadata:
+      archetype: give_way_asymmetry
+      issue: 4974
+      pack_id: field_observed_ped_robot_v0
+      epic: 4932
+      density: medium
+      flow: t_intersection
+      groups: 0.0
+      interaction_basis: >
+        Field observations document that pedestrian yielding to sidewalk robots is common
+        but not universal, producing an asymmetric give-way pattern (Weinberg et al. 2023;
+        Gehrke et al. 2023). This archetype mixes a hesitating (yielding) majority with a
+        non-reactive minority to model that asymmetry.
+      evidence_tier: exploratory
+      benchmark_evidence: false
+      claim_boundary: >
+        Mechanism-only: proves the hesitating + non_reactive response-law mixture reaches
+        runtime on one scenario. Not calibrated to field data; not benchmark evidence.
+      plausible_ranges_source:
+        - "Weinberg et al. 2023, Sharing the Sidewalk"
+        - "Gehrke et al. 2023, sidewalk delivery-robot PET study"
+      plausibility:
+        status: unverified
+        verified_on: null
+        verified_by: null
+        method: null
+        notes: "Metadata-only field-observed archetype; no benchmark evidence."
+        metrics:
+          min_distance: null
+          mean_distance: null
+          robot_ped_within_5m_frac: null
+          ped_force_mean: null
+          force_q95: null
+        metrics_updated_on: null
+    seeds: [4974, 4975, 4976]

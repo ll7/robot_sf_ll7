@@ -87,6 +87,9 @@ from robot_sf.benchmark.report_table import format_latex_booktabs as _tbl_format
 from robot_sf.benchmark.report_table import format_markdown as _tbl_format_md
 from robot_sf.benchmark.report_table import to_json as _tbl_to_json
 from robot_sf.benchmark.runner import load_scenario_matrix, run_batch
+from robot_sf.benchmark.scenario_flakiness import (
+    compute_flakiness_audit as _compute_flakiness_audit,
+)
 from robot_sf.benchmark.scenario_schema import (
     validate_scenario_list,
     validate_scenario_matrix_metadata,
@@ -826,6 +829,48 @@ def _handle_seed_variance(args) -> int:
         return 2
 
 
+def _handle_flakiness_audit(args) -> int:
+    """Audit scenario outcome flakiness and write a JSON report.
+
+    Returns:
+        Exit code (0 success, 2 failure).
+    """
+    try:
+        records = _agg_read_jsonl(args.in_path)
+        report = _compute_flakiness_audit(
+            records,
+            outcome_metric=str(args.outcome_metric),
+            group_by=args.group_by,
+            fallback_group_by=args.fallback_group_by,
+            seed_field=str(args.seed_field),
+            stability_threshold=float(args.stability_threshold),
+            min_seeds=int(args.min_seeds),
+        )
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2)
+        try:
+            summary = report["summary"]
+            logging.info(
+                "Flakiness audit written to %s (%s cells, %s knife-edge, determinism=%s)",
+                out_path,
+                summary["n_cells"],
+                summary["n_knife_edge_cells"],
+                report["exact_repeat"]["is_deterministic"],
+            )
+        except _CLI_LOGGING_ERRORS:  # pragma: no cover - defensive logging boundary
+            logging.debug("Logging 'Flakiness audit' failed", exc_info=True)
+        return 0
+    except ValueError:
+        # Fail closed on an empty/invalid audit request rather than emit a report
+        # that asserts stability without evidence.
+        logging.exception("Flakiness audit failed")
+        return 2
+    except _CLI_INPUT_ERRORS:  # pragma: no cover - error path
+        return 2
+
+
 def _handle_extract_failures(args) -> int:
     """Extract failure episodes and write them to disk.
 
@@ -1395,7 +1440,22 @@ def _collect_scenario_warnings(  # noqa: PLR0912,PLR0915
                         scenario_id,
                         (
                             "ped_density outside recommended [0.02, 0.08]; "
+                            "unit is peds per m^2 of spawnable area "
+                            "(route/zone sidewalk area, not whole-map); "
                             "may reduce benchmark comparability"
+                        ),
+                        "/simulation_config/ped_density",
+                    )
+                if not marker_placeholder_density and density_val > 0.15:
+                    warn(
+                        idx,
+                        scenario_id,
+                        (
+                            f"ped_density={density_val} is high; unit is "
+                            "peds per m^2 of spawnable area (recommended "
+                            "0.02-0.08). If this value was meant per "
+                            "whole-map area or per route meter, it is likely "
+                            "a unit confusion."
                         ),
                         "/simulation_config/ped_density",
                     )
@@ -2321,6 +2381,57 @@ def _add_seed_variance_subparser(
     p.set_defaults(cmd="seed-variance")
 
 
+def _add_flakiness_audit_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the flakiness-audit subcommand parser."""
+    p = subparsers.add_parser(
+        "flakiness-audit",
+        help=(
+            "Audit scenario outcome flakiness: exact-repeat determinism and "
+            "per-cell (scenario, planner) outcome-stability; writes a JSON report"
+        ),
+    )
+    p.add_argument("--in", dest="in_path", required=True, help="Input episodes JSONL path")
+    p.add_argument("--out", required=True, help="Output JSON report path")
+    p.add_argument(
+        "--outcome-metric",
+        default="success",
+        help="Binary outcome metric name (default: success)",
+    )
+    p.add_argument(
+        "--group-by",
+        default=DEFAULT_REPORT_GROUP_BY,
+        help="Planner grouping key (dotted path). Default: scenario_params.algo",
+    )
+    p.add_argument(
+        "--fallback-group-by",
+        default=DEFAULT_REPORT_FALLBACK_GROUP_BY,
+        help="Fallback grouping key when group-by is missing. Default: scenario_id",
+    )
+    p.add_argument(
+        "--seed-field",
+        default="seed",
+        help="Dotted path to the seed field (default: seed)",
+    )
+    p.add_argument(
+        "--stability-threshold",
+        type=float,
+        default=0.8,
+        help=(
+            "Majority-agreement fraction below which a cell is flagged knife-edge "
+            "(range (0, 1]; default 0.8)"
+        ),
+    )
+    p.add_argument(
+        "--min-seeds",
+        type=int,
+        default=2,
+        help="Minimum distinct seeds before a cell's stability is assessed (default: 2)",
+    )
+    p.set_defaults(cmd="flakiness-audit")
+
+
 def _add_extract_failures_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -2730,6 +2841,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_validate_row_claims_subparser(subparsers)
     _add_export_parquet_subparser(subparsers)
     _add_seed_variance_subparser(subparsers)
+    _add_flakiness_audit_subparser(subparsers)
     _add_extract_failures_subparser(subparsers)
     _add_snqi_ablate_subparser(subparsers)
     _add_rank_subparser(subparsers)
@@ -3238,6 +3350,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         "validate-row-claims": _handle_validate_row_claims,
         "export-parquet": _handle_export_parquet,
         "seed-variance": _handle_seed_variance,
+        "flakiness-audit": _handle_flakiness_audit,
         "extract-failures": _handle_extract_failures,
         "snqi-ablate": _handle_snqi_ablate,
         "rank": _handle_rank,

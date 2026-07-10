@@ -1,3 +1,5 @@
+<!-- AI-GENERATED NEEDS-REVIEW -->
+
 ## h600 per-cell (scenario_id) breakdown (issue #5138)
 
 Per-cell (scenario_id) success / near-miss / collision / SNQI for the retained h600 legs. `episodes` is the per-cell `n` (typically 3 for these three-seed campaigns). Diagnostic-only.

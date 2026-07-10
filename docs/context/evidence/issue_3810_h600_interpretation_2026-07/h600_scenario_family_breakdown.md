@@ -1,3 +1,5 @@
+<!-- AI-GENERATED NEEDS-REVIEW -->
+
 ## h600 per-scenario-family breakdown (issue #5138)
 
 Per-family success / near-miss / collision / SNQI for the retained h600 legs (jobs 13268 `confirm`, 13273 `extended_roster`). Columns follow the release campaign's family-breakdown schema; `episodes` is the per-cell `n`. Diagnostic-only; see bundle README for caveats.

@@ -1,3 +1,5 @@
+<!-- AI-GENERATED NEEDS-REVIEW -->
+
 ## h600 universally-hard families summary (issue #5138)
 
 Bottleneck, cross-trap, and head-on-corridor per (leg, planner, family). `zero_completion` = `yes` when a planner arm with episodes>0 reports success_mean of 0.0. This is the table that answers whether the universally-hard families stay at zero completion at h600. Diagnostic-only, three-seed evidence.

@@ -236,5 +236,6 @@
       }
     }
   ],
-  "schema_version": "issue_4195_h600_aggregation.v1.source_manifest"
+  "schema_version": "issue_4195_h600_aggregation.v1.source_manifest",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW"
 }

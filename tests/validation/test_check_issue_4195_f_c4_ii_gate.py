@@ -116,6 +116,18 @@ def test_unlisted_evidence_file_fails_closed(tmp_path: Path) -> None:
     assert any(v["field"] == "sha256sums_coverage" for v in report["violations"])
 
 
+def test_sha256sums_allows_review_marker_comment(tmp_path: Path) -> None:
+    """A review marker may precede checksum entries without weakening coverage."""
+    _make_valid_fixture(tmp_path)
+    sums_path = tmp_path / "SHA256SUMS"
+    sums_path.write_text(
+        "# AI-GENERATED NEEDS-REVIEW\n" + sums_path.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    report = build_report(tmp_path)
+    assert report["status"] == "pass", report["violations"]
+
+
 def test_digest_mismatch_fails_closed(tmp_path: Path) -> None:
     """Editing a file after the ledger is written trips the digest check."""
     _make_valid_fixture(tmp_path)

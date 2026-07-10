@@ -70,6 +70,7 @@ from robot_sf.benchmark.identity.hash_utils import sha256_file
 SCHEMA_VERSION = "issue_5138_h600_family_breakdown_export.v1"
 
 DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_3810_h600_interpretation_2026-07")
+REVIEW_MARKER = "AI-GENERATED NEEDS-REVIEW"
 
 # Canonical h600 legs (job_id -> reports dir). These match the runs already
 # recorded in the bundle's source_manifest.json so provenance stays consistent.
@@ -366,7 +367,8 @@ def _write_csv(path: Path, rows: list[dict[str, str]], columns: tuple[str, ...])
     """Write ``rows`` to ``path`` with a fixed column schema."""
 
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(columns))
+        handle.write(f"# {REVIEW_MARKER}\n")
+        writer = csv.DictWriter(handle, fieldnames=list(columns), lineterminator="\n")
         writer.writeheader()
         for row in rows:
             writer.writerow({col: row.get(col, "") for col in columns})
@@ -388,7 +390,7 @@ def _write_markdown_table(
 ) -> None:
     """Render ``rows`` as a GitHub-Flavored Markdown table with a header block."""
 
-    lines: list[str] = [f"## {title}", "", intro, ""]
+    lines: list[str] = [f"<!-- {REVIEW_MARKER} -->", "", f"## {title}", "", intro, ""]
     if not rows:
         lines.append("_No rows._")
         lines.append("")
@@ -525,7 +527,9 @@ def _write_sha256sums(output_dir: Path) -> None:
         if path.name == "SHA256SUMS" or not path.is_file():
             continue
         lines.append(f"{sha256_file(path)}  {_public_path(path)}")
-    (output_dir / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (output_dir / "SHA256SUMS").write_text(
+        f"# {REVIEW_MARKER}\n" + "\n".join(lines) + "\n", encoding="utf-8"
+    )
 
 
 def _update_source_manifest(
@@ -538,6 +542,7 @@ def _update_source_manifest(
 
     manifest_path = output_dir / "source_manifest.json"
     manifest = _read_json(manifest_path)
+    manifest["review_marker"] = REVIEW_MARKER
     manifest["generated_outputs"] = sorted(
         set(manifest.get("generated_outputs") or []) | set(generated_outputs)
     )
@@ -579,6 +584,9 @@ def _append_readme_section(output_dir: Path, fragment: str) -> None:
 
     readme_path = output_dir / "README.md"
     text = readme_path.read_text(encoding="utf-8")
+    marker_comment = f"<!-- {REVIEW_MARKER} -->"
+    if marker_comment not in text:
+        text = marker_comment + "\n\n" + text.lstrip()
     marker = "## Issue #5138 per-family + per-cell h600 breakdown export"
     if marker in text:
         # Replace the existing block (from the marker to EOF) so re-runs are clean.

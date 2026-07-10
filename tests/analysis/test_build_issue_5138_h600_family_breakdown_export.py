@@ -246,7 +246,7 @@ def _make_bundle(tmp_path: Path) -> tuple[Path, list[RunSource]]:
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
     with path.open("r", newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))
+        return list(csv.DictReader(line for line in handle if not line.startswith("#")))
 
 
 def test_build_export_produces_all_artifacts_with_release_schema(tmp_path: Path) -> None:
@@ -349,6 +349,8 @@ def test_source_manifest_and_sha256sums_updated_and_gate_coverage(tmp_path: Path
     # SHA256SUMS covers every .md/.json/.csv file in the bundle with matching digests.
     sums = {}
     for line in (output_dir / "SHA256SUMS").read_text(encoding="utf-8").splitlines():
+        if line.startswith("#"):
+            continue
         digest, rel = line.split()
         sums[Path(rel).name] = digest
     checksummed = [
@@ -372,6 +374,24 @@ def test_readme_section_appended_and_is_idempotent(tmp_path: Path) -> None:
     assert (output_dir / "README.md").read_text(encoding="utf-8").count(
         "## Issue #5138 per-family + per-cell h600 breakdown export"
     ) == 1
+
+
+def test_generated_evidence_files_carry_review_markers(tmp_path: Path) -> None:
+    """Generated durable evidence remains visibly marked for review."""
+    output_dir, runs = _make_bundle(tmp_path)
+    build_export(output_dir, runs)
+    for name in (
+        "README.md",
+        "SHA256SUMS",
+        "h600_scenario_cell_breakdown.csv",
+        "h600_scenario_cell_breakdown.md",
+        "h600_scenario_family_breakdown.csv",
+        "h600_scenario_family_breakdown.md",
+        "h600_universally_hard_families_summary.csv",
+        "h600_universally_hard_families_summary.md",
+        "source_manifest.json",
+    ):
+        assert "AI-GENERATED NEEDS-REVIEW" in (output_dir / name).read_text(encoding="utf-8")
 
 
 def test_build_export_fails_closed_when_canonical_breakdown_missing(tmp_path: Path) -> None:

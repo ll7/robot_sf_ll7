@@ -1,3 +1,4 @@
+# AI-GENERATED NEEDS-REVIEW
 run_label,job_id,scenario_matrix_hash,planner_key,algo,scenario_family,episodes,success_mean,collisions_mean,ped_collision_count_mean,obstacle_collision_count_mean,total_collision_count_mean,near_misses_mean,time_to_goal_norm_mean,path_efficiency_mean,comfort_exposure_mean,jerk_mean,snqi_mean
 confirm,13268,c10df617a87c,goal,goal,accompanying_peer,3,1.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.5356,1.0000,0.0031,,0.1391
 confirm,13268,c10df617a87c,goal,goal,blind_corner,3,0.0000,1.0000,1.0000,0.0000,1.0000,6.0000,1.0000,1.0000,0.0000,,'-0.3776

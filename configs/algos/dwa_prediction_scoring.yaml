@@ -1,5 +1,5 @@
-# Classical Dynamic Window Approach baseline. This is experimental/testing-only:
-# it is runnable for controlled evaluation but is not paper-facing benchmark evidence.
+# DWA with opt-in constant-velocity pedestrian prediction scoring. Experimental/testing-only:
+# this changes pedestrian clearance scoring, not benchmark or paper claim status.
 allow_testing_algorithms: true
 max_linear_speed: 1.0
 max_angular_speed: 1.2
@@ -21,5 +21,4 @@ heading_weight: 0.8
 clearance_weight: 1.2
 velocity_weight: 0.25
 progress_weight: 1.0
-# Opt-in only: the base DWA scores pedestrians at their observed positions.
-prediction_scoring_enabled: false
+prediction_scoring_enabled: true

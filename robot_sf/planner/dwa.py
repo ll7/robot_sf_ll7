@@ -42,6 +42,7 @@ class DWAPlannerConfig:
     clearance_weight: float = 1.2
     velocity_weight: float = 0.25
     progress_weight: float = 1.0
+    prediction_scoring_enabled: bool = False
 
     def __post_init__(self) -> None:
         """Reject invalid dynamics and rollout parameters before planning begins."""
@@ -96,8 +97,8 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
 
     def _extract_state(
         self, observation: dict[str, Any]
-    ) -> tuple[np.ndarray, float, float, float, np.ndarray, np.ndarray]:
-        """Return robot pose/command state, active goal, and pedestrian positions."""
+    ) -> tuple[np.ndarray, float, float, float, np.ndarray, np.ndarray, np.ndarray]:
+        """Return robot state, active goal, and pedestrian positions/world velocities."""
         robot, goal, pedestrians = self._socnav_fields(observation)
         robot = robot or {}
         goal = goal or {}
@@ -126,7 +127,47 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             int(self._as_1d_float(pedestrians.get("count", [raw_positions.shape[0]]), pad=1)[0]),
             0,
         )
-        return robot_pos, heading, linear_speed, angular_speed, active_goal, raw_positions[:count]
+        pedestrian_positions = raw_positions[:count]
+        pedestrian_velocities = np.zeros_like(pedestrian_positions)
+        if self.config.prediction_scoring_enabled and count:
+            if pedestrian_positions.shape[0] < count or not np.all(
+                np.isfinite(pedestrian_positions)
+            ):
+                raise ValueError(
+                    "DWA prediction scoring requires one finite (x, y) world position "
+                    "for every active pedestrian"
+                )
+            raw_velocities = np.asarray(pedestrians.get("velocities", []), dtype=float)
+            if raw_velocities.ndim == 1 and raw_velocities.size % 2 == 0:
+                raw_velocities = raw_velocities.reshape(-1, 2)
+            if (
+                raw_velocities.ndim != 2
+                or raw_velocities.shape[-1] != 2
+                or raw_velocities.shape[0] < count
+                or not np.all(np.isfinite(raw_velocities[:count]))
+            ):
+                raise ValueError(
+                    "DWA prediction scoring requires one finite (vx, vy) ego-frame velocity "
+                    "for every active pedestrian"
+                )
+            velocities_ego = raw_velocities[:count]
+            cos_h = float(np.cos(heading))
+            sin_h = float(np.sin(heading))
+            pedestrian_velocities[:, 0] = (
+                cos_h * velocities_ego[:, 0] - sin_h * velocities_ego[:, 1]
+            )
+            pedestrian_velocities[:, 1] = (
+                sin_h * velocities_ego[:, 0] + cos_h * velocities_ego[:, 1]
+            )
+        return (
+            robot_pos,
+            heading,
+            linear_speed,
+            angular_speed,
+            active_goal,
+            pedestrian_positions,
+            pedestrian_velocities,
+        )
 
     def _dynamic_window(
         self, linear_speed: float, angular_speed: float
@@ -189,6 +230,7 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         heading: float,
         goal: np.ndarray,
         pedestrian_positions: np.ndarray,
+        pedestrian_velocities: np.ndarray,
         command: tuple[float, float],
         observation: dict[str, Any],
     ) -> float:
@@ -201,7 +243,7 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         orientation = float(heading)
         start_distance = float(np.linalg.norm(goal - position))
         min_clearance = float("inf")
-        for _ in range(max(int(self.config.prediction_steps), 1)):
+        for step_idx in range(max(int(self.config.prediction_steps), 1)):
             position += np.array(
                 [
                     command[0] * np.cos(orientation) * float(self.config.prediction_dt),
@@ -210,8 +252,12 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             )
             orientation = wrap_angle_pi(orientation + command[1] * float(self.config.prediction_dt))
             if pedestrian_positions.size:
+                scored_positions = pedestrian_positions
+                if self.config.prediction_scoring_enabled:
+                    forecast_time = float(step_idx + 1) * float(self.config.prediction_dt)
+                    scored_positions = pedestrian_positions + pedestrian_velocities * forecast_time
                 pedestrian_clearance = (
-                    float(np.min(np.linalg.norm(pedestrian_positions - position[None, :], axis=1)))
+                    float(np.min(np.linalg.norm(scored_positions - position[None, :], axis=1)))
                     - float(self.config.robot_radius)
                     - float(self.config.pedestrian_radius)
                 )
@@ -243,9 +289,15 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             Bounded linear and angular velocity command ``(v, omega)``.
         """
-        robot_pos, heading, linear_speed, angular_speed, goal, pedestrians = self._extract_state(
-            observation
-        )
+        (
+            robot_pos,
+            heading,
+            linear_speed,
+            angular_speed,
+            goal,
+            pedestrians,
+            pedestrian_velocities,
+        ) = self._extract_state(observation)
         if np.linalg.norm(goal - robot_pos) <= float(self.config.goal_tolerance):
             return 0.0, 0.0
         v_min, v_max, w_min, w_max = self._dynamic_window(linear_speed, angular_speed)
@@ -261,6 +313,7 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
                     heading=heading,
                     goal=goal,
                     pedestrian_positions=pedestrians,
+                    pedestrian_velocities=pedestrian_velocities,
                     command=command,
                     observation=observation,
                 )
@@ -318,4 +371,25 @@ def build_dwa_config(cfg: dict[str, Any] | None) -> DWAPlannerConfig:
         clearance_weight=float(cfg.get("clearance_weight", defaults.clearance_weight)),
         velocity_weight=float(cfg.get("velocity_weight", defaults.velocity_weight)),
         progress_weight=float(cfg.get("progress_weight", defaults.progress_weight)),
+        prediction_scoring_enabled=_parse_bool(
+            cfg.get("prediction_scoring_enabled", defaults.prediction_scoring_enabled),
+            name="prediction_scoring_enabled",
+        ),
     )
+
+
+def _parse_bool(value: Any, *, name: str) -> bool:
+    """Parse a config boolean without treating arbitrary non-empty strings as true.
+
+    Returns:
+        Parsed boolean value.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+    raise ValueError(f"{name} must be a boolean")

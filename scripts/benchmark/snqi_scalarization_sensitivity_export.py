@@ -20,6 +20,7 @@ from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     build_scalarization_sensitivity_report,
     classify_scalarization_sensitivity_inputs,
     input_file_provenance,
+    load_admissible_weight_family_config,
     load_baseline_mapping,
     load_jsonl,
     load_weight_mapping,
@@ -36,6 +37,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--episodes", required=True, type=Path, help="Input episode JSONL.")
     parser.add_argument("--baseline", required=True, type=Path, help="SNQI baseline stats JSON.")
     parser.add_argument("--weights", required=True, type=Path, help="SNQI weights JSON.")
+    parser.add_argument(
+        "--weight-family-config",
+        type=Path,
+        help="Optional ex-ante admissible weight-family YAML; labels stress probes separately.",
+    )
     parser.add_argument("--output-dir", required=True, type=Path, help="Artifact output directory.")
     parser.add_argument(
         "--planner-key",
@@ -81,10 +87,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     records = load_jsonl(args.episodes)
     baseline = load_baseline_mapping(args.baseline)
     weights = load_weight_mapping(args.weights)
+    weight_family = (
+        load_admissible_weight_family_config(args.weight_family_config)
+        if args.weight_family_config is not None
+        else None
+    )
     provenance = {
         "episodes": input_file_provenance(args.episodes),
         "baseline": input_file_provenance(args.baseline),
         "weights": input_file_provenance(args.weights),
+        "weight_family_config": input_file_provenance(args.weight_family_config),
     }
     if args.application_packet is not None:
         provenance["application_packet"] = input_file_provenance(args.application_packet)
@@ -110,6 +122,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         baseline=baseline,
         planner_key=args.planner_key,
         fallback_planner_key=args.fallback_planner_key,
+        admissible_weight_family=weight_family,
         input_provenance=provenance,
     )
     artifacts = write_diagnostic_artifacts(report, args.output_dir, stem=args.stem)

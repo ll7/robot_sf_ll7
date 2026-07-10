@@ -122,6 +122,112 @@ def test_check_evidence_tree_hygiene(
     assert not blockers
 
 
+@patch("scripts.ci.pr_contract_check.is_file_new")
+@patch("scripts.ci.pr_contract_check.get_new_files")
+def test_check_evidence_tree_hygiene_distance_convention_missing(
+    mock_new_files: MagicMock, mock_is_new: MagicMock, tmp_path: Path
+) -> None:
+    """Issue #5141: a new distance-like series without distance_convention is blocked."""
+    mock_new_files.return_value = set()
+    mock_is_new.return_value = True
+
+    # New distance-series CSV with a marker but NO convention declaration.
+    f = tmp_path / "docs/context/evidence/min_distance_series.csv"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(
+        "# AI-GENERATED NEEDS-REVIEW\nstep,min_robot_ped_distance_m\n0,1.37\n",
+        encoding="utf-8",
+    )
+    blockers = pr_contract_check.check_evidence_tree_hygiene([str(f)], "origin/main")
+    distance_blockers = [b for b in blockers if "distance_convention" in b]
+    assert len(distance_blockers) == 1
+    assert "distance-like series" in distance_blockers[0]
+
+
+@patch("scripts.ci.pr_contract_check.is_file_new")
+@patch("scripts.ci.pr_contract_check.get_new_files")
+def test_check_evidence_tree_hygiene_distance_convention_present_in_file(
+    mock_new_files: MagicMock, mock_is_new: MagicMock, tmp_path: Path
+) -> None:
+    """Issue #5141: an in-file `# distance_convention:` header satisfies the lint."""
+    mock_new_files.return_value = set()
+    mock_is_new.return_value = True
+
+    f = tmp_path / "docs/context/evidence/min_distance_series.csv"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(
+        "# AI-GENERATED NEEDS-REVIEW\n"
+        "# distance_convention: center_center\n"
+        "step,min_robot_ped_distance_m\n0,1.37\n",
+        encoding="utf-8",
+    )
+    blockers = pr_contract_check.check_evidence_tree_hygiene([str(f)], "origin/main")
+    assert not blockers
+
+
+@patch("scripts.ci.pr_contract_check.is_file_new")
+@patch("scripts.ci.pr_contract_check.get_new_files")
+def test_check_evidence_tree_hygiene_distance_convention_present_in_sibling_metadata(
+    mock_new_files: MagicMock, mock_is_new: MagicMock, tmp_path: Path
+) -> None:
+    """Issue #5141: a sibling metadata.json carrying the field satisfies the lint."""
+    mock_new_files.return_value = set()
+    mock_is_new.return_value = True
+
+    bundle = tmp_path / "docs/context/evidence/bundle"
+    bundle.mkdir(parents=True, exist_ok=True)
+    # Distance CSV has no in-file declaration...
+    csv_path = bundle / "min_distance_series.csv"
+    csv_path.write_text(
+        "# AI-GENERATED NEEDS-REVIEW\nstep,min_robot_ped_distance_m\n0,1.37\n",
+        encoding="utf-8",
+    )
+    # ...but the sibling metadata.json declares it.
+    (bundle / "metadata.json").write_text(
+        '{"distance_convention": "center_center"}\n', encoding="utf-8"
+    )
+    blockers = pr_contract_check.check_evidence_tree_hygiene([str(csv_path)], "origin/main")
+    assert not blockers
+
+
+@patch("scripts.ci.pr_contract_check.is_file_new")
+@patch("scripts.ci.pr_contract_check.get_new_files")
+def test_check_evidence_tree_hygiene_distance_convention_not_retroactive(
+    mock_new_files: MagicMock, mock_is_new: MagicMock, tmp_path: Path
+) -> None:
+    """Issue #5141: the lint only applies to NEW evidence files."""
+    mock_new_files.return_value = set()
+    mock_is_new.return_value = False  # pre-existing file
+
+    f = tmp_path / "docs/context/evidence/old_min_distance_series.csv"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(
+        "# AI-GENERATED NEEDS-REVIEW\nstep,min_robot_ped_distance_m\n0,1.37\n",
+        encoding="utf-8",
+    )
+    blockers = pr_contract_check.check_evidence_tree_hygiene([str(f)], "origin/main")
+    assert not any("distance_convention" in b for b in blockers)
+
+
+@patch("scripts.ci.pr_contract_check.is_file_new")
+@patch("scripts.ci.pr_contract_check.get_new_files")
+def test_check_evidence_tree_hygiene_non_distance_series_unaffected(
+    mock_new_files: MagicMock, mock_is_new: MagicMock, tmp_path: Path
+) -> None:
+    """Issue #5141: files that are not distance-like are not flagged."""
+    mock_new_files.return_value = set()
+    mock_is_new.return_value = True
+
+    f = tmp_path / "docs/context/evidence/README.md"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(
+        "<!-- AI-GENERATED NEEDS-REVIEW -->\nSummary text without distance data.\n",
+        encoding="utf-8",
+    )
+    blockers = pr_contract_check.check_evidence_tree_hygiene([str(f)], "origin/main")
+    assert not any("distance_convention" in b for b in blockers)
+
+
 @patch("subprocess.run")
 def test_check_successor_discipline(mock_run: MagicMock) -> None:
     """Test check_successor_discipline warns on lack of successor statement."""

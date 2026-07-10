@@ -292,6 +292,35 @@ class TestWriteBundleFixture:
             content = (bundle_dir / csv_name).read_text(encoding="utf-8")
             assert content.startswith("# AI-GENERATED NEEDS-REVIEW\n")
 
+    def test_distance_convention_field_is_center_center(self, tmp_path: Path) -> None:
+        """Issue #5141: min_robot_ped_distance_m is center-to-center; declare it."""
+        record = self._make_minimal_record()
+        sel = _export_module.SelectedEpisode(
+            planner="orca",
+            scenario_id="classic_group_crossing_low",
+            seed=42,
+            selection_mode="best",
+            metric_value=0.85,
+            episode_id="classic_group_crossing_low_s42",
+            status="success",
+        )
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+        _export_module.write_bundle(
+            episode_record=record,
+            selection=sel,
+            output_dir=bundle_dir,
+        )
+        # metadata.json carries the explicit convention.
+        meta = json.loads((bundle_dir / "metadata.json").read_text(encoding="utf-8"))
+        assert meta["distance_convention"] == "center_center"
+        # The embedded trace_series.json metadata mirrors it.
+        trace = json.loads((bundle_dir / "trace_series.json").read_text(encoding="utf-8"))
+        assert trace["metadata"]["distance_convention"] == "center_center"
+        # The distance-series CSV carries an in-file convention header line.
+        csv_content = (bundle_dir / "min_distance_series.csv").read_text(encoding="utf-8")
+        assert "# distance_convention: center_center" in csv_content
+
     def test_readme_has_review_marker_with_date(self, tmp_path: Path) -> None:
         """README marker includes issue ref and provenance-pinned date (not wall-clock)."""
         record = self._make_minimal_record()

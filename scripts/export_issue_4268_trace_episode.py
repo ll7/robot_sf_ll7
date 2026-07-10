@@ -21,6 +21,10 @@ from typing import Any
 
 from robot_sf.benchmark.classic_interactions_loader import load_classic_matrix, select_scenario
 from robot_sf.benchmark.map_runner import _run_map_episode
+from robot_sf.evidence.distance_convention import (
+    DISTANCE_CONVENTION_FIELD,
+    DistanceConvention,
+)
 
 DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_4253_trace_episode_2026-07")
 DEFAULT_SCENARIO_MATRIX = Path("configs/scenarios/classic_interactions.yaml")
@@ -193,6 +197,26 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer.writerows(rows)
 
 
+def _write_distance_csv(
+    path: Path,
+    rows: list[dict[str, Any]],
+    *,
+    convention: DistanceConvention,
+) -> None:
+    """Write a distance-like series CSV with an explicit convention header.
+
+    Issue #5141: distance-like series must declare their convention so a
+    center-to-center value is not misread as surface clearance.
+    """
+    if not rows:
+        raise ValueError(f"cannot write empty CSV: {path}")
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        handle.write(f"# {DISTANCE_CONVENTION_FIELD}: {convention.value}\n")
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()), lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     """Write deterministic JSON."""
 
@@ -250,6 +274,10 @@ def write_bundle(
         "horizon": horizon,
         "dt": dt,
         "recording_path": "robot_sf.benchmark.map_runner._run_map_episode(record_simulation_step_trace=True)",
+        # Issue #5141: min_robot_ped_distance_m is computed as math.dist(robot_xy,
+        # ped_position), i.e. center-to-center; declared explicitly to prevent a
+        # surface-clearance misreading of the exported series.
+        DISTANCE_CONVENTION_FIELD: DistanceConvention.CENTER_CENTER.value,
         "status": record.get("status"),
         "termination_reason": record.get("termination_reason"),
         "steps": record.get("steps"),
@@ -266,7 +294,11 @@ def write_bundle(
     _write_json(output_dir / "metadata.json", metadata)
     _write_json(output_dir / "trace_series.json", trace_payload)
     _write_csv(output_dir / "trace_timeseries.csv", derived.trace_rows)
-    _write_csv(output_dir / "min_distance_series.csv", derived.min_distance_rows)
+    _write_distance_csv(
+        output_dir / "min_distance_series.csv",
+        derived.min_distance_rows,
+        convention=DistanceConvention.CENTER_CENTER,
+    )
     _write_readme(output_dir, metadata)
     _write_sha256sums(output_dir)
     return metadata
@@ -286,6 +318,8 @@ statistical benchmark or dissertation claim.
 - `trace_timeseries.csv`: per-timestep robot state, commanded action, executed velocity, pedestrian
   positions, and nearest robot-pedestrian distance.
 - `min_distance_series.csv`: figure-ready `(step, time_s, min_robot_ped_distance_m)` series.
+  Distance convention: `center_center` (robot-to-pedestrian center distance; footprint radii
+  are NOT subtracted). Do not read these values as surface clearance.
 - `trace_series.json`: raw recorded frames plus derived rows.
 - `metadata.json`: scenario, seed, planner, commit, matrix hash, and claim boundary.
 - `SHA256SUMS`: checksums for the files above.

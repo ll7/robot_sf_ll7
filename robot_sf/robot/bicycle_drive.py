@@ -1,7 +1,7 @@
 """Bicycle drive model for vehicle dynamics simulation."""
 
 from dataclasses import dataclass, field
-from math import cos, sin, tan
+from math import cos, isfinite, sin, tan
 
 import numpy as np
 from gymnasium import spaces
@@ -24,13 +24,16 @@ class BicycleDriveSettings:
     max_steer: float = 0.78  # Maximum steering angle (45 degrees in radians)
     max_velocity: float = 3.0  # Maximum forward velocity
     max_accel: float = 1.0  # Maximum forward acceleration (m/s^2)
+    allow_backwards: bool = False  # Whether backwards movement is allowed
+    # Keep this new field after the existing positional settings so callers using
+    # the prior dataclass positional form still pass ``allow_backwards`` in its
+    # original slot.
     # Maximum braking deceleration magnitude (m/s^2), i.e. the most negative
     # commanded acceleration the model will honor. ``None`` (default) keeps the
     # legacy symmetric behavior where braking authority equals forward
     # acceleration; set explicitly to decouple braking from forward acceleration
     # (issue #4976).
     max_decel: float | None = None
-    allow_backwards: bool = False  # Whether backwards movement is allowed
 
     def __post_init__(self) -> None:
         """Resolve the braking-authority default for backward compatibility.
@@ -41,6 +44,12 @@ class BicycleDriveSettings:
         """
         if self.max_decel is None:
             self.max_decel = self.max_accel
+        if (
+            isinstance(self.max_decel, bool)
+            or not isfinite(float(self.max_decel))
+            or self.max_decel <= 0.0
+        ):
+            raise ValueError("max_decel must be positive")
 
     @property
     def min_velocity(self) -> float:

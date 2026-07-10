@@ -37,15 +37,18 @@ class DifferentialDriveSettings:
     # Maximum linear acceleration (m/s^2) accepted as an action; the per-step
     # velocity delta is max_linear_accel * d_t (see issue #3711)
     max_linear_accel: float = 1.0
+    # Maximum angular acceleration (rad/s^2) accepted as an action; the per-step
+    # angular velocity delta is max_angular_accel * d_t (see issue #3711)
+    max_angular_accel: float = 1.0
+    # Keep this new field after the existing positional settings so callers using
+    # the prior dataclass positional form still pass ``max_angular_accel`` in its
+    # original slot.
     # Maximum linear braking deceleration magnitude (m/s^2), i.e. the most
     # negative commanded linear acceleration honored. ``None`` (default) keeps
     # the legacy symmetric behavior where braking authority equals forward
     # acceleration; set explicitly to decouple braking from forward acceleration
     # (issue #4976).
     max_linear_decel: float | None = None
-    # Maximum angular acceleration (rad/s^2) accepted as an action; the per-step
-    # angular velocity delta is max_angular_accel * d_t (see issue #3711)
-    max_angular_accel: float = 1.0
 
     def __post_init__(self):
         """

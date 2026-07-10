@@ -82,6 +82,19 @@ def test_diff_drive_default_braking_equals_acceleration() -> None:
     assert settings.max_linear_decel == 0.4
 
 
+def test_new_braking_fields_preserve_existing_positional_settings_order() -> None:
+    """Adding braking authority does not reinterpret legacy positional arguments."""
+
+    bicycle = BicycleDriveSettings(0.2, 1.0, 0.78, 3.0, 0.4, True)
+    differential = DifferentialDriveSettings(0.2, 3.0, 2.0, 0.05, 0.3, True, 0.4, 0.3)
+
+    assert bicycle.allow_backwards is True
+    assert bicycle.max_decel == pytest.approx(0.4)
+    assert differential.allow_backwards is True
+    assert differential.max_angular_accel == pytest.approx(0.3)
+    assert differential.max_linear_decel == pytest.approx(0.4)
+
+
 def test_diff_drive_default_action_space_unchanged() -> None:
     """Without explicit braking, the action-space low bound stays symmetric."""
     robot = DifferentialDriveRobot(
@@ -198,6 +211,13 @@ def test_diff_drive_rejects_non_positive_braking_authority() -> None:
     """An explicit non-positive braking authority fails closed at construction."""
     with pytest.raises(ValueError, match="max_linear_decel"):
         DifferentialDriveSettings(max_linear_decel=0.0)
+
+
+def test_bicycle_rejects_non_positive_braking_authority() -> None:
+    """An explicit non-positive bicycle braking authority fails closed."""
+
+    with pytest.raises(ValueError, match="max_decel"):
+        BicycleDriveSettings(max_decel=0.0)
 
 
 # ---------------------------------------------------------------------------

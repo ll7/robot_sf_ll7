@@ -85,7 +85,7 @@ class ThreadedVecEnv(DummyVecEnv):
         self._ensure_no_pending_step("step_async")
         copied_actions = np.asarray(actions).copy()
         self._step_futures = [
-            self._executor.submit(env.step, copied_actions[env_idx])
+            self._executor.submit(env.step, copied_actions[env_idx].copy())
             for env_idx, env in enumerate(self.envs)
         ]
 

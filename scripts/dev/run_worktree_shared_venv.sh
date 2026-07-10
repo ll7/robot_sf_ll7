@@ -17,7 +17,9 @@ fast-pysf/pysocialforce and NOT shadowed by PYTHONPATH=$PWD) is especially drift
 a newer API from a stale install fails mid-collection with a confusing ImportError. The helper
 therefore runs a cheap freshness check comparing the installed `pysocialforce` package against this
 checkout's fast-pysf/pysocialforce source and fails early with an actionable message when they
-diverge. Refresh the owning checkout with `uv sync --all-extras` to clear the divergence.
+diverge. Refresh the owning checkout with
+`uv sync --all-extras --reinstall-package robot-sf`; a plain sync does not rebuild this
+force-included source.
 
 Standalone commands with a verified boundary that does not import project packages can use
 --standalone. That mode skips the project-source freshness check and does not add the worktree root
@@ -146,8 +148,9 @@ check_shared_venv_freshness() {
 Shared virtualenv is stale relative to this checkout: $venv
   diverging module: pysocialforce/$rel_path
 The reused env (UV_NO_SYNC=1) lacks source present in fast-pysf/pysocialforce, so imports can
-fail mid-run with a confusing ImportError. Refresh the owning checkout with 'uv sync --all-extras',
-use --standalone for a command verified not to import project packages, or rerun with
+fail mid-run with a confusing ImportError. Refresh the owning checkout with
+'uv sync --all-extras --reinstall-package robot-sf'; a plain sync does not rebuild this
+force-included source; use --standalone for a command verified not to import project packages, or rerun with
 --no-freshness-check (or ROBOT_SF_VENV_FRESHNESS_CHECK=skip) once you have confirmed the env matches
 this checkout.
 EOF

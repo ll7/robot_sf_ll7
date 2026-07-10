@@ -19,6 +19,7 @@ from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     build_scalarization_sensitivity_report,
     classify_scalarization_sensitivity_inputs,
     input_file_provenance,
+    load_admissible_weight_family_config,
     load_baseline_mapping,
     load_jsonl,
     load_weight_mapping,
@@ -32,6 +33,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--episodes", type=Path, required=True, help="Episode JSONL input.")
     parser.add_argument("--weights", type=Path, default=None, help="Optional SNQI weights JSON.")
     parser.add_argument("--baseline", type=Path, default=None, help="Optional SNQI baseline JSON.")
+    parser.add_argument(
+        "--weight-family-config",
+        type=Path,
+        default=None,
+        help="Optional ex-ante admissible weight-family YAML; labels stress probes separately.",
+    )
     parser.add_argument(
         "--output-dir",
         type=Path,
@@ -91,10 +98,16 @@ def main(argv: list[str] | None = None) -> int:
     records = load_jsonl(args.episodes)
     weights = load_weight_mapping(args.weights)
     baseline = load_baseline_mapping(args.baseline)
+    weight_family = (
+        load_admissible_weight_family_config(args.weight_family_config)
+        if args.weight_family_config is not None
+        else None
+    )
     provenance = {
         "episodes": input_file_provenance(args.episodes),
         "weights": input_file_provenance(args.weights),
         "baseline": input_file_provenance(args.baseline),
+        "weight_family_config": input_file_provenance(args.weight_family_config),
     }
     if args.application_packet is not None:
         provenance["application_packet"] = input_file_provenance(args.application_packet)
@@ -127,6 +140,7 @@ def main(argv: list[str] | None = None) -> int:
         planner_key=args.planner_key,
         fallback_planner_key=args.fallback_planner_key,
         sweep_factors=args.sweep_factors,
+        admissible_weight_family=weight_family,
         input_provenance=provenance,
     )
     artifacts = write_diagnostic_artifacts(report, args.output_dir)

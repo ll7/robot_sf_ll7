@@ -15,7 +15,10 @@ import json
 import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import TYPE_CHECKING, Any
+
+import yaml
 
 from robot_sf.benchmark.rank_metrics import kendall_tau, spearman_from_order
 from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES, compute_snqi, normalize_metric
@@ -25,6 +28,7 @@ if TYPE_CHECKING:
 
 SCALARIZATION_SENSITIVITY_SCHEMA = "snqi_scalarization_sensitivity.v1"
 SCALARIZATION_SENSITIVITY_PREFLIGHT_SCHEMA = "snqi_scalarization_sensitivity_preflight.v1"
+ADMISSIBLE_WEIGHT_FAMILY_SCHEMA = "snqi-admissible-weight-family.v1"
 DEFAULT_SWEEP_FACTORS: tuple[float, ...] = (0.0, 0.25, 0.5, 1.0, 1.5, 2.0)
 SENSITIVITY_PREFLIGHT_READY = "ready"
 SENSITIVITY_PREFLIGHT_BLOCKED = "blocked"
@@ -441,6 +445,7 @@ def build_scalarization_sensitivity_report(
     planner_key: str = "planner_key",
     fallback_planner_key: str = "planner",
     sweep_factors: Sequence[float] = DEFAULT_SWEEP_FACTORS,
+    admissible_weight_family: Mapping[str, Any] | None = None,
     input_provenance: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a SNQI scalarization-sensitivity and Pareto-front report.
@@ -473,6 +478,7 @@ def build_scalarization_sensitivity_report(
 
     weight_zero: dict[str, Any] = {}
     weight_sweep: dict[str, Any] = {}
+    family_variants: list[dict[str, Any]] = []
     for weight_name in WEIGHT_NAMES:
         if weight_name not in clean_weights:
             continue
@@ -482,7 +488,12 @@ def build_scalarization_sensitivity_report(
             _planner_snqi_scores(grouped, zero_weights, baseline),
             higher_is_better=True,
         )
-        weight_zero[weight_name] = _variant_summary(base_order, zero_order)
+        zero_summary = _variant_summary(base_order, zero_order)
+        if admissible_weight_family is not None:
+            zero_summary["weight_family"] = classify_admissible_weight_vector(
+                zero_weights, admissible_weight_family
+            )
+        weight_zero[weight_name] = zero_summary
 
         variants = []
         for factor in sweep_factors:
@@ -490,12 +501,22 @@ def build_scalarization_sensitivity_report(
             sweep_weights[weight_name] = clean_weights[weight_name] * float(factor)
             sweep_scores = _planner_snqi_scores(grouped, sweep_weights, baseline)
             sweep_order = _rank_order(sweep_scores, higher_is_better=True)
-            variants.append(
+            variant = {
+                "factor": float(factor),
+                "weight_value": float(sweep_weights[weight_name]),
+                "order": sweep_order,
+                **_variant_summary(base_order, sweep_order),
+            }
+            if admissible_weight_family is not None:
+                variant["weight_family"] = classify_admissible_weight_vector(
+                    sweep_weights, admissible_weight_family
+                )
+            variants.append(variant)
+            family_variants.append(
                 {
-                    "factor": float(factor),
-                    "weight_value": float(sweep_weights[weight_name]),
-                    "order": sweep_order,
-                    **_variant_summary(base_order, sweep_order),
+                    "variant_id": f"{weight_name}@{float(factor):g}",
+                    "weights": sweep_weights,
+                    **variant,
                 }
             )
         weight_sweep[weight_name] = variants
@@ -514,7 +535,7 @@ def build_scalarization_sensitivity_report(
         default=0,
     )
 
-    return {
+    report = {
         "schema_version": SCALARIZATION_SENSITIVITY_SCHEMA,
         "evidence_kind": "analysis_artifact_only",
         "claim_boundary": (
@@ -547,6 +568,288 @@ def build_scalarization_sensitivity_report(
             "max_weight_zero_pairwise_reversal_count_vs_base": max_zero_reversals,
             "top_term_by_mean_abs_contribution": dominance[0]["component"] if dominance else None,
         },
+    }
+    if admissible_weight_family is not None:
+        family_summary = _weight_family_sensitivity_summary(
+            admissible_weight_family, family_variants
+        )
+        report["admissible_weight_family"] = family_summary
+        report["summary"].update(
+            {
+                "headline_scope": "admissible_family_only",
+                "admissible_family_pairwise_reversal_count_vs_base": family_summary[
+                    "admissible_family"
+                ]["pairwise_reversal_count_vs_base"],
+                "full_sweep_pairwise_reversal_count_vs_base": family_summary["full_sweep"][
+                    "pairwise_reversal_count_vs_base"
+                ],
+            }
+        )
+    return report
+
+
+def load_admissible_weight_family_config(path: Path) -> dict[str, Any]:
+    """Load and validate an ex-ante SNQI weight-family configuration.
+
+    The configuration deliberately classifies weight vectors before ranking
+    artifacts are inspected. It does not select canonical SNQI weights.
+
+    Returns:
+        Validated family policy suitable for report classification.
+    """
+
+    with path.open(encoding="utf-8") as handle:
+        raw = yaml.safe_load(handle)
+    if not isinstance(raw, Mapping):
+        raise ValueError("admissible weight-family config must be a mapping")
+    if raw.get("schema_version") != ADMISSIBLE_WEIGHT_FAMILY_SCHEMA:
+        raise ValueError(
+            f"unsupported admissible weight-family schema_version: {raw.get('schema_version')!r}"
+        )
+    family = raw.get("admissible_family")
+    if not isinstance(family, Mapping):
+        raise ValueError("admissible weight-family config requires an admissible_family mapping")
+    return _validated_admissible_weight_family(family)
+
+
+def classify_admissible_weight_vector(
+    weights: Mapping[str, float], family: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Classify one vector as admissible or as a labeled stress probe.
+
+    The vector is normalized onto the simplex solely for family membership.
+    SNQI scores continue to use the original supplied weights, so this checker
+    does not alter metric semantics.
+
+    Returns:
+        JSON-ready membership label, normalized components, group masses, and
+        any policy violations.
+    """
+
+    validated = _validated_admissible_weight_family(family)
+    raw_weights, violations = _coerce_nonnegative_weight_vector(weights)
+
+    total = sum(raw_weights.values())
+    if len(raw_weights) != len(WEIGHT_NAMES) or total <= 0.0:
+        if total <= 0.0:
+            violations.append("non_positive_weight_sum")
+        return _weight_family_classification(validated, {}, violations)
+
+    normalized = {name: raw_weights[name] / total for name in WEIGHT_NAMES}
+    minimum = validated["component_bounds"]["minimum"]
+    maximum = validated["component_bounds"]["maximum"]
+    for name, value in normalized.items():
+        if value < minimum:
+            violations.append(f"below_component_minimum:{name}")
+        if value > maximum:
+            violations.append(f"above_component_maximum:{name}")
+
+    group_masses = {
+        group_name: sum(normalized[name] for name in group_weights)
+        for group_name, group_weights in validated["groups"].items()
+    }
+    order = validated["ordered_group_masses"]
+    for stronger, weaker in pairwise(order):
+        if group_masses[stronger] < group_masses[weaker]:
+            violations.append(f"group_order:{stronger}<{weaker}")
+    return _weight_family_classification(validated, normalized, violations, group_masses)
+
+
+def _validated_admissible_weight_family(family: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the narrow, JSON-ready family contract or reject malformed policy."""
+
+    family_id, minimum, maximum = _validate_weight_family_header(family)
+    normalized_groups = _validate_weight_family_groups(family.get("groups"))
+    normalized_order = _validate_weight_family_order(
+        family.get("ordered_group_masses"), normalized_groups
+    )
+    stress_probe_label = _validate_stress_probe_label(family.get("stress_probe_label"))
+    return {
+        "id": family_id,
+        "normalization": "simplex_l1",
+        "component_bounds": {"minimum": minimum, "maximum": maximum},
+        "groups": normalized_groups,
+        "ordered_group_masses": normalized_order,
+        "stress_probe_label": stress_probe_label,
+    }
+
+
+def _validate_weight_family_header(family: Mapping[str, Any]) -> tuple[str, float, float]:
+    """Validate the family identity, simplex rule, and component bounds.
+
+    Returns:
+        Family identifier plus minimum and maximum normalized component bounds.
+    """
+
+    family_id = family.get("id")
+    if not isinstance(family_id, str) or not family_id.strip():
+        raise ValueError("admissible_family.id must be a non-empty string")
+    if family.get("normalization") != "simplex_l1":
+        raise ValueError("admissible_family.normalization must be 'simplex_l1'")
+    bounds = family.get("component_bounds")
+    if not isinstance(bounds, Mapping):
+        raise ValueError("admissible_family.component_bounds must be a mapping")
+    try:
+        minimum = float(bounds["minimum"])
+        maximum = float(bounds["maximum"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("component bounds require numeric minimum and maximum") from exc
+    if not (0.0 <= minimum <= maximum <= 1.0):
+        raise ValueError("component bounds must satisfy 0 <= minimum <= maximum <= 1")
+    return family_id, minimum, maximum
+
+
+def _validate_weight_family_groups(value: Any) -> dict[str, tuple[str, ...]]:
+    """Validate an exact partition of the current SNQI weight names.
+
+    Returns:
+        Group names mapped to their validated component names.
+    """
+
+    if not isinstance(value, Mapping) or not value:
+        raise ValueError("admissible_family.groups must be a non-empty mapping")
+    normalized_groups: dict[str, tuple[str, ...]] = {}
+    seen_weights: set[str] = set()
+    for group_name, names in value.items():
+        if not isinstance(group_name, str) or not group_name:
+            raise ValueError("admissible_family group names must be non-empty strings")
+        if not isinstance(names, Sequence) or isinstance(names, (str, bytes)) or not names:
+            raise ValueError(f"admissible_family group {group_name!r} must contain weight names")
+        normalized_names = tuple(str(name) for name in names)
+        unknown = set(normalized_names).difference(WEIGHT_NAMES)
+        duplicate = seen_weights.intersection(normalized_names)
+        if unknown:
+            raise ValueError(
+                f"admissible_family group {group_name!r} has unknown weights: {unknown}"
+            )
+        if duplicate:
+            raise ValueError(f"admissible_family weights appear in multiple groups: {duplicate}")
+        normalized_groups[group_name] = normalized_names
+        seen_weights.update(normalized_names)
+    missing = set(WEIGHT_NAMES).difference(seen_weights)
+    if missing:
+        raise ValueError(f"admissible_family groups omit SNQI weights: {missing}")
+    return normalized_groups
+
+
+def _validate_weight_family_order(
+    value: Any, groups: Mapping[str, Sequence[str]]
+) -> tuple[str, ...]:
+    """Validate the strongest-to-weakest group-mass ordering.
+
+    Returns:
+        Ordered group names from strongest to weakest allowed mass.
+    """
+
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise ValueError("admissible_family.ordered_group_masses must be a sequence")
+    normalized_order = tuple(str(name) for name in value)
+    if len(normalized_order) < 2:
+        raise ValueError("admissible_family.ordered_group_masses needs at least two groups")
+    if len(set(normalized_order)) != len(normalized_order):
+        raise ValueError("admissible_family.ordered_group_masses cannot repeat groups")
+    unknown_groups = set(normalized_order).difference(groups)
+    if unknown_groups:
+        raise ValueError(f"admissible_family ordering has unknown groups: {unknown_groups}")
+    return normalized_order
+
+
+def _validate_stress_probe_label(value: Any) -> str:
+    """Validate the durable label assigned to out-of-family vectors.
+
+    Returns:
+        The non-empty stress-probe label.
+    """
+
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("admissible_family.stress_probe_label must be a non-empty string")
+    return value
+
+
+def _coerce_nonnegative_weight_vector(
+    weights: Mapping[str, float],
+) -> tuple[dict[str, float], list[str]]:
+    """Collect finite nonnegative weights while retaining all invalid-field reasons.
+
+    Returns:
+        Accepted component values and rejection reasons for the rest.
+    """
+
+    raw_weights: dict[str, float] = {}
+    violations: list[str] = []
+    for name in WEIGHT_NAMES:
+        try:
+            value = float(weights[name])
+        except (KeyError, TypeError, ValueError):
+            violations.append(f"missing_or_non_numeric:{name}")
+            continue
+        if not math.isfinite(value) or value < 0.0:
+            violations.append(f"non_finite_or_negative:{name}")
+            continue
+        raw_weights[name] = value
+    return raw_weights, violations
+
+
+def _weight_family_classification(
+    family: Mapping[str, Any],
+    normalized_weights: Mapping[str, float],
+    violations: Sequence[str],
+    group_masses: Mapping[str, float] | None = None,
+) -> dict[str, Any]:
+    admissible = not violations
+    return {
+        "family_id": family["id"],
+        "classification": "admissible" if admissible else "stress_probe",
+        "stress_probe_label": None if admissible else family["stress_probe_label"],
+        "violations": list(violations),
+        "normalized_weights": dict(normalized_weights),
+        "group_masses": dict(group_masses or {}),
+    }
+
+
+def _weight_family_sensitivity_summary(
+    family: Mapping[str, Any], variants: Sequence[Mapping[str, Any]]
+) -> dict[str, Any]:
+    """Summarize unique sweep vectors without letting stress probes set the headline.
+
+    Returns:
+        Separate full-sweep, admissible-family, and stress-probe inversion totals.
+    """
+
+    unique_variants: list[Mapping[str, Any]] = []
+    seen_vectors: set[tuple[float, ...]] = set()
+    for variant in variants:
+        weights = variant["weights"]
+        signature = tuple(float(weights[name]) for name in WEIGHT_NAMES)
+        if signature not in seen_vectors:
+            seen_vectors.add(signature)
+            unique_variants.append(variant)
+
+    admissible = [
+        variant
+        for variant in unique_variants
+        if variant.get("weight_family", {}).get("classification") == "admissible"
+    ]
+    stress_probes = [variant for variant in unique_variants if variant not in admissible]
+    return {
+        "family": dict(family),
+        "headline_scope": "admissible_family_only",
+        "full_sweep": _inversion_summary(unique_variants),
+        "admissible_family": _inversion_summary(admissible),
+        "stress_probes": {
+            **_inversion_summary(stress_probes),
+            "label": family["stress_probe_label"],
+        },
+    }
+
+
+def _inversion_summary(variants: Sequence[Mapping[str, Any]]) -> dict[str, int | float]:
+    reversals = [int(variant["pairwise_reversal_count_vs_base"]) for variant in variants]
+    return {
+        "vector_count": len(variants),
+        "vectors_with_inversions": sum(value > 0 for value in reversals),
+        "pairwise_reversal_count_vs_base": sum(reversals),
+        "max_pairwise_reversal_count_vs_base": max(reversals, default=0),
     }
 
 
@@ -729,7 +1032,7 @@ def format_markdown(report: Mapping[str, Any]) -> str:
         "## Summary",
         "",
         f"- Decision disagreement rate: `{float(disagreement.get('pairwise_disagreement_rate', 0.0)):.6f}`",
-        "- Max weight-sweep disagreement rate vs base: "
+        "- Max full weight-sweep disagreement rate vs base: "
         f"`{float(summary.get('max_weight_sweep_disagreement_rate_vs_base', 0.0)):.6f}`",
         "- Max weight-zero pairwise reversals vs base: "
         f"`{int(summary.get('max_weight_zero_pairwise_reversal_count_vs_base', 0))}`",
@@ -740,6 +1043,39 @@ def format_markdown(report: Mapping[str, Any]) -> str:
         "| Planner | SNQI rank | Constraints-first rank | Rank delta | SNQI mean | Constraints-first score | Pareto front |",
         "|---|---:|---:|---:|---:|---:|:---:|",
     ]
+    weight_family = report.get("admissible_weight_family")
+    if isinstance(weight_family, Mapping):
+        admissible = weight_family.get("admissible_family", {})
+        full_sweep = weight_family.get("full_sweep", {})
+        stress_probes = weight_family.get("stress_probes", {})
+        lines.extend(
+            [
+                "",
+                "## Ex-Ante Admissible Weight Family",
+                "",
+                "Headline sensitivity statements use only the admissible family below. "
+                "Nonconforming vectors remain visible as labeled stress probes.",
+                "",
+                "| Scope | Vectors | Vectors with inversions | Pairwise reversals vs base |",
+                "|---|---:|---:|---:|",
+                "| Admissible family | {vectors} | {with_inversions} | {reversals} |".format(
+                    vectors=int(admissible.get("vector_count", 0)),
+                    with_inversions=int(admissible.get("vectors_with_inversions", 0)),
+                    reversals=int(admissible.get("pairwise_reversal_count_vs_base", 0)),
+                ),
+                "| Full sweep | {vectors} | {with_inversions} | {reversals} |".format(
+                    vectors=int(full_sweep.get("vector_count", 0)),
+                    with_inversions=int(full_sweep.get("vectors_with_inversions", 0)),
+                    reversals=int(full_sweep.get("pairwise_reversal_count_vs_base", 0)),
+                ),
+                "| Stress probes ({label}) | {vectors} | {with_inversions} | {reversals} |".format(
+                    label=str(stress_probes.get("label", "stress_probe")),
+                    vectors=int(stress_probes.get("vector_count", 0)),
+                    with_inversions=int(stress_probes.get("vectors_with_inversions", 0)),
+                    reversals=int(stress_probes.get("pairwise_reversal_count_vs_base", 0)),
+                ),
+            ]
+        )
     for row in report.get("planner_rows", []):
         lines.append(
             "| {planner} | {snqi_rank} | {constraints_rank} | {rank_delta:+d} | "
@@ -1261,6 +1597,7 @@ def _padded_domain(values: Sequence[float]) -> tuple[float, float]:
 
 
 __all__ = [
+    "ADMISSIBLE_WEIGHT_FAMILY_SCHEMA",
     "DEFAULT_SWEEP_FACTORS",
     "OPTIONAL_SENSITIVITY_METRICS",
     "REQUIRED_SENSITIVITY_METRICS",
@@ -1272,10 +1609,12 @@ __all__ = [
     "DiagnosticArtifacts",
     "SensitivityPreflightIssue",
     "build_scalarization_sensitivity_report",
+    "classify_admissible_weight_vector",
     "classify_scalarization_sensitivity_inputs",
     "format_markdown",
     "format_pareto_svg",
     "input_file_provenance",
+    "load_admissible_weight_family_config",
     "load_baseline_mapping",
     "load_jsonl",
     "load_weight_mapping",

@@ -1,0 +1,34 @@
+schema_version: snqi-admissible-weight-family.v1
+issue: 5142
+name: issue_5142_snqi_admissible_weight_family
+claim_boundary: >
+  Ex-ante classification policy for diagnostic Social Navigation Quality Index (SNQI)
+  scalarization sensitivity. It does not choose canonical SNQI weights, change metric
+  semantics, establish benchmark evidence, or edit paper/dissertation claims.
+admissible_family:
+  id: constraint_completion_comfort_simplex_v1
+  normalization: simplex_l1
+  component_bounds:
+    minimum: 0.02
+    maximum: 0.40
+  groups:
+    constraint_class:
+      - w_collisions
+      - w_near
+      - w_force_exceed
+    completion_and_progress:
+      - w_success
+      - w_time
+    comfort_and_smoothness:
+      - w_comfort
+      - w_jerk
+  ordered_group_masses:
+    - constraint_class
+    - completion_and_progress
+    - comfort_and_smoothness
+  stress_probe_label: out_of_family_stress_probe
+rationale: >
+  The group-mass ordering treats collision, near-miss, and force-exceed terms as
+  constraint-class terms; success and time as completion/progress; and comfort and
+  jerk as comfort/smoothness. Simplex bounds exclude zeroed and single-term-dominant
+  vectors. This is a reversible analysis policy, not a calibration result.

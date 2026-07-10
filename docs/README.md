@@ -159,6 +159,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Training Protocol Template](./dev/training_protocol_template.md)** - Fill-in template for documenting training/evaluation runs
 * **[Canonical PPO Training Workflow](./training/ppo_training_workflow.md)** - Config-driven PPO entrypoint, evaluation cadence semantics, and startup provenance logging.
 * **[Robot SF Environment Contract And Training Provenance](./training/environment_contract.md)** - Factory entrypoints, rollout ownership, reward-versus-benchmark boundary, and PPO run-record checklist.
+* **[Reward Profiles Reference](./training/reward_profiles.md)** - Single reference table for every reward profile and legacy reward function (per-term weights, collision penalties, env-factory default) plus how to find the profile a checkpoint was trained with.
 * **[Vectorized Environment Support](./training/vectorized_env_support.md)** - Public DummyVecEnv/SubprocVecEnv support matrix, spawn start-method contract, and smoke-test boundary.
 * **[Issue #1037 RL Environment Patterns](./context/issue_1037_rl_environment_patterns.md)** -
   Design note mapping May 2026 LLM-era RL environment patterns to Robot SF training, reward,

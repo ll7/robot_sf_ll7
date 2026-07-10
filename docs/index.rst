@@ -86,6 +86,7 @@ references.
    Developer Guide <dev_guide>
    API Reference <api/index>
    Environment API <ENVIRONMENT>
+   Reward Profiles Reference <training/reward_profiles>
    Observation Contract <dev/observation_contract>
    Helper Catalog <dev/helper_catalog>
    Code Review Guide <code_review>

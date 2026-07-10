@@ -64,7 +64,7 @@
       "has_as_count": 1,
       "pragma_no_cover_count": 0,
       "blessed": true,
-      "note": "Blessed broad catch. Add a justification note in scripts/dev/generate_optional_import_snapshot.py when blessing.",
+      "note": "Blessed broad catch: defensive visualization ingest boundary.",
       "samples": [
         "robot_sf/benchmark/visualization.py:466"
       ]
@@ -191,12 +191,12 @@
         "robot_sf/benchmark/orca_preflight.py:89"
       ]
     },
-    "ImportError+OSError+RuntimeError+TypeError+ValueError": {
+    "ImportError+OSError+RuntimeError+TypeError+ValueError+json.JSONDecodeError": {
       "count_ceiling": 1,
       "has_as_count": 1,
       "pragma_no_cover_count": 0,
       "blessed": true,
-      "note": "Blessed broad catch: defensive JSON/config ingest boundary. Review carefully before adding more.",
+      "note": "Blessed broad catch: defensive resource-lifecycle ingest boundary. Review carefully before adding more.",
       "samples": [
         "robot_sf/benchmark/camera_ready/resource_lifecycle.py:345"
       ]

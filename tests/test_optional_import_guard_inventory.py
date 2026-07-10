@@ -43,19 +43,35 @@ FIXTURE = REPO_ROOT / "tests" / "fixtures" / "optional_import_guards.json"
 _TRACKED = {"ImportError", "ModuleNotFoundError"}
 
 
+def _exception_name(node: ast.expr) -> str | None:
+    """Return a dotted exception name for a simple AST exception expression."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = _exception_name(node.value)
+        return f"{parent}.{node.attr}" if parent is not None else None
+    return None
+
+
 def _caught_type_names(node: ast.ExceptHandler) -> list[str]:
     """Return the sorted, de-duplicated names of exceptions a handler catches.
 
-    Returns an empty list for handlers whose catch clause is not a simple name
-    or tuple of names (e.g. ``except SomeError()``); those are out of scope.
+    Returns an empty list for handlers whose catch clause is not a simple name,
+    dotted attribute, or tuple of them (e.g. ``except SomeError()``); those are
+    out of scope.
     """
     t = node.type
     if t is None:
         return []
-    if isinstance(t, ast.Name):
-        names = [t.id]
+    if isinstance(t, (ast.Name, ast.Attribute)):
+        name = _exception_name(t)
+        names = [name] if name is not None else []
     elif isinstance(t, ast.Tuple):
-        names = [e.id for e in t.elts if isinstance(e, ast.Name)]
+        names = []
+        for element in t.elts:
+            name = _exception_name(element)
+            if name is not None:
+                names.append(name)
     else:
         return []
     return sorted(set(names))
@@ -135,6 +151,18 @@ def _load_fixture() -> dict[str, object]:
 
 class TestOptionalImportGuardInventory:
     """Characterization ratchet over optional-import guards in ``robot_sf/``."""
+
+    def test_collector_preserves_dotted_exception_names(self) -> None:
+        """A qualified broad exception must not be collapsed into ImportError."""
+        tree = ast.parse(
+            "try:\n"
+            "    import optional_dep\n"
+            "except (ImportError, native_loader.LoadError):\n"
+            "    optional_dep = None\n"
+        )
+        handler = next(node for node in ast.walk(tree) if isinstance(node, ast.ExceptHandler))
+
+        assert _caught_type_names(handler) == ["ImportError", "native_loader.LoadError"]
 
     def test_no_new_unblessed_spelling_and_no_count_growth(self) -> None:
         """The inventory must stay within the blessed snapshot envelope.

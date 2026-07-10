@@ -59,9 +59,16 @@ NOTES = {
     "AttributeError+ImportError+OSError": ("Blessed broad catch: optional registry boundary."),
     "AttributeError+ImportError+RuntimeError": ("Blessed broad catch: optional native boundary."),
     "AttributeError+ImportError+TypeError": ("Blessed broad catch: optional dispatch boundary."),
+    "AttributeError+ImportError+OSError+RuntimeError+TypeError+ValueError": (
+        "Blessed broad catch: defensive visualization ingest boundary."
+    ),
     "ImportError+OSError+RuntimeError+TypeError+ValueError": (
         "Blessed broad catch: defensive JSON/config ingest boundary. Review "
         "carefully before adding more."
+    ),
+    "ImportError+OSError+RuntimeError+TypeError+ValueError+json.JSONDecodeError": (
+        "Blessed broad catch: defensive resource-lifecycle ingest boundary. "
+        "Review carefully before adding more."
     ),
     "ImportError+OSError+RuntimeError+ValueError": (
         "Blessed broad catch: defensive ingest boundary. Review carefully."

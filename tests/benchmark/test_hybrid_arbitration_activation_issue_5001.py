@@ -154,6 +154,23 @@ def _drive(adapter: HybridPortfolioAdapter) -> tuple[list[str], list[tuple[float
     return heads, commands
 
 
+def _integrate_commands(commands: list[tuple[float, float]], *, dt: float = 0.1) -> np.ndarray:
+    """Integrate the selected unicycle commands into a deterministic trajectory.
+
+    The fixture deliberately uses a small, transparent integrator rather than a
+    second planner: this makes the causal chain under test explicit — selected
+    source changes the selected command, which changes the next trajectory step.
+    """
+    position = np.zeros(2)
+    heading = 0.0
+    positions: list[np.ndarray] = []
+    for linear_speed, angular_speed in commands:
+        position = position + dt * linear_speed * np.array([np.cos(heading), np.sin(heading)])
+        heading += dt * angular_speed
+        positions.append(position.copy())
+    return np.asarray(positions)
+
+
 def test_hybrid_portfolio_arbitration_produces_source_handoff() -> None:
     """The real arbitration path must change its selected source across regimes."""
     adapter = _build_adapter()
@@ -168,29 +185,32 @@ def test_hybrid_portfolio_arbitration_produces_source_handoff() -> None:
 
 
 def test_selected_command_tracks_selected_head() -> None:
-    """The selected command must change consistently with the selected head."""
+    """Source transitions must consistently change selected commands and trajectory."""
     adapter = _build_adapter()
     heads, commands = _drive(adapter)
+    trajectory = _integrate_commands(commands)
+    trajectory_steps = np.diff(np.vstack([np.zeros(2), trajectory]), axis=0)
 
-    # Every distinct head maps to a distinct command, so a source change implies
-    # a command (trajectory) change — the two telemetry views stay consistent.
+    # Every distinct head maps to a distinct command, so a source change must
+    # change both the command and the resulting unicycle trajectory step.
     for step in range(1, len(heads)):
         head_changed = heads[step] != heads[step - 1]
         command_changed = commands[step] != commands[step - 1]
-        assert head_changed == command_changed
+        trajectory_changed = not np.allclose(trajectory_steps[step], trajectory_steps[step - 1])
+        assert head_changed == command_changed == trajectory_changed
 
 
 def test_command_source_changes_counted_when_wired() -> None:
     """Threading the captured source sequence yields a nonzero change count."""
     adapter = _build_adapter()
-    heads, _commands = _drive(adapter)
+    heads, commands = _drive(adapter)
 
-    # A benign straight trajectory of matching length; only command_source_changes
-    # is under test here.
+    # The production-selected commands generate this deterministic trajectory;
+    # source handoffs therefore feed both source telemetry and motion evidence.
+    positions = _integrate_commands(commands)
     n = len(heads)
-    positions = np.array([[float(i), 0.0] for i in range(n)])
     headings = np.zeros(n)
-    velocities = np.ones(n)
+    velocities = np.asarray([command[0] for command in commands])
 
     result = oscillatory_control_predicate(
         positions,

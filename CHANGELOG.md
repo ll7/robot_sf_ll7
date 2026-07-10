@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* **issue #5118 CPU vectorized environment (VecEnv) worker-mode throughput comparator.**
+  `scripts/validation/run_vecenv_worker_mode_throughput.py` accepts a standard training config YAML,
+  constructs `dummy`, `subproc`, and `threaded` VecEnv modes, runs configurable warmup and step
+  loops, and writes a machine-readable JSON artifact (`vecenv_throughput_comparator.v1`) with
+  transitions-per-second, speedup vs. the dummy baseline, config SHA-256, git commit, and host
+  provenance. Focused tests in `tests/validation/test_run_vecenv_worker_mode_throughput.py` cover
+  helper contracts and CLI output schema. The `threaded_lidar_batch` mode awaits PR #5123.
+
 ### Fixed
 
 * **issue #5091 fresh worktree virtualenv bootstrap now fails closed.** Added

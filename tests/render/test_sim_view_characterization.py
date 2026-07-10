@@ -24,9 +24,19 @@ split is surfaced as a concrete diff rather than a soft mismatch.
 
 from __future__ import annotations
 
+import os
+from typing import TYPE_CHECKING
+
 import numpy as np
 import pytest
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+# This module instantiates SimulationView, which initializes Pygame.  Set the
+# driver before importing it so this characterization lock remains headless on
+# developer machines as well as CI.
+os.environ["SDL_VIDEODRIVER"] = "dummy"
 pygame = pytest.importorskip("pygame")  # skip the whole module if pygame is missing
 
 from robot_sf.render.sim_view import (  # noqa: E402  (import after pygame guard)
@@ -38,6 +48,13 @@ from robot_sf.render.sim_view import (  # noqa: E402  (import after pygame guard
 # --------------------------------------------------------------------------- #
 # Fixtures
 # --------------------------------------------------------------------------- #
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_pygame() -> Iterator[None]:
+    """Release Pygame state after every test to keep fixtures independent."""
+    yield
+    pygame.quit()
 
 
 @pytest.fixture

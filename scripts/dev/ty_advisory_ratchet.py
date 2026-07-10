@@ -125,13 +125,16 @@ def run_ty(repo_root: Path) -> list[dict[str, Any]]:
     non-zero ty exit that is not advisory, or on unparseable output.
     """
     cmd = ["uvx", "ty", "check", ".", "--output-format", "gitlab", "--exit-zero"]
-    proc = subprocess.run(
-        cmd,
-        cwd=repo_root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:  # e.g. uvx not installed / not on PATH
+        raise RuntimeError(f"Could not invoke '{' '.join(cmd)}': {exc}") from exc
     if proc.returncode != 0:
         raise RuntimeError(
             f"ty exited {proc.returncode} (expected 0 with --exit-zero).\n"
@@ -161,7 +164,7 @@ def aggregate(findings: list[dict[str, Any]]) -> dict[str, Any]:
     general_total = 0
     optional_total = 0
     for finding in findings:
-        path = finding.get("location", {}).get("path", "<unknown>")
+        path = (finding.get("location") or {}).get("path", "<unknown>")
         mod = module_of(path)
         rules[str(finding.get("check_name", "unknown"))] += 1
         category = classify_finding(finding)
@@ -227,25 +230,31 @@ def build_baseline_payload(
 def load_baseline(path: Path) -> dict[str, Any]:
     """Load and minimally validate a baseline file."""
     data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"Baseline {path} must be a JSON object, got {type(data).__name__}.")
     if data.get("schema_version") != SCHEMA_VERSION:
         raise ValueError(
             f"Unsupported baseline schema_version in {path}: "
             f"got {data.get('schema_version')}, expected {SCHEMA_VERSION}"
         )
-    if "modules" not in data:
-        raise ValueError(f"Baseline {path} is missing the 'modules' mapping.")
+    if not isinstance(data.get("modules"), dict):
+        raise ValueError(f"Baseline {path} is missing a valid 'modules' mapping.")
     return data
 
 
 def _detect_ty_version(repo_root: Path) -> str | None:
     """Best-effort detect the ty version for baseline provenance."""
-    proc = subprocess.run(
-        ["uvx", "ty", "--version"],
-        cwd=repo_root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        proc = subprocess.run(
+            ["uvx", "ty", "--version"],
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        # Best-effort provenance only; uvx may be absent in offline/test modes.
+        return None
     if proc.returncode == 0:
         return proc.stdout.strip() or None
     return None

@@ -15,6 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "dev" / "ty_advisory_ratchet.py"
 BASELINE = ROOT / "scripts" / "validation" / "ty_advisory_baseline.json"
@@ -326,3 +328,30 @@ def test_committed_baseline_reproduces_on_clean_checkout() -> None:
 def test_ratchet_helper_is_registered_in_repo() -> None:
     """The ratchet helper exists at the documented path."""
     assert SCRIPT.exists(), f"ty ratchet helper missing at {SCRIPT}"
+
+
+def test_aggregate_tolerates_null_location() -> None:
+    """A finding with an explicit null location must not crash aggregation (gate #5052 fix)."""
+    finding = {"check_name": "invalid-argument-type", "location": None}
+    agg = tyratchet.aggregate([finding])
+    # The finding is bucketed under the '<unknown>' path module, not an AttributeError.
+    assert agg["modules"]["<unknown>"]["total"] == 1
+
+
+def test_load_baseline_rejects_non_object_json(tmp_path: Path) -> None:
+    """A baseline whose top-level JSON is not an object must fail closed (gate #5052 fix)."""
+    bad = tmp_path / "baseline.json"
+    bad.write_text("[]", encoding="utf-8")
+    with pytest.raises(ValueError, match="must be a JSON object"):
+        tyratchet.load_baseline(bad)
+
+
+def test_load_baseline_rejects_non_dict_modules(tmp_path: Path) -> None:
+    """A baseline whose 'modules' is not a mapping must fail closed (gate #5052 fix)."""
+    bad = tmp_path / "baseline.json"
+    bad.write_text(
+        json.dumps({"schema_version": tyratchet.SCHEMA_VERSION, "modules": []}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="valid 'modules' mapping"):
+        tyratchet.load_baseline(bad)

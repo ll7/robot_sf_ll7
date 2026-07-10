@@ -56,7 +56,7 @@ def _plan() -> dict:
 
 
 def test_run_plan_cell_count_matches_preflight_materialization() -> None:
-    """Enumerated run cells must equal preflight run_cells_per_scenario (3x12x3=108)."""
+    """Enumerated run cells must equal preflight run_cells_per_scenario (3x14x3=126)."""
     config = _config()
     preflight = build_fixed_scope_preflight(
         config, config_path="configs/research/fidelity_sensitivity_v1.yaml", git_head="test-head"
@@ -88,8 +88,8 @@ def test_run_cells_carry_resolved_algorithm_and_scope_axes() -> None:
     # default_social_force resolves to the canonical social_force algorithm.
     assert algorithms["default_social_force"] == "social_force"
     # Baseline variants are included in the full fixed scope: one baseline per
-    # axis (4 axes) x every planner group (3) x every seed (3) => 36 cells.
-    assert sum(1 for cell in plan["run_cells"] if cell["baseline_variant"]) == 4 * len(
+    # axis (5 axes) x every planner group (3) x every seed (3) => 45 cells.
+    assert sum(1 for cell in plan["run_cells"] if cell["baseline_variant"]) == 5 * len(
         groups
     ) * len(seeds)
 
@@ -195,7 +195,7 @@ def test_plan_only_cli_writes_plan_without_running_episodes(tmp_path: Path) -> N
     plan = json.loads(plan_path.read_text(encoding="utf-8"))
     assert plan["schema_version"] == campaign_runner.FIXED_SCOPE_PLAN_SCHEMA_VERSION
     assert plan["launched"] is False
-    assert plan["run_cell_count"] == 108
+    assert plan["run_cell_count"] == 126
 
 
 def test_plan_only_cli_require_launchable_passes_when_prerequisites_bound(tmp_path: Path) -> None:
@@ -223,8 +223,8 @@ def test_variant_index_covers_every_plan_cell() -> None:
     index = campaign_runner.build_fixed_scope_variant_index(config)
     plan = _plan()
 
-    # Four axes x three variants each = twelve materialized variants.
-    assert len(index) == 12
+    # Four three-variant axes plus the two-variant integration-scheme axis = 14 variants.
+    assert len(index) == 14
     for cell in plan["run_cells"]:
         assert (cell["axis"], cell["variant"]) in index
     # Every variant is runtime-bound (no "unsupported"), so no cell is stranded.
@@ -279,7 +279,7 @@ def test_bind_plan_preserves_cell_count_and_order() -> None:
     plan = _plan()
     bindings = campaign_runner.bind_fixed_scope_run_plan(plan, config)
 
-    assert len(bindings) == plan["run_cell_count"] == 108
+    assert len(bindings) == plan["run_cell_count"] == 126
     for binding, cell in zip(bindings, plan["run_cells"], strict=True):
         assert binding.cell.planner_group == cell["planner_group"]
         assert binding.cell.axis == cell["axis"]
@@ -331,8 +331,8 @@ def test_execute_runs_one_batch_per_bound_cell_with_correct_inputs() -> None:
     config = _config()
     bindings = campaign_runner.bind_fixed_scope_run_plan(_plan(), config)
     bound = [b for b in bindings if b.runner_bound]
-    # Sanity: 12 variants x 3 seeds for the single runner-bound planner group.
-    assert len(bound) == 108
+    # Sanity: 14 variants x 3 seeds x 3 runner-bound planner groups.
+    assert len(bound) == 126
 
     seen: list[tuple] = []
 

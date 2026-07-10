@@ -22,6 +22,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dedicated exact-repeat campaign. Claim boundary: diagnostic-grade only — no planner-quality or
   ranking claim, no benchmark campaign was run. Covered by
   `tests/benchmark/test_scenario_flakiness_real_campaign.py`.
+* **issue #5137 planner-free feasibility oracle per scenario cell + envelope-sensitivity axis.**
+  `robot_sf/scenario_certification/feasibility_oracle.py` is a planner-free oracle that discharges
+  route-infeasibility for zero-completion cells (bottleneck, cross-trap, head-on-corridor families).
+  It combines the existing `scenario_cert.v1` route certifier (inflated A* shortest path under the
+  same robot envelope and kinematics) with a scripted actor-free waypoint traversal (the canonical
+  `goal`-algo map episode, pedestrians removed) and reports per-cell feasible yes/no **plus margins**:
+  minimum corridor width vs envelope diameter, and minimum completion steps vs horizon (observed and
+  a kinematic lower bound). It adds an **envelope-sensitivity axis** that re-runs the oracle at a
+  reduced envelope radius (default `1.0 m` nominal vs `0.5 m` reduced) to separate "hard for planners"
+  from "infeasible by construction". It also emits the oracle verdict into campaign metadata via
+  `annotate_zero_completion_cells`, so zero-completion cells are automatically annotated as
+  route-infeasible-by-construction, envelope-sensitive-hard, or still-planner-limited. This is new
+  capability: issue #3484 `feasibility_diagnostics.py` has no envelope axis and no margin assembly,
+  and the static MAPF oracle explicitly excludes kinematics. Focused tests in
+  `tests/scenario_certification/test_feasibility_oracle.py` cover margin math, envelope-sensitivity
+  classification, campaign annotation, fail-closed behavior, and one real end-to-end rollout. Claim
+  boundary: `diagnostic_only_not_benchmark_evidence` — no benchmark metric or paper-facing claim.
 
 * **issue #5118 CPU vectorized environment (VecEnv) worker-mode throughput comparator.**
   `scripts/validation/run_vecenv_worker_mode_throughput.py` accepts a standard training config YAML,

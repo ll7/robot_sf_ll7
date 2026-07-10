@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+import torch
 import yaml
 
 from scripts.validation import predictive_eval_common
@@ -366,7 +367,7 @@ def test_main_writes_failure_summary_for_missing_jsonl(
     """Campaign main should leave a structured failure summary before exiting nonzero."""
 
     checkpoint = tmp_path / "predictive_model.pt"
-    checkpoint.write_text("stub", encoding="utf-8")
+    torch.save({}, checkpoint)
     output_dir = tmp_path / "campaign"
 
     def _fake_run_map_batch(*_args, **_kwargs) -> None:
@@ -416,7 +417,7 @@ def test_main_writes_failure_summary_for_malformed_jsonl(
     """Malformed runner JSONL should still leave a structured failure summary."""
 
     checkpoint = tmp_path / "predictive_model.pt"
-    checkpoint.write_text("stub", encoding="utf-8")
+    torch.save({}, checkpoint)
     output_dir = tmp_path / "campaign"
 
     def _fake_run_map_batch(_scenarios_or_path, jsonl_path: Path, **_kwargs) -> None:

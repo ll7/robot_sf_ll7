@@ -9,9 +9,27 @@ Scope of T030 implementation:
   * Return a list of ``AggregateMetricsGroup`` dataclass instances.
 
 Out‑of‑scope (future tasks):
-  * Wilson score interval integration for binary rate metrics (T031).
   * Effect size computations (T032).
   * Precision evaluation (T033) and adaptive integration (T034).
+
+Resampling modes (issue #5139):
+  * ``flat`` (default): resample episodes i.i.d. within a single
+    (archetype, density) group. This is the original T030 behaviour and the
+    backward-compatible default. For binary rate metrics it pairs with the
+    Wilson score interval (T031), which assumes i.i.d. Bernoulli trials.
+  * ``hierarchical``: two-stage cluster bootstrap. Episodes are nested in
+    scenario cells (and seeds); flat i.i.d. resampling understates uncertainty
+    because it ignores within-cell correlation. The hierarchical procedure
+    resamples cluster cells with replacement and then episodes within each
+    resampled cell with replacement before pooling, which is the documented
+    "successor-campaign procedure". The cluster field is selected by
+    ``cfg.bootstrap_cluster`` (``"scenario"`` -> ``scenario_id``, the default;
+    ``"seed"`` -> ``seed`` for a seed-level cluster bootstrap).
+    For binary rate metrics in hierarchical mode the flat Wilson interval is
+    replaced by a cluster-robust interval (see ``_cluster_robust_interval``)
+    that derives its standard error from the between-cell dispersion of
+    cell-level proportions, so the interval widens with intra-cluster
+    correlation rather than assuming independence.
 
 Design notes:
   * Determinism: bootstrap uses a ``random.Random`` instance seeded from
@@ -44,6 +62,8 @@ __all__ = [
     "AggregateMetric",
     "AggregateMetricsGroup",
     "aggregate_metrics",
+    "cluster_robust_interval",
+    "hierarchical_bootstrap_ci",
 ]
 
 
@@ -123,8 +143,160 @@ def _bootstrap_ci(
     return mean_ci_tuple, median_ci_tuple
 
 
+def _resolve_cluster_field(cfg) -> str:
+    """Resolve the record field that defines a bootstrap cluster (cell).
+
+    Returns:
+        Record key used as the cluster identifier in hierarchical mode
+        (``"scenario_id"`` for ``bootstrap_cluster == "scenario"``,
+        ``"seed"`` for ``bootstrap_cluster == "seed"``). Defaults to
+        ``scenario_id`` for any unrecognised value so callers always get a
+        concrete field name.
+    """
+    cluster = str(getattr(cfg, "bootstrap_cluster", "scenario") or "scenario").lower()
+    return "seed" if cluster == "seed" else "scenario_id"
+
+
+def _percentile_of_sorted(sorted_vals: list[float], conf: float) -> tuple[float, float]:
+    """Return the (low, high) percentile interval of a sorted sample list.
+
+    Args:
+        sorted_vals: Values sorted ascending. Must be non-empty.
+        conf: Confidence level in (0, 1).
+
+    Returns:
+        ``(lower, upper)`` bounds of the two-sided central interval.
+    """
+    n = len(sorted_vals)
+    alpha = 1.0 - conf
+    low_idx = int(alpha / 2 * n)
+    high_idx = min(n - 1, int((1 - alpha / 2) * n) - 1)
+    high_idx = max(high_idx, low_idx)  # guard against empty upper slice
+    return (sorted_vals[low_idx], sorted_vals[high_idx])
+
+
+def hierarchical_bootstrap_ci(
+    clustered_values: list[list[float]],
+    samples: int,
+    conf: float,
+    rng: random.Random,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Two-stage (cluster-then-episode) bootstrap mean/median CIs.
+
+    This is the hierarchical (scenario-then-episode) resampling procedure.
+    For each bootstrap iteration it resamples cluster cells with replacement
+    and then episodes within each resampled cell with replacement, pools the
+    drawn episodes, and records the mean and median of the pool. The
+    percentile interval of those statistics is the reported CI. Unlike flat
+    i.i.d. resampling, this preserves within-cell correlation and therefore
+    widens intervals when episodes within a cell are similar (the
+    anti-conservatism correction documented in issue #5139).
+
+    Args:
+        clustered_values: Per-cluster lists of metric values. Each inner list
+            is the set of episode values observed in one cluster (cell). Must
+            contain at least one non-empty cluster.
+        samples: Number of bootstrap iterations.
+        conf: Confidence level in (0, 1).
+        rng: Seeded ``random.Random`` for reproducibility.
+
+    Returns:
+        Tuple of ``(mean_ci, median_ci)`` as ``(low, high)`` tuples. Returns
+        ``(nan, nan)`` pairs when there is no data and collapses to the single
+        value when there is exactly one episode overall.
+    """
+    nan_pair = (math.nan, math.nan)
+    cells = [c for c in clustered_values if c]
+    if not cells:
+        return nan_pair, nan_pair
+    total = sum(len(c) for c in cells)
+    if total == 1:  # degenerate: CI collapses to the single observed value
+        v = next(v for c in cells for v in c)
+        single = (v, v)
+        return single, single
+    n_cells = len(cells)
+    stats_mean: list[float] = []
+    stats_median: list[float] = []
+    for _ in range(samples):
+        pooled: list[float] = []
+        for _ in range(n_cells):
+            cell = cells[rng.randrange(0, n_cells)]
+            m = len(cell)
+            pooled.extend(cell[rng.randrange(0, m)] for _ in range(m))
+        stats_mean.append(mean(pooled))
+        stats_median.append(median(pooled))
+    stats_mean.sort()
+    stats_median.sort()
+    return _percentile_of_sorted(stats_mean, conf), _percentile_of_sorted(stats_median, conf)
+
+
+def cluster_robust_interval(
+    clustered_values: list[list[float]],
+    conf: float,
+) -> tuple[float, float]:
+    """Cluster-robust normal interval for a binary (rate) endpoint.
+
+    Counterpart to the flat Wilson interval (T031) for the hierarchical mode.
+    The flat Wilson interval assumes i.i.d. Bernoulli trials and therefore
+    understates uncertainty when episodes within a cluster are correlated.
+    This interval estimates the standard error of the overall proportion from
+    the between-cluster dispersion of cluster-level proportions
+    (cluster-robust / sandwich-style variance) and forms a symmetric normal
+    interval clipped to ``[0, 1]``.
+
+    Let ``C`` be the number of clusters, ``p_c`` the proportion in cluster
+    ``c``, and ``p_bar`` the mean of the ``p_c``. The cluster-robust variance
+    of the overall mean is ``sum_c (p_c - p_bar)^2 / (C * (C - 1))`` and the
+    interval is ``p_hat +/- z * sqrt(var)`` clipped to ``[0, 1]``, where
+    ``p_hat`` is the pooled episode-level proportion (consistent with the
+    bootstrap point estimate).
+
+    Args:
+        clustered_values: Per-cluster lists of 0/1 (or [0,1]) outcomes. Each
+            inner list is the set of episode outcomes in one cluster.
+        conf: Confidence level in (0, 1).
+
+    Returns:
+        ``(low, high)`` clipped to ``[0, 1]``. Returns ``(nan, nan)`` when
+        there is no data, collapses to the single value when there is exactly
+        one episode, and falls back to the pooled Wilson interval when there
+        is only one cluster (cluster-robust SE is undefined with C < 2).
+    """
+    cells = [c for c in clustered_values if c]
+    if not cells:
+        return (math.nan, math.nan)
+    total_vals = [v for c in cells for v in c if math.isfinite(v)]
+    if not total_vals:
+        return (math.nan, math.nan)
+    n = len(total_vals)
+    p_hat = sum(total_vals) / n
+    if n == 1:
+        return (p_hat, p_hat)
+    c = len(cells)
+    if c < 2:
+        # Cluster-robust SE is undefined with a single cluster; fall back to
+        # the flat Wilson interval so the rate metric still reports a finite,
+        # defensible interval rather than a zero-width degenerate one.
+        return _wilson_interval(p_hat, n, conf)
+    cell_means = [sum(cl) / len(cl) for cl in cells]
+    p_bar = sum(cell_means) / c
+    var = sum((pc - p_bar) ** 2 for pc in cell_means) / (c * (c - 1))
+    se = math.sqrt(var) if var > 0 else 0.0
+    z = _z_from_conf(conf)
+    half = z * se
+    low = max(0.0, p_hat - half)
+    high = min(1.0, p_hat + half)
+    return (low, high)
+
+
 def aggregate_metrics(records: Iterable[dict], cfg):  # T030
     """Aggregate metrics grouped by archetype and density.
+
+    Resampling mode is selected by ``cfg.bootstrap_mode``: ``"flat"`` (default,
+    backward-compatible i.i.d. episode bootstrap) or ``"hierarchical"`` (two-stage
+    cluster bootstrap, issue #5139). In hierarchical mode the cluster field is
+    ``cfg.bootstrap_cluster`` (``"scenario"`` -> ``scenario_id`` by default,
+    ``"seed"`` -> ``seed``).
 
     Returns:
         List of AggregateMetricsGroup entries.
@@ -132,10 +304,13 @@ def aggregate_metrics(records: Iterable[dict], cfg):  # T030
     groups_raw = _group_records(records)
     if not groups_raw:
         return []
-    bootstrap_samples, conf, master_seed = _bootstrap_params(cfg)
+    bootstrap_samples, conf, master_seed, mode, cluster_field = _bootstrap_params(cfg)
     result: list[AggregateMetricsGroup] = []
     for (arch, dens), recs in sorted(groups_raw.items()):
         metric_values = _collect_metric_values(recs)
+        clustered_values = (
+            _collect_clustered_metric_values(recs, cluster_field) if mode == "hierarchical" else {}
+        )
         metric_objs: dict[str, AggregateMetric] = {}
         for metric_name, vals in metric_values.items():
             metric_objs[metric_name] = _aggregate_single_metric(
@@ -146,6 +321,7 @@ def aggregate_metrics(records: Iterable[dict], cfg):  # T030
                 master_seed,
                 bootstrap_samples,
                 conf,
+                clustered_values.get(metric_name),
             )
         result.append(
             AggregateMetricsGroup(
@@ -179,18 +355,77 @@ def _group_records(records: Iterable[dict]) -> dict[tuple[str, str], list[dict]]
     return groups
 
 
-def _bootstrap_params(cfg) -> tuple[int, float, int]:
+def _bootstrap_params(cfg) -> tuple[int, float, int, str, str]:
     """Resolve bootstrap configuration from the config object.
 
     Returns:
-        Tuple of (samples, confidence, master_seed).
+        Tuple of (samples, confidence, master_seed, bootstrap_mode,
+        cluster_field). ``bootstrap_mode`` is ``"flat"`` (default) or
+        ``"hierarchical"``; ``cluster_field`` is the record key used as the
+        cluster identifier in hierarchical mode.
     """
     samples = int(getattr(cfg, "bootstrap_samples", 1000) or 1000)
     if getattr(cfg, "smoke", False):
         samples = min(samples, 300)
     conf = float(getattr(cfg, "bootstrap_confidence", 0.95) or 0.95)
     seed = int(getattr(cfg, "master_seed", 0) or 0)
-    return samples, conf, seed
+    mode = str(getattr(cfg, "bootstrap_mode", "flat") or "flat").lower()
+    if mode not in {"flat", "hierarchical"}:
+        logger.bind(
+            event="aggregation_unknown_bootstrap_mode",
+            bootstrap_mode=mode,
+        ).warning(
+            "Unknown bootstrap_mode '{}'; falling back to 'flat'.",
+            mode,
+        )
+        mode = "flat"
+    cluster_field = _resolve_cluster_field(cfg)
+    return samples, conf, seed, mode, cluster_field
+
+
+def _collect_clustered_metric_values(
+    recs: list[dict],
+    cluster_field: str,
+) -> dict[str, list[list[float]]]:
+    """Collect numeric metric values grouped by cluster (cell).
+
+    Used by the hierarchical bootstrap. Records missing the cluster field are
+    placed in a synthetic ``"__no_cluster__"`` cell so their values are still
+    resampled rather than dropped.
+
+    Returns:
+        Mapping of metric name to a list of per-cluster value lists.
+    """
+    cells: dict[str, dict[str, list[float]]] = {}
+    for r in recs:
+        cluster_key = r.get(cluster_field)
+        cell_id = "__no_cluster__" if cluster_key is None else str(cluster_key)
+        bucket = cells.setdefault(cell_id, {})
+        for k, v in r.get("metrics", {}).items():
+            if isinstance(v, int | float):
+                key = _METRIC_ALIASES.get(k, k)
+                bucket.setdefault(key, []).append(float(v))
+    result: dict[str, list[list[float]]] = {}
+    for cell_metrics in cells.values():
+        for metric_name, vals in cell_metrics.items():
+            result.setdefault(metric_name, []).append(vals)
+    return result
+
+
+def _finite_clusters(
+    clustered_values: list[list[float]] | None,
+) -> list[list[float]]:
+    """Drop non-finite values and empty cells from clustered metric values.
+
+    Returns:
+        List of non-empty per-cluster lists containing only finite values.
+        Returns ``[]`` when ``clustered_values`` is ``None`` or has no usable
+        data, signalling the caller to fall back to the flat bootstrap.
+    """
+    if not clustered_values:
+        return []
+    cleaned = [[v for v in cell if math.isfinite(v)] for cell in clustered_values]
+    return [c for c in cleaned if c]
 
 
 def _collect_metric_values(recs: list[dict]) -> dict[str, list[float]]:
@@ -216,8 +451,17 @@ def _aggregate_single_metric(
     master_seed: int,
     bootstrap_samples: int,
     conf: float,
+    clustered_values: list[list[float]] | None = None,
 ) -> AggregateMetric:
     """Compute aggregate statistics and CIs for one metric.
+
+    When ``clustered_values`` is provided (hierarchical mode) the bootstrap
+    mean/median CIs use the two-stage cluster bootstrap
+    (``hierarchical_bootstrap_ci``) and, for binary rate metrics, the mean CI
+    uses the cluster-robust interval (``cluster_robust_interval``) instead of
+    the flat Wilson interval. When cluster data is unavailable (``None``, the
+    flat-mode default) the implementation uses the original i.i.d. bootstrap,
+    so a missing cluster field never produces a crash.
 
     Returns:
         AggregateMetric instance.
@@ -241,13 +485,25 @@ def _aggregate_single_metric(
     m_p95 = _percentile(sorted_vals, 95.0) if sorted_vals else math.nan
     group_seed = hash((master_seed, arch, dens, metric_name)) & 0xFFFFFFFF
     rng = random.Random(group_seed)
-    mean_ci, median_ci = _bootstrap_ci(sorted_vals, bootstrap_samples, conf, rng)
-    # Replace mean_ci for rate metrics with Wilson interval (T031) for better coverage when near bounds.
-    if metric_name in {"collision_rate", "success_rate"} and sorted_vals:
-        # Interpret values as Bernoulli outcomes; approximate p via mean.
-        p = m_mean
-        n = len(sorted_vals)
-        mean_ci = _wilson_interval(p, n, conf)
+    is_rate = metric_name in {"collision_rate", "success_rate"}
+    finite_clusters = _finite_clusters(clustered_values)
+    if finite_clusters:
+        mean_ci, median_ci = hierarchical_bootstrap_ci(
+            finite_clusters,
+            bootstrap_samples,
+            conf,
+            rng,
+        )
+        if is_rate:
+            mean_ci = cluster_robust_interval(finite_clusters, conf)
+    else:
+        mean_ci, median_ci = _bootstrap_ci(sorted_vals, bootstrap_samples, conf, rng)
+        # Replace mean_ci for rate metrics with Wilson interval (T031) for better coverage when near bounds.
+        if is_rate and sorted_vals:
+            # Interpret values as Bernoulli outcomes; approximate p via mean.
+            p = m_mean
+            n = len(sorted_vals)
+            mean_ci = _wilson_interval(p, n, conf)
     return AggregateMetric(
         name=metric_name,
         mean=m_mean,

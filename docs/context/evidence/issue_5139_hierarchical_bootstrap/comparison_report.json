@@ -1,0 +1,706 @@
+{
+  "claim_boundary": "diagnostic-only: synthetic structured episode bundle characterizing the implemented flat vs hierarchical bootstrap procedures. NOT benchmark evidence and NOT a paper claim. No repository campaign bundle matches the (archetype, density, scenario_id, seed) aggregation schema yet; the pre-registered 30-seed successor campaign this work unblocks has not run. Re-run on a real campaign bundle to obtain nominal benchmark evidence.",
+  "evidence_status": "diagnostic-only",
+  "issue": "#5139",
+  "description": "Flat (i.i.d. episode) vs hierarchical (scenario-then-episode cluster) bootstrap interval-width comparison for the analysis layer.",
+  "bundle_description": "Synthetic structured bundle: 90 episodes across 3 (archetype, density) groups, 6 scenario cells per group, 5 seeds per cell, with cell-level success/collision probabilities inducing intra-cluster correlation.",
+  "config": {
+    "bootstrap_samples": 1000,
+    "bootstrap_confidence": 0.95,
+    "master_seed": 123,
+    "smoke": false,
+    "modes": [
+      "flat",
+      "hierarchical_scenario",
+      "hierarchical_seed"
+    ]
+  },
+  "comparisons": [
+    {
+      "archetype": "bottleneck",
+      "density": "low",
+      "metric": "collision_rate",
+      "mode": "flat",
+      "mean": 0.4,
+      "mean_ci": [
+        0.24590628116801852,
+        0.5767963974667752
+      ],
+      "median_ci": [
+        0.0,
+        1.0
+      ],
+      "mean_ci_width": 0.33089011629875675,
+      "is_rate": true
+    },
+    {
+      "archetype": "bottleneck",
+      "density": "low",
+      "metric": "success_rate",
+      "mode": "flat",
+      "mean": 0.6,
+      "mean_ci": [
+        0.42320360253322475,
+        0.7540937188319815
+      ],
+      "median_ci": [
+        0.0,
+        1.0
+      ],
+      "mean_ci_width": 0.33089011629875675,
+      "is_rate": true
+    },
+    {
+      "archetype": "bottleneck",
+      "density": "low",
+      "metric": "time_to_goal",
+      "mode": "flat",
+      "mean": 13.813821971442517,
+      "mean_ci": [
+        12.871711494141511,
+        14.761948787217488
+      ],
+      "median_ci": [
+        12.220766510572272,
+        15.61898534891976
+      ],
+      "mean_ci_width": 1.8902372930759768,
+      "is_rate": false
+    },
+    {
+      "archetype": "crossing",
+      "density": "high",
+      "metric": "collision_rate",
+      "mode": "flat",
+      "mean": 0.4,
+      "mean_ci": [
+        0.24590628116801852,
+        0.5767963974667752
+      ],
+      "median_ci": [
+        0.0,
+        1.0
+      ],
+      "mean_ci_width": 0.33089011629875675,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "high",
+      "metric": "success_rate",
+      "mode": "flat",
+      "mean": 0.6,
+      "mean_ci": [
+        0.42320360253322475,
+        0.7540937188319815
+      ],
+      "median_ci": [
+        0.0,
+        1.0
+      ],
+      "mean_ci_width": 0.33089011629875675,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "high",
+      "metric": "time_to_goal",
+      "mode": "flat",
+      "mean": 13.757465765658745,
+      "mean_ci": [
+        12.787219581313904,
+        14.75148977169068
+      ],
+      "median_ci": [
+        12.167582142709474,
+        15.409887385525694
+      ],
+      "mean_ci_width": 1.9642701903767765,
+      "is_rate": false
+    },
+    {
+      "archetype": "crossing",
+      "density": "low",
+      "metric": "collision_rate",
+      "mode": "flat",
+      "mean": 0.5666666666666667,
+      "mean_ci": [
+        0.3919730700081361,
+        0.7262251442353347
+      ],
+      "median_ci": [
+        0.0,
+        1.0
+      ],
+      "mean_ci_width": 0.3342520742271986,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "low",
+      "metric": "success_rate",
+      "mode": "flat",
+      "mean": 0.43333333333333335,
+      "mean_ci": [
+        0.2737748557646652,
+        0.6080269299918639
+      ],
+      "median_ci": [
+        0.0,
+        1.0
+      ],
+      "mean_ci_width": 0.3342520742271987,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "low",
+      "metric": "time_to_goal",
+      "mode": "flat",
+      "mean": 13.70624051563986,
+      "mean_ci": [
+        12.802160526743997,
+        14.686942131058453
+      ],
+      "median_ci": [
+        12.193570244920487,
+        15.378329229730834
+      ],
+      "mean_ci_width": 1.8847816043144565,
+      "is_rate": false
+    },
+    {
+      "archetype": "bottleneck",
+      "density": "low",
+      "metric": "collision_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.4,
+      "mean_ci": [
+        0.06431742363701043,
+        0.7356825763629896
+      ],
+      "median_ci": [
+        0.0,
+        1.0
+      ],
+      "mean_ci_width": 0.6713651527259792,
+      "is_rate": true
+    },
+    {
+      "archetype": "bottleneck",
+      "density": "low",
+      "metric": "success_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.6,
+      "mean_ci": [
+        0.2643174236370104,
+        0.9356825763629896
+      ],
+      "median_ci": [
+        0.0,
+        1.0
+      ],
+      "mean_ci_width": 0.6713651527259792,
+      "is_rate": true
+    },
+    {
+      "archetype": "bottleneck",
+      "density": "low",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_scenario",
+      "mean": 13.813821971442517,
+      "mean_ci": [
+        11.731912234204135,
+        15.826448489727452
+      ],
+      "median_ci": [
+        10.831731698719235,
+        16.425387372363605
+      ],
+      "mean_ci_width": 4.094536255523318,
+      "is_rate": false
+    },
+    {
+      "archetype": "crossing",
+      "density": "high",
+      "metric": "collision_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.4,
+      "mean_ci": [
+        0.0963636851484016,
+        0.7036363148515985
+      ],
+      "median_ci": [
+        0.0,
+        1.0
+      ],
+      "mean_ci_width": 0.607272629703197,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "high",
+      "metric": "success_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.6,
+      "mean_ci": [
+        0.29636368514840156,
+        0.9036363148515985
+      ],
+      "median_ci": [
+        0.0,
+        1.0
+      ],
+      "mean_ci_width": 0.607272629703197,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "high",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_scenario",
+      "mean": 13.757465765658745,
+      "mean_ci": [
+        11.611383216825132,
+        16.033671451369997
+      ],
+      "median_ci": [
+        10.430503101168128,
+        16.827135217349067
+      ],
+      "mean_ci_width": 4.422288234544865,
+      "is_rate": false
+    },
+    {
+      "archetype": "crossing",
+      "density": "low",
+      "metric": "collision_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.5666666666666667,
+      "mean_ci": [
+        0.24000600257665766,
+        0.8933273307566756
+      ],
+      "median_ci": [
+        0.0,
+        1.0
+      ],
+      "mean_ci_width": 0.6533213281800179,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "low",
+      "metric": "success_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.43333333333333335,
+      "mean_ci": [
+        0.1066726692433243,
+        0.7599939974233424
+      ],
+      "median_ci": [
+        0.0,
+        1.0
+      ],
+      "mean_ci_width": 0.6533213281800181,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "low",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_scenario",
+      "mean": 13.70624051563986,
+      "mean_ci": [
+        11.61131876618098,
+        15.782228170161531
+      ],
+      "median_ci": [
+        10.917203400906393,
+        16.83546800577847
+      ],
+      "mean_ci_width": 4.17090940398055,
+      "is_rate": false
+    },
+    {
+      "archetype": "bottleneck",
+      "density": "low",
+      "metric": "collision_rate",
+      "mode": "hierarchical_seed",
+      "mean": 0.4,
+      "mean_ci": [
+        0.3199848053940782,
+        0.48001519460592185
+      ],
+      "median_ci": [
+        0.0,
+        1.0
+      ],
+      "mean_ci_width": 0.16003038921184365,
+      "is_rate": true
+    },
+    {
+      "archetype": "bottleneck",
+      "density": "low",
+      "metric": "success_rate",
+      "mode": "hierarchical_seed",
+      "mean": 0.6,
+      "mean_ci": [
+        0.5199848053940782,
+        0.6800151946059217
+      ],
+      "median_ci": [
+        0.0,
+        1.0
+      ],
+      "mean_ci_width": 0.16003038921184354,
+      "is_rate": true
+    },
+    {
+      "archetype": "bottleneck",
+      "density": "low",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_seed",
+      "mean": 13.813821971442517,
+      "mean_ci": [
+        12.934419665246855,
+        14.780266472486142
+      ],
+      "median_ci": [
+        12.23208509544622,
+        15.61898534891976
+      ],
+      "mean_ci_width": 1.8458468072392868,
+      "is_rate": false
+    },
+    {
+      "archetype": "crossing",
+      "density": "high",
+      "metric": "collision_rate",
+      "mode": "hierarchical_seed",
+      "mean": 0.4,
+      "mean_ci": [
+        0.3199848053940782,
+        0.48001519460592185
+      ],
+      "median_ci": [
+        0.0,
+        1.0
+      ],
+      "mean_ci_width": 0.16003038921184365,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "high",
+      "metric": "success_rate",
+      "mode": "hierarchical_seed",
+      "mean": 0.6,
+      "mean_ci": [
+        0.5199848053940782,
+        0.6800151946059217
+      ],
+      "median_ci": [
+        0.0,
+        1.0
+      ],
+      "mean_ci_width": 0.16003038921184354,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "high",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_seed",
+      "mean": 13.757465765658745,
+      "mean_ci": [
+        12.770283614919885,
+        14.74085782283672
+      ],
+      "median_ci": [
+        12.167582142709474,
+        15.409887385525694
+      ],
+      "mean_ci_width": 1.970574207916835,
+      "is_rate": false
+    },
+    {
+      "archetype": "crossing",
+      "density": "low",
+      "metric": "collision_rate",
+      "mode": "hierarchical_seed",
+      "mean": 0.5666666666666667,
+      "mean_ci": [
+        0.436002401030663,
+        0.6973309323026703
+      ],
+      "median_ci": [
+        0.0,
+        1.0
+      ],
+      "mean_ci_width": 0.2613285312720073,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "low",
+      "metric": "success_rate",
+      "mode": "hierarchical_seed",
+      "mean": 0.43333333333333335,
+      "mean_ci": [
+        0.3026690676973297,
+        0.563997598969337
+      ],
+      "median_ci": [
+        0.0,
+        1.0
+      ],
+      "mean_ci_width": 0.2613285312720073,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "low",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_seed",
+      "mean": 13.70624051563986,
+      "mean_ci": [
+        12.764896442508956,
+        14.623937309235965
+      ],
+      "median_ci": [
+        12.104218959948973,
+        15.389136180796452
+      ],
+      "mean_ci_width": 1.8590408667270086,
+      "is_rate": false
+    }
+  ],
+  "width_ratios": [
+    {
+      "archetype": "bottleneck",
+      "density": "low",
+      "metric": "collision_rate",
+      "mode": "hierarchical_scenario",
+      "flat_width": 0.33089011629875675,
+      "hierarchical_width": 0.6713651527259792,
+      "ratio": 2.0289670789677245,
+      "is_rate": true
+    },
+    {
+      "archetype": "bottleneck",
+      "density": "low",
+      "metric": "collision_rate",
+      "mode": "hierarchical_seed",
+      "flat_width": 0.33089011629875675,
+      "hierarchical_width": 0.16003038921184365,
+      "ratio": 0.4836360511516582,
+      "is_rate": true
+    },
+    {
+      "archetype": "bottleneck",
+      "density": "low",
+      "metric": "success_rate",
+      "mode": "hierarchical_scenario",
+      "flat_width": 0.33089011629875675,
+      "hierarchical_width": 0.6713651527259792,
+      "ratio": 2.0289670789677245,
+      "is_rate": true
+    },
+    {
+      "archetype": "bottleneck",
+      "density": "low",
+      "metric": "success_rate",
+      "mode": "hierarchical_seed",
+      "flat_width": 0.33089011629875675,
+      "hierarchical_width": 0.16003038921184354,
+      "ratio": 0.48363605115165786,
+      "is_rate": true
+    },
+    {
+      "archetype": "bottleneck",
+      "density": "low",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_scenario",
+      "flat_width": 1.8902372930759768,
+      "hierarchical_width": 4.094536255523318,
+      "ratio": 2.166149335071203,
+      "is_rate": false
+    },
+    {
+      "archetype": "bottleneck",
+      "density": "low",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_seed",
+      "flat_width": 1.8902372930759768,
+      "hierarchical_width": 1.8458468072392868,
+      "ratio": 0.9765159189275896,
+      "is_rate": false
+    },
+    {
+      "archetype": "crossing",
+      "density": "high",
+      "metric": "collision_rate",
+      "mode": "hierarchical_scenario",
+      "flat_width": 0.33089011629875675,
+      "hierarchical_width": 0.607272629703197,
+      "ratio": 1.8352697762507288,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "high",
+      "metric": "collision_rate",
+      "mode": "hierarchical_seed",
+      "flat_width": 0.33089011629875675,
+      "hierarchical_width": 0.16003038921184365,
+      "ratio": 0.4836360511516582,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "high",
+      "metric": "success_rate",
+      "mode": "hierarchical_scenario",
+      "flat_width": 0.33089011629875675,
+      "hierarchical_width": 0.607272629703197,
+      "ratio": 1.8352697762507288,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "high",
+      "metric": "success_rate",
+      "mode": "hierarchical_seed",
+      "flat_width": 0.33089011629875675,
+      "hierarchical_width": 0.16003038921184354,
+      "ratio": 0.48363605115165786,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "high",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_scenario",
+      "flat_width": 1.9642701903767765,
+      "hierarchical_width": 4.422288234544865,
+      "ratio": 2.251364530302526,
+      "is_rate": false
+    },
+    {
+      "archetype": "crossing",
+      "density": "high",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_seed",
+      "flat_width": 1.9642701903767765,
+      "hierarchical_width": 1.970574207916835,
+      "ratio": 1.0032093433840938,
+      "is_rate": false
+    },
+    {
+      "archetype": "crossing",
+      "density": "low",
+      "metric": "collision_rate",
+      "mode": "hierarchical_scenario",
+      "flat_width": 0.3342520742271986,
+      "hierarchical_width": 0.6533213281800179,
+      "ratio": 1.9545767358079005,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "low",
+      "metric": "collision_rate",
+      "mode": "hierarchical_seed",
+      "flat_width": 0.3342520742271986,
+      "hierarchical_width": 0.2613285312720073,
+      "ratio": 0.7818306943231605,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "low",
+      "metric": "success_rate",
+      "mode": "hierarchical_scenario",
+      "flat_width": 0.3342520742271987,
+      "hierarchical_width": 0.6533213281800181,
+      "ratio": 1.9545767358079005,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "low",
+      "metric": "success_rate",
+      "mode": "hierarchical_seed",
+      "flat_width": 0.3342520742271987,
+      "hierarchical_width": 0.2613285312720073,
+      "ratio": 0.7818306943231603,
+      "is_rate": true
+    },
+    {
+      "archetype": "crossing",
+      "density": "low",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_scenario",
+      "flat_width": 1.8847816043144565,
+      "hierarchical_width": 4.17090940398055,
+      "ratio": 2.212940424732985,
+      "is_rate": false
+    },
+    {
+      "archetype": "crossing",
+      "density": "low",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_seed",
+      "flat_width": 1.8847816043144565,
+      "hierarchical_width": 1.8590408667270086,
+      "ratio": 0.986342853979196,
+      "is_rate": false
+    }
+  ],
+  "summary": {
+    "rate_metrics_all_modes": {
+      "count": 12,
+      "min_ratio": 0.48363605115165786,
+      "max_ratio": 2.0289670789677245,
+      "mean_ratio": 1.2613193979421384,
+      "median_ratio": 1.8352697762507288
+    },
+    "rate_metrics_hierarchical_scenario": {
+      "count": 6,
+      "min_ratio": 1.8352697762507288,
+      "max_ratio": 2.0289670789677245,
+      "mean_ratio": 1.9396045303421179,
+      "median_ratio": 1.9545767358079005
+    },
+    "rate_metrics_hierarchical_seed": {
+      "count": 6,
+      "min_ratio": 0.48363605115165786,
+      "max_ratio": 0.7818306943231605,
+      "mean_ratio": 0.5830342655421589,
+      "median_ratio": 0.4836360511516582
+    },
+    "continuous_metrics_all_modes": {
+      "count": 6,
+      "min_ratio": 0.9765159189275896,
+      "max_ratio": 2.251364530302526,
+      "mean_ratio": 1.5994204010662656,
+      "median_ratio": 2.166149335071203
+    },
+    "continuous_metrics_hierarchical_scenario": {
+      "count": 3,
+      "min_ratio": 2.166149335071203,
+      "max_ratio": 2.251364530302526,
+      "mean_ratio": 2.2101514300355714,
+      "median_ratio": 2.212940424732985
+    },
+    "continuous_metrics_hierarchical_seed": {
+      "count": 3,
+      "min_ratio": 0.9765159189275896,
+      "max_ratio": 1.0032093433840938,
+      "mean_ratio": 0.9886893720969598,
+      "median_ratio": 0.986342853979196
+    },
+    "anti_conservatism_note": "ratio > 1 means the hierarchical interval is wider than the flat interval on the same records, i.e. the flat interval was anti-conservative (understated uncertainty) under clustering. The hierarchical_scenario (scenario-then-episode) mode is the documented successor-campaign procedure and is the primary anti-conservatism comparison; hierarchical_seed is the optional seed-level cluster variant. A seed-mode ratio < 1 can occur when the cell-level rate already absorbs most between-cell variance, leaving little between-seed dispersion."
+  }
+}

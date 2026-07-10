@@ -61,3 +61,10 @@ def test_post_process_metrics_logs_and_drops_invalid_count_and_flag_values():
     assert metrics["near_misses"] == 2
     logged_keys = {msg.record["extra"].get("metric_key") for msg in captured}
     assert {"collisions", "social_proxemic_available"} <= logged_keys
+    count_warning = next(
+        msg.record["message"]
+        for msg in captured
+        if msg.record["extra"].get("metric_key") == "collisions"
+    )
+    assert "collisions" in count_warning
+    assert "'not-a-count'" in count_warning

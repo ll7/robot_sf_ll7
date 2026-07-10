@@ -307,6 +307,22 @@ def test_similarity_report_rejects_misaligned_malformed_position_series(tmp_path
         )
 
 
+def test_similarity_report_rejects_temporally_misaligned_actor_series(tmp_path: Path) -> None:
+    """Unequal robot/pedestrian lengths cannot form per-step raw features."""
+    records = [
+        json.loads(line) for line in TRAJECTORY_FIXTURE.read_text(encoding="utf-8").splitlines()[:2]
+    ]
+    records[0]["trajectory"]["pedestrian_trajectories"]["ped-1"].pop()
+    episodes = tmp_path / "misaligned_trajectory.jsonl"
+    _write_jsonl(episodes, records)
+
+    with pytest.raises(ValueError, match="at least two selected records"):
+        build_collision_scenario_similarity_report(
+            episodes,
+            require_trajectory_comparison=True,
+        )
+
+
 def test_trajectory_fixture_cli_writes_feature_set_table(tmp_path: Path) -> None:
     """Tracked synthetic fixture has a reproducible raw-trajectory CLI path."""
     out_json = tmp_path / "similarity.json"

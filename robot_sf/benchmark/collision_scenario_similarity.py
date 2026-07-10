@@ -245,8 +245,6 @@ def _trajectory_geometry_features(
     closest: tuple[float, int] | None = None
     for step, robot_position in enumerate(robot_positions):
         for track in pedestrian_tracks:
-            if step >= len(track):
-                continue
             distance = math.dist(robot_position, track[step])
             if closest is None or distance < closest[0]:
                 closest = (distance, step)
@@ -282,6 +280,13 @@ def _trajectory_action_features(record: dict[str, Any]) -> tuple[dict[str, float
     pedestrian_tracks = _pedestrian_trajectories(
         _first_present(record, _PEDESTRIAN_TRAJECTORY_PATHS)
     )
+    raw_actor_trajectories_available = bool(robot_positions and pedestrian_tracks) and all(
+        len(track) == len(robot_positions) for track in pedestrian_tracks
+    )
+    if not raw_actor_trajectories_available:
+        # Do not align unequal arrays by truncation or interpolation: their
+        # per-step distance and timing features are not interpretable.
+        pedestrian_tracks = []
     actions = _actions(_first_present(record, _ACTION_TRACE_PATHS))
     dt = _finite_float(_first_present(record, _TRAJECTORY_DT_PATHS))
 
@@ -289,7 +294,7 @@ def _trajectory_action_features(record: dict[str, Any]) -> tuple[dict[str, float
     features.update(_action_features(actions))
 
     return features, {
-        "raw_actor_trajectories_available": bool(robot_positions and pedestrian_tracks),
+        "raw_actor_trajectories_available": raw_actor_trajectories_available,
         "robot_samples": len(robot_positions),
         "pedestrian_tracks": len(pedestrian_tracks),
         "pedestrian_samples": sum(len(track) for track in pedestrian_tracks),

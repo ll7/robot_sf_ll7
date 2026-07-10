@@ -3,6 +3,7 @@
   "issue": 3482,
   "release_tag": "0.0.2",
   "generated_on": "2026-07-01",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "purpose": "Machine-readable claim boundary for release 0.0.2 collision-count metrics after EpisodeEventLedger.v1 exact/derived reconciliation surfaced a discrepancy and exact-event provenance recovery did not find the source artifacts.",
   "source": {
     "type": "issue_comment_summary_plus_negative_recovery_disposition",
@@ -21,18 +22,39 @@
   "claim_boundaries": {
     "exact_collision_outcome_status": "bounded_diagnostic_only",
     "collision_count_metric_status": "withdrawn_exact_event_provenance_unavailable",
+    "snqi_collision_term_status": "withdrawn_derived_collision_source",
+    "success_rate_collision_status": "withdrawn_derived_collision_source",
     "open_gates": []
+  },
+  "derived_collision_consumers": {
+    "snqi_collision_term": {
+      "field_path": "robot_sf/benchmark/snqi/compute.py:112",
+      "consumed_field": "metrics['collisions']",
+      "source_field": "total_collision_count (metrics.py:2952)",
+      "status": "withdrawn_derived_collision_source",
+      "note": "SNQI collision penalty normalizes metrics['collisions'] which is set to total_collision_count (the withdrawn derived quantity). With derived counts zero everywhere in release 0.0.2, the SNQI collision term contributed exactly nothing to every released score — every released SNQI equals a collision-weight-zero SNQI."
+    },
+    "success_rate_collision_gate": {
+      "field_path": "robot_sf/benchmark/metrics.py:1704",
+      "consumed_function": "collision_count(data)",
+      "source_functions": ["wall_collisions", "agent_collisions", "human_collisions"],
+      "status": "withdrawn_derived_collision_source",
+      "note": "success_rate() returns 0.0 when collision_count() > 0, and collision_count() sums the same derived geometry functions using D_COLL=0.25m. The runtime trigger fires at radius-sum ~1.4m; the 1.15m gap explains why 241 exact-collision episodes produced zero derived counts. The no-collision gate never bound on the release surface, so success values for those 241 episodes may be incorrect."
+    }
   },
   "forbidden_claims_until_gates_close": [
     "Do not use release 0.0.2 total_collision_count or collision-count-derived tables as paper-ready evidence.",
     "Do not treat zero positive derived collision counts as evidence that release 0.0.2 had zero collisions.",
     "Do not cite the 241 exact collision outcomes as release-bundle evidence unless exact-event provenance is later recovered and promoted.",
-    "Do not auto-close issue #3482 with a completed merge keyword; the defensible closure path is not_planned because the collision-count claim is withdrawn, not validated."
+    "Do not auto-close issue #3482 with a completed merge keyword; the defensible closure path is not_planned because the collision-count claim is withdrawn, not validated.",
+    "Do not report release 0.0.2 SNQI scores as collision-penalty-inclusive; the collision term was zero for all episodes due to the withdrawn derived count.",
+    "Do not report release 0.0.2 success_rate as collision-gate-inclusive; the no-collision requirement in success_rate() never bound on the 241 exact-collision episodes."
   ],
   "allowed_uses": [
     "Preserve the exact-vs-derived discrepancy as a fail-closed evidence boundary.",
     "Use non-collision release table fields only with an explicit collision-count withdrawal caveat.",
-    "Use this manifest with the claim-disposition packet to explain why release 0.0.2 collision-count claims are withdrawn rather than reconciled."
+    "Use this manifest with the claim-disposition packet to explain why release 0.0.2 collision-count claims are withdrawn rather than reconciled.",
+    "Use derived_collision_consumers section to document downstream metric impact of the withdrawn collision count."
   ],
   "validator": "scripts/validation/check_release_0_0_2_collision_count_boundary.py"
 }

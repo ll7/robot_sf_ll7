@@ -1,4 +1,4 @@
-# Issue 4933: Virtual-Validation Mitigation Techniques — Feasibility and Effort Assessment
+# Issue #4933 — Virtual-Validation Mitigation Techniques — Feasibility and Effort Assessment
 
 This assessment evaluates five mitigation techniques from the autonomous-driving virtual-validation
 literature, mapped onto robot_sf_ll7's existing infrastructure. For each technique: what it adds,
@@ -103,8 +103,8 @@ unit than naive random. Overlaps with the scenario-generation epic (#4932).
   rare-event smoke runs.
 - **`configs/benchmarks/rare_event/`**: YAML specs for crossing and static-constriction
   rare-event scenarios.
-- **`robot_sf/benchmark/scenario_certification.py`**: feasibility checks ensure mutated
-  scenarios remain valid.
+- **`robot_sf/scenario_certification/feasibility_diagnostics.py`**: feasibility checks ensure
+  mutated scenarios remain valid.
 - **`scripts/benchmark/run_scenario_criticality_optimization.py`**: criticality search as
   baseline for learned/adaptive stress-testing approaches.
 

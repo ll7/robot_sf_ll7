@@ -19,6 +19,24 @@ Check these in order:
 
 Reject changes that only add code or docs without task-appropriate proof.
 
+## Post-Merge Review-Thread Sweep
+
+Merge does not mean "all review findings adjudicated." Inline review threads left unresolved
+on a merged PR are easily lost, and some are later fixed by successor PRs without ever being
+linked. After merge, run a short sweep so the thread ledger reflects reality:
+
+1. Re-query unresolved review threads on the merged PR (`gh api graphql` on `reviewThreads`,
+   filtering `isResolved == false`).
+2. For each unresolved thread, either resolve it (if the merge or a successor commit addressed
+   the comment) or link the fixing PR/commit/issue in a one-line reply. Threads whose substance
+   is still open get a dedicated follow-up issue instead of a silent resolve.
+3. Record the sweep outcome in the merge note or the issue thread so the count of unresolved
+   threads is auditable.
+
+Treat substantive threads that need real work (for example a fail-closed contract gap or an
+end-to-end assertion gap) as follow-up issues, not as items to resolve with a link. This sweep is
+bookkeeping: it does not change benchmark, metric, or schema semantics.
+
 ## Intended Design Alignment
 
 Before treating CI or targeted tests as sufficient, compare the PR against the linked issue,

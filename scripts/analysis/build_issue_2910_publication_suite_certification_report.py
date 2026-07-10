@@ -324,8 +324,13 @@ def build_report(
                     "blockers after policy application."
                     if status == "pass"
                     else (
-                        "Report states claim boundary and lists blockers that prevent "
-                        "publication readiness."
+                        "Report states claim boundary; publication-suite policy is applied "
+                        "but the release badge is deferred pending the #4364 release re-base."
+                        if status == "blocked_pending_rebase"
+                        else (
+                            "Report states claim boundary and lists blockers that prevent "
+                            "publication readiness."
+                        )
                     )
                 ),
                 "result": "met"
@@ -339,8 +344,14 @@ def build_report(
                     "versioned suite policy."
                     if status == "pass"
                     else (
-                        "status remains blocked while excluded/stress-only scenarios and "
-                        "matrix certification blockers remain."
+                        "status remains blocked_pending_rebase; excluded/stress-only scenarios "
+                        "are policy-handled but the release badge is deferred until the #4364 "
+                        "release re-base."
+                        if status == "blocked_pending_rebase"
+                        else (
+                            "status remains blocked while excluded/stress-only scenarios and "
+                            "matrix certification blockers remain."
+                        )
                     )
                 ),
                 "result": "met",

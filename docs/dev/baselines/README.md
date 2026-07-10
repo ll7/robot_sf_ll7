@@ -6,3 +6,4 @@ This folder documents built-in baseline algorithms available in the Social Navig
 - PPO (ppo)
 - Random (random)
 - Prediction Planner (prediction_planner)
+- Dynamic Window Approach (dwa): [parameters and run command](../../baselines/dwa.md)

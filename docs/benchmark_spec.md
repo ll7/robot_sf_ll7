@@ -122,7 +122,8 @@ when an input JSONL mixes tracks. Use
 comparisons; those reports namespace rows by `benchmark_track` and record that fallback, degraded,
 failed, or diagnostic-stub rows are caveats rather than benchmark-success evidence.
 
-Placeholder planners (`rvo`, `dwa`, `teb`) are hard-blocked for benchmark runs.
+The placeholder `rvo` planner is hard-blocked for benchmark runs. The implemented `dwa` and `teb`
+planners remain experimental/testing-only and require explicit opt-in.
 
 ## Success And Collision Semantics
 

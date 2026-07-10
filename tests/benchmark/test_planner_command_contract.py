@@ -76,6 +76,14 @@ def test_planner_kinematics_compatibility_blocks_known_invalid_pairs() -> None:
     assert compatible is False
     assert reason is not None and "non-image" in reason
 
+    compatible, reason = planner_kinematics_compatibility(
+        algo="dwa",
+        robot_kinematics="holonomic",
+        algo_config={},
+    )
+    assert compatible is False
+    assert reason is not None and "unicycle" in reason
+
     assert planner_kinematics_compatibility(
         algo="ppo",
         robot_kinematics="differential_drive",

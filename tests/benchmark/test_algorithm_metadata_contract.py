@@ -288,6 +288,21 @@ def test_grid_route_metadata_marks_testing_only_route_spike() -> None:
     assert planner["adapter_name"] == "GridRoutePlannerAdapter"
 
 
+def test_dwa_metadata_marks_native_classical_testing_adapter() -> None:
+    """DWA metadata should identify the local implementation and its testing-only boundary."""
+    meta = enrich_algorithm_metadata(
+        algo="dwa",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+    planner = meta["planner_kinematics"]
+    assert meta["baseline_category"] == "classical"
+    assert meta["policy_semantics"] == "in_repo_classical_dynamic_window"
+    assert planner["adapter_name"] == "DWAPlannerAdapter"
+    assert planner["testing_only_adapter"] is True
+
+
 def test_risk_surface_dwa_metadata_marks_prototype_surface_adapter() -> None:
     """Risk-surface DWA metadata should prevent learned-risk overclaiming."""
     assert canonical_algorithm_name("risk_surface_dwa_v0") == "risk_surface_dwa"

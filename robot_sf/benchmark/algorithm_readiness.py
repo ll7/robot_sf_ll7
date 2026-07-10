@@ -428,9 +428,13 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
     ),
     AlgorithmReadiness(
         canonical_name="dwa",
-        tier="placeholder",
+        tier="experimental",
         aliases=("dwa",),
-        note="Placeholder adapter; not benchmark-validated.",
+        note=(
+            "Deterministic in-repository Dynamic Window Approach baseline; implemented but "
+            "requires explicit opt-in until benchmark evidence supports promotion."
+        ),
+        requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
         canonical_name="teb",

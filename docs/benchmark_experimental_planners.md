@@ -54,6 +54,7 @@ dependencies through `uv run python`, so they avoid accidental system-Python imp
 
 The following planners are currently treated as testing-only and fail closed by default:
 
+- `dwa`
 - `risk_dwa`
 - `hybrid_rule_local_planner`
 - `mppi_social`
@@ -121,6 +122,7 @@ testing-only planners. None of them currently meet the promotion bar.
 
 | Planner | Evidence note | Current blocker | Promotion criterion | Next proof required |
 | --- | --- | --- | --- | --- |
+| `dwa` | Issue #4983 implementation PR | Newly implemented classical dynamic-window baseline; no benchmark campaign evidence yet. | Demonstrate repeatable results on the intended scenario matrix, with no fallback/degraded rows counted as success. | Run the canonical DWA config through the verified-simple gate, then a predeclared broader matrix if that gate is credible. |
 | `risk_dwa` | `docs/context/issue_679_risk_dwa_benchmark.md` | Much lower success and higher collisions than predictive baselines despite faster runtime. | Show a concrete revision that recovers goal-reaching to a competitive level without giving back the reactive safety/runtime advantages. | Rerun benchmark evidence only after a hypothesis-driven change to progress recovery or action selection. |
 | `hybrid_rule_local_planner` | `docs/context/policy_search/reports/2026-04-30_best_non_learning_local_policy_report.md` | Best current hybrid-rule configuration is `hybrid_rule_v3_static_margin0_waypoint2`: collision-free on nominal sanity and stress slice, with better stress success/near-miss rates than the previous margin-0 candidate. Follow-up route-lookahead, route-commitment, static-escape, mild-speed, and comfort/progress variants either introduced static collisions or regressed success/stress behavior. | Show broader matrix gains without increasing collisions or severe timeout/freezing. | Investigate doorway comfort and dynamic-agent passage logic before adding broader recovery or ensemble claims. |
 | `mppi_social` | `docs/context/issue_677_mppi_social_benchmark.md` | Severe runtime cost plus lower success than predictive baselines. | Demonstrate a materially better runtime-success tradeoff than the current predictive baselines while preserving the observed safety signal. | Provide a concrete runtime-reduction or horizon-simplification hypothesis, then rerun the verified-simple gate and broader benchmark. |
@@ -148,4 +150,3 @@ caveats; roster/campaign decisions are separate maintainer calls.
 | External baseline | Upstream | Smoke verdict | Per-step | Blocker for any future comparison | Detail |
 | --- | --- | --- | --- | --- | --- |
 | CrowdNav_Prediction_AttnGraph | `Shuijing725/CrowdNav_Prediction_AttnGraph` @ `3907731` (MIT, ICRA 2023) | PASS — checkpoint loads and acts on synthetic observations (model-only adapter, PyTorch path only) | ~1–2 ms CPU, flat in neighbor count | Holonomic `ActionXY` vs Robot SF unicycle; trained on ORCA pedestrians vs default social-force crowd; GST-inferred prediction variant needs TensorFlow. Results need an "evaluated out-of-training-distribution" caveat until reconciled. | `docs/context/issue_4871_crowdnav_pred_attng_smoke.md` (issue #4871) |
-

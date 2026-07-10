@@ -13,6 +13,8 @@ from typing import Any
 _LAZY_EXPORTS = {
     "ClassicGlobalPlanner": "robot_sf.planner.classic_global_planner",
     "ClassicPlannerConfig": "robot_sf.planner.classic_global_planner",
+    "DWAPlannerAdapter": "robot_sf.planner.dwa",
+    "DWAPlannerConfig": "robot_sf.planner.dwa",
     "PlanningError": "robot_sf.planner.classic_global_planner",
     "PlannerActionAdapter": "robot_sf.planner.classic_planner_adapter",
     "attach_classic_global_planner": "robot_sf.planner.classic_planner_adapter",

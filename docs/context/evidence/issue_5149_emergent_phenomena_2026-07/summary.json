@@ -1,0 +1,154 @@
+{
+  "claim_boundary": "diagnostic behavioral-validity (smoke-tier) evidence; not paper-grade validation against real trajectory data (#4975)",
+  "evidence_status": "diagnostic-only",
+  "generated_at_utc": "2026-07-10T18:27:48Z",
+  "git_head": "41e7d5e5638b37291cbbd972edf0d917364a1585",
+  "issue": "robot_sf_ll7#5149",
+  "released_default_config": {
+    "obstacle_force": {
+      "factor": 10.0,
+      "sigma": 0.0,
+      "threshold": -0.57
+    },
+    "scene": {
+      "agent_radius": 0.35,
+      "dt_secs": 0.1,
+      "enable_group": false,
+      "max_speed_multiplier": 1.3,
+      "tau": 0.5
+    },
+    "social_force": {
+      "activation_threshold": 20.0,
+      "factor": 5.1,
+      "gamma": 0.35,
+      "lambda_importance": 2.0,
+      "n": 2,
+      "n_prime": 3
+    }
+  },
+  "results": [
+    {
+      "calibration": "released_default",
+      "desired_speed_mean_mps": 0.65,
+      "desired_speed_std_mps": 0.0,
+      "dt_secs": 0.1,
+      "duration_secs": 40.0,
+      "n_pedestrians": 24,
+      "n_steps": 400,
+      "order_parameters": {
+        "lane_purity": 0.3681592039800995,
+        "lane_segregation_index": 0.23136876774456966
+      },
+      "phenomenon_verdict": "weak_partial",
+      "realized_mean_max_speed_mps": 0.65,
+      "scenario": "bidirectional_corridor",
+      "scenario_extra": {},
+      "seed": 5149
+    },
+    {
+      "calibration": "literature_typical",
+      "desired_speed_mean_mps": 1.3,
+      "desired_speed_std_mps": 0.2,
+      "dt_secs": 0.1,
+      "duration_secs": 40.0,
+      "n_pedestrians": 24,
+      "n_steps": 400,
+      "order_parameters": {
+        "lane_purity": 0.41459369817578773,
+        "lane_segregation_index": 0.2829526668850842
+      },
+      "phenomenon_verdict": "weak_partial",
+      "realized_mean_max_speed_mps": 1.235983608172668,
+      "scenario": "bidirectional_corridor",
+      "scenario_extra": {},
+      "seed": 5149
+    },
+    {
+      "calibration": "released_default",
+      "desired_speed_mean_mps": 0.65,
+      "desired_speed_std_mps": 0.0,
+      "dt_secs": 0.1,
+      "duration_secs": 50.0,
+      "n_pedestrians": 20,
+      "n_steps": 500,
+      "order_parameters": {
+        "mean_burst_windows": 2.0,
+        "oscillation_flips": 3.0,
+        "throughput_peds_per_sec": 0.3592814371257485
+      },
+      "phenomenon_verdict": "clearly_present",
+      "realized_mean_max_speed_mps": 0.6500000000000001,
+      "scenario": "narrow_doorway",
+      "scenario_extra": {
+        "door_half_width": 0.6,
+        "door_x": 8.0
+      },
+      "seed": 5149
+    },
+    {
+      "calibration": "literature_typical",
+      "desired_speed_mean_mps": 1.3,
+      "desired_speed_std_mps": 0.2,
+      "dt_secs": 0.1,
+      "duration_secs": 50.0,
+      "n_pedestrians": 20,
+      "n_steps": 500,
+      "order_parameters": {
+        "mean_burst_windows": 1.75,
+        "oscillation_flips": 3.0,
+        "throughput_peds_per_sec": 0.3592814371257485
+      },
+      "phenomenon_verdict": "clearly_present",
+      "realized_mean_max_speed_mps": 1.220853044130425,
+      "scenario": "narrow_doorway",
+      "scenario_extra": {
+        "door_half_width": 0.6,
+        "door_x": 8.0
+      },
+      "seed": 5149
+    },
+    {
+      "calibration": "released_default",
+      "desired_speed_mean_mps": 0.65,
+      "desired_speed_std_mps": 0.0,
+      "dt_secs": 0.1,
+      "duration_secs": 50.0,
+      "n_pedestrians": 40,
+      "n_steps": 500,
+      "order_parameters": {
+        "arch_lateral_spread": 0.8553737726439913,
+        "exit_density_ratio": 6.82347684494131
+      },
+      "phenomenon_verdict": "clearly_present",
+      "realized_mean_max_speed_mps": 0.65,
+      "scenario": "high_density_exit",
+      "scenario_extra": {
+        "exit_half_width": 0.6
+      },
+      "seed": 5149
+    },
+    {
+      "calibration": "literature_typical",
+      "desired_speed_mean_mps": 1.3,
+      "desired_speed_std_mps": 0.2,
+      "dt_secs": 0.1,
+      "duration_secs": 50.0,
+      "n_pedestrians": 40,
+      "n_steps": 500,
+      "order_parameters": {
+        "arch_lateral_spread": 0.7304195476124661,
+        "exit_density_ratio": 7.664465537285172
+      },
+      "phenomenon_verdict": "clearly_present",
+      "realized_mean_max_speed_mps": 1.288403860333974,
+      "scenario": "high_density_exit",
+      "scenario_extra": {
+        "exit_half_width": 0.6
+      },
+      "seed": 5149
+    }
+  ],
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "substrate": "pysocialforce",
+  "substrate_version": "2.0.0"
+}

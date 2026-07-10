@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from pathlib import Path
+
+import pytest
 
 from robot_sf.benchmark.cli import cli_main
 from robot_sf.benchmark.collision_scenario_similarity import (
@@ -12,8 +14,12 @@ from robot_sf.benchmark.collision_scenario_similarity import (
     describe_collision_scenarios,
 )
 
-if TYPE_CHECKING:
-    from pathlib import Path
+TRAJECTORY_FIXTURE = (
+    Path(__file__).parents[1]
+    / "fixtures"
+    / "benchmark"
+    / "collision_scenario_similarity_trajectory.jsonl"
+)
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
@@ -207,6 +213,129 @@ def test_similarity_report_summarizes_trajectory_metric_validation(tmp_path: Pat
         "metrics.min_distance",
         "metrics.socnavbench_path_length",
     ]
+
+
+def test_similarity_report_compares_raw_trajectory_and_action_feature_sets() -> None:
+    """Raw actor trajectories produce comparable optional nearest-neighbor feature sets."""
+    report = build_collision_scenario_similarity_report(
+        TRAJECTORY_FIXTURE,
+        nearest_k=1,
+        require_trajectory_comparison=True,
+    )
+
+    descriptor = report["descriptors"][0]
+    assert descriptor["context_categorical"] == {"map_region": "north-crossing"}
+    assert descriptor["trajectory_context"] == {
+        "raw_actor_trajectories_available": True,
+        "robot_samples": 3,
+        "pedestrian_tracks": 1,
+        "pedestrian_samples": 3,
+        "action_samples": 3,
+        "dt": 0.5,
+    }
+    assert descriptor["trajectory_action_numeric"][
+        "trajectory_min_center_distance"
+    ] == pytest.approx(0.1)
+    assert descriptor["trajectory_action_numeric"][
+        "trajectory_time_to_min_center_distance"
+    ] == pytest.approx(0.5)
+
+    comparison = report["feature_set_comparison"]
+    assert comparison["status"] == "available"
+    assert comparison["comparison_cohort_count"] == 3
+    reports = {row["feature_set_id"]: row for row in comparison["reports"]}
+    assert set(reports) == {
+        "legacy_summary_v1",
+        "trajectory_action_v1",
+        "combined_context_v1",
+    }
+    assert reports["legacy_summary_v1"]["nearest_neighbors"] == report["nearest_neighbors"]
+    assert reports["legacy_summary_v1"]["groups"] == report["groups"]
+    for feature_report in reports.values():
+        assert feature_report["status"] == "available"
+        alpha_row = next(
+            row
+            for row in feature_report["nearest_neighbors"]
+            if row["record_id"] == "trajectory-alpha-1"
+        )
+        assert alpha_row["neighbors"][0]["record_id"] == "trajectory-alpha-2"
+
+    raw_validation = report["validation"]["raw_trajectory_arrays"]
+    assert raw_validation["comparison_status"] == "available"
+    assert raw_validation["selected_with_raw_trajectory_arrays"] == 3
+
+
+def test_similarity_report_can_require_raw_trajectory_comparison(tmp_path: Path) -> None:
+    """Explicit raw-trajectory comparison fails closed when fewer than two rows qualify."""
+    episodes = tmp_path / "episodes.jsonl"
+    _write_jsonl(episodes, _records())
+
+    with pytest.raises(ValueError, match="at least two selected records"):
+        build_collision_scenario_similarity_report(
+            episodes,
+            require_trajectory_comparison=True,
+        )
+
+    out_json = tmp_path / "similarity.json"
+    exit_code = cli_main(
+        [
+            "collision-scenario-similarity",
+            "--episodes-jsonl",
+            str(episodes),
+            "--out-json",
+            str(out_json),
+            "--require-trajectory-comparison",
+        ]
+    )
+    assert exit_code == 2
+    assert not out_json.exists()
+
+
+def test_similarity_report_rejects_misaligned_malformed_position_series(tmp_path: Path) -> None:
+    """Malformed samples exclude the whole actor series instead of shifting time alignment."""
+    records = [
+        json.loads(line) for line in TRAJECTORY_FIXTURE.read_text(encoding="utf-8").splitlines()[:2]
+    ]
+    records[0]["trajectory"]["robot_positions"][1] = ["invalid", 0.0]
+    episodes = tmp_path / "malformed_trajectory.jsonl"
+    _write_jsonl(episodes, records)
+
+    with pytest.raises(ValueError, match="at least two selected records"):
+        build_collision_scenario_similarity_report(
+            episodes,
+            require_trajectory_comparison=True,
+        )
+
+
+def test_trajectory_fixture_cli_writes_feature_set_table(tmp_path: Path) -> None:
+    """Tracked synthetic fixture has a reproducible raw-trajectory CLI path."""
+    out_json = tmp_path / "similarity.json"
+    out_md = tmp_path / "similarity.md"
+
+    exit_code = cli_main(
+        [
+            "collision-scenario-similarity",
+            "--episodes-jsonl",
+            str(TRAJECTORY_FIXTURE),
+            "--out-json",
+            str(out_json),
+            "--out-markdown",
+            str(out_md),
+            "--nearest-k",
+            "1",
+            "--require-trajectory-comparison",
+        ]
+    )
+
+    assert exit_code == 0
+    assert (
+        json.loads(out_json.read_text(encoding="utf-8"))["feature_set_comparison"]["status"]
+        == "available"
+    )
+    markdown = out_md.read_text(encoding="utf-8")
+    assert "Evidence status: `diagnostic-only`" in markdown
+    assert "Candidate Feature-Set Comparison" in markdown
+    assert "trajectory_action_v1" in markdown
 
 
 def test_collision_scenario_similarity_cli_writes_json_and_markdown(tmp_path: Path) -> None:

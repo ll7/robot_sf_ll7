@@ -54,7 +54,6 @@
     "downstream_export_allowed_status": "ready"
   },
   "downstream_integration": {
-    "builder": "scripts/analysis/build_issue_5138_h600_family_breakdown_export.py",
     "blocked_pull_request": 5154,
     "next_action": "Recover the exact six source files, copy them to the declared reports_dir paths without transformation, run the issue #5164 checker, then update PR #5154 builder defaults and source manifest to the tracked paths."
   }

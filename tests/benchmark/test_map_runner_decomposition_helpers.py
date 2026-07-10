@@ -207,7 +207,7 @@ class TestSocnavFamilyAdapterDispatch:
             ("socnav_sampling", "SamplingPlannerAdapter"),
             ("sampling", "SamplingPlannerAdapter"),
             ("rvo", "SamplingPlannerAdapter"),
-            ("dwa", "SamplingPlannerAdapter"),
+            ("dwa", "DWAPlannerAdapter"),
         ],
     )
     def test_classical_adapter_constructed_for_key(
@@ -220,8 +220,8 @@ class TestSocnavFamilyAdapterDispatch:
         adapter = _build_socnav_family_adapter(algo_key, algo_key, {}, meta=meta)
         assert type(adapter).__name__ == expected_adapter_type
 
-    def test_rvo_dwa_marks_placeholder_status_in_meta(self) -> None:
-        """RVO/DWA must record the placeholder + unimplemented status in metadata."""
+    def test_rvo_marks_placeholder_status_in_meta(self) -> None:
+        """RVO must record its placeholder + unimplemented status in metadata."""
         meta: dict[str, Any] = {"algorithm": "rvo"}
         _build_socnav_family_adapter("rvo", "rvo", {}, meta=meta)
         assert meta["status"] == "placeholder"

@@ -300,6 +300,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Local Navigation Benchmark Gap Analysis (2026-01-14)](./dev/benchmark_plan_2026-01-14.md)** - Current-state inventory, missing pieces, and open questions for local planner benchmarking
 * **[Prediction Planner Baseline](./baselines/prediction_planner.md)** - High-level model description, benchmark role, configuration, and citation/provenance notes
 * **[Prediction-Aware MPC Planner](./baselines/prediction_mpc.md)** - Experimental constant-velocity prediction-MPC local planner, config, smoke command, and claim boundary
+* **[Dynamic Window Approach Baseline](./baselines/dwa.md)** - Classical acceleration-window local planner, canonical parameters, and experimental claim boundary
 * **[Prediction Planner Literature Audit](./context/prediction_planner_literature_audit.md)** - Source-backed audit of implementation lineage, benchmark evidence, literature-positioning boundaries, and current claim limits
 * **[Issue #592 Hybrid Obstacle-Context Predictor Design](./context/issue_592_hybrid_obstacle_predictor_design.md)** - Feature-baseline-first plan for obstacle-conditioned predictive models, with config-first experiment path and benchmark proof gates
 * **[Guarded PPO Baseline](./baselines/guarded_ppo.md)** - Canonical safety-aware challenger profile, intervention semantics, and benchmark-readiness boundary

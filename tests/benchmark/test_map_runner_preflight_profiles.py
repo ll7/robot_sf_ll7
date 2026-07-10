@@ -348,6 +348,7 @@ def test_all_issue_596_testing_only_planners_remain_opt_in_gated(
 
     for algo in (
         "hrvo",
+        "dwa",
         "risk_dwa",
         "risk_surface_dwa",
         "safety_barrier",
@@ -373,7 +374,7 @@ def test_all_issue_596_testing_only_planners_remain_opt_in_gated(
     algo_cfg_path = tmp_path / "testing_only_opt_in.yaml"
     algo_cfg_path.write_text("allow_testing_algorithms: true\n", encoding="utf-8")
 
-    for algo in ("teb", "nmpc_social", "nmpc"):
+    for algo in ("dwa", "teb", "nmpc_social", "nmpc"):
         summary = map_runner.run_map_batch(
             [_scenario()],
             out_path,

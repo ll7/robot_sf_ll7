@@ -35,6 +35,32 @@ def test_placeholder_algorithm_is_never_allowed() -> None:
         )
 
 
+def test_dwa_requires_explicit_experimental_opt_in() -> None:
+    """The implemented DWA baseline stays gated until benchmark promotion evidence exists."""
+    spec = get_algorithm_readiness("dwa")
+    assert spec is not None
+    assert spec.canonical_name == "dwa"
+    assert spec.tier == "experimental"
+    assert spec.requires_explicit_opt_in is True
+
+    with pytest.raises(ValueError, match="allow_testing_algorithms"):
+        require_algorithm_allowed(
+            algo="dwa",
+            benchmark_profile="experimental",
+            ppo_paper_ready=False,
+        )
+
+    assert (
+        require_algorithm_allowed(
+            algo="dwa",
+            benchmark_profile="experimental",
+            ppo_paper_ready=False,
+            allow_testing_algorithms=True,
+        )
+        == spec
+    )
+
+
 def test_paper_baseline_profile_allows_only_publication_baselines() -> None:
     """Paper-baseline profile should reject unproven experimental algorithms."""
     assert paper_baseline_algorithms() == ("goal", "social_force", "orca", "ppo")

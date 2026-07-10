@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.planner.dwa import DWAPlannerAdapter, build_dwa_config
 from robot_sf.planner.learned_prediction_mpc import (
     LEARNED_PREDICTION_MPC_ALIASES,
     build_learned_prediction_mpc_adapter,
@@ -46,6 +47,21 @@ def _build_risk_dwa_policy_spec(algo_config: dict[str, Any]) -> AdapterPolicySpe
         algo_config=algo_config,
         adapter=RiskDWAPlannerAdapter(config=build_risk_dwa_config(algo_config)),
         adapter_name="RiskDWAPlannerAdapter",
+    )
+
+
+def _build_dwa_policy_spec(algo_config: dict[str, Any]) -> AdapterPolicySpec:
+    """Build the classical DWA adapter spec without map-runner metadata.
+
+    Returns:
+        Adapter construction payload for the map runner.
+    """
+    return AdapterPolicySpec(
+        algo_key="dwa",
+        algo_config=algo_config,
+        adapter=DWAPlannerAdapter(config=build_dwa_config(algo_config)),
+        adapter_name="DWAPlannerAdapter",
+        limitations="classical_dwa_experimental_testing_only",
     )
 
 
@@ -101,6 +117,7 @@ _ADAPTER_POLICY_BUILDERS: dict[str, Callable[[dict[str, Any]], AdapterPolicySpec
     "prediction_aware_mpc": _build_prediction_mpc_policy_spec,
     "prediction_mpc": _build_prediction_mpc_policy_spec,
     "prediction_mpc_cbf": _build_prediction_mpc_policy_spec,
+    "dwa": _build_dwa_policy_spec,
     "risk_dwa": _build_risk_dwa_policy_spec,
     "teb": _build_teb_policy_spec,
 }

@@ -103,10 +103,15 @@ def planner_kinematics_compatibility(
     """Return explicit compatibility status for planner/kinematics combinations."""
     algo_key = algo.strip().lower()
     kin = robot_kinematics.strip().lower()
-    if kin in {"holonomic", "omni", "omnidirectional"} and algo_key in {"rvo", "dwa"}:
+    if kin in {"holonomic", "omni", "omnidirectional"} and algo_key == "rvo":
         return (
             False,
             f"planner '{algo_key}' is a placeholder adapter and is disabled for '{kin}' runs",
+        )
+    if kin in {"holonomic", "omni", "omnidirectional"} and algo_key == "dwa":
+        return (
+            False,
+            "planner 'dwa' produces unicycle commands and is disabled for holonomic runs",
         )
     if algo_key == "ppo" and kin in {"holonomic", "omni", "omnidirectional"}:
         obs_mode = str(algo_config.get("obs_mode", "vector")).strip().lower()

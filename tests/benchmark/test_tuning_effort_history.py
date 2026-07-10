@@ -128,7 +128,7 @@ def test_backfilled_record_requires_parameter_and_evidence_paths(tmp_path: Path)
         ("missing_tuning_field", "tuning is missing explicit fields"),
         ("extra_tuning_field", "tuning has unsupported fields"),
         ("invalid_source", "tuning.source must be one of"),
-        ("invalid_parameter_list", "parameters_touched must be a list of strings"),
+        ("invalid_parameter_list", "parameters_touched must be a list of non-empty strings"),
     ],
 )
 def test_registry_fails_closed_on_malformed_record(tmp_path: Path, case: str, message: str) -> None:
@@ -155,6 +155,33 @@ def test_registry_fails_closed_on_malformed_record(tmp_path: Path, case: str, me
     elif case == "invalid_parameter_list":
         tuning["parameters_touched"] = "speed"
     registry = _write_fixture(tmp_path, records=[record])
+    with pytest.raises(ValueError, match=message):
+        validate_registry(registry, repo_root=tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("eval_set_disjoint", "yes", "eval_set_disjoint must be a boolean"),
+        ("budget_runs", True, "budget_runs must be an integer"),
+        ("budget_runs", -1, "budget_runs must be non-negative"),
+        ("budget_hours", float("nan"), "budget_hours must be finite and non-negative"),
+        ("tuned_by", 7, "tuned_by must be a non-empty string"),
+    ],
+)
+def test_registry_fails_closed_on_malformed_scalar_tuning_values(
+    tmp_path: Path,
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    """Scalar fields follow the same fail-closed types as live tuning metadata."""
+    record = _record()
+    tuning = record["tuning"]
+    assert isinstance(tuning, dict)
+    tuning[field] = value
+    registry = _write_fixture(tmp_path, records=[record])
+
     with pytest.raises(ValueError, match=message):
         validate_registry(registry, repo_root=tmp_path)
 

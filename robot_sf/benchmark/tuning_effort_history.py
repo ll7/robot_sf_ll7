@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -78,11 +79,45 @@ def _validate_tuning_shape(tuning: dict[str, Any], *, context: str) -> str:
     source = tuning.get("source")
     if source not in _SOURCES:
         raise ValueError(f"{context}.tuning.source must be one of {sorted(_SOURCES)}")
-    for field in ("parameters_touched", "tuning_scenario_ids"):
-        values = tuning.get(field)
-        if not isinstance(values, list) or not all(isinstance(item, str) for item in values):
-            raise ValueError(f"{context}.tuning.{field} must be a list of strings")
+    _validate_tuning_string_lists(tuning, context=context)
+    _validate_tuning_scalar_fields(tuning, context=context)
     return source
+
+
+def _validate_tuning_string_lists(tuning: dict[str, Any], *, context: str) -> None:
+    """Require explicitly listed tuning fields to contain meaningful string values."""
+    for field in ("parameters_touched", "tuning_scenario_ids"):
+        values = tuning[field]
+        if not isinstance(values, list) or not all(
+            isinstance(item, str) and item.strip() for item in values
+        ):
+            raise ValueError(f"{context}.tuning.{field} must be a list of non-empty strings")
+
+
+def _validate_tuning_scalar_fields(tuning: dict[str, Any], *, context: str) -> None:
+    """Match the live tuning metadata contract for optional scalar values."""
+    eval_set_disjoint = tuning["eval_set_disjoint"]
+    if eval_set_disjoint is not None and not isinstance(eval_set_disjoint, bool):
+        raise ValueError(f"{context}.tuning.eval_set_disjoint must be a boolean when provided")
+
+    budget_runs = tuning["budget_runs"]
+    if budget_runs is not None:
+        if isinstance(budget_runs, bool) or not isinstance(budget_runs, int):
+            raise ValueError(f"{context}.tuning.budget_runs must be an integer when provided")
+        if budget_runs < 0:
+            raise ValueError(f"{context}.tuning.budget_runs must be non-negative")
+
+    budget_hours = tuning["budget_hours"]
+    if budget_hours is not None:
+        if isinstance(budget_hours, bool | str) or not isinstance(budget_hours, int | float):
+            raise ValueError(f"{context}.tuning.budget_hours must be a number when provided")
+        if not math.isfinite(budget_hours) or budget_hours < 0:
+            raise ValueError(f"{context}.tuning.budget_hours must be finite and non-negative")
+
+    for field in ("tuned_by", "tuned_at_utc"):
+        value = tuning[field]
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise ValueError(f"{context}.tuning.{field} must be a non-empty string when provided")
 
 
 def _validate_record_evidence(

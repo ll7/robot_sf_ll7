@@ -99,6 +99,7 @@ def test_run_cells_carry_resolved_algorithm_and_scope_axes() -> None:
         "social_force_speed_archetypes",
         "observation_noise",
         "clearance_radius",
+        "control_action_latency",
     } <= axes
     assert seeds == {111, 112, 113}
     # default_social_force resolves to the canonical social_force algorithm.

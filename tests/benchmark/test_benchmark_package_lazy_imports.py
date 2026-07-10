@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import textwrap
 import time
 
 import pytest
@@ -78,6 +79,49 @@ def test_lightweight_module_fast_startup(module: str) -> None:
         f"Importing {module!r} took {elapsed:.1f}s — exceeds 5 s budget. "
         "A heavy dependency was likely pulled in eagerly."
     )
+
+
+def test_scenario_failure_cause_shim_is_quiet_when_invoked() -> None:
+    """The public failure-cause shim must remain quiet while classifying."""
+    result = _run_import(
+        textwrap.dedent(
+            """
+            import sys
+
+            from robot_sf.benchmark import scenario_failure_cause
+
+            assert scenario_failure_cause.__name__ == (
+                "robot_sf.benchmark.scenario_failure_cause"
+            )
+            verdict = scenario_failure_cause.classify_scenario_failure_cause(
+                {
+                    "route_feasible": True,
+                    "actor_free_solved": True,
+                    "extended_time_solved": None,
+                    "oracle_solved": False,
+                }
+            )
+            assert verdict["cause"] == "indeterminate"
+            try:
+                scenario_failure_cause.diagnostics_from_mapping({"route_feasible": "yes"})
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("invalid diagnostics must still fail closed")
+            assert "robot_sf.sensor.registry" not in sys.modules
+            print("OK")
+            """
+        )
+    )
+
+    assert result.returncode == 0, f"benchmark shim failed:\n{result.stderr}"
+    assert result.stdout.strip() == "OK"
+    for pattern in _HEAVY_INIT_PATTERNS:
+        assert pattern not in result.stderr, (
+            "Invoking scenario_failure_cause through robot_sf.benchmark emitted "
+            f"heavy-stack noise (pattern {pattern!r}).\n"
+            f"stderr snippet: {result.stderr[:500]}"
+        )
 
 
 # --- public API surface ---------------------------------------------------

@@ -11,6 +11,7 @@ Transformation rules:
 
 Already-migrated files are skipped automatically.
 """
+
 from __future__ import annotations
 
 import re
@@ -48,7 +49,7 @@ def _has_target_class(src: str) -> bool:
     return bool(_CLASS_RE.search(src))
 
 
-def _add_import(src: str) -> str:
+def _add_import(src: str) -> str:  # noqa: C901
     """Insert the RobotSfError import safely, after all complete import blocks.
 
     Handles multi-line imports by tracking open parentheses depth so we never
@@ -64,8 +65,10 @@ def _add_import(src: str) -> str:
         stripped = line.strip()
 
         # Track module-level triple-quoted docstrings
-        if not in_docstring and paren_depth == 0 and (
-            stripped.startswith('"""') or stripped.startswith("'''")
+        if (
+            not in_docstring
+            and paren_depth == 0
+            and (stripped.startswith('"""') or stripped.startswith("'''"))
         ):
             docstring_char = stripped[:3]
             count = stripped.count(docstring_char)
@@ -92,9 +95,15 @@ def _add_import(src: str) -> str:
             insert_after = i
         elif stripped.startswith("from ") or stripped.startswith("import "):
             insert_after = i
-        elif stripped.startswith("class ") or stripped.startswith("def ") or (
-            stripped and not stripped.startswith("#") and not stripped.startswith("@")
-            and not stripped.startswith("__")
+        elif (
+            stripped.startswith("class ")
+            or stripped.startswith("def ")
+            or (
+                stripped
+                and not stripped.startswith("#")
+                and not stripped.startswith("@")
+                and not stripped.startswith("__")
+            )
         ):
             # First non-import, non-decorator, non-dunder-assignment line
             if insert_after >= 0:
@@ -126,6 +135,7 @@ def _rewrite_classes(src: str) -> str:
 
 
 def process_file(path: Path) -> bool:
+    """Migrate direct builtin exception bases in one source file."""
     src = path.read_text()
     if not _has_target_class(src):
         return False
@@ -142,6 +152,7 @@ def process_file(path: Path) -> bool:
 
 
 def main() -> None:
+    """Apply the one-shot migration to every remaining eligible source file."""
     target_files = sorted(
         p
         for p in (ROOT / "robot_sf").rglob("*.py")

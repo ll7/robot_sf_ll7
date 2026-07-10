@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5039 compat-matrix promotion readiness gate.** New
+  `scripts/ci/check_compat_matrix_promotion_readiness.py` turns "is the advisory
+  `compat-matrix` job proven enough to promote to a required CI gate?" into a machine-checkable,
+  fail-closed decision. It reads
+  `docs/context/issue_5039_compat_matrix_promotion_manifest.yaml` (recorded hosted-run evidence
+  plus the objective gate: all four `ubuntu`/`macos` × Python 3.11/3.13 cells green ≥3 times each
+  within the 30-minute budget) and reports `ready`/`blocked`; `--require-ready` exits non-zero
+  until the evidence exists. Current state is `blocked` — the advisory matrix (PR #5037) is not
+  yet on `main` and no hosted evidence has been recorded — so promotion is deferred to an
+  evidence-carrying follow-up. The absolute coverage floor is recorded as `split_recommended`
+  (independent CI policy design). Covered by `tests/test_compat_matrix_promotion_readiness.py`.
+  Claim boundary: readiness bookkeeping only; no CI gate is changed and no benchmark/paper claim
+  is asserted.
+
 * **issue #4871 CrowdNav_Prediction_AttnGraph external learned-baseline feasibility smoke.** New
   `robot_sf/planner/crowdnav_pred_attng.py` is the thinnest model-only adapter proving the shipped
   ICRA 2023 attention-graph SRNN checkpoint (`41200.pt`, MIT, pinned at upstream `3907731`) loads and

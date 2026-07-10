@@ -54,6 +54,17 @@ instead of reimplementing. If the issue depends on an unmerged source PR, mark i
 unavailable for clean-main work with the unblock condition "source PR merged to origin/main",
 unless the user explicitly chooses a stacked-PR route.
 
+### Exact merged-fix stale-evidence guard
+
+Before auto-admitting a ready candidate, search recently merged PR titles and bodies, then verify
+the candidate's failure signature, named symbol, and failing file/line against current
+`origin/main` history and code. Classify the issue as `covered_by_pr` and stop before claim or
+branch only when an exact merged fix implements the stated boundary and its regression proof covers
+the reported failure. Record the covering PR rather than treating a loose keyword, a change in the
+same file, or historical failure output alone as duplicate evidence. The #5145 / PR #4958
+`PosixPath` serialization regression is the required fixture: it was stale because current main
+already replaced `json.dumps(asdict(arm_params))` with the tested subprocess-boundary serializer.
+
 Delegated queue-scout output is only route evidence until verified by the main agent in the target
 repository. Before using a scout recommendation to select, claim, or branch for an issue, run:
 

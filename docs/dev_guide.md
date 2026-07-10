@@ -184,12 +184,22 @@ pinning imports to the current worktree:
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- pytest tests/test_ci_script_contract.py -q
 scripts/dev/run_worktree_shared_venv.sh --venv ../robot_sf_ll7/.venv -- ruff check scripts/dev
+scripts/dev/run_worktree_shared_venv.sh --standalone -- \
+  python scripts/dev/check_docs_evidence_integrity.py --files docs/dev_guide.md
 ```
 
-The helper runs from `git rev-parse --show-toplevel`, prepends that root to `PYTHONPATH`, sets
-`UV_PROJECT_ENVIRONMENT` to the shared `.venv`, and sets `UV_NO_SYNC=1`. This is intended for fast
-local feedback when dependencies are already current. It should fail if the shared virtualenv is
-missing instead of silently installing into the wrong checkout.
+The helper runs from `git rev-parse --show-toplevel`, sets `UV_PROJECT_ENVIRONMENT` to the shared
+`.venv`, and sets `UV_NO_SYNC=1`. By default it also prepends the worktree root to `PYTHONPATH`.
+This is intended for fast local feedback when dependencies are already current. It should fail if
+the shared virtualenv is missing instead of silently installing into the wrong checkout.
+
+Use `--standalone` for a dependency-light command whose tests verify that it does not import
+`robot_sf` or other project packages. This mode still reuses third-party dependencies from the
+shared environment, but it skips the project-source freshness check and does not add the worktree
+root to `PYTHONPATH`. For example, `check_docs_evidence_integrity.py` has a minimal-environment
+import guard in `tests/tooling/test_docs_evidence_import_boundary.py`, so it remains safe to run when
+an unrelated installed `pysocialforce` copy is stale. Do not use this mode for tests or commands
+that import project code; refresh the owning checkout environment for those commands instead.
 
 If a fresh linked worktree fails to collect a focused test because an optional dependency such as
 `torch` is not installed in that worktree, rerun the same focused command through

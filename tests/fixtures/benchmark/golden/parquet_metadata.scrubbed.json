@@ -1,0 +1,29 @@
+{
+  "jsonl_is_source_of_truth": true,
+  "record_count": 4,
+  "schema_version": "benchmark_parquet_export.v1",
+  "source_files": [
+    {
+      "path": "aggregate_episodes.jsonl",
+      "sha256": "0223048f2feed315b9b82e63d8ea16fa0c84f0576ce939530bd786038b691c45"
+    }
+  ],
+  "tables": {
+    "algorithm_metadata": {
+      "file": "algorithm_metadata.parquet",
+      "rows": 0
+    },
+    "episodes": {
+      "file": "episodes.parquet",
+      "rows": 4
+    },
+    "metrics": {
+      "file": "metrics.parquet",
+      "rows": 28
+    },
+    "scenario_params": {
+      "file": "scenario_params.parquet",
+      "rows": 4
+    }
+  }
+}

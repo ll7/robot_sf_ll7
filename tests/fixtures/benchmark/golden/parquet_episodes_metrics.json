@@ -1,0 +1,226 @@
+[
+  {
+    "episode_id": "golden-orca-corridor-17",
+    "metric_path": "avg_speed",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 1.25,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-orca-corridor-17",
+    "metric_path": "collisions",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 0.0,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-orca-corridor-17",
+    "metric_path": "min_clearance",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 0.5,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-orca-corridor-17",
+    "metric_path": "near_misses",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 1.0,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-orca-corridor-17",
+    "metric_path": "path_length",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 10.0,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-orca-corridor-17",
+    "metric_path": "success",
+    "value_bool": true,
+    "value_json": null,
+    "value_number": null,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-orca-corridor-17",
+    "metric_path": "time_to_goal",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 8.0,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-orca-crossing-23",
+    "metric_path": "avg_speed",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 0.75,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-orca-crossing-23",
+    "metric_path": "collisions",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 1.0,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-orca-crossing-23",
+    "metric_path": "min_clearance",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 0.2,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-orca-crossing-23",
+    "metric_path": "near_misses",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 3.0,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-orca-crossing-23",
+    "metric_path": "path_length",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 12.0,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-orca-crossing-23",
+    "metric_path": "success",
+    "value_bool": false,
+    "value_json": null,
+    "value_number": null,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-orca-crossing-23",
+    "metric_path": "time_to_goal",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 12.0,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-social-force-corridor-17",
+    "metric_path": "avg_speed",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 1.0,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-social-force-corridor-17",
+    "metric_path": "collisions",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 0.0,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-social-force-corridor-17",
+    "metric_path": "min_clearance",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 0.45,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-social-force-corridor-17",
+    "metric_path": "near_misses",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 2.0,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-social-force-corridor-17",
+    "metric_path": "path_length",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 11.0,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-social-force-corridor-17",
+    "metric_path": "success",
+    "value_bool": true,
+    "value_json": null,
+    "value_number": null,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-social-force-corridor-17",
+    "metric_path": "time_to_goal",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 9.0,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-social-force-crossing-23",
+    "metric_path": "avg_speed",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 0.9,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-social-force-crossing-23",
+    "metric_path": "collisions",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 0.0,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-social-force-crossing-23",
+    "metric_path": "min_clearance",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 0.35,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-social-force-crossing-23",
+    "metric_path": "near_misses",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 2.0,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-social-force-crossing-23",
+    "metric_path": "path_length",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 13.0,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-social-force-crossing-23",
+    "metric_path": "success",
+    "value_bool": true,
+    "value_json": null,
+    "value_number": null,
+    "value_text": null
+  },
+  {
+    "episode_id": "golden-social-force-crossing-23",
+    "metric_path": "time_to_goal",
+    "value_bool": null,
+    "value_json": null,
+    "value_number": 11.0,
+    "value_text": null
+  }
+]

@@ -1,0 +1,351 @@
+version: 1
+issue: 5143
+claim_boundary: >-
+  Retrospective audit metadata only. Backfilled fields come from retained configs and context
+  records; unknown fields remain null or empty and must not be interpreted as zero tuning effort.
+
+campaign_manifests:
+  - docs/context/evidence/camera_ready_all_planners_2026-05-04/campaign/campaign_manifest.json
+  - docs/context/evidence/issue_1023_candidate_augmented_local_full_2026-05-06/campaign/campaign_manifest.json
+  - docs/context/evidence/issue_1023_scenario_horizons_local_full_2026-05-06/campaign/campaign_manifest.json
+  - docs/context/evidence/issue_1023_scenario_horizons_preflight_2026-05-06/campaign_manifest.json
+  - docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/campaign_manifest.json
+  - docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/campaign_manifest.json
+  - docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-07-01/campaign_manifest.json
+
+records:
+  - planner:
+      key: goal
+      algo: goal
+      algo_config_path: null
+    tuning:
+      parameters_touched: []
+      tuning_scenario_ids: []
+      eval_set_disjoint: null
+      budget_runs: null
+      budget_hours: null
+      tuned_by: null
+      tuned_at_utc: null
+      source: unknown
+    evidence_refs:
+      - configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml
+    unknown_reason: >-
+      Retained campaign configs select the built-in goal arm but do not record a tuning procedure,
+      parameter search, scenario set, budget, author, or time.
+
+  - planner:
+      key: social_force
+      algo: social_force
+      algo_config_path: null
+    tuning:
+      parameters_touched: []
+      tuning_scenario_ids: []
+      eval_set_disjoint: null
+      budget_runs: null
+      budget_hours: null
+      tuned_by: null
+      tuned_at_utc: null
+      source: unknown
+    evidence_refs:
+      - configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml
+    unknown_reason: >-
+      Retained campaign configs select the built-in Social Force arm but do not identify which
+      parameters, scenarios, or effort produced its defaults.
+
+  - planner:
+      key: orca
+      algo: orca
+      algo_config_path: null
+    tuning:
+      parameters_touched: []
+      tuning_scenario_ids: []
+      eval_set_disjoint: null
+      budget_runs: null
+      budget_hours: null
+      tuned_by: null
+      tuned_at_utc: null
+      source: unknown
+    evidence_refs:
+      - configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml
+    unknown_reason: >-
+      These historical arms use the built-in ORCA defaults, not the separately documented
+      issue-707 tuned profile, so that profile's provenance cannot be transferred to them.
+
+  - planner:
+      key: prediction_planner
+      algo: prediction_planner
+      algo_config_path: configs/algos/prediction_planner_camera_ready.yaml
+    tuning:
+      parameters_touched: []
+      tuning_scenario_ids: []
+      eval_set_disjoint: null
+      budget_runs: null
+      budget_hours: null
+      tuned_by: null
+      tuned_at_utc: null
+      source: unknown
+    evidence_refs:
+      - configs/algos/prediction_planner_camera_ready.yaml
+    unknown_reason: >-
+      The retained config records final values and a model id, but no parameter-search lineage or
+      total tuning budget; final values alone are not evidence of tuning effort.
+
+  - planner:
+      key: socnav_sampling
+      algo: socnav_sampling
+      algo_config_path: null
+    tuning:
+      parameters_touched: []
+      tuning_scenario_ids: []
+      eval_set_disjoint: null
+      budget_runs: null
+      budget_hours: null
+      tuned_by: null
+      tuned_at_utc: null
+      source: unknown
+    evidence_refs:
+      - configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml
+    unknown_reason: >-
+      No retained per-arm config or tuning ledger identifies historical tuning effort.
+
+  - planner:
+      key: sacadrl
+      algo: sacadrl
+      algo_config_path: null
+    tuning:
+      parameters_touched: []
+      tuning_scenario_ids: []
+      eval_set_disjoint: null
+      budget_runs: null
+      budget_hours: null
+      tuned_by: null
+      tuned_at_utc: null
+      source: unknown
+    evidence_refs:
+      - configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml
+    unknown_reason: >-
+      No retained per-arm config or tuning ledger identifies historical tuning effort.
+
+  - planner:
+      key: socnav_bench
+      algo: socnav_bench
+      algo_config_path: null
+    tuning:
+      parameters_touched: []
+      tuning_scenario_ids: []
+      eval_set_disjoint: null
+      budget_runs: null
+      budget_hours: null
+      tuned_by: null
+      tuned_at_utc: null
+      source: unknown
+    evidence_refs:
+      - configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml
+    unknown_reason: >-
+      No retained per-arm config or tuning ledger identifies historical tuning effort.
+
+  - planner:
+      key: ppo
+      algo: ppo
+      algo_config_path: configs/baselines/ppo_15m_grid_socnav.yaml
+    tuning:
+      parameters_touched:
+        - feature_extractor
+        - feature_extractor_kwargs.grid_channels
+        - feature_extractor_kwargs.grid_kernel_sizes
+        - feature_extractor_kwargs.socnav_hidden_dims
+        - feature_extractor_kwargs.dropout_rate
+        - ppo_hyperparams.learning_rate
+        - ppo_hyperparams.batch_size
+        - ppo_hyperparams.n_epochs
+        - ppo_hyperparams.ent_coef
+        - ppo_hyperparams.clip_range
+        - ppo_hyperparams.target_kl
+        - env_factory_kwargs.reward_kwargs.weights
+        - env_factory_kwargs.reward_curriculum
+      tuning_scenario_ids: []
+      eval_set_disjoint: false
+      budget_runs: null
+      budget_hours: null
+      tuned_by: null
+      tuned_at_utc: null
+      source: backfilled
+    evidence_refs:
+      - configs/baselines/ppo_15m_grid_socnav.yaml
+      - configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml
+      - docs/context/issue_791_promotion_campaign_128k_256k.md
+
+  - planner:
+      key: ppo
+      algo: ppo
+      algo_config_path: configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml
+    tuning:
+      parameters_touched:
+        - feature_extractor
+        - feature_extractor_kwargs
+        - ppo_hyperparams
+        - env_factory_kwargs.reward_kwargs.weights
+        - env_factory_kwargs.reward_curriculum
+      tuning_scenario_ids: []
+      eval_set_disjoint: false
+      budget_runs: null
+      budget_hours: null
+      tuned_by: null
+      tuned_at_utc: null
+      source: backfilled
+    evidence_refs:
+      - configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml
+      - configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml
+      - docs/context/issue_791_promotion_campaign_128k_256k.md
+
+  - planner:
+      key: ppo
+      algo: ppo
+      algo_config_path: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_portable.yaml
+    tuning:
+      parameters_touched:
+        - feature_extractor
+        - feature_extractor_kwargs
+        - ppo_hyperparams
+        - env_factory_kwargs.reward_kwargs.weights
+        - env_factory_kwargs.reward_curriculum
+      tuning_scenario_ids: []
+      eval_set_disjoint: false
+      budget_runs: null
+      budget_hours: null
+      tuned_by: null
+      tuned_at_utc: null
+      source: backfilled
+    evidence_refs:
+      - configs/baselines/ppo_issue_791_eval_aligned_large_capacity_portable.yaml
+      - configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml
+      - docs/context/issue_791_promotion_campaign_128k_256k.md
+
+  - planner:
+      key: hybrid_rule_v3_fast_progress
+      algo: hybrid_rule_local_planner
+      algo_config_path: configs/policy_search/candidates/hybrid_rule_v3_fast_progress.yaml
+    tuning:
+      parameters_touched: [max_linear_speed, max_linear_accel]
+      tuning_scenario_ids: []
+      eval_set_disjoint: false
+      budget_runs: null
+      budget_hours: null
+      tuned_by: null
+      tuned_at_utc: null
+      source: backfilled
+    evidence_refs:
+      - configs/policy_search/candidates/hybrid_rule_v3_fast_progress.yaml
+      - configs/policy_search/scenario_horizons_h500.yaml
+      - configs/policy_search/ablation_manifests/issue_2104_component_ablation_pilot.yaml
+
+  - planner:
+      key: hybrid_rule_v3_fast_progress_static_escape
+      algo: hybrid_rule_local_planner
+      algo_config_path: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml
+    tuning:
+      parameters_touched:
+        - max_linear_speed
+        - max_linear_accel
+        - static_clearance_escape_enabled
+        - static_clearance_escape_min_clearance
+        - static_clearance_escape_max_speed
+        - static_clearance_escape_tolerance
+        - static_recenter_enabled
+        - static_recenter_weight
+        - static_recenter_probe_speed
+        - static_corridor_transit_enabled
+        - static_corridor_transit_initial_band
+        - static_corridor_transit_tolerance
+        - static_corridor_transit_min_progress_3s
+        - static_corridor_transit_weight
+      tuning_scenario_ids: []
+      eval_set_disjoint: false
+      budget_runs: null
+      budget_hours: null
+      tuned_by: null
+      tuned_at_utc: null
+      source: backfilled
+    evidence_refs:
+      - configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml
+      - configs/policy_search/scenario_horizons_h500.yaml
+      - docs/context/issue_1023_experimental_benchmark_candidates.md
+
+  - planner:
+      key: hybrid_rule_v3_fast_progress_static_escape_continuous
+      algo: hybrid_rule_local_planner
+      algo_config_path: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml
+    tuning:
+      parameters_touched:
+        - hard_safety_margin
+        - corridor_subgoal_enabled
+        - corridor_subgoal_speed
+        - corridor_subgoal_turn_in_place_error
+        - corridor_subgoal_heading_gain
+        - continuous_static_clearance_enabled
+        - corridor_subgoal_static_clearance_buffer
+        - corridor_subgoal_route_progress_weight
+        - corridor_subgoal_centering_weight
+        - corridor_subgoal_tangent_alignment_weight
+        - corridor_subgoal_clearance_weight
+        - corridor_subgoal_continuity_weight
+      tuning_scenario_ids: []
+      eval_set_disjoint: false
+      budget_runs: null
+      budget_hours: null
+      tuned_by: null
+      tuned_at_utc: null
+      source: backfilled
+    evidence_refs:
+      - configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml
+      - configs/policy_search/ablation_manifests/issue_2104_component_ablation_pilot.yaml
+
+  - planner:
+      key: scenario_adaptive_hybrid_orca_v1
+      algo: hybrid_rule_local_planner
+      algo_config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
+    tuning:
+      parameters_touched:
+        - max_linear_speed
+        - max_linear_accel
+        - static_clearance_escape_enabled
+        - static_clearance_escape_min_clearance
+        - static_clearance_escape_max_speed
+        - static_clearance_escape_tolerance
+        - static_recenter_enabled
+        - static_recenter_weight
+        - static_recenter_probe_speed
+        - scenario_overrides.francis2023_perpendicular_traffic
+        - scenario_algo_overrides.francis2023_leave_group
+      tuning_scenario_ids: []
+      eval_set_disjoint: false
+      budget_runs: null
+      budget_hours: null
+      tuned_by: null
+      tuned_at_utc: null
+      source: backfilled
+    evidence_refs:
+      - configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
+      - configs/policy_search/scenario_horizons_h500.yaml
+      - docs/context/issue_1023_experimental_benchmark_candidates.md
+
+  - planner:
+      key: scenario_adaptive_hybrid_orca_v2_collision_guard
+      algo: hybrid_rule_local_planner
+      algo_config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+    tuning:
+      parameters_touched:
+        - scenario_overrides.classic_merging_low
+        - scenario_overrides.francis2023_perpendicular_traffic
+        - scenario_algo_overrides.francis2023_leave_group
+      tuning_scenario_ids: []
+      eval_set_disjoint: false
+      budget_runs: null
+      budget_hours: null
+      tuned_by: null
+      tuned_at_utc: null
+      source: backfilled
+    evidence_refs:
+      - configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+      - configs/policy_search/scenario_horizons_h500.yaml
+      - configs/policy_search/ablation_manifests/issue_2104_component_ablation_pilot.yaml

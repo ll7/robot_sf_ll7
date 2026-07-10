@@ -186,6 +186,21 @@ planners:
 config history), or `unknown`. When an arm declares no block, the manifest synthesizes a
 `backfill_pending` entry with empty fields so the asymmetry is still recorded rather than hidden.
 
+Historical manifests created before this block existed are covered by the versioned sidecar
+[`configs/benchmarks/tuning_effort_history_v1.yaml`](../configs/benchmarks/tuning_effort_history_v1.yaml).
+It matches each retained manifest arm by planner key, algorithm, and algorithm-config path. Records
+are `backfilled` only when retained configs identify touched parameters and evidence paths;
+otherwise every field remains explicitly empty under `source: unknown`. In particular, a selected
+training run's elapsed time or a policy-search evaluation's episode count is not silently relabeled
+as the total tuning budget. Validate full legacy-arm coverage with:
+
+```bash
+uv run python -m robot_sf.benchmark.tuning_effort_history
+```
+
+The checker fails closed on missing or duplicate arms, missing evidence files, populated unknown
+records, and unused registry entries. It does not rewrite the immutable historical manifests.
+
 A top-level `tuning_effort_summary` records how many enabled arms are declared vs backfill-pending
 and which arms are still missing a tuning block.
 

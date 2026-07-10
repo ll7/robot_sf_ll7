@@ -22,6 +22,7 @@ from robot_sf.common.safe_pickle import (
     UnsafePickleError,
     restricted_pickle_load,
 )
+from robot_sf.errors import RobotSfError
 from scripts.tools.manage_external_data import (
     EXTERNAL_DATA_ROOT_ENV,
     check_asset,
@@ -35,7 +36,7 @@ ETH_TRAVERSIBLE_RELATIVE_PATH = _S3DIS_BASE / "traversibles" / "ETH" / "data.pkl
 ACQUISITION_DOC = "docs/datasets/socnavbench-s3dis-eth.md"
 
 
-class SocNavBenchEthDataError(RuntimeError):
+class SocNavBenchEthDataError(RobotSfError, RuntimeError):
     """Raised when staged SocNavBench ETH data is absent or structurally invalid."""
 
 

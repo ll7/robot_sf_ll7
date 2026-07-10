@@ -619,6 +619,8 @@ def _runtime_binding(
 ) -> str:
     if axis == "integration_timestep" and "dt" in patch:
         return "sim_config.time_per_step_in_secs"
+    if axis == "pedestrian_integration_scheme" and isinstance(patch.get("sim_config"), Mapping):
+        return "sim_config.pedestrian_integration_scheme"
     if axis == "clearance_radius" and isinstance(patch.get("sim_config"), Mapping):
         return "sim_config.ped_radius"
     if axis == "social_force_speed_archetypes" and "pedestrian_archetypes" in patch:
@@ -637,6 +639,10 @@ def apply_variant(config: Any, variant: VariantSpec, *, seed: int) -> None:
         config.sim_config.sim_time_in_secs = original_duration
     elif variant.runtime_binding == "sim_config.ped_radius":
         config.sim_config.ped_radius = float(variant.patch["sim_config"]["ped_radius"])
+    elif variant.runtime_binding == "sim_config.pedestrian_integration_scheme":
+        config.sim_config.pedestrian_integration_scheme = str(
+            variant.patch["sim_config"]["pedestrian_integration_scheme"]
+        )
     elif variant.runtime_binding == "sim_config.archetype_composition":
         config.sim_config.archetype_composition = {
             str(key): float(value) for key, value in variant.patch["pedestrian_archetypes"].items()

@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #4978 scenario flakiness audit applied to a real multi-planner campaign.** Ships a
+  tracked, compact subset of a real benchmark campaign (4 planners × 5 scenarios × 20 seeds = 400
+  episodes, with provenance) under
+  `tests/fixtures/benchmark/scenario_flakiness_issue_4978/real_campaign_episodes.jsonl`, plus the
+  committed `scenario_flakiness.v1` report the audit produces from it
+  (`real_campaign_flakiness_report.json`). This delivers the *real-campaign application* that PRs
+  #5069 and #5115 deferred: the audit now has regression-protected evidence that it surfaces real
+  per-cell outcome instability — 7 of 20 assessable cells flagged knife-edge (35%), including a
+  perfect coin-flip cell (`classic_doorway_medium`/`ppo`, stability 0.50 across 20 seeds). Exact-repeat
+  determinism is reported as `null` (unknown) because each seed ran once; asserting it needs a
+  dedicated exact-repeat campaign. Claim boundary: diagnostic-grade only — no planner-quality or
+  ranking claim, no benchmark campaign was run. Covered by
+  `tests/benchmark/test_scenario_flakiness_real_campaign.py`.
+
 * **issue #5118 CPU vectorized environment (VecEnv) worker-mode throughput comparator.**
   `scripts/validation/run_vecenv_worker_mode_throughput.py` accepts a standard training config YAML,
   constructs `dummy`, `subproc`, and `threaded` VecEnv modes, runs configurable warmup and step

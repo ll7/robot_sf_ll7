@@ -1,0 +1,420 @@
+{
+  "schema_version": "scenario_flakiness.v1",
+  "outcome_metric": "success",
+  "group_by": "algo",
+  "fallback_group_by": "algo",
+  "stability_threshold": 0.8,
+  "min_seeds": 2,
+  "observation_track_mode": "strict",
+  "observation_tracks": {
+    "mode": "strict",
+    "tracks": {
+      "unspecified": 400
+    },
+    "mixed_tracks": false,
+    "selected_track": "unspecified",
+    "caveat_record_count": 0,
+    "caveat_policy": "Fallback, degraded, failed, and diagnostic-stub rows are caveats, not benchmark success evidence."
+  },
+  "exact_repeat": {
+    "checked_repeat_groups": 0,
+    "nondeterministic_repeat_groups": 0,
+    "is_deterministic": null,
+    "examples": []
+  },
+  "summary": {
+    "n_records": 400,
+    "n_cells": 20,
+    "n_assessable_cells": 20,
+    "n_knife_edge_cells": 7,
+    "knife_edge_fraction": 0.35,
+    "n_records_missing_outcome": 0,
+    "n_records_missing_scenario": 0
+  },
+  "cells": [
+    {
+      "cell_key": "classic_bottleneck_high::goal",
+      "scenario_id": "classic_bottleneck_high",
+      "planner": "goal",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.0,
+      "stability_score": 1.0,
+      "knife_edge": false,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 0,
+        "0": 20
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "classic_bottleneck_high::orca",
+      "scenario_id": "classic_bottleneck_high",
+      "planner": "orca",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.35,
+      "stability_score": 0.65,
+      "knife_edge": true,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 7,
+        "0": 13
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "classic_bottleneck_high::ppo",
+      "scenario_id": "classic_bottleneck_high",
+      "planner": "ppo",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.0,
+      "stability_score": 1.0,
+      "knife_edge": false,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 0,
+        "0": 20
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "classic_bottleneck_high::social_force",
+      "scenario_id": "classic_bottleneck_high",
+      "planner": "social_force",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.0,
+      "stability_score": 1.0,
+      "knife_edge": false,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 0,
+        "0": 20
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "classic_cross_trap_high::goal",
+      "scenario_id": "classic_cross_trap_high",
+      "planner": "goal",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.0,
+      "stability_score": 1.0,
+      "knife_edge": false,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 0,
+        "0": 20
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "classic_cross_trap_high::orca",
+      "scenario_id": "classic_cross_trap_high",
+      "planner": "orca",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.6,
+      "stability_score": 0.6,
+      "knife_edge": true,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 12,
+        "0": 8
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "classic_cross_trap_high::ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "planner": "ppo",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.65,
+      "stability_score": 0.65,
+      "knife_edge": true,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 13,
+        "0": 7
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "classic_cross_trap_high::social_force",
+      "scenario_id": "classic_cross_trap_high",
+      "planner": "social_force",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.0,
+      "stability_score": 1.0,
+      "knife_edge": false,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 0,
+        "0": 20
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "classic_doorway_low::goal",
+      "scenario_id": "classic_doorway_low",
+      "planner": "goal",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.25,
+      "stability_score": 0.75,
+      "knife_edge": true,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 5,
+        "0": 15
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "classic_doorway_low::orca",
+      "scenario_id": "classic_doorway_low",
+      "planner": "orca",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.35,
+      "stability_score": 0.65,
+      "knife_edge": true,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 7,
+        "0": 13
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "classic_doorway_low::ppo",
+      "scenario_id": "classic_doorway_low",
+      "planner": "ppo",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.55,
+      "stability_score": 0.55,
+      "knife_edge": true,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 11,
+        "0": 9
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "classic_doorway_low::social_force",
+      "scenario_id": "classic_doorway_low",
+      "planner": "social_force",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.0,
+      "stability_score": 1.0,
+      "knife_edge": false,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 0,
+        "0": 20
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "classic_doorway_medium::goal",
+      "scenario_id": "classic_doorway_medium",
+      "planner": "goal",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.15,
+      "stability_score": 0.85,
+      "knife_edge": false,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 3,
+        "0": 17
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "classic_doorway_medium::orca",
+      "scenario_id": "classic_doorway_medium",
+      "planner": "orca",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.15,
+      "stability_score": 0.85,
+      "knife_edge": false,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 3,
+        "0": 17
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "classic_doorway_medium::ppo",
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.5,
+      "stability_score": 0.5,
+      "knife_edge": true,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 10,
+        "0": 10
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "classic_doorway_medium::social_force",
+      "scenario_id": "classic_doorway_medium",
+      "planner": "social_force",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.0,
+      "stability_score": 1.0,
+      "knife_edge": false,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 0,
+        "0": 20
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "francis2023_narrow_doorway::goal",
+      "scenario_id": "francis2023_narrow_doorway",
+      "planner": "goal",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.0,
+      "stability_score": 1.0,
+      "knife_edge": false,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 0,
+        "0": 20
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "francis2023_narrow_doorway::orca",
+      "scenario_id": "francis2023_narrow_doorway",
+      "planner": "orca",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.0,
+      "stability_score": 1.0,
+      "knife_edge": false,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 0,
+        "0": 20
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "francis2023_narrow_doorway::ppo",
+      "scenario_id": "francis2023_narrow_doorway",
+      "planner": "ppo",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.0,
+      "stability_score": 1.0,
+      "knife_edge": false,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 0,
+        "0": 20
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    },
+    {
+      "cell_key": "francis2023_narrow_doorway::social_force",
+      "scenario_id": "francis2023_narrow_doorway",
+      "planner": "social_force",
+      "benchmark_track": "unspecified",
+      "n_seeds": 20,
+      "n_episodes": 20,
+      "success_rate": 0.0,
+      "stability_score": 1.0,
+      "knife_edge": false,
+      "assessable": true,
+      "outcome_counts": {
+        "1": 0,
+        "0": 20
+      },
+      "has_within_seed_repeats": false,
+      "nondeterministic_seeds": 0
+    }
+  ],
+  "_provenance": {
+    "purpose": "Real-campaign application of the scenario flakiness audit (issue #4978). Computed from a tracked, compact subset of a real multi-planner benchmark campaign shipped with this repo. Diagnostic-grade: demonstrates the audit on real episodes; NOT a benchmark-quality or planner-ranking claim.",
+    "source_campaign": "issue3216-headline-ci-rank-stability-cpu-requeue-20260630h (goal, orca, ppo, social_force; 20 seeds each, seeds 111-130)",
+    "source_git_hash": [
+      "a5516b432fceffa71573e458aaee31c00a0b6c81"
+    ],
+    "source_observation_levels": [
+      "oracle_full_state",
+      "tracked_agents_no_noise"
+    ],
+    "source_observation_modes": [
+      "goal_state",
+      "socnav_state"
+    ],
+    "scenarios": [
+      "classic_bottleneck_high",
+      "classic_cross_trap_high",
+      "classic_doorway_low",
+      "classic_doorway_medium",
+      "francis2023_narrow_doorway"
+    ],
+    "regenerated_by": "tests/fixtures/benchmark/scenario_flakiness_issue_4978/README.md",
+    "exact_repeat_note": "Each (scenario, planner, seed) cell was executed exactly once in the source campaign, so exact-repeat determinism is reported as null (unknown) by design. A dedicated exact-repeat campaign is required to assert determinism."
+  }
+}

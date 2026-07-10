@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **issue #4988 benchmark CLI surfaces typed errors (not raw tracebacks) for malformed input.**
+  `robot_sf/benchmark/parquet_export.py` now raises the canonical `EpisodeRecordInputError`
+  (a `ValueError` subclass, so backward-compatible) instead of a bare `ValueError` when a JSONL line
+  is unparseable. This lands inside the `export-parquet` CLI boundary's typed `_CLI_INPUT_ERRORS`
+  handler, so a corrupt input file now exits `2` with a logged message rather than escaping
+  `cli_main` as a raw traceback. A new parametrized CLI-boundary contract test
+  (`tests/benchmark/test_cli_typed_error_contract.py`) ratchets the missing- and malformed-input
+  fail-closed behavior across 20 input-consuming subcommands. Claim boundary: error-surface/exit-code
+  behavior only — no success-path output or benchmark metric value changes.
+
 * **issue #5000 goal-planner late-evasive latency instrumentation (fail-closed).** The
   `late_evasive_predicate` (`robot_sf/benchmark/safety_predicates.py`, schema bumped
   `safety_predicate.late_evasive.v1` → `.v2`) now emits a `latency_unavailable_reason` alongside

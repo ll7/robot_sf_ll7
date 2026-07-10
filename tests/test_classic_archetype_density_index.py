@@ -11,6 +11,9 @@ assert anything about benchmark results.
 What is guarded:
   * every in-directory ``classic_*.yaml`` config (and every density tier inside
     it) is covered by the index (missing-coverage guard, both directions);
+  * every classic archetype config is either admitted by
+    ``classic_interactions.yaml`` or explicitly marked ``evaluation: excluded``
+    or ``evaluation: planned`` with a reason (issue #4971);
   * each tier's ``ped_density`` and ``density_advisory`` match the config;
   * each config's ``spawn_mode`` / ``in_matrix`` flags match what the configs and
     ``classic_interactions.yaml`` actually say;
@@ -152,6 +155,28 @@ def test_in_matrix_flag_matches_includes() -> None:
     matrix_files = _matrix_config_filenames()
     for config, entry in _index_entries_by_config().items():
         assert entry["in_matrix"] == (config in matrix_files), config
+
+
+def test_every_classic_archetype_is_admitted_or_explicitly_dispositioned() -> None:
+    """Fail closed when a classic config is outside the standard manifest silently."""
+    matrix_files = _matrix_config_filenames()
+    allowed_dispositions = {"excluded", "planned"}
+
+    for config_path in _classic_config_paths():
+        if config_path.name in matrix_files:
+            continue
+
+        config = _load_yaml(config_path)
+        disposition = config.get("evaluation")
+        reason = config.get("evaluation_reason")
+        assert disposition in allowed_dispositions, (
+            f"{config_path.name}: not included by {MATRIX_FILE.name}; add it to the manifest or "
+            "set evaluation to 'excluded' or 'planned'."
+        )
+        assert isinstance(reason, str) and reason.strip(), (
+            f"{config_path.name}: evaluation={disposition!r} requires a non-empty "
+            "evaluation_reason."
+        )
 
 
 def test_marker_spawn_density_zero_semantics() -> None:

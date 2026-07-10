@@ -269,8 +269,9 @@ def compute_flakiness_audit(
         A schema-versioned audit report (see module docstring for structure).
 
     Raises:
-        ValueError: When ``records`` is empty (an audit of nothing is not
-            evidence) or when ``stability_threshold`` is outside ``(0, 1]``.
+        ValueError: When ``records`` has no usable episode evidence, when
+            ``stability_threshold`` is outside ``(0, 1]``, or when
+            ``min_seeds`` is not positive.
     """
     if not records:
         raise ValueError(
@@ -279,6 +280,8 @@ def compute_flakiness_audit(
         )
     if not (0.0 < stability_threshold <= 1.0):
         raise ValueError(f"stability_threshold must be in (0, 1], got {stability_threshold}")
+    if min_seeds < 1:
+        raise ValueError(f"min_seeds must be at least 1, got {min_seeds}")
 
     cell_meta, cell_seed_outcomes, n_missing_outcome, n_missing_scenario = _ingest_records(
         records,
@@ -287,6 +290,11 @@ def compute_flakiness_audit(
         fallback_group_by=fallback_group_by,
         seed_field=seed_field,
     )
+    if not cell_seed_outcomes:
+        raise ValueError(
+            "scenario flakiness audit requires at least one record with a scenario and "
+            "interpretable outcome; refusing to report stability with no usable evidence"
+        )
 
     cells: list[dict[str, Any]] = []
     determinism_examples: list[dict[str, Any]] = []

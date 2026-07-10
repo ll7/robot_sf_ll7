@@ -53,6 +53,27 @@ def test_generates_forecast_result_card_with_latex(tmp_path: Path) -> None:
     assert "\\begin{tabular}" in latex
 
 
+def test_render_latex_table_escapes_underscores() -> None:
+    """LaTeX metric cells escape underscores without f-string expressions."""
+    card = cards.ResultCard(
+        title="Synthetic",
+        source_summary="summary.json",
+        evidence_tier="smoke",
+        decision="diagnostic",
+        comparator="baseline",
+        claim_boundary="Synthetic renderer regression test.",
+        metrics={"metric_key": "value_with_underscore"},
+        commands=["python script.py"],
+        artifacts=["summary.json"],
+        caveats=["Synthetic fixture."],
+        non_transfer_notes=[],
+    )
+
+    latex = cards.render_latex_table(card)
+
+    assert "metric\\_key & value\\_with\\_underscore \\\\" in latex
+
+
 def test_generates_runtime_result_card_from_count_metrics(tmp_path: Path) -> None:
     """Runtime evidence summaries expose useful count/status metrics."""
     cards.main(

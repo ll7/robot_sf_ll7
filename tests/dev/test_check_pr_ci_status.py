@@ -117,6 +117,93 @@ def test_main_with_explicit_pr_and_failure_exit(
     assert "abc123" in captured.out
 
 
+def test_main_ignores_superseded_failed_check_run_after_successful_pr_body_edit(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A refreshed workflow job should replace its earlier failed run in the CI summary."""
+    mock_data = json.dumps(
+        {
+            "number": 5136,
+            "title": "corrected PR body",
+            "state": "OPEN",
+            "mergeable": "MERGEABLE",
+            "headRefName": "corrected-pr-body",
+            "statusCheckRollup": [
+                {
+                    "__typename": "CheckRun",
+                    "name": "pr-body-contracts",
+                    "workflowName": "PR body contracts",
+                    "startedAt": "2026-07-10T16:58:58Z",
+                    "status": "completed",
+                    "conclusion": "failure",
+                },
+                {
+                    "__typename": "CheckRun",
+                    "name": "pr-body-contracts",
+                    "workflowName": "PR body contracts",
+                    "startedAt": "2026-07-10T17:29:04Z",
+                    "status": "completed",
+                    "conclusion": "success",
+                },
+            ],
+            "reviews": [],
+        }
+    )
+
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout=mock_data, stderr="")
+        rc = main(["5136", "--json"])
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["checks"]["overall"] == "success"
+    assert payload["checks"]["total"] == 1
+    assert payload["checks"]["superseded"] == 1
+
+
+def test_main_keeps_same_named_runs_from_different_workflows(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Matching job names alone must not hide a failure from another workflow."""
+    mock_data = json.dumps(
+        {
+            "number": 5137,
+            "title": "same job name",
+            "state": "OPEN",
+            "mergeable": "MERGEABLE",
+            "headRefName": "same-job-name",
+            "statusCheckRollup": [
+                {
+                    "__typename": "CheckRun",
+                    "name": "validate",
+                    "workflowName": "PR body contracts",
+                    "startedAt": "2026-07-10T17:00:00Z",
+                    "status": "completed",
+                    "conclusion": "success",
+                },
+                {
+                    "__typename": "CheckRun",
+                    "name": "validate",
+                    "workflowName": "Security Baseline",
+                    "startedAt": "2026-07-10T17:01:00Z",
+                    "status": "completed",
+                    "conclusion": "failure",
+                },
+            ],
+            "reviews": [],
+        }
+    )
+
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout=mock_data, stderr="")
+        rc = main(["5137", "--json"])
+
+    assert rc == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["checks"]["overall"] == "failure"
+    assert payload["checks"]["superseded"] == 0
+
+
 def test_main_accepts_pr_flag_alias(capsys: pytest.CaptureFixture) -> None:
     """--pr should work as a named alias for the positional PR number."""
     mock_data = json.dumps(

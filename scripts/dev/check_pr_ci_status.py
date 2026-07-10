@@ -95,6 +95,45 @@ def _rollup_name(check: dict[str, Any]) -> str:
     return str(check.get("name") or check.get("context") or "unknown")
 
 
+def _check_run_identity(check: dict[str, Any]) -> tuple[str, str] | None:
+    """Return a stable identity for timestamped GitHub Actions check runs.
+
+    GitHub's PR rollup retains completed runs when editing a PR body retriggers
+    a workflow on the same commit.  Only runs from the same workflow job can
+    supersede one another; legacy statuses and runs without a timestamp remain
+    independently fail-closed.
+    """
+    if check.get("__typename") != "CheckRun":
+        return None
+    workflow_name = str(check.get("workflowName") or "")
+    started_at = str(check.get("startedAt") or "")
+    if not workflow_name or not started_at:
+        return None
+    return workflow_name, _rollup_name(check)
+
+
+def _latest_check_runs(rollup: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """Keep the newest timestamped run for each duplicate GitHub Actions job."""
+    latest_by_identity: dict[tuple[str, str], dict[str, Any]] = {}
+    for check in rollup:
+        identity = _check_run_identity(check)
+        if identity is None:
+            continue
+        latest = latest_by_identity.get(identity)
+        if latest is None or str(check["startedAt"]) > str(latest["startedAt"]):
+            latest_by_identity[identity] = check
+
+    effective_rollup: list[dict[str, Any]] = []
+    superseded_count = 0
+    for check in rollup:
+        identity = _check_run_identity(check)
+        if identity is not None and latest_by_identity[identity] is not check:
+            superseded_count += 1
+            continue
+        effective_rollup.append(check)
+    return effective_rollup, superseded_count
+
+
 def _fetch_ci_status(
     pr_number: str,
     backoff: float = 0.0,
@@ -133,7 +172,8 @@ def _fetch_ci_status(
             "status": "error",
             "error": parse_error or "gh output is not a JSON object",
         }
-    rollup = data.get("statusCheckRollup", []) or []
+    raw_rollup = data.get("statusCheckRollup", []) or []
+    rollup, superseded_count = _latest_check_runs(raw_rollup)
 
     # Classify overall CI state.
     conclusions: dict[str, int] = {}
@@ -186,6 +226,7 @@ def _fetch_ci_status(
         "head_sha": data.get("headRefOid", ""),
         "checks": {
             "total": len(rollup),
+            "superseded": superseded_count,
             "overall": overall,
             "by_conclusion": conclusions,
             "by_status": states,
@@ -250,6 +291,9 @@ def _format_human(data: dict[str, Any]) -> str:
     lines.append(
         f"  checks: {overall}  |  {total} total  |  {conclusion_str}  |  status: {status_str}"
     )
+    superseded = checks.get("superseded", 0)
+    if superseded:
+        lines.append(f"  ignored {superseded} superseded GitHub Actions check run(s)")
     for check in checks.get("details", []):
         if check.get("status") == "completed" and check.get("conclusion") == "success":
             continue

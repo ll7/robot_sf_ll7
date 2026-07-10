@@ -228,7 +228,9 @@ def select_exemplars_for_planner(
     ]
 
     if not group_crossing_eps:
-        return []
+        raise ExemplarExportInputError(
+            f"planner {planner!r}: no eligible group-crossing episodes for exemplar selection"
+        )
 
     # Extract metric values
     scored: list[tuple[float, dict[str, Any]]] = []

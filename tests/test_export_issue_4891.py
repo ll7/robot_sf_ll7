@@ -97,13 +97,13 @@ class TestSelectExemplars:
         assert median.metric_value == 0.7
 
     def test_empty_episodes(self) -> None:
-        selected = _export_module.select_exemplars_for_planner([], "goal")
-        assert selected == []
+        with pytest.raises(_export_module.ExemplarExportInputError, match="no eligible"):
+            _export_module.select_exemplars_for_planner([], "goal")
 
     def test_no_head_on_corridor(self) -> None:
         episodes = [self._make_episode("classic_doorway_low", 1, 0.8)]
-        selected = _export_module.select_exemplars_for_planner(episodes, "goal")
-        assert selected == []
+        with pytest.raises(_export_module.ExemplarExportInputError, match="no eligible"):
+            _export_module.select_exemplars_for_planner(episodes, "goal")
 
     def test_tie_break_prefers_richer_trace_for_best(self) -> None:
         """When path_efficiency ties, best gets the MOST steps, worst the FEWEST.
@@ -206,6 +206,13 @@ class TestFailClosedInputs:
         with pytest.raises(
             _export_module.ExemplarExportInputError, match="no finite selection metric"
         ):
+            _export_module.select_exemplars_for_planner(episodes, "goal")
+
+    def test_no_eligible_scenarios_fail_closed(self) -> None:
+        """A campaign cannot emit an empty successful report when it lacks this scenario family."""
+        episodes = [self._episode("classic_group_crossing_low", 1, 0.5)]
+
+        with pytest.raises(_export_module.ExemplarExportInputError, match="no eligible"):
             _export_module.select_exemplars_for_planner(episodes, "goal")
 
     @staticmethod

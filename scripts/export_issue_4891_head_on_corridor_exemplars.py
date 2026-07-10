@@ -234,7 +234,9 @@ def select_exemplars_for_planner(
     corridor_eps = [ep for ep in episodes if ep.get("scenario_id") in HEAD_ON_CORRIDOR_SCENARIOS]
 
     if not corridor_eps:
-        return []
+        raise ExemplarExportInputError(
+            f"planner {planner!r}: no eligible head-on-corridor episodes for exemplar selection"
+        )
 
     # Extract metric values with step count for quality filtering
     scored: list[tuple[float, int, dict[str, Any]]] = []

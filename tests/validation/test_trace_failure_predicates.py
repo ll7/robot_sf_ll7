@@ -176,6 +176,9 @@ def test_event_and_action_predicates_cover_remaining_contract_ids() -> None:
     predicates = {row["predicate_id"]: row for row in payload["predicates"]}
     assert predicates["late_evasive_reaction"]["validity_status"] == "valid"
     assert predicates["late_evasive_reaction"]["evidence_fields"]["reaction_delay_steps"] == 1
+    # Seconds-valued companion to reaction_delay_steps (issue #5000): frames carry time_s, so a
+    # reacted late-evasive event always exposes a latency in seconds, not only a step count.
+    assert predicates["late_evasive_reaction"]["evidence_fields"]["response_latency_s"] == 1.0
     assert predicates["bottleneck_deadlock"]["validity_status"] == "valid"
     assert predicates["bottleneck_deadlock"]["evidence_fields"]["event"] == "bottleneck_deadlock"
 

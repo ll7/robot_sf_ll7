@@ -1658,6 +1658,11 @@ def _late_evasive_reaction(
                     "pressure_distance_m": pressure_distance_m,
                     "near_miss_threshold_m": near_miss_threshold_m,
                     "reaction_delay_steps": reaction_frame.step - pressure_frame.step,
+                    # Seconds-valued companion to reaction_delay_steps so this surface, like the
+                    # benchmark late_evasive_predicate, always carries a latency in seconds when a
+                    # reaction exists (issue #5000). Frames carry time_s, so this is finite here;
+                    # the "no reaction" case returns None above rather than a predicate.
+                    "response_latency_s": reaction_frame.time_s - pressure_frame.time_s,
                     "reaction_frame_index": reaction_index,
                     "angular_velocity": angular,
                     "linear_drop_mps": linear_drop,

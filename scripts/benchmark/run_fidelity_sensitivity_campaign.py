@@ -20,7 +20,7 @@ import math
 import pathlib
 import subprocess
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -623,6 +623,8 @@ def _runtime_binding(
         return "sim_config.pedestrian_integration_scheme"
     if axis == "clearance_radius" and isinstance(patch.get("sim_config"), Mapping):
         return "sim_config.ped_radius"
+    if axis == "control_action_latency" and isinstance(patch.get("sim_config"), Mapping):
+        return "sim_config.action_latency_steps"
     if axis == "social_force_speed_archetypes" and "pedestrian_archetypes" in patch:
         return "sim_config.archetype_composition"
     if axis == "observation_noise" and observation_noise:
@@ -642,6 +644,12 @@ def apply_variant(config: Any, variant: VariantSpec, *, seed: int) -> None:
     elif variant.runtime_binding == "sim_config.pedestrian_integration_scheme":
         config.sim_config.pedestrian_integration_scheme = str(
             variant.patch["sim_config"]["pedestrian_integration_scheme"]
+        )
+    elif variant.runtime_binding == "sim_config.action_latency_steps":
+        config.sim_config = replace(
+            config.sim_config,
+            action_latency_steps=int(variant.patch["sim_config"]["action_latency_steps"]),
+            action_latency_ms=None,
         )
     elif variant.runtime_binding == "sim_config.archetype_composition":
         config.sim_config.archetype_composition = {
@@ -856,7 +864,14 @@ def run_episode(
     info: dict[str, Any] = {}
     steps = 0
     try:
-        env.reset(seed=seed)
+        reset_result = env.reset(seed=seed)
+        reset_info = (
+            reset_result[1]
+            if isinstance(reset_result, tuple)
+            and len(reset_result) == 2
+            and isinstance(reset_result[1], Mapping)
+            else {}
+        )
         for step_idx in range(max_steps):
             obs = _build_observation(env, noise=variant.observation_noise, rng=rng)
             command = planner.step(obs)
@@ -891,6 +906,9 @@ def run_episode(
         "variant_source_key": variant.source_key,
         "baseline_variant": variant.baseline,
         "runtime_binding": variant.runtime_binding,
+        "action_latency": reset_info.get("action_latency")
+        if isinstance(reset_info, Mapping)
+        else None,
         "planner": planner_name,
         "scenario_id": str(scenario.get("name") or scenario.get("scenario_id") or "unknown"),
         "seed": int(seed),

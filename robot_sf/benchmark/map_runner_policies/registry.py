@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeAlias
 
 # Policies return a unicycle ``(linear, angular)`` tuple, or a structured payload
 # (e.g. holonomic world-velocity commands from ORCA/HRVO) once those families are
 # migrated into the registry; keep both shapes in the contract.
-type PolicyCallable = Callable[[dict[str, Any]], tuple[float, float] | dict[str, Any]]
-type PolicyBuildResult = tuple[PolicyCallable, dict[str, Any]]
+PolicyCallable: TypeAlias = Callable[[dict[str, Any]], tuple[float, float] | dict[str, Any]]  # noqa: UP040
+PolicyBuildResult: TypeAlias = tuple[PolicyCallable, dict[str, Any]]  # noqa: UP040
 
 
 class PolicyBuilder(Protocol):

@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 OSCILLATORY_PREDICATE_SCHEMA = "safety_predicate.oscillatory_control.v1"
-LATE_EVASIVE_PREDICATE_SCHEMA = "safety_predicate.late_evasive.v1"
+LATE_EVASIVE_PREDICATE_SCHEMA = "safety_predicate.late_evasive.v2"
 OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA = "safety_predicate.occlusion_near_miss.v1"
 
 
@@ -204,6 +204,17 @@ def late_evasive_predicate(
     if first_visible is not None and action_step is not None:
         response_latency_s = float((action_step - first_visible) * dt)
 
+    # Fail closed: a null response_latency_s must always carry a machine-readable reason so a
+    # late-evasive event is never a silent empty. The dominant goal-planner case is
+    # ``no_clearance_restoring_action`` — the robot never decelerated hard enough after the hazard
+    # became visible, so there is no reaction to time even though ``late_evasive`` fires. See #5000.
+    latency_unavailable_reason: str | None = None
+    if response_latency_s is None:
+        if first_visible is None:
+            latency_unavailable_reason = "hazard_never_visible"
+        else:
+            latency_unavailable_reason = "no_clearance_restoring_action"
+
     # Required deceleration to stop within the visible distance, at first visibility.
     required_deceleration_m_s2 = 0.0
     if first_visible is not None:
@@ -232,6 +243,7 @@ def late_evasive_predicate(
             "minimum_distance_m": minimum_distance,
             "required_deceleration_m_s2": required_deceleration_m_s2,
             "response_latency_s": response_latency_s,
+            "latency_unavailable_reason": latency_unavailable_reason,
             "n_steps": n,
         },
         "thresholds": {

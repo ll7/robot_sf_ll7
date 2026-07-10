@@ -618,6 +618,225 @@ def test_worktree_shared_venv_helper_reports_relative_missing_env() -> None:
     assert "cd:" not in result.stderr
 
 
+def test_worktree_shared_venv_helper_has_freshness_check_wiring() -> None:
+    """The shared-venv helper must guard the reused env against source drift (issue #5023)."""
+    script_text = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")
+
+    # The freshness gate compares the vendored pysocialforce install against fast-pysf source.
+    assert "check_shared_venv_freshness()" in script_text
+    assert 'local src_pkg="$repo_root/fast-pysf/pysocialforce"' in script_text
+    assert 'for candidate in "$venv"/lib/python*/site-packages/pysocialforce' in script_text
+    assert 'cmp -s "$src_file" "$installed_file"' in script_text
+    assert "Shared virtualenv is stale relative to this checkout" in script_text
+    assert "diverging module: pysocialforce/" in script_text
+    # The gate is skippable for advanced users with a confirmed-matching env.
+    assert "--no-freshness-check" in script_text
+    assert "ROBOT_SF_VENV_FRESHNESS_CHECK:-" in script_text
+    assert "ROBOT_SF_VENV_FRESHNESS_CHECK=skip" in script_text
+
+
+def _make_freshness_fixture_repo(
+    tmp_path: Path,
+    *,
+    installed_scene: str,
+) -> tuple[Path, Path, dict[str, str]]:
+    """Build a git repo + shared venv whose installed pysocialforce/scene.py is ``installed_scene``.
+
+    The worktree source fast-pysf/pysocialforce/scene.py carries a newer API (normalize_integration_scheme)
+    while the installed copy may or may not match it. A fake ``uv`` on PATH proves whether the helper
+    reached the underlying command or failed earlier in the freshness gate.
+    """
+    repo = tmp_path / "repo"
+    fake_bin = repo / "fake-bin"
+    venv = repo / "shared-venv"
+    site_packages = venv / "lib" / "python3.12" / "site-packages"
+    installed_pkg = site_packages / "pysocialforce"
+    src_pkg = repo / "fast-pysf" / "pysocialforce"
+    fake_bin.mkdir(parents=True)
+    installed_pkg.mkdir(parents=True)
+    src_pkg.mkdir(parents=True)
+    (venv / "bin").mkdir(parents=True)
+
+    # Worktree source scene.py carries the newer API the helper must detect drift against.
+    newer_scene = "def normalize_integration_scheme(value=None):\n    return value\n"
+    (src_pkg / "scene.py").write_text(newer_scene, encoding="utf-8")
+    (src_pkg / "__init__.py").write_text("", encoding="utf-8")
+    # Installed copy is whatever the caller passes (matching = fresh, divergent = stale).
+    (installed_pkg / "scene.py").write_text(installed_scene, encoding="utf-8")
+    (installed_pkg / "__init__.py").write_text("", encoding="utf-8")
+
+    # The helper only checks venv presence via bin/python executability.
+    py = venv / "bin" / "python"
+    py.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    py.chmod(0o755)
+
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        '#!/usr/bin/env bash\nprintf "uv-reached %s\\n" "$*" >&2\nexit 7\n',
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "config", "user.email", "agent@example.invalid"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Agent"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "commit", "-m", "freshness fixture"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    env = {
+        **os.environ,
+        "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+    }
+    return repo, venv, env
+
+
+def test_worktree_shared_venv_freshness_check_fails_early_on_stale_env(
+    tmp_path: Path,
+) -> None:
+    """A stale shared env (missing the newer source API) must fail before uv runs (issue #5023)."""
+    repo, venv, env = _make_freshness_fixture_repo(
+        tmp_path,
+        installed_scene="# stale install without normalize_integration_scheme\n",
+    )
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--",
+            "python",
+            "-c",
+            "from pysocialforce.scene import normalize_integration_scheme",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "Shared virtualenv is stale relative to this checkout" in result.stderr
+    assert "diverging module: pysocialforce/scene.py" in result.stderr
+    assert "uv sync --all-extras" in result.stderr
+    # The freshness gate must fire before the underlying command is executed.
+    assert "uv-reached" not in result.stderr
+
+
+def test_worktree_shared_venv_freshness_check_passes_on_fresh_env(
+    tmp_path: Path,
+) -> None:
+    """A shared env whose installed pysocialforce matches the source must proceed to the command."""
+    matching_scene = "def normalize_integration_scheme(value=None):\n    return value\n"
+    repo, venv, env = _make_freshness_fixture_repo(tmp_path, installed_scene=matching_scene)
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--",
+            "python",
+            "-V",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    # The freshness gate passes, so the helper reaches the underlying command (fake uv exits 7).
+    assert result.returncode == 7
+    assert "uv-reached" in result.stderr
+    assert "Shared virtualenv is stale" not in result.stderr
+
+
+def test_worktree_shared_venv_freshness_check_flag_bypasses_stale_env(
+    tmp_path: Path,
+) -> None:
+    """--no-freshness-check lets a confirmed-matching env skip the drift gate."""
+    repo, venv, env = _make_freshness_fixture_repo(
+        tmp_path,
+        installed_scene="# stale install without normalize_integration_scheme\n",
+    )
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--no-freshness-check",
+            "--",
+            "python",
+            "-V",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 7
+    assert "uv-reached" in result.stderr
+    assert "Shared virtualenv is stale" not in result.stderr
+
+
+def test_worktree_shared_venv_freshness_check_env_var_bypasses_stale_env(
+    tmp_path: Path,
+) -> None:
+    """ROBOT_SF_VENV_FRESHNESS_CHECK=skip lets a confirmed-matching env skip the drift gate."""
+    repo, venv, env = _make_freshness_fixture_repo(
+        tmp_path,
+        installed_scene="# stale install without normalize_integration_scheme\n",
+    )
+    env = {**env, "ROBOT_SF_VENV_FRESHNESS_CHECK": "skip"}
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--",
+            "python",
+            "-V",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 7
+    assert "uv-reached" in result.stderr
+    assert "Shared virtualenv is stale" not in result.stderr
+
+
 def test_gh_comment_has_valid_shell_syntax() -> None:
     """gh_comment.sh should pass bash -n syntax check."""
     syntax = subprocess.run(

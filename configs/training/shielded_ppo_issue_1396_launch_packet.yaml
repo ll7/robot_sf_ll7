@@ -24,7 +24,7 @@ training_starting_points:
   guarded_algo_config: configs/algos/guarded_ppo_relaxed_v2.yaml
   resume_policy_id: ppo_expert_br06_v3_15m_all_maps_randomized
   checksums:
-    configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml: a374a624eb38402e5e4e2612f92440c0f80ff1eb0554a34f33dd36c16920a426
+    configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml: 91f9d9a7c0bcb54f3628beef9140181a64277ab8bdf9b12dcdc37f0251a7d437
     configs/policy_search/candidates/risk_guarded_ppo_v1.yaml: 69030a865be80be5e3ba98db447551c3707f966de8ac5f216e66044d9ea50735
 runtime_guard:
   active_in_all_evaluations: true

@@ -93,8 +93,13 @@ Treat a checkout as linked when `.git` is a file pointing into `.git/worktrees/.
 `git rev-parse --git-common-dir` differs from `git rev-parse --git-dir`.
 
 A linked worktree is fresh only when it lacks both `local.machine.md` and `.venv` plus any
-team-specific initialized marker. In a fresh worktree, derive the main checkout from the common Git
-dir, symlink the main `local.machine.md` when present, run `uv sync --all-extras`, then
+team-specific initialized marker. In a fresh worktree, run
+`scripts/dev/bootstrap_worktree.sh` (preferred) or manually: derive the main checkout from the
+common Git dir, symlink the main `local.machine.md` when present, then run
+`uv venv .venv && uv sync --all-extras`. The `uv venv .venv` step is required: `uv sync --all-extras`
+alone may silently detect and reuse the main checkout's `.venv` without creating one locally,
+leaving `.venv/bin/activate` missing. After sync, verify `.venv/bin/python` exists before
+continuing; if absent, the environment is not usable and the caller must fail closed. Then
 `source .venv/bin/activate` before Python tooling. For quick targeted validation that intentionally
 reuses the main checkout virtualenv, prefer `scripts/dev/run_worktree_shared_venv.sh -- <uv-run-command>`
 so `PYTHONPATH` points at the active worktree. Use a full local `.venv` and final PR readiness for

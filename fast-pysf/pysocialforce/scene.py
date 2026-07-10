@@ -46,6 +46,12 @@ def sample_truncated_normal_speeds(
     Returns:
         np.ndarray: Non-negative desired speeds with shape ``(num_peds,)``.
     """
+    if not np.isfinite(mean) or mean < 0:
+        raise ValueError("desired speed mean must be finite and non-negative")
+    if not np.isfinite(std) or std < 0:
+        raise ValueError("desired speed std must be finite and non-negative")
+    if not np.isfinite(high) or high < 0:
+        raise ValueError("desired speed high bound must be finite and non-negative")
     if num_peds <= 0:
         return np.zeros((0,), dtype=float)
     rng = np.random.default_rng(seed)
@@ -124,7 +130,7 @@ class PedState:
         self.state = state
         self.groups = groups
 
-    def assign_desired_speeds(self, desired_speeds: np.ndarray) -> None:
+    def assign_desired_speeds(self, desired_speeds: np.ndarray | None) -> None:
         """Assign per-pedestrian desired speeds decoupled from the spawn speed.
 
         When set, these speeds drive the goal-directed force (``max_speeds``)
@@ -137,16 +143,19 @@ class PedState:
         Args:
             desired_speeds: Non-negative desired speeds in m/s, one per pedestrian.
         """
+        if desired_speeds is None:
+            self.clear_desired_speeds()
+            return
         speeds = np.asarray(desired_speeds, dtype=float)
         if speeds.ndim != 1 or speeds.shape[0] != self.size():
             raise ValueError(
                 "desired_speeds must be a 1D array with one entry per pedestrian "
                 f"(got shape {speeds.shape} for {self.size()} pedestrians)"
             )
-        if np.any(speeds < 0):
-            raise ValueError("desired_speeds must be non-negative")
+        if not np.all(np.isfinite(speeds)) or np.any(speeds < 0):
+            raise ValueError("desired_speeds must be finite and non-negative")
         self._explicit_desired_speeds = speeds
-        self.max_speeds = speeds.copy()
+        self._refresh_max_speeds()
 
     def clear_desired_speeds(self) -> None:
         """Restore the legacy spawn-coupled desired-speed derivation.
@@ -155,7 +164,14 @@ class PedState:
         ``max_speed_multiplier * initial_speed`` (issue #4972).
         """
         self._explicit_desired_speeds = None
-        self.max_speeds = self.max_speed_multiplier * self.initial_speeds
+        self._refresh_max_speeds()
+
+    def _refresh_max_speeds(self) -> None:
+        """Refresh the goal-driving cap from explicit or legacy desired speeds."""
+        if self._explicit_desired_speeds is not None:
+            self.max_speeds = self._explicit_desired_speeds.copy()
+        else:
+            self.max_speeds = self.max_speed_multiplier * self.initial_speeds
 
     def _update_state(self, state: np.ndarray) -> None:
         """Normalize and cache state-derived fields.
@@ -174,10 +190,7 @@ class PedState:
             self._state = state
         if self.initial_speeds is None:
             self.initial_speeds = self.speeds()
-        if self._explicit_desired_speeds is not None:
-            self.max_speeds = self._explicit_desired_speeds.copy()
-        else:
-            self.max_speeds = self.max_speed_multiplier * self.initial_speeds
+        self._refresh_max_speeds()
 
     @property
     def state(self) -> np.ndarray:

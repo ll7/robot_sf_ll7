@@ -75,8 +75,11 @@ def test_assign_desired_speeds_overrides_and_validates():
     with pytest.raises(ValueError, match="one entry per pedestrian"):
         peds.assign_desired_speeds(np.array([0.8, 1.0]))  # wrong length
 
-    with pytest.raises(ValueError, match="non-negative"):
+    with pytest.raises(ValueError, match="finite and non-negative"):
         peds.assign_desired_speeds(np.array([-0.1, 1.0, 1.2]))  # negative
+
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        peds.assign_desired_speeds(np.array([0.8, np.nan, 1.2]))
 
 
 def test_clear_desired_speeds_restores_legacy_derivation():
@@ -85,6 +88,14 @@ def test_clear_desired_speeds_restores_legacy_derivation():
     peds.assign_desired_speeds(np.array([1.3, 1.3, 1.3]))
     np.testing.assert_allclose(peds.max_speeds, 1.3)
     peds.clear_desired_speeds()
+    np.testing.assert_allclose(peds.max_speeds, np.full(3, 0.65))
+
+
+def test_assign_none_restores_legacy_derivation():
+    """The documented None shortcut must restore the legacy speed derivation."""
+    peds = PedState(_state(3, speed=0.5), [], SceneConfig())
+    peds.assign_desired_speeds(np.array([1.3, 1.3, 1.3]))
+    peds.assign_desired_speeds(None)
     np.testing.assert_allclose(peds.max_speeds, np.full(3, 0.65))
 
 
@@ -99,3 +110,15 @@ def test_sample_truncated_normal_speeds_clips_and_handles_zero():
     np.testing.assert_allclose(
         sample_truncated_normal_speeds(5, mean=0.7, std=0.0, high=3.0, seed=None), 0.7
     )
+
+
+@pytest.mark.parametrize(
+    ("mean", "std", "high"),
+    [(-0.1, 0.2, 3.0), (1.0, -0.2, 3.0), (1.0, 0.2, -0.1), (np.nan, 0.2, 3.0)],
+)
+def test_sample_truncated_normal_speeds_rejects_invalid_parameters(
+    mean: float, std: float, high: float
+) -> None:
+    """Invalid distribution parameters fail before they can enter the integrator."""
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        sample_truncated_normal_speeds(2, mean=mean, std=std, high=high)

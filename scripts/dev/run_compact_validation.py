@@ -152,7 +152,10 @@ def run_compact_validation(
         log_path.write_text(f"{timeout_message}\n", encoding="utf-8", errors="replace")
     elapsed = time.monotonic() - started
     combined = log_path.read_text(encoding="utf-8", errors="replace")
-    excerpt, truncated = _failure_lines(combined, limit=excerpt_lines, width=excerpt_width)
+    if returncode == 0:
+        excerpt, truncated = [], False
+    else:
+        excerpt, truncated = _failure_lines(combined, limit=excerpt_lines, width=excerpt_width)
     failing_node_ids = _pytest_node_ids(combined) if returncode != 0 else []
     summary: dict[str, Any] = {
         "schema": SCHEMA_VERSION,
@@ -231,9 +234,10 @@ def _print_human_summary(summary: dict[str, Any]) -> None:
         print("Failing node ids:")
         for node_id in summary["failing_node_ids"]:
             print(f"- {node_id}")
-    print("Failure excerpt:")
-    for line in summary["failure_excerpt"]:
-        print(line)
+    if summary["failure_excerpt"]:
+        print("Failure excerpt:")
+        for line in summary["failure_excerpt"]:
+            print(line)
     if summary["excerpt_truncated"]:
         print("... additional matching lines omitted; see full log")
 

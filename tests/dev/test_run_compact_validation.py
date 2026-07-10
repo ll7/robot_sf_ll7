@@ -57,7 +57,7 @@ def test_run_compact_validation_bounds_failure_output(tmp_path: Path, capsys) ->
 
 
 def test_run_compact_validation_json_summary_for_success(tmp_path: Path, capsys) -> None:
-    """Successful commands should still save full logs and emit summary JSON."""
+    """Successful commands should save logs without a failure-labelled excerpt."""
     artifact_dir = tmp_path / "artifacts"
     command = [sys.executable, "-c", "print('ok')"]
 
@@ -67,12 +67,16 @@ def test_run_compact_validation_json_summary_for_success(tmp_path: Path, capsys)
     payload = json.loads(stdout)
     assert rc == 0
     assert payload["exit_code"] == 0
-    assert payload["failure_excerpt"] == ["ok"]
+    assert payload["failure_excerpt"] == []
+    assert payload["excerpt_line_count"] == 0
+    assert payload["excerpt_truncated"] is False
     assert Path(payload["log_path"]).read_text(encoding="utf-8") == "ok\n"
     assert Path(payload["summary_path"]).exists()
 
 
-def test_run_compact_validation_suppresses_node_ids_on_success(tmp_path: Path) -> None:
+def test_run_compact_validation_suppresses_failure_details_on_success(
+    tmp_path: Path, capsys
+) -> None:
     """Passing pytest-like logs should not look like failed test summaries."""
     artifact_dir = tmp_path / "artifacts"
     command = [
@@ -89,11 +93,15 @@ def test_run_compact_validation_suppresses_node_ids_on_success(tmp_path: Path) -
         ),
     ]
 
-    summary = run_compact_validation(command, artifact_dir=artifact_dir)
+    rc = main(["--artifact-dir", str(artifact_dir), "--", *command])
+    stdout = capsys.readouterr().out
+    summary = json.loads(next(artifact_dir.glob("*.summary.json")).read_text(encoding="utf-8"))
 
+    assert rc == 0
     assert summary["exit_code"] == 0
     assert summary["failing_node_ids"] == []
-    assert "test_policy_stack_runs_atomic_topology_smoke" in "\n".join(summary["failure_excerpt"])
+    assert summary["failure_excerpt"] == []
+    assert "Failure excerpt:" not in stdout
 
 
 def test_run_compact_validation_keeps_node_ids_on_failure(tmp_path: Path) -> None:
@@ -117,8 +125,8 @@ def test_run_compact_validation_keeps_node_ids_on_failure(tmp_path: Path) -> Non
     assert summary["failing_node_ids"] == ["tests/dev/test_compact.py::test_real_failure"]
 
 
-def test_run_compact_validation_marks_truncated_plain_output(tmp_path: Path) -> None:
-    """Large output without failure keywords should still report truncation."""
+def test_run_compact_validation_suppresses_plain_output_on_success(tmp_path: Path) -> None:
+    """Successful output should not create a failure excerpt."""
     artifact_dir = tmp_path / "artifacts"
     command = [
         sys.executable,
@@ -129,12 +137,8 @@ def test_run_compact_validation_marks_truncated_plain_output(tmp_path: Path) -> 
     summary = run_compact_validation(command, artifact_dir=artifact_dir, excerpt_lines=3)
 
     assert summary["exit_code"] == 0
-    assert summary["excerpt_truncated"] is True
-    assert summary["failure_excerpt"] == [
-        "plain output line 27",
-        "plain output line 28",
-        "plain output line 29",
-    ]
+    assert summary["excerpt_truncated"] is False
+    assert summary["failure_excerpt"] == []
 
 
 def test_run_compact_validation_emits_summary_on_timeout(tmp_path: Path, capsys) -> None:

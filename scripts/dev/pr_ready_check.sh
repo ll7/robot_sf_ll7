@@ -200,6 +200,29 @@ fi
 
 resolve_base_ref
 
+if [[ "$pr_ready_final" != "1" && "$(worktree_state)" != "clean" ]]; then
+  dirty_paths=()
+  while IFS= read -r dirty_path; do
+    [[ -z "$dirty_path" ]] && continue
+    dirty_paths+=("$dirty_path")
+  done < <(
+    {
+      git diff --name-only HEAD
+      git ls-files --others --exclude-standard
+    } | LC_ALL=C sort -u
+  )
+
+  printf 'Interim changed-file scope is committed HEAD vs %s.\n' "$BASE_REF" >&2
+  if [[ ${#dirty_paths[@]} -gt 0 ]]; then
+    printf 'Dirty paths excluded from diff-scoped gates:\n' >&2
+    max_dirty_paths=30
+    printf '%s\n' "${dirty_paths[@]:0:max_dirty_paths}" >&2
+    if (( ${#dirty_paths[@]} > max_dirty_paths )); then
+      printf '... truncated (%d more dirty paths)\n' "$(( ${#dirty_paths[@]} - max_dirty_paths ))" >&2
+    fi
+  fi
+fi
+
 changed_files=()
 core_changed_files=()
 optional_changed_files=()
@@ -214,7 +237,11 @@ while IFS= read -r changed_file; do
 done < <(git diff --name-only --diff-filter=ACMRT "$BASE_REF...HEAD")
 
 if [[ ${#changed_files[@]} -gt 0 ]]; then
-  printf 'Changed files vs %s:\n' "$BASE_REF" >&2
+  if [[ "$pr_ready_final" == "1" ]]; then
+    printf 'Changed files vs %s:\n' "$BASE_REF" >&2
+  else
+    printf 'Committed changed files vs %s:\n' "$BASE_REF" >&2
+  fi
   printf '%s\n' "${changed_files[@]}" >&2
 fi
 if [[ ${#core_changed_files[@]} -gt 0 ]]; then
@@ -251,7 +278,11 @@ if [[ ${#optional_changed_files[@]} -gt 0 ]]; then
   fi
   PYTEST_ADDOPTS="$optional_pytest_addopts" ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=optional "$SCRIPT_DIR/run_tests_parallel.sh" --lane optional
 else
-  printf 'No changed files require the optional-extra lane.\n' >&2
+  if [[ "$pr_ready_final" == "1" ]]; then
+    printf 'No changed files require the optional-extra lane.\n' >&2
+  else
+    printf 'No committed changed files require the optional-extra lane.\n' >&2
+  fi
 fi
 "$SCRIPT_DIR/check_changed_coverage.sh"
 "$SCRIPT_DIR/check_docstring_todos_diff.sh"
@@ -263,6 +294,7 @@ if [[ "$pr_ready_final" == "1" ]]; then
   freshness_args+=(--require-clean-tree)
 elif [[ "$(worktree_state)" != "clean" ]]; then
   printf 'Warning: recording interim PR readiness from a dirty non-ignored worktree.\n' >&2
+  printf 'Interim readiness is not changed-file proof for the dirty paths listed above.\n' >&2
   printf 'Use PR_READY_MODE=final BASE_REF=%q %q for final committed-HEAD PR proof.\n' "$BASE_REF" "$0" >&2
 fi
 uv run python "$SCRIPT_DIR/pr_ready_freshness.py" "${freshness_args[@]}"

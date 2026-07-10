@@ -274,7 +274,40 @@ def test_pr_ready_check_keeps_core_only_changes_on_the_core_lane(preflight_repo:
     assert result.returncode == 0, result.stderr
     lane_lines = lane_log.read_text(encoding="utf-8").splitlines()
     assert lane_lines == ["core --lane core"]
-    assert "No changed files require the optional-extra lane." in result.stderr
+    assert "No committed changed files require the optional-extra lane." in result.stderr
+
+
+def test_interim_mode_reports_dirty_paths_excluded_from_changed_file_gates(
+    preflight_repo: Path,
+) -> None:
+    """Dirty paths are explicit when interim diff-scoped gates only inspect HEAD."""
+    lane_log = _write_lane_logging_stub(preflight_repo)
+    tracked_file = preflight_repo / "tests" / "unit" / "test_dirty_tracked.py"
+    tracked_file.parent.mkdir(parents=True, exist_ok=True)
+    tracked_file.write_text("print('baseline')\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "tracked dirty fixture")
+    tracked_file.write_text("print('dirty tracked path')\n", encoding="utf-8")
+
+    dirty_file = preflight_repo / "tests" / "planner" / "test_dirty_optional.py"
+    dirty_file.parent.mkdir(parents=True, exist_ok=True)
+    dirty_file.write_text("print('dirty optional lane')\n", encoding="utf-8")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        help_flag=False,
+        env_overrides={
+            "BASE_REF": "HEAD",
+            "PR_READY_MODE": "interim",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert lane_log.read_text(encoding="utf-8").splitlines() == ["core --lane core"]
+    assert "Interim changed-file scope is committed HEAD vs HEAD." in result.stderr
+    assert "Dirty paths excluded from diff-scoped gates:" in result.stderr
+    assert "tests/unit/test_dirty_tracked.py" in result.stderr
+    assert "tests/planner/test_dirty_optional.py" in result.stderr
 
 
 def test_core_lane_collection_hook_skips_optional_paths(monkeypatch: pytest.MonkeyPatch) -> None:

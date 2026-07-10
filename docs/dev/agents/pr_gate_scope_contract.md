@@ -50,3 +50,23 @@ Exit codes: `0` disjoint & conforming, `1` violation found, `2` malformed manife
 The module is pure arithmetic over gate descriptors — no GitHub calls, no state mutation — so it is
 safe to call inline in a dispatcher or run as a pre-admission gate. Tests:
 `tests/tools/test_pr_gate_scopes.py` (includes the exact issue #5059 scenario).
+
+## Deployed prompt migration fixture
+
+`tests/fixtures/pr_gate_scopes/live_private_ops_prompt_manifest.json` is the public-safe adoption
+record for the private-operations prompt generator. It records the exact initial migration:
+
+| Gate | Legacy scope | Immutable replacement |
+| --- | --- | --- |
+| `999997` | open-ended range from `#5037` | `number % 2 == 0` |
+| `999996` | range `#5047`–`#5057` | `number % 2 == 1` |
+
+The fixture also covers the deployed three-gate extension: `999997`, `999996`, and `999995` own
+residues `0`, `1`, and `2` respectively under modulus `3`. It intentionally contains no host,
+session, packet, or current-PR-list data; those are transient private-operations state, not a public
+contract. Validate the fixture with:
+
+```bash
+python -m scripts.tools.pr_gate_scopes \
+  --gates tests/fixtures/pr_gate_scopes/live_private_ops_prompt_manifest.json
+```

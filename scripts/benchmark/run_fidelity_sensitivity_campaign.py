@@ -44,6 +44,9 @@ from robot_sf.planner.hybrid_rule_local_planner import (
     build_hybrid_rule_local_planner_config,
 )
 from robot_sf.planner.socnav import ORCAPlannerAdapter, SocNavPlannerConfig
+from robot_sf.robot.actuation_envelope import actuation_envelope_from_drive_config
+from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleDriveSettings
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
 if TYPE_CHECKING:
@@ -629,6 +632,8 @@ def _runtime_binding(
         return "sim_config.archetype_composition"
     if axis == "observation_noise" and observation_noise:
         return "planner_observation_noise"
+    if axis == "robot_speed_band" and isinstance(patch.get("robot_config"), Mapping):
+        return "robot_config.drive_speed_cap"
     return "unsupported"
 
 
@@ -657,6 +662,111 @@ def apply_variant(config: Any, variant: VariantSpec, *, seed: int) -> None:
         }
         config.sim_config.archetype_speed_factors = dict(ARCHETYPE_SPEED_FACTORS)
         config.sim_config.archetype_seed = int(seed)
+    elif variant.runtime_binding == "robot_config.drive_speed_cap":
+        _apply_robot_speed_band_variant(config, variant.patch["robot_config"])
+
+
+def _robot_speed_cap(robot_config: Any) -> float:
+    """Return the active drive model's peak forward speed (m/s).
+
+    The bicycle drive model exposes ``max_velocity``; the differential drive
+    exposes ``max_linear_speed``; the holonomic drive exposes ``max_speed``.
+    This keeps the robot speed-band axis drive-model-agnostic at the read site so
+    a swept cap flows to planner command limits regardless of the active model.
+    """
+    for attr in ("max_velocity", "max_linear_speed", "max_speed"):
+        value = getattr(robot_config, attr, None)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return float(value)
+    raise ValueError(
+        "robot_config exposes no recognized peak-forward-speed field "
+        "(max_velocity / max_linear_speed / max_speed)"
+    )
+
+
+def _robot_drive_model_name(robot_config: Any) -> str:
+    """Return a stable drive-model label for the active robot config."""
+    if isinstance(robot_config, BicycleDriveSettings):
+        return "bicycle_drive"
+    if isinstance(robot_config, DifferentialDriveSettings):
+        return "differential_drive"
+    return type(robot_config).__name__
+
+
+def _apply_robot_speed_band_variant(config: Any, robot_overrides: Mapping[str, Any]) -> None:
+    """Apply a robot speed-band variant to the active drive model.
+
+    Sweeps the drive-model peak forward speed upward toward the micromobility
+    regime (issue #5144). The bicycle drive model is the primary target because
+    it already allows 3.0 m/s; the axis is drive-model-agnostic so a raised cap
+    also binds to a differential drive when the scenario uses one.
+
+    Braking authority (``max_decel`` / ``max_linear_decel``) is carried from the
+    variant so stopping-distance realism scales with the speed band via the
+    #4976 actuation envelope (``stopping_distance = v^2 / (2 * max_decel)``).
+    The robot speed-band axis is independent of the pedestrian-speed axis
+    (#4972): it only mutates ``robot_config``, never pedestrian speed state.
+    """
+    current = config.robot_config
+    raw_type = str(robot_overrides.get("type", robot_overrides.get("model", ""))).strip().lower()
+    if raw_type:
+        target_type = "bicycle_drive" if raw_type in {"bicycle", "bicycle_drive"} else raw_type
+    else:
+        target_type = _robot_drive_model_name(current)
+
+    if target_type == "bicycle_drive":
+        config.robot_config = _bicycle_speed_band_settings(current, robot_overrides)
+    elif target_type == "differential_drive":
+        config.robot_config = _differential_speed_band_settings(current, robot_overrides)
+    else:
+        raise ValueError(
+            "robot_speed_band axis only supports 'bicycle_drive' and 'differential_drive' "
+            f"drive models; got {target_type!r}"
+        )
+
+
+def _bicycle_speed_band_settings(
+    current: Any, overrides: Mapping[str, Any]
+) -> BicycleDriveSettings:
+    """Build bicycle-drive settings with a swept speed cap and braking authority."""
+    base_radius = float(getattr(current, "radius", 0.35))
+    base_wheelbase = float(getattr(current, "wheelbase", 1.0))
+    base_steer = float(getattr(current, "max_steer", 0.78))
+    base_accel = float(getattr(current, "max_accel", 1.0))
+    base_decel = float(getattr(current, "max_decel", base_accel))
+    return BicycleDriveSettings(
+        radius=float(overrides.get("radius", base_radius)),
+        wheelbase=float(overrides.get("wheelbase", base_wheelbase)),
+        max_steer=float(overrides.get("max_steer", base_steer)),
+        max_velocity=float(overrides["max_velocity"]),
+        max_accel=float(overrides.get("max_accel", base_accel)),
+        max_decel=float(overrides.get("max_decel", base_decel)),
+        allow_backwards=bool(overrides.get("allow_backwards", False)),
+    )
+
+
+def _differential_speed_band_settings(
+    current: Any, overrides: Mapping[str, Any]
+) -> DifferentialDriveSettings:
+    """Build differential-drive settings with a swept speed cap and braking authority."""
+    base_radius = float(getattr(current, "radius", 0.35))
+    base_angular = float(getattr(current, "max_angular_speed", 1.0))
+    base_wheel_radius = float(getattr(current, "wheel_radius", 0.05))
+    base_interaxis = float(getattr(current, "interaxis_length", 0.3))
+    base_accel = float(getattr(current, "max_linear_accel", 1.0))
+    base_angular_accel = float(getattr(current, "max_angular_accel", 1.0))
+    base_decel = float(getattr(current, "max_linear_decel", base_accel))
+    return DifferentialDriveSettings(
+        radius=float(overrides.get("radius", base_radius)),
+        max_linear_speed=float(overrides["max_linear_speed"]),
+        max_angular_speed=float(overrides.get("max_angular_speed", base_angular)),
+        wheel_radius=float(overrides.get("wheel_radius", base_wheel_radius)),
+        interaxis_length=float(overrides.get("interaxis_length", base_interaxis)),
+        allow_backwards=bool(overrides.get("allow_backwards", False)),
+        max_linear_accel=float(overrides.get("max_linear_accel", base_accel)),
+        max_angular_accel=float(overrides.get("max_angular_accel", base_angular_accel)),
+        max_linear_decel=float(overrides.get("max_linear_decel", base_decel)),
+    )
 
 
 def _build_observation(
@@ -765,19 +875,40 @@ def _load_yaml_mapping(path: pathlib.Path) -> dict[str, Any]:
     return data
 
 
+def _robot_angular_cap(robot_config: Any) -> float:
+    """Return the active drive model's angular command bound.
+
+    A bicycle drive accepts a steering angle, but planners emit angular velocity.
+    Its maximum planner-facing yaw rate therefore derives from the speed cap,
+    steering bound, and wheelbase (``v * tan(steer) / wheelbase``).
+    """
+    max_angular_speed = getattr(robot_config, "max_angular_speed", None)
+    if max_angular_speed is not None:
+        return float(max_angular_speed)
+    if isinstance(robot_config, BicycleDriveSettings):
+        return float(
+            robot_config.max_velocity
+            * math.tan(robot_config.max_steer)
+            / max(robot_config.wheelbase, 1e-6)
+        )
+    return float(getattr(robot_config, "max_steer", 0.0))
+
+
 def _socnav_config(config: Any) -> SocNavPlannerConfig:
     """Build a SocNav adapter config using the active scenario speed caps."""
     return SocNavPlannerConfig(
-        max_linear_speed=float(config.robot_config.max_linear_speed),
-        max_angular_speed=float(config.robot_config.max_angular_speed),
+        max_linear_speed=_robot_speed_cap(config.robot_config),
+        max_angular_speed=_robot_angular_cap(config.robot_config),
     )
 
 
 def _planner(planner: str, config: Any, *, seed: int) -> Any:
+    speed_cap = _robot_speed_cap(config.robot_config)
+    angular_cap = _robot_angular_cap(config.robot_config)
     if planner == "goal_seek":
         return GoalSeekPlanner(
-            max_linear_speed=float(config.robot_config.max_linear_speed),
-            max_angular_speed=float(config.robot_config.max_angular_speed),
+            max_linear_speed=speed_cap,
+            max_angular_speed=angular_cap,
         )
     if planner == "baseline_social_force":
         return SocialForcePlanner(
@@ -785,8 +916,8 @@ def _planner(planner: str, config: Any, *, seed: int) -> Any:
                 action_space="unicycle",
                 mode="unicycle",
                 dt=float(config.sim_config.time_per_step_in_secs),
-                v_max=float(config.robot_config.max_linear_speed),
-                omega_max=float(config.robot_config.max_angular_speed),
+                v_max=speed_cap,
+                omega_max=angular_cap,
             ),
             seed=seed,
         )
@@ -807,9 +938,23 @@ def _planner(planner: str, config: Any, *, seed: int) -> Any:
 
 
 def _env_action(env: Any, command: Mapping[str, float]) -> np.ndarray:
-    current_linear, current_angular = env.simulator.robots[0].current_speed
+    robot = env.simulator.robots[0]
+    current_linear, current_angular = robot.current_speed
     desired_linear = float(command.get("v", command.get("linear", 0.0)))
     desired_angular = float(command.get("omega", command.get("angular", 0.0)))
+    if isinstance(robot, BicycleDriveRobot):
+        config = robot.config
+        target_speed = float(np.clip(desired_linear, config.min_velocity, config.max_velocity))
+        time_step = float(env.env_config.sim_config.time_per_step_in_secs)
+        acceleration = (target_speed - float(current_linear)) / max(time_step, 1e-6)
+        if abs(target_speed) < 1e-6:
+            steering = 0.0
+        else:
+            steering = math.atan(
+                desired_angular * config.wheelbase / max(abs(target_speed), 1e-6)
+            ) * np.sign(target_speed)
+        action = np.array([acceleration, steering], dtype=float)
+        return np.clip(action, env.action_space.low, env.action_space.high)
     return np.array(
         [desired_linear - float(current_linear), desired_angular - float(current_angular)],
         dtype=float,
@@ -900,12 +1045,21 @@ def run_episode(
     )
     success = route_success and not collision
     min_clearance = min(clearances) if clearances else None
+    speed_band = _robot_speed_cap(config.robot_config)
     return {
         "variant": variant.key,
         "axis": variant.axis,
         "variant_source_key": variant.source_key,
         "baseline_variant": variant.baseline,
         "runtime_binding": variant.runtime_binding,
+        "speed_band": {
+            "drive_model": _robot_drive_model_name(config.robot_config),
+            "peak_forward_speed_mps": speed_band,
+            # #4976 actuation envelope so stopping-distance realism scales with
+            # the swept speed band; ``None`` for drive models without braking
+            # authority.
+            "actuation_envelope": actuation_envelope_from_drive_config(config.robot_config),
+        },
         "action_latency": reset_info.get("action_latency")
         if isinstance(reset_info, Mapping)
         else None,

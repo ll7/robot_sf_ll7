@@ -111,7 +111,9 @@ def test_main_push_workflows_queue_while_pull_request_runs_supersede() -> None:
     expected = "${{ github.ref != 'refs/heads/main' }}"
     for workflow_file in (CI_WORKFLOW, CODEQL_WORKFLOW):
         workflow = yaml.safe_load(workflow_file.read_text(encoding="utf-8")) or {}
-        assert workflow["concurrency"]["cancel-in-progress"] == expected
+        concurrency = workflow.get("concurrency", {})
+        assert isinstance(concurrency, dict)
+        assert concurrency.get("cancel-in-progress") == expected
 
 
 def _workflow_files() -> list[Path]:

@@ -2,11 +2,11 @@
 
 # Issue #5149: Emergent-Phenomena Demonstration for the Released Pedestrian Substrate
 
-Plain-language summary: this bundle demonstrates whether THIS repository's pedestrian simulator (the bundled `fast-pysf` / PySocialForce Social Force model) reproduces the three canonical crowd-dynamics emergent phenomena (lane formation in bidirectional flow, doorway oscillation, and exit arching/clogging), run at the released-default speed calibration (~0.65 m/s desired) and at a literature-typical calibration (~1.3 m/s).
+Plain-language summary: this bundle demonstrates whether THIS repository's pedestrian simulator (the bundled `fast-pysf` / PySocialForce Social Force model) reproduces the three canonical crowd-dynamics emergent phenomena (lane formation in bidirectional flow, doorway oscillation, and an exit arching diagnostic), run at the released-default speed calibration (~0.65 m/s desired) and at a literature-typical calibration (~1.3 m/s).
 
 ## Provenance
 - Generated at (UTC): `2026-07-10T18:27:48Z`
-- Git head: `41e7d5e5638b37291cbbd972edf0d917364a1585`
+- Git head: `068b1cd9346887bc78fd89a508568b224cc23c86`
 - Substrate: `pysocialforce==2.0.0`
 - Generation command: `uv run python scripts/validation/build_issue_5149_emergent_phenomena_demo.py`
 - Harness module: `robot_sf/research/emergent_phenomena.py`

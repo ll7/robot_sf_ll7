@@ -15,7 +15,6 @@ import numpy as np
 import pygame
 from loguru import logger
 
-from robot_sf.common.geometry import euclid_dist
 from robot_sf.common.types import PedPose, RgbColor, RobotPose, Vec2D
 from robot_sf.nav.map_config import MapDefinition, Obstacle
 from robot_sf.nav.occupancy_grid import (
@@ -36,6 +35,8 @@ except ImportError:
     logger.warning(
         "MoviePy is not available. Video recording is disabled. Have you installed ffmpeg?",
     )
+
+from robot_sf.render.sim_view_text_overlay import SimViewTextOverlay
 
 ## Note: PYGAME_HIDE_SUPPORT_PROMPT is set before importing pygame above
 
@@ -305,6 +306,10 @@ class SimulationView:
             )
             pygame.display.set_caption(self.caption)
         self.font = pygame.font.Font(None, 36)
+        # Text-overlay collaborator (god-class split, see #4989/#4770). Held as
+        # an instance attribute and reached through delegating methods so the
+        # public/protected text-overlay surface stays on SimulationView.
+        self._text_overlay = SimViewTextOverlay(self)
         self._validate_render_modes()
 
     def _validate_render_modes(self) -> None:
@@ -1273,133 +1278,82 @@ class SimulationView:
     def _add_text(self, timestep: int, state: VisualizableSimState):
         """Render diagnostic overlay text for the current frame.
 
+        Delegates to the :class:`~robot_sf.render.sim_view_text_overlay.SimViewTextOverlay`
+        collaborator (god-class split, see #4989/#4770). Behavior is unchanged.
+        Kept as an overridable method so subclasses (e.g. ``InteractivePlayback``)
+        can extend it via ``super()._add_text(...)``.
+
         Args:
             timestep: Simulation step index shown in the overlay.
             state: Current visualizable state used to build display lines.
         """
-        info_lines = self._get_display_info_lines(state)
-        text_lines = self._build_text_lines(timestep, state, info_lines)
-        self._render_text_display(text_lines)
+        self._text_overlay._add_text(timestep, state)
 
     def _get_display_info_lines(self, state: VisualizableSimState) -> list[str]:
         """Get lines for robot/pedestrian info display based on display mode.
 
+        Delegates to the text-overlay collaborator; behavior is unchanged.
+
         Returns:
             list[str]: Info lines for robot (mode 1), pedestrian (mode 2), or empty (mode 0).
         """
-        if self.display_robot_info == 1:
-            return self._get_robot_info_lines(state)
-        elif self.display_robot_info == 2:
-            return self._get_pedestrian_info_lines(state)
-        return []
+        return self._text_overlay._get_display_info_lines(state)
 
     def _get_robot_info_lines(self, state: VisualizableSimState) -> list[str]:
         """Get robot information lines for display.
 
+        Delegates to the text-overlay collaborator; behavior is unchanged.
+
         Returns:
             list[str]: Robot pose, action, and goal info lines, or empty list if unavailable.
         """
-        if hasattr(state, "robot_action") and state.robot_action:
-            return [
-                f"RobotPose: {state.robot_pose}",
-                f"RobotAction: {state.robot_action.action if state.robot_action else None}",
-                f"RobotGoal: {state.robot_action.goal if state.robot_action else None}",
-            ]
-        return []
+        return self._text_overlay._get_robot_info_lines(state)
 
     def _get_pedestrian_info_lines(self, state: VisualizableSimState) -> list[str]:
         """Get pedestrian information lines for display.
 
+        Delegates to the text-overlay collaborator; behavior is unchanged.
+
         Returns:
             list[str]: Ego pedestrian pose, action, goal, and distance info, or empty list if unavailable.
         """
-        if self._has_pedestrian_data(state):
-            assert state.ego_ped_pose is not None, "ego_ped_pose must be set"
-            distance_to_robot = euclid_dist(state.ego_ped_pose[0], state.robot_pose[0])
-            assert state.ego_ped_action is not None, "ego_ped_action must be set"
-            return [
-                f"PedestrianPose: {state.ego_ped_pose}",
-                f"PedestrianAction: {state.ego_ped_action.action}",
-                f"PedestrianGoal: {state.ego_ped_action.goal}",
-                f"DistanceRobot: {distance_to_robot:.2f}",
-            ]
-        else:
-            self.display_robot_info = 0
-            return []
+        return self._text_overlay._get_pedestrian_info_lines(state)
 
     def _has_pedestrian_data(self, state: VisualizableSimState) -> bool:
         """Check if the state has complete pedestrian data.
 
+        Delegates to the text-overlay collaborator; behavior is unchanged.
+
         Returns:
             bool: True if state has valid ego_ped_pose and ego_ped_action.
         """
-        return bool(
-            hasattr(state, "ego_ped_pose")
-            and state.ego_ped_pose
-            and hasattr(state, "ego_ped_action")
-            and state.ego_ped_action
-        )
+        return self._text_overlay._has_pedestrian_data(state)
 
     def _build_text_lines(
         self, timestep: int, state: VisualizableSimState, info_lines: list[str]
     ) -> list[str]:
         """Build the complete list of text lines for display.
 
+        Delegates to the text-overlay collaborator; behavior is unchanged.
+
         Returns:
             list[str]: Combined list of timestep, scaling, speedup, and optional robot/ped info lines.
         """
-        # Calculate speedup factor safely
-        actual_fps = self.clock.get_fps()
-        time_per_step = getattr(state, "time_per_step_in_secs", 0.1)
-        speedup = actual_fps * time_per_step
-
-        text_lines = [
-            f"step: {timestep}",
-            f"scaling: {self.scaling}",
-        ]
-
-        # Add FPS and speedup information if not recording
-        if not self.record_video:
-            text_lines += [
-                f"target fps: {actual_fps:.1f}/{getattr(self, 'current_target_fps', 60):.1f}",
-                f"speedup: {speedup:.1f}x",
-            ]
-
-        text_lines += [
-            f"x-offset: {self.offset[0] / self.scaling:.2f}",
-            f"y-offset: {self.offset[1] / self.scaling:.2f}",
-        ]
-
-        text_lines += info_lines
-        text_lines += ["(Press h for help)"]
-        return text_lines
+        return self._text_overlay._build_text_lines(timestep, state, info_lines)
 
     def _render_text_display(self, text_lines: list[str]):
-        """Render the text display on screen."""
-        # Create a surface for the text background
-        max_width = max(self.font.size(line)[0] for line in text_lines)
-        text_height = len(text_lines) * self.font.get_linesize()
-        text_surface = pygame.Surface((max_width + 10, text_height + 10), pygame.SRCALPHA)
-        text_surface.fill(TEXT_BACKGROUND)
+        """Render the text display on screen.
 
-        for i, text in enumerate(text_lines):
-            self._render_text_line(text_surface, text, i)
-
-        self.screen.blit(text_surface, self._timestep_text_pos)
+        Delegates to the text-overlay collaborator; behavior is unchanged.
+        """
+        self._text_overlay._render_text_display(text_lines)
 
     def _render_text_line(self, surface, text: str, line_index: int):
-        """Render a single text line with outline effect."""
-        text_render = self.font.render(text, True, TEXT_COLOR)
-        text_outline = self.font.render(text, True, TEXT_OUTLINE_COLOR)
+        """Render a single text line with outline effect.
 
-        pos = (5, line_index * self.font.get_linesize() + 5)
-
-        # Draw text outline
-        for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
-            surface.blit(text_outline, (pos[0] + dx, pos[1] + dy))
-
-        # Draw main text
-        surface.blit(text_render, pos)
+        Delegates to the text-overlay collaborator; behavior is unchanged.
+        """
+        self._text_overlay._render_text_line(surface, text, line_index)
 
     def _add_minimal_hint(self):
         """Show a minimal hint when text display is disabled."""

@@ -159,7 +159,10 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
             line = raw.strip()
             if not line:
                 continue
-            record = json.loads(line)
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"{path}:{line_no} is not valid JSON") from exc
             if not isinstance(record, dict):
                 raise ValueError(f"{path}:{line_no} is not a JSON object")
             records.append(record)

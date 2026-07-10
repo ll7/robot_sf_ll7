@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* **issue #5000 goal-planner late-evasive latency instrumentation (fail-closed).** The
+  `late_evasive_predicate` (`robot_sf/benchmark/safety_predicates.py`, schema bumped
+  `safety_predicate.late_evasive.v1` → `.v2`) now emits a `latency_unavailable_reason` alongside
+  `response_latency_s`, so a `late_evasive=true` event is never a silent-empty latency. Root cause of
+  the reported 109/110 goal-planner anomaly: the goal planner almost never produces a
+  clearance-restoring deceleration after the hazard becomes visible, so `late_evasive` fires via the
+  no-action branch (`first_clearance_restoring_action_step is None`) while `response_latency_s` is
+  genuinely undefined — not a false positive and not a missing timestamp. The reason value is
+  `no_clearance_restoring_action` (dominant goal case) or `hazard_never_visible`, and `null` exactly
+  when latency is finite. The trace-surface `_late_evasive_reaction`
+  (`robot_sf/analysis_workbench/trace_failure_predicates.py`) gains a seconds-valued
+  `response_latency_s` companion to its `reaction_delay_steps`. The downstream
+  `scripts/analysis/issue_4904_latency_decel_profile.py` derivation now surfaces the reason tally
+  (`late_evasive_no_latency`, `dominant_latency_unavailable_reason`) instead of a silent gap. Claim
+  boundary: telemetry/analysis-surface correctness only — no benchmark metric semantics change, no
+  hybrid-/goal-planner effectiveness claim on the 0-latency data.
+
 ### Added
 
 * **issue #4871 CrowdNav_Prediction_AttnGraph external learned-baseline feasibility smoke.** New

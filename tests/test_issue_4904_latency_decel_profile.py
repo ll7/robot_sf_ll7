@@ -122,6 +122,44 @@ class TestExtractProfiles:
         assert p["late_evasive_true"] == 5
         assert p["latency_populated"] == 0
         assert len(p["latencies"]) == 0
+        # Fail closed (issue #5000): late_evasive events with no finite latency are tallied by
+        # reason. Legacy records without a producer reason fall back to "unspecified".
+        assert sum(p["latency_unavailable_reasons"].values()) == 5
+        assert p["latency_unavailable_reasons"]["unspecified"] == 5
+
+    def test_latency_unavailable_reason_is_surfaced(self):
+        episodes = [
+            _make_episode(
+                "goal",
+                exposure_steps=10,
+                late_evasive=True,
+                response_latency_s=None,
+                required_deceleration_m_s2=0.001,
+                seed=i,
+            )
+            for i in range(3)
+        ]
+        for ep in episodes:
+            ep["safety_predicates"]["late_evasive_predicate"]["fields"][
+                "latency_unavailable_reason"
+            ] = "no_clearance_restoring_action"
+        profiles = extract_profiles(episodes)
+        reasons = profiles["goal"]["latency_unavailable_reasons"]
+        assert reasons["no_clearance_restoring_action"] == 3
+        assert "unspecified" not in reasons
+
+    def test_finite_latency_records_no_reason(self):
+        episodes = [
+            _make_episode(
+                "p",
+                exposure_steps=10,
+                late_evasive=True,
+                response_latency_s=2.0,
+                required_deceleration_m_s2=0.5,
+            )
+        ]
+        profiles = extract_profiles(episodes)
+        assert sum(profiles["p"]["latency_unavailable_reasons"].values()) == 0
 
     def test_filters_non_finite_values(self):
         # json.loads silently accepts NaN/Infinity tokens; they must be treated as
@@ -228,6 +266,12 @@ class TestWritePercentileCsv:
         assert goal["late_evasive_rate"] == "1.0"
         assert goal["latency_populated_rate"] == "0.0"
         assert goal["anomaly_gap"] == "1.0"  # 1.0 - 0.0
+        # Fail-closed columns (issue #5000): the silent 0-latency gap is now machine-readable.
+        assert goal["late_evasive_no_latency"] == "10"
+        assert goal["dominant_latency_unavailable_reason"] == "unspecified"
+        # alpha's single late_evasive event carried a finite latency, so nothing is unexplained.
+        assert by_planner["alpha"]["late_evasive_no_latency"] == "0"
+        assert by_planner["alpha"]["dominant_latency_unavailable_reason"] == ""
 
         alpha = by_planner["alpha"]
         assert alpha["exposure_episodes"] == "2"

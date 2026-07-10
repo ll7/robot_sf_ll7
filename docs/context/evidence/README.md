@@ -122,6 +122,13 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_5088_braking_authority_sensitivity_smoke/`: targeted CPU smoke comparing
+  0.25 and 2.0 m/s² braking authority for the baseline-safe Social Force planner on
+  `classic_cross_trap_high` at fixed seeds 101–103. The compact report records an
+  observed clearance/TTC sensitivity signal in one seed, unchanged near-miss counts,
+  one first-step collision with unavailable TTC per arm, adapter-mode provenance, raw
+  JSONL checksums, and the explicit no-safety/no-paper-claim boundary.
+
 - `issue_2910_publication_suite_certification_report/`: CPU-only integration
   report for Issue #2910 v0.1 publication-suite certification handling. Consumes
   the tracked `scenario_cert.v1` summary and #3294 release claim matrix, keeps

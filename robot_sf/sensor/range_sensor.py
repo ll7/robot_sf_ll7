@@ -151,7 +151,6 @@ class LidarScannerSettings:
     angle_opening: Range = field(init=False)
     scan_noise_array: np.ndarray = field(init=False)
     ray_offsets: np.ndarray = field(init=False)
-    _ray_angles_buffer: np.ndarray = field(init=False)
 
     def __post_init__(self):
         """Validate scanner settings and derive derived fields.
@@ -177,7 +176,6 @@ class LidarScannerSettings:
         scan_noise_arr = np.array(self.scan_noise, dtype=np.float64)
         scan_noise_arr.flags.writeable = False
         self.scan_noise_array = scan_noise_arr
-        self._ray_angles_buffer = np.zeros(self.num_rays, dtype=np.float64)
 
     @classmethod
     def ego_pedestrian_lidar(cls) -> "LidarScannerSettings":
@@ -546,6 +544,7 @@ class _LidarBatchBinding:
 
 
 _LIDAR_BATCH_CONTEXT = local()
+_LIDAR_RANGES_ONLY_CONTEXT = local()
 
 
 @contextmanager
@@ -822,10 +821,10 @@ def lidar_ray_scan_ranges_only(
 ) -> np.ndarray:
     """Simulate a radial LiDAR scan returning only ranges, no ray angles.
 
-    This lightweight variant of :func:`lidar_ray_scan` reuses a private work
-    buffer on the settings object to avoid allocating a new ray_angles array
-    on every call. Intended for hot env-internal closures that discard the
-    directional information.
+    This lightweight variant of :func:`lidar_ray_scan` reuses a thread-local
+    work buffer to avoid allocating a new ray_angles array on every call.
+    The buffer is isolated per thread so parallel environment observations
+    cannot overwrite each other's angles.
 
     Args:
         pose: ``((x, y), heading)`` scanner pose in world coordinates and radians.
@@ -836,7 +835,11 @@ def lidar_ray_scan_ranges_only(
     Returns:
         numpy.ndarray: Per-ray distances with shape ``(settings.num_rays,)``.
     """
-    ranges, _ray_angles = _lidar_ray_scan_impl(pose, occ, settings, settings._ray_angles_buffer)
+    ray_angles = getattr(_LIDAR_RANGES_ONLY_CONTEXT, "ray_angles", None)
+    if ray_angles is None or ray_angles.shape != (settings.num_rays,):
+        ray_angles = np.empty(settings.num_rays, dtype=np.float64)
+        _LIDAR_RANGES_ONLY_CONTEXT.ray_angles = ray_angles
+    ranges, _ray_angles = _lidar_ray_scan_impl(pose, occ, settings, ray_angles)
     return ranges
 
 

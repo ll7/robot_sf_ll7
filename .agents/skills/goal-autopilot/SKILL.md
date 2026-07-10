@@ -421,7 +421,10 @@ reviewed the output, integrated any edits, run the required validation, updated 
 recorded cleanup.
 
 For delegated queue scouts, keep the scout output in the ledger as route evidence only until the
-main agent verifies issue state in `ll7/robot_sf_ll7` with local `gh issue view` or REST evidence.
+main agent verifies issue state in `ll7/robot_sf_ll7` with the canonical complete-thread read
+`uv run python scripts/dev/gh_issue_rest.py thread <number> --repo ll7/robot_sf_ll7` (issue #5148:
+plain `gh issue view --comments` fails on some GitHub CLI versions because it requests the
+deprecated classic-Projects field) or equivalent REST evidence.
 Do not claim or branch from scout text alone; stale state, wrong repo-owner URLs, missing recent
 comments, and duplicate PR coverage are known failure modes.
 

@@ -31,7 +31,10 @@ writes when available.
    - Preserve the `## Archetype Metadata` YAML block from
     `docs/context/issue_1512_issue_archetypes.md`; repair or flag missing keys and invalid
     `archetype` / `evidence_tier` values conservatively instead of inventing replacements.
-2. Load issue body and metadata with GitHub MCP / GitHub app tools when available, or `gh issue view`.
+2. Load issue body and metadata with GitHub MCP / GitHub app tools when available, or the canonical
+   complete-thread read `uv run python scripts/dev/gh_issue_rest.py thread <number> --repo
+   ll7/robot_sf_ll7` (issue #5148: plain `gh issue view --comments` fails on some GitHub CLI
+   versions because it requests the deprecated classic-Projects field).
 3. Compare required sections (problem statement, scope/non-goals, estimates, risks, acceptance, validation, metadata).
 4. If gaps are limited and obvious:
    - generate repaired body with missing sections,

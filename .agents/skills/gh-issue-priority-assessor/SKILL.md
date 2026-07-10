@@ -28,7 +28,10 @@ inputs, not as hard authority.
    - `docs/project_prioritization.md` (includes the **Research-Leverage Interpretation** and the
      **verify-before-scoring gate** — apply both).
    - `docs/context/issue_713_batch_first_issue_workflow.md` for batch-first Project #5 writes.
-   - issue body/metadata from GitHub MCP / GitHub app tools or `gh issue view`.
+   - issue body/metadata from GitHub MCP / GitHub app tools or the canonical complete-thread read
+     `uv run python scripts/dev/gh_issue_rest.py thread <number> --repo ll7/robot_sf_ll7`
+     (issue #5148: plain `gh issue view --comments` fails on some GitHub CLI versions because it
+     requests the deprecated classic-Projects field).
    - current Project #5 field values from MCP or `gh project item-list`.
 2. Run the **verify-before-scoring gate**: confirm the issue is still open work (no covering/merged
    PR, no tooling already landed under another issue). If it is already done or superseded, route to

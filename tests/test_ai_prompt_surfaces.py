@@ -15,6 +15,19 @@ COPILOT_INSTRUCTIONS = ROOT / ".github" / "copilot-instructions.md"
 ADAPTATION_NOTE = ROOT / "docs" / "ai" / "awesome_copilot_adaptation.md"
 CODING_AGENTS_NOTE = ROOT / "docs" / "context" / "issue_728_coding_agents_compatibility.md"
 AGENTS_MD = ROOT / "AGENTS.md"
+GH_ISSUE_REST_HELPER = ROOT / "scripts" / "dev" / "gh_issue_rest.py"
+# Ready-queue skills that instruct reading a complete live issue thread (body + comments)
+# before claiming, branching, clarifying, prioritizing, or auditing an issue. Issue #5148
+# requires these surfaces to point at the canonical REST-fallback helper instead of the
+# broken raw `gh issue view --comments` first-step command.
+ISSUE_THREAD_READ_SKILLS = (
+    "gh-issue-autopilot",
+    "gh-issue-clarifier",
+    "gh-issue-priority-assessor",
+    "gh-issue-template-auditor",
+    "goal-issue-implementation",
+    "goal-autopilot",
+)
 
 
 def test_ai_skill_files_exist() -> None:
@@ -182,3 +195,40 @@ def test_coding_agents_compatibility_note_is_discoverable() -> None:
 
     dev_guide_text = DEV_GUIDE.read_text(encoding="utf-8")
     assert note_ref in dev_guide_text, f"{note_ref!r} not linked from docs/dev_guide.md"
+
+
+def test_ready_queue_skills_use_issue_thread_rest_fallback() -> None:
+    """Ready-queue skills must read live issue threads via the canonical REST fallback.
+
+    Issue #5148: ``gh issue view <number> --comments`` (and ``--json ...comments``) fails on
+    some GitHub CLI versions because it requests the deprecated classic-Projects GraphQL
+    field ``repository.issue.projectCards`` and exits before returning content. Skills that
+    instruct reading a complete live issue thread before claiming, branching, clarifying,
+    prioritizing, or auditing an issue must therefore point at the shared helper
+    ``scripts/dev/gh_issue_rest.py thread <number>`` (native-first with a targeted REST
+    fallback) instead of mandating the broken raw command as the first-step read.
+    """
+
+    assert GH_ISSUE_REST_HELPER.exists(), (
+        "canonical issue-thread helper missing: scripts/dev/gh_issue_rest.py"
+    )
+
+    helper_text = GH_ISSUE_REST_HELPER.read_text(encoding="utf-8")
+    # The helper must still own the targeted fallback for the known GraphQL failure.
+    assert "repository.issue.projectCards" in helper_text, (
+        "gh_issue_rest.py no longer documents the projectCards fallback contract"
+    )
+    assert "def read_complete_issue_thread" in helper_text, (
+        "gh_issue_rest.py no longer exposes read_complete_issue_thread"
+    )
+
+    canonical_ref = "scripts/dev/gh_issue_rest.py"
+    for skill_name in ISSUE_THREAD_READ_SKILLS:
+        skill_path = SKILL_DIR / skill_name / "SKILL.md"
+        assert skill_path.exists(), f"missing ready-queue skill: {skill_path}"
+        text = skill_path.read_text(encoding="utf-8")
+        assert canonical_ref in text, (
+            f"ready-queue skill {skill_name} does not reference the canonical issue-thread "
+            f"helper {canonical_ref} (issue #5148); live-issue review is unreliable on hosts "
+            f"where `gh issue view --comments` hits the deprecated projectCards field"
+        )

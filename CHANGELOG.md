@@ -48,14 +48,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5039 compat-matrix promotion readiness gate.** New
+  `scripts/ci/check_compat_matrix_promotion_readiness.py` turns "is the advisory
+  `compat-matrix` job proven enough to promote to a required CI gate?" into a machine-checkable,
+  fail-closed decision. It reads
+  `docs/context/issue_5039_compat_matrix_promotion_manifest.yaml` (recorded hosted-run evidence
+  plus the objective gate: all four `ubuntu`/`macos` × Python 3.11/3.13 cells green ≥3 times each
+  within the 30-minute budget) and reports `ready`/`blocked`; `--require-ready` exits non-zero
+  until the evidence exists. Current state is `blocked`: the advisory matrix (PR #5037) is now on
+  `main`, but no eligible hosted evidence has been recorded in the manifest — so promotion is
+  deferred to an evidence-carrying follow-up. The absolute coverage floor is tracked separately in
+  issue #5071. Covered by `tests/test_compat_matrix_promotion_readiness.py`.
+  Claim boundary: readiness bookkeeping only; no CI gate is changed and no benchmark/paper claim
+  is asserted.
 * **issue #5034 control-action-latency sweep fail-closed preflight + blocker packet.** New
   `robot_sf/benchmark/control_action_latency_preflight.py` (`check_control_action_latency_axis`) and
   CLI `scripts/benchmark/preflight_control_action_latency_sweep.py` guard the issue-#5034 sweep: they
   fail closed unless the fidelity-sensitivity study config carries a `control_action_latency` axis
   whose variants cover the required action-latency steps `[0, 1, 3]` (the 0/100/300 ms-equivalent
-  delays). On current `main` the axis is absent (it is wired by unmerged PR #5026, parent issue
-  #4977), so the preflight reports `decision: blocked` and names the exact unmet prerequisite; it
-  flips to `ready` automatically once #5026 lands. Durable fail-closed decision packet at
+  delays). Its durable packet records the historical blocked result before PR #5026 landed the axis;
+  the same preflight now returns `ready` on `main`. Durable fail-closed decision packet at
   `docs/context/evidence/issue_5034_control_action_latency_sweep_blocked_2026-07-10/`. Claim boundary:
   launch/readiness preflight only — not benchmark evidence, not paper-facing; no campaign run and no
   Slurm/GPU submission were performed.
@@ -83,6 +95,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   before admitting a second gate, and a docs note at
   `docs/dev/agents/pr_gate_scope_contract.md`. Pure arithmetic over gate descriptors — no GitHub
   calls, no benchmark/metric semantics. Tests in `tests/tools/test_pr_gate_scopes.py`.
+* **issue #4978 scenario flakiness audit — exact-repeat determinism + per-cell outcome-stability.**
+  New `robot_sf/benchmark/scenario_flakiness.py` (`compute_flakiness_audit`, schema
+  `scenario_flakiness.v1`) and a `robot_sf_bench flakiness-audit` CLI subcommand measure two forms of
+  outcome instability from existing episode JSONL: (1) exact-repeat determinism — when a
+  `(scenario, planner, seed)` cell is executed more than once, whether repeats share the same binary
+  outcome (a `False` verdict is a reproducibility bug the audit doubles as a detector for); and
+  (2) per-cell outcome stability — the fraction of seeds in a `(scenario, planner)` cell that agree
+  with the majority outcome, flagging `knife_edge` cells below a configurable threshold (default
+  0.8). The audit is advisory and read-only: it emits a schema-versioned report and does not change
+  rankings, campaign summaries, or metric semantics. Fail-closed by design — empty input raises,
+  cells below `min_seeds` are reported as not assessable rather than counted as stable, and
+  determinism is reported as `null` (unknown) when no exact-repeat data exists. Claim boundary:
+  new diagnostic capability validated on synthetic and CPU fixtures; no benchmark campaign run.
 * **issue #3574 realized-distribution audit for heterogeneous-population traces.**
   `robot_sf/benchmark/heterogeneous_population_metrics.py` gains `realized_distribution_audit` and
   `summarize_distribution` (plus a `RealizedDistributionSpec`), covering DoD item 5: configured

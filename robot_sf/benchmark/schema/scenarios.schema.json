@@ -110,7 +110,14 @@
                 "minLength": 1
             },
             "simulation_config": {
-                "type": "object"
+                "type": "object",
+                "properties": {
+                    "ped_density": {
+                        "description": "Pedestrian spawn density, in pedestrians per square meter of SPAWNABLE route/zone (sidewalk) area; NOT whole-map area. The spawn count is ceil(total_sidewalks_area * ped_density). Classic archetypes use 0.02 (low) / 0.05 (medium) / 0.08 (high). The value 0.0 is a marker-controlled placeholder: with metadata.spawn_mode == 'markers', pedestrians come from fixed map/config markers and 0.0 does NOT mean an empty scene. Must be >= 0.",
+                        "type": "number",
+                        "minimum": 0
+                    }
+                }
             },
             "robot_config": {
                 "type": "object"

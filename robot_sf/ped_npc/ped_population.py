@@ -115,7 +115,12 @@ class PedSpawnConfig:
     """Configuration for pedestrian spawning in a simulation environment.
 
     Attributes:
-        peds_per_area_m2: The density of pedestrians per square meter area.
+        peds_per_area_m2: Pedestrian spawn density, in pedestrians per square
+            meter of SPAWNABLE route/zone (sidewalk) area; NOT whole-map area.
+            The runtime spawn count is
+            ``ceil(total_sidewalks_area * peds_per_area_m2)``. The value ``0.0``
+            is a marker-controlled placeholder (with marker spawning, pedestrians
+            come from fixed markers), not an empty scene.
         max_group_members: Maximum number of members allowed in a pedestrian group.
         group_member_probs: A list representing the probability distribution for the
                             number of members in a group. Each index corresponds to

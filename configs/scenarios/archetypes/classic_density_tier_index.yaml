@@ -17,9 +17,14 @@
 #   from them or omits a config/tier (missing-coverage guard).
 #
 # `density` semantics — read this before counting the matrix
+#   `simulation_config.ped_density` unit: pedestrians per m^2 of SPAWNABLE
+#   route/zone (sidewalk) area, NOT whole-map area and NOT per route meter.
+#   Spawn count = ceil(total_sidewalks_area * ped_density)
+#   (robot_sf/ped_npc/ped_population.py). Classic band: 0.02/0.05/0.08.
 #   `simulation_config.ped_density` is NOT uniform in meaning across configs:
 #     * route_density               -> `ped_density` is a real route-spawn
-#                                       pedestrian density (peds/m of route area).
+#                                       pedestrian density (peds per m^2 of
+#                                       spawnable sidewalk area).
 #     * markers                     -> `ped_density: 0.0` is a PLACEHOLDER, not
 #                                       "no pedestrians". Pedestrians are placed
 #                                       from fixed markers (SVG `single_ped`

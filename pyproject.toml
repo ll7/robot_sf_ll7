@@ -459,7 +459,7 @@ max-statements = 60
 # helper_catalog.py keeps BLE001: its wrappers intentionally convert any failure to RuntimeError.
 "robot_sf/benchmark/camera_ready_campaign.py" = ["BLE001"]
 "robot_sf/benchmark/camera_ready/campaign.py" = ["BLE001"]
-"robot_sf/benchmark/cli.py" = ["BLE001", "T201"]
+"robot_sf/benchmark/cli.py" = ["T201"]
 "robot_sf/benchmark/doctor.py" = ["BLE001"]
 "robot_sf/benchmark/failure_extractor.py" = ["BLE001"]
 "robot_sf/benchmark/full_classic/render_sim_view.py" = ["C901"]
@@ -479,7 +479,7 @@ max-statements = 60
 # Issue #4880 (commit 3): viz/figure/full_classic group; BLE001 removed for figure_qa,
 # plots, full_classic/{orchestrator,plots,render_sim_view(C901 kept),validation,visual_deps}.
 # camera_ready/campaign.py keeps BLE001: its full-benchmark-run handler is campaign fault isolation.
-# cli.py remains a future slice (47 CLI-boundary handlers).
+# Issue #4880: cli.py is fully narrowed; BLE001 remains enabled as a ratchet.
 # Issue #4859: visualization.py worst sites fixed, BLE001 removed to enforce lint guard.
 "robot_sf/adversarial/**/*.py" = ["D417", "DOC201", "TC001", "TC003"]
 "robot_sf/adversarial/config.py" = ["C901", "PLR0913"]

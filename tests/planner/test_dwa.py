@@ -90,3 +90,33 @@ def test_dwa_config_builder_applies_explicit_acceleration_parameters() -> None:
     assert config.max_angular_acceleration == pytest.approx(0.9)
     assert config.linear_samples == 4
     assert config.angular_samples == 6
+
+
+def test_dwa_dynamic_window_preserves_reachability_outside_speed_limits() -> None:
+    """Out-of-range current commands collapse to the nearest dynamically reachable value."""
+    planner = DWAPlannerAdapter(
+        DWAPlannerConfig(
+            max_linear_speed=1.0,
+            max_angular_speed=1.0,
+            max_linear_acceleration=0.5,
+            max_angular_acceleration=1.0,
+            control_dt=0.2,
+        )
+    )
+
+    assert planner._dynamic_window(1.5, -2.0) == pytest.approx((1.4, 1.4, -1.8, -1.8))
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"max_linear_speed": float("nan")},
+        {"max_angular_acceleration": -0.1},
+        {"control_dt": 0.0},
+        {"prediction_steps": 0},
+    ],
+)
+def test_dwa_rejects_invalid_runtime_configuration(overrides: dict[str, float]) -> None:
+    """The experimental planner fails closed before it can emit invalid commands."""
+    with pytest.raises(ValueError):
+        DWAPlannerConfig(**overrides)

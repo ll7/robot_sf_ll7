@@ -9,6 +9,7 @@ upstream-wrapper claim and not benchmark-performance evidence by itself.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 from typing import Any
 
 import numpy as np
@@ -42,6 +43,49 @@ class DWAPlannerConfig:
     velocity_weight: float = 0.25
     progress_weight: float = 1.0
 
+    def __post_init__(self) -> None:
+        """Reject invalid dynamics and rollout parameters before planning begins."""
+        numeric_values = {
+            "max_linear_speed": self.max_linear_speed,
+            "max_angular_speed": self.max_angular_speed,
+            "max_linear_acceleration": self.max_linear_acceleration,
+            "max_angular_acceleration": self.max_angular_acceleration,
+            "control_dt": self.control_dt,
+            "prediction_dt": self.prediction_dt,
+            "goal_tolerance": self.goal_tolerance,
+            "robot_radius": self.robot_radius,
+            "pedestrian_radius": self.pedestrian_radius,
+            "safety_margin": self.safety_margin,
+            "clearance_distance": self.clearance_distance,
+            "obstacle_threshold": self.obstacle_threshold,
+            "heading_weight": self.heading_weight,
+            "clearance_weight": self.clearance_weight,
+            "velocity_weight": self.velocity_weight,
+            "progress_weight": self.progress_weight,
+        }
+        invalid = [name for name, value in numeric_values.items() if not isfinite(float(value))]
+        if invalid:
+            raise ValueError(f"DWA configuration values must be finite: {', '.join(invalid)}")
+        positive = ("max_linear_speed", "max_angular_speed", "control_dt", "prediction_dt")
+        if any(float(numeric_values[name]) <= 0.0 for name in positive):
+            raise ValueError(
+                f"DWA configuration values must be greater than zero: {', '.join(positive)}"
+            )
+        nonnegative = set(numeric_values) - set(positive)
+        if any(float(numeric_values[name]) < 0.0 for name in nonnegative):
+            raise ValueError("DWA configuration values must not be negative")
+        if not 0.0 <= float(self.obstacle_threshold) <= 1.0:
+            raise ValueError("obstacle_threshold must be in [0, 1]")
+        if any(
+            int(value) < 1
+            for value in (self.prediction_steps, self.linear_samples, self.angular_samples)
+        ):
+            raise ValueError(
+                "prediction_steps, linear_samples, and angular_samples must be at least one"
+            )
+        if int(self.obstacle_search_cells) < 1:
+            raise ValueError("obstacle_search_cells must be at least one")
+
 
 class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
     """Classical Dynamic Window Approach planner producing bounded ``(v, omega)`` actions."""
@@ -55,6 +99,9 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
     ) -> tuple[np.ndarray, float, float, float, np.ndarray, np.ndarray]:
         """Return robot pose/command state, active goal, and pedestrian positions."""
         robot, goal, pedestrians = self._socnav_fields(observation)
+        robot = robot or {}
+        goal = goal or {}
+        pedestrians = pedestrians or {}
         robot_pos = self._as_1d_float(robot.get("position", [0.0, 0.0]), pad=2)[:2]
         heading = float(self._as_1d_float(robot.get("heading", [0.0]), pad=1)[0])
         linear_speed = float(self._as_1d_float(robot.get("speed", [0.0]), pad=1)[0])
@@ -81,16 +128,29 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         return robot_pos, heading, linear_speed, angular_speed, active_goal, raw_positions[:count]
 
-    def _dynamic_window(self, linear_speed: float, angular_speed: float) -> tuple[float, ...]:
+    def _dynamic_window(
+        self, linear_speed: float, angular_speed: float
+    ) -> tuple[float, float, float, float]:
         """Return reachable linear/angular bounds for the next control period."""
         dt = max(float(self.config.control_dt), 0.0)
         v_delta = max(float(self.config.max_linear_acceleration), 0.0) * dt
         w_delta = max(float(self.config.max_angular_acceleration), 0.0) * dt
+        v_reach_min, v_reach_max = linear_speed - v_delta, linear_speed + v_delta
+        w_reach_min, w_reach_max = angular_speed - w_delta, angular_speed + w_delta
+        v_min, v_max = _reachable_interval(
+            v_reach_min, v_reach_max, 0.0, self.config.max_linear_speed
+        )
+        w_min, w_max = _reachable_interval(
+            w_reach_min,
+            w_reach_max,
+            -self.config.max_angular_speed,
+            self.config.max_angular_speed,
+        )
         return (
-            max(0.0, linear_speed - v_delta),
-            min(float(self.config.max_linear_speed), linear_speed + v_delta),
-            max(-float(self.config.max_angular_speed), angular_speed - w_delta),
-            min(float(self.config.max_angular_speed), angular_speed + w_delta),
+            v_min,
+            v_max,
+            w_min,
+            w_max,
         )
 
     def _min_obstacle_clearance(self, point: np.ndarray, observation: dict[str, Any]) -> float:
@@ -107,6 +167,8 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             return 0.0
         row, col = rc
         channel_grid = np.asarray(grid[channel], dtype=float)
+        if not (0 <= row < channel_grid.shape[0] and 0 <= col < channel_grid.shape[1]):
+            return 0.0
         if channel_grid[row, col] >= float(self.config.obstacle_threshold):
             return 0.0
         radius = max(int(self.config.obstacle_search_cells), 1)
@@ -187,12 +249,8 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         if np.linalg.norm(goal - robot_pos) <= float(self.config.goal_tolerance):
             return 0.0, 0.0
         v_min, v_max, w_min, w_max = self._dynamic_window(linear_speed, angular_speed)
-        linear_candidates = np.linspace(
-            v_min, max(v_min, v_max), max(int(self.config.linear_samples), 1)
-        )
-        angular_candidates = np.linspace(
-            w_min, max(w_min, w_max), max(int(self.config.angular_samples), 1)
-        )
+        linear_candidates = np.linspace(v_min, v_max, int(self.config.linear_samples))
+        angular_candidates = np.linspace(w_min, w_max, int(self.config.angular_samples))
         best_score = float("-inf")
         best_command = (0.0, 0.0)
         for linear in linear_candidates:
@@ -209,6 +267,21 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
                 if score > best_score:
                     best_score, best_command = score, command
         return best_command
+
+
+def _reachable_interval(
+    reachable_min: float, reachable_max: float, limit_min: float, limit_max: float
+) -> tuple[float, float]:
+    """Intersect reachable and configured ranges, preserving acceleration reachability when disjoint.
+
+    Returns:
+        Lower and upper candidate bounds, equal when only the nearest reachable value is valid.
+    """
+    if reachable_max < limit_min:
+        return reachable_max, reachable_max
+    if reachable_min > limit_max:
+        return reachable_min, reachable_min
+    return max(reachable_min, limit_min), min(reachable_max, limit_max)
 
 
 def build_dwa_config(cfg: dict[str, Any] | None) -> DWAPlannerConfig:

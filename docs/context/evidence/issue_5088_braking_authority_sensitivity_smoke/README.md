@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#5088, 2026-07-10) - NEEDS-REVIEW -->
+
 # Issue #5088 Braking-Authority Sensitivity Smoke
 
 - Status: `signal_activated`
@@ -27,3 +29,5 @@ DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/tools/run_br
 ```
 
 Replace `<fresh-artifact-dir>` with an empty local scratch directory. Raw episode JSONL remains disposable and untracked; `report.json` plus this README are the tracked compact evidence. Fallback/degraded execution is excluded, and this smoke makes no calibrated safety or paper-facing claim.
+
+<!-- /AI-GENERATED -->

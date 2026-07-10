@@ -52,3 +52,27 @@ def test_occlusion_share_remains_numeric_when_visibility_is_observed() -> None:
 
     assert result.loc[0, "occlusion_measurement"] == "available"
     assert result.loc[0, "occluded_share"] == 0.5
+
+
+def test_occlusion_share_ignores_missing_records_when_visibility_is_mixed() -> None:
+    """An observed occlusion share uses only records with a visibility observation."""
+    frame = pd.DataFrame(
+        [
+            {
+                "planner": "orca",
+                "actual_minimum_separation_m": 0.4,
+                "was_occluded_before_min": True,
+            },
+            {
+                "planner": "orca",
+                "actual_minimum_separation_m": 0.3,
+                "was_occluded_before_min": None,
+            },
+        ]
+    )
+
+    result = profile.compute_occlusion_share(frame)
+
+    assert result.loc[0, "occlusion_measurement"] == "available"
+    assert result.loc[0, "occluded_share"] == 1.0
+    assert result.loc[0, "occluded_none"] == 1

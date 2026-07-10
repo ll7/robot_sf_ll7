@@ -145,7 +145,8 @@ def compute_occlusion_share(df: pd.DataFrame) -> pd.DataFrame:
     for planner, group in valid.groupby("planner"):
         n = len(group)
         occluded_none = group["was_occluded_before_min"].isna().sum()
-        measurement_available = occluded_none < n
+        observed_count = n - occluded_none
+        measurement_available = observed_count > 0
         occluded_true = group["was_occluded_before_min"].fillna(False).astype(bool).sum()
         result.append(
             {
@@ -153,7 +154,7 @@ def compute_occlusion_share(df: pd.DataFrame) -> pd.DataFrame:
                 "N": n,
                 "occluded_true": int(occluded_true),
                 "occlusion_measurement": "available" if measurement_available else "unavailable",
-                "occluded_share": occluded_true / n if measurement_available else None,
+                "occluded_share": occluded_true / observed_count if measurement_available else None,
                 "occluded_none": int(occluded_none),
             }
         )

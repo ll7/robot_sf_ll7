@@ -59,3 +59,15 @@ claims, run campaigns, submit Slurm or graphics processing unit jobs, or copy ra
 
 New compact artifacts, when the fail-closed preflight is ready, use the
 `snqi_weight_set_h600_*` prefix and are checksummed in `SHA256SUMS`.
+
+## Issue #5138 per-family + per-cell h600 breakdown export
+
+Per-scenario-family and per-cell success / near-miss / collision / SNQI breakdowns for the two retained h600 campaign legs (jobs 13268 `confirm` and 13273 `extended_roster`), promoted into this bundle so the family-difficulty question is answerable from the exported artifacts. The per-family table uses the release campaign's family-breakdown schema (with `run_label`/`job_id`/`scenario_matrix_hash` prepended); the per-cell table adds `scenario_id` (the cell granularity). Every row carries `episodes` (the per-cell `n`) so any cell's sample size is computable.
+
+- `h600_scenario_family_breakdown.csv` / `.md`: per-family breakdown, release-schema columns, both legs concatenated.
+- `h600_scenario_cell_breakdown.csv` / `.md`: per-cell (scenario_id) breakdown, both legs concatenated.
+- `h600_universally_hard_families_summary.csv` / `.md`: bottleneck, cross-trap, head-on-corridor per (leg, planner, family) with a `zero_completion` flag.
+
+None of the universally-hard families (bottleneck, cross-trap, head-on-corridor) stays at zero completion across every planner arm at h600: at least one arm clears each family. This weakens a strict 'universally impossible' reading of the family-difficulty finding; the per-cell table shows which speed/context cells remain hard. All values are diagnostic-only, three-seed h600 evidence.
+
+Claim boundary: diagnostic-only, reporting over existing campaign bundles; no new compute. Collision-count columns are republished verbatim from the h600 campaign breakdowns and are not paper/dissertation evidence (release 0.0.2 collision-count provenance withdrawn by issue #3482). The h600 legs are three-seed campaigns, so per-cell `n` is small (typically 3) and per-cell success is diagnostic, not a stable estimate. `jerk_mean` is absent from the h600 campaign breakdowns and is emitted as an empty field.

@@ -1,0 +1,55 @@
+## h600 universally-hard families summary (issue #5138)
+
+Bottleneck, cross-trap, and head-on-corridor per (leg, planner, family). `zero_completion` = `yes` when a planner arm with episodes>0 reports success_mean of 0.0. This is the table that answers whether the universally-hard families stay at zero completion at h600. Diagnostic-only, three-seed evidence.
+
+| run_label | job_id | scenario_matrix_hash | planner_key | algo | scenario_family | episodes | success_mean | near_misses_mean | collisions_mean | zero_completion |
+|---|---|---|---|---|---|---|---|---|---|---|
+| confirm | 13268 | c10df617a87c | goal | goal | bottleneck | 12 | 0.1667 | 14.4167 | 0.8333 | no |
+| confirm | 13268 | c10df617a87c | goal | goal | cross_trap | 9 | 0.0000 | 7.3333 | 1.0000 | yes |
+| confirm | 13268 | c10df617a87c | goal | goal | head_on_corridor | 6 | 0.3333 | 6.8333 | 0.6667 | no |
+| confirm | 13268 | c10df617a87c | orca | orca | bottleneck | 12 | 0.5000 | 25.2500 | 0.5000 | no |
+| confirm | 13268 | c10df617a87c | orca | orca | cross_trap | 9 | 0.4444 | 7.2222 | 0.5556 | no |
+| confirm | 13268 | c10df617a87c | orca | orca | head_on_corridor | 6 | 1.0000 | 5.3333 | 0.0000 | no |
+| confirm | 13268 | c10df617a87c | ppo | ppo | bottleneck | 12 | 0.2500 | 6.5000 | 0.7500 | no |
+| confirm | 13268 | c10df617a87c | ppo | ppo | cross_trap | 9 | 0.6667 | 9.8889 | 0.3333 | no |
+| confirm | 13268 | c10df617a87c | ppo | ppo | head_on_corridor | 6 | 1.0000 | 2.1667 | 0.0000 | no |
+| confirm | 13268 | c10df617a87c | prediction_planner | prediction_planner | bottleneck | 12 | 0.4167 | 30.6667 | 0.5833 | no |
+| confirm | 13268 | c10df617a87c | prediction_planner | prediction_planner | cross_trap | 9 | 0.2222 | 35.1111 | 0.7778 | no |
+| confirm | 13268 | c10df617a87c | prediction_planner | prediction_planner | head_on_corridor | 6 | 0.5000 | 5.6667 | 0.5000 | no |
+| confirm | 13268 | c10df617a87c | sacadrl | sacadrl | bottleneck | 12 | 0.2500 | 0.0000 | 0.7500 | no |
+| confirm | 13268 | c10df617a87c | sacadrl | sacadrl | cross_trap | 9 | 0.2222 | 5.5556 | 0.7778 | no |
+| confirm | 13268 | c10df617a87c | sacadrl | sacadrl | head_on_corridor | 6 | 0.5000 | 9.0000 | 0.5000 | no |
+| confirm | 13268 | c10df617a87c | social_force | social_force | bottleneck | 12 | 0.0000 | 11.9167 | 0.5000 | yes |
+| confirm | 13268 | c10df617a87c | social_force | social_force | cross_trap | 9 | 0.0000 | 16.4444 | 0.5556 | yes |
+| confirm | 13268 | c10df617a87c | social_force | social_force | head_on_corridor | 6 | 0.3333 | 10.1667 | 0.6667 | no |
+| confirm | 13268 | c10df617a87c | socnav_sampling | socnav_sampling | bottleneck | 12 | 0.1667 | 3.5833 | 0.8333 | no |
+| confirm | 13268 | c10df617a87c | socnav_sampling | socnav_sampling | cross_trap | 9 | 0.2222 | 2.0000 | 0.7778 | no |
+| confirm | 13268 | c10df617a87c | socnav_sampling | socnav_sampling | head_on_corridor | 6 | 0.5000 | 3.1667 | 0.5000 | no |
+| extended_roster | 13273 | c10df617a87c | goal | goal | bottleneck | 12 | 0.1667 | 14.4167 | 0.8333 | no |
+| extended_roster | 13273 | c10df617a87c | goal | goal | cross_trap | 9 | 0.0000 | 7.3333 | 1.0000 | yes |
+| extended_roster | 13273 | c10df617a87c | goal | goal | head_on_corridor | 6 | 0.3333 | 6.8333 | 0.6667 | no |
+| extended_roster | 13273 | c10df617a87c | orca | orca | bottleneck | 12 | 0.5000 | 25.2500 | 0.5000 | no |
+| extended_roster | 13273 | c10df617a87c | orca | orca | cross_trap | 9 | 0.4444 | 7.2222 | 0.5556 | no |
+| extended_roster | 13273 | c10df617a87c | orca | orca | head_on_corridor | 6 | 1.0000 | 5.3333 | 0.0000 | no |
+| extended_roster | 13273 | c10df617a87c | ppo | ppo | bottleneck | 12 | 0.2500 | 6.5000 | 0.7500 | no |
+| extended_roster | 13273 | c10df617a87c | ppo | ppo | cross_trap | 9 | 0.6667 | 9.8889 | 0.3333 | no |
+| extended_roster | 13273 | c10df617a87c | ppo | ppo | head_on_corridor | 6 | 1.0000 | 2.1667 | 0.0000 | no |
+| extended_roster | 13273 | c10df617a87c | prediction_mpc | prediction_mpc | bottleneck | 12 | 0.7500 | 152.7500 | 0.0000 | no |
+| extended_roster | 13273 | c10df617a87c | prediction_mpc | prediction_mpc | cross_trap | 9 | 0.0000 | 30.3333 | 1.0000 | yes |
+| extended_roster | 13273 | c10df617a87c | prediction_mpc | prediction_mpc | head_on_corridor | 6 | 1.0000 | 42.3333 | 0.0000 | no |
+| extended_roster | 13273 | c10df617a87c | prediction_mpc_cbf | prediction_mpc | bottleneck | 12 | 0.7500 | 152.7500 | 0.0000 | no |
+| extended_roster | 13273 | c10df617a87c | prediction_mpc_cbf | prediction_mpc | cross_trap | 9 | 0.0000 | 30.3333 | 1.0000 | yes |
+| extended_roster | 13273 | c10df617a87c | prediction_mpc_cbf | prediction_mpc | head_on_corridor | 6 | 1.0000 | 43.0000 | 0.0000 | no |
+| extended_roster | 13273 | c10df617a87c | prediction_planner | prediction_planner | bottleneck | 12 | 0.4167 | 30.6667 | 0.5833 | no |
+| extended_roster | 13273 | c10df617a87c | prediction_planner | prediction_planner | cross_trap | 9 | 0.2222 | 35.1111 | 0.7778 | no |
+| extended_roster | 13273 | c10df617a87c | prediction_planner | prediction_planner | head_on_corridor | 6 | 0.5000 | 5.6667 | 0.5000 | no |
+| extended_roster | 13273 | c10df617a87c | sacadrl | sacadrl | bottleneck | 12 | 0.2500 | 0.0000 | 0.7500 | no |
+| extended_roster | 13273 | c10df617a87c | sacadrl | sacadrl | cross_trap | 9 | 0.2222 | 5.5556 | 0.7778 | no |
+| extended_roster | 13273 | c10df617a87c | sacadrl | sacadrl | head_on_corridor | 6 | 0.5000 | 9.0000 | 0.5000 | no |
+| extended_roster | 13273 | c10df617a87c | social_force | social_force | bottleneck | 12 | 0.0000 | 11.9167 | 0.5000 | yes |
+| extended_roster | 13273 | c10df617a87c | social_force | social_force | cross_trap | 9 | 0.0000 | 16.4444 | 0.5556 | yes |
+| extended_roster | 13273 | c10df617a87c | social_force | social_force | head_on_corridor | 6 | 0.3333 | 10.1667 | 0.6667 | no |
+| extended_roster | 13273 | c10df617a87c | socnav_sampling | socnav_sampling | bottleneck | 12 | 0.1667 | 3.5833 | 0.8333 | no |
+| extended_roster | 13273 | c10df617a87c | socnav_sampling | socnav_sampling | cross_trap | 9 | 0.2222 | 2.0000 | 0.7778 | no |
+| extended_roster | 13273 | c10df617a87c | socnav_sampling | socnav_sampling | head_on_corridor | 6 | 0.5000 | 3.1667 | 0.5000 | no |
+

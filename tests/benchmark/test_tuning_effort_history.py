@@ -129,6 +129,7 @@ def test_backfilled_record_requires_parameter_and_evidence_paths(tmp_path: Path)
         ("extra_tuning_field", "tuning has unsupported fields"),
         ("invalid_source", "tuning.source must be one of"),
         ("invalid_parameter_list", "parameters_touched must be a list of non-empty strings"),
+        ("non_string_source", "tuning.source must be one of"),
     ],
 )
 def test_registry_fails_closed_on_malformed_record(tmp_path: Path, case: str, message: str) -> None:
@@ -154,6 +155,8 @@ def test_registry_fails_closed_on_malformed_record(tmp_path: Path, case: str, me
         tuning["source"] = "declared"
     elif case == "invalid_parameter_list":
         tuning["parameters_touched"] = "speed"
+    elif case == "non_string_source":
+        tuning["source"] = ["unknown"]
     registry = _write_fixture(tmp_path, records=[record])
     with pytest.raises(ValueError, match=message):
         validate_registry(registry, repo_root=tmp_path)

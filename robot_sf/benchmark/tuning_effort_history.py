@@ -77,7 +77,7 @@ def _validate_tuning_shape(tuning: dict[str, Any], *, context: str) -> str:
         raise ValueError(f"{context}.tuning has unsupported fields: {unknown_fields}")
 
     source = tuning.get("source")
-    if source not in _SOURCES:
+    if not isinstance(source, str) or source not in _SOURCES:
         raise ValueError(f"{context}.tuning.source must be one of {sorted(_SOURCES)}")
     _validate_tuning_string_lists(tuning, context=context)
     _validate_tuning_scalar_fields(tuning, context=context)

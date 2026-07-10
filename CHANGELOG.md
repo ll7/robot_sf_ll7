@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **issue #4988 benchmark CLI surfaces typed errors (not raw tracebacks) for malformed input.**
+  `robot_sf/benchmark/parquet_export.py` now raises the canonical `EpisodeRecordInputError`
+  (a `ValueError` subclass, so backward-compatible) instead of a bare `ValueError` when a JSONL line
+  is unparseable. This lands inside the `export-parquet` CLI boundary's typed `_CLI_INPUT_ERRORS`
+  handler, so a corrupt input file now exits `2` with a logged message rather than escaping
+  `cli_main` as a raw traceback. A new parametrized CLI-boundary contract test
+  (`tests/benchmark/test_cli_typed_error_contract.py`) ratchets the missing- and malformed-input
+  fail-closed behavior across 20 input-consuming subcommands. Claim boundary: error-surface/exit-code
+  behavior only — no success-path output or benchmark metric value changes.
 * **issue #5031 docs-only PR bodies can now select "domain approval not required".** The PR
   follow-up checker (`scripts/dev/check_pr_followups.py::analyze_domain_approval`) previously forced
   `domain_approval_required` on any body that merely *mentioned* an evidence concept in prose (e.g. a

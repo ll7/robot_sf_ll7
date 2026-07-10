@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #3574 realized-distribution audit for heterogeneous-population traces.**
+  `robot_sf/benchmark/heterogeneous_population_metrics.py` gains `realized_distribution_audit` and
+  `summarize_distribution` (plus a `RealizedDistributionSpec`), covering DoD item 5: configured
+  target vs. realized per-step distributions (overall and per-archetype) from one control trace, so
+  the interaction/truncation shift the #3206 smoke could not compute is made explicit. A numeric
+  configured→realized mean shift is reported only when the caller declares the two sides comparable,
+  and missing or non-finite trace fields fail closed as blockers. Pure analysis only — no ablation
+  campaign, Slurm submission, or heterogeneity/realism claim. Tests in
+  `tests/benchmark/test_heterogeneous_population_distribution_audit.py`.
 * **issue #4871 CrowdNav_Prediction_AttnGraph external learned-baseline feasibility smoke.** New
   `robot_sf/planner/crowdnav_pred_attng.py` is the thinnest model-only adapter proving the shipped
   ICRA 2023 attention-graph SRNN checkpoint (`41200.pt`, MIT, pinned at upstream `3907731`) loads and

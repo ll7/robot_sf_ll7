@@ -123,11 +123,11 @@ _CLI_INPUT_ERRORS = (
     json.JSONDecodeError,
     yaml.YAMLError,
     EpisodeRecordInputError,
-    ValueError,
-    TypeError,
 )
+# AttributeError is limited to the optional tqdm API probe below; ordinary CLI
+# logging/display calls must not hide programmer mistakes.
 _CLI_OPTIONAL_DEPENDENCY_ERRORS = (ImportError, ModuleNotFoundError, AttributeError)
-_CLI_LOGGING_ERRORS = (OSError, ValueError, AttributeError, ImportError)
+_CLI_LOGGING_ERRORS = (OSError, ValueError)
 
 
 def _handle_baseline(args) -> int:

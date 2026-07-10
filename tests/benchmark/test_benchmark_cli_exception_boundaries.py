@@ -65,19 +65,19 @@ def test_progress_optional_dependency_failure_is_best_effort(
     progress(1, 1, {"id": "scenario"}, 7, True, None)
 
 
-def test_unexpected_collaborator_error_is_not_converted_to_success(
+def test_unexpected_collaborator_value_error_is_not_converted_to_cli_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A programmer error from aggregation propagates instead of returning success."""
+    """A programmer ValueError propagates instead of becoming CLI exit code 2."""
     args = _aggregate_args(tmp_path / "episodes.jsonl", tmp_path / "summary.json")
 
     def _unexpected_error(_path: str) -> list[dict[str, object]]:
-        raise RuntimeError("broken collaborator")
+        raise ValueError("broken collaborator")
 
     monkeypatch.setattr(cli, "_agg_read_jsonl", _unexpected_error)
 
-    with pytest.raises(RuntimeError, match="broken collaborator"):
+    with pytest.raises(ValueError, match="broken collaborator"):
         cli._handle_aggregate(args)
 
 

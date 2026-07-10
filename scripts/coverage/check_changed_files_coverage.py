@@ -19,10 +19,27 @@ import subprocess
 import sys
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict, cast
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+
+class _CoverageFileData(TypedDict, total=False):
+    """Typed subset of a coverage.py JSON file payload."""
+
+    executed_lines: list[int]
+    missing_lines: list[int]
+    summary: dict[str, object]
+
+
+class _CoverageResult(TypedDict):
+    """Coverage result row for a single changed file."""
+
+    file: str
+    coverage: float | None
+    resolved: str | None
+    scope: str
 
 
 def _run(cmd: list[str], *, cwd: Path | None = None) -> str:
@@ -229,17 +246,19 @@ def _load_coverage_index(coverage_path: Path, repo_root: Path) -> dict[str, floa
     return index
 
 
-def _load_coverage_file_data(coverage_path: Path, repo_root: Path) -> dict[str, dict[str, object]]:
+def _load_coverage_file_data(coverage_path: Path, repo_root: Path) -> dict[str, _CoverageFileData]:
     """Load normalized coverage.py file data keyed by repository path.
 
     Returns:
         Mapping from normalized file path to the raw coverage.py file payload.
     """
     data = json.loads(coverage_path.read_text(encoding="utf-8"))
-    files: dict[str, dict[str, object]] = {}
+    files: dict[str, _CoverageFileData] = {}
     for file_path, file_data in data.get("files", {}).items():
         if isinstance(file_data, dict):
-            files[_normalize_path(Path(file_path), repo_root)] = file_data
+            files[_normalize_path(Path(file_path), repo_root)] = cast(
+                "_CoverageFileData", file_data
+            )
     return files
 
 
@@ -290,7 +309,7 @@ def _changed_line_numbers(base: str, path: Path, repo_root: Path) -> set[int]:
 
 def _coverage_for_changed_lines(
     *,
-    file_data: dict[str, object] | None,
+    file_data: _CoverageFileData | None,
     changed_lines: set[int],
 ) -> tuple[float | None, str]:
     """Return executable changed-line coverage, falling back when data is insufficient.
@@ -399,18 +418,18 @@ def _select_changed_files(
 def _build_results(
     selected: list[str],
     coverage_index: dict[str, float],
-    coverage_file_data: dict[str, dict[str, object]],
+    coverage_file_data: dict[str, _CoverageFileData],
     *,
     base: str,
     repo_root: Path,
-) -> list[dict[str, object]]:
+) -> list[_CoverageResult]:
     """Attach coverage data to selected changed files.
 
     Returns:
         Result rows containing file path, coverage value, and resolved coverage
         key.
     """
-    results: list[dict[str, object]] = []
+    results: list[_CoverageResult] = []
     for path_str in selected:
         file_coverage, resolved = _resolve_coverage(path_str, coverage_index)
         coverage = file_coverage
@@ -435,10 +454,10 @@ def _build_results(
 
 
 def _summarize_results(
-    results: list[dict[str, object]],
+    results: list[_CoverageResult],
     min_required: float,
     goal: float,
-) -> tuple[list[dict[str, object]], list[dict[str, object]], list[dict[str, object]]]:
+) -> tuple[list[_CoverageResult], list[_CoverageResult], list[_CoverageResult]]:
     """Partition coverage results by missing data, minimum failures, and goal warnings.
 
     Returns:
@@ -451,7 +470,7 @@ def _summarize_results(
 
 
 def _print_results(
-    results: list[dict[str, object]],
+    results: list[_CoverageResult],
     min_required: float,
     goal: float,
 ) -> None:
@@ -473,8 +492,8 @@ def _print_results(
 
 
 def _report_failures(
-    missing: list[dict[str, object]],
-    below_min: list[dict[str, object]],
+    missing: list[_CoverageResult],
+    below_min: list[_CoverageResult],
 ) -> None:
     """Print coverage failures that should fail the gate."""
     print("Test coverage requirement not met:")
@@ -487,7 +506,7 @@ def _report_failures(
         )
 
 
-def _report_warnings(below_goal: list[dict[str, object]]) -> None:
+def _report_warnings(below_goal: list[_CoverageResult]) -> None:
     """Print coverage rows below the aspirational goal."""
     _print_lines(
         ["Coverage goal not met (warning only):"]
@@ -522,8 +541,8 @@ def _report_skipped(skipped: list[str], show_skipped: bool) -> None:
 
 
 def _handle_missing_or_below_min(
-    missing: list[dict[str, object]],
-    below_min: list[dict[str, object]],
+    missing: list[_CoverageResult],
+    below_min: list[_CoverageResult],
 ) -> int:
     """Return a failing exit code when hard coverage requirements are unmet.
 

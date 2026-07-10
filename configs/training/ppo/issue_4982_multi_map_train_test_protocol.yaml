@@ -1,0 +1,54 @@
+# Issue #4982: declared geometry-held-out PPO training protocol.
+# This is a launch configuration, not benchmark evidence. A completed campaign is
+# required before interpreting the zero-shot decay metric as a generalization result.
+base_config: expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+policy_id: ppo_issue_4982_multi_map_protocol
+scenario_sampling:
+  strategy: random
+  profile_strategy: cycle
+  include_scenarios:
+    - classic_cross_trap_medium
+    - classic_doorway_medium
+    - classic_group_crossing_medium
+    - classic_head_on_corridor_medium
+    - classic_merging_medium
+    - classic_overtaking_medium
+    - classic_t_intersection_medium
+    - classic_urban_crossing_medium
+evaluation:
+  evaluation_episodes: 100
+  hold_out_scenarios:
+    - classic_bottleneck_medium
+    - classic_station_platform_medium
+    - francis2023_frontal_approach
+    - francis2023_blind_corner
+  step_schedule:
+    - until_step: 3000000
+      every_steps: 500000
+    - every_steps: 1000000
+multi_map_protocol:
+  schema_version: multi-map-train-test.v1
+  train_scenarios:
+    - classic_cross_trap_medium
+    - classic_doorway_medium
+    - classic_group_crossing_medium
+    - classic_head_on_corridor_medium
+    - classic_merging_medium
+    - classic_overtaking_medium
+    - classic_t_intersection_medium
+    - classic_urban_crossing_medium
+  held_out_scenarios:
+    - classic_bottleneck_medium
+    - classic_station_platform_medium
+    - francis2023_frontal_approach
+    - francis2023_blind_corner
+  zero_shot_decay_metric: success_rate
+domain_randomization:
+  schema_version: training-domain-randomization.v1
+  peds_speed_mult: [0.8, 1.2]
+  ped_density_multiplier: [0.8, 1.2]
+  route_spawn_jitter_frac: [0.0, 0.2]
+tracking:
+  tensorboard: true
+  wandb:
+    enabled: false

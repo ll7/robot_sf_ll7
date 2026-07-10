@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.common import ensure_seed_tuple
 from robot_sf.telemetry.progress import PipelineStepDefinition
+
+if TYPE_CHECKING:
+    from robot_sf.training.multi_map_protocol import DomainRandomization, MultiMapTrainTestProtocol
 
 
 @dataclass(slots=True)
@@ -53,6 +57,8 @@ class ExpertTrainingConfig:
     env_overrides: dict[str, object] = field(default_factory=dict)
     env_factory_kwargs: dict[str, object] = field(default_factory=dict)
     scenario_sampling: dict[str, object] = field(default_factory=dict)
+    multi_map_protocol: MultiMapTrainTestProtocol | None = None
+    domain_randomization: DomainRandomization | None = None
     density_curriculum: dict[str, object] = field(default_factory=dict)
     num_envs: int | str | None = None
     num_envs_reserve_cores: int = 0
@@ -86,6 +92,8 @@ class ExpertTrainingConfig:
         env_overrides: dict[str, object] | None = None,
         env_factory_kwargs: dict[str, object] | None = None,
         scenario_sampling: dict[str, object] | None = None,
+        multi_map_protocol: MultiMapTrainTestProtocol | None = None,
+        domain_randomization: DomainRandomization | None = None,
         density_curriculum: dict[str, object] | None = None,
         num_envs: int | str | None = None,
         num_envs_reserve_cores: int = 0,
@@ -129,6 +137,8 @@ class ExpertTrainingConfig:
             env_overrides=dict(env_overrides or {}),
             env_factory_kwargs=resolved_env_factory_kwargs,
             scenario_sampling=dict(scenario_sampling or {}),
+            multi_map_protocol=multi_map_protocol,
+            domain_randomization=domain_randomization,
             density_curriculum=dict(density_curriculum or {}),
             num_envs=num_envs,
             num_envs_reserve_cores=int(num_envs_reserve_cores),

@@ -78,6 +78,10 @@ from robot_sf.training.imitation_config import (
     EvaluationSchedule,
     ExpertTrainingConfig,
 )
+from robot_sf.training.multi_map_protocol import (
+    DomainRandomization,
+    MultiMapTrainTestProtocol,
+)
 from robot_sf.training.ppo_policy import AsymmetricGridSocNavPolicy
 from robot_sf.training.scenario_loader import (
     build_robot_config_from_scenario,
@@ -974,6 +978,15 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         )
 
     build_density_curriculum_schedule(data.get("density_curriculum"))
+    multi_map_protocol = MultiMapTrainTestProtocol.from_raw(data.get("multi_map_protocol"))
+    domain_randomization = DomainRandomization.from_raw(data.get("domain_randomization"))
+    if multi_map_protocol is not None:
+        declared_hold_out = tuple(str(name) for name in evaluation.hold_out_scenarios)
+        if declared_hold_out != multi_map_protocol.held_out_scenarios:
+            raise ValueError(
+                "evaluation.hold_out_scenarios must exactly match "
+                "multi_map_protocol.held_out_scenarios"
+            )
     return ExpertTrainingConfig.from_raw(
         scenario_config=scenario_config,
         scenario_id=str(scenario_id) if scenario_id else None,
@@ -1002,6 +1015,8 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         env_overrides=dict(data.get("env_overrides", {}) or {}),
         env_factory_kwargs=dict(data.get("env_factory_kwargs", {}) or {}),
         scenario_sampling=dict(data.get("scenario_sampling", {}) or {}),
+        multi_map_protocol=multi_map_protocol,
+        domain_randomization=domain_randomization,
         density_curriculum=dict(data.get("density_curriculum", {}) or {}),
         num_envs=_parse_num_envs(data.get("num_envs")),
         worker_mode=str(data.get("worker_mode", "auto")),
@@ -1149,6 +1164,7 @@ class _TrainingEnvFactory:
     env_overrides: dict[str, object]
     env_factory_kwargs: dict[str, object]
     scenario_sampling: dict[str, object]
+    domain_randomization: DomainRandomization | None = None
     density_curriculum: DensityCurriculumSchedule | None = None
 
     def _build_config(self, scenario_def: Mapping[str, Any]):
@@ -1217,6 +1233,7 @@ class _TrainingEnvFactory:
             algorithm_name=self.algorithm_name,
             env_factory_kwargs=self.env_factory_kwargs,
             density_curriculum=self.density_curriculum,
+            domain_randomization=self.domain_randomization,
             seed=self.seed,
         )
 
@@ -1233,6 +1250,7 @@ def _make_training_env(  # noqa: PLR0913
     env_overrides: Mapping[str, object],
     env_factory_kwargs: Mapping[str, object],
     scenario_sampling: Mapping[str, object],
+    domain_randomization: DomainRandomization | None = None,
     density_curriculum: DensityCurriculumSchedule | None = None,
 ) -> Callable[[], Any]:
     """Create a picklable training environment factory (seeded when provided)."""
@@ -1251,6 +1269,7 @@ def _make_training_env(  # noqa: PLR0913
         env_overrides=dict(env_overrides),
         env_factory_kwargs=dict(env_factory_kwargs),
         scenario_sampling=dict(scenario_sampling),
+        domain_randomization=domain_randomization,
         density_curriculum=density_curriculum,
     )
 
@@ -1514,6 +1533,16 @@ def _init_wandb(
             "feature_extractor": config.feature_extractor,
             "ppo_hyperparams": dict(config.ppo_hyperparams),
             "best_checkpoint_metric": config.best_checkpoint_metric,
+            "multi_map_protocol": (
+                config.multi_map_protocol.as_dict()
+                if config.multi_map_protocol is not None
+                else None
+            ),
+            "domain_randomization": (
+                config.domain_randomization.as_dict()
+                if config.domain_randomization is not None
+                else None
+            ),
             "snqi_weights_source": (
                 str(config.snqi_weights_path) if config.snqi_weights_path is not None else "default"
             ),
@@ -1694,6 +1723,18 @@ def _resolve_scenario_context(
     scenario_definitions: Sequence[Mapping[str, Any]],
 ) -> ScenarioContext:
     """Resolve scenario selection and profile for training/evaluation."""
+    protocol = config.multi_map_protocol
+    if protocol is not None:
+        protocol.validate_scenarios(scenario_definitions)
+        if config.scenario_id:
+            raise ValueError("multi_map_protocol cannot be combined with scenario_id")
+        configured_include = tuple(
+            str(name) for name in config.scenario_sampling.get("include_scenarios", ())
+        )
+        if configured_include and configured_include != protocol.train_scenarios:
+            raise ValueError(
+                "scenario_sampling.include_scenarios must match multi_map_protocol.train_scenarios"
+            )
     if config.scenario_id:
         selected = select_scenario(scenario_definitions, config.scenario_id)
         label = config.scenario_id
@@ -1704,11 +1745,11 @@ def _resolve_scenario_context(
             training_exclude=(),
         )
 
+    train_scenarios = protocol.train_scenarios if protocol is not None else ()
     sampler = ScenarioSampler(
         scenario_definitions,
-        include_scenarios=tuple(
-            str(name) for name in config.scenario_sampling.get("include_scenarios", ())
-        ),
+        include_scenarios=train_scenarios
+        or tuple(str(name) for name in config.scenario_sampling.get("include_scenarios", ())),
         exclude_scenarios=tuple(config.evaluation.hold_out_scenarios)
         + tuple(str(name) for name in config.scenario_sampling.get("exclude_scenarios", ())),
         weights=(
@@ -1726,7 +1767,11 @@ def _resolve_scenario_context(
         selected_scenario=None,
         scenario_label=config.scenario_config.stem,
         scenario_profile=sampler.scenario_ids,
-        training_exclude=tuple(config.evaluation.hold_out_scenarios),
+        training_exclude=(
+            protocol.held_out_scenarios
+            if protocol is not None
+            else tuple(config.evaluation.hold_out_scenarios)
+        ),
     )
 
 
@@ -1742,6 +1787,8 @@ def _resolve_evaluation_context(
     else:
         scenario_definitions = tuple(load_scenarios(evaluation_scenario_config))
 
+    if config.multi_map_protocol is not None:
+        config.multi_map_protocol.validate_scenarios(scenario_definitions)
     if config.evaluation.hold_out_scenarios:
         sampler = ScenarioSampler(
             scenario_definitions,
@@ -1945,17 +1992,19 @@ def _per_scenario_eval_rows_from_episode_records(
     episode_records: Sequence[Mapping[str, object]],
 ) -> list[dict[str, float | int | str]]:
     """Build per-scenario checkpoint rows from raw episode records."""
-    grouped: dict[tuple[int, str], dict[str, object]] = {}
+    grouped: dict[tuple[int, str, str], dict[str, object]] = {}
     for record in episode_records:
         scenario_id = str(record.get("scenario_id", "unknown"))
+        split = str(record.get("split", "evaluation"))
         eval_step = int(record.get("eval_step", 0) or 0)
         metrics = record.get("metrics", {})
         if not isinstance(metrics, Mapping):
             continue
         bucket = grouped.setdefault(
-            (eval_step, scenario_id),
+            (eval_step, split, scenario_id),
             {
                 "eval_step": eval_step,
+                "split": split,
                 "scenario_id": scenario_id,
                 "episodes": 0,
                 **{metric: [] for metric in _EVAL_METRIC_KEYS},
@@ -1968,9 +2017,10 @@ def _per_scenario_eval_rows_from_episode_records(
                 cast("list[float]", bucket[metric]).append(float(value))
 
     rows: list[dict[str, float | int | str]] = []
-    for (_eval_step, _scenario_id), bucket in sorted(grouped.items()):
+    for (_eval_step, _split, _scenario_id), bucket in sorted(grouped.items()):
         row: dict[str, float | int | str] = {
             "eval_step": int(bucket["eval_step"]),
+            "split": str(bucket["split"]),
             "scenario_id": str(bucket["scenario_id"]),
             "episodes": int(bucket["episodes"]),
         }
@@ -2041,16 +2091,17 @@ def _write_eval_per_scenario(
         (
             {
                 "eval_step": int(row.get("eval_step", 0)),
+                "split": str(row.get("split", "evaluation")),
                 "scenario_id": str(row.get("scenario_id", "unknown")),
                 "episodes": int(row.get("episodes", 0)),
                 **{key: float(row.get(key, float("nan"))) for key in _EVAL_METRIC_KEYS},
             }
             for row in rows
         ),
-        key=lambda row: (int(row["eval_step"]), str(row["scenario_id"])),
+        key=lambda row: (int(row["eval_step"]), str(row["split"]), str(row["scenario_id"])),
     )
     json_path.write_text(json.dumps(sorted_rows, indent=2, sort_keys=True), encoding="utf-8")
-    fieldnames = ["eval_step", "scenario_id", "episodes", *_EVAL_METRIC_KEYS]
+    fieldnames = ["eval_step", "split", "scenario_id", "episodes", *_EVAL_METRIC_KEYS]
     with csv_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
@@ -2296,7 +2347,7 @@ def _persist_best_checkpoint_if_updated(
     return best_summary, best_summary.eval_step
 
 
-def _train_with_schedule(  # noqa: C901,PLR0913
+def _train_with_schedule(  # noqa: C901,PLR0913,PLR0915
     model: PPO,
     *,
     config: ExpertTrainingConfig,
@@ -2365,16 +2416,42 @@ def _train_with_schedule(  # noqa: C901,PLR0913
             float(effective_steps / train_wall_sec) if train_wall_sec > 0.0 else 0.0
         )
         eval_t0 = time.perf_counter()
-        step_metrics, eval_records = _evaluate_policy(
-            model,
-            config,
-            scenario_definitions=evaluation_ctx.scenario_definitions,
-            scenario_path=evaluation_ctx.scenario_config,
-            scenario_id=scenario_id,
-            hold_out_scenarios=hold_out_scenarios,
-            snqi_context=snqi_context,
-            eval_step=eval_step,
-        )
+        protocol = config.multi_map_protocol
+        if protocol is not None:
+            _train_metrics, train_records = _evaluate_policy(
+                model,
+                config,
+                scenario_definitions=evaluation_ctx.scenario_definitions,
+                scenario_path=evaluation_ctx.scenario_config,
+                scenario_id=None,
+                hold_out_scenarios=protocol.train_scenarios,
+                snqi_context=snqi_context,
+                eval_step=eval_step,
+                split="train",
+            )
+            step_metrics, held_out_records = _evaluate_policy(
+                model,
+                config,
+                scenario_definitions=evaluation_ctx.scenario_definitions,
+                scenario_path=evaluation_ctx.scenario_config,
+                scenario_id=None,
+                hold_out_scenarios=protocol.held_out_scenarios,
+                snqi_context=snqi_context,
+                eval_step=eval_step,
+                split="held_out",
+            )
+            eval_records = train_records + held_out_records
+        else:
+            step_metrics, eval_records = _evaluate_policy(
+                model,
+                config,
+                scenario_definitions=evaluation_ctx.scenario_definitions,
+                scenario_path=evaluation_ctx.scenario_config,
+                scenario_id=scenario_id,
+                hold_out_scenarios=hold_out_scenarios,
+                snqi_context=snqi_context,
+                eval_step=eval_step,
+            )
         eval_wall_sec = max(0.0, time.perf_counter() - eval_t0)
         for key, values in step_metrics.items():
             metrics_raw[key].extend(values)
@@ -2467,6 +2544,7 @@ def _init_training_model(
             env_overrides=config.env_overrides,
             env_factory_kwargs=config.env_factory_kwargs,
             scenario_sampling=config.scenario_sampling,
+            domain_randomization=config.domain_randomization,
             density_curriculum=density_curriculum,
         )
         for seed in env_seeds
@@ -2598,7 +2676,7 @@ def _gather_episode_metrics(
     }
 
 
-def _evaluate_policy(
+def _evaluate_policy(  # noqa: PLR0913
     model: PPO,
     config: ExpertTrainingConfig,
     *,
@@ -2608,6 +2686,7 @@ def _evaluate_policy(
     hold_out_scenarios: Sequence[str],
     snqi_context: TrainingSNQIContext,
     eval_step: int | None = None,
+    split: str = "evaluation",
 ) -> tuple[MetricSamples, list[dict[str, object]]]:
     """Evaluate a policy across hold-out or sampled scenarios."""
     episodes = max(1, config.evaluation.evaluation_episodes)
@@ -2699,6 +2778,7 @@ def _evaluate_policy(
                 "seed": seed,
                 "steps": steps,
                 "scenario_id": scenario_name,
+                "split": split,
                 "eval_step": eval_step,
                 "metrics": metric_row,
             },
@@ -2737,61 +2817,66 @@ def _simulate_dry_run_metrics(
     use_random = _randomize_eval_seeds(config)
     rng = np.random.default_rng(None if use_random else 123)
 
+    protocol = config.multi_map_protocol
+    split_scenarios = (
+        (("train", protocol.train_scenarios), ("held_out", protocol.held_out_scenarios))
+        if protocol is not None
+        else (("evaluation", (scenario_id,)),)
+    )
     for eval_step in eval_steps:
-        for idx in range(episodes):
-            seed = (
-                None
-                if use_random
-                else _deterministic_eval_seed_for_episode(
-                    config,
-                    episode_idx=idx,
-                    scenario_cycle_length=1,
+        for split, scenarios in split_scenarios:
+            for idx in range(episodes):
+                seed = (
+                    None
+                    if use_random
+                    else _deterministic_eval_seed_for_episode(
+                        config,
+                        episode_idx=idx,
+                        scenario_cycle_length=len(scenarios),
+                    )
                 )
-            )
-            success = 1.0 if idx % 5 != 0 else 0.0
-            collision = 0.0 if idx % 3 else 0.2
-            path_eff = max(0.0, 0.85 - 0.05 * idx) + float(rng.uniform(-0.01, 0.01))
-            comfort = collision * 0.1
-            normalized_time = max(0.0, min(1.0, 1.0 - path_eff))
-            snqi_inputs: dict[str, float | int | bool] = {
-                "success": success,
-                "time_to_goal_norm": normalized_time,
-                "collisions": collision,
-                "near_misses": 0.0,
-                "comfort_exposure": comfort,
-                "force_exceed_events": 0.0,
-                "jerk_mean": 0.0,
-            }
-            snqi = compute_training_snqi(snqi_inputs, context=snqi_context)
-            episode_return = 40.0 * success - 12.0 * collision + 8.0 * path_eff
-            avg_step_reward = episode_return / max(float(config.convergence.plateau_window), 1.0)
-
-            metrics["success_rate"].append(success)
-            metrics["collision_rate"].append(collision)
-            metrics["path_efficiency"].append(path_eff)
-            metrics["comfort_exposure"].append(comfort)
-            metrics["snqi"].append(snqi)
-            metrics["eval_episode_return"].append(episode_return)
-            metrics["eval_avg_step_reward"].append(avg_step_reward)
-
-            episode_records.append(
-                {
-                    "episode": idx,
-                    "seed": seed,
-                    "steps": config.convergence.plateau_window,
-                    "scenario_id": scenario_id,
-                    "eval_step": eval_step,
-                    "metrics": {
-                        "success_rate": success,
-                        "collision_rate": collision,
-                        "path_efficiency": path_eff,
-                        "comfort_exposure": comfort,
-                        "snqi": snqi,
-                        "eval_episode_return": episode_return,
-                        "eval_avg_step_reward": avg_step_reward,
+                success = 1.0 if idx % 5 != 0 else 0.0
+                collision = 0.0 if idx % 3 else 0.2
+                path_eff = max(0.0, 0.85 - 0.05 * idx) + float(rng.uniform(-0.01, 0.01))
+                comfort = collision * 0.1
+                normalized_time = max(0.0, min(1.0, 1.0 - path_eff))
+                snqi_inputs: dict[str, float | int | bool] = {
+                    "success": success,
+                    "time_to_goal_norm": normalized_time,
+                    "collisions": collision,
+                    "near_misses": 0.0,
+                    "comfort_exposure": comfort,
+                    "force_exceed_events": 0.0,
+                    "jerk_mean": 0.0,
+                }
+                snqi = compute_training_snqi(snqi_inputs, context=snqi_context)
+                episode_return = 40.0 * success - 12.0 * collision + 8.0 * path_eff
+                avg_step_reward = episode_return / max(
+                    float(config.convergence.plateau_window), 1.0
+                )
+                metric_row = {
+                    "success_rate": success,
+                    "collision_rate": collision,
+                    "path_efficiency": path_eff,
+                    "comfort_exposure": comfort,
+                    "snqi": snqi,
+                    "eval_episode_return": episode_return,
+                    "eval_avg_step_reward": avg_step_reward,
+                }
+                if split != "train":
+                    for metric, value in metric_row.items():
+                        metrics[metric].append(float(value))
+                episode_records.append(
+                    {
+                        "episode": idx,
+                        "seed": seed,
+                        "steps": config.convergence.plateau_window,
+                        "scenario_id": scenarios[idx % len(scenarios)],
+                        "split": split,
+                        "eval_step": eval_step,
+                        "metrics": metric_row,
                     },
-                },
-            )
+                )
 
     return metrics, episode_records
 
@@ -2828,6 +2913,42 @@ def _aggregate_metrics(samples: MetricSamples) -> dict[str, common.MetricAggrega
             )
         aggregates[name] = common.MetricAggregate(mean=mean, median=median, p95=p95, ci95=ci)
     return aggregates
+
+
+def _zero_shot_decay_metric(
+    episode_records: Sequence[Mapping[str, object]],
+    protocol: MultiMapTrainTestProtocol | None,
+) -> tuple[str, float] | None:
+    """Return the final held-out performance drop relative to the train split.
+
+    Positive values mean the held-out split performed worse. This is a protocol
+    readout only; it becomes generalization evidence only after a campaign run.
+    """
+    if protocol is None:
+        return None
+    eval_steps = [
+        int(record["eval_step"]) if record.get("eval_step") is not None else -1
+        for record in episode_records
+    ]
+    if not eval_steps:
+        return None
+    final_step = max(eval_steps)
+    split_values: dict[str, list[float]] = {"train": [], "held_out": []}
+    for record in episode_records:
+        step = record.get("eval_step")
+        if (int(step) if step is not None else -1) != final_step:
+            continue
+        split = str(record.get("split", ""))
+        metrics = record.get("metrics")
+        if split not in split_values or not isinstance(metrics, Mapping):
+            continue
+        value = metrics.get(protocol.zero_shot_decay_metric)
+        if value is not None and np.isfinite(float(value)):
+            split_values[split].append(float(value))
+    if not split_values["train"] or not split_values["held_out"]:
+        return None
+    decay = float(np.mean(split_values["train"]) - np.mean(split_values["held_out"]))
+    return f"zero_shot_{protocol.zero_shot_decay_metric}_decay", decay
 
 
 def _write_episode_log(path: Path, records: Iterable[Mapping[str, object]]) -> None:
@@ -2890,7 +3011,7 @@ def _persist_expert_checkpoint(
     return checkpoint_path, config_manifest
 
 
-def _build_training_notes(
+def _build_training_notes(  # noqa: C901
     *,
     config: ExpertTrainingConfig,
     scenario_ctx: ScenarioContext,
@@ -2937,6 +3058,19 @@ def _build_training_notes(
         notes.append(f"policy_parameter_count={policy_parameter_count}")
     if scenario_coverage:
         notes.append(f"scenario_coverage={scenario_coverage}")
+    if config.multi_map_protocol is not None:
+        notes.append(
+            f"multi_map_protocol={json.dumps(config.multi_map_protocol.as_dict(), sort_keys=True)}"
+        )
+        notes.append(
+            "zero_shot_decay_interpretation="
+            "positive means final held-out performance is below the train split"
+        )
+    if config.domain_randomization is not None:
+        notes.append(
+            "domain_randomization="
+            f"{json.dumps(config.domain_randomization.as_dict(), sort_keys=True)}"
+        )
     density_curriculum = build_density_curriculum_schedule(config.density_curriculum)
     if density_curriculum.enabled:
         notes.append(f"density_curriculum={json.dumps(curriculum_metadata(density_curriculum))}")
@@ -3034,6 +3168,18 @@ def run_expert_training(
     )
 
     aggregates = _aggregate_metrics(outputs.metrics_raw)
+    zero_shot_decay = _zero_shot_decay_metric(
+        outputs.episode_records,
+        config.multi_map_protocol,
+    )
+    if zero_shot_decay is not None:
+        metric_name, metric_value = zero_shot_decay
+        aggregates[metric_name] = common.MetricAggregate(
+            mean=metric_value,
+            median=metric_value,
+            p95=metric_value,
+            ci95=(metric_value, metric_value),
+        )
     scenario_coverage = _collect_scenario_coverage(outputs.vec_env)
 
     checkpoint_path, config_manifest = _persist_expert_checkpoint(

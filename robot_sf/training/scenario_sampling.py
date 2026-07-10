@@ -11,6 +11,7 @@ from loguru import logger
 
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.training.density_curriculum import apply_density_curriculum_stage_to_scenario
+from robot_sf.training.multi_map_protocol import DomainRandomization, apply_domain_randomization
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario
 
 if TYPE_CHECKING:
@@ -198,6 +199,7 @@ class ScenarioSwitchingEnv(Env):
         switch_per_reset: bool = True,
         seed: int | None = None,
         density_curriculum: DensityCurriculumSchedule | None = None,
+        domain_randomization: DomainRandomization | None = None,
     ) -> None:
         """Initialize a wrapper that swaps scenarios between episodes."""
         super().__init__()
@@ -215,6 +217,7 @@ class ScenarioSwitchingEnv(Env):
         self._algorithm_name = algorithm_name
         self._switch_per_reset = switch_per_reset
         self._density_curriculum = density_curriculum
+        self._domain_randomization = domain_randomization
         self._curriculum_timestep = 0
         self._rng = np.random.default_rng(seed)
         self._scenario_coverage: dict[str, int] = {}
@@ -260,6 +263,11 @@ class ScenarioSwitchingEnv(Env):
         if self._density_curriculum is not None:
             stage = self._density_curriculum.stage_for_timestep(self._curriculum_timestep)
             scenario = apply_density_curriculum_stage_to_scenario(scenario, stage)
+        scenario, _sampled_randomization = apply_domain_randomization(
+            scenario,
+            self._domain_randomization,
+            rng=self._rng,
+        )
         env_seed = int(seed) if seed is not None else int(self._rng.integers(0, 2**31 - 1))
         env = self._env_factory(
             config=self._config_builder(scenario),

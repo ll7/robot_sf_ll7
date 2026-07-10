@@ -1,3 +1,4 @@
+<!-- AI-GENERATED (robot_sf#5164, 2026-07-10) — NEEDS-REVIEW -->
 # Issue 4195 h600 Aggregation Artifact
 
 This directory contains diagnostic-only h600 interpretation artifacts for jobs 13268, 13273.

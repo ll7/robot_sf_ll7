@@ -80,7 +80,7 @@ def _parse_sha256sums(text: str) -> dict[str, str]:
     mapping: dict[str, str] = {}
     for raw in text.splitlines():
         line = raw.strip()
-        if not line:
+        if not line or line.startswith("#"):
             continue
         parts = line.split()
         if len(parts) != 2:

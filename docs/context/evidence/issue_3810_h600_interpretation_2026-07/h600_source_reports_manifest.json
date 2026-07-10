@@ -1,5 +1,6 @@
 {
   "schema_version": "issue_5164_h600_source_reports.v1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "issue": 5164,
   "contract_status": "active",
   "claim_boundary": "Diagnostic-only source-report acquisition contract. This manifest does not promote benchmark or paper/dissertation claims and does not authorize reconstructing missing report bytes from derived exports.",

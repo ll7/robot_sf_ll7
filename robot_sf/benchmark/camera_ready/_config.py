@@ -158,7 +158,7 @@ def _tuning_budget_hours(planner_key: str, value: Any) -> float | None:
         raise TypeError(
             f"Planner '{planner_key}' tuning.budget_hours must be a number when provided"
         ) from exc
-    if hours < 0:
+    if not math.isfinite(hours) or hours < 0:
         raise ValueError(f"Planner '{planner_key}' tuning.budget_hours must be non-negative")
     return hours
 

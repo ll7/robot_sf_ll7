@@ -114,6 +114,13 @@ def test_parse_tuning_spec_rejects_negative_budget() -> None:
         _parse_tuning({"budget_hours": -0.5})
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_parse_tuning_spec_rejects_non_finite_budget_hours(value: float) -> None:
+    """Non-finite values must not reach JSON campaign-manifest output."""
+    with pytest.raises(ValueError, match="budget_hours must be non-negative"):
+        _parse_tuning({"budget_hours": value})
+
+
 def test_parse_tuning_spec_rejects_non_bool_disjoint_flag() -> None:
     """The eval-set disjointness flag must be a boolean when provided."""
     with pytest.raises(TypeError, match="eval_set_disjoint must be a boolean"):

@@ -309,6 +309,30 @@ def test_dummy_worker_log_environment_leaves_log_level_unchanged(monkeypatch) ->
     assert train_ppo.os.environ["LOGURU_LEVEL"] == "INFO"
 
 
+def test_threaded_lidar_batch_mode_uses_dummy_single_environment_fallback(tmp_path: Path) -> None:
+    """The batch mode must preserve the established scalar worker for one environment."""
+    config = ExpertTrainingConfig.from_raw(
+        scenario_config=tmp_path / "scenarios.yaml",
+        seeds=(123,),
+        total_timesteps=32,
+        policy_id="ppo_threaded_lidar_batch_test",
+        convergence=ConvergenceCriteria(
+            success_rate=0.9,
+            collision_rate=0.05,
+            plateau_window=1000,
+        ),
+        evaluation=EvaluationSchedule(
+            frequency_episodes=0,
+            evaluation_episodes=1,
+            step_schedule=((None, 32),),
+        ),
+        worker_mode="threaded_lidar_batch",
+    )
+
+    assert train_ppo._resolve_worker_mode(config, num_envs=1) == "dummy"
+    assert train_ppo._resolve_worker_mode(config, num_envs=2) == "threaded_lidar_batch"
+
+
 def test_init_training_model_quiets_loguru_while_spawning_subproc_workers(
     monkeypatch, tmp_path: Path
 ) -> None:

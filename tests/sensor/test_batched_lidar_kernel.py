@@ -1,5 +1,7 @@
 """Contracts for opt-in cross-environment LiDAR obstacle batching."""
 
+from concurrent.futures import ThreadPoolExecutor
+
 import numpy as np
 import pytest
 
@@ -127,3 +129,23 @@ def test_batch_contract_rejects_read_only_output() -> None:
             obstacle_counts,
             ray_angles,
         )
+
+
+def test_coordinator_fails_closed_for_heterogeneous_ray_counts() -> None:
+    """Rollout coordination must reject incompatible rows instead of using scalar fallback."""
+    coordinator = range_sensor.LidarBatchCoordinator(2, timeout_seconds=1.0)
+
+    def _submit(env_index: int, num_rays: int) -> None:
+        coordinator.submit(
+            env_index,
+            np.full(num_rays, np.inf, dtype=np.float64),
+            np.zeros(2, dtype=np.float64),
+            np.empty((0, 4), dtype=np.float64),
+            np.zeros(num_rays, dtype=np.float64),
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(_submit, 0, 4), executor.submit(_submit, 1, 5)]
+        for future in futures:
+            with pytest.raises(RuntimeError, match="coordinated LiDAR batch failed"):
+                future.result()

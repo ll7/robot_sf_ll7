@@ -153,6 +153,7 @@ def test_changed_test_proof_enables_declaration_only_coverage(
     test_path = tmp_path / "tests" / "test_errors.py"
     test_path.parent.mkdir()
     test_path.write_text(
+        "from robot_sf.errors import DatasetError\n\n"
         "def test_compatibility():\n    assert issubclass(DatasetError, RobotSfError)\n",
         encoding="utf-8",
     )
@@ -163,6 +164,37 @@ def test_changed_test_proof_enables_declaration_only_coverage(
     )
 
     assert _has_declaration_only_test_proof(
+        Path("robot_sf/errors.py"),
+        "origin/main",
+        tmp_path,
+        [Path("robot_sf/errors.py"), Path("tests/test_errors.py")],
+    )
+
+
+def test_changed_test_proof_rejects_an_unrelated_same_named_class(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A proof must import the declaration from the changed source module."""
+    source_path = tmp_path / "robot_sf" / "errors.py"
+    source_path.parent.mkdir()
+    source_path.write_text(
+        "from errors import RobotSfError\n\nclass DatasetError(RobotSfError, RuntimeError):\n    pass\n",
+        encoding="utf-8",
+    )
+    test_path = tmp_path / "tests" / "test_errors.py"
+    test_path.parent.mkdir()
+    test_path.write_text(
+        "class DatasetError(RobotSfError):\n    pass\n\n"
+        "def test_compatibility():\n    assert issubclass(DatasetError, RobotSfError)\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "scripts.coverage.check_changed_files_coverage._file_at_ref",
+        lambda *args: "class DatasetError(RuntimeError):\n    pass\n",
+    )
+
+    assert not _has_declaration_only_test_proof(
         Path("robot_sf/errors.py"),
         "origin/main",
         tmp_path,

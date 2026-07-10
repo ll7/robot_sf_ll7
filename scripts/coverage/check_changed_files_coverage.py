@@ -207,7 +207,8 @@ def _added_leading_bases(before: ast.ClassDef, after: ast.ClassDef) -> list[str]
         return None
     if (
         before.name != after.name
-        or _ast_dumps(before.type_params) != _ast_dumps(after.type_params)
+        or _ast_dumps(getattr(before, "type_params", []))
+        != _ast_dumps(getattr(after, "type_params", []))
         or _ast_dumps(before.keywords) != _ast_dumps(after.keywords)
         or _ast_dumps(before.decorator_list) != _ast_dumps(after.decorator_list)
         or _ast_dumps(before.body) != _ast_dumps(after.body)
@@ -400,7 +401,32 @@ def _proofs_from_statements(
     return proofs
 
 
-def _declaration_proofs_from_test_source(source: str) -> set[tuple[str, str]]:
+def _source_module_name(path: Path) -> str | None:
+    """Return the importable module name for a repository-relative Python path."""
+    if path.suffix != ".py" or not path.parts:
+        return None
+    parts = list(path.with_suffix("").parts)
+    if parts[-1] == "__init__":
+        parts.pop()
+    return ".".join(parts) or None
+
+
+def _direct_imports_from_module(tree: ast.Module, module_name: str) -> set[str]:
+    """Return unaliased names directly imported from one absolute module."""
+    return {
+        alias.name
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module == module_name
+        for alias in node.names
+        if alias.asname is None
+    }
+
+
+def _declaration_proofs_from_test_source(
+    source: str,
+    *,
+    source_module: str | None = None,
+) -> set[tuple[str, str]]:
     """Collect direct declaration proofs from one test module source."""
     try:
         tree = ast.parse(source)
@@ -427,15 +453,22 @@ def _declaration_proofs_from_test_source(source: str) -> set[tuple[str, str]]:
             "test_"
         ):
             proofs.update(_proofs_from_statements(node.body, parameter_values.get(id(node), {})))
-    return proofs
+    if source_module is None:
+        return proofs
+    source_imports = _direct_imports_from_module(tree, source_module)
+    return {(candidate, base) for candidate, base in proofs if candidate in source_imports}
 
 
 def _changed_tests_prove_declaration_requirements(
     requirements: set[tuple[str, str]],
     changed_files: Iterable[Path],
     repo_root: Path,
+    source_path: Path,
 ) -> bool:
-    """Return whether the PR's changed tests jointly prove a class-base migration."""
+    """Return whether changed tests prove a migration from its source module."""
+    source_module = _source_module_name(source_path)
+    if source_module is None:
+        return False
     proofs: set[tuple[str, str]] = set()
     for path in changed_files:
         if path.suffix != ".py" or not path.parts or path.parts[0] != "tests":
@@ -444,7 +477,7 @@ def _changed_tests_prove_declaration_requirements(
             source = (repo_root / path).read_text(encoding="utf-8")
         except OSError:
             continue
-        proofs.update(_declaration_proofs_from_test_source(source))
+        proofs.update(_declaration_proofs_from_test_source(source, source_module=source_module))
     return requirements <= proofs
 
 
@@ -467,6 +500,7 @@ def _has_declaration_only_test_proof(
         requirements,
         changed_files,
         repo_root,
+        path,
     )
 
 

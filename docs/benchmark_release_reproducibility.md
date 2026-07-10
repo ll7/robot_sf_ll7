@@ -101,17 +101,47 @@ conditions (same commit, same manifest, `workers: 1`) on 2026-04-10:
 | `orca` | ±0.0071 (1/141 episodes) | ±0.0071 |
 | `prediction_planner` | ±0.0071 (1/141 episodes) | ±0.0071 |
 
-**Inherently non-deterministic:**
+**Inherently non-deterministic (source identified and bounded, issue #5140):**
 
-- `near_misses_mean` varies for all planners (±0.01–0.31 per run). This is
-  proximity-threshold nondeterminism in the simulation physics and cannot be
-  eliminated without fixing the underlying pedestrian dynamics RNG.
+- `near_misses_mean` varies for all planners (±0.01–0.31 per run in the
+  2026-04-10 full-release measurement). The source is now identified and
+  quantified rather than asserted:
+  - **The metric path is provably deterministic.** The near-miss reduction
+    (`_compute_robot_ped_distance_summary`) is pure NumPy (`np.linalg.norm`
+    distance matrix → `min` over pedestrians → `count_nonzero` against the
+    0.5 m surface-clearance band). It contains no Numba kernel, no parallel
+    reduction, and no `fastmath`, so it is bit-deterministic for any fixed input
+    trajectory set. This *disproves* the "parallel reduction order / JIT fastmath
+    / thread scheduling in the Numba kernels" hypothesis **for the metric path**;
+    see `robot_sf/benchmark/near_miss_determinism.py::metric_path_is_deterministic`.
+  - **The residual nondeterminism is upstream, in the pedestrian dynamics.**
+    `pysocialforce.forces` computes per-agent forces with `@njit(fastmath=True)`;
+    the resulting trajectories can cross the 0.5 m clearance threshold at
+    knife-edge timesteps, so a sub-ULP trajectory difference can flip a
+    near-miss count. The residual is *machine-/compiler-conditional*, not a
+    property of the metric definition.
+  - **Tolerance quantification.** `measure_exact_repeat_nondeterminism` runs `N`
+    exact-repeat episodes and reports the per-metric maximum deviation. On the
+    supported CI CPU (NumPy 2.3.5, Numba 0.65.1), exact-repeat `near_misses`
+    deviation is **0.0** across low/medium/high-density scenarios (8 repeats,
+    `horizon=60`) — i.e. the metric is bit-identical within one machine. The
+    ±0.01–0.31 figure from the full release reflects *cross-run* divergence
+    surfaced at knife-edge crossings under the full campaign pipeline; treat it
+    as the empirical bound on a single machine, not a guarantee across CPUs.
+  - **SNQI propagation bound.** The near-miss SNQI term is
+    `-w_near * clamp((nm - med) / (p95 - med), 0, 1)` with
+    `w_near = 0.3082583` (camera-ready v3). A raw near-miss tolerance `delta`
+    propagates to at most `w_near * delta / (p95 - med)` in the linear region,
+    capped at `w_near ≈ 0.31` by the `[0,1]` clamp. Compute it with
+    `snqi_near_miss_propagation_bound`.
 
 **Interpretation:** The benchmark's primary outcome claims (success, collisions)
 are rerun-stable for 5/7 planners and within a 1-episode tolerance for the
 remaining 2. `near_misses_mean` should not be cited as a precision metric in
-publication tables — report it with an explicit tolerance or omit it from
-primary claims.
+publication tables — report it with an explicit tolerance (measured via
+`measure_exact_repeat_nondeterminism`) or omit it from primary claims. SNQI
+consumers should propagate the measured near-miss tolerance through
+`snqi_near_miss_propagation_bound` before claiming a composite precision.
 
 ## What Counts As Comparable vs Non-Comparable
 

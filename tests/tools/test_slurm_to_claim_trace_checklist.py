@@ -122,6 +122,69 @@ def test_complete_trace_checklist_passes(tmp_path: Path) -> None:
     assert report["retrieval"]["run"]["job_id"] == "13268"
 
 
+def test_sha256sums_comment_markers_are_ignored(tmp_path: Path) -> None:
+    """SHA256SUMS with # comment header does not produce a synthetic missing-artifact blocker.
+
+    Regression for issue #5197: PR #5187 adds '# AI-GENERATED NEEDS-REVIEW' headers
+    to SHA256SUMS files; the parser must skip them rather than treating them as entries.
+    """
+
+    evidence_dir = tmp_path / "docs/context/evidence/issue_3425_trace"
+    readme = evidence_dir / "README.md"
+    readme.parent.mkdir(parents=True, exist_ok=True)
+    readme.write_text("# Trace\n", encoding="utf-8")
+    relpath = readme.relative_to(tmp_path).as_posix()
+    digest = _sha256(readme)
+    # Write SHA256SUMS with a leading comment line (as added by PR #5187)
+    (evidence_dir / "SHA256SUMS").write_text(
+        f"# AI-GENERATED NEEDS-REVIEW\n{digest}  {relpath}\n",
+        encoding="utf-8",
+    )
+
+    entries = slurm_to_claim_trace_checklist._parse_sha256s(evidence_dir / "SHA256SUMS")
+
+    assert "AI-GENERATED NEEDS-REVIEW" not in entries
+    assert relpath in entries
+    assert entries[relpath] == digest
+
+
+def test_sha256sums_comment_markers_do_not_block_checklist(tmp_path: Path) -> None:
+    """Evidence dir whose SHA256SUMS has a comment header passes checksum verification."""
+
+    evidence_dir = tmp_path / "docs/context/evidence/issue_3425_trace"
+    readme = evidence_dir / "README.md"
+    readme.parent.mkdir(parents=True, exist_ok=True)
+    readme.write_text("# Trace\n", encoding="utf-8")
+    relpath = readme.relative_to(tmp_path).as_posix()
+    digest = _sha256(readme)
+    (evidence_dir / "SHA256SUMS").write_text(
+        f"# AI-GENERATED NEEDS-REVIEW\n{digest}  {relpath}\n",
+        encoding="utf-8",
+    )
+    source_manifest = _write_source_manifest(tmp_path)
+
+    report = slurm_to_claim_trace_checklist.build_checklist(
+        job_id="13268",
+        issue=3425,
+        source_manifest=source_manifest,
+        evidence_dir=evidence_dir,
+        finalizer_manifest=None,
+        reconciliation=None,
+        spine_pointer="docs/context/evidence/issue_3425_trace/README.md",
+        claim_boundary="workflow trace only; no benchmark claim",
+        repo_root=tmp_path,
+        generated_at="2026-07-11T00:00:00+00:00",
+    )
+
+    # The comment should not appear as a synthetic missing-artifact blocker
+    blocker_details = " ".join(b["detail"] for b in report["blockers"])
+    assert "AI-GENERATED" not in blocker_details
+    assert "NEEDS-REVIEW" not in blocker_details
+    # Evidence checksums should pass (comment line is skipped, real entry verified)
+    check_statuses = {c["name"]: c["status"] for c in report["checks"]}
+    assert check_statuses.get("evidence_checksums") == "pass"
+
+
 def test_missing_finalizer_and_reconciliation_block_without_losing_retrieval(
     tmp_path: Path,
 ) -> None:

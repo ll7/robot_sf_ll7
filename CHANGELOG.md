@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **issue #5090 make `robot_sf.benchmark` package imports lazy.**
+  The broad eager import surface in `robot_sf/benchmark/__init__.py` previously triggered
+  TensorFlow/oneDNN initialisation and simulator-registry messages (~8 s startup delay) whenever
+  any `robot_sf.benchmark.<sub-module>` was imported. Replaced with a `__getattr__`-based lazy
+  loader: each public name in `__all__` is resolved on first access and then cached. Lightweight
+  schema and error modules now start in milliseconds. Public API surface and `__all__` are
+  unchanged. A subprocess regression test (`tests/benchmark/test_benchmark_package_lazy_imports.py`)
+  asserts no TF/simulator-registry noise and startup within a 5 s budget for canonically
+  lightweight sub-modules. No benchmark metric semantics were changed.
+
 * **issue #4988 benchmark CLI surfaces typed errors (not raw tracebacks) for malformed input.**
   `robot_sf/benchmark/parquet_export.py` now raises the canonical `EpisodeRecordInputError`
   (a `ValueError` subclass, so backward-compatible) instead of a bare `ValueError` when a JSONL line

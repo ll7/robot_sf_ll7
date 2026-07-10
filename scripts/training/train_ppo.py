@@ -556,9 +556,12 @@ def _resolve_worker_mode(config: ExpertTrainingConfig, num_envs: int) -> str:
     mode = config.worker_mode.lower()
     if mode == "auto":
         return "subproc" if num_envs > 1 else "dummy"
-    if mode not in {"dummy", "subproc", "threaded"}:
-        raise ValueError("worker_mode must be one of {'auto', 'dummy', 'subproc', 'threaded'}")
-    if mode in {"subproc", "threaded"} and num_envs == 1:
+    if mode not in {"dummy", "subproc", "threaded", "threaded_lidar_batch"}:
+        raise ValueError(
+            "worker_mode must be one of "
+            "{'auto', 'dummy', 'subproc', 'threaded', 'threaded_lidar_batch'}"
+        )
+    if mode in {"subproc", "threaded", "threaded_lidar_batch"} and num_envs == 1:
         return "dummy"
     return mode
 
@@ -2553,8 +2556,11 @@ def _init_training_model(
     if worker_mode == "subproc":
         with _subproc_worker_log_environment(worker_mode):
             vec_env = SubprocVecEnv(env_fns, start_method="spawn")
-    elif worker_mode == "threaded":
-        vec_env = ThreadedVecEnv(env_fns)
+    elif worker_mode in {"threaded", "threaded_lidar_batch"}:
+        vec_env = ThreadedVecEnv(
+            env_fns,
+            batch_lidar=worker_mode == "threaded_lidar_batch",
+        )
     else:
         vec_env = DummyVecEnv(env_fns)
     policy_class, policy_kwargs, critic_profile = _resolve_policy_selection(config)

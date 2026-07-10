@@ -32,12 +32,12 @@ def _run_import(code: str, timeout: float = 15.0) -> subprocess.CompletedProcess
 
 _LIGHTWEIGHT_MODULES = [
     # These modules have no transitive heavy deps (TF / simulator-registry).
-    # scenario_failure_cause is intentionally excluded: it imports from
-    # robot_sf.scenario_certification.failure_cause which itself triggers the
-    # sensor registry.  Fixing that chain is out of scope for #5090.
+    # The scenario-certification package is lazy as of #5128, so this
+    # compatibility shim must stay lightweight too.
     "robot_sf.benchmark.errors",
     "robot_sf.benchmark.benchmark_protocol",
     "robot_sf.benchmark.helper_registry",
+    "robot_sf.benchmark.scenario_failure_cause",
 ]
 
 _HEAVY_INIT_PATTERNS = [

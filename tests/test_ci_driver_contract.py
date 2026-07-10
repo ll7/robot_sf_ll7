@@ -21,6 +21,7 @@ WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
     "fast-feedback": 45,
     "smoke-artifacts": 30,
+    "xdist-scratch-isolation": 15,
     "wheel-smoke-install": 20,
     "examples-smoke": 30,
     "ci": 5,

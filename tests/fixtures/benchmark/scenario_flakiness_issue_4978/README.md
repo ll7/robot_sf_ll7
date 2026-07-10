@@ -52,6 +52,11 @@ output/issue3216-headline-ci-rank-stability-cpu-requeue-20260630h/
 - **Seeds:** 20 per (scenario, planner) cell (seeds 111–130).
 - **Source `git_hash`:** `a5516b432fceffa71573e458aaee31c00a0b6c81` (recorded on
   every record).
+- **Raw-input SHA-256:** `goal` `3626a644ebcdb68433cc755eb6557923d975bc5ff46751efc22311932d52363b`;
+  `orca` `f510b3767d89d78a559a69b3eaea221d4fda28a48c38d38cd30e517ec1e6705e`;
+  `ppo` `3d29f280b5e5b756d54a9202bd62f8b861d214b5bcfdd63c713ac0a7a24d32f3`;
+  `social_force` `3c7f99383e8ed0fb2d19af94c89567be652026dfc23ae807f69cdc755f2bee5e`.
+  These hashes identify the ignored source episode files when the source campaign is available.
 - **Observation contracts:** `goal` uses `goal_state` / `oracle_full_state`; the
   other three use `socnav_state` / `tracked_agents_no_noise`. Cells are grouped
   by `(scenario, planner)`, so each cell is internally single-contract; the

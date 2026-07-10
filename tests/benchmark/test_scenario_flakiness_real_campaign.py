@@ -155,3 +155,6 @@ def test_committed_report_matches_fresh_computation(real_report):
         assert committed_cell["n_seeds"] == cell["n_seeds"]
     # Provenance block is self-describing (not a benchmark claim).
     assert committed["_provenance"]["source_git_hash"]
+    source_hashes = committed["_provenance"]["source_episode_sha256"]
+    assert set(source_hashes) == {"goal", "orca", "ppo", "social_force"}
+    assert all(len(value) == 64 for value in source_hashes.values())

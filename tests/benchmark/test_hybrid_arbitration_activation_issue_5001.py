@@ -26,23 +26,17 @@ What this module proves
   :func:`~robot_sf.benchmark.safety_predicates.oscillatory_control_predicate` and shows a
   **nonzero** ``command_source_changes`` — the mechanism *does* produce a countable
   handoff when the telemetry is actually populated.
-* ``test_episode_runner_callsite_always_reports_zero`` pins the root cause of the
-  0/1,165 field result: the episode runner
-  (``robot_sf/benchmark/map_runner_episode.py:597``) calls
-  ``oscillatory_control_predicate(positions, headings, speeds, dt=dt)`` and never passes
-  ``command_sources``. With that optional signal absent, ``command_source_changes`` is
-  hard-wired to 0 (``safety_predicates.py:98-100``) for *every* episode, regardless of
-  how many real head handoffs occurred.
+* ``test_absent_command_sources_remain_backward_compatible`` preserves the predicate's
+  original zero-valued behavior for non-hybrid callers that do not provide the optional
+  command-source signal.
 
 Classification of the 0/1,165 result
 -------------------------------------
 **Telemetry failure (wiring gap), not genuine non-activation.** The arbitration mechanism
 is reachable and, when its per-step source labels are threaded through, yields a nonzero
-count (first two tests). The retained-trace surface reports 0 only because the runner
-never supplies ``command_sources`` to the predicate (third test). Wiring the per-step
-planner source into the episode runner changes benchmark telemetry output and is therefore
-deferred as post-freeze work (freeze 2026-07-18); see
-``docs/context/issue_5001_state.yaml``.
+count (first two tests). The retained-trace surface reported 0 because the runner did not
+supply ``command_sources`` to the predicate. Issue #5081 repairs that runner wiring while
+this predecessor module keeps the original activation and compatibility evidence.
 
 This module changes no benchmark metric semantics: it only reads existing production code
 and the existing optional predicate signal.
@@ -223,26 +217,12 @@ def test_command_source_changes_counted_when_wired() -> None:
     assert result["fields"]["command_source_changes"] > 0
 
 
-def test_episode_runner_callsite_always_reports_zero() -> None:
-    """The runner's argument signature structurally forces a zero change count.
-
-    This replicates ``map_runner_episode.py:597`` — ``oscillatory_control_predicate``
-    is called with positions/headings/speeds and ``dt`` but *without*
-    ``command_sources``. This is the root cause of the 0/1,165 field result: with the
-    optional signal absent, ``command_source_changes`` is 0 for every episode no matter
-    how many real head handoffs occurred, so the retained-trace 0/1,165 is a telemetry
-    gap, not evidence of genuine non-activation.
-    """
-    adapter = _build_adapter()
-    heads, _commands = _drive(adapter)
-    # Sanity: the underlying mechanism genuinely handed off in this scenario.
-    assert any(a != b for a, b in pairwise(heads))
-
-    n = len(heads)
+def test_absent_command_sources_remain_backward_compatible() -> None:
+    """Non-hybrid callers without source telemetry should retain a zero count."""
+    n = len(_EXPECTED_HEADS)
     positions = np.array([[float(i), 0.0] for i in range(n)])
     headings = np.zeros(n)
     speeds = np.ones(n)
 
-    # Exact episode-runner call signature (no command_sources).
     result = oscillatory_control_predicate(positions, headings, speeds, dt=0.1)
     assert result["fields"]["command_source_changes"] == 0

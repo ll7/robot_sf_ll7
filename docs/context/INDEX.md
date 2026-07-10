@@ -1,5 +1,8 @@
 # Context Retrieval Index
 
+Registered emergent-phenomena demonstration for the released pedestrian substrate (lane formation, doorway oscillation, exit arching) at released + literature-typical speed:
+[README.md](evidence/issue_5149_emergent_phenomena_2026-07/README.md).
+
 Publication figure style pack (opt-in vector export, colorblind-safe planner palette, provenance sidecars, LaTeX-safe captions):
 [issue_4777_publication_figure_style_pack.md](issue_4777_publication_figure_style_pack.md).
 

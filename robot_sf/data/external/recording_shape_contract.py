@@ -27,6 +27,7 @@ from io import StringIO
 from pathlib import Path
 from typing import Any
 
+from robot_sf.errors import RobotSfError
 from scripts.tools.manage_external_data import (
     EXTERNAL_DATA_ROOT_ENV,
     check_asset,
@@ -56,7 +57,7 @@ __all__ = [
 ]
 
 
-class RecordingDatasetError(RuntimeError):
+class RecordingDatasetError(RobotSfError, RuntimeError):
     """Raised when a staged recording-style dataset is present but invalid.
 
     Per-dataset modules subclass this so their tests and callers can match a

@@ -43,7 +43,17 @@ closed instead of falling back silently. Reset-time and automatic-reset scans re
 
 The implementation is proven by Stable-Baselines3 lifecycle tests, a real Robot SF reset/step smoke,
 and a coordinated rollout test that compares complete LiDAR observations bit for bit with scalar
-threaded execution. This is implementation-integrity evidence, not throughput evidence. The
-remaining acceptance step is a reproducible standard-PPO configuration measurement that compares
-dummy, subprocess, threaded, and threaded-LiDAR-batch modes. The issue's >3x claim may only be
-promoted if the exact configuration, host, and sample duration support it.
+threaded execution. This is implementation-integrity evidence, not throughput evidence.
+
+Run the bounded four-mode central processing unit (CPU) comparator with:
+
+```bash
+uv run python scripts/validation/run_vecenv_worker_mode_throughput.py \
+  --config configs/training/lidar/lidar_ppo_mlp_smoke_issue_1662.yaml \
+  --output output/vecenv_throughput.json
+```
+
+The JSON records repeated throughput samples, median speedup against a separately measured
+one-environment dummy fallback, failures, and config/scenario/commit/host provenance. Its explicit
+claim boundary is diagnostic-only. The issue's >3x claim may only be promoted after a reviewed,
+sufficiently long standard-config measurement supports it; a bounded smoke is not that evidence.

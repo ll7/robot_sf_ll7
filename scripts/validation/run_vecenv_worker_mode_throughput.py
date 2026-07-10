@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """CPU VecEnv worker-mode throughput comparator.
 
-Loads a standard training config, constructs ``dummy``, ``subproc``,
-``threaded``, and ``threaded_lidar_batch`` VecEnv modes, runs bounded warmup
-and step loops, and writes machine-readable JSON with throughput and
-host/config provenance.
+Loads a standard expert Proximal Policy Optimization (PPO) training config,
+constructs ``dummy``, ``subproc``, ``threaded``, and
+``threaded_lidar_batch`` VecEnv modes through the training environment
+contract, runs repeated bounded warmup and step loops, and writes
+machine-readable JSON with throughput and host/config provenance.
 
 Usage
 -----
@@ -16,30 +17,39 @@ Usage
     # explicit config and env count
     uv run python scripts/validation/run_vecenv_worker_mode_throughput.py \\
         --config configs/training/lidar/lidar_ppo_mlp_smoke_issue_1662.yaml \\
-        --num-envs 4 --warmup-steps 10 --measure-steps 50 \\
+        --num-envs 4 --repetitions 3 --warmup-steps 10 --measure-steps 50 \\
         --output output/vecenv_throughput.json
 
-Output schema (``vecenv_throughput_comparator.v1``)
+Output schema (``vecenv_throughput_comparator.v2``)
 ----------------------------------------------------
 ::
 
     {
-      "schema": "vecenv_throughput_comparator.v1",
+      "schema": "vecenv_throughput_comparator.v2",
+      "status": "ok",
       "config_path": "...",
       "config_sha256": "...",
       "commit": "...",
       "host": "...",
       "num_envs": 4,
+      "repetitions": 3,
+      "base_seed": 42,
       "warmup_steps": 20,
       "measure_steps": 100,
       "baseline_mode": "dummy",
+      "baseline_num_envs": 1,
+      "baseline": {
+        "transitions_per_second": 10.2,
+        "status": "ok"
+      },
       "results": [
         {
           "mode": "dummy",
           "transitions_per_second": 42.3,
-          "speedup_vs_baseline": 1.0,
+          "speedup_vs_baseline": 4.147,
           "status": "ok",
-          "error": null
+          "error": null,
+          "repetition_results": []
         },
         ...
       ]
@@ -51,6 +61,12 @@ Notes
   method and must be invoked as an executable file (not via ``python -c``).
 - ``threaded_lidar_batch`` uses the same in-process workers as ``threaded``
   while enabling its cross-environment LiDAR batch coordinator.
+- Speedups use a separately measured one-environment ``DummyVecEnv`` fallback
+  as the baseline. The four requested mode rows all use ``num_envs``.
+- The first scenario definition in the training config's scenario manifest is
+  held fixed across modes; the JSON records that selection and the manifest hash.
+- Results are diagnostic until a sufficiently long, reviewed measurement
+  supports the parent issue's acceptance gate.
 
 Found while implementing #4981; tracked as issue #5118.
 """
@@ -64,6 +80,7 @@ import hashlib
 import json
 import platform
 import socket
+import statistics
 import subprocess
 import sys
 import time
@@ -72,7 +89,7 @@ from typing import Any
 
 _REPO_ROOT = Path(__file__).parent.parent.parent.resolve()
 _DEFAULT_CONFIG = _REPO_ROOT / "configs/training/lidar/lidar_ppo_mlp_smoke_issue_1662.yaml"
-_SCHEMA = "vecenv_throughput_comparator.v1"
+_SCHEMA = "vecenv_throughput_comparator.v2"
 _SUPPORTED_MODES = ("dummy", "subproc", "threaded", "threaded_lidar_batch")
 _RECOVERABLE_MODE_ERRORS = (
     EOFError,
@@ -97,6 +114,7 @@ class _EnvFactory:
     scenario_path: Path
     env_factory_kwargs: dict[str, Any]
     seed: int | None
+    env_overrides: dict[str, Any] = dataclasses.field(default_factory=dict)
 
     def __call__(self):
         from robot_sf.gym_env.environment_factory import make_robot_env
@@ -104,6 +122,7 @@ class _EnvFactory:
             build_robot_config_from_scenario,
             load_scenarios,
         )
+        from scripts.training.train_ppo import _apply_env_overrides
 
         scenarios = load_scenarios(self.scenario_path)
         if not scenarios:
@@ -112,6 +131,9 @@ class _EnvFactory:
             scenarios[0],
             scenario_path=self.scenario_path,
         )
+        # Reuse the production PPO override path so this measures the training
+        # config's declared environment rather than the raw scenario defaults.
+        _apply_env_overrides(config, self.env_overrides)
         return make_robot_env(
             config=config,
             seed=self.seed,
@@ -155,6 +177,15 @@ def _git_commit(repo_root: Path) -> str:
         return "unknown"
 
 
+def _provenance_path(path: Path) -> str:
+    """Prefer a checkout-independent repository-relative provenance path."""
+    resolved = path.resolve()
+    try:
+        return str(resolved.relative_to(_REPO_ROOT))
+    except ValueError:
+        return str(resolved)
+
+
 def _resolve_scenario_path(config: dict[str, Any], config_path: Path) -> Path:
     """Resolve the scenario_config path relative to the config file."""
     raw = config.get("scenario_config")
@@ -186,6 +217,13 @@ def _env_factory_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     return dict(raw)
 
 
+def _env_overrides(config: dict[str, Any]) -> dict[str, Any]:
+    raw = config.get("env_overrides") or {}
+    if not isinstance(raw, dict):
+        raise ValueError("config env_overrides must be a mapping when provided")
+    return dict(raw)
+
+
 # ---------------------------------------------------------------------------
 # VecEnv construction
 # ---------------------------------------------------------------------------
@@ -196,12 +234,14 @@ def _build_env_fns(
     env_factory_kwargs: dict[str, Any],
     num_envs: int,
     base_seed: int,
+    env_overrides: dict[str, Any] | None = None,
 ) -> list[_EnvFactory]:
     return [
         _EnvFactory(
             scenario_path=scenario_path,
             env_factory_kwargs=env_factory_kwargs,
             seed=base_seed + i,
+            env_overrides=dict(env_overrides or {}),
         )
         for i in range(num_envs)
     ]
@@ -228,13 +268,14 @@ def _build_vec_env(mode: str, env_fns: list[_EnvFactory]):
 # ---------------------------------------------------------------------------
 
 
-def _measure_mode(
+def _measure_mode_once(
     mode: str,
     env_fns: list[_EnvFactory],
     warmup_steps: int,
     measure_steps: int,
+    action_seed: int,
 ) -> dict[str, Any]:
-    """Run warmup then measured steps; return throughput record."""
+    """Run one warmup and measurement repetition; return its throughput record."""
     import numpy as np
 
     try:
@@ -252,6 +293,7 @@ def _measure_mode(
     try:
         vec_env.reset()
         action_space = vec_env.action_space
+        action_space.seed(action_seed)
         for _ in range(warmup_steps):
             actions = np.array([action_space.sample() for _ in range(num_envs)])
             vec_env.step(actions)
@@ -285,6 +327,50 @@ def _measure_mode(
             vec_env.close()
 
 
+def _measure_mode(
+    mode: str,
+    env_fns: list[_EnvFactory],
+    warmup_steps: int,
+    measure_steps: int,
+    repetitions: int,
+    base_seed: int,
+) -> dict[str, Any]:
+    """Measure one mode repeatedly and summarize successful samples by median."""
+    repetition_results: list[dict[str, Any]] = []
+    for repetition in range(repetitions):
+        record = _measure_mode_once(
+            mode,
+            env_fns,
+            warmup_steps,
+            measure_steps,
+            action_seed=base_seed + repetition,
+        )
+        record["repetition"] = repetition
+        repetition_results.append(record)
+
+    failures = [record for record in repetition_results if record["status"] != "ok"]
+    if failures:
+        first = failures[0]
+        return {
+            "mode": mode,
+            "transitions_per_second": None,
+            "speedup_vs_baseline": None,
+            "status": first["status"],
+            "error": first["error"],
+            "repetition_results": repetition_results,
+        }
+
+    samples = [float(record["transitions_per_second"]) for record in repetition_results]
+    return {
+        "mode": mode,
+        "transitions_per_second": round(statistics.median(samples), 2),
+        "speedup_vs_baseline": None,
+        "status": "ok",
+        "error": None,
+        "repetition_results": repetition_results,
+    }
+
+
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
@@ -311,6 +397,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="N",
         help="Number of parallel environments (overrides config; default: config value or 4).",
+    )
+    parser.add_argument(
+        "--repetitions",
+        type=int,
+        default=3,
+        metavar="N",
+        help="Independent measurements per baseline/mode (default: 3; median is reported).",
+    )
+    parser.add_argument(
+        "--base-seed",
+        type=int,
+        default=42,
+        metavar="N",
+        help="First environment and action-sampling seed (default: 42).",
     )
     parser.add_argument(
         "--warmup-steps",
@@ -351,27 +451,46 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def _run_modes(
     modes: list[str],
     env_fns: list[_EnvFactory],
+    baseline_env_fns: list[_EnvFactory],
     warmup_steps: int,
     measure_steps: int,
-) -> tuple[list[dict[str, Any]], float | None]:
-    """Measure throughput for each mode; return results and baseline TPS."""
+    repetitions: int,
+    base_seed: int,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Measure the single-env baseline and every requested target worker mode."""
     results: list[dict[str, Any]] = []
-    baseline_tps: float | None = None
-    baseline_mode = modes[0] if modes else "dummy"
+
+    print("  measuring baseline=dummy num_envs=1 ...", file=sys.stderr)
+    baseline = _measure_mode(
+        "dummy",
+        baseline_env_fns,
+        warmup_steps,
+        measure_steps,
+        repetitions,
+        base_seed,
+    )
+    baseline_tps = baseline["transitions_per_second"]
+    if baseline_tps is not None:
+        baseline["speedup_vs_baseline"] = 1.0
 
     for mode in modes:
         print(f"  measuring mode={mode} ...", file=sys.stderr)
-        record = _measure_mode(mode, env_fns, warmup_steps, measure_steps)
+        record = _measure_mode(
+            mode,
+            env_fns,
+            warmup_steps,
+            measure_steps,
+            repetitions,
+            base_seed,
+        )
         results.append(record)
-        if mode == baseline_mode and record["transitions_per_second"] is not None:
-            baseline_tps = record["transitions_per_second"]
 
     for record in results:
         tps = record["transitions_per_second"]
         if tps is not None and baseline_tps is not None and baseline_tps > 0:
             record["speedup_vs_baseline"] = round(tps / baseline_tps, 3)
 
-    return results, baseline_tps
+    return baseline, results
 
 
 def _write_results(
@@ -411,6 +530,48 @@ def _validate_run_parameters(args: argparse.Namespace) -> None:
         raise ValueError("--warmup-steps must be >= 0")
     if args.measure_steps < 1:
         raise ValueError("--measure-steps must be >= 1")
+    if args.repetitions < 1:
+        raise ValueError("--repetitions must be >= 1")
+
+
+def _write_preflight_failure(
+    *,
+    args: argparse.Namespace,
+    config_path: Path,
+    error: str,
+    host: str,
+) -> Path:
+    """Persist configuration failures through the same machine-readable contract."""
+    config_sha256 = None
+    if config_path.is_file():
+        with contextlib.suppress(OSError):
+            config_sha256 = _sha256_file(config_path)
+    payload = {
+        "schema": _SCHEMA,
+        "status": "failed",
+        "config_path": _provenance_path(config_path),
+        "config_sha256": config_sha256,
+        "scenario_path": None,
+        "scenario_sha256": None,
+        "scenario_selection": None,
+        "commit": _git_commit(_REPO_ROOT),
+        "host": host,
+        "python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        "platform": platform.platform(),
+        "num_envs": args.num_envs,
+        "repetitions": args.repetitions,
+        "base_seed": args.base_seed,
+        "warmup_steps": args.warmup_steps,
+        "measure_steps": args.measure_steps,
+        "modes": list(args.modes),
+        "baseline_mode": "dummy",
+        "baseline_num_envs": 1,
+        "baseline": None,
+        "results": [],
+        "failures": [{"scope": "configuration", "error": error}],
+        "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+    }
+    return _write_results(payload, args.output, host)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -418,9 +579,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
+    host = socket.gethostname()
     config_path = Path(args.config).resolve()
     if not config_path.exists():
-        print(f"ERROR: config not found: {config_path}", file=sys.stderr)
+        error = f"config not found: {config_path}"
+        output_path = _write_preflight_failure(
+            args=args,
+            config_path=config_path,
+            error=error,
+            host=host,
+        )
+        print(f"ERROR: {error}; wrote: {output_path}", file=sys.stderr)
         return 1
 
     try:
@@ -429,11 +598,26 @@ def main(argv: list[str] | None = None) -> int:
         scenario_path = _resolve_scenario_path(raw_config, config_path)
         num_envs = _resolve_num_envs(raw_config, args.num_envs)
         env_factory_kwargs = _env_factory_kwargs(raw_config)
+        env_overrides = _env_overrides(raw_config)
     except ValueError as exc:
-        print(f"ERROR: invalid comparator configuration: {exc}", file=sys.stderr)
+        error = f"invalid comparator configuration: {exc}"
+        output_path = _write_preflight_failure(
+            args=args,
+            config_path=config_path,
+            error=error,
+            host=host,
+        )
+        print(f"ERROR: {error}; wrote: {output_path}", file=sys.stderr)
         return 1
     if not scenario_path.exists():
-        print(f"ERROR: scenario not found: {scenario_path}", file=sys.stderr)
+        error = f"scenario not found: {scenario_path}"
+        output_path = _write_preflight_failure(
+            args=args,
+            config_path=config_path,
+            error=error,
+            host=host,
+        )
+        print(f"ERROR: {error}; wrote: {output_path}", file=sys.stderr)
         return 1
 
     modes = list(args.modes)
@@ -441,42 +625,84 @@ def main(argv: list[str] | None = None) -> int:
         modes.remove("subproc")
         print("INFO: subproc mode skipped via --skip-subproc", file=sys.stderr)
 
-    host = socket.gethostname()
     commit = _git_commit(_REPO_ROOT)
 
     print(
         f"VecEnv throughput comparator | "
         f"host={host} commit={commit[:12]} "
-        f"num_envs={num_envs} warmup={args.warmup_steps} measure={args.measure_steps}",
+        f"num_envs={num_envs} repetitions={args.repetitions} "
+        f"warmup={args.warmup_steps} measure={args.measure_steps}",
         file=sys.stderr,
     )
 
-    env_fns = _build_env_fns(scenario_path, env_factory_kwargs, num_envs, base_seed=42)
-    results, _ = _run_modes(modes, env_fns, args.warmup_steps, args.measure_steps)
+    env_fns = _build_env_fns(
+        scenario_path,
+        env_factory_kwargs,
+        num_envs,
+        base_seed=args.base_seed,
+        env_overrides=env_overrides,
+    )
+    baseline_env_fns = _build_env_fns(
+        scenario_path,
+        env_factory_kwargs,
+        1,
+        base_seed=args.base_seed,
+        env_overrides=env_overrides,
+    )
+    baseline, results = _run_modes(
+        modes,
+        env_fns,
+        baseline_env_fns,
+        args.warmup_steps,
+        args.measure_steps,
+        args.repetitions,
+        args.base_seed,
+    )
+
+    failures = []
+    if baseline["status"] != "ok":
+        failures.append({"scope": "baseline", "mode": "dummy", "error": baseline["error"]})
+    failures.extend(
+        {"scope": "mode", "mode": record["mode"], "error": record["error"]}
+        for record in results
+        if record["status"] != "ok"
+    )
 
     output_data: dict[str, Any] = {
         "schema": _SCHEMA,
-        "config_path": str(config_path),
+        "status": "failed" if failures else "ok",
+        "config_path": _provenance_path(config_path),
         "config_sha256": _sha256_file(config_path),
+        "scenario_path": _provenance_path(scenario_path),
+        "scenario_sha256": _sha256_file(scenario_path),
+        "scenario_selection": {"strategy": "first", "index": 0},
         "commit": commit,
         "host": host,
         "python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
         "platform": platform.platform(),
         "num_envs": num_envs,
+        "repetitions": args.repetitions,
+        "base_seed": args.base_seed,
         "warmup_steps": args.warmup_steps,
         "measure_steps": args.measure_steps,
-        "baseline_mode": modes[0] if modes else "dummy",
+        "modes": modes,
+        "baseline_mode": "dummy",
+        "baseline_num_envs": 1,
+        "baseline": baseline,
         "results": results,
+        "failures": failures,
+        "claim_boundary": "diagnostic_only_not_benchmark_evidence",
     }
 
     output_path = _write_results(output_data, args.output, host)
     print(f"  wrote: {output_path}", file=sys.stderr)
     _print_table(results)
 
-    failed = [r for r in results if r["status"] != "ok"]
-    if failed:
-        modes_str = ", ".join(r["mode"] for r in failed)
-        print(f"\nWARN: failed modes: {modes_str}", file=sys.stderr)
+    if failures:
+        scopes = ", ".join(
+            f"{failure['scope']}:{failure.get('mode', 'configuration')}" for failure in failures
+        )
+        print(f"\nWARN: failed measurements: {scopes}", file=sys.stderr)
         return 2
     return 0
 

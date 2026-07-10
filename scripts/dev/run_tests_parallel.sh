@@ -258,6 +258,34 @@ for pytest_arg in "${pytest_args[@]}"; do
   fi
 done
 
+# The fixed core list keeps routine readiness fast, but must not hide a newly
+# changed top-level core test that is absent from that list.
+changed_top_level_core_test_paths=()
+if [[ "$lane_mode" == "core" ]]; then
+  changed_test_base_ref="${BASE_REF:-origin/main}"
+  if git rev-parse --verify --quiet "${changed_test_base_ref}^{commit}" >/dev/null 2>&1; then
+    while IFS= read -r changed_test_path; do
+      if [[ -f "$changed_test_path" ]] && ! is_optional_test_path "$changed_test_path"; then
+        changed_top_level_core_test_paths+=("$changed_test_path")
+      fi
+    done < <(
+      git diff --name-only --diff-filter=ACMR "${changed_test_base_ref}...HEAD" -- \
+        ':(top,glob)tests/test_*.py'
+    )
+  fi
+fi
+
+append_unique_pytest_arg() {
+  local candidate="$1"
+  local existing
+  for existing in "${pytest_args[@]}"; do
+    if [[ "$existing" == "$candidate" ]]; then
+      return
+    fi
+  done
+  pytest_args+=("$candidate")
+}
+
 if [[ "$lane_mode" == "core" ]]; then
   for pytest_arg in "${explicit_test_targets[@]}"; do
     if is_optional_test_path "$pytest_arg"; then
@@ -269,7 +297,12 @@ if [[ "$lane_mode" == "core" ]]; then
   if [[ ${#explicit_test_targets[@]} -eq 0 ]]; then
     for core_test_path in "${core_test_paths[@]}"; do
       if [[ -e "$core_test_path" ]]; then
-        pytest_args+=("$core_test_path")
+        append_unique_pytest_arg "$core_test_path"
+      fi
+    done
+    for changed_test_path in "${changed_top_level_core_test_paths[@]}"; do
+      if [[ -e "$changed_test_path" ]]; then
+        append_unique_pytest_arg "$changed_test_path"
       fi
     done
   else

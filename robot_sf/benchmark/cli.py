@@ -57,7 +57,7 @@ from robot_sf.benchmark.collision_scenario_similarity import (
 from robot_sf.benchmark.distributions import collect_grouped_values as _dist_collect
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
 from robot_sf.benchmark.doctor import collect_doctor_report, doctor_exit_code
-from robot_sf.benchmark.errors import EpisodeRecordInputError
+from robot_sf.benchmark.errors import AggregationMetadataError, EpisodeRecordInputError
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
 from robot_sf.benchmark.failure_mechanism_classifier import (
     classify_failure_mechanisms_from_jsonl,
@@ -128,6 +128,7 @@ _CLI_INPUT_ERRORS = (
     OSError,
     json.JSONDecodeError,
     yaml.YAMLError,
+    AggregationMetadataError,
     EpisodeRecordInputError,
 )
 # AttributeError is limited to the optional tqdm API probe below; ordinary CLI

@@ -28,6 +28,7 @@ root). Pass ``--benchmarks-dir`` to point directly at a ``benchmarks`` tree.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -47,6 +48,23 @@ from robot_sf.common import (
 
 class BackfillError(RuntimeError):
     """Raised when the retained artefacts are insufficient to rebuild a manifest."""
+
+
+def _load_eval_by_scenario(path: Path) -> list[dict[str, Any]]:
+    """Load the row-array retained by the evaluation-by-scenario writer."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise BackfillError(f"Unable to read eval-by-scenario JSON at {path}") from exc
+    if not isinstance(payload, list):
+        raise BackfillError(f"Expected JSON array in {path}")
+
+    rows: list[dict[str, Any]] = []
+    for index, row in enumerate(payload):
+        if not isinstance(row, dict):
+            raise BackfillError(f"Expected JSON object at index {index} in {path}")
+        rows.append(row)
+    return rows
 
 
 def _single(paths: list[Path], label: str, *, required: bool = True) -> Path | None:
@@ -131,7 +149,7 @@ def build_artifact(
 
     perf = _load_json(perf_path)
     expert = _load_json(expert_path)
-    eval_by_scenario = _load_json(eval_scenario_path)
+    eval_by_scenario = _load_eval_by_scenario(eval_scenario_path)
 
     run_id = perf.get("run_id") or episode_path.stem
     wall_sec = perf.get("total_wall_clock_sec")

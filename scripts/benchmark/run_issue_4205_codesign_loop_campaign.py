@@ -677,9 +677,18 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
         research_report,
     )
     manifest_path = Path(args.hydration_manifest)
+    try:
+        manifest_payload = _load_json(manifest_path)
+    except (FileNotFoundError, OSError) as exc:
+        # Fail closed on a missing/unreadable private hydration manifest instead
+        # of letting the raw OSError propagate (#4960: regression after the
+        # local _load_json was consolidated onto hash_utils.load_json, which
+        # dropped the path.exists() -> ContractError guard). main() converts
+        # ContractError into exit code 2 before any campaign output is written.
+        raise ContractError(f"missing or unreadable hydration manifest: {manifest_path}") from exc
     hydration = _validate_checkpoint_hydration_manifest(
         research_report,
-        _load_json(manifest_path),
+        manifest_payload,
         manifest_path=manifest_path,
     )
     if hydration.get("schema_version") != HYDRATION_MANIFEST_SCHEMA:

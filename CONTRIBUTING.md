@@ -231,7 +231,7 @@ If you're extending robot_sf_ll7 for research, consider contributing:
 ### New Scenario Configurations
 
 ```yaml
-# In configs/scenarios/your_scenarios.yaml
+# In configs/scenarios/<scenario_name>.yaml
 scenarios:
   scenario_name:
     description: "Description of interaction pattern"
@@ -250,7 +250,7 @@ the `robot_sf_bench` entry point with explicit scenario, algorithm, and algorith
 uv run robot_sf_bench run \
   --matrix configs/scenarios/planner_sanity_matrix_v1.yaml \
   --algo your_planner \
-  --algo-config configs/algos/your_planner.yaml \
+  --algo-config configs/algos/<planner_name>.yaml \
   --out output/benchmarks/your_planner_smoke/episodes.jsonl \
   --repeats 1 \
   --horizon 300 \

@@ -13,6 +13,8 @@ import yaml
 from robot_sf.benchmark.camera_ready._config import load_campaign_config
 from scripts.tools import split_campaign_config_by_planner as splitter
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _fixture_parent() -> dict[str, object]:
     return {
@@ -129,8 +131,9 @@ def test_unsafe_parent_name_fails_before_creating_output(tmp_path: Path) -> None
 def test_real_h500_s20_children_load_without_error(tmp_path: Path) -> None:
     """Nested emitted configs remain directly runnable by the existing config loader."""
 
-    parent_path = Path(
-        "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml"
+    parent_path = (
+        REPOSITORY_ROOT
+        / "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml"
     )
     result = splitter.split_campaign_config(parent_path, tmp_path / "s20")
 

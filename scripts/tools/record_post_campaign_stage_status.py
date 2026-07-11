@@ -43,6 +43,11 @@ def build_stage_status(
     an already completed campaign as a failed scheduler job.
     """
     summary, summary_status = _load_campaign_summary(campaign_summary_path)
+    if campaign_exit_code == 0 and summary_status != "loaded":
+        raise ValueError(
+            "campaign completed successfully (exit 0) but its summary could not be loaded "
+            f"({summary_status}) from {campaign_summary_path}"
+        )
     warnings = summary.get("warnings", []) if summary is not None else []
     if not isinstance(warnings, list):
         warnings = []

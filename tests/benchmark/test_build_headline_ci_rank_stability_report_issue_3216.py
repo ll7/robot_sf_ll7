@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import runpy
 import subprocess
 import sys
 from pathlib import Path
@@ -33,6 +34,32 @@ def _load_module() -> ModuleType:
 
 issue3216 = _load_module()
 ReportConfig = issue3216.ReportConfig
+
+
+@pytest.mark.parametrize("summary_contents", (None, "not-json"))
+def test_stage_status_fails_closed_when_successful_campaign_summary_is_unavailable(
+    tmp_path: Path,
+    summary_contents: str | None,
+) -> None:
+    """An exit-0 campaign cannot write a vacuous status envelope without its summary."""
+
+    module = runpy.run_path(
+        str(
+            Path(__file__).resolve().parents[2]
+            / "scripts/tools/record_post_campaign_stage_status.py"
+        )
+    )
+    summary_path = tmp_path / "campaign_summary.json"
+    if summary_contents is not None:
+        summary_path.write_text(summary_contents, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="summary could not be loaded"):
+        module["build_stage_status"](
+            campaign_summary_path=summary_path,
+            campaign_exit_code=0,
+            stage_name="report",
+            stage_exit_code=0,
+        )
 
 
 def test_read_csv_rows_fails_closed_on_missing_empty_and_header_only(tmp_path: Path) -> None:
@@ -509,10 +536,12 @@ def test_campaign_recovery_writes_headline_rows_from_completed_artifacts(
     assert by_family["bottleneck"]["row_status"] == "ok"
 
 
+@pytest.mark.parametrize("status_recorder_exit", (0, 17))
 def test_campaign_wrapper_runs_builder_before_requiring_headline_rows(
     tmp_path: Path,
+    status_recorder_exit: int,
 ) -> None:
-    """The wrapper no longer searches for headline_rows before builder execution."""
+    """The wrapper records a real status envelope or fails when it cannot persist one."""
 
     repo_root = Path(__file__).resolve().parents[2]
     output_root = tmp_path / "benchmarks"
@@ -562,6 +591,9 @@ case "${1:-}" in
     echo '# fixture' > "$output_dir/report.md"
     ;;
   scripts/tools/record_post_campaign_stage_status.py)
+    if [ "${STATUS_RECORDER_EXIT:-0}" -ne 0 ]; then
+      exit "$STATUS_RECORDER_EXIT"
+    fi
     exec python "$@"
     ;;
   *)
@@ -577,6 +609,7 @@ esac
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "OUTPUT_ROOT": str(output_root),
         "REPORT_DIR": str(report_dir),
+        "STATUS_RECORDER_EXIT": str(status_recorder_exit),
         "UV_STUB_LOG": str(log_path),
     }
 
@@ -595,7 +628,14 @@ esac
         check=False,
     )
 
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == status_recorder_exit, result.stderr
+    if status_recorder_exit:
+        assert "ERROR: failed to write post-campaign stage status (exit 17)." in result.stderr
+        assert not (
+            output_root / "fixture_campaign" / "reports" / "post_campaign_stage_status.json"
+        ).exists()
+        return
+
     assert "locate headline rows" not in result.stdout
     assert " rows=" in result.stdout
     calls = log_path.read_text(encoding="utf-8")

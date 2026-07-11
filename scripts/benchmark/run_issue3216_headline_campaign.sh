@@ -180,7 +180,8 @@ echo " report_stage_exit_code=$report_exit_code"
 echo " report_stage_failed=$([ "$report_exit_code" -eq 0 ] && echo false || echo true)"
 echo " post_campaign_stage_status=$STAGE_STATUS"
 if [ "$status_record_exit_code" -ne 0 ]; then
-  echo "WARNING: failed to write post-campaign stage status (exit $status_record_exit_code)." >&2
+  echo "ERROR: failed to write post-campaign stage status (exit $status_record_exit_code)." >&2
+  exit "$status_record_exit_code"
 fi
 
 if [ "$report_exit_code" -ne 0 ]; then

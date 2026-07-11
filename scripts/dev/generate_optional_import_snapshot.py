@@ -46,6 +46,10 @@ NOTES = {
         "RuntimeError. Do not collapse to ImportError."
     ),
     "ImportError+OSError": ("Blessed broad catch: native-lib / filesystem load may raise OSError."),
+    "ImportError+OSError+RuntimeError": (
+        "Blessed broad catch: best-effort repository-root provenance may fail during module import "
+        "or path resolution."
+    ),
     "ImportError+SyntaxError": (
         "Blessed broad catch: parser/extension load may surface SyntaxError."
     ),

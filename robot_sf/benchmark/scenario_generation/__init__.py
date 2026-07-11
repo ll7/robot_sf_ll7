@@ -3,6 +3,12 @@
 Entries produced here are generated scenario hypotheses, never benchmark evidence.
 """
 
+from robot_sf.benchmark.scenario_generation.archive_sampler import (
+    ArchiveSamplingSpec,
+    GeneratedScenarioArchiveSamplingError,
+    run_archive_sampling,
+    sample_generated_archive,
+)
 from robot_sf.benchmark.scenario_generation.catalog_schema import (
     CATALOG_ENTRY_SCHEMA_VERSION,
     GeneratedScenarioCatalogValidationError,
@@ -19,6 +25,8 @@ from robot_sf.benchmark.scenario_generation.segment_extraction import extract_cr
 
 __all__ = [
     "CATALOG_ENTRY_SCHEMA_VERSION",
+    "ArchiveSamplingSpec",
+    "GeneratedScenarioArchiveSamplingError",
     "GeneratedScenarioCatalogValidationError",
     "GeneratedScenarioMaterialization",
     "apply_generated_replay_runtime",
@@ -26,5 +34,7 @@ __all__ = [
     "extract_critical_segment",
     "generated_replay_status_entry",
     "materialize_generated_scenario",
+    "run_archive_sampling",
+    "sample_generated_archive",
     "validate_catalog_entry",
 ]

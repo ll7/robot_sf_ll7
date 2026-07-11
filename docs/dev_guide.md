@@ -207,6 +207,23 @@ If a fresh linked worktree fails to collect a focused test because an optional d
 classifies the direct failure as setup or optional-dependency friction for that worktree, not as a
 code regression; record both commands in the PR or handoff.
 
+When validating the SNQI (Social Navigation Quality Index) contract or camera-ready exit handling,
+pass the relevant files explicitly. `-k` filters only after pytest has collected files, so starting
+from `pytest tests -k ...` can import unrelated optional stacks first. This command collects only
+the files that own the checks:
+
+```bash
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy scripts/dev/run_focused_tests.sh \
+  tests/unit/benchmark/test_snqi_campaign_contract.py \
+  tests/benchmark/test_camera_ready_campaign.py \
+  tests/tools/test_run_camera_ready_benchmark.py \
+  -k "snqi_contract or exit or camera_ready_summary" -q
+```
+
+If a change adds another focused contract test, append its file path to this command rather than
+falling back to the whole `tests` tree. This is a collection boundary, not a replacement for the
+optional readiness lane when the changed tests actually require optional dependencies.
+
 Use a normal worktree-local `uv sync --all-extras` and
 `PR_READY_MODE=final BASE_REF=origin/main scripts/dev/pr_ready_check.sh` for final PR proof,
 dependency changes, generated lockfile validation, or any run where environment isolation matters.

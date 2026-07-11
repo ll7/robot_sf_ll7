@@ -137,28 +137,57 @@ fi
 
 echo "== [#3216] campaign: increased-seed-budget headline 7x7 (S20) =="
 echo " config=$CONFIG campaign_id=$CAMPAIGN_ID output_root=$OUTPUT_ROOT"
+campaign_exit_code=0
 uv run python scripts/tools/run_camera_ready_benchmark.py \
   --config "$CONFIG" \
   --campaign-id "$CAMPAIGN_ID" \
-  --output-root "$OUTPUT_ROOT"
+  --output-root "$OUTPUT_ROOT" || campaign_exit_code=$?
+
+echo " campaign_stage_exit_code=$campaign_exit_code"
+if [ "$campaign_exit_code" -ne 0 ]; then
+  exit "$campaign_exit_code"
+fi
 
 echo "== [#3216] report: per-cell CI + rank-stability (fail-closed; never self-certifies paper-grade) =="
 CAMPAIGN_ROOT="$OUTPUT_ROOT/$CAMPAIGN_ID"
 mkdir -p "$REPORT_DIR"
+report_exit_code=0
 uv run python scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py \
   --campaign "$CAMPAIGN_ROOT" \
   --rank-metric "$RANK_METRIC" \
   --expected-planners-from-config "$CONFIG" \
-  --output-dir "$REPORT_DIR"
+  --output-dir "$REPORT_DIR" || report_exit_code=$?
 
 ROWS="$CAMPAIGN_ROOT/reports/headline_rows.json"
-if [ ! -f "$ROWS" ]; then
+if [ "$report_exit_code" -eq 0 ] && [ ! -f "$ROWS" ]; then
   echo "ERROR: report builder did not produce $ROWS." >&2
-  exit 5
+  report_exit_code=5
 fi
-if [ ! -f "$REPORT_DIR/result.json" ]; then
+if [ "$report_exit_code" -eq 0 ] && [ ! -f "$REPORT_DIR/result.json" ]; then
   echo "ERROR: report builder did not produce $REPORT_DIR/result.json." >&2
-  exit 5
+  report_exit_code=5
+fi
+
+STAGE_STATUS="$CAMPAIGN_ROOT/reports/post_campaign_stage_status.json"
+status_record_exit_code=0
+uv run python scripts/tools/record_post_campaign_stage_status.py \
+  --campaign-summary "$CAMPAIGN_ROOT/reports/campaign_summary.json" \
+  --campaign-exit-code "$campaign_exit_code" \
+  --stage-name headline_ci_rank_stability_report \
+  --stage-exit-code "$report_exit_code" \
+  --output "$STAGE_STATUS" || status_record_exit_code=$?
+echo " report_stage_exit_code=$report_exit_code"
+echo " report_stage_failed=$([ "$report_exit_code" -eq 0 ] && echo false || echo true)"
+echo " post_campaign_stage_status=$STAGE_STATUS"
+if [ "$status_record_exit_code" -ne 0 ]; then
+  echo "ERROR: failed to write post-campaign stage status (exit $status_record_exit_code)." >&2
+  exit "$status_record_exit_code"
+fi
+
+if [ "$report_exit_code" -ne 0 ]; then
+  echo "WARNING: campaign completed but the post-campaign report stage failed; " \
+    "campaign exit remains $campaign_exit_code." >&2
+  exit "$campaign_exit_code"
 fi
 echo " rows=$ROWS"
 

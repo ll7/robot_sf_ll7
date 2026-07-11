@@ -78,6 +78,15 @@ def _planner_key(entry: Any, index: int) -> str:
     return key
 
 
+def _safe_output_component(value: str, *, label: str) -> str:
+    """Return a filename-safe config-derived component or fail before emission."""
+
+    component = value.strip()
+    if not component or component in {".", ".."} or "/" in component or "\\" in component:
+        raise CampaignSplitError(f"{label} cannot contain a path separator or traversal component")
+    return component
+
+
 def _collect_enabled_planners(
     payload: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], tuple[str, ...]]:
@@ -182,9 +191,9 @@ def split_campaign_config(
     enabled, disabled_keys = _collect_enabled_planners(parent)
     groups = _split_groups(enabled, group_by=group_by)
     _validate_union(enabled, [planners for _, planners in groups])
-    parent_name = str(parent.get("name") or config_path.stem).strip()
-    if not parent_name:
-        raise CampaignSplitError("Campaign config requires a non-empty name or filename stem")
+    parent_name = _safe_output_component(
+        str(parent.get("name") or config_path.stem), label="Campaign config name"
+    )
     if "split_provenance" in parent:
         raise CampaignSplitError(
             "Campaign config already has split_provenance; refusing to overwrite it"

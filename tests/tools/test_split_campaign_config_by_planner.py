@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 
 from robot_sf.benchmark.camera_ready._config import load_campaign_config
@@ -108,6 +109,21 @@ def test_split_by_planner_group_emits_one_child_per_group(tmp_path: Path) -> Non
     assert [planner["key"] for planner in core_payload["planners"]] == ["goal", "orca"]
     assert core_payload["split_provenance"]["arm_key"] == "core"
     assert core_payload["split_provenance"]["split_mode"] == "per_group"
+
+
+def test_unsafe_parent_name_fails_before_creating_output(tmp_path: Path) -> None:
+    """A config name cannot turn derived child filenames into paths outside out_dir."""
+
+    parent_path = tmp_path / "parent.yaml"
+    parent = _fixture_parent()
+    parent["name"] = "../../outside"
+    parent_path.write_text(yaml.safe_dump(parent, sort_keys=False), encoding="utf-8")
+    out_dir = tmp_path / "splits"
+
+    with pytest.raises(splitter.CampaignSplitError, match="Campaign config name"):
+        splitter.split_campaign_config(parent_path, out_dir)
+
+    assert not out_dir.exists()
 
 
 def test_real_h500_s20_children_load_without_error(tmp_path: Path) -> None:

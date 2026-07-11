@@ -152,7 +152,7 @@ class TestGoalRobustness:
         )
         report = compute_robustness_report(record, dt=0.1)
         goal = next(p for p in report.properties if p.property_name == "goal")
-        assert goal.robustness == pytest.approx(0.0)
+        assert goal.robustness == pytest.approx(-0.1)
         assert goal.violated
 
     def test_critical_time_is_actual_goal_time(self) -> None:
@@ -221,6 +221,16 @@ class TestCollisionRobustness:
         collision = next(p for p in report.properties if p.property_name == "collision")
         assert collision.critical_time_s == pytest.approx(3.7)
 
+    def test_non_violating_collision_has_no_critical_time(self) -> None:
+        record = _make_episode_record(
+            total_collision_count=0.0,
+            collision_event=False,
+            collision_events=[{"collision_time": 3.7}],
+        )
+        report = compute_robustness_report(record)
+        collision = next(p for p in report.properties if p.property_name == "collision")
+        assert collision.critical_time_s is None
+
 
 class TestRobustnessReport:
     """Tests for the aggregated robustness report."""
@@ -272,6 +282,9 @@ class TestRobustnessReport:
             assert orig.property_name == rest.property_name
             assert orig.robustness == pytest.approx(rest.robustness)
             assert orig.violated == rest.violated
+            assert orig.critical_time_s == rest.critical_time_s
+        collision = next(p for p in restored.properties if p.property_name == "collision")
+        assert collision.critical_time_s == pytest.approx(2.0)
 
 
 class TestWriteRobustnessReport:
@@ -450,6 +463,16 @@ class TestFirstCollisionTime:
         ledger = {"collision_events": [{"collision_time": None}]}
         assert _first_collision_time(ledger) is None
 
+    def test_skips_malformed_or_non_finite_events(self) -> None:
+        ledger = {
+            "collision_events": [
+                {"collision_time": "not-a-time"},
+                {"collision_time": float("nan")},
+                {"collision_time": 3.0},
+            ]
+        }
+        assert _first_collision_time(ledger) == pytest.approx(3.0)
+
 
 class TestObjectiveRegistry:
     """Tests for the temporal_robustness objective registration."""
@@ -508,3 +531,27 @@ class TestDtDerivation:
         t_total = 200 * 0.1
         t_actual = 0.3 * t_total
         assert goal.robustness == pytest.approx(t_total - t_actual)
+
+    @pytest.mark.parametrize(
+        ("horizon", "wall_time_sec", "steps"),
+        [(None, 20.0, 200), ("bad", "bad", "bad"), (0, float("nan"), 0)],
+    )
+    def test_malformed_metadata_falls_back_to_safe_defaults(
+        self,
+        horizon: object,
+        wall_time_sec: object,
+        steps: object,
+    ) -> None:
+        record = _make_episode_record()
+        record["horizon"] = horizon
+        record["wall_time_sec"] = wall_time_sec
+        record["steps"] = steps
+        report = compute_robustness_report(record)
+        goal = next(p for p in report.properties if p.property_name == "goal")
+        assert goal.robustness == pytest.approx(14.0)
+
+    @pytest.mark.parametrize("name, value", [("dt", 0.0), ("dt", float("nan")), ("tau", -1.0)])
+    def test_invalid_explicit_semantic_parameters_raise(self, name: str, value: float) -> None:
+        kwargs = {name: value}
+        with pytest.raises(ValueError, match=f"{name} must be a finite positive float"):
+            compute_robustness_report(_make_episode_record(), **kwargs)

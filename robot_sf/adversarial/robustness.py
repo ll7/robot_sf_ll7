@@ -5,7 +5,7 @@ positive = satisfaction margin) for social-navigation safety properties:
 
 1. **Clearance** (always d_clearance > d_safe): ``rho = min_clearance - NEAR_MISS_DIST``
 2. **TTC** (always TTC > tau while closing): ``rho = min_ttc - tau``
-3. **Goal reaching** (eventually reach goal within T): ``rho = T*(1 - time_to_goal_norm) - T``
+3. **Goal reaching** (eventually reach goal within T): ``rho = T - T_actual``
 4. **Progress** (avoid sustained low-progress): ``rho = -failure_to_progress``
 5. **Collision** (never collide): ``rho = -collision_count``
 
@@ -47,6 +47,37 @@ def _metric(metrics: dict[str, Any], key: str, default: float = 0.0) -> float:
     except (TypeError, ValueError):
         return default
     return parsed if math.isfinite(parsed) else default
+
+
+def _positive_int(value: Any, default: int) -> int:
+    """Read a positive integer, falling back for malformed record metadata."""
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _derived_dt(record: dict[str, Any]) -> float:
+    """Derive a finite positive timestep from optional episode metadata."""
+    try:
+        wall_time = float(record.get("wall_time_sec"))
+        steps = float(record.get("steps"))
+    except (TypeError, ValueError):
+        return 0.1
+    dt = wall_time / steps if wall_time > 0.0 and steps > 0.0 else 0.1
+    return dt if math.isfinite(dt) and dt > 0.0 else 0.1
+
+
+def _validated_positive_float(value: float, *, name: str) -> float:
+    """Validate an explicit semantic parameter rather than masking a bad configuration."""
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a finite positive float") from exc
+    if not math.isfinite(parsed) or parsed <= 0.0:
+        raise ValueError(f"{name} must be a finite positive float")
+    return parsed
 
 
 @dataclass(frozen=True)
@@ -165,8 +196,9 @@ def _goal_robustness(
     """Eventually reach goal within T: rho = T - T_actual.
 
     When the goal is reached at time T_actual < T, rho > 0 (satisfaction).
-    When the goal is not reached, T_actual = T (the full horizon), so rho = 0
-    (boundary violation -- counts as violation).
+    When the goal is not reached, model it as one unresolved timestep beyond
+    the horizon. This keeps the signed contract intact: non-completion is a
+    negative violation rather than a zero-valued tie with a boundary success.
     """
     t_total = horizon * dt
     route_complete = bool(outcome.get("route_complete"))
@@ -176,7 +208,7 @@ def _goal_robustness(
         rho = t_total - t_actual
         critical_time = t_actual
     else:
-        rho = 0.0
+        rho = -dt
         critical_time = t_total
     return PropertyRobustness(
         property_name="goal",
@@ -213,7 +245,7 @@ def _collision_robustness(
         collision_flag = bool(outcome.get("collision") or outcome.get("collision_event"))
         collision_count = 1.0 if collision_flag else 0.0
     rho = -collision_count
-    critical_time = _first_collision_time(event_ledger)
+    critical_time = _first_collision_time(event_ledger) if rho < 0 else None
     return PropertyRobustness(
         property_name="collision",
         robustness=rho,
@@ -226,16 +258,17 @@ def _collision_robustness(
 def _first_collision_time(event_ledger: dict[str, Any]) -> float | None:
     """Extract the timestamp of the first collision event, if available."""
     collision_events = event_ledger.get("collision_events")
-    if not isinstance(collision_events, list) or not collision_events:
+    if not isinstance(collision_events, list):
         return None
-    first = collision_events[0]
-    if isinstance(first, dict):
-        t = first.get("collision_time")
-        if t is not None:
-            try:
-                return float(t)
-            except (TypeError, ValueError):
-                return None
+    for event in collision_events:
+        if not isinstance(event, dict):
+            continue
+        try:
+            timestamp = float(event.get("collision_time"))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(timestamp):
+            return timestamp
     return None
 
 
@@ -268,15 +301,13 @@ def compute_robustness_report(
     event_ledger = (
         record.get("event_ledger") if isinstance(record.get("event_ledger"), dict) else {}
     )
-    horizon = int(record.get("horizon", 200))
+    horizon = _positive_int(record.get("horizon"), 200)
 
     if dt is None:
-        wall_time = record.get("wall_time_sec")
-        steps = record.get("steps")
-        if wall_time and steps and steps > 0:
-            dt = float(wall_time) / float(steps)
-        else:
-            dt = 0.1
+        dt = _derived_dt(record)
+    else:
+        dt = _validated_positive_float(dt, name="dt")
+    tau = _validated_positive_float(tau, name="tau")
 
     properties = (
         _clearance_robustness(metrics, event_ledger),

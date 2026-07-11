@@ -33,6 +33,7 @@ import argparse
 import json
 import math
 import os
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -537,12 +538,10 @@ def _pct(value: Any) -> str:
 def _trace_commit() -> str:
     """Return the current git commit hash for provenance, or 'unknown'."""
     try:
-        import subprocess
-
         return subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=str(REPO_ROOT), text=True
         ).strip()
-    except Exception:  # noqa: BLE001 - provenance-only; never fail the trace on it
+    except (OSError, subprocess.CalledProcessError):
         return "unknown"
 
 

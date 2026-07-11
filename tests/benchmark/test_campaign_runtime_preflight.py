@@ -66,6 +66,8 @@ def test_map_resolvability_preflight_aggregates_every_bad_prepared_scenario() ->
     ]
 
     def resolve_map(map_file: str):
+        if map_file.endswith("missing_a.svg"):
+            raise RuntimeError("malformed SVG")
         return None if "missing" in map_file else object()
 
     with pytest.raises(CampaignScenarioMapPreflightError) as excinfo:
@@ -74,6 +76,8 @@ def test_map_resolvability_preflight_aggregates_every_bad_prepared_scenario() ->
     assert excinfo.value.scenarios == ("bad_a", "bad_b")
     assert "maps/missing_a.svg" in str(excinfo.value)
     assert "maps/missing_b.svg" in str(excinfo.value)
+    assert "RuntimeError: malformed SVG" in str(excinfo.value)
+    assert "FileNotFoundError: map file could not be resolved or loaded" in str(excinfo.value)
 
 
 def test_map_resolvability_preflight_accepts_valid_prepared_scenarios() -> None:

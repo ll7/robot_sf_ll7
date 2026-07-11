@@ -165,7 +165,7 @@ def check_campaign_scenario_maps_preflight(
         def resolver(map_file: str | None) -> Any:
             return resolve_map_definition(map_file, scenario_path=scenario_path)
 
-    failures: list[tuple[str, str, Exception | None]] = []
+    failures: list[tuple[str, str, Exception]] = []
     checked = 0
     for scenario in scenarios:
         map_file = scenario.get("map_file")
@@ -177,14 +177,21 @@ def check_campaign_scenario_maps_preflight(
         )
         try:
             if resolver(map_file) is None:
-                failures.append((scenario_name, map_file, None))
-        except (OSError, ValueError) as exc:
+                failures.append(
+                    (
+                        scenario_name,
+                        map_file,
+                        FileNotFoundError("map file could not be resolved or loaded"),
+                    )
+                )
+        # Map parser backends do not expose one stable error hierarchy. Preserve every failed
+        # prepared scenario in the fail-closed aggregate instead of stopping at the first parser.
+        except Exception as exc:  # noqa: BLE001
             failures.append((scenario_name, map_file, exc))
 
     if failures:
         details = "\n".join(
-            f"  - scenario '{name}', map_file '{map_file}'"
-            + (f": {type(error).__name__}: {error}" if error is not None else "")
+            f"  - scenario '{name}', map_file '{map_file}': {type(error).__name__}: {error}"
             for name, map_file, error in failures
         )
         message = (

@@ -208,6 +208,7 @@ from robot_sf.benchmark.utils import (
 from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.planner.dwa import DWAPlannerAdapter, build_dwa_config
+from robot_sf.planner.sipp_lattice import SippLatticePlannerAdapter, build_sipp_lattice_config
 from robot_sf.planner.gap_prediction import GapAwarePredictionAdapter  # noqa: F401
 from robot_sf.planner.grid_route import (  # noqa: F401
     GridRoutePlannerAdapter,
@@ -2068,6 +2069,8 @@ def _build_socnav_family_adapter(  # noqa: C901, PLR0912, PLR0915
         adapter = NMPCSocialPlannerAdapter(config=build_nmpc_social_config(algo_config))
     elif algo_key == "dwa":
         adapter = DWAPlannerAdapter(config=build_dwa_config(algo_config))
+    elif algo_key == "sipp_lattice":
+        adapter = SippLatticePlannerAdapter(config=build_sipp_lattice_config(algo_config))
     elif algo_key == "rvo":
         adapter = SamplingPlannerAdapter(config=socnav_cfg)
         meta.update({"status": "placeholder", "fallback_reason": "unimplemented"})

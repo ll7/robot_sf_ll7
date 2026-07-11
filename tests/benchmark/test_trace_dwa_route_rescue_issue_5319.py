@@ -54,6 +54,14 @@ def test_load_scenario_resolves_relative_paths_from_matrix_parent(monkeypatch) -
     assert captured == {"path": matrix, "base_dir": matrix.parent}
 
 
+def test_repo_relative_path_avoids_worktree_specific_evidence_paths() -> None:
+    """Durable evidence records repository-relative paths, not the active worktree."""
+    trace = _load_trace_module()
+    assert trace._repo_relative_path(ROOT / "configs/algos/dwa_route_rescue.yaml") == (
+        "configs/algos/dwa_route_rescue.yaml"
+    )
+
+
 def test_route_rescue_activation_steps_extracts_active_steps() -> None:
     """Only steps with route_rescue_active=True are returned."""
     trace = _load_trace_module()

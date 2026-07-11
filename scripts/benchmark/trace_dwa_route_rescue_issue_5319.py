@@ -44,6 +44,11 @@ SCHEMA_PATH = REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json"
 DEFAULT_MATRIX = REPO_ROOT / "configs/scenarios/classic_interactions.yaml"
 DEFAULT_ALGO_CONFIG = REPO_ROOT / "configs/algos/dwa_route_rescue.yaml"
 DEFAULT_OUT_DIR = REPO_ROOT / "output/benchmarks/issue_5319"
+BASELINE_SUMMARY = (
+    REPO_ROOT
+    / "docs/context/evidence/issue_5298_dwa_decision_trace_2026-07-11"
+    / "dwa_decision_trace_summary.json"
+)
 HORIZON = 100
 DT = 0.1
 
@@ -348,7 +353,7 @@ def _write_evidence_readme(  # noqa: PLR0915
     )
     lines.append(f"- **Seeds:** {', '.join(str(seed) for _, seed, _ in TARGET_EPISODES)}.")
     lines.append(
-        f"- **Config SHA-256:** `{config_sha256}` for `configs/algos/dwa_route_rescue.yaml`."
+        f"- **Config SHA-256 hash:** `{config_sha256}` for `configs/algos/dwa_route_rescue.yaml`."
     )
     lines.append("")
     lines.append("## Episodes traced")
@@ -526,6 +531,14 @@ def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _repo_relative_path(path: Path) -> str:
+    """Return a stable repository-relative path when the artifact is in this checkout."""
+    try:
+        return path.resolve().relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def trace_episodes(
     *,
     matrix_path: Path,
@@ -593,7 +606,7 @@ def trace_episodes(
                 "schema_version": "dwa-route-rescue-trace.v1",
                 "issue": 5319,
                 "claim_boundary": "diagnostic-only: two CPU fixed-seed DWA episodes with route-rescue; no benchmark/roster/metric/paper claim.",
-                "config": str(algo_config_path),
+                "config": _repo_relative_path(algo_config_path),
                 "episodes": episodes_payload,
             },
             indent=2,
@@ -606,16 +619,15 @@ def trace_episodes(
     summary_payload = {
         "schema_version": "dwa-route-rescue-trace.v1",
         "issue": 5319,
-        "config": str(algo_config_path),
+        "config": _repo_relative_path(algo_config_path),
         "episodes": summaries,
     }
     write_json(out_dir / "dwa_route_rescue_summary.json", summary_payload)
 
-    baseline_path = (
-        out_dir.parent / "issue_5298" / "dwa_decision_trace_summary.json"
-        if out_dir.parent.exists()
-        else None
-    )
+    baseline_path = BASELINE_SUMMARY
+    if not baseline_path.exists():
+        candidate = out_dir.parent / "issue_5298" / "dwa_decision_trace_summary.json"
+        baseline_path = candidate if candidate.exists() else None
     baseline_summaries: list[dict[str, Any]] = []
     if baseline_path and baseline_path.exists():
         baseline_data = json.loads(baseline_path.read_text(encoding="utf-8"))

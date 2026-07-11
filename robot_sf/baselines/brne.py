@@ -59,11 +59,7 @@ _DEFAULT_COST_A3 = 80.0
 _DEFAULT_PED_SAMPLE_SCALE = 0.1
 _DEFAULT_CORRIDOR_Y_MIN = -0.65
 _DEFAULT_CORRIDOR_Y_MAX = 0.65
-_DEFAULT_BRNE_ITERS = 10
 _DEFAULT_STEP_BUDGET_S = 0.1
-
-# Adaptive num_samples candidates (must be perfect squares for meshgrid).
-_ADAPTIVE_NUM_SAMPLES = (196, 144, 100, 64, 49)
 
 
 @dataclass
@@ -83,9 +79,7 @@ class BRNEPlannerConfig:
     ped_sample_scale: float = _DEFAULT_PED_SAMPLE_SCALE
     corridor_y_min: float = _DEFAULT_CORRIDOR_Y_MIN
     corridor_y_max: float = _DEFAULT_CORRIDOR_Y_MAX
-    brne_iters: int = _DEFAULT_BRNE_ITERS
     step_budget_s: float = _DEFAULT_STEP_BUDGET_S
-    adaptive_num_samples: bool = False
     v_max: float = 2.0
     omega_max: float = 1.0
     safety_clamp: bool = True
@@ -240,8 +234,10 @@ class BRNEPlanner:
         weights = self._brne_solve(brne, xtraj, ytraj, num_agents, plan_steps, num_samples)
         elapsed_s = time.perf_counter() - t0
 
-        if weights is None:
-            _LOGGER.debug("BRNE corridor out-of-bounds; returning zero motion")
+        if weights is None or not np.all(np.isfinite(weights)):
+            _LOGGER.debug(
+                "BRNE returned out-of-bounds or non-finite weights; returning zero motion"
+            )
             return {"v": 0.0, "omega": 0.0}
 
         if elapsed_s > cfg.step_budget_s:
@@ -253,7 +249,10 @@ class BRNEPlanner:
             return {"v": 0.0, "omega": 0.0}
 
         robot_weights = weights[0]
-        cmd = np.mean(ulist * robot_weights[:, np.newaxis, np.newaxis], axis=0)
+        cmd = np.sum(ulist * robot_weights[:, np.newaxis, np.newaxis], axis=0)
+        if not np.all(np.isfinite(cmd)):
+            _LOGGER.debug("BRNE produced a non-finite control command; returning zero motion")
+            return {"v": 0.0, "omega": 0.0}
         action = {"v": float(cmd[0, 0]), "omega": float(cmd[0, 1])}
         self._clamp_action(action)
         return action

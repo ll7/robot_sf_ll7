@@ -63,11 +63,10 @@ When the interacting-agent count exceeds budget at the current `num_samples`:
    step budget (`time_per_step_in_secs`, default 100 ms), the adapter logs the
    overrun and returns a zero-motion action `{"v": 0.0, "omega": 0.0}` for that
    step. The episode continues; the planner does not crash.
-2. **Adaptive `num_samples`** (optional, opt-in): when
-   `adaptive_num_samples=True`, the adapter reduces `num_samples` in powers of
-   the BRNE meshgrid constraint (perfect squares: 196 -> 144 -> 100 -> 64 -> 49)
-   until the solve fits budget or the minimum is reached. Each reduction is
-   logged.
+2. **Fixed sampling policy**: this bounded adapter does not adapt
+   `num_samples` at runtime. A budget overrun fails closed with zero motion;
+   adaptive sampling needs a separate contract and validation before it can be
+   introduced.
 3. **Maximum-agent cap**: agents beyond `maximum_agents` (default 8, matching
    upstream) are excluded from the BRNE solve (sorted by distance ascending).
    This is the upstream convention, not a local override.

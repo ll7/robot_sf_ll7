@@ -11,6 +11,7 @@ import importlib.util
 import math
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from robot_sf.baselines import get_baseline, list_baselines
@@ -51,6 +52,16 @@ def _make_observation(
     }
 
 
+def _fake_brne_module() -> object:
+    """Return a placeholder upstream module for isolated adapter tests."""
+    return object()
+
+
+def _fake_covariance(_brne: object) -> np.ndarray:
+    """Return the minimal covariance placeholder for isolated adapter tests."""
+    return np.eye(1)
+
+
 # --- Registry ---
 
 
@@ -70,7 +81,6 @@ def test_build_brne_config_defaults() -> None:
     assert cfg.stage_path == "third_party/external_repos/brne"
     assert cfg.num_samples == 196
     assert cfg.maximum_agents == 8
-    assert cfg.adaptive_num_samples is False
     assert cfg.action_space == "unicycle"
     assert cfg.allow_testing_algorithms is True
     assert cfg.include_in_paper is False
@@ -145,6 +155,61 @@ def test_brne_step_raises_when_stage_path_missing() -> None:
     planner = BRNEPlanner({"stage_path": "/nonexistent/path/brne"})
     with pytest.raises(FileNotFoundError, match="BRNE core algorithm not found"):
         planner.step(_make_observation())
+
+
+def test_brne_config_does_not_expose_unimplemented_adaptive_sampling() -> None:
+    """The bounded adapter must not advertise an unused sampling policy."""
+    cfg = build_brne_config({"adaptive_num_samples": True})
+    assert not hasattr(cfg, "adaptive_num_samples")
+
+
+def test_brne_solve_fails_closed_on_nonfinite_weights(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Non-finite upstream weights must not propagate into a control action."""
+    planner = BRNEPlanner({})
+    monkeypatch.setattr(planner, "_ensure_brne_loaded", _fake_brne_module)
+    monkeypatch.setattr(planner, "_ensure_cov", _fake_covariance)
+    monkeypatch.setattr(
+        planner,
+        "_build_trajectories",
+        lambda *_args: (
+            np.zeros((1, 1)),
+            np.zeros((1, 1)),
+            np.ones((2, 1, 2)),
+        ),
+    )
+    monkeypatch.setattr(
+        planner,
+        "_brne_solve",
+        lambda *_args: np.array([[np.nan, 1.0]]),
+    )
+    planner._jit_warmup_done = True
+
+    assert planner.step(_make_observation(num_agents=1)) == {"v": 0.0, "omega": 0.0}
+
+
+def test_brne_solve_uses_normalized_weighted_sum(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Normalized sample weights preserve, rather than divide, control magnitude."""
+    planner = BRNEPlanner({})
+    monkeypatch.setattr(planner, "_ensure_brne_loaded", _fake_brne_module)
+    monkeypatch.setattr(planner, "_ensure_cov", _fake_covariance)
+    monkeypatch.setattr(
+        planner,
+        "_build_trajectories",
+        lambda *_args: (
+            np.zeros((1, 1)),
+            np.zeros((1, 1)),
+            np.array([[[0.4, 0.1]], [[0.8, 0.3]]]),
+        ),
+    )
+    monkeypatch.setattr(
+        planner,
+        "_brne_solve",
+        lambda *_args: np.array([[0.25, 0.75]]),
+    )
+    planner._jit_warmup_done = True
+
+    action = planner.step(_make_observation(num_agents=1))
+    assert action == pytest.approx({"v": 0.7, "omega": 0.25})
 
 
 # --- Integration: real upstream solve ---

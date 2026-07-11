@@ -203,7 +203,7 @@ def _goal_robustness(
     t_total = horizon * dt
     route_complete = bool(outcome.get("route_complete"))
     time_to_goal_norm = _metric(metrics, "time_to_goal_norm", 1.0)
-    if route_complete and time_to_goal_norm < 1.0:
+    if route_complete:
         t_actual = time_to_goal_norm * t_total
         rho = t_total - t_actual
         critical_time = t_actual
@@ -214,7 +214,7 @@ def _goal_robustness(
         property_name="goal",
         robustness=rho,
         critical_time_s=critical_time,
-        violated=rho <= 0,
+        violated=rho < 0,
         detail=f"route_complete={route_complete}, time_to_goal_norm={time_to_goal_norm:.4f}",
     )
 

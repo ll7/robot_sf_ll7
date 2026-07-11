@@ -155,6 +155,17 @@ class TestGoalRobustness:
         assert goal.robustness == pytest.approx(-0.1)
         assert goal.violated
 
+    def test_completed_at_deadline_is_zero_margin_satisfaction(self) -> None:
+        record = _make_episode_record(
+            time_to_goal_norm=1.0,
+            route_complete=True,
+            horizon=200,
+        )
+        report = compute_robustness_report(record, dt=0.1)
+        goal = next(p for p in report.properties if p.property_name == "goal")
+        assert goal.robustness == pytest.approx(0.0)
+        assert not goal.violated
+
     def test_critical_time_is_actual_goal_time(self) -> None:
         record = _make_episode_record(
             time_to_goal_norm=0.25,

@@ -28,6 +28,7 @@ HETEROGENEOUS_POPULATION_ABLATION_SCHEMA = "heterogeneous_population_ablation_ha
 MEAN_MATCHED_HETEROGENEITY_HARNESS_SCHEMA = "mean_matched_heterogeneity_harness.v1"
 MEAN_MATCHED_EPISODE_READINESS_SCHEMA = "mean_matched_episode_readiness.v1"
 EPISODE_CONTROL_TRACE_PATH = "algorithm_metadata.pedestrian_control_trace"
+RANK_METRIC_KEY = "mean_clearance"
 
 
 @dataclass(frozen=True, slots=True)
@@ -294,6 +295,7 @@ def assess_mean_matched_episode_records(
             row_blockers.append("episode record missing")
         else:
             row_blockers.extend(_episode_trace_blockers(record, expected_by_key[key], metric_keys))
+            row_blockers.extend(_episode_rank_metric_blockers(record))
         row_readiness.append(
             {
                 "scenario_id": key[0],
@@ -317,6 +319,7 @@ def assess_mean_matched_episode_records(
         "ready": not blockers,
         "claim_boundary": "integration_readiness_only_no_ablation_result",
         "trace_metric_keys": metric_keys,
+        "rank_metric_key": RANK_METRIC_KEY,
         "expected_row_count": len(expected_by_key),
         "observed_row_count": len(observed_by_key),
         "row_readiness": row_readiness,
@@ -364,6 +367,24 @@ def _episode_trace_blockers(
     blockers.extend(_trace_metric_metadata_blockers(trace, metric_keys))
     blockers.extend(_trace_population_metadata_blockers(trace, manifest_row))
     return blockers
+
+
+def _episode_rank_metric_blockers(record: Mapping[str, Any]) -> list[str]:
+    """Require the finite episode metric consumed by rank sensitivity.
+
+    Returns:
+        Field-level blockers when the rank metric is absent or non-finite.
+    """
+
+    metrics = record.get("metrics")
+    if not isinstance(metrics, Mapping):
+        return ["metrics missing or not mapping"]
+    value = metrics.get(RANK_METRIC_KEY)
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return [f"metrics.{RANK_METRIC_KEY} missing or not finite number"]
+    if not math.isfinite(float(value)):
+        return [f"metrics.{RANK_METRIC_KEY} missing or not finite number"]
+    return []
 
 
 def audit_smoke_mean_match(

@@ -15,7 +15,8 @@ heterogeneous and homogeneous mean-matched rows before any benchmark campaign ru
   near-field exposure rows when that threshold metadata is absent.
 - The runtime trace path is `algorithm_metadata.pedestrian_control_trace`. Before report
   analysis, `mean_matched_episode_readiness.v1` requires every manifest row exactly once and
-  checks each simulator-indexed archetype/control label plus every declared metric field.
+  checks each simulator-indexed archetype/control label, every declared trace metric field, and
+  the finite episode-level `metrics.mean_clearance` value consumed by rank sensitivity.
 - It does not run a full ablation campaign, response-law mixture sweep, rank-order
   sensitivity analysis, Slurm job, or paper/dissertation claim update.
 

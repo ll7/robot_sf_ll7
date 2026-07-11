@@ -434,6 +434,7 @@ def _episode_records_for_manifest(manifest: dict[str, object]) -> list[dict[str,
                 "planner": row["planner"],
                 "seed": row["seed"],
                 "population_arm": row["population_arm"],
+                "metrics": {"mean_clearance": 1.0},
                 "algorithm_metadata": {
                     "pedestrian_control_trace": {
                         "schema_version": "pedestrian-control-trace.v1",
@@ -494,6 +495,19 @@ def test_episode_record_readiness_blocks_missing_or_misaligned_trace_metadata() 
     assert any(
         "archetype does not match manifest label" in blocker for blocker in readiness["blockers"]
     )
+
+
+def test_episode_record_readiness_blocks_missing_rank_metric() -> None:
+    """Records cannot reach rank analysis without its finite episode metric."""
+
+    manifest = build_mean_matched_harness_manifest(_manifest_config())
+    records = _episode_records_for_manifest(manifest)
+    records[0].pop("metrics")
+
+    readiness = assess_mean_matched_episode_records(manifest, records)
+
+    assert readiness["status"] == "blocked"
+    assert any("metrics missing or not mapping" in blocker for blocker in readiness["blockers"])
 
 
 def test_report_cli_stops_before_analysis_when_integration_readiness_is_blocked(

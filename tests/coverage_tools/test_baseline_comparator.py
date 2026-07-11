@@ -9,6 +9,7 @@ import json
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import pytest
 
@@ -20,6 +21,9 @@ from robot_sf.coverage_tools.baseline_comparator import (
     generate_warning,
     load_baseline,
 )
+
+ROOT = Path(__file__).resolve().parents[2]
+COMPARE_CLI = ROOT / "scripts" / "coverage" / "compare_coverage.py"
 
 
 def test_baseline_comparator_import_avoids_optional_startup_dependencies():
@@ -278,3 +282,56 @@ def test_generate_warning_no_decrease():
 
     warning_github = generate_warning(delta, format_type="github")
     assert warning_github == ""  # No GitHub annotation for stable coverage
+
+
+def test_compare_cli_absolute_floor_blocks_without_a_baseline(tmp_path, sample_coverage_data):
+    """The absolute floor must not depend on the advisory cache baseline."""
+    current = tmp_path / "coverage.json"
+    current.write_text(json.dumps(sample_coverage_data), encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(COMPARE_CLI),
+            "--current",
+            str(current),
+            "--absolute-only",
+            "--minimum-total",
+            "67",
+            "--format",
+            "github",
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "::error title=Absolute Coverage Floor Failed::" in result.stdout
+    assert "66.67% is below the required 67.00%" in result.stdout
+
+
+def test_compare_cli_absolute_floor_passes_at_boundary(tmp_path, sample_coverage_data):
+    """Coverage equal to the floor passes even when no baseline is cached."""
+    current = tmp_path / "coverage.json"
+    current.write_text(json.dumps(sample_coverage_data), encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(COMPARE_CLI),
+            "--current",
+            str(current),
+            "--absolute-only",
+            "--minimum-total",
+            "66.67",
+            "--format",
+            "github",
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Absolute Coverage Floor Failed" not in result.stdout

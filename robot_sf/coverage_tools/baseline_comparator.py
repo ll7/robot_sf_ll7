@@ -141,6 +141,8 @@ def compare(
     current_path: Path,
     baseline: CoverageBaseline | None,
     threshold: float = 1.0,
+    *,
+    report_missing_baseline: bool = True,
 ) -> CoverageDelta:
     """
     Compare current coverage against baseline.
@@ -149,6 +151,7 @@ def compare(
         current_path: Path to current coverage.json
         baseline: Baseline to compare against (None = no comparison)
         threshold: Warning threshold in percentage points (default: 1.0)
+        report_missing_baseline: Log when no baseline is available.
 
     Returns:
         CoverageDelta with comparison results
@@ -176,7 +179,8 @@ def compare(
 
     # No baseline = no comparison
     if baseline is None:
-        logger.info("No baseline available for comparison")
+        if report_missing_baseline:
+            logger.info("No baseline available for comparison")
         return CoverageDelta(
             current_coverage=current_snapshot.total_coverage,
             baseline_coverage=current_snapshot.total_coverage,

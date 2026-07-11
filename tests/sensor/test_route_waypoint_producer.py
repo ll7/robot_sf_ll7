@@ -169,6 +169,18 @@ class TestRouteWaypointProducer:
         wp = fusion._build_route_waypoints(cap)
         assert wp.shape == (0, 2)
 
+    def test_build_route_waypoints_fails_closed_for_malformed_navigation(self) -> None:
+        """Malformed route metadata never leaks invalid data into the observation."""
+        fusion, sim = _build_fusion(waypoints=[(1.0, 0.0)])
+        cap = np.array([20.0, 20.0], dtype=np.float32)
+
+        sim.robot_navs[0].waypoint_id = "not-an-index"  # type: ignore[assignment]
+        assert fusion._build_route_waypoints(cap).shape == (0, 2)
+
+        sim.robot_navs[0].waypoint_id = 0
+        sim.robot_navs[0].waypoints = [(float("nan"), 0.0)]
+        assert fusion._build_route_waypoints(cap).shape == (0, 2)
+
 
 class TestRouteWaypointProducerIntegration:
     """Integration tests: DWA probe activates when route_waypoints are present."""

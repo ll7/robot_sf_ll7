@@ -206,6 +206,10 @@ def socnav_observation_space(
                         high=np.array([float(np.max(pos_cap))], dtype=np.float32),
                         dtype=np.float32,
                     ),
+                    "route_waypoints": spaces.Sequence(
+                        spaces.Box(low=pos_low, high=pos_high, dtype=np.float32),
+                        stack=True,
+                    ),
                 },
             ),
             "goal": spaces.Dict(
@@ -569,39 +573,42 @@ class SocNavObservationFusion:
         Returns:
             np.ndarray: Clipped, capped route waypoint array.
         """
+        empty = np.zeros((0, 2), dtype=np.float32)
         navs_raw = getattr(self.simulator, "robot_navs", None)
-        if not navs_raw or self.robot_index >= len(navs_raw):
-            return np.zeros((0, 2), dtype=np.float32)
+        if navs_raw is None:
+            return empty
 
-        nav = navs_raw[self.robot_index]
-        waypoints_raw = getattr(nav, "waypoints", None)
-        if waypoints_raw is None:
-            return np.zeros((0, 2), dtype=np.float32)
+        try:
+            nav = navs_raw[self.robot_index]
+            waypoint_id = int(getattr(nav, "waypoint_id", 0))
+            if waypoint_id < 0:
+                return empty
+            remaining_arr = np.asarray(
+                getattr(nav, "waypoints", None)[waypoint_id:], dtype=np.float32
+            )
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+            return empty
 
-        waypoint_id = int(getattr(nav, "waypoint_id", 0))
-        remaining = waypoints_raw[waypoint_id:]
+        if remaining_arr.size == 0:
+            if waypoint_id == 0:
+                return empty
+            remaining_arr = empty
+        elif remaining_arr.ndim != 2 or remaining_arr.shape[-1] != 2:
+            return empty
 
-        if not remaining:
-            if waypoint_id <= 0:
-                return np.zeros((0, 2), dtype=np.float32)
+        try:
             robot_pose = self.simulator.robots[self.robot_index].pose
-            robot_pos = np.asarray(robot_pose[0], dtype=np.float32)
-            return np.clip(robot_pos.reshape(1, -1), 0.0, position_cap)
+            robot_pos = np.asarray(robot_pose[0], dtype=np.float32).reshape(-1)
+        except (AttributeError, IndexError, TypeError, ValueError):
+            return empty
+        if robot_pos.shape != (2,) or not np.all(np.isfinite(robot_pos)):
+            return empty
+        if remaining_arr.size > 0 and not np.all(np.isfinite(remaining_arr)):
+            return empty
 
-        remaining_arr = np.asarray(remaining, dtype=np.float32)
-        if remaining_arr.ndim != 2 or remaining_arr.shape[-1] != 2:
-            return np.zeros((0, 2), dtype=np.float32)
-
-        robot_pose = self.simulator.robots[self.robot_index].pose
-        robot_pos = np.asarray(robot_pose[0], dtype=np.float32)
-
-        wp_with_robot = np.vstack([robot_pos.reshape(1, -1), remaining_arr])
+        wp_with_robot = np.vstack([robot_pos.reshape(1, 2), remaining_arr])
         wp_with_robot = np.clip(wp_with_robot, 0.0, position_cap)
-
-        if wp_with_robot.shape[0] > MAX_ROUTE_WAYPOINTS:
-            wp_with_robot = wp_with_robot[:MAX_ROUTE_WAYPOINTS]
-
-        return wp_with_robot
+        return wp_with_robot[:MAX_ROUTE_WAYPOINTS]
 
     def next_obs(self) -> dict[str, Any]:
         """Return the latest structured observation aligned to the declared space."""

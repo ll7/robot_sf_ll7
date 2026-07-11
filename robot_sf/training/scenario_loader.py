@@ -37,11 +37,13 @@ from robot_sf.sim.pedestrian_model_variants import (
     HSFM_ALIGNMENT_TORQUE_V1,
     HSFM_ANISOTROPIC_FOV_V1,
     HSFM_TTC_PREDICTIVE_V1,
+    HSFM_ZANLUNGO_COLLISION_PREDICTION_V1,
 )
 from robot_sf.sim.sim_config import (
     AlignmentTorqueConfig,
     AnisotropicFovConfig,
     TtcPredictiveForceConfig,
+    ZanlungoCollisionPredictionConfig,
 )
 
 _MAP_REGISTRY_ENV = "ROBOT_SF_MAP_REGISTRY"
@@ -2110,6 +2112,10 @@ def _apply_single_pedestrian_override(
 # selector path below, so adding a new opt-in force model is a single-line change here.
 _OPT_IN_PEDESTRIAN_MODEL_CONFIGS: dict[str, tuple[type, str]] = {
     "ttc_predictive_force": (TtcPredictiveForceConfig, HSFM_TTC_PREDICTIVE_V1),
+    "zanlungo_collision_prediction": (
+        ZanlungoCollisionPredictionConfig,
+        HSFM_ZANLUNGO_COLLISION_PREDICTION_V1,
+    ),
     "anisotropic_fov": (AnisotropicFovConfig, HSFM_ANISOTROPIC_FOV_V1),
     "alignment_torque": (AlignmentTorqueConfig, HSFM_ALIGNMENT_TORQUE_V1),
 }
@@ -2254,6 +2260,7 @@ def _apply_simulation_overrides(
         "goal_radius",
         "pedestrian_model",
         "ttc_predictive_force",
+        "zanlungo_collision_prediction",
         "anisotropic_fov",
         "alignment_torque",
         "route_spawn_distribution",

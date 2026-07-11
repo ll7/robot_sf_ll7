@@ -10,6 +10,7 @@ from pysocialforce.scene import EXPLICIT_EULER, normalize_integration_scheme
 SOCIAL_FORCE_DEFAULT = "social_force_default"
 HSFM_TOTAL_FORCE_V1 = "hsfm_total_force_v1"
 HSFM_TTC_PREDICTIVE_V1 = "hsfm_ttc_predictive_v1"
+HSFM_ZANLUNGO_COLLISION_PREDICTION_V1 = "hsfm_zanlungo_collision_prediction_v1"
 HSFM_ANISOTROPIC_FOV_V1 = "hsfm_anisotropic_fov_v1"
 HSFM_ALIGNMENT_TORQUE_V1 = "hsfm_alignment_torque_v1"
 SUPPORTED_PEDESTRIAN_MODELS = frozenset(
@@ -17,6 +18,7 @@ SUPPORTED_PEDESTRIAN_MODELS = frozenset(
         SOCIAL_FORCE_DEFAULT,
         HSFM_TOTAL_FORCE_V1,
         HSFM_TTC_PREDICTIVE_V1,
+        HSFM_ZANLUNGO_COLLISION_PREDICTION_V1,
         HSFM_ANISOTROPIC_FOV_V1,
         HSFM_ALIGNMENT_TORQUE_V1,
     }
@@ -650,6 +652,182 @@ def ttc_predictive_repulsion(
     np.divide(max_force, norms, out=factors, where=norms > max_force)
     np.minimum(factors, 1.0, out=factors)
     return repulsion * np.expand_dims(factors, axis=-1)
+
+
+def _validate_zanlungo_inputs(
+    positions: np.ndarray,
+    velocities: np.ndarray,
+    *,
+    interaction_strength: float,
+    interaction_range_m: float,
+    anisotropy_lambda: float,
+    angle_threshold_rad: float,
+    max_force: float,
+    epsilon: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return validated arrays for the Zanlungo force calculation."""
+    position_array = np.asarray(positions, dtype=float)
+    velocity_array = np.asarray(velocities, dtype=float)
+    if position_array.ndim != 2 or position_array.shape[1] != 2:
+        raise ValueError("positions must have shape (N, 2)")
+    if velocity_array.shape != position_array.shape:
+        raise ValueError("velocities must have shape (N, 2) matching positions")
+    if not np.all(np.isfinite(position_array)) or not np.all(np.isfinite(velocity_array)):
+        raise ValueError("positions and velocities must be finite")
+    if not np.isfinite(interaction_strength) or interaction_strength < 0:
+        raise ValueError("interaction_strength must be finite and >= 0")
+    if not np.isfinite(interaction_range_m) or interaction_range_m <= 0:
+        raise ValueError("interaction_range_m must be finite and > 0")
+    if not np.isfinite(anisotropy_lambda) or not 0 <= anisotropy_lambda <= 1:
+        raise ValueError("anisotropy_lambda must be within [0, 1]")
+    if (
+        not np.isfinite(angle_threshold_rad)
+        or angle_threshold_rad <= 0
+        or angle_threshold_rad > np.pi
+    ):
+        raise ValueError("angle_threshold_rad must be within (0, pi]")
+    if not np.isfinite(max_force) or max_force <= 0:
+        raise ValueError("max_force must be finite and > 0")
+    if not np.isfinite(epsilon) or epsilon <= 0:
+        raise ValueError("epsilon must be finite and > 0")
+    return position_array, velocity_array
+
+
+def _zanlungo_actor_force(
+    actor_index: int,
+    positions: np.ndarray,
+    velocities: np.ndarray,
+    *,
+    interaction_strength: float,
+    interaction_range_m: float,
+    anisotropy_lambda: float,
+    angle_threshold_rad: float,
+    epsilon: float,
+) -> np.ndarray:
+    """Compute one actor's non-additive common-time projected force.
+
+    Returns:
+        Two-dimensional force vector for the selected actor.
+    """
+    pedestrian_count = positions.shape[0]
+    displacement = positions[actor_index] - positions
+    relative_velocity = velocities - velocities[actor_index]
+    displacement_norm = np.linalg.norm(displacement, axis=-1)
+    relative_speed = np.linalg.norm(relative_velocity, axis=-1)
+    dot_product = np.sum(displacement * relative_velocity, axis=-1)
+    denominator = displacement_norm * relative_speed
+    cosine = np.full(pedestrian_count, -1.0, dtype=float)
+    np.divide(dot_product, denominator, out=cosine, where=denominator > epsilon)
+    candidate = (
+        (np.arange(pedestrian_count) != actor_index)
+        & (cosine >= float(np.cos(angle_threshold_rad)))
+        & (dot_product > epsilon)
+        & (relative_speed > epsilon)
+    )
+    closest_time = np.full(pedestrian_count, np.inf, dtype=float)
+    np.divide(dot_product, relative_speed**2, out=closest_time, where=candidate)
+    actor_time = float(np.min(closest_time))
+    actor_speed = float(np.linalg.norm(velocities[actor_index]))
+    if not np.isfinite(actor_time) or actor_speed <= epsilon:
+        return np.zeros(2, dtype=float)
+
+    projected_displacement = displacement - relative_velocity * actor_time
+    projected_distance = np.linalg.norm(projected_displacement, axis=-1)
+    directions = np.zeros_like(projected_displacement)
+    np.divide(
+        projected_displacement,
+        projected_distance[:, np.newaxis],
+        out=directions,
+        where=projected_distance[:, np.newaxis] > epsilon,
+    )
+    # Equation (10) is directionally undefined for an exactly centered future
+    # collision. Reusing the current separation direction is deterministic and
+    # keeps the limiting repulsion finite without inventing random symmetry breaking.
+    degenerate = (projected_distance <= epsilon) & (displacement_norm > epsilon)
+    np.divide(
+        displacement,
+        displacement_norm[:, np.newaxis],
+        out=directions,
+        where=degenerate[:, np.newaxis],
+    )
+
+    direction_to_neighbor = -displacement
+    heading_cosine = np.zeros(pedestrian_count, dtype=float)
+    np.divide(
+        direction_to_neighbor @ velocities[actor_index],
+        displacement_norm * actor_speed,
+        out=heading_cosine,
+        where=displacement_norm > epsilon,
+    )
+    np.clip(heading_cosine, -1.0, 1.0, out=heading_cosine)
+    anisotropy = (
+        float(anisotropy_lambda) + (1.0 - float(anisotropy_lambda)) * (1.0 + heading_cosine) / 2.0
+    )
+    weights = anisotropy * np.exp(-projected_distance / float(interaction_range_m))
+    weights[actor_index] = 0.0
+    return (
+        float(interaction_strength)
+        * actor_speed
+        / max(actor_time, epsilon)
+        * np.sum(weights[:, np.newaxis] * directions, axis=0)
+    )
+
+
+def zanlungo_collision_prediction_repulsion(
+    positions: np.ndarray,
+    velocities: np.ndarray,
+    *,
+    interaction_strength: float,
+    interaction_range_m: float,
+    anisotropy_lambda: float,
+    angle_threshold_rad: float,
+    max_force: float,
+    epsilon: float = 1e-9,
+) -> np.ndarray:
+    """Compute the Zanlungo et al. (2011) collision-prediction force.
+
+    Each actor selects its earliest eligible pairwise closest-approach time and
+    projects *all* neighbors to that common time before summing interactions.
+    This common-time projection is the non-additive distinction from the existing
+    pairwise time-to-collision force.
+
+    Returns:
+        Per-pedestrian predictive force array with shape ``(N, 2)``.
+    """
+
+    position_array, velocity_array = _validate_zanlungo_inputs(
+        positions,
+        velocities,
+        interaction_strength=interaction_strength,
+        interaction_range_m=interaction_range_m,
+        anisotropy_lambda=anisotropy_lambda,
+        angle_threshold_rad=angle_threshold_rad,
+        max_force=max_force,
+        epsilon=epsilon,
+    )
+
+    pedestrian_count = position_array.shape[0]
+    result = np.zeros_like(position_array, dtype=float)
+    if pedestrian_count < 2 or interaction_strength == 0:
+        return result
+
+    for actor_index in range(pedestrian_count):
+        result[actor_index] = _zanlungo_actor_force(
+            actor_index,
+            position_array,
+            velocity_array,
+            interaction_strength=interaction_strength,
+            interaction_range_m=interaction_range_m,
+            anisotropy_lambda=anisotropy_lambda,
+            angle_threshold_rad=angle_threshold_rad,
+            epsilon=epsilon,
+        )
+
+    norms = np.linalg.norm(result, axis=-1)
+    factors = np.ones_like(norms, dtype=float)
+    np.divide(max_force, norms, out=factors, where=norms > max_force)
+    np.minimum(factors, 1.0, out=factors)
+    return result * factors[:, np.newaxis]
 
 
 def step_hsfm_total_force(

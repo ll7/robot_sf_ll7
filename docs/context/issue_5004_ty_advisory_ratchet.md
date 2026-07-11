@@ -11,7 +11,7 @@ baseline ratchet (#3477/#3529) and the TODO-docstring ratchet (#1285).
 
 ## Implementation
 
-`scripts/dev/ty_advisory_ratchet.py` re-runs `uvx ty check .` (gitlab-JSON,
+`scripts/dev/ty_advisory_ratchet.py` re-runs `uvx ty@0.0.58 check .` (gitlab-JSON,
 advisory `--exit-zero`), aggregates findings per module, and diffs against the
 committed baseline at `scripts/validation/ty_advisory_baseline.json`.
 
@@ -74,7 +74,9 @@ Fix (per the issue's suggested change):
   workflow (`.github/workflows/ty-advisory-ratchet.yml`) keeps running the live
   `--check` as a non-gating (`continue-on-error`) companion.
 
-Refresh the fixture after a baseline refresh:
+When upgrading `ty`, bump the exact pin in both
+`scripts/dev/ty_advisory_ratchet.py` and `scripts/dev/ci_driver.sh`, then refresh
+the baseline and fixture in the same PR. Refresh the fixture after every baseline refresh:
 
 ```bash
 uv run python scripts/dev/ty_advisory_ratchet.py --write-baseline   # after reducing findings

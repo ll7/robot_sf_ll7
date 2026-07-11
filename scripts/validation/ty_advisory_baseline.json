@@ -1,5 +1,5 @@
 {
-  "description": "ty advisory diagnostic baseline + per-module downward ratchet (issue #5004). The ratchet gates on the 'general' bucket; the 'optional_import_excluded' bucket is recorded for visibility but owned by #4990/#4995. Refresh with `scripts/dev/ty_advisory_ratchet.py --write-baseline` after intentionally reducing findings.",
+  "description": "ty advisory diagnostic baseline + per-module downward ratchet (issue #5004). The ratchet gates on the 'general' bucket; the 'optional_import_excluded' bucket is recorded for visibility but owned by #4990/#4995. The ratchet uses pinned ty 0.0.58; upgrades must bump the pin in this helper and scripts/dev/ci_driver.sh, then run `scripts/dev/ty_advisory_ratchet.py --write-baseline` and `scripts/dev/ty_advisory_ratchet.py --emit-baseline-fixture` in the same PR.",
   "exclusion": {
     "owned_by_other_issues": [
       "#4990",
@@ -8,7 +8,7 @@
     ],
     "rule": "Findings with check_name='unresolved-import' and description prefix 'unresolved-import: Cannot resolve imported module...' are treated as the optional-import category: recorded but EXCLUDED from the ratchet gate (owned by #4990/#4995)."
   },
-  "generated_at": "2026-07-10T11:46:32Z",
+  "generated_at": "2026-07-11T04:31:19Z",
   "modules": {
     "examples": {
       "general": 151,
@@ -21,9 +21,9 @@
       "total": 3
     },
     "fast-pysf": {
-      "general": 2,
+      "general": 3,
       "optional_import_excluded": 6,
-      "total": 8
+      "total": 9
     },
     "robot_sf": {
       "general": 3,
@@ -51,9 +51,9 @@
       "total": 16
     },
     "robot_sf/benchmark": {
-      "general": 510,
-      "optional_import_excluded": 2,
-      "total": 512
+      "general": 545,
+      "optional_import_excluded": 1,
+      "total": 546
     },
     "robot_sf/common": {
       "general": 2,
@@ -71,9 +71,9 @@
       "total": 3
     },
     "robot_sf/gym_env": {
-      "general": 57,
+      "general": 58,
       "optional_import_excluded": 0,
-      "total": 57
+      "total": 58
     },
     "robot_sf/manual_control": {
       "general": 1,
@@ -91,9 +91,9 @@
       "total": 2
     },
     "robot_sf/nav": {
-      "general": 52,
+      "general": 51,
       "optional_import_excluded": 0,
-      "total": 52
+      "total": 51
     },
     "robot_sf/ped_ego": {
       "general": 4,
@@ -116,14 +116,14 @@
       "total": 22
     },
     "robot_sf/research": {
-      "general": 10,
-      "optional_import_excluded": 0,
-      "total": 10
-    },
-    "robot_sf/robot": {
       "general": 8,
       "optional_import_excluded": 0,
       "total": 8
+    },
+    "robot_sf/robot": {
+      "general": 12,
+      "optional_import_excluded": 0,
+      "total": 12
     },
     "robot_sf/scenario_certification": {
       "general": 3,
@@ -141,9 +141,9 @@
       "total": 14
     },
     "robot_sf/telemetry": {
-      "general": 11,
+      "general": 9,
       "optional_import_excluded": 0,
-      "total": 11
+      "total": 9
     },
     "robot_sf/training": {
       "general": 74,
@@ -156,9 +156,9 @@
       "total": 2
     },
     "scripts": {
-      "general": 960,
+      "general": 969,
       "optional_import_excluded": 19,
-      "total": 979
+      "total": 988
     },
     "third_party": {
       "general": 194,
@@ -167,35 +167,34 @@
     }
   },
   "rules": {
-    "call-non-callable": 10,
+    "call-non-callable": 11,
     "deprecated": 1,
     "index-out-of-bounds": 4,
-    "invalid-argument-type": 1443,
+    "invalid-argument-type": 1480,
     "invalid-assignment": 121,
     "invalid-key": 1,
     "invalid-method-override": 5,
     "invalid-parameter-default": 4,
-    "invalid-return-type": 80,
-    "invalid-syntax": 7,
+    "invalid-return-type": 81,
     "invalid-type-form": 43,
-    "no-matching-overload": 59,
-    "not-iterable": 41,
-    "not-subscriptable": 80,
+    "no-matching-overload": 61,
+    "not-iterable": 39,
+    "not-subscriptable": 81,
     "redundant-cast": 4,
     "too-many-positional-arguments": 1,
     "unknown-argument": 5,
-    "unresolved-attribute": 498,
+    "unresolved-attribute": 507,
     "unresolved-import": 168,
     "unresolved-reference": 1,
-    "unsupported-operator": 71,
-    "unused-type-ignore-comment": 42
+    "unsupported-operator": 76,
+    "unused-type-ignore-comment": 39
   },
   "schema_version": 1,
   "summary": {
-    "general_findings": 2540,
+    "general_findings": 2585,
     "module_count": 31,
-    "optional_import_findings_excluded": 149,
-    "total_findings": 2689
+    "optional_import_findings_excluded": 148,
+    "total_findings": 2733
   },
   "ty_version": "ty 0.0.58"
 }

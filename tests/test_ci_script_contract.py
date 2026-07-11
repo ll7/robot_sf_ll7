@@ -318,7 +318,7 @@ def test_ci_driver_typecheck_phase_is_explicitly_advisory() -> None:
     assert "Ty type check (advisory; reports findings but exits zero)" in script_text
     assert "Running ty in advisory mode (--exit-zero)" in script_text
     assert "findings are reported but do not fail this phase" in script_text
-    assert "uvx ty check . --exit-zero" in script_text
+    assert "uvx ty@0.0.58 check . --exit-zero" in script_text
 
 
 def test_ci_driver_test_phase_runs_benchmark_reconciliation_guard() -> None:

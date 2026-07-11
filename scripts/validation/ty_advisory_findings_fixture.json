@@ -2370,9 +2370,9 @@
     "severity": "major"
   },
   {
-    "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_0` (baseline-reproduction fixture for module 'fast-pysf')",
-    "fingerprint": "fast-pysf/_ty_baseline_fixture.py:3:optional",
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #2 for module 'fast-pysf'",
+    "fingerprint": "fast-pysf/_ty_baseline_fixture.py:3:general",
     "location": {
       "path": "fast-pysf/_ty_baseline_fixture.py",
       "positions": {
@@ -2382,11 +2382,11 @@
         }
       }
     },
-    "severity": "minor"
+    "severity": "major"
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_1` (baseline-reproduction fixture for module 'fast-pysf')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_0` (baseline-reproduction fixture for module 'fast-pysf')",
     "fingerprint": "fast-pysf/_ty_baseline_fixture.py:4:optional",
     "location": {
       "path": "fast-pysf/_ty_baseline_fixture.py",
@@ -2401,7 +2401,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_2` (baseline-reproduction fixture for module 'fast-pysf')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_1` (baseline-reproduction fixture for module 'fast-pysf')",
     "fingerprint": "fast-pysf/_ty_baseline_fixture.py:5:optional",
     "location": {
       "path": "fast-pysf/_ty_baseline_fixture.py",
@@ -2416,7 +2416,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_3` (baseline-reproduction fixture for module 'fast-pysf')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_2` (baseline-reproduction fixture for module 'fast-pysf')",
     "fingerprint": "fast-pysf/_ty_baseline_fixture.py:6:optional",
     "location": {
       "path": "fast-pysf/_ty_baseline_fixture.py",
@@ -2431,7 +2431,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_4` (baseline-reproduction fixture for module 'fast-pysf')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_3` (baseline-reproduction fixture for module 'fast-pysf')",
     "fingerprint": "fast-pysf/_ty_baseline_fixture.py:7:optional",
     "location": {
       "path": "fast-pysf/_ty_baseline_fixture.py",
@@ -2446,7 +2446,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_5` (baseline-reproduction fixture for module 'fast-pysf')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_4` (baseline-reproduction fixture for module 'fast-pysf')",
     "fingerprint": "fast-pysf/_ty_baseline_fixture.py:8:optional",
     "location": {
       "path": "fast-pysf/_ty_baseline_fixture.py",
@@ -2454,6 +2454,21 @@
         "begin": {
           "column": 1,
           "line": 8
+        }
+      }
+    },
+    "severity": "minor"
+  },
+  {
+    "check_name": "unresolved-import",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_5` (baseline-reproduction fixture for module 'fast-pysf')",
+    "fingerprint": "fast-pysf/_ty_baseline_fixture.py:9:optional",
+    "location": {
+      "path": "fast-pysf/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 9
         }
       }
     },
@@ -11235,9 +11250,9 @@
     "severity": "major"
   },
   {
-    "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_0` (baseline-reproduction fixture for module 'robot_sf/benchmark')",
-    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:511:optional",
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #510 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:511:general",
     "location": {
       "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
       "positions": {
@@ -11247,18 +11262,528 @@
         }
       }
     },
-    "severity": "minor"
+    "severity": "major"
   },
   {
-    "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_1` (baseline-reproduction fixture for module 'robot_sf/benchmark')",
-    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:512:optional",
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #511 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:512:general",
     "location": {
       "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
       "positions": {
         "begin": {
           "column": 1,
           "line": 512
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #512 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:513:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 513
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #513 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:514:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 514
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #514 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:515:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 515
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #515 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:516:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 516
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #516 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:517:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 517
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #517 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:518:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 518
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #518 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:519:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 519
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #519 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:520:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 520
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #520 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:521:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 521
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #521 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:522:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 522
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #522 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:523:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 523
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #523 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:524:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 524
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #524 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:525:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 525
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #525 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:526:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 526
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #526 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:527:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 527
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #527 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:528:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 528
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #528 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:529:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 529
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #529 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:530:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 530
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #530 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:531:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 531
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #531 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:532:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 532
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #532 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:533:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 533
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #533 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:534:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 534
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #534 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:535:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 535
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #535 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:536:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 536
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #536 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:537:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 537
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #537 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:538:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 538
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #538 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:539:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 539
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #539 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:540:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 540
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #540 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:541:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 541
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #541 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:542:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 542
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #542 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:543:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 543
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #543 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:544:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 544
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #544 for module 'robot_sf/benchmark'",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:545:general",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 545
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "unresolved-import",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_0` (baseline-reproduction fixture for module 'robot_sf/benchmark')",
+    "fingerprint": "robot_sf/benchmark/_ty_baseline_fixture.py:546:optional",
+    "location": {
+      "path": "robot_sf/benchmark/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 546
         }
       }
     },
@@ -12279,6 +12804,21 @@
         "begin": {
           "column": 1,
           "line": 57
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #57 for module 'robot_sf/gym_env'",
+    "fingerprint": "robot_sf/gym_env/_ty_baseline_fixture.py:58:general",
+    "location": {
+      "path": "robot_sf/gym_env/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 58
         }
       }
     },
@@ -13374,21 +13914,6 @@
         "begin": {
           "column": 1,
           "line": 51
-        }
-      }
-    },
-    "severity": "major"
-  },
-  {
-    "check_name": "invalid-argument-type",
-    "description": "invalid-argument-type: baseline-reproduction fixture #51 for module 'robot_sf/nav'",
-    "fingerprint": "robot_sf/nav/_ty_baseline_fixture.py:52:general",
-    "location": {
-      "path": "robot_sf/nav/_ty_baseline_fixture.py",
-      "positions": {
-        "begin": {
-          "column": 1,
-          "line": 52
         }
       }
     },
@@ -19276,36 +19801,6 @@
   },
   {
     "check_name": "invalid-argument-type",
-    "description": "invalid-argument-type: baseline-reproduction fixture #8 for module 'robot_sf/research'",
-    "fingerprint": "robot_sf/research/_ty_baseline_fixture.py:9:general",
-    "location": {
-      "path": "robot_sf/research/_ty_baseline_fixture.py",
-      "positions": {
-        "begin": {
-          "column": 1,
-          "line": 9
-        }
-      }
-    },
-    "severity": "major"
-  },
-  {
-    "check_name": "invalid-argument-type",
-    "description": "invalid-argument-type: baseline-reproduction fixture #9 for module 'robot_sf/research'",
-    "fingerprint": "robot_sf/research/_ty_baseline_fixture.py:10:general",
-    "location": {
-      "path": "robot_sf/research/_ty_baseline_fixture.py",
-      "positions": {
-        "begin": {
-          "column": 1,
-          "line": 10
-        }
-      }
-    },
-    "severity": "major"
-  },
-  {
-    "check_name": "invalid-argument-type",
     "description": "invalid-argument-type: baseline-reproduction fixture #0 for module 'robot_sf/robot'",
     "fingerprint": "robot_sf/robot/_ty_baseline_fixture.py:1:general",
     "location": {
@@ -19419,6 +19914,66 @@
         "begin": {
           "column": 1,
           "line": 8
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #8 for module 'robot_sf/robot'",
+    "fingerprint": "robot_sf/robot/_ty_baseline_fixture.py:9:general",
+    "location": {
+      "path": "robot_sf/robot/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 9
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #9 for module 'robot_sf/robot'",
+    "fingerprint": "robot_sf/robot/_ty_baseline_fixture.py:10:general",
+    "location": {
+      "path": "robot_sf/robot/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 10
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #10 for module 'robot_sf/robot'",
+    "fingerprint": "robot_sf/robot/_ty_baseline_fixture.py:11:general",
+    "location": {
+      "path": "robot_sf/robot/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 11
+        }
+      }
+    },
+    "severity": "major"
+  },
+  {
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #11 for module 'robot_sf/robot'",
+    "fingerprint": "robot_sf/robot/_ty_baseline_fixture.py:12:general",
+    "location": {
+      "path": "robot_sf/robot/_ty_baseline_fixture.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 12
         }
       }
     },
@@ -19854,36 +20409,6 @@
         "begin": {
           "column": 1,
           "line": 9
-        }
-      }
-    },
-    "severity": "major"
-  },
-  {
-    "check_name": "invalid-argument-type",
-    "description": "invalid-argument-type: baseline-reproduction fixture #9 for module 'robot_sf/telemetry'",
-    "fingerprint": "robot_sf/telemetry/_ty_baseline_fixture.py:10:general",
-    "location": {
-      "path": "robot_sf/telemetry/_ty_baseline_fixture.py",
-      "positions": {
-        "begin": {
-          "column": 1,
-          "line": 10
-        }
-      }
-    },
-    "severity": "major"
-  },
-  {
-    "check_name": "invalid-argument-type",
-    "description": "invalid-argument-type: baseline-reproduction fixture #10 for module 'robot_sf/telemetry'",
-    "fingerprint": "robot_sf/telemetry/_ty_baseline_fixture.py:11:general",
-    "location": {
-      "path": "robot_sf/telemetry/_ty_baseline_fixture.py",
-      "positions": {
-        "begin": {
-          "column": 1,
-          "line": 11
         }
       }
     },
@@ -35430,9 +35955,9 @@
     "severity": "major"
   },
   {
-    "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_0` (baseline-reproduction fixture for module 'scripts')",
-    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:961:optional",
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #960 for module 'scripts'",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:961:general",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
       "positions": {
@@ -35442,12 +35967,12 @@
         }
       }
     },
-    "severity": "minor"
+    "severity": "major"
   },
   {
-    "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_1` (baseline-reproduction fixture for module 'scripts')",
-    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:962:optional",
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #961 for module 'scripts'",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:962:general",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
       "positions": {
@@ -35457,12 +35982,12 @@
         }
       }
     },
-    "severity": "minor"
+    "severity": "major"
   },
   {
-    "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_2` (baseline-reproduction fixture for module 'scripts')",
-    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:963:optional",
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #962 for module 'scripts'",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:963:general",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
       "positions": {
@@ -35472,12 +35997,12 @@
         }
       }
     },
-    "severity": "minor"
+    "severity": "major"
   },
   {
-    "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_3` (baseline-reproduction fixture for module 'scripts')",
-    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:964:optional",
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #963 for module 'scripts'",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:964:general",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
       "positions": {
@@ -35487,12 +36012,12 @@
         }
       }
     },
-    "severity": "minor"
+    "severity": "major"
   },
   {
-    "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_4` (baseline-reproduction fixture for module 'scripts')",
-    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:965:optional",
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #964 for module 'scripts'",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:965:general",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
       "positions": {
@@ -35502,12 +36027,12 @@
         }
       }
     },
-    "severity": "minor"
+    "severity": "major"
   },
   {
-    "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_5` (baseline-reproduction fixture for module 'scripts')",
-    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:966:optional",
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #965 for module 'scripts'",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:966:general",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
       "positions": {
@@ -35517,12 +36042,12 @@
         }
       }
     },
-    "severity": "minor"
+    "severity": "major"
   },
   {
-    "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_6` (baseline-reproduction fixture for module 'scripts')",
-    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:967:optional",
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #966 for module 'scripts'",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:967:general",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
       "positions": {
@@ -35532,12 +36057,12 @@
         }
       }
     },
-    "severity": "minor"
+    "severity": "major"
   },
   {
-    "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_7` (baseline-reproduction fixture for module 'scripts')",
-    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:968:optional",
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #967 for module 'scripts'",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:968:general",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
       "positions": {
@@ -35547,12 +36072,12 @@
         }
       }
     },
-    "severity": "minor"
+    "severity": "major"
   },
   {
-    "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_8` (baseline-reproduction fixture for module 'scripts')",
-    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:969:optional",
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #968 for module 'scripts'",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:969:general",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
       "positions": {
@@ -35562,11 +36087,11 @@
         }
       }
     },
-    "severity": "minor"
+    "severity": "major"
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_9` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_0` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:970:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -35581,7 +36106,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_10` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_1` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:971:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -35596,7 +36121,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_11` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_2` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:972:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -35611,7 +36136,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_12` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_3` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:973:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -35626,7 +36151,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_13` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_4` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:974:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -35641,7 +36166,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_14` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_5` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:975:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -35656,7 +36181,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_15` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_6` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:976:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -35671,7 +36196,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_16` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_7` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:977:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -35686,7 +36211,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_17` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_8` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:978:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -35701,7 +36226,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_18` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_9` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:979:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -35709,6 +36234,141 @@
         "begin": {
           "column": 1,
           "line": 979
+        }
+      }
+    },
+    "severity": "minor"
+  },
+  {
+    "check_name": "unresolved-import",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_10` (baseline-reproduction fixture for module 'scripts')",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:980:optional",
+    "location": {
+      "path": "scripts/dev/ty_advisory_ratchet.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 980
+        }
+      }
+    },
+    "severity": "minor"
+  },
+  {
+    "check_name": "unresolved-import",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_11` (baseline-reproduction fixture for module 'scripts')",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:981:optional",
+    "location": {
+      "path": "scripts/dev/ty_advisory_ratchet.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 981
+        }
+      }
+    },
+    "severity": "minor"
+  },
+  {
+    "check_name": "unresolved-import",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_12` (baseline-reproduction fixture for module 'scripts')",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:982:optional",
+    "location": {
+      "path": "scripts/dev/ty_advisory_ratchet.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 982
+        }
+      }
+    },
+    "severity": "minor"
+  },
+  {
+    "check_name": "unresolved-import",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_13` (baseline-reproduction fixture for module 'scripts')",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:983:optional",
+    "location": {
+      "path": "scripts/dev/ty_advisory_ratchet.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 983
+        }
+      }
+    },
+    "severity": "minor"
+  },
+  {
+    "check_name": "unresolved-import",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_14` (baseline-reproduction fixture for module 'scripts')",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:984:optional",
+    "location": {
+      "path": "scripts/dev/ty_advisory_ratchet.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 984
+        }
+      }
+    },
+    "severity": "minor"
+  },
+  {
+    "check_name": "unresolved-import",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_15` (baseline-reproduction fixture for module 'scripts')",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:985:optional",
+    "location": {
+      "path": "scripts/dev/ty_advisory_ratchet.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 985
+        }
+      }
+    },
+    "severity": "minor"
+  },
+  {
+    "check_name": "unresolved-import",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_16` (baseline-reproduction fixture for module 'scripts')",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:986:optional",
+    "location": {
+      "path": "scripts/dev/ty_advisory_ratchet.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 986
+        }
+      }
+    },
+    "severity": "minor"
+  },
+  {
+    "check_name": "unresolved-import",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_17` (baseline-reproduction fixture for module 'scripts')",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:987:optional",
+    "location": {
+      "path": "scripts/dev/ty_advisory_ratchet.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 987
+        }
+      }
+    },
+    "severity": "minor"
+  },
+  {
+    "check_name": "unresolved-import",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_18` (baseline-reproduction fixture for module 'scripts')",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:988:optional",
+    "location": {
+      "path": "scripts/dev/ty_advisory_ratchet.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 988
         }
       }
     },

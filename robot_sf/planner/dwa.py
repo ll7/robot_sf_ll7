@@ -101,6 +101,8 @@ class DWAPlannerConfig:
             raise ValueError("route_rescue_window must be at least one")
         if int(self.route_rescue_patience) < 1:
             raise ValueError("route_rescue_patience must be at least one")
+        if int(self.route_rescue_patience) > int(self.route_rescue_window):
+            raise ValueError("route_rescue_patience cannot be greater than route_rescue_window")
         if float(self.route_rescue_progress_threshold) < 0.0:
             raise ValueError("route_rescue_progress_threshold must not be negative")
         if float(self.route_rescue_horizon_scale) < 1.0:
@@ -352,7 +354,9 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             "y": float(active_goal[1]),
         }
 
-    def plan(self, observation: dict[str, Any]) -> tuple[float, float]:  # noqa: C901, PLR0912
+    def plan(  # noqa: C901, PLR0912, PLR0915
+        self, observation: dict[str, Any]
+    ) -> tuple[float, float]:
         """Select the highest-scoring dynamically reachable unicycle command.
 
         Returns:
@@ -449,11 +453,13 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             and infeasible_count / candidate_total
             >= float(self.config.feasibility_slowdown_infeasible_ratio)
         ):
-            self._feasibility_slowdown_active = True
             slowdown_v_max = v_max * float(self.config.feasibility_slowdown_scale)
             slowdown_candidates = np.linspace(
                 v_min, max(v_min, slowdown_v_max), int(self.config.linear_samples)
             )
+            slowdown_best_score = float("-inf")
+            slowdown_best_command = (0.0, 0.0)
+            slowdown_found = False
             for linear in slowdown_candidates:
                 for angular in angular_candidates:
                     command = (float(linear), float(angular))
@@ -469,8 +475,12 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
                     )
                     if not math.isfinite(score):
                         continue
-                    if score > best_score:
-                        best_score, best_command = score, command
+                    slowdown_found = True
+                    if score > slowdown_best_score:
+                        slowdown_best_score, slowdown_best_command = score, command
+            if slowdown_found:
+                self._feasibility_slowdown_active = True
+                best_score, best_command = slowdown_best_score, slowdown_best_command
 
         window_degenerate = bool(abs(v_max - v_min) <= 1e-12 or abs(w_max - w_min) <= 1e-12)
         if candidate_feasible == 0:

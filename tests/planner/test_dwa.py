@@ -373,7 +373,7 @@ def test_dwa_route_rescue_does_not_activate_with_progress() -> None:
     assert diag.get("route_rescue_active") is False
 
 
-def test_dwa_route_rescue_extends_prediction_horizon() -> None:
+def test_dwa_route_rescue_extends_prediction_horizon(monkeypatch: pytest.MonkeyPatch) -> None:
     """When rescue is active, the planner uses a longer prediction horizon."""
     config = DWAPlannerConfig(
         route_rescue_enabled=True,
@@ -385,14 +385,24 @@ def test_dwa_route_rescue_extends_prediction_horizon() -> None:
         angular_samples=3,
     )
     planner = DWAPlannerAdapter(config)
-    base_obs = _observation(goal=(3.0, 0.0))
-    base_cmd = planner.plan(base_obs)
+    observed_overrides: list[dict[str, object]] = []
+    original_score = planner._rollout_score
+
+    def record_score(**kwargs: object) -> float:
+        overrides = kwargs.get("rescue_overrides")
+        observed_overrides.append(dict(overrides) if isinstance(overrides, dict) else {})
+        return original_score(**kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(planner, "_rollout_score", record_score)
     for _ in range(5):
         obs = _observation(goal=(3.0, 0.0))
         planner.plan(obs)
-    rescue_cmd = planner.plan(_observation(goal=(3.0, 0.0)))
+    planner.plan(_observation(goal=(3.0, 0.0)))
     assert planner._rescue_active is True
-    assert base_cmd != rescue_cmd or True
+    assert any(
+        overrides.get("prediction_steps") == 30 and overrides.get("progress_weight") == 2.0
+        for overrides in observed_overrides
+    ), "Expected active route-rescue scoring to use the configured horizon and progress boost"
 
 
 def test_dwa_feasibility_slowdown_is_disabled_by_default() -> None:
@@ -405,7 +415,9 @@ def test_dwa_feasibility_slowdown_is_disabled_by_default() -> None:
     assert diag.get("feasibility_slowdown_active") is False
 
 
-def test_dwa_feasibility_slowdown_reduces_speed_near_obstacle() -> None:
+def test_dwa_feasibility_slowdown_reduces_speed_near_obstacle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """With high infeasible ratio, feasibility-slowdown reduces linear speed."""
     config = DWAPlannerConfig(
         feasibility_slowdown_enabled=True,
@@ -413,28 +425,18 @@ def test_dwa_feasibility_slowdown_reduces_speed_near_obstacle() -> None:
         feasibility_slowdown_scale=0.3,
         linear_samples=5,
         angular_samples=5,
-        safety_margin=0.5,
-        robot_radius=0.25,
-        pedestrian_radius=0.30,
     )
     planner = DWAPlannerAdapter(config)
-    observation = _observation(goal=(3.0, 0.0), pedestrians=[(0.5, 0.0)])
-    planner.plan(observation)
+    monkeypatch.setattr(
+        planner,
+        "_rollout_score",
+        lambda **kwargs: float("-inf") if kwargs["command"][0] > 0.081 else kwargs["command"][0],
+    )
+    observation = _observation(goal=(3.0, 0.0))
+    slowdown_cmd = planner.plan(observation)
     diag = planner.diagnostics()["last_decision"]
-    if diag.get("feasibility_slowdown_active"):
-        slowdown_cmd = planner.plan(observation)
-        base_planner = DWAPlannerAdapter(
-            DWAPlannerConfig(
-                feasibility_slowdown_enabled=False,
-                linear_samples=5,
-                angular_samples=5,
-                safety_margin=0.5,
-                robot_radius=0.25,
-                pedestrian_radius=0.30,
-            )
-        )
-        base_cmd = base_planner.plan(observation)
-        assert slowdown_cmd[0] <= base_cmd[0]
+    assert diag.get("feasibility_slowdown_active") is True
+    assert slowdown_cmd[0] == pytest.approx(0.048)
 
 
 def test_dwa_route_rescue_config_builder_parses_new_fields() -> None:
@@ -469,6 +471,8 @@ def test_dwa_route_rescue_config_rejects_invalid_values() -> None:
         DWAPlannerConfig(route_rescue_window=0)
     with pytest.raises(ValueError, match="route_rescue_patience"):
         DWAPlannerConfig(route_rescue_patience=0)
+    with pytest.raises(ValueError, match="route_rescue_patience"):
+        DWAPlannerConfig(route_rescue_window=3, route_rescue_patience=4)
     with pytest.raises(ValueError, match="route_rescue_progress_threshold"):
         DWAPlannerConfig(route_rescue_progress_threshold=-0.1)
     with pytest.raises(ValueError, match="route_rescue_horizon_scale"):

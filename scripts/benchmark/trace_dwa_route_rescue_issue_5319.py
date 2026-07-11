@@ -87,7 +87,7 @@ STEP_TRACE_FIELDS: tuple[str, ...] = (
 
 def _load_scenario(name: str, seed: int, matrix_path: Path) -> dict[str, Any]:
     """Return one scenario from the source matrix with a single pinned seed."""
-    scenarios = load_scenarios(matrix_path, base_dir=matrix_path)
+    scenarios = load_scenarios(matrix_path, base_dir=matrix_path.parent)
     by_name = {str(row.get("name")): dict(row) for row in scenarios}
     if name not in by_name:
         raise KeyError(f"scenario {name!r} is absent from matrix {matrix_path}")
@@ -301,6 +301,7 @@ def _write_evidence_readme(  # noqa: PLR0915
     summaries: list[dict[str, Any]],
     baseline_summaries: list[dict[str, Any]],
     trace_commit: str,
+    config_sha256: str,
 ) -> None:
     """Write the diagnostic evidence README comparing rescue vs. baseline."""
     rescue_bottleneck = next(
@@ -344,6 +345,10 @@ def _write_evidence_readme(  # noqa: PLR0915
     lines.append(
         "- **Caveat:** this is a diagnostic probe, not a comparator benchmark. Two episodes cannot "
         "bound the full failure surface. The intervention may not generalize beyond these rows."
+    )
+    lines.append(f"- **Seeds:** {', '.join(str(seed) for _, seed, _ in TARGET_EPISODES)}.")
+    lines.append(
+        f"- **Config SHA-256:** `{config_sha256}` for `configs/algos/dwa_route_rescue.yaml`."
     )
     lines.append("")
     lines.append("## Episodes traced")
@@ -514,6 +519,13 @@ def _trace_commit() -> str:
         return "unknown"
 
 
+def _sha256_file(path: Path) -> str:
+    """Return the SHA-256 digest for a committed config artifact."""
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def trace_episodes(
     *,
     matrix_path: Path,
@@ -618,6 +630,7 @@ def trace_episodes(
             summaries=summaries,
             baseline_summaries=baseline_summaries,
             trace_commit=_trace_commit(),
+            config_sha256=_sha256_file(algo_config_path),
         )
 
     return {

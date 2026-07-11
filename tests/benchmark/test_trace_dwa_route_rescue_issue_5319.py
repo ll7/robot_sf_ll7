@@ -37,6 +37,23 @@ def test_route_progress_summary_skips_and_records_non_finite_trace_values() -> N
     assert summary["skipped_non_finite_cells"] == 2
 
 
+def test_load_scenario_resolves_relative_paths_from_matrix_parent(monkeypatch) -> None:
+    """The matrix parent, rather than its filename, is the loader base directory."""
+    trace = _load_trace_module()
+    matrix = ROOT / "configs" / "scenarios" / "classic_interactions.yaml"
+    captured: dict[str, Path] = {}
+
+    def fake_load(path: Path, *, base_dir: Path):
+        captured["path"] = path
+        captured["base_dir"] = base_dir
+        return [{"name": "target"}]
+
+    monkeypatch.setattr(trace, "load_scenarios", fake_load)
+
+    assert trace._load_scenario("target", 7, matrix) == {"name": "target", "seeds": [7]}
+    assert captured == {"path": matrix, "base_dir": matrix.parent}
+
+
 def test_route_rescue_activation_steps_extracts_active_steps() -> None:
     """Only steps with route_rescue_active=True are returned."""
     trace = _load_trace_module()

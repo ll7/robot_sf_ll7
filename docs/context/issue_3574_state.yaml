@@ -5,7 +5,8 @@ current_status: open_pre_run_integration_contract_ready
 claim_boundary: diagnostic_only_not_benchmark_or_paper_evidence
 latest_integration_slice:
   capability: manifest_declared_per_archetype_metrics_flow_into_report
-  status: ready_for_review
+  pull_request: 5334
+  status: open_for_review
   reason: >
     The report now emits a per-archetype result for every trace metric declared
     by the mean-matched manifest while retaining the clearance-only compatibility

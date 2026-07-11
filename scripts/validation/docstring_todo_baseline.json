@@ -31,7 +31,6 @@
     "robot_sf/telemetry/sampler.py": 35,
     "scripts/PPO_training/train_ppo_punish_action.py": 2,
     "scripts/analyze_feature_extractors.py": 27,
-    "scripts/benchmark.py": 1,
     "scripts/benchmark02.py": 2,
     "scripts/benchmark_workers.py": 10,
     "scripts/compare_slow_tests.py": 10,

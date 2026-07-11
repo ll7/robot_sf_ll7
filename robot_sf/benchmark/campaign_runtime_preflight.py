@@ -185,7 +185,14 @@ def check_campaign_scenario_maps_preflight(
                         FileNotFoundError("map file could not be resolved or loaded"),
                     )
                 )
-        except (OSError, RuntimeError, TypeError, ValueError, AssertionError, yaml.YAMLError) as exc:
+        except (
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+            AssertionError,
+            yaml.YAMLError,
+        ) as exc:
             failures.append((scenario_name, map_file, exc))
 
     if failures:

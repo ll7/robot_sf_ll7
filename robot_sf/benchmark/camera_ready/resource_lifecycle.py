@@ -184,12 +184,15 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
         availability_payload,
         summarize_benchmark_availability,
     )
-    from robot_sf.benchmark.runner import run_batch  # noqa: PLC0415
-    from robot_sf.benchmark.scenario_matrix import load_scenario_matrix  # noqa: PLC0415
+    from robot_sf.benchmark.runner import load_scenario_matrix, run_batch  # noqa: PLC0415
 
-    # Load scenario matrix
-    scenario_matrix = load_scenario_matrix(params.scenario_matrix_path)
-    scenarios = scenario_matrix.scenarios
+    # Load scenario matrix. NOTE (2026-07-11): this previously imported
+    # `robot_sf.benchmark.scenario_matrix` — a module that has NEVER existed — and read
+    # `.scenarios` off an object that was really a list. The subprocess worker therefore
+    # failed on every arm it ever ran (masked first by the arm_params JSON crash, then
+    # observed live in Slurm job 13364). load_scenario_matrix lives in runner and returns
+    # the scenario list directly, exactly as the in-process path consumes it.
+    scenarios = load_scenario_matrix(params.scenario_matrix_path)
 
     # Apply kinematics transform
     scoped_scenarios = [

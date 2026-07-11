@@ -17,19 +17,26 @@ def _write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
-def _split_fixture(tmp_path: Path, planners: tuple[str, ...] = ("goal", "orca")) -> Path:
+def _split_fixture(
+    tmp_path: Path,
+    planners: tuple[str, ...] = ("goal", "orca"),
+    *,
+    split_per_planner: bool = True,
+) -> Path:
     split_dir = tmp_path / "splits"
     split_dir.mkdir()
     parent = tmp_path / "parent.yaml"
     parent.write_text("name: parent\n", encoding="utf-8")
     children = []
-    for index, planner in enumerate(planners):
-        path = split_dir / f"parent__arm_{planner}.yaml"
+    arm_planners = ((planner,) for planner in planners) if split_per_planner else (planners,)
+    for index, child_planners in enumerate(arm_planners):
+        arm_label = "__".join(child_planners)
+        path = split_dir / f"parent__arm_{arm_label}.yaml"
         path.write_text(
             yaml.safe_dump(
                 {
-                    "name": f"parent__arm_{planner}",
-                    "planners": [{"key": planner, "enabled": True}],
+                    "name": f"parent__arm_{arm_label}",
+                    "planners": [{"key": planner, "enabled": True} for planner in child_planners],
                     "seed_policy": {"seed_set": "paper_eval_s20"},
                 },
                 sort_keys=False,
@@ -40,7 +47,7 @@ def _split_fixture(tmp_path: Path, planners: tuple[str, ...] = ("goal", "orca"))
             {
                 "filename": path.name,
                 "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                "planner_keys": [planner],
+                "planner_keys": list(child_planners),
                 "arm_index": index,
             }
         )
@@ -208,6 +215,46 @@ def test_aggregate_fails_closed_for_missing_or_failed_arm(tmp_path: Path) -> Non
         "missing_campaign_artifacts",
     }
     assert all(item["blocking"] for item in result["excluded_rows"])
+
+
+def test_aggregate_checks_every_row_in_a_multiplanner_arm(tmp_path: Path) -> None:
+    """A failed sibling row blocks even when its arm's first row is native."""
+    packet = runner.build_execution_packet(
+        _split_fixture(tmp_path, split_per_planner=False),
+        output_root=tmp_path / "campaigns",
+        campaign_prefix="issue5273_s20",
+    )
+    packet_path = tmp_path / "packet.json"
+    _write_json(packet_path, packet)
+    arm = packet["arms"][0]
+    campaign_root = Path(arm["campaign_root"])
+    _write_campaign(
+        campaign_root,
+        campaign_id=arm["campaign_id"],
+        config_hash=arm["config_sha256"][:16],
+        planner="goal",
+    )
+    summary_path = campaign_root / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    failed_row = dict(summary["planner_rows"][0])
+    failed_row.update(
+        {
+            "planner_key": "orca",
+            "status": "failed",
+            "availability_status": "failed",
+            "benchmark_success": False,
+        }
+    )
+    summary["planner_rows"].append(failed_row)
+    _write_json(summary_path, summary)
+
+    result = runner.aggregate_execution_packet(packet_path, output_dir=tmp_path / "aggregate")
+
+    assert result["status"] == "blocked"
+    assert result["benchmark_success"] is False
+    assert result["included_planner_keys"] == ["goal"]
+    assert result["excluded_rows"][0]["planner_key"] == "orca"
+    assert result["excluded_rows"][0]["reason"] == "row_status_failed"
 
 
 def test_aggregate_fails_closed_for_contract_mismatch(tmp_path: Path) -> None:

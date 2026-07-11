@@ -364,21 +364,32 @@ def aggregate_execution_packet(  # noqa: C901, PLR0915
             sources.append({**source, "status": "incompatible"})
             continue
 
-        row = rows[0]
-        reason = _row_exclusion_reason(row)
-        if reason is None:
-            included_rows.append(deepcopy(row))
-            sources.append({**source, "status": "included_native"})
-        else:
+        arm_has_native_row = False
+        arm_has_excluded_row = False
+        for row in rows:
+            reason = _row_exclusion_reason(row)
+            if reason is None:
+                included_rows.append(deepcopy(row))
+                arm_has_native_row = True
+                continue
+            arm_has_excluded_row = True
             exclusions.append(
                 {
                     **source,
+                    "planner_key": row.get("planner_key"),
                     "reason": reason,
                     "blocking": reason.startswith(("row_status_", "availability_status_"))
                     or reason == "benchmark_success_false",
                 }
             )
-            sources.append({**source, "status": "excluded_non_native"})
+        source_status = (
+            "mixed_rows"
+            if arm_has_native_row and arm_has_excluded_row
+            else "included_native"
+            if arm_has_native_row
+            else "excluded_non_native"
+        )
+        sources.append({**source, "status": source_status})
 
     blocking = [item for item in exclusions if item["blocking"]]
     complete = bool(included_rows) and not blocking

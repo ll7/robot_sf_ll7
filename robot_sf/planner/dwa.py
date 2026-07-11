@@ -45,6 +45,9 @@ class DWAPlannerConfig:
     velocity_weight: float = 0.25
     progress_weight: float = 1.0
     prediction_scoring_enabled: bool = False
+    global_route_probe_enabled: bool = False
+    global_route_probe_waypoint_distance: float = 2.0
+    global_route_probe_heading_weight: float = 0.5
     route_rescue_enabled: bool = False
     route_rescue_window: int = 20
     route_rescue_patience: int = 10
@@ -55,7 +58,7 @@ class DWAPlannerConfig:
     feasibility_slowdown_infeasible_ratio: float = 0.25
     feasibility_slowdown_scale: float = 0.5
 
-    def __post_init__(self) -> None:  # noqa: C901
+    def __post_init__(self) -> None:  # noqa: C901, PLR0912
         """Reject invalid dynamics and rollout parameters before planning begins."""
         numeric_values = {
             "max_linear_speed": self.max_linear_speed,
@@ -112,6 +115,19 @@ class DWAPlannerConfig:
             )
         if int(self.obstacle_search_cells) < 1:
             raise ValueError("obstacle_search_cells must be at least one")
+        probe_values = {
+            "global_route_probe_waypoint_distance": self.global_route_probe_waypoint_distance,
+            "global_route_probe_heading_weight": self.global_route_probe_heading_weight,
+        }
+        invalid_probe = [name for name, value in probe_values.items() if not isfinite(float(value))]
+        if invalid_probe:
+            raise ValueError(
+                f"DWA global-route probe values must be finite: {', '.join(invalid_probe)}"
+            )
+        if float(self.global_route_probe_waypoint_distance) <= 0.0:
+            raise ValueError("global_route_probe_waypoint_distance must be positive")
+        if float(self.global_route_probe_heading_weight) < 0.0:
+            raise ValueError("global_route_probe_heading_weight must not be negative")
         if int(self.route_rescue_window) < 1:
             raise ValueError("route_rescue_window must be at least one")
         if int(self.route_rescue_patience) < 1:
@@ -335,12 +351,76 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         effective_progress_weight = float(
             overrides.get("progress_weight") or self.config.progress_weight
         )
-        return (
+        base_score = (
             float(self.config.heading_weight) * heading_score
             + float(self.config.clearance_weight) * clearance_score
             + float(self.config.velocity_weight) * velocity_score
             + effective_progress_weight * (start_distance - end_distance)
         )
+        if not self.config.global_route_probe_enabled:
+            return base_score
+        waypoint_score = self._waypoint_following_score(
+            robot_pos=robot_pos,
+            heading=heading,
+            end_position=position,
+            end_orientation=orientation,
+            observation=observation,
+        )
+        return base_score + float(self.config.global_route_probe_heading_weight) * waypoint_score
+
+    def _waypoint_following_score(
+        self,
+        *,
+        robot_pos: np.ndarray,
+        heading: float,
+        end_position: np.ndarray,
+        end_orientation: float,
+        observation: dict[str, Any],
+    ) -> float:
+        """Score waypoint-following alignment for global-route integration probe.
+
+        The probe biases DWA toward the next global-route waypoint by computing
+        a heading-alignment score at the rollout endpoint. This helps the planner
+        navigate through bottleneck corridors where the constant-velocity rollout
+        cannot directly see the goal.
+
+        Returns:
+            Waypoint-following score in [-1, 1], or 0.0 when no waypoint is available.
+        """
+        if not self.config.global_route_probe_enabled:
+            return 0.0
+        waypoint = self._route_waypoint_target(robot_pos=robot_pos, observation=observation)
+        if waypoint is None:
+            return 0.0
+        desired_heading = float(
+            np.arctan2(
+                waypoint[1] - end_position[1],
+                waypoint[0] - end_position[0],
+            )
+        )
+        return float(np.cos(wrap_angle_pi(desired_heading - end_orientation)))
+
+    def _route_waypoint_target(
+        self, *, robot_pos: np.ndarray, observation: dict[str, Any]
+    ) -> np.ndarray | None:
+        """Return the usable forward route waypoint, or ``None`` when the probe cannot score."""
+        robot_state = observation.get("robot")
+        if not isinstance(robot_state, dict):
+            return None
+        waypoints_raw = robot_state.get("route_waypoints")
+        if waypoints_raw is None:
+            return None
+        waypoints = np.asarray(waypoints_raw, dtype=float)
+        if waypoints.ndim != 2 or waypoints.shape[-1] != 2 or waypoints.shape[0] == 0:
+            return None
+        if not np.all(np.isfinite(waypoints)):
+            return None
+        waypoint_distances = np.linalg.norm(waypoints - robot_pos[None, :], axis=1)
+        nearest_idx = int(np.argmin(waypoint_distances))
+        nearest_distance = float(waypoint_distances[nearest_idx])
+        if nearest_distance > float(self.config.global_route_probe_waypoint_distance):
+            return None
+        return waypoints[min(nearest_idx + 1, len(waypoints) - 1)]
 
     def _target_goal_detail(
         self, observation: dict[str, Any], active_goal: np.ndarray, robot_pos: np.ndarray
@@ -507,6 +587,11 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         feasible_score_min = float(min(feasible_scores)) if feasible_scores else None
         feasible_score_max = float(max(feasible_scores)) if feasible_scores else None
         selected_score = best_score if candidate_feasible > 0 else None
+        global_route_probe_activated = bool(
+            self.config.global_route_probe_enabled
+            and self._route_waypoint_target(robot_pos=robot_pos, observation=observation)
+            is not None
+        )
         self._last_decision = {
             "selected_source": "dwa",
             "selected_command": [float(best_command[0]), float(best_command[1])],
@@ -525,6 +610,7 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             },
             "distance_to_goal_m": distance_to_goal,
             "target_goal": target_goal,
+            "global_route_probe_activated": global_route_probe_activated,
             "route_rescue_active": self._rescue_active,
             "route_rescue_type": self._rescue_type,
             "feasibility_slowdown_active": self._feasibility_slowdown_active,
@@ -597,6 +683,22 @@ def build_dwa_config(cfg: dict[str, Any] | None) -> DWAPlannerConfig:
         prediction_scoring_enabled=_parse_bool(
             cfg.get("prediction_scoring_enabled", defaults.prediction_scoring_enabled),
             name="prediction_scoring_enabled",
+        ),
+        global_route_probe_enabled=_parse_bool(
+            cfg.get("global_route_probe_enabled", defaults.global_route_probe_enabled),
+            name="global_route_probe_enabled",
+        ),
+        global_route_probe_waypoint_distance=float(
+            cfg.get(
+                "global_route_probe_waypoint_distance",
+                defaults.global_route_probe_waypoint_distance,
+            )
+        ),
+        global_route_probe_heading_weight=float(
+            cfg.get(
+                "global_route_probe_heading_weight",
+                defaults.global_route_probe_heading_weight,
+            )
         ),
         route_rescue_enabled=_parse_bool(
             cfg.get("route_rescue_enabled", defaults.route_rescue_enabled),

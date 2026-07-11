@@ -20,14 +20,25 @@ import hashlib
 import json
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+import yaml
+
+from robot_sf.benchmark.map_runner_identity import _scenario_with_episode_seed_defaults
+from robot_sf.benchmark.utils import _config_hash
+from robot_sf.common.artifact_paths import get_repository_root
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 BASELINE_SCHEMA_VERSION = "scenario_flakiness.v1"
 MANIFEST_SCHEMA_VERSION = "scenario_exact_repeat_campaign.v1"
 HOST_REPORT_SCHEMA_VERSION = "scenario_exact_repeat_host_result.v1"
 VERIFIED_HOST_REPORT_SCHEMA_VERSION = "scenario_exact_repeat_verified_host_result.v1"
 CROSS_HOST_SCHEMA_VERSION = "scenario_exact_repeat_cross_host.v1"
+RESOLVED_DEFINITIONS_SCHEMA_VERSION = "scenario_exact_repeat_resolved_definitions.v1"
 DEFAULT_REPEATS = 3
+SOURCE_IDENTITY_REVISION = "a5516b432fceffa71573e458aaee31c00a0b6c81"
 
 
 def canonical_sha256(value: Any) -> str:
@@ -140,11 +151,18 @@ def build_manifest(  # noqa: C901 - validation branches make the fail-closed con
                 "horizon": horizon,
                 "source_git_hash": _require_text(row.get("git_hash"), "source git_hash"),
                 "source_config_hash": _require_text(row.get("config_hash"), "source config_hash"),
+                "source_observation_mode": _require_text(
+                    row.get("observation_mode"), "source observation_mode"
+                ),
+                "source_observation_level": _require_text(
+                    row.get("observation_level"), "source observation_level"
+                ),
             }
         )
 
     manifest = {
         "schema_version": MANIFEST_SCHEMA_VERSION,
+        "review_marker": "AI-GENERATED NEEDS-REVIEW",
         "claim_boundary": "diagnostic-only; no campaign result is represented by this manifest",
         "execution_contract": {
             "cpu_only": True,
@@ -166,6 +184,215 @@ def build_manifest(  # noqa: C901 - validation branches make the fail-closed con
     }
     manifest["manifest_sha256"] = canonical_sha256(manifest)
     return manifest
+
+
+def _scenario_id(scenario: Mapping[str, Any]) -> str:
+    for key in ("name", "scenario_id", "id"):
+        value = scenario.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    raise ValueError("campaign scenario has no non-empty name, scenario_id, or id")
+
+
+def _planner_index(planners: Sequence[Any]) -> dict[str, Any]:
+    indexed: dict[str, Any] = {}
+    for planner in planners:
+        identity = str(planner.key)
+        if identity in indexed:
+            raise ValueError(f"campaign contains duplicate planner key {identity!r}")
+        indexed[identity] = planner
+    algo_counts: dict[str, int] = defaultdict(int)
+    for planner in planners:
+        algo_counts[str(planner.algo)] += 1
+    for planner in planners:
+        algo = str(planner.algo)
+        if algo_counts[algo] == 1:
+            indexed.setdefault(algo, planner)
+    return indexed
+
+
+def _historical_identity_payload(
+    scenario: Mapping[str, Any],
+    *,
+    target: Mapping[str, Any],
+    algo: str,
+    algo_config: Mapping[str, Any],
+    record_forces: bool,
+    record_simulation_step_trace: bool,
+    dt: float | None,
+    horizon: int | None,
+) -> dict[str, Any]:
+    """Rebuild the map-runner identity contract used by the retained source revision.
+
+    Returns:
+        The canonical historical identity payload used to compute ``source_config_hash``.
+    """
+
+    payload = {key: value for key, value in scenario.items() if key not in {"seed", "seeds"}}
+    payload.setdefault("id", _scenario_id(scenario))
+    payload["algo"] = algo
+    payload["algo_config_hash"] = _config_hash(dict(algo_config))
+    payload["record_forces"] = record_forces
+    payload["observation_mode"] = _require_text(
+        target.get("source_observation_mode"), "target source_observation_mode"
+    )
+    payload["observation_level"] = _require_text(
+        target.get("source_observation_level"), "target source_observation_level"
+    )
+    # Source revision a5516b432 used this field but predates the separate planner-decision trace
+    # identity field. Keeping the historical shape is necessary to verify the retained hashes.
+    payload["record_simulation_step_trace"] = record_simulation_step_trace
+    if horizon is not None and horizon > 0:
+        payload["run_horizon"] = horizon
+    if dt is not None and dt > 0:
+        payload["run_dt"] = dt
+    return payload
+
+
+def resolve_runnable_definitions(  # noqa: C901 - fail-closed recovery validates each input axis.
+    manifest: Mapping[str, Any], campaign_config_path: Path
+) -> dict[str, Any]:
+    """Recover and hash-check every runnable scenario/planner target in the manifest.
+
+    The retained fixture was slimmed after the source campaign, but its source revision and
+    per-target map-runner identity hashes remain available. This resolver materializes the
+    scenario and planner objects from the canonical source campaign config and accepts them only
+    when all target hashes and horizons reproduce exactly.
+
+    Returns:
+        A diagnostic-only bundle with all 140 hash-matched runnable target definitions.
+    """
+    targets, _ = _check_manifest(manifest)
+    source_commits = sorted({str(target["source_git_hash"]) for target in targets.values()})
+    if source_commits != [SOURCE_IDENTITY_REVISION]:
+        raise ValueError(
+            "definition recovery supports only the retained #5263 source revision "
+            f"{SOURCE_IDENTITY_REVISION}"
+        )
+    from robot_sf.benchmark.camera_ready._config import (  # noqa: PLC0415
+        _load_campaign_scenarios,
+        _scenario_with_kinematics,
+        load_campaign_config,
+    )
+
+    config_path = campaign_config_path.resolve()
+    try:
+        config_repo_path = config_path.relative_to(get_repository_root().resolve()).as_posix()
+    except ValueError as exc:
+        raise ValueError("source campaign config must be repository-local") from exc
+    cfg = load_campaign_config(config_path)
+    if tuple(cfg.kinematics_matrix) != ("differential_drive",):
+        raise ValueError("source campaign must resolve exactly one differential_drive kinematics")
+
+    scenarios = {_scenario_id(item): item for item in _load_campaign_scenarios(cfg)}
+    planners = _planner_index(cfg.planners)
+    resolved_targets: list[dict[str, Any]] = []
+    scenario_definitions: dict[str, dict[str, Any]] = {}
+    planner_definitions: dict[str, dict[str, Any]] = {}
+    for key, target in sorted(targets.items()):
+        scenario = scenarios.get(key[0])
+        if scenario is None:
+            raise ValueError(f"source campaign is missing target scenario {key[0]!r}")
+        planner = planners.get(key[1])
+        if planner is None:
+            raise ValueError(f"source campaign is missing target planner {key[1]!r}")
+        if not planner.enabled:
+            raise ValueError(f"source campaign target planner {key[1]!r} is disabled")
+
+        scenario_params = _scenario_with_kinematics(
+            scenario,
+            kinematics="differential_drive",
+            holonomic_command_mode=cfg.holonomic_command_mode,
+        )
+        scenario_params = _scenario_with_episode_seed_defaults(scenario_params, seed=key[2])
+        scenario_horizon = scenario_params.get("simulation_config", {}).get("max_episode_steps")
+        effective_horizon = (
+            planner.horizon_override if planner.horizon_override is not None else cfg.horizon
+        )
+        if effective_horizon is None:
+            if scenario_horizon != target["horizon"]:
+                raise ValueError(f"source campaign target {key} has a mismatched scenario horizon")
+        elif int(effective_horizon) != target["horizon"]:
+            raise ValueError(f"source campaign target {key} has a mismatched planner horizon")
+
+        if planner.algo_config_path is None:
+            planner_config: dict[str, Any] = {}
+            planner_config_path = None
+        else:
+            loaded = yaml.safe_load(planner.algo_config_path.read_text(encoding="utf-8")) or {}
+            if not isinstance(loaded, dict):
+                raise ValueError(f"planner config for {key[1]!r} must be an object")
+            planner_config = loaded
+            try:
+                planner_config_path = (
+                    planner.algo_config_path.resolve()
+                    .relative_to(get_repository_root().resolve())
+                    .as_posix()
+                )
+            except ValueError as exc:
+                raise ValueError(f"planner config for {key[1]!r} must be repository-local") from exc
+        effective_dt = planner.dt_override if planner.dt_override is not None else cfg.dt
+        identity_payload = _historical_identity_payload(
+            scenario_params,
+            target=target,
+            algo=str(planner.algo),
+            algo_config=planner_config,
+            record_forces=bool(cfg.record_forces),
+            record_simulation_step_trace=bool(cfg.record_simulation_step_trace),
+            dt=float(effective_dt) if effective_dt is not None else None,
+            horizon=int(effective_horizon) if effective_horizon is not None else None,
+        )
+        computed_hash = _config_hash(identity_payload)
+        if computed_hash != target["source_config_hash"]:
+            raise ValueError(
+                f"source campaign target {key} config hash mismatch: "
+                f"expected {target['source_config_hash']}, computed {computed_hash}"
+            )
+        scenario_definition_id = f"{key[0]}--{key[2]}"
+        scenario_definitions[scenario_definition_id] = scenario_params
+        planner_definition_id = str(planner.key)
+        planner_definitions[planner_definition_id] = {
+            "algo": str(planner.algo),
+            "planner_config": planner_config,
+            "planner_config_path": planner_config_path,
+            "planner_config_hash": _config_hash(planner_config),
+        }
+        resolved_targets.append(
+            {
+                **dict(target),
+                "scenario_definition_id": scenario_definition_id,
+                "planner_definition_id": planner_definition_id,
+                "computed_config_hash": computed_hash,
+            }
+        )
+
+    bundle = {
+        "schema_version": RESOLVED_DEFINITIONS_SCHEMA_VERSION,
+        "review_marker": "AI-GENERATED NEEDS-REVIEW",
+        "claim_boundary": (
+            "diagnostic-only definition recovery; no repeat campaign result or determinism "
+            "verdict is represented"
+        ),
+        "manifest_sha256": manifest["manifest_sha256"],
+        "source": {
+            "campaign_config_path": config_repo_path,
+            "campaign_config_sha256": hashlib.sha256(config_path.read_bytes()).hexdigest(),
+            "source_git_hashes": source_commits,
+            "historical_identity_contract": f"map_runner_identity@{SOURCE_IDENTITY_REVISION[:10]}",
+        },
+        "execution_contract": dict(manifest["execution_contract"]),
+        "scenario_definitions": scenario_definitions,
+        "planner_definitions": planner_definitions,
+        "targets": resolved_targets,
+        "summary": {
+            "n_targets": len(resolved_targets),
+            "n_cells": len({key[:2] for key in targets}),
+            "all_source_config_hashes_match": True,
+            "runnable_definitions_remaining": [],
+        },
+    }
+    bundle["bundle_sha256"] = canonical_sha256(bundle)
+    return bundle
 
 
 def _check_manifest(

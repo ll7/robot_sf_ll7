@@ -122,7 +122,6 @@ reviewed public command, a compatibility shim, or a bounded debug utility.
 | --- | --- | --- |
 | `__init__.py` | canonical | Import support for tested script modules. |
 | `analyze_feature_extractors.py` | compatibility | Prefer `research/generate_extractor_report.py` for multi-extractor report generation. |
-| `benchmark.py` | compatibility | Fails closed; use `scripts/benchmark_workers.py` or `scripts/validation/performance_smoke_test.py`. |
 | `benchmark02.py` | compatibility | Fails closed; use `scripts/benchmark_workers.py` or `scripts/validation/performance_smoke_test.py`. |
 | `benchmark_ped_apf_models.py` | debug-only | Narrow APF comparison helper. |
 | `benchmark_ped_policy_collisions.py` | debug-only | Narrow pedestrian-policy collision analysis helper. |
@@ -262,10 +261,16 @@ uv run python scripts/classic_benchmark_full.py
 
 **Details**: Expanded parser with full benchmark flags
 
-#### `benchmark.py`
+#### `benchmark/`
 
-**Purpose**: Retired root profiling benchmark. Fails closed with migration guidance.
-**Replacement**:
+**Purpose**: Importable benchmark reporting and campaign helper scripts. The retired root profiling
+benchmark remains available as a fail-closed module command:
+
+```bash
+uv run python -m scripts.benchmark
+```
+
+Use this maintained smoke alternative instead:
 
 ```bash
 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \

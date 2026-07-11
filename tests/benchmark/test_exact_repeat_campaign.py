@@ -12,16 +12,24 @@ import pytest
 from robot_sf.benchmark.exact_repeat_campaign import (
     HOST_REPORT_SCHEMA_VERSION,
     build_manifest,
+    canonical_sha256,
     compare_verified_hosts,
+    resolve_runnable_definitions,
     verify_host_report,
 )
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_DIR = (
     Path(__file__).resolve().parent.parent
     / "fixtures"
     / "benchmark"
     / "scenario_flakiness_issue_4978"
 )
+CAMPAIGN_CONFIG = (
+    REPOSITORY_ROOT
+    / "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml"
+)
+EVIDENCE_DIR = REPOSITORY_ROOT / "docs/context/evidence/issue_5263_exact_repeat"
 
 
 def _load(path: Path) -> Any:
@@ -73,6 +81,50 @@ def test_manifest_pins_all_seven_knife_edge_cells_and_their_420_runs(manifest):
         "scenario_params",
         "planner_config",
     ]
+    assert {target["source_observation_mode"] for target in manifest["targets"]} == {
+        "goal_state",
+        "socnav_state",
+    }
+
+
+def test_resolver_hash_matches_all_140_runnable_source_definitions(manifest):
+    """The canonical source config recovers every target without inventing definitions."""
+    resolved = resolve_runnable_definitions(manifest, CAMPAIGN_CONFIG)
+    assert resolved["summary"] == {
+        "n_targets": 140,
+        "n_cells": 7,
+        "all_source_config_hashes_match": True,
+        "runnable_definitions_remaining": [],
+    }
+    assert all(
+        target["computed_config_hash"] == target["source_config_hash"]
+        for target in resolved["targets"]
+    )
+    assert len(resolved["scenario_definitions"]) == 80
+    assert set(resolved["planner_definitions"]) == {"goal", "orca", "ppo"}
+    assert resolved["planner_definitions"]["ppo"]["planner_config_path"].startswith("configs/")
+    assert all(
+        target["scenario_definition_id"] in resolved["scenario_definitions"]
+        for target in resolved["targets"]
+    )
+
+
+def test_registered_definition_artifacts_match_fresh_resolution(manifest):
+    """Committed evidence stays reproducible from the retained fixture and canonical config."""
+    assert _load(EVIDENCE_DIR / "exact_repeat_manifest.json") == manifest
+    assert _load(EVIDENCE_DIR / "resolved_definitions.json") == resolve_runnable_definitions(
+        manifest, CAMPAIGN_CONFIG
+    )
+
+
+def test_resolver_fails_closed_on_any_unmatched_source_hash(manifest):
+    """One stale or invented target definition invalidates the complete recovery bundle."""
+    drifted = copy.deepcopy(manifest)
+    drifted["targets"][0]["source_config_hash"] = "0" * 16
+    without_hash = {key: value for key, value in drifted.items() if key != "manifest_sha256"}
+    drifted["manifest_sha256"] = canonical_sha256(without_hash)
+    with pytest.raises(ValueError, match="config hash mismatch"):
+        resolve_runnable_definitions(drifted, CAMPAIGN_CONFIG)
 
 
 def test_host_verifier_requires_all_targets_and_reports_cell_verdicts(manifest):

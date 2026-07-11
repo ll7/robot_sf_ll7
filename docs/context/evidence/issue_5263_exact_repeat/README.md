@@ -1,9 +1,9 @@
 <!-- AI-GENERATED (robot_sf#5263, 2026-07-11) - NEEDS-REVIEW -->
-# Issue #5263 exact-repeat evidence packet
+# Issue #5263 exact-repeat runnable definitions
 
-This packet defines the exact CPU-only repeat campaign needed to determine whether the seven
-retained knife-edge cells reproduce bit-for-bit. It is a diagnostic campaign contract, not a
-campaign result or a benchmark claim.
+This evidence bundle recovers and hash-verifies the runnable definitions for all 140 targets in
+the exact CPU-only repeat campaign. It is diagnostic definition-recovery evidence, not a campaign
+result, determinism verdict, or benchmark claim.
 
 ## What is pinned
 
@@ -14,10 +14,11 @@ Each target records its scenario ID, planner, seed, horizon, source Git revision
 configuration hash. The manifest is CPU-only and single-worker; it never stores a target-host
 assignment.
 
-The retained fixture does not contain runnable `scenario_params` or `planner_config` objects. That
-is an intentional fail-closed blocker: a host must acquire those definitions from the original
-campaign configuration and prove that their hashes match the manifest before execution. The packet
-therefore cannot be mistaken for an empirical result.
+The retained fixture does not contain runnable `scenario_params` or `planner_config` objects.
+`resolve-definitions` recovers them from the canonical source campaign configuration and reproduces
+every retained map-runner identity hash before writing a bundle. The registered output resolves all
+140 targets across seven cells against source revision
+`a5516b432fceffa71573e458aaee31c00a0b6c81`; one mismatch fails the entire operation.
 
 ## Commands
 
@@ -25,7 +26,12 @@ therefore cannot be mistaken for an empirical result.
 uv run python scripts/benchmark/build_exact_repeat_campaign_packet.py manifest \
   --baseline-report tests/fixtures/benchmark/scenario_flakiness_issue_4978/real_campaign_flakiness_report.json \
   --source-episodes tests/fixtures/benchmark/scenario_flakiness_issue_4978/real_campaign_episodes.jsonl \
-  --output output/issue_5263/exact_repeat_manifest.json
+  --output docs/context/evidence/issue_5263_exact_repeat/exact_repeat_manifest.json
+
+uv run python scripts/benchmark/build_exact_repeat_campaign_packet.py resolve-definitions \
+  --manifest docs/context/evidence/issue_5263_exact_repeat/exact_repeat_manifest.json \
+  --campaign-config configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml \
+  --output docs/context/evidence/issue_5263_exact_repeat/resolved_definitions.json
 
 uv run python scripts/benchmark/build_exact_repeat_campaign_packet.py verify-host \
   --manifest output/issue_5263/exact_repeat_manifest.json \
@@ -39,7 +45,10 @@ uv run python scripts/benchmark/build_exact_repeat_campaign_packet.py compare-ho
   --output output/issue_5263/cross_host_matrix.json
 ```
 
-`verify-host` rejects missing targets, a Git revision or per-target horizon/config hash that does
+`resolved_definitions.json` contains 80 deduplicated seed-specific scenario definitions, the three
+planner definitions (`goal`, `orca`, and `ppo`), and 140 target references with matching retained
+and computed hashes. `verify-host` rejects missing targets, a Git revision or per-target
+horizon/config hash that does
 not match the manifest, non-CPU or multi-worker metadata, absent NumPy/Numba versions,
 not-exactly-three repeats, malformed trajectory hashes, and unrecorded divergences. A
 repeat is identical only when its binary outcome and SHA-256 trajectory hash agree. Otherwise the
@@ -49,7 +58,7 @@ divergent, not a successful comparison.
 
 ## Evidence status and remaining action
 
-No full benchmark campaign, Slurm/GPU submission, or paper/dissertation claim update was made by
-this packet. The remaining empirical action is to recover the original runnable definitions, run
-the 420 CPU-only repeats on one host, register the verified report under this evidence directory,
-then run and compare the second-host near-miss repeat with its environment manifest.
+No full benchmark campaign, Slurm/GPU submission, or paper/dissertation claim update was made.
+The runnable-definition blocker is resolved. The remaining empirical actions are to run the 420
+CPU-only repeats on one host, register the verified report under this evidence directory, then run
+and compare the second-host near-miss repeat with its environment manifest.

@@ -1,0 +1,2244 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "issue_5139.retained_interval_comparison.v1",
+  "claim_boundary": "diagnostic-only, analysis-only: flat versus hierarchical interval widths on the retained issue #1454 exploratory campaign bundle. This post-hoc reuse was not pre-registered for issue #5139 and does not establish benchmark, planner-ranking, paper, or dissertation claims.",
+  "evidence_status": "diagnostic-only (analysis-only)",
+  "issue": "#5139",
+  "description": "Flat episode-level intervals versus hierarchical scenario-cluster intervals on one retained campaign bundle. Binary endpoints compare flat Wilson intervals with the merged cluster-robust intervals.",
+  "source_provenance": {
+    "episode_table": "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/reports/seed_episode_rows.csv",
+    "episode_table_sha256": "fd758fceb72cecdd375b5f59b7e9bd8fa639cbb5c74c35db362fb751a9cada8f",
+    "row_count": 5760,
+    "planner_keys": [
+      "goal",
+      "hybrid_rule_v3_fast_progress",
+      "hybrid_rule_v3_fast_progress_static_escape",
+      "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "orca",
+      "ppo",
+      "prediction_planner",
+      "sacadrl",
+      "scenario_adaptive_hybrid_orca_v1",
+      "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "social_force",
+      "socnav_sampling"
+    ],
+    "kinematics": [
+      "differential_drive"
+    ],
+    "scenario_ids": [
+      "classic_bottleneck_high",
+      "classic_bottleneck_low",
+      "classic_bottleneck_medium",
+      "classic_cross_trap_high",
+      "classic_cross_trap_low",
+      "classic_cross_trap_medium",
+      "classic_doorway_high",
+      "classic_doorway_low",
+      "classic_doorway_medium",
+      "classic_group_crossing_high",
+      "classic_group_crossing_low",
+      "classic_group_crossing_medium",
+      "classic_head_on_corridor_low",
+      "classic_head_on_corridor_medium",
+      "classic_merging_low",
+      "classic_merging_medium",
+      "classic_overtaking_low",
+      "classic_overtaking_medium",
+      "classic_realworld_double_bottleneck_high",
+      "classic_station_platform_medium",
+      "classic_t_intersection_low",
+      "classic_t_intersection_medium",
+      "classic_urban_crossing_medium",
+      "francis2023_accompanying_peer",
+      "francis2023_blind_corner",
+      "francis2023_circular_crossing",
+      "francis2023_crowd_navigation",
+      "francis2023_down_path",
+      "francis2023_entering_elevator",
+      "francis2023_entering_room",
+      "francis2023_exiting_elevator",
+      "francis2023_exiting_room",
+      "francis2023_following_human",
+      "francis2023_frontal_approach",
+      "francis2023_intersection_no_gesture",
+      "francis2023_intersection_proceed",
+      "francis2023_intersection_wait",
+      "francis2023_join_group",
+      "francis2023_leading_human",
+      "francis2023_leave_group",
+      "francis2023_narrow_doorway",
+      "francis2023_narrow_hallway",
+      "francis2023_parallel_traffic",
+      "francis2023_pedestrian_obstruction",
+      "francis2023_pedestrian_overtaking",
+      "francis2023_perpendicular_traffic",
+      "francis2023_robot_crowding",
+      "francis2023_robot_overtaking"
+    ],
+    "seeds": [
+      111,
+      112,
+      113,
+      114,
+      115,
+      116,
+      117,
+      118,
+      119,
+      120
+    ],
+    "campaign_manifest": "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/campaign_manifest.json",
+    "campaign_manifest_sha256": "073f42e05e92bb7a143c5fae42286f455d72a0696369142452618a138fa99408",
+    "campaign_id": "issue1454-s10-h500-candidates",
+    "campaign_schema_version": "benchmark-camera-ready-campaign.v1",
+    "campaign_git_commit": "4941ac48f1f4e65053bbfcbbc94a55a336fad9ea",
+    "campaign_config_hash": "b5a3a8b80493c728"
+  },
+  "grouping_contract": {
+    "analysis_group": [
+      "planner_key",
+      "kinematics"
+    ],
+    "hierarchical_cluster": "scenario_id",
+    "episode_level": "seed_episode_rows.csv row",
+    "adapter": {
+      "archetype": "planner_key",
+      "density": "kinematics",
+      "reason": "aggregate_metrics requires archetype/density group keys; the adapter keeps planners separate while pooling retained scenario cells for each planner."
+    }
+  },
+  "config": {
+    "bootstrap_samples": 1000,
+    "bootstrap_confidence": 0.95,
+    "master_seed": 5139,
+    "smoke": false,
+    "modes": [
+      "flat",
+      "hierarchical_scenario"
+    ],
+    "rate_interval_flat": "wilson",
+    "rate_interval_hierarchical": "cluster_robust"
+  },
+  "comparisons": [
+    {
+      "planner_key": "goal",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "flat",
+      "mean": 0.6125,
+      "mean_ci": [
+        0.5681880514029164,
+        0.6550255613024462
+      ],
+      "mean_ci_width": 0.08683750989952976,
+      "is_rate": true
+    },
+    {
+      "planner_key": "goal",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "flat",
+      "mean": 7.139583333333333,
+      "mean_ci": [
+        5.85,
+        8.48125
+      ],
+      "mean_ci_width": 2.6312499999999996,
+      "is_rate": false
+    },
+    {
+      "planner_key": "goal",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "flat",
+      "mean": -0.2593604425859325,
+      "mean_ci": [
+        -0.2734679196822423,
+        -0.2454378670192723
+      ],
+      "mean_ci_width": 0.028030052662970012,
+      "is_rate": false
+    },
+    {
+      "planner_key": "goal",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "flat",
+      "mean": 0.04791666666666667,
+      "mean_ci": [
+        0.03213878358090283,
+        0.07087318017717766
+      ],
+      "mean_ci_width": 0.038734396596274825,
+      "is_rate": true
+    },
+    {
+      "planner_key": "goal",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "flat",
+      "mean": 0.9934236140427563,
+      "mean_ci": [
+        0.988596604662941,
+        0.9969664932363038
+      ],
+      "mean_ci_width": 0.00836988857336285,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "flat",
+      "mean": 0.029166666666666667,
+      "mean_ci": [
+        0.017452060312482066,
+        0.048357634661371336
+      ],
+      "mean_ci_width": 0.03090557434888927,
+      "is_rate": true
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "flat",
+      "mean": 21.991666666666667,
+      "mean_ci": [
+        18.739583333333332,
+        25.66875
+      ],
+      "mean_ci_width": 6.929166666666667,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "flat",
+      "mean": -0.11597676152367278,
+      "mean_ci": [
+        -0.13804055751860922,
+        -0.09536199246300404
+      ],
+      "mean_ci_width": 0.042678565055605175,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "flat",
+      "mean": 0.7875,
+      "mean_ci": [
+        0.7486956766310842,
+        0.8217391113937309
+      ],
+      "mean_ci_width": 0.07304343476264674,
+      "is_rate": true
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "flat",
+      "mean": 0.7384949439093307,
+      "mean_ci": [
+        0.7226872105095667,
+        0.7531143120580788
+      ],
+      "mean_ci_width": 0.030427101548512026,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "flat",
+      "mean": 0.035416666666666666,
+      "mean_ci": [
+        0.0222281042304214,
+        0.05598234700484102
+      ],
+      "mean_ci_width": 0.033754242774419616,
+      "is_rate": true
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "flat",
+      "mean": 21.8875,
+      "mean_ci": [
+        18.760416666666668,
+        25.5875
+      ],
+      "mean_ci_width": 6.827083333333331,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "flat",
+      "mean": -0.10690436468449724,
+      "mean_ci": [
+        -0.1296462854436881,
+        -0.08595831890509932
+      ],
+      "mean_ci_width": 0.043687966538588766,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "flat",
+      "mean": 0.8645833333333334,
+      "mean_ci": [
+        0.8310631251947296,
+        0.8923143233874637
+      ],
+      "mean_ci_width": 0.06125119819273417,
+      "is_rate": true
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "flat",
+      "mean": 0.7117894308301517,
+      "mean_ci": [
+        0.6969949836029402,
+        0.7256291452071753
+      ],
+      "mean_ci_width": 0.028634161604235042,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "flat",
+      "mean": 0.025,
+      "mean_ci": [
+        0.014357806275901537,
+        0.0431847178570125
+      ],
+      "mean_ci_width": 0.02882691158111096,
+      "is_rate": true
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "flat",
+      "mean": 18.914583333333333,
+      "mean_ci": [
+        15.347916666666666,
+        22.747916666666665
+      ],
+      "mean_ci_width": 7.399999999999999,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "flat",
+      "mean": -0.09724124872953549,
+      "mean_ci": [
+        -0.12174182813286367,
+        -0.07632178617830562
+      ],
+      "mean_ci_width": 0.04542004195455805,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "flat",
+      "mean": 0.8770833333333333,
+      "mean_ci": [
+        0.8446801973210332,
+        0.903498763783978
+      ],
+      "mean_ci_width": 0.05881856646294481,
+      "is_rate": true
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "flat",
+      "mean": 0.7220584544347811,
+      "mean_ci": [
+        0.7080555098859446,
+        0.7366641677507918
+      ],
+      "mean_ci_width": 0.02860865786484723,
+      "is_rate": false
+    },
+    {
+      "planner_key": "orca",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "flat",
+      "mean": 0.16041666666666668,
+      "mean_ci": [
+        0.13030141984849422,
+        0.19592415661494875
+      ],
+      "mean_ci_width": 0.06562273676645453,
+      "is_rate": true
+    },
+    {
+      "planner_key": "orca",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "flat",
+      "mean": 13.825,
+      "mean_ci": [
+        11.714583333333334,
+        15.94375
+      ],
+      "mean_ci_width": 4.229166666666666,
+      "is_rate": false
+    },
+    {
+      "planner_key": "orca",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "flat",
+      "mean": -0.24759243607189968,
+      "mean_ci": [
+        -0.29092718425248626,
+        -0.2087104080630216
+      ],
+      "mean_ci_width": 0.08221677618946466,
+      "is_rate": false
+    },
+    {
+      "planner_key": "orca",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "flat",
+      "mean": 0.775,
+      "mean_ci": [
+        0.7355444333078153,
+        0.810088842194182
+      ],
+      "mean_ci_width": 0.07454440888636671,
+      "is_rate": true
+    },
+    {
+      "planner_key": "orca",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "flat",
+      "mean": 0.6972139412212626,
+      "mean_ci": [
+        0.678354485859955,
+        0.7146741891293257
+      ],
+      "mean_ci_width": 0.03631970326937073,
+      "is_rate": false
+    },
+    {
+      "planner_key": "ppo",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "flat",
+      "mean": 0.19375,
+      "mean_ci": [
+        0.16088064087120693,
+        0.23148230231975078
+      ],
+      "mean_ci_width": 0.07060166144854385,
+      "is_rate": true
+    },
+    {
+      "planner_key": "ppo",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "flat",
+      "mean": 6.514583333333333,
+      "mean_ci": [
+        5.491666666666666,
+        7.660416666666666
+      ],
+      "mean_ci_width": 2.16875,
+      "is_rate": false
+    },
+    {
+      "planner_key": "ppo",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "flat",
+      "mean": -0.24150006760189388,
+      "mean_ci": [
+        -0.26944754307756524,
+        -0.21424845266024567
+      ],
+      "mean_ci_width": 0.055199090417319574,
+      "is_rate": false
+    },
+    {
+      "planner_key": "ppo",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "flat",
+      "mean": 0.7854166666666667,
+      "mean_ci": [
+        0.7465004034681499,
+        0.8198007991361955
+      ],
+      "mean_ci_width": 0.07330039566804558,
+      "is_rate": true
+    },
+    {
+      "planner_key": "ppo",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "flat",
+      "mean": 0.6440221554755468,
+      "mean_ci": [
+        0.6225053735312037,
+        0.6641247728578844
+      ],
+      "mean_ci_width": 0.041619399326680684,
+      "is_rate": false
+    },
+    {
+      "planner_key": "prediction_planner",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "flat",
+      "mean": 0.4,
+      "mean_ci": [
+        0.3571349286484628,
+        0.4444529711689928
+      ],
+      "mean_ci_width": 0.08731804252052999,
+      "is_rate": true
+    },
+    {
+      "planner_key": "prediction_planner",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "flat",
+      "mean": 20.20625,
+      "mean_ci": [
+        17.354166666666668,
+        23.075
+      ],
+      "mean_ci_width": 5.720833333333331,
+      "is_rate": false
+    },
+    {
+      "planner_key": "prediction_planner",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "flat",
+      "mean": -0.1814819485234124,
+      "mean_ci": [
+        -0.20235769065578066,
+        -0.1610712264967847
+      ],
+      "mean_ci_width": 0.04128646415899595,
+      "is_rate": false
+    },
+    {
+      "planner_key": "prediction_planner",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "flat",
+      "mean": 0.53125,
+      "mean_ci": [
+        0.4865363656595469,
+        0.5754674156474981
+      ],
+      "mean_ci_width": 0.08893104998795126,
+      "is_rate": true
+    },
+    {
+      "planner_key": "prediction_planner",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "flat",
+      "mean": 0.8631430092011204,
+      "mean_ci": [
+        0.8458333687514106,
+        0.8787483495062886
+      ],
+      "mean_ci_width": 0.032914980754877976,
+      "is_rate": false
+    },
+    {
+      "planner_key": "sacadrl",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "flat",
+      "mean": 0.6604166666666667,
+      "mean_ci": [
+        0.6169270968515033,
+        0.7013589805246616
+      ],
+      "mean_ci_width": 0.08443188367315835,
+      "is_rate": true
+    },
+    {
+      "planner_key": "sacadrl",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "flat",
+      "mean": 5.852083333333334,
+      "mean_ci": [
+        4.797916666666667,
+        6.904166666666667
+      ],
+      "mean_ci_width": 2.10625,
+      "is_rate": false
+    },
+    {
+      "planner_key": "sacadrl",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "flat",
+      "mean": -0.35135026538727293,
+      "mean_ci": [
+        -0.3724535606121182,
+        -0.3313743866264555
+      ],
+      "mean_ci_width": 0.04107917398566269,
+      "is_rate": false
+    },
+    {
+      "planner_key": "sacadrl",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "flat",
+      "mean": 0.06875,
+      "mean_ci": [
+        0.0493695853494876,
+        0.09497823261328964
+      ],
+      "mean_ci_width": 0.04560864726380204,
+      "is_rate": true
+    },
+    {
+      "planner_key": "sacadrl",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "flat",
+      "mean": 0.9779456485082834,
+      "mean_ci": [
+        0.9680940708055777,
+        0.9869758956177949
+      ],
+      "mean_ci_width": 0.01888182481221712,
+      "is_rate": false
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v1",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "flat",
+      "mean": 0.03333333333333333,
+      "mean_ci": [
+        0.020620270197241428,
+        0.05345659561755131
+      ],
+      "mean_ci_width": 0.032836325420309884,
+      "is_rate": true
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v1",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "flat",
+      "mean": 20.777083333333334,
+      "mean_ci": [
+        17.752083333333335,
+        24.145833333333332
+      ],
+      "mean_ci_width": 6.393749999999997,
+      "is_rate": false
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v1",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "flat",
+      "mean": -0.10371704937962968,
+      "mean_ci": [
+        -0.12461043950697363,
+        -0.08312337739546732
+      ],
+      "mean_ci_width": 0.04148706211150631,
+      "is_rate": false
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v1",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "flat",
+      "mean": 0.8729166666666667,
+      "mean_ci": [
+        0.8401310751251404,
+        0.8997807151389315
+      ],
+      "mean_ci_width": 0.05964964001379114,
+      "is_rate": true
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v1",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "flat",
+      "mean": 0.7083419031018956,
+      "mean_ci": [
+        0.6934496667903228,
+        0.7235635124186698
+      ],
+      "mean_ci_width": 0.030113845628346958,
+      "is_rate": false
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "flat",
+      "mean": 0.03333333333333333,
+      "mean_ci": [
+        0.020620270197241428,
+        0.05345659561755131
+      ],
+      "mean_ci_width": 0.032836325420309884,
+      "is_rate": true
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "flat",
+      "mean": 20.777083333333334,
+      "mean_ci": [
+        17.727083333333333,
+        24.302083333333332
+      ],
+      "mean_ci_width": 6.574999999999999,
+      "is_rate": false
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "flat",
+      "mean": -0.10372074848660243,
+      "mean_ci": [
+        -0.12423496067516125,
+        -0.08195180677075274
+      ],
+      "mean_ci_width": 0.04228315390440851,
+      "is_rate": false
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "flat",
+      "mean": 0.8729166666666667,
+      "mean_ci": [
+        0.8401310751251404,
+        0.8997807151389315
+      ],
+      "mean_ci_width": 0.05964964001379114,
+      "is_rate": true
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "flat",
+      "mean": 0.7083605042923719,
+      "mean_ci": [
+        0.693677606873149,
+        0.7211309534519574
+      ],
+      "mean_ci_width": 0.02745334657880838,
+      "is_rate": false
+    },
+    {
+      "planner_key": "social_force",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "flat",
+      "mean": 0.3854166666666667,
+      "mean_ci": [
+        0.3429505781424639,
+        0.42970222373170397
+      ],
+      "mean_ci_width": 0.08675164558924009,
+      "is_rate": true
+    },
+    {
+      "planner_key": "social_force",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "flat",
+      "mean": 4.710416666666666,
+      "mean_ci": [
+        3.9833333333333334,
+        5.49375
+      ],
+      "mean_ci_width": 1.510416666666667,
+      "is_rate": false
+    },
+    {
+      "planner_key": "social_force",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "flat",
+      "mean": -0.9915659756971045,
+      "mean_ci": [
+        -1.0170454897304115,
+        -0.9628604777823216
+      ],
+      "mean_ci_width": 0.05418501194808989,
+      "is_rate": false
+    },
+    {
+      "planner_key": "social_force",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "flat",
+      "mean": 0.016666666666666666,
+      "mean_ci": [
+        0.008468917956316031,
+        0.032539264494719305
+      ],
+      "mean_ci_width": 0.024070346538403273,
+      "is_rate": true
+    },
+    {
+      "planner_key": "social_force",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "flat",
+      "mean": 0.9988169642562829,
+      "mean_ci": [
+        0.9978371567407939,
+        0.9996188570249639
+      ],
+      "mean_ci_width": 0.001781700284170018,
+      "is_rate": false
+    },
+    {
+      "planner_key": "socnav_sampling",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "flat",
+      "mean": 0.6,
+      "mean_ci": [
+        0.5555470288310072,
+        0.6428650713515371
+      ],
+      "mean_ci_width": 0.08731804252052999,
+      "is_rate": true
+    },
+    {
+      "planner_key": "socnav_sampling",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "flat",
+      "mean": 1.9208333333333334,
+      "mean_ci": [
+        1.6208333333333333,
+        2.2333333333333334
+      ],
+      "mean_ci_width": 0.6125,
+      "is_rate": false
+    },
+    {
+      "planner_key": "socnav_sampling",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "flat",
+      "mean": -0.15649325458506322,
+      "mean_ci": [
+        -0.1776951509909382,
+        -0.13644761283410609
+      ],
+      "mean_ci_width": 0.0412475381568321,
+      "is_rate": false
+    },
+    {
+      "planner_key": "socnav_sampling",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "flat",
+      "mean": 0.4,
+      "mean_ci": [
+        0.3571349286484628,
+        0.4444529711689928
+      ],
+      "mean_ci_width": 0.08731804252052999,
+      "is_rate": true
+    },
+    {
+      "planner_key": "socnav_sampling",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "flat",
+      "mean": 0.8257281200457548,
+      "mean_ci": [
+        0.8069820073083598,
+        0.846055485687267
+      ],
+      "mean_ci_width": 0.03907347837890718,
+      "is_rate": false
+    },
+    {
+      "planner_key": "goal",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.6125,
+      "mean_ci": [
+        0.49309950659081403,
+        0.7319004934091861
+      ],
+      "mean_ci_width": 0.23880098681837203,
+      "is_rate": true
+    },
+    {
+      "planner_key": "goal",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "hierarchical_scenario",
+      "mean": 7.139583333333333,
+      "mean_ci": [
+        4.383333333333334,
+        10.845833333333333
+      ],
+      "mean_ci_width": 6.4624999999999995,
+      "is_rate": false
+    },
+    {
+      "planner_key": "goal",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "hierarchical_scenario",
+      "mean": -0.2593604425859325,
+      "mean_ci": [
+        -0.29310085622127496,
+        -0.22154288032321154
+      ],
+      "mean_ci_width": 0.07155797589806343,
+      "is_rate": false
+    },
+    {
+      "planner_key": "goal",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.04791666666666667,
+      "mean_ci": [
+        0.009654006626964563,
+        0.08617932670636877
+      ],
+      "mean_ci_width": 0.07652532007940421,
+      "is_rate": true
+    },
+    {
+      "planner_key": "goal",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_scenario",
+      "mean": 0.9934236140427563,
+      "mean_ci": [
+        0.9849273196641342,
+        0.9991240081667118
+      ],
+      "mean_ci_width": 0.014196688502577604,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.029166666666666667,
+      "mean_ci": [
+        0.00585424943031625,
+        0.05247908390301709
+      ],
+      "mean_ci_width": 0.04662483447270084,
+      "is_rate": true
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "hierarchical_scenario",
+      "mean": 21.991666666666667,
+      "mean_ci": [
+        14.245833333333334,
+        30.629166666666666
+      ],
+      "mean_ci_width": 16.383333333333333,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "hierarchical_scenario",
+      "mean": -0.11597676152367278,
+      "mean_ci": [
+        -0.17132113390678438,
+        -0.06233356133056933
+      ],
+      "mean_ci_width": 0.10898757257621505,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.7875,
+      "mean_ci": [
+        0.7024056540623853,
+        0.8725943459376146
+      ],
+      "mean_ci_width": 0.17018869187522934,
+      "is_rate": true
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_scenario",
+      "mean": 0.7384949439093307,
+      "mean_ci": [
+        0.7033309371622223,
+        0.7734993334216816
+      ],
+      "mean_ci_width": 0.07016839625945936,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.035416666666666666,
+      "mean_ci": [
+        0.011719393103265127,
+        0.059113940230068204
+      ],
+      "mean_ci_width": 0.04739454712680308,
+      "is_rate": true
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "hierarchical_scenario",
+      "mean": 21.8875,
+      "mean_ci": [
+        14.066666666666666,
+        31.077083333333334
+      ],
+      "mean_ci_width": 17.010416666666668,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "hierarchical_scenario",
+      "mean": -0.10690436468449724,
+      "mean_ci": [
+        -0.1640750023334417,
+        -0.05458644488431057
+      ],
+      "mean_ci_width": 0.10948855744913112,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.8645833333333334,
+      "mean_ci": [
+        0.8026891701977954,
+        0.9264774964688713
+      ],
+      "mean_ci_width": 0.12378832627107594,
+      "is_rate": true
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_scenario",
+      "mean": 0.7117894308301517,
+      "mean_ci": [
+        0.6769874730367254,
+        0.74801435184652
+      ],
+      "mean_ci_width": 0.07102687880979464,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.025,
+      "mean_ci": [
+        0.0027782865875200756,
+        0.047221713412479924
+      ],
+      "mean_ci_width": 0.044443426824959845,
+      "is_rate": true
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "hierarchical_scenario",
+      "mean": 18.914583333333333,
+      "mean_ci": [
+        10.847916666666666,
+        28.9125
+      ],
+      "mean_ci_width": 18.064583333333335,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "hierarchical_scenario",
+      "mean": -0.09724124872953549,
+      "mean_ci": [
+        -0.15795706602820947,
+        -0.03950928838968017
+      ],
+      "mean_ci_width": 0.1184477776385293,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.8770833333333333,
+      "mean_ci": [
+        0.8198340033567839,
+        0.9343326633098827
+      ],
+      "mean_ci_width": 0.11449865995309882,
+      "is_rate": true
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_scenario",
+      "mean": 0.7220584544347811,
+      "mean_ci": [
+        0.6887958609512411,
+        0.7555403340782506
+      ],
+      "mean_ci_width": 0.06674447312700948,
+      "is_rate": false
+    },
+    {
+      "planner_key": "orca",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.16041666666666668,
+      "mean_ci": [
+        0.09192733573311992,
+        0.22890599760021343
+      ],
+      "mean_ci_width": 0.1369786618670935,
+      "is_rate": true
+    },
+    {
+      "planner_key": "orca",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "hierarchical_scenario",
+      "mean": 13.825,
+      "mean_ci": [
+        9.160416666666666,
+        19.054166666666667
+      ],
+      "mean_ci_width": 9.89375,
+      "is_rate": false
+    },
+    {
+      "planner_key": "orca",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "hierarchical_scenario",
+      "mean": -0.24759243607189968,
+      "mean_ci": [
+        -0.37753194477803775,
+        -0.13060700303096606
+      ],
+      "mean_ci_width": 0.2469249417470717,
+      "is_rate": false
+    },
+    {
+      "planner_key": "orca",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.775,
+      "mean_ci": [
+        0.6883441596729163,
+        0.8616558403270838
+      ],
+      "mean_ci_width": 0.17331168065416747,
+      "is_rate": true
+    },
+    {
+      "planner_key": "orca",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_scenario",
+      "mean": 0.6972139412212626,
+      "mean_ci": [
+        0.6544762947198026,
+        0.7414727482530992
+      ],
+      "mean_ci_width": 0.08699645353329655,
+      "is_rate": false
+    },
+    {
+      "planner_key": "ppo",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.19375,
+      "mean_ci": [
+        0.102331024338723,
+        0.285168975661277
+      ],
+      "mean_ci_width": 0.18283795132255404,
+      "is_rate": true
+    },
+    {
+      "planner_key": "ppo",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "hierarchical_scenario",
+      "mean": 6.514583333333333,
+      "mean_ci": [
+        4.475,
+        8.8625
+      ],
+      "mean_ci_width": 4.387500000000001,
+      "is_rate": false
+    },
+    {
+      "planner_key": "ppo",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "hierarchical_scenario",
+      "mean": -0.24150006760189388,
+      "mean_ci": [
+        -0.32001561467377937,
+        -0.16837882396898818
+      ],
+      "mean_ci_width": 0.1516367907047912,
+      "is_rate": false
+    },
+    {
+      "planner_key": "ppo",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.7854166666666667,
+      "mean_ci": [
+        0.6897057948228594,
+        0.8811275385104739
+      ],
+      "mean_ci_width": 0.19142174368761444,
+      "is_rate": true
+    },
+    {
+      "planner_key": "ppo",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_scenario",
+      "mean": 0.6440221554755468,
+      "mean_ci": [
+        0.595750715524309,
+        0.6969004913211347
+      ],
+      "mean_ci_width": 0.10114977579682571,
+      "is_rate": false
+    },
+    {
+      "planner_key": "prediction_planner",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.4,
+      "mean_ci": [
+        0.3088433294609167,
+        0.49115667053908335
+      ],
+      "mean_ci_width": 0.18231334107816666,
+      "is_rate": true
+    },
+    {
+      "planner_key": "prediction_planner",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "hierarchical_scenario",
+      "mean": 20.20625,
+      "mean_ci": [
+        14.004166666666666,
+        27.414583333333333
+      ],
+      "mean_ci_width": 13.410416666666666,
+      "is_rate": false
+    },
+    {
+      "planner_key": "prediction_planner",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "hierarchical_scenario",
+      "mean": -0.1814819485234124,
+      "mean_ci": [
+        -0.2363199604621358,
+        -0.12494199264253747
+      ],
+      "mean_ci_width": 0.11137796781959833,
+      "is_rate": false
+    },
+    {
+      "planner_key": "prediction_planner",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.53125,
+      "mean_ci": [
+        0.43604453563246653,
+        0.6264554643675335
+      ],
+      "mean_ci_width": 0.190410928735067,
+      "is_rate": true
+    },
+    {
+      "planner_key": "prediction_planner",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_scenario",
+      "mean": 0.8631430092011204,
+      "mean_ci": [
+        0.828168364004972,
+        0.8977840088345359
+      ],
+      "mean_ci_width": 0.06961564482956395,
+      "is_rate": false
+    },
+    {
+      "planner_key": "sacadrl",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.6604166666666667,
+      "mean_ci": [
+        0.5422901216250479,
+        0.7785432117082854
+      ],
+      "mean_ci_width": 0.23625309008323758,
+      "is_rate": true
+    },
+    {
+      "planner_key": "sacadrl",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "hierarchical_scenario",
+      "mean": 5.852083333333334,
+      "mean_ci": [
+        3.7395833333333335,
+        8.4625
+      ],
+      "mean_ci_width": 4.722916666666666,
+      "is_rate": false
+    },
+    {
+      "planner_key": "sacadrl",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "hierarchical_scenario",
+      "mean": -0.35135026538727293,
+      "mean_ci": [
+        -0.40753980052144423,
+        -0.3016551795599657
+      ],
+      "mean_ci_width": 0.10588462096147855,
+      "is_rate": false
+    },
+    {
+      "planner_key": "sacadrl",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.06875,
+      "mean_ci": [
+        0.009767114841747408,
+        0.1277328851582526
+      ],
+      "mean_ci_width": 0.11796577031650518,
+      "is_rate": true
+    },
+    {
+      "planner_key": "sacadrl",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_scenario",
+      "mean": 0.9779456485082834,
+      "mean_ci": [
+        0.9483255436652637,
+        0.9975096118532801
+      ],
+      "mean_ci_width": 0.04918406818801646,
+      "is_rate": false
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v1",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.03333333333333333,
+      "mean_ci": [
+        0.009748600885172376,
+        0.05691806578149429
+      ],
+      "mean_ci_width": 0.047169464896321914,
+      "is_rate": true
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v1",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "hierarchical_scenario",
+      "mean": 20.777083333333334,
+      "mean_ci": [
+        13.708333333333334,
+        29.485416666666666
+      ],
+      "mean_ci_width": 15.777083333333332,
+      "is_rate": false
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v1",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "hierarchical_scenario",
+      "mean": -0.10371704937962968,
+      "mean_ci": [
+        -0.15561134308388094,
+        -0.05649276700514097
+      ],
+      "mean_ci_width": 0.09911857607873997,
+      "is_rate": false
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v1",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.8729166666666667,
+      "mean_ci": [
+        0.8117837390110149,
+        0.9340495943223185
+      ],
+      "mean_ci_width": 0.12226585531130363,
+      "is_rate": true
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v1",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_scenario",
+      "mean": 0.7083419031018956,
+      "mean_ci": [
+        0.6744600001013425,
+        0.7437397957036576
+      ],
+      "mean_ci_width": 0.06927979560231501,
+      "is_rate": false
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.03333333333333333,
+      "mean_ci": [
+        0.009748600885172376,
+        0.05691806578149429
+      ],
+      "mean_ci_width": 0.047169464896321914,
+      "is_rate": true
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "hierarchical_scenario",
+      "mean": 20.777083333333334,
+      "mean_ci": [
+        13.5375,
+        28.797916666666666
+      ],
+      "mean_ci_width": 15.260416666666666,
+      "is_rate": false
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "hierarchical_scenario",
+      "mean": -0.10372074848660243,
+      "mean_ci": [
+        -0.15926992947245008,
+        -0.055215603576692224
+      ],
+      "mean_ci_width": 0.10405432589575786,
+      "is_rate": false
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.8729166666666667,
+      "mean_ci": [
+        0.8117837390110149,
+        0.9340495943223185
+      ],
+      "mean_ci_width": 0.12226585531130363,
+      "is_rate": true
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_scenario",
+      "mean": 0.7083605042923719,
+      "mean_ci": [
+        0.675515957394553,
+        0.7429146013021025
+      ],
+      "mean_ci_width": 0.06739864390754957,
+      "is_rate": false
+    },
+    {
+      "planner_key": "social_force",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.3854166666666667,
+      "mean_ci": [
+        0.2656794341073703,
+        0.505153899225963
+      ],
+      "mean_ci_width": 0.23947446511859266,
+      "is_rate": true
+    },
+    {
+      "planner_key": "social_force",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "hierarchical_scenario",
+      "mean": 4.710416666666666,
+      "mean_ci": [
+        3.095833333333333,
+        6.479166666666667
+      ],
+      "mean_ci_width": 3.3833333333333337,
+      "is_rate": false
+    },
+    {
+      "planner_key": "social_force",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "hierarchical_scenario",
+      "mean": -0.9915659756971045,
+      "mean_ci": [
+        -1.060922496450855,
+        -0.9131315067114569
+      ],
+      "mean_ci_width": 0.14779098973939808,
+      "is_rate": false
+    },
+    {
+      "planner_key": "social_force",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.016666666666666666,
+      "mean_ci": [
+        0.0,
+        0.0354258427854883
+      ],
+      "mean_ci_width": 0.0354258427854883,
+      "is_rate": true
+    },
+    {
+      "planner_key": "social_force",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_scenario",
+      "mean": 0.9988169642562829,
+      "mean_ci": [
+        0.9965895405407079,
+        1.0
+      ],
+      "mean_ci_width": 0.003410459459292081,
+      "is_rate": false
+    },
+    {
+      "planner_key": "socnav_sampling",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.6,
+      "mean_ci": [
+        0.4889680859767777,
+        0.7110319140232223
+      ],
+      "mean_ci_width": 0.2220638280464446,
+      "is_rate": true
+    },
+    {
+      "planner_key": "socnav_sampling",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "mode": "hierarchical_scenario",
+      "mean": 1.9208333333333334,
+      "mean_ci": [
+        1.2854166666666667,
+        2.6958333333333333
+      ],
+      "mean_ci_width": 1.4104166666666667,
+      "is_rate": false
+    },
+    {
+      "planner_key": "socnav_sampling",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "mode": "hierarchical_scenario",
+      "mean": -0.15649325458506322,
+      "mean_ci": [
+        -0.21476342107630395,
+        -0.1017524795275731
+      ],
+      "mean_ci_width": 0.11301094154873084,
+      "is_rate": false
+    },
+    {
+      "planner_key": "socnav_sampling",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "mode": "hierarchical_scenario",
+      "mean": 0.4,
+      "mean_ci": [
+        0.28896808597677776,
+        0.5110319140232223
+      ],
+      "mean_ci_width": 0.2220638280464446,
+      "is_rate": true
+    },
+    {
+      "planner_key": "socnav_sampling",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "mode": "hierarchical_scenario",
+      "mean": 0.8257281200457548,
+      "mean_ci": [
+        0.7756593620664974,
+        0.8799759149150351
+      ],
+      "mean_ci_width": 0.10431655284853769,
+      "is_rate": false
+    }
+  ],
+  "width_ratios": [
+    {
+      "planner_key": "goal",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "flat_width": 0.08683750989952976,
+      "hierarchical_width": 0.23880098681837203,
+      "ratio": 2.7499750637099414,
+      "is_rate": true
+    },
+    {
+      "planner_key": "goal",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "flat_width": 2.6312499999999996,
+      "hierarchical_width": 6.4624999999999995,
+      "ratio": 2.456057007125891,
+      "is_rate": false
+    },
+    {
+      "planner_key": "goal",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "flat_width": 0.028030052662970012,
+      "hierarchical_width": 0.07155797589806343,
+      "ratio": 2.552901942727969,
+      "is_rate": false
+    },
+    {
+      "planner_key": "goal",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "flat_width": 0.038734396596274825,
+      "hierarchical_width": 0.07652532007940421,
+      "ratio": 1.9756424987594572,
+      "is_rate": true
+    },
+    {
+      "planner_key": "goal",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "flat_width": 0.00836988857336285,
+      "hierarchical_width": 0.014196688502577604,
+      "ratio": 1.6961621864069412,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "flat_width": 0.03090557434888927,
+      "hierarchical_width": 0.04662483447270084,
+      "ratio": 1.5086221646088422,
+      "is_rate": true
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "flat_width": 6.929166666666667,
+      "hierarchical_width": 16.383333333333333,
+      "ratio": 2.364401683704149,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "flat_width": 0.042678565055605175,
+      "hierarchical_width": 0.10898757257621505,
+      "ratio": 2.5536840902269557,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "flat_width": 0.07304343476264674,
+      "hierarchical_width": 0.17018869187522934,
+      "ratio": 2.3299656215271676,
+      "is_rate": true
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "flat_width": 0.030427101548512026,
+      "hierarchical_width": 0.07016839625945936,
+      "ratio": 2.306115031942331,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "flat_width": 0.033754242774419616,
+      "hierarchical_width": 0.04739454712680308,
+      "ratio": 1.4041063650440015,
+      "is_rate": true
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "flat_width": 6.827083333333331,
+      "hierarchical_width": 17.010416666666668,
+      "ratio": 2.4916081782117803,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "flat_width": 0.043687966538588766,
+      "hierarchical_width": 0.10948855744913112,
+      "ratio": 2.506149086898378,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "flat_width": 0.06125119819273417,
+      "hierarchical_width": 0.12378832627107594,
+      "ratio": 2.0209943629439096,
+      "is_rate": true
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "flat_width": 0.028634161604235042,
+      "hierarchical_width": 0.07102687880979464,
+      "ratio": 2.48049444546299,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "flat_width": 0.02882691158111096,
+      "hierarchical_width": 0.044443426824959845,
+      "ratio": 1.541733900279547,
+      "is_rate": true
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "flat_width": 7.399999999999999,
+      "hierarchical_width": 18.064583333333335,
+      "ratio": 2.4411599099099104,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "flat_width": 0.04542004195455805,
+      "hierarchical_width": 0.1184477776385293,
+      "ratio": 2.6078306523149895,
+      "is_rate": false
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "flat_width": 0.05881856646294481,
+      "hierarchical_width": 0.11449865995309882,
+      "ratio": 1.9466414575954005,
+      "is_rate": true
+    },
+    {
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "flat_width": 0.02860865786484723,
+      "hierarchical_width": 0.06674447312700948,
+      "ratio": 2.3330165798872193,
+      "is_rate": false
+    },
+    {
+      "planner_key": "orca",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "flat_width": 0.06562273676645453,
+      "hierarchical_width": 0.1369786618670935,
+      "ratio": 2.08736588287362,
+      "is_rate": true
+    },
+    {
+      "planner_key": "orca",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "flat_width": 4.229166666666666,
+      "hierarchical_width": 9.89375,
+      "ratio": 2.3394088669950746,
+      "is_rate": false
+    },
+    {
+      "planner_key": "orca",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "flat_width": 0.08221677618946466,
+      "hierarchical_width": 0.2469249417470717,
+      "ratio": 3.0033401112449956,
+      "is_rate": false
+    },
+    {
+      "planner_key": "orca",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "flat_width": 0.07454440888636671,
+      "hierarchical_width": 0.17331168065416747,
+      "ratio": 2.324945401584157,
+      "is_rate": true
+    },
+    {
+      "planner_key": "orca",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "flat_width": 0.03631970326937073,
+      "hierarchical_width": 0.08699645353329655,
+      "ratio": 2.395296373653546,
+      "is_rate": false
+    },
+    {
+      "planner_key": "ppo",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "flat_width": 0.07060166144854385,
+      "hierarchical_width": 0.18283795132255404,
+      "ratio": 2.589711737248714,
+      "is_rate": true
+    },
+    {
+      "planner_key": "ppo",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "flat_width": 2.16875,
+      "hierarchical_width": 4.387500000000001,
+      "ratio": 2.023054755043228,
+      "is_rate": false
+    },
+    {
+      "planner_key": "ppo",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "flat_width": 0.055199090417319574,
+      "hierarchical_width": 0.1516367907047912,
+      "ratio": 2.747088576249669,
+      "is_rate": false
+    },
+    {
+      "planner_key": "ppo",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "flat_width": 0.07330039566804558,
+      "hierarchical_width": 0.19142174368761444,
+      "ratio": 2.6114694462837997,
+      "is_rate": true
+    },
+    {
+      "planner_key": "ppo",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "flat_width": 0.041619399326680684,
+      "hierarchical_width": 0.10114977579682571,
+      "ratio": 2.4303516493084576,
+      "is_rate": false
+    },
+    {
+      "planner_key": "prediction_planner",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "flat_width": 0.08731804252052999,
+      "hierarchical_width": 0.18231334107816666,
+      "ratio": 2.0879229059137647,
+      "is_rate": true
+    },
+    {
+      "planner_key": "prediction_planner",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "flat_width": 5.720833333333331,
+      "hierarchical_width": 13.410416666666666,
+      "ratio": 2.344136926438457,
+      "is_rate": false
+    },
+    {
+      "planner_key": "prediction_planner",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "flat_width": 0.04128646415899595,
+      "hierarchical_width": 0.11137796781959833,
+      "ratio": 2.6976872466161543,
+      "is_rate": false
+    },
+    {
+      "planner_key": "prediction_planner",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "flat_width": 0.08893104998795126,
+      "hierarchical_width": 0.190410928735067,
+      "ratio": 2.1411073945586456,
+      "is_rate": true
+    },
+    {
+      "planner_key": "prediction_planner",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "flat_width": 0.032914980754877976,
+      "hierarchical_width": 0.06961564482956395,
+      "ratio": 2.1150139915924746,
+      "is_rate": false
+    },
+    {
+      "planner_key": "sacadrl",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "flat_width": 0.08443188367315835,
+      "hierarchical_width": 0.23625309008323758,
+      "ratio": 2.7981501750901305,
+      "is_rate": true
+    },
+    {
+      "planner_key": "sacadrl",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "flat_width": 2.10625,
+      "hierarchical_width": 4.722916666666666,
+      "ratio": 2.2423343224530163,
+      "is_rate": false
+    },
+    {
+      "planner_key": "sacadrl",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "flat_width": 0.04107917398566269,
+      "hierarchical_width": 0.10588462096147855,
+      "ratio": 2.577574247194796,
+      "is_rate": false
+    },
+    {
+      "planner_key": "sacadrl",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "flat_width": 0.04560864726380204,
+      "hierarchical_width": 0.11796577031650518,
+      "ratio": 2.586478165734383,
+      "is_rate": true
+    },
+    {
+      "planner_key": "sacadrl",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "flat_width": 0.01888182481221712,
+      "hierarchical_width": 0.04918406818801646,
+      "ratio": 2.6048365916515053,
+      "is_rate": false
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v1",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "flat_width": 0.032836325420309884,
+      "hierarchical_width": 0.047169464896321914,
+      "ratio": 1.4365025407851122,
+      "is_rate": true
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v1",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "flat_width": 6.393749999999997,
+      "hierarchical_width": 15.777083333333332,
+      "ratio": 2.4675790159661135,
+      "is_rate": false
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v1",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "flat_width": 0.04148706211150631,
+      "hierarchical_width": 0.09911857607873997,
+      "ratio": 2.389144254474692,
+      "is_rate": false
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v1",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "flat_width": 0.05964964001379114,
+      "hierarchical_width": 0.12226585531130363,
+      "ratio": 2.049733330880714,
+      "is_rate": true
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v1",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "flat_width": 0.030113845628346958,
+      "hierarchical_width": 0.06927979560231501,
+      "ratio": 2.300596093150591,
+      "is_rate": false
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "flat_width": 0.032836325420309884,
+      "hierarchical_width": 0.047169464896321914,
+      "ratio": 1.4365025407851122,
+      "is_rate": true
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "flat_width": 6.574999999999999,
+      "hierarchical_width": 15.260416666666666,
+      "ratio": 2.320975918884664,
+      "is_rate": false
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "flat_width": 0.04228315390440851,
+      "hierarchical_width": 0.10405432589575786,
+      "ratio": 2.4608931994760446,
+      "is_rate": false
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "flat_width": 0.05964964001379114,
+      "hierarchical_width": 0.12226585531130363,
+      "ratio": 2.049733330880714,
+      "is_rate": true
+    },
+    {
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "flat_width": 0.02745334657880838,
+      "hierarchical_width": 0.06739864390754957,
+      "ratio": 2.455024698503443,
+      "is_rate": false
+    },
+    {
+      "planner_key": "social_force",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "flat_width": 0.08675164558924009,
+      "hierarchical_width": 0.23947446511859266,
+      "ratio": 2.7604602021324074,
+      "is_rate": true
+    },
+    {
+      "planner_key": "social_force",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "flat_width": 1.510416666666667,
+      "hierarchical_width": 3.3833333333333337,
+      "ratio": 2.2399999999999998,
+      "is_rate": false
+    },
+    {
+      "planner_key": "social_force",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "flat_width": 0.05418501194808989,
+      "hierarchical_width": 0.14779098973939808,
+      "ratio": 2.727525277303329,
+      "is_rate": false
+    },
+    {
+      "planner_key": "social_force",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "flat_width": 0.024070346538403273,
+      "hierarchical_width": 0.0354258427854883,
+      "ratio": 1.4717628900343327,
+      "is_rate": true
+    },
+    {
+      "planner_key": "social_force",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "flat_width": 0.001781700284170018,
+      "hierarchical_width": 0.003410459459292081,
+      "ratio": 1.9141600243279973,
+      "is_rate": false
+    },
+    {
+      "planner_key": "socnav_sampling",
+      "kinematics": "differential_drive",
+      "metric": "collision_rate",
+      "flat_width": 0.08731804252052999,
+      "hierarchical_width": 0.2220638280464446,
+      "ratio": 2.5431608592718224,
+      "is_rate": true
+    },
+    {
+      "planner_key": "socnav_sampling",
+      "kinematics": "differential_drive",
+      "metric": "near_miss",
+      "flat_width": 0.6125,
+      "hierarchical_width": 1.4104166666666667,
+      "ratio": 2.302721088435374,
+      "is_rate": false
+    },
+    {
+      "planner_key": "socnav_sampling",
+      "kinematics": "differential_drive",
+      "metric": "snqi",
+      "flat_width": 0.0412475381568321,
+      "hierarchical_width": 0.11301094154873084,
+      "ratio": 2.7398227045463583,
+      "is_rate": false
+    },
+    {
+      "planner_key": "socnav_sampling",
+      "kinematics": "differential_drive",
+      "metric": "success_rate",
+      "flat_width": 0.08731804252052999,
+      "hierarchical_width": 0.2220638280464446,
+      "ratio": 2.5431608592718224,
+      "is_rate": true
+    },
+    {
+      "planner_key": "socnav_sampling",
+      "kinematics": "differential_drive",
+      "metric": "time_to_goal",
+      "flat_width": 0.03907347837890718,
+      "hierarchical_width": 0.10431655284853769,
+      "ratio": 2.6697534280656807,
+      "is_rate": false
+    }
+  ],
+  "summary": {
+    "rate_metrics": {
+      "count": 24,
+      "min_ratio": 1.4041063650440015,
+      "median_ratio": 2.0876443943936924,
+      "mean_ratio": 2.1248270457415632,
+      "max_ratio": 2.7981501750901305
+    },
+    "non_rate_metrics": {
+      "count": 36,
+      "min_ratio": 1.6961621864069412,
+      "median_ratio": 2.4480923042066767,
+      "mean_ratio": 2.424941671010977,
+      "max_ratio": 3.0033401112449956
+    },
+    "interpretation": "Ratios describe this retained exploratory bundle only. A ratio above one means the scenario-hierarchical interval is wider; a ratio at or below one is retained rather than filtered and does not invalidate the method."
+  }
+}

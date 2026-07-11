@@ -154,6 +154,19 @@ scripts/dev/ruff_fix_format.sh
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 ```
 
+### External review routing
+
+CodeRabbit reviews pull requests that change simulator code, tests, scripts, or GitHub Actions.
+Documentation, context, and evidence-registration-only pull requests are excluded by default so
+limited external-review capacity remains available for higher-risk changes. Add the `review-bot`
+label to explicitly request CodeRabbit review for an excluded pull request. The repository applies
+the `review-bot-auto` label to eligible code-bearing pull requests; do not add or remove that
+managed label manually.
+
+Gemini Code Assist has no equivalent repository-level path-and-label trigger, so this routing does
+not change Gemini's automatic-review behavior. Treat Gemini feedback as optional and keep the
+repository's human and gate-review requirements unchanged.
+
 ### Step 7: Commit Your Work
 
 ```bash

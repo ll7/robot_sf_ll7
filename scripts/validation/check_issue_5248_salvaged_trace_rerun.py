@@ -88,7 +88,11 @@ def _load_trace_contract(path: Path) -> tuple[set[str], float]:
     fraction = mechanism.get("min_trace_verified_labeled_fraction")
     if modes != set(TRACE_VERIFIED_EVIDENCE_MODES):
         raise ValueError("preregistration trace-verified modes drift from the canonical schema")
-    if not isinstance(fraction, (int, float)) or not 0 < float(fraction) <= 1:
+    if (
+        isinstance(fraction, bool)
+        or not isinstance(fraction, (int, float))
+        or not 0 < float(fraction) <= 1
+    ):
         raise ValueError("preregistration minimum trace-labeled fraction must be in (0, 1]")
     return modes, float(fraction)
 

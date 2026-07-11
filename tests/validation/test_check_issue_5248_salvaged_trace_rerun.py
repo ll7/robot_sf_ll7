@@ -9,6 +9,7 @@ from pathlib import Path
 from scripts.validation.check_issue_5248_salvaged_trace_rerun import (
     BLOCKED_STATUS,
     READY_STATUS,
+    _load_trace_contract,
     build_registration_receipt,
     main,
 )
@@ -139,6 +140,25 @@ def test_missing_mechanism_field_is_blocked(tmp_path: Path) -> None:
 
     assert receipt["status"] == BLOCKED_STATUS
     assert any("mechanism_evidence_uri" in blocker for blocker in receipt["blockers"])
+
+
+def test_trace_contract_rejects_boolean_labeled_fraction(tmp_path: Path) -> None:
+    """A boolean is not a numeric preregistration coverage threshold."""
+    config = tmp_path / "preregistration.yaml"
+    config.write_text(
+        PREREGISTRATION_CONFIG.read_text(encoding="utf-8").replace(
+            "min_trace_verified_labeled_fraction: 0.5",
+            "min_trace_verified_labeled_fraction: true",
+        ),
+        encoding="utf-8",
+    )
+
+    try:
+        _load_trace_contract(config)
+    except ValueError as exc:
+        assert "minimum trace-labeled fraction" in str(exc)
+    else:
+        raise AssertionError("expected boolean threshold to fail closed")
 
 
 def test_cli_writes_blocked_receipt_and_nonzero_exit(tmp_path: Path, capsys) -> None:

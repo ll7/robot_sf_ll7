@@ -31,3 +31,22 @@ updates:
       merge: false
       release: false
       delete: false
+  - date: "2026-07-11"
+    surface: "three_arm_diagnostic_comparison.v1"
+    status: partial
+    evidence:
+      - "tests/planner/test_learned_prediction_mpc_three_arm_diagnostic.py (3 passed)"
+      - "PR #5216 merged stub-predictor rollout-selection contract test"
+    progress:
+      - "All interface code, config, comparison runner, and comparison report builder are in main."
+      - "Stub-predictor rollout-selection test (PR #5216) proves learned-MPC selects a constraint-feasible action."
+      - "Three-arm diagnostic test proves learned MPC, CV MPC, and a trivial model-free baseline all emit bounded commands on the same observations (diagnostic-only, no training, no campaign)."
+    blockers_remaining:
+      - "Run the representative paired campaign evaluation (scripts/benchmark/run_issue_4013_model_based_comparison.py) — campaign runs are excluded from this implementation lane."
+      - "Optional: stage ETH/BIWI real trajectory data and run real-trajectory predictor training for higher evidence tier."
+    next_empirical_action: "Run scripts/benchmark/run_issue_4013_model_based_comparison.py locally (trains synthetic checkpoint then runs 3-arm map_runner comparison)."
+    forbidden_actions_confirmed:
+      compute_submit: false
+      merge: false
+      release: false
+      delete: false

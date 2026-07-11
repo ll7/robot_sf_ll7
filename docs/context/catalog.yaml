@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-06-26
+updated_at: 2026-07-11
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -20,6 +20,30 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/evidence/evidence_registry_dispositions.yaml
+  status: evidence
+  freshness: evidence
+  area: evidence_policy
+- path: docs/context/evidence/issue_5263_exact_repeat/exact_repeat_manifest.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5263_exact_repeat/resolved_definitions.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5263_exact_repeat/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5006_residual_review_thread_ledger.md
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
+- path: docs/context/issue_4973_zanlungo_collision_prediction.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5139_hierarchical_bootstrap
   status: evidence
   freshness: evidence
@@ -55,6 +79,10 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_3463_closure_audit_2026-07-07.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_3463_closure_audit_2026-07-11.md
   status: evidence
   freshness: evidence
   area: benchmark_evidence
@@ -4188,3 +4216,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5248_salvaged_h600_registration_2026-07
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence

@@ -1230,6 +1230,7 @@ def build_report(
     campaign: str | None = None,
     rows_path: str | None = None,
     job_evidence: Mapping[str, Any] | None = None,
+    generated_at_utc: str | None = None,
 ) -> dict[str, Any]:
     """Build the full report payload.
 
@@ -1287,7 +1288,7 @@ def build_report(
         "classification": classification,
         "classification_rationale": rationale,
         "git_head": _git_head(),
-        "generated_at_utc": datetime.now(UTC).isoformat(),
+        "generated_at_utc": generated_at_utc or datetime.now(UTC).isoformat(),
         "inputs": {
             "rows_path": rows_path,
             "campaign": campaign,
@@ -1642,6 +1643,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--rank-resamples", type=int, default=DEFAULT_RANK_RESAMPLES)
     parser.add_argument("--rank-seed", type=int, default=DEFAULT_BOOTSTRAP_SEED)
     parser.add_argument(
+        "--generated-at-utc",
+        type=str,
+        default=None,
+        help=(
+            "Optional stable ISO-8601 timestamp for reproducible artifact hashes; "
+            "defaults to report-generation time."
+        ),
+    )
+    parser.add_argument(
         "--invalid-rank-metric-reason",
         type=str,
         default=None,
@@ -1747,6 +1757,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         campaign=campaign,
         rows_path=rows_path,
         job_evidence=job_evidence,
+        generated_at_utc=args.generated_at_utc,
     )
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

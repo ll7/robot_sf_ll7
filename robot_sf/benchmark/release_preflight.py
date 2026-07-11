@@ -38,6 +38,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
+from robot_sf.errors import RobotSfError
 
 SCHEMA_VERSION = "release_preflight_checklist.v1"
 
@@ -108,7 +109,7 @@ ALLOWED_ISSUE_CLASSIFICATIONS = frozenset(
 )
 
 
-class ReleasePreflightError(ValueError):
+class ReleasePreflightError(RobotSfError, ValueError):
     """Raised when a checklist definition is structurally invalid."""
 
 

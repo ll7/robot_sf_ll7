@@ -214,8 +214,33 @@ def test_ci_workflow_splits_fast_feedback_from_smoke_artifacts() -> None:
     assert "needs" not in workflow["jobs"]["fast-feedback"]
 
 
-def test_ci_workflow_adds_a_nonblocking_core_compatibility_matrix() -> None:
-    """Exercise declared Python support on Linux and macOS without gating CI yet."""
+def test_ci_workflow_enforces_absolute_coverage_floor_without_resharding() -> None:
+    """Block low full-suite coverage without changing pull-request fast feedback."""
+    workflow = yaml.safe_load(_workflow_text())
+    fast_feedback = workflow["jobs"]["fast-feedback"]
+    steps = fast_feedback["steps"]
+    floor_step = next(
+        step for step in steps if step.get("name") == "Enforce absolute coverage floor"
+    )
+    baseline_step = next(
+        step for step in steps if step.get("name") == "Compare coverage with baseline"
+    )
+
+    assert floor_step["if"] == "${{ github.event_name != 'pull_request' }}"
+    assert "continue-on-error" not in floor_step
+    assert "--minimum-total 85.0" in floor_step["run"]
+    assert "--absolute-only" in floor_step["run"]
+    assert "--current output/coverage/coverage.json" in floor_step["run"]
+    assert baseline_step["continue-on-error"] is True
+    assert "--threshold 1.0" in baseline_step["run"]
+    assert "--fail-on-decrease" not in baseline_step["run"]
+    assert fast_feedback["strategy"]["matrix"]["shard"] == (
+        "${{ github.event_name == 'pull_request' && fromJSON('[1, 2, 3, 4]') || fromJSON('[1]') }}"
+    )
+
+
+def test_ci_workflow_requires_the_proven_core_compatibility_matrix() -> None:
+    """Gate aggregate CI on the proven Linux/macOS and Python compatibility matrix."""
     workflow = yaml.safe_load(_workflow_text())
     compat_matrix = workflow["jobs"]["compat-matrix"]
     steps = compat_matrix.get("steps", [])
@@ -226,7 +251,7 @@ def test_ci_workflow_adds_a_nonblocking_core_compatibility_matrix() -> None:
     assert setup_step is not None, "setup-ci-python step not found in compat-matrix job"
     test_steps = [step.get("run", "") for step in steps]
 
-    assert compat_matrix["continue-on-error"] is True
+    assert "continue-on-error" not in compat_matrix
     assert compat_matrix["strategy"]["fail-fast"] is False
     assert compat_matrix["strategy"]["matrix"] == {
         "os": ["ubuntu-latest", "macos-latest"],
@@ -243,7 +268,10 @@ def test_ci_workflow_adds_a_nonblocking_core_compatibility_matrix() -> None:
         and '-q -m "not slow"' in step
         for step in test_steps
     )
-    assert "compat-matrix" not in workflow["jobs"]["ci"]["needs"]
+    aggregate = workflow["jobs"]["ci"]
+    assert "compat-matrix" in aggregate["needs"]
+    aggregate_steps = [step.get("run", "") for step in aggregate.get("steps", [])]
+    assert any('needs.compat-matrix.result }}" != "success"' in step for step in aggregate_steps)
 
 
 def test_ci_setup_action_supports_core_matrix_dependencies_on_macos() -> None:

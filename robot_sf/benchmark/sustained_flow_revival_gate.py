@@ -17,6 +17,7 @@ from robot_sf.benchmark.interaction_exposure import (
     INTERACTION_EXPOSURE_REQUIRED_FIELDS,
     is_not_derivable_status,
 )
+from robot_sf.errors import RobotSfError
 
 SUSTAINED_FLOW_REVIVAL_GATE_SCHEMA_VERSION = "issue_3813.sustained_flow_revival_gate.v1"
 
@@ -77,7 +78,7 @@ class SustainedFlowRevivalGateReport:
         return payload
 
 
-class SustainedFlowRevivalGateError(ValueError):
+class SustainedFlowRevivalGateError(RobotSfError, ValueError):
     """Raised when the revival-gate inputs are structurally invalid."""
 
 

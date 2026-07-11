@@ -31,6 +31,7 @@ from loguru import logger
 
 if TYPE_CHECKING:
     from multiprocessing.connection import Connection
+from robot_sf.errors import RobotSfError
 
 
 def frame_shape_from_map(map_svg_path: str) -> tuple[int, int]:
@@ -161,7 +162,7 @@ class ValidationResult:
     details: dict | None = None
 
 
-class VisualizationError(Exception):
+class VisualizationError(RobotSfError):
     """Raised when visualization generation fails."""
 
     def __init__(self, message: str, artifact_type: str, details: dict | None = None):

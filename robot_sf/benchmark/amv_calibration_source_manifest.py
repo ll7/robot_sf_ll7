@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 import yaml
 
 from robot_sf.benchmark.synthetic_actuation import actuation_variability_fields
+from robot_sf.errors import RobotSfError
 
 AMV_CALIBRATION_SOURCE_MANIFEST_SCHEMA_VERSION = "amv_calibration_source_manifest.v1"
 AMV_CALIBRATION_SOURCE_EVIDENCE_BOUNDARY = (
@@ -65,7 +66,7 @@ _FIELD_STATUSES = {
 }
 
 
-class AmvCalibrationSourceManifestError(ValueError):
+class AmvCalibrationSourceManifestError(RobotSfError, ValueError):
     """Raised when an AMV calibration source manifest cannot be parsed."""
 
 

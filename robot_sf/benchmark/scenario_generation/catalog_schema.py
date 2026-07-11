@@ -14,13 +14,15 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from robot_sf.errors import RobotSfError
+
 CATALOG_ENTRY_SCHEMA_VERSION = "generated-scenario-catalog-entry.v1"
 _SCHEMA_PATH = (
     Path(__file__).resolve().parents[1] / "schemas" / "generated_scenario_catalog_entry.v1.json"
 )
 
 
-class GeneratedScenarioCatalogValidationError(ValueError):
+class GeneratedScenarioCatalogValidationError(RobotSfError, ValueError):
     """Raised when a catalog entry cannot safely be stored as a hypothesis."""
 
 

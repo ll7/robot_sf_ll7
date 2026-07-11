@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import json
+import math
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 from robot_sf.benchmark.heterogeneous_population_ablation import (
+    EPISODE_CONTROL_TRACE_PATH,
     HETEROGENEOUS_POPULATION_ABLATION_SCHEMA,
+    MEAN_MATCHED_EPISODE_READINESS_SCHEMA,
     MEAN_MATCHED_HETEROGENEITY_HARNESS_SCHEMA,
     ArchetypePopulationSpec,
+    assess_mean_matched_episode_records,
     audit_smoke_mean_match,
     build_mean_matched_harness_manifest,
     build_mean_matched_population_pair,
@@ -30,21 +37,22 @@ def _archetypes() -> dict[str, ArchetypePopulationSpec]:
 def _control_trace() -> dict[str, object]:
     return {
         "schema_version": "pedestrian-control-trace.v1",
+        "near_field_clearance_threshold_m": 1.0,
         "pedestrians": [
             {
                 "id": "ped_cautious",
                 "archetype": "cautious",
                 "steps": [
-                    {"step": 0, "clearance_m": 1.0},
-                    {"step": 1, "clearance_m": 0.8},
+                    {"step": 0, "clearance_m": 1.0, "near_field_exposure_s": 0.0},
+                    {"step": 1, "clearance_m": 0.8, "near_field_exposure_s": 0.1},
                 ],
             },
             {
                 "id": "ped_hurried",
                 "archetype": "hurried",
                 "steps": [
-                    {"step": 0, "clearance_m": 0.5},
-                    {"step": 1, "clearance_m": 0.3},
+                    {"step": 0, "clearance_m": 0.5, "near_field_exposure_s": 0.1},
+                    {"step": 1, "clearance_m": 0.3, "near_field_exposure_s": 0.1},
                 ],
             },
         ],
@@ -204,7 +212,7 @@ def test_issue_3206_three_seed_smoke_audits_as_mean_matched_but_not_per_archetyp
 
 def _manifest_config() -> dict[str, object]:
     return {
-        "trace_metric_keys": ["clearance_m"],
+        "trace_metric_keys": ["clearance_m", "near_field_exposure_s"],
         "planners": [{"key": "goal", "algo": "goal"}, {"key": "social_force"}],
         "seeds": [101, 102],
         "scenarios": [
@@ -261,9 +269,12 @@ def test_mean_matched_harness_manifest_fails_closed_on_missing_control_trace_inp
 
     assert manifest["status"] == "blocked_pending_control_trace"
     assert any(
-        "metadata.pedestrian_control_trace missing" in blocker for blocker in manifest["blockers"]
+        f"{EPISODE_CONTROL_TRACE_PATH} missing" in blocker for blocker in manifest["blockers"]
     )
     assert any("steps[].clearance_m missing" in blocker for blocker in manifest["blockers"])
+    assert any(
+        "steps[].near_field_exposure_s missing" in blocker for blocker in manifest["blockers"]
+    )
     first_row = manifest["manifest_rows"][0]
     assert first_row["trace_readiness"]["ready"] is False
     assert (
@@ -271,7 +282,15 @@ def test_mean_matched_harness_manifest_fails_closed_on_missing_control_trace_inp
         in first_row["expected_episode_output_keys"]
     )
     assert (
-        "metadata.pedestrian_control_trace.pedestrians[].steps[].clearance_m"
+        f"{EPISODE_CONTROL_TRACE_PATH}.pedestrians[].steps[].clearance_m"
+        in first_row["expected_episode_output_keys"]
+    )
+    assert (
+        f"{EPISODE_CONTROL_TRACE_PATH}.pedestrians[].steps[].near_field_exposure_s"
+        in first_row["expected_episode_output_keys"]
+    )
+    assert (
+        f"{EPISODE_CONTROL_TRACE_PATH}.near_field_clearance_threshold_m"
         in first_row["expected_episode_output_keys"]
     )
     assert PEDESTRIAN_CONTROL_TRACE_LABELS_KEY in first_row["arm_population"]
@@ -295,10 +314,59 @@ def test_mean_matched_harness_manifest_accepts_fixture_control_traces() -> None:
     assert manifest["blockers"] == []
     readiness = manifest["scenario_rows"][0]["trace_readiness_by_arm"]["heterogeneous"]
     assert readiness["metrics"]["clearance_m"]["status"] == "ready"
+    assert readiness["metrics"]["near_field_exposure_s"]["status"] == "ready"
     assert readiness["metrics"]["clearance_m"]["archetype_counts"] == {
         "cautious": 1,
         "hurried": 1,
     }
+
+
+def test_mean_matched_harness_manifest_blocks_exposure_without_threshold_metadata() -> None:
+    """Near-field exposure cannot be interpreted when its clearance threshold is absent."""
+
+    config = _manifest_config()
+    scenario = config["scenarios"][0]
+    assert isinstance(scenario, dict)
+    trace = _control_trace()
+    trace.pop("near_field_clearance_threshold_m")
+    scenario["control_traces"] = {
+        "heterogeneous": trace,
+        "mean_matched_homogeneous": _control_trace(),
+    }
+
+    manifest = build_mean_matched_harness_manifest(config)
+
+    assert manifest["status"] == "blocked_pending_control_trace"
+    assert any(
+        "control_trace.near_field_clearance_threshold_m missing" in blocker
+        for blocker in manifest["blockers"]
+    )
+
+
+@pytest.mark.parametrize("threshold", [True, "1.0", [], math.nan, -0.1])
+def test_mean_matched_harness_manifest_blocks_invalid_exposure_threshold(
+    threshold: object,
+) -> None:
+    """Near-field exposure provenance must be a finite non-negative numeric threshold."""
+
+    config = _manifest_config()
+    scenario = config["scenarios"][0]
+    assert isinstance(scenario, dict)
+    trace = _control_trace()
+    trace["near_field_clearance_threshold_m"] = threshold
+    scenario["control_traces"] = {
+        "heterogeneous": trace,
+        "mean_matched_homogeneous": _control_trace(),
+    }
+
+    manifest = build_mean_matched_harness_manifest(config)
+
+    assert manifest["status"] == "blocked_pending_control_trace"
+    assert any(
+        "control_trace.near_field_clearance_threshold_m must be finite non-negative number"
+        in blocker
+        for blocker in manifest["blockers"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -341,4 +409,206 @@ def test_mean_matched_harness_manifest_reports_bad_fixture_trace_metric() -> Non
     assert any(
         "control_trace.pedestrians[0].steps[0] missing 'clearance_m'" in blocker
         for blocker in manifest["blockers"]
+    )
+
+
+def _episode_records_for_manifest(manifest: dict[str, object]) -> list[dict[str, object]]:
+    records: list[dict[str, object]] = []
+    manifest_rows = manifest["manifest_rows"]
+    assert isinstance(manifest_rows, list)
+    for row in manifest_rows:
+        labels = row["arm_population"][PEDESTRIAN_CONTROL_TRACE_LABELS_KEY]
+        pedestrians = [
+            {
+                **label,
+                "steps": [
+                    {"step": 0, "clearance_m": 0.8, "near_field_exposure_s": 0.1},
+                    {"step": 1, "clearance_m": 1.2, "near_field_exposure_s": 0.0},
+                ],
+            }
+            for label in labels
+        ]
+        records.append(
+            {
+                "scenario_id": row["scenario_id"],
+                "planner": row["planner"],
+                "seed": row["seed"],
+                "population_arm": row["population_arm"],
+                "metrics": {"mean_clearance": 1.0},
+                "algorithm_metadata": {
+                    "pedestrian_control_trace": {
+                        "schema_version": "pedestrian-control-trace.v1",
+                        "near_field_clearance_threshold_m": 1.0,
+                        "pedestrian_count": len(pedestrians),
+                        "pedestrians": pedestrians,
+                    }
+                },
+            }
+        )
+    return records
+
+
+def test_episode_record_readiness_integrates_manifest_with_runtime_trace_path() -> None:
+    """Complete runtime-shaped records satisfy the paired manifest exactly once."""
+
+    manifest = build_mean_matched_harness_manifest(_manifest_config())
+    readiness = assess_mean_matched_episode_records(
+        manifest, _episode_records_for_manifest(manifest)
+    )
+
+    assert readiness["schema_version"] == MEAN_MATCHED_EPISODE_READINESS_SCHEMA
+    assert readiness["status"] == "ready"
+    assert readiness["ready"] is True
+    assert readiness["expected_row_count"] == 8
+    assert readiness["observed_row_count"] == 8
+    assert readiness["blockers"] == []
+
+
+def test_episode_record_readiness_blocks_missing_manifest_row() -> None:
+    """A partial campaign cannot silently become an ablation report."""
+
+    manifest = build_mean_matched_harness_manifest(_manifest_config())
+    records = _episode_records_for_manifest(manifest)
+
+    readiness = assess_mean_matched_episode_records(manifest, records[:-1])
+
+    assert readiness["status"] == "blocked"
+    assert any("episode record missing" in blocker for blocker in readiness["blockers"])
+
+
+def test_episode_record_readiness_blocks_missing_or_misaligned_trace_metadata() -> None:
+    """Runtime trace location and simulator-indexed archetypes are mandatory."""
+
+    manifest = build_mean_matched_harness_manifest(_manifest_config())
+    records = _episode_records_for_manifest(manifest)
+    records[0]["algorithm_metadata"] = {}
+    trace = records[1]["algorithm_metadata"]["pedestrian_control_trace"]
+    trace["pedestrians"][0]["archetype"] = "wrong"
+
+    readiness = assess_mean_matched_episode_records(manifest, records)
+
+    assert readiness["status"] == "blocked"
+    assert any(
+        f"{EPISODE_CONTROL_TRACE_PATH} missing or not mapping" in blocker
+        for blocker in readiness["blockers"]
+    )
+    assert any(
+        "archetype does not match manifest label" in blocker for blocker in readiness["blockers"]
+    )
+
+
+def test_episode_record_readiness_blocks_missing_rank_metric() -> None:
+    """Records cannot reach rank analysis without its finite episode metric."""
+
+    manifest = build_mean_matched_harness_manifest(_manifest_config())
+    records = _episode_records_for_manifest(manifest)
+    records[0].pop("metrics")
+
+    readiness = assess_mean_matched_episode_records(manifest, records)
+
+    assert readiness["status"] == "blocked"
+    assert any("metrics missing or not mapping" in blocker for blocker in readiness["blockers"])
+
+
+def test_report_cli_stops_before_analysis_when_integration_readiness_is_blocked(
+    tmp_path: Path,
+) -> None:
+    """The report command persists blockers and does not analyze partial inputs."""
+
+    manifest_path = tmp_path / "manifest.json"
+    records_path = tmp_path / "records.jsonl"
+    output_dir = tmp_path / "report"
+    manifest_path.write_text(
+        json.dumps(build_mean_matched_harness_manifest(_manifest_config())), encoding="utf-8"
+    )
+    records_path.write_text(
+        json.dumps(
+            {
+                "scenario_id": "classic_density_002",
+                "planner": "goal",
+                "seed": 101,
+                "population_arm": "heterogeneous",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    command = [
+        sys.executable,
+        str(
+            Path(__file__).parents[2]
+            / "scripts/benchmark/build_heterogeneous_population_ablation_report.py"
+        ),
+        "--manifest",
+        str(manifest_path),
+        "--records",
+        str(records_path),
+        "--output-dir",
+        str(output_dir),
+    ]
+
+    result = subprocess.run(
+        command,
+        cwd=Path(__file__).parents[2],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    readiness = json.loads((output_dir / "integration_readiness.json").read_text(encoding="utf-8"))
+    assert readiness["status"] == "blocked"
+    assert not (output_dir / "summary.json").exists()
+
+
+_REPO_HARNESS_CONFIG_PATH = (
+    Path(__file__).parents[2] / "configs/benchmarks/issue_3574_mean_matched_harness_smoke.yaml"
+)
+
+
+def _load_repo_harness_config() -> dict[str, object]:
+    return yaml.safe_load(_REPO_HARNESS_CONFIG_PATH.read_text(encoding="utf-8"))
+
+
+def test_repo_harness_config_loads_and_has_at_least_three_planners() -> None:
+    """Repo config meets the ≥3-planner DoD for rank-order sensitivity analysis."""
+
+    config = _load_repo_harness_config()
+    planners = config.get("planners", [])
+    assert isinstance(planners, list), "planners must be a list"
+    assert len(planners) >= 3, f"DoD requires ≥3 planners; got {len(planners)}: {planners}"
+
+
+def test_repo_harness_config_builds_valid_manifest_and_fails_closed() -> None:
+    """Repo config builds a valid manifest and blocks on missing episode traces."""
+
+    config = _load_repo_harness_config()
+    manifest = build_mean_matched_harness_manifest(
+        config, config_path=str(_REPO_HARNESS_CONFIG_PATH)
+    )
+
+    assert manifest["schema_version"] == MEAN_MATCHED_HETEROGENEITY_HARNESS_SCHEMA
+    assert manifest["issue"] == 3574
+    # Without episode runs the manifest is blocked — it fails closed, not open.
+    assert manifest["status"] == "blocked_pending_control_trace"
+    assert manifest["blockers"], "manifest must name the missing trace fields"
+    # Paired arms must appear in every row.
+    arms_seen = {row["population_arm"] for row in manifest["manifest_rows"]}
+    assert arms_seen == {"heterogeneous", "mean_matched_homogeneous"}
+
+
+def test_repo_harness_config_manifest_includes_near_field_exposure_metric() -> None:
+    """Repo config declares near_field_exposure_s for per-archetype tail risk."""
+
+    config = _load_repo_harness_config()
+    metric_keys = config.get("trace_metric_keys", [])
+    assert "near_field_exposure_s" in metric_keys, (
+        "near_field_exposure_s must be declared for per-archetype tail-risk analysis"
+    )
+    manifest = build_mean_matched_harness_manifest(config)
+    # near_field_clearance_threshold_m must be surfaced in the row-level output contract.
+    first_row = manifest["manifest_rows"][0]
+    assert any(
+        "near_field_clearance_threshold_m" in key
+        for key in first_row["expected_episode_output_keys"]
     )

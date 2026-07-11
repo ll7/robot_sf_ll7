@@ -318,7 +318,7 @@ def test_ci_driver_typecheck_phase_is_explicitly_advisory() -> None:
     assert "Ty type check (advisory; reports findings but exits zero)" in script_text
     assert "Running ty in advisory mode (--exit-zero)" in script_text
     assert "findings are reported but do not fail this phase" in script_text
-    assert "uvx ty check . --exit-zero" in script_text
+    assert "uvx ty@0.0.58 check . --exit-zero" in script_text
 
 
 def test_ci_driver_test_phase_runs_benchmark_reconciliation_guard() -> None:
@@ -1360,6 +1360,20 @@ def test_bootstrap_worktree_rejects_unknown_flag() -> None:
     assert "unknown argument" in result.stderr
 
 
+def test_bootstrap_worktree_rejects_multiple_worktree_directories() -> None:
+    """bootstrap_worktree.sh accepts at most one explicit worktree directory."""
+    result = subprocess.run(
+        [str(BOOTSTRAP_WORKTREE), "one", "two"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "expected at most one WORKTREE_DIR" in result.stderr
+
+
 def test_bootstrap_worktree_rejects_extra_without_name() -> None:
     """bootstrap_worktree.sh should reject an incomplete --extra option before syncing."""
     result = subprocess.run(
@@ -1459,6 +1473,107 @@ def test_bootstrap_worktree_forwards_repeatable_extras_to_uv_sync(tmp_path: Path
 
     assert result.returncode == 0, result.stderr
     assert captured_args.read_text(encoding="utf-8") == "sync --extra training --extra gpu\n"
+
+
+def test_bootstrap_worktree_targets_an_explicit_linked_worktree(tmp_path: Path) -> None:
+    """An explicit target runs the bootstrap flow in that linked worktree."""
+    main_repo = tmp_path / "main-repo"
+    linked_worktree = tmp_path / "linked-worktree"
+    script_dir = main_repo / "scripts" / "dev"
+    fake_bin = main_repo / "fake-bin"
+    captured_cwds = main_repo / "uv-cwds.txt"
+    script_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+
+    script = script_dir / "bootstrap_worktree.sh"
+    script.write_text(BOOTSTRAP_WORKTREE.read_text(encoding="utf-8"), encoding="utf-8")
+    script.chmod(0o755)
+
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                'printf "%s\\n" "$PWD" >> "$UV_CAPTURED_CWDS"',
+                'if [[ "$1" == "venv" ]]; then',
+                '  mkdir -p "$2/bin"',
+                '  printf "#!/usr/bin/env bash\\nexit 0\\n" > "$2/bin/python"',
+                '  chmod 0755 "$2/bin/python"',
+                "  exit 0",
+                "fi",
+                'if [[ "$1" == "sync" ]]; then',
+                "  exit 0",
+                "fi",
+                'echo "unexpected uv invocation: $*" >&2',
+                "exit 99",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    subprocess.run(["git", "init"], cwd=main_repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "config", "user.email", "agent@example.invalid"],
+        cwd=main_repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Agent"],
+        cwd=main_repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(["git", "add", "."], cwd=main_repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "commit", "-m", "bootstrap target fixture"],
+        cwd=main_repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    env = {
+        **os.environ,
+        "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+        "UV_CAPTURED_CWDS": str(captured_cwds),
+    }
+    non_linked_result = subprocess.run(
+        [str(script), "--no-symlink-machine", str(main_repo)],
+        cwd=main_repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert non_linked_result.returncode == 2
+    assert "must be a linked Git worktree" in non_linked_result.stderr
+    assert not captured_cwds.exists()
+
+    subprocess.run(
+        ["git", "worktree", "add", "-b", "target-worktree", str(linked_worktree)],
+        cwd=main_repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    result = subprocess.run(
+        [str(script), "--no-symlink-machine", str(linked_worktree)],
+        cwd=main_repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (linked_worktree / ".venv" / "bin" / "python").is_file()
+    assert captured_cwds.read_text(encoding="utf-8") == f"{linked_worktree}\n{linked_worktree}\n"
 
 
 def test_bootstrap_worktree_creates_venv_before_sync() -> None:

@@ -23,6 +23,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.artifact_catalog import sha256_file
+from robot_sf.errors import RobotSfError
 
 _SCHEMA_VERSION = "oracle-trace-uri-registry.v1"
 _REQUIRED_SPLITS = ("train", "validation", "evaluation")
@@ -34,7 +35,7 @@ _HEX_DIGITS = frozenset("0123456789abcdef")
 _PENDING_SHA256 = "pending"
 
 
-class OracleTraceUriRegistryError(ValueError):
+class OracleTraceUriRegistryError(RobotSfError, ValueError):
     """Raised when an oracle-imitation trace-URI registry fails validation."""
 
 

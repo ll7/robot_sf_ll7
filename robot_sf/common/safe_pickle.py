@@ -17,9 +17,10 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pathlib import Path
+from robot_sf.errors import RobotSfError
 
 
-class UnsafePickleError(RuntimeError):
+class UnsafePickleError(RobotSfError, RuntimeError):
     """Raised when a restricted unpickler rejects a pickle global."""
 
 

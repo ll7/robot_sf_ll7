@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* **issue #5217 restore typical pedestrian desired-speed propagation.** `SimulationSettings`
+  with `ped_speed_tier="typical"` (or explicit `desired_speed_mean`) now correctly sets
+  `pysf_sim.peds.max_speeds` to the decoupled desired-speed distribution (~1.3 m/s for the
+  `typical` tier) on all pysocialforce install versions. The previous implementation relied solely
+  on `pysf_config.scene_config` propagation, which was silently ignored by pysf installs that
+  predated the fast-pysf #5042 update. The fix adds `_enforce_ped_desired_speeds` in
+  `simulator.py`, which applies the sampled speeds directly to `peds.max_speeds` and encodes
+  them into `peds.initial_speeds` so the legacy `max_speed_multiplier * initial_speed`
+  recomputation also yields the correct values on every state update. A companion
+  `sample_desired_pedestrian_speeds` helper in `pedestrian_speed_tiers.py` provides the
+  standalone sampling without a pysf-version dependency.
+
+### Changed
+
+* **issue #5228 xdist memory-diagnostic robustness.** Three residual gaps from the
+  PR #4952 review are closed: (1) `_tree_rss_gb` no longer calls `is_running()` before
+  `memory_info()` — the latter already supplies the handled `NoSuchProcess` signal,
+  removing a superfluous kernel round-trip per process; (2) `main()` validates
+  `--ceiling-gb`, `--auto-workers`, and `--project-at` arguments early (exit 2 before
+  any sweep starts) instead of failing late during report construction; (3)
+  `test_sample_process_tree_peak_captures_allocation` now calls `_terminate_process_tree`
+  before `popen.wait` in its `finally` block so a still-alive child cannot be left
+  running after a sampling or assertion failure. Regression coverage added for all three
+  changes in `tests/dev/test_measure_xdist_worker_memory.py`.
+
+* **issue #5071 absolute continuous-integration coverage floor.** The unsharded full-suite
+  coverage report on `main` and manual CI runs must cover at least 85% of the `robot_sf` package.
+  This blocking floor reuses the existing report while the baseline-relative comparison remains
+  advisory; pull-request test sharding and fast-feedback latency are unchanged.
+
+* **issue #4993 complete RobotSfError migration.** Re-parents the remaining 76 ad-hoc
+  exception classes across `analysis_workbench`, `benchmark` (individual files), `common`,
+  `data_ingestion`, `examples`, `nav`, `planner`, `research`, and `training` subpackages onto
+  `RobotSfError` while preserving all existing `ValueError` / `RuntimeError` / `Exception`
+  ancestry. `except ValueError` and `except SpecificError` clauses are unaffected; new code
+  can now also target `except RobotSfError` for broad-package catches. Covered by
+  `tests/test_robot_sf_error_migration_4993.py` (59 compatibility tests).
+
 ### Added
 
 * **issue #4978 scenario flakiness audit applied to a real multi-planner campaign.** Ships a

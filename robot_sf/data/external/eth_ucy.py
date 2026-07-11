@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from robot_sf.errors import RobotSfError
 from scripts.tools.manage_external_data import (
     EXTERNAL_DATA_ROOT_ENV,
     resolve_asset_local_path_by_id,
@@ -36,7 +37,7 @@ ACQUISITION_DOC = "docs/datasets/eth-ucy.md"
 _MIN_NUMERIC_COLUMNS = 4
 
 
-class EthUcyDataError(RuntimeError):
+class EthUcyDataError(RobotSfError, RuntimeError):
     """Raised when staged ETH/UCY data is present but structurally invalid."""
 
 

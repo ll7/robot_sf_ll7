@@ -759,11 +759,33 @@ class _TopologyGuidedEpisodeAccumulator:
     selected_counts: Counter[str] = field(default_factory=Counter)
     near_parity_reason_counts: Counter[str] = field(default_factory=Counter)
     lane_status_counts: Counter[str] = field(default_factory=Counter)
+    candidate_availability_status_counts: Counter[str] = field(default_factory=Counter)
+    candidate_unavailable_reason_counts: Counter[str] = field(default_factory=Counter)
+    candidate_outcome_counts: Counter[str] = field(default_factory=Counter)
+    configured_fallback_steps: int = 0
     candidate_counts: list[int] = field(default_factory=list)
     route_progress_values: list[float] = field(default_factory=list)
     selected_sequence: list[str] = field(default_factory=list)
     config: dict[str, Any] = field(default_factory=dict)
     topology_command_influence_steps: int = 0
+
+
+def _update_topology_candidate_availability_fields(
+    accumulator: _TopologyGuidedEpisodeAccumulator,
+    candidate_availability: Any,
+) -> None:
+    """Fold explicit topology candidate availability into the episode accumulator."""
+    if not isinstance(candidate_availability, dict):
+        return
+    candidate_status = str(candidate_availability.get("status", "unknown"))
+    accumulator.candidate_availability_status_counts[candidate_status] += 1
+    candidate_reason = candidate_availability.get("reason")
+    if candidate_status != "available" and candidate_reason is not None:
+        accumulator.candidate_unavailable_reason_counts[str(candidate_reason)] += 1
+    candidate_outcome = str(candidate_availability.get("outcome", "unknown"))
+    accumulator.candidate_outcome_counts[candidate_outcome] += 1
+    if bool(candidate_availability.get("fallback_used")):
+        accumulator.configured_fallback_steps += 1
 
 
 def _update_topology_guided_episode_fields(
@@ -787,6 +809,9 @@ def _update_topology_guided_episode_fields(
     lane_status = step.get("topology_lane_status")
     if lane_status is not None:
         accumulator.lane_status_counts[str(lane_status)] += 1
+    _update_topology_candidate_availability_fields(
+        accumulator, step.get("topology_candidate_availability")
+    )
     count = topology.get("hypothesis_count")
     if isinstance(count, int | np.integer):
         accumulator.candidate_counts.append(int(count))
@@ -913,12 +938,15 @@ def _topology_guided_episode_diagnostics(
     fallback_used = fallback_steps > 0 or bool(
         accumulator.lane_status_counts.get("fallback_only", 0)
     )
+    fallback_only = accumulator.topology_steps == fallback_steps or (
+        accumulator.lane_status_counts.get("fallback_only", 0) == accumulator.topology_steps
+    )
     route_progress = _topology_route_progress_summary(
         route_progress_values=accumulator.route_progress_values,
         selected_switch_count=selected_switch_count,
         min_progress_delta=min_progress_delta,
         stall_window_steps=stall_window_steps,
-        fallback_only=accumulator.topology_steps == fallback_steps,
+        fallback_only=fallback_only,
     )
 
     return {
@@ -931,6 +959,14 @@ def _topology_guided_episode_diagnostics(
         "fallback_steps": int(fallback_steps),
         "status_counts": dict(sorted(accumulator.status_counts.items())),
         "lane_status_counts": dict(sorted(accumulator.lane_status_counts.items())),
+        "candidate_availability_status_counts": dict(
+            sorted(accumulator.candidate_availability_status_counts.items())
+        ),
+        "candidate_unavailable_reasons": dict(
+            sorted(accumulator.candidate_unavailable_reason_counts.items())
+        ),
+        "candidate_outcome_counts": dict(sorted(accumulator.candidate_outcome_counts.items())),
+        "configured_fallback_steps": int(accumulator.configured_fallback_steps),
         "no_candidate_reasons": dict(sorted(accumulator.no_candidate_reason_counts.items())),
         "fallback_reasons": dict(sorted(accumulator.fallback_reason_counts.items())),
         "candidate_counts": {
@@ -2030,6 +2066,7 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     "topology_lane_status",
                     "topology_fallback_status",
                     "topology_fallback_reason",
+                    "topology_candidate_availability",
                     "topology_command_influence",
                 ):
                     value = planner_step_decision.get(key)

@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from robot_sf.common.types import Line2D, Vec2D
+from robot_sf.errors import RobotSfError
 
 PREDICTIVE_OBSTACLE_FEATURE_SCHEMA = "predictive_obstacle_features_v1"
 PREDICTIVE_OBSTACLE_FEATURE_DIM = 6
@@ -24,7 +25,7 @@ PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME = "same_seed_hardcase_runtime_robot_speed
 PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE = "standalone_rollout_velocity_xy_preferred_v1"
 
 
-class ObstacleFeatureSchemaError(ValueError):
+class ObstacleFeatureSchemaError(RobotSfError, ValueError):
     """Raised when obstacle-feature metadata is incompatible with the expected schema."""
 
 
@@ -649,3 +650,32 @@ def validate_predictive_feature_schema_metadata(
                 f"Predictive {feature_label} feature dimension mismatch: "
                 f"expected {expected_base_dim}, got {int(input_dim)}"
             )
+
+
+def validate_predictive_runtime_feature_schema(metadata: dict[str, object]) -> None:
+    """Reject ego-conditioned checkpoints whose motion-channel producer differs from runtime.
+
+    The structural schema validator accepts either registered ego-motion producer so that
+    artifacts remain self-describing. Runtime planning is stricter: its generated robot-speed
+    channels must use the same producer as the checkpoint. Keep this comparison shared so
+    CPU-only preflight audits and :class:`PredictionPlannerAdapter` fail on the same condition.
+    """
+    if not isinstance(metadata, dict):
+        return
+    if str(metadata.get("base_schema") or "").strip() != PREDICTIVE_EGO_FEATURE_SCHEMA:
+        return
+    actual_producer = predictive_ego_motion_channel_producer_key(metadata)
+    if actual_producer is None:
+        return
+    expected_producer = predictive_ego_motion_channel_producer_key(
+        predictive_feature_schema_metadata(
+            model_family=str(metadata.get("name") or ""),
+            ego_conditioning=True,
+            ego_motion_channel_producer=PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
+        )
+    )
+    if actual_producer != expected_producer:
+        raise ObstacleFeatureSchemaError(
+            "Predictive ego motion producer mismatch: "
+            f"runtime expects {expected_producer!r}, got {actual_producer!r}"
+        )

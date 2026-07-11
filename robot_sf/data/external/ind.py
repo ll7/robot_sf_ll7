@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from robot_sf.errors import RobotSfError
 from scripts.tools.manage_external_data import (
     EXTERNAL_DATA_ROOT_ENV,
     resolve_asset_local_path_by_id,
@@ -56,7 +57,7 @@ _RECORDING_META_REQUIRED_COLUMNS = ("recordingId", "frameRate")
 _TRACKS_FINITE_COLUMNS = ("frame", "xCenter", "yCenter")
 
 
-class IndDataError(RuntimeError):
+class IndDataError(RobotSfError, RuntimeError):
     """Raised when staged inD data is present but structurally invalid."""
 
 

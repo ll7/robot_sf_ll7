@@ -7,6 +7,7 @@ live in `robot_sf.planner.socnav_occupancy`; this module re-exports
 `OccupancyAwarePlannerMixin` for existing imports.
 """
 
+import hashlib
 import os
 import re
 import sys
@@ -48,17 +49,13 @@ except ImportError:  # pragma: no cover - optional dependency
 from robot_sf.models import resolve_model_path
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
 from robot_sf.planner.obstacle_features import (
-    PREDICTIVE_EGO_FEATURE_SCHEMA,
-    PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
     LocalObstacleFeatureExtractor,
-    ObstacleFeatureSchemaError,
     infer_predictive_feature_schema,
     normalize_obstacle_lines,
     obstacle_lines_from_map,
     obstacle_lines_from_observation,
-    predictive_ego_motion_channel_producer_key,
-    predictive_feature_schema_metadata,
+    validate_predictive_runtime_feature_schema,
 )
 
 try:  # pragma: no cover - exercised in minimal environments without torch
@@ -3014,6 +3011,20 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
         self._model: _SACADRLModel | None = None
         self._load_error: Exception | None = None
         self._fallback_warned = False
+        self._checkpoint_provenance: dict[str, Any] = {
+            "model_id": self.config.sacadrl_model_id,
+            "checkpoint_path": self.config.sacadrl_checkpoint_path,
+            "checkpoint_sha256": None,
+            "hash_source": None,
+            "load_succeeded": None,
+            "fallback_triggered": False,
+            "load_status": "not_attempted",
+            "load_error": None,
+        }
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return runtime checkpoint provenance for benchmark episode metadata."""
+        return {"checkpoint_provenance": dict(self._checkpoint_provenance)}
 
     def plan(self, observation: dict) -> tuple[float, float]:
         """
@@ -3065,7 +3076,23 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
             return None if self._allow_fallback else self._raise_cached_error()
         try:
             self._model = self._build_model()
+            self._checkpoint_provenance.update(
+                {
+                    "load_succeeded": True,
+                    "fallback_triggered": False,
+                    "load_status": "loaded",
+                    "load_error": None,
+                }
+            )
         except Exception as exc:
+            self._checkpoint_provenance.update(
+                {
+                    "load_succeeded": False,
+                    "fallback_triggered": bool(self._allow_fallback),
+                    "load_status": "fallback" if self._allow_fallback else "failed",
+                    "load_error": f"{type(exc).__name__}: {exc}",
+                }
+            )
             if self._allow_fallback:
                 self._load_error = exc
                 if not self._fallback_warned:
@@ -3120,6 +3147,22 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
             raise FileNotFoundError(
                 f"GA3C-CADRL checkpoint data file not found for prefix: {prefix}"
             )
+        checkpoint_files = sorted([meta_path, index_path, *data_files], key=lambda path: path.name)
+        digest = hashlib.sha256()
+        for path in checkpoint_files:
+            digest.update(path.name.encode("utf-8"))
+            digest.update(b"\0")
+            with path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            digest.update(b"\0")
+        self._checkpoint_provenance.update(
+            {
+                "checkpoint_path": str(meta_path.resolve()),
+                "checkpoint_sha256": digest.hexdigest(),
+                "hash_source": "computed_tensorflow_checkpoint_bundle",
+            }
+        )
         return prefix
 
     def _compute_goal_frame(
@@ -3598,26 +3641,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
 
     def _validate_runtime_feature_schema(self, feature_schema: Any) -> None:
         """Reject explicit standalone-producer checkpoints against runtime speed semantics."""
-        if not isinstance(feature_schema, dict):
-            return
-        base_schema = str(feature_schema.get("base_schema") or "").strip()
-        if base_schema != PREDICTIVE_EGO_FEATURE_SCHEMA:
-            return
-        actual_producer = predictive_ego_motion_channel_producer_key(feature_schema)
-        if actual_producer is None:
-            return
-        expected_producer = predictive_ego_motion_channel_producer_key(
-            predictive_feature_schema_metadata(
-                model_family=str(feature_schema.get("name") or ""),
-                ego_conditioning=True,
-                ego_motion_channel_producer=PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
-            )
-        )
-        if actual_producer != expected_producer:
-            raise ObstacleFeatureSchemaError(
-                "Predictive ego motion producer mismatch: "
-                f"runtime expects {expected_producer!r}, got {actual_producer!r}"
-            )
+        validate_predictive_runtime_feature_schema(feature_schema)
 
     def _normalize_pedestrians(self, ped_state: dict) -> tuple[np.ndarray, np.ndarray]:
         """Normalize pedestrian positions and ego-frame velocities.

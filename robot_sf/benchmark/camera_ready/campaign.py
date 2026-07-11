@@ -93,6 +93,7 @@ from robot_sf.benchmark.snqi.campaign_contract import (
     evaluate_snqi_contract,
     resolve_weight_mapping,
     sanitize_baseline_stats,
+    soft_contract_warning_active,
     validate_snqi_normalized_inputs,
 )
 from robot_sf.benchmark.utils import load_optional_json
@@ -252,6 +253,20 @@ class _CampaignPlannerBatchResult:
     warnings: list[str]
 
 
+def _checkpoint_fallback_detected(summary: dict[str, Any]) -> bool:
+    """Return whether preflight or runtime metadata proves checkpoint fallback occurred."""
+    preflight = summary.get("preflight")
+    contract = summary.get("algorithm_metadata_contract")
+    checkpoint = contract.get("checkpoint_provenance") if isinstance(contract, dict) else None
+    preflight_fallback = isinstance(preflight, dict) and (
+        preflight.get("status") == "fallback"
+        or preflight.get("planner_metadata_status") == "fallback"
+    )
+    return preflight_fallback or (
+        isinstance(checkpoint, dict) and checkpoint.get("fallback_triggered") is True
+    )
+
+
 def _cleanup_gpu_memory_between_arms(
     *,
     planner_key: str,
@@ -288,11 +303,13 @@ def _cleanup_gpu_memory_between_arms(
         memory_metrics["torch_available"] = True
         if torch.cuda.is_available():
             memory_metrics["cuda_available"] = True
-            # Measure before gc/empty_cache so diagnostics capture what cleanup freed.
+            # Measure before empty_cache so diagnostics capture what cleanup freed.
             memory_metrics["high_water_mark_mb"] = torch.cuda.max_memory_allocated() / 1024 / 1024
             allocated_before = torch.cuda.memory_allocated() / 1024 / 1024
             reserved_before = torch.cuda.memory_reserved() / 1024 / 1024
 
+            # Capture the allocated/reserved baseline before collecting Python
+            # references so cleanup telemetry includes memory freed by gc.collect().
             gc.collect()
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
@@ -321,6 +338,12 @@ def _cleanup_gpu_memory_between_arms(
                 memory_metrics["reserved_freed_mb"],
                 memory_metrics["high_water_mark_mb"],
             )
+        else:
+            # CPU-only nodes still need Python-level cleanup between arms.
+            gc.collect()
+    else:
+        # Keep no-torch environments from accumulating completed-arm objects.
+        gc.collect()
     return memory_metrics
 
 
@@ -350,7 +373,11 @@ def _execute_campaign_planner_batch(
                 str(planner.algo_config_path) if planner.algo_config_path is not None else None
             ),
             benchmark_profile=planner.benchmark_profile,
-            socnav_missing_prereq_policy=planner.socnav_missing_prereq_policy,
+            socnav_missing_prereq_policy=(
+                "fail-fast"
+                if cfg.checkpoint_provenance_enforcement == "error"
+                else planner.socnav_missing_prereq_policy
+            ),
             adapter_impact_eval=planner.adapter_impact_eval,
             observation_mode=run.active_observation_mode,
             observation_noise=cfg.observation_noise,
@@ -382,6 +409,12 @@ def _execute_campaign_planner_batch(
             "failures": [],
         }
         warnings.append(f"Planner '{planner.key}' failed for kinematics '{run.kinematics}': {exc}")
+    if cfg.checkpoint_provenance_enforcement == "error":
+        if _checkpoint_fallback_detected(summary):
+            raise RuntimeError(
+                "checkpoint_provenance_enforcement='error' blocked planner fallback for "
+                f"arm '{planner.key}' ({run.kinematics})"
+            )
     return _CampaignPlannerBatchResult(status=status, summary=summary, warnings=warnings)
 
 
@@ -682,6 +715,18 @@ def _run_campaign_planner_variant_subprocess(
         log_run=True,
     )
 
+    # Hand the worker the fully-prepared scenario list rather than letting it
+    # re-load the matrix: the preparation above (campaign loader + kinematics
+    # scoping) carries map_file normalization, seed overrides, candidate
+    # filtering, AMV overrides, horizon schedules, and holonomic_command_mode,
+    # and the worker must execute exactly the same episodes the in-process
+    # path would (Slurm jobs 13372/13373 failed every episode without this).
+    scoped_scenarios_path = run.planner_dir / "scoped_scenarios.json"
+    scoped_scenarios_path.write_text(
+        json.dumps(run.scoped_scenarios, default=str),
+        encoding="utf-8",
+    )
+
     # Build subprocess parameters
     arm_params = _SubprocessArmParams(
         planner_key=planner.key,
@@ -690,7 +735,11 @@ def _run_campaign_planner_variant_subprocess(
         planner_human_model_source=planner.human_model_source,
         planner_group=planner.planner_group,
         benchmark_profile=planner.benchmark_profile,
-        socnav_missing_prereq_policy=planner.socnav_missing_prereq_policy,
+        socnav_missing_prereq_policy=(
+            "fail-fast"
+            if cfg.checkpoint_provenance_enforcement == "error"
+            else planner.socnav_missing_prereq_policy
+        ),
         adapter_impact_eval=planner.adapter_impact_eval,
         kinematics=kinematics,
         observation_mode=active_observation_mode,
@@ -709,6 +758,7 @@ def _run_campaign_planner_variant_subprocess(
         snqi_weights=context.snqi_weights,
         snqi_baseline=context.snqi_baseline,
         algo_config_path=planner.algo_config_path,
+        scoped_scenarios_path=scoped_scenarios_path,
     )
 
     # Serialize parameters for subprocess. The Path-typed fields on
@@ -989,18 +1039,22 @@ def _run_campaign_planner_matrix(
                     active_observation_mode=active_observation_mode,
                 )
             else:
-                variant_result = _run_campaign_planner_variant(
-                    context,
-                    planner=planner,
-                    kinematics=kinematics,
-                    active_observation_mode=active_observation_mode,
-                )
-                # Clean up GPU memory after each arm to prevent VRAM leaks
-                # across campaign iterations (issue #4826).
-                memory_metrics = _cleanup_gpu_memory_between_arms(
-                    planner_key=planner.key,
-                    kinematics=kinematics,
-                )
+                try:
+                    variant_result = _run_campaign_planner_variant(
+                        context,
+                        planner=planner,
+                        kinematics=kinematics,
+                        active_observation_mode=active_observation_mode,
+                    )
+                finally:
+                    # Clean up GPU memory and Python refs after each arm to prevent
+                    # VRAM/RSS leaks across campaign iterations (issue #4826).
+                    # Runs even if the arm raised — keeps the next arm from inheriting
+                    # leaked CUDA allocations.
+                    memory_metrics = _cleanup_gpu_memory_between_arms(
+                        planner_key=planner.key,
+                        kinematics=kinematics,
+                    )
                 # Attach diagnostics to the run entry created by this variant.
                 if variant_result.run_entries:
                     variant_result.run_entries[-1]["gpu_cleanup"] = memory_metrics
@@ -1047,6 +1101,98 @@ def _build_skipped_combo_rows(run_entries: list[dict[str, Any]]) -> list[dict[st
             }
         )
     return skipped_combo_rows
+
+
+def _runtime_checkpoint_record(
+    entry: dict[str, Any], provenance: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Return one kinematics-specific runtime checkpoint record when observable."""
+    summary = entry.get("summary")
+    planner_entry = entry.get("planner")
+    if not isinstance(summary, dict) or not isinstance(planner_entry, dict):
+        return None
+    contract = summary.get("algorithm_metadata_contract")
+    runtime = contract.get("checkpoint_provenance") if isinstance(contract, dict) else None
+    if not isinstance(runtime, dict):
+        preflight = summary.get("preflight")
+        if isinstance(preflight, dict) and preflight.get("status") == "fallback":
+            runtime = {
+                "model_id": provenance.get("model_id"),
+                "checkpoint_sha256": provenance.get("checkpoint_sha256"),
+                "load_succeeded": False,
+                "fallback_triggered": True,
+                "load_status": "fallback",
+                "load_error": preflight.get("error"),
+            }
+        else:
+            return None
+    return {
+        **runtime,
+        "kinematics": planner_entry.get("kinematics"),
+        "run_status": entry.get("status"),
+    }
+
+
+def _summarize_checkpoint_runtime(provenance: dict[str, Any]) -> None:
+    """Summarize kinematics-specific load results on the planner-level block."""
+    runtime_records = provenance.get("runtime")
+    if not isinstance(runtime_records, list) or not runtime_records:
+        return
+    load_values = [
+        item.get("load_succeeded")
+        for item in runtime_records
+        if isinstance(item, dict) and isinstance(item.get("load_succeeded"), bool)
+    ]
+    fallback_values = [
+        item.get("fallback_triggered")
+        for item in runtime_records
+        if isinstance(item, dict) and isinstance(item.get("fallback_triggered"), bool)
+    ]
+    provenance["load_succeeded"] = all(load_values) if load_values else None
+    provenance["fallback_triggered"] = any(fallback_values) if fallback_values else None
+    runtime_hashes = {
+        str(item["checkpoint_sha256"])
+        for item in runtime_records
+        if isinstance(item, dict) and item.get("checkpoint_sha256") is not None
+    }
+    if len(runtime_hashes) == 1:
+        provenance["checkpoint_sha256"] = runtime_hashes.pop()
+    if provenance["fallback_triggered"] is True:
+        provenance["status"] = "fallback"
+    elif provenance["load_succeeded"] is True:
+        provenance["status"] = "loaded"
+    elif provenance["load_succeeded"] is False:
+        provenance["status"] = "load_failed"
+    else:
+        provenance["status"] = "runtime_not_observed"
+
+
+def _finalize_checkpoint_provenance(
+    manifest_payload: dict[str, Any], run_entries: list[dict[str, Any]]
+) -> None:
+    """Fold runtime load/fallback diagnostics into each manifest planner arm in place."""
+    planners = manifest_payload.get("planners")
+    if not isinstance(planners, list):
+        return
+    by_key = {str(planner.get("key")): planner for planner in planners if isinstance(planner, dict)}
+    for entry in run_entries:
+        planner_entry = entry.get("planner")
+        if not isinstance(planner_entry, dict):
+            continue
+        planner = by_key.get(str(planner_entry.get("key")))
+        provenance = planner.get("checkpoint_provenance") if isinstance(planner, dict) else None
+        if not isinstance(provenance, dict) or provenance.get("status") == "not_applicable":
+            continue
+        runtime = _runtime_checkpoint_record(entry, provenance)
+        if not isinstance(runtime, dict):
+            continue
+        provenance.setdefault("runtime", []).append(runtime)
+        planner_entry["checkpoint_provenance"] = runtime
+
+    for planner in planners:
+        provenance = planner.get("checkpoint_provenance") if isinstance(planner, dict) else None
+        if isinstance(provenance, dict):
+            _summarize_checkpoint_runtime(provenance)
 
 
 def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
@@ -1127,6 +1273,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
     planner_rows = planner_run_results.planner_rows
     warnings = planner_run_results.warnings
     seed_variability_records = planner_run_results.seed_variability_records
+    _finalize_checkpoint_provenance(manifest_payload, run_entries)
 
     planner_rows.sort(
         key=lambda row: (row.get("snqi_mean", "nan") == "nan", row.get("planner_key"))
@@ -1601,18 +1748,22 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
         and cfg.snqi_contract.enforcement in {"error", "enforce"}
         and contract_eval.status == "fail"
     )
+    # Issue #5240: a soft contract warning (enforcement=warn with status warn/fail) must NOT
+    # change the exit code. It is surfaced in the summary as ``soft_contract_warning: true``
+    # plus a ``warnings[]`` entry, and the campaign still counts as benchmark_success when all
+    # planner rows succeeded. Only hard enforcement levels stay fatal (handled by snqi_hard_fail).
+    soft_contract_warning = bool(
+        cfg.paper_facing
+        and cfg.snqi_contract.enabled
+        and soft_contract_warning_active(cfg.snqi_contract.enforcement, contract_eval.status)
+    )
     if snqi_hard_fail:
         warnings.append(
             "SNQI contract status=fail with "
             f"snqi_contract.enforcement={cfg.snqi_contract.enforcement}; "
             "campaign marked with hard contract warning."
         )
-    elif (
-        cfg.paper_facing
-        and cfg.snqi_contract.enabled
-        and cfg.snqi_contract.enforcement == "warn"
-        and contract_eval.status in {"warn", "fail"}
-    ):
+    elif soft_contract_warning:
         warnings.append(
             "SNQI contract status="
             f"{contract_eval.status} with snqi_contract.enforcement=warn; campaign marked with soft contract warning."
@@ -1709,6 +1860,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
         "planner_rows": planner_rows,
         "runs": run_entries,
         "warnings": warnings,
+        "soft_contract_warning": soft_contract_warning,
         "artifacts": {
             "campaign_manifest": _repo_relative(campaign_root / "campaign_manifest.json"),
             "campaign_summary_json": _repo_relative(summary_json_path),
@@ -2034,4 +2186,5 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
         "runtime_sec": runtime_sec,
         "publication_bundle": publication_payload,
         "warnings": warnings,
+        "soft_contract_warning": soft_contract_warning,
     }

@@ -23,6 +23,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.errors import RobotSfError
+
 # Mirror the weighting rule accepted by build_predictive_mixed_dataset.py so the
 # preflight fails closed on specs the dataset builder would reject downstream.
 _SUPPORTED_WEIGHTING_RULE = "repeat_hardcase_rows"
@@ -45,7 +47,7 @@ _EXPECTED_PROVENANCE_KEYS = (
 _PROVENANCE_PRETRAINING_STATUS = "expected_missing_until_training"
 
 
-class PredictiveRetrainPreflightError(ValueError):
+class PredictiveRetrainPreflightError(RobotSfError, ValueError):
     """Raised when a predictive retraining launch config fails preflight."""
 
 

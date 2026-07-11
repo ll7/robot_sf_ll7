@@ -139,7 +139,7 @@ def _parse_sha256s(path: Path) -> dict[str, str]:
     entries: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
-        if not stripped:
+        if not stripped or stripped.startswith("#"):
             continue
         digest, _, relpath = stripped.partition("  ")
         if not relpath:

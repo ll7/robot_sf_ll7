@@ -36,6 +36,7 @@ from shapely.ops import unary_union
 
 if TYPE_CHECKING:
     from robot_sf.common.types import Vec2D
+from robot_sf.errors import RobotSfError
 
 FOOTPRINT_ORIENTATION_SCHEMA_VERSION = "footprint-orientation.v1"
 FOOTPRINT_KIND_CIRCULAR = "circular"
@@ -51,7 +52,7 @@ REQUIRED_SCENARIO_FAMILY_IDS = frozenset(
 )
 
 
-class FootprintOrientationConfigError(ValueError):
+class FootprintOrientationConfigError(RobotSfError, ValueError):
     """Raised when a footprint-orientation diagnostic config violates the v1 contract."""
 
 

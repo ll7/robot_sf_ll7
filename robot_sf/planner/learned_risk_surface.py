@@ -15,12 +15,13 @@ from typing import Any
 import numpy as np
 
 from robot_sf.common.math_utils import wrap_angle_pi
+from robot_sf.errors import RobotSfError
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter
 from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin
 
 
-class RiskSurfaceUnavailable(ValueError):
+class RiskSurfaceUnavailable(RobotSfError, ValueError):
     """Raised when a local risk surface cannot satisfy the runtime contract."""
 
 

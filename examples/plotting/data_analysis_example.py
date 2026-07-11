@@ -13,6 +13,7 @@ Prerequisites:
 
 Expected Output:
     - Plots written under `robot_sf/data_analysis/plots`
+    - In smoke mode, JSON exports written under `output/examples/datasets/`
     - Console logs describing generated assets
 
 Limitations:
@@ -25,6 +26,7 @@ from pathlib import Path
 from loguru import logger
 
 from examples.demo_utils import fast_demo_enabled
+from robot_sf.common.artifact_paths import get_artifact_root
 from robot_sf.data_analysis.extract_json_from_pickle import (
     extract_timestamp,
     plot_all_data_json,
@@ -96,20 +98,15 @@ if __name__ == "__main__":
             recording_id = extract_timestamp(str(recording_path))
 
             if fast_demo_enabled():
-                dataset_dir = Path("examples/datasets")
-                if dataset_dir.exists():
-                    json_path = dataset_dir / f"{recording_id}.json"
-                    save_to_json(str(recording_path), str(json_path))
-                    logger.info(
-                        "Fast demo mode: exported JSON and skipped plotting "
-                        f"(recording_id={recording_id}, recording_path={recording_path}, "
-                        f"json_path={json_path})"
-                    )
-                else:
-                    raise RuntimeError(
-                        "Fast demo mode requires 'examples/datasets' to exist "
-                        f"(recording_id={recording_id}, recording_path={recording_path})"
-                    )
+                dataset_dir = get_artifact_root() / "examples" / "datasets"
+                dataset_dir.mkdir(parents=True, exist_ok=True)
+                json_path = dataset_dir / f"{recording_id}.json"
+                save_to_json(str(recording_path), str(json_path))
+                logger.info(
+                    "Fast demo mode: exported JSON and skipped plotting "
+                    f"(recording_id={recording_id}, recording_path={recording_path}, "
+                    f"json_path={json_path})"
+                )
             else:
                 show_from_json(str(recording_path), recording_id)
                 show_from_pkl(str(recording_path), recording_id)

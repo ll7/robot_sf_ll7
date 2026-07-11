@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from robot_sf.errors import RobotSfError
 from scripts.tools.manage_external_data import (
     EXTERNAL_DATA_ROOT_ENV,
     check_asset,
@@ -54,7 +55,7 @@ _ATC_COLUMNS = len(ATC_COLUMN_NAMES)
 _DEFAULT_MAX_SCAN_ROWS = 10_000
 
 
-class AtcDataError(RuntimeError):
+class AtcDataError(RobotSfError, RuntimeError):
     """Raised when staged ATC data is present but structurally invalid."""
 
 

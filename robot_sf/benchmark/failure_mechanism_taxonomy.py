@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from typing import Any
+from robot_sf.errors import RobotSfError
 
 MECHANISM_SCHEMA_VERSION = "failure_mechanism_taxonomy.v1"
 
@@ -61,7 +62,7 @@ REQUIRED_MECHANISM_FIELDS = (
 )
 
 
-class FailureMechanismTaxonomyError(ValueError):
+class FailureMechanismTaxonomyError(RobotSfError, ValueError):
     """Raised when a failure-mechanism taxonomy record violates the contract."""
 
 

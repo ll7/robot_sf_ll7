@@ -16,6 +16,7 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from robot_sf.common.json_pointer import json_pointer
+from robot_sf.errors import RobotSfError
 
 ARTIFACT_CATALOG_SCHEMA_VERSION = "artifact_catalog.v1"
 ARTIFACT_CATALOG_SCHEMA_FILE = Path(__file__).with_name("schemas") / "artifact_catalog.v1.json"
@@ -80,7 +81,7 @@ class ArtifactCatalog:
         return asdict(self)
 
 
-class ArtifactCatalogValidationError(ValueError):
+class ArtifactCatalogValidationError(RobotSfError, ValueError):
     """Raised when an artifact catalog fails validation."""
 
     def __init__(self, issues: list[ArtifactCatalogIssue], *, source: str | Path | None = None):

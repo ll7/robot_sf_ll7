@@ -7,6 +7,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.errors import RobotSfError
+
 SCHEMA_VERSION = "predictive-retraining-readiness.v1"
 DECISION_BLOCKED = "retraining_blocked"
 DECISION_READY = "retraining_launch_ready"
@@ -40,7 +42,7 @@ _REQUIRED_PIPELINE_PROVENANCE = {
 }
 
 
-class PredictiveRetrainingReadinessError(ValueError):
+class PredictiveRetrainingReadinessError(RobotSfError, ValueError):
     """Raised when a predictive retraining readiness packet cannot be evaluated."""
 
 

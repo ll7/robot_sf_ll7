@@ -62,13 +62,16 @@ from robot_sf.sim.pedestrian_model_variants import (
     HSFM_ANISOTROPIC_FOV_V1,
     HSFM_TOTAL_FORCE_V1,
     HSFM_TTC_PREDICTIVE_V1,
+    HSFM_ZANLUNGO_COLLISION_PREDICTION_V1,
     fov_attenuated_total_force,
     normalize_pedestrian_model,
     pairwise_social_force_contributions,
     step_alignment_torque_heading,
     step_hsfm_total_force,
     ttc_predictive_repulsion,
+    zanlungo_collision_prediction_repulsion,
 )
+from robot_sf.sim.pedestrian_speed_tiers import sample_desired_pedestrian_speeds
 
 PYSF_POSITION_SLICE = slice(0, 2)
 PYSF_VELOCITY_SLICE = slice(2, 4)
@@ -101,6 +104,43 @@ def _apply_ped_desired_speed_config(
     pysf_config.scene_config.desired_speed_mean = settings.desired_speed_mean
     pysf_config.scene_config.desired_speed_std = settings.desired_speed_std
     pysf_config.scene_config.desired_speed_seed = settings.desired_speed_seed
+
+
+def _enforce_ped_desired_speeds(peds, settings: SimulationSettings) -> None:
+    """Apply decoupled desired speeds directly to a PedState after simulator creation.
+
+    ``_apply_ped_desired_speed_config`` propagates settings into the PySF config so
+    that ``PedState.__init__`` can sample them. However, older installed pysf versions
+    (< the fast-pysf update in #5042) do not read ``desired_speed_mean`` from the scene
+    config and silently fall back to the spawn-coupled ``max_speed_multiplier *
+    initial_speed`` = 0.65 m/s default (issue #5217).
+
+    This function re-applies the desired speeds directly on the ``PedState`` object
+    after ``PySFSimulator`` is constructed, which restores the tier contract for stale
+    pysf installs. It is a no-op when the new pysf already applied the speeds via
+    ``assign_desired_speeds`` (the explicit-desired-speeds path uses ``_explicit_desired_speeds``
+    and ignores the ``initial_speeds`` override we write here).
+
+    Calling this after ``max_speed_multiplier`` is set is intentional: we encode the
+    desired speeds into ``initial_speeds`` so the legacy recomputation
+    ``max_speeds = max_speed_multiplier * initial_speeds`` also yields the correct values
+    on every subsequent ``_update_state`` call.
+    """
+    if settings.desired_speed_mean is None:
+        return
+    desired_speeds = sample_desired_pedestrian_speeds(
+        peds.size(),
+        mean=settings.desired_speed_mean,
+        std=settings.desired_speed_std,
+        seed=settings.desired_speed_seed,
+    )
+    # Direct assignment: works with both new pysf (``assign_desired_speeds`` already ran,
+    # this overwrites with identical values) and old pysf (no explicit-speed support).
+    peds.max_speeds = desired_speeds.copy()
+    # Compat: encode into initial_speeds so legacy _update_state recomputation preserves them.
+    initial_speeds = getattr(peds, "initial_speeds", None)
+    if initial_speeds is not None and peds.max_speed_multiplier > 0:
+        peds.initial_speeds = desired_speeds / peds.max_speed_multiplier
 
 
 def _make_ped_forces(
@@ -293,6 +333,7 @@ class Simulator:
             ),
         )
         self.pysf_sim.peds.max_speed_multiplier = self.config.peds_speed_mult
+        _enforce_ped_desired_speeds(self.pysf_sim.peds, self.config)
         self.robot_navs = [
             RouteNavigator(proximity_threshold=self.goal_proximity_threshold) for _ in self.robots
         ]
@@ -323,6 +364,7 @@ class Simulator:
         if self.pedestrian_model not in {
             HSFM_TOTAL_FORCE_V1,
             HSFM_TTC_PREDICTIVE_V1,
+            HSFM_ZANLUNGO_COLLISION_PREDICTION_V1,
             HSFM_ANISOTROPIC_FOV_V1,
             HSFM_ALIGNMENT_TORQUE_V1,
         }:
@@ -350,6 +392,24 @@ class Simulator:
                     horizon_s=ttc_config.horizon_s,
                     force_scale=ttc_config.force_scale,
                     max_force=ttc_config.max_force,
+                )
+        elif self.pedestrian_model == HSFM_ZANLUNGO_COLLISION_PREDICTION_V1:
+            zanlungo_config = self.config.zanlungo_collision_prediction
+            if zanlungo_config.include_ped_ped:
+                pairwise_social = self._pairwise_social_force_contributions(current_state)
+                collision_prediction = zanlungo_collision_prediction_repulsion(
+                    current_state[:, PYSF_POSITION_SLICE],
+                    current_state[:, PYSF_VELOCITY_SLICE],
+                    interaction_strength=zanlungo_config.interaction_strength,
+                    interaction_range_m=zanlungo_config.interaction_range_m,
+                    anisotropy_lambda=zanlungo_config.anisotropy_lambda,
+                    angle_threshold_rad=zanlungo_config.angle_threshold_rad,
+                    max_force=zanlungo_config.max_force,
+                )
+                ped_forces = (
+                    np.asarray(ped_forces, dtype=float)
+                    - pairwise_social.sum(axis=1)
+                    + collision_prediction
                 )
         elif self.pedestrian_model == HSFM_ANISOTROPIC_FOV_V1:
             fov_config = self.config.anisotropic_fov
@@ -398,7 +458,7 @@ class Simulator:
     def _social_force_component(self) -> SocialForce:
         """Return the active PySocialForce ped-ped ``SocialForce`` component.
 
-        The pairwise field-of-view model needs the social force's parameters
+        Pairwise replacement models need the social force's parameters
         (activation threshold, factor, and interaction exponents) so its per-pair
         reconstruction exactly matches the aggregate PySocialForce already sums into the
         total force. Fail closed if the component is missing, mirroring the ``max_speeds``
@@ -411,8 +471,7 @@ class Simulator:
             if isinstance(force, SocialForce):
                 return force
         raise RuntimeError(
-            "PySocialForce SocialForce component is unavailable for the pairwise "
-            "field-of-view pedestrian model"
+            "PySocialForce SocialForce component is unavailable for the pairwise pedestrian model"
         )
 
     def _pairwise_social_force_contributions(self, state: np.ndarray) -> np.ndarray:
@@ -722,6 +781,7 @@ class PedSimulator(Simulator):
             ),
         )
         self.pysf_sim.peds.max_speed_multiplier = self.config.peds_speed_mult
+        _enforce_ped_desired_speeds(self.pysf_sim.peds, self.config)
 
         self.robot_navs = [
             RouteNavigator(proximity_threshold=self.goal_proximity_threshold) for _ in self.robots

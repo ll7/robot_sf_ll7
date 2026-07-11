@@ -44,6 +44,7 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from robot_sf.common.json_pointer import json_pointer
+from robot_sf.errors import RobotSfError
 
 SCENARIO_PRIOR_STAGING_CONTRACT_SCHEMA_VERSION = "scenario_prior_staging_contract.v1"
 SCENARIO_PRIOR_STAGING_CONTRACT_SCHEMA_FILE = (
@@ -72,7 +73,7 @@ CONTRACT_STATUS_INVALID = "invalid"
 _LIVE_AVAILABLE_STATUSES = frozenset({"available", "staged"})
 
 
-class ScenarioPriorStagingContractError(ValueError):
+class ScenarioPriorStagingContractError(RobotSfError, ValueError):
     """Raised when a scenario-prior staging contract fails schema checks."""
 
     def __init__(self, errors: list[str], *, source: str | Path | None = None):

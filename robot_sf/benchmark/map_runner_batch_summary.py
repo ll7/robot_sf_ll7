@@ -201,6 +201,16 @@ def merge_runtime_algorithm_contract(  # noqa: C901
             base_contract["upstream_reference"] = upstream_reference
         _merge_mapping(upstream_reference, runtime_upstream_reference)
 
+    runtime_planner = runtime_algorithm_metadata.get("planner_runtime")
+    if isinstance(runtime_planner, dict):
+        runtime_checkpoint = runtime_planner.get("checkpoint_provenance")
+        if isinstance(runtime_checkpoint, dict):
+            checkpoint = base_contract.get("checkpoint_provenance")
+            if not isinstance(checkpoint, dict):
+                checkpoint = {}
+                base_contract["checkpoint_provenance"] = checkpoint
+            _merge_mapping(checkpoint, runtime_checkpoint)
+
     return base_contract
 
 

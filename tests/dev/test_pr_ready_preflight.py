@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,20 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_DEV = REPO_ROOT / "scripts" / "dev"
 OPTIONAL_ALLOWLIST = REPO_ROOT / "tests" / "support" / "optional_test_allowlist.txt"
+
+_FOCUSED_SNQI_SELECTOR_TARGETS = (
+    "tests/unit/benchmark/test_snqi_campaign_contract.py",
+    "tests/benchmark/test_camera_ready_campaign.py",
+    "tests/tools/test_run_camera_ready_benchmark.py",
+)
+_UNRELATED_OPTIONAL_IMPORTS = (
+    "torch",
+    "stable_baselines3",
+    "duckdb",
+    "optuna",
+    "pyarrow",
+    "sqlalchemy",
+)
 
 _POST_PREFLIGHT_SCRIPTS = [
     "check_pr_followups.py",
@@ -274,7 +289,40 @@ def test_pr_ready_check_keeps_core_only_changes_on_the_core_lane(preflight_repo:
     assert result.returncode == 0, result.stderr
     lane_lines = lane_log.read_text(encoding="utf-8").splitlines()
     assert lane_lines == ["core --lane core"]
-    assert "No changed files require the optional-extra lane." in result.stderr
+    assert "No committed changed files require the optional-extra lane." in result.stderr
+
+
+def test_interim_mode_reports_dirty_paths_excluded_from_changed_file_gates(
+    preflight_repo: Path,
+) -> None:
+    """Dirty paths are explicit when interim diff-scoped gates only inspect HEAD."""
+    lane_log = _write_lane_logging_stub(preflight_repo)
+    tracked_file = preflight_repo / "tests" / "unit" / "test_dirty_tracked.py"
+    tracked_file.parent.mkdir(parents=True, exist_ok=True)
+    tracked_file.write_text("print('baseline')\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "tracked dirty fixture")
+    tracked_file.write_text("print('dirty tracked path')\n", encoding="utf-8")
+
+    dirty_file = preflight_repo / "tests" / "planner" / "test_dirty_optional.py"
+    dirty_file.parent.mkdir(parents=True, exist_ok=True)
+    dirty_file.write_text("print('dirty optional lane')\n", encoding="utf-8")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        help_flag=False,
+        env_overrides={
+            "BASE_REF": "HEAD",
+            "PR_READY_MODE": "interim",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert lane_log.read_text(encoding="utf-8").splitlines() == ["core --lane core"]
+    assert "Interim changed-file scope is committed HEAD vs HEAD." in result.stderr
+    assert "Dirty paths excluded from diff-scoped gates:" in result.stderr
+    assert "tests/unit/test_dirty_tracked.py" in result.stderr
+    assert "tests/planner/test_dirty_optional.py" in result.stderr
 
 
 def test_core_lane_collection_hook_skips_optional_paths(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -315,6 +363,47 @@ def test_optional_lane_collection_hook_skips_core_paths(monkeypatch: pytest.Monk
         test_conftest.pytest_ignore_collect(Path("tests/dev/test_pr_ready_preflight.py"), None)
         is True
     )
+
+
+def test_focused_snqi_selector_collects_without_unrelated_optional_stacks(tmp_path: Path) -> None:
+    """Explicit SNQI targets must collect when unrelated optional imports are unavailable."""
+    sitecustomize = tmp_path / "sitecustomize.py"
+    sitecustomize.write_text(
+        "import builtins\n"
+        f"BLOCKED = {set(_UNRELATED_OPTIONAL_IMPORTS)!r}\n"
+        "original_import = builtins.__import__\n"
+        "def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):\n"
+        "    if name.split('.', maxsplit=1)[0] in BLOCKED:\n"
+        "        raise ModuleNotFoundError(f'blocked optional import: {name}')\n"
+        "    return original_import(name, globals, locals, fromlist, level)\n"
+        "builtins.__import__ = guarded_import\n",
+        encoding="utf-8",
+    )
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(filter(None, (str(tmp_path), os.environ.get("PYTHONPATH")))),
+    }
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            *_FOCUSED_SNQI_SELECTOR_TARGETS,
+            "-k",
+            "snqi_contract or exit or camera_ready_summary",
+            "--collect-only",
+            "-q",
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_missing_base_ref_falls_back_to_head_without_crashing(preflight_repo: Path) -> None:

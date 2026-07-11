@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+from robot_sf.errors import RobotSfError
 
 SELECTION_MANIFEST_SCHEMA_VERSION = "exemplar-selection.v1"
 
@@ -46,7 +47,7 @@ METRIC_DIRECTIONS: dict[str, MetricDirection] = {
 }
 
 
-class ExemplarSelectionError(Exception):
+class ExemplarSelectionError(RobotSfError):
     """Raised when exemplar selection inputs are malformed."""
 
 

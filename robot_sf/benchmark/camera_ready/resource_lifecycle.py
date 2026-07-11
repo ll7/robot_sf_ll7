@@ -57,6 +57,15 @@ class _SubprocessArmParams:
     snqi_weights: dict[str, Any] | None
     snqi_baseline: dict[str, Any] | None
     algo_config_path: Path | None
+    # Fully-prepared scenario list serialized by the parent (see
+    # _run_campaign_planner_variant_subprocess). When set, the worker consumes it
+    # verbatim instead of re-deriving scenarios from scenario_matrix_path: the
+    # parent's preparation applies map_file normalization, seed overrides,
+    # scenario-candidate filtering, AMV overrides, horizon schedules, and the
+    # configured holonomic_command_mode — none of which a bare matrix re-load
+    # reproduces (Slurm jobs 13372/13373: every episode failed on unresolvable
+    # relative map_file, and arm seeds diverged from the campaign plan).
+    scoped_scenarios_path: Path | None = None
 
 
 # Path-typed fields on _SubprocessArmParams. dataclasses.asdict() returns these as
@@ -71,6 +80,7 @@ _SUBPROCESS_ARM_PATH_FIELDS: tuple[str, ...] = (
     "episodes_path",
     "summary_path",
     "algo_config_path",
+    "scoped_scenarios_path",
 )
 
 
@@ -184,22 +194,33 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
         availability_payload,
         summarize_benchmark_availability,
     )
-    from robot_sf.benchmark.runner import run_batch  # noqa: PLC0415
-    from robot_sf.benchmark.scenario_matrix import load_scenario_matrix  # noqa: PLC0415
+    from robot_sf.benchmark.runner import load_scenario_matrix, run_batch  # noqa: PLC0415
 
-    # Load scenario matrix
-    scenario_matrix = load_scenario_matrix(params.scenario_matrix_path)
-    scenarios = scenario_matrix.scenarios
-
-    # Apply kinematics transform
-    scoped_scenarios = [
-        _scenario_with_kinematics(
-            sc,
-            kinematics=params.kinematics,
-            holonomic_command_mode="differential_drive",  # Default from campaign
-        )
-        for sc in scenarios
-    ]
+    if params.scoped_scenarios_path is not None:
+        # Preferred handoff: consume the parent's fully-prepared scenario list so
+        # the subprocess arm executes EXACTLY what the in-process path would have.
+        # Re-deriving scenarios from the matrix here loses the campaign loader's
+        # map_file normalization (relative map paths then fail to resolve from the
+        # worker cwd — Slurm jobs 13372/13373 lost all 147 episodes to this), plus
+        # seed overrides, candidate filtering, AMV overrides, horizon schedules,
+        # and the configured holonomic_command_mode.
+        with params.scoped_scenarios_path.open("r", encoding="utf-8") as f:
+            scoped_scenarios = json.load(f)
+    else:
+        # Legacy fallback for callers that predate scoped_scenarios_path.
+        # NOTE (2026-07-11): this previously imported `robot_sf.benchmark.scenario_matrix`
+        # — a module that has NEVER existed — and read `.scenarios` off an object that
+        # was really a list (observed live in Slurm job 13364). load_scenario_matrix
+        # lives in runner and returns the scenario list directly.
+        scenarios = load_scenario_matrix(params.scenario_matrix_path)
+        scoped_scenarios = [
+            _scenario_with_kinematics(
+                sc,
+                kinematics=params.kinematics,
+                holonomic_command_mode="differential_drive",  # Default from campaign
+            )
+            for sc in scenarios
+        ]
 
     # Run the batch
     status = "ok"
@@ -316,13 +337,12 @@ def _main_subprocess_worker() -> int:
     # Read parameters from stdin
     params_json = sys.stdin.read()
     params_dict = json.loads(params_json)
-    for field_name in ("scenario_matrix_path", "episodes_path", "summary_path"):
+    # Re-parse str -> Path using the same field list the serializer uses, so a
+    # field added to one side cannot silently miss the other.
+    for field_name in _SUBPROCESS_ARM_PATH_FIELDS:
         field_value = params_dict.get(field_name)
         if field_value:
             params_dict[field_name] = Path(field_value)
-    algo_config_path = params_dict.get("algo_config_path")
-    if algo_config_path:
-        params_dict["algo_config_path"] = Path(algo_config_path)
 
     params = _SubprocessArmParams(**params_dict)
 

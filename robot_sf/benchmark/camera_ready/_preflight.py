@@ -44,6 +44,10 @@ from robot_sf.benchmark.camera_ready._util import (
 from robot_sf.benchmark.campaign_checkpoint_preflight import (
     check_campaign_arm_checkpoints_preflight,
 )
+from robot_sf.benchmark.campaign_runtime_preflight import (
+    check_campaign_arm_policy_dependencies_preflight,
+    check_campaign_scenario_maps_preflight,
+)
 from robot_sf.benchmark.latency_stress import not_available_latency_metrics
 from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
@@ -71,6 +75,53 @@ _CHECKPOINT_PREFLIGHT_REPORT_NAME: dict[str, str] = {
 # distinct from a declared ``backfilled`` source: it makes the cross-arm asymmetry visible in the
 # manifest without inventing tuning parameters the author never recorded (issue #5143).
 _TUNING_BACKFILL_PENDING = "backfill_pending"
+
+
+def _checkpoint_provenance_block(
+    planner: PlannerSpec,
+    checkpoint_preflight_summary: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the preflight checkpoint-provenance block for one campaign arm.
+
+    Returns:
+        JSON-serializable checkpoint identity and not-yet-run status.
+    """
+    references = [
+        dict(item)
+        for item in checkpoint_preflight_summary.get("arms", [])
+        if isinstance(item, dict) and item.get("planner_key") == planner.key
+    ]
+    if not references:
+        return {
+            "status": "not_applicable",
+            "model_id": None,
+            "checkpoint_sha256": None,
+            "load_succeeded": None,
+            "fallback_triggered": None,
+            "references": [],
+            "runtime": [],
+        }
+    model_ids = sorted(
+        {str(item["model_id"]) for item in references if item.get("model_id") is not None}
+    )
+    hashes = sorted(
+        {
+            str(item["checkpoint_sha256"])
+            for item in references
+            if item.get("checkpoint_sha256") is not None
+        }
+    )
+    resolved_statuses = {"present_local", "staged", "stageable_remote"}
+    unresolved = [item for item in references if item.get("status") not in resolved_statuses]
+    return {
+        "status": "resolution_failed" if unresolved else "not_run",
+        "model_id": model_ids[0] if len(model_ids) == 1 else None,
+        "checkpoint_sha256": hashes[0] if len(hashes) == 1 else None,
+        "load_succeeded": None,
+        "fallback_triggered": None,
+        "references": references,
+        "runtime": [],
+    }
 
 
 def _tuning_effort_block(planner: PlannerSpec) -> dict[str, Any]:
@@ -369,6 +420,10 @@ def prepare_campaign_preflight(  # noqa: PLR0913
             collision.
         CampaignCheckpointPreflightError: When any enabled arm names a checkpoint that cannot be
             resolved (or, in ``enforced_staged`` mode, cannot be staged) before scenarios load.
+        CampaignPolicyDependencyPreflightError: When an enabled arm cannot import its required
+            policy dependency in the active campaign interpreter.
+        CampaignScenarioMapPreflightError: When a prepared scenario's ``map_file`` cannot resolve
+            with the same repository-root path semantics used by campaign execution.
     """
     if validate_campaign_config is None:
         from robot_sf.benchmark.camera_ready_campaign import (  # noqa: PLC0415
@@ -379,6 +434,7 @@ def prepare_campaign_preflight(  # noqa: PLR0913
 
     validate_campaign_config(cfg)
     check_orca_rvo2_preflight(cfg)
+    check_campaign_arm_policy_dependencies_preflight(cfg)
     # Fail fast when an enabled arm names a checkpoint that cannot be resolved (unknown/mistyped
     # model_id, local_only-missing, or a missing model_path file) before any scenario loads. There
     # are two modes (issue #4613/#4663):
@@ -392,6 +448,7 @@ def prepare_campaign_preflight(  # noqa: PLR0913
         stage=checkpoint_preflight_stage,
         registry_path=checkpoint_registry_path,
         cache_dir=checkpoint_cache_dir,
+        fail_closed_implicit=cfg.checkpoint_provenance_enforcement == "error",
     )
     ensure_canonical_tree(categories=("benchmarks",))
     campaign_id = _resolve_campaign_id(cfg, label=label, campaign_id=campaign_id)
@@ -408,6 +465,7 @@ def prepare_campaign_preflight(  # noqa: PLR0913
 
     created_at_utc = _utc_now()
     scenarios = _load_campaign_scenarios(cfg)
+    check_campaign_scenario_maps_preflight(scenarios)
     route_clearance_certifications = _load_route_clearance_certifications(
         cfg.route_clearance_certifications_path
     )
@@ -622,11 +680,15 @@ def prepare_campaign_preflight(  # noqa: PLR0913
                 "observation_mode": planner.observation_mode,
                 "enabled": planner.enabled,
                 "tuning": _tuning_effort_block(planner),
+                "checkpoint_provenance": _checkpoint_provenance_block(
+                    planner, checkpoint_preflight_report
+                ),
             }
             for planner in cfg.planners
         ],
         "tuning_effort_enforcement": cfg.tuning_effort_enforcement,
         "tuning_effort_summary": _tuning_effort_summary(cfg.planners),
+        "checkpoint_provenance_enforcement": cfg.checkpoint_provenance_enforcement,
         "kinematics_matrix": list(cfg.kinematics_matrix),
         "holonomic_command_mode": cfg.holonomic_command_mode,
         "observation_mode": cfg.observation_mode,

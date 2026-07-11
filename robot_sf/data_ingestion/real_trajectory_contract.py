@@ -29,6 +29,7 @@ import jsonschema
 import yaml
 
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.errors import RobotSfError
 
 MANIFEST_SCHEMA_ID = "robot_sf_real_trajectory_ingestion_manifest.v1"
 
@@ -214,7 +215,7 @@ def _validated_staging_issues(staging_dir: str, checksums: dict[str, Any]) -> li
     return issues
 
 
-class ContractError(RuntimeError):
+class ContractError(RobotSfError, RuntimeError):
     """Raised when a manifest cannot be loaded or fails structural schema validation."""
 
 

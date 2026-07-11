@@ -13,7 +13,6 @@ from types import SimpleNamespace
 
 import pytest
 import yaml
-from loguru import logger
 
 import robot_sf.benchmark.camera_ready as camera_ready_package
 import robot_sf.benchmark.camera_ready._artifacts as camera_ready_artifacts_module
@@ -63,6 +62,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     run_campaign,
     write_campaign_report,
 )
+from robot_sf.benchmark.campaign_runtime_preflight import CampaignScenarioMapPreflightError
 from robot_sf.benchmark.map_runner_profile_metadata import load_synthetic_actuation_profile
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
 from robot_sf.benchmark.synthetic_actuation import (
@@ -4690,6 +4690,12 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
     result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="snqi_warn")
     summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
     assert any("snqi_contract.enforcement=warn" in item for item in summary_payload["warnings"])
+    # Issue #5240: a soft contract warning (enforcement=warn) must be surfaced as a top-level
+    # ``soft_contract_warning: true`` in the campaign summary while staying non-fatal.
+    assert summary_payload["soft_contract_warning"] is True
+    # The soft contract warning must not change the process exit code (stays 0 on a completed run).
+    assert result["exit_code"] == 0
+    assert result["soft_contract_warning"] is True
 
 
 def test_run_campaign_parity_table_includes_ci_columns(tmp_path: Path, monkeypatch) -> None:
@@ -5099,12 +5105,9 @@ def test_prepare_campaign_preflight_emits_route_clearance_warnings(
     assert manifest_payload["route_clearance_warnings"] == warnings
 
 
-def test_prepare_campaign_preflight_warns_when_route_clearance_map_parse_fails(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Map parse failures should be visible without DEBUG logging."""
-    broken_map_path = tmp_path / "broken.svg"
-    broken_map_path.write_text("<svg><path d='broken'/></svg>\n", encoding="utf-8")
+def test_prepare_campaign_preflight_fails_when_map_is_unresolvable(tmp_path: Path) -> None:
+    """An unresolvable map must fail the runtime preflight before route clearance."""
+    broken_map_path = tmp_path / "does_not_exist.svg"
     scenario_path = tmp_path / "scenarios.yaml"
     scenario_path.write_text(
         "\n".join(
@@ -5133,39 +5136,15 @@ def test_prepare_campaign_preflight_warns_when_route_clearance_map_parse_fails(
         encoding="utf-8",
     )
 
-    def fail_convert_map(_path: str) -> object:
-        raise ValueError("invalid SVG path data")
-
-    monkeypatch.setattr(
-        "robot_sf.benchmark.camera_ready_campaign.convert_map",
-        fail_convert_map,
-    )
-    captured: list[str] = []
-
-    def capture_message(message: object) -> None:
-        captured.append(str(message))
-
-    handle = logger.add(capture_message, level="WARNING", format="{level}:{message}")
-    try:
-        cfg = load_campaign_config(config_path)
-        prepared = prepare_campaign_preflight(
+    cfg = load_campaign_config(config_path)
+    with pytest.raises(CampaignScenarioMapPreflightError, match="parse_failure_case") as excinfo:
+        prepare_campaign_preflight(
             cfg,
             output_root=tmp_path / "out",
             label="parse",
         )
-    finally:
-        logger.remove(handle)
-
-    validate_payload = json.loads(
-        Path(prepared["validate_config_path"]).read_text(encoding="utf-8")
-    )
-    assert validate_payload["route_clearance_warning_count"] == 0
-
-    log_text = "\n".join(captured)
-    assert "WARNING:" in log_text
-    assert "parse_failure_case" in log_text
-    assert broken_map_path.as_posix() in log_text
-    assert "invalid SVG path data" in log_text
+    assert broken_map_path.as_posix() in str(excinfo.value)
+    assert "map-resolvability preflight failed" in str(excinfo.value)
 
 
 def test_prepare_campaign_preflight_attaches_route_clearance_certifications(

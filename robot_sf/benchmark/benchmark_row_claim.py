@@ -16,6 +16,7 @@ from jsonschema import Draft202012Validator
 from jsonschema import ValidationError as JsonSchemaValidationError
 
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.errors import RobotSfError
 
 BENCHMARK_ROW_CLAIM_SCHEMA_VERSION = "benchmark_row_claim.v1"
 BENCHMARK_ROW_CLAIM_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/benchmark_row_claim.v1.json")
@@ -61,7 +62,7 @@ _NON_SUCCESS_WORDING = {
 }
 
 
-class BenchmarkRowClaimError(ValueError):
+class BenchmarkRowClaimError(RobotSfError, ValueError):
     """Raised when a leaderboard row claim violates the v1 contract."""
 
 

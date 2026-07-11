@@ -21,3 +21,5 @@ heading_weight: 0.8
 clearance_weight: 1.2
 velocity_weight: 0.25
 progress_weight: 1.0
+# Opt-in only: the base DWA scores pedestrians at their observed positions.
+prediction_scoring_enabled: false

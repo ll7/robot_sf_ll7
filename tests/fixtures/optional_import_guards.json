@@ -6,7 +6,7 @@
     "ModuleNotFoundError"
   ],
   "spelling_key": "Caught exception type names, sorted and joined by '+'. The 'as <alias>' name is intentionally NOT part of the key.",
-  "total_guards": 100,
+  "total_guards": 101,
   "spellings": {
     "AttributeError+ImportError": {
       "count_ceiling": 2,
@@ -16,7 +16,7 @@
       "note": "Blessed broad catch: compiled-backend entry point may raise AttributeError when a native wheel component is absent.",
       "samples": [
         "robot_sf/baselines/sicnav.py:376",
-        "robot_sf/planner/socnav.py:779"
+        "robot_sf/planner/socnav.py:776"
       ]
     },
     "AttributeError+ImportError+IndexError+KeyError+OSError+RuntimeError+TypeError+ValueError": {
@@ -46,7 +46,7 @@
       "blessed": true,
       "note": "Blessed broad catch: defensive best-effort boundary. Very broad; do not extend further without strong justification.",
       "samples": [
-        "robot_sf/planner/socnav.py:644"
+        "robot_sf/planner/socnav.py:641"
       ]
     },
     "AttributeError+ImportError+OSError": {
@@ -56,7 +56,7 @@
       "blessed": true,
       "note": "Blessed broad catch: optional registry boundary.",
       "samples": [
-        "robot_sf/benchmark/cli.py:203"
+        "robot_sf/benchmark/cli.py:210"
       ]
     },
     "AttributeError+ImportError+OSError+RuntimeError+TypeError+ValueError": {
@@ -66,7 +66,7 @@
       "blessed": true,
       "note": "Blessed broad catch: defensive visualization ingest boundary.",
       "samples": [
-        "robot_sf/benchmark/visualization.py:466"
+        "robot_sf/benchmark/visualization.py:467"
       ]
     },
     "AttributeError+ImportError+RuntimeError": {
@@ -90,9 +90,9 @@
       ]
     },
     "ImportError": {
-      "count_ceiling": 71,
+      "count_ceiling": 70,
       "has_as_count": 14,
-      "pragma_no_cover_count": 24,
+      "pragma_no_cover_count": 23,
       "blessed": true,
       "note": "Pure optional-import. Prefer robot_sf.common.optional_import.try_import for new plain cases.",
       "samples": [
@@ -105,7 +105,7 @@
         "robot_sf/baselines/sac.py:14",
         "robot_sf/baselines/sicnav.py:420",
         "robot_sf/baselines/sicnav.py:298",
-        "robot_sf/benchmark/cli.py:191",
+        "robot_sf/benchmark/cli.py:198",
         "robot_sf/benchmark/distributions.py:131",
         "robot_sf/benchmark/episode_replay_figure.py:37",
         "robot_sf/benchmark/episode_replay_figure.py:50",
@@ -130,14 +130,15 @@
         "robot_sf/benchmark/full_classic/visual_deps.py:58",
         "robot_sf/benchmark/full_classic/visuals.py:49",
         "robot_sf/benchmark/helper_catalog.py:73",
-        "robot_sf/benchmark/live_forecast_replay_gate.py:953",
+        "robot_sf/benchmark/live_forecast_replay_gate.py:954",
+        "robot_sf/benchmark/near_miss_determinism.py:394",
         "robot_sf/benchmark/plots.py:28",
         "robot_sf/benchmark/runner.py:41",
         "robot_sf/benchmark/runner.py:47",
         "robot_sf/benchmark/scenario_generator.py:48",
         "robot_sf/benchmark/scenario_schema.py:25",
         "robot_sf/benchmark/schema_validator.py:20",
-        "robot_sf/benchmark/visualization.py:1189",
+        "robot_sf/benchmark/visualization.py:1190",
         "robot_sf/common/matplotlib_utils.py:62",
         "robot_sf/common/optional_import.py:80",
         "robot_sf/common/seed.py:47",
@@ -153,18 +154,16 @@
         "robot_sf/planner/ompl_geometric_adapter.py:193",
         "robot_sf/planner/ompl_smoke.py:42",
         "robot_sf/planner/ompl_smoke.py:252",
-        "robot_sf/planner/socnav.py:30",
-        "robot_sf/planner/socnav.py:35",
-        "robot_sf/planner/socnav.py:40",
-        "robot_sf/planner/socnav.py:45",
-        "robot_sf/planner/socnav.py:69",
-        "robot_sf/planner/socnav.py:3469",
+        "robot_sf/planner/socnav.py:31",
+        "robot_sf/planner/socnav.py:36",
+        "robot_sf/planner/socnav.py:41",
+        "robot_sf/planner/socnav.py:46",
+        "robot_sf/planner/socnav.py:66",
+        "robot_sf/planner/socnav.py:3512",
         "robot_sf/planner/theta_star_v2.py:33",
-        "robot_sf/render/sim_view.py:34",
+        "robot_sf/render/sim_view.py:33",
         "robot_sf/sim/registry.py:145",
         "robot_sf/telemetry/gpu.py:11",
-        "robot_sf/telemetry/tensorboard_adapter.py:20",
-        "robot_sf/telemetry/tensorboard_adapter.py:23",
         "robot_sf/telemetry/visualization.py:100",
         "robot_sf/training/diffusion_policy.py:33"
       ]
@@ -176,10 +175,10 @@
       "blessed": true,
       "note": "Blessed broad catch: native-lib / filesystem load may raise OSError.",
       "samples": [
-        "robot_sf/benchmark/cli.py:3042",
-        "robot_sf/benchmark/cli.py:3076",
+        "robot_sf/benchmark/cli.py:3198",
+        "robot_sf/benchmark/cli.py:3232",
         "robot_sf/benchmark/full_classic/visual_deps.py:45",
-        "robot_sf/benchmark/orca_preflight.py:89"
+        "robot_sf/benchmark/orca_preflight.py:90"
       ]
     },
     "ImportError+OSError+RuntimeError+TypeError+ValueError+json.JSONDecodeError": {
@@ -189,7 +188,7 @@
       "blessed": true,
       "note": "Blessed broad catch: defensive resource-lifecycle ingest boundary. Review carefully before adding more.",
       "samples": [
-        "robot_sf/benchmark/camera_ready/resource_lifecycle.py:345"
+        "robot_sf/benchmark/camera_ready/resource_lifecycle.py:365"
       ]
     },
     "ImportError+OSError+RuntimeError+ValueError": {
@@ -199,20 +198,22 @@
       "blessed": true,
       "note": "Blessed broad catch: defensive ingest boundary. Review carefully.",
       "samples": [
-        "robot_sf/benchmark/camera_ready/resource_lifecycle.py:245"
+        "robot_sf/benchmark/camera_ready/resource_lifecycle.py:266"
       ]
     },
     "ImportError+RuntimeError": {
-      "count_ceiling": 5,
+      "count_ceiling": 7,
       "has_as_count": 0,
-      "pragma_no_cover_count": 2,
+      "pragma_no_cover_count": 3,
       "blessed": true,
       "note": "Blessed broad catch: guarded plotting / native-lib load may raise RuntimeError. Do not collapse to ImportError.",
       "samples": [
         "robot_sf/baselines/dr_mpc.py:187",
         "robot_sf/baselines/sicnav.py:344",
         "robot_sf/baselines/sicnav.py:530",
-        "robot_sf/benchmark/cli.py:3211",
+        "robot_sf/benchmark/cli.py:3367",
+        "robot_sf/telemetry/tensorboard_adapter.py:20",
+        "robot_sf/telemetry/tensorboard_adapter.py:26",
         "robot_sf/training/multi_extractor_analysis.py:22"
       ]
     },
@@ -235,7 +236,7 @@
       "blessed": true,
       "note": "Pure optional-import (ModuleNotFoundError spelling). Prefer robot_sf.common.optional_import.try_import for new plain cases.",
       "samples": [
-        "robot_sf/benchmark/parquet_export.py:18",
+        "robot_sf/benchmark/parquet_export.py:20",
         "robot_sf/common/hardware.py:129",
         "robot_sf/planner/learned_short_horizon_predictor.py:424",
         "robot_sf/planner/social_navigation_pyenvs_force_model.py:39",

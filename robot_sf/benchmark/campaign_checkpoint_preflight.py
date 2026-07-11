@@ -23,11 +23,11 @@ mirrors the fail-closed shape of :mod:`robot_sf.benchmark.orca_preflight` and of
   the compute node loads a validated file instead of discovering a corrupt or incomplete cache 14h
   in. Ops runs this before ``sbatch`` (see ``scripts/benchmark/preflight_campaign_checkpoints.py``).
 
-Claim boundary: this is a provisioning / fail-closed preflight. It does not run the benchmark, does
-not by itself constitute benchmark evidence, and only inspects checkpoint *references* named exactly
-``model_id`` / ``model_path`` in an arm's ``algo_config`` (recursively, so a nested prior policy is
-covered). Other model-loading side channels (for example ``predictive_foresight_model_id``) are out
-of scope and keep their existing runtime behavior.
+Claim boundary: this is a provisioning / fail-closed preflight. It does not run the benchmark and
+does not by itself constitute benchmark evidence. It inspects the generic ``model_id`` /
+``model_path`` pair and the SA-CADRL/predictive planner model fields recursively. The registry-backed
+SA-CADRL default is also represented when an arm has no algorithm config, so its checkpoint cannot
+remain implicit. Other model-loading side channels keep their existing runtime behavior.
 """
 
 from __future__ import annotations
@@ -39,16 +39,23 @@ from typing import TYPE_CHECKING, Any
 import yaml
 from loguru import logger
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.models import get_registry_entry, resolve_model_path
 
 if TYPE_CHECKING:
     from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, PlannerSpec
+from robot_sf.errors import RobotSfError
 
 # Config keys, at any nesting depth of an arm's algo_config, that name a policy checkpoint.
 # ``model_id`` resolves through the registry; ``model_path`` is a direct filesystem reference.
 # ``model_id`` wins when both appear at the same mapping level, mirroring
 # ``PPOPlanner._load_model`` runtime semantics.
-_CHECKPOINT_REFERENCE_KEYS: tuple[str, ...] = ("model_id", "model_path")
+_CHECKPOINT_REFERENCE_KEY_PAIRS: tuple[tuple[str, str], ...] = (
+    ("model_id", "model_path"),
+    ("sacadrl_model_id", "sacadrl_checkpoint_path"),
+    ("predictive_model_id", "predictive_checkpoint_path"),
+)
+_DEFAULT_SACADRL_MODEL_ID = "ga3c_cadrl_iros18"
 # Registry-entry fields that declare a durable remote source ``resolve_model_path`` can stage.
 _REMOTE_SOURCE_KEYS: tuple[str, ...] = (
     "github_release",
@@ -57,7 +64,7 @@ _REMOTE_SOURCE_KEYS: tuple[str, ...] = (
 )
 
 
-class CampaignCheckpointPreflightError(RuntimeError):
+class CampaignCheckpointPreflightError(RobotSfError, RuntimeError):
     """Typed campaign checkpoint preflight failure for library-facing callers."""
 
     def __init__(
@@ -80,6 +87,7 @@ class ArmCheckpointReference:
     kind: str  # "model_id" or "model_path"
     value: str
     algo_config_path: Path | None
+    implicit: bool = False
 
 
 @dataclass(frozen=True)
@@ -91,6 +99,8 @@ class ArmCheckpointResolution:
     status: str
     detail: str
     resolved_path: Path | None = None
+    checkpoint_sha256: str | None = None
+    hash_source: str | None = None
 
 
 def _iter_mapping_checkpoint_keys(node: Any) -> list[tuple[str, str]]:
@@ -105,11 +115,13 @@ def _iter_mapping_checkpoint_keys(node: Any) -> list[tuple[str, str]]:
     """
     references: list[tuple[str, str]] = []
     if isinstance(node, dict):
-        for kind in _CHECKPOINT_REFERENCE_KEYS:
-            value = node.get(kind)
-            if isinstance(value, str) and value.strip():
-                references.append((kind, value.strip()))
-                break
+        for model_id_key, model_path_key in _CHECKPOINT_REFERENCE_KEY_PAIRS:
+            model_id = node.get(model_id_key)
+            model_path = node.get(model_path_key)
+            if isinstance(model_id, str) and model_id.strip():
+                references.append(("model_id", model_id.strip()))
+            elif isinstance(model_path, str) and model_path.strip():
+                references.append(("model_path", model_path.strip()))
         for value in node.values():
             references.extend(_iter_mapping_checkpoint_keys(value))
     elif isinstance(node, (list, tuple)):
@@ -161,10 +173,13 @@ def iter_campaign_arm_checkpoint_references(
     references: list[ArmCheckpointReference] = []
     for planner in cfg.planners:
         if not _is_learned_checkpoint_planner(planner):
-            continue
-        config_path = Path(planner.algo_config_path)  # type: ignore[arg-type]
-        algo_config = _load_algo_config(config_path)
-        for kind, value in _iter_mapping_checkpoint_keys(algo_config):
+            planner_references: list[tuple[str, str]] = []
+            config_path = None
+        else:
+            config_path = Path(planner.algo_config_path)  # type: ignore[arg-type]
+            algo_config = _load_algo_config(config_path)
+            planner_references = _iter_mapping_checkpoint_keys(algo_config)
+        for kind, value in planner_references:
             references.append(
                 ArmCheckpointReference(
                     planner_key=planner.key,
@@ -172,6 +187,21 @@ def iter_campaign_arm_checkpoint_references(
                     kind=kind,
                     value=value,
                     algo_config_path=config_path,
+                )
+            )
+        if (
+            planner.enabled
+            and planner.algo.strip().lower() in {"sacadrl", "sa_cadrl"}
+            and not planner_references
+        ):
+            references.append(
+                ArmCheckpointReference(
+                    planner_key=planner.key,
+                    algo=planner.algo,
+                    kind="model_id",
+                    value=_DEFAULT_SACADRL_MODEL_ID,
+                    algo_config_path=config_path,
+                    implicit=True,
                 )
             )
     return references
@@ -195,6 +225,8 @@ def _resolve_model_path_reference(
             status="present_local",
             detail=f"model_path file present at {path}",
             resolved_path=path,
+            checkpoint_sha256=sha256_file(path),
+            hash_source="computed_file",
         )
     return ArmCheckpointResolution(
         reference=reference,
@@ -207,6 +239,19 @@ def _resolve_model_path_reference(
 def _entry_has_remote_source(entry: dict[str, Any]) -> bool:
     """Return True when a registry entry declares a durable remote source to stage from."""
     return any(entry.get(key) for key in _REMOTE_SOURCE_KEYS)
+
+
+def _declared_registry_sha256(entry: dict[str, Any]) -> str | None:
+    """Return a registry-declared SHA-256 for an unstaged remote artifact, when available."""
+    release = entry.get("github_release")
+    if isinstance(release, dict):
+        value = release.get("sha256")
+        if isinstance(value, str) and len(value.strip()) == 64:
+            return value.strip().lower()
+    value = entry.get("sha256")
+    if isinstance(value, str) and len(value.strip()) == 64:
+        return value.strip().lower()
+    return None
 
 
 def _resolve_model_id_reference_cheap(
@@ -243,6 +288,8 @@ def _resolve_model_id_reference_cheap(
                 status="present_local",
                 detail=f"registry local_path present at {resolved}",
                 resolved_path=resolved,
+                checkpoint_sha256=sha256_file(resolved),
+                hash_source="computed_file",
             )
     if bool(entry.get("local_only")):
         return ArmCheckpointResolution(
@@ -255,6 +302,7 @@ def _resolve_model_id_reference_cheap(
             ),
         )
     if _entry_has_remote_source(entry):
+        declared_sha256 = _declared_registry_sha256(entry)
         return ArmCheckpointResolution(
             reference=reference,
             resolvable=True,
@@ -264,6 +312,8 @@ def _resolve_model_id_reference_cheap(
                 "source; run with stage=True (or the preflight script with --stage) before sbatch "
                 "to download and checksum-verify it"
             ),
+            checkpoint_sha256=declared_sha256,
+            hash_source="registry_declared" if declared_sha256 is not None else None,
         )
     return ArmCheckpointResolution(
         reference=reference,
@@ -314,6 +364,8 @@ def _resolve_model_id_reference_staged(
         status="staged",
         detail=f"model_id '{reference.value}' staged and verified at {path}",
         resolved_path=path,
+        checkpoint_sha256=sha256_file(path),
+        hash_source="computed_file",
     )
 
 
@@ -421,6 +473,7 @@ def check_campaign_arm_checkpoints_preflight(
     stage: bool = False,
     registry_path: str | Path | None = None,
     cache_dir: str | Path | None = None,
+    fail_closed_implicit: bool = False,
 ) -> dict[str, Any]:
     """Fail fast when any enabled arm's checkpoint cannot be resolved before a campaign runs.
 
@@ -436,6 +489,7 @@ def check_campaign_arm_checkpoints_preflight(
             present locally or has a stageable remote source (no network access).
         registry_path: Optional model-registry path override (useful for tests/fixtures).
         cache_dir: Optional cache directory override for staged downloads.
+        fail_closed_implicit: Whether implicit registry defaults are blocking when unresolved.
 
     Returns:
         dict[str, Any]: A summary with the checked/resolved counts and per-arm resolution status.
@@ -468,23 +522,32 @@ def check_campaign_arm_checkpoints_preflight(
         for reference in references
     ]
     failures = [resolution for resolution in resolutions if not resolution.resolvable]
-    if failures:
-        message = _preflight_failure_message(failures, stage=stage)
+    blocking_failures = [
+        resolution
+        for resolution in failures
+        if not resolution.reference.implicit or fail_closed_implicit
+    ]
+    if blocking_failures:
+        message = _preflight_failure_message(blocking_failures, stage=stage)
         logger.error(message)
-        failing_arms = tuple(sorted({resolution.reference.planner_key for resolution in failures}))
+        failing_arms = tuple(
+            sorted({resolution.reference.planner_key for resolution in blocking_failures})
+        )
         raise CampaignCheckpointPreflightError(message, arms=failing_arms)
 
     submit_safe = _compute_submit_safe(resolutions, stage=stage)
     if not submit_safe:
         logger.warning(
             "Checkpoint preflight passed resolvability but is NOT submit-safe: "
-            "stageable_remote arms must be staged with stage=True (or the preflight script with "
-            "--stage) before sbatch. See docs/context/issue_4613_camera_ready_checkpoint_provisioning.md."
+            "every checkpoint must be present or staged before sbatch. Stage remote-backed arms "
+            "with stage=True; unresolved implicit defaults are audit-only unless strict provenance "
+            "enforcement is enabled. See "
+            "docs/context/issue_4613_camera_ready_checkpoint_provisioning.md."
         )
     logger.info(f"Checkpoint {mode} preflight passed for {len(references)} reference(s).")
     return {
         "checked": len(resolutions),
-        "resolved": len(resolutions),
+        "resolved": len(resolutions) - len(failures),
         "stage": bool(stage),
         "submit_safe": submit_safe,
         "arms": [
@@ -493,10 +556,19 @@ def check_campaign_arm_checkpoints_preflight(
                 "algo": resolution.reference.algo,
                 "kind": resolution.reference.kind,
                 "value": resolution.reference.value,
+                "implicit": resolution.reference.implicit,
                 "status": resolution.status,
                 "resolved_path": (
                     str(resolution.resolved_path) if resolution.resolved_path is not None else None
                 ),
+                "model_id": (
+                    resolution.reference.value if resolution.reference.kind == "model_id" else None
+                ),
+                "checkpoint_sha256": resolution.checkpoint_sha256,
+                "hash_source": resolution.hash_source,
+                "load_succeeded": None,
+                "fallback_triggered": None,
+                "load_status": "not_run",
             }
             for resolution in resolutions
         ],

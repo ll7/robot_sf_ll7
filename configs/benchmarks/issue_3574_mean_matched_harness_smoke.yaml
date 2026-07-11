@@ -3,6 +3,7 @@ issue: 3574
 claim_boundary: harness_only_no_ablation_result
 trace_metric_keys:
   - clearance_m
+  - near_field_exposure_s
 planners:
   - key: goal
     algo: goal
@@ -14,6 +15,7 @@ seeds:
 scenarios:
   - id: issue_3574_classic_crossing_density_002
     density: 0.02
+    pedestrian_control_trace_near_field_clearance_m: 1.0
     population_size: 12
     archetype_seed: 3574
     composition:

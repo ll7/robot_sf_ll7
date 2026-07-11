@@ -67,7 +67,7 @@ def test_build_pedestrian_control_trace_records_archetype_controls() -> None:
 
 
 def test_build_pedestrian_control_trace_computes_clearance() -> None:
-    """Recorder computes per-step clearance_m when robot positions are supplied."""
+    """Recorder computes clearance and thresholded near-field exposure per step."""
 
     positions = np.array(
         [
@@ -97,8 +97,32 @@ def test_build_pedestrian_control_trace_computes_clearance() -> None:
     cautious, hurried = trace["pedestrians"]
     assert cautious["steps"][0]["clearance_m"] == pytest.approx(0.5)
     assert cautious["steps"][1]["clearance_m"] == pytest.approx(0.5)
+    assert cautious["steps"][0]["near_field_exposure_s"] == pytest.approx(0.1)
+    assert cautious["steps"][1]["near_field_exposure_s"] == pytest.approx(0.1)
     assert hurried["steps"][0]["clearance_m"] == pytest.approx(0.5)
     assert hurried["steps"][1]["clearance_m"] == pytest.approx(math.sqrt(5) - 0.5)
+    assert hurried["steps"][0]["near_field_exposure_s"] == pytest.approx(0.1)
+    assert hurried["steps"][1]["near_field_exposure_s"] == pytest.approx(0.0)
+    assert trace["near_field_clearance_threshold_m"] == pytest.approx(1.0)
+
+
+def test_build_pedestrian_control_trace_uses_configured_near_field_threshold() -> None:
+    """Exposure duration is traceable to the configured surface-clearance threshold."""
+
+    trace = build_pedestrian_control_trace(
+        scenario={
+            **_scenario(),
+            "pedestrian_control_trace_near_field_clearance_m": 0.4,
+        },
+        ped_positions=np.array([[[0.0, 0.0], [2.0, 0.0]]], dtype=float),
+        ped_forces=None,
+        dt=0.2,
+        robot_positions=np.array([[1.0, 0.0]], dtype=float),
+    )
+
+    assert trace["near_field_clearance_threshold_m"] == pytest.approx(0.4)
+    assert trace["pedestrians"][0]["steps"][0]["near_field_exposure_s"] == pytest.approx(0.0)
+    assert trace["pedestrians"][1]["steps"][0]["near_field_exposure_s"] == pytest.approx(0.0)
 
 
 @pytest.mark.parametrize(
@@ -113,6 +137,19 @@ def test_build_pedestrian_control_trace_computes_clearance() -> None:
         (
             {"robot_positions": np.zeros((2, 2), dtype=float), "ped_radius": -0.1},
             "must be non-negative",
+        ),
+        (
+            {"scenario": {**_scenario(), "pedestrian_control_trace_near_field_clearance_m": -0.1}},
+            "must be non-negative",
+        ),
+        (
+            {
+                "scenario": {
+                    **_scenario(),
+                    "pedestrian_control_trace_near_field_clearance_m": math.nan,
+                }
+            },
+            "not finite",
         ),
     ],
 )

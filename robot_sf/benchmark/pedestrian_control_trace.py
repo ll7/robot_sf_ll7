@@ -69,6 +69,9 @@ def attach_pedestrian_control_trace(
         robot_positions=robot_positions,
         robot_radius=robot_radius,
         ped_radius=ped_radius,
+        near_field_clearance_threshold_m=scenario.get(
+            "pedestrian_control_trace_near_field_clearance_m", 1.0
+        ),
     )
 
 
@@ -108,6 +111,7 @@ def _build_pedestrian_steps(
     robot_pos: np.ndarray | None,
     robot_rad: float,
     ped_rad: float,
+    near_field_clearance_threshold_m: float,
     dt_value: float,
     simulator_index: int,
 ) -> list[dict[str, Any]]:
@@ -148,6 +152,9 @@ def _build_pedestrian_steps(
                 clearance,
             )
             payload["clearance_m"] = clearance
+            payload["near_field_exposure_s"] = (
+                dt_value if clearance <= near_field_clearance_threshold_m else 0.0
+            )
         if forces is not None:
             force = forces[step]
             force_norm = float(np.linalg.norm(force))
@@ -176,6 +183,7 @@ def build_pedestrian_control_trace(
     robot_positions: np.ndarray | None = None,
     robot_radius: float = 0.0,
     ped_radius: float = 0.0,
+    near_field_clearance_threshold_m: float | None = None,
 ) -> dict[str, Any]:
     """Build a finite, per-pedestrian control trace grouped by simulator pedestrian index.
 
@@ -189,6 +197,17 @@ def build_pedestrian_control_trace(
     dt_value = require_finite_scalar("pedestrian_control_trace.dt", dt)
     if dt_value <= 0.0:
         raise ValueError("pedestrian_control_trace.dt must be positive")
+    configured_near_field_threshold = (
+        scenario.get("pedestrian_control_trace_near_field_clearance_m", 1.0)
+        if near_field_clearance_threshold_m is None
+        else near_field_clearance_threshold_m
+    )
+    near_field_threshold = require_finite_scalar(
+        "pedestrian_control_trace.near_field_clearance_threshold_m",
+        configured_near_field_threshold,
+    )
+    if near_field_threshold < 0.0:
+        raise ValueError("near_field_clearance_threshold_m must be non-negative")
 
     positions = require_finite_array("pedestrian_control_trace.ped_positions", ped_positions)
     if positions.ndim != 3 or positions.shape[2] != 2:
@@ -223,6 +242,7 @@ def build_pedestrian_control_trace(
             robot_pos=robot_pos,
             robot_rad=robot_rad,
             ped_rad=ped_rad,
+            near_field_clearance_threshold_m=near_field_threshold,
             dt_value=dt_value,
             simulator_index=simulator_index,
         )
@@ -248,6 +268,7 @@ def build_pedestrian_control_trace(
         "archetype_source": archetype_source,
         "pedestrian_count": pedestrian_count,
         "step_count": step_count,
+        "near_field_clearance_threshold_m": near_field_threshold,
         "pedestrians": pedestrians,
     }
 

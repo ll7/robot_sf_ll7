@@ -1446,15 +1446,7 @@ def test_sampler_comparison_synthetic_smoke(tmp_path: Path) -> None:
     assert {
         json.loads(Path(row.manifest_path).read_text(encoding="utf-8"))["config"]["objective"]
         for row in rows
-    } == {"worst_case_snqi", "temporal_robustness"}
-
-    with pytest.raises(ValueError, match="objective_names must not contain duplicates"):
-        run_sampler_comparison(
-            config=config,
-            sampler_names=("random",),
-            objective_names=("worst_case_snqi", "worst_case_snqi"),
-            synthetic=True,
-        )
+    } == {"worst_case_snqi"}
 
 
 def test_sampler_comparison_package_b_budget_seed_grid(tmp_path: Path) -> None:
@@ -1600,6 +1592,20 @@ def test_sampler_comparison_multi_objective(tmp_path: Path) -> None:
     assert all(Path(row.manifest_path).exists() for row in rows)
     assert all(row.num_failed_evaluations == 0 for row in rows)
     assert all(row.best_valid_objective is not None for row in rows)
+    assert {
+        row.objective: json.loads(Path(row.manifest_path).read_text(encoding="utf-8"))["config"][
+            "objective"
+        ]
+        for row in rows
+    } == {"worst_case_snqi": "worst_case_snqi", "temporal_robustness": "temporal_robustness"}
+
+    with pytest.raises(ValueError, match="objective_names must not contain duplicates"):
+        run_sampler_comparison(
+            config=config,
+            sampler_names=("random",),
+            objective_names=("worst_case_snqi", "worst_case_snqi"),
+            synthetic=True,
+        )
 
 
 def test_invalid_optimizer_proposals_are_rejected_before_evaluation(tmp_path: Path) -> None:

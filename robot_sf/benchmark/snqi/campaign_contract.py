@@ -158,6 +158,38 @@ def _is_finite(value: Any) -> bool:
         return False
 
 
+# SNQI contract enforcement levels that keep a contract failure fatal (exit-impacting).
+# Any other enforcement level (notably "warn") is soft and must not change the exit code.
+_HARD_SNQI_ENFORCEMENT_LEVELS = {"error", "enforce"}
+
+
+def soft_contract_warning_active(enforcement: str, contract_status: str) -> bool:
+    """Return whether a contract result must surface as a SOFT, non-fatal warning.
+
+    Under ``snqi_contract.enforcement == "warn"`` a contract ``status`` of ``"warn"``
+    or ``"fail"`` is reported as a soft contract warning: it is recorded in the
+    campaign summary (``warnings[]`` plus a top-level ``soft_contract_warning: true``)
+    but must NOT change the process exit code, and the campaign still counts as
+    ``benchmark_success`` when all planner rows succeeded.
+
+    Hard enforcement levels (``error`` / ``enforce``) are intentionally NOT soft:
+    a contract ``fail`` under those levels stays fatal (see issue #5240).
+
+    Args:
+        enforcement: Resolved ``snqi_contract.enforcement`` value (e.g. ``"warn"``,
+            ``"error"``, ``"enforce"``).
+        contract_status: Resolved contract ``status`` (``"pass"`` / ``"warn"`` / ``"fail"``).
+
+    Returns:
+        ``True`` when the result is a soft, non-fatal contract warning.
+    """
+    normalized_enforcement = str(enforcement or "").strip().lower()
+    normalized_status = str(contract_status or "").strip().lower()
+    if normalized_enforcement in _HARD_SNQI_ENFORCEMENT_LEVELS:
+        return False
+    return normalized_enforcement == "warn" and normalized_status in {"warn", "fail"}
+
+
 def _quantile(values: Sequence[float], q: float) -> float:
     """Compute an interpolated quantile without a NumPy dependency.
 
@@ -923,5 +955,6 @@ __all__ = [
     "evaluate_snqi_contract",
     "resolve_weight_mapping",
     "sanitize_baseline_stats",
+    "soft_contract_warning_active",
     "spearman_correlation",
 ]

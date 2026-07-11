@@ -6,8 +6,9 @@ arms to prevent VRAM leaks during long-running multi-arm campaigns.
 
 from __future__ import annotations
 
+import gc
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -220,6 +221,169 @@ class TestCampaignMultiArmMemoryRegression:
             "diff_drive",
             "holonomic",
         ]
+
+
+class TestGcCollectAlwaysRunsBetweenArms:
+    """Regression tests for gc.collect() always running between arms (issue #4826).
+
+    Before this fix, gc.collect() was only called inside the CUDA block, so CPU-only
+    runs (no GPU, or torch not installed) never triggered garbage collection between
+    arms. This allows Python-level references to model weights, replay buffers, and
+    env wrappers to accumulate across arms and grow RSS monotonically.
+    """
+
+    def test_gc_collect_called_without_torch(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """gc.collect() runs even when torch is not installed (issue #4826)."""
+        monkeypatch.delitem(sys.modules, "torch", raising=False)
+
+        with patch.object(gc, "collect", wraps=gc.collect) as mock_gc:
+            _cleanup_gpu_memory_between_arms(planner_key="p", kinematics="k")
+            mock_gc.assert_called_once()
+
+    def test_gc_collect_called_with_torch_cpu_only(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """gc.collect() runs when torch is available but CUDA is not (CPU-only cluster node)."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = False
+        monkeypatch.setitem(sys.modules, "torch", mock_torch)
+
+        with patch.object(gc, "collect", wraps=gc.collect) as mock_gc:
+            _cleanup_gpu_memory_between_arms(planner_key="p", kinematics="k")
+            mock_gc.assert_called_once()
+
+    def test_gc_collect_called_before_cuda_empty_cache(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """gc.collect() runs before CUDA empty_cache to release Python refs first."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.max_memory_allocated.return_value = 0
+        mock_torch.cuda.memory_allocated.side_effect = [0, 0]
+        mock_torch.cuda.memory_reserved.side_effect = [0, 0]
+        monkeypatch.setitem(sys.modules, "torch", mock_torch)
+
+        call_order: list[str] = []
+        original_gc_collect = gc.collect
+
+        def tracking_gc_collect(*args, **kwargs):
+            call_order.append("gc.collect")
+            return original_gc_collect(*args, **kwargs)
+
+        def tracking_empty_cache():
+            call_order.append("empty_cache")
+
+        mock_torch.cuda.empty_cache = tracking_empty_cache
+
+        with patch.object(gc, "collect", side_effect=tracking_gc_collect):
+            _cleanup_gpu_memory_between_arms(planner_key="p", kinematics="k")
+
+        assert call_order.index("gc.collect") < call_order.index("empty_cache"), (
+            "gc.collect() must run before cuda.empty_cache() to release Python object refs first"
+        )
+
+
+class TestCleanupRunsInFinallyBlock:
+    """Regression tests for cleanup running in try/finally (issue #4826).
+
+    The in-process arm loop wraps each arm execution in try/finally so that
+    _cleanup_gpu_memory_between_arms is called even when _run_campaign_planner_variant
+    raises an unexpected exception. Without try/finally, a crashing arm leaves its
+    CUDA allocations unreleased for all subsequent arms.
+    """
+
+    def test_cleanup_called_after_successful_arm(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        """Cleanup is called once per arm on success."""
+        cleanup_calls: list[tuple[str, str]] = []
+
+        def fake_variant(context, *, planner, kinematics, active_observation_mode):
+            return _CampaignPlannerVariantResult(
+                run_entries=[{"planner": {"key": planner.key}}],
+                planner_rows=[],
+                warnings=[],
+                seed_variability_records=[],
+                stop_requested=False,
+            )
+
+        def fake_cleanup(*, planner_key, kinematics):
+            cleanup_calls.append((planner_key, kinematics))
+            return {"planner_key": planner_key, "kinematics": kinematics}
+
+        monkeypatch.setattr(campaign_mod, "_run_campaign_planner_variant", fake_variant)
+        monkeypatch.setattr(campaign_mod, "_cleanup_gpu_memory_between_arms", fake_cleanup)
+
+        cfg = CampaignConfig(
+            name="test",
+            scenario_matrix_path=tmp_path / "scenarios.yaml",
+            planners=(
+                PlannerSpec(key="plan_a", algo="orca"),
+                PlannerSpec(key="plan_b", algo="orca"),
+            ),
+            kinematics_matrix=("diff_drive",),
+        )
+        deps = _CampaignRuntimeDependencies(
+            prepare_campaign_preflight=lambda *a, **kw: {},
+            run_batch=lambda *a, **kw: {},
+            compute_aggregates_with_ci=lambda *a, **kw: {},
+            export_publication_bundle=lambda *a, **kw: None,
+        )
+
+        campaign_mod._run_campaign_planner_matrix(
+            cfg=cfg,
+            scenarios=[],
+            snqi_weights=None,
+            snqi_baseline=None,
+            runs_dir=tmp_path,
+            dependencies=deps,
+        )
+
+        assert cleanup_calls == [("plan_a", "diff_drive"), ("plan_b", "diff_drive")], (
+            "cleanup must be called once per arm in the correct order"
+        )
+
+    def test_cleanup_called_even_when_arm_raises(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        """Cleanup runs via try/finally even when _run_campaign_planner_variant raises."""
+        cleanup_was_called = []
+
+        def exploding_variant(context, *, planner, kinematics, active_observation_mode):
+            raise RuntimeError("unexpected arm failure")
+
+        def fake_cleanup(*, planner_key, kinematics):
+            cleanup_was_called.append((planner_key, kinematics))
+            return {"planner_key": planner_key, "kinematics": kinematics}
+
+        monkeypatch.setattr(campaign_mod, "_run_campaign_planner_variant", exploding_variant)
+        monkeypatch.setattr(campaign_mod, "_cleanup_gpu_memory_between_arms", fake_cleanup)
+
+        cfg = CampaignConfig(
+            name="test",
+            scenario_matrix_path=tmp_path / "scenarios.yaml",
+            planners=(PlannerSpec(key="plan_a", algo="orca"),),
+            kinematics_matrix=("diff_drive",),
+        )
+        deps = _CampaignRuntimeDependencies(
+            prepare_campaign_preflight=lambda *a, **kw: {},
+            run_batch=lambda *a, **kw: {},
+            compute_aggregates_with_ci=lambda *a, **kw: {},
+            export_publication_bundle=lambda *a, **kw: None,
+        )
+
+        with pytest.raises(RuntimeError, match="unexpected arm failure"):
+            campaign_mod._run_campaign_planner_matrix(
+                cfg=cfg,
+                scenarios=[],
+                snqi_weights=None,
+                snqi_baseline=None,
+                runs_dir=tmp_path,
+                dependencies=deps,
+            )
+
+        assert len(cleanup_was_called) == 1, (
+            "cleanup must run exactly once via finally block even when the arm raises"
+        )
+        assert cleanup_was_called[0] == ("plan_a", "diff_drive")
 
 
 def test_pytorch_alloc_conf_set_in_slurm_env() -> None:

@@ -52,11 +52,11 @@ def test_issue_5262_evidence_rows_match_the_bounded_negative_result() -> None:
     with (_EVIDENCE_DIR / "dwa_config_sensitivity_per_cell_rows.csv").open(
         encoding="utf-8", newline=""
     ) as handle:
-        cells = list(csv.DictReader(handle))
+        cells = list(csv.DictReader(line for line in handle if not line.startswith("#")))
     with (_EVIDENCE_DIR / "dwa_config_sensitivity_episode_rows.csv").open(
         encoding="utf-8", newline=""
     ) as handle:
-        episodes = list(csv.DictReader(handle))
+        episodes = list(csv.DictReader(line for line in handle if not line.startswith("#")))
 
     assert len(cells) == 9
     assert len(episodes) == 27

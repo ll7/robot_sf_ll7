@@ -1,3 +1,5 @@
+# AI-GENERATED NEEDS-REVIEW
+# distance_convention: center_center
 config_id,scenario_id,archetype,seeds,episodes,route_complete,timeouts,collisions,median_steps,config_sha256_16,max_linear_speed,max_angular_speed,max_linear_acceleration,max_angular_acceleration,goal_tolerance,heading_weight,clearance_weight,velocity_weight,progress_weight
 canonical,classic_bottleneck_medium,bottleneck,131;132;133,3,0,3,0,100,85fe7a8764671c83,1.0,1.2,0.8,1.5,0.25,0.8,1.2,0.25,1.0
 canonical,classic_cross_trap_high,cross_trap,101;102;103,3,0,2,1,100,85fe7a8764671c83,1.0,1.2,0.8,1.5,0.25,0.8,1.2,0.25,1.0

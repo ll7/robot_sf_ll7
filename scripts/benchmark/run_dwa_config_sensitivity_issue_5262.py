@@ -223,11 +223,19 @@ def cell_rows(
     return result
 
 
-def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+def _write_csv(
+    path: Path,
+    rows: list[dict[str, Any]],
+    *,
+    distance_convention: str | None = None,
+) -> None:
     """Write homogeneous rows as a deterministic CSV artifact."""
     if not rows:
         raise ValueError(f"cannot write empty CSV: {path}")
     with path.open("w", encoding="utf-8", newline="") as handle:
+        handle.write("# AI-GENERATED NEEDS-REVIEW\n")
+        if distance_convention is not None:
+            handle.write(f"# distance_convention: {distance_convention}\n")
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
@@ -275,7 +283,11 @@ def run_campaign(manifest: dict[str, Any], out_dir: Path) -> dict[str, Any]:
     all_rows.sort(key=lambda row: (row["config_id"], row["scenario_id"], row["seed"]))
     cells = cell_rows(all_rows, manifest, configs)
     _write_csv(out_dir / "dwa_config_sensitivity_episode_rows.csv", all_rows)
-    _write_csv(out_dir / "dwa_config_sensitivity_per_cell_rows.csv", cells)
+    _write_csv(
+        out_dir / "dwa_config_sensitivity_per_cell_rows.csv",
+        cells,
+        distance_convention="center_center",
+    )
     report = {
         "schema_version": manifest["schema_version"],
         "issue": manifest["issue"],

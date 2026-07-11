@@ -6,7 +6,7 @@
     "ModuleNotFoundError"
   ],
   "spelling_key": "Caught exception type names, sorted and joined by '+'. The 'as <alias>' name is intentionally NOT part of the key.",
-  "total_guards": 101,
+  "total_guards": 102,
   "spellings": {
     "AttributeError+ImportError": {
       "count_ceiling": 2,
@@ -169,12 +169,13 @@
       ]
     },
     "ImportError+OSError": {
-      "count_ceiling": 4,
+      "count_ceiling": 5,
       "has_as_count": 1,
       "pragma_no_cover_count": 2,
       "blessed": true,
-      "note": "Blessed broad catch: native-lib / filesystem load may raise OSError.",
+      "note": "Blessed broad catch: native-lib / filesystem load may raise OSError. campaign_runtime_preflight.py is a deliberate import PROBE (issue #5300): it exists to catch and report arm-dependency import failures with a remediation message, so try_import (which discards the exception) is the wrong tool there.",
       "samples": [
+        "robot_sf/benchmark/campaign_runtime_preflight.py:106",
         "robot_sf/benchmark/cli.py:3198",
         "robot_sf/benchmark/cli.py:3232",
         "robot_sf/benchmark/full_classic/visual_deps.py:45",

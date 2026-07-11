@@ -226,17 +226,18 @@ def test_in_process_and_subprocess_arms_execute_identical_episode_set(tmp_path: 
     on Slurm jobs 13372/13373).
     """
     config_path = _write_parity_campaign_config(tmp_path)
-    cfg = load_campaign_config(config_path)
-    expected_arms = _arm_keys_from_config(cfg)
+    cfg_in_process = load_campaign_config(config_path)
+    expected_arms = _arm_keys_from_config(cfg_in_process)
     assert len(expected_arms) == 2, (
         f"Parity test expects a 2-arm campaign, got arms={expected_arms}"
     )
 
     in_process_result = _run_campaign_for_arm_isolation(
-        cfg, output_root=tmp_path / "in_process", arm_isolation="in_process"
+        cfg_in_process, output_root=tmp_path / "in_process", arm_isolation="in_process"
     )
+    cfg_subprocess = load_campaign_config(config_path)
     subprocess_result = _run_campaign_for_arm_isolation(
-        cfg, output_root=tmp_path / "subprocess", arm_isolation="subprocess"
+        cfg_subprocess, output_root=tmp_path / "subprocess", arm_isolation="subprocess"
     )
     in_process_root = Path(in_process_result["campaign_root"])
     subprocess_root = Path(subprocess_result["campaign_root"])
@@ -269,6 +270,12 @@ def test_in_process_and_subprocess_arms_execute_identical_episode_set(tmp_path: 
         )
 
         # Identical episode counts and resolved_seeds in matrix_summary.json.
+        assert arm in in_matrix, (
+            f"arm '{arm}' missing from in_process matrix summary; available={list(in_matrix)}"
+        )
+        assert arm in sub_matrix, (
+            f"arm '{arm}' missing from subprocess matrix summary; available={list(sub_matrix)}"
+        )
         in_row = in_matrix[arm]
         sub_row = sub_matrix[arm]
         assert in_row["resolved_seeds"] == sub_row["resolved_seeds"], (

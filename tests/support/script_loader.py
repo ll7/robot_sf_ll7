@@ -39,6 +39,7 @@ use this helper from the start.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import sys
 from typing import TYPE_CHECKING
@@ -54,15 +55,17 @@ def _module_name_from_path(path: Path | str, explicit_name: str | None) -> str:
     The name only has to be unique within :data:`sys.modules` for the loader to
     behave; callers may supply an explicit name to keep historical test module
     names stable during gradual migration. The default uses ``{parent}.{stem}``
-    of the resolved path, which is deterministic for a given path and short
-    enough to read in tracebacks while staying unique across distinct scripts.
+    plus a short digest of the resolved path. That remains readable in
+    tracebacks while avoiding collisions between distinct scripts that share a
+    parent directory name and stem.
     """
     if explicit_name:
         return explicit_name
     import pathlib
 
     p = pathlib.Path(str(path)).resolve()
-    return f"{p.parent.name}.{p.stem}"
+    path_digest = hashlib.sha256(str(p).encode()).hexdigest()[:12]
+    return f"{p.parent.name}.{p.stem}_{path_digest}"
 
 
 def load_script_module(

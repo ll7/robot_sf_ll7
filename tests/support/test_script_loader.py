@@ -150,6 +150,28 @@ def test_load_script_module_default_name_is_stable(tmp_path: Path) -> None:
         sys.modules.pop(module.__name__, None)
 
 
+def test_load_script_module_default_name_distinguishes_same_named_scripts(tmp_path: Path) -> None:
+    """Distinct scripts with the same parent name and stem cannot collide."""
+    left = tmp_path / "left" / "scripts" / "shared.py"
+    right = tmp_path / "right" / "scripts" / "shared.py"
+    left.parent.mkdir(parents=True)
+    right.parent.mkdir(parents=True)
+    left.write_text("VALUE = 'left'\n")
+    right.write_text("VALUE = 'right'\n")
+
+    left_module = load_script_module(left)
+    right_module = load_script_module(right)
+    try:
+        assert left_module.__name__ != right_module.__name__
+        assert sys.modules[left_module.__name__] is left_module
+        assert sys.modules[right_module.__name__] is right_module
+        assert left_module.VALUE == "left"
+        assert right_module.VALUE == "right"
+    finally:
+        sys.modules.pop(left_module.__name__, None)
+        sys.modules.pop(right_module.__name__, None)
+
+
 def test_load_script_module_missing_path_raises(tmp_path: Path) -> None:
     """A missing script path fails fast with a clear FileNotFoundError."""
     missing = tmp_path / "does_not_exist.py"

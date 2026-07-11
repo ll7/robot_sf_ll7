@@ -1,0 +1,49 @@
+{
+  "children": [
+    {
+      "filename": "paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30__arm_scenario_adaptive_hybrid_orca_v1.yaml",
+      "planner_keys": [
+        "scenario_adaptive_hybrid_orca_v1"
+      ],
+      "sha256": "bdb366962fc181cadecc123e1e6f89dc974b5ae5912ee12f168970642e2801dd"
+    },
+    {
+      "filename": "paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30__arm_scenario_adaptive_hybrid_orca_v2_collision_guard.yaml",
+      "planner_keys": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard"
+      ],
+      "sha256": "6e522e1004956a4e1cf659d5dc2a71d3fea3d33e9c036a5b94312d0d88a5a691"
+    },
+    {
+      "filename": "paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30__arm_hybrid_rule_v3_fast_progress_static_escape.yaml",
+      "planner_keys": [
+        "hybrid_rule_v3_fast_progress_static_escape"
+      ],
+      "sha256": "8b3d3da8c3ac774b119ce4a579f2eb73a8e2fc4d522629100e659dc4798d5b4f"
+    },
+    {
+      "filename": "paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30__arm_hybrid_rule_v3_fast_progress_static_escape_continuous.yaml",
+      "planner_keys": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous"
+      ],
+      "sha256": "ecf439f3148a30bb1e1d22005d09de36dbc1cf042fe01c51490bbcab167fe883"
+    },
+    {
+      "filename": "paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30__arm_orca.yaml",
+      "planner_keys": [
+        "orca"
+      ],
+      "sha256": "c89cebd1885ffc2cd065df3866c475a7515f56720100a9d63d9cb4525f2fd246"
+    },
+    {
+      "filename": "paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30__arm_ppo.yaml",
+      "planner_keys": [
+        "ppo"
+      ],
+      "sha256": "ad6b7ad3239325984d7b9cd880e9164688e30c368cf9faa98f9c91202c8b6667"
+    }
+  ],
+  "source_config": "configs/benchmarks/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30.yaml",
+  "source_sha256": "82eee7a1dca241df9bec65e18072f2dd3c46c86489b3b55816d2504af88896b6",
+  "split_mode": "per_planner"
+}

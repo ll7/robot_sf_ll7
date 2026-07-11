@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import yaml
 from loguru import logger
 
 from robot_sf.errors import RobotSfError
@@ -184,9 +185,7 @@ def check_campaign_scenario_maps_preflight(
                         FileNotFoundError("map file could not be resolved or loaded"),
                     )
                 )
-        # Map parser backends do not expose one stable error hierarchy. Preserve every failed
-        # prepared scenario in the fail-closed aggregate instead of stopping at the first parser.
-        except Exception as exc:  # noqa: BLE001
+        except (OSError, RuntimeError, TypeError, ValueError, AssertionError, yaml.YAMLError) as exc:
             failures.append((scenario_name, map_file, exc))
 
     if failures:

@@ -2,6 +2,7 @@
   "counts": {
     "by_path": {
       "robot_sf/benchmark/camera_ready/campaign.py": 1,
+      "robot_sf/benchmark/camera_ready/resource_lifecycle.py": 2,
       "robot_sf/benchmark/doctor.py": 1,
       "robot_sf/benchmark/forecast_lane_inventory.py": 1,
       "robot_sf/benchmark/helper_catalog.py": 2,
@@ -101,7 +102,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 170
+    "total": 172
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -110,9 +111,27 @@
       "context": "_execute_campaign_planner_batch",
       "fingerprint": "ba3cb2a07fb0c63c",
       "handler": "Exception",
-      "lineno": 374,
+      "lineno": 401,
       "path": "robot_sf/benchmark/camera_ready/campaign.py",
       "source": "except Exception as exc:"
+    },
+    {
+      "col_offset": 4,
+      "context": "_main_subprocess_worker",
+      "fingerprint": "f52dd654553d63c5",
+      "handler": "Exception",
+      "lineno": 378,
+      "path": "robot_sf/benchmark/camera_ready/resource_lifecycle.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - worker must always emit structured output (#4826)"
+    },
+    {
+      "col_offset": 12,
+      "context": "_main_subprocess_worker",
+      "fingerprint": "a5a4fb83bfe617b4",
+      "handler": "Exception",
+      "lineno": 391,
+      "path": "robot_sf/benchmark/camera_ready/resource_lifecycle.py",
+      "source": "except Exception:  # noqa: BLE001 - cleanup must never mask the original error"
     },
     {
       "col_offset": 4,
@@ -164,7 +183,7 @@
       "context": "_preflight_policy",
       "fingerprint": "9d6addfc4094f787",
       "handler": "Exception",
-      "lineno": 845,
+      "lineno": 849,
       "path": "robot_sf/benchmark/map_runner.py",
       "source": "except Exception as exc:"
     },
@@ -173,7 +192,7 @@
       "context": "_preflight_policy",
       "fingerprint": "3f6860893c2f6ced",
       "handler": "Exception",
-      "lineno": 875,
+      "lineno": 879,
       "path": "robot_sf/benchmark/map_runner.py",
       "source": "except Exception as fallback_exc:"
     },
@@ -308,7 +327,7 @@
       "context": "recompute_snqi_weights",
       "fingerprint": "01ff629114737f13",
       "handler": "Exception",
-      "lineno": 280,
+      "lineno": 314,
       "path": "robot_sf/benchmark/snqi/compute.py",
       "source": "except Exception:"
     },
@@ -497,7 +516,7 @@
       "context": "main",
       "fingerprint": "589c3978b3d2d36c",
       "handler": "Exception",
-      "lineno": 296,
+      "lineno": 325,
       "path": "scripts/classic_benchmark_full.py",
       "source": "except Exception:"
     },
@@ -533,7 +552,7 @@
       "context": "main",
       "fingerprint": "54d81d337d560e63",
       "handler": "Exception",
-      "lineno": 523,
+      "lineno": 533,
       "path": "scripts/dev/compact_ci_snapshot.py",
       "source": "except Exception as exc:"
     },
@@ -560,7 +579,7 @@
       "context": "_build_drift_sample",
       "fingerprint": "5fe2ee87d360b97b",
       "handler": "Exception",
-      "lineno": 163,
+      "lineno": 178,
       "path": "scripts/dev/watch_pr_ci_status.py",
       "source": "except Exception as exc:"
     },
@@ -1262,7 +1281,7 @@
       "context": "_init_wandb",
       "fingerprint": "c69862f1d86e1c9c",
       "handler": "Exception",
-      "lineno": 1486,
+      "lineno": 1509,
       "path": "scripts/training/train_ppo.py",
       "source": "except Exception as exc:  # pragma: no cover - optional dependency"
     },
@@ -1271,7 +1290,7 @@
       "context": "_collect_scenario_coverage",
       "fingerprint": "3b3a0ef3ccea6c5c",
       "handler": "Exception",
-      "lineno": 1891,
+      "lineno": 1942,
       "path": "scripts/training/train_ppo.py",
       "source": "except Exception:  # pragma: no cover - best effort across vec env types"
     },
@@ -1280,7 +1299,7 @@
       "context": "_upload_wandb_best_checkpoint_artifact",
       "fingerprint": "a37b06c9172d6e1c",
       "handler": "Exception",
-      "lineno": 2237,
+      "lineno": 2292,
       "path": "scripts/training/train_ppo.py",
       "source": "except Exception as exc:  # pragma: no cover - optional dependency"
     },
@@ -1496,7 +1515,7 @@
       "context": "_maybe_run_perf_tests",
       "fingerprint": "c53f52389d7b6f6c",
       "handler": "Exception",
-      "lineno": 250,
+      "lineno": 248,
       "path": "scripts/validation/run_examples_smoke.py",
       "source": "except Exception as exc:"
     },

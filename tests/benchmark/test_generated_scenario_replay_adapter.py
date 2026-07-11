@@ -1,0 +1,257 @@
+"""Contract tests for issue #5203 generated critical-segment replay materialization."""
+
+from __future__ import annotations
+
+import json
+import runpy
+import sys
+from copy import deepcopy
+from pathlib import Path
+
+import pytest
+import yaml
+
+from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.scenario_generation import (
+    dump_generated_scenario_yaml,
+    extract_critical_segment,
+    generated_replay_status_entry,
+    materialize_generated_scenario,
+)
+from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _entry() -> dict:
+    """Return a safely in-bounds critical segment with a stable pedestrian roster."""
+
+    return extract_critical_segment(
+        {
+            "episode_id": "generated-replay-fixture",
+            "seed": 5203,
+            "source_map": str(
+                Path(__file__).resolve().parents[2] / "maps/svg_maps/classic_crossing.svg"
+            ),
+            "steps": [
+                {
+                    "time_s": 0.0,
+                    "robot": {"position": [5.0, 5.0]},
+                    "pedestrians": [{"position": [10.0, 10.0]}],
+                },
+                {
+                    "time_s": 1.0,
+                    "robot": {"position": [6.0, 5.0]},
+                    "pedestrians": [{"position": [9.5, 10.0]}],
+                },
+                {
+                    "time_s": 2.0,
+                    "robot": {"position": [7.0, 5.0]},
+                    "pedestrians": [{"position": [9.0, 10.0]}],
+                },
+            ],
+        },
+        pre_margin_s=1.0,
+        post_margin_s=1.0,
+    )
+
+
+def test_materializer_writes_deterministic_generated_only_loader_scenario(tmp_path: Path) -> None:
+    """A representable entry becomes stable YAML that pins source-map actor state."""
+
+    entry = _entry()
+    result = materialize_generated_scenario(entry, max_episode_steps=3)
+
+    assert result.status == "loads_only"
+    assert result.warnings == ()
+    assert dump_generated_scenario_yaml(result) == dump_generated_scenario_yaml(result)
+    scenario_path = tmp_path / "generated-replay.yaml"
+    scenario_path.write_text(dump_generated_scenario_yaml(result), encoding="utf-8")
+    scenario = load_scenarios(scenario_path)[0]
+    config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+    map_def = next(iter(config.map_pool.map_defs.values()))
+
+    assert scenario["metadata"]["required_manual_review"] is True
+    assert scenario["metadata"]["benchmark_evidence"] is False
+    assert map_def.robot_routes[0].waypoints == [(6.0, 5.0), (7.0, 5.0)]
+    assert map_def.robot_spawn_zones == [((6.0, 5.0), (6.0, 5.0), (6.0, 5.0))]
+    assert map_def.single_pedestrians[0].start == (9.5, 10.0)
+    assert map_def.single_pedestrians[0].trajectory == [
+        (9.5, 10.0),
+        (9.0, 10.0),
+    ]
+
+
+def test_materializer_fails_closed_for_a_dynamic_pedestrian_roster() -> None:
+    """Actor insertion/removal cannot be silently converted into a replay route."""
+
+    entry = _entry()
+    entry["segment"]["trace_frames"][1]["pedestrians"].append({"position": [8.0, 8.0]})
+
+    result = materialize_generated_scenario(entry)
+    status_entry = generated_replay_status_entry(entry, result)
+
+    assert result.scenario_document is None
+    assert result.status == "not_representable_yet"
+    assert result.warnings == ("replay_gap: pedestrian count changes at trace frame 1 (1 -> 2)",)
+    assert status_entry["replay"] == {
+        "schema_version": "generated-scenario-replay.v1",
+        "source_seed": 5203,
+        "replay_contract": "source_episode_seed_pinned.v1",
+        "status": "not_representable_yet",
+        "warnings": ["replay_gap: pedestrian count changes at trace frame 1 (1 -> 2)"],
+    }
+
+
+def test_materialized_yaml_marks_the_generated_hypothesis_as_manual_review_only(
+    tmp_path: Path,
+) -> None:
+    """The generated YAML keeps its non-benchmark manual-review boundary explicit."""
+
+    result = materialize_generated_scenario(_entry())
+    scenario_path = tmp_path / "generated.yaml"
+    scenario_path.write_text(dump_generated_scenario_yaml(result), encoding="utf-8")
+    loaded = load_scenarios(scenario_path)
+    assert loaded[0]["metadata"]["benchmark_evidence"] is False
+    assert loaded[0]["metadata"]["required_manual_review"] is True
+
+
+def test_loader_fails_closed_for_an_unknown_generated_replay_field(tmp_path: Path) -> None:
+    """Generated-only runtime payloads reject undeclared semantics before simulation."""
+
+    result = materialize_generated_scenario(_entry())
+    scenario_path = tmp_path / "generated.yaml"
+    scenario_path.write_text(dump_generated_scenario_yaml(result), encoding="utf-8")
+    scenario = load_scenarios(scenario_path)[0]
+    scenario["generated_replay"]["undeclared_runtime_behavior"] = True
+
+    with pytest.raises(ValueError, match="generated_replay has unknown keys"):
+        build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+
+
+def test_loader_fails_closed_for_nonfinite_generated_replay_coordinates(tmp_path: Path) -> None:
+    """Generated replay data cannot inject non-finite positions into the map runtime."""
+
+    result = materialize_generated_scenario(_entry())
+    scenario_path = tmp_path / "generated.yaml"
+    scenario_path.write_text(dump_generated_scenario_yaml(result), encoding="utf-8")
+    scenario = load_scenarios(scenario_path)[0]
+    scenario["generated_replay"] = deepcopy(scenario["generated_replay"])
+    scenario["generated_replay"]["robot"]["start"] = [float("nan"), 5.0]
+
+    with pytest.raises(ValueError, match="must contain finite coordinates"):
+        build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+
+
+def test_materialized_yaml_executes_one_bounded_cpu_map_runner_job(tmp_path: Path) -> None:
+    """The production map runner executes a materialized generated-only scenario."""
+
+    result = materialize_generated_scenario(_entry(), max_episode_steps=3)
+    scenario_path = tmp_path / "generated.yaml"
+    scenario_path.write_text(dump_generated_scenario_yaml(result), encoding="utf-8")
+    episodes_path = tmp_path / "episodes.jsonl"
+
+    summary = run_map_batch(
+        scenario_path,
+        episodes_path,
+        REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json",
+        horizon=3,
+        dt=0.1,
+        record_forces=False,
+        algo="goal",
+        workers=1,
+        resume=False,
+    )
+
+    assert summary["successful_jobs"] == 1
+    assert summary["failed_jobs"] == 0
+    assert episodes_path.is_file()
+
+
+def test_materialize_cli_syncs_replay_validated_status_into_yaml(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A successful optional smoke synchronizes the scenario and sidecar statuses."""
+
+    entry_path = tmp_path / "entry.json"
+    output_path = tmp_path / "generated.yaml"
+    status_path = tmp_path / "status.json"
+    entry_path.write_text(json.dumps(_entry()), encoding="utf-8")
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.run_map_batch",
+        lambda *args, **kwargs: {"successful_jobs": 1, "failed_jobs": 0},
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "materialize_generated_scenario.py",
+            "--catalog-entry-json",
+            str(entry_path),
+            "--output",
+            str(output_path),
+            "--status-output",
+            str(status_path),
+            "--replay-smoke-output",
+            str(tmp_path / "episodes.jsonl"),
+        ],
+    )
+
+    assert _materialize_cli_main()() == 0
+    assert _generated_replay_status(output_path) == "replay_validated"
+    assert (
+        json.loads(status_path.read_text(encoding="utf-8"))["replay"]["status"]
+        == "replay_validated"
+    )
+
+
+def test_materialize_cli_records_yaml_smoke_setup_errors(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """YAML setup errors preserve the diagnostic sidecar rather than escaping."""
+
+    entry_path = tmp_path / "entry.json"
+    output_path = tmp_path / "generated.yaml"
+    status_path = tmp_path / "status.json"
+    entry_path.write_text(json.dumps(_entry()), encoding="utf-8")
+
+    def raise_yaml_error(*args: object, **kwargs: object) -> None:
+        raise yaml.YAMLError("malformed generated scenario")
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.run_map_batch", raise_yaml_error)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "materialize_generated_scenario.py",
+            "--catalog-entry-json",
+            str(entry_path),
+            "--output",
+            str(output_path),
+            "--status-output",
+            str(status_path),
+            "--replay-smoke-output",
+            str(tmp_path / "episodes.jsonl"),
+        ],
+    )
+
+    assert _materialize_cli_main()() == 3
+    status = json.loads(status_path.read_text(encoding="utf-8"))["replay"]
+    assert status["status"] == "loads_only"
+    assert status["warnings"] == ["replay_smoke_error: malformed generated scenario"]
+
+
+def _materialize_cli_main() -> object:
+    """Load the standalone CLI without relying on the current working directory."""
+
+    return runpy.run_path(
+        str(REPO_ROOT / "scripts/benchmark/materialize_generated_scenario.py"),
+        run_name="generated_scenario_materializer_test",
+    )["main"]
+
+
+def _generated_replay_status(scenario_path: Path) -> str:
+    """Return the generated-only metadata status from a materialized YAML file."""
+
+    document = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))
+    return document["scenarios"][0]["metadata"]["generated_replay"]["replay_status"]

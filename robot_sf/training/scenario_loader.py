@@ -1239,6 +1239,7 @@ def build_robot_config_from_scenario(
         scenario.get("observation_visibility"),
     )
     _apply_map_pool(config, scenario, scenario_path)
+    _apply_generated_replay_runtime(config, scenario.get("generated_replay"))
     _apply_route_overrides(config, scenario.get("route_overrides_file"), scenario_path)
     _apply_single_pedestrian_overrides(
         config,
@@ -1247,6 +1248,21 @@ def build_robot_config_from_scenario(
     )
     _apply_social_group_overrides(config, scenario.get("social_groups"))
     return config
+
+
+def _apply_generated_replay_runtime(config: RobotSimulationConfig, runtime: object) -> None:
+    """Apply a generated-only trace replay block after its source map is loaded."""
+
+    if runtime is None:
+        return
+    if config.map_pool is None or not config.map_pool.map_defs:
+        raise ValueError("generated_replay requires a successfully loaded source map")
+    from robot_sf.benchmark.scenario_generation.replay_adapter import (  # noqa: PLC0415
+        apply_generated_replay_runtime,
+    )
+
+    map_name, source_map = next(iter(config.map_pool.map_defs.items()))
+    config.map_pool.map_defs[map_name] = apply_generated_replay_runtime(source_map, runtime)
 
 
 def _reject_required_platform_semantic_consumers(scenario: Mapping[str, Any]) -> None:

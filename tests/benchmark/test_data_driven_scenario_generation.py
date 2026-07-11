@@ -252,6 +252,10 @@ def test_pipeline_writes_deterministic_hypothesis_catalog_and_provenance(
     }
     assert all(entry["replay"]["status"] == "not_representable_yet" for entry in catalog["entries"])
     assert all(entry["metadata"]["benchmark_evidence"] is False for entry in catalog["entries"])
+    assert all(
+        entry["source_episode"]["source_map"] == "maps/svg_maps/classic_crossing.svg"
+        for entry in catalog["entries"]
+    )
     assert all(outcome["benchmark_evidence"] is False for outcome in outcomes)
     assert all(outcome["criticality_time_series"] for outcome in outcomes)
     assert len(provenance["entries"]) == 2

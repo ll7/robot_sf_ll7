@@ -38,3 +38,26 @@ never added to release matrices automatically.
 Importance sampling, learned proposals, exact mid-episode scenario-YAML reconstruction,
 criticality-reproduction campaigns, and certification into hand-authored benchmark families require
 separate evidence and review.
+
+## Generated replay review checklist
+
+Before a materialized generated replay can receive a local `certified` verdict, review every entry
+in its catalog for geometry validity (in-bounds states and a non-zero robot route), route
+feasibility, plausible pedestrian count, a critical trace frame matching its recorded clearance,
+and deduplication at the declared threshold. Run the bounded native replay smoke before recording
+the verdict. Point-shaped spawn zones are intentional generated-replay runtime placement, not a
+geometry failure by themselves.
+
+The first reviewed packet is
+[`configs/scenarios/generated/issue_5264_generated_replay_catalog.yaml`](../../configs/scenarios/generated/issue_5264_generated_replay_catalog.yaml).
+Its companion manifest is the canonical review state and can be checked with:
+
+```bash
+uv run python scripts/benchmark/check_generated_replay_review.py \
+  --catalog configs/scenarios/generated/issue_5264_generated_replay_catalog.yaml \
+  --review-manifest configs/scenarios/generated/issue_5264_review_manifest.yaml
+```
+
+`certified` in this packet only means the checklist and bounded replay passed. The entries remain
+generated hypotheses with `benchmark_evidence: false`; they do not enter a frozen suite or make a
+benchmark claim.

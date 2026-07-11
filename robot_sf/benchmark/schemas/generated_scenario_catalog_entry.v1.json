@@ -76,7 +76,17 @@
         "schema_version": {"const": "generated-scenario-provenance.v1"},
         "source_issue": {"const": "#4932"},
         "distiller": {"type": "string", "minLength": 1},
-        "claim_boundary": {"const": "generated scenario hypotheses only"}
+        "claim_boundary": {"const": "generated scenario hypotheses only"},
+        "reviewed": {"type": "boolean"},
+        "review": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["verdict", "reason"],
+          "properties": {
+            "verdict": {"enum": ["certified", "rejected", "needs-fix"]},
+            "reason": {"type": "string", "minLength": 1}
+          }
+        }
       }
     }
   },

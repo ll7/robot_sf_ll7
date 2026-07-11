@@ -4900,6 +4900,12 @@ def test_topology_guided_episode_diagnostics_records_available_candidate_contrac
                     "near_parity_gate_reason": "selected_non_primary_near_parity",
                 },
                 "topology_command_influence": {"selected_hypothesis_id": "masked_cell_5_12"},
+                "topology_candidate_availability": {
+                    "status": "available",
+                    "reason": "valid_candidate_route_geometry",
+                    "outcome": "candidate_available",
+                    "fallback_used": False,
+                },
                 "topology_guided_config": {
                     "diagnostic_only": True,
                     "arbitration_weight": 0.35,
@@ -4924,6 +4930,10 @@ def test_topology_guided_episode_diagnostics_records_available_candidate_contrac
     }
     assert summary["selected_candidate_switch_count"] == 1
     assert summary["topology_command_influence_steps"] == 1
+    assert summary["candidate_availability_status_counts"] == {"available": 1}
+    assert summary["candidate_unavailable_reasons"] == {}
+    assert summary["candidate_outcome_counts"] == {"candidate_available": 1}
+    assert summary["configured_fallback_steps"] == 0
     assert summary["arbitration_weight"] == pytest.approx(0.35)
     assert summary["near_parity_margin"] == pytest.approx(0.05)
     assert summary["near_parity_gate_reason_counts"] == {
@@ -4948,6 +4958,12 @@ def test_topology_guided_episode_diagnostics_preserves_fallback_and_churn_reason
                 },
                 "topology_lane_status": "fallback_only",
                 "topology_fallback_reason": "fewer_than_min_distinct_routes",
+                "topology_candidate_availability": {
+                    "status": "unavailable",
+                    "reason": "topology_route_unavailable",
+                    "outcome": "configured_fallback",
+                    "fallback_used": True,
+                },
                 "topology_guided_config": {
                     "diagnostic_only": True,
                     "fallback_on_no_candidate": True,
@@ -4964,6 +4980,10 @@ def test_topology_guided_episode_diagnostics_preserves_fallback_and_churn_reason
     assert fallback_summary["fallback_steps"] == 1
     assert fallback_summary["no_candidate_reasons"] == {"fewer_than_min_distinct_routes": 1}
     assert fallback_summary["fallback_reasons"] == {"fewer_than_min_distinct_routes": 1}
+    assert fallback_summary["candidate_availability_status_counts"] == {"unavailable": 1}
+    assert fallback_summary["candidate_unavailable_reasons"] == {"topology_route_unavailable": 1}
+    assert fallback_summary["candidate_outcome_counts"] == {"configured_fallback": 1}
+    assert fallback_summary["configured_fallback_steps"] == 1
     assert fallback_summary["route_progress"]["terminal_reason"] == "fallback_only"
 
     churn_summary = _topology_guided_episode_diagnostics(

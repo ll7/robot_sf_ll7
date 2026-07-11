@@ -632,6 +632,36 @@ def _topology_guided_config_metadata(config: TopologyGuidedLocalPolicyConfig) ->
     }
 
 
+def _topology_candidate_fails_closed(
+    config: TopologyGuidedLocalPolicyConfig,
+    *,
+    topology_status: str,
+    candidate_status: str,
+    configured_candidate_fallback: bool,
+) -> bool:
+    """Return whether topology or candidate-source availability requires a safe stop."""
+    if candidate_status == "malformed":
+        return True
+    if topology_status == "not_available" and config.fail_closed_on_missing_inputs:
+        return True
+    if (
+        topology_status == "insufficient_hypotheses"
+        and config.fail_closed_on_insufficient_hypotheses
+    ):
+        return True
+    if (
+        topology_status != "ok"
+        and config.candidate_required
+        and not config.fallback_on_no_candidate
+    ):
+        return True
+    return (
+        topology_status == "ok"
+        and candidate_status == "unavailable"
+        and not configured_candidate_fallback
+    )
+
+
 def _dynamic_window_limit_metadata(
     bounds: tuple[float, float, float, float],
 ) -> dict[str, float]:
@@ -821,6 +851,8 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
         self._selected_hypothesis_counts: Counter[str] = Counter()
         self._last_topology_decision: dict[str, Any] | None = None
         self._last_topology_command_influence: dict[str, Any] | None = None
+        self._last_topology_candidate_availability: dict[str, Any] | None = None
+        self._topology_candidate_availability_counts: Counter[str] = Counter()
         self._recent_primary_selections: deque[tuple[str, float | None]] = deque(
             maxlen=max(int(self.topology_config.primary_route_reuse_penalty_cooldown_steps), 1)
         )
@@ -834,6 +866,8 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
         self._selected_hypothesis_counts = Counter()
         self._last_topology_decision = None
         self._last_topology_command_influence = None
+        self._last_topology_candidate_availability = None
+        self._topology_candidate_availability_counts = Counter()
         self._recent_primary_selections = deque(
             maxlen=max(int(self.topology_config.primary_route_reuse_penalty_cooldown_steps), 1)
         )
@@ -1172,15 +1206,55 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
         bounds: tuple[float, float, float, float],
     ) -> HybridRuleCandidate | None:
         """Return a bounded command that tracks the selected topology hypothesis."""
+        availability = {
+            "schema_version": "topology_candidate_availability.v1",
+            "source": "topology_hypothesis",
+            "status": "unavailable",
+            "reason": "topology_route_unavailable",
+            "candidate_available": False,
+            "fallback_configured": bool(
+                self.topology_config.diagnostic_only
+                and self.topology_config.fallback_on_no_candidate
+            ),
+            "fallback_used": False,
+            "outcome": "candidate_unavailable",
+        }
+        self._last_topology_candidate_availability = availability
         if not bool(self.topology_config.enabled) or not bool(
             self.topology_config.topology_command_enabled
         ):
+            availability.update(
+                status="disabled",
+                reason="topology_command_disabled",
+                outcome="candidate_disabled",
+            )
             return None
         if not isinstance(route_corridor, dict) or route_corridor.get("topology_status") != "ok":
             return None
         waypoint = self._route_point(route_corridor, "route_waypoint_world")
         tangent_heading = self._route_tangent_heading(route_corridor)
         if waypoint is None or tangent_heading is None:
+            waypoint_present = "route_waypoint_world" in route_corridor
+            tangent_inputs_present = any(
+                key in route_corridor
+                for key in (
+                    "route_tangent_heading",
+                    "route_start_world",
+                    "route_next_world",
+                )
+            )
+            malformed = (waypoint_present and waypoint is None) or (
+                tangent_inputs_present and tangent_heading is None
+            )
+            availability.update(
+                status="malformed" if malformed else "unavailable",
+                reason=(
+                    "malformed_candidate_route_geometry"
+                    if malformed
+                    else "missing_candidate_route_geometry"
+                ),
+                outcome="fail_closed" if malformed else "candidate_unavailable",
+            )
             return None
 
         v_min, v_max, w_min, w_max = bounds
@@ -1227,12 +1301,19 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
         )
         linear = float(np.clip(desired_linear, v_min, v_max))
         rollout_sequence = ((float(self.config.rollout_horizon), linear, desired_angular),)
-        return HybridRuleCandidate(
+        candidate = HybridRuleCandidate(
             linear,
             desired_angular,
             "topology_hypothesis",
             rollout_sequence,
         )
+        availability.update(
+            status="available",
+            reason="valid_candidate_route_geometry",
+            candidate_available=True,
+            outcome="candidate_available",
+        )
+        return candidate
 
     def _generate_candidates(
         self,
@@ -1249,6 +1330,7 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             list[HybridRuleCandidate]: De-duplicated local command candidates.
         """
         self._last_topology_command_influence = None
+        self._last_topology_candidate_availability = None
         candidates = super()._generate_candidates(
             state,
             speed_cap,
@@ -1378,6 +1460,29 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             hard_static_clearance=hard_static_clearance,
         )
 
+    def _candidate_availability_after_plan(self) -> tuple[dict[str, Any], str, bool]:
+        """Record the current candidate-source status and configured fallback eligibility.
+
+        Returns:
+            Availability payload, normalized status, and whether diagnostic fallback is configured.
+        """
+        availability = deepcopy(self._last_topology_candidate_availability or {})
+        status = str(availability.get("status", "unknown"))
+        if availability:
+            self._topology_candidate_availability_counts[status] += 1
+        configured_fallback = bool(
+            status == "unavailable" and availability.get("fallback_configured")
+        )
+        return availability, status, configured_fallback
+
+    @staticmethod
+    def _mark_configured_candidate_fallback(
+        availability: dict[str, Any], configured_fallback: bool
+    ) -> None:
+        """Mark an allowed no-candidate path as an explicit configured fallback."""
+        if configured_fallback:
+            availability.update(fallback_used=True, outcome="configured_fallback")
+
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return a command, stopping fail-closed when topology hypotheses are unavailable.
 
@@ -1385,22 +1490,25 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             tuple[float, float]: Selected linear and angular velocity.
         """
         self._last_topology_decision = None
+        self._last_topology_candidate_availability = None
         command = super().plan(observation)
         topology = self._last_topology_decision or {}
         status = str(topology.get("status", "unknown"))
-        fail_closed = (
-            (status == "not_available" and bool(self.topology_config.fail_closed_on_missing_inputs))
-            or (
-                status == "insufficient_hypotheses"
-                and bool(self.topology_config.fail_closed_on_insufficient_hypotheses)
-            )
-            or (
-                status != "ok"
-                and bool(self.topology_config.candidate_required)
-                and not bool(self.topology_config.fallback_on_no_candidate)
-            )
+        (
+            candidate_availability,
+            candidate_status,
+            configured_candidate_fallback,
+        ) = self._candidate_availability_after_plan()
+        fail_closed = _topology_candidate_fails_closed(
+            self.topology_config,
+            topology_status=status,
+            candidate_status=candidate_status,
+            configured_candidate_fallback=configured_candidate_fallback,
         )
         if fail_closed:
+            if candidate_availability:
+                candidate_availability["outcome"] = "fail_closed"
+                self._last_topology_candidate_availability = deepcopy(candidate_availability)
             self._last_command = (0.0, 0.0)
             if self._last_decision:
                 self._last_decision["planner_mode"] = "TOPOLOGY_FAIL_CLOSED"
@@ -1408,7 +1516,12 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
                 self._last_decision["selected_source"] = "topology_fail_closed"
                 self._last_decision["topology_guided"] = topology
                 self._last_decision["topology_lane_status"] = "failed"
+                if candidate_availability:
+                    self._last_decision["topology_candidate_availability"] = candidate_availability
             return (0.0, 0.0)
+        self._mark_configured_candidate_fallback(
+            candidate_availability, configured_candidate_fallback
+        )
         if self._last_decision:
             self._last_decision["topology_guided"] = topology
             self._last_decision["topology_guided_config"] = _topology_guided_config_metadata(
@@ -1418,6 +1531,15 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
                 self._last_decision["topology_lane_status"] = "fallback_only"
                 self._last_decision["topology_fallback_status"] = status
                 self._last_decision["topology_fallback_reason"] = topology.get("reason")
+            elif configured_candidate_fallback:
+                self._last_decision["topology_lane_status"] = "fallback_only"
+                self._last_decision["topology_fallback_status"] = "candidate_unavailable"
+                self._last_decision["topology_fallback_reason"] = candidate_availability.get(
+                    "reason"
+                )
+            if candidate_availability:
+                self._last_decision["topology_candidate_availability"] = candidate_availability
+                self._last_topology_candidate_availability = deepcopy(candidate_availability)
             if self._last_decision.get("selected_source") == "topology_hypothesis":
                 influence = deepcopy(self._last_topology_command_influence or {})
                 influence.update(
@@ -1452,6 +1574,10 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             "near_parity_thresholds": _near_parity_threshold_metadata(self.topology_config),
             "status_counts": dict(sorted(self._topology_status_counts.items())),
             "selected_hypothesis_counts": dict(sorted(self._selected_hypothesis_counts.items())),
+            "candidate_availability_counts": dict(
+                sorted(self._topology_candidate_availability_counts.items())
+            ),
+            "last_candidate_availability": self._last_topology_candidate_availability,
             "last_topology_decision": self._last_topology_decision,
         }
         return diagnostics

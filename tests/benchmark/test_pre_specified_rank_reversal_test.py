@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+import robot_sf.benchmark.heterogeneous_rank_sensitivity as rank_sensitivity
 from robot_sf.benchmark.heterogeneous_rank_sensitivity import (
     RANK_REVERSAL_TEST_SCHEMA,
     pre_specified_rank_reversal_test,
@@ -116,6 +117,28 @@ def test_pre_registration_block_is_declared_before_results() -> None:
     assert pre["mean_matched_arm"] == _HOM
     assert "stable across population compositions" in pre["null_hypothesis"]
     assert "excludes zero in BOTH arms with opposite signs" in pre["decision_rule"]
+
+
+def test_custom_alpha_reaches_bootstrap_confidence_intervals(monkeypatch) -> None:
+    """The declared significance level controls the percentile CI calculation."""
+    seen_alphas: list[float] = []
+    original = rank_sensitivity._bootstrap_mean_percentile_ci
+
+    def record_alpha(differences, num_bootstrap, rng, *, alpha=0.05):
+        seen_alphas.append(alpha)
+        return original(differences, num_bootstrap, rng, alpha=alpha)
+
+    monkeypatch.setattr(rank_sensitivity, "_bootstrap_mean_percentile_ci", record_alpha)
+    result = pre_specified_rank_reversal_test(
+        _stable_fixture(),
+        metric_key=_METRIC,
+        planners=["A", "B"],
+        num_bootstrap=100,
+        seed=42,
+        alpha=0.20,
+    )
+    assert result["pre_registration"]["ci_level"] == pytest.approx(0.80)
+    assert seen_alphas == [0.20, 0.20]
 
 
 # ---------------------------------------------------------------------------

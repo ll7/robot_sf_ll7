@@ -313,6 +313,7 @@ def pre_specified_rank_reversal_test(
                 higher_is_safer=higher_is_safer,
                 num_bootstrap=num_bootstrap,
                 rng=rng,
+                alpha=alpha,
             )
             pair_results.append(pair_record)
             if reversal is not None:
@@ -389,7 +390,7 @@ def _blocked_test_result(
     }
 
 
-def _evaluate_planner_pair(
+def _evaluate_planner_pair(  # noqa: PLR0913 - pair-test inputs are explicit
     *,
     arrays: tuple[np.ndarray, np.ndarray],
     i: int,
@@ -399,6 +400,7 @@ def _evaluate_planner_pair(
     higher_is_safer: bool,
     num_bootstrap: int,
     rng: np.random.Generator,
+    alpha: float,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """Compute the per-pair verdict, pair record, and optional reversal for one pair.
 
@@ -409,8 +411,8 @@ def _evaluate_planner_pair(
     het_array, hom_array = arrays
     het_diff = _seed_pair_difference(het_array, i, j, higher_is_safer=higher_is_safer)
     hom_diff = _seed_pair_difference(hom_array, i, j, higher_is_safer=higher_is_safer)
-    het_ci = _bootstrap_mean_percentile_ci(het_diff, num_bootstrap, rng)
-    hom_ci = _bootstrap_mean_percentile_ci(hom_diff, num_bootstrap, rng)
+    het_ci = _bootstrap_mean_percentile_ci(het_diff, num_bootstrap, rng, alpha=alpha)
+    hom_ci = _bootstrap_mean_percentile_ci(hom_diff, num_bootstrap, rng, alpha=alpha)
     het_sign = _determined_sign(het_ci)
     hom_sign = _determined_sign(hom_ci)
 
@@ -594,11 +596,13 @@ def _bootstrap_mean_percentile_ci(
     differences: np.ndarray,
     num_bootstrap: int,
     rng: np.random.Generator,
+    *,
+    alpha: float = 0.05,
 ) -> tuple[float, float]:
     """Percentile bootstrap CI on the mean of a 1-D paired-difference array.
 
     Returns:
-        The ``(lower, upper)`` 2.5th / 97.5th percentile bounds on the bootstrapped mean.
+        The ``(lower, upper)`` percentile bounds implied by ``alpha`` on the bootstrapped mean.
     """
     n = int(differences.size)
     if n == 0:
@@ -606,8 +610,8 @@ def _bootstrap_mean_percentile_ci(
     indices = rng.integers(0, n, size=(num_bootstrap, n))
     resampled = differences[indices]
     means = resampled.mean(axis=1)
-    lower = float(np.percentile(means, 2.5))
-    upper = float(np.percentile(means, 97.5))
+    lower = float(np.percentile(means, (alpha / 2.0) * 100.0))
+    upper = float(np.percentile(means, (1.0 - alpha / 2.0) * 100.0))
     return lower, upper
 
 

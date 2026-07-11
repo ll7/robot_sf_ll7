@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 from loguru import logger
 
+from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.models import resolve_model_path
 from robot_sf.planner.obstacle_features import (
     PREDICTIVE_LEGACY_FEATURE_SCHEMA,
@@ -579,13 +580,13 @@ def emit_schema_filtered_config(
     if not isinstance(data, dict):
         raise TypeError(f"Campaign config must be a mapping: {source}")
 
+    # The first-party import is deliberately unguarded: it has no optional or
+    # native dependency boundary. Repository-root resolution itself can still
+    # fail on unusual filesystem or symlink state, so retain the prior
+    # best-effort provenance fallback without reintroducing an import guard.
     try:
-        from robot_sf.common.artifact_paths import (  # noqa: PLC0415
-            get_repository_root,
-        )
-
-        repo_root = Path(get_repository_root())
-    except (ImportError, RuntimeError, OSError):  # pragma: no cover - best-effort provenance
+        repo_root = get_repository_root()
+    except (OSError, RuntimeError):
         repo_root = source.parent
     try:
         source_rel = source.relative_to(repo_root) if repo_root in source.parents else source

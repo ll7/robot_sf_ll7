@@ -33,8 +33,11 @@ def _write_campaign(
         Path to the campaign config file.
     """
     map_path = (tmp_path / "scenario_map.svg").resolve()
-    # Content is irrelevant: ``convert_map`` is monkeypatched per test to return fixed geometry.
-    map_path.write_text("<svg></svg>\n", encoding="utf-8")
+    # ``convert_map`` is monkeypatched for the clearance geometry, but the runtime preflight still
+    # resolves this fixture first, so it must be a syntactically valid SVG map.
+    map_path.write_text(
+        '<svg width="10" height="10" viewBox="0 0 10 10"></svg>\n', encoding="utf-8"
+    )
 
     scenario_lines = [
         "- name: clearance_case",

@@ -71,6 +71,7 @@ from robot_sf.sim.pedestrian_model_variants import (
     ttc_predictive_repulsion,
     zanlungo_collision_prediction_repulsion,
 )
+from robot_sf.sim.pedestrian_speed_tiers import sample_desired_pedestrian_speeds
 
 PYSF_POSITION_SLICE = slice(0, 2)
 PYSF_VELOCITY_SLICE = slice(2, 4)
@@ -103,6 +104,43 @@ def _apply_ped_desired_speed_config(
     pysf_config.scene_config.desired_speed_mean = settings.desired_speed_mean
     pysf_config.scene_config.desired_speed_std = settings.desired_speed_std
     pysf_config.scene_config.desired_speed_seed = settings.desired_speed_seed
+
+
+def _enforce_ped_desired_speeds(peds, settings: SimulationSettings) -> None:
+    """Apply decoupled desired speeds directly to a PedState after simulator creation.
+
+    ``_apply_ped_desired_speed_config`` propagates settings into the PySF config so
+    that ``PedState.__init__`` can sample them. However, older installed pysf versions
+    (< the fast-pysf update in #5042) do not read ``desired_speed_mean`` from the scene
+    config and silently fall back to the spawn-coupled ``max_speed_multiplier *
+    initial_speed`` = 0.65 m/s default (issue #5217).
+
+    This function re-applies the desired speeds directly on the ``PedState`` object
+    after ``PySFSimulator`` is constructed, which restores the tier contract for stale
+    pysf installs. It is a no-op when the new pysf already applied the speeds via
+    ``assign_desired_speeds`` (the explicit-desired-speeds path uses ``_explicit_desired_speeds``
+    and ignores the ``initial_speeds`` override we write here).
+
+    Calling this after ``max_speed_multiplier`` is set is intentional: we encode the
+    desired speeds into ``initial_speeds`` so the legacy recomputation
+    ``max_speeds = max_speed_multiplier * initial_speeds`` also yields the correct values
+    on every subsequent ``_update_state`` call.
+    """
+    if settings.desired_speed_mean is None:
+        return
+    desired_speeds = sample_desired_pedestrian_speeds(
+        peds.size(),
+        mean=settings.desired_speed_mean,
+        std=settings.desired_speed_std,
+        seed=settings.desired_speed_seed,
+    )
+    # Direct assignment: works with both new pysf (``assign_desired_speeds`` already ran,
+    # this overwrites with identical values) and old pysf (no explicit-speed support).
+    peds.max_speeds = desired_speeds.copy()
+    # Compat: encode into initial_speeds so legacy _update_state recomputation preserves them.
+    initial_speeds = getattr(peds, "initial_speeds", None)
+    if initial_speeds is not None and peds.max_speed_multiplier > 0:
+        peds.initial_speeds = desired_speeds / peds.max_speed_multiplier
 
 
 def _make_ped_forces(
@@ -295,6 +333,7 @@ class Simulator:
             ),
         )
         self.pysf_sim.peds.max_speed_multiplier = self.config.peds_speed_mult
+        _enforce_ped_desired_speeds(self.pysf_sim.peds, self.config)
         self.robot_navs = [
             RouteNavigator(proximity_threshold=self.goal_proximity_threshold) for _ in self.robots
         ]
@@ -742,6 +781,7 @@ class PedSimulator(Simulator):
             ),
         )
         self.pysf_sim.peds.max_speed_multiplier = self.config.peds_speed_mult
+        _enforce_ped_desired_speeds(self.pysf_sim.peds, self.config)
 
         self.robot_navs = [
             RouteNavigator(proximity_threshold=self.goal_proximity_threshold) for _ in self.robots

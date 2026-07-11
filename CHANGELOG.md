@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* **issue #5217 restore typical pedestrian desired-speed propagation.** `SimulationSettings`
+  with `ped_speed_tier="typical"` (or explicit `desired_speed_mean`) now correctly sets
+  `pysf_sim.peds.max_speeds` to the decoupled desired-speed distribution (~1.3 m/s for the
+  `typical` tier) on all pysocialforce install versions. The previous implementation relied solely
+  on `pysf_config.scene_config` propagation, which was silently ignored by pysf installs that
+  predated the fast-pysf #5042 update. The fix adds `_enforce_ped_desired_speeds` in
+  `simulator.py`, which applies the sampled speeds directly to `peds.max_speeds` and encodes
+  them into `peds.initial_speeds` so the legacy `max_speed_multiplier * initial_speed`
+  recomputation also yields the correct values on every state update. A companion
+  `sample_desired_pedestrian_speeds` helper in `pedestrian_speed_tiers.py` provides the
+  standalone sampling without a pysf-version dependency.
+
 ### Changed
 
 * **issue #5071 absolute continuous-integration coverage floor.** The unsharded full-suite

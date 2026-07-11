@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
+import yaml
 
 from robot_sf.planner.dwa import DWAPlannerAdapter, DWAPlannerConfig, build_dwa_config
 
@@ -16,6 +19,7 @@ def _observation(
     angular_velocity: float = 0.0,
     goal: tuple[float, float] = (3.0, 0.0),
     pedestrians: list[tuple[float, float]] | None = None,
+    pedestrian_velocities: list[tuple[float, float]] | None = None,
 ) -> dict[str, object]:
     """Build a minimal structured observation accepted by DWA."""
     positions = [] if pedestrians is None else pedestrians
@@ -32,6 +36,9 @@ def _observation(
         },
         "pedestrians": {
             "positions": np.asarray(positions, dtype=float),
+            "velocities": np.asarray(
+                [] if pedestrian_velocities is None else pedestrian_velocities, dtype=float
+            ),
             "count": np.asarray([len(positions)], dtype=float),
         },
     }
@@ -90,6 +97,105 @@ def test_dwa_config_builder_applies_explicit_acceleration_parameters() -> None:
     assert config.max_angular_acceleration == pytest.approx(0.9)
     assert config.linear_samples == 4
     assert config.angular_samples == 6
+
+
+def test_dwa_prediction_scoring_is_opt_in_in_canonical_configs() -> None:
+    """The classic config retains static scoring while the variant opts into forecasts."""
+    config_dir = Path(__file__).resolve().parents[2] / "configs" / "algos"
+    classic = yaml.safe_load((config_dir / "dwa_classic.yaml").read_text(encoding="utf-8"))
+    predictive = yaml.safe_load(
+        (config_dir / "dwa_prediction_scoring.yaml").read_text(encoding="utf-8")
+    )
+
+    assert build_dwa_config(classic).prediction_scoring_enabled is False
+    assert build_dwa_config(predictive).prediction_scoring_enabled is True
+    assert {
+        key: value for key, value in classic.items() if key != "prediction_scoring_enabled"
+    } == {key: value for key, value in predictive.items() if key != "prediction_scoring_enabled"}
+
+
+def test_dwa_prediction_scoring_avoids_a_future_crossing() -> None:
+    """Time-aligned constant-velocity scoring rejects a pedestrian's future crossing point."""
+    observation = _observation(
+        goal=(3.0, 0.0),
+        pedestrians=[(0.6, 0.8)],
+        pedestrian_velocities=[(0.0, -1.0)],
+    )
+    base_command = DWAPlannerAdapter(DWAPlannerConfig()).plan(observation)
+    predictive_command = DWAPlannerAdapter(DWAPlannerConfig(prediction_scoring_enabled=True)).plan(
+        observation
+    )
+    repeated_command = DWAPlannerAdapter(DWAPlannerConfig(prediction_scoring_enabled=True)).plan(
+        observation
+    )
+
+    assert base_command[0] > 0.0
+    assert repeated_command == predictive_command
+    assert predictive_command != base_command
+    assert predictive_command[0] <= base_command[0]
+
+
+def test_dwa_prediction_scoring_rotates_ego_velocity_to_world() -> None:
+    """Pedestrian ego-frame velocities are rotated using the current robot heading."""
+    planner = DWAPlannerAdapter(DWAPlannerConfig(prediction_scoring_enabled=True))
+    *_, velocities_world = planner._extract_state(
+        _observation(
+            heading=np.pi / 2,
+            pedestrians=[(1.0, 0.0)],
+            pedestrian_velocities=[(1.0, 0.0)],
+        )
+    )
+
+    np.testing.assert_allclose(velocities_world, [[0.0, 1.0]], atol=1e-12)
+
+
+def test_dwa_prediction_scoring_requires_active_pedestrian_velocities() -> None:
+    """The opt-in variant fails closed when an active forecast input is absent."""
+    planner = DWAPlannerAdapter(DWAPlannerConfig(prediction_scoring_enabled=True))
+
+    with pytest.raises(ValueError, match="one finite .* velocity"):
+        planner.plan(_observation(pedestrians=[(1.0, 0.0)]))
+
+
+def test_dwa_prediction_scoring_requires_finite_active_pedestrian_positions() -> None:
+    """The opt-in variant rejects malformed current state before forecasting."""
+    planner = DWAPlannerAdapter(DWAPlannerConfig(prediction_scoring_enabled=True))
+
+    with pytest.raises(ValueError, match="one finite .* world position"):
+        planner.plan(
+            _observation(
+                pedestrians=[(float("nan"), 0.0)],
+                pedestrian_velocities=[(0.0, 0.0)],
+            )
+        )
+
+
+@pytest.mark.parametrize(("raw", "expected"), [("yes", True), ("off", False)])
+def test_dwa_config_builder_parses_boolean_strings(raw: str, expected: bool) -> None:
+    """Text config values use explicit boolean parsing rather than string truthiness."""
+    assert (
+        build_dwa_config({"prediction_scoring_enabled": raw}).prediction_scoring_enabled is expected
+    )
+
+
+def test_dwa_config_builder_rejects_non_boolean_prediction_flag() -> None:
+    """Ambiguous prediction-scoring flag values fail closed."""
+    with pytest.raises(ValueError, match="prediction_scoring_enabled must be a boolean"):
+        build_dwa_config({"prediction_scoring_enabled": 1})
+
+
+def test_dwa_base_scoring_ignores_pedestrian_velocities() -> None:
+    """Velocity payloads do not alter the disabled-by-default base DWA contract."""
+    planner = DWAPlannerAdapter(DWAPlannerConfig())
+    without_velocity = planner.plan(_observation(pedestrians=[(0.6, 0.8)]))
+    with_velocity = planner.plan(
+        _observation(
+            pedestrians=[(0.6, 0.8)],
+            pedestrian_velocities=[(0.0, -1.0)],
+        )
+    )
+
+    assert with_velocity == without_velocity
 
 
 def test_dwa_dynamic_window_preserves_reachability_outside_speed_limits() -> None:

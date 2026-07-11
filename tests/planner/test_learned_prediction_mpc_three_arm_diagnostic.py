@@ -11,7 +11,7 @@ The three arms mirror the paired comparison runner
    (untrained smoke model; source labeled ``diagnostic_untrained_smoke``).
 2. ``cv_prediction_mpc`` — constant-velocity pedestrian prediction + MPC
    (deterministic; source labeled ``constant_velocity``).
-3. ``model_free_baseline`` — trivial inline goal-seeker with no pedestrian model.
+3. ``model_free_baseline`` — canonical ``goal`` policy with no pedestrian model.
 
 Running the representative evaluation with real map scenarios and seeds
 is the remaining campaign work that stays out of this PR.
@@ -19,14 +19,22 @@ is the remaining campaign work that stays out of this PR.
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
 import numpy as np
 import pytest
+import yaml
 
+from robot_sf.benchmark.map_runner_policies.goal import build as build_goal_policy
 from robot_sf.planner.learned_prediction_mpc import build_learned_prediction_mpc_adapter
 from robot_sf.planner.prediction_mpc import (
     PredictionMPCConfig,
     PredictionMPCPlannerAdapter,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _SMOKE_CFG = {
     "allow_untrained_smoke": True,
@@ -35,6 +43,8 @@ _SMOKE_CFG = {
     "hidden_dim": 8,
     "solver_max_iterations": 8,
 }
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_MODEL_FREE_CONFIG = _REPO_ROOT / "configs/benchmarks/issue_4013_model_free_baseline_smoke.yaml"
 
 
 def _obs(
@@ -66,15 +76,17 @@ def _obs(
     }
 
 
-class _TrivialGoalSeeker:
-    """Model-free baseline: emit max_speed straight ahead without any pedestrian model."""
-
-    max_linear_speed: float = 0.9
-    max_angular_speed: float = 1.1
-
-    def plan(self, observation: dict) -> tuple[float, float]:
-        del observation
-        return self.max_linear_speed, 0.0
+def _build_canonical_model_free_baseline() -> Callable[[dict[str, Any]], tuple[float, float]]:
+    """Build the same ``goal`` policy family selected by the canonical third-arm config."""
+    payload = yaml.safe_load(_MODEL_FREE_CONFIG.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    planners = payload.get("planners")
+    assert isinstance(planners, list) and len(planners) == 1
+    planner = planners[0]
+    assert isinstance(planner, dict)
+    assert planner["issue_4013_role"] == "model_free_baseline"
+    assert planner["algo"] == "goal"
+    return build_goal_policy("goal", {}, robot_kinematics="differential_drive")[0]
 
 
 def test_learned_and_cv_planners_emit_bounded_commands_on_same_observations() -> None:
@@ -142,7 +154,7 @@ def test_three_arm_diagnostic_comparison_all_emit_bounded_commands() -> None:
 
     learned = build_learned_prediction_mpc_adapter(_SMOKE_CFG)
     cv = PredictionMPCPlannerAdapter(PredictionMPCConfig(horizon_steps=2, solver_max_iterations=8))
-    model_free = _TrivialGoalSeeker()
+    model_free = _build_canonical_model_free_baseline()
 
     observations = [
         _obs(goal=(3.0, 0.0)),
@@ -158,15 +170,25 @@ def test_three_arm_diagnostic_comparison_all_emit_bounded_commands() -> None:
     for obs in observations:
         results["learned_prediction_mpc"].append(learned.plan(obs))
         results["cv_prediction_mpc"].append(cv.plan(obs))
-        results["model_free_baseline"].append(model_free.plan(obs))
+        results["model_free_baseline"].append(model_free(obs))
 
-    max_lin = cv.config.max_linear_speed
-    max_ang = cv.config.max_angular_speed
+    max_linear_by_arm = {
+        "learned_prediction_mpc": cv.config.max_linear_speed,
+        "cv_prediction_mpc": cv.config.max_linear_speed,
+        "model_free_baseline": 1.0,
+    }
+    max_angular_by_arm = {
+        "learned_prediction_mpc": cv.config.max_angular_speed,
+        "cv_prediction_mpc": cv.config.max_angular_speed,
+        "model_free_baseline": 1.0,
+    }
     for arm, commands in results.items():
         for linear, angular in commands:
             assert np.isfinite(linear), f"{arm}: non-finite linear"
             assert np.isfinite(angular), f"{arm}: non-finite angular"
-            assert 0.0 <= linear <= max_lin, f"{arm}: linear {linear!r} out of [0, {max_lin}]"
-            assert abs(angular) <= max_ang, f"{arm}: angular {angular!r} out of bounds"
+            max_linear = max_linear_by_arm[arm]
+            max_angular = max_angular_by_arm[arm]
+            assert 0.0 <= linear <= max_linear, f"{arm}: linear {linear!r} out of [0, {max_linear}]"
+            assert abs(angular) <= max_angular, f"{arm}: angular {angular!r} out of bounds"
 
     assert all(results[arm] for arm in results), "each arm must produce at least one action"

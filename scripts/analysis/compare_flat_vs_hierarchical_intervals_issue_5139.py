@@ -8,18 +8,11 @@ that artifact.
 
 Claim boundary and evidence status
 -----------------------------------
-- Claim boundary: characterizes the implemented resampling procedures
-  (``robot_sf.benchmark.full_classic.aggregation``) on a *synthetic but
-  structured* episode bundle that mirrors the documented
-  family -> scenario cell -> seed -> episode nesting with controlled
-  intra-cluster correlation.
 - Evidence status: ``diagnostic-only``. This is NOT benchmark evidence and NOT
-  a paper claim. No real campaign bundle in the repository matches the
-  (archetype, density, scenario_id, seed) aggregation schema yet; the
-  pre-registered 30-seed successor campaign this work unblocks has not run.
-  The synthetic bundle exists solely so the flat-vs-hierarchical width
-  difference is documented and reproducible. Re-run this script on a real
-  campaign bundle once one exists to obtain nominal benchmark evidence.
+  a paper claim. The default synthetic mode preserves the original method
+  diagnostic. ``--retained-bundle`` adapts a retained camera-ready episode
+  table into planner/kinematics groups while keeping scenario identifiers as
+  clusters, producing the bounded real-bundle comparison required by #5139.
 
 Usage::
 
@@ -30,11 +23,13 @@ Outputs (under ``--output-dir``):
   * ``comparison_report.md``  - human-readable comparison table.
   * ``comparison_report.json`` - machine-readable results with provenance.
   * ``synthetic_bundle.jsonl`` - the structured episode bundle used (for audit).
+  * ``retained_comparison_report.{md,json}`` - real retained-bundle analysis.
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import math
@@ -56,6 +51,19 @@ CLAIM_BOUNDARY = (
 
 EVIDENCE_STATUS = "diagnostic-only"
 REVIEW_MARKER = "AI-GENERATED NEEDS-REVIEW"
+DEFAULT_RETAINED_BUNDLE = (
+    REPO_ROOT
+    / "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/reports/seed_episode_rows.csv"
+)
+DEFAULT_RETAINED_MANIFEST = (
+    REPO_ROOT
+    / "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/campaign_manifest.json"
+)
+RETAINED_CLAIM_BOUNDARY = (
+    "diagnostic-only, analysis-only: flat versus hierarchical interval widths on the retained "
+    "issue #1454 exploratory campaign bundle. This post-hoc reuse was not pre-registered for "
+    "issue #5139 and does not establish benchmark, planner-ranking, paper, or dissertation claims."
+)
 
 
 def _stable_cell_offset(archetype: str, density: str) -> int:
@@ -90,6 +98,36 @@ class ComparisonReport:
     bundle_description: str
     config: dict[str, Any]
     comparisons: list[MetricComparison] = field(default_factory=list)
+    width_ratios: list[dict[str, Any]] = field(default_factory=list)
+    summary: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class RetainedMetricComparison:
+    """Interval-width comparison for one retained-campaign planner and metric."""
+
+    planner_key: str
+    kinematics: str
+    metric: str
+    mode: str
+    mean: float
+    mean_ci: tuple[float, float]
+    mean_ci_width: float
+    is_rate: bool
+
+
+@dataclass
+class RetainedComparisonReport:
+    """Real retained-bundle comparison with deterministic provenance."""
+
+    claim_boundary: str
+    evidence_status: str
+    issue: str
+    description: str
+    source_provenance: dict[str, Any]
+    grouping_contract: dict[str, Any]
+    config: dict[str, Any]
+    comparisons: list[RetainedMetricComparison] = field(default_factory=list)
     width_ratios: list[dict[str, Any]] = field(default_factory=list)
     summary: dict[str, Any] = field(default_factory=dict)
 
@@ -165,6 +203,238 @@ def _ci_width(ci):
     if ci is None or any(math.isnan(v) for v in ci):
         return 0.0
     return ci[1] - ci[0]
+
+
+def _sha256(path: Path) -> str:
+    """Return the SHA-256 digest for a provenance input."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _repo_relative(path: Path) -> str:
+    """Render a path relative to the repository when possible."""
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return str(resolved)
+
+
+def load_retained_bundle(path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Load retained camera-ready episode rows into the aggregation contract.
+
+    The full-classic aggregation API groups on ``(archetype, density)``. For this
+    cross-scenario campaign comparison those two adapter fields represent
+    ``(planner_key, kinematics)``; the original ``scenario_id`` remains the
+    hierarchical cluster. This produces one interval per planner/kinematics
+    row over the campaign's scenario cells without mixing planners.
+    """
+    required = {
+        "episode_id",
+        "scenario_id",
+        "planner_key",
+        "kinematics",
+        "seed",
+        "success",
+        "collision",
+        "near_miss",
+        "time_to_goal",
+        "snqi",
+    }
+    if not path.is_file():
+        raise FileNotFoundError(f"retained campaign episode table not found: {path}")
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        missing = sorted(required - set(reader.fieldnames or ()))
+        if missing:
+            raise ValueError(f"retained campaign table missing columns: {', '.join(missing)}")
+        source_rows = list(reader)
+    if not source_rows:
+        raise ValueError("retained campaign table contains no episode rows")
+
+    records: list[dict[str, Any]] = []
+    for row_number, row in enumerate(source_rows, start=2):
+        metrics: dict[str, float] = {}
+        for source_name, metric_name in (
+            ("success", "success_rate"),
+            ("collision", "collision_rate"),
+            ("near_miss", "near_miss"),
+            ("time_to_goal", "time_to_goal"),
+            ("snqi", "snqi"),
+        ):
+            try:
+                value = float(row[source_name])
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"retained campaign table row {row_number} has invalid {source_name!r}"
+                ) from exc
+            if not math.isfinite(value):
+                raise ValueError(
+                    f"retained campaign table row {row_number} has non-finite {source_name!r}"
+                )
+            metrics[metric_name] = value
+        records.append(
+            {
+                "episode_id": row["episode_id"],
+                "scenario_id": row["scenario_id"],
+                "seed": int(row["seed"]),
+                # Adapter contract documented above; output translates these
+                # names back to planner_key and kinematics.
+                "archetype": row["planner_key"],
+                "density": row["kinematics"],
+                "metrics": metrics,
+            }
+        )
+
+    provenance = {
+        "episode_table": _repo_relative(path),
+        "episode_table_sha256": _sha256(path),
+        "row_count": len(records),
+        "planner_keys": sorted({row["planner_key"] for row in source_rows}),
+        "kinematics": sorted({row["kinematics"] for row in source_rows}),
+        "scenario_ids": sorted({row["scenario_id"] for row in source_rows}),
+        "seeds": sorted({int(row["seed"]) for row in source_rows}),
+    }
+    return records, provenance
+
+
+def collect_retained_comparisons(
+    records: list[dict[str, Any]],
+    *,
+    source_provenance: dict[str, Any],
+    manifest_path: Path,
+) -> RetainedComparisonReport:
+    """Compare flat and scenario-hierarchical intervals on retained rows."""
+    from robot_sf.benchmark.full_classic.aggregation import aggregate_metrics
+
+    if not manifest_path.is_file():
+        raise FileNotFoundError(f"retained campaign manifest not found: {manifest_path}")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    provenance = {
+        **source_provenance,
+        "campaign_manifest": _repo_relative(manifest_path),
+        "campaign_manifest_sha256": _sha256(manifest_path),
+        "campaign_id": manifest.get("campaign_id"),
+        "campaign_schema_version": manifest.get("schema_version"),
+        "campaign_git_commit": (manifest.get("git") or {}).get("commit"),
+        "campaign_config_hash": manifest.get("config_hash"),
+    }
+    cfg_common = {
+        "bootstrap_samples": 1000,
+        "bootstrap_confidence": 0.95,
+        "master_seed": 5139,
+        "smoke": False,
+    }
+    flat_groups = aggregate_metrics(
+        [dict(record) for record in records],
+        _Cfg(bootstrap_mode="flat", **cfg_common),
+    )
+    hierarchical_groups = aggregate_metrics(
+        [dict(record) for record in records],
+        _Cfg(bootstrap_mode="hierarchical", bootstrap_cluster="scenario", **cfg_common),
+    )
+
+    rate_metrics = {"collision_rate", "success_rate"}
+    comparisons: list[RetainedMetricComparison] = []
+    for groups, mode in ((flat_groups, "flat"), (hierarchical_groups, "hierarchical_scenario")):
+        for group in groups:
+            for metric_name, metric in sorted(group.metrics.items()):
+                comparisons.append(
+                    RetainedMetricComparison(
+                        planner_key=group.archetype,
+                        kinematics=group.density,
+                        metric=metric_name,
+                        mode=mode,
+                        mean=metric.mean,
+                        mean_ci=metric.mean_ci or (math.nan, math.nan),
+                        mean_ci_width=_ci_width(metric.mean_ci),
+                        is_rate=metric_name in rate_metrics,
+                    )
+                )
+
+    by_key: dict[tuple[str, str, str], dict[str, RetainedMetricComparison]] = {}
+    for comparison in comparisons:
+        key = (comparison.planner_key, comparison.kinematics, comparison.metric)
+        by_key.setdefault(key, {})[comparison.mode] = comparison
+    width_ratios: list[dict[str, Any]] = []
+    for (planner_key, kinematics, metric), modes in sorted(by_key.items()):
+        flat = modes.get("flat")
+        hierarchical = modes.get("hierarchical_scenario")
+        if flat is None or hierarchical is None or flat.mean_ci_width <= 0:
+            continue
+        width_ratios.append(
+            {
+                "planner_key": planner_key,
+                "kinematics": kinematics,
+                "metric": metric,
+                "flat_width": flat.mean_ci_width,
+                "hierarchical_width": hierarchical.mean_ci_width,
+                "ratio": hierarchical.mean_ci_width / flat.mean_ci_width,
+                "is_rate": hierarchical.is_rate,
+            }
+        )
+
+    def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        ratios = sorted(row["ratio"] for row in rows)
+        if not ratios:
+            return {}
+        middle = len(ratios) // 2
+        median_ratio = (
+            ratios[middle] if len(ratios) % 2 else (ratios[middle - 1] + ratios[middle]) / 2
+        )
+        return {
+            "count": len(ratios),
+            "min_ratio": ratios[0],
+            "median_ratio": median_ratio,
+            "mean_ratio": sum(ratios) / len(ratios),
+            "max_ratio": ratios[-1],
+        }
+
+    report = RetainedComparisonReport(
+        claim_boundary=RETAINED_CLAIM_BOUNDARY,
+        evidence_status="diagnostic-only (analysis-only)",
+        issue="#5139",
+        description=(
+            "Flat episode-level intervals versus hierarchical scenario-cluster intervals on one "
+            "retained campaign bundle. Binary endpoints compare flat Wilson intervals with the "
+            "merged cluster-robust intervals."
+        ),
+        source_provenance=provenance,
+        grouping_contract={
+            "analysis_group": ["planner_key", "kinematics"],
+            "hierarchical_cluster": "scenario_id",
+            "episode_level": "seed_episode_rows.csv row",
+            "adapter": {
+                "archetype": "planner_key",
+                "density": "kinematics",
+                "reason": (
+                    "aggregate_metrics requires archetype/density group keys; the adapter keeps "
+                    "planners separate while pooling retained scenario cells for each planner."
+                ),
+            },
+        },
+        config={
+            **cfg_common,
+            "modes": ["flat", "hierarchical_scenario"],
+            "rate_interval_flat": "wilson",
+            "rate_interval_hierarchical": "cluster_robust",
+        },
+    )
+    report.comparisons = comparisons
+    report.width_ratios = width_ratios
+    report.summary = {
+        "rate_metrics": summarize([row for row in width_ratios if row["is_rate"]]),
+        "non_rate_metrics": summarize([row for row in width_ratios if not row["is_rate"]]),
+        "interpretation": (
+            "Ratios describe this retained exploratory bundle only. A ratio above one means the "
+            "scenario-hierarchical interval is wider; a ratio at or below one is retained rather "
+            "than filtered and does not invalidate the method."
+        ),
+    }
+    return report
 
 
 def _compute_width_ratios(
@@ -435,6 +705,115 @@ def write_bundle(records: list[dict[str, Any]], path: Path) -> None:
             f.write(json.dumps({**r, "review_marker": REVIEW_MARKER}) + "\n")
 
 
+def write_retained_markdown(report: RetainedComparisonReport, path: Path) -> None:
+    """Write the retained-bundle analysis report."""
+    provenance = report.source_provenance
+    lines = [
+        f"<!-- {REVIEW_MARKER} -->",
+        "",
+        "# Retained Campaign Flat vs Hierarchical Interval Comparison (issue #5139)",
+        "",
+        f"**Claim boundary:** {report.claim_boundary}",
+        "",
+        f"**Evidence status:** `{report.evidence_status}`",
+        "",
+        "**Major caveat:** this is a post-hoc analysis of an exploratory retained campaign, not "
+        "the pre-registered successor campaign and not benchmark-strength evidence.",
+        "",
+        "## Plain-language summary",
+        "",
+        "This report compares confidence-interval widths when retained campaign episodes are "
+        "treated as independent versus when their scenario grouping is respected. It exercises "
+        "the merged scenario-hierarchical bootstrap and cluster-robust binary intervals on real "
+        "campaign rows while keeping the result analysis-only.",
+        "",
+        "## Deterministic provenance",
+        "",
+        f"- campaign: `{provenance['campaign_id']}`",
+        f"- episode table: `{provenance['episode_table']}`",
+        f"- episode table SHA-256: `{provenance['episode_table_sha256']}`",
+        f"- campaign manifest: `{provenance['campaign_manifest']}`",
+        f"- campaign manifest SHA-256: `{provenance['campaign_manifest_sha256']}`",
+        f"- campaign commit: `{provenance['campaign_git_commit']}`",
+        f"- config hash: `{provenance['campaign_config_hash']}`",
+        f"- rows: {provenance['row_count']}",
+        f"- planners: {len(provenance['planner_keys'])}",
+        f"- scenario cells: {len(provenance['scenario_ids'])}",
+        f"- seeds: {len(provenance['seeds'])}",
+        "- analysis groups: `(planner_key, kinematics)`; hierarchical cluster: `scenario_id`",
+        f"- bootstrap samples: {report.config['bootstrap_samples']}",
+        f"- confidence: {report.config['bootstrap_confidence']}",
+        f"- master seed: {report.config['master_seed']}",
+        "",
+        "## Interval-width ratios",
+        "",
+        "A ratio above 1 means the scenario-hierarchical interval is wider than the flat "
+        "interval on the same retained rows. Binary endpoints compare cluster-robust intervals "
+        "against flat Wilson intervals.",
+        "",
+        "| planner | kinematics | metric | flat width | hierarchical width | ratio |",
+        "| --- | --- | --- | ---: | ---: | ---: |",
+    ]
+    for row in report.width_ratios:
+        lines.append(
+            f"| {row['planner_key']} | {row['kinematics']} | {row['metric']} | "
+            f"{row['flat_width']:.6f} | {row['hierarchical_width']:.6f} | "
+            f"{row['ratio']:.3f} |"
+        )
+    lines.extend(["", "## Bounded summary", ""])
+    for label, key in (
+        ("Binary rate metrics", "rate_metrics"),
+        ("Non-rate metrics", "non_rate_metrics"),
+    ):
+        summary = report.summary[key]
+        lines.extend(
+            [
+                f"### {label}",
+                "",
+                f"- comparisons: {summary.get('count', 0)}",
+                f"- minimum ratio: {summary.get('min_ratio', math.nan):.3f}",
+                f"- median ratio: {summary.get('median_ratio', math.nan):.3f}",
+                f"- mean ratio: {summary.get('mean_ratio', math.nan):.3f}",
+                f"- maximum ratio: {summary.get('max_ratio', math.nan):.3f}",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            report.summary["interpretation"],
+            "",
+            "## Reproduce",
+            "",
+            "```bash",
+            "uv run python scripts/analysis/compare_flat_vs_hierarchical_intervals_issue_5139.py \\",
+            f"  --retained-bundle {provenance['episode_table']} \\",
+            f"  --retained-manifest {provenance['campaign_manifest']}",
+            "```",
+            "",
+        ]
+    )
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def write_retained_json(report: RetainedComparisonReport, path: Path) -> None:
+    """Write the machine-readable retained-bundle report."""
+    payload = {
+        "review_marker": REVIEW_MARKER,
+        "schema_version": "issue_5139.retained_interval_comparison.v1",
+        "claim_boundary": report.claim_boundary,
+        "evidence_status": report.evidence_status,
+        "issue": report.issue,
+        "description": report.description,
+        "source_provenance": report.source_provenance,
+        "grouping_contract": report.grouping_contract,
+        "config": report.config,
+        "comparisons": [asdict(comparison) for comparison in report.comparisons],
+        "width_ratios": report.width_ratios,
+        "summary": report.summary,
+    }
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
 def main(argv: list[str] | None = None) -> int:
     """Generate the flat-vs-hierarchical comparison artifact."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -445,28 +824,76 @@ def main(argv: list[str] | None = None) -> int:
         help="Output directory for the comparison artifact.",
     )
     parser.add_argument("--seed", type=int, default=20260710, help="Bundle RNG seed.")
+    parser.add_argument(
+        "--retained-bundle",
+        type=Path,
+        help=(
+            "Retained seed_episode_rows.csv to analyze instead of generating the historical "
+            "synthetic diagnostic. The canonical retained input is "
+            f"{_repo_relative(DEFAULT_RETAINED_BUNDLE)}."
+        ),
+    )
+    parser.add_argument(
+        "--retained-manifest",
+        type=Path,
+        help=(
+            "Campaign manifest paired with --retained-bundle. Defaults to the canonical "
+            "#1454 manifest only when the canonical retained bundle is used."
+        ),
+    )
     args = parser.parse_args(argv)
 
     output_dir: Path = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    records = build_synthetic_bundle(seed=args.seed)
-    report = collect_comparisons(records, bundle_seed=args.seed)
-
-    write_markdown(report, output_dir / "comparison_report.md")
-    write_json(report, output_dir / "comparison_report.json")
-    write_bundle(records, output_dir / "synthetic_bundle.jsonl")
-
-    rate_summary = report.summary.get("rate_metrics_hierarchical_scenario", {})
-    print(f"[issue_5139] wrote artifact to {output_dir}")
-    print(f"[issue_5139] evidence_status={report.evidence_status}")
-    if rate_summary:
+    if args.retained_bundle is not None:
+        retained_manifest = args.retained_manifest
+        if retained_manifest is None:
+            if args.retained_bundle.resolve() != DEFAULT_RETAINED_BUNDLE.resolve():
+                parser.error(
+                    "--retained-manifest is required when --retained-bundle is not the canonical "
+                    "#1454 bundle"
+                )
+            retained_manifest = DEFAULT_RETAINED_MANIFEST
+        records, provenance = load_retained_bundle(args.retained_bundle)
+        retained_report = collect_retained_comparisons(
+            records,
+            source_provenance=provenance,
+            manifest_path=retained_manifest,
+        )
+        write_retained_markdown(
+            retained_report,
+            output_dir / "retained_comparison_report.md",
+        )
+        write_retained_json(
+            retained_report,
+            output_dir / "retained_comparison_report.json",
+        )
+        rate_summary = retained_report.summary.get("rate_metrics", {})
+        print(f"[issue_5139] wrote retained-bundle artifact to {output_dir}")
+        print(f"[issue_5139] evidence_status={retained_report.evidence_status}")
         print(
-            f"[issue_5139] rate-metric width ratios (hierarchical_scenario/flat): "
+            "[issue_5139] rate-metric width ratios (hierarchical_scenario/flat): "
             f"median={rate_summary.get('median_ratio'):.2f} "
             f"mean={rate_summary.get('mean_ratio'):.2f} "
             f"max={rate_summary.get('max_ratio'):.2f}"
         )
+    else:
+        records = build_synthetic_bundle(seed=args.seed)
+        report = collect_comparisons(records, bundle_seed=args.seed)
+        write_markdown(report, output_dir / "comparison_report.md")
+        write_json(report, output_dir / "comparison_report.json")
+        write_bundle(records, output_dir / "synthetic_bundle.jsonl")
+        rate_summary = report.summary.get("rate_metrics_hierarchical_scenario", {})
+        print(f"[issue_5139] wrote synthetic artifact to {output_dir}")
+        print(f"[issue_5139] evidence_status={report.evidence_status}")
+        if rate_summary:
+            print(
+                "[issue_5139] rate-metric width ratios (hierarchical_scenario/flat): "
+                f"median={rate_summary.get('median_ratio'):.2f} "
+                f"mean={rate_summary.get('mean_ratio'):.2f} "
+                f"max={rate_summary.get('max_ratio'):.2f}"
+            )
     return 0
 
 

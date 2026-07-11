@@ -75,6 +75,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "teb": "classical",
     "nmpc_social": "classical",
     "prediction_mpc": "classical",
+    "chance_constrained_mpc": "classical",
     "learned_prediction_mpc": "learning",
 }
 
@@ -136,6 +137,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "teb": "corridor_commitment_local_planner",
     "nmpc_social": "nonlinear_model_predictive_local_planner",
     "prediction_mpc": "prediction_aware_model_predictive_local_planner",
+    "chance_constrained_mpc": "gmm_chance_constrained_model_predictive_local_planner",
     "learned_prediction_mpc": "learned_short_horizon_prediction_mpc_local_planner",
 }
 
@@ -233,6 +235,15 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
             "Consumes structured SocNav state. The constant-velocity backend derives "
             "time-varying pedestrian futures from tracked pedestrian positions and "
             "ego-frame pedestrian velocities rotated into world coordinates."
+        ),
+    },
+    "chance_constrained_mpc": {
+        "default_mode": "socnav_state",
+        "supported_modes": ("socnav_state",),
+        "inputs": ("robot_state", "goal", "pedestrians", "k_mode_gmm_pedestrian_futures"),
+        "notes": (
+            "Experimental chance-constrained MPC requires an injected K-mode Gaussian-mixture "
+            "pedestrian predictor and fails closed while that provider is unavailable."
         ),
     },
     "learned_prediction_mpc": {
@@ -1108,6 +1119,16 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "default_adapter_name": "PredictionMPCPlannerAdapter",
         "benchmark_command_space": "unicycle_vw",
         "projection_policy": "constant_velocity_time_varying_pedestrian_constraints",
+        "projection_documented": True,
+    },
+    "chance_constrained_mpc": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": False,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "ChanceConstrainedMPCPlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "gmm_marginal_or_boole_joint_collision_risk_constraints",
         "projection_documented": True,
     },
     "learned_prediction_mpc": {

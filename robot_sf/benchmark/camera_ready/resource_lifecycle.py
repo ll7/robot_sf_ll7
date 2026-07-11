@@ -334,35 +334,62 @@ def _main_subprocess_worker() -> int:
 
     from loguru import logger  # noqa: PLC0415
 
-    # Read parameters from stdin
-    params_json = sys.stdin.read()
-    params_dict = json.loads(params_json)
-    # Re-parse str -> Path using the same field list the serializer uses, so a
-    # field added to one side cannot silently miss the other.
-    for field_name in _SUBPROCESS_ARM_PATH_FIELDS:
-        field_value = params_dict.get(field_name)
-        if field_value:
-            params_dict[field_name] = Path(field_value)
-
-    params = _SubprocessArmParams(**params_dict)
-
-    # Configure minimal logging for subprocess
+    # Configure minimal logging for subprocess.
     logger.remove()
     logger.add(sys.stderr, level="INFO")
 
-    logger.info(
-        "Subprocess arm execution: planner={} algo={} kinematics={}",
-        params.planner_key,
-        params.planner_algo,
-        params.kinematics,
-    )
-
+    # The worker is the hard-isolation boundary for issue #4826: its contract is
+    # to ALWAYS emit structured JSON on stdout so the parent can record the arm's
+    # outcome. This guarantee covers the WHOLE worker path — input parsing,
+    # param reconstruction, and arm execution — not just arm execution. Earlier
+    # versions had a narrow except tuple that missed KeyError/AttributeError/
+    # IndexError/ArithmeticError AND kept stdin parsing outside the handler, so a
+    # malformed handoff (bad JSON, missing fields) crashed the worker with EMPTY
+    # stdout: the parent could not parse a result and the per-arm cleanup
+    # telemetry the issue's acceptance criterion requires was lost. Catching
+    # ``Exception`` (not BaseException) keeps KeyboardInterrupt/SystemExit
+    # propagating while guaranteeing structured output for every ordinary
+    # failure (issue #4826 robustness / fail-closed).
+    params: _SubprocessArmParams | None = None
     try:
+        # Read parameters from stdin
+        params_json = sys.stdin.read()
+        params_dict = json.loads(params_json)
+        # Re-parse str -> Path using the same field list the serializer uses, so
+        # a field added to one side cannot silently miss the other.
+        for field_name in _SUBPROCESS_ARM_PATH_FIELDS:
+            field_value = params_dict.get(field_name)
+            if field_value:
+                params_dict[field_name] = Path(field_value)
+
+        params = _SubprocessArmParams(**params_dict)
+
+        logger.info(
+            "Subprocess arm execution: planner={} algo={} kinematics={}",
+            params.planner_key,
+            params.planner_algo,
+            params.kinematics,
+        )
+
         result = _run_single_arm_subprocess(params)
         # Write result to stdout as JSON for parent process
         print(json.dumps(result))  # noqa: T201
         return 0
-    except (json.JSONDecodeError, TypeError, ValueError, RuntimeError, OSError, ImportError) as exc:
+    except Exception as exc:  # noqa: BLE001 - worker must always emit structured output (#4826)
+        # Best-effort GPU cleanup even on the unexpected-exception path, so a
+        # crash after VRAM was allocated still runs the defense-in-depth cleanup
+        # before the subprocess exits (the OS reclaims the rest on exit). If the
+        # failure happened before ``params`` was built (e.g. bad input JSON), no
+        # VRAM was allocated yet, so cleanup is correctly skipped.
+        cleanup_metrics: dict[str, Any] = {}
+        if params is not None:
+            try:
+                cleanup_metrics = _cleanup_gpu_memory_before_exit(
+                    planner_key=params.planner_key,
+                    kinematics=params.kinematics,
+                )
+            except Exception:  # noqa: BLE001 - cleanup must never mask the original error
+                logger.opt(exception=True).debug("Cleanup after unexpected worker error failed")
         logger.error("Subprocess arm failed: {}", exc)
         print(  # noqa: T201
             json.dumps(
@@ -375,7 +402,7 @@ def _main_subprocess_worker() -> int:
                         "failed_jobs": 0,
                         "failures": [],
                     },
-                    "cleanup_metrics": {},
+                    "cleanup_metrics": cleanup_metrics,
                     "warnings": [str(exc)],
                     "episodes_total": 0,
                 }

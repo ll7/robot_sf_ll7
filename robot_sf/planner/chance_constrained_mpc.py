@@ -69,8 +69,8 @@ class GaussianMixturePedestrianForecast:
             raise ValueError("covariances_world must be positive definite")
         if not np.isfinite(self.dt) or float(self.dt) <= 0.0:
             raise ValueError("dt must be finite and positive")
-        if not str(self.source).strip():
-            raise ValueError("source must be non-empty")
+        if not isinstance(self.source, str) or not self.source.strip():
+            raise ValueError("source must be a non-empty string")
         object.__setattr__(self, "means_world", means)
         object.__setattr__(self, "covariances_world", covariances)
         object.__setattr__(self, "mode_weights", weights)

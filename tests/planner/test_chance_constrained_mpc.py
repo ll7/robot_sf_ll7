@@ -106,6 +106,20 @@ def test_forecast_rejects_non_normalized_mode_weights() -> None:
         )
 
 
+@pytest.mark.parametrize("source", [None, "", "   "])
+def test_forecast_rejects_missing_or_non_string_source(source: object) -> None:
+    """A required provenance source must not stringify a missing value as valid."""
+
+    with pytest.raises(ValueError, match="source must be a non-empty string"):
+        GaussianMixturePedestrianForecast(
+            means_world=np.zeros((1, 1, 1, 2)),
+            covariances_world=np.tile(np.eye(2), (1, 1, 1, 1, 1)),
+            mode_weights=np.asarray([[1.0]]),
+            dt=0.25,
+            source=source,  # type: ignore[arg-type]
+        )
+
+
 def test_marginal_constraint_rejects_collision_probability_above_alpha() -> None:
     """Per-timestep GMM collision risk must stay below the configured alpha."""
 

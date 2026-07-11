@@ -30,6 +30,9 @@ Recent topology corrective-behaviors closure audit:
 High-churn topology corrective-behaviors issue state:
 [issue_3463_state.yaml](issue_3463_state.yaml).
 
+High-churn mean-matched heterogeneous-population ablation issue state:
+[issue_3574_state.yaml](issue_3574_state.yaml).
+
 Recent Package C prediction/observation closure audit:
 [issue_3080_closure_audit_2026-07-05.md](evidence/issue_3080_closure_audit_2026-07-05.md).
 

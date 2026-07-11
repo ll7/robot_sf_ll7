@@ -1,0 +1,23 @@
+issue: 3574
+state_surface: high_churn_issue_state
+updated_at: "2026-07-11"
+current_status: open_pre_run_integration_contract_ready
+claim_boundary: diagnostic_only_not_benchmark_or_paper_evidence
+latest_integration_slice:
+  capability: manifest_declared_per_archetype_metrics_flow_into_report
+  pull_request: 5334
+  status: open_for_review
+  reason: >
+    The report now emits a per-archetype result for every trace metric declared
+    by the mean-matched manifest while retaining the clearance-only compatibility
+    view. A synthetic 18-row contract fixture proves composition only, not an
+    empirical heterogeneous-population result.
+remaining_blockers:
+  - no_attributed_mean_matched_paired_campaign_episode_records
+  - no_campaign_backed_realized_distribution_or_rank_reversal_conclusion
+next_empirical_action: run_the_tracked_18_row_paired_manifest_then_review_provenanced_outputs
+forbidden_claims:
+  heterogeneity_effect: false
+  planner_rank_stability: false
+  realism_or_sim_to_real: false
+  paper_or_dissertation_claim: false

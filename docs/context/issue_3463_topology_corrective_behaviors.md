@@ -2,15 +2,18 @@
 
 Issue: [#3463](https://github.com/ll7/robot_sf_ll7/issues/3463)
 
-Status: diagnostic-only integration complete. All DoD criteria met after PR #5225 (2026-07-11). Issue #3465 remains the benchmark-facing promotion gate.
+Status: diagnostic-only integration report. PR #5225 closes the bounded availability
+correction, but #3463 remains open for its parent acceptance audit and a
+post-replacement diagnostic re-run. Issue #3465 remains the benchmark-facing promotion gate.
 
 ## Plain Summary
 
 Issue #3463 converted the topology-guided local-planner lane from a revise-only
-diagnostic into guarded, testable implementation surfaces. The CPU-only cross-slice
-diagnostic ran 15 rows across three slices at `diagnostic_complete` strength. The
-`doorway_transfer` blocker (scenario-level `obstacle_collision`) was removed from the
-manifest in PR #4841. PR #5225 (2026-07-11) closed the last bounded corrective gap:
+diagnostic into guarded, testable implementation surfaces. The latest tracked
+CPU-only cross-slice diagnostic contains 15 `diagnostic_complete` rows plus five
+`doorway_transfer` `not_available` rows. The scenario was removed from the manifest
+in PR #4841, but this report does not supply a post-replacement re-run. PR #5225
+(2026-07-11) closed the bounded availability correction:
 topology hypothesis availability now records valid/missing/malformed/configured-fallback
 outcomes and fails closed on malformed geometry. This is not benchmark, planner-promotion,
 paper, or dissertation evidence.
@@ -95,16 +98,16 @@ registry entries, and validator tests. PR
 evidence. PR [#4746](https://github.com/ll7/robot_sf_ll7/pull/4746) preserved
 blocker triage.
 
-Status: executed at diagnostic-only strength; latest result is `blocked`, not
-promotion evidence.
+Status: executed at diagnostic-only strength; the latest tracked packet is `blocked`,
+not promotion evidence. A post-replacement re-run remains open.
 
 ### Five Mechanism Families
 
-The implemented surfaces cover topology hypothesis availability, command
-arbitration strength, route-progress accounting, near-parity gate
-parameterization, and horizon/scenario-slice sensitivity. The current unresolved
-classification is the fail-closed `doorway_transfer` blocker in the 2026-07-05
-and 2026-07-07 evidence.
+The merged surfaces cover topology hypothesis availability, command arbitration
+strength, route-progress accounting, near-parity gate parameterization, and
+horizon/scenario-slice sensitivity. PR #5225 corrects availability handling, but
+the parent issue remains open until the post-replacement diagnostic and its broader
+acceptance audit are explicitly resolved.
 
 Status: covered for diagnostic closure audit; blocker remains before promotion.
 
@@ -117,7 +120,7 @@ Status: covered.
 
 ## Consolidated Contract
 
-The #3463 contract is now complete and handed off to #3465:
+The #3463 contract remains diagnostic-only and open:
 
 - topology-guided corrective behavior remains diagnostic-only until #3465 or a
   successor explicitly runs the paired enabled-versus-disabled gate;
@@ -125,23 +128,23 @@ The #3463 contract is now complete and handed off to #3465:
   as topology-lane success;
 - topology-guided config fields stay finite, bounded, and documented through
   validation rules;
-- Issue #3463 cross-slice diagnostic completed 15 rows at `diagnostic_complete`
-  strength across three retained slices (doorway_transfer removed as scenario-level
-  failure, not a topology bug);
-- PR #5225 closes the topology hypothesis availability corrective gap.
+- the latest tracked Issue #3463 cross-slice packet is fail-closed `blocked` because
+  five `doorway_transfer` rows were `not_available`; #4841 removed that scenario,
+  but a post-replacement run is still required;
+- PR #5225 closes only the topology hypothesis availability corrective gap.
 
 ## Remaining Blockers
 
 | Blocker | Why it remains |
 | --- | --- |
 | No full benchmark promotion claim. | Issue #3463 intentionally stops at guarded diagnostic implementation; Issue #3465 owns the benchmark-facing enabled-versus-disabled comparison. |
+| Post-replacement diagnostic evidence. | PR #4841 removed the all-candidate doorway_transfer failure from the manifest, but the retained-slice packet has not been re-run and recorded after that change. |
 | Two schema nitpicks from PR #4426 are tracked separately. | The issue thread spun off global-versus-per-step command limits and uniform topology-guided config schema handling to Issue #4430. |
 
 ## Next Empirical Action
 
-The next empirical action for the topology lane is the benchmark-facing
-enabled-versus-disabled comparison owned by Issue #3465. The cross-slice diagnostic
-packet (manifest `configs/policy_search/topology_reselection_cross_slice_issue_3463.yaml`)
-ran at diagnostic-only strength and is retained for reference. The `doorway_transfer`
-slice remains in the evidence record as a scenario-level failure, preserved for future
-behavioral work.
+Run the retained-slice diagnostic packet from
+`configs/policy_search/topology_reselection_cross_slice_issue_3463.yaml` and record
+whether it completes without fallback/degraded success. Reassess #3463 against its
+parent acceptance criteria after that diagnostic result; #3465 remains the separate
+benchmark-facing enabled-versus-disabled gate.

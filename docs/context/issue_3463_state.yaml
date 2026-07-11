@@ -1,21 +1,20 @@
 issue: 3463
 state_surface: high_churn_issue_state
 updated_at: "2026-07-11"
-current_status: closure_ready_all_dod_met
+current_status: open_diagnostic_requires_post_replacement_smoke
 claim_boundary: diagnostic_only_not_benchmark_or_paper_evidence
 benchmark_promotion_gate: 3465
 latest_audit:
   path: docs/context/evidence/issue_3463_closure_audit_2026-07-11.md
-  decision: close
+  decision: remain_open
   reason: >
-    All five #2540 mechanism families addressed in merged PRs (#4176, #4388, #4411,
-    #4426, #4444, #5225). Cross-slice diagnostic completed 15 rows across three slices
-    (bottleneck_transfer, t_intersection_transfer, simple_negative_control) at
-    diagnostic-only strength. The doorway_transfer blocker was removed (#4841) as a
-    scenario-level failure affecting all candidates equally. PR #5225 (2026-07-11)
-    closed the last bounded corrective gap: topology hypothesis availability now records
-    valid/missing/malformed/fallback outcomes and fails closed on malformed geometry.
-    All DoD items met. #3465 remains the benchmark-facing promotion gate.
+    PR #5225 (2026-07-11) closes the bounded topology-hypothesis-availability
+    correction: valid/missing/malformed/fallback outcomes are recorded and malformed
+    geometry fails closed. The parent acceptance audit remains open, however: the
+    tracked 2026-07-05 packet included five doorway_transfer not_available rows;
+    #4841 removed that scenario but no post-replacement diagnostic run is recorded.
+    Keep #3463 open until its remaining corrective scope and diagnostic re-run are
+    explicitly resolved. #3465 remains the benchmark-facing promotion gate.
 prior_audit:
   path: docs/context/evidence/issue_3463_closure_audit_2026-07-07.md
   decision: slice_replaced
@@ -33,7 +32,7 @@ resolved_blocker:
   rows_affected: 5
   resolution_action: removed_slice_from_cross_slice_manifest
   retained_in_record: true
-next_empirical_action: await_3465_benchmark_facing_enabled_vs_disabled_promotion
+next_empirical_action: run_post_replacement_cross_slice_diagnostic_then_reassess_3463
 forbidden_claims:
   benchmark_improvement: false
   planner_promotion: false

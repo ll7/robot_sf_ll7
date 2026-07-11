@@ -228,7 +228,11 @@ def _integer(value: object, path: str) -> int:
 
 
 def _resolve_config_path(value: str, *, config_path: Path) -> Path:
-    """Resolve an absolute path or a path relative to the owning sampler config."""
+    """Resolve an absolute path or a path relative to the owning sampler config.
+
+    Returns:
+        Absolute resolved path for ``value``.
+    """
     candidate = Path(value)
     return candidate if candidate.is_absolute() else (config_path.parent / candidate).resolve()
 

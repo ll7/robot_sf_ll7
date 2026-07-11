@@ -27,6 +27,7 @@ from robot_sf.benchmark.predictive_checkpoint_schema_audit import (
 from robot_sf.planner.obstacle_features import (
     PREDICTIVE_EGO_FEATURE_DIM,
     PREDICTIVE_EGO_FEATURE_SCHEMA,
+    PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
     PREDICTIVE_LEGACY_FEATURE_DIM,
     PREDICTIVE_LEGACY_FEATURE_SCHEMA,
     predictive_feature_schema_metadata,
@@ -191,6 +192,50 @@ def test_audit_explicit_expected_schema_can_match_ego_checkpoint(tmp_path: Path)
     arm = result.arms[0]
     assert arm.status == STATUS_COMPAT
     assert arm.expected_schema == PREDICTIVE_EGO_FEATURE_SCHEMA
+
+
+def test_audit_rejects_ego_checkpoint_with_nonruntime_motion_producer(tmp_path: Path) -> None:
+    """The audit rejects an ego checkpoint that the runtime planner would fail closed on."""
+    schema = predictive_feature_schema_metadata(
+        model_family=PREDICTIVE_EGO_FEATURE_SCHEMA,
+        ego_conditioning=True,
+        ego_motion_channel_producer=PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE,
+    )
+    model = PredictiveTrajectoryModel(
+        PredictiveModelConfig(
+            input_dim=PREDICTIVE_EGO_FEATURE_DIM,
+            feature_schema_name=PREDICTIVE_EGO_FEATURE_SCHEMA,
+        )
+    )
+    checkpoint = tmp_path / "ckpt" / "standalone_ego.pt"
+    save_predictive_checkpoint(
+        checkpoint,
+        model=model,
+        optimizer=None,
+        epoch=1,
+        feature_schema_metadata=schema,
+    )
+    registry = _write_registry(
+        tmp_path,
+        [{"model_id": "standalone_ego", "local_path": str(checkpoint)}],
+    )
+    algo_cfg = _write_algo_config(
+        tmp_path,
+        "standalone_ego.yaml",
+        {
+            "predictive_model_id": "standalone_ego",
+            "predictive_feature_schema_name": PREDICTIVE_EGO_FEATURE_SCHEMA,
+        },
+    )
+    campaign = _campaign(
+        (PlannerSpec(key="ego_arm", algo="prediction_planner", algo_config_path=algo_cfg),),
+        tmp_path=tmp_path,
+    )
+
+    result = audit_predictive_checkpoint_schema(campaign, registry_path=registry)
+
+    assert result.arms[0].status == STATUS_INCOMPAT
+    assert "ego motion producer mismatch" in result.arms[0].detail
 
 
 def test_audit_skips_non_predictive_arms(tmp_path: Path) -> None:

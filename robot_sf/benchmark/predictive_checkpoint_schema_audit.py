@@ -44,6 +44,7 @@ from robot_sf.planner.obstacle_features import (
     ObstacleFeatureSchemaError,
     infer_predictive_feature_schema,
     validate_predictive_feature_schema_metadata,
+    validate_predictive_runtime_feature_schema,
 )
 from robot_sf.planner.predictive_model import PredictiveModelConfig
 
@@ -249,6 +250,7 @@ def _classify_arm_schema(
             input_dim=input_dim,
             expected_schema_name=str(expected_schema_name),
         )
+        validate_predictive_runtime_feature_schema(feature_schema)
     except ObstacleFeatureSchemaError as exc:
         return (
             STATUS_INCOMPAT,

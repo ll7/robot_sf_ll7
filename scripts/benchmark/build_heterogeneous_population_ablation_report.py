@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.heterogeneous_population_ablation import (
+    assess_mean_matched_episode_records,
     build_per_archetype_ablation_report,
 )
 from robot_sf.benchmark.heterogeneous_rank_sensitivity import (
@@ -26,6 +27,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--manifest",
+        default="output/issue_3574_mean_matched_harness/manifest.json",
+        help="Paired pre-run manifest used to fail closed on missing or extra episode rows.",
+    )
     parser.add_argument(
         "--records",
         default="output/issue_3574_mean_matched_harness/episode_records.jsonl",
@@ -62,33 +68,35 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
 def main() -> int:  # noqa: C901,PLR0912,PLR0915
     """Run report compilation pipeline."""
     args = parse_args()
+    manifest_path = REPO_ROOT / args.manifest
     records_path = REPO_ROOT / args.records
     output_dir = REPO_ROOT / args.output_dir
     durable_dir = REPO_ROOT / args.durable_dir
 
+    if not manifest_path.exists():
+        print(f"Error: Manifest not found at {manifest_path}. Build it first.")
+        return 1
     if not records_path.exists():
         print(f"Error: Episode records not found at {records_path}. Run the simulations first.")
         return 1
 
+    with manifest_path.open("r", encoding="utf-8") as f:
+        manifest = json.load(f)
     records = load_jsonl(records_path)
     print(f"Loaded {len(records)} episode records.")
 
-    # Validate/skip incomplete rows (issue #4618 R5): downstream tabulation reads
-    # ``planner``/``seed``/``scenario_id``/``population_arm`` directly, so drop any record
-    # missing (or null in) those keys instead of raising a raw KeyError mid-report.
-    required_keys = ("planner", "seed", "scenario_id", "population_arm")
-    complete_records = [
-        rec for rec in records if all(rec.get(key) is not None for key in required_keys)
-    ]
-    skipped = len(records) - len(complete_records)
-    if skipped:
+    integration_readiness = assess_mean_matched_episode_records(manifest, records)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    readiness_path = output_dir / "integration_readiness.json"
+    readiness_path.write_text(
+        json.dumps(integration_readiness, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    if not integration_readiness["ready"]:
         print(
-            f"Skipped {skipped} incomplete episode record(s) missing required keys {required_keys}."
+            "Blocked: episode records do not satisfy the mean-matched manifest; "
+            f"see {readiness_path}"
         )
-    records = complete_records
-    if not records:
-        print("Error: no complete episode records with required keys; nothing to report.")
-        return 1
+        return 2
 
     # Find planners and seeds
     planners = sorted({rec["planner"] for rec in records})
@@ -186,6 +194,7 @@ def main() -> int:  # noqa: C901,PLR0912,PLR0915
     # Write summary.json
     summary_data = {
         "schema_version": "heterogeneous_population_ablation.v1",
+        "integration_readiness": integration_readiness,
         "rank_sensitivity": rank_sensitivity,
         "ablation_reports": ablation_reports,
     }

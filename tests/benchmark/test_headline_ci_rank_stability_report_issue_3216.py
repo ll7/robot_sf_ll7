@@ -227,6 +227,13 @@ def test_report_records_canonical_owners_and_git_head():
     assert any("canonical_table_export" in o for o in owners)
 
 
+def test_report_can_use_stable_generation_timestamp():
+    """A caller can make content hashes reproducible without changing statistics."""
+    rows = [_cell_row("merging", "a", {"snqi": [0.5, 0.6, 0.55]})]
+    report = mod.build_report(rows, generated_at_utc="2026-06-30T12:34:56+00:00")
+    assert report["generated_at_utc"] == "2026-06-30T12:34:56+00:00"
+
+
 def test_markdown_renders_without_error():
     """Markdown rendering produces a non-empty summary with the classification."""
     rows = [

@@ -1,3 +1,4 @@
+<!-- AI-GENERATED (robot_sf#5263, 2026-07-11) - NEEDS-REVIEW -->
 # Issue #5263 exact-repeat evidence packet
 
 This packet defines the exact CPU-only repeat campaign needed to determine whether the seven

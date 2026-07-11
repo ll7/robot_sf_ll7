@@ -300,32 +300,6 @@ def _write_steps_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     )
 
 
-def _append_outcome_comparison_and_acceptance_criteria(lines: list[str]) -> None:
-    """Append the bounded inference and completion record for the packet."""
-    lines.append("## Outcome comparison")
-    lines.append("")
-    lines.append(
-        "The probe did not activate on either recorded step. Under the fail-closed scoring "
-        "contract, its waypoint term is therefore zero and DWA uses the baseline score. "
-        "This is a scoring-contract inference, not an independently rerun baseline comparator."
-    )
-    lines.append("")
-    lines.append("## Acceptance criteria")
-    lines.append("")
-    lines.append(
-        "- [x] Planner/config tests cover the new contract and malformed-input failure mode"
-    )
-    lines.append(
-        "- [x] The evidence packet states whether the probe activates and whether either "
-        "original mechanism changes"
-    )
-    lines.append(
-        "- [x] Results remain diagnostic-only unless a separate benchmark decision establishes "
-        "a broader claim"
-    )
-    lines.append("")
-
-
 def _write_evidence_readme(
     path: Path, *, summaries: list[dict[str, Any]], trace_commit: str
 ) -> None:
@@ -382,7 +356,6 @@ def _write_evidence_readme(
         if first_activation is not None:
             lines.append(f"- Global-route probe first activation step: {first_activation}")
         lines.append("")
-    _append_outcome_comparison_and_acceptance_criteria(lines)
     lines.append("## Claim boundary")
     lines.append("")
     lines.append(

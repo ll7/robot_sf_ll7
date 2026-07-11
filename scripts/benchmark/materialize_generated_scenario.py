@@ -9,6 +9,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from robot_sf.benchmark.scenario_generation import (
     dump_generated_scenario_yaml,
     generated_replay_status_entry,
@@ -66,6 +68,10 @@ def main() -> int:
             )
             if summary["successful_jobs"] == 1 and summary["failed_jobs"] == 0:
                 result = replace(result, status="replay_validated")
+                result.scenario_document["scenarios"][0]["metadata"]["generated_replay"][
+                    "replay_status"
+                ] = result.status
+                args.output.write_text(dump_generated_scenario_yaml(result), encoding="utf-8")
             else:
                 smoke_failed = True
                 result = replace(
@@ -74,7 +80,12 @@ def main() -> int:
                         "replay_smoke: materialized scenario loaded but did not complete successfully",
                     ),
                 )
-        except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover - runtime dependent
+        except (
+            OSError,
+            RuntimeError,
+            ValueError,
+            yaml.YAMLError,
+        ) as exc:  # pragma: no cover - runtime dependent
             smoke_failed = True
             result = replace(result, warnings=(f"replay_smoke_error: {exc}",))
     _write_status(args.status_output, entry, result)

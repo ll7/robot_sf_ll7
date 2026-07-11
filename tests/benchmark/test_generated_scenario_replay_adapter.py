@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import json
+import runpy
+import sys
 from copy import deepcopy
 from pathlib import Path
 
 import pytest
+import yaml
 
 from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.benchmark.scenario_generation import (
@@ -162,3 +166,92 @@ def test_materialized_yaml_executes_one_bounded_cpu_map_runner_job(tmp_path: Pat
     assert summary["successful_jobs"] == 1
     assert summary["failed_jobs"] == 0
     assert episodes_path.is_file()
+
+
+def test_materialize_cli_syncs_replay_validated_status_into_yaml(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A successful optional smoke synchronizes the scenario and sidecar statuses."""
+
+    entry_path = tmp_path / "entry.json"
+    output_path = tmp_path / "generated.yaml"
+    status_path = tmp_path / "status.json"
+    entry_path.write_text(json.dumps(_entry()), encoding="utf-8")
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.run_map_batch",
+        lambda *args, **kwargs: {"successful_jobs": 1, "failed_jobs": 0},
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "materialize_generated_scenario.py",
+            "--catalog-entry-json",
+            str(entry_path),
+            "--output",
+            str(output_path),
+            "--status-output",
+            str(status_path),
+            "--replay-smoke-output",
+            str(tmp_path / "episodes.jsonl"),
+        ],
+    )
+
+    assert _materialize_cli_main()() == 0
+    assert _generated_replay_status(output_path) == "replay_validated"
+    assert (
+        json.loads(status_path.read_text(encoding="utf-8"))["replay"]["status"]
+        == "replay_validated"
+    )
+
+
+def test_materialize_cli_records_yaml_smoke_setup_errors(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """YAML setup errors preserve the diagnostic sidecar rather than escaping."""
+
+    entry_path = tmp_path / "entry.json"
+    output_path = tmp_path / "generated.yaml"
+    status_path = tmp_path / "status.json"
+    entry_path.write_text(json.dumps(_entry()), encoding="utf-8")
+
+    def raise_yaml_error(*args: object, **kwargs: object) -> None:
+        raise yaml.YAMLError("malformed generated scenario")
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.run_map_batch", raise_yaml_error)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "materialize_generated_scenario.py",
+            "--catalog-entry-json",
+            str(entry_path),
+            "--output",
+            str(output_path),
+            "--status-output",
+            str(status_path),
+            "--replay-smoke-output",
+            str(tmp_path / "episodes.jsonl"),
+        ],
+    )
+
+    assert _materialize_cli_main()() == 3
+    status = json.loads(status_path.read_text(encoding="utf-8"))["replay"]
+    assert status["status"] == "loads_only"
+    assert status["warnings"] == ["replay_smoke_error: malformed generated scenario"]
+
+
+def _materialize_cli_main() -> object:
+    """Load the standalone CLI without relying on the current working directory."""
+
+    return runpy.run_path(
+        str(REPO_ROOT / "scripts/benchmark/materialize_generated_scenario.py"),
+        run_name="generated_scenario_materializer_test",
+    )["main"]
+
+
+def _generated_replay_status(scenario_path: Path) -> str:
+    """Return the generated-only metadata status from a materialized YAML file."""
+
+    document = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))
+    return document["scenarios"][0]["metadata"]["generated_replay"]["replay_status"]

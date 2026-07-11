@@ -10,6 +10,7 @@ import pytest
 
 from scripts.analysis.build_issue_5138_h600_family_breakdown_export import (
     CELL_COLUMNS,
+    DEFAULT_RUNS,
     FAMILY_COLUMNS,
     HARD_SUMMARY_COLUMNS,
     SCHEMA_VERSION,
@@ -17,6 +18,14 @@ from scripts.analysis.build_issue_5138_h600_family_breakdown_export import (
     RunSource,
     build_export,
 )
+
+
+def test_default_runs_use_issue_5164_durable_source_locations() -> None:
+    """The default export path cannot silently fall back to worktree-local output/."""
+    assert [str(run["reports_dir"]) for run in DEFAULT_RUNS] == [
+        "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_reports/13268",
+        "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_reports/13273",
+    ]
 
 
 def _write_family_breakdown(reports_dir: Path, *, planners: tuple[str, ...]) -> None:

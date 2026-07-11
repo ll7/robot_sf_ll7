@@ -72,18 +72,23 @@ SCHEMA_VERSION = "issue_5138_h600_family_breakdown_export.v1"
 DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_3810_h600_interpretation_2026-07")
 REVIEW_MARKER = "AI-GENERATED NEEDS-REVIEW"
 
-# Canonical h600 legs (job_id -> reports dir). These match the runs already
-# recorded in the bundle's source_manifest.json so provenance stays consistent.
+# Canonical h600 legs (job_id -> reports dir). #5164 pins these repository-
+# accessible locations and verifies their checksums before this exporter may
+# regenerate the diagnostic bundle.
 DEFAULT_RUNS = (
     {
         "job_id": "13268",
         "run_label": "confirm",
-        "reports_dir": Path("output/issue3810-h600-longhorizon-confirm-run/13268/reports"),
+        "reports_dir": Path(
+            "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_reports/13268"
+        ),
     },
     {
         "job_id": "13273",
         "run_label": "extended_roster",
-        "reports_dir": Path("output/issue3810-h600-extroster-run/13273/reports"),
+        "reports_dir": Path(
+            "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_reports/13273"
+        ),
     },
 )
 

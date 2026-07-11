@@ -100,20 +100,20 @@
         "created_at_utc": "2026-07-02T11:15:01.146142Z",
         "git_hash": "1cb7dc31a018fdf21892beb0e74ca47699e41d9a",
         "job_id": "13268",
-        "reports_dir": "output/issue3810-h600-longhorizon-confirm-run/13268/reports",
+        "reports_dir": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_reports/13268",
         "run_label": "confirm",
         "scenario_matrix_hash": "c10df617a87c",
         "source_files": {
           "scenario_breakdown.csv": {
-            "path": "output/issue3810-h600-longhorizon-confirm-run/13268/reports/scenario_breakdown.csv",
+            "path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_reports/13268/scenario_breakdown.csv",
             "sha256": "bab81ea5ed6517c7537ff41954b4b2ecefc2dc84754c6f43efca8d36f9bac2a1"
           },
           "scenario_family_breakdown.csv": {
-            "path": "output/issue3810-h600-longhorizon-confirm-run/13268/reports/scenario_family_breakdown.csv",
+            "path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_reports/13268/scenario_family_breakdown.csv",
             "sha256": "f2d7e3128eb956721a2724a2d8d9ca9645eced6df1a3219f1e3a4e597f8965b9"
           },
           "seed_episode_rows.csv": {
-            "path": "output/issue3810-h600-longhorizon-confirm-run/13268/reports/seed_episode_rows.csv",
+            "path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_reports/13268/seed_episode_rows.csv",
             "sha256": "4493c8ebee0942c1c32b0d51e511f4fd98f35ee2be8d24d366564f8979be7d23"
           }
         }
@@ -123,20 +123,20 @@
         "created_at_utc": "2026-07-02T15:32:24.056840Z",
         "git_hash": "4da0879fa897783fe35f65d52ef488d14e526ccc",
         "job_id": "13273",
-        "reports_dir": "output/issue3810-h600-extroster-run/13273/reports",
+        "reports_dir": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_reports/13273",
         "run_label": "extended_roster",
         "scenario_matrix_hash": "c10df617a87c",
         "source_files": {
           "scenario_breakdown.csv": {
-            "path": "output/issue3810-h600-extroster-run/13273/reports/scenario_breakdown.csv",
+            "path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_reports/13273/scenario_breakdown.csv",
             "sha256": "49ef88f08ccc66e73f01cf6221a52fd685a6ca9d3aa4f1179aa0ca1532827e1f"
           },
           "scenario_family_breakdown.csv": {
-            "path": "output/issue3810-h600-extroster-run/13273/reports/scenario_family_breakdown.csv",
+            "path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_reports/13273/scenario_family_breakdown.csv",
             "sha256": "1a925a9fc4f0cecba834573597e1c8995a350a5b3454fec0cb4280256eb4a156"
           },
           "seed_episode_rows.csv": {
-            "path": "output/issue3810-h600-extroster-run/13273/reports/seed_episode_rows.csv",
+            "path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_reports/13273/seed_episode_rows.csv",
             "sha256": "f2e5960c2439f28745b4bd2f7cd19f4c94cabd86cb1387693095a656ac859e81"
           }
         }

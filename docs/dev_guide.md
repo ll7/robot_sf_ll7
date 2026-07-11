@@ -466,6 +466,27 @@ When issue or PR text needs to classify proof strength, use the
 [artifact evidence vocabulary](context/artifact_evidence_vocabulary.md) so local `output/` paths are
 not promoted into durable benchmark or paper-facing claims.
 
+#### Issue-reading fallback
+
+`gh issue view <number> --comments` can fail on some GitHub CLI versions with a
+`repository.issue.projectCards` GraphQL deprecation error. Use the targeted REST
+fallback instead (see issue #5186):
+
+```bash
+# Drop-in for `gh issue view <number> --comments`: native CLI first, REST fallback
+# only for the known projectCards GraphQL error.
+uv run python scripts/dev/gh_issue_rest.py thread <number> --repo ll7/robot_sf_ll7
+
+# Explicit REST read with normalized fields (stable JSON output shape):
+uv run python scripts/dev/gh_issue_rest.py view <number> --repo ll7/robot_sf_ll7 --comments
+uv run python scripts/dev/gh_issue_rest.py view <number> --json number title state url labels comments
+```
+
+All issue-delivery skills (`gh-issue-autopilot`, `gh-issue-clarifier`,
+`goal-issue-implementation`, etc.) already route to `gh_issue_rest.py thread` when
+`gh issue view --comments` fails; see
+`docs/context/issue_713_batch_first_issue_workflow.md` for the full command reference.
+
 For GitHub issue batches and Project #5 updates, follow the batch-first workflow note:
 
 - `docs/context/issue_713_batch_first_issue_workflow.md`

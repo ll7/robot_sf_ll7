@@ -7,7 +7,7 @@ This diagnostic probes global-route waypoint integration for the classical DWA p
 
 - Config: `configs/algos/dwa_global_route_probe.yaml`
 - Matrix: `configs/scenarios/classic_interactions.yaml`
-- Commit: `7d74dc18a76409ab35aeee8c390bb386e11ba660`
+- Commit: `8d84eda28d2b72e9ebebd1bd47ae4aa9198ea6f0`
 
 ## Episodes
 
@@ -26,6 +26,16 @@ This diagnostic probes global-route waypoint integration for the classical DWA p
 - Net progress: 1.178 m
 - Min distance to goal: 1.575 m
 - Global-route probe activated: False
+
+## Outcome comparison
+
+The probe did not activate on either recorded step. Under the fail-closed scoring contract, its waypoint term is therefore zero and DWA uses the baseline score. This is a scoring-contract inference, not an independently rerun baseline comparator.
+
+## Acceptance criteria
+
+- [x] Planner/config tests cover the new contract and malformed-input failure mode
+- [x] The evidence packet states whether the probe activates and whether either original mechanism changes
+- [x] Results remain diagnostic-only unless a separate benchmark decision establishes a broader claim
 
 ## Claim boundary
 

@@ -106,6 +106,7 @@ def test_run_trace_uses_current_map_runner_contract(
         algo_config=trace.DEFAULT_ALGO_CONFIG,
         matrix_path=trace.DEFAULT_MATRIX,
         out_dir=tmp_path,
+        evidence_dir=tmp_path / "evidence",
     )
 
     assert len(calls) == 2
@@ -118,3 +119,9 @@ def test_run_trace_uses_current_map_runner_contract(
         assert kwargs["algo_config_path"] == str(trace.DEFAULT_ALGO_CONFIG)
         assert kwargs["benchmark_profile"] == "experimental"
         assert kwargs["record_planner_decision_trace"] is True
+
+    readme = (tmp_path / "evidence" / "README.md").read_text(encoding="utf-8")
+    assert "## Outcome comparison" in readme
+    assert "scoring-contract inference, not an independently rerun baseline comparator" in readme
+    assert "## Acceptance criteria" in readme
+    assert "- [x] The evidence packet states whether the probe activates" in readme

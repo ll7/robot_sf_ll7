@@ -73,6 +73,53 @@ _CHECKPOINT_PREFLIGHT_REPORT_NAME: dict[str, str] = {
 _TUNING_BACKFILL_PENDING = "backfill_pending"
 
 
+def _checkpoint_provenance_block(
+    planner: PlannerSpec,
+    checkpoint_preflight_summary: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the preflight checkpoint-provenance block for one campaign arm.
+
+    Returns:
+        JSON-serializable checkpoint identity and not-yet-run status.
+    """
+    references = [
+        dict(item)
+        for item in checkpoint_preflight_summary.get("arms", [])
+        if isinstance(item, dict) and item.get("planner_key") == planner.key
+    ]
+    if not references:
+        return {
+            "status": "not_applicable",
+            "model_id": None,
+            "checkpoint_sha256": None,
+            "load_succeeded": None,
+            "fallback_triggered": None,
+            "references": [],
+            "runtime": [],
+        }
+    model_ids = sorted(
+        {str(item["model_id"]) for item in references if item.get("model_id") is not None}
+    )
+    hashes = sorted(
+        {
+            str(item["checkpoint_sha256"])
+            for item in references
+            if item.get("checkpoint_sha256") is not None
+        }
+    )
+    resolved_statuses = {"present_local", "staged", "stageable_remote"}
+    unresolved = [item for item in references if item.get("status") not in resolved_statuses]
+    return {
+        "status": "resolution_failed" if unresolved else "not_run",
+        "model_id": model_ids[0] if len(model_ids) == 1 else None,
+        "checkpoint_sha256": hashes[0] if len(hashes) == 1 else None,
+        "load_succeeded": None,
+        "fallback_triggered": None,
+        "references": references,
+        "runtime": [],
+    }
+
+
 def _tuning_effort_block(planner: PlannerSpec) -> dict[str, Any]:
     """Return the per-arm tuning-effort manifest block (issue #5143).
 
@@ -392,6 +439,7 @@ def prepare_campaign_preflight(  # noqa: PLR0913
         stage=checkpoint_preflight_stage,
         registry_path=checkpoint_registry_path,
         cache_dir=checkpoint_cache_dir,
+        fail_closed_implicit=cfg.checkpoint_provenance_enforcement == "error",
     )
     ensure_canonical_tree(categories=("benchmarks",))
     campaign_id = _resolve_campaign_id(cfg, label=label, campaign_id=campaign_id)
@@ -622,11 +670,15 @@ def prepare_campaign_preflight(  # noqa: PLR0913
                 "observation_mode": planner.observation_mode,
                 "enabled": planner.enabled,
                 "tuning": _tuning_effort_block(planner),
+                "checkpoint_provenance": _checkpoint_provenance_block(
+                    planner, checkpoint_preflight_report
+                ),
             }
             for planner in cfg.planners
         ],
         "tuning_effort_enforcement": cfg.tuning_effort_enforcement,
         "tuning_effort_summary": _tuning_effort_summary(cfg.planners),
+        "checkpoint_provenance_enforcement": cfg.checkpoint_provenance_enforcement,
         "kinematics_matrix": list(cfg.kinematics_matrix),
         "holonomic_command_mode": cfg.holonomic_command_mode,
         "observation_mode": cfg.observation_mode,

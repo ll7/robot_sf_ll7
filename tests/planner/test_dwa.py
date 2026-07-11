@@ -226,3 +226,71 @@ def test_dwa_rejects_invalid_runtime_configuration(overrides: dict[str, float]) 
     """The experimental planner fails closed before it can emit invalid commands."""
     with pytest.raises(ValueError):
         DWAPlannerConfig(**overrides)
+
+
+def test_dwa_diagnostics_populated_after_plan() -> None:
+    """Diagnostics are populated after plan() and include expected decision keys."""
+    config = DWAPlannerConfig(linear_samples=5, angular_samples=5)
+    planner = DWAPlannerAdapter(config)
+    observation = _observation(goal=(3.0, 0.0))
+    command = planner.plan(observation)
+    diag = planner.diagnostics()
+    last = diag.get("last_decision", {})
+    assert last["selected_source"] == "dwa"
+    assert last["selected_command"] == list(command)
+    assert last["constraint_reason"] == "best_feasible"
+    assert last["candidate_total"] == 25
+    assert last["candidate_feasible"] > 0
+    assert last["candidate_infeasible"] >= 0
+    assert last["feasible_score_min"] is not None
+    assert last["feasible_score_max"] is not None
+    assert last["feasible_score_max"] >= last["feasible_score_min"]
+    window = last["dynamic_window"]
+    assert window["v_min"] <= window["v_max"]
+    assert window["w_min"] <= window["w_max"]
+    assert last["distance_to_goal_m"] == pytest.approx(3.0)
+    assert last["target_goal"]["kind"] in {"next", "current"}
+
+
+def test_dwa_diagnostics_goal_reached() -> None:
+    """When within goal_tolerance the diagnostics record the goal_reached constraint reason."""
+    config = DWAPlannerConfig(goal_tolerance=0.5)
+    planner = DWAPlannerAdapter(config)
+    observation = _observation(goal=(0.1, 0.0))
+    command = planner.plan(observation)
+    diag = planner.diagnostics()
+    last = diag.get("last_decision", {})
+    assert command == (0.0, 0.0)
+    assert last["constraint_reason"] == "goal_reached"
+    assert last["candidate_total"] == 0
+    assert last["distance_to_goal_m"] == pytest.approx(0.1)
+
+
+def test_dwa_diagnostics_feasible_infeasible_counts() -> None:
+    """Close obstacle produces infeasible candidates and records the count."""
+    config = DWAPlannerConfig(
+        linear_samples=3,
+        angular_samples=3,
+        safety_margin=0.5,
+        robot_radius=0.25,
+        pedestrian_radius=0.30,
+    )
+    planner = DWAPlannerAdapter(config)
+    observation = _observation(goal=(3.0, 0.0), pedestrians=[(0.3, 0.0)])
+    planner.plan(observation)
+    diag = planner.diagnostics()
+    last = diag.get("last_decision", {})
+    assert last["candidate_infeasible"] > 0
+    assert last["candidate_feasible"] < last["candidate_total"]
+
+
+def test_dwa_diagnostics_resets_between_episodes() -> None:
+    """Diagnostics from a prior episode do not leak into the next episode."""
+    config = DWAPlannerConfig(linear_samples=3, angular_samples=3)
+    planner = DWAPlannerAdapter(config)
+    planner.plan(_observation(goal=(3.0, 0.0)))
+    first_diag = planner.diagnostics()["last_decision"]
+    assert first_diag["constraint_reason"] == "best_feasible"
+    planner.plan(_observation(goal=(0.05, 0.0)))
+    second_diag = planner.diagnostics()["last_decision"]
+    assert second_diag["constraint_reason"] == "goal_reached"

@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 from loguru import logger
 
+from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.models import resolve_model_path
 from robot_sf.planner.obstacle_features import (
     PREDICTIVE_LEGACY_FEATURE_SCHEMA,
@@ -579,14 +580,12 @@ def emit_schema_filtered_config(
     if not isinstance(data, dict):
         raise TypeError(f"Campaign config must be a mapping: {source}")
 
-    try:
-        from robot_sf.common.artifact_paths import (  # noqa: PLC0415
-            get_repository_root,
-        )
-
-        repo_root = Path(get_repository_root())
-    except (ImportError, RuntimeError, OSError):  # pragma: no cover - best-effort provenance
-        repo_root = source.parent
+    # ``get_repository_root`` is a first-party, pure-path helper (no optional or
+    # native deps) and is imported unguarded by 20+ other modules. A broad
+    # ``except (ImportError, RuntimeError, OSError)`` here previously tripped the
+    # optional-import guard inventory (issue #5287); it could not actually fire
+    # for this call, so the guard was unjustified and is removed.
+    repo_root = get_repository_root()
     try:
         source_rel = source.relative_to(repo_root) if repo_root in source.parents else source
     except ValueError:

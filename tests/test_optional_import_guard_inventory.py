@@ -236,6 +236,34 @@ class TestOptionalImportGuardInventory:
                 msg += "\n\nShrink opportunities (not failures):\n" + "\n".join(shrink_notes)
             pytest.fail(msg)
 
+    def test_no_first_party_import_wrapped_in_broad_catch(self) -> None:
+        """Regression guard for issue #5287.
+
+        A first-party import of ``robot_sf.common.artifact_paths.get_repository_root``
+        was previously wrapped in a broad ``except (ImportError, RuntimeError,
+        OSError)`` guard inside
+        ``robot_sf/benchmark/predictive_checkpoint_schema_audit.py``. That guard
+        could not actually fire: ``get_repository_root`` is a first-party, pure-path
+        helper with no optional or native dependencies, and 20+ other modules import
+        it unguarded. The broad catch was therefore unjustified and tripped this
+        inventory ratchet as a new ``ImportError+OSError+RuntimeError`` spelling.
+
+        This test pins the fix: the exact 3-element spelling must never reappear in
+        ``robot_sf/``. If a future change genuinely needs that broad catch, it must
+        come with strong justification and be blessed in the snapshot instead of
+        silently reintroducing the regression.
+        """
+        observed = collect_optional_import_guards(SCANNED_ROOT)
+        assert "ImportError+OSError+RuntimeError" not in observed, (
+            "The 'ImportError+OSError+RuntimeError' spelling reappeared in robot_sf/. "
+            "This exact spelling was removed in issue #5287 because it guarded a "
+            "first-party pure-path import that cannot raise these exceptions. "
+            "Either drop the unjustified broad catch or, if genuinely required, bless "
+            "a *specific* spelling in tests/fixtures/optional_import_guards.json with "
+            "justification. Locations:\n    "
+            + "\n    ".join(str(x) for x in observed["ImportError+OSError+RuntimeError"]["samples"])
+        )
+
     def test_snapshot_matches_collector_output(self) -> None:
         """The committed counts must equal what the collector reports today.
 

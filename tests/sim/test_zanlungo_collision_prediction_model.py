@@ -116,6 +116,51 @@ def test_exact_centered_collision_uses_finite_deterministic_direction_and_cap() 
 
 
 @pytest.mark.parametrize(
+    ("positions", "velocities", "message"),
+    [
+        (np.zeros((2, 3)), np.zeros((2, 2)), "positions"),
+        (np.zeros((2, 2)), np.zeros((3, 2)), "velocities"),
+        (np.array([[0.0, 0.0], [np.nan, 0.0]]), np.zeros((2, 2)), "finite"),
+    ],
+)
+def test_force_state_inputs_fail_closed(
+    positions: np.ndarray,
+    velocities: np.ndarray,
+    message: str,
+) -> None:
+    """Malformed state arrays fail before pairwise projection."""
+    with pytest.raises(ValueError, match=message):
+        _force(positions, velocities)
+
+
+def test_empty_single_actor_disabled_and_invalid_epsilon_paths() -> None:
+    """Trivial populations are no-ops and invalid numerical tolerance fails closed."""
+    np.testing.assert_array_equal(_force(np.empty((0, 2)), np.empty((0, 2))), np.empty((0, 2)))
+    np.testing.assert_array_equal(_force(np.zeros((1, 2)), np.zeros((1, 2))), np.zeros((1, 2)))
+    disabled = zanlungo_collision_prediction_repulsion(
+        np.zeros((2, 2)),
+        np.zeros((2, 2)),
+        interaction_strength=0.0,
+        interaction_range_m=0.71,
+        anisotropy_lambda=0.29,
+        angle_threshold_rad=np.pi / 4,
+        max_force=5.0,
+    )
+    np.testing.assert_array_equal(disabled, np.zeros((2, 2)))
+    with pytest.raises(ValueError, match="epsilon"):
+        zanlungo_collision_prediction_repulsion(
+            np.zeros((2, 2)),
+            np.zeros((2, 2)),
+            interaction_strength=1.13,
+            interaction_range_m=0.71,
+            anisotropy_lambda=0.29,
+            angle_threshold_rad=np.pi / 4,
+            max_force=5.0,
+            epsilon=0.0,
+        )
+
+
+@pytest.mark.parametrize(
     ("kwargs", "message"),
     [
         ({"interaction_strength": -1.0}, "interaction_strength"),
@@ -149,6 +194,16 @@ def test_scenario_selector_enables_validated_config_without_changing_default(tmp
     assert SimulationSettings().zanlungo_collision_prediction.enabled is False
     with pytest.raises(ValueError, match="anisotropy_lambda"):
         ZanlungoCollisionPredictionConfig(anisotropy_lambda=-0.1)
+    with pytest.raises(ValueError, match="interaction_strength"):
+        ZanlungoCollisionPredictionConfig(interaction_strength=-0.1)
+    with pytest.raises(ValueError, match="interaction_range_m"):
+        ZanlungoCollisionPredictionConfig(interaction_range_m=0.0)
+    with pytest.raises(ValueError, match="angle_threshold_rad"):
+        ZanlungoCollisionPredictionConfig(angle_threshold_rad=0.0)
+    with pytest.raises(ValueError, match="max_force"):
+        ZanlungoCollisionPredictionConfig(max_force=0.0)
+    with pytest.raises(ValueError, match="ZanlungoCollisionPredictionConfig"):
+        SimulationSettings(zanlungo_collision_prediction="invalid")  # type: ignore[arg-type]
 
     config = build_robot_config_from_scenario(
         {

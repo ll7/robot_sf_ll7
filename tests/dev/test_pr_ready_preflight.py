@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,20 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_DEV = REPO_ROOT / "scripts" / "dev"
 OPTIONAL_ALLOWLIST = REPO_ROOT / "tests" / "support" / "optional_test_allowlist.txt"
+
+_FOCUSED_SNQI_SELECTOR_TARGETS = (
+    "tests/unit/benchmark/test_snqi_campaign_contract.py",
+    "tests/benchmark/test_camera_ready_campaign.py",
+    "tests/tools/test_run_camera_ready_benchmark.py",
+)
+_UNRELATED_OPTIONAL_IMPORTS = (
+    "torch",
+    "stable_baselines3",
+    "duckdb",
+    "optuna",
+    "pyarrow",
+    "sqlalchemy",
+)
 
 _POST_PREFLIGHT_SCRIPTS = [
     "check_pr_followups.py",
@@ -348,6 +363,47 @@ def test_optional_lane_collection_hook_skips_core_paths(monkeypatch: pytest.Monk
         test_conftest.pytest_ignore_collect(Path("tests/dev/test_pr_ready_preflight.py"), None)
         is True
     )
+
+
+def test_focused_snqi_selector_collects_without_unrelated_optional_stacks(tmp_path: Path) -> None:
+    """Explicit SNQI targets must collect when unrelated optional imports are unavailable."""
+    sitecustomize = tmp_path / "sitecustomize.py"
+    sitecustomize.write_text(
+        "import builtins\n"
+        f"BLOCKED = {set(_UNRELATED_OPTIONAL_IMPORTS)!r}\n"
+        "original_import = builtins.__import__\n"
+        "def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):\n"
+        "    if name.split('.', maxsplit=1)[0] in BLOCKED:\n"
+        "        raise ModuleNotFoundError(f'blocked optional import: {name}')\n"
+        "    return original_import(name, globals, locals, fromlist, level)\n"
+        "builtins.__import__ = guarded_import\n",
+        encoding="utf-8",
+    )
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(filter(None, (str(tmp_path), os.environ.get("PYTHONPATH")))),
+    }
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            *_FOCUSED_SNQI_SELECTOR_TARGETS,
+            "-k",
+            "snqi_contract or exit or camera_ready_summary",
+            "--collect-only",
+            "-q",
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_missing_base_ref_falls_back_to_head_without_crashing(preflight_repo: Path) -> None:

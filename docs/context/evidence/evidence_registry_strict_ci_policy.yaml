@@ -1,0 +1,67 @@
+# AI-GENERATED NEEDS-REVIEW
+schema_version: evidence_registry_strict_ci_policy.v1
+claim_boundary: >-
+  Strict-CI exclusion policy for legacy evidence-registry findings. This policy allows
+  strict-mode gating to pass while legacy provenance and artifact gaps are documented as
+  known exclusions. New campaigns must not produce these excluded codes; the exclusion
+  applies only to records that predate the strict-CI gate.
+evidence_status: policy-decision
+approved_by: ll7
+approved_date: 2026-07-11
+decision_summary: >-
+  All 359 current findings are classified by the disposition packet. The strict-CI gate is
+  enabled with an explicit exclusion set for legacy provenance and artifact gaps that cannot
+  be backfilled without external evidence. New campaigns are held to the full integrity
+  contract.
+excluded_codes:
+  - code: duplicate_campaign_id
+    status: review_cross_bundle_collision
+    justification: >-
+      Six cross-bundle identifiers remain. Canonical ownership requires an explicit
+      maintainer decision; suppressing would hide real ambiguity. Excluded until
+      ownership is resolved.
+  - code: missing_config_path
+    status: provenance_backfill_required
+    justification: >-
+      Legacy campaign records lack a producing configuration path. Cannot be inferred
+      from current files. Excluded until the canonical campaign manifest is backfilled.
+  - code: missing_config_sha256
+    status: provenance_backfill_required
+    justification: >-
+      Legacy campaign records lack a config checksum. Requires hashing the config blob
+      at the declared producing commit. Excluded until backfilled.
+  - code: missing_commit
+    status: provenance_backfill_required
+    justification: >-
+      Legacy campaign records lack an immutable producing commit. Cannot be recovered
+      from durable provenance without maintainer action. Excluded until resolved.
+  - code: dangling_commit
+    status: historical_commit_unavailable
+    justification: >-
+      Nine declared commits are not reachable in this checkout. Requires recovery from
+      a durable remote or archive. Never replace with the current commit.
+  - code: config_missing_at_commit
+    status: provenance_backfill_required
+    justification: >-
+      Two claimed configurations are absent from their declared commits. Requires
+      correcting the path or recovering the producing commit with source evidence.
+  - code: hash_without_artifact_path
+    status: artifact_provenance_backfill_required
+    justification: >-
+      77 checksums cannot be bound to a specific artifact path. Requires adding the
+      adjacent repository-relative path or an explicit external location.
+  - code: uncommitted_artifact_missing_location
+    status: artifact_provenance_backfill_required
+    justification: >-
+      128 untracked or external artifacts lack a durable location marker. Requires
+      adding a stable location or promoting the artifact with its provenance manifest.
+  - code: invalid_sha256
+    status: integrity_repair_required
+    justification: >-
+      One declared artifact checksum is not a valid SHA-256 value. Excluded until the
+      identified artifact is re-hashed and the manifest is corrected.
+  - code: artifact_hash_mismatch
+    status: integrity_repair_required
+    justification: >-
+      14 tracked artifacts do not match their declared SHA-256. Requires recomputing
+      from the declared source or correcting the manifest with provenance review.

@@ -129,6 +129,38 @@ def _load_document(path: Path) -> Any:
     return raw
 
 
+def _load_strict_exclusion_policy(path: Path) -> frozenset[str]:
+    """Load a strict-mode exclusion policy or fail before a gate can pass."""
+    if not path.is_file():
+        raise FileNotFoundError(f"Strict exclusion policy file not found: {path}")
+    try:
+        policy = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Could not parse strict exclusion policy {path}: {exc}") from exc
+    if not isinstance(policy, Mapping):
+        raise ValueError(
+            f"Strict exclusion policy {path} must be a YAML mapping, got {type(policy).__name__}."
+        )
+    codes = policy.get("excluded_codes")
+    if not isinstance(codes, list):
+        raise ValueError(f"Strict exclusion policy {path} must contain an 'excluded_codes' list.")
+
+    parsed: list[str] = []
+    for item in codes:
+        if isinstance(item, str) and item.strip():
+            parsed.append(item)
+        elif (
+            isinstance(item, Mapping) and isinstance(item.get("code"), str) and item["code"].strip()
+        ):
+            parsed.append(item["code"])
+        else:
+            raise ValueError(
+                f"Every strict exclusion policy entry in {path} must be a non-empty code string "
+                "or mapping with a non-empty 'code' string."
+            )
+    return frozenset(parsed)
+
+
 def _iter_mappings(
     value: Any, ancestors: tuple[Mapping[str, Any], ...] = ()
 ) -> Iterable[tuple[Mapping[str, Any], tuple[Mapping[str, Any], ...]]]:
@@ -422,7 +454,10 @@ def _disposition_summary(
 
 
 def lint_evidence_registry(
-    repo_root: Path, registry_root: Path, disposition_path: Path | None = None
+    repo_root: Path,
+    registry_root: Path,
+    disposition_path: Path | None = None,
+    exclude_codes: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     """Return a deterministic integrity report for every supported evidence file."""
     repo_root = repo_root.resolve()
@@ -472,15 +507,25 @@ def lint_evidence_registry(
                 )
             )
     findings.sort(key=lambda item: (item["path"], item["code"], item["message"]))
-    by_code = dict(sorted(Counter(item["code"] for item in findings).items()))
+    excluded = [item for item in findings if item["code"] in exclude_codes]
+    active = [item for item in findings if item["code"] not in exclude_codes]
+    by_code = dict(sorted(Counter(item["code"] for item in active).items()))
+    excluded_by_code = dict(sorted(Counter(item["code"] for item in excluded).items()))
     dispositions = _load_dispositions(disposition_path)
     report: dict[str, Any] = {
         "registry_root": registry_root.relative_to(repo_root).as_posix(),
         "checked_files": len(files),
         "campaign_ids": sorted(campaigns),
-        "issues": findings,
-        "summary": {"findings": len(findings), "by_code": by_code},
+        "issues": active,
+        "summary": {"findings": len(active), "by_code": by_code},
     }
+    if exclude_codes:
+        report["excluded_codes"] = sorted(exclude_codes)
+        report["excluded_issues"] = excluded
+        report["excluded_summary"] = {
+            "findings": len(excluded),
+            "by_code": excluded_by_code,
+        }
     if disposition_path is not None and disposition_path.is_file():
         try:
             report["disposition_path"] = disposition_path.relative_to(repo_root).as_posix()
@@ -520,6 +565,18 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("docs/context/evidence/evidence_registry_dispositions.yaml"),
         help="Optional versioned category-disposition packet for report-mode output.",
     )
+    parser.add_argument(
+        "--exclude-codes",
+        type=str,
+        default="",
+        help="Comma-separated finding codes to exclude from strict-mode gating.",
+    )
+    parser.add_argument(
+        "--strict-exclusion-policy",
+        type=Path,
+        default=None,
+        help="Optional YAML file declaring excluded codes with justification.",
+    )
     args = parser.parse_args(argv)
     repo_root = args.repo_root.resolve() if args.repo_root else _repo_root_from_git()
     registry_root = (
@@ -530,9 +587,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.disposition_file.is_absolute()
         else repo_root / args.disposition_file
     )
-    report = lint_evidence_registry(repo_root, registry_root, disposition_path)
+    exclude_codes: frozenset[str] = frozenset()
+    if args.strict_exclusion_policy:
+        exclude_codes = _load_strict_exclusion_policy(args.strict_exclusion_policy)
+    if args.exclude_codes:
+        exclude_codes = exclude_codes | frozenset(
+            code.strip() for code in args.exclude_codes.split(",") if code.strip()
+        )
+    report = lint_evidence_registry(repo_root, registry_root, disposition_path, exclude_codes)
     print(json.dumps(report, indent=2, sort_keys=True))
-    return 1 if args.strict and report["issues"] else 0
+    return 1 if args.strict and report["summary"]["findings"] > 0 else 0
 
 
 if __name__ == "__main__":

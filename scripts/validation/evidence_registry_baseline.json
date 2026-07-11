@@ -1,0 +1,301 @@
+{
+  "description": "Evidence-registry integrity downward ratchet (issue #5275). The ratchet gates on per-file, per-code finding counts: a clean file (absent here) that gains a finding fails, and a tracked file whose per-code count increases fails. The committed baseline is the explicitly-approved grandfathered exclusion policy for the 359 legacy findings classified by docs/context/evidence/evidence_registry_dispositions.yaml; remediate a category and refresh this baseline with `scripts/dev/evidence_registry_ratchet.py --write-baseline` to lock in the reduction. Promote the gate from advisory to blocking by removing continue-on-error in the ratchet CI workflow once the policy has settled.",
+  "findings_by_path": {
+    "docs/context/evidence/camera_ready_all_planners_2026-05-04/campaign/campaign_manifest.json": {
+      "dangling_commit": 1,
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1023_candidate_augmented_local_full_2026-05-06/campaign/campaign_manifest.json": {
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1023_candidate_augmented_preflight_2026-05-06/preflight/validate_config.json": {
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1023_scenario_horizons_local_full_2026-05-06/campaign/campaign_manifest.json": {
+      "dangling_commit": 1,
+      "duplicate_campaign_id": 1,
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1023_scenario_horizons_preflight_2026-05-06/campaign_manifest.json": {
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1239_human_model_transfer_2026-05-18/preflight_matrix_summary.json": {
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1239_human_model_transfer_2026-05-18/smoke_planner_rows.json": {
+      "missing_commit": 1,
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/nominal_campaign_summary.json": {
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/stress_campaign_summary.json": {
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1353_broader_amv_2026-05-26/cross_kinematics_1354/amv_coverage_summary.json": {
+      "dangling_commit": 1,
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1353_broader_amv_2026-05-26/nominal/amv_coverage_summary.json": {
+      "dangling_commit": 1,
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1353_broader_amv_2026-05-26/stress/amv_coverage_summary.json": {
+      "dangling_commit": 1,
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1396_shielded_ppo_launch_packet_2026-05-24/comparison_freeze_stub.json": {
+      "missing_commit": 1,
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/campaign_manifest.json": {
+      "config_missing_at_commit": 1,
+      "dangling_commit": 1,
+      "duplicate_campaign_id": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1454_s10_preflight_2026-05-22/fixed_h100/amv_coverage_summary.json": {
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1454_s10_preflight_2026-05-22/scenario_horizons_h500/amv_coverage_summary.json": {
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1454_stage_a_fixed_h100_2026-05-22/reports/campaign_analysis.json": {
+      "dangling_commit": 1,
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12749_summary.json": {
+      "hash_without_artifact_path": 4
+    },
+    "docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/campaign_manifest.json": {
+      "dangling_commit": 1,
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/artifact_inventory.json": {
+      "artifact_hash_mismatch": 1,
+      "uncommitted_artifact_missing_location": 4
+    },
+    "docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/packet.json": {
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1569_amv_actuation_smoke_2026-05-27/summary.json": {
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_1878_head_on_replay_2026-05-31/head_on_replay_determinism_summary.json": {
+      "hash_without_artifact_path": 6
+    },
+    "docs/context/evidence/issue_2011_amv_actuation_sensitivity_pilot_2026-06-01/pilot_index.json": {
+      "missing_commit": 12,
+      "missing_config_path": 12,
+      "missing_config_sha256": 12
+    },
+    "docs/context/evidence/issue_2011_amv_actuation_sensitivity_pilot_2026-06-01/preflight_index.json": {
+      "missing_commit": 12,
+      "missing_config_path": 12,
+      "missing_config_sha256": 12
+    },
+    "docs/context/evidence/issue_2037_artifact_compiler_smoke_2026-06-01/artifact_catalog.yaml": {
+      "uncommitted_artifact_missing_location": 21
+    },
+    "docs/context/evidence/issue_2156_research_v1_hazard_odd_2026-06-03/hazard_odd_coverage_summary.json": {
+      "artifact_hash_mismatch": 1,
+      "hash_without_artifact_path": 6
+    },
+    "docs/context/evidence/issue_2159_failure_pack_2026-06-23/failure_pack_manifest.json": {
+      "hash_without_artifact_path": 3
+    },
+    "docs/context/evidence/issue_2164_amv_hazard_odd_join_2026-06-03/hazard_odd_coverage_summary.json": {
+      "hash_without_artifact_path": 6
+    },
+    "docs/context/evidence/issue_2168_ammv_social_force_pair_2026-06-03/summary.json": {
+      "hash_without_artifact_path": 2
+    },
+    "docs/context/evidence/issue_2309_amv_trace_export_probe_2026-06-05/summary.json": {
+      "hash_without_artifact_path": 2
+    },
+    "docs/context/evidence/issue_2432_ammv_trace_selection_2026-06-06/summary.json": {
+      "hash_without_artifact_path": 2
+    },
+    "docs/context/evidence/issue_2434_ammv_scenario_sweep_2026-06-06/summary.json": {
+      "hash_without_artifact_path": 2
+    },
+    "docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/finalization_12762.json": {
+      "uncommitted_artifact_missing_location": 4
+    },
+    "docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/finalization_12763.json": {
+      "uncommitted_artifact_missing_location": 4
+    },
+    "docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/finalization_12764.json": {
+      "uncommitted_artifact_missing_location": 4
+    },
+    "docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/finalization_12765.json": {
+      "uncommitted_artifact_missing_location": 4
+    },
+    "docs/context/evidence/issue_2542_dissertation_export_bundle/artifact_manifest.json": {
+      "uncommitted_artifact_missing_location": 2
+    },
+    "docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json": {
+      "uncommitted_artifact_missing_location": 3
+    },
+    "docs/context/evidence/issue_2946_mechanism_figure_pack_2026-06-19/figure_pack_manifest.json": {
+      "hash_without_artifact_path": 2
+    },
+    "docs/context/evidence/issue_3202_ammv_anticipatory_conflict/summary.json": {
+      "hash_without_artifact_path": 2
+    },
+    "docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-07-01/campaign_manifest.json": {
+      "dangling_commit": 1,
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08/artifact_inventory.json": {
+      "artifact_hash_mismatch": 1,
+      "uncommitted_artifact_missing_location": 5
+    },
+    "docs/context/evidence/issue_3213_predictive_nontransfer_confirming_eval_2026-07-08/seed_provenance.yaml": {
+      "hash_without_artifact_path": 3
+    },
+    "docs/context/evidence/issue_3266_ppo_snqi_smoke_2026-06-23/summary.json": {
+      "config_missing_at_commit": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_3342_nearfield_turn_budget_2026-06-21/summary.json": {
+      "uncommitted_artifact_missing_location": 1
+    },
+    "docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json": {
+      "duplicate_campaign_id": 1,
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13273.json": {
+      "duplicate_campaign_id": 1,
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/finalizer_13268.json": {
+      "artifact_hash_mismatch": 3
+    },
+    "docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/finalizer_13273.json": {
+      "artifact_hash_mismatch": 3
+    },
+    "docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/artifact_inventory.json": {
+      "artifact_hash_mismatch": 1,
+      "uncommitted_artifact_missing_location": 8
+    },
+    "docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/packet.json": {
+      "artifact_hash_mismatch": 1,
+      "duplicate_campaign_id": 1,
+      "missing_config_path": 1,
+      "missing_config_sha256": 1,
+      "uncommitted_artifact_missing_location": 13
+    },
+    "docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/provenance.json": {
+      "hash_without_artifact_path": 3,
+      "uncommitted_artifact_missing_location": 1
+    },
+    "docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175/snqi_scalarization_sensitivity.json": {
+      "hash_without_artifact_path": 3,
+      "uncommitted_artifact_missing_location": 1
+    },
+    "docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.json": {
+      "uncommitted_artifact_missing_location": 7
+    },
+    "docs/context/evidence/issue_3810_h600_interpretation_2026-07/h600_source_reports_manifest.json": {
+      "uncommitted_artifact_missing_location": 6
+    },
+    "docs/context/evidence/issue_3810_h600_interpretation_2026-07/snqi_weight_set_h600_preflight.json": {
+      "artifact_hash_mismatch": 1,
+      "hash_without_artifact_path": 1,
+      "uncommitted_artifact_missing_location": 16
+    },
+    "docs/context/evidence/issue_3810_h600_interpretation_2026-07/snqi_weight_set_h600_report.json": {
+      "artifact_hash_mismatch": 2,
+      "hash_without_artifact_path": 5,
+      "uncommitted_artifact_missing_location": 16
+    },
+    "docs/context/evidence/issue_4011_rl_trajectory_dataset_smoke_2026-07-02/issue_4011_smoke.manifest.json": {
+      "hash_without_artifact_path": 1
+    },
+    "docs/context/evidence/issue_4012_offline_online_smoke_2026-07-05/summary.json": {
+      "uncommitted_artifact_missing_location": 6
+    },
+    "docs/context/evidence/issue_4165_proxemic_ablation_report/summary.json": {
+      "hash_without_artifact_path": 2
+    },
+    "docs/context/evidence/issue_4166_release_gates/current_roster/summary.json": {
+      "hash_without_artifact_path": 1
+    },
+    "docs/context/evidence/issue_4166_release_gates/summary.json": {
+      "hash_without_artifact_path": 1
+    },
+    "docs/context/evidence/issue_4207_certification_transfer_probe_2026-07/metadata.json": {
+      "hash_without_artifact_path": 2
+    },
+    "docs/context/evidence/issue_4207_certification_transfer_probe_2026-07/summary.json": {
+      "hash_without_artifact_path": 2
+    },
+    "docs/context/evidence/issue_4207_interacting_physics_2026-07/metadata.json": {
+      "hash_without_artifact_path": 2
+    },
+    "docs/context/evidence/issue_4207_interacting_physics_2026-07/summary.json": {
+      "hash_without_artifact_path": 2
+    },
+    "docs/context/evidence/issue_4207_interacting_smoke_2026-07/metadata.json": {
+      "hash_without_artifact_path": 2
+    },
+    "docs/context/evidence/issue_4207_interacting_smoke_2026-07/summary.json": {
+      "hash_without_artifact_path": 2
+    },
+    "docs/context/evidence/issue_4445_ch8_statistics_reproducibility/source_manifest.json": {
+      "invalid_sha256": 1,
+      "uncommitted_artifact_missing_location": 2
+    },
+    "docs/context/evidence/issue_4683_release_assurance_case_example.json": {
+      "hash_without_artifact_path": 6
+    },
+    "docs/context/evidence/issue_4848_group_crossing_exemplars_2026-07/goal/classic_group_crossing_high_seed24_best/metadata.json": {
+      "duplicate_campaign_id": 1,
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_5088_braking_authority_sensitivity_smoke/report.json": {
+      "hash_without_artifact_path": 2
+    }
+  },
+  "generated_at": "2026-07-11T08:53:40Z",
+  "linter": "scripts/tools/lint_evidence_registry.py",
+  "schema_version": 1,
+  "summary": {
+    "by_code": {
+      "artifact_hash_mismatch": 14,
+      "config_missing_at_commit": 2,
+      "dangling_commit": 9,
+      "duplicate_campaign_id": 6,
+      "hash_without_artifact_path": 77,
+      "invalid_sha256": 1,
+      "missing_commit": 26,
+      "missing_config_path": 46,
+      "missing_config_sha256": 50,
+      "uncommitted_artifact_missing_location": 128
+    },
+    "files_with_findings": 73,
+    "total_findings": 359
+  }
+}

@@ -25,7 +25,8 @@ from robot_sf.sim.pedestrian_model_variants import (
 )
 from robot_sf.sim.sim_config import SimulationSettings
 
-CONFIG_PATH = Path("configs/research/issue_4973_zanlungo_corridor_acceptance.yaml")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CONFIG_PATH = REPO_ROOT / "configs/research/issue_4973_zanlungo_corridor_acceptance.yaml"
 
 
 @pytest.fixture(scope="module")
@@ -138,6 +139,47 @@ def test_config_loader_fails_closed_if_benchmark_evidence_is_promoted(tmp_path: 
     path.write_text(text, encoding="utf-8")
     with pytest.raises(ValueError, match="benchmark_evidence must be false"):
         load_acceptance_config(path)
+
+
+@pytest.mark.parametrize(
+    ("source", "replacement", "match"),
+    [
+        ("duration_s: 10.0", "duration_s: true", "fixture.duration_s"),
+        (
+            "interaction_strength: 1.13",
+            "interaction_strength: true",
+            "parameters.interaction_strength",
+        ),
+    ],
+)
+def test_config_loader_rejects_boolean_numeric_values(
+    tmp_path: Path, source: str, replacement: str, match: str
+) -> None:
+    """YAML booleans cannot silently alter numeric fixture or force parameters."""
+    path = tmp_path / "boolean-value.yaml"
+    path.write_text(CONFIG_PATH.read_text(encoding="utf-8").replace(source, replacement, 1))
+    with pytest.raises(ValueError, match=match):
+        load_acceptance_config(path)
+
+
+def test_config_loader_rejects_evidence_boundary_drift(tmp_path: Path) -> None:
+    """Packet provenance must match the report's diagnostic-only evidence boundary."""
+    path = tmp_path / "drifted-evidence-tier.yaml"
+    path.write_text(
+        CONFIG_PATH.read_text(encoding="utf-8").replace(
+            "evidence_tier: diagnostic-only", "evidence_tier: nominal-benchmark", 1
+        )
+    )
+    with pytest.raises(ValueError, match="metadata.evidence_tier"):
+        load_acceptance_config(path)
+
+
+def test_config_path_is_independent_of_the_current_working_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The test's repository fixture path works from non-root test invocations."""
+    monkeypatch.chdir(tmp_path)
+    assert load_acceptance_config(CONFIG_PATH).issue == 4973
 
 
 def test_config_loader_fails_closed_on_dishonest_parameter_ratio(tmp_path: Path) -> None:

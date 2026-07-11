@@ -11,6 +11,7 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass
+from numbers import Real
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -37,6 +38,7 @@ if TYPE_CHECKING:
     from robot_sf.common.types import Rect
 
 SCHEMA_VERSION = "zanlungo-corridor-acceptance.v1"
+EVIDENCE_TIER = "diagnostic-only"
 CLAIM_BOUNDARY = (
     "deterministic CPU synthetic-corridor acceptance only; benchmark_evidence=false; "
     "no Robot SF realism calibration, campaign, or paper-facing claim"
@@ -69,21 +71,25 @@ class CorridorFixtureConfig:
 
     def __post_init__(self) -> None:
         """Fail closed on malformed or physically empty fixture geometry."""
-        finite_values = (
-            self.width_m,
-            self.height_m,
-            self.corridor_min_y_m,
-            self.corridor_max_y_m,
-            *self.left_start,
-            *self.right_start,
-            self.left_goal_x_m,
-            self.right_goal_x_m,
-            self.desired_speed_mps,
-            self.duration_s,
-            self.dt_s,
-        )
-        if not all(math.isfinite(float(value)) for value in finite_values):
-            raise ValueError("corridor fixture values must be finite")
+        values = {
+            "width_m": self.width_m,
+            "height_m": self.height_m,
+            "corridor_min_y_m": self.corridor_min_y_m,
+            "corridor_max_y_m": self.corridor_max_y_m,
+            "left_start[0]": self.left_start[0],
+            "left_start[1]": self.left_start[1],
+            "right_start[0]": self.right_start[0],
+            "right_start[1]": self.right_start[1],
+            "left_goal_x_m": self.left_goal_x_m,
+            "right_goal_x_m": self.right_goal_x_m,
+            "desired_speed_mps": self.desired_speed_mps,
+            "duration_s": self.duration_s,
+            "dt_s": self.dt_s,
+        }
+        for field_name, value in values.items():
+            _require_finite_real(value, f"fixture.{field_name}")
+        if isinstance(self.seed, bool) or not isinstance(self.seed, int) or self.seed < 0:
+            raise ValueError("fixture.seed must be a non-negative integer")
         if self.width_m <= 0 or self.height_m <= 0:
             raise ValueError("corridor width_m and height_m must be positive")
         if not 0 <= self.corridor_min_y_m < self.corridor_max_y_m <= self.height_m:
@@ -106,16 +112,23 @@ class OutcomeThresholds:
 
     def __post_init__(self) -> None:
         """Require finite non-negative thresholds and a positive conflict distance."""
-        values = (
-            self.lateral_yield_m,
-            self.collision_proxy_distance_m,
-            self.freeze_speed_mps,
-            self.freeze_window_s,
-            self.conflict_distance_m,
-        )
-        if not all(math.isfinite(float(value)) for value in values):
-            raise ValueError("outcome thresholds must be finite")
-        if any(value < 0 for value in values[:-1]) or self.conflict_distance_m <= 0:
+        values = {
+            "lateral_yield_m": self.lateral_yield_m,
+            "collision_proxy_distance_m": self.collision_proxy_distance_m,
+            "freeze_speed_mps": self.freeze_speed_mps,
+            "freeze_window_s": self.freeze_window_s,
+            "conflict_distance_m": self.conflict_distance_m,
+        }
+        for field_name, value in values.items():
+            _require_finite_real(value, f"thresholds.{field_name}")
+        if (
+            any(
+                value < 0
+                for field_name, value in values.items()
+                if field_name != "conflict_distance_m"
+            )
+            or self.conflict_distance_m <= 0
+        ):
             raise ValueError(
                 "outcome thresholds must be non-negative with positive conflict distance"
             )
@@ -136,10 +149,10 @@ class SensitivityCase:
         if not self.case_id.strip():
             raise ValueError("sensitivity case_id must be non-empty")
         normalize_pedestrian_model(self.pedestrian_model)
-        if self.relative_to_reference is not None and (
-            not math.isfinite(float(self.relative_to_reference)) or self.relative_to_reference < 0
-        ):
-            raise ValueError("relative_to_reference must be finite and non-negative")
+        if self.relative_to_reference is not None:
+            _require_finite_real(self.relative_to_reference, "relative_to_reference")
+            if self.relative_to_reference < 0:
+                raise ValueError("relative_to_reference must be non-negative")
 
 
 @dataclass(frozen=True)
@@ -157,6 +170,8 @@ class AcceptanceConfig:
 
     issue: int
     benchmark_evidence: bool
+    evidence_tier: str
+    claim_boundary: str
     reference_case_id: str
     fixture: CorridorFixtureConfig
     thresholds: OutcomeThresholds
@@ -178,10 +193,7 @@ def load_acceptance_config(path: str | Path) -> AcceptanceConfig:
         raise ValueError("acceptance config must be a YAML mapping")
     if payload.get("schema_version") != SCHEMA_VERSION:
         raise ValueError(f"schema_version must be {SCHEMA_VERSION}")
-    metadata = _require_mapping(payload, "metadata")
-    benchmark_evidence = metadata.get("benchmark_evidence")
-    if benchmark_evidence is not False:
-        raise ValueError("metadata.benchmark_evidence must be false")
+    evidence_tier, claim_boundary = _validate_metadata(_require_mapping(payload, "metadata"))
     fixture = CorridorFixtureConfig(**_normalize_fixture(_require_mapping(payload, "fixture")))
     thresholds = OutcomeThresholds(**_require_mapping(payload, "thresholds"))
     raw_cases = payload.get("sensitivity_cases")
@@ -206,6 +218,8 @@ def load_acceptance_config(path: str | Path) -> AcceptanceConfig:
     return AcceptanceConfig(
         issue=4973,
         benchmark_evidence=False,
+        evidence_tier=evidence_tier,
+        claim_boundary=claim_boundary,
         reference_case_id=reference_case_id,
         fixture=fixture,
         thresholds=thresholds,
@@ -377,8 +391,8 @@ def run_acceptance(config: AcceptanceConfig) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
         "issue": config.issue,
-        "claim_boundary": CLAIM_BOUNDARY,
-        "evidence_tier": "diagnostic-only",
+        "claim_boundary": config.claim_boundary,
+        "evidence_tier": config.evidence_tier,
         "benchmark_evidence": False,
         "config": {
             "path": config.config_path,
@@ -460,7 +474,10 @@ def _normalize_fixture(payload: Mapping[str, Any]) -> dict[str, Any]:
         value = normalized.get(key)
         if not isinstance(value, list) or len(value) != 2:
             raise ValueError(f"fixture.{key} must be a two-value list")
-        normalized[key] = (float(value[0]), float(value[1]))
+        normalized[key] = (
+            _require_finite_real(value[0], f"fixture.{key}[0]"),
+            _require_finite_real(value[1], f"fixture.{key}[1]"),
+        )
     return normalized
 
 
@@ -470,13 +487,59 @@ def _normalize_case(payload: Any) -> SensitivityCase:
     parameters = payload.get("parameters", {})
     if not isinstance(parameters, dict):
         raise ValueError("sensitivity case parameters must be a mapping")
+    pedestrian_model = normalize_pedestrian_model(payload.get("pedestrian_model"))
+    if pedestrian_model == HSFM_ZANLUNGO_COLLISION_PREDICTION_V1:
+        _validate_zanlungo_parameters(parameters)
     return SensitivityCase(
         case_id=str(payload.get("case_id", "")),
-        pedestrian_model=normalize_pedestrian_model(payload.get("pedestrian_model")),
+        pedestrian_model=pedestrian_model,
         varied_parameter=payload.get("varied_parameter"),
         relative_to_reference=payload.get("relative_to_reference"),
         parameters=parameters,
     )
+
+
+def _require_finite_real(value: Any, field_name: str) -> float:
+    """Return a finite real value while rejecting YAML booleans explicitly."""
+    if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(float(value)):
+        raise ValueError(f"{field_name} must be a finite real number, not a boolean")
+    return float(value)
+
+
+def _validate_metadata(metadata: Mapping[str, Any]) -> tuple[str, str]:
+    """Require the packet provenance that the diagnostic report will emit.
+
+    Returns:
+        Validated evidence tier and claim boundary.
+    """
+    if metadata.get("benchmark_evidence") is not False:
+        raise ValueError("metadata.benchmark_evidence must be false")
+    evidence_tier = metadata.get("evidence_tier")
+    if evidence_tier != EVIDENCE_TIER:
+        raise ValueError(f"metadata.evidence_tier must be {EVIDENCE_TIER}")
+    claim_boundary = metadata.get("claim_boundary")
+    if claim_boundary != CLAIM_BOUNDARY:
+        raise ValueError("metadata.claim_boundary must match the diagnostic acceptance boundary")
+    return evidence_tier, claim_boundary
+
+
+def _validate_zanlungo_parameters(parameters: Mapping[str, Any]) -> None:
+    """Reject incomplete, unexpected, or non-numeric Zanlungo packet parameters."""
+    numeric_fields = {
+        "interaction_strength",
+        "interaction_range_m",
+        "anisotropy_lambda",
+        "angle_threshold_rad",
+        "max_force",
+    }
+    required_fields = numeric_fields | {"include_ped_ped"}
+    if set(parameters) != required_fields:
+        raise ValueError("Zanlungo sensitivity parameters must declare the complete paper packet")
+    for field_name in numeric_fields:
+        _require_finite_real(parameters[field_name], f"parameters.{field_name}")
+    if not isinstance(parameters["include_ped_ped"], bool):
+        raise ValueError("parameters.include_ped_ped must be a boolean")
+    ZanlungoCollisionPredictionConfig(enabled=True, **dict(parameters))
 
 
 def _parameter_bookkeeping_complete(

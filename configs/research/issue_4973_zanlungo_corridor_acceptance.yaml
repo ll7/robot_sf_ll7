@@ -4,8 +4,8 @@ metadata:
   benchmark_evidence: false
   evidence_tier: diagnostic-only
   claim_boundary: >-
-    Deterministic CPU synthetic-corridor acceptance only. This packet does not
-    calibrate pedestrian realism or support benchmark, paper, or dissertation claims.
+    deterministic CPU synthetic-corridor acceptance only; benchmark_evidence=false;
+    no Robot SF realism calibration, campaign, or paper-facing claim
 
 reference_case_id: zanlungo_paper_reference
 

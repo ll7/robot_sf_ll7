@@ -12,6 +12,8 @@ from robot_sf.research.zanlungo_corridor_acceptance import (
     write_acceptance_report,
 )
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the validation command parser."""
@@ -19,12 +21,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--config",
         type=Path,
-        default=Path("configs/research/issue_4973_zanlungo_corridor_acceptance.yaml"),
+        default=REPO_ROOT / "configs/research/issue_4973_zanlungo_corridor_acceptance.yaml",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("output/issue_4973_zanlungo_corridor_acceptance"),
+        default=REPO_ROOT / "output/issue_4973_zanlungo_corridor_acceptance",
     )
     return parser
 

@@ -1,0 +1,23 @@
+schema_version: data-driven-scenario-generation.v1
+seed: 4932
+source_scenarios: configs/scenarios/sets/classic_cross_trap_subset.yaml
+episode_budget: 2
+sampler:
+  type: monte_carlo
+  robot_start_goal_policy: sampled_map_route_pairs
+  pedestrian_policy: sampled_map_routes_and_population
+  obstacle_policy: disabled_for_mvp
+  episode_seed_min: 1
+  episode_seed_max: 2147483647
+runner:
+  algo: goal
+  algo_config: null
+  horizon: 20
+  dt: null
+extraction:
+  pre_margin_s: 1.0
+  post_margin_s: 1.0
+deduplication:
+  distance_threshold: 1.0
+output_root: output/issue_4932_generation_mvp
+claim_boundary: generated scenario hypotheses only

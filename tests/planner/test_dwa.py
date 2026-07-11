@@ -467,6 +467,16 @@ def test_dwa_route_rescue_config_builder_parses_new_fields() -> None:
 
 def test_dwa_route_rescue_config_rejects_invalid_values() -> None:
     """Invalid route-rescue config values fail closed."""
+    for field in (
+        "route_rescue_progress_threshold",
+        "route_rescue_horizon_scale",
+        "route_rescue_progress_weight_boost",
+        "feasibility_slowdown_infeasible_ratio",
+        "feasibility_slowdown_scale",
+    ):
+        for value in (float("inf"), float("nan")):
+            with pytest.raises(ValueError, match=field):
+                DWAPlannerConfig(**{field: value})
     with pytest.raises(ValueError, match="route_rescue_window"):
         DWAPlannerConfig(route_rescue_window=0)
     with pytest.raises(ValueError, match="route_rescue_patience"):

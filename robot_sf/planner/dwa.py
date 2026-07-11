@@ -78,6 +78,21 @@ class DWAPlannerConfig:
         invalid = [name for name, value in numeric_values.items() if not isfinite(float(value))]
         if invalid:
             raise ValueError(f"DWA configuration values must be finite: {', '.join(invalid)}")
+        intervention_values = {
+            "route_rescue_progress_threshold": self.route_rescue_progress_threshold,
+            "route_rescue_horizon_scale": self.route_rescue_horizon_scale,
+            "route_rescue_progress_weight_boost": self.route_rescue_progress_weight_boost,
+            "feasibility_slowdown_infeasible_ratio": self.feasibility_slowdown_infeasible_ratio,
+            "feasibility_slowdown_scale": self.feasibility_slowdown_scale,
+        }
+        invalid_interventions = [
+            name for name, value in intervention_values.items() if not isfinite(float(value))
+        ]
+        if invalid_interventions:
+            raise ValueError(
+                "DWA intervention configuration values must be finite: "
+                f"{', '.join(invalid_interventions)}"
+            )
         positive = ("max_linear_speed", "max_angular_speed", "control_dt", "prediction_dt")
         if any(float(numeric_values[name]) <= 0.0 for name in positive):
             raise ValueError(

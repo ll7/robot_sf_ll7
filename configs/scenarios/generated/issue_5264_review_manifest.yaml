@@ -1,0 +1,26 @@
+claim_boundary: generated scenario hypotheses only
+deduplication_distance_threshold: 1.0
+entries:
+- checklist:
+    critical_window_present: true
+    dedup_correct: true
+    geometry_valid: true
+    pedestrian_density_plausible: true
+    route_feasible: true
+  materialized_scenario: generated-2931e2af37766dfe.yaml
+  reason: Three pedestrians, a non-zero pinned route, and the recorded minimum-clearance
+    frame passed static review and bounded native CPU replay.
+  scenario_id: generated-2931e2af37766dfe
+  verdict: certified
+- checklist:
+    critical_window_present: true
+    dedup_correct: true
+    geometry_valid: true
+    pedestrian_density_plausible: true
+    route_feasible: true
+  materialized_scenario: generated-c64c6ffba1e4a51f.yaml
+  reason: Twelve pedestrians, a non-zero pinned route, and the recorded minimum-clearance
+    frame passed static review and bounded native CPU replay.
+  scenario_id: generated-c64c6ffba1e4a51f
+  verdict: certified
+schema_version: generated-scenario-review-manifest.v1

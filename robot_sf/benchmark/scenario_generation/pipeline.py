@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -125,6 +126,10 @@ def run_generation_pipeline(
         episode_seed_min=int(sampler.get("episode_seed_min", 1)),
         episode_seed_max=int(sampler.get("episode_seed_max", 2_147_483_647)),
     )
+    sampled = [
+        replace(sample, source_map=_repo_relative_map_reference(sample.source_map, source_path))
+        for sample in sampled
+    ]
     sampled_matrix_path = output_root / "sampled_scenarios.yaml"
     sampled_matrix_path.write_text(
         yaml.safe_dump(
@@ -266,6 +271,30 @@ def _required_int(payload: Mapping[str, Any], key: str) -> int:
 
 def _source_scenario_name(scenario: Mapping[str, Any]) -> str:
     return _required_string(scenario, "name")
+
+
+def _repo_relative_map_reference(source_map: str, source_scenarios_path: Path) -> str:
+    """Normalize a source-map reference for catalog entries and later materialization.
+
+    Source scenario sets may use paths relative to their own directory.  Catalog
+    entries outlive that directory, so record a repository-root-relative path
+    instead of serializing an ambiguous relative reference.
+
+    Returns:
+        A repository-root-relative map path suitable for a durable catalog entry.
+    """
+
+    repository_root = Path(__file__).resolve().parents[3]
+    map_path = Path(source_map)
+    if not map_path.is_absolute():
+        root_relative = repository_root / map_path
+        map_path = (
+            root_relative if root_relative.exists() else source_scenarios_path.parent / map_path
+        )
+    try:
+        return map_path.resolve().relative_to(repository_root).as_posix()
+    except ValueError as exc:
+        raise ValueError(f"source map must live under the repository root: {source_map}") from exc
 
 
 def _load_jsonl(path: Path) -> list[dict[str, Any]]:

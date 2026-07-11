@@ -93,6 +93,7 @@ def extract_critical_segment(
             "source_issue": "#4932",
             "distiller": _DISTILLER_ID,
             "claim_boundary": _CLAIM_BOUNDARY,
+            "reviewed": False,
         },
     }
     validate_catalog_entry(entry)

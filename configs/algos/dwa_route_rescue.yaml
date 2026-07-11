@@ -1,0 +1,40 @@
+# DWA with route-rescue and feasibility-slowdown interventions (issue #5319).
+# This is experimental/testing-only: diagnostic probe for the #5298 failure
+# mechanisms, not paper-facing benchmark evidence.
+allow_testing_algorithms: true
+max_linear_speed: 1.0
+max_angular_speed: 1.2
+max_linear_acceleration: 0.8
+max_angular_acceleration: 1.5
+control_dt: 0.2
+prediction_dt: 0.1
+prediction_steps: 15
+linear_samples: 7
+angular_samples: 9
+goal_tolerance: 0.25
+robot_radius: 0.25
+pedestrian_radius: 0.30
+safety_margin: 0.10
+clearance_distance: 2.0
+obstacle_threshold: 0.5
+obstacle_search_cells: 12
+heading_weight: 0.8
+clearance_weight: 1.2
+velocity_weight: 0.25
+progress_weight: 1.0
+prediction_scoring_enabled: false
+# Route-rescue: when the robot has not made meaningful progress toward the goal
+# for route_rescue_patience steps within route_rescue_window, extend the rollout
+# horizon by route_rescue_horizon_scale and boost the progress weight.
+route_rescue_enabled: true
+route_rescue_window: 30
+route_rescue_patience: 15
+route_rescue_progress_threshold: 0.2
+route_rescue_horizon_scale: 3.0
+route_rescue_progress_weight_boost: 3.0
+# Feasibility-slowdown: when more than feasibility_slowdown_infeasible_ratio of
+# candidates become infeasible, re-evaluate with a reduced v_max to give the
+# planner more time to react to obstacles the short horizon missed.
+feasibility_slowdown_enabled: true
+feasibility_slowdown_infeasible_ratio: 0.10
+feasibility_slowdown_scale: 0.3

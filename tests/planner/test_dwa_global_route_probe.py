@@ -193,6 +193,39 @@ def test_global_route_probe_ignores_malformed_waypoints() -> None:
     assert command[0] > 0.0
 
 
+def test_global_route_probe_ignores_null_robot_state() -> None:
+    """A null structured robot payload fails closed without raising."""
+    planner = DWAPlannerAdapter(DWAPlannerConfig(global_route_probe_enabled=True))
+    observation = _observation(goal=(3.0, 0.0))
+    observation["robot"] = None
+    assert (
+        planner._waypoint_following_score(
+            robot_pos=np.zeros(2),
+            heading=0.0,
+            end_position=np.zeros(2),
+            end_orientation=0.0,
+            observation=observation,
+        )
+        == 0.0
+    )
+
+
+def test_global_route_probe_targets_next_waypoint_after_nearest() -> None:
+    """The probe advances past the nearest waypoint to preserve route direction."""
+    planner = DWAPlannerAdapter(DWAPlannerConfig(global_route_probe_enabled=True))
+    observation = _observation(route_waypoints=[(-0.1, 0.0), (1.0, 0.0)])
+    assert (
+        planner._waypoint_following_score(
+            robot_pos=np.zeros(2),
+            heading=0.0,
+            end_position=np.zeros(2),
+            end_orientation=0.0,
+            observation=observation,
+        )
+        > 0.9
+    )
+
+
 def test_global_route_probe_ignores_nan_waypoints() -> None:
     """Probe gracefully ignores NaN waypoint data."""
     config = DWAPlannerConfig(global_route_probe_enabled=True)

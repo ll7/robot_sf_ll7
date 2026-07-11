@@ -48,8 +48,17 @@ class DWAPlannerConfig:
     global_route_probe_enabled: bool = False
     global_route_probe_waypoint_distance: float = 2.0
     global_route_probe_heading_weight: float = 0.5
+    route_rescue_enabled: bool = False
+    route_rescue_window: int = 20
+    route_rescue_patience: int = 10
+    route_rescue_progress_threshold: float = 0.05
+    route_rescue_horizon_scale: float = 2.0
+    route_rescue_progress_weight_boost: float = 2.0
+    feasibility_slowdown_enabled: bool = False
+    feasibility_slowdown_infeasible_ratio: float = 0.25
+    feasibility_slowdown_scale: float = 0.5
 
-    def __post_init__(self) -> None:
+    def __post_init__(self) -> None:  # noqa: C901, PLR0912
         """Reject invalid dynamics and rollout parameters before planning begins."""
         numeric_values = {
             "max_linear_speed": self.max_linear_speed,
@@ -72,6 +81,21 @@ class DWAPlannerConfig:
         invalid = [name for name, value in numeric_values.items() if not isfinite(float(value))]
         if invalid:
             raise ValueError(f"DWA configuration values must be finite: {', '.join(invalid)}")
+        intervention_values = {
+            "route_rescue_progress_threshold": self.route_rescue_progress_threshold,
+            "route_rescue_horizon_scale": self.route_rescue_horizon_scale,
+            "route_rescue_progress_weight_boost": self.route_rescue_progress_weight_boost,
+            "feasibility_slowdown_infeasible_ratio": self.feasibility_slowdown_infeasible_ratio,
+            "feasibility_slowdown_scale": self.feasibility_slowdown_scale,
+        }
+        invalid_interventions = [
+            name for name, value in intervention_values.items() if not isfinite(float(value))
+        ]
+        if invalid_interventions:
+            raise ValueError(
+                "DWA intervention configuration values must be finite: "
+                f"{', '.join(invalid_interventions)}"
+            )
         positive = ("max_linear_speed", "max_angular_speed", "control_dt", "prediction_dt")
         if any(float(numeric_values[name]) <= 0.0 for name in positive):
             raise ValueError(
@@ -104,6 +128,28 @@ class DWAPlannerConfig:
             raise ValueError("global_route_probe_waypoint_distance must be positive")
         if float(self.global_route_probe_heading_weight) < 0.0:
             raise ValueError("global_route_probe_heading_weight must not be negative")
+        if int(self.route_rescue_window) < 1:
+            raise ValueError("route_rescue_window must be at least one")
+        if int(self.route_rescue_patience) < 1:
+            raise ValueError("route_rescue_patience must be at least one")
+        if int(self.route_rescue_patience) > int(self.route_rescue_window):
+            raise ValueError("route_rescue_patience cannot be greater than route_rescue_window")
+        if float(self.route_rescue_progress_threshold) < 0.0:
+            raise ValueError("route_rescue_progress_threshold must not be negative")
+        if float(self.route_rescue_horizon_scale) < 1.0:
+            raise ValueError("route_rescue_horizon_scale must be at least 1.0")
+        if float(self.route_rescue_progress_weight_boost) < 1.0:
+            raise ValueError("route_rescue_progress_weight_boost must be at least 1.0")
+        if (
+            float(self.feasibility_slowdown_infeasible_ratio) < 0.0
+            or float(self.feasibility_slowdown_infeasible_ratio) > 1.0
+        ):
+            raise ValueError("feasibility_slowdown_infeasible_ratio must be in [0, 1]")
+        if (
+            float(self.feasibility_slowdown_scale) <= 0.0
+            or float(self.feasibility_slowdown_scale) > 1.0
+        ):
+            raise ValueError("feasibility_slowdown_scale must be in (0, 1]")
 
 
 class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -112,10 +158,11 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
     def __init__(self, config: DWAPlannerConfig | None = None) -> None:
         """Initialize the deterministic planner with optional parameter overrides."""
         self.config = config or DWAPlannerConfig()
-        # Per-step decision detail captured by ``plan`` and surfaced via ``diagnostics``.
-        # It is a diagnostic-only record for the issue #5298 DWA decision trace and does
-        # not influence command selection. Reset to ``None`` between independent episodes.
         self._last_decision: dict[str, Any] | None = None
+        self._distance_history: list[float] = []
+        self._rescue_active = False
+        self._rescue_type: str | None = None
+        self._feasibility_slowdown_active = False
 
     def _extract_state(
         self, observation: dict[str, Any]
@@ -255,6 +302,7 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         pedestrian_velocities: np.ndarray,
         command: tuple[float, float],
         observation: dict[str, Any],
+        rescue_overrides: dict[str, Any] | None = None,
     ) -> float:
         """Score a constant command rollout; a collision candidate is infeasible.
 
@@ -265,7 +313,9 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         orientation = float(heading)
         start_distance = float(np.linalg.norm(goal - position))
         min_clearance = float("inf")
-        for step_idx in range(max(int(self.config.prediction_steps), 1)):
+        overrides = rescue_overrides or {}
+        effective_steps = int(overrides.get("prediction_steps") or self.config.prediction_steps)
+        for step_idx in range(max(effective_steps, 1)):
             position += np.array(
                 [
                     command[0] * np.cos(orientation) * float(self.config.prediction_dt),
@@ -298,11 +348,14 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             float(self.config.clearance_distance), 1e-6
         )
         velocity_score = command[0] / max(float(self.config.max_linear_speed), 1e-6)
+        effective_progress_weight = float(
+            overrides.get("progress_weight") or self.config.progress_weight
+        )
         base_score = (
             float(self.config.heading_weight) * heading_score
             + float(self.config.clearance_weight) * clearance_score
             + float(self.config.velocity_weight) * velocity_score
-            + float(self.config.progress_weight) * (start_distance - end_distance)
+            + effective_progress_weight * (start_distance - end_distance)
         )
         if not self.config.global_route_probe_enabled:
             return base_score
@@ -336,7 +389,9 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         """
         if not self.config.global_route_probe_enabled:
             return 0.0
-        robot_state = observation.get("robot") or {}
+        robot_state = observation.get("robot")
+        if not isinstance(robot_state, dict):
+            return 0.0
         waypoints_raw = robot_state.get("route_waypoints")
         if waypoints_raw is None:
             return 0.0
@@ -350,7 +405,7 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         nearest_distance = float(waypoint_distances[nearest_idx])
         if nearest_distance > float(self.config.global_route_probe_waypoint_distance):
             return 0.0
-        waypoint = waypoints[nearest_idx]
+        waypoint = waypoints[min(nearest_idx + 1, len(waypoints) - 1)]
         desired_heading = float(
             np.arctan2(
                 waypoint[1] - end_position[1],
@@ -386,7 +441,9 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             "y": float(active_goal[1]),
         }
 
-    def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
+    def plan(  # noqa: C901, PLR0912, PLR0915
+        self, observation: dict[str, Any]
+    ) -> tuple[float, float]:
         """Select the highest-scoring dynamically reachable unicycle command.
 
         Returns:
@@ -420,6 +477,35 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             }
             return 0.0, 0.0
         v_min, v_max, w_min, w_max = self._dynamic_window(linear_speed, angular_speed)
+
+        self._distance_history.append(distance_to_goal)
+        window = max(int(self.config.route_rescue_window), 1)
+        if len(self._distance_history) > window:
+            self._distance_history = self._distance_history[-window:]
+
+        self._rescue_active = False
+        self._rescue_type = None
+        self._feasibility_slowdown_active = False
+        rescue_overrides: dict[str, Any] = {}
+
+        if self.config.route_rescue_enabled and len(self._distance_history) >= max(
+            int(self.config.route_rescue_patience), 1
+        ):
+            recent = self._distance_history[-int(self.config.route_rescue_patience) :]
+            if recent[0] - recent[-1] < float(self.config.route_rescue_progress_threshold):
+                self._rescue_active = True
+                self._rescue_type = "route_rescue"
+                rescue_overrides["prediction_steps"] = max(
+                    int(
+                        float(self.config.prediction_steps)
+                        * float(self.config.route_rescue_horizon_scale)
+                    ),
+                    self.config.prediction_steps,
+                )
+                rescue_overrides["progress_weight"] = float(self.config.progress_weight) * float(
+                    self.config.route_rescue_progress_weight_boost
+                )
+
         linear_candidates = np.linspace(v_min, v_max, int(self.config.linear_samples))
         angular_candidates = np.linspace(w_min, w_max, int(self.config.angular_samples))
         best_score = float("-inf")
@@ -437,9 +523,9 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
                     pedestrian_velocities=pedestrian_velocities,
                     command=command,
                     observation=observation,
+                    rescue_overrides=rescue_overrides,
                 )
                 if not math.isfinite(score):
-                    # ``_rollout_score`` returns negative infinity for unsafe rollouts.
                     infeasible_count += 1
                     continue
                 feasible_scores.append(score)
@@ -447,6 +533,42 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
                     best_score, best_command = score, command
         candidate_total = int(self.config.linear_samples) * int(self.config.angular_samples)
         candidate_feasible = len(feasible_scores)
+
+        if (
+            self.config.feasibility_slowdown_enabled
+            and candidate_total > 0
+            and infeasible_count / candidate_total
+            >= float(self.config.feasibility_slowdown_infeasible_ratio)
+        ):
+            slowdown_v_max = v_max * float(self.config.feasibility_slowdown_scale)
+            slowdown_candidates = np.linspace(
+                v_min, max(v_min, slowdown_v_max), int(self.config.linear_samples)
+            )
+            slowdown_best_score = float("-inf")
+            slowdown_best_command = (0.0, 0.0)
+            slowdown_found = False
+            for linear in slowdown_candidates:
+                for angular in angular_candidates:
+                    command = (float(linear), float(angular))
+                    score = self._rollout_score(
+                        robot_pos=robot_pos,
+                        heading=heading,
+                        goal=goal,
+                        pedestrian_positions=pedestrians,
+                        pedestrian_velocities=pedestrian_velocities,
+                        command=command,
+                        observation=observation,
+                        rescue_overrides=rescue_overrides,
+                    )
+                    if not math.isfinite(score):
+                        continue
+                    slowdown_found = True
+                    if score > slowdown_best_score:
+                        slowdown_best_score, slowdown_best_command = score, command
+            if slowdown_found:
+                self._feasibility_slowdown_active = True
+                best_score, best_command = slowdown_best_score, slowdown_best_command
+
         window_degenerate = bool(abs(v_max - v_min) <= 1e-12 or abs(w_max - w_min) <= 1e-12)
         if candidate_feasible == 0:
             constraint_reason = "all_candidates_infeasible_zero_command"
@@ -457,9 +579,11 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         feasible_score_min = float(min(feasible_scores)) if feasible_scores else None
         feasible_score_max = float(max(feasible_scores)) if feasible_scores else None
         selected_score = best_score if candidate_feasible > 0 else None
+        robot_state = observation.get("robot")
         global_route_probe_activated = bool(
             self.config.global_route_probe_enabled
-            and observation.get("robot", {}).get("route_waypoints") is not None
+            and isinstance(robot_state, dict)
+            and robot_state.get("route_waypoints") is not None
         )
         self._last_decision = {
             "selected_source": "dwa",
@@ -480,6 +604,9 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             "distance_to_goal_m": distance_to_goal,
             "target_goal": target_goal,
             "global_route_probe_activated": global_route_probe_activated,
+            "route_rescue_active": self._rescue_active,
+            "route_rescue_type": self._rescue_type,
+            "feasibility_slowdown_active": self._feasibility_slowdown_active,
         }
         return best_command
 
@@ -565,6 +692,36 @@ def build_dwa_config(cfg: dict[str, Any] | None) -> DWAPlannerConfig:
                 "global_route_probe_heading_weight",
                 defaults.global_route_probe_heading_weight,
             )
+        ),
+        route_rescue_enabled=_parse_bool(
+            cfg.get("route_rescue_enabled", defaults.route_rescue_enabled),
+            name="route_rescue_enabled",
+        ),
+        route_rescue_window=int(cfg.get("route_rescue_window", defaults.route_rescue_window)),
+        route_rescue_patience=int(cfg.get("route_rescue_patience", defaults.route_rescue_patience)),
+        route_rescue_progress_threshold=float(
+            cfg.get("route_rescue_progress_threshold", defaults.route_rescue_progress_threshold)
+        ),
+        route_rescue_horizon_scale=float(
+            cfg.get("route_rescue_horizon_scale", defaults.route_rescue_horizon_scale)
+        ),
+        route_rescue_progress_weight_boost=float(
+            cfg.get(
+                "route_rescue_progress_weight_boost", defaults.route_rescue_progress_weight_boost
+            )
+        ),
+        feasibility_slowdown_enabled=_parse_bool(
+            cfg.get("feasibility_slowdown_enabled", defaults.feasibility_slowdown_enabled),
+            name="feasibility_slowdown_enabled",
+        ),
+        feasibility_slowdown_infeasible_ratio=float(
+            cfg.get(
+                "feasibility_slowdown_infeasible_ratio",
+                defaults.feasibility_slowdown_infeasible_ratio,
+            )
+        ),
+        feasibility_slowdown_scale=float(
+            cfg.get("feasibility_slowdown_scale", defaults.feasibility_slowdown_scale)
         ),
     )
 

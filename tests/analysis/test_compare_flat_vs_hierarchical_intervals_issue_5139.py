@@ -114,6 +114,15 @@ def test_retained_comparison_is_deterministic_and_analysis_only(tmp_path: Path) 
     assert "not benchmark-strength evidence" in first_markdown.decode()
 
 
+def test_noncanonical_retained_bundle_requires_an_explicit_manifest(tmp_path: Path) -> None:
+    """An arbitrary table cannot inherit provenance from the canonical campaign."""
+    bundle = tmp_path / "seed_episode_rows.csv"
+    _write_bundle(bundle)
+
+    with pytest.raises(SystemExit, match="2"):
+        comparison.main(["--retained-bundle", str(bundle)])
+
+
 def test_retained_loader_fails_closed_on_missing_metric_column(tmp_path: Path) -> None:
     """A schema mismatch must stop analysis instead of silently dropping endpoints."""
     bundle = tmp_path / "seed_episode_rows.csv"

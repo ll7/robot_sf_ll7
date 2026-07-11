@@ -836,8 +836,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--retained-manifest",
         type=Path,
-        default=DEFAULT_RETAINED_MANIFEST,
-        help="Campaign manifest paired with --retained-bundle.",
+        help=(
+            "Campaign manifest paired with --retained-bundle. Defaults to the canonical "
+            "#1454 manifest only when the canonical retained bundle is used."
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -845,11 +847,19 @@ def main(argv: list[str] | None = None) -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if args.retained_bundle is not None:
+        retained_manifest = args.retained_manifest
+        if retained_manifest is None:
+            if args.retained_bundle.resolve() != DEFAULT_RETAINED_BUNDLE.resolve():
+                parser.error(
+                    "--retained-manifest is required when --retained-bundle is not the canonical "
+                    "#1454 bundle"
+                )
+            retained_manifest = DEFAULT_RETAINED_MANIFEST
         records, provenance = load_retained_bundle(args.retained_bundle)
         retained_report = collect_retained_comparisons(
             records,
             source_provenance=provenance,
-            manifest_path=args.retained_manifest,
+            manifest_path=retained_manifest,
         )
         write_retained_markdown(
             retained_report,

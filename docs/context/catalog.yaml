@@ -24,6 +24,10 @@ entries:
   status: evidence
   freshness: evidence
   area: evidence_policy
+- path: docs/context/evidence/issue_5298_dwa_decision_trace_2026-07-11
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5263_exact_repeat/exact_repeat_manifest.json
   status: evidence
   freshness: evidence
@@ -4201,6 +4205,10 @@ entries:
   area: benchmark_evidence
   legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_5020_dwa_archetype_matrix_2026-07-10/dwa_archetype_matrix_status_rows.csv
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5262_dwa_config_sensitivity_2026-07-11
   status: evidence
   freshness: evidence
   area: benchmark_evidence

@@ -8,6 +8,8 @@ upstream-wrapper claim and not benchmark-performance evidence by itself.
 
 from __future__ import annotations
 
+import math
+from copy import deepcopy
 from dataclasses import dataclass
 from math import isfinite
 from typing import Any
@@ -94,6 +96,10 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
     def __init__(self, config: DWAPlannerConfig | None = None) -> None:
         """Initialize the deterministic planner with optional parameter overrides."""
         self.config = config or DWAPlannerConfig()
+        # Per-step decision detail captured by ``plan`` and surfaced via ``diagnostics``.
+        # It is a diagnostic-only record for the issue #5298 DWA decision trace and does
+        # not influence command selection. Reset to ``None`` between independent episodes.
+        self._last_decision: dict[str, Any] | None = None
 
     def _extract_state(
         self, observation: dict[str, Any]
@@ -283,6 +289,33 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             + float(self.config.progress_weight) * (start_distance - end_distance)
         )
 
+    def _target_goal_detail(
+        self, observation: dict[str, Any], active_goal: np.ndarray, robot_pos: np.ndarray
+    ) -> dict[str, Any]:
+        """Return which route waypoint the planner is currently targeting.
+
+        Mirrors the ``active_goal`` selection in ``_extract_state`` to label the
+        trace: when the robot is within ``goal_tolerance`` of ``goal_next`` the
+        planner switches to the final ``goal_current`` waypoint; otherwise it
+        tracks ``goal_next``. Recording this disambiguates goal-overshoot from
+        intermediate-waypoint tracking in the issue #5298 decision trace.
+
+        Returns:
+            dict[str, Any]: Target-goal kind and world coordinates.
+        """
+        _, goal_state, _ = self._socnav_fields(observation)
+        goal_state = goal_state or {}
+        goal_next = self._as_1d_float(goal_state.get("next", [0.0, 0.0]), pad=2)[:2]
+        targets_next = bool(
+            np.linalg.norm(goal_next - robot_pos) > float(self.config.goal_tolerance)
+        )
+        kind = "next" if targets_next else "current"
+        return {
+            "kind": kind,
+            "x": float(active_goal[0]),
+            "y": float(active_goal[1]),
+        }
+
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Select the highest-scoring dynamically reachable unicycle command.
 
@@ -298,13 +331,31 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             pedestrians,
             pedestrian_velocities,
         ) = self._extract_state(observation)
-        if np.linalg.norm(goal - robot_pos) <= float(self.config.goal_tolerance):
+        distance_to_goal = float(np.linalg.norm(goal - robot_pos))
+        target_goal = self._target_goal_detail(observation, goal, robot_pos)
+        if distance_to_goal <= float(self.config.goal_tolerance):
+            self._last_decision = {
+                "selected_source": "dwa",
+                "selected_command": [0.0, 0.0],
+                "selected_score": 0.0,
+                "constraint_reason": "goal_reached",
+                "candidate_total": 0,
+                "candidate_feasible": 0,
+                "candidate_infeasible": 0,
+                "feasible_score_min": None,
+                "feasible_score_max": None,
+                "dynamic_window": None,
+                "distance_to_goal_m": distance_to_goal,
+                "target_goal": target_goal,
+            }
             return 0.0, 0.0
         v_min, v_max, w_min, w_max = self._dynamic_window(linear_speed, angular_speed)
         linear_candidates = np.linspace(v_min, v_max, int(self.config.linear_samples))
         angular_candidates = np.linspace(w_min, w_max, int(self.config.angular_samples))
         best_score = float("-inf")
         best_command = (0.0, 0.0)
+        feasible_scores: list[float] = []
+        infeasible_count = 0
         for linear in linear_candidates:
             for angular in angular_candidates:
                 command = (float(linear), float(angular))
@@ -317,9 +368,58 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
                     command=command,
                     observation=observation,
                 )
+                if not math.isfinite(score):
+                    # ``_rollout_score`` returns negative infinity for unsafe rollouts.
+                    infeasible_count += 1
+                    continue
+                feasible_scores.append(score)
                 if score > best_score:
                     best_score, best_command = score, command
+        candidate_total = int(self.config.linear_samples) * int(self.config.angular_samples)
+        candidate_feasible = len(feasible_scores)
+        window_degenerate = bool(abs(v_max - v_min) <= 1e-12 or abs(w_max - w_min) <= 1e-12)
+        if candidate_feasible == 0:
+            constraint_reason = "all_candidates_infeasible_zero_command"
+        elif window_degenerate:
+            constraint_reason = "best_feasible_acceleration_limited_window"
+        else:
+            constraint_reason = "best_feasible"
+        feasible_score_min = float(min(feasible_scores)) if feasible_scores else None
+        feasible_score_max = float(max(feasible_scores)) if feasible_scores else None
+        selected_score = best_score if candidate_feasible > 0 else None
+        self._last_decision = {
+            "selected_source": "dwa",
+            "selected_command": [float(best_command[0]), float(best_command[1])],
+            "selected_score": selected_score,
+            "constraint_reason": constraint_reason,
+            "candidate_total": candidate_total,
+            "candidate_feasible": candidate_feasible,
+            "candidate_infeasible": infeasible_count,
+            "feasible_score_min": feasible_score_min,
+            "feasible_score_max": feasible_score_max,
+            "dynamic_window": {
+                "v_min": float(v_min),
+                "v_max": float(v_max),
+                "w_min": float(w_min),
+                "w_max": float(w_max),
+            },
+            "distance_to_goal_m": distance_to_goal,
+            "target_goal": target_goal,
+        }
         return best_command
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Expose the most recent DWA decision detail for episode tracing.
+
+        The map-runner policy wrapper reads this via ``_planner_stats`` so that
+        ``record_planner_decision_trace`` captures per-step DWA candidate and
+        constraint state. The payload is diagnostic-only and does not affect
+        command selection.
+
+        Returns:
+            dict[str, Any]: Diagnostic payload keyed by ``last_decision``.
+        """
+        return {"last_decision": deepcopy(self._last_decision) if self._last_decision else {}}
 
 
 def _reachable_interval(

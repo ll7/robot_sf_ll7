@@ -1,0 +1,12 @@
+# AI-GENERATED NEEDS-REVIEW
+# distance_convention: center_center
+config_id,scenario_id,archetype,seeds,episodes,route_complete,timeouts,collisions,median_steps,config_sha256_16,max_linear_speed,max_angular_speed,max_linear_acceleration,max_angular_acceleration,goal_tolerance,heading_weight,clearance_weight,velocity_weight,progress_weight
+canonical,classic_bottleneck_medium,bottleneck,131;132;133,3,0,3,0,100,85fe7a8764671c83,1.0,1.2,0.8,1.5,0.25,0.8,1.2,0.25,1.0
+canonical,classic_cross_trap_high,cross_trap,101;102;103,3,0,2,1,100,85fe7a8764671c83,1.0,1.2,0.8,1.5,0.25,0.8,1.2,0.25,1.0
+canonical,classic_t_intersection_low,t_intersection,161;162;163,3,0,0,3,78,85fe7a8764671c83,1.0,1.2,0.8,1.5,0.25,0.8,1.2,0.25,1.0
+mobility_and_goal,classic_bottleneck_medium,bottleneck,131;132;133,3,0,3,0,100,1be09d2da145af87,1.6,1.8,1.6,2.5,0.5,0.8,1.2,0.25,1.0
+mobility_and_goal,classic_cross_trap_high,cross_trap,101;102;103,3,0,2,1,100,1be09d2da145af87,1.6,1.8,1.6,2.5,0.5,0.8,1.2,0.25,1.0
+mobility_and_goal,classic_t_intersection_low,t_intersection,161;162;163,3,0,0,3,55,1be09d2da145af87,1.6,1.8,1.6,2.5,0.5,0.8,1.2,0.25,1.0
+progress_weight_400,classic_bottleneck_medium,bottleneck,131;132;133,3,0,3,0,100,a025ed6417cdb533,1.0,1.2,0.8,1.5,0.25,0.2,0.6,0.2,4.0
+progress_weight_400,classic_cross_trap_high,cross_trap,101;102;103,3,0,2,1,100,a025ed6417cdb533,1.0,1.2,0.8,1.5,0.25,0.2,0.6,0.2,4.0
+progress_weight_400,classic_t_intersection_low,t_intersection,161;162;163,3,0,0,3,75,a025ed6417cdb533,1.0,1.2,0.8,1.5,0.25,0.2,0.6,0.2,4.0

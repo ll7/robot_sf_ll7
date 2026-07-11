@@ -2084,6 +2084,23 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
                         fallback_config, dict
                     ):
                         step_decision["topology_guided_config"] = deepcopy(fallback_config)
+                # Additive, planner-agnostic pass-through for adapter diagnostics that do
+                # not map onto the topology-guided fields above (issue #5298 DWA trace).
+                # Only present when the underlying adapter populates them, so other
+                # planners' traces are unchanged.
+                for _dwa_key in (
+                    "constraint_reason",
+                    "candidate_total",
+                    "candidate_feasible",
+                    "candidate_infeasible",
+                    "feasible_score_min",
+                    "feasible_score_max",
+                    "dynamic_window",
+                    "target_goal",
+                ):
+                    _value = planner_step_decision.get(_dwa_key)
+                    if _value is not None:
+                        step_decision[_dwa_key] = deepcopy(_value)
                 planner_decision_trace.append(step_decision)
 
             meta = info.get("meta", {}) if isinstance(info, dict) else {}

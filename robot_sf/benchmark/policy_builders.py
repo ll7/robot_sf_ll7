@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.planner.chance_constrained_mpc import build_chance_constrained_mpc_adapter
 from robot_sf.planner.dwa import DWAPlannerAdapter, build_dwa_config
 from robot_sf.planner.learned_prediction_mpc import (
     LEARNED_PREDICTION_MPC_ALIASES,
@@ -95,6 +96,25 @@ def _build_prediction_mpc_policy_spec(algo_config: dict[str, Any]) -> AdapterPol
     )
 
 
+def _build_chance_constrained_mpc_policy_spec(algo_config: dict[str, Any]) -> AdapterPolicySpec:
+    """Build the experimental K-mode/GMM chance-constrained MPC arm.
+
+    The builder intentionally fails closed until issue #2844 supplies a concrete
+    multimodal predictor provider; no constant-velocity substitution is valid.
+
+    Returns:
+        The chance-constrained adapter specification when its provider is wired.
+    """
+
+    return AdapterPolicySpec(
+        algo_key="chance_constrained_mpc",
+        algo_config=algo_config,
+        adapter=build_chance_constrained_mpc_adapter(algo_config),
+        adapter_name="ChanceConstrainedMPCPlannerAdapter",
+        limitations="blocked_until_issue_2844_k_mode_gmm_predictor_provider",
+    )
+
+
 def _build_learned_prediction_mpc_policy_spec(algo_config: dict[str, Any]) -> AdapterPolicySpec:
     """Build learned short-horizon prediction MPC algorithm config.
 
@@ -112,6 +132,7 @@ def _build_learned_prediction_mpc_policy_spec(algo_config: dict[str, Any]) -> Ad
 
 
 _ADAPTER_POLICY_BUILDERS: dict[str, Callable[[dict[str, Any]], AdapterPolicySpec]] = {
+    "chance_constrained_mpc": _build_chance_constrained_mpc_policy_spec,
     **dict.fromkeys(LEARNED_PREDICTION_MPC_ALIASES, _build_learned_prediction_mpc_policy_spec),
     "cv_prediction_mpc": _build_prediction_mpc_policy_spec,
     "prediction_aware_mpc": _build_prediction_mpc_policy_spec,

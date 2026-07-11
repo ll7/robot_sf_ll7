@@ -1,7 +1,7 @@
 """Configuration dataclasses for simulator timing and pedestrian behavior."""
 
 from dataclasses import dataclass, field, replace
-from math import ceil, isfinite
+from math import ceil, isfinite, pi
 from typing import Any
 
 from pysocialforce.scene import normalize_integration_scheme
@@ -12,6 +12,7 @@ from robot_sf.sim.pedestrian_model_variants import (
     HSFM_ALIGNMENT_TORQUE_V1,
     HSFM_ANISOTROPIC_FOV_V1,
     HSFM_TTC_PREDICTIVE_V1,
+    HSFM_ZANLUNGO_COLLISION_PREDICTION_V1,
     normalize_pedestrian_model,
 )
 from robot_sf.sim.pedestrian_speed_tiers import (
@@ -55,6 +56,53 @@ def _normalize_ttc_predictive_force_config(
     raise ValueError("ttc_predictive_force must be a TtcPredictiveForceConfig")
 
 
+@dataclass(frozen=True)
+class ZanlungoCollisionPredictionConfig:
+    """Opt-in Zanlungo et al. (2011) collision-prediction force parameters."""
+
+    enabled: bool = False
+    interaction_strength: float = 1.13
+    interaction_range_m: float = 0.71
+    anisotropy_lambda: float = 0.29
+    angle_threshold_rad: float = pi / 4
+    max_force: float = 5.0
+    include_ped_ped: bool = True
+
+    def __post_init__(self) -> None:
+        """Validate finite collision-prediction parameters."""
+        if not isfinite(self.interaction_strength) or self.interaction_strength < 0:
+            raise ValueError("zanlungo_collision_prediction.interaction_strength must be >= 0")
+        if not isfinite(self.interaction_range_m) or self.interaction_range_m <= 0:
+            raise ValueError("zanlungo_collision_prediction.interaction_range_m must be > 0")
+        if not isfinite(self.anisotropy_lambda) or not 0 <= self.anisotropy_lambda <= 1:
+            raise ValueError(
+                "zanlungo_collision_prediction.anisotropy_lambda must be within [0, 1]"
+            )
+        if (
+            not isfinite(self.angle_threshold_rad)
+            or self.angle_threshold_rad <= 0
+            or self.angle_threshold_rad > pi
+        ):
+            raise ValueError(
+                "zanlungo_collision_prediction.angle_threshold_rad must be within (0, pi]"
+            )
+        if not isfinite(self.max_force) or self.max_force <= 0:
+            raise ValueError("zanlungo_collision_prediction.max_force must be > 0")
+
+
+def _normalize_zanlungo_collision_prediction_config(
+    value: ZanlungoCollisionPredictionConfig | dict,
+) -> ZanlungoCollisionPredictionConfig:
+    """Return a validated Zanlungo collision-prediction config."""
+    if isinstance(value, ZanlungoCollisionPredictionConfig):
+        return value
+    if isinstance(value, dict):
+        return ZanlungoCollisionPredictionConfig(**value)
+    raise ValueError(
+        "zanlungo_collision_prediction must be a ZanlungoCollisionPredictionConfig or dict"
+    )
+
+
 def _pedestrian_model_ttc_config(
     pedestrian_model: str,
     ttc_config: TtcPredictiveForceConfig,
@@ -67,6 +115,20 @@ def _pedestrian_model_ttc_config(
     if pedestrian_model == HSFM_TTC_PREDICTIVE_V1 and not ttc_config.enabled:
         return replace(ttc_config, enabled=True)
     return ttc_config
+
+
+def _pedestrian_model_zanlungo_config(
+    pedestrian_model: str,
+    config: ZanlungoCollisionPredictionConfig,
+) -> ZanlungoCollisionPredictionConfig:
+    """Enable Zanlungo provenance when its pedestrian-model selector is active.
+
+    Returns:
+        Original or selector-enabled collision-prediction config.
+    """
+    if pedestrian_model == HSFM_ZANLUNGO_COLLISION_PREDICTION_V1 and not config.enabled:
+        return replace(config, enabled=True)
+    return config
 
 
 @dataclass(frozen=True)
@@ -197,6 +259,11 @@ class SimulationSettings:
 
     ttc_predictive_force: TtcPredictiveForceConfig = field(default_factory=TtcPredictiveForceConfig)
     """TTC predictive force settings used by ``hsfm_ttc_predictive_v1``."""
+
+    zanlungo_collision_prediction: ZanlungoCollisionPredictionConfig = field(
+        default_factory=ZanlungoCollisionPredictionConfig
+    )
+    """Collision-prediction settings used by ``hsfm_zanlungo_collision_prediction_v1``."""
 
     anisotropic_fov: AnisotropicFovConfig = field(default_factory=AnisotropicFovConfig)
     """Anisotropic field-of-view settings used by ``hsfm_anisotropic_fov_v1``."""
@@ -384,6 +451,13 @@ class SimulationSettings:
         self.ttc_predictive_force = _pedestrian_model_ttc_config(
             self.pedestrian_model,
             self.ttc_predictive_force,
+        )
+        self.zanlungo_collision_prediction = _normalize_zanlungo_collision_prediction_config(
+            self.zanlungo_collision_prediction
+        )
+        self.zanlungo_collision_prediction = _pedestrian_model_zanlungo_config(
+            self.pedestrian_model,
+            self.zanlungo_collision_prediction,
         )
         self.anisotropic_fov = _normalize_anisotropic_fov_config(self.anisotropic_fov)
         self.anisotropic_fov = _pedestrian_model_anisotropic_fov_config(

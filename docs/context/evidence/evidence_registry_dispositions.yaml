@@ -1,9 +1,12 @@
 # AI-GENERATED NEEDS-REVIEW
 schema_version: evidence_registry_disposition.v1
 claim_boundary: >-
-  Report-mode classification of legacy evidence-registry integrity findings. This packet does not
-  validate a campaign, alter benchmark interpretation, or enable strict CI.
+  Report-mode classification of legacy evidence-registry integrity findings. This packet
+  classifies categories for report-mode output. Strict CI is enabled via a companion
+  policy file (evidence_registry_strict_ci_policy.v1) that defines an explicit exclusion
+  set for legacy findings that cannot be backfilled without external evidence.
 evidence_status: diagnostic-only
+strict_ci_policy: evidence_registry_strict_ci_policy.yaml
 categories:
   - code: duplicate_campaign_id
     status: review_cross_bundle_collision

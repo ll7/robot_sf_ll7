@@ -294,3 +294,157 @@ def test_report_mode_is_non_blocking_and_strict_mode_fails(tmp_path: Path) -> No
     assert report_mode.returncode == 0
     assert json.loads(report_mode.stdout)["summary"]["findings"] > 0
     assert strict_mode.returncode == 1
+
+
+def test_exclude_codes_removes_findings_from_strict_gating(tmp_path: Path) -> None:
+    """Excluded codes are removed from active findings and do not block strict mode."""
+    linter = _load_linter()
+    repo, evidence, _commit, config_sha256 = _make_repo(tmp_path)
+    artifact_sha256 = hashlib.sha256((evidence / "artifact.json").read_bytes()).hexdigest()
+    _write_entry(
+        evidence,
+        campaign_id="campaign-exclude",
+        commit="f" * 40,
+        config_sha256=config_sha256,
+        artifact_sha256=artifact_sha256,
+        name="exclude.json",
+    )
+
+    report = linter.lint_evidence_registry(
+        repo, evidence, exclude_codes=frozenset({"dangling_commit"})
+    )
+
+    assert report["summary"]["findings"] > 0
+    assert not any(issue["code"] == "dangling_commit" for issue in report["issues"])
+
+
+def test_strict_mode_with_all_codes_excluded_passes(tmp_path: Path) -> None:
+    """Strict mode passes when all finding codes are excluded."""
+    repo, evidence, _commit, config_sha256 = _make_repo(tmp_path)
+    artifact_sha256 = hashlib.sha256((evidence / "artifact.json").read_bytes()).hexdigest()
+    _write_entry(
+        evidence,
+        campaign_id="campaign-strict-exclude",
+        commit="f" * 40,
+        config_sha256=config_sha256,
+        artifact_sha256=artifact_sha256,
+        name="strict-exclude.json",
+    )
+    command = [
+        sys.executable,
+        str(LINTER),
+        "--repo-root",
+        str(repo),
+        "--registry-root",
+        str(evidence),
+        "--strict",
+        "--exclude-codes",
+        "dangling_commit,config_missing_at_commit",
+    ]
+
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+
+    assert result.returncode == 0
+    report = json.loads(result.stdout)
+    assert report["summary"]["findings"] == 0
+    assert "excluded_summary" in report
+
+
+def test_excluded_codes_appear_in_report(tmp_path: Path) -> None:
+    """Excluded findings are recorded separately in the report for transparency."""
+    linter = _load_linter()
+    repo, evidence, _commit, config_sha256 = _make_repo(tmp_path)
+    artifact_sha256 = hashlib.sha256((evidence / "artifact.json").read_bytes()).hexdigest()
+    _write_entry(
+        evidence,
+        campaign_id="campaign-excluded-report",
+        commit="f" * 40,
+        config_sha256=config_sha256,
+        artifact_sha256=artifact_sha256,
+        name="excluded-report.json",
+    )
+
+    report = linter.lint_evidence_registry(
+        repo, evidence, exclude_codes=frozenset({"dangling_commit"})
+    )
+
+    assert "excluded_codes" in report
+    assert "excluded_issues" in report
+    assert "excluded_summary" in report
+    assert report["excluded_codes"] == ["dangling_commit"]
+    assert report["excluded_summary"]["findings"] > 0
+    assert "dangling_commit" in report["excluded_summary"]["by_code"]
+
+
+def test_strict_exclusion_policy_file_is_loaded(tmp_path: Path) -> None:
+    """A YAML policy file provides excluded codes for strict gating."""
+    repo, evidence, _commit, config_sha256 = _make_repo(tmp_path)
+    artifact_sha256 = hashlib.sha256((evidence / "artifact.json").read_bytes()).hexdigest()
+    _write_entry(
+        evidence,
+        campaign_id="campaign-policy",
+        commit="f" * 40,
+        config_sha256=config_sha256,
+        artifact_sha256=artifact_sha256,
+        name="policy.json",
+    )
+    policy_path = repo / "strict_ci_policy.yaml"
+    policy_path.write_text(
+        "schema_version: evidence_registry_strict_ci_policy.v1\n"
+        "excluded_codes:\n"
+        "  - dangling_commit\n"
+        "  - config_missing_at_commit\n",
+        encoding="utf-8",
+    )
+    command = [
+        sys.executable,
+        str(LINTER),
+        "--repo-root",
+        str(repo),
+        "--registry-root",
+        str(evidence),
+        "--strict",
+        "--strict-exclusion-policy",
+        str(policy_path),
+    ]
+
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+
+    assert result.returncode == 0
+    report = json.loads(result.stdout)
+    assert report["summary"]["findings"] == 0
+
+
+def test_exclude_codes_and_policy_merge(tmp_path: Path) -> None:
+    """CLI --exclude-codes and --strict-exclusion-policy are merged."""
+    repo, evidence, _commit, config_sha256 = _make_repo(tmp_path)
+    artifact_sha256 = hashlib.sha256((evidence / "artifact.json").read_bytes()).hexdigest()
+    _write_entry(
+        evidence,
+        campaign_id="campaign-merge",
+        commit="f" * 40,
+        config_sha256=config_sha256,
+        artifact_sha256=artifact_sha256,
+        name="merge.json",
+    )
+    policy_path = repo / "policy.yaml"
+    policy_path.write_text("excluded_codes:\n  - dangling_commit\n", encoding="utf-8")
+    command = [
+        sys.executable,
+        str(LINTER),
+        "--repo-root",
+        str(repo),
+        "--registry-root",
+        str(evidence),
+        "--strict",
+        "--exclude-codes",
+        "config_missing_at_commit",
+        "--strict-exclusion-policy",
+        str(policy_path),
+    ]
+
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+
+    assert result.returncode == 0
+    report = json.loads(result.stdout)
+    assert set(report["excluded_codes"]) == {"dangling_commit", "config_missing_at_commit"}

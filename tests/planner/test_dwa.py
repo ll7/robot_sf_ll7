@@ -294,3 +294,28 @@ def test_dwa_diagnostics_resets_between_episodes() -> None:
     planner.plan(_observation(goal=(0.05, 0.0)))
     second_diag = planner.diagnostics()["last_decision"]
     assert second_diag["constraint_reason"] == "goal_reached"
+
+
+def test_dwa_diagnostics_returns_an_isolated_snapshot() -> None:
+    """Caller mutation of nested diagnostics cannot alter planner state."""
+    planner = DWAPlannerAdapter(DWAPlannerConfig())
+    planner.plan(_observation(goal=(3.0, 0.0)))
+
+    snapshot = planner.diagnostics()["last_decision"]
+    snapshot["selected_command"][0] = 99.0
+    snapshot["dynamic_window"]["v_min"] = 99.0
+    current = planner.diagnostics()["last_decision"]
+
+    assert current["selected_command"][0] != 99.0
+    assert current["dynamic_window"]["v_min"] != 99.0
+
+
+def test_dwa_target_goal_diagnostics_tolerate_missing_goal_payload() -> None:
+    """Diagnostic-only target labels preserve the planner's missing-goal defaults."""
+    planner = DWAPlannerAdapter(DWAPlannerConfig())
+    observation = _observation(goal=(3.0, 0.0))
+    observation["goal"] = None
+
+    planner.plan(observation)
+
+    assert planner.diagnostics()["last_decision"]["target_goal"]["kind"] in {"next", "current"}

@@ -9,6 +9,7 @@ upstream-wrapper claim and not benchmark-performance evidence by itself.
 from __future__ import annotations
 
 import math
+from copy import deepcopy
 from dataclasses import dataclass
 from math import isfinite
 from typing import Any
@@ -303,6 +304,7 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             dict[str, Any]: Target-goal kind and world coordinates.
         """
         _, goal_state, _ = self._socnav_fields(observation)
+        goal_state = goal_state or {}
         goal_next = self._as_1d_float(goal_state.get("next", [0.0, 0.0]), pad=2)[:2]
         targets_next = bool(
             np.linalg.norm(goal_next - robot_pos) > float(self.config.goal_tolerance)
@@ -417,7 +419,7 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             dict[str, Any]: Diagnostic payload keyed by ``last_decision``.
         """
-        return {"last_decision": dict(self._last_decision) if self._last_decision else {}}
+        return {"last_decision": deepcopy(self._last_decision) if self._last_decision else {}}
 
 
 def _reachable_interval(

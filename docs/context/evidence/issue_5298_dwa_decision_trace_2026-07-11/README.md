@@ -65,7 +65,7 @@ config-sensitivity surface (consistent with the #5262 `needs-implementation-chan
 
 The next bounded repair/experiment should target the DWA rollout horizon and its global-route / goal 
 convergence behavior, not the velocity/acceleration/tolerance axes already swept in #5262. That 
-follow-up should be tracked in its own scoped issue (see PR body).
+follow-up is tracked in [#5319](https://github.com/ll7/robot_sf_ll7/issues/5319).
 
 ## Reproduction
 
@@ -76,8 +76,8 @@ DISPLAY= SDL_VIDEODRIVER=dummy MPLBACKEND=Agg uv run python \
   --evidence-dir docs/context/evidence/issue_5298_dwa_decision_trace_2026-07-11
 ```
 
-Executed at repo commit `ecc70db75f4fcb1089beb7da75b423ac348aa5cd`. Raw per-step trace is also written to the disposable 
-`output/benchmarks/issue_5298/dwa_decision_trace.json`; this packet keeps the compact derived 
+Executed at repo commit `b8b3df4836d4e91962dae3051fbdfa3da3c1c0a1`. Raw per-step trace is also written to the disposable
+`output/benchmarks/issue_5298/dwa_decision_trace.json`; this packet keeps the compact derived
 steps CSV and summary JSON needed to review the mechanism.
 
 ## Acceptance mapping (issue #5298 definition of done)
@@ -88,4 +88,3 @@ steps CSV and summary JSON needed to review the mechanism.
       bounded-horizon collision miss).
 - [x] The conclusion names the next bounded repair/experiment direction (rollout-horizon and 
       global-route convergence), tracked as a follow-up issue.
-

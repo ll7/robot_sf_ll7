@@ -21,7 +21,9 @@
         "max_route_progress_from_start_m": 1.5256010265433233,
         "min_distance_to_goal_m": 0.47439997345667684,
         "net_progress_m": -2.8845916237837987,
-        "progress_ratio_of_initial": -1.4428557919221334
+        "progress_ratio_of_initial": -1.4428557919221334,
+        "skipped_non_finite_cells": 0,
+        "skipped_non_finite_rows": 0
       },
       "scenario_id": "classic_bottleneck_medium",
       "seed": 131,
@@ -51,7 +53,9 @@
         "max_route_progress_from_start_m": 2.814232847734116,
         "min_distance_to_goal_m": 1.5746728011551396,
         "net_progress_m": 1.178272598168248,
-        "progress_ratio_of_initial": 0.26850901883153916
+        "progress_ratio_of_initial": 0.26850901883153916,
+        "skipped_non_finite_cells": 0,
+        "skipped_non_finite_rows": 0
       },
       "scenario_id": "classic_t_intersection_low",
       "seed": 161,
@@ -62,5 +66,6 @@
     }
   ],
   "issue": 5298,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "dwa-decision-trace.v1"
 }

@@ -30,13 +30,15 @@ JSON) into ``docs/context/evidence/`` for durable traceability.
 from __future__ import annotations
 
 import argparse
-import csv
 import json
+import math
 import os
 from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.evidence.distance_convention import DistanceConvention
+from robot_sf.evidence.writers import write_distance_series_csv, write_json
 from robot_sf.training.scenario_loader import load_scenarios
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -55,6 +57,7 @@ TARGET_EPISODES: tuple[tuple[str, int, str], ...] = (
     ("classic_bottleneck_medium", 131, "bottleneck_timeout"),
     ("classic_t_intersection_low", 161, "t_intersection_collision"),
 )
+FOLLOW_UP_ISSUE = 5319
 
 STEP_TRACE_FIELDS: tuple[str, ...] = (
     "episode_id",
@@ -178,16 +181,30 @@ def _route_progress_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Return compact route-progress statistics for one episode's trace."""
     if not rows:
         return {"status": "no_steps"}
-    distances = [
-        float(row["distance_to_goal_m"])
-        for row in rows
-        if row.get("distance_to_goal_m") is not None
-    ]
-    progresses = [
-        float(row["route_progress_from_start_m"])
-        for row in rows
-        if row.get("route_progress_from_start_m") is not None
-    ]
+    distances: list[float] = []
+    progresses: list[float] = []
+    skipped_non_finite_rows = 0
+    skipped_non_finite_cells = 0
+    for row in rows:
+        row_has_non_finite_value = False
+        for key, values in (
+            ("distance_to_goal_m", distances),
+            ("route_progress_from_start_m", progresses),
+        ):
+            raw_value = row.get(key)
+            if raw_value in (None, ""):
+                continue
+            try:
+                value = float(raw_value)
+            except (TypeError, ValueError):
+                value = float("nan")
+            if math.isfinite(value):
+                values.append(value)
+            else:
+                row_has_non_finite_value = True
+                skipped_non_finite_cells += 1
+        if row_has_non_finite_value:
+            skipped_non_finite_rows += 1
     initial = distances[0] if distances else None
     final = distances[-1] if distances else None
     return {
@@ -204,6 +221,8 @@ def _route_progress_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
             if initial not in (None, 0.0) and final is not None
             else None
         ),
+        "skipped_non_finite_rows": skipped_non_finite_rows,
+        "skipped_non_finite_cells": skipped_non_finite_cells,
     }
 
 
@@ -260,17 +279,16 @@ def _write_steps_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     """Write flat per-step rows as a deterministic CSV artifact."""
     if not rows:
         raise ValueError(f"cannot write empty steps CSV: {path}")
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        handle.write("# AI-GENERATED NEEDS-REVIEW\n")
-        writer = csv.DictWriter(handle, fieldnames=list(STEP_TRACE_FIELDS))
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({field: row.get(field) for field in STEP_TRACE_FIELDS})
+    write_distance_series_csv(
+        path,
+        [{field: row.get(field) for field in STEP_TRACE_FIELDS} for row in rows],
+        convention=DistanceConvention.CENTER_CENTER,
+    )
 
 
-def _write_evidence_readme(
+def _write_evidence_readme(  # noqa: PLR0915
     path: Path, *, summaries: list[dict[str, Any]], trace_commit: str
-) -> None:  # noqa: PLR0915
+) -> None:
     """Write the analysis-only evidence README naming config/scenario/seed/mechanism."""
     bottleneck = next((s for s in summaries if s["episode_id"] == "bottleneck_timeout"), None)
     t_inter = next((s for s in summaries if s["episode_id"] == "t_intersection_collision"), None)
@@ -456,7 +474,10 @@ def _write_evidence_readme(
     lines.append(
         "convergence behavior, not the velocity/acceleration/tolerance axes already swept in #5262. That "
     )
-    lines.append("follow-up should be tracked in its own scoped issue (see PR body).")
+    lines.append(
+        f"follow-up is tracked in [#{FOLLOW_UP_ISSUE}](https://github.com/ll7/robot_sf_ll7/issues/"
+        f"{FOLLOW_UP_ISSUE})."
+    )
     lines.append("")
     lines.append("## Reproduction")
     lines.append("")
@@ -468,10 +489,10 @@ def _write_evidence_readme(
     lines.append("```")
     lines.append("")
     lines.append(
-        f"Executed at repo commit `{trace_commit}`. Raw per-step trace is also written to the disposable "
+        f"Executed at repo commit `{trace_commit}`. Raw per-step trace is also written to the disposable"
     )
     lines.append(
-        "`output/benchmarks/issue_5298/dwa_decision_trace.json`; this packet keeps the compact derived "
+        "`output/benchmarks/issue_5298/dwa_decision_trace.json`; this packet keeps the compact derived"
     )
     lines.append("steps CSV and summary JSON needed to review the mechanism.")
     lines.append("")
@@ -601,36 +622,17 @@ def trace_episodes(
         encoding="utf-8",
     )
     _write_steps_csv(out_dir / "dwa_decision_trace_steps.csv", all_step_rows)
-    (out_dir / "dwa_decision_trace_summary.json").write_text(
-        json.dumps(
-            {
-                "schema_version": "dwa-decision-trace.v1",
-                "issue": 5298,
-                "episodes": summaries,
-            },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    summary_payload = {
+        "schema_version": "dwa-decision-trace.v1",
+        "issue": 5298,
+        "episodes": summaries,
+    }
+    write_json(out_dir / "dwa_decision_trace_summary.json", summary_payload)
 
     if evidence_dir is not None:
         evidence_dir.mkdir(parents=True, exist_ok=True)
         _write_steps_csv(evidence_dir / "dwa_decision_trace_steps.csv", all_step_rows)
-        (evidence_dir / "dwa_decision_trace_summary.json").write_text(
-            json.dumps(
-                {
-                    "schema_version": "dwa-decision-trace.v1",
-                    "issue": 5298,
-                    "episodes": summaries,
-                },
-                indent=2,
-                sort_keys=True,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
+        write_json(evidence_dir / "dwa_decision_trace_summary.json", summary_payload)
         _write_evidence_readme(
             evidence_dir / "README.md",
             summaries=summaries,

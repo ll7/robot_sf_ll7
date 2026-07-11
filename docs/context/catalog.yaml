@@ -24,6 +24,10 @@ entries:
   status: evidence
   freshness: evidence
   area: evidence_policy
+- path: docs/context/evidence/issue_5298_dwa_decision_trace_2026-07-11
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5263_exact_repeat/exact_repeat_manifest.json
   status: evidence
   freshness: evidence

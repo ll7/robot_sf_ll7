@@ -2,7 +2,7 @@
 """ty advisory diagnostic baseline + per-module downward ratchet (issue #5004).
 
 This helper turns the existing *advisory* ``ty check`` scan (run in CI via
-``uvx ty check . --exit-zero``) into a **monotone downward ratchet**: the total
+``uvx ty@0.0.58 check . --exit-zero``) into a **monotone downward ratchet**: the total
 ``ty`` finding count per module may stay the same or decrease, but never increase.
 
 What this owns (issue #5004)
@@ -92,6 +92,9 @@ DEFAULT_BASELINE = Path("scripts/validation/ty_advisory_baseline.json")
 # dependency-resolution state. See issue #5070.
 DEFAULT_FIXTURE = Path("scripts/validation/ty_advisory_findings_fixture.json")
 SCHEMA_VERSION = 1
+# The baseline and every ratchet-feeding invocation must use this exact release.
+# Upgrade this value, the ci_driver invocation, and the baseline + fixture together.
+TY_VERSION = "0.0.58"
 
 # A finding is the "optional-import category" (excluded from the ratchet gate,
 # owned by #4990/#4995) when it is an unresolved whole-module import. Member
@@ -131,6 +134,11 @@ def classify_finding(finding: dict[str, Any]) -> str:
     return "general"
 
 
+def ty_command(*args: str) -> list[str]:
+    """Build the pinned ``ty`` command used by every live ratchet operation."""
+    return ["uvx", f"ty@{TY_VERSION}", *args]
+
+
 def run_ty(repo_root: Path) -> list[dict[str, Any]]:
     """Run ``ty check`` in gitlab-JSON mode and return parsed findings.
 
@@ -138,7 +146,7 @@ def run_ty(repo_root: Path) -> list[dict[str, Any]]:
     itself; only this ratchet decides pass/fail. Raises ``RuntimeError`` on a
     non-zero ty exit that is not advisory, or on unparseable output.
     """
-    cmd = ["uvx", "ty", "check", ".", "--output-format", "gitlab", "--exit-zero"]
+    cmd = ty_command("check", ".", "--output-format", "gitlab", "--exit-zero")
     try:
         proc = subprocess.run(
             cmd,
@@ -292,9 +300,12 @@ def build_baseline_payload(
             "ty advisory diagnostic baseline + per-module downward ratchet "
             "(issue #5004). The ratchet gates on the 'general' bucket; the "
             "'optional_import_excluded' bucket is recorded for visibility but "
-            "owned by #4990/#4995. Refresh with "
-            "`scripts/dev/ty_advisory_ratchet.py --write-baseline` after "
-            "intentionally reducing findings."
+            "owned by #4990/#4995. The ratchet uses pinned ty "
+            f"{TY_VERSION}; upgrades must bump the pin in this helper and "
+            "scripts/dev/ci_driver.sh, then run "
+            "`scripts/dev/ty_advisory_ratchet.py --write-baseline` and "
+            "`scripts/dev/ty_advisory_ratchet.py --emit-baseline-fixture` in "
+            "the same PR."
         ),
         "exclusion": {
             "rule": (
@@ -335,7 +346,7 @@ def _detect_ty_version(repo_root: Path) -> str | None:
     """Best-effort detect the ty version for baseline provenance."""
     try:
         proc = subprocess.run(
-            ["uvx", "ty", "--version"],
+            ty_command("--version"),
             cwd=repo_root,
             check=False,
             capture_output=True,

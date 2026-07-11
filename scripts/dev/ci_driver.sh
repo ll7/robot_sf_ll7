@@ -243,7 +243,7 @@ run_phase() {
       ;;
     typecheck)
       echo "Running ty in advisory mode (--exit-zero); findings are reported but do not fail this phase."
-      uvx ty check . --exit-zero
+      uvx ty@0.0.58 check . --exit-zero
       # Advisory downward ratchet over the ty baseline (issue #5004). Surfaced but
       # non-gating here to match the advisory --exit-zero posture above; promote to
       # gating via the dedicated .github/workflows/ty-advisory-ratchet.yml workflow.

@@ -211,6 +211,13 @@ def test_baseline_payload_records_exclusion_and_sibling_issues() -> None:
     assert "Cannot resolve imported module" in payload["exclusion"]["rule"]
 
 
+def test_pinned_ty_command_matches_committed_baseline() -> None:
+    """The live ratchet pin must agree with the version recorded in its baseline."""
+    baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
+    assert tyratchet.ty_command("check") == ["uvx", "ty@0.0.58", "check"]
+    assert baseline["ty_version"] == f"ty {tyratchet.TY_VERSION}"
+
+
 # --------------------------------------------------------------------------- #
 # CLI end-to-end via --ty-output (no live ty run)
 # --------------------------------------------------------------------------- #

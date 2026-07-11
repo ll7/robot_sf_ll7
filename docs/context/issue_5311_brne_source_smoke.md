@@ -1,4 +1,4 @@
-# Issue #5311 — BRNE source-side smoke + contract mapping
+# Issue #5311 — BRNE Source-Side Smoke + Contract Mapping
 
 **Status:** smoke PASS; control-budget verdict **BORDERLINE (conditional go)**. The
 upstream pure-numpy/numba core runs end-to-end against the staged source on the

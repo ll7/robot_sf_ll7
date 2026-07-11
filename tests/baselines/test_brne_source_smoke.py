@@ -31,10 +31,21 @@ def _load_upstream_brne(stage_path: Path):
     """Import the real upstream brne.py core module from the staged clone."""
     core_file = stage_path / BRNE_CORE_REL
     spec = importlib.util.spec_from_file_location("brne_upstream", core_file)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not build import spec for {core_file}")
     module = importlib.util.module_from_spec(spec)
     sys.modules["brne_upstream"] = module
     spec.loader.exec_module(module)  # type: ignore[union-attr]
     return module
+
+
+def test_load_upstream_brne_fails_closed_when_import_spec_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unimportable staged module produces a clear, fail-closed error."""
+    monkeypatch.setattr(importlib.util, "spec_from_file_location", lambda *_args: None)
+    with pytest.raises(ImportError, match="Could not build import spec"):
+        _load_upstream_brne(tmp_path)
 
 
 @pytest.fixture(scope="module")
@@ -96,7 +107,7 @@ def test_brne_nav_returns_finite_weights_for_two_agents(upstream_brne) -> None:
     xtraj = np.zeros((num_agents * num_samples, plan_steps))
     ytraj = np.zeros((num_agents * num_samples, plan_steps))
     # Robot: straight rollout along +x.
-    xtraj[:num_samples] = np.tile(np.arange(plan_steps) * dt * 0.4, (num_samples, 1))
+    xtraj[:num_samples] = np.arange(plan_steps) * dt * 0.4
     ytraj[:num_samples] = brne.mvn_sample_normal(num_samples, plan_steps, lmat) * 0.05
     # Pedestrian: samples around a constant-velocity mean heading toward the robot.
     xp = brne.mvn_sample_normal(num_samples, plan_steps, lmat)
@@ -147,8 +158,8 @@ def test_brne_unicycle_dynamics_match_differential_drive_command(upstream_brne) 
     dt = 0.1
     v, omega = 0.4, 0.5
     n = 5
-    st0 = np.tile(np.array([0.0, 0.0, 0.0]), reps=(1, 1)).T  # (3, 1) single sample
-    ulist = np.tile([v, omega], reps=(n, 1, 1))  # (tsteps, num_samples=1, 2)
+    st0 = np.zeros((3, 1))  # (3, 1) single sample
+    ulist = np.full((n, 1, 2), [v, omega])  # (tsteps, num_samples=1, 2)
     # traj_sim_essemble returns (tsteps, 3, num_samples); squeeze the sample axis.
     traj = brne.traj_sim_essemble(st0, ulist, dt)[:, :, 0]
     assert traj.shape == (n, 3)
@@ -186,7 +197,7 @@ def test_brne_solve_completes_within_control_budget_for_small_crowd(upstream_brn
     num_agents = num_peds + 1
     xtraj = np.zeros((num_agents * num_samples, plan_steps))
     ytraj = np.zeros((num_agents * num_samples, plan_steps))
-    xtraj[:num_samples] = np.tile(np.arange(plan_steps) * dt * 0.4, (num_samples, 1))
+    xtraj[:num_samples] = np.arange(plan_steps) * dt * 0.4
     ytraj[:num_samples] = brne.mvn_sample_normal(num_samples, plan_steps, lmat) * 0.05
     for i in range(num_peds):
         xp = brne.mvn_sample_normal(num_samples, plan_steps, lmat)

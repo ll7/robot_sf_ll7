@@ -122,7 +122,7 @@ def build_robot_samples(brne: ModuleType, robot_pose: np.ndarray) -> tuple[np.nd
     ``traj_sim_essemble`` (RK4 over [v*cos, v*sin, omega]).
     """
     # Nominal command: straight at constant speed toward +x.
-    nominal_cmds = np.tile([0.4, 0.0], reps=(PLAN_STEPS, 1))
+    nominal_cmds = np.full((PLAN_STEPS, 2), [0.4, 0.0])
     ulist_essemble = brne.get_ulist_essemble(nominal_cmds, 0.6, 1.0, NUM_SAMPLES)
     traj_essemble = brne.traj_sim_essemble(
         np.tile(robot_pose, reps=(NUM_SAMPLES, 1)).T,

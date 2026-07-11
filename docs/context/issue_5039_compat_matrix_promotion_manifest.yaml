@@ -32,15 +32,29 @@ recorded_runs: []
 
 # --- Coverage floor decision (issue acceptance criterion) ---
 coverage_floor:
-  status: split_recommended
-  follow_up_issue: 5071
+  status: implemented
+  implementation_issue: 5071
+  effective_on: merge_to_main
+  minimum_total_percent: 85.0
+  metric: line_coverage
+  measured_scope: >-
+    All importable robot_sf package files measured by the unsharded full test suite's
+    --cov=robot_sf report. Tests, scripts, examples, and fast-pysf are not part of this floor.
+  enforcement: >-
+    Blocking fast-feedback step on push-to-main and workflow_dispatch runs. Pull-request runs
+    retain their four-shard fast-feedback topology and do not emit a partial coverage report.
+  baseline_evidence:
+    run_url: https://github.com/ll7/robot_sf_ll7/actions/runs/28936401950
+    artifact_id: 8166279784
+    commit_sha: 1d32698b4055fce6a5bc434441a8ae417c53b02a
+    observed_total_percent: 88.84265916113439
+    measured_files: 652
   rationale: >-
-    An absolute coverage floor is an independent CI policy decision -- which floor
-    percentage, measured over which packages, blocking vs advisory -- orthogonal to matrix
-    promotion. The issue permits splitting it into a separately linked issue when it needs
-    independent policy design; it does. The existing baseline-relative advisory comparison
-    (scripts/coverage/compare_coverage.py) remains in force meanwhile, so no coverage
-    regression signal is lost by deferring the absolute floor.
+    The latest available successful hosted main report measured 88.84 percent. An 85 percent
+    floor provides 3.84 percentage points of operational headroom while preventing a large
+    absolute regression. The independent baseline-relative comparison remains advisory and
+    unchanged so smaller trend regressions stay visible. The floor reuses the existing report,
+    adding no test runtime and no compatibility-matrix dependency.
 
 # --- Durable state ledger / issue-state surface for #5039 ---
 state:

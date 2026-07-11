@@ -55,7 +55,12 @@ def test_shipped_manifest_parses_with_canonical_gate() -> None:
     assert gate["min_green_runs_per_cell"] >= 1
     assert gate["runtime_budget_minutes"] > 0
     assert data["recorded_runs"] == []
-    assert data["coverage_floor"]["status"] == "split_recommended"
+    floor = data["coverage_floor"]
+    assert floor["status"] == "implemented"
+    assert floor["implementation_issue"] == 5071
+    assert floor["minimum_total_percent"] == 85.0
+    assert floor["metric"] == "line_coverage"
+    assert floor["baseline_evidence"]["observed_total_percent"] > floor["minimum_total_percent"]
 
 
 def test_shipped_manifest_is_currently_blocked() -> None:

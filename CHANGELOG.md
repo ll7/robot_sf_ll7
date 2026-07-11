@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **issue #5071 absolute continuous-integration coverage floor.** The unsharded full-suite
+  coverage report on `main` and manual CI runs must cover at least 85% of the `robot_sf` package.
+  This blocking floor reuses the existing report while the baseline-relative comparison remains
+  advisory; pull-request test sharding and fast-feedback latency are unchanged.
+
 * **issue #4993 complete RobotSfError migration.** Re-parents the remaining 76 ad-hoc
   exception classes across `analysis_workbench`, `benchmark` (individual files), `common`,
   `data_ingestion`, `examples`, `nav`, `planner`, `research`, and `training` subpackages onto

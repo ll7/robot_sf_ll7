@@ -49,6 +49,13 @@ def _gh_api_patch(
             stdout="",
             stderr="gh CLI not found on PATH; install GitHub CLI (https://cli.github.com/)",
         )
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=124,
+            stdout="",
+            stderr=f"gh api timed out after {timeout} seconds; body update was not verified",
+        )
 
 
 def update_pr_body(number: int, body_file: Path, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
@@ -79,6 +80,19 @@ def test_update_pr_body_fails_closed_on_api_error(tmp_path: Path) -> None:
 
     assert result["status"] == "error"
     assert "Bad credentials" in result["error"]
+
+
+def test_update_pr_body_fails_closed_on_timeout(tmp_path: Path) -> None:
+    """A timeout must remain a structured, unverified error rather than escaping."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("body", encoding="utf-8")
+    with patch("scripts.dev.gh_pr_body_rest.subprocess.run") as mock_run:
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd=["gh", "api"], timeout=30)
+        result = update_pr_body(5220, body_file)
+
+    assert result["status"] == "error"
+    assert "timed out" in result["error"]
+    assert "not verified" in result["error"]
 
 
 def test_cli_prints_compact_success_json(tmp_path: Path, capsys) -> None:

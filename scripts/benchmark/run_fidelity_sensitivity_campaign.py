@@ -1607,9 +1607,11 @@ def _resolve_rank_contract_spec(
         plan_path = pathlib.Path(args.plan)
         if not plan_path.is_absolute():
             plan_path = REPO_ROOT / args.plan
-        if not plan_path.exists():
-            raise FileNotFoundError(f"--plan not found: {plan_path}")
+        if not plan_path.is_file():
+            raise FileNotFoundError(f"--plan not found or is not a file: {plan_path}")
         plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        if not isinstance(plan, dict):
+            raise ValueError(f"--plan must contain a JSON dictionary: {_repo_rel(plan_path)}")
         spec = select_rank_identifiability_contract_spec(plan)
         if spec is None:
             raise ValueError(
@@ -1646,9 +1648,9 @@ def _run_fixed_scope_check_rank_contract(
     report_path = pathlib.Path(args.report) if args.report else None
     if report_path is not None and not report_path.is_absolute():
         report_path = REPO_ROOT / args.report
-    if report_path is None or not report_path.exists():
+    if report_path is None or not report_path.is_file():
         missing = _repo_rel(report_path) if report_path else "<unset>"
-        print(f"fail-closed: --report not found: {missing}")
+        print(f"fail-closed: --report not found or is not a file: {missing}")
         print(
             "--fixed-scope-check-rank-contract requires --report pointing to an "
             "existing fidelity_rank_stability_report.json"

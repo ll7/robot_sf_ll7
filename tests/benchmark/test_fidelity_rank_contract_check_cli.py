@@ -16,7 +16,9 @@ mode in-process through ``main([...])``.
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import json
+import re
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -209,6 +211,25 @@ def test_cli_fails_closed_when_report_path_missing(
     assert "fidelity_rank_stability_report.json" in captured.out
 
 
+def test_cli_fails_closed_when_report_path_is_directory(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A directory passed as --report fails closed rather than attempting to read it."""
+    report_dir = tmp_path / "fidelity_rank_stability_report.json"
+    report_dir.mkdir()
+
+    exit_code = campaign_runner.main(
+        [
+            "--fixed-scope-check-rank-contract",
+            "--report",
+            str(report_dir),
+        ]
+    )
+
+    assert exit_code == 1
+    assert "not found or is not a file" in capsys.readouterr().out
+
+
 def test_cli_emits_machine_readable_check_packet(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -299,6 +320,44 @@ def test_cli_plan_without_contract_spec_raises(tmp_path: Path) -> None:
         )
 
 
+def test_cli_rejects_plan_with_non_object_json_root(tmp_path: Path) -> None:
+    """A serialized plan must be an object so spec selection cannot silently misbehave."""
+    plan_path = tmp_path / "fidelity_fixed_scope_run_plan.json"
+    plan_path.write_text("[]", encoding="utf-8")
+    report_path = _write_report(
+        _identifiable_report(), tmp_path / "fidelity_rank_stability_report.json"
+    )
+
+    with pytest.raises(ValueError, match="JSON dictionary"):
+        campaign_runner.main(
+            [
+                "--fixed-scope-check-rank-contract",
+                "--report",
+                str(report_path),
+                "--plan",
+                str(plan_path),
+            ]
+        )
+
+
+def test_cli_rejects_plan_path_that_is_a_directory(tmp_path: Path) -> None:
+    """A directory passed as --plan raises a clear file-boundary error."""
+    report_path = _write_report(
+        _identifiable_report(), tmp_path / "fidelity_rank_stability_report.json"
+    )
+
+    with pytest.raises(FileNotFoundError, match="not found or is not a file"):
+        campaign_runner.main(
+            [
+                "--fixed-scope-check-rank-contract",
+                "--report",
+                str(report_path),
+                "--plan",
+                str(tmp_path),
+            ]
+        )
+
+
 # ---------------------------------------------------------------------------
 # Regression: the execute path still uses the shared selector (no divergence)
 # ---------------------------------------------------------------------------
@@ -306,11 +365,5 @@ def test_cli_plan_without_contract_spec_raises(tmp_path: Path) -> None:
 
 def test_execute_path_uses_shared_selector() -> None:
     """_run_fixed_scope_execute resolves its spec via the shared selector helper."""
-    # The execute-path contract gate references the shared selector symbol.
-    source = (
-        Path(campaign_runner.__file__).read_text(encoding="utf-8")
-        if hasattr(campaign_runner, "__file__")
-        else ""
-    )
-    # The execute function's post-run gate must call the shared selector.
-    assert "select_rank_identifiability_contract_spec(plan)" in source
+    source = inspect.getsource(campaign_runner._run_fixed_scope_execute)
+    assert re.search(r"select_rank_identifiability_contract_spec\s*\(\s*plan\s*\)", source)

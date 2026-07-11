@@ -378,6 +378,37 @@ def test_cli_view_fails_closed_on_rest_error(capsys: pytest.CaptureFixture[str])
     assert "deprecated" in captured.err
 
 
+def test_rest_paths_do_not_request_deprecated_project_cards_field() -> None:
+    """REST API paths used by the helper must never include ``projectCards``.
+
+    Regression check for issue #5226: ``gh issue view --comments`` fails on some
+    GitHub CLI versions because the underlying GraphQL query requests the deprecated
+    ``repository.issue.projectCards`` field.  The ``fetch_issue`` and
+    ``fetch_comments`` helpers bypass this by calling pure-REST endpoints
+    (``/repos/{repo}/issues/{n}`` and ``/repos/{repo}/issues/{n}/comments``).
+    This test captures all ``_gh_api`` call paths and asserts that none of them
+    contain the deprecated field name, so a future refactor cannot silently
+    reintroduce a GraphQL projectCards dependency.
+    """
+    with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:
+        mock_api.return_value = _proc(stdout=json.dumps(_raw_issue()))
+        fetch_issue(5226)
+    for call in mock_api.call_args_list:
+        path = call[0][0]
+        assert "projectCards" not in path, (
+            f"fetch_issue REST path contains deprecated field: {path!r}"
+        )
+
+    with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:
+        mock_api.return_value = _proc(stdout=json.dumps([_raw_comment()]))
+        fetch_comments(5226)
+    for call in mock_api.call_args_list:
+        path = call[0][0]
+        assert "projectCards" not in path, (
+            f"fetch_comments REST path contains deprecated field: {path!r}"
+        )
+
+
 def test_cli_view_rejects_unknown_json_field(capsys: pytest.CaptureFixture[str]) -> None:
     """Unknown --json fields should fail fast with exit code 2, not emit partial JSON."""
     with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:

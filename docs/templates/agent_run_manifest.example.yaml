@@ -17,7 +17,7 @@ agent_run:
   actual_agent_count: 1
   commands_run:
     - "git fetch origin"
-    - "gh issue view 4756 --comments"
+    - "uv run python scripts/dev/gh_issue_rest.py thread 4756"
     - "git worktree add -b cheap/issue-4756 ../robot_sf_ll7.worktrees/cheap-issue-4756 origin/main"
     - "uv run python -c \"from pathlib import Path; import yaml; yaml.safe_load(Path('docs/templates/agent_run_manifest.yaml').read_text())\""
     - "git diff --check"

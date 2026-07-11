@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
 
 import pytest
+
+from tests.support.script_loader import load_script_module
 
 _AMMV_PANEL_SCRIPT_PATH = (
     Path(__file__).resolve().parents[2]
@@ -16,14 +17,20 @@ _AMMV_PANEL_SCRIPT_PATH = (
 
 
 def _load_ammv_panel_module():
-    """Import the issue #2227 AMMV panel builder script by path."""
-    spec = importlib.util.spec_from_file_location(
-        "build_ammv_mechanism_panel_issue_2227", _AMMV_PANEL_SCRIPT_PATH
+    """Import the issue #2227 AMMV panel builder script by path.
+
+    Uses the shared :func:`tests.support.script_loader.load_script_module` helper
+    (added for issue #5289) instead of the bare ``spec_from_file_location`` /
+    ``module_from_spec`` / ``exec_module`` idiom. The shared helper registers the
+    module in :data:`sys.modules` before ``exec_module`` so the script can use
+    ``@dataclass(frozen=True)`` with bare ``InitVar`` / ``ClassVar`` annotations
+    (the script already enables ``from __future__ import annotations``, which is
+    the exact condition that surfaced the friction in issue #5289).
+    """
+    return load_script_module(
+        _AMMV_PANEL_SCRIPT_PATH,
+        name="build_ammv_mechanism_panel_issue_2227",
     )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 @pytest.fixture(scope="module")

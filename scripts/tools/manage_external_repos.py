@@ -107,6 +107,48 @@ REPOS: tuple[RepoSpec, ...] = (
         ),
         related_issues=(4871, 1617),
     ),
+    RepoSpec(
+        name="brne",
+        title=(
+            "BRNE: Bayesian Recursive Nash Equilibrium for social navigation "
+            "(Sun et al., IJRR 2024, 'Mixed strategy Nash equilibrium for crowd navigation') "
+            "reference implementation"
+        ),
+        upstream_url="https://github.com/MurpheyLab/brne",
+        fork_url=None,
+        pinned_sha="633a5cdcb39ab27f18b596cb8cb1968644f82391",
+        stage_path=DEFAULT_STAGE_ROOT / "brne",
+        source_access_date="2026-07-11",
+        license_note=(
+            "GNU General Public License v3.0 (GPL-3.0), as reported by GitHub repository "
+            "license metadata (LICENSE file at the pinned commit)."
+        ),
+        license_compatibility_decision=(
+            "GPL-3.0 is copyleft and therefore NOT compatible with vendoring BRNE source into "
+            "this non-GPL repository. Staging is local-only for research/reference/contract "
+            "mapping. No robot_sf_ll7 code imports the staged tree at runtime; the smoke loads "
+            "it from the local clone explicitly, not from an installed/vendored copy."
+        ),
+        redistribution_decision=(
+            "no vendoring and no public redistribution of BRNE source in this repo; GPL-3.0 "
+            "copyleft obligations would attach. The registry stages a local-only clone from "
+            "upstream MurpheyLab/brne and records provenance. Reuse in any derivative that "
+            "ships BRNE source would require the consuming work to be GPL-3.0."
+        ),
+        intended_use=(
+            "Reference checkout for the BRNE source-side smoke + contract mapping (issue #5311). "
+            "Only the pure-numpy/numba core algorithm (brne_nav/brne_py/brne_py/brne.py) is "
+            "exercised; the ROS2 navigation node (brne_nav.py), the torch path, the C++ brnelib, "
+            "and the SocNavBench benchmark study are out of scope for the smoke. No robot_sf "
+            "planner registration and no benchmark roster eligibility — this is a go/no-go "
+            "control-budget assessment only."
+        ),
+        validation_command=(
+            "uv run pytest tests/baselines/test_brne_source_smoke.py "
+            "-k brne_skip_without_external_repo -q"
+        ),
+        related_issues=(5311,),
+    ),
 )
 
 

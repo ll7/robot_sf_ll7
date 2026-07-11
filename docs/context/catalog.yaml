@@ -20,6 +20,18 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/evidence/evidence_registry_dispositions.yaml
+  status: evidence
+  freshness: evidence
+  area: evidence_policy
+- path: docs/context/evidence/issue_5263_exact_repeat/exact_repeat_manifest.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5263_exact_repeat/resolved_definitions.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5263_exact_repeat/README.md
   status: evidence
   freshness: evidence
@@ -4204,3 +4216,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5248_salvaged_h600_registration_2026-07
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence

@@ -134,7 +134,6 @@ jobs:
   compat-matrix:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -296,6 +295,7 @@ jobs:
     timeout-minutes: 5
     needs:
       - fast-feedback
+      - compat-matrix
       - smoke-artifacts
       - xdist-scratch-isolation
       - wheel-smoke-install
@@ -306,6 +306,10 @@ jobs:
         run: |
           if [[ "${{ needs.fast-feedback.result }}" != "success" ]]; then
             echo "fast-feedback finished with ${{ needs.fast-feedback.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.compat-matrix.result }}" != "success" ]]; then
+            echo "compat-matrix finished with ${{ needs.compat-matrix.result }}" >&2
             exit 1
           fi
           if [[ "${{ needs.wheel-smoke-install.result }}" != "success" ]]; then

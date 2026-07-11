@@ -32,7 +32,11 @@ from robot_sf.benchmark.camera_ready.resource_lifecycle import (
 )
 
 
-def _make_arm_params(*, algo_config_path: Path | None = None) -> _SubprocessArmParams:
+def _make_arm_params(
+    *,
+    algo_config_path: Path | None = None,
+    scoped_scenarios_path: Path | None = None,
+) -> _SubprocessArmParams:
     """Build a representative _SubprocessArmParams for serialization tests."""
     return _SubprocessArmParams(
         planner_key="test",
@@ -60,6 +64,7 @@ def _make_arm_params(*, algo_config_path: Path | None = None) -> _SubprocessArmP
         snqi_weights=None,
         snqi_baseline=None,
         algo_config_path=algo_config_path,
+        scoped_scenarios_path=scoped_scenarios_path,
     )
 
 
@@ -94,6 +99,7 @@ class TestSubprocessIsolationEntryPoints:
             snqi_weights=None,
             snqi_baseline=None,
             algo_config_path=None,
+            scoped_scenarios_path=None,
         )
         assert params.planner_key == "test_planner"
         assert params.planner_algo == "test_algo"
@@ -618,6 +624,167 @@ class TestSubprocessIsolationMetricEmission:
         entry = result.run_entries[0]
         assert entry["subprocess_isolation"] is True
         assert entry["status"] == "failed"
+
+
+class TestScopedScenarioParity:
+    """Regression tests for the parent->worker scenario handoff.
+
+    Before this fix, the subprocess worker re-loaded the scenario matrix from
+    disk instead of consuming the parent's prepared list. The re-load skipped
+    the campaign loader's map_file normalization (every episode then failed
+    with an unresolvable relative map_file — Slurm jobs 13372/13373), and also
+    lost seed overrides, scenario-candidate filtering, AMV overrides, horizon
+    schedules, and the configured holonomic_command_mode. The contract locked
+    here: the worker must execute EXACTLY the scenario dicts the parent
+    prepared, delivered via ``scoped_scenarios_path``.
+    """
+
+    SCOPED = [
+        {
+            "name": "blind_corner",
+            "map_file": "maps/svg_maps/francis2023/francis2023_blind_corner.svg",
+            "seeds": [111],
+            "simulation_config": {"max_episode_steps": 30},
+            "robot_config": {"kinematics": "differential_drive"},
+        }
+    ]
+
+    def test_serializer_round_trips_scoped_scenarios_path(self):
+        """scoped_scenarios_path survives serialize -> worker re-parse as Path."""
+        from robot_sf.benchmark.camera_ready.resource_lifecycle import (
+            _SUBPROCESS_ARM_PATH_FIELDS,
+        )
+
+        base = _make_arm_params()
+        params = _SubprocessArmParams(
+            **{**base.__dict__, "scoped_scenarios_path": Path("/tmp/scoped.json")}
+        )
+        params_dict = json.loads(_serialize_subprocess_arm_params(params))
+        assert params_dict["scoped_scenarios_path"] == "/tmp/scoped.json"
+
+        for field_name in _SUBPROCESS_ARM_PATH_FIELDS:
+            if params_dict.get(field_name):
+                params_dict[field_name] = Path(params_dict[field_name])
+        rebuilt = _SubprocessArmParams(**params_dict)
+        assert rebuilt == params
+
+    def test_parent_serializes_scoped_scenarios_for_worker(self, tmp_path):
+        """The parent writes its prepared scenarios and hands the path to the worker."""
+        from robot_sf.benchmark.camera_ready.campaign import (
+            _run_campaign_planner_variant_subprocess,
+        )
+
+        maker = TestSubprocessIsolationMetricEmission()
+        planner, context, run = maker._make_context(tmp_path)
+        run = type(run)(**{**run.__dict__, "scoped_scenarios": self.SCOPED})
+
+        worker_stdout = json.dumps(
+            {
+                "summary": {
+                    "status": "ok",
+                    "total_jobs": 1,
+                    "written": 1,
+                    "failed_jobs": 0,
+                    "failures": [],
+                },
+                "cleanup_metrics": {},
+                "warnings": [],
+                "episodes_total": 1,
+            }
+        )
+        captured_input = {}
+
+        def fake_subprocess_run(cmd, *, input, capture_output, text, check):  # noqa: A002
+            captured_input["json"] = input
+            return subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout=worker_stdout, stderr=""
+            )
+
+        with (
+            patch(
+                "robot_sf.benchmark.camera_ready.campaign._prepare_campaign_planner_variant_run",
+                return_value=run,
+            ),
+            patch(
+                "robot_sf.benchmark.camera_ready.campaign.subprocess.run",
+                side_effect=fake_subprocess_run,
+            ),
+            patch(
+                "robot_sf.benchmark.camera_ready.campaign._planner_report_row",
+                return_value={"planner_key": planner.key, "status": "ok"},
+            ),
+            patch("robot_sf.benchmark.camera_ready.campaign.read_jsonl", return_value=[]),
+            patch(
+                "robot_sf.benchmark.camera_ready.campaign.classify_planner_row_status",
+                return_value="ok",
+            ),
+        ):
+            _run_campaign_planner_variant_subprocess(
+                context,
+                planner=planner,
+                kinematics="differential_drive",
+                active_observation_mode="lidar",
+            )
+
+        handoff = json.loads(captured_input["json"])
+        scoped_path = handoff["scoped_scenarios_path"]
+        assert isinstance(scoped_path, str)
+        assert json.loads(Path(scoped_path).read_text(encoding="utf-8")) == self.SCOPED
+
+    def test_worker_consumes_scoped_scenarios_verbatim(self, tmp_path):
+        """The worker runs exactly the serialized scenarios; the matrix is not re-read.
+
+        scenario_matrix_path points at a file that does not exist: if the worker
+        fell back to re-loading the matrix, run_batch would never be reached and
+        the legacy loader would raise instead.
+        """
+        from unittest.mock import Mock as _Mock
+
+        from robot_sf.benchmark.camera_ready.resource_lifecycle import (
+            _run_single_arm_subprocess,
+        )
+
+        scoped_path = tmp_path / "scoped_scenarios.json"
+        scoped_path.write_text(json.dumps(self.SCOPED), encoding="utf-8")
+
+        base = _make_arm_params()
+        params = _SubprocessArmParams(
+            **{
+                **base.__dict__,
+                "scenario_matrix_path": tmp_path / "does-not-exist.yaml",
+                "episodes_path": tmp_path / "episodes.jsonl",
+                "summary_path": tmp_path / "summary.json",
+                "scoped_scenarios_path": scoped_path,
+            }
+        )
+
+        captured = {}
+
+        def fake_run_batch(scenarios, **kwargs):
+            captured["scenarios"] = scenarios
+            return {
+                "status": "ok",
+                "total_jobs": 1,
+                "written": 1,
+                "failed_jobs": 0,
+                "failures": [],
+            }
+
+        with (
+            patch("robot_sf.benchmark.runner.run_batch", side_effect=fake_run_batch),
+            patch(
+                "robot_sf.benchmark.fallback_policy.summarize_benchmark_availability",
+                return_value=_Mock(availability_status="ok"),
+            ),
+            patch(
+                "robot_sf.benchmark.fallback_policy.availability_payload",
+                return_value={},
+            ),
+        ):
+            result = _run_single_arm_subprocess(params)
+
+        assert captured["scenarios"] == self.SCOPED
+        assert result["summary"]["status"] == "ok"
 
 
 if __name__ == "__main__":

@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+# Reserve automatic CodeRabbit reviews for code-bearing pull requests.  The routing
+# workflow applies review-bot-auto for high-risk paths; contributors may apply
+# review-bot to request a review for an otherwise excluded pull request.
+reviews:
+  path_filters:
+    - "robot_sf/**"
+    - "fast-pysf/**"
+    - "scripts/**"
+    - "tests/**"
+    - ".github/workflows/**"
+  auto_review:
+    enabled: false
+    labels:
+      - review-bot-auto
+      - review-bot

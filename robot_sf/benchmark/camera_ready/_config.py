@@ -18,6 +18,7 @@ import yaml
 
 from robot_sf.benchmark.camera_ready._config_types import (
     _AMV_DIMENSIONS,
+    _CHECKPOINT_PROVENANCE_ENFORCEMENT,
     _TUNING_EFFORT_ENFORCEMENT,
     _TUNING_SOURCES,
     DEFAULT_SEED_SETS_PATH,
@@ -708,6 +709,12 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
                 "tuning_effort_enforcement='error' requires an author-declared 'tuning' block "
                 f"for every enabled arm; missing declared tuning block for: {names}"
             )
+    if cfg.checkpoint_provenance_enforcement not in _CHECKPOINT_PROVENANCE_ENFORCEMENT:
+        known = ", ".join(_CHECKPOINT_PROVENANCE_ENFORCEMENT)
+        raise ValueError(
+            "Unsupported checkpoint_provenance_enforcement "
+            f"'{cfg.checkpoint_provenance_enforcement}'. Expected one of: {known}"
+        )
     threshold_values = {
         "rank_alignment_warn_threshold": cfg.snqi_contract.rank_alignment_warn_threshold,
         "rank_alignment_fail_threshold": cfg.snqi_contract.rank_alignment_fail_threshold,
@@ -1129,6 +1136,9 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
         ),
         tuning_effort_enforcement=(
             str(payload.get("tuning_effort_enforcement", "off")).strip().lower() or "off"
+        ),
+        checkpoint_provenance_enforcement=(
+            str(payload.get("checkpoint_provenance_enforcement", "off")).strip().lower() or "off"
         ),
     )
     _validate_campaign_config(cfg)

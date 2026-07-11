@@ -731,6 +731,9 @@ def _preflight_policy(  # noqa: C901, PLR0915
             "Unsupported socnav prereq policy "
             f"'{missing_prereq_policy}'. Expected fail-fast|skip-with-warning|fallback.",
         )
+    effective_algo_config = dict(algo_config)
+    if policy == "fail-fast" and bool(effective_algo_config.get("allow_fallback", False)):
+        effective_algo_config["allow_fallback"] = False
 
     def _build_and_close(cfg: dict[str, Any]) -> dict[str, Any]:
         """Instantiate then close one planner, returning any emitted benchmark metadata.
@@ -801,7 +804,7 @@ def _preflight_policy(  # noqa: C901, PLR0915
 
     learned_contract = _evaluate_learned_policy_contract(
         algo=algo,
-        algo_config=algo_config,
+        algo_config=effective_algo_config,
         benchmark_profile=benchmark_profile,
         robot_kinematics=robot_kinematics,
     )
@@ -828,18 +831,18 @@ def _preflight_policy(  # noqa: C901, PLR0915
         )
 
     try:
-        planner_meta = _build_and_close(algo_config)
+        planner_meta = _build_and_close(effective_algo_config)
         metadata_issue = _preflight_metadata_issue(planner_meta)
         if metadata_issue is not None:
             logger.warning("{}", metadata_issue)
-            return dict(algo_config), {
+            return effective_algo_config, {
                 "status": "skipped",
                 "error": metadata_issue,
                 "planner_metadata_status": str(planner_meta.get("status", "")),
                 "planner_metadata_fallback_reason": planner_meta.get("fallback_reason"),
                 "learned_policy_contract": learned_contract,
             }
-        return dict(algo_config), {
+        return effective_algo_config, {
             "status": "ok",
             "learned_policy_contract": learned_contract,
         }
@@ -852,14 +855,14 @@ def _preflight_policy(  # noqa: C901, PLR0915
         )
         if policy == "skip-with-warning":
             logger.warning("{}", message)
-            return dict(algo_config), {
+            return effective_algo_config, {
                 "status": "skipped",
                 "error": str(exc),
                 "policy": policy,
                 "learned_policy_contract": learned_contract,
             }
         if policy == "fallback":
-            fallback_cfg = dict(algo_config)
+            fallback_cfg = dict(effective_algo_config)
             fallback_cfg["allow_fallback"] = True
             try:
                 _build_and_close(fallback_cfg)
@@ -1137,6 +1140,37 @@ def _build_external_mpc_policy(
     )
 
 
+def _checkpoint_runtime_metadata(planner: Any, algo_config: dict[str, Any]) -> dict[str, Any]:
+    """Normalize a learned planner's live load/fallback state for benchmark artifacts.
+
+    Returns:
+        Runtime checkpoint status using the campaign provenance vocabulary.
+    """
+    metadata = planner.get_metadata() if hasattr(planner, "get_metadata") else {}
+    status = str(metadata.get("status", "unknown")).strip().lower()
+    return {
+        "model_id": algo_config.get("model_id"),
+        "checkpoint_sha256": None,
+        "hash_source": None,
+        "load_succeeded": status == "ok",
+        "fallback_triggered": status == "fallback",
+        "load_status": "loaded" if status == "ok" else status,
+        "load_error": metadata.get("fallback_reason"),
+    }
+
+
+def _attach_checkpoint_runtime_stats(
+    policy: Callable[[dict[str, Any]], Any], planner: Any, algo_config: dict[str, Any]
+) -> None:
+    """Attach a live checkpoint diagnostics hook to a learned policy callable."""
+
+    def _planner_stats() -> dict[str, Any]:
+        """Return checkpoint state after the latest planner step."""
+        return {"checkpoint_provenance": _checkpoint_runtime_metadata(planner, algo_config)}
+
+    policy._planner_stats = _planner_stats
+
+
 def _build_ppo_policy(  # noqa: C901
     algo_key: str,
     algo_config: dict[str, Any],
@@ -1209,6 +1243,7 @@ def _build_ppo_policy(  # noqa: C901
         return linear, angular
 
     _policy._planner_close = ppo_planner.close
+    _attach_checkpoint_runtime_stats(_policy, ppo_planner, algo_config)
     ppo_bind_env = getattr(ppo_planner, "bind_env", None)
     if callable(ppo_bind_env):
         _policy._planner_bind_env = ppo_bind_env
@@ -1314,6 +1349,7 @@ def _build_sac_policy(
         return linear, angular
 
     _policy._planner_close = sac_planner.close
+    _attach_checkpoint_runtime_stats(_policy, sac_planner, algo_config)
     _policy._planner_native_env_action = _sac_can_be_native
     if "status" not in meta:
         meta["status"] = "ok"
@@ -1393,6 +1429,7 @@ def _build_drl_vo_policy(
         return linear, angular
 
     _policy._planner_close = drl_planner.close
+    _attach_checkpoint_runtime_stats(_policy, drl_planner, algo_config)
     _attach_planner_reset(_policy, drl_planner)
     if "status" not in meta:
         meta["status"] = "ok"
@@ -1546,6 +1583,7 @@ def _build_guarded_ppo_policy(  # noqa: C901, PLR0915
             guard_close()
 
     _policy._planner_close = _close_guarded_ppo
+    _attach_checkpoint_runtime_stats(_policy, ppo_planner, ppo_config)
     ppo_bind_env = getattr(ppo_planner, "bind_env", None)
     guard_bind_env = getattr(guard_adapter, "bind_env", None)
     bind_hooks = [hook for hook in (ppo_bind_env, guard_bind_env) if callable(hook)]

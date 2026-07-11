@@ -70,6 +70,19 @@ jobs:
       - name: Unit tests
         run: scripts/dev/ci_driver.sh test
 
+      # Pull requests use four disjoint fast-feedback shards, so they do not
+      # produce a complete coverage report. Enforce the absolute floor on the
+      # existing unsharded main/manual full-suite report without adding a
+      # second test pass or changing pull-request feedback latency.
+      - name: Enforce absolute coverage floor
+        if: ${{ github.event_name != 'pull_request' }}
+        run: >-
+          uv run python scripts/coverage/compare_coverage.py
+          --current output/coverage/coverage.json
+          --absolute-only
+          --format github
+          --minimum-total 85.0
+
       - name: Restore coverage baseline
         if: ${{ github.event_name != 'pull_request' }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

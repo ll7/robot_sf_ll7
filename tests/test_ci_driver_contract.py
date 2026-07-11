@@ -214,6 +214,31 @@ def test_ci_workflow_splits_fast_feedback_from_smoke_artifacts() -> None:
     assert "needs" not in workflow["jobs"]["fast-feedback"]
 
 
+def test_ci_workflow_enforces_absolute_coverage_floor_without_resharding() -> None:
+    """Block low full-suite coverage without changing pull-request fast feedback."""
+    workflow = yaml.safe_load(_workflow_text())
+    fast_feedback = workflow["jobs"]["fast-feedback"]
+    steps = fast_feedback["steps"]
+    floor_step = next(
+        step for step in steps if step.get("name") == "Enforce absolute coverage floor"
+    )
+    baseline_step = next(
+        step for step in steps if step.get("name") == "Compare coverage with baseline"
+    )
+
+    assert floor_step["if"] == "${{ github.event_name != 'pull_request' }}"
+    assert "continue-on-error" not in floor_step
+    assert "--minimum-total 85.0" in floor_step["run"]
+    assert "--absolute-only" in floor_step["run"]
+    assert "--current output/coverage/coverage.json" in floor_step["run"]
+    assert baseline_step["continue-on-error"] is True
+    assert "--threshold 1.0" in baseline_step["run"]
+    assert "--fail-on-decrease" not in baseline_step["run"]
+    assert fast_feedback["strategy"]["matrix"]["shard"] == (
+        "${{ github.event_name == 'pull_request' && fromJSON('[1, 2, 3, 4]') || fromJSON('[1]') }}"
+    )
+
+
 def test_ci_workflow_adds_a_nonblocking_core_compatibility_matrix() -> None:
     """Exercise declared Python support on Linux and macOS without gating CI yet."""
     workflow = yaml.safe_load(_workflow_text())

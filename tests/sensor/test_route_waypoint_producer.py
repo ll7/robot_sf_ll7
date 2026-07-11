@@ -144,8 +144,8 @@ class TestRouteWaypointProducer:
         fusion, _ = _build_fusion(waypoints=[(100.0, -5.0)])
         obs = fusion.next_obs()
         wp = obs["robot"]["route_waypoints"]
-        assert float(wp[0, 0]) <= SOCNAV_POSITION_CAP_M
-        assert float(wp[0, 1]) >= 0.0
+        assert float(wp[1, 0]) == SOCNAV_POSITION_CAP_M
+        assert float(wp[1, 1]) == 0.0
 
     def test_route_waypoints_float32(self) -> None:
         """Route waypoints are returned as float32."""

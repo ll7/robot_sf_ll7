@@ -183,7 +183,7 @@ def test_global_route_probe_config_is_opt_in_in_canonical_configs() -> None:
 
 
 def test_global_route_probe_ignores_malformed_waypoints() -> None:
-    """Probe gracefully ignores malformed waypoint data."""
+    """Probe gracefully ignores malformed waypoint data and reports no activation."""
     config = DWAPlannerConfig(global_route_probe_enabled=True)
     planner = DWAPlannerAdapter(config)
 
@@ -191,6 +191,7 @@ def test_global_route_probe_ignores_malformed_waypoints() -> None:
     observation["robot"]["route_waypoints"] = np.array([])  # type: ignore[index]
     command = planner.plan(observation)
     assert command[0] > 0.0
+    assert planner.diagnostics()["last_decision"]["global_route_probe_activated"] is False
 
 
 def test_global_route_probe_ignores_null_robot_state() -> None:
@@ -227,7 +228,7 @@ def test_global_route_probe_targets_next_waypoint_after_nearest() -> None:
 
 
 def test_global_route_probe_ignores_nan_waypoints() -> None:
-    """Probe gracefully ignores NaN waypoint data."""
+    """Probe gracefully ignores NaN waypoint data and reports no activation."""
     config = DWAPlannerConfig(global_route_probe_enabled=True)
     planner = DWAPlannerAdapter(config)
 
@@ -235,10 +236,11 @@ def test_global_route_probe_ignores_nan_waypoints() -> None:
     observation["robot"]["route_waypoints"] = np.array([[float("nan"), 0.0]])  # type: ignore[index]
     command = planner.plan(observation)
     assert command[0] > 0.0
+    assert planner.diagnostics()["last_decision"]["global_route_probe_activated"] is False
 
 
 def test_global_route_probe_ignores_out_of_range_waypoints() -> None:
-    """Probe ignores waypoints beyond the configured distance threshold."""
+    """Probe ignores out-of-range waypoints and reports no activation."""
     config = DWAPlannerConfig(
         global_route_probe_enabled=True,
         global_route_probe_waypoint_distance=1.0,
@@ -249,6 +251,7 @@ def test_global_route_probe_ignores_out_of_range_waypoints() -> None:
     observation = _observation(goal=(3.0, 0.0), route_waypoints=waypoints)
     command = planner.plan(observation)
     assert command[0] > 0.0
+    assert planner.diagnostics()["last_decision"]["global_route_probe_activated"] is False
 
 
 def test_global_route_probe_deterministic() -> None:

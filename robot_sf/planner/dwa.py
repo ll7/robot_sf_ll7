@@ -389,23 +389,9 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         """
         if not self.config.global_route_probe_enabled:
             return 0.0
-        robot_state = observation.get("robot")
-        if not isinstance(robot_state, dict):
+        waypoint = self._route_waypoint_target(robot_pos=robot_pos, observation=observation)
+        if waypoint is None:
             return 0.0
-        waypoints_raw = robot_state.get("route_waypoints")
-        if waypoints_raw is None:
-            return 0.0
-        waypoints = np.asarray(waypoints_raw, dtype=float)
-        if waypoints.ndim != 2 or waypoints.shape[-1] != 2 or waypoints.shape[0] == 0:
-            return 0.0
-        if not np.all(np.isfinite(waypoints)):
-            return 0.0
-        waypoint_distances = np.linalg.norm(waypoints - robot_pos[None, :], axis=1)
-        nearest_idx = int(np.argmin(waypoint_distances))
-        nearest_distance = float(waypoint_distances[nearest_idx])
-        if nearest_distance > float(self.config.global_route_probe_waypoint_distance):
-            return 0.0
-        waypoint = waypoints[min(nearest_idx + 1, len(waypoints) - 1)]
         desired_heading = float(
             np.arctan2(
                 waypoint[1] - end_position[1],
@@ -413,6 +399,28 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             )
         )
         return float(np.cos(wrap_angle_pi(desired_heading - end_orientation)))
+
+    def _route_waypoint_target(
+        self, *, robot_pos: np.ndarray, observation: dict[str, Any]
+    ) -> np.ndarray | None:
+        """Return the usable forward route waypoint, or ``None`` when the probe cannot score."""
+        robot_state = observation.get("robot")
+        if not isinstance(robot_state, dict):
+            return None
+        waypoints_raw = robot_state.get("route_waypoints")
+        if waypoints_raw is None:
+            return None
+        waypoints = np.asarray(waypoints_raw, dtype=float)
+        if waypoints.ndim != 2 or waypoints.shape[-1] != 2 or waypoints.shape[0] == 0:
+            return None
+        if not np.all(np.isfinite(waypoints)):
+            return None
+        waypoint_distances = np.linalg.norm(waypoints - robot_pos[None, :], axis=1)
+        nearest_idx = int(np.argmin(waypoint_distances))
+        nearest_distance = float(waypoint_distances[nearest_idx])
+        if nearest_distance > float(self.config.global_route_probe_waypoint_distance):
+            return None
+        return waypoints[min(nearest_idx + 1, len(waypoints) - 1)]
 
     def _target_goal_detail(
         self, observation: dict[str, Any], active_goal: np.ndarray, robot_pos: np.ndarray
@@ -579,11 +587,10 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         feasible_score_min = float(min(feasible_scores)) if feasible_scores else None
         feasible_score_max = float(max(feasible_scores)) if feasible_scores else None
         selected_score = best_score if candidate_feasible > 0 else None
-        robot_state = observation.get("robot")
         global_route_probe_activated = bool(
             self.config.global_route_probe_enabled
-            and isinstance(robot_state, dict)
-            and robot_state.get("route_waypoints") is not None
+            and self._route_waypoint_target(robot_pos=robot_pos, observation=observation)
+            is not None
         )
         self._last_decision = {
             "selected_source": "dwa",

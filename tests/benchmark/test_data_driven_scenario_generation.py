@@ -12,7 +12,10 @@ import yaml
 from robot_sf.benchmark.scenario_generation.catalog_writer import (
     deduplicate_catalog_entries,
 )
-from robot_sf.benchmark.scenario_generation.pipeline import run_generation_pipeline
+from robot_sf.benchmark.scenario_generation.pipeline import (
+    load_generation_config,
+    run_generation_pipeline,
+)
 from robot_sf.benchmark.scenario_generation.random_sampler import sample_episode_jobs
 from robot_sf.benchmark.scenario_generation.replay_validation import assess_replay_status
 from robot_sf.benchmark.scenario_generation.segment_extraction import extract_critical_segment
@@ -276,3 +279,23 @@ def test_pipeline_refuses_to_mix_with_existing_output(tmp_path: Path) -> None:
 
     with pytest.raises(FileExistsError, match="must be empty"):
         run_generation_pipeline(config_path)
+
+
+def test_generation_config_rejects_negative_deduplication_threshold(tmp_path: Path) -> None:
+    """A negative threshold fails before it can silently disable deduplication."""
+
+    config = {
+        "schema_version": "data-driven-scenario-generation.v1",
+        "seed": 4932,
+        "source_scenarios": "unused.yaml",
+        "episode_budget": 1,
+        "sampler": {"type": "monte_carlo", "obstacle_policy": "disabled_for_mvp"},
+        "runner": {"algo": "goal", "horizon": 1},
+        "deduplication": {"distance_threshold": -0.1},
+        "claim_boundary": "generated scenario hypotheses only",
+    }
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="must be finite and >= 0"):
+        load_generation_config(config_path)

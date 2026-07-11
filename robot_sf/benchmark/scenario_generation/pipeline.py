@@ -89,8 +89,13 @@ def _validate_dedup_config(raw_dedup: object) -> None:
     if not isinstance(dedup, Mapping):
         raise ValueError("deduplication must be a mapping")
     threshold = dedup.get("distance_threshold")
-    if not isinstance(threshold, int | float) or isinstance(threshold, bool):
-        raise ValueError("deduplication.distance_threshold must be numeric")
+    if (
+        not isinstance(threshold, int | float)
+        or isinstance(threshold, bool)
+        or not math.isfinite(float(threshold))
+        or threshold < 0
+    ):
+        raise ValueError("deduplication.distance_threshold must be finite and >= 0")
 
 
 def run_generation_pipeline(

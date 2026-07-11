@@ -31,6 +31,7 @@ _TUNING_SOURCES = (TUNING_SOURCE_DECLARED, TUNING_SOURCE_BACKFILLED, TUNING_SOUR
 # blocks in the manifest but do not fail; "error" = fail closed when any enabled arm lacks a
 # declared tuning block.
 _TUNING_EFFORT_ENFORCEMENT = ("off", "warn", "error")
+_CHECKPOINT_PROVENANCE_ENFORCEMENT = ("off", "error")
 
 
 @dataclass(frozen=True)
@@ -181,3 +182,7 @@ class CampaignConfig:
     # blocks in the manifest but do not fail; "error" = fail closed when any enabled arm lacks a
     # declared tuning block.
     tuning_effort_enforcement: str = "off"
+    # Runtime checkpoint provenance remains audit-only by default for backwards compatibility.
+    # ``error`` also makes implicit learned checkpoints (such as SA-CADRL's registry default)
+    # fail closed during preflight and disables planner fallback for campaign execution.
+    checkpoint_provenance_enforcement: str = "off"

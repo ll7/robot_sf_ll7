@@ -62,12 +62,14 @@ from robot_sf.sim.pedestrian_model_variants import (
     HSFM_ANISOTROPIC_FOV_V1,
     HSFM_TOTAL_FORCE_V1,
     HSFM_TTC_PREDICTIVE_V1,
+    HSFM_ZANLUNGO_COLLISION_PREDICTION_V1,
     fov_attenuated_total_force,
     normalize_pedestrian_model,
     pairwise_social_force_contributions,
     step_alignment_torque_heading,
     step_hsfm_total_force,
     ttc_predictive_repulsion,
+    zanlungo_collision_prediction_repulsion,
 )
 
 PYSF_POSITION_SLICE = slice(0, 2)
@@ -323,6 +325,7 @@ class Simulator:
         if self.pedestrian_model not in {
             HSFM_TOTAL_FORCE_V1,
             HSFM_TTC_PREDICTIVE_V1,
+            HSFM_ZANLUNGO_COLLISION_PREDICTION_V1,
             HSFM_ANISOTROPIC_FOV_V1,
             HSFM_ALIGNMENT_TORQUE_V1,
         }:
@@ -350,6 +353,24 @@ class Simulator:
                     horizon_s=ttc_config.horizon_s,
                     force_scale=ttc_config.force_scale,
                     max_force=ttc_config.max_force,
+                )
+        elif self.pedestrian_model == HSFM_ZANLUNGO_COLLISION_PREDICTION_V1:
+            zanlungo_config = self.config.zanlungo_collision_prediction
+            if zanlungo_config.include_ped_ped:
+                pairwise_social = self._pairwise_social_force_contributions(current_state)
+                collision_prediction = zanlungo_collision_prediction_repulsion(
+                    current_state[:, PYSF_POSITION_SLICE],
+                    current_state[:, PYSF_VELOCITY_SLICE],
+                    interaction_strength=zanlungo_config.interaction_strength,
+                    interaction_range_m=zanlungo_config.interaction_range_m,
+                    anisotropy_lambda=zanlungo_config.anisotropy_lambda,
+                    angle_threshold_rad=zanlungo_config.angle_threshold_rad,
+                    max_force=zanlungo_config.max_force,
+                )
+                ped_forces = (
+                    np.asarray(ped_forces, dtype=float)
+                    - pairwise_social.sum(axis=1)
+                    + collision_prediction
                 )
         elif self.pedestrian_model == HSFM_ANISOTROPIC_FOV_V1:
             fov_config = self.config.anisotropic_fov
@@ -398,7 +419,7 @@ class Simulator:
     def _social_force_component(self) -> SocialForce:
         """Return the active PySocialForce ped-ped ``SocialForce`` component.
 
-        The pairwise field-of-view model needs the social force's parameters
+        Pairwise replacement models need the social force's parameters
         (activation threshold, factor, and interaction exponents) so its per-pair
         reconstruction exactly matches the aggregate PySocialForce already sums into the
         total force. Fail closed if the component is missing, mirroring the ``max_speeds``
@@ -411,8 +432,7 @@ class Simulator:
             if isinstance(force, SocialForce):
                 return force
         raise RuntimeError(
-            "PySocialForce SocialForce component is unavailable for the pairwise "
-            "field-of-view pedestrian model"
+            "PySocialForce SocialForce component is unavailable for the pairwise pedestrian model"
         )
 
     def _pairwise_social_force_contributions(self, state: np.ndarray) -> np.ndarray:

@@ -11,6 +11,7 @@ import pytest
 
 from robot_sf.planner.prediction_mpc import (
     ConstantVelocityPedestrianPredictor,
+    PredictedPedestrianFutures,
     PredictionMPCConfig,
     PredictionMPCPlannerAdapter,
     build_prediction_mpc_config,
@@ -163,6 +164,67 @@ def test_prediction_mpc_solver_avoids_or_stops_for_predicted_collision() -> None
     )
 
     assert linear <= 0.1
+
+
+def test_prediction_mpc_selects_constraint_feasible_action_from_stub_predictor() -> None:
+    """An injected predictor drives selection through the hard rollout constraint."""
+
+    class StubPredictor:
+        """Return a fixed short-horizon pedestrian future and record the interface call."""
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, float]] = []
+            self.last_futures: PredictedPedestrianFutures | None = None
+
+        def predict(
+            self,
+            observation: dict,
+            *,
+            horizon_steps: int,
+            dt: float,
+        ) -> PredictedPedestrianFutures:
+            del observation
+            self.calls.append((horizon_steps, dt))
+            self.last_futures = PredictedPedestrianFutures(
+                positions_world=np.repeat(
+                    np.asarray([[[0.9, 0.0]]], dtype=float), horizon_steps, axis=1
+                ),
+                mask=np.ones((1,), dtype=float),
+                dt=dt,
+                source="stub_short_horizon",
+            )
+            return self.last_futures
+
+    predictor = StubPredictor()
+    planner = PredictionMPCPlannerAdapter(
+        PredictionMPCConfig(
+            predictor_backend="stub_short_horizon",
+            horizon_steps=3,
+            rollout_dt=0.25,
+            solver_max_iterations=60,
+            pedestrian_safety_margin=0.25,
+        ),
+        predictor=predictor,
+    )
+    observation = _obs(
+        goal=(3.0, 0.0),
+        ped_positions=[(0.9, 0.0)],
+        ped_velocities=[(0.0, 0.0)],
+    )
+
+    linear, angular = planner.plan(observation)
+
+    assert predictor.calls == [(3, 0.25)]
+    assert predictor.last_futures is not None
+    assert planner._last_solution is not None
+    constraint_values = planner._pedestrian_clearance_constraints(
+        planner._last_solution,
+        context=_clearance_context(planner, observation),
+        predicted_futures=predictor.last_futures,
+    )
+    assert np.min(constraint_values) >= -planner.config.solver_ftol
+    assert 0.0 <= linear <= planner.config.max_linear_speed
+    assert abs(angular) <= planner.config.max_angular_speed
 
 
 def test_prediction_mpc_optimizer_failure_stops_deterministically(monkeypatch) -> None:

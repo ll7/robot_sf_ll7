@@ -214,6 +214,13 @@ alignment-torque slice is in
 `hsfm_alignment_torque_v1` selector that decouples pedestrian heading `phi` from the instantaneous
 force direction via a damped second-order torque (diagnostic/prototype).
 
+Recent Zanlungo collision-prediction force prototype:
+[issue_4973_zanlungo_collision_prediction.md](issue_4973_zanlungo_collision_prediction.md)
+records the opt-in common-time closest-approach force, its fail-closed replacement of only the
+pedestrian-to-pedestrian social term, paper-parameter provenance, and the still-deferred corridor
+freeze/deadlock acceptance comparison. It is diagnostic implementation evidence, not a calibrated
+realism or benchmark-performance claim.
+
 Recent heavy forecast-model study/preflight: [forecast_heavy_model_study_2026-06-20.md](forecast_heavy_model_study_2026-06-20.md)
 records the analysis-only inventory of heavy predictor families (transformer, AgentFormer-like,
 CVAE, diffusion) with literature-derived compute/latency/uncertainty/integration estimates, the

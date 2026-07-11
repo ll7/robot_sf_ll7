@@ -18,7 +18,8 @@ import ast
 import importlib
 from pathlib import Path
 
-TARGET = Path("robot_sf/benchmark/camera_ready/resource_lifecycle.py")
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+TARGET = _REPO_ROOT / "robot_sf/benchmark/camera_ready/resource_lifecycle.py"
 
 
 def _robot_sf_imports(tree: ast.AST) -> list[tuple[str, list[str]]]:
@@ -35,6 +36,7 @@ def _robot_sf_imports(tree: ast.AST) -> list[tuple[str, list[str]]]:
 
 
 def test_all_robot_sf_imports_resolve() -> None:
+    """Every deferred first-party import resolves its module and requested symbol."""
     tree = ast.parse(TARGET.read_text())
     imports = _robot_sf_imports(tree)
     assert imports, "expected robot_sf imports in resource_lifecycle"

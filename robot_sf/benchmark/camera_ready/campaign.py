@@ -302,11 +302,13 @@ def _cleanup_gpu_memory_between_arms(
         memory_metrics["torch_available"] = True
         if torch.cuda.is_available():
             memory_metrics["cuda_available"] = True
-            # Measure before gc/empty_cache so diagnostics capture what cleanup freed.
+            # Measure before empty_cache so diagnostics capture what cleanup freed.
             memory_metrics["high_water_mark_mb"] = torch.cuda.max_memory_allocated() / 1024 / 1024
             allocated_before = torch.cuda.memory_allocated() / 1024 / 1024
             reserved_before = torch.cuda.memory_reserved() / 1024 / 1024
 
+            # Capture the allocated/reserved baseline before collecting Python
+            # references so cleanup telemetry includes memory freed by gc.collect().
             gc.collect()
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
@@ -335,6 +337,12 @@ def _cleanup_gpu_memory_between_arms(
                 memory_metrics["reserved_freed_mb"],
                 memory_metrics["high_water_mark_mb"],
             )
+        else:
+            # CPU-only nodes still need Python-level cleanup between arms.
+            gc.collect()
+    else:
+        # Keep no-torch environments from accumulating completed-arm objects.
+        gc.collect()
     return memory_metrics
 
 
@@ -1017,18 +1025,22 @@ def _run_campaign_planner_matrix(
                     active_observation_mode=active_observation_mode,
                 )
             else:
-                variant_result = _run_campaign_planner_variant(
-                    context,
-                    planner=planner,
-                    kinematics=kinematics,
-                    active_observation_mode=active_observation_mode,
-                )
-                # Clean up GPU memory after each arm to prevent VRAM leaks
-                # across campaign iterations (issue #4826).
-                memory_metrics = _cleanup_gpu_memory_between_arms(
-                    planner_key=planner.key,
-                    kinematics=kinematics,
-                )
+                try:
+                    variant_result = _run_campaign_planner_variant(
+                        context,
+                        planner=planner,
+                        kinematics=kinematics,
+                        active_observation_mode=active_observation_mode,
+                    )
+                finally:
+                    # Clean up GPU memory and Python refs after each arm to prevent
+                    # VRAM/RSS leaks across campaign iterations (issue #4826).
+                    # Runs even if the arm raised — keeps the next arm from inheriting
+                    # leaked CUDA allocations.
+                    memory_metrics = _cleanup_gpu_memory_between_arms(
+                        planner_key=planner.key,
+                        kinematics=kinematics,
+                    )
                 # Attach diagnostics to the run entry created by this variant.
                 if variant_result.run_entries:
                     variant_result.run_entries[-1]["gpu_cleanup"] = memory_metrics

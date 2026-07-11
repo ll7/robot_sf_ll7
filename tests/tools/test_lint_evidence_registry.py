@@ -147,18 +147,20 @@ def test_config_hash_mismatch_is_classified(tmp_path: Path) -> None:
 
 
 def test_duplicate_campaign_ids_are_classified(tmp_path: Path) -> None:
-    """Campaign identifiers are unique across registry files."""
+    """Campaign identifiers are collisions only when distinct bundles claim ownership."""
     linter = _load_linter()
     repo, evidence, commit, config_sha256 = _make_repo(tmp_path)
     artifact_sha256 = hashlib.sha256((evidence / "artifact.json").read_bytes()).hexdigest()
-    for name in ("one.json", "two.json"):
+    for bundle in ("one", "two"):
+        bundle_evidence = evidence / bundle
+        bundle_evidence.mkdir()
         _write_entry(
-            evidence,
+            bundle_evidence,
             campaign_id="campaign-duplicate",
             commit=commit,
             config_sha256=config_sha256,
             artifact_sha256=artifact_sha256,
-            name=name,
+            name="manifest.json",
         )
 
     report = linter.lint_evidence_registry(repo, evidence)
@@ -166,7 +168,74 @@ def test_duplicate_campaign_ids_are_classified(tmp_path: Path) -> None:
     duplicate_issues = [
         issue for issue in report["issues"] if issue["code"] == "duplicate_campaign_id"
     ]
-    assert len(duplicate_issues) == 2
+    assert len(duplicate_issues) == 1
+    assert "multiple evidence bundles" in duplicate_issues[0]["message"]
+
+
+def test_campaign_metadata_is_aggregated_within_one_bundle(tmp_path: Path) -> None:
+    """Child reports inherit campaign provenance from their bundle's manifest."""
+    linter = _load_linter()
+    repo, evidence, commit, config_sha256 = _make_repo(tmp_path)
+    artifact_sha256 = hashlib.sha256((evidence / "artifact.json").read_bytes()).hexdigest()
+    bundle = evidence / "campaign-bundle"
+    bundle.mkdir()
+    _write_entry(
+        bundle,
+        campaign_id="campaign-bundle",
+        commit=commit,
+        config_sha256=config_sha256,
+        artifact_sha256=artifact_sha256,
+        name="campaign_manifest.json",
+    )
+    (bundle / "summary.json").write_text(
+        json.dumps({"campaign_id": "campaign-bundle", "result": "diagnostic"}),
+        encoding="utf-8",
+    )
+
+    report = linter.lint_evidence_registry(repo, evidence)
+
+    codes = {issue["code"] for issue in report["issues"]}
+    assert "duplicate_campaign_id" not in codes
+    assert not {
+        "missing_config_path",
+        "missing_config_sha256",
+        "missing_commit",
+    }.intersection(codes)
+
+
+def test_disposition_packet_classifies_without_suppressing_findings(tmp_path: Path) -> None:
+    """A report-mode packet labels categories while leaving strict findings intact."""
+    linter = _load_linter()
+    repo, evidence, _commit, config_sha256 = _make_repo(tmp_path)
+    artifact_sha256 = hashlib.sha256((evidence / "artifact.json").read_bytes()).hexdigest()
+    _write_entry(
+        evidence,
+        campaign_id="campaign-disposition",
+        commit="f" * 40,
+        config_sha256=config_sha256,
+        artifact_sha256=artifact_sha256,
+        name="disposition.json",
+    )
+    disposition_path = repo / "dispositions.yaml"
+    disposition_path.write_text(
+        "\n".join(
+            [
+                "schema_version: evidence_registry_disposition.v1",
+                "categories:",
+                "  - code: dangling_commit",
+                "    status: historical_commit_unavailable",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    report = linter.lint_evidence_registry(repo, evidence, disposition_path)
+
+    assert any(issue["code"] == "dangling_commit" for issue in report["issues"])
+    assert report["disposition_summary"] == {
+        "by_status": {"historical_commit_unavailable": 1},
+        "unclassified_by_code": {"config_missing_at_commit": 1},
+    }
 
 
 def test_reports_dir_filename_manifest_hash_is_verified(tmp_path: Path) -> None:

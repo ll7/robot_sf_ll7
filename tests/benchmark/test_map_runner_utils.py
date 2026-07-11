@@ -5012,7 +5012,9 @@ def test_topology_guided_episode_diagnostics_preserves_fallback_and_churn_reason
     assert candidate_geometry_fallback_summary is not None
     assert candidate_geometry_fallback_summary["fallback_used"] is True
     assert candidate_geometry_fallback_summary["fallback_steps"] == 0
-    assert candidate_geometry_fallback_summary["route_progress"]["terminal_reason"] == "fallback_only"
+    assert (
+        candidate_geometry_fallback_summary["route_progress"]["terminal_reason"] == "fallback_only"
+    )
 
     churn_summary = _topology_guided_episode_diagnostics(
         [

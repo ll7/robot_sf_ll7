@@ -173,8 +173,15 @@ def _validate_materialized_scenario(
 def _validate_criticality(entry: Mapping[str, Any]) -> None:
     observed_at = float(entry["criticality"]["observed_at_s"])
     frame = next(
-        frame for frame in entry["segment"]["trace_frames"] if float(frame["time_s"]) == observed_at
+        (
+            frame
+            for frame in entry["segment"]["trace_frames"]
+            if float(frame["time_s"]) == observed_at
+        ),
+        None,
     )
+    if frame is None:
+        raise ValueError(f"no trace frame matches observed_at_s: {_scenario_id(entry)}")
     observed = min(
         math.dist(frame["robot"]["position"], pedestrian["position"])
         for pedestrian in frame["pedestrians"]

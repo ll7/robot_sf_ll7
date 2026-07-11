@@ -174,6 +174,12 @@ def test_review_manifest_requires_complete_certified_provenance(tmp_path: Path) 
     with pytest.raises(ValueError, match="not marked reviewed"):
         validate_review_manifest(catalog_path, review_path)
 
+    catalog_packet["entries"][0]["provenance"]["reviewed"] = True
+    catalog_packet["entries"][0]["criticality"]["observed_at_s"] = 1.5
+    catalog_path.write_text(yaml.safe_dump(catalog_packet, sort_keys=True), encoding="utf-8")
+    with pytest.raises(ValueError, match="no trace frame matches observed_at_s"):
+        validate_review_manifest(catalog_path, review_path)
+
 
 def test_distiller_is_deterministic_for_one_trace() -> None:
     """A catalog identity is stable for the same episode and extraction bounds."""

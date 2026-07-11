@@ -15,10 +15,12 @@ import pytest
 from scripts.dev.measure_xdist_worker_memory import (
     SCHEMA_VERSION,
     SweepPoint,
+    _terminate_process_tree,
     build_report,
     build_verdict,
     classify_projection,
     fit_linear,
+    main,
     project_peak_rss,
     render_markdown,
     sample_process_tree_peak,
@@ -188,6 +190,21 @@ def test_cli_help_exits_zero_with_usage() -> None:
     assert "uv run pytest" not in result.stdout
 
 
+def test_main_rejects_nonpositive_ceiling_before_sweep() -> None:
+    """--ceiling-gb <= 0 must exit 2 immediately, before any sweep."""
+    assert main(["--ceiling-gb", "0", "--workers", "1", "--targets", "x"]) == 2
+
+
+def test_main_rejects_zero_auto_workers_before_sweep() -> None:
+    """--auto-workers < 1 must exit 2 immediately, before any sweep."""
+    assert main(["--auto-workers", "0", "--workers", "1", "--targets", "x"]) == 2
+
+
+def test_main_rejects_negative_project_at_before_sweep() -> None:
+    """--project-at with a negative value must exit 2 immediately, before any sweep."""
+    assert main(["--project-at", "-1", "--workers", "1", "--targets", "x"]) == 2
+
+
 def test_build_report_has_schema_and_projections() -> None:
     """The full report must carry schema version, fit, projections, and verdict."""
     report = build_report(
@@ -282,6 +299,7 @@ def test_sample_process_tree_peak_captures_allocation(tmp_path) -> None:
     try:
         peak_gb, samples = sample_process_tree_peak(popen, interval_seconds=0.005)
     finally:
+        _terminate_process_tree(popen)
         popen.wait(timeout=30)
     # 200 MiB allocation plus interpreter overhead: well above the bare
     # interpreter footprint (~tens of MiB) and below a generous bound.
@@ -337,3 +355,30 @@ def test_terminate_process_tree_noop_on_exited_child() -> None:
     popen.wait(timeout=10)
     # Must not raise even though the pid may already be reaped/reused.
     _terminate_process_tree(popen)
+
+
+def test_tree_rss_gb_best_effort_on_exiting_process() -> None:
+    """_tree_rss_gb must not raise when a process raises NoSuchProcess on memory_info().
+
+    Regression for the redundant-is_running() gap: the old code called
+    is_running() before memory_info(), adding a superfluous probe (two kernel
+    round-trips per process).  The refactored form relies solely on the
+    NoSuchProcess / AccessDenied guard around memory_info().  This test uses a
+    mock to simulate a process that exits between enumeration and RSS query,
+    verifying best-effort semantics without a real subprocess race.
+    """
+    from unittest.mock import MagicMock
+
+    import psutil
+
+    from scripts.dev.measure_xdist_worker_memory import _tree_rss_gb
+
+    # Build a mock root process whose memory_info() raises NoSuchProcess,
+    # simulating a process that exited after being enumerated.
+    mock_proc = MagicMock(spec=psutil.Process)
+    mock_proc.children.return_value = []
+    mock_proc.memory_info.side_effect = psutil.NoSuchProcess(pid=99999)
+
+    # Must return 0.0 cleanly without propagating the exception.
+    result = _tree_rss_gb(mock_proc)
+    assert result == 0.0

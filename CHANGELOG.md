@@ -23,6 +23,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **issue #5228 xdist memory-diagnostic robustness.** Three residual gaps from the
+  PR #4952 review are closed: (1) `_tree_rss_gb` no longer calls `is_running()` before
+  `memory_info()` — the latter already supplies the handled `NoSuchProcess` signal,
+  removing a superfluous kernel round-trip per process; (2) `main()` validates
+  `--ceiling-gb`, `--auto-workers`, and `--project-at` arguments early (exit 2 before
+  any sweep starts) instead of failing late during report construction; (3)
+  `test_sample_process_tree_peak_captures_allocation` now calls `_terminate_process_tree`
+  before `popen.wait` in its `finally` block so a still-alive child cannot be left
+  running after a sampling or assertion failure. Regression coverage added for all three
+  changes in `tests/dev/test_measure_xdist_worker_memory.py`.
+
 * **issue #5071 absolute continuous-integration coverage floor.** The unsharded full-suite
   coverage report on `main` and manual CI runs must cover at least 85% of the `robot_sf` package.
   This blocking floor reuses the existing report while the baseline-relative comparison remains

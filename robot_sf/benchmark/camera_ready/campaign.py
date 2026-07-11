@@ -93,6 +93,7 @@ from robot_sf.benchmark.snqi.campaign_contract import (
     evaluate_snqi_contract,
     resolve_weight_mapping,
     sanitize_baseline_stats,
+    soft_contract_warning_active,
     validate_snqi_normalized_inputs,
 )
 from robot_sf.benchmark.utils import load_optional_json
@@ -1734,18 +1735,22 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
         and cfg.snqi_contract.enforcement in {"error", "enforce"}
         and contract_eval.status == "fail"
     )
+    # Issue #5240: a soft contract warning (enforcement=warn with status warn/fail) must NOT
+    # change the exit code. It is surfaced in the summary as ``soft_contract_warning: true``
+    # plus a ``warnings[]`` entry, and the campaign still counts as benchmark_success when all
+    # planner rows succeeded. Only hard enforcement levels stay fatal (handled by snqi_hard_fail).
+    soft_contract_warning = bool(
+        cfg.paper_facing
+        and cfg.snqi_contract.enabled
+        and soft_contract_warning_active(cfg.snqi_contract.enforcement, contract_eval.status)
+    )
     if snqi_hard_fail:
         warnings.append(
             "SNQI contract status=fail with "
             f"snqi_contract.enforcement={cfg.snqi_contract.enforcement}; "
             "campaign marked with hard contract warning."
         )
-    elif (
-        cfg.paper_facing
-        and cfg.snqi_contract.enabled
-        and cfg.snqi_contract.enforcement == "warn"
-        and contract_eval.status in {"warn", "fail"}
-    ):
+    elif soft_contract_warning:
         warnings.append(
             "SNQI contract status="
             f"{contract_eval.status} with snqi_contract.enforcement=warn; campaign marked with soft contract warning."
@@ -1842,6 +1847,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
         "planner_rows": planner_rows,
         "runs": run_entries,
         "warnings": warnings,
+        "soft_contract_warning": soft_contract_warning,
         "artifacts": {
             "campaign_manifest": _repo_relative(campaign_root / "campaign_manifest.json"),
             "campaign_summary_json": _repo_relative(summary_json_path),
@@ -2167,4 +2173,5 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
         "runtime_sec": runtime_sec,
         "publication_bundle": publication_payload,
         "warnings": warnings,
+        "soft_contract_warning": soft_contract_warning,
     }

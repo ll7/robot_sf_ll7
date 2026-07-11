@@ -1,0 +1,12 @@
+# Rank generated hypotheses for manual review; this does not certify or promote them.
+schema_version: generated-scenario-adaptive-proposal-selection.v1
+source_archive: ../scenarios/generated/issue_4932_rare_event_demo_archive.yaml
+proposal_count: 2
+selector:
+  type: adaptive_min_max_rank.v1
+  criteria:
+    - field: criticality.source_metrics.min_clearance_m
+      direction: lower_is_better
+      weight: 1.0
+output_path: ../../output/issue_4932_adaptive_proposal_selection/selection.json
+claim_boundary: generated scenario hypotheses only

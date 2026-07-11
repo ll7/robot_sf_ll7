@@ -27,6 +27,11 @@ never added to release matrices automatically.
   without replacement, biases probability toward lower minimum-clearance values, and records the
   source-archive checksum plus every weight and random draw. The tracked CPU demo uses
   `configs/benchmarks/scenario_generation_rare_event_sampler.yaml`.
+- Adaptive proposal selection can deterministically rank the current generated archive with
+  configurable numeric criteria, directions, and weights. The selector records archive-adaptive
+  min-max ranges, every score component, and the source checksum; missing configured fields fail
+  closed. The tracked synthetic demo uses
+  `configs/benchmarks/scenario_generation_adaptive_proposal_selector.yaml`.
 
 ## Intended output contract
 
@@ -39,7 +44,8 @@ never added to release matrices automatically.
 
 ## Remaining research work
 
-Calibrated importance-sampling estimators, learned proposals, exact mid-episode scenario-YAML
+Calibrated importance-sampling estimators, trained proposal models, exact mid-episode scenario-YAML
 reconstruction, criticality-reproduction campaigns, and certification into hand-authored benchmark
 families require separate evidence and review. Archive selection changes which existing hypotheses
-are inspected first; it does not estimate a population failure probability.
+are inspected first; it does not estimate a population failure probability or establish that its
+scoring policy improves failure yield.

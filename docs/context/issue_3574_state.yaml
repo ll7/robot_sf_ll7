@@ -5,8 +5,8 @@ current_status: open_pre_run_response_law_sweep_contract_ready
 claim_boundary: diagnostic_only_not_benchmark_or_paper_evidence
 latest_integration_slice:
   capability: fixed_density_response_law_fraction_sweep_manifest_and_reporting
-  pull_request: pending
-  status: local_validation_complete
+  pull_request: 5336
+  status: open_for_review
   reason: >
     The tracked mean-matched manifest now expands each paired arm across the
     required non-reactive fractions (0.0, 0.1, 0.25, 0.5) at fixed density.

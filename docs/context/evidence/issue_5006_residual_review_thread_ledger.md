@@ -1,9 +1,11 @@
+<!-- AI-GENERATED (robot_sf#5006, 2026-07-11) - NEEDS-REVIEW -->
+
 # Issue #5006 Residual Review-Thread Ledger
 
 This ledger makes the remaining post-merge review work visible: each advisory thread from the
 first sweep is linked to proof that it was already covered, or is explicitly left for a maintainer
 decision or a bounded follow-up. It audits the 33 unresolved threads classified in merged
-[PR #5046](https://github.com/ll7/robot_sf_ll7/pull/5046) against `origin/main` at
+[merged pull request (PR) #5046](https://github.com/ll7/robot_sf_ll7/pull/5046) against `origin/main` at
 `7fb2339590246b70d96d8d48e2ffed2a7f0871d8` on 2026-07-11.
 
 ## Claim Boundary
@@ -42,7 +44,7 @@ audit. No unresolved thread is represented as fixed.
 | Issue #4936 | [deterministic head-on selection report](https://github.com/ll7/robot_sf_ll7/pull/4936#discussion_r3550338710) | `covered` | [PR #4938](https://github.com/ll7/robot_sf_ll7/pull/4938) threads the pinned generation time into the report and adds byte-identity tests. |
 | Issue #4940 | [duplicate planner-failure computation](https://github.com/ll7/robot_sf_ll7/pull/4940#discussion_r3551519011) | `covered` | The merged [PR #4940](https://github.com/ll7/robot_sf_ll7/pull/4940) calls `_compute_planner_failures` once; the duplicate inline block is absent. |
 | Issue #4940 | [`_planner_run` fallback guard](https://github.com/ll7/robot_sf_ll7/pull/4940#discussion_r3551519018) | `covered` | The merged [PR #4940](https://github.com/ll7/robot_sf_ll7/pull/4940) uses an explicit `None`-aware planner-key helper. |
-| Issue #4940 | [`_derive_mechanism_label` return type](https://github.com/ll7/robot_sf_ll7/pull/4940#discussion_r3551519031) | `covered` | The merged [PR #4940](https://github.com/ll7/robot_sf_ll7/pull/4940) declares `dict[str, Any] | None`. |
+| Issue #4940 | [`_derive_mechanism_label` return type](https://github.com/ll7/robot_sf_ll7/pull/4940#discussion_r3551519031) | `covered` | The merged [PR #4940](https://github.com/ll7/robot_sf_ll7/pull/4940) declares `dict[str, Any] \| None`. |
 | Issue #4945 | [import finite-value support](https://github.com/ll7/robot_sf_ll7/pull/4945#discussion_r3551851277) | `covered` | The merged [PR #4945](https://github.com/ll7/robot_sf_ll7/pull/4945) imports `math` and centralizes finite parsing in `_finite_float`. |
 | Issue #4945 | [filter non-finite comparison values](https://github.com/ll7/robot_sf_ll7/pull/4945#discussion_r3551851291) | `covered` | [PR #4945](https://github.com/ll7/robot_sf_ll7/pull/4945) routes parsed comparison values through `_finite_float`. |
 | Issue #4945 | [filter non-finite confidence values](https://github.com/ll7/robot_sf_ll7/pull/4945#discussion_r3551851301) | `covered` | [PR #4945](https://github.com/ll7/robot_sf_ll7/pull/4945) routes confidence values through `_finite_float`. |

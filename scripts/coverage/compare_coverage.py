@@ -94,12 +94,7 @@ def main() -> int:
 
     # Compare current against baseline
     try:
-        delta = compare(
-            args.current,
-            baseline,
-            threshold=args.threshold,
-            report_missing_baseline=not args.absolute_only,
-        )
+        delta = compare(args.current, baseline, threshold=args.threshold)
     except (FileNotFoundError, ValueError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1

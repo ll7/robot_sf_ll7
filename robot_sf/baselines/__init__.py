@@ -75,6 +75,16 @@ def _get_drl_vo_planner():
     return module.DrlVoPlanner
 
 
+def _get_brne_planner():
+    """Lazy import for BRNE baseline adapter.
+
+    Returns:
+        The BRNEPlanner class.
+    """
+    module = importlib.import_module("robot_sf.baselines.brne")
+    return module.BRNEPlanner
+
+
 # Registry of available baseline algorithms
 BASELINES: dict[str, type] = {
     "social_force": _get_social_force_planner,
@@ -85,6 +95,7 @@ BASELINES: dict[str, type] = {
     "sicnav": _get_sicnav_planner,
     "dr_mpc": _get_drm_mp_planner,
     "drl_vo": _get_drl_vo_planner,
+    "brne": _get_brne_planner,
 }
 
 

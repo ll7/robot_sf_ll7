@@ -32,6 +32,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5319_dwa_route_rescue_2026-07-11
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5263_exact_repeat/exact_repeat_manifest.json
   status: evidence
   freshness: evidence

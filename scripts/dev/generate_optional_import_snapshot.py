@@ -45,7 +45,12 @@ NOTES = {
         "Blessed broad catch: guarded plotting / native-lib load may raise "
         "RuntimeError. Do not collapse to ImportError."
     ),
-    "ImportError+OSError": ("Blessed broad catch: native-lib / filesystem load may raise OSError."),
+    "ImportError+OSError": (
+        "Blessed broad catch: native-lib / filesystem load may raise OSError. "
+        "campaign_runtime_preflight.py is a deliberate import PROBE (issue #5300): it "
+        "exists to catch and report arm-dependency import failures with a remediation "
+        "message, so try_import (which discards the exception) is the wrong tool there."
+    ),
     "ImportError+SyntaxError": (
         "Blessed broad catch: parser/extension load may surface SyntaxError."
     ),

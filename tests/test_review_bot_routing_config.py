@@ -26,7 +26,7 @@ def test_coderabbit_routes_only_labeled_reviews_to_high_risk_paths() -> None:
 
 
 def test_routing_workflow_tracks_every_coderabbit_high_risk_path() -> None:
-    """Keep the workflow's automatic label criteria aligned with CodeRabbit."""
+    """Keep the workflow's label-routing and security contracts aligned with CodeRabbit."""
     workflow = yaml.load(
         (REPOSITORY_ROOT / ".github/workflows/review-bot-routing.yml").read_text(),
         Loader=yaml.BaseLoader,
@@ -39,5 +39,10 @@ def test_routing_workflow_tracks_every_coderabbit_high_risk_path() -> None:
         "synchronize",
         "ready_for_review",
     ]
+    assert workflow["permissions"] == {
+        "issues": "write",
+        "pull-requests": "write",
+    }
     assert "review-bot-auto" in script
     assert all(path_filter.removesuffix("**") in script for path_filter in HIGH_RISK_PATH_FILTERS)
+    assert "actions/checkout" not in str(workflow["jobs"]["route-coderabbit"])

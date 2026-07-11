@@ -776,67 +776,12 @@ def _run_campaign_planner_variant_subprocess(
 
     if proc.returncode != 0:
         logger.error(
-            "Subprocess arm failed: planner={} kinematics={} returncode={} stderr={}",
+            "Subprocess arm exited non-zero: planner={} kinematics={} returncode={} stderr={}; "
+            "attempting to parse its structured result",
             planner.key,
             kinematics,
             proc.returncode,
             proc.stderr,
-        )
-        # Create a failed result
-        status = "failed"
-        summary = {
-            "status": "failed",
-            "error": f"Subprocess failed with return code {proc.returncode}: {proc.stderr}",
-            "total_jobs": 0,
-            "written": 0,
-            "failed_jobs": 0,
-            "failures": [],
-        }
-        warnings = [f"Subprocess failed: {proc.stderr}"]
-        planner_rows = []
-        seed_variability_records = []
-        stop_requested = cfg.stop_on_failure and status in {"failed", "partial-failure"}
-
-        run_entries = [
-            {
-                "planner": {
-                    "key": planner.key,
-                    "algo": planner.algo,
-                    "human_model_variant": planner.human_model_variant,
-                    "human_model_source": planner.human_model_source,
-                    "planner_group": planner.planner_group,
-                    "benchmark_profile": planner.benchmark_profile,
-                    "kinematics": kinematics,
-                    "algo_config_path": (
-                        _repo_relative(planner.algo_config_path)
-                        if planner.algo_config_path is not None
-                        else None
-                    ),
-                    "socnav_missing_prereq_policy": planner.socnav_missing_prereq_policy,
-                    "adapter_impact_eval": planner.adapter_impact_eval,
-                    "observation_mode": active_observation_mode,
-                    "workers": run.effective_workers,
-                    "horizon": run.effective_horizon,
-                    "dt": run.effective_dt,
-                },
-                "status": status,
-                "started_at_utc": _utc_now(),
-                "finished_at_utc": _utc_now(),
-                "runtime_sec": 0.0,
-                "episodes_path": _repo_relative(run.episodes_path),
-                "summary_path": _repo_relative(run.planner_dir / "summary.json"),
-                "summary": summary,
-                "aggregates": None,
-                "subprocess_isolation": True,
-            }
-        ]
-
-        return _CampaignPlannerVariantResult(
-            run_entries=run_entries,
-            planner_rows=planner_rows,
-            warnings=warnings,
-            seed_variability_records=seed_variability_records,
-            stop_requested=stop_requested,
         )
 
     warnings: list[str] = []

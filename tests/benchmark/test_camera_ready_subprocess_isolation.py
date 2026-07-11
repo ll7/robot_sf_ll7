@@ -625,6 +625,63 @@ class TestSubprocessIsolationMetricEmission:
         assert entry["subprocess_isolation"] is True
         assert entry["status"] == "failed"
 
+    def test_subprocess_path_preserves_structured_failure_output(self, tmp_path):
+        """A non-zero worker exit still propagates its JSON error and cleanup telemetry.
+
+        The worker deliberately exits non-zero for a failed arm.  It nevertheless
+        guarantees structured stdout, which the parent must parse instead of
+        replacing with a generic failure (issue #4826).
+        """
+        from robot_sf.benchmark.camera_ready.campaign import (
+            _run_campaign_planner_variant_subprocess,
+        )
+
+        planner, context, run = self._make_context(tmp_path)
+        worker_stdout = json.dumps(
+            {
+                "summary": {
+                    "status": "failed",
+                    "error": "KeyError('missing_planner_field')",
+                    "total_jobs": 0,
+                    "written": 0,
+                    "failed_jobs": 0,
+                    "failures": [],
+                },
+                "cleanup_metrics": {"cuda_available": False},
+                "warnings": ["missing_planner_field"],
+                "episodes_total": 0,
+            }
+        )
+
+        with (
+            patch(
+                "robot_sf.benchmark.camera_ready.campaign._prepare_campaign_planner_variant_run",
+                return_value=run,
+            ),
+            patch(
+                "robot_sf.benchmark.camera_ready.campaign.subprocess.run",
+                return_value=subprocess.CompletedProcess(
+                    args=[], returncode=1, stdout=worker_stdout, stderr="worker failed"
+                ),
+            ),
+            patch("robot_sf.benchmark.camera_ready.campaign.read_jsonl", return_value=[]),
+            patch(
+                "robot_sf.benchmark.camera_ready.campaign.classify_planner_row_status",
+                return_value="unexpected_failure",
+            ),
+        ):
+            result = _run_campaign_planner_variant_subprocess(
+                context,
+                planner=planner,
+                kinematics="differential_drive",
+                active_observation_mode="lidar",
+            )
+
+        entry = result.run_entries[0]
+        assert entry["status"] == "failed"
+        assert entry["summary"]["error"] == "KeyError('missing_planner_field')"
+        assert entry["gpu_cleanup"] == {"cuda_available": False}
+
 
 class TestScopedScenarioParity:
     """Regression tests for the parent->worker scenario handoff.

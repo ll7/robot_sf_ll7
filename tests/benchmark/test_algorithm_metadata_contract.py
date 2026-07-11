@@ -676,6 +676,28 @@ def test_prediction_mpc_metadata_exposes_constraint_mpc_contract() -> None:
     ]
 
 
+def test_chance_constrained_mpc_metadata_names_gmm_and_fail_closed_boundary() -> None:
+    """The experimental arm must retain its GMM input and adapter contract in reports."""
+    meta = enrich_algorithm_metadata(
+        algo="chance_constrained_mpc",
+        metadata={"status": "blocked"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+
+    planner = meta["planner_kinematics"]
+    assert meta["baseline_category"] == "classical"
+    assert meta["policy_semantics"] == "gmm_chance_constrained_model_predictive_local_planner"
+    assert planner["adapter_name"] == "ChanceConstrainedMPCPlannerAdapter"
+    assert planner["projection_policy"] == "gmm_marginal_or_boole_joint_collision_risk_constraints"
+    assert meta["observation_spec"]["inputs"] == [
+        "robot_state",
+        "goal",
+        "pedestrians",
+        "k_mode_gmm_pedestrian_futures",
+    ]
+
+
 def test_prediction_mpc_cbf_alias_reuses_supported_mpc_command_contract() -> None:
     """Trace rosters may name the CBF arm without losing MPC command metadata."""
     meta = enrich_algorithm_metadata(

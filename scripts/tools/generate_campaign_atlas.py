@@ -93,8 +93,8 @@ def _load_json(path: Path) -> tuple[dict[str, Any] | None, str | None]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except OSError as exc:
         return None, f"unreadable manifest ({exc})"
-    except json.JSONDecodeError as exc:
-        return None, f"malformed manifest json ({exc.msg})"
+    except ValueError as exc:
+        return None, f"malformed manifest json ({exc})"
     if not isinstance(data, Mapping):
         return None, "manifest is not a JSON object"
     return dict(data), None
@@ -129,6 +129,10 @@ def _remote_base(manifest: Mapping[str, Any] | None) -> str:
             candidates.append(repo_url.strip())
     for candidate in candidates:
         normalized = candidate.rstrip("/").removesuffix(".git")
+        if normalized.startswith("git@"):
+            normalized = "https://" + normalized[4:].replace(":", "/", 1)
+        elif normalized.startswith("ssh://git@"):
+            normalized = "https://" + normalized[10:].replace(":", "/", 1)
         if normalized:
             return normalized
     return FALLBACK_REMOTE
@@ -138,9 +142,11 @@ def _date_from(manifest: Mapping[str, Any]) -> str:
     """Return the campaign date (date portion of created/started timestamp)."""
     for key in ("created_at_utc", "started_at_utc"):
         value = manifest.get(key)
-        if isinstance(value, str) and value.strip():
-            # ISO-8601 timestamps: the date is the first 10 chars (YYYY-MM-DD).
-            return value[:10] if len(value) >= 10 else value.strip()
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped:
+                # ISO-8601 timestamps: the date is the first 10 chars (YYYY-MM-DD).
+                return stripped[:10] if len(stripped) >= 10 else stripped
     return ""
 
 
@@ -443,7 +449,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     rendered, row_count = generate(args.evidence_root, args.output)
 
     if args.check:
-        current = args.output.read_text(encoding="utf-8") if args.output.is_file() else ""
+        if not args.output.is_file():
+            print(f"ERROR: campaign atlas is missing: {args.output}", file=sys.stderr)
+            return 1
+        current = args.output.read_text(encoding="utf-8")
         if current != rendered:
             print(
                 f"ERROR: campaign atlas is stale or missing: {args.output}\n"

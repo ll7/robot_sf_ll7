@@ -13,7 +13,6 @@ Pins the contract from issue #5301:
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -43,14 +42,7 @@ _ATLAS_OUTPUT = Path("docs/benchmarks/CAMPAIGN_ATLAS.md")
 
 
 def _make_git_repo(tmp_path: Path) -> Path:
-    """Create a minimal git repo rooted at tmp_path and return it."""
-    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.name", "Test"], cwd=tmp_path, check=True, capture_output=True
-    )
-    subprocess.run(
-        ["git", "config", "user.email", "t@t"], cwd=tmp_path, check=True, capture_output=True
-    )
+    """Return the temporary repo root; the atlas does not require Git."""
     return tmp_path
 
 
@@ -244,6 +236,20 @@ def test_malformed_json_manifest_produces_incomplete_row(
     assert row.campaign_id == "broken_demo"
 
 
+def test_invalid_utf8_manifest_produces_incomplete_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Invalid UTF-8 becomes an INCOMPLETE row instead of escaping the scan."""
+    repo = _make_git_repo(tmp_path)
+    _chdir(repo, monkeypatch)
+    manifest = _write_manifest(repo, "invalid_utf8_demo")
+    manifest.write_bytes(b"\xff\xfe")
+    rows = _scan(repo)
+    assert len(rows) == 1
+    assert rows[0].status == "INCOMPLETE"
+    assert any("malformed" in reason for reason in rows[0].incomplete_reasons)
+
+
 def test_manifest_not_a_json_object_produces_incomplete_row(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -335,6 +341,22 @@ def test_render_normalizes_git_remote_suffix(
         in rendered
     )
     assert ".git/commit/" not in rendered
+
+
+@pytest.mark.parametrize(
+    "remote",
+    ["git@github.com:ll7/robot_sf_ll7.git", "ssh://git@github.com/ll7/robot_sf_ll7.git"],
+)
+def test_render_normalizes_ssh_git_remotes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, remote: str
+) -> None:
+    """SSH remote forms render as browser-valid HTTPS commit links."""
+    repo = _make_git_repo(tmp_path)
+    _chdir(repo, monkeypatch)
+    commit = "abc123abc123abc123abc123abc123abc123abcd"
+    _write_manifest(repo, "ssh_remote_demo", remote=remote, commit=commit)
+    rendered = render_atlas(_scan(repo), atlas_output=_ATLAS_OUTPUT)
+    assert f"https://github.com/ll7/robot_sf_ll7/commit/{commit}" in rendered
 
 
 def test_render_report_links_are_relative_to_atlas_dir(
@@ -459,6 +481,18 @@ def test_main_check_fails_when_missing(tmp_path: Path, monkeypatch: pytest.Monke
     repo = _build_registry(tmp_path)
     _chdir(repo, monkeypatch)
     out = repo / "does_not_exist.md"
+    rc = main(["--evidence-root", _EVIDENCE, "--output", str(out), "--check"])
+    assert rc == 1
+
+
+def test_main_check_fails_when_output_is_a_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--check`` fails closed when the requested atlas path is a directory."""
+    repo = _build_registry(tmp_path)
+    _chdir(repo, monkeypatch)
+    out = repo / "atlas_directory"
+    out.mkdir()
     rc = main(["--evidence-root", _EVIDENCE, "--output", str(out), "--check"])
     assert rc == 1
 

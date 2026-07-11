@@ -26,7 +26,8 @@ FIXTURE_DIR = (
     / "scenario_flakiness_issue_4978"
 )
 CAMPAIGN_CONFIG = (
-    REPOSITORY_ROOT / "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml"
+    REPOSITORY_ROOT
+    / "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml"
 )
 EVIDENCE_DIR = REPOSITORY_ROOT / "docs/context/evidence/issue_5263_exact_repeat"
 

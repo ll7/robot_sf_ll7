@@ -266,8 +266,7 @@ def _tree_rss_gb(root: psutil.Process) -> float:
         pass
     for pr in procs:
         try:
-            if pr.is_running():
-                total += pr.memory_info().rss
+            total += pr.memory_info().rss
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
     return total / (1024.0**3)
@@ -570,6 +569,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     worker_counts = sorted({int(w) for w in args.workers if int(w) >= 1})
     if not worker_counts:
         print("--workers requires at least one positive integer.", file=sys.stderr)
+        return 2
+
+    if args.ceiling_gb <= 0:
+        print(f"--ceiling-gb must be positive; got {args.ceiling_gb}.", file=sys.stderr)
+        return 2
+    if args.auto_workers < 1:
+        print(
+            f"--auto-workers must be a positive integer; got {args.auto_workers}.", file=sys.stderr
+        )
+        return 2
+    invalid_proj = [w for w in args.project_at if w < 0]
+    if invalid_proj:
+        print(f"--project-at values must be non-negative; got {invalid_proj}.", file=sys.stderr)
         return 2
 
     config: dict[str, object] = {

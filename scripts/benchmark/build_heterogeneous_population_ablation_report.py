@@ -115,7 +115,10 @@ def main() -> int:  # noqa: C901,PLR0912,PLR0915
         seed=3574,
     )
 
-    # 2. Build per-archetype reports for each (scenario, seed, planner) triplet
+    # 2. Build per-archetype reports for every metric declared by the paired manifest.
+    # Keeping this manifest-driven avoids silently dropping a trace metric after readiness has
+    # accepted it. The legacy ``ablation_reports`` field below remains the clearance view for
+    # consumers that predate the multi-metric integration contract.
     # Group records by (scenario_id, seed, planner)
     triplets: dict[tuple[str, int, str], dict[str, dict[str, Any]]] = {}
     for rec in records:
@@ -129,20 +132,26 @@ def main() -> int:  # noqa: C901,PLR0912,PLR0915
         if control_trace:
             triplets.setdefault(key, {})[arm] = control_trace
 
-    ablation_reports = {}
-    for key, traces_by_arm in triplets.items():
-        sc_id, seed, planner = key
-        # Check if we have both arms
-        if "heterogeneous" in traces_by_arm and "mean_matched_homogeneous" in traces_by_arm:
-            report = build_per_archetype_ablation_report(
-                control_traces_by_arm=traces_by_arm,
-                metric_key="clearance_m",
-                higher_is_safer=True,
-                cvar_alpha=0.2,
-                reducer="mean",
-            )
-            key_str = f"{sc_id}/seed_{seed}/{planner}"
-            ablation_reports[key_str] = report
+    per_archetype_metric_reports: dict[str, dict[str, Any]] = {}
+    for metric_key in integration_readiness["trace_metric_keys"]:
+        metric_reports: dict[str, Any] = {}
+        for key, traces_by_arm in triplets.items():
+            sc_id, seed, planner = key
+            # Readiness guarantees that every manifest row is present. Keep the paired-arm guard
+            # here so this reporting layer remains safe when called with future manifest variants.
+            if "heterogeneous" in traces_by_arm and "mean_matched_homogeneous" in traces_by_arm:
+                metric_reports[f"{sc_id}/seed_{seed}/{planner}"] = (
+                    build_per_archetype_ablation_report(
+                        control_traces_by_arm=traces_by_arm,
+                        metric_key=metric_key,
+                        higher_is_safer=True,
+                        cvar_alpha=0.2,
+                        reducer="mean",
+                    )
+                )
+        per_archetype_metric_reports[metric_key] = metric_reports
+
+    ablation_reports = per_archetype_metric_reports.get("clearance_m", {})
 
     # 3. Create tabulated results for CSV
     # Row format: scenario_id, seed, planner, arm, mean_clearance, cvar_clearance
@@ -196,6 +205,7 @@ def main() -> int:  # noqa: C901,PLR0912,PLR0915
         "schema_version": "heterogeneous_population_ablation.v1",
         "integration_readiness": integration_readiness,
         "rank_sensitivity": rank_sensitivity,
+        "per_archetype_metric_reports": per_archetype_metric_reports,
         "ablation_reports": ablation_reports,
     }
 
@@ -223,9 +233,19 @@ def main() -> int:  # noqa: C901,PLR0912,PLR0915
             writer.writerows(csv_rows)
 
     # 4. Generate beautiful Markdown Report (analysis.md)
-    markdown_content = """# Issue #3574 Heterogeneous Population Ablation Report
+    trace_metric_text = ", ".join(integration_readiness["trace_metric_keys"])
+    markdown_content = f"""# Issue #3574 Heterogeneous Population Ablation Report
 
-This report evaluates whether moving from a homogeneous mean-matched population to a heterogeneous mixture population impacts planner safety rankings and metrics.
+This report compiles supplied paired episode records into the issue #3574 integration schema.
+
+## Claim Boundary
+
+- Evidence status: `diagnostic-only` until a separately reviewed campaign provides attributable
+  paired records and appropriate confidence bounds.
+- This report does not run a benchmark and does not establish a heterogeneous-population effect,
+  planner rank-stability result, realism claim, or sim-to-real claim.
+- Any ranking text below describes only the supplied records; it is not an empirical conclusion by
+  itself.
 
 ## Executive Summary
 We compared planners across two paired population arms:
@@ -233,6 +253,13 @@ We compared planners across two paired population arms:
 2. **Mean-Matched Homogeneous**: A homogeneous population with speed/radius set to the weighted means of the mixture.
 
 We evaluated the safety metric **clearance_m** (distance between robot and nearest pedestrian) using **mean** and **CVaR (alpha=0.2)** (tail safety of the 20% closest encounters).
+
+## Per-Archetype Trace Metrics
+
+The JSON summary contains per-archetype reports for every metric required by the paired manifest:
+`{trace_metric_text}`. These reports preserve both arms for
+each scenario/seed/planner triplet and are only rendered after the fail-closed integration-readiness
+check passes.
 
 ## Rank-Order Sensitivity Analysis
 We ran paired bootstrap resampling (1000 iterations) over seeds to compute the probability of one planner beating another under both arms.

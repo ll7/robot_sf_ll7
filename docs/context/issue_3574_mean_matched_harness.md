@@ -41,3 +41,37 @@ uv run python scripts/benchmark/build_heterogeneous_population_ablation_report.p
   --manifest output/issue_3574_mean_matched_harness/manifest.json \
   --records output/issue_3574_mean_matched_harness/episode_records.jsonl
 ```
+
+## Integration Contract Update (2026-07-11)
+
+The report now carries a coherent per-archetype result for every trace metric declared in the
+paired manifest, currently `clearance_m` and `near_field_exposure_s`. Its additive
+`per_archetype_metric_reports` summary field is keyed first by metric and then by the paired
+scenario/seed/planner triplet. The existing `ablation_reports` field remains the `clearance_m`
+view for compatibility.
+
+This joins the already-landed pieces without turning fixture output into evidence:
+
+- the dry-run manifest defines the two mean-matched population arms, three planners, and common
+  seeds;
+- episode readiness requires every expected row once, aligned per-pedestrian labels, finite trace
+  fields, and finite `metrics.mean_clearance` before analysis;
+- the report produces per-archetype summaries for all requested trace fields; and
+- the separate preregistered rank-reversal CLI consumes the same readiness-checked records.
+
+### Blocker Inventory
+
+- **Remaining:** no attributed mean-matched paired campaign records exist, so there is no effect,
+  rank-stability, or realized-distribution conclusion.
+- **New:** none observed by the fixture integration check.
+- **Intentional:** this slice does not run a benchmark campaign, submit Slurm/GPU work, or promote
+  a paper/dissertation claim.
+
+### Next Empirical Action
+
+Run the 18-row tracked manifest with its common scenario, seed, planner, and arm keys; retain the
+episode records with aligned traces for both declared metrics. Then run the report command above,
+the preregistered rank-reversal command in
+[the rank-reversal note](issue_3574_rank_reversal_test.md), and the configured-versus-realized
+distribution audit on those same traces. Interpret results only after the paired records, durable
+provenance, and confidence-bound review are complete.

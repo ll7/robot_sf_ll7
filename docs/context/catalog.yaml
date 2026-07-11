@@ -106,6 +106,10 @@ entries:
   status: current
   freshness: maintained
   area: benchmark_evidence
+- path: docs/context/issue_3574_state.yaml
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
 - path: docs/context/issue_1134_state.yaml
   status: current
   freshness: maintained

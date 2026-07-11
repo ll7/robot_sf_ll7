@@ -1,0 +1,31 @@
+# Experimental chance-constrained MPC contract for issue #5307.
+#
+# This arm is intentionally unavailable from ordinary benchmark YAML until #2844
+# provides a K-mode/GMM predictor implementation that is injected through the
+# explicit GaussianMixturePedestrianPredictor boundary. It never falls back to
+# constant velocity. The CV and deterministic-envelope matched arms remain in
+# prediction_mpc_cv.yaml and prediction_mpc_cv_uncertainty_envelope.yaml.
+allow_testing_algorithms: true
+predictor_backend: issue_2844_k_mode_gmm
+allow_predictor_fallback: false
+max_linear_speed: 0.9
+max_angular_speed: 1.1
+horizon_steps: 6
+rollout_dt: 0.25
+goal_tolerance: 0.25
+waypoint_switch_distance: 0.75
+path_goal_weight: 1.5
+terminal_goal_weight: 5.0
+heading_weight: 0.5
+control_effort_weight: 0.05
+smoothness_weight: 0.2
+pedestrian_safety_margin: 0.35
+static_obstacle_soft_weight: 1.0
+solver_ftol: 0.001
+solver_max_iterations: 40
+warm_start: true
+fallback_to_stop: true
+chance_constraint_formulation: marginal
+max_collision_risk: 0.05
+radial_quadrature_order: 6
+angular_quadrature_order: 16

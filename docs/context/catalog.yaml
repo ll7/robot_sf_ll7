@@ -24,6 +24,10 @@ entries:
   status: evidence
   freshness: evidence
   area: evidence_policy
+- path: docs/context/evidence/evidence_registry_strict_ci_policy.yaml
+  status: evidence
+  freshness: policy
+  area: evidence_policy
 - path: docs/context/evidence/issue_5263_exact_repeat/exact_repeat_manifest.json
   status: evidence
   freshness: evidence

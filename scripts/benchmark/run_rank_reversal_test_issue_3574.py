@@ -63,6 +63,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--seed", type=int, default=3574, help="RNG seed for bootstrap.")
     parser.add_argument(
+        "--response-law-fraction",
+        type=float,
+        help="Analyze one response-law sweep fraction; omitted for legacy unswept manifests.",
+    )
+    parser.add_argument(
         "--lower-is-safer",
         action="store_true",
         help="Set if smaller metric values rank a planner higher (e.g. collisions).",
@@ -182,6 +187,14 @@ def main() -> int:
         return 2
 
     planners = sorted({str(rec["planner"]) for rec in records})
+    arms = None
+    if args.response_law_fraction is not None:
+        if not 0.0 <= args.response_law_fraction <= 1.0:
+            print("Error: --response-law-fraction must be in [0, 1].")
+            return 1
+        suffix = f"/response_law_fraction_{args.response_law_fraction:g}"
+        arms = (f"heterogeneous{suffix}", f"mean_matched_homogeneous{suffix}")
+
     test_result = pre_specified_rank_reversal_test(
         records,
         metric_key=args.metric_key,
@@ -190,6 +203,7 @@ def main() -> int:
         alpha=args.alpha,
         num_bootstrap=args.num_bootstrap,
         seed=args.seed,
+        arms=arms,
     )
 
     (output_dir / "rank_reversal_test.json").write_text(

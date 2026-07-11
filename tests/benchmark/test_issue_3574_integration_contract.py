@@ -69,6 +69,7 @@ def _fixture_records(manifest: dict[str, Any]) -> list[dict[str, Any]]:
                 "planner": row["planner"],
                 "seed": row["seed"],
                 "population_arm": row["population_arm"],
+                "response_law_fraction": row.get("response_law_fraction", 0.0),
                 "metrics": {"mean_clearance": 1.0},
                 "algorithm_metadata": {
                     "pedestrian_control_trace": {
@@ -139,7 +140,7 @@ def test_tracked_manifest_metrics_flow_into_per_archetype_report(tmp_path: Path)
     reports = summary["per_archetype_metric_reports"]
     assert sorted(reports) == ["clearance_m", "near_field_exposure_s"]
     for metric_key in reports:
-        assert len(reports[metric_key]) == 9
+        assert len(reports[metric_key]) == 36
         first_report = next(iter(reports[metric_key].values()))
         assert first_report["metric_key"] == metric_key
         assert first_report["higher_is_safer"] is (metric_key == "clearance_m"), (
@@ -151,3 +152,11 @@ def test_tracked_manifest_metrics_flow_into_per_archetype_report(tmp_path: Path)
 
     assert summary["ablation_reports"] == reports["clearance_m"]
     assert (durable_dir / "summary.json").exists()
+
+
+def test_tracked_manifest_declares_required_response_law_sweep() -> None:
+    """The committed #3574 matrix makes all required fractions runnable."""
+
+    config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+
+    assert config["response_law_fractions"] == [0.0, 0.1, 0.25, 0.5]

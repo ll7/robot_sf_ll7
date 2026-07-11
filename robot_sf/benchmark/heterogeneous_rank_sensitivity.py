@@ -78,7 +78,7 @@ def compute_bootstrap_rank_sensitivity(  # noqa: C901,PLR0912,PLR0915
         if val is None or not math.isfinite(float(val)):
             continue
 
-        arm_str = str(arm).strip()
+        arm_str = _rank_arm_name(rec, scenario_params, str(arm).strip())
         p_str = str(planner).strip()
         if p_str not in planners:
             continue
@@ -168,21 +168,27 @@ def compute_bootstrap_rank_sensitivity(  # noqa: C901,PLR0912,PLR0915
             "pairwise_probabilities": pairwise,
         }
 
-    # Detect rank reversals
-    # A reversal is defined if the ranking differs between arms
+    # Detect rank reversals for each response-law fraction independently. Legacy
+    # records without the sweep field keep the original canonical arm names.
     reversals = []
-    if "heterogeneous" in arm_results and "mean_matched_homogeneous" in arm_results:
-        rank_het = arm_results["heterogeneous"]["ranking"]
-        rank_hom = arm_results["mean_matched_homogeneous"]["ranking"]
+    for heterogeneous_arm in sorted(arm for arm in arm_results if arm.startswith("heterogeneous")):
+        suffix = heterogeneous_arm.removeprefix("heterogeneous")
+        mean_matched_arm = f"mean_matched_homogeneous{suffix}"
+        if mean_matched_arm not in arm_results:
+            continue
+        rank_het = arm_results[heterogeneous_arm]["ranking"]
+        rank_hom = arm_results[mean_matched_arm]["ranking"]
         if rank_het != rank_hom:
-            reversals.append(
-                {
-                    "type": "rank_order_disagreement",
-                    "heterogeneous_ranking": rank_het,
-                    "mean_matched_homogeneous_ranking": rank_hom,
-                    "description": f"Heterogeneous ranking {rank_het} differs from homogeneous {rank_hom}",
-                }
-            )
+            reversal = {
+                "type": "rank_order_disagreement",
+                "heterogeneous_ranking": rank_het,
+                "mean_matched_homogeneous_ranking": rank_hom,
+                "description": f"Heterogeneous ranking {rank_het} differs from homogeneous {rank_hom}",
+            }
+            if suffix:
+                reversal["heterogeneous_arm"] = heterogeneous_arm
+                reversal["mean_matched_homogeneous_arm"] = mean_matched_arm
+            reversals.append(reversal)
 
     return {
         "schema_version": "heterogeneous_rank_sensitivity.v1",
@@ -531,7 +537,33 @@ def _parse_rank_record(
         return None
     if not math.isfinite(numeric):
         return None
-    return str(arm).strip(), str(planner).strip(), seed_int, numeric
+    return (
+        _rank_arm_name(record, scenario_params, str(arm).strip()),
+        str(planner).strip(),
+        seed_int,
+        numeric,
+    )
+
+
+def _rank_arm_name(record: Mapping[str, Any], scenario_params: Mapping[str, Any], arm: str) -> str:
+    """Keep response-law fractions separate during rank aggregation.
+
+    Returns:
+        A stable rank-group arm name, with a response-law suffix when present.
+    """
+
+    fraction = record.get("response_law_fraction")
+    if fraction is None:
+        fraction = scenario_params.get("response_law_fraction")
+    if fraction is None:
+        return arm
+    try:
+        numeric_fraction = float(fraction)
+    except (TypeError, ValueError):
+        return arm
+    if not math.isfinite(numeric_fraction) or not 0.0 <= numeric_fraction <= 1.0:
+        return arm
+    return f"{arm}/response_law_fraction_{numeric_fraction:g}"
 
 
 def _paired_performance_arrays(

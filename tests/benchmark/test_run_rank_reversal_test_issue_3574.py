@@ -77,23 +77,24 @@ def _records_for_manifest(
             }
             for label in labels
         ]
-        records.append(
-            {
-                "scenario_id": row["scenario_id"],
-                "planner": row["planner"],
-                "seed": row["seed"],
-                "population_arm": row["population_arm"],
-                "metrics": {"mean_clearance": mean_clearance_by_key[key]},
-                "algorithm_metadata": {
-                    "pedestrian_control_trace": {
-                        "schema_version": "pedestrian-control-trace.v1",
-                        "near_field_clearance_threshold_m": 1.0,
-                        "pedestrian_count": len(pedestrians),
-                        "pedestrians": pedestrians,
-                    }
-                },
-            }
-        )
+        record = {
+            "scenario_id": row["scenario_id"],
+            "planner": row["planner"],
+            "seed": row["seed"],
+            "population_arm": row["population_arm"],
+            "metrics": {"mean_clearance": mean_clearance_by_key[key]},
+            "algorithm_metadata": {
+                "pedestrian_control_trace": {
+                    "schema_version": "pedestrian-control-trace.v1",
+                    "near_field_clearance_threshold_m": 1.0,
+                    "pedestrian_count": len(pedestrians),
+                    "pedestrians": pedestrians,
+                }
+            },
+        }
+        if "response_law_fraction" in row:
+            record["response_law_fraction"] = row["response_law_fraction"]
+        records.append(record)
     return records
 
 
@@ -167,6 +168,50 @@ def test_cli_renders_reversal_on_constructed_records(tmp_path: Path) -> None:
     markdown = (output_dir / "rank_reversal_test.md").read_text(encoding="utf-8")
     assert "reject_null_rank_stability" in markdown
     assert "Analysis tooling only" in markdown
+
+
+def test_cli_selects_one_response_law_fraction(tmp_path: Path) -> None:
+    """The preregistered test selects, rather than mixes, sweep fractions."""
+
+    config = _manifest_config()
+    config["response_law_fractions"] = [0.5]
+    manifest = build_mean_matched_harness_manifest(config)
+    clearance: dict[tuple[str, str, int, str], float] = {}
+    for row in manifest["manifest_rows"]:
+        key = (row["scenario_id"], row["planner"], row["seed"], row["population_arm"])
+        clearance[key] = 2.0 if row["planner"] == "goal" else 0.5
+    records = _records_for_manifest(manifest, mean_clearance_by_key=clearance)
+    manifest_path = tmp_path / "manifest.json"
+    records_path = tmp_path / "episode_records.jsonl"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    records_path.write_text(
+        "".join(json.dumps(record) + "\n" for record in records), encoding="utf-8"
+    )
+
+    code = _run_cli(
+        _load_cli(),
+        [
+            "run_rank_reversal_test_issue_3574.py",
+            "--manifest",
+            str(manifest_path),
+            "--records",
+            str(records_path),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--response-law-fraction",
+            "0.5",
+            "--num-bootstrap",
+            "20",
+        ],
+    )
+
+    assert code == 0
+    result = json.loads((tmp_path / "out" / "rank_reversal_test.json").read_text(encoding="utf-8"))
+    assert result["status"] == "ready"
+    assert result["arms"] == [
+        "heterogeneous/response_law_fraction_0.5",
+        "mean_matched_homogeneous/response_law_fraction_0.5",
+    ]
 
 
 def test_cli_fails_closed_on_missing_records_file(tmp_path: Path) -> None:

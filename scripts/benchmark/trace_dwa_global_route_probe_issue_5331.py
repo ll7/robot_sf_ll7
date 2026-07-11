@@ -91,7 +91,7 @@ STEP_TRACE_FIELDS: tuple[str, ...] = (
 
 def _load_scenario(name: str, seed: int, matrix_path: Path) -> dict[str, Any]:
     """Return one scenario from the source matrix with a single pinned seed."""
-    scenarios = load_scenarios(matrix_path, base_dir=matrix_path)
+    scenarios = load_scenarios(matrix_path, base_dir=matrix_path.parent)
     by_name = {str(row.get("name")): dict(row) for row in scenarios}
     if name not in by_name:
         raise KeyError(f"scenario {name!r} is absent from matrix {matrix_path}")
@@ -407,24 +407,32 @@ def run_trace(
 
     for scenario_id, seed, episode_id in TARGET_EPISODES:
         scenario = _load_scenario(scenario_id, seed, matrix_path)
-        result_dir = out_dir / f"{episode_id}_seed{seed}"
-        result_dir.mkdir(parents=True, exist_ok=True)
+        episodes_path = out_dir / f"episodes_{episode_id}.jsonl"
+        if episodes_path.exists():
+            episodes_path.unlink()
         run_map_batch(
-            scenarios=[scenario],
-            algo_config_path=algo_config,
+            [scenario],
+            episodes_path,
+            schema_path=SCHEMA_PATH,
+            scenario_path=matrix_path,
             horizon=HORIZON,
             dt=DT,
-            out_dir=result_dir,
-            schema_path=SCHEMA_PATH,
+            record_forces=False,
+            algo="dwa",
+            algo_config_path=str(algo_config),
+            benchmark_profile="experimental",
+            workers=1,
+            resume=False,
             record_planner_decision_trace=True,
         )
-        jsonl_files = list(result_dir.glob("*.jsonl"))
-        if not jsonl_files:
-            raise FileNotFoundError(f"no episode JSONL produced in {result_dir}")
-        record = _read_record(jsonl_files[0])
-        steps = record.get("planner_decision_trace", [])
-        if not isinstance(steps, list):
-            steps = []
+        record = _read_record(episodes_path)
+        algorithm_metadata = record.get("algorithm_metadata")
+        trace = (
+            algorithm_metadata.get("planner_decision_trace", {})
+            if isinstance(algorithm_metadata, dict)
+            else {}
+        )
+        steps = trace.get("steps", []) if isinstance(trace.get("steps"), list) else []
         summary = _summarize_episode(
             episode_id=episode_id,
             record=record,

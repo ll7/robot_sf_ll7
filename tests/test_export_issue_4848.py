@@ -629,11 +629,13 @@ class TestFailClosedInputs:
 class TestBundleReproducibleByteIdentical:
     """Re-running the same export with the same inputs produces byte-identical outputs.
 
-    Excludes generated_at_utc and git_commit (which change per run) by writing
-    a fixed generated_at_utc into the episode record's metadata.
+    CSV files (trace_timeseries.csv, min_distance_series.csv) are always byte-identical
+    because they contain no timestamps.  JSON files (metadata.json, trace_series.json)
+    are byte-identical only when ``pin_generated_at`` is passed to ``write_bundle``
+    to fix ``generated_at_utc``; without it they embed wall-clock time and will differ.
     """
 
-    def _make_minimal_record(self, timestamp: str) -> dict[str, Any]:
+    def _make_minimal_record(self) -> dict[str, Any]:
         steps = [
             {
                 "step": i,
@@ -657,8 +659,7 @@ class TestBundleReproducibleByteIdentical:
 
     def test_bundle_files_reproducible(self, tmp_path: Path) -> None:
         """Running write_bundle twice with same episode yields SHA-identical CSV files."""
-        # Use a fixed git commit by monkey-patching (CSV output doesn't depend on it)
-        record = self._make_minimal_record("2026-07-08T12:00:00+00:00")
+        record = self._make_minimal_record()
         sel = _export_module.SelectedEpisode(
             planner="goal",
             scenario_id="classic_group_crossing_low",
@@ -685,7 +686,7 @@ class TestBundleReproducibleByteIdentical:
     def test_pin_generated_at_byte_identical_metadata(self, tmp_path: Path) -> None:
         """pin_generated_at makes metadata.json byte-identical across runs."""
         pin = "2026-07-08T23:13:18.753884+00:00"
-        record = self._make_minimal_record(pin)
+        record = self._make_minimal_record()
         sel = _export_module.SelectedEpisode(
             planner="goal",
             scenario_id="classic_group_crossing_low",
@@ -712,7 +713,7 @@ class TestBundleReproducibleByteIdentical:
     def test_pin_generated_at_overrides_wall_clock(self, tmp_path: Path) -> None:
         """pin_generated_at replaces datetime.now in the written metadata."""
         pin = "2025-01-15T10:30:00+00:00"
-        record = self._make_minimal_record(pin)
+        record = self._make_minimal_record()
         sel = _export_module.SelectedEpisode(
             planner="orca",
             scenario_id="classic_group_crossing_low",

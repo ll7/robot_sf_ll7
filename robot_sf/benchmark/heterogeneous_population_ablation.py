@@ -26,6 +26,8 @@ from robot_sf.ped_npc.ped_archetypes import allocate_archetype_counts, assign_ar
 
 HETEROGENEOUS_POPULATION_ABLATION_SCHEMA = "heterogeneous_population_ablation_harness.v1"
 MEAN_MATCHED_HETEROGENEITY_HARNESS_SCHEMA = "mean_matched_heterogeneity_harness.v1"
+MEAN_MATCHED_EPISODE_READINESS_SCHEMA = "mean_matched_episode_readiness.v1"
+EPISODE_CONTROL_TRACE_PATH = "algorithm_metadata.pedestrian_control_trace"
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,11 +251,11 @@ def build_mean_matched_harness_manifest(
         "trace_metric_keys": metric_keys,
         "expected_episode_output_keys": [
             f"scenario.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY}",
-            "metadata.pedestrian_control_trace",
-            "metadata.pedestrian_control_trace.pedestrians[].archetype",
-            "metadata.pedestrian_control_trace.pedestrians[].steps[]",
+            EPISODE_CONTROL_TRACE_PATH,
+            f"{EPISODE_CONTROL_TRACE_PATH}.pedestrians[].archetype",
+            f"{EPISODE_CONTROL_TRACE_PATH}.pedestrians[].steps[]",
             *(
-                ["metadata.pedestrian_control_trace.near_field_clearance_threshold_m"]
+                [f"{EPISODE_CONTROL_TRACE_PATH}.near_field_clearance_threshold_m"]
                 if "near_field_exposure_s" in metric_keys
                 else []
             ),
@@ -262,6 +264,106 @@ def build_mean_matched_harness_manifest(
         "row_count": len(manifest_rows),
         "blockers": blockers,
     }
+
+
+def assess_mean_matched_episode_records(
+    manifest: Mapping[str, Any],
+    episode_records: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Validate real episode records against the paired manifest before analysis.
+
+    Every expected scenario/planner/seed/arm row must occur exactly once and carry a
+    ready per-pedestrian control trace for every declared metric. Missing, duplicate,
+    unexpected, or malformed rows remain explicit blockers; they are never silently
+    dropped from the future ablation report.
+
+    Returns:
+        Versioned integration-readiness report with row-level blockers.
+    """
+
+    manifest_rows = _required_sequence(manifest, "manifest_rows")
+    metric_keys = _metric_keys(manifest.get("trace_metric_keys"))
+    expected_by_key = _rows_by_campaign_key(manifest_rows, source="manifest_rows")
+    observed_by_key, blockers = _index_episode_records(episode_records)
+
+    row_readiness: list[dict[str, Any]] = []
+    for key in sorted(expected_by_key):
+        record = observed_by_key.get(key)
+        row_blockers: list[str] = []
+        if record is None:
+            row_blockers.append("episode record missing")
+        else:
+            row_blockers.extend(_episode_trace_blockers(record, expected_by_key[key], metric_keys))
+        row_readiness.append(
+            {
+                "scenario_id": key[0],
+                "planner": key[1],
+                "seed": key[2],
+                "population_arm": key[3],
+                "status": "ready" if not row_blockers else "blocked",
+                "ready": not row_blockers,
+                "blockers": row_blockers,
+            }
+        )
+        blockers.extend(f"{_format_campaign_key(key)}: {blocker}" for blocker in row_blockers)
+
+    for key in sorted(set(observed_by_key) - set(expected_by_key)):
+        blockers.append(f"unexpected episode record for {_format_campaign_key(key)}")
+
+    return {
+        "schema_version": MEAN_MATCHED_EPISODE_READINESS_SCHEMA,
+        "issue": 3574,
+        "status": "ready" if not blockers else "blocked",
+        "ready": not blockers,
+        "claim_boundary": "integration_readiness_only_no_ablation_result",
+        "trace_metric_keys": metric_keys,
+        "expected_row_count": len(expected_by_key),
+        "observed_row_count": len(observed_by_key),
+        "row_readiness": row_readiness,
+        "blockers": blockers,
+    }
+
+
+def _index_episode_records(
+    episode_records: Sequence[Mapping[str, Any]],
+) -> tuple[dict[tuple[str, str, int, str], Mapping[str, Any]], list[str]]:
+    observed_by_key: dict[tuple[str, str, int, str], Mapping[str, Any]] = {}
+    blockers: list[str] = []
+    for index, record in enumerate(episode_records):
+        if not isinstance(record, Mapping):
+            blockers.append(f"episode_records[{index}] must be mapping")
+            continue
+        try:
+            key = _campaign_row_key(record, context=f"episode_records[{index}]")
+        except ValueError as exc:
+            blockers.append(str(exc))
+            continue
+        if key in observed_by_key:
+            blockers.append(f"duplicate episode record for {_format_campaign_key(key)}")
+            continue
+        observed_by_key[key] = record
+    return observed_by_key, blockers
+
+
+def _episode_trace_blockers(
+    record: Mapping[str, Any],
+    manifest_row: Mapping[str, Any],
+    metric_keys: Sequence[str],
+) -> list[str]:
+    algorithm_metadata = record.get("algorithm_metadata")
+    if not isinstance(algorithm_metadata, Mapping):
+        return ["algorithm_metadata missing or not mapping"]
+    trace = algorithm_metadata.get("pedestrian_control_trace")
+    if not isinstance(trace, Mapping):
+        return [f"{EPISODE_CONTROL_TRACE_PATH} missing or not mapping"]
+    blockers = [
+        blocker
+        for metric_key in metric_keys
+        for blocker in assess_control_trace_readiness(trace, metric_key).blockers
+    ]
+    blockers.extend(_trace_metric_metadata_blockers(trace, metric_keys))
+    blockers.extend(_trace_population_metadata_blockers(trace, manifest_row))
+    return blockers
 
 
 def audit_smoke_mean_match(
@@ -444,19 +546,15 @@ def _manifest_scenario_rows(
                         "population_composition_hash": composition_hash,
                         "expected_episode_output_keys": [
                             f"scenario.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY}",
-                            "metadata.pedestrian_control_trace",
-                            "metadata.pedestrian_control_trace.pedestrians[].archetype",
+                            EPISODE_CONTROL_TRACE_PATH,
+                            f"{EPISODE_CONTROL_TRACE_PATH}.pedestrians[].archetype",
                             *(
-                                [
-                                    "metadata.pedestrian_control_trace."
-                                    "near_field_clearance_threshold_m"
-                                ]
+                                [f"{EPISODE_CONTROL_TRACE_PATH}.near_field_clearance_threshold_m"]
                                 if "near_field_exposure_s" in metric_keys
                                 else []
                             ),
                             *[
-                                "metadata.pedestrian_control_trace.pedestrians[]."
-                                f"steps[].{metric_key}"
+                                f"{EPISODE_CONTROL_TRACE_PATH}.pedestrians[].steps[].{metric_key}"
                                 for metric_key in metric_keys
                             ],
                         ],
@@ -490,10 +588,9 @@ def _trace_readiness_by_arm(
                 "ready": False,
                 "metric_keys": list(metric_keys),
                 "blockers": [
-                    "metadata.pedestrian_control_trace missing",
+                    f"{EPISODE_CONTROL_TRACE_PATH} missing",
                     *[
-                        "metadata.pedestrian_control_trace.pedestrians[]."
-                        f"steps[].{metric_key} missing"
+                        f"{EPISODE_CONTROL_TRACE_PATH}.pedestrians[].steps[].{metric_key} missing"
                         for metric_key in metric_keys
                     ],
                 ],
@@ -549,6 +646,55 @@ def _trace_metric_metadata_blockers(
     return []
 
 
+def _trace_population_metadata_blockers(
+    trace: Mapping[str, Any], manifest_row: Mapping[str, Any]
+) -> list[str]:
+    """Check simulator-indexed trace labels against the manifest population arm.
+
+    Returns:
+        Field-level blockers for missing or mismatched population metadata.
+    """
+
+    arm_population = manifest_row.get("arm_population")
+    if not isinstance(arm_population, Mapping):
+        return ["manifest row arm_population missing or not mapping"]
+    expected_labels = arm_population.get(PEDESTRIAN_CONTROL_TRACE_LABELS_KEY)
+    if not isinstance(expected_labels, Sequence) or isinstance(expected_labels, str):
+        return [f"manifest row arm_population.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY} missing"]
+    pedestrians = trace.get("pedestrians")
+    if not isinstance(pedestrians, Sequence) or isinstance(pedestrians, str):
+        return ["control_trace.pedestrians must be a sequence"]
+    blockers: list[str] = []
+    if len(pedestrians) != len(expected_labels):
+        blockers.append(
+            "control_trace pedestrian count does not match manifest arm population: "
+            f"{len(pedestrians)} != {len(expected_labels)}"
+        )
+        return blockers
+
+    for index, (pedestrian, expected_label) in enumerate(
+        zip(pedestrians, expected_labels, strict=True)
+    ):
+        blockers.extend(_trace_label_blockers(pedestrian, expected_label, index=index))
+    return blockers
+
+
+def _trace_label_blockers(pedestrian: Any, expected_label: Any, *, index: int) -> list[str]:
+    if not isinstance(pedestrian, Mapping) or not isinstance(expected_label, Mapping):
+        return [f"control_trace label alignment at index {index} must use mappings"]
+    blockers: list[str] = []
+    for key in ("simulator_index", "archetype", "desired_speed_factor", "response_law"):
+        if key not in expected_label:
+            continue
+        if key not in pedestrian:
+            blockers.append(f"control_trace.pedestrians[{index}].{key} missing")
+        elif pedestrian[key] != expected_label[key]:
+            blockers.append(
+                f"control_trace.pedestrians[{index}].{key} does not match manifest label"
+            )
+    return blockers
+
+
 def _planner_rows(planners: Sequence[Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for index, planner in enumerate(planners):
@@ -587,6 +733,33 @@ def _metric_keys(raw_metric_keys: Any) -> list[str]:
     if not metric_keys or any(not metric_key for metric_key in metric_keys):
         raise ValueError("trace_metric_keys must contain non-empty metric keys")
     return metric_keys
+
+
+def _campaign_row_key(row: Mapping[str, Any], *, context: str) -> tuple[str, str, int, str]:
+    scenario_id = _required_str(row, "scenario_id", context=context)
+    planner = _required_str(row, "planner", context=context)
+    seed = _required_int(row, "seed", context=context)
+    population_arm = _required_str(row, "population_arm", context=context)
+    return scenario_id, planner, seed, population_arm
+
+
+def _rows_by_campaign_key(
+    rows: Sequence[Any], *, source: str
+) -> dict[tuple[str, str, int, str], Mapping[str, Any]]:
+    indexed: dict[tuple[str, str, int, str], Mapping[str, Any]] = {}
+    for index, row in enumerate(rows):
+        if not isinstance(row, Mapping):
+            raise ValueError(f"{source}[{index}] must be mapping")
+        key = _campaign_row_key(row, context=f"{source}[{index}]")
+        if key in indexed:
+            raise ValueError(f"{source} contains duplicate {_format_campaign_key(key)}")
+        indexed[key] = row
+    return indexed
+
+
+def _format_campaign_key(key: tuple[str, str, int, str]) -> str:
+    scenario_id, planner, seed, population_arm = key
+    return f"{scenario_id}/{planner}/seed_{seed}/{population_arm}"
 
 
 def _required_sequence(config: Mapping[str, Any], key: str) -> Sequence[Any]:

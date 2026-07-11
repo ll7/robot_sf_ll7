@@ -162,9 +162,12 @@ def run_archive_sampling(
         Persisted selection payload with source and draw provenance.
     """
 
+    config_path = config_path.resolve()
     config = load_archive_sampling_config(config_path)
     spec = ArchiveSamplingSpec.from_payload(config)
-    source_archive = Path(_non_empty_string(config["source_archive"], "source_archive"))
+    source_archive = _resolve_config_path(
+        _non_empty_string(config["source_archive"], "source_archive"), config_path=config_path
+    )
     if not source_archive.is_file():
         raise GeneratedScenarioArchiveSamplingError(
             f"source archive does not exist or is not a file: {source_archive}"
@@ -180,7 +183,9 @@ def run_archive_sampling(
     _validate_archive_metadata(archive.get("metadata"))
     entries = archive.get("entries")
     selected = sample_generated_archive(entries, spec=spec)
-    output_path = output_path or Path(_non_empty_string(config["output_path"], "output_path"))
+    output_path = output_path or _resolve_config_path(
+        _non_empty_string(config["output_path"], "output_path"), config_path=config_path
+    )
     if output_path.exists():
         raise FileExistsError(f"output_path already exists: {output_path}")
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -220,6 +225,12 @@ def _integer(value: object, path: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool):
         raise GeneratedScenarioArchiveSamplingError(f"{path} must be an integer")
     return value
+
+
+def _resolve_config_path(value: str, *, config_path: Path) -> Path:
+    """Resolve an absolute path or a path relative to the owning sampler config."""
+    candidate = Path(value)
+    return candidate if candidate.is_absolute() else (config_path.parent / candidate).resolve()
 
 
 def _validated_entries(entries: object) -> list[dict[str, Any]]:

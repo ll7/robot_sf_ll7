@@ -184,6 +184,31 @@ def test_run_writes_archive_checksum_sampling_provenance_and_governance(tmp_path
         run_archive_sampling(config_path)
 
 
+def test_run_resolves_relative_paths_from_config_not_cwd(tmp_path: Path, monkeypatch) -> None:
+    """A checked-in sampler config remains runnable outside the repository root."""
+    config_path, archive_path, output_path = _write_config_and_archive(tmp_path)
+    relative_config = tmp_path / "nested" / "config.yaml"
+    relative_config.parent.mkdir()
+    relative_config.write_text(
+        yaml.safe_dump(
+            {
+                **yaml.safe_load(config_path.read_text(encoding="utf-8")),
+                "source_archive": "../archive.yaml",
+                "output_path": "../selection.json",
+            }
+        ),
+        encoding="utf-8",
+    )
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+
+    result = run_archive_sampling(relative_config)
+
+    assert result["source_archive"]["path"] == archive_path.as_posix()
+    assert output_path.is_file()
+
+
 def test_run_rejects_missing_or_wrong_schema_archive(tmp_path: Path) -> None:
     """Missing files and non-generated catalogs are explicit blockers."""
 

@@ -1,7 +1,7 @@
 # CPU-only demo for deterministic sampling over a generated-scenario hypothesis archive.
 schema_version: generated-scenario-rare-event-sampling.v1
 seed: 4932
-source_archive: configs/scenarios/generated/issue_4932_rare_event_demo_archive.yaml
+source_archive: ../scenarios/generated/issue_4932_rare_event_demo_archive.yaml
 sample_size: 2
 sampler:
   type: criticality_weighted_without_replacement.v1
@@ -9,5 +9,5 @@ sampler:
   direction: lower_is_more_critical
   clearance_floor_m: 0.05
   exponent: 1.0
-output_path: output/issue_4932_rare_event_sampling/selection.json
+output_path: ../../output/issue_4932_rare_event_sampling/selection.json
 claim_boundary: generated scenario hypotheses only

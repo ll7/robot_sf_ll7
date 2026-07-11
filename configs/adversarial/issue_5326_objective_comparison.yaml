@@ -1,0 +1,44 @@
+schema_version: adversarial-objective-comparison.v1
+issue: 5326
+status: infrastructure_ready
+claim_scope: not_paper_facing_benchmark_evidence
+runner: scripts/tools/compare_adversarial_samplers.py
+base_config:
+  scenario_template: configs/scenarios/templates/crossing_ttc.yaml
+  search_space: configs/adversarial/crossing_ttc_space.yaml
+  policy: goal
+objectives:
+  - worst_case_snqi
+  - temporal_robustness
+budget_grid: [16, 32, 64]
+repeated_seeds: [1101, 2202, 3303]
+samplers:
+  - random
+  - coordinate
+  - optuna
+reporting_contract:
+  - objective
+  - first_failure_iteration
+  - best_valid_objective
+  - invalid_candidate_rate
+  - replay_success_rate
+  - certified_valid_failure_count
+  - replayable_valid_failure_count
+  - fallback_candidate_count
+  - degraded_candidate_count
+  - held_out_family_yield
+explicit_exclusions:
+  learned_failure_proposal_issue_2921: stretch_out_of_scope_until_base_comparison_succeeds
+  held_out_family_yield: not_evaluated_narrow_archive_caveat
+  paper_facing_success_claims: forbidden
+  campaign_evidence: requires_slurm_capable_worker
+output_artifacts:
+  output_dir: output/adversarial/issue_5326_objective_comparison
+  report_json: output/adversarial/issue_5326_objective_comparison/report.json
+example_command: >
+  uv run python scripts/tools/compare_adversarial_samplers.py
+  --objective worst_case_snqi --objective temporal_robustness
+  --package-b-budget-grid
+  --seed 1101 --seed 2202 --seed 3303
+  --output-dir output/adversarial/issue_5326_objective_comparison
+  --out-json output/adversarial/issue_5326_objective_comparison/report.json

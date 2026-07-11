@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 class SamplerComparisonRow:
     """One sampler result row for the comparison report."""
 
+    objective: str
     sampler: str
     budget: int
     seed: int
@@ -69,61 +70,71 @@ def run_sampler_comparison(
     *,
     config: SearchConfig,
     sampler_names: Sequence[str],
+    objective_names: Sequence[str],
     synthetic: bool,
     budgets: Sequence[int] | None = None,
     seeds: Sequence[int] | None = None,
 ) -> list[SamplerComparisonRow]:
-    """Run the configured search once per sampler and return compact rows."""
+    """Run the configured search once per sampler and objective and return compact rows."""
     rows: list[SamplerComparisonRow] = []
     active_budgets = tuple(budgets or (config.budget,))
     active_seeds = tuple(seeds or (config.seed,))
-    for budget in active_budgets:
-        if budget <= 0:
-            raise ValueError("budgets must be positive")
-        for base_seed in active_seeds:
-            for sampler_name in sampler_names:
-                run_seed = int(base_seed)
-                sampler_output_dir = (
-                    config.output_dir
-                    / f"budget_{int(budget):04d}"
-                    / f"seed_{int(base_seed)}"
-                    / sampler_name
-                )
-                sampler_config = replace(
-                    config,
-                    budget=int(budget),
-                    output_dir=sampler_output_dir,
-                    seed=run_seed,
-                )
-                result = run_adversarial_search(
-                    sampler_config,
-                    sampler=build_sampler(sampler_name, config.search_space, seed=run_seed),
-                    evaluator=_synthetic_evaluator if synthetic else None,
-                    certifier=(
-                        (lambda _candidate, _path, _required: passed_status("synthetic comparison"))
-                        if synthetic
-                        else None
-                    ),
-                )
-                rows.append(
-                    _comparison_row_from_manifest(
-                        sampler=sampler_name,
-                        budget=int(budget),
-                        seed=run_seed,
-                        manifest_path=result.manifest_path,
-                        best_bundle_path=result.best_bundle_path,
-                        best_objective_value=result.best_objective_value,
-                        num_candidates=result.num_candidates,
-                        num_valid_candidates=result.num_valid_candidates,
-                        num_invalid_candidates=result.num_invalid_candidates,
-                        num_failed_evaluations=result.num_failed_evaluations,
+    for objective_name in objective_names:
+        for budget in active_budgets:
+            if budget <= 0:
+                raise ValueError("budgets must be positive")
+            for base_seed in active_seeds:
+                for sampler_name in sampler_names:
+                    run_seed = int(base_seed)
+                    sampler_output_dir = (
+                        config.output_dir
+                        / objective_name
+                        / f"budget_{int(budget):04d}"
+                        / f"seed_{int(base_seed)}"
+                        / sampler_name
                     )
-                )
+                    sampler_config = replace(
+                        config,
+                        objective=objective_name,
+                        budget=int(budget),
+                        output_dir=sampler_output_dir,
+                        seed=run_seed,
+                    )
+                    result = run_adversarial_search(
+                        sampler_config,
+                        sampler=build_sampler(sampler_name, config.search_space, seed=run_seed),
+                        evaluator=_synthetic_evaluator if synthetic else None,
+                        certifier=(
+                            (
+                                lambda _candidate, _path, _required: passed_status(
+                                    "synthetic comparison"
+                                )
+                            )
+                            if synthetic
+                            else None
+                        ),
+                    )
+                    rows.append(
+                        _comparison_row_from_manifest(
+                            objective=objective_name,
+                            sampler=sampler_name,
+                            budget=int(budget),
+                            seed=run_seed,
+                            manifest_path=result.manifest_path,
+                            best_bundle_path=result.best_bundle_path,
+                            best_objective_value=result.best_objective_value,
+                            num_candidates=result.num_candidates,
+                            num_valid_candidates=result.num_valid_candidates,
+                            num_invalid_candidates=result.num_invalid_candidates,
+                            num_failed_evaluations=result.num_failed_evaluations,
+                        )
+                    )
     return rows
 
 
 def _comparison_row_from_manifest(  # noqa: PLR0913
     *,
+    objective: str,
     sampler: str,
     budget: int,
     seed: int,
@@ -163,6 +174,7 @@ def _comparison_row_from_manifest(  # noqa: PLR0913
         "learned failure proposal #2921 remains stretch/out of scope",
     )
     return SamplerComparisonRow(
+        objective=objective,
         sampler=sampler,
         budget=budget,
         seed=seed,
@@ -306,7 +318,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=Path("configs/adversarial/crossing_ttc_space.yaml"),
     )
     parser.add_argument("--policy", default="goal")
-    parser.add_argument("--objective", default="worst_case_snqi")
+    parser.add_argument(
+        "--objective",
+        action="append",
+        dest="objectives",
+        default=None,
+        help=(
+            "Objective to evaluate; repeat to compare multiple objectives. "
+            "Defaults to worst_case_snqi."
+        ),
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
         "--budget",
@@ -350,11 +371,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the sampler comparison CLI."""
     args = parse_args(argv)
+    objectives = args.objectives or ["worst_case_snqi"]
     config = SearchConfig.from_files(
         policy=args.policy,
         scenario_template=args.scenario_template,
         search_space=args.search_space,
-        objective=args.objective,
+        objective=objectives[0],
         output_dir=args.output_dir,
         budget=(args.budget or [8])[0],
         seed=(args.seed or [123])[0],
@@ -364,14 +386,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     rows = run_sampler_comparison(
         config=config,
         sampler_names=tuple(args.samplers or ("random", "coordinate", "optuna")),
+        objective_names=objectives,
         synthetic=bool(args.synthetic),
         budgets=budgets,
         seeds=seeds,
     )
     payload = {
-        "schema_version": "adversarial-sampler-comparison.v2",
+        "schema_version": "adversarial-sampler-comparison.v3",
         "report_status": "diagnostic_local_nominal",
         "claim_scope": "not_paper_facing_benchmark_evidence",
+        "objectives": objectives,
         "budget_grid": list(budgets or [config.budget]),
         "seeds": list(seeds),
         "package_b_notes": {

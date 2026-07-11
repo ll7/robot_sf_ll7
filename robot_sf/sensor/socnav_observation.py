@@ -30,6 +30,16 @@ DEFAULT_MAX_PEDS = 64
 SOCNAV_POSITION_CAP_M = 50.0
 """Global cap for SocNav position-like observations to keep bounds consistent."""
 
+MAX_ROUTE_WAYPOINTS = 32
+"""Maximum number of route waypoints exposed in the structured observation.
+
+The total route_waypoints array may contain up to this many entries (including
+the robot position prefix when remaining waypoints are non-empty). Capping
+prevents unbounded memory growth for maps with extremely dense route waypoint
+lists while keeping the DWA global-route probe within a manageable search
+radius for nearest-waypoint resolution.
+"""
+
 
 def dynamic_pedestrian_occlusion_mask(
     ped_positions: np.ndarray,
@@ -540,6 +550,59 @@ class SocNavObservationFusion:
                 return True
         return False
 
+    def _build_route_waypoints(self, position_cap: np.ndarray) -> np.ndarray:
+        """Extract remaining route waypoints for the DWA global-route probe.
+
+        Reads from ``simulator.robot_navs`` and returns a ``(N, 2)`` float32
+        array containing the robot position (when remaining waypoints exist)
+        followed by remaining waypoints from ``waypoint_id`` onward. The array
+        is clipped to the position cap and bounded by ``MAX_ROUTE_WAYPOINTS``.
+
+        Contract:
+        - Robot position is prepended when remaining waypoints exist.
+        - When the navigator has no waypoints, returns empty ``(0, 2)``.
+        - When all waypoints are visited but a route existed, returns robot
+          position ``(1, 2)`` so the probe can still locate the robot on route.
+        - Total rows never exceed ``MAX_ROUTE_WAYPOINTS``.
+        - Malformed navigator state fails closed with an empty array.
+
+        Returns:
+            np.ndarray: Clipped, capped route waypoint array.
+        """
+        navs_raw = getattr(self.simulator, "robot_navs", None)
+        if not navs_raw or self.robot_index >= len(navs_raw):
+            return np.zeros((0, 2), dtype=np.float32)
+
+        nav = navs_raw[self.robot_index]
+        waypoints_raw = getattr(nav, "waypoints", None)
+        if waypoints_raw is None:
+            return np.zeros((0, 2), dtype=np.float32)
+
+        waypoint_id = int(getattr(nav, "waypoint_id", 0))
+        remaining = waypoints_raw[waypoint_id:]
+
+        if not remaining:
+            if waypoint_id <= 0:
+                return np.zeros((0, 2), dtype=np.float32)
+            robot_pose = self.simulator.robots[self.robot_index].pose
+            robot_pos = np.asarray(robot_pose[0], dtype=np.float32)
+            return np.clip(robot_pos.reshape(1, -1), 0.0, position_cap)
+
+        remaining_arr = np.asarray(remaining, dtype=np.float32)
+        if remaining_arr.ndim != 2 or remaining_arr.shape[-1] != 2:
+            return np.zeros((0, 2), dtype=np.float32)
+
+        robot_pose = self.simulator.robots[self.robot_index].pose
+        robot_pos = np.asarray(robot_pose[0], dtype=np.float32)
+
+        wp_with_robot = np.vstack([robot_pos.reshape(1, -1), remaining_arr])
+        wp_with_robot = np.clip(wp_with_robot, 0.0, position_cap)
+
+        if wp_with_robot.shape[0] > MAX_ROUTE_WAYPOINTS:
+            wp_with_robot = wp_with_robot[:MAX_ROUTE_WAYPOINTS]
+
+        return wp_with_robot
+
     def next_obs(self) -> dict[str, Any]:
         """Return the latest structured observation aligned to the declared space."""
         ped_positions = np.asarray(self.simulator.ped_pos, dtype=np.float32)
@@ -634,6 +697,7 @@ class SocNavObservationFusion:
             self.simulator.robots[self.robot_index].current_speed, dtype=np.float32
         )
         robot_velocity_xy = self._robot_velocity_xy(wrapped_heading)
+        route_waypoints = self._build_route_waypoints(position_cap)
         obs = {
             "robot": {
                 "position": robot_pos_clipped,
@@ -644,6 +708,7 @@ class SocNavObservationFusion:
                 "radius": np.array(
                     [self.simulator.robots[self.robot_index].config.radius], dtype=np.float32
                 ),
+                "route_waypoints": route_waypoints,
             },
             "goal": {
                 "current": goal_clipped,

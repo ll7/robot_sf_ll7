@@ -64,6 +64,28 @@ def _git_succeeds(repo_root: Path, *args: str) -> bool:
     )
 
 
+def _git_bytes(repo_root: Path, *args: str) -> bytes | None:
+    """Return Git command output bytes, or ``None`` when the object is unavailable."""
+
+    result = subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return result.stdout if result.returncode == 0 else None
+
+
+def _config_hash_matches(
+    repo_root: Path, commit: str, path: str, declared_hashes: set[str]
+) -> bool:
+    """Return whether one committed config blob matches a declared SHA-256 value."""
+
+    blob = _git_bytes(repo_root, "show", f"{commit}:{path}")
+    return blob is not None and hashlib.sha256(blob).hexdigest() in declared_hashes
+
+
 def _is_tracked(repo_root: Path, repo_path: str) -> bool:
     """Return whether a normalized repository path is tracked in the current index."""
     return _git_succeeds(repo_root, "ls-files", "--error-unmatch", "--", repo_path)
@@ -242,7 +264,7 @@ def _artifact_findings(repo_root: Path, display_path: Path, value: Any) -> list[
     return findings
 
 
-def _campaign_metadata_findings(
+def _campaign_metadata_findings(  # noqa: C901 - rule-to-finding mapping is intentionally linear
     repo_root: Path,
     display_path: Path,
     campaign_ids: Sequence[str],
@@ -277,6 +299,7 @@ def _campaign_metadata_findings(
         for commit in set(commits)
         if _git_succeeds(repo_root, "cat-file", "-e", f"{commit}^{{commit}}")
     ]
+    declared_config_hashes = {item.lower() for item in config_hashes if SHA256_RE.fullmatch(item)}
     for config_path in sorted(set(config_paths)):
         normalized = _resolve_repo_path(repo_root, config_path)
         if normalized is None:
@@ -298,6 +321,19 @@ def _campaign_metadata_findings(
                     f"config {normalized[0]} does not exist at a declared commit",
                 )
             )
+        elif declared_config_hashes:
+            config_hash_matches = any(
+                _config_hash_matches(repo_root, commit, normalized[0], declared_config_hashes)
+                for commit in resolved_commits
+            )
+            if not config_hash_matches:
+                findings.append(
+                    _issue(
+                        display_path,
+                        "config_sha256_mismatch",
+                        f"config_sha256 does not match {normalized[0]} at a declared commit",
+                    )
+                )
     return findings
 
 

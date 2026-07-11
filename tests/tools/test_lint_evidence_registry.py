@@ -127,6 +127,25 @@ def test_hash_mismatch_is_classified(tmp_path: Path) -> None:
     assert {issue["code"] for issue in report["issues"]} >= {"artifact_hash_mismatch"}
 
 
+def test_config_hash_mismatch_is_classified(tmp_path: Path) -> None:
+    """A declared producing-config hash must match the blob at the declared commit."""
+    linter = _load_linter()
+    repo, evidence, commit, _config_sha256 = _make_repo(tmp_path)
+    artifact_sha256 = hashlib.sha256((evidence / "artifact.json").read_bytes()).hexdigest()
+    _write_entry(
+        evidence,
+        campaign_id="campaign-config-hash-mismatch",
+        commit=commit,
+        config_sha256="0" * 64,
+        artifact_sha256=artifact_sha256,
+        name="config-mismatch.json",
+    )
+
+    report = linter.lint_evidence_registry(repo, evidence)
+
+    assert {issue["code"] for issue in report["issues"]} >= {"config_sha256_mismatch"}
+
+
 def test_duplicate_campaign_ids_are_classified(tmp_path: Path) -> None:
     """Campaign identifiers are unique across registry files."""
     linter = _load_linter()

@@ -938,12 +938,15 @@ def _topology_guided_episode_diagnostics(
     fallback_used = fallback_steps > 0 or bool(
         accumulator.lane_status_counts.get("fallback_only", 0)
     )
+    fallback_only = accumulator.topology_steps == fallback_steps or (
+        accumulator.lane_status_counts.get("fallback_only", 0) == accumulator.topology_steps
+    )
     route_progress = _topology_route_progress_summary(
         route_progress_values=accumulator.route_progress_values,
         selected_switch_count=selected_switch_count,
         min_progress_delta=min_progress_delta,
         stall_window_steps=stall_window_steps,
-        fallback_only=accumulator.topology_steps == fallback_steps,
+        fallback_only=fallback_only,
     )
 
     return {

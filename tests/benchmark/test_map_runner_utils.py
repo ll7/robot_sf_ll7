@@ -4986,6 +4986,34 @@ def test_topology_guided_episode_diagnostics_preserves_fallback_and_churn_reason
     assert fallback_summary["configured_fallback_steps"] == 1
     assert fallback_summary["route_progress"]["terminal_reason"] == "fallback_only"
 
+    candidate_geometry_fallback_summary = _topology_guided_episode_diagnostics(
+        [
+            {
+                "step": 0,
+                "route_progress_from_start_m": 0.0,
+                "topology_guided": {
+                    "status": "ok",
+                    "hypothesis_count": 1,
+                    "selected_hypothesis_id": "primary_route",
+                },
+                "topology_lane_status": "fallback_only",
+                "topology_fallback_reason": "missing_candidate_route_geometry",
+                "topology_candidate_availability": {
+                    "status": "unavailable",
+                    "reason": "missing_candidate_route_geometry",
+                    "outcome": "configured_fallback",
+                    "fallback_used": True,
+                },
+                "topology_guided_config": {"diagnostic_only": True},
+            }
+        ]
+    )
+
+    assert candidate_geometry_fallback_summary is not None
+    assert candidate_geometry_fallback_summary["fallback_used"] is True
+    assert candidate_geometry_fallback_summary["fallback_steps"] == 0
+    assert candidate_geometry_fallback_summary["route_progress"]["terminal_reason"] == "fallback_only"
+
     churn_summary = _topology_guided_episode_diagnostics(
         [
             {

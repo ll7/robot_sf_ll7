@@ -64,6 +64,7 @@ The following planners are currently treated as testing-only and fail closed by 
 - `gap_prediction`
 - `sicnav`
 - `dr_mpc`
+- `brne`
 - `trivial_reference` / `reference_adapter` (diagnostic starter template only)
 
 These planners are blocked unless their algo config explicitly contains:
@@ -132,6 +133,7 @@ testing-only planners. None of them currently meet the promotion bar.
 | `gap_prediction` | `docs/context/issue_671_gap_prediction_benchmark.md` | Over-conservative veto behavior collapses success to zero. | Demonstrate that the veto/prediction interaction can support actual progress rather than only suppressing motion. | Bring a concrete fix for progress recovery, then rerun verified-simple and only escalate to the paper surface if success returns. |
 | `sicnav` | `docs/context/issue_4870_sicnav_smoke.md`, `docs/context/issue_771_drmpscnav_assessment.md` | Open-source smoke PASSES: the wrapper drives the pinned upstream `sicnav.policy.campc.CollisionAvoidMPC` (CasADi + bundled IPOPT + python-RVO2; Acados/HSL intentionally absent) and returns valid `{v, omega}` actions. But the steady-state solve is ~197 / 506 / 1454 ms per `step()` for 2 / 5 / 10 neighbors — **2.0×–14.5× over the 100 ms step budget** and scaling with neighbor count, so this redistributable path is real-time campaign-infeasible. | Show the wrapper runs deterministically on the verified-simple subset without fallback-only behavior AND at a per-step solve cost compatible with the real-time step budget. | Do not rerun the uncompiled CasADi/IPOPT path. Revisit only with a compiled Acados + HSL build (or a horizon/solver change) that brings per-step solve under the 100 ms budget, and switch the crowd to ORCA pedestrians (the wrapper's social-force default is not what SICNav models). |
 | `dr_mpc` | `docs/context/issue_771_drmpscnav_assessment.md` | External DR-MPC runtime is assessment-only and not yet benchmark-ready in-repo. | Show the wrapper can resolve the upstream contract and produce stable actions without fallback-only behavior. | Keep DR-MPC as a follow-up anchor until the benchmark wrapper is backed by a real upstream runtime. |
+| `brne` | `docs/context/issue_5318_brne_integration_decision.md`, `docs/context/issue_5311_brne_source_smoke.md` | Bounded exploration-tier integration (issue #5318): corridor-class scenarios only, no arbitrary static geometry, fail-closed budget enforcement. Adapter registered and integration-tested but no benchmark campaign evidence yet. | Show corridor-class scenarios pass the verified-simple gate with documented goal-reaching, then a maintainer must explicitly approve a benchmark arm. | Run the BRNE adapter on a small set of corridor-class scenarios and verify goal-reaching + non-degenerate behavior (no permanent zero-motion, no corridor violations). |
 
 ## Current status
 

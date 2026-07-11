@@ -1,5 +1,5 @@
 {
-  "bundle_sha256": "761dd246a8d455f5360f08a6883a31b8cbc7e769c3212a57caa27fcd3a894c02",
+  "bundle_sha256": "60d35a14769ba7fa17ce2972278a7b4c4fa7506d18df697196669643e26eabbf",
   "claim_boundary": "diagnostic-only definition recovery; no repeat campaign result or determinism verdict is represented",
   "execution_contract": {
     "cpu_only": true,
@@ -11,7 +11,7 @@
     "trajectory_hash": "sha256",
     "workers": 1
   },
-  "manifest_sha256": "a3d79f8e8a7a37ca5fa46885b031490aa266218b57e62713664d71ac94f73a2b",
+  "manifest_sha256": "a7ddefd00c903e417f03809723096279be722c4871264e4495c18a0548b37ff2",
   "planner_definitions": {
     "goal": {
       "algo": "goal",
@@ -50,6 +50,7 @@
       "planner_config_path": "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml"
     }
   },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "scenario_definitions": {
     "classic_bottleneck_high--111": {
       "map_file": "maps/svg_maps/classic_bottleneck_high.svg",

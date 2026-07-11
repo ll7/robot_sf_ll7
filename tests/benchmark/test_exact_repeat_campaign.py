@@ -18,16 +18,17 @@ from robot_sf.benchmark.exact_repeat_campaign import (
     verify_host_report,
 )
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_DIR = (
     Path(__file__).resolve().parent.parent
     / "fixtures"
     / "benchmark"
     / "scenario_flakiness_issue_4978"
 )
-CAMPAIGN_CONFIG = Path(
-    "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml"
+CAMPAIGN_CONFIG = (
+    REPOSITORY_ROOT / "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml"
 )
-EVIDENCE_DIR = Path("docs/context/evidence/issue_5263_exact_repeat")
+EVIDENCE_DIR = REPOSITORY_ROOT / "docs/context/evidence/issue_5263_exact_repeat"
 
 
 def _load(path: Path) -> Any:

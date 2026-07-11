@@ -162,6 +162,7 @@ def build_manifest(  # noqa: C901 - validation branches make the fail-closed con
 
     manifest = {
         "schema_version": MANIFEST_SCHEMA_VERSION,
+        "review_marker": "AI-GENERATED NEEDS-REVIEW",
         "claim_boundary": "diagnostic-only; no campaign result is represented by this manifest",
         "execution_contract": {
             "cpu_only": True,
@@ -367,6 +368,7 @@ def resolve_runnable_definitions(  # noqa: C901 - fail-closed recovery validates
 
     bundle = {
         "schema_version": RESOLVED_DEFINITIONS_SCHEMA_VERSION,
+        "review_marker": "AI-GENERATED NEEDS-REVIEW",
         "claim_boundary": (
             "diagnostic-only definition recovery; no repeat campaign result or determinism "
             "verdict is represented"

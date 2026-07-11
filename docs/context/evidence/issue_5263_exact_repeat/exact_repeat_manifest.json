@@ -40,7 +40,8 @@
     "trajectory_hash": "sha256",
     "workers": 1
   },
-  "manifest_sha256": "a3d79f8e8a7a37ca5fa46885b031490aa266218b57e62713664d71ac94f73a2b",
+  "manifest_sha256": "a7ddefd00c903e417f03809723096279be722c4871264e4495c18a0548b37ff2",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "scenario_exact_repeat_campaign.v1",
   "source": {
     "baseline_report_sha256": "5e0d1aeee7879f92087dc8be2c8c673125b4b7b89af6251a66911d0d1a3fcf5c",

@@ -30,8 +30,11 @@ provenance:
     - per-actor maximum-force cap
 validation:
   focused_test: tests/sim/test_zanlungo_collision_prediction_model.py
-  corridor_acceptance_status: deferred
-  corridor_acceptance_reason: >-
-    The implementation seam is complete, but eliminating freeze/deadlock requires
-    a predeclared scenario comparison and parameter sensitivity run; this config
-    does not promote the paper's calibration to Robot SF benchmark evidence.
+  corridor_acceptance_status: implemented
+  corridor_acceptance_config: configs/research/issue_4973_zanlungo_corridor_acceptance.yaml
+  corridor_acceptance_command: >-
+    uv run python scripts/validation/run_issue_4973_zanlungo_corridor_acceptance.py
+  corridor_acceptance_boundary: >-
+    The deterministic CPU corridor matrix is diagnostic-only with
+    benchmark_evidence=false; it does not promote the paper's calibration to Robot SF
+    benchmark or realism evidence.

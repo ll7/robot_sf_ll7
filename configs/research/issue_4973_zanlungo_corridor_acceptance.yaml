@@ -1,0 +1,79 @@
+schema_version: zanlungo-corridor-acceptance.v1
+issue: 4973
+metadata:
+  benchmark_evidence: false
+  evidence_tier: diagnostic-only
+  claim_boundary: >-
+    Deterministic CPU synthetic-corridor acceptance only. This packet does not
+    calibrate pedestrian realism or support benchmark, paper, or dissertation claims.
+
+reference_case_id: zanlungo_paper_reference
+
+fixture:
+  width_m: 10.0
+  height_m: 4.0
+  corridor_min_y_m: 1.2
+  corridor_max_y_m: 2.8
+  left_start: [2.5, 1.9]
+  right_start: [7.5, 2.1]
+  left_goal_x_m: 7.5
+  right_goal_x_m: 2.5
+  desired_speed_mps: 1.0
+  duration_s: 10.0
+  dt_s: 0.1
+  seed: 4973
+
+thresholds:
+  lateral_yield_m: 0.2
+  collision_proxy_distance_m: 0.25
+  freeze_speed_mps: 0.1
+  freeze_window_s: 1.0
+  conflict_distance_m: 1.5
+
+sensitivity_cases:
+  - case_id: social_force_control
+    pedestrian_model: social_force_default
+    varied_parameter: null
+    relative_to_reference: null
+    parameters: {}
+  - case_id: zanlungo_strength_low
+    pedestrian_model: hsfm_zanlungo_collision_prediction_v1
+    varied_parameter: interaction_strength
+    relative_to_reference: 0.4424778761061947
+    parameters: &paper_parameters
+      interaction_strength: 0.5
+      interaction_range_m: 0.71
+      anisotropy_lambda: 0.29
+      angle_threshold_rad: 0.7853981633974483
+      max_force: 5.0
+      include_ped_ped: true
+  - case_id: zanlungo_paper_reference
+    pedestrian_model: hsfm_zanlungo_collision_prediction_v1
+    varied_parameter: reference
+    relative_to_reference: 1.0
+    parameters:
+      <<: *paper_parameters
+      interaction_strength: 1.13
+  - case_id: zanlungo_strength_high
+    pedestrian_model: hsfm_zanlungo_collision_prediction_v1
+    varied_parameter: interaction_strength
+    relative_to_reference: 1.7699115044247788
+    parameters:
+      <<: *paper_parameters
+      interaction_strength: 2.0
+  - case_id: zanlungo_range_low
+    pedestrian_model: hsfm_zanlungo_collision_prediction_v1
+    varied_parameter: interaction_range_m
+    relative_to_reference: 0.5633802816901409
+    parameters:
+      <<: *paper_parameters
+      interaction_strength: 1.13
+      interaction_range_m: 0.4
+  - case_id: zanlungo_range_high
+    pedestrian_model: hsfm_zanlungo_collision_prediction_v1
+    varied_parameter: interaction_range_m
+    relative_to_reference: 1.6901408450704225
+    parameters:
+      <<: *paper_parameters
+      interaction_strength: 1.13
+      interaction_range_m: 1.2

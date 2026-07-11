@@ -23,6 +23,24 @@ from robot_sf.benchmark.heterogeneous_rank_sensitivity import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+# Every trace metric admitted by the integration manifest must declare its safety direction.
+# Defaulting an unknown metric to ``True`` would invert the dangerous CVaR tail for a new
+# lower-is-safer metric and turn a manifest extension into a silent analysis error.
+PER_ARCHETYPE_METRIC_HIGHER_IS_SAFER = {
+    "clearance_m": True,
+    "near_field_exposure_s": False,
+}
+
+
+def metric_higher_is_safer(metric_key: str) -> bool:
+    """Return the declared safety direction or fail closed for an unknown trace metric."""
+    try:
+        return PER_ARCHETYPE_METRIC_HIGHER_IS_SAFER[metric_key]
+    except KeyError as exc:
+        raise ValueError(
+            f"No higher_is_safer direction is declared for trace metric {metric_key!r}"
+        ) from exc
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
@@ -134,6 +152,11 @@ def main() -> int:  # noqa: C901,PLR0912,PLR0915
 
     per_archetype_metric_reports: dict[str, dict[str, Any]] = {}
     for metric_key in integration_readiness["trace_metric_keys"]:
+        try:
+            higher_is_safer = metric_higher_is_safer(metric_key)
+        except ValueError as exc:
+            print(f"Blocked: {exc}")
+            return 2
         metric_reports: dict[str, Any] = {}
         for key, traces_by_arm in triplets.items():
             sc_id, seed, planner = key
@@ -144,7 +167,7 @@ def main() -> int:  # noqa: C901,PLR0912,PLR0915
                     build_per_archetype_ablation_report(
                         control_traces_by_arm=traces_by_arm,
                         metric_key=metric_key,
-                        higher_is_safer=True,
+                        higher_is_safer=higher_is_safer,
                         cvar_alpha=0.2,
                         reducer="mean",
                     )

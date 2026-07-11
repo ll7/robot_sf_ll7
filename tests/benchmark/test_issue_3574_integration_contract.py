@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import pytest
 import yaml
 
 from robot_sf.benchmark.heterogeneous_population_ablation import (
@@ -91,6 +92,16 @@ def _run_cli(module: ModuleType, argv: list[str]) -> int:
         sys.argv = old_argv
 
 
+def test_report_metric_direction_contract_is_explicit_and_fail_closed() -> None:
+    """Each supported trace metric has a declared safety direction."""
+
+    module = _load_report_cli()
+    assert module.metric_higher_is_safer("clearance_m") is True
+    assert module.metric_higher_is_safer("near_field_exposure_s") is False
+    with pytest.raises(ValueError, match="No higher_is_safer direction"):
+        module.metric_higher_is_safer("unknown_safety_metric")
+
+
 def test_tracked_manifest_metrics_flow_into_per_archetype_report(tmp_path: Path) -> None:
     """Every declared trace metric receives an aligned per-archetype report."""
 
@@ -131,6 +142,10 @@ def test_tracked_manifest_metrics_flow_into_per_archetype_report(tmp_path: Path)
         assert len(reports[metric_key]) == 9
         first_report = next(iter(reports[metric_key].values()))
         assert first_report["metric_key"] == metric_key
+        assert first_report["higher_is_safer"] is (metric_key == "clearance_m"), (
+            f"Expected {metric_key!r} to declare the correct CVaR safety direction; "
+            f"got {first_report['higher_is_safer']!r}"
+        )
         assert first_report["arms"]["heterogeneous"]["ready"] is True
         assert first_report["arms"]["mean_matched_homogeneous"]["ready"] is True
 

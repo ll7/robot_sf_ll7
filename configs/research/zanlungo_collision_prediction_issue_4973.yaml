@@ -1,0 +1,37 @@
+schema_version: zanlungo-collision-prediction.v1
+issue: 4973
+evidence_tier: diagnostic-only
+claim_boundary: >-
+  Opt-in implementation and deterministic CPU contract only; parameters are the
+  paper's trajectory-calibrated values, not a Robot SF realism calibration or
+  benchmark-performance claim.
+simulation_config:
+  pedestrian_model: hsfm_zanlungo_collision_prediction_v1
+  zanlungo_collision_prediction:
+    enabled: true
+    interaction_strength: 1.13
+    interaction_range_m: 0.71
+    anisotropy_lambda: 0.29
+    angle_threshold_rad: 0.7853981633974483
+    max_force: 5.0
+    include_ped_ped: true
+provenance:
+  citation: >-
+    F. Zanlungo, T. Ikeda, and T. Kanda (2011), Social force model with
+    explicit collision prediction, EPL 93 68005.
+  doi: 10.1209/0295-5075/93/68005
+  equation_contract:
+    - earliest eligible pairwise closest-approach time per actor
+    - all neighbors projected to that common time
+    - speed-over-time and exponential projected-distance scaling
+    - anisotropy weighting from equation 11
+  implementation_safeguards:
+    - deterministic current-separation direction at zero projected distance
+    - per-actor maximum-force cap
+validation:
+  focused_test: tests/sim/test_zanlungo_collision_prediction_model.py
+  corridor_acceptance_status: deferred
+  corridor_acceptance_reason: >-
+    The implementation seam is complete, but eliminating freeze/deadlock requires
+    a predeclared scenario comparison and parameter sensitivity run; this config
+    does not promote the paper's calibration to Robot SF benchmark evidence.

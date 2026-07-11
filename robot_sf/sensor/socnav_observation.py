@@ -30,6 +30,16 @@ DEFAULT_MAX_PEDS = 64
 SOCNAV_POSITION_CAP_M = 50.0
 """Global cap for SocNav position-like observations to keep bounds consistent."""
 
+MAX_ROUTE_WAYPOINTS = 32
+"""Maximum number of route waypoints exposed in the structured observation.
+
+The total route_waypoints array may contain up to this many entries (including
+the robot position prefix when remaining waypoints are non-empty). Capping
+prevents unbounded memory growth for maps with extremely dense route waypoint
+lists while keeping the DWA global-route probe within a manageable search
+radius for nearest-waypoint resolution.
+"""
+
 
 def dynamic_pedestrian_occlusion_mask(
     ped_positions: np.ndarray,
@@ -195,6 +205,10 @@ def socnav_observation_space(
                         low=radius_bounds,
                         high=np.array([float(np.max(pos_cap))], dtype=np.float32),
                         dtype=np.float32,
+                    ),
+                    "route_waypoints": spaces.Sequence(
+                        spaces.Box(low=pos_low, high=pos_high, dtype=np.float32),
+                        stack=True,
                     ),
                 },
             ),
@@ -540,6 +554,62 @@ class SocNavObservationFusion:
                 return True
         return False
 
+    def _build_route_waypoints(self, position_cap: np.ndarray) -> np.ndarray:
+        """Extract remaining route waypoints for the DWA global-route probe.
+
+        Reads from ``simulator.robot_navs`` and returns a ``(N, 2)`` float32
+        array containing the robot position (when remaining waypoints exist)
+        followed by remaining waypoints from ``waypoint_id`` onward. The array
+        is clipped to the position cap and bounded by ``MAX_ROUTE_WAYPOINTS``.
+
+        Contract:
+        - Robot position is prepended when remaining waypoints exist.
+        - When the navigator has no waypoints, returns empty ``(0, 2)``.
+        - When all waypoints are visited but a route existed, returns robot
+          position ``(1, 2)`` so the probe can still locate the robot on route.
+        - Total rows never exceed ``MAX_ROUTE_WAYPOINTS``.
+        - Malformed navigator state fails closed with an empty array.
+
+        Returns:
+            np.ndarray: Clipped, capped route waypoint array.
+        """
+        empty = np.zeros((0, 2), dtype=np.float32)
+        navs_raw = getattr(self.simulator, "robot_navs", None)
+        if navs_raw is None:
+            return empty
+
+        try:
+            nav = navs_raw[self.robot_index]
+            waypoint_id = int(getattr(nav, "waypoint_id", 0))
+            if waypoint_id < 0:
+                return empty
+            remaining_arr = np.asarray(
+                getattr(nav, "waypoints", None)[waypoint_id:], dtype=np.float32
+            )
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+            return empty
+
+        if remaining_arr.size == 0:
+            if waypoint_id == 0:
+                return empty
+            remaining_arr = empty
+        elif remaining_arr.ndim != 2 or remaining_arr.shape[-1] != 2:
+            return empty
+
+        try:
+            robot_pose = self.simulator.robots[self.robot_index].pose
+            robot_pos = np.asarray(robot_pose[0], dtype=np.float32).reshape(-1)
+        except (AttributeError, IndexError, TypeError, ValueError):
+            return empty
+        if robot_pos.shape != (2,) or not np.all(np.isfinite(robot_pos)):
+            return empty
+        if remaining_arr.size > 0 and not np.all(np.isfinite(remaining_arr)):
+            return empty
+
+        wp_with_robot = np.vstack([robot_pos.reshape(1, 2), remaining_arr])
+        wp_with_robot = np.clip(wp_with_robot, 0.0, position_cap)
+        return wp_with_robot[:MAX_ROUTE_WAYPOINTS]
+
     def next_obs(self) -> dict[str, Any]:
         """Return the latest structured observation aligned to the declared space."""
         ped_positions = np.asarray(self.simulator.ped_pos, dtype=np.float32)
@@ -634,6 +704,7 @@ class SocNavObservationFusion:
             self.simulator.robots[self.robot_index].current_speed, dtype=np.float32
         )
         robot_velocity_xy = self._robot_velocity_xy(wrapped_heading)
+        route_waypoints = self._build_route_waypoints(position_cap)
         obs = {
             "robot": {
                 "position": robot_pos_clipped,
@@ -644,6 +715,7 @@ class SocNavObservationFusion:
                 "radius": np.array(
                     [self.simulator.robots[self.robot_index].config.radius], dtype=np.float32
                 ),
+                "route_waypoints": route_waypoints,
             },
             "goal": {
                 "current": goal_clipped,

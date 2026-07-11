@@ -1,5 +1,5 @@
 {
-  "config": "/home/luttkule/git/robot_sf_ll7.worktrees/cheap-issue-5319-20260711T162239Z/configs/algos/dwa_route_rescue.yaml",
+  "config": "configs/algos/dwa_route_rescue.yaml",
   "episodes": [
     {
       "collision_event": false,
@@ -51,16 +51,16 @@
         "v_mps": 1.0,
         "w_radps": 0.0
       },
-      "last_selected_score": 2.6126464431359775,
+      "last_selected_score": 2.632769117007398,
       "route_complete": false,
       "route_progress": {
-        "final_distance_to_goal_m": 3.472494144949838,
-        "final_route_progress_from_start_m": 0.9164115039394174,
+        "final_distance_to_goal_m": 3.0821557152161585,
+        "final_route_progress_from_start_m": 1.306749933673097,
         "initial_distance_to_goal_m": 4.3882049224852615,
-        "max_route_progress_from_start_m": 2.815632852094045,
-        "min_distance_to_goal_m": 1.5732727967952103,
-        "net_progress_m": 0.9157107775354234,
-        "progress_ratio_of_initial": 0.20867548205037112,
+        "max_route_progress_from_start_m": 2.801751067473568,
+        "min_distance_to_goal_m": 1.5871545814156875,
+        "net_progress_m": 1.306049207269103,
+        "progress_ratio_of_initial": 0.29762721439394896,
         "skipped_non_finite_cells": 0,
         "skipped_non_finite_rows": 0
       },

@@ -12,6 +12,8 @@ Baseline trace: <https://github.com/ll7/robot_sf_ll7/issues/5298> and `docs/cont
 - **Claim boundary:** two CPU-only fixed-seed episodes traced with the DWA route-rescue config (`configs/algos/dwa_route_rescue.yaml`). This does not change DWA roster status, benchmark metric semantics, the frozen v0.1 suite, or any paper/dissertation claim.
 - **Interventions:** (1) route-rescue extends the rollout horizon and boosts progress weight when the robot stalls for `route_rescue_patience` steps; (2) feasibility-slowdown reduces linear speed when infeasible-candidate fraction exceeds a threshold.
 - **Caveat:** this is a diagnostic probe, not a comparator benchmark. Two episodes cannot bound the full failure surface. The intervention may not generalize beyond these rows.
+- **Seeds:** 131, 161.
+- **Config SHA-256 hash:** `80d70aba8abc2934492a51ac0cffb0eedb30afb65832f1478e48341bd23c3ea2` for `configs/algos/dwa_route_rescue.yaml`.
 
 ## Episodes traced
 
@@ -24,6 +26,18 @@ Baseline trace: <https://github.com/ll7/robot_sf_ll7/issues/5298> and `docs/cont
 
 | Episode | Metric | Baseline (#5298) | Route-rescue | Delta |
 | --- | --- | --- | --- | --- |
+| bottleneck | steps | 100 | 100 | 0.000 |
+| bottleneck | termination | max_steps | max_steps | same |
+| | min_distance | 0.474 m | 0.474 m | 0.000 m |
+| | net_progress | -2.885 m | -2.885 m | 0.000 m |
+| | rescue_steps | 0 | 0 | — |
+| | slowdown_steps | 0 | 0 | — |
+| t_intersection | steps | 96 | 100 | 4.000 |
+| t_intersection | termination | collision | max_steps | changed |
+| | min_distance | 1.575 m | 1.587 m | 0.012 m |
+| | net_progress | 1.178 m | 1.306 m | 0.128 m |
+| | rescue_steps | 0 | 0 | — |
+| | slowdown_steps | 0 | 0 | — |
 
 ## Mechanism analysis
 
@@ -37,7 +51,7 @@ Baseline trace: <https://github.com/ll7/robot_sf_ll7/issues/5298> and `docs/cont
 ### t_intersection_collision
 
 - Termination: max_steps after 100 steps.
-- Route progress: initial 4.388 m, final 3.472 m, minimum 1.573 m, net 0.916 m.
+- Route progress: initial 4.388 m, final 3.082 m, minimum 1.587 m, net 1.306 m.
 - Route-rescue was active for 0 steps (first activation step: None).
 - Feasibility-slowdown was active for 0 steps.
 - First infeasible candidate at step 14.
@@ -57,5 +71,5 @@ DISPLAY= SDL_VIDEODRIVER=dummy MPLBACKEND=Agg uv run python \
   --evidence-dir docs/context/evidence/issue_5319_dwa_route_rescue_2026-07-11
 ```
 
-Executed at repo commit `8f496e1f14ba80ae82cb7518bb506d60625c1456`.
+Executed at repo commit `4132ef70aef95ea937766f60e4bd7291a8e56146`.
 

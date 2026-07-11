@@ -32,7 +32,11 @@ from robot_sf.benchmark.camera_ready.resource_lifecycle import (
 )
 
 
-def _make_arm_params(*, algo_config_path: Path | None = None) -> _SubprocessArmParams:
+def _make_arm_params(
+    *,
+    algo_config_path: Path | None = None,
+    scoped_scenarios_path: Path | None = None,
+) -> _SubprocessArmParams:
     """Build a representative _SubprocessArmParams for serialization tests."""
     return _SubprocessArmParams(
         planner_key="test",
@@ -60,6 +64,7 @@ def _make_arm_params(*, algo_config_path: Path | None = None) -> _SubprocessArmP
         snqi_weights=None,
         snqi_baseline=None,
         algo_config_path=algo_config_path,
+        scoped_scenarios_path=scoped_scenarios_path,
     )
 
 
@@ -94,6 +99,7 @@ class TestSubprocessIsolationEntryPoints:
             snqi_weights=None,
             snqi_baseline=None,
             algo_config_path=None,
+            scoped_scenarios_path=None,
         )
         assert params.planner_key == "test_planner"
         assert params.planner_algo == "test_algo"

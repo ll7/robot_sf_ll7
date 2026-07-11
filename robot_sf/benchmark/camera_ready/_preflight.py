@@ -44,6 +44,10 @@ from robot_sf.benchmark.camera_ready._util import (
 from robot_sf.benchmark.campaign_checkpoint_preflight import (
     check_campaign_arm_checkpoints_preflight,
 )
+from robot_sf.benchmark.campaign_runtime_preflight import (
+    check_campaign_arm_policy_dependencies_preflight,
+    check_campaign_scenario_maps_preflight,
+)
 from robot_sf.benchmark.latency_stress import not_available_latency_metrics
 from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
@@ -416,6 +420,10 @@ def prepare_campaign_preflight(  # noqa: PLR0913
             collision.
         CampaignCheckpointPreflightError: When any enabled arm names a checkpoint that cannot be
             resolved (or, in ``enforced_staged`` mode, cannot be staged) before scenarios load.
+        CampaignPolicyDependencyPreflightError: When an enabled arm cannot import its required
+            policy dependency in the active campaign interpreter.
+        CampaignScenarioMapPreflightError: When a prepared scenario's ``map_file`` cannot resolve
+            with the same repository-root path semantics used by campaign execution.
     """
     if validate_campaign_config is None:
         from robot_sf.benchmark.camera_ready_campaign import (  # noqa: PLC0415
@@ -426,6 +434,7 @@ def prepare_campaign_preflight(  # noqa: PLR0913
 
     validate_campaign_config(cfg)
     check_orca_rvo2_preflight(cfg)
+    check_campaign_arm_policy_dependencies_preflight(cfg)
     # Fail fast when an enabled arm names a checkpoint that cannot be resolved (unknown/mistyped
     # model_id, local_only-missing, or a missing model_path file) before any scenario loads. There
     # are two modes (issue #4613/#4663):
@@ -456,6 +465,7 @@ def prepare_campaign_preflight(  # noqa: PLR0913
 
     created_at_utc = _utc_now()
     scenarios = _load_campaign_scenarios(cfg)
+    check_campaign_scenario_maps_preflight(scenarios)
     route_clearance_certifications = _load_route_clearance_certifications(
         cfg.route_clearance_certifications_path
     )

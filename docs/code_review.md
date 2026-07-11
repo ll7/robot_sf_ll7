@@ -27,11 +27,16 @@ linked. After merge, run a short sweep so the thread ledger reflects reality:
 
 1. Re-query unresolved review threads on the merged PR (`gh api graphql` on `reviewThreads`,
    filtering `isResolved == false`).
-2. For each unresolved thread, either resolve it (if the merge or a successor commit addressed
-   the comment) or link the fixing PR/commit/issue in a one-line reply. Threads whose substance
-   is still open get a dedicated follow-up issue instead of a silent resolve.
-3. Record the sweep outcome in the merge note or the issue thread so the count of unresolved
-   threads is auditable.
+2. For each unresolved thread, record its discussion URL and one explicit disposition:
+   `covered` with a fixing PR/commit, `superseded` with the replacement contract,
+   `decision_required` with the concrete choice, or `follow_up_required` with a dedicated issue.
+   Do not resolve the last two categories as if they were fixed.
+3. Resolve or reply to `covered` and `superseded` threads when permissions allow. Keep the durable
+   ledger truthful even when GitHub thread state cannot be changed in the current lane.
+4. Record disposition counts in the merge note or linked issue so the sweep reconciles to the
+   queried unresolved-thread count. The
+   [issue #5006 residual ledger](context/evidence/issue_5006_residual_review_thread_ledger.md)
+   is a compact worked example.
 
 Treat substantive threads that need real work (for example a fail-closed contract gap or an
 end-to-end assertion gap) as follow-up issues, not as items to resolve with a link. This sweep is

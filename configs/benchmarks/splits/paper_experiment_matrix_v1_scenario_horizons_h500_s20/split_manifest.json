@@ -1,0 +1,70 @@
+{
+  "children": [
+    {
+      "filename": "paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_prediction_planner.yaml",
+      "planner_keys": [
+        "prediction_planner"
+      ],
+      "sha256": "e44f6a630b5de980ee8926c53c6977e8c3b6db17c5930a6cf78f6867b4289332"
+    },
+    {
+      "filename": "paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_goal.yaml",
+      "planner_keys": [
+        "goal"
+      ],
+      "sha256": "51b9511c6e8ddf082e449621965a5056bd24672b1f2f7ceb1cfa7e62f32b4cb1"
+    },
+    {
+      "filename": "paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_social_force.yaml",
+      "planner_keys": [
+        "social_force"
+      ],
+      "sha256": "beb0fb13f1d7bf54c2649ce8c13b386169c22cb8a04e998f46eb2a0848b04dcd"
+    },
+    {
+      "filename": "paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_orca.yaml",
+      "planner_keys": [
+        "orca"
+      ],
+      "sha256": "1704afa991595958bb538dd354487e9ba25d72adfbc69d0e06e42a12ac2e6960"
+    },
+    {
+      "filename": "paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_ppo.yaml",
+      "planner_keys": [
+        "ppo"
+      ],
+      "sha256": "f9871fdb72c94bdd8214ae7a969e512d3119169533fab1534f7503c35b2ebb54"
+    },
+    {
+      "filename": "paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_socnav_sampling.yaml",
+      "planner_keys": [
+        "socnav_sampling"
+      ],
+      "sha256": "34fc1151809bb04982f6886ab360ab580d77d71b2c89254c49fa1df4fc27be84"
+    },
+    {
+      "filename": "paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_sacadrl.yaml",
+      "planner_keys": [
+        "sacadrl"
+      ],
+      "sha256": "08277e417679e0a5bedcb3d4e695c11fa97275a3bbdb0e64e4a3fafb750ea53d"
+    },
+    {
+      "filename": "paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_scenario_adaptive_hybrid_orca_v1.yaml",
+      "planner_keys": [
+        "scenario_adaptive_hybrid_orca_v1"
+      ],
+      "sha256": "048dd88b6b5782b845166a369b85ef22bea46b47b1935b64b16a574c23eeceda"
+    },
+    {
+      "filename": "paper_experiment_matrix_v1_scenario_horizons_h500_s20__arm_hybrid_rule_v3_fast_progress_static_escape.yaml",
+      "planner_keys": [
+        "hybrid_rule_v3_fast_progress_static_escape"
+      ],
+      "sha256": "d46b1c807db82f9ddb6c2ac8d0b68d47b4ba90accae4917ad9babfd56cf282cf"
+    }
+  ],
+  "source_config": "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml",
+  "source_sha256": "249968670830c3b710e1407aecb2256d140cd1ba76294766421447bd89357f15",
+  "split_mode": "per_planner"
+}

@@ -54,7 +54,7 @@ def test_shipped_manifest_parses_with_canonical_gate() -> None:
     assert gate["required_cells"] == CANONICAL_CELLS
     assert gate["min_green_runs_per_cell"] >= 1
     assert gate["runtime_budget_minutes"] > 0
-    assert data["recorded_runs"] == []
+    assert len(data["recorded_runs"]) == len(CANONICAL_CELLS) * gate["min_green_runs_per_cell"]
     floor = data["coverage_floor"]
     assert floor["status"] == "implemented"
     assert floor["implementation_issue"] == 5071
@@ -63,14 +63,15 @@ def test_shipped_manifest_parses_with_canonical_gate() -> None:
     assert floor["baseline_evidence"]["observed_total_percent"] > floor["minimum_total_percent"]
 
 
-def test_shipped_manifest_is_currently_blocked() -> None:
-    """With no recorded evidence the gate must fail closed as blocked."""
+def test_shipped_manifest_is_ready_with_hosted_evidence() -> None:
+    """The tracked hosted evidence satisfies every cell in the promotion gate."""
     checker = _load_checker()
     manifest = checker.load_manifest(MANIFEST)
     report = checker.evaluate(manifest)
-    assert report["status"] == "blocked"
-    assert report["ready"] is False
-    assert len(report["unmet_cells"]) == len(CANONICAL_CELLS)
+    assert report["status"] == "ready"
+    assert report["ready"] is True
+    assert report["unmet_cells"] == []
+    assert all(cell["green_runs"] == cell["required"] for cell in report["cells"])
 
 
 def test_full_green_evidence_promotes_to_ready() -> None:
@@ -124,8 +125,8 @@ def test_malformed_manifest_fails_closed() -> None:
         checker.load_manifest(ROOT / "does_not_exist.yaml")
 
 
-def test_cli_require_ready_blocks_on_shipped_manifest() -> None:
-    """The CLI exits 0 by default but 2 under --require-ready while blocked."""
+def test_cli_require_ready_passes_on_shipped_manifest() -> None:
+    """The CLI confirms that the tracked manifest is promotable."""
     default = subprocess.run(
         [sys.executable, str(CHECKER), "--manifest", str(MANIFEST)],
         capture_output=True,
@@ -133,7 +134,7 @@ def test_cli_require_ready_blocks_on_shipped_manifest() -> None:
         check=False,
     )
     assert default.returncode == 0, default.stderr
-    assert "BLOCKED" in default.stdout
+    assert "READY" in default.stdout
 
     required = subprocess.run(
         [sys.executable, str(CHECKER), "--manifest", str(MANIFEST), "--require-ready"],
@@ -141,4 +142,5 @@ def test_cli_require_ready_blocks_on_shipped_manifest() -> None:
         text=True,
         check=False,
     )
-    assert required.returncode == 2, required.stdout
+    assert required.returncode == 0, required.stdout
+    assert "READY" in required.stdout

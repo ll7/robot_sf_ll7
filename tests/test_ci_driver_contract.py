@@ -239,8 +239,8 @@ def test_ci_workflow_enforces_absolute_coverage_floor_without_resharding() -> No
     )
 
 
-def test_ci_workflow_adds_a_nonblocking_core_compatibility_matrix() -> None:
-    """Exercise declared Python support on Linux and macOS without gating CI yet."""
+def test_ci_workflow_requires_the_proven_core_compatibility_matrix() -> None:
+    """Gate aggregate CI on the proven Linux/macOS and Python compatibility matrix."""
     workflow = yaml.safe_load(_workflow_text())
     compat_matrix = workflow["jobs"]["compat-matrix"]
     steps = compat_matrix.get("steps", [])
@@ -251,7 +251,7 @@ def test_ci_workflow_adds_a_nonblocking_core_compatibility_matrix() -> None:
     assert setup_step is not None, "setup-ci-python step not found in compat-matrix job"
     test_steps = [step.get("run", "") for step in steps]
 
-    assert compat_matrix["continue-on-error"] is True
+    assert "continue-on-error" not in compat_matrix
     assert compat_matrix["strategy"]["fail-fast"] is False
     assert compat_matrix["strategy"]["matrix"] == {
         "os": ["ubuntu-latest", "macos-latest"],
@@ -268,7 +268,10 @@ def test_ci_workflow_adds_a_nonblocking_core_compatibility_matrix() -> None:
         and '-q -m "not slow"' in step
         for step in test_steps
     )
-    assert "compat-matrix" not in workflow["jobs"]["ci"]["needs"]
+    aggregate = workflow["jobs"]["ci"]
+    assert "compat-matrix" in aggregate["needs"]
+    aggregate_steps = [step.get("run", "") for step in aggregate.get("steps", [])]
+    assert any('needs.compat-matrix.result }}" != "success"' in step for step in aggregate_steps)
 
 
 def test_ci_setup_action_supports_core_matrix_dependencies_on_macos() -> None:

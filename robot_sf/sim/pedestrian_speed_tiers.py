@@ -21,6 +21,8 @@ unchanged until a major campaign re-base.
 
 from __future__ import annotations
 
+import numpy as np
+
 PED_SPEED_TIER_SLOW = "slow"
 PED_SPEED_TIER_TYPICAL = "typical"
 PED_SPEED_TIER_BRISK = "brisk"
@@ -79,3 +81,38 @@ def desired_speed_params_for_tier(tier: str | None) -> tuple[float | None, float
         return None, None
     mean, std = _PED_SPEED_TIER_PARAMS[normalized]
     return mean, std
+
+
+def sample_desired_pedestrian_speeds(
+    num_peds: int,
+    mean: float,
+    std: float | None = None,
+    high: float = PED_SPEED_TIER_HIGH,
+    seed: int | None = None,
+) -> np.ndarray:
+    """Sample per-pedestrian desired walking speeds from a truncated normal distribution.
+
+    Standalone sampling that does not depend on the pysocialforce package version.
+    Produces values identical to ``pysocialforce.scene.sample_truncated_normal_speeds``
+    when given the same parameters (issue #5217 compat layer).
+
+    Args:
+        num_peds: Number of pedestrians to sample speeds for.
+        mean: Desired-speed distribution mean (m/s).
+        std: Standard deviation (m/s). ``None`` defaults to ``PED_SPEED_TIER_STD``
+            (0.2 m/s), matching the pysf ``DEFAULT_DESIRED_SPEED_STD`` constant.
+        high: Inclusive upper-bound clip for the distribution (m/s).
+        seed: Optional RNG seed for deterministic sampling.
+
+    Returns:
+        np.ndarray: Non-negative desired speeds, shape ``(num_peds,)``.
+    """
+    if num_peds <= 0:
+        return np.zeros(0, dtype=float)
+    std_eff = PED_SPEED_TIER_STD if std is None else float(std)
+    rng = np.random.default_rng(seed)
+    if std_eff > 0.0:
+        speeds = rng.normal(loc=float(mean), scale=std_eff, size=num_peds)
+    else:
+        speeds = np.full(num_peds, float(mean), dtype=float)
+    return np.clip(speeds, 0.0, float(high))

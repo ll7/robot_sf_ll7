@@ -9,9 +9,12 @@ planners:
     algo: goal
   - key: social_force
     algo: social_force
+  - key: orca
+    algo: orca
 seeds:
   - 101
   - 102
+  - 103
 scenarios:
   - id: issue_3574_classic_crossing_density_002
     density: 0.02

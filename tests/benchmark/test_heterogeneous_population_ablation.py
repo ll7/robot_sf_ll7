@@ -7,6 +7,7 @@ import math
 from pathlib import Path
 
 import pytest
+import yaml
 
 from robot_sf.benchmark.heterogeneous_population_ablation import (
     HETEROGENEOUS_POPULATION_ABLATION_SCHEMA,
@@ -403,4 +404,57 @@ def test_mean_matched_harness_manifest_reports_bad_fixture_trace_metric() -> Non
     assert any(
         "control_trace.pedestrians[0].steps[0] missing 'clearance_m'" in blocker
         for blocker in manifest["blockers"]
+    )
+
+
+_REPO_HARNESS_CONFIG_PATH = (
+    Path(__file__).parents[2] / "configs/benchmarks/issue_3574_mean_matched_harness_smoke.yaml"
+)
+
+
+def _load_repo_harness_config() -> dict[str, object]:
+    return yaml.safe_load(_REPO_HARNESS_CONFIG_PATH.read_text(encoding="utf-8"))
+
+
+def test_repo_harness_config_loads_and_has_at_least_three_planners() -> None:
+    """Repo config meets the ≥3-planner DoD for rank-order sensitivity analysis."""
+
+    config = _load_repo_harness_config()
+    planners = config.get("planners", [])
+    assert isinstance(planners, list), "planners must be a list"
+    assert len(planners) >= 3, f"DoD requires ≥3 planners; got {len(planners)}: {planners}"
+
+
+def test_repo_harness_config_builds_valid_manifest_and_fails_closed() -> None:
+    """Repo config builds a valid manifest and blocks on missing episode traces."""
+
+    config = _load_repo_harness_config()
+    manifest = build_mean_matched_harness_manifest(
+        config, config_path=str(_REPO_HARNESS_CONFIG_PATH)
+    )
+
+    assert manifest["schema_version"] == MEAN_MATCHED_HETEROGENEITY_HARNESS_SCHEMA
+    assert manifest["issue"] == 3574
+    # Without episode runs the manifest is blocked — it fails closed, not open.
+    assert manifest["status"] == "blocked_pending_control_trace"
+    assert manifest["blockers"], "manifest must name the missing trace fields"
+    # Paired arms must appear in every row.
+    arms_seen = {row["population_arm"] for row in manifest["manifest_rows"]}
+    assert arms_seen == {"heterogeneous", "mean_matched_homogeneous"}
+
+
+def test_repo_harness_config_manifest_includes_near_field_exposure_metric() -> None:
+    """Repo config declares near_field_exposure_s for per-archetype tail risk."""
+
+    config = _load_repo_harness_config()
+    metric_keys = config.get("trace_metric_keys", [])
+    assert "near_field_exposure_s" in metric_keys, (
+        "near_field_exposure_s must be declared for per-archetype tail-risk analysis"
+    )
+    manifest = build_mean_matched_harness_manifest(config)
+    # near_field_clearance_threshold_m must be surfaced in the row-level output contract.
+    first_row = manifest["manifest_rows"][0]
+    assert any(
+        "near_field_clearance_threshold_m" in key
+        for key in first_row["expected_episode_output_keys"]
     )

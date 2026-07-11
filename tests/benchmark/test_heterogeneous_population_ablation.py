@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import pytest
@@ -30,21 +31,22 @@ def _archetypes() -> dict[str, ArchetypePopulationSpec]:
 def _control_trace() -> dict[str, object]:
     return {
         "schema_version": "pedestrian-control-trace.v1",
+        "near_field_clearance_threshold_m": 1.0,
         "pedestrians": [
             {
                 "id": "ped_cautious",
                 "archetype": "cautious",
                 "steps": [
-                    {"step": 0, "clearance_m": 1.0},
-                    {"step": 1, "clearance_m": 0.8},
+                    {"step": 0, "clearance_m": 1.0, "near_field_exposure_s": 0.0},
+                    {"step": 1, "clearance_m": 0.8, "near_field_exposure_s": 0.1},
                 ],
             },
             {
                 "id": "ped_hurried",
                 "archetype": "hurried",
                 "steps": [
-                    {"step": 0, "clearance_m": 0.5},
-                    {"step": 1, "clearance_m": 0.3},
+                    {"step": 0, "clearance_m": 0.5, "near_field_exposure_s": 0.1},
+                    {"step": 1, "clearance_m": 0.3, "near_field_exposure_s": 0.1},
                 ],
             },
         ],
@@ -204,7 +206,7 @@ def test_issue_3206_three_seed_smoke_audits_as_mean_matched_but_not_per_archetyp
 
 def _manifest_config() -> dict[str, object]:
     return {
-        "trace_metric_keys": ["clearance_m"],
+        "trace_metric_keys": ["clearance_m", "near_field_exposure_s"],
         "planners": [{"key": "goal", "algo": "goal"}, {"key": "social_force"}],
         "seeds": [101, 102],
         "scenarios": [
@@ -264,6 +266,9 @@ def test_mean_matched_harness_manifest_fails_closed_on_missing_control_trace_inp
         "metadata.pedestrian_control_trace missing" in blocker for blocker in manifest["blockers"]
     )
     assert any("steps[].clearance_m missing" in blocker for blocker in manifest["blockers"])
+    assert any(
+        "steps[].near_field_exposure_s missing" in blocker for blocker in manifest["blockers"]
+    )
     first_row = manifest["manifest_rows"][0]
     assert first_row["trace_readiness"]["ready"] is False
     assert (
@@ -272,6 +277,14 @@ def test_mean_matched_harness_manifest_fails_closed_on_missing_control_trace_inp
     )
     assert (
         "metadata.pedestrian_control_trace.pedestrians[].steps[].clearance_m"
+        in first_row["expected_episode_output_keys"]
+    )
+    assert (
+        "metadata.pedestrian_control_trace.pedestrians[].steps[].near_field_exposure_s"
+        in first_row["expected_episode_output_keys"]
+    )
+    assert (
+        "metadata.pedestrian_control_trace.near_field_clearance_threshold_m"
         in first_row["expected_episode_output_keys"]
     )
     assert PEDESTRIAN_CONTROL_TRACE_LABELS_KEY in first_row["arm_population"]
@@ -295,10 +308,59 @@ def test_mean_matched_harness_manifest_accepts_fixture_control_traces() -> None:
     assert manifest["blockers"] == []
     readiness = manifest["scenario_rows"][0]["trace_readiness_by_arm"]["heterogeneous"]
     assert readiness["metrics"]["clearance_m"]["status"] == "ready"
+    assert readiness["metrics"]["near_field_exposure_s"]["status"] == "ready"
     assert readiness["metrics"]["clearance_m"]["archetype_counts"] == {
         "cautious": 1,
         "hurried": 1,
     }
+
+
+def test_mean_matched_harness_manifest_blocks_exposure_without_threshold_metadata() -> None:
+    """Near-field exposure cannot be interpreted when its clearance threshold is absent."""
+
+    config = _manifest_config()
+    scenario = config["scenarios"][0]
+    assert isinstance(scenario, dict)
+    trace = _control_trace()
+    trace.pop("near_field_clearance_threshold_m")
+    scenario["control_traces"] = {
+        "heterogeneous": trace,
+        "mean_matched_homogeneous": _control_trace(),
+    }
+
+    manifest = build_mean_matched_harness_manifest(config)
+
+    assert manifest["status"] == "blocked_pending_control_trace"
+    assert any(
+        "control_trace.near_field_clearance_threshold_m missing" in blocker
+        for blocker in manifest["blockers"]
+    )
+
+
+@pytest.mark.parametrize("threshold", [True, "1.0", [], math.nan, -0.1])
+def test_mean_matched_harness_manifest_blocks_invalid_exposure_threshold(
+    threshold: object,
+) -> None:
+    """Near-field exposure provenance must be a finite non-negative numeric threshold."""
+
+    config = _manifest_config()
+    scenario = config["scenarios"][0]
+    assert isinstance(scenario, dict)
+    trace = _control_trace()
+    trace["near_field_clearance_threshold_m"] = threshold
+    scenario["control_traces"] = {
+        "heterogeneous": trace,
+        "mean_matched_homogeneous": _control_trace(),
+    }
+
+    manifest = build_mean_matched_harness_manifest(config)
+
+    assert manifest["status"] == "blocked_pending_control_trace"
+    assert any(
+        "control_trace.near_field_clearance_threshold_m must be finite non-negative number"
+        in blocker
+        for blocker in manifest["blockers"]
+    )
 
 
 @pytest.mark.parametrize(

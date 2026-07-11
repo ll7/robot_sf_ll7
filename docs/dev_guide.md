@@ -662,8 +662,8 @@ gh api repos/$OWNER/$REPO/pulls -X POST \
 PR=$(gh api repos/$OWNER/$REPO/pulls --method GET \
   -f state=open -f head="$OWNER:$BRANCH" \
   --jq '.[0].number')
-gh api repos/$OWNER/$REPO/pulls/$PR -X PATCH \
-  -f body="Updated summary $(date -Iseconds)"
+uv run python scripts/dev/gh_pr_body_rest.py "$PR" --repo "$OWNER/$REPO" \
+  --body-file /path/to/updated-pr-body.md
 ```
 
 ```bash

@@ -252,6 +252,11 @@ def build_mean_matched_harness_manifest(
             "metadata.pedestrian_control_trace",
             "metadata.pedestrian_control_trace.pedestrians[].archetype",
             "metadata.pedestrian_control_trace.pedestrians[].steps[]",
+            *(
+                ["metadata.pedestrian_control_trace.near_field_clearance_threshold_m"]
+                if "near_field_exposure_s" in metric_keys
+                else []
+            ),
         ],
         "manifest_rows": manifest_rows,
         "row_count": len(manifest_rows),
@@ -441,6 +446,14 @@ def _manifest_scenario_rows(
                             f"scenario.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY}",
                             "metadata.pedestrian_control_trace",
                             "metadata.pedestrian_control_trace.pedestrians[].archetype",
+                            *(
+                                [
+                                    "metadata.pedestrian_control_trace."
+                                    "near_field_clearance_threshold_m"
+                                ]
+                                if "near_field_exposure_s" in metric_keys
+                                else []
+                            ),
                             *[
                                 "metadata.pedestrian_control_trace.pedestrians[]."
                                 f"steps[].{metric_key}"
@@ -502,6 +515,7 @@ def _trace_readiness_by_arm(
                 for metric_readiness in readiness["metrics"].values()
                 for blocker in metric_readiness["blockers"]
             ]
+            metric_blockers.extend(_trace_metric_metadata_blockers(trace, metric_keys))
             if metric_blockers:
                 readiness["status"] = "blocked"
                 readiness["ready"] = False
@@ -512,6 +526,27 @@ def _trace_readiness_by_arm(
             blockers.extend(f"{scenario_id}/{arm}: {blocker}" for blocker in readiness["blockers"])
 
     return readiness_by_arm, blockers
+
+
+def _trace_metric_metadata_blockers(
+    trace: Mapping[str, Any], metric_keys: Sequence[str]
+) -> list[str]:
+    """Return provenance blockers required by non-self-describing trace metrics."""
+
+    if "near_field_exposure_s" not in metric_keys:
+        return []
+    threshold = trace.get("near_field_clearance_threshold_m")
+    if threshold is None:
+        return ["control_trace.near_field_clearance_threshold_m missing"]
+    if isinstance(threshold, bool | str):
+        return ["control_trace.near_field_clearance_threshold_m must be finite non-negative number"]
+    try:
+        threshold_value = float(threshold)
+    except (TypeError, ValueError):
+        return ["control_trace.near_field_clearance_threshold_m must be finite non-negative number"]
+    if not math.isfinite(threshold_value) or threshold_value < 0.0:
+        return ["control_trace.near_field_clearance_threshold_m must be finite non-negative number"]
+    return []
 
 
 def _planner_rows(planners: Sequence[Any]) -> list[dict[str, Any]]:

@@ -9,7 +9,10 @@ heterogeneous and homogeneous mean-matched rows before any benchmark campaign ru
 - The manifest is a pre-run contract, not a heterogeneous-population effect result.
 - It attributes future rows by scenario, seed, planner, density, and population arm.
 - It records the expected `pedestrian_control_trace` fields needed by the existing
-  per-archetype metric primitives.
+  per-archetype metric primitives: surface clearance (`clearance_m`) and
+  near-field exposure duration (`near_field_exposure_s`). The trace records the
+  configured surface-clearance threshold alongside those fields; the manifest blocks
+  near-field exposure rows when that threshold metadata is absent.
 - It does not run a full ablation campaign, response-law mixture sweep, rank-order
   sensitivity analysis, Slurm job, or paper/dissertation claim update.
 

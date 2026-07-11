@@ -2,13 +2,12 @@ schema_version: compat_matrix_promotion_manifest.v1
 issue: 5039
 title: "ci: promote proven compatibility matrix and add coverage floor"
 claim_boundary: >-
-  Promotion-readiness bookkeeping only. This manifest records whether the advisory
-  compat-matrix CI job has accumulated enough green hosted-run evidence to be promoted to a
-  required gate. It asserts no benchmark, metric, or paper claim and does not by itself change
-  any CI gate. Promotion is a separate, evidence-carrying follow-up PR that must pass
-  scripts/ci/check_compat_matrix_promotion_readiness.py --require-ready.
+  CI compatibility evidence only. This manifest records the hosted-run evidence used to promote
+  the compat-matrix CI job from advisory to required. It asserts no benchmark, metric, or paper
+  claim. The promotion is allowed only when
+  scripts/ci/check_compat_matrix_promotion_readiness.py --require-ready passes.
 
-# --- Objective promotion gate the eventual promotion PR must satisfy ---
+# --- Objective promotion gate the promotion PR must satisfy ---
 promotion_gate:
   # Advisory job introduced by PR #5037; canonical source of the required cells.
   advisory_job: compat-matrix
@@ -25,10 +24,82 @@ promotion_gate:
   # timeout-minutes in PR #5037; a run over budget does not count as green evidence.
   runtime_budget_minutes: 30
 
-# --- Recorded hosted-run evidence (empty => blocked / fail-closed) ---
+# --- Recorded hosted-run evidence (empty or incomplete => blocked / fail-closed) ---
 # Populate one entry per eligible green hosted run from the advisory matrix.
 # Each entry: {os, python, run_url, conclusion: success|failure, duration_minutes, sha}
-recorded_runs: []
+recorded_runs:
+  - os: ubuntu-latest
+    python: "3.11"
+    run_url: https://github.com/ll7/robot_sf_ll7/actions/runs/29133433132/job/86493115183
+    conclusion: success
+    duration_minutes: 1.65
+    sha: ffbbba83f3fa2fa1d7f3369552e4c6725bad045a
+  - os: ubuntu-latest
+    python: "3.13"
+    run_url: https://github.com/ll7/robot_sf_ll7/actions/runs/29133433132/job/86493115194
+    conclusion: success
+    duration_minutes: 2.52
+    sha: ffbbba83f3fa2fa1d7f3369552e4c6725bad045a
+  - os: macos-latest
+    python: "3.11"
+    run_url: https://github.com/ll7/robot_sf_ll7/actions/runs/29133433132/job/86493115188
+    conclusion: success
+    duration_minutes: 1.18
+    sha: ffbbba83f3fa2fa1d7f3369552e4c6725bad045a
+  - os: macos-latest
+    python: "3.13"
+    run_url: https://github.com/ll7/robot_sf_ll7/actions/runs/29133433132/job/86493115198
+    conclusion: success
+    duration_minutes: 1.27
+    sha: ffbbba83f3fa2fa1d7f3369552e4c6725bad045a
+  - os: ubuntu-latest
+    python: "3.11"
+    run_url: https://github.com/ll7/robot_sf_ll7/actions/runs/29133990553/job/86494641247
+    conclusion: success
+    duration_minutes: 2.43
+    sha: be2194f22a2cce3ddf8e19b786c124ba68db548f
+  - os: ubuntu-latest
+    python: "3.13"
+    run_url: https://github.com/ll7/robot_sf_ll7/actions/runs/29133990553/job/86494641261
+    conclusion: success
+    duration_minutes: 2.65
+    sha: be2194f22a2cce3ddf8e19b786c124ba68db548f
+  - os: macos-latest
+    python: "3.11"
+    run_url: https://github.com/ll7/robot_sf_ll7/actions/runs/29133990553/job/86494641252
+    conclusion: success
+    duration_minutes: 2.37
+    sha: be2194f22a2cce3ddf8e19b786c124ba68db548f
+  - os: macos-latest
+    python: "3.13"
+    run_url: https://github.com/ll7/robot_sf_ll7/actions/runs/29133990553/job/86494641254
+    conclusion: success
+    duration_minutes: 1.17
+    sha: be2194f22a2cce3ddf8e19b786c124ba68db548f
+  - os: ubuntu-latest
+    python: "3.11"
+    run_url: https://github.com/ll7/robot_sf_ll7/actions/runs/29134139801/job/86495042229
+    conclusion: success
+    duration_minutes: 2.92
+    sha: 51ec8ee0a8d06b9a6e3d12a9aab5d6f4f138c68e
+  - os: ubuntu-latest
+    python: "3.13"
+    run_url: https://github.com/ll7/robot_sf_ll7/actions/runs/29134139801/job/86495042200
+    conclusion: success
+    duration_minutes: 2.93
+    sha: 51ec8ee0a8d06b9a6e3d12a9aab5d6f4f138c68e
+  - os: macos-latest
+    python: "3.11"
+    run_url: https://github.com/ll7/robot_sf_ll7/actions/runs/29134139801/job/86495042183
+    conclusion: success
+    duration_minutes: 2.17
+    sha: 51ec8ee0a8d06b9a6e3d12a9aab5d6f4f138c68e
+  - os: macos-latest
+    python: "3.13"
+    run_url: https://github.com/ll7/robot_sf_ll7/actions/runs/29134139801/job/86495042173
+    conclusion: success
+    duration_minutes: 1.62
+    sha: 51ec8ee0a8d06b9a6e3d12a9aab5d6f4f138c68e
 
 # --- Coverage floor decision (issue acceptance criterion) ---
 coverage_floor:
@@ -58,15 +129,12 @@ coverage_floor:
 
 # --- Durable state ledger / issue-state surface for #5039 ---
 state:
-  status: blocked
-  blockers_remaining:
-    - "No eligible hosted green-run evidence is recorded for any of the four required cells."
+  status: ready
+  blockers_remaining: []
   next_empirical_action: >-
-    Collect >= 3 green hosted runs per required cell within the 30-minute budget, populate
-    recorded_runs above, then run
-    scripts/ci/check_compat_matrix_promotion_readiness.py --require-ready and open the promotion
-    PR that adds compat-matrix to the required aggregate CI gate. The separately tracked absolute
-    coverage-floor policy is issue #5071.
+    Promote compat-matrix through the required aggregate CI gate, then require its own four hosted
+    cells to pass on the promotion PR before treating issue #5039 as resolved. The separately
+    tracked absolute coverage-floor policy was completed in issue #5071.
   forbidden_actions_confirmed:
     compute_submit: false
     merge: false

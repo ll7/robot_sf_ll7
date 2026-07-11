@@ -1,0 +1,42 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "blockers": [
+    "cannot read campaign_summary.json: [Errno 2] No such file or directory: 'output/issue4206-13334-harvest/reports/campaign_summary.json'",
+    "cannot read seed_episode_rows.csv: [Errno 2] No such file or directory: 'output/issue4206-13334-harvest/reports/seed_episode_rows.csv'"
+  ],
+  "campaign": {
+    "campaign_execution_status": null,
+    "episode_row_count": 0,
+    "total_episodes_expected": 6480,
+    "total_episodes_observed": null
+  },
+  "claim_boundary": "Registration readiness only: this receipt records the checker's fail-closed blocked result. The unavailable inputs mean it cannot verify campaign structure or trace-label coverage for the issue #4206 reanalysis, and it does not establish benchmark, planner, paper, or dissertation claims.",
+  "generated_at": "2026-07-11T05:16:28Z",
+  "issue": 5248,
+  "job_id": "13334",
+  "next_action": "Resolve the listed source-artifact or trace-label blockers before reanalysis.",
+  "schema_version": "issue_5248_salvaged_trace_rerun_registration.v1",
+  "source_files": {},
+  "status": "blocked_campaign_registration",
+  "trace_labels": {
+    "minimum_labeled_fraction": 0.5,
+    "required_fields": [
+      "mechanism_schema_version",
+      "mechanism_label",
+      "mechanism_confidence",
+      "mechanism_evidence_mode",
+      "mechanism_evidence_uri",
+      "mechanism_case_id",
+      "mechanism_caveat"
+    ],
+    "required_schema_version": "failure_mechanism_taxonomy.v1",
+    "trace_labeled_fraction": 0.0,
+    "trace_labeled_rows": 0,
+    "trace_verified_evidence_modes": [
+      "deterministic_replay",
+      "direct_probe",
+      "paired_trace",
+      "root_cause"
+    ]
+  }
+}

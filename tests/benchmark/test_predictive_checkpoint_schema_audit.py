@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+import robot_sf.benchmark.predictive_checkpoint_schema_audit as schema_audit
 from robot_sf.benchmark.camera_ready._config_types import (
     CampaignConfig,
     PlannerSpec,
@@ -331,6 +332,27 @@ def test_filtered_config_drops_exactly_the_incompatible_arm(tmp_path: Path) -> N
     assert excluded[0]["checkpoint_schema"] == "predictive_ego_v1"
     assert filtered["schema_audit"]["excluded_arm_count"] == 1
     assert "issue #5241" in filtered["schema_audit"]["note"]
+
+
+def test_filtered_config_keeps_best_effort_provenance_when_root_resolution_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A filesystem root-resolution failure must not block config emission."""
+    source_config = tmp_path / "campaign.yaml"
+    source_config.write_text("name: fallback_test\nplanners: []\n", encoding="utf-8")
+    result = schema_audit.SchemaAuditResult(config_path=source_config)
+
+    def fail_root_resolution() -> Path:
+        raise OSError("simulated root resolution failure")
+
+    monkeypatch.setattr(schema_audit, "get_repository_root", fail_root_resolution)
+    out_path = tmp_path / "campaign_schema_filtered.yaml"
+
+    emit_schema_filtered_config(source_config, result, out_path)
+
+    filtered = yaml.safe_load(out_path.read_text(encoding="utf-8"))
+    assert filtered["schema_audit"]["source_config"] == source_config.name
 
 
 def test_filtered_config_leaves_uninspected_arms_in_place(tmp_path: Path) -> None:

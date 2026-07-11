@@ -16,6 +16,7 @@ import re
 import subprocess
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -43,6 +44,18 @@ ARTIFACT_PATH_KEYS = {
     "path",
     "source_path",
 }
+
+
+@dataclass(frozen=True)
+class _DocumentRecord:
+    """Parsed registry data needed for bundle-level campaign checks."""
+
+    path: Path
+    campaign_ids: list[str]
+    config_paths: list[str]
+    config_hashes: list[str]
+    commits: list[str]
+    findings: list[dict[str, str]]
 
 
 def _issue(path: Path, code: str, message: str) -> dict[str, str]:
@@ -337,35 +350,84 @@ def _campaign_metadata_findings(  # noqa: C901 - rule-to-finding mapping is inte
     return findings
 
 
-def _lint_document(repo_root: Path, path: Path) -> tuple[list[str], list[dict[str, str]]]:
-    """Lint one registry file and return its campaign IDs plus findings."""
+def _lint_document(repo_root: Path, path: Path) -> _DocumentRecord:
+    """Read one document and retain only document-local integrity findings."""
     display_path = path.relative_to(repo_root)
     try:
         value = _load_document(path)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, yaml.YAMLError) as exc:
-        return [], [_issue(display_path, "unreadable_document", str(exc))]
+        return _DocumentRecord(
+            path, [], [], [], [], [_issue(display_path, "unreadable_document", str(exc))]
+        )
     campaign_ids = _campaign_ids(value)
     config_paths, config_hashes, commits = _file_metadata(value)
-    findings: list[dict[str, str]] = []
-    for commit in sorted(set(commits)):
-        if not _git_succeeds(repo_root, "cat-file", "-e", f"{commit}^{{commit}}"):
-            findings.append(
-                _issue(display_path, "dangling_commit", f"commit {commit} does not resolve")
-            )
-    findings.extend(
-        _campaign_metadata_findings(
-            repo_root, display_path, campaign_ids, config_paths, config_hashes, commits
-        )
+    return _DocumentRecord(
+        path,
+        campaign_ids,
+        config_paths,
+        config_hashes,
+        commits,
+        _artifact_findings(repo_root, display_path, value),
     )
-    findings.extend(_artifact_findings(repo_root, display_path, value))
-    return campaign_ids, findings
 
 
-def lint_evidence_registry(repo_root: Path, registry_root: Path) -> dict[str, Any]:
+def _bundle_path(registry_root: Path, path: Path) -> Path:
+    """Return an evidence bundle root, treating root-level files as independent bundles."""
+    relative = path.relative_to(registry_root)
+    return path if len(relative.parts) == 1 else registry_root / relative.parts[0]
+
+
+def _load_dispositions(path: Path | None) -> dict[str, dict[str, str]]:
+    """Load optional report-mode category dispositions from the versioned packet."""
+    if path is None or not path.is_file():
+        return {}
+    value = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if (
+        not isinstance(value, Mapping)
+        or value.get("schema_version") != "evidence_registry_disposition.v1"
+    ):
+        raise ValueError(f"{path} must use schema_version evidence_registry_disposition.v1")
+    categories = value.get("categories")
+    if not isinstance(categories, list):
+        raise ValueError(f"{path} must contain a categories list")
+    dispositions: dict[str, dict[str, str]] = {}
+    for category in categories:
+        if not isinstance(category, Mapping):
+            raise ValueError(f"{path} categories must be mappings")
+        code = category.get("code")
+        status = category.get("status")
+        if not isinstance(code, str) or not isinstance(status, str) or not code or not status:
+            raise ValueError(f"{path} categories require non-empty code and status")
+        dispositions[code] = {"status": status}
+    return dispositions
+
+
+def _disposition_summary(
+    findings: Sequence[dict[str, str]], dispositions: Mapping[str, Mapping[str, str]]
+) -> dict[str, Any]:
+    """Summarize report findings by their documented disposition, never suppressing them."""
+    by_status: Counter[str] = Counter()
+    unclassified: Counter[str] = Counter()
+    for finding in findings:
+        code = finding["code"]
+        disposition = dispositions.get(code)
+        if disposition is None:
+            unclassified[code] += 1
+        else:
+            by_status[disposition["status"]] += 1
+    return {
+        "by_status": dict(sorted(by_status.items())),
+        "unclassified_by_code": dict(sorted(unclassified.items())),
+    }
+
+
+def lint_evidence_registry(
+    repo_root: Path, registry_root: Path, disposition_path: Path | None = None
+) -> dict[str, Any]:
     """Return a deterministic integrity report for every supported evidence file."""
     repo_root = repo_root.resolve()
     registry_root = registry_root.resolve()
-    campaigns: dict[str, list[Path]] = defaultdict(list)
+    campaigns: dict[str, list[_DocumentRecord]] = defaultdict(list)
     findings: list[dict[str, str]] = []
     files = sorted(
         path
@@ -373,29 +435,59 @@ def lint_evidence_registry(repo_root: Path, registry_root: Path) -> dict[str, An
         if path.is_file() and path.suffix.lower() in {".json", ".yaml", ".yml", ".md", ".csv"}
     )
     for path in files:
-        campaign_ids, document_findings = _lint_document(repo_root, path)
-        findings.extend(document_findings)
-        for campaign_id in campaign_ids:
-            campaigns[campaign_id].append(path.relative_to(repo_root))
-    for campaign_id, paths in sorted(campaigns.items()):
-        if len(paths) > 1:
-            for path in paths:
+        document = _lint_document(repo_root, path)
+        findings.extend(document.findings)
+        for campaign_id in document.campaign_ids:
+            campaigns[campaign_id].append(document)
+    for campaign_id, documents in sorted(campaigns.items()):
+        canonical_path = min(document.path for document in documents).relative_to(repo_root)
+        config_paths = [path for document in documents for path in document.config_paths]
+        config_hashes = [item for document in documents for item in document.config_hashes]
+        commits = [commit for document in documents for commit in document.commits]
+        for commit in sorted(set(commits)):
+            if not _git_succeeds(repo_root, "cat-file", "-e", f"{commit}^{{commit}}"):
                 findings.append(
-                    _issue(
-                        path,
-                        "duplicate_campaign_id",
-                        f"campaign_id {campaign_id!r} appears in {len(paths)} files",
-                    )
+                    _issue(canonical_path, "dangling_commit", f"commit {commit} does not resolve")
                 )
+        findings.extend(
+            _campaign_metadata_findings(
+                repo_root,
+                canonical_path,
+                [campaign_id],
+                config_paths,
+                config_hashes,
+                commits,
+            )
+        )
+        bundle_paths = sorted(
+            {_bundle_path(registry_root, document.path) for document in documents}
+        )
+        if len(bundle_paths) > 1:
+            bundle_list = ", ".join(path.relative_to(repo_root).as_posix() for path in bundle_paths)
+            findings.append(
+                _issue(
+                    canonical_path,
+                    "duplicate_campaign_id",
+                    f"campaign_id {campaign_id!r} appears in multiple evidence bundles: {bundle_list}",
+                )
+            )
     findings.sort(key=lambda item: (item["path"], item["code"], item["message"]))
     by_code = dict(sorted(Counter(item["code"] for item in findings).items()))
-    return {
+    dispositions = _load_dispositions(disposition_path)
+    report: dict[str, Any] = {
         "registry_root": registry_root.relative_to(repo_root).as_posix(),
         "checked_files": len(files),
         "campaign_ids": sorted(campaigns),
         "issues": findings,
         "summary": {"findings": len(findings), "by_code": by_code},
     }
+    if disposition_path is not None and disposition_path.is_file():
+        try:
+            report["disposition_path"] = disposition_path.relative_to(repo_root).as_posix()
+        except ValueError:
+            report["disposition_path"] = disposition_path.as_posix()
+        report["disposition_summary"] = _disposition_summary(findings, dispositions)
+    return report
 
 
 def _repo_root_from_git() -> Path:
@@ -422,12 +514,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--strict", action="store_true", help="Exit nonzero when findings are present."
     )
+    parser.add_argument(
+        "--disposition-file",
+        type=Path,
+        default=Path("docs/context/evidence/evidence_registry_dispositions.yaml"),
+        help="Optional versioned category-disposition packet for report-mode output.",
+    )
     args = parser.parse_args(argv)
     repo_root = args.repo_root.resolve() if args.repo_root else _repo_root_from_git()
     registry_root = (
         args.registry_root if args.registry_root.is_absolute() else repo_root / args.registry_root
     )
-    report = lint_evidence_registry(repo_root, registry_root)
+    disposition_path = (
+        args.disposition_file
+        if args.disposition_file.is_absolute()
+        else repo_root / args.disposition_file
+    )
+    report = lint_evidence_registry(repo_root, registry_root, disposition_path)
     print(json.dumps(report, indent=2, sort_keys=True))
     return 1 if args.strict and report["issues"] else 0
 

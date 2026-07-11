@@ -1,0 +1,50 @@
+# AI-GENERATED NEEDS-REVIEW
+schema_version: evidence_registry_disposition.v1
+claim_boundary: >-
+  Report-mode classification of legacy evidence-registry integrity findings. This packet does not
+  validate a campaign, alter benchmark interpretation, or enable strict CI.
+evidence_status: diagnostic-only
+categories:
+  - code: duplicate_campaign_id
+    status: review_cross_bundle_collision
+    disposition: >-
+      Repeated references inside one evidence bundle are aggregated by the checker. Remaining
+      cross-bundle identifiers need an explicit canonical-owner or reference relationship before
+      strict CI can rely on uniqueness.
+    next_action: Add canonical campaign ownership or a documented cross-bundle reference.
+  - code: missing_config_path
+    status: provenance_backfill_required
+    disposition: Legacy campaign records lack a repository-relative producing configuration path.
+    next_action: Backfill the canonical campaign manifest; do not infer a configuration from results.
+  - code: missing_config_sha256
+    status: provenance_backfill_required
+    disposition: Legacy campaign records lack a checksum for the producing configuration.
+    next_action: Hash the configuration blob at the declared producing commit.
+  - code: missing_commit
+    status: provenance_backfill_required
+    disposition: Legacy campaign records lack an immutable producing commit.
+    next_action: Recover the commit from durable provenance or retain the finding as unresolved.
+  - code: dangling_commit
+    status: historical_commit_unavailable
+    disposition: The declared commit is not reachable in this checkout.
+    next_action: Recover from a durable remote/archive; never replace it with the current commit.
+  - code: config_missing_at_commit
+    status: provenance_backfill_required
+    disposition: The claimed configuration is absent from the declared commit.
+    next_action: Correct the path or recover the producing commit with source evidence.
+  - code: artifact_hash_mismatch
+    status: integrity_repair_required
+    disposition: A tracked artifact's bytes do not match its declared SHA-256.
+    next_action: Recompute from the declared source or correct the manifest with provenance review.
+  - code: invalid_sha256
+    status: integrity_repair_required
+    disposition: A declared artifact checksum is not a SHA-256 value.
+    next_action: Replace it only after hashing the identified artifact.
+  - code: hash_without_artifact_path
+    status: artifact_provenance_backfill_required
+    disposition: A checksum cannot be bound to a specific artifact path.
+    next_action: Add the adjacent repository-relative path or an explicit external location.
+  - code: uncommitted_artifact_missing_location
+    status: artifact_provenance_backfill_required
+    disposition: An untracked or external artifact lacks a durable location marker.
+    next_action: Add a stable location or promote the artifact with its provenance manifest.

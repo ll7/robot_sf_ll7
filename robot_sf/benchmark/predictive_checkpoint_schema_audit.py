@@ -580,12 +580,14 @@ def emit_schema_filtered_config(
     if not isinstance(data, dict):
         raise TypeError(f"Campaign config must be a mapping: {source}")
 
-    # ``get_repository_root`` is a first-party, pure-path helper (no optional or
-    # native deps) and is imported unguarded by 20+ other modules. A broad
-    # ``except (ImportError, RuntimeError, OSError)`` here previously tripped the
-    # optional-import guard inventory (issue #5287); it could not actually fire
-    # for this call, so the guard was unjustified and is removed.
-    repo_root = get_repository_root()
+    # The first-party import is deliberately unguarded: it has no optional or
+    # native dependency boundary. Repository-root resolution itself can still
+    # fail on unusual filesystem or symlink state, so retain the prior
+    # best-effort provenance fallback without reintroducing an import guard.
+    try:
+        repo_root = get_repository_root()
+    except (OSError, RuntimeError):
+        repo_root = source.parent
     try:
         source_rel = source.relative_to(repo_root) if repo_root in source.parents else source
     except ValueError:

@@ -543,6 +543,7 @@ case "${1:-}" in
       esac
     done
     mkdir -p "$output_root/$campaign_id/reports"
+    echo '{"soft_contract_warning":false,"warnings":[]}' > "$output_root/$campaign_id/reports/campaign_summary.json"
     ;;
   scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py)
     shift
@@ -559,6 +560,9 @@ case "${1:-}" in
     mkdir -p "$output_dir"
     echo '{"classification":"fixture"}' > "$output_dir/result.json"
     echo '# fixture' > "$output_dir/report.md"
+    ;;
+  scripts/tools/record_post_campaign_stage_status.py)
+    exec python "$@"
     ;;
   *)
     exit 98
@@ -600,3 +604,173 @@ esac
     assert f"--campaign {output_root / 'fixture_campaign'}" in calls
     assert (output_root / "fixture_campaign" / "reports" / "headline_rows.json").is_file()
     assert (report_dir / "result.json").is_file()
+    stage_status = json.loads(
+        (
+            output_root / "fixture_campaign" / "reports" / "post_campaign_stage_status.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert stage_status["campaign"]["status"] == "completed"
+    assert stage_status["post_campaign_stage"]["status"] == "completed"
+    assert stage_status["job_exit_code"] == 0
+
+
+@pytest.mark.parametrize("missing_artifact", ("headline_rows", "result"))
+def test_campaign_wrapper_preserves_completed_soft_warning_exit_when_report_artifact_is_missing(
+    tmp_path: Path,
+    missing_artifact: str,
+) -> None:
+    """The wrapper records its exact exit-5 artifact guards without overwriting campaign exit 0."""
+    repo_root = Path(__file__).resolve().parents[2]
+    output_root = tmp_path / "benchmarks"
+    report_dir = tmp_path / "report"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    uv_stub = bin_dir / "uv"
+    uv_stub.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+shift 2
+case "${1:-}" in
+  -)
+    exec python -
+    ;;
+  scripts/tools/run_camera_ready_benchmark.py)
+    shift
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --campaign-id) campaign_id="$2"; shift 2 ;;
+        --output-root) output_root="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    mkdir -p "$output_root/$campaign_id/reports"
+    cat > "$output_root/$campaign_id/reports/campaign_summary.json" <<'JSON'
+{"soft_contract_warning":true,"warnings":["SNQI contract warning fixture"]}
+JSON
+    ;;
+  scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py)
+    shift
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --campaign) campaign="$2"; shift 2 ;;
+        --output-dir) output_dir="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    if [ "$REPORT_FIXTURE" = "headline_rows" ]; then
+      mkdir -p "$output_dir"
+      echo '{"classification":"fixture"}' > "$output_dir/result.json"
+    else
+      mkdir -p "$campaign/reports"
+      echo '[]' > "$campaign/reports/headline_rows.json"
+    fi
+    ;;
+  scripts/tools/record_post_campaign_stage_status.py)
+    exec python "$@"
+    ;;
+  *) exit 98 ;;
+esac
+""",
+        encoding="utf-8",
+    )
+    uv_stub.chmod(0o755)
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "OUTPUT_ROOT": str(output_root),
+        "REPORT_DIR": str(report_dir),
+        "REPORT_FIXTURE": missing_artifact,
+    }
+
+    result = subprocess.run(
+        [
+            "bash",
+            "scripts/benchmark/run_issue3216_headline_campaign.sh",
+            "--campaign-id",
+            "soft_warning_fixture",
+        ],
+        cwd=repo_root,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "campaign_stage_exit_code=0" in result.stdout
+    assert "report_stage_exit_code=5" in result.stdout
+    assert "report_stage_failed=true" in result.stdout
+    expected_missing = (
+        output_root / "soft_warning_fixture" / "reports" / "headline_rows.json"
+        if missing_artifact == "headline_rows"
+        else report_dir / "result.json"
+    )
+    assert f"ERROR: report builder did not produce {expected_missing}." in result.stderr
+    status_path = (
+        output_root / "soft_warning_fixture" / "reports" / "post_campaign_stage_status.json"
+    )
+    stage_status = json.loads(status_path.read_text(encoding="utf-8"))
+    assert stage_status["campaign"] == {
+        "exit_code": 0,
+        "soft_contract_warning": True,
+        "status": "completed",
+        "summary_json": str(
+            output_root / "soft_warning_fixture" / "reports" / "campaign_summary.json"
+        ),
+        "summary_status": "loaded",
+        "warnings": ["SNQI contract warning fixture"],
+    }
+    assert stage_status["post_campaign_stage"] == {
+        "exit_code": 5,
+        "name": "headline_ci_rank_stability_report",
+        "status": "report_stage_failed",
+    }
+    assert stage_status["job_exit_code"] == 0
+
+
+def test_campaign_wrapper_preserves_hard_campaign_failure(tmp_path: Path) -> None:
+    """A hard campaign failure remains nonzero and skips post-campaign reporting."""
+    repo_root = Path(__file__).resolve().parents[2]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    call_log = tmp_path / "calls.log"
+    uv_stub = bin_dir / "uv"
+    uv_stub.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+echo "$*" >> "$UV_STUB_LOG"
+if [ "${3:-}" = "-" ]; then
+  exec python -
+fi
+if [[ "$*" == *"run_camera_ready_benchmark.py"* ]]; then
+  exit 2
+fi
+exit 98
+""",
+        encoding="utf-8",
+    )
+    uv_stub.chmod(0o755)
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "OUTPUT_ROOT": str(tmp_path / "benchmarks"),
+        "REPORT_DIR": str(tmp_path / "report"),
+        "UV_STUB_LOG": str(call_log),
+    }
+
+    result = subprocess.run(
+        ["bash", "scripts/benchmark/run_issue3216_headline_campaign.sh"],
+        cwd=repo_root,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "campaign_stage_exit_code=2" in result.stdout
+    calls = call_log.read_text(encoding="utf-8")
+    assert "run_camera_ready_benchmark.py" in calls
+    assert "build_headline_ci_rank_stability_report_issue_3216.py" not in calls

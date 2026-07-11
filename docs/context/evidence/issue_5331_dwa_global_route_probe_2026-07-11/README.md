@@ -37,16 +37,16 @@ rollout cannot directly see the goal.
 
 ## Test results
 
-All 41 DWA tests pass:
-- 17 new global-route probe tests
-- 24 existing DWA tests (no regressions)
+- 54 targeted DWA planner tests pass, including 17 global-route probe tests.
+- 2 trace-runner production-call contract tests pass.
 
 ## Validation commands
 
 ```bash
 uv run pytest tests/planner/test_dwa_global_route_probe.py tests/planner/test_dwa.py -v
-uv run ruff check robot_sf/planner/dwa.py scripts/benchmark/trace_dwa_global_route_probe_issue_5331.py tests/planner/test_dwa_global_route_probe.py
-uv run ruff format --check robot_sf/planner/dwa.py scripts/benchmark/trace_dwa_global_route_probe_issue_5331.py tests/planner/test_dwa_global_route_probe.py
+uv run pytest tests/benchmark/test_trace_dwa_global_route_probe_issue_5331.py -v
+uv run ruff check robot_sf/planner/dwa.py scripts/benchmark/trace_dwa_global_route_probe_issue_5331.py tests/planner/test_dwa_global_route_probe.py tests/benchmark/test_trace_dwa_global_route_probe_issue_5331.py
+uv run ruff format --check robot_sf/planner/dwa.py scripts/benchmark/trace_dwa_global_route_probe_issue_5331.py tests/planner/test_dwa_global_route_probe.py tests/benchmark/test_trace_dwa_global_route_probe_issue_5331.py
 ```
 
 ## Trace script

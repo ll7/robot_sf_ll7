@@ -337,9 +337,110 @@ def test_topology_guided_policy_records_fallback_only_status() -> None:
     assert diagnostics["topology_guided"]["status_counts"] == {"not_available": 1}
     assert diagnostics["last_decision"]["topology_lane_status"] == "fallback_only"
     assert diagnostics["last_decision"]["topology_fallback_status"] == "not_available"
+    availability = diagnostics["last_decision"]["topology_candidate_availability"]
+    assert availability["status"] == "unavailable"
+    assert availability["fallback_configured"] is True
+    assert availability["fallback_used"] is True
+    assert availability["outcome"] == "configured_fallback"
     assert (
         diagnostics["last_decision"]["topology_guided_config"]["fallback_on_no_candidate"] is True
     )
+
+
+def _candidate_source_corridor(
+    planner: TopologyGuidedHybridRulePlannerAdapter,
+    route_corridor: dict[str, object],
+):
+    """Return a route-corridor diagnostic stub with an available hypothesis."""
+
+    def corridor(_observation, *, current_time):
+        del current_time
+        planner._last_topology_decision = {
+            "status": "ok",
+            "reason": "selected_scored_route_hypothesis",
+            "hypothesis_count": 1,
+            "selected_hypothesis_id": "primary_route",
+        }
+        return {
+            "topology_status": "ok",
+            "topology_hypothesis": {"hypothesis_id": "primary_route"},
+            **route_corridor,
+        }
+
+    return corridor
+
+
+def test_topology_candidate_source_missing_geometry_fails_without_configured_fallback(
+    monkeypatch,
+) -> None:
+    """Missing candidate geometry is unavailable and fails closed without fallback."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(_config(fallback_on_no_candidate=False))
+    monkeypatch.setattr(
+        planner,
+        "_route_corridor_diagnostics",
+        _candidate_source_corridor(planner, {"route_tangent_heading": 0.0}),
+    )
+
+    command = planner.plan(_obs(occupied_cells=[]))
+
+    assert command == (0.0, 0.0)
+    availability = planner.diagnostics()["last_decision"]["topology_candidate_availability"]
+    assert availability == {
+        "schema_version": "topology_candidate_availability.v1",
+        "source": "topology_hypothesis",
+        "status": "unavailable",
+        "reason": "missing_candidate_route_geometry",
+        "candidate_available": False,
+        "fallback_configured": False,
+        "fallback_used": False,
+        "outcome": "fail_closed",
+    }
+
+
+def test_topology_candidate_source_malformed_geometry_always_fails_closed(monkeypatch) -> None:
+    """Malformed candidate geometry cannot enter the configured diagnostic fallback path."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(_config(fallback_on_no_candidate=True))
+    monkeypatch.setattr(
+        planner,
+        "_route_corridor_diagnostics",
+        _candidate_source_corridor(
+            planner,
+            {"route_waypoint_world": [np.nan, 0.0], "route_tangent_heading": 0.0},
+        ),
+    )
+
+    command = planner.plan(_obs(occupied_cells=[]))
+
+    assert command == (0.0, 0.0)
+    decision = planner.diagnostics()["last_decision"]
+    assert decision["topology_lane_status"] == "failed"
+    assert decision["topology_candidate_availability"]["status"] == "malformed"
+    assert decision["topology_candidate_availability"]["outcome"] == "fail_closed"
+    assert decision["topology_candidate_availability"]["fallback_used"] is False
+
+
+def test_topology_candidate_source_missing_geometry_uses_configured_diagnostic_fallback(
+    monkeypatch,
+) -> None:
+    """A diagnostic lane may explicitly fall back when candidate geometry is unavailable."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(_config(fallback_on_no_candidate=True))
+    monkeypatch.setattr(
+        planner,
+        "_route_corridor_diagnostics",
+        _candidate_source_corridor(planner, {"route_tangent_heading": 0.0}),
+    )
+
+    command = planner.plan(_obs(occupied_cells=[]))
+
+    assert all(np.isfinite(command))
+    decision = planner.diagnostics()["last_decision"]
+    availability = decision["topology_candidate_availability"]
+    assert decision["topology_lane_status"] == "fallback_only"
+    assert decision["topology_fallback_status"] == "candidate_unavailable"
+    assert availability["status"] == "unavailable"
+    assert availability["fallback_configured"] is True
+    assert availability["fallback_used"] is True
+    assert availability["outcome"] == "configured_fallback"
 
 
 def test_topology_guided_policy_candidate_required_can_fail_closed() -> None:
@@ -373,6 +474,11 @@ def test_topology_guided_policy_records_selected_hypothesis_diagnostics() -> Non
     diagnostics = planner.diagnostics()
     assert diagnostics["topology_guided"]["status_counts"] == {"ok": 1}
     assert diagnostics["topology_guided"]["selected_hypothesis_counts"]
+    availability = diagnostics["last_decision"]["topology_candidate_availability"]
+    assert availability["schema_version"] == "topology_candidate_availability.v1"
+    assert availability["status"] == "available"
+    assert availability["candidate_available"] is True
+    assert availability["outcome"] == "candidate_available"
     route_corridor = diagnostics["last_decision"]["route_corridor"]
     assert route_corridor["topology_status"] == "ok"
     assert route_corridor["topology_guided_config"]["schema_version"] == (

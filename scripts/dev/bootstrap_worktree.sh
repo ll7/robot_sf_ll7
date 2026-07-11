@@ -11,24 +11,26 @@
 # silently succeeding and leaving the caller without a working .venv.
 #
 # Usage:
-#   scripts/dev/bootstrap_worktree.sh [--extra NAME] [--no-symlink-machine] [--help|-h]
+#   scripts/dev/bootstrap_worktree.sh [--extra NAME] [--no-symlink-machine] [WORKTREE_DIR]
 #
 # Options:
 #   --extra NAME          Include an optional dependency extra (repeatable), such as training.
 #   --no-symlink-machine  Skip symlinking local.machine.md from the main checkout.
 #   -h, --help            Show this help and exit.
+#   WORKTREE_DIR          An explicit linked worktree to bootstrap.
 #
-# The script must be run from the root of the worktree to bootstrap.
-# Example:
-#   cd /path/to/robot_sf_ll7.worktrees/my-branch
+# The script normally bootstraps the current worktree. An explicit WORKTREE_DIR lets callers
+# bootstrap a newly created linked worktree from another checkout.
+# Examples:
 #   scripts/dev/bootstrap_worktree.sh
+#   scripts/dev/bootstrap_worktree.sh /path/to/robot_sf_ll7.worktrees/my-branch
 #   source .venv/bin/activate
 
 set -euo pipefail
 
 show_help() {
     cat <<'EOF'
-Usage: scripts/dev/bootstrap_worktree.sh [--extra NAME] [--no-symlink-machine] [--help|-h]
+Usage: scripts/dev/bootstrap_worktree.sh [--extra NAME] [--no-symlink-machine] [WORKTREE_DIR]
 
 Bootstrap a fresh linked Git worktree: run `uv venv .venv` and then, by default,
 `uv sync --all-extras`. Verify .venv/bin/python exists before returning. Fails
@@ -46,16 +48,20 @@ Options:
   --extra NAME          Include an optional dependency extra (repeatable), such as training.
   --no-symlink-machine  Skip symlinking local.machine.md from the main checkout.
   -h, --help            Show this help and exit.
+  WORKTREE_DIR          An explicit linked worktree to bootstrap.
 
-Run from the worktree root you want to bootstrap. Example:
+Without WORKTREE_DIR, run from the worktree root you want to bootstrap. To bootstrap an
+explicit linked worktree from another checkout, pass its path. Examples:
   cd ../robot_sf_ll7.worktrees/issue-1234-my-branch
   scripts/dev/bootstrap_worktree.sh --extra training
+  scripts/dev/bootstrap_worktree.sh ../robot_sf_ll7.worktrees/issue-1234-my-branch
   source .venv/bin/activate
 EOF
 }
 
 symlink_machine=1
 sync_extras=()
+worktree_dir=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --extra)
@@ -75,15 +81,35 @@ while [[ $# -gt 0 ]]; do
             show_help
             exit 0
             ;;
-        *)
+        -*)
             echo "bootstrap_worktree: unknown argument: $1" >&2
             show_help >&2
             exit 2
             ;;
+        *)
+            if [[ -n "$worktree_dir" ]]; then
+                echo "bootstrap_worktree: expected at most one WORKTREE_DIR" >&2
+                show_help >&2
+                exit 2
+            fi
+            worktree_dir="$1"
+            shift
+            ;;
     esac
 done
 
-repo_root="$(git rev-parse --show-toplevel)"
+if [[ -n "$worktree_dir" ]]; then
+    if [[ ! -d "$worktree_dir" ]]; then
+        echo "bootstrap_worktree: WORKTREE_DIR is not a directory: $worktree_dir" >&2
+        exit 2
+    fi
+    repo_root="$(git -C "$worktree_dir" rev-parse --show-toplevel 2>/dev/null)" || {
+        echo "bootstrap_worktree: WORKTREE_DIR is not a Git worktree: $worktree_dir" >&2
+        exit 2
+    }
+else
+    repo_root="$(git rev-parse --show-toplevel)"
+fi
 cd "$repo_root"
 
 # Derive the main checkout path from the git common dir.
@@ -96,6 +122,11 @@ main_repo_root="$(cd "$git_common_dir/.." && pwd)"
 is_linked=0
 if [[ "$git_common_dir" != "$repo_root/.git" ]]; then
     is_linked=1
+fi
+
+if [[ -n "$worktree_dir" && "$is_linked" -ne 1 ]]; then
+    echo "bootstrap_worktree: WORKTREE_DIR must be a linked Git worktree: $worktree_dir" >&2
+    exit 2
 fi
 
 # Symlink local.machine.md from the main checkout when requested and not already present.

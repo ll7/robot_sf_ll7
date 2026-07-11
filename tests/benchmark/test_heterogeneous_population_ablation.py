@@ -262,6 +262,57 @@ def test_mean_matched_harness_manifest_attributes_rows_by_pairing_keys() -> None
     ] == pytest.approx(1.025)
 
 
+def test_mean_matched_harness_manifest_expands_response_law_fraction_sweep() -> None:
+    """Each configured response fraction creates fixed-density paired rows."""
+
+    config = _manifest_config()
+    config["response_law_fractions"] = [0.0, 0.1, 0.25, 0.5, 1.0]
+    manifest = build_mean_matched_harness_manifest(config)
+
+    assert manifest["response_law_fractions"] == [0.0, 0.1, 0.25, 0.5, 1.0]
+    assert manifest["row_count"] == 40
+    rows_by_fraction = {
+        fraction: [
+            row for row in manifest["manifest_rows"] if row["response_law_fraction"] == fraction
+        ]
+        for fraction in manifest["response_law_fractions"]
+    }
+    assert {fraction: len(rows) for fraction, rows in rows_by_fraction.items()} == {
+        0.0: 8,
+        0.1: 8,
+        0.25: 8,
+        0.5: 8,
+        1.0: 8,
+    }
+    for fraction, rows in rows_by_fraction.items():
+        for row in rows:
+            population = row["arm_population"]
+            expected_composition = {}
+            if fraction < 1.0:
+                expected_composition["reactive"] = pytest.approx(1.0 - fraction)
+            if fraction > 0.0:
+                expected_composition["non_reactive"] = pytest.approx(fraction)
+            assert population["response_law_composition"] == expected_composition
+            if fraction == 1.0:
+                assert {record["response_law"] for record in population["records"]} == {
+                    "non_reactive"
+                }
+            assert len(population[PEDESTRIAN_CONTROL_TRACE_LABELS_KEY]) == 4
+
+
+@pytest.mark.parametrize("fractions", [[], [0.1, 0.1], [-0.1], [1.1], [True]])
+def test_mean_matched_harness_manifest_rejects_invalid_response_law_fractions(
+    fractions: object,
+) -> None:
+    """Response-law sweep fractions fail closed before rows are emitted."""
+
+    config = _manifest_config()
+    config["response_law_fractions"] = fractions
+
+    with pytest.raises(ValueError, match="response_law_fractions"):
+        build_mean_matched_harness_manifest(config)
+
+
 def test_mean_matched_harness_manifest_fails_closed_on_missing_control_trace_inputs() -> None:
     """Pre-run manifests name the exact trace fields future metrics require."""
 

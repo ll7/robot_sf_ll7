@@ -65,6 +65,77 @@ def test_compute_bootstrap_rank_sensitivity_basic() -> None:
     assert result["arms"]["heterogeneous"]["pairwise_probabilities"]["B_beats_A"] == 0.0
 
 
+def test_rank_sensitivity_keeps_response_law_fractions_separate() -> None:
+    """Response-law sweep rows cannot overwrite one another by shared seed."""
+
+    records = []
+    for fraction, values in [(0.0, (2.0, 1.0)), (0.5, (1.0, 2.0))]:
+        for arm in ("heterogeneous", "mean_matched_homogeneous"):
+            for seed in (1, 2):
+                for planner, value in zip(("A", "B"), values, strict=True):
+                    records.append(
+                        {
+                            "population_arm": arm,
+                            "response_law_fraction": fraction,
+                            "planner": planner,
+                            "seed": seed,
+                            "metrics": {"clearance_m": value},
+                        }
+                    )
+
+    result = compute_bootstrap_rank_sensitivity(
+        records,
+        metric_key="clearance_m",
+        planners=["A", "B"],
+        num_bootstrap=20,
+        seed=42,
+    )
+
+    assert result["status"] == "ready"
+    assert result["arms"]["heterogeneous/response_law_fraction_0"]["ranking"] == ["A", "B"]
+    assert result["arms"]["heterogeneous/response_law_fraction_0.5"]["ranking"] == ["B", "A"]
+
+
+def test_rank_sensitivity_identifies_a_reversal_within_one_response_fraction() -> None:
+    """Sweep-arm reversals retain the fraction-qualified arm names."""
+
+    records = []
+    for arm, values in [
+        ("heterogeneous", (2.0, 1.0)),
+        ("mean_matched_homogeneous", (1.0, 2.0)),
+    ]:
+        for seed in (1, 2):
+            for planner, value in zip(("A", "B"), values, strict=True):
+                records.append(
+                    {
+                        "population_arm": arm,
+                        "response_law_fraction": 0.25,
+                        "planner": planner,
+                        "seed": seed,
+                        "metrics": {"clearance_m": value},
+                    }
+                )
+
+    result = compute_bootstrap_rank_sensitivity(
+        records,
+        metric_key="clearance_m",
+        planners=["A", "B"],
+        num_bootstrap=20,
+        seed=42,
+    )
+
+    assert result["reversals"] == [
+        {
+            "type": "rank_order_disagreement",
+            "heterogeneous_arm": "heterogeneous/response_law_fraction_0.25",
+            "mean_matched_homogeneous_arm": "mean_matched_homogeneous/response_law_fraction_0.25",
+            "heterogeneous_ranking": ["A", "B"],
+            "mean_matched_homogeneous_ranking": ["B", "A"],
+            "description": "Heterogeneous ranking ['A', 'B'] differs from homogeneous ['B', 'A']",
+        }
+    ]
+
+
 def test_insufficient_seeds_blocks() -> None:
     """Verify that result shows blocked when seed count is less than 3."""
     records = [

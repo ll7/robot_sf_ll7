@@ -15,12 +15,21 @@ seeds:
   - 101
   - 102
   - 103
+# Fractions of pedestrians that receive no robot-avoidance force.  The manifest
+# expands every mean-matched arm across this fixed-density sweep; executing it
+# remains a separate, campaign-only step.
+response_law_fractions:
+  - 0.0
+  - 0.1
+  - 0.25
+  - 0.5
 scenarios:
   - id: issue_3574_classic_crossing_density_002
     density: 0.02
     pedestrian_control_trace_near_field_clearance_m: 1.0
     population_size: 12
     archetype_seed: 3574
+    response_law_seed: 3574
     composition:
       cautious: 0.25
       standard: 0.5

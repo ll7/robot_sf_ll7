@@ -61,6 +61,10 @@ def main() -> int:
         seed = int(row["seed"])
         arm = row["population_arm"]
         density = float(row["density"])
+        response_law_fraction_value = row.get("response_law_fraction")
+        response_law_fraction = float(
+            0.0 if response_law_fraction_value is None else response_law_fraction_value
+        )
 
         print(
             f"[{idx + 1}/{len(manifest_rows)}] Running scenario={scenario_id} arm={arm} planner={planner} seed={seed}"
@@ -122,6 +126,7 @@ def main() -> int:
             rec["planner"] = planner
             rec["seed"] = seed
             rec["scenario_id"] = scenario_id
+            rec["response_law_fraction"] = response_law_fraction
 
             # Make sure scenario params matches too
             if "scenario_params" not in rec:
@@ -130,6 +135,7 @@ def main() -> int:
             rec["scenario_params"]["planner"] = planner
             rec["scenario_params"]["seed"] = seed
             rec["scenario_params"]["scenario_id"] = scenario_id
+            rec["scenario_params"]["response_law_fraction"] = response_law_fraction
 
             records.append(rec)
         except (RuntimeError, ValueError, KeyError, TypeError, OSError) as e:

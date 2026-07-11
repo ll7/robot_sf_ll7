@@ -219,6 +219,7 @@ def build_mean_matched_harness_manifest(
     planner_rows = _planner_rows(_required_sequence(config, "planners"))
     seed_rows = _seed_rows(_required_sequence(config, "seeds"))
     metric_keys = _metric_keys(config.get("trace_metric_keys", ("clearance_m",)))
+    response_law_fractions = _response_law_fractions(config.get("response_law_fractions"))
 
     scenario_rows: list[dict[str, Any]] = []
     manifest_rows: list[dict[str, Any]] = []
@@ -233,6 +234,7 @@ def build_mean_matched_harness_manifest(
             planner_rows=planner_rows,
             seed_rows=seed_rows,
             metric_keys=metric_keys,
+            response_law_fractions=response_law_fractions,
         )
         scenario_rows.append(scenario_row)
         manifest_rows.extend(scenario_manifest_rows)
@@ -250,6 +252,7 @@ def build_mean_matched_harness_manifest(
         "planner_rows": planner_rows,
         "seed_rows": seed_rows,
         "trace_metric_keys": metric_keys,
+        "response_law_fractions": response_law_fractions,
         "expected_episode_output_keys": [
             f"scenario.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY}",
             EPISODE_CONTROL_TRACE_PATH,
@@ -509,6 +512,7 @@ def _manifest_scenario_rows(
     planner_rows: Sequence[Mapping[str, Any]],
     seed_rows: Sequence[Mapping[str, Any]],
     metric_keys: Sequence[str],
+    response_law_fractions: Sequence[float],
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
     scenario_id = _required_str(scenario, "id", context=f"scenarios[{scenario_index}]")
     density = _required_float(scenario, "density", context=f"scenarios[{scenario_index}]")
@@ -525,7 +529,7 @@ def _manifest_scenario_rows(
         archetypes=archetypes,
         seed=scenario.get("archetype_seed"),
     )
-    composition_hash = _stable_hash(
+    base_composition_hash = _stable_hash(
         {
             "population_size": population_size,
             "composition": pair["arms"]["heterogeneous"]["composition"],
@@ -542,18 +546,40 @@ def _manifest_scenario_rows(
         "scenario_id": scenario_id,
         "density": density,
         "population_size": population_size,
-        "population_composition_hash": composition_hash,
+        "population_composition_hash": base_composition_hash,
+        "response_law_fractions": list(response_law_fractions),
         "heterogeneous_counts": pair["arms"]["heterogeneous"]["counts"],
         "mean_matched_parameters": pair["mean_matched_parameters"],
         "trace_readiness_by_arm": trace_readiness_by_arm,
     }
 
     manifest_rows: list[dict[str, Any]] = []
-    for planner in planner_rows:
-        for seed in seed_rows:
-            for arm in ("heterogeneous", "mean_matched_homogeneous"):
-                manifest_rows.append(
-                    {
+    fractions: Sequence[float | None] = response_law_fractions or (None,)
+    response_law_seed = scenario.get("response_law_seed", scenario.get("archetype_seed"))
+    for response_law_fraction in fractions:
+        response_pair = (
+            pair
+            if response_law_fraction is None
+            else _with_response_law_fraction(
+                pair,
+                fraction=response_law_fraction,
+                seed=response_law_seed,
+            )
+        )
+        composition_hash = (
+            base_composition_hash
+            if response_law_fraction is None
+            else _stable_hash(
+                {
+                    "base_population_composition_hash": base_composition_hash,
+                    "response_law_fraction": response_law_fraction,
+                }
+            )
+        )
+        for planner in planner_rows:
+            for seed in seed_rows:
+                for arm in ("heterogeneous", "mean_matched_homogeneous"):
+                    row = {
                         "scenario_id": scenario_id,
                         "planner": planner["key"],
                         "seed": seed["seed"],
@@ -580,9 +606,11 @@ def _manifest_scenario_rows(
                             ],
                         ],
                         "trace_readiness": trace_readiness_by_arm[arm],
-                        "arm_population": pair["arms"][arm],
+                        "arm_population": response_pair["arms"][arm],
                     }
-                )
+                    if response_law_fraction is not None:
+                        row["response_law_fraction"] = response_law_fraction
+                    manifest_rows.append(row)
 
     return scenario_row, manifest_rows, blockers
 
@@ -756,18 +784,86 @@ def _metric_keys(raw_metric_keys: Any) -> list[str]:
     return metric_keys
 
 
-def _campaign_row_key(row: Mapping[str, Any], *, context: str) -> tuple[str, str, int, str]:
+def _response_law_fractions(raw_fractions: Any) -> list[float]:
+    """Validate optional non-reactive fractions for the fixed-density sweep.
+
+    Returns:
+        Ordered, finite response-law fractions, or an empty list for legacy configs.
+    """
+
+    if raw_fractions is None:
+        return []
+    if not isinstance(raw_fractions, Sequence) or isinstance(raw_fractions, str):
+        raise ValueError("response_law_fractions must be a non-empty sequence")
+    fractions: list[float] = []
+    for index, raw_fraction in enumerate(raw_fractions):
+        if isinstance(raw_fraction, bool):
+            raise ValueError(f"response_law_fractions[{index}] must be a finite number in [0, 1]")
+        try:
+            fraction = float(raw_fraction)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"response_law_fractions[{index}] must be a finite number in [0, 1]"
+            ) from exc
+        if not math.isfinite(fraction) or not 0.0 <= fraction <= 1.0:
+            raise ValueError(f"response_law_fractions[{index}] must be a finite number in [0, 1]")
+        if fraction in fractions:
+            raise ValueError("response_law_fractions must not contain duplicates")
+        fractions.append(fraction)
+    if not fractions:
+        raise ValueError("response_law_fractions must be a non-empty sequence")
+    return fractions
+
+
+def _with_response_law_fraction(
+    pair: Mapping[str, Any], *, fraction: float, seed: int | None
+) -> dict[str, Any]:
+    """Attach deterministic reactive/non-reactive labels to both paired arms.
+
+    Returns:
+        A copy of the paired population payload with response-law composition and labels.
+    """
+
+    response_law_composition = {}
+    if fraction < 1.0:
+        response_law_composition["reactive"] = 1.0 - fraction
+    if fraction > 0.0:
+        response_law_composition["non_reactive"] = fraction
+
+    arms: dict[str, dict[str, Any]] = {}
+    for arm_name, arm in pair["arms"].items():
+        records = arm["records"]
+        response_laws = assign_archetype_labels(len(records), response_law_composition, seed=seed)
+        labeled_records = [
+            {**record, "response_law": str(response_law)}
+            for record, response_law in zip(records, response_laws, strict=True)
+        ]
+        arms[arm_name] = {
+            **arm,
+            "records": labeled_records,
+            "response_law_composition": dict(response_law_composition),
+            "response_law_seed": seed,
+            PEDESTRIAN_CONTROL_TRACE_LABELS_KEY: build_generated_population_control_trace_labels(
+                labeled_records,
+                source=f"mean_matched_harness.{arm_name}.response_law_sweep",
+            ),
+        }
+    return {**pair, "arms": arms}
+
+
+def _campaign_row_key(row: Mapping[str, Any], *, context: str) -> tuple[str, str, int, str, float]:
     scenario_id = _required_str(row, "scenario_id", context=context)
     planner = _required_str(row, "planner", context=context)
     seed = _required_int(row, "seed", context=context)
     population_arm = _required_str(row, "population_arm", context=context)
-    return scenario_id, planner, seed, population_arm
+    response_law_fraction = _response_law_fraction_from_row(row, context=context)
+    return scenario_id, planner, seed, population_arm, response_law_fraction
 
 
 def _rows_by_campaign_key(
     rows: Sequence[Any], *, source: str
-) -> dict[tuple[str, str, int, str], Mapping[str, Any]]:
-    indexed: dict[tuple[str, str, int, str], Mapping[str, Any]] = {}
+) -> dict[tuple[str, str, int, str, float], Mapping[str, Any]]:
+    indexed: dict[tuple[str, str, int, str, float], Mapping[str, Any]] = {}
     for index, row in enumerate(rows):
         if not isinstance(row, Mapping):
             raise ValueError(f"{source}[{index}] must be mapping")
@@ -778,9 +874,35 @@ def _rows_by_campaign_key(
     return indexed
 
 
-def _format_campaign_key(key: tuple[str, str, int, str]) -> str:
-    scenario_id, planner, seed, population_arm = key
-    return f"{scenario_id}/{planner}/seed_{seed}/{population_arm}"
+def _format_campaign_key(key: tuple[str, str, int, str, float]) -> str:
+    scenario_id, planner, seed, population_arm, response_law_fraction = key
+    return (
+        f"{scenario_id}/{planner}/seed_{seed}/{population_arm}/"
+        f"response_law_fraction_{response_law_fraction:g}"
+    )
+
+
+def _response_law_fraction_from_row(row: Mapping[str, Any], *, context: str) -> float:
+    """Read the sweep dimension, retaining ``0.0`` for legacy paired manifests.
+
+    Returns:
+        A finite response-law fraction in the inclusive interval ``[0, 1]``.
+    """
+
+    value = row.get("response_law_fraction")
+    if value is None:
+        return 0.0
+    if isinstance(value, bool):
+        raise ValueError(f"{context}.response_law_fraction must be a finite number in [0, 1]")
+    try:
+        fraction = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{context}.response_law_fraction must be a finite number in [0, 1]"
+        ) from exc
+    if not math.isfinite(fraction) or not 0.0 <= fraction <= 1.0:
+        raise ValueError(f"{context}.response_law_fraction must be a finite number in [0, 1]")
+    return fraction
 
 
 def _required_sequence(config: Mapping[str, Any], key: str) -> Sequence[Any]:

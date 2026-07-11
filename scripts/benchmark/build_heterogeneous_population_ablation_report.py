@@ -137,14 +137,19 @@ def main() -> int:  # noqa: C901,PLR0912,PLR0915
     # Keeping this manifest-driven avoids silently dropping a trace metric after readiness has
     # accepted it. The legacy ``ablation_reports`` field below remains the clearance view for
     # consumers that predate the multi-metric integration contract.
-    # Group records by (scenario_id, seed, planner)
-    triplets: dict[tuple[str, int, str], dict[str, dict[str, Any]]] = {}
+    # Group records by (scenario_id, seed, planner, response-law fraction) so each
+    # fixed-density sweep arm keeps its own paired per-archetype result.
+    triplets: dict[tuple[str, int, str, float], dict[str, dict[str, Any]]] = {}
     for rec in records:
         sc_id = rec["scenario_id"]
         seed = int(rec["seed"])
         planner = rec["planner"]
         arm = rec["population_arm"]
-        key = (sc_id, seed, planner)
+        response_law_fraction_value = rec.get("response_law_fraction")
+        response_law_fraction = float(
+            0.0 if response_law_fraction_value is None else response_law_fraction_value
+        )
+        key = (sc_id, seed, planner, response_law_fraction)
 
         control_trace = rec.get("algorithm_metadata", {}).get("pedestrian_control_trace")
         if control_trace:
@@ -159,18 +164,18 @@ def main() -> int:  # noqa: C901,PLR0912,PLR0915
             return 2
         metric_reports: dict[str, Any] = {}
         for key, traces_by_arm in triplets.items():
-            sc_id, seed, planner = key
+            sc_id, seed, planner, response_law_fraction = key
             # Readiness guarantees that every manifest row is present. Keep the paired-arm guard
             # here so this reporting layer remains safe when called with future manifest variants.
             if "heterogeneous" in traces_by_arm and "mean_matched_homogeneous" in traces_by_arm:
-                metric_reports[f"{sc_id}/seed_{seed}/{planner}"] = (
-                    build_per_archetype_ablation_report(
-                        control_traces_by_arm=traces_by_arm,
-                        metric_key=metric_key,
-                        higher_is_safer=higher_is_safer,
-                        cvar_alpha=0.2,
-                        reducer="mean",
-                    )
+                metric_reports[
+                    f"{sc_id}/seed_{seed}/{planner}/response_law_fraction_{response_law_fraction:g}"
+                ] = build_per_archetype_ablation_report(
+                    control_traces_by_arm=traces_by_arm,
+                    metric_key=metric_key,
+                    higher_is_safer=higher_is_safer,
+                    cvar_alpha=0.2,
+                    reducer="mean",
                 )
         per_archetype_metric_reports[metric_key] = metric_reports
 
@@ -184,6 +189,10 @@ def main() -> int:  # noqa: C901,PLR0912,PLR0915
         seed = int(rec["seed"])
         planner = rec["planner"]
         arm = rec["population_arm"]
+        response_law_fraction_value = rec.get("response_law_fraction")
+        response_law_fraction = float(
+            0.0 if response_law_fraction_value is None else response_law_fraction_value
+        )
         trace = rec.get("algorithm_metadata", {}).get("pedestrian_control_trace")
 
         mean_val = ""
@@ -214,6 +223,7 @@ def main() -> int:  # noqa: C901,PLR0912,PLR0915
                 "seed": seed,
                 "planner": planner,
                 "arm": arm,
+                "response_law_fraction": response_law_fraction,
                 "mean_clearance_m": mean_val,
                 "cvar_clearance_m": cvar_val,
             }
@@ -248,6 +258,7 @@ def main() -> int:  # noqa: C901,PLR0912,PLR0915
                     "seed",
                     "planner",
                     "arm",
+                    "response_law_fraction",
                     "mean_clearance_m",
                     "cvar_clearance_m",
                 ],

@@ -202,6 +202,11 @@ def build_pedestrian_control_trace(
         if near_field_clearance_threshold_m is None
         else near_field_clearance_threshold_m
     )
+    if isinstance(configured_near_field_threshold, bool):
+        raise ValueError(
+            "pedestrian_control_trace.near_field_clearance_threshold_m "
+            "must be a real numeric scalar"
+        )
     near_field_threshold = require_finite_scalar(
         "pedestrian_control_trace.near_field_clearance_threshold_m",
         configured_near_field_threshold,

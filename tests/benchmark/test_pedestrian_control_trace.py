@@ -151,6 +151,15 @@ def test_build_pedestrian_control_trace_uses_configured_near_field_threshold() -
             },
             "not finite",
         ),
+        (
+            {
+                "scenario": {
+                    **_scenario(),
+                    "pedestrian_control_trace_near_field_clearance_m": True,
+                }
+            },
+            "must be a real numeric scalar",
+        ),
     ],
 )
 def test_build_pedestrian_control_trace_rejects_invalid_robot_params(

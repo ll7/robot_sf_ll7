@@ -261,12 +261,10 @@ class SippLatticePrimitiveSet:
         max_v = min(self.max_linear_speed * 0.4, self.max_linear_acceleration * dt)
         primitives: list[MotionPrimitive] = []
 
-        v_values = [
-            -v
-            for v in np.arange(
-                self.linear_resolution, max_v + self.linear_resolution * 0.5, self.linear_resolution
-            )
-        ]
+        magnitudes = list(np.arange(self.linear_resolution, max_v + 1e-6, self.linear_resolution))
+        if max_v > 1e-6 and (not magnitudes or magnitudes[-1] < max_v - 1e-6):
+            magnitudes.append(max_v)
+        v_values = [-v for v in magnitudes]
         for v in v_values:
             primitives.append(
                 MotionPrimitive(

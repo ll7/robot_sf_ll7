@@ -64,6 +64,40 @@ Implementation:
 > The at-scale GPU smoke (Phase 5) still must be re-run to confirm VRAM release;
 > this code fix only unblocks that smoke.
 
+### Worker always-emit contract (subprocess robustness)
+Status: Complete (this PR)
+
+The subprocess worker (``_main_subprocess_worker``) is the hard-isolation
+boundary, so its contract is to ALWAYS emit structured JSON on stdout (with
+``cleanup_metrics``) so the parent can record the arm's outcome. Two gaps in the
+merged #4826/#4957/#5270 code are closed here:
+
+1. The worker's except clause caught only ``(json.JSONDecodeError, TypeError,
+   ValueError, RuntimeError, OSError, ImportError)`` and skipped cleanup on the
+   failure path, so an unexpected error (``KeyError``/``AttributeError``/
+   ``IndexError``/``ArithmeticError``) crashed the worker with EMPTY stdout: the
+   parent could not parse a result and the per-arm cleanup telemetry the issue's
+   acceptance criterion requires was lost. The handler now catches ``Exception``
+   (keeping ``KeyboardInterrupt``/``SystemExit`` propagating) and runs the
+   defense-in-depth GPU cleanup before emitting the structured failure.
+2. Input parsing (``json.loads``) was outside the handler, so a malformed
+   parent->worker handoff crashed with a traceback instead of a structured
+   failure. The whole worker path (parse + reconstruct + run) is now inside the
+   always-emit guard; cleanup is correctly skipped when the failure predates
+   ``params`` being built (no VRAM allocated yet).
+
+A new CPU-safe regression file
+(``tests/benchmark/test_camera_ready_subprocess_worker_robustness.py``) locks
+both contract layers and — for the first time — spawns the REAL worker via
+``python -m robot_sf.benchmark.camera_ready.resource_lifecycle`` instead of
+mocking ``subprocess.run``. That end-to-end round-trip guard is what would have
+caught the #4957 serialization crash and the nonexistent-module / scenario-list
+handoff bugs at CI time rather than only on live GPU runs.
+
+This is runtime orchestration/resource lifecycle only; no planner semantics,
+metrics, row classification, or evidence interpretation changed. The live GPU
+multi-arm VRAM smoke (Phase 5) still remains and is what closes the issue.
+
 ### Phase 3: PYTORCH_ALLOC_CONF hardening
 Status: Complete (PR #4836)
 

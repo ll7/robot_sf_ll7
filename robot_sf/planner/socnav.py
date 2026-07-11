@@ -49,17 +49,13 @@ except ImportError:  # pragma: no cover - optional dependency
 from robot_sf.models import resolve_model_path
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
 from robot_sf.planner.obstacle_features import (
-    PREDICTIVE_EGO_FEATURE_SCHEMA,
-    PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
     LocalObstacleFeatureExtractor,
-    ObstacleFeatureSchemaError,
     infer_predictive_feature_schema,
     normalize_obstacle_lines,
     obstacle_lines_from_map,
     obstacle_lines_from_observation,
-    predictive_ego_motion_channel_producer_key,
-    predictive_feature_schema_metadata,
+    validate_predictive_runtime_feature_schema,
 )
 
 try:  # pragma: no cover - exercised in minimal environments without torch
@@ -3645,26 +3641,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
 
     def _validate_runtime_feature_schema(self, feature_schema: Any) -> None:
         """Reject explicit standalone-producer checkpoints against runtime speed semantics."""
-        if not isinstance(feature_schema, dict):
-            return
-        base_schema = str(feature_schema.get("base_schema") or "").strip()
-        if base_schema != PREDICTIVE_EGO_FEATURE_SCHEMA:
-            return
-        actual_producer = predictive_ego_motion_channel_producer_key(feature_schema)
-        if actual_producer is None:
-            return
-        expected_producer = predictive_ego_motion_channel_producer_key(
-            predictive_feature_schema_metadata(
-                model_family=str(feature_schema.get("name") or ""),
-                ego_conditioning=True,
-                ego_motion_channel_producer=PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME,
-            )
-        )
-        if actual_producer != expected_producer:
-            raise ObstacleFeatureSchemaError(
-                "Predictive ego motion producer mismatch: "
-                f"runtime expects {expected_producer!r}, got {actual_producer!r}"
-            )
+        validate_predictive_runtime_feature_schema(feature_schema)
 
     def _normalize_pedestrians(self, ped_state: dict) -> tuple[np.ndarray, np.ndarray]:
         """Normalize pedestrian positions and ego-frame velocities.

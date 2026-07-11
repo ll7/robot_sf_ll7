@@ -23,6 +23,10 @@ never added to release matrices automatically.
   from a `generated-scenario-catalog-entry.v1` entry to standalone generated-only scenario YAML.
   Unsupported state must remain explicitly `not_representable_yet`; a passed source load alone is
   insufficient.
+- Stage 4 has a separate deterministic archive sampler. It selects existing generated records
+  without replacement, biases probability toward lower minimum-clearance values, and records the
+  source-archive checksum plus every weight and random draw. The tracked CPU demo uses
+  `configs/benchmarks/scenario_generation_rare_event_sampler.yaml`.
 
 ## Intended output contract
 
@@ -35,9 +39,10 @@ never added to release matrices automatically.
 
 ## Remaining research work
 
-Importance sampling, learned proposals, exact mid-episode scenario-YAML reconstruction,
-criticality-reproduction campaigns, and certification into hand-authored benchmark families require
-separate evidence and review.
+Calibrated importance-sampling estimators, learned proposals, exact mid-episode scenario-YAML
+reconstruction, criticality-reproduction campaigns, and certification into hand-authored benchmark
+families require separate evidence and review. Archive selection changes which existing hypotheses
+are inspected first; it does not estimate a population failure probability.
 
 ## Generated replay review checklist
 

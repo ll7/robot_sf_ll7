@@ -61,7 +61,10 @@ def main() -> int:
         seed = int(row["seed"])
         arm = row["population_arm"]
         density = float(row["density"])
-        response_law_fraction = float(row.get("response_law_fraction", 0.0))
+        response_law_fraction_value = row.get("response_law_fraction")
+        response_law_fraction = float(
+            0.0 if response_law_fraction_value is None else response_law_fraction_value
+        )
 
         print(
             f"[{idx + 1}/{len(manifest_rows)}] Running scenario={scenario_id} arm={arm} planner={planner} seed={seed}"

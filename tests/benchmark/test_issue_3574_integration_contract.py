@@ -39,7 +39,9 @@ def _load_report_cli() -> ModuleType:
     return module
 
 
-def _fixture_records(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+def _fixture_records(
+    manifest: dict[str, Any], *, null_first_response_law_fraction: bool = False
+) -> list[dict[str, Any]]:
     """Construct complete records matching the tracked pre-run manifest."""
 
     records: list[dict[str, Any]] = []
@@ -63,13 +65,18 @@ def _fixture_records(manifest: dict[str, Any]) -> list[dict[str, Any]]:
                     ],
                 }
             )
+        response_law_fraction = row.get("response_law_fraction")
+        if response_law_fraction is None:
+            response_law_fraction = 0.0
+        if null_first_response_law_fraction and not records:
+            response_law_fraction = None
         records.append(
             {
                 "scenario_id": row["scenario_id"],
                 "planner": row["planner"],
                 "seed": row["seed"],
                 "population_arm": row["population_arm"],
-                "response_law_fraction": row.get("response_law_fraction", 0.0),
+                "response_law_fraction": response_law_fraction,
                 "metrics": {"mean_clearance": 1.0},
                 "algorithm_metadata": {
                     "pedestrian_control_trace": {
@@ -113,7 +120,10 @@ def test_tracked_manifest_metrics_flow_into_per_archetype_report(tmp_path: Path)
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     records_path = tmp_path / "episode_records.jsonl"
     records_path.write_text(
-        "".join(json.dumps(record) + "\n" for record in _fixture_records(manifest)),
+        "".join(
+            json.dumps(record) + "\n"
+            for record in _fixture_records(manifest, null_first_response_law_fraction=True)
+        ),
         encoding="utf-8",
     )
     output_dir = tmp_path / "output"

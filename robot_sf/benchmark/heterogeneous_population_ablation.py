@@ -824,11 +824,11 @@ def _with_response_law_fraction(
         A copy of the paired population payload with response-law composition and labels.
     """
 
-    response_law_composition = {"reactive": 1.0 - fraction}
-    if fraction:
+    response_law_composition = {}
+    if fraction < 1.0:
+        response_law_composition["reactive"] = 1.0 - fraction
+    if fraction > 0.0:
         response_law_composition["non_reactive"] = fraction
-    else:
-        response_law_composition = {"reactive": 1.0}
 
     arms: dict[str, dict[str, Any]] = {}
     for arm_name, arm in pair["arms"].items():
@@ -889,7 +889,9 @@ def _response_law_fraction_from_row(row: Mapping[str, Any], *, context: str) -> 
         A finite response-law fraction in the inclusive interval ``[0, 1]``.
     """
 
-    value = row.get("response_law_fraction", 0.0)
+    value = row.get("response_law_fraction")
+    if value is None:
+        return 0.0
     if isinstance(value, bool):
         raise ValueError(f"{context}.response_law_fraction must be a finite number in [0, 1]")
     try:

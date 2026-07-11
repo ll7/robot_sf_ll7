@@ -266,11 +266,11 @@ def test_mean_matched_harness_manifest_expands_response_law_fraction_sweep() -> 
     """Each configured response fraction creates fixed-density paired rows."""
 
     config = _manifest_config()
-    config["response_law_fractions"] = [0.0, 0.1, 0.25, 0.5]
+    config["response_law_fractions"] = [0.0, 0.1, 0.25, 0.5, 1.0]
     manifest = build_mean_matched_harness_manifest(config)
 
-    assert manifest["response_law_fractions"] == [0.0, 0.1, 0.25, 0.5]
-    assert manifest["row_count"] == 32
+    assert manifest["response_law_fractions"] == [0.0, 0.1, 0.25, 0.5, 1.0]
+    assert manifest["row_count"] == 40
     rows_by_fraction = {
         fraction: [
             row for row in manifest["manifest_rows"] if row["response_law_fraction"] == fraction
@@ -282,14 +282,21 @@ def test_mean_matched_harness_manifest_expands_response_law_fraction_sweep() -> 
         0.1: 8,
         0.25: 8,
         0.5: 8,
+        1.0: 8,
     }
     for fraction, rows in rows_by_fraction.items():
         for row in rows:
             population = row["arm_population"]
-            assert population["response_law_composition"] == {
-                "reactive": pytest.approx(1.0 - fraction),
-                **({"non_reactive": pytest.approx(fraction)} if fraction else {}),
-            }
+            expected_composition = {}
+            if fraction < 1.0:
+                expected_composition["reactive"] = pytest.approx(1.0 - fraction)
+            if fraction > 0.0:
+                expected_composition["non_reactive"] = pytest.approx(fraction)
+            assert population["response_law_composition"] == expected_composition
+            if fraction == 1.0:
+                assert {record["response_law"] for record in population["records"]} == {
+                    "non_reactive"
+                }
             assert len(population[PEDESTRIAN_CONTROL_TRACE_LABELS_KEY]) == 4
 
 

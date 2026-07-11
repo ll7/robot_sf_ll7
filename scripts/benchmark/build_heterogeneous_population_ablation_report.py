@@ -145,7 +145,10 @@ def main() -> int:  # noqa: C901,PLR0912,PLR0915
         seed = int(rec["seed"])
         planner = rec["planner"]
         arm = rec["population_arm"]
-        response_law_fraction = float(rec.get("response_law_fraction", 0.0))
+        response_law_fraction_value = rec.get("response_law_fraction")
+        response_law_fraction = float(
+            0.0 if response_law_fraction_value is None else response_law_fraction_value
+        )
         key = (sc_id, seed, planner, response_law_fraction)
 
         control_trace = rec.get("algorithm_metadata", {}).get("pedestrian_control_trace")
@@ -186,7 +189,10 @@ def main() -> int:  # noqa: C901,PLR0912,PLR0915
         seed = int(rec["seed"])
         planner = rec["planner"]
         arm = rec["population_arm"]
-        response_law_fraction = float(rec.get("response_law_fraction", 0.0))
+        response_law_fraction_value = rec.get("response_law_fraction")
+        response_law_fraction = float(
+            0.0 if response_law_fraction_value is None else response_law_fraction_value
+        )
         trace = rec.get("algorithm_metadata", {}).get("pedestrian_control_trace")
 
         mean_val = ""

@@ -156,6 +156,38 @@ The table contract is one row per `(config_name, family, planner)` with scenario
 unique seed count, denominator episodes, kinematics count, kinematics-expanded denominator
 episodes, and densities. Markdown tables may also be checked when they expose the same column names.
 
+## Per-arm checkpoint provenance
+
+Every camera-ready manifest planner arm carries a `checkpoint_provenance` block. Classical arms use
+`status: not_applicable`; checkpoint-backed arms record the model registry ID (when applicable),
+resolved checkpoint SHA-256, resolution details, actual runtime load result, and whether planner
+fallback triggered. Runtime results are also listed per kinematics variant under `runtime`, so a
+mixed-kinematics campaign cannot hide one degraded variant behind another successful load.
+
+Preflight-only manifests intentionally use `load_succeeded: null`, `fallback_triggered: null`, and
+`status: not_run`: checkpoint resolution is not proof that the planner loaded the weights. Completed
+campaigns change the status only from planner-emitted runtime diagnostics. At runtime SA-CADRL
+replaces the arm-level digest with a hash of its full TensorFlow checkpoint bundle (metadata, index,
+and data shards); ordinary single-file checkpoints use the file SHA-256. The nested preflight
+reference records retain the resolved registry artifact hash and state whether it was computed
+locally or came from registry-declared remote metadata.
+
+Existing campaigns remain audit-only by default. Set the following for comparison campaigns that
+must abort instead of silently using a learned-planner fallback:
+
+```yaml
+checkpoint_provenance_enforcement: error
+```
+
+Strict mode makes an unavailable implicit checkpoint (including SA-CADRL's default
+`ga3c_cadrl_iros18`) a preflight error and forces the effective planner prerequisite policy to
+`fail-fast`, including overriding an algorithm config's `allow_fallback: true`. The default `off`
+preserves legacy fallback behavior while still recording the result. Explicit `model_id` or
+`model_path` references retain the repository's existing always-on resolvability gate.
+
+This metadata proves artifact identity and the load/fallback path. It does not prove benchmark
+quality or make fallback/degraded rows success evidence.
+
 ## Per-arm tuning-effort block
 
 Each planner arm (a row in the campaign `planners` list) carries a `tuning` block in the camera-ready

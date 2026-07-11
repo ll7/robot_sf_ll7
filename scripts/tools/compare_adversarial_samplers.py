@@ -70,16 +70,19 @@ def run_sampler_comparison(
     *,
     config: SearchConfig,
     sampler_names: Sequence[str],
-    objective_names: Sequence[str],
     synthetic: bool,
+    objective_names: Sequence[str] | None = None,
     budgets: Sequence[int] | None = None,
     seeds: Sequence[int] | None = None,
 ) -> list[SamplerComparisonRow]:
     """Run the configured search once per sampler and objective and return compact rows."""
     rows: list[SamplerComparisonRow] = []
+    active_objectives = tuple(objective_names or (config.objective,))
+    if len(active_objectives) != len(set(active_objectives)):
+        raise ValueError("objective_names must not contain duplicates")
     active_budgets = tuple(budgets or (config.budget,))
     active_seeds = tuple(seeds or (config.seed,))
-    for objective_name in objective_names:
+    for objective_name in active_objectives:
         for budget in active_budgets:
             if budget <= 0:
                 raise ValueError("budgets must be positive")

@@ -1,4 +1,5 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "blockers": [
     "cannot read campaign_summary.json: [Errno 2] No such file or directory: 'output/issue4206-13334-harvest/reports/campaign_summary.json'",
     "cannot read seed_episode_rows.csv: [Errno 2] No such file or directory: 'output/issue4206-13334-harvest/reports/seed_episode_rows.csv'"
@@ -9,7 +10,7 @@
     "total_episodes_expected": 6480,
     "total_episodes_observed": null
   },
-  "claim_boundary": "Registration readiness only: this receipt verifies campaign structure and trace-label coverage for the issue #4206 reanalysis. It does not establish benchmark, planner, paper, or dissertation claims.",
+  "claim_boundary": "Registration readiness only: this receipt records the checker's fail-closed blocked result. The unavailable inputs mean it cannot verify campaign structure or trace-label coverage for the issue #4206 reanalysis, and it does not establish benchmark, planner, paper, or dissertation claims.",
   "generated_at": "2026-07-11T05:16:28Z",
   "issue": 5248,
   "job_id": "13334",

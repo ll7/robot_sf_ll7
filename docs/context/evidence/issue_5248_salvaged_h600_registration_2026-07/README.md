@@ -1,3 +1,4 @@
+<!-- AI-GENERATED (robot_sf#5248, 2026-07-11) - NEEDS-REVIEW -->
 # Salvaged h600 harvest registration
 
 Evidence status: `diagnostic-only`; registration is

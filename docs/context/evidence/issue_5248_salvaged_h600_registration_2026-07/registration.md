@@ -1,8 +1,9 @@
+<!-- AI-GENERATED (robot_sf#5248, 2026-07-11) - NEEDS-REVIEW -->
 # Salvaged trace-capable h600 registration receipt
 
 - Status: `blocked_campaign_registration`
 - Job: `13334`
-- Claim boundary: Registration readiness only: this receipt verifies campaign structure and trace-label coverage for the issue #4206 reanalysis. It does not establish benchmark, planner, paper, or dissertation claims.
+- Claim boundary: Registration readiness only: this receipt records the checker's fail-closed blocked result. The unavailable inputs mean it cannot verify campaign structure or trace-label coverage for the issue #4206 reanalysis, and it does not establish benchmark, planner, paper, or dissertation claims.
 
 | Check | Observed |
 | --- | --- |

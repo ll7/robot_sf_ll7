@@ -1,5 +1,8 @@
 # Context Retrieval Index
 
+Issue #5311 BRNE (Bayesian Recursive Nash Equilibrium) external interaction-planning comparator: source-side smoke + contract mapping, runtime-vs-neighbor-count measurement, and conditional go/no-go (GPL-3.0, local-only staging, no vendoring):
+[issue_5311_brne_source_smoke.md](issue_5311_brne_source_smoke.md).
+
 Issue #5263 exact-repeat campaign definitions (140 hash-matched targets and fail-closed two-host matrix):
 [README.md](evidence/issue_5263_exact_repeat/README.md).
 

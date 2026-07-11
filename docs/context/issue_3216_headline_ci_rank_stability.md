@@ -55,6 +55,15 @@ S20 (`paper_eval_s20`) and the launch-only S30 schedule (`paper_eval_s30`) are
 available via #1554. No S20/S30 campaign rows exist yet, so the report remains
 blocked until the SLURM run produces durable rows.
 
+The portable launcher `scripts/benchmark/run_issue3216_headline_campaign.sh`
+keeps campaign execution and post-campaign reporting as separate status lanes.
+It writes `reports/post_campaign_stage_status.json` under the campaign root with
+both exit codes. A completed campaign retains exit 0 even when the report stage
+fails, while the report is marked `report_stage_failed` and remains unavailable
+for benchmark claims. Hard campaign failures remain nonzero and skip reporting.
+This prevents a missing report dependency or artifact from relabeling completed
+planner rows as a failed campaign without hiding the reporting blocker.
+
 ## Reuse of canonical owners (no reinvention)
 
 Per AGENTS.md "Canonical Owner Check", the statistics are **composed**, not

@@ -36090,9 +36090,9 @@
     "severity": "major"
   },
   {
-    "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_0` (baseline-reproduction fixture for module 'scripts')",
-    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:970:optional",
+    "check_name": "invalid-argument-type",
+    "description": "invalid-argument-type: baseline-reproduction fixture #969 for module 'scripts'",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:970:general",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
       "positions": {
@@ -36102,11 +36102,11 @@
         }
       }
     },
-    "severity": "minor"
+    "severity": "major"
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_1` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_0` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:971:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -36121,7 +36121,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_2` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_1` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:972:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -36136,7 +36136,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_3` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_2` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:973:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -36151,7 +36151,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_4` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_3` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:974:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -36166,7 +36166,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_5` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_4` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:975:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -36181,7 +36181,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_6` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_5` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:976:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -36196,7 +36196,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_7` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_6` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:977:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -36211,7 +36211,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_8` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_7` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:978:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -36226,7 +36226,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_9` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_8` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:979:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -36241,7 +36241,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_10` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_9` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:980:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -36256,7 +36256,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_11` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_10` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:981:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -36271,7 +36271,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_12` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_11` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:982:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -36286,7 +36286,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_13` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_12` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:983:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -36301,7 +36301,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_14` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_13` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:984:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -36316,7 +36316,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_15` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_14` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:985:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -36331,7 +36331,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_16` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_15` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:986:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -36346,7 +36346,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_17` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_16` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:987:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -36361,7 +36361,7 @@
   },
   {
     "check_name": "unresolved-import",
-    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_18` (baseline-reproduction fixture for module 'scripts')",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_17` (baseline-reproduction fixture for module 'scripts')",
     "fingerprint": "scripts/dev/ty_advisory_ratchet.py:988:optional",
     "location": {
       "path": "scripts/dev/ty_advisory_ratchet.py",
@@ -36369,6 +36369,21 @@
         "begin": {
           "column": 1,
           "line": 988
+        }
+      }
+    },
+    "severity": "minor"
+  },
+  {
+    "check_name": "unresolved-import",
+    "description": "unresolved-import: Cannot resolve imported module `_ty_optional_18` (baseline-reproduction fixture for module 'scripts')",
+    "fingerprint": "scripts/dev/ty_advisory_ratchet.py:989:optional",
+    "location": {
+      "path": "scripts/dev/ty_advisory_ratchet.py",
+      "positions": {
+        "begin": {
+          "column": 1,
+          "line": 989
         }
       }
     },

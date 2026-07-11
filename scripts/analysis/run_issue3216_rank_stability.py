@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import subprocess
 import sys
@@ -82,8 +83,17 @@ def _failed_contract_checks(diagnostics: Mapping[str, Any]) -> list[dict[str, fl
     for value_key, threshold_key, direction in checks:
         value = diagnostics.get(value_key)
         threshold = thresholds.get(threshold_key)
-        if not isinstance(value, (int, float)) or not isinstance(threshold, (int, float)):
-            continue
+        if (
+            isinstance(value, bool)
+            or isinstance(threshold, bool)
+            or not isinstance(value, (int, float))
+            or not isinstance(threshold, (int, float))
+            or not math.isfinite(float(value))
+            or not math.isfinite(float(threshold))
+        ):
+            raise ValueError(
+                f"SNQI diagnostics {value_key}/{threshold_key} must be finite numeric values"
+            )
         violates = value < threshold if direction == "below" else value > threshold
         if violates:
             failed.append(

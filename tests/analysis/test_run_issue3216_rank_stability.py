@@ -141,3 +141,34 @@ def test_runner_rejects_harvest_without_completion_marker(tmp_path: Path) -> Non
     assert result.returncode == 2
     assert "VERIFIED_COMPLETE" in result.stderr
     assert not (tmp_path / "analysis").exists()
+
+
+def test_runner_rejects_nonfinite_snqi_diagnostics(tmp_path: Path) -> None:
+    """A failed contract with a non-finite diagnostic cannot become provenance."""
+    campaign = tmp_path / "campaign"
+    _campaign(campaign)
+    diagnostics_path = campaign / "reports" / "snqi_diagnostics.json"
+    diagnostics = json.loads(diagnostics_path.read_text(encoding="utf-8"))
+    diagnostics["rank_alignment_spearman"] = float("nan")
+    diagnostics_path.write_text(json.dumps(diagnostics), encoding="utf-8")
+    harvest_log = tmp_path / "harvest.log"
+    harvest_log.write_text("VERIFIED_COMPLETE\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(_SCRIPT),
+            "--campaign-root",
+            str(campaign),
+            "--harvest-log",
+            str(harvest_log),
+            "--output-dir",
+            str(tmp_path / "analysis"),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "must be finite numeric values" in result.stderr

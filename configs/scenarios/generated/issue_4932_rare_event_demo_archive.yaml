@@ -1,0 +1,161 @@
+# Three review-pending generated hypotheses for the CPU-only archive-sampler demo.
+# This archive is not included in any benchmark or release matrix.
+schema_version: generated-scenario-catalog.v1
+metadata:
+  source: auto_generated
+  required_manual_review: true
+  benchmark_evidence: false
+  claim_boundary: generated scenario hypotheses only
+  release_matrix_inclusion: false
+entries:
+  - schema_version: generated-scenario-catalog-entry.v1
+    scenario_id: generated-36e0c47a287acc0d
+    metadata:
+      source: auto_generated
+      generated_by: robot_sf.benchmark.scenario_generation.segment_extraction
+      required_manual_review: true
+      benchmark_evidence: false
+    source_episode:
+      episode_id: demo-critical
+      source_seed: 4932
+      source_map: maps/svg_maps/classic_crossing.svg
+    criticality:
+      signal: min_clearance
+      observed_at_s: 1.0
+      source_metrics:
+        min_clearance_m: 0.12
+    segment:
+      window_start_s: 0.0
+      window_end_s: 2.0
+      initial_robot_state:
+        position: [0.0, 0.0]
+      trace_frames:
+        - time_s: 0.0
+          robot:
+            position: [0.0, 0.0]
+          pedestrians:
+            - position: [3.0, 0.0]
+        - time_s: 1.0
+          robot:
+            position: [1.0, 0.0]
+          pedestrians:
+            - position: [1.12, 0.0]
+        - time_s: 2.0
+          robot:
+            position: [2.0, 0.0]
+          pedestrians:
+            - position: [5.0, 0.0]
+    replay:
+      schema_version: generated-scenario-replay.v1
+      source_seed: 4932
+      replay_contract: source_episode_seed_pinned.v1
+      status: not_representable_yet
+      warnings:
+        - "replay_gap: demo trace state is not a certified standalone scenario"
+    provenance:
+      schema_version: generated-scenario-provenance.v1
+      source_issue: "#4932"
+      distiller: critical_segment_min_clearance.v1
+      claim_boundary: generated scenario hypotheses only
+  - schema_version: generated-scenario-catalog-entry.v1
+    scenario_id: generated-055e3f5f4631bd24
+    metadata:
+      source: auto_generated
+      generated_by: robot_sf.benchmark.scenario_generation.segment_extraction
+      required_manual_review: true
+      benchmark_evidence: false
+    source_episode:
+      episode_id: demo-near
+      source_seed: 4932
+      source_map: maps/svg_maps/classic_crossing.svg
+    criticality:
+      signal: min_clearance
+      observed_at_s: 1.0
+      source_metrics:
+        min_clearance_m: 0.45
+    segment:
+      window_start_s: 0.0
+      window_end_s: 2.0
+      initial_robot_state:
+        position: [4.0, 0.0]
+      trace_frames:
+        - time_s: 0.0
+          robot:
+            position: [4.0, 0.0]
+          pedestrians:
+            - position: [7.0, 0.0]
+        - time_s: 1.0
+          robot:
+            position: [5.0, 0.0]
+          pedestrians:
+            - position: [5.45, 0.0]
+        - time_s: 2.0
+          robot:
+            position: [6.0, 0.0]
+          pedestrians:
+            - position: [9.0, 0.0]
+    replay:
+      schema_version: generated-scenario-replay.v1
+      source_seed: 4932
+      replay_contract: source_episode_seed_pinned.v1
+      status: not_representable_yet
+      warnings:
+        - "replay_gap: demo trace state is not a certified standalone scenario"
+    provenance:
+      schema_version: generated-scenario-provenance.v1
+      source_issue: "#4932"
+      distiller: critical_segment_min_clearance.v1
+      claim_boundary: generated scenario hypotheses only
+  - schema_version: generated-scenario-catalog-entry.v1
+    scenario_id: generated-6f60fb4d82bdf5f9
+    metadata:
+      source: auto_generated
+      generated_by: robot_sf.benchmark.scenario_generation.segment_extraction
+      required_manual_review: true
+      benchmark_evidence: false
+    source_episode:
+      episode_id: demo-nominal
+      source_seed: 4932
+      source_map: maps/svg_maps/classic_crossing.svg
+    criticality:
+      signal: min_clearance
+      observed_at_s: 1.0
+      source_metrics:
+        min_clearance_m: 1.2
+    segment:
+      window_start_s: 0.0
+      window_end_s: 2.0
+      initial_robot_state:
+        position: [8.0, 0.0]
+      trace_frames:
+        - time_s: 0.0
+          robot:
+            position: [8.0, 0.0]
+          pedestrians:
+            - position: [11.0, 0.0]
+        - time_s: 1.0
+          robot:
+            position: [9.0, 0.0]
+          pedestrians:
+            - position: [10.2, 0.0]
+        - time_s: 2.0
+          robot:
+            position: [10.0, 0.0]
+          pedestrians:
+            - position: [13.0, 0.0]
+    replay:
+      schema_version: generated-scenario-replay.v1
+      source_seed: 4932
+      replay_contract: source_episode_seed_pinned.v1
+      status: not_representable_yet
+      warnings:
+        - "replay_gap: demo trace state is not a certified standalone scenario"
+    provenance:
+      schema_version: generated-scenario-provenance.v1
+      source_issue: "#4932"
+      distiller: critical_segment_min_clearance.v1
+      claim_boundary: generated scenario hypotheses only
+deduplication:
+  schema_version: generated-scenario-dedup.v1
+  dropped_count: 0
+  dropped: []

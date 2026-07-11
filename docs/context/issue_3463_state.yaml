@@ -1,10 +1,21 @@
 issue: 3463
 state_surface: high_churn_issue_state
-updated_at: "2026-07-08"
-current_status: open_diagnostic_complete_slice_replaced
+updated_at: "2026-07-11"
+current_status: open_diagnostic_requires_post_replacement_smoke
 claim_boundary: diagnostic_only_not_benchmark_or_paper_evidence
 benchmark_promotion_gate: 3465
 latest_audit:
+  path: docs/context/evidence/issue_3463_closure_audit_2026-07-11.md
+  decision: remain_open
+  reason: >
+    PR #5225 (2026-07-11) closes the bounded topology-hypothesis-availability
+    correction: valid/missing/malformed/fallback outcomes are recorded and malformed
+    geometry fails closed. The parent acceptance audit remains open, however: the
+    tracked 2026-07-05 packet included five doorway_transfer not_available rows;
+    #4841 removed that scenario but no post-replacement diagnostic run is recorded.
+    Keep #3463 open until its remaining corrective scope and diagnostic re-run are
+    explicitly resolved. #3465 remains the benchmark-facing promotion gate.
+prior_audit:
   path: docs/context/evidence/issue_3463_closure_audit_2026-07-07.md
   decision: slice_replaced
   reason: >
@@ -21,7 +32,7 @@ resolved_blocker:
   rows_affected: 5
   resolution_action: removed_slice_from_cross_slice_manifest
   retained_in_record: true
-next_empirical_action: await_3465_benchmark_facing_enabled_vs_disabled_promotion
+next_empirical_action: run_post_replacement_cross_slice_diagnostic_then_reassess_3463
 forbidden_claims:
   benchmark_improvement: false
   planner_promotion: false

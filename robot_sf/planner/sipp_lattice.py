@@ -135,22 +135,25 @@ class SippLatticePrimitiveSet:
             List of FORWARD and turn primitives.
         """
         dt = self.primitive_duration
-        max_v = self.max_linear_speed
-        max_w = self.max_angular_speed
+        max_v = min(self.max_linear_speed, self.max_linear_acceleration * dt)
+        max_w = min(
+            self.max_angular_speed,
+            self.max_steering_rate * dt,
+        )
 
-        linear_values = [
-            v
-            for v in np.arange(0.0, max_v + self.linear_resolution * 0.5, self.linear_resolution)
-            if v <= max_v and v > 1e-6
-        ]
+        linear_values = list(
+            np.arange(self.linear_resolution, max_v + 1e-6, self.linear_resolution)
+        )
+        if max_v > 1e-6 and (not linear_values or linear_values[-1] < max_v - 1e-6):
+            linear_values.append(max_v)
 
-        angular_values = [
-            w
-            for w in np.arange(
-                -max_w, max_w + self.angular_resolution * 0.5, self.angular_resolution
-            )
-            if abs(w) <= max_w + 1e-6
-        ]
+        if max_w <= 1e-6:
+            angular_values = [0.0]
+        else:
+            positive_values = np.arange(0.0, max_w + 1e-6, self.angular_resolution)
+            if positive_values[-1] < max_w - 1e-6:
+                positive_values = np.append(positive_values, max_w)
+            angular_values = list(np.concatenate((-positive_values[:0:-1], positive_values)))
 
         primitives: list[MotionPrimitive] = []
         for v in linear_values:
@@ -158,10 +161,8 @@ class SippLatticePrimitiveSet:
                 abs_w = abs(w)
                 if abs_w > max_w:
                     continue
-                delta_w = abs_w * dt
-                if max_steering_rate := self.max_steering_rate:
-                    if delta_w > max_steering_rate * dt + 1e-6:
-                        continue
+                if abs_w > self.max_steering_rate * dt + 1e-6:
+                    continue
                 primitives.append(
                     MotionPrimitive(
                         linear_velocity=float(v),
@@ -180,7 +181,7 @@ class SippLatticePrimitiveSet:
         """
         dt = self.primitive_duration
         steps = int(self.deceleration_steps)
-        max_v = self.max_linear_speed
+        max_v = min(self.max_linear_speed, self.max_linear_acceleration * dt)
         primitives: list[MotionPrimitive] = []
 
         for i in range(1, steps + 1):
@@ -218,16 +219,22 @@ class SippLatticePrimitiveSet:
             List of low-speed recentering arcs.
         """
         dt = self.primitive_duration
-        max_w = self.recenter_angular_max
-        v = self.linear_resolution * 0.5
+        max_w = min(
+            self.recenter_angular_max,
+            self.max_angular_speed,
+            self.max_steering_rate * dt,
+        )
+        v = min(self.linear_resolution * 0.5, self.max_linear_acceleration * dt)
 
         if max_w > self.angular_resolution:
             steps = max(2, int(max_w / self.angular_resolution))
             angular_values = [
                 w for w in np.linspace(-max_w, max_w, steps) if abs(w) <= max_w + 1e-6
             ]
+        elif max_w > 1e-6:
+            angular_values = [-max_w, max_w]
         else:
-            angular_values = [0.3, -0.3] if max_w >= 0.3 else [0.0, -0.0]
+            angular_values = [0.0]
 
         primitives: list[MotionPrimitive] = []
         for w in angular_values:
@@ -251,7 +258,7 @@ class SippLatticePrimitiveSet:
             return []
 
         dt = self.primitive_duration
-        max_v = self.max_linear_speed * 0.4
+        max_v = min(self.max_linear_speed * 0.4, self.max_linear_acceleration * dt)
         primitives: list[MotionPrimitive] = []
 
         v_values = [
@@ -301,30 +308,20 @@ class SippKinodynamicCollisionModel:
 
     Attributes:
         robot_radius: Robot safety radius in meters.
-        pedestrian_radius: Default pedestrian safety radius in meters.
         safety_margin: Minimum clearance margin above contact distance in meters.
-        min_clearance: Minimum acceptable distance to a dynamic obstacle.
-        grid_obstacle_threshold: Occupancy grid value above which a cell is blocked.
         continuous_check_steps: Number of interpolated points per arc for collision.
     """
 
     robot_radius: float = 0.25
-    pedestrian_radius: float = 0.30
     safety_margin: float = 0.10
-    min_clearance: float = 0.55
-    grid_obstacle_threshold: float = 0.5
     continuous_check_steps: int = 5
 
     def __post_init__(self) -> None:
         """Validate collision model parameters."""
         if not (isfinite(self.robot_radius) and self.robot_radius > 0.0):
             raise ValueError("robot_radius must be finite and positive")
-        if not (isfinite(self.pedestrian_radius) and self.pedestrian_radius > 0.0):
-            raise ValueError("pedestrian_radius must be finite and positive")
         if not (isfinite(self.safety_margin) and self.safety_margin >= 0.0):
             raise ValueError("safety_margin must be finite and non-negative")
-        if not isfinite(self.grid_obstacle_threshold):
-            raise ValueError("grid_obstacle_threshold must be finite")
         if int(self.continuous_check_steps) < 1:
             raise ValueError("continuous_check_steps must be at least 1")
 
@@ -352,7 +349,7 @@ class SippKinodynamicCollisionModel:
         obstacle_centers: np.ndarray,
         obstacle_radius: float,
     ) -> bool:
-        """Continuous collision check by linearly interpolating between arc endpoints.
+        """Continuous collision check by linearly interpolating a straight segment.
 
         Args:
             start_pos: Robot start position as ``(x, y)``.
@@ -364,19 +361,47 @@ class SippKinodynamicCollisionModel:
             ``True`` if any interpolated point collides with any obstacle.
         """
         steps = max(int(self.continuous_check_steps), 1)
+        fractions = np.linspace(0.0, 1.0, steps + 1)[:, None]
+        positions = start_pos + fractions * (end_pos - start_pos)
+        return self._positions_collide(positions, obstacle_centers, obstacle_radius)
+
+    def _positions_collide(
+        self,
+        positions: np.ndarray,
+        obstacle_centers: np.ndarray,
+        obstacle_radius: float,
+    ) -> bool:
+        """Return whether sampled robot positions intersect any obstacle circle."""
+        if len(obstacle_centers) == 0:
+            return False
         combined_radius = self.robot_radius + self.safety_margin + float(obstacle_radius)
+        diffs = positions[:, None, :] - obstacle_centers[None, :, :]
+        distances_squared = np.sum(diffs * diffs, axis=2)
+        return bool(np.any(distances_squared <= combined_radius * combined_radius))
 
-        combined_sq = combined_radius * combined_radius
+    def _unicycle_arc_positions(
+        self,
+        command: tuple[float, float],
+        heading: float,
+        duration: float,
+        start_pos: np.ndarray,
+    ) -> np.ndarray:
+        """Sample the exact constant-unicycle arc, including its endpoints.
 
-        for i in range(steps + 1):
-            t = i / steps
-            pos = start_pos + t * (end_pos - start_pos)
-            for j in range(len(obstacle_centers)):
-                dx = pos[0] - obstacle_centers[j, 0]
-                dy = pos[1] - obstacle_centers[j, 1]
-                if dx * dx + dy * dy <= combined_sq:
-                    return True
-        return False
+        Returns:
+            Sampled world-frame positions from the start through the arc endpoint.
+        """
+        velocity, angular_velocity = command
+        steps = max(int(self.continuous_check_steps), 1)
+        times = np.linspace(0.0, duration, steps + 1)
+        if abs(angular_velocity) < 1e-6:
+            direction = np.array([math.cos(heading), math.sin(heading)])
+            return start_pos + times[:, None] * velocity * direction
+
+        headings = heading + angular_velocity * times
+        dx = velocity / angular_velocity * (np.sin(headings) - math.sin(heading))
+        dy = -velocity / angular_velocity * (np.cos(headings) - math.cos(heading))
+        return start_pos + np.column_stack((dx, dy))
 
     def primitive_posture(
         self,
@@ -401,22 +426,8 @@ class SippKinodynamicCollisionModel:
             Dictionary with ``endpoint_collides``, ``continuous_collides``,
             ``endpoint_distance``, and ``continuous_clearance`` keys.
         """
-        v, omega = command
-        dt = duration
-        wrap_angle_pi(heading + omega * dt)
-
-        if abs(omega) < 1e-6:
-            end_pos = start_pos + np.array([v * math.cos(heading), v * math.sin(heading)]) * dt
-        else:
-            n = max(int(self.continuous_check_steps) + 2, 4)
-            sub_dt = dt / n
-            position = np.array(start_pos, dtype=float)
-            h = float(heading)
-            for _ in range(n):
-                position[0] += v * math.cos(h) * sub_dt
-                position[1] += v * math.sin(h) * sub_dt
-                h += omega * sub_dt
-            end_pos = position
+        arc_positions = self._unicycle_arc_positions(command, heading, duration, start_pos)
+        end_pos = arc_positions[-1]
 
         endpoint_dist = float("inf")
         if len(obstacle_positions) > 0:
@@ -426,16 +437,18 @@ class SippKinodynamicCollisionModel:
                 np.min(dists) - self.robot_radius - self.safety_margin - float(obstacle_radius)
             )
 
-        endpoint_collides = endpoint_dist < 0.0 if len(obstacle_positions) > 0 else False
-        continuous_collides = (
-            self.check_continuous_arc_collision(
-                start_pos, end_pos, obstacle_positions, obstacle_radius
-            )
-            if len(obstacle_positions) > 0
-            else False
+        endpoint_collides = endpoint_dist <= 0.0 if len(obstacle_positions) > 0 else False
+        continuous_collides = self._positions_collide(
+            arc_positions, obstacle_positions, obstacle_radius
         )
-
-        continuous_clearance = endpoint_dist
+        if len(obstacle_positions) > 0:
+            diffs = arc_positions[:, None, :] - obstacle_positions[None, :, :]
+            distances = np.sqrt(np.sum(diffs * diffs, axis=2))
+            continuous_clearance = float(
+                np.min(distances) - self.robot_radius - self.safety_margin - float(obstacle_radius)
+            )
+        else:
+            continuous_clearance = float("inf")
 
         return {
             "endpoint_collides": bool(endpoint_collides),
@@ -489,14 +502,10 @@ class SippLatticeConfig:
     grid_obstacle_threshold: float = 0.5
     continuous_check_steps: int = 5
     goal_tolerance: float = 0.25
-    lattice_search_depth: int = 3
-    max_expansion_nodes: int = 1000
-    occupancy_heading_sweep: float = 1.0
     occupancy_candidates: int = 5
     occupancy_lookahead: float = 1.0
     occupancy_weight: float = 1.2
     occupancy_angle_weight: float = 0.3
-    pedestrian_radius_cfg: float = 0.30
 
     def __post_init__(self) -> None:
         """Validate configuration values at construction."""
@@ -509,7 +518,6 @@ class SippLatticeConfig:
                 "angular_resolution": self.angular_resolution,
                 "robot_radius": self.robot_radius,
                 "pedestrian_radius": self.pedestrian_radius,
-                "pedestrian_radius_cfg": self.pedestrian_radius_cfg,
                 "goal_tolerance": self.goal_tolerance,
                 "occupancy_lookahead": self.occupancy_lookahead,
             },
@@ -525,8 +533,6 @@ class SippLatticeConfig:
             positive_ints={
                 "deceleration_steps": self.deceleration_steps,
                 "continuous_check_steps": self.continuous_check_steps,
-                "lattice_search_depth": self.lattice_search_depth,
-                "max_expansion_nodes": self.max_expansion_nodes,
                 "occupancy_candidates": self.occupancy_candidates,
             },
         )
@@ -561,10 +567,7 @@ class SippLatticeConfig:
         """
         return SippKinodynamicCollisionModel(
             robot_radius=self.robot_radius,
-            pedestrian_radius=self.pedestrian_radius,
             safety_margin=self.safety_margin,
-            min_clearance=self.min_clearance,
-            grid_obstacle_threshold=self.grid_obstacle_threshold,
             continuous_check_steps=self.continuous_check_steps,
         )
 
@@ -627,7 +630,7 @@ class SippLatticePlannerAdapter(OccupancyAwarePlannerMixin):
         )
         pedestrian_positions = raw_positions[:count]
 
-        ped_rad = float(self.config.pedestrian_radius_cfg)
+        ped_rad = float(self.config.pedestrian_radius)
         return robot_pos, heading, speed, active_goal, pedestrian_positions, ped_rad
 
     def _score_primitive(
@@ -680,17 +683,19 @@ class SippLatticePlannerAdapter(OccupancyAwarePlannerMixin):
             robot_pos,
             end_pos - robot_pos,
             observation,
-            0.5,
-            min(3, self.config.continuous_check_steps),
+            self.config.occupancy_lookahead,
+            self.config.occupancy_candidates,
         )
+        if grid_penalty >= float(self.config.grid_obstacle_threshold):
+            return float("-inf")
 
         score = (
             1.5 * heading_score
             + 1.0 * clearance_score
             + 0.3 * velocity_score
             + 1.0 * progress
-            - 1.2 * grid_penalty
-            - 0.6 * ped_penalty
+            - float(self.config.occupancy_weight) * grid_penalty
+            - float(self.config.occupancy_angle_weight) * ped_penalty
         )
         return score
 
@@ -715,8 +720,10 @@ class SippLatticePlannerAdapter(OccupancyAwarePlannerMixin):
             self._last_decision = {
                 "primitive_count": self._primitive_count,
                 "feasible_count": 0,
+                "infeasible_count": 0,
                 "best_score": 0.0,
                 "best_kind": "goal_reached",
+                "best_command": [0.0, 0.0],
                 "constraint_reason": "goal_reached",
                 "distance_to_goal_m": distance_to_goal,
             }
@@ -786,13 +793,17 @@ def build_sipp_lattice_config(cfg: dict[str, Any] | None) -> SippLatticeConfig:
     defaults = SippLatticeConfig()
 
     def _get_float(key: str) -> float:
-        return float(cfg.get(key, getattr(defaults, key, 0.0)))
+        value = cfg.get(key)
+        return float(getattr(defaults, key, 0.0) if value is None else value)
 
     def _get_int(key: str) -> int:
-        return int(cfg.get(key, getattr(defaults, key, 1)))
+        value = cfg.get(key)
+        return int(getattr(defaults, key, 1) if value is None else value)
 
     def _get_bool(key: str) -> bool:
-        v = cfg.get(key, getattr(defaults, key, False))
+        v = cfg.get(key)
+        if v is None:
+            v = getattr(defaults, key, False)
         if isinstance(v, bool):
             return v
         if isinstance(v, str):
@@ -817,12 +828,8 @@ def build_sipp_lattice_config(cfg: dict[str, Any] | None) -> SippLatticeConfig:
         grid_obstacle_threshold=_get_float("grid_obstacle_threshold"),
         continuous_check_steps=_get_int("continuous_check_steps"),
         goal_tolerance=_get_float("goal_tolerance"),
-        lattice_search_depth=_get_int("lattice_search_depth"),
-        max_expansion_nodes=_get_int("max_expansion_nodes"),
-        occupancy_heading_sweep=_get_float("occupancy_heading_sweep"),
         occupancy_candidates=_get_int("occupancy_candidates"),
         occupancy_lookahead=_get_float("occupancy_lookahead"),
         occupancy_weight=_get_float("occupancy_weight"),
         occupancy_angle_weight=_get_float("occupancy_angle_weight"),
-        pedestrian_radius_cfg=_get_float("pedestrian_radius_cfg"),
     )

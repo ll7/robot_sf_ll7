@@ -77,7 +77,6 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "prediction_mpc": "classical",
     "chance_constrained_mpc": "classical",
     "learned_prediction_mpc": "learning",
-"sipp_lattice": "classical",
 }
 
 _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
@@ -140,7 +139,6 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "prediction_mpc": "prediction_aware_model_predictive_local_planner",
     "chance_constrained_mpc": "gmm_chance_constrained_model_predictive_local_planner",
     "learned_prediction_mpc": "learned_short_horizon_prediction_mpc_local_planner",
-"sipp_lattice": "kinodynamic_state_time_lattice_planner",
 }
 
 _DEFAULT_OBSERVATION_SPEC: dict[str, Any] = {
@@ -1141,16 +1139,6 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "default_adapter_name": "PredictionMPCPlannerAdapter",
         "benchmark_command_space": "unicycle_vw",
         "projection_policy": "learned_short_horizon_time_varying_pedestrian_constraints",
-        "projection_documented": True,
-    },
-    "sipp_lattice": {
-        "planner_command_space": "unicycle_vw",
-        "supports_native_commands": False,
-        "supports_adapter_commands": True,
-        "default_execution_mode": "adapter",
-        "default_adapter_name": "SippLatticePlannerAdapter",
-        "benchmark_command_space": "unicycle_vw",
-        "projection_policy": "kinodynamic_primitive_lattice_unicycle_vw",
         "projection_documented": True,
     },
 }

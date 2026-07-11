@@ -218,8 +218,30 @@ class TestSippLatticePrimitiveSet:
         ps = SippLatticePrimitiveSet(deceleration_steps=4)
         prizes = ps.build()
         decelerate = [p.linear_velocity for p in prizes if p.kind == PrimitiveKind.DECELERATE]
-        decelerate.sort(reverse=True)
         assert decelerate == sorted(decelerate, reverse=True)
+
+    def test_steering_rate_limits_angular_velocity_per_primitive(self) -> None:
+        ps = SippLatticePrimitiveSet(
+            max_angular_speed=3.0,
+            max_steering_rate=2.0,
+            primitive_duration=0.2,
+        )
+        forwards = [p for p in ps.build() if p.kind == PrimitiveKind.FORWARD]
+        assert forwards
+        assert max(abs(p.angular_velocity) for p in forwards) <= 0.4 + 1e-6
+
+    def test_linear_acceleration_limits_speed_per_primitive(self) -> None:
+        ps = SippLatticePrimitiveSet(
+            max_linear_speed=3.0,
+            max_linear_acceleration=0.5,
+            primitive_duration=0.2,
+        )
+        assert max(abs(p.linear_velocity) for p in ps.build()) <= 0.1 + 1e-6
+
+    def test_low_recenter_limit_produces_bounded_corrective_turns(self) -> None:
+        ps = SippLatticePrimitiveSet(recenter_angular_max=0.1, angular_resolution=0.25)
+        recenter = [p.angular_velocity for p in ps.build() if p.kind == PrimitiveKind.RECENTER]
+        assert recenter == [-0.1, 0.1]
 
     def test_wait_primitive_is_zero_command(self) -> None:
         ps = SippLatticePrimitiveSet()
@@ -312,8 +334,21 @@ class TestSippKinodynamicCollisionModel:
             obstacle_radius=0.3,
         )
         end = np.array(posture["end_position"])
-        assert end[0] > 0.0
-        assert end[1] > 0.0
+        assert end[0] == pytest.approx(math.sin(0.1) / 0.5)
+        assert end[1] == pytest.approx((1.0 - math.cos(0.1)) / 0.5)
+
+    def test_primitive_posture_checks_the_actual_turning_arc(self) -> None:
+        cm = SippKinodynamicCollisionModel(continuous_check_steps=20)
+        posture = cm.primitive_posture(
+            command=(1.0, math.pi),
+            heading=0.0,
+            duration=1.0,
+            start_pos=np.array([0.0, 0.0]),
+            obstacle_positions=np.array([[0.32, 0.32]]),
+            obstacle_radius=0.05,
+        )
+        assert posture["continuous_collides"]
+        assert not posture["endpoint_collides"]
 
     def test_invalid_robot_radius_raises(self) -> None:
         with pytest.raises(ValueError, match="robot_radius"):
@@ -410,6 +445,14 @@ class TestBuildSippLatticeConfig:
         cfg = build_sipp_lattice_config({"continuous_check_steps": 8})
         assert cfg.continuous_check_steps == 8
 
+    def test_none_values_use_defaults(self) -> None:
+        cfg = build_sipp_lattice_config(
+            {"max_linear_speed": None, "deceleration_steps": None, "allow_reverse": None}
+        )
+        assert cfg.max_linear_speed == 1.0
+        assert cfg.deceleration_steps == 4
+        assert cfg.allow_reverse
+
 
 # -- SippLatticePlannerAdapter tests --
 
@@ -475,6 +518,16 @@ class TestSippLatticePlannerAdapter:
         diag = planner.diagnostics()
         last = diag["last_decision"]
         assert last["constraint_reason"] == "goal_reached"
+        assert set(last) == {
+            "primitive_count",
+            "feasible_count",
+            "infeasible_count",
+            "best_score",
+            "best_kind",
+            "best_command",
+            "constraint_reason",
+            "distance_to_goal_m",
+        }
 
     def test_reset_clears_last_decision(self) -> None:
         planner = SippLatticePlannerAdapter()

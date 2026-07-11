@@ -480,16 +480,6 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         ),
         requires_explicit_opt_in=True,
     ),
-    AlgorithmReadiness(
-        canonical_name="sipp_lattice",
-        tier="experimental",
-        aliases=("sipp_lattice", "kinodynamic_lattice"),
-        note=(
-            "Kinodynamic state-time lattice (SIPP-class) planner using AMV-feasible motion "
-            "primitives with continuous-collision scoring; Slice 1 of issue #5306."
-        ),
-        requires_explicit_opt_in=True,
-    ),
 )
 
 _ALIAS_INDEX: dict[str, AlgorithmReadiness] = {

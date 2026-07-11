@@ -304,6 +304,12 @@ def test_build_policy_prediction_mpc_alias_registers_same_adapter() -> None:
     assert meta["algorithm"] == "prediction_mpc"
 
 
+def test_build_policy_chance_constrained_mpc_fails_closed_without_gmm_provider() -> None:
+    """The experimental GMM MPC key must not substitute a deterministic predictor."""
+    with pytest.raises(ValueError, match="unavailable"):
+        _build_policy("chance_constrained_mpc", {"predictor_backend": "issue_2844_k_mode_gmm"})
+
+
 def test_build_policy_learned_prediction_mpc_registers_diagnostic_adapter() -> None:
     """Learned prediction MPC aliases use prediction-MPC adapter diagnostics."""
 

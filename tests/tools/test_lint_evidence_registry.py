@@ -415,6 +415,43 @@ def test_strict_exclusion_policy_file_is_loaded(tmp_path: Path) -> None:
     assert report["summary"]["findings"] == 0
 
 
+def test_strict_exclusion_policy_fails_closed_when_missing_or_malformed(tmp_path: Path) -> None:
+    """A policy option never silently turns a strict check into a vacuous pass."""
+    repo, evidence, _commit, config_sha256 = _make_repo(tmp_path)
+    artifact_sha256 = hashlib.sha256((evidence / "artifact.json").read_bytes()).hexdigest()
+    _write_entry(
+        evidence,
+        campaign_id="campaign-invalid-policy",
+        commit="f" * 40,
+        config_sha256=config_sha256,
+        artifact_sha256=artifact_sha256,
+        name="invalid-policy.json",
+    )
+    command = [
+        sys.executable,
+        str(LINTER),
+        "--repo-root",
+        str(repo),
+        "--registry-root",
+        str(evidence),
+        "--strict",
+        "--strict-exclusion-policy",
+    ]
+    missing = subprocess.run(
+        [*command, str(repo / "missing.yaml")], capture_output=True, text=True, check=False
+    )
+    malformed = repo / "malformed.yaml"
+    malformed.write_text("excluded_codes: dangling_commit\\n", encoding="utf-8")
+    malformed_result = subprocess.run(
+        [*command, str(malformed)], capture_output=True, text=True, check=False
+    )
+
+    assert missing.returncode != 0
+    assert "Strict exclusion policy file not found" in missing.stderr
+    assert malformed_result.returncode != 0
+    assert "must contain an 'excluded_codes' list" in malformed_result.stderr
+
+
 def test_exclude_codes_and_policy_merge(tmp_path: Path) -> None:
     """CLI --exclude-codes and --strict-exclusion-policy are merged."""
     repo, evidence, _commit, config_sha256 = _make_repo(tmp_path)

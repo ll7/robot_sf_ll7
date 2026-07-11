@@ -129,6 +129,38 @@ def _load_document(path: Path) -> Any:
     return raw
 
 
+def _load_strict_exclusion_policy(path: Path) -> frozenset[str]:
+    """Load a strict-mode exclusion policy or fail before a gate can pass."""
+    if not path.is_file():
+        raise FileNotFoundError(f"Strict exclusion policy file not found: {path}")
+    try:
+        policy = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Could not parse strict exclusion policy {path}: {exc}") from exc
+    if not isinstance(policy, Mapping):
+        raise ValueError(
+            f"Strict exclusion policy {path} must be a YAML mapping, got {type(policy).__name__}."
+        )
+    codes = policy.get("excluded_codes")
+    if not isinstance(codes, list):
+        raise ValueError(f"Strict exclusion policy {path} must contain an 'excluded_codes' list.")
+
+    parsed: list[str] = []
+    for item in codes:
+        if isinstance(item, str) and item.strip():
+            parsed.append(item)
+        elif (
+            isinstance(item, Mapping) and isinstance(item.get("code"), str) and item["code"].strip()
+        ):
+            parsed.append(item["code"])
+        else:
+            raise ValueError(
+                f"Every strict exclusion policy entry in {path} must be a non-empty code string "
+                "or mapping with a non-empty 'code' string."
+            )
+    return frozenset(parsed)
+
+
 def _iter_mappings(
     value: Any, ancestors: tuple[Mapping[str, Any], ...] = ()
 ) -> Iterable[tuple[Mapping[str, Any], tuple[Mapping[str, Any], ...]]]:
@@ -556,18 +588,8 @@ def main(argv: list[str] | None = None) -> int:
         else repo_root / args.disposition_file
     )
     exclude_codes: frozenset[str] = frozenset()
-    if args.strict_exclusion_policy and args.strict_exclusion_policy.is_file():
-        policy = yaml.safe_load(args.strict_exclusion_policy.read_text(encoding="utf-8"))
-        if isinstance(policy, Mapping):
-            codes = policy.get("excluded_codes")
-            if isinstance(codes, list):
-                parsed: list[str] = []
-                for item in codes:
-                    if isinstance(item, str):
-                        parsed.append(item)
-                    elif isinstance(item, Mapping) and isinstance(item.get("code"), str):
-                        parsed.append(item["code"])
-                exclude_codes = frozenset(parsed)
+    if args.strict_exclusion_policy:
+        exclude_codes = _load_strict_exclusion_policy(args.strict_exclusion_policy)
     if args.exclude_codes:
         exclude_codes = exclude_codes | frozenset(
             code.strip() for code in args.exclude_codes.split(",") if code.strip()

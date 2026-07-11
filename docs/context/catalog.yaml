@@ -4204,6 +4204,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5262_dwa_config_sensitivity_2026-07-11
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5088_braking_authority_sensitivity_smoke/README.md
   status: evidence
   freshness: evidence

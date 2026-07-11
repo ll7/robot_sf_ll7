@@ -1,6 +1,6 @@
 # Context Retrieval Index
 
-Issue #5263 exact-repeat campaign packet (seven knife-edge cells and fail-closed two-host matrix):
+Issue #5263 exact-repeat campaign definitions (140 hash-matched targets and fail-closed two-host matrix):
 [README.md](evidence/issue_5263_exact_repeat/README.md).
 
 Registered emergent-phenomena demonstration for the released pedestrian substrate (lane formation, doorway oscillation, exit arching) at released + literature-typical speed:

@@ -11,6 +11,7 @@ from typing import Any
 from robot_sf.benchmark.exact_repeat_campaign import (
     build_manifest,
     compare_verified_hosts,
+    resolve_runnable_definitions,
     verify_host_report,
 )
 
@@ -37,6 +38,12 @@ def _parser() -> argparse.ArgumentParser:
     manifest.add_argument("--baseline-report", type=Path, required=True)
     manifest.add_argument("--source-episodes", type=Path, required=True)
     manifest.add_argument("--output", type=Path, required=True)
+    resolve = subcommands.add_parser(
+        "resolve-definitions", help="recover and hash-check all runnable target definitions"
+    )
+    resolve.add_argument("--manifest", type=Path, required=True)
+    resolve.add_argument("--campaign-config", type=Path, required=True)
+    resolve.add_argument("--output", type=Path, required=True)
     verify = subcommands.add_parser("verify-host", help="verify a completed host report")
     verify.add_argument("--manifest", type=Path, required=True)
     verify.add_argument("--host-report", type=Path, required=True)
@@ -56,6 +63,8 @@ def main() -> int:
         payload = build_manifest(
             _read_json(args.baseline_report), _read_jsonl(args.source_episodes)
         )
+    elif args.command == "resolve-definitions":
+        payload = resolve_runnable_definitions(_read_json(args.manifest), args.campaign_config)
     elif args.command == "verify-host":
         payload = verify_host_report(_read_json(args.manifest), _read_json(args.host_report))
     else:

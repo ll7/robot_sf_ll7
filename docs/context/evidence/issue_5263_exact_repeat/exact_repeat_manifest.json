@@ -1,0 +1,1455 @@
+{
+  "cells": [
+    {
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high"
+    },
+    {
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high"
+    },
+    {
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high"
+    },
+    {
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low"
+    },
+    {
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low"
+    },
+    {
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low"
+    },
+    {
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium"
+    }
+  ],
+  "claim_boundary": "diagnostic-only; no campaign result is represented by this manifest",
+  "execution_contract": {
+    "cpu_only": true,
+    "repeats_per_target": 3,
+    "required_runtime_versions": [
+      "numpy_version",
+      "numba_version"
+    ],
+    "trajectory_hash": "sha256",
+    "workers": 1
+  },
+  "manifest_sha256": "a3d79f8e8a7a37ca5fa46885b031490aa266218b57e62713664d71ac94f73a2b",
+  "schema_version": "scenario_exact_repeat_campaign.v1",
+  "source": {
+    "baseline_report_sha256": "5e0d1aeee7879f92087dc8be2c8c673125b4b7b89af6251a66911d0d1a3fcf5c",
+    "runnable_definitions_required": [
+      "scenario_params",
+      "planner_config"
+    ],
+    "source_episodes_sha256": "dc1cba59f13f817a6fde7f0ad47bafc748a36e53d8fa710f9753ce7a3c284281"
+  },
+  "targets": [
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 111,
+      "source_config_hash": "b25a1074a394ea79",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 112,
+      "source_config_hash": "61d5656f863ea0a6",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 113,
+      "source_config_hash": "5ac98fcd650669ce",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 114,
+      "source_config_hash": "ca405d168280c993",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 115,
+      "source_config_hash": "d90872cbf79aa218",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 116,
+      "source_config_hash": "4b00cd1e75c193d6",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 117,
+      "source_config_hash": "40613c799d5c3c6c",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 118,
+      "source_config_hash": "f7c902f22e9fca15",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 119,
+      "source_config_hash": "8e2332d70aa63320",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 120,
+      "source_config_hash": "dab90ac862897b14",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 121,
+      "source_config_hash": "7c2a96aa7ab3a6ee",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 122,
+      "source_config_hash": "7298d55448970727",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 123,
+      "source_config_hash": "269f547f953df683",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 124,
+      "source_config_hash": "b627af0ebbbe3cbd",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 125,
+      "source_config_hash": "47fab67b63af5511",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 126,
+      "source_config_hash": "5a253b7356bdb275",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 127,
+      "source_config_hash": "a9500a847d6463de",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 128,
+      "source_config_hash": "407296f5888883c2",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 129,
+      "source_config_hash": "e3bd0894fb9cffe8",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 130,
+      "source_config_hash": "2ebae5f001de9d43",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 111,
+      "source_config_hash": "04a9705164404c6e",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 112,
+      "source_config_hash": "6103cec07bef8fcb",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 113,
+      "source_config_hash": "bc0ecc2d986c9556",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 114,
+      "source_config_hash": "22017c654745dd19",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 115,
+      "source_config_hash": "1a75c797a6e4ad38",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 116,
+      "source_config_hash": "8c4e2cf4ab32545b",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 117,
+      "source_config_hash": "4a4c7ed473ca28a4",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 118,
+      "source_config_hash": "3c0a3e614ed1396c",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 119,
+      "source_config_hash": "619b44d327b8368f",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 120,
+      "source_config_hash": "b7eaf0b39bd33500",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 121,
+      "source_config_hash": "9d1b15f1d68aadf8",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 122,
+      "source_config_hash": "f9cf19413a15d931",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 123,
+      "source_config_hash": "d83d3b5b8606e8b7",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 124,
+      "source_config_hash": "dd0b43535f3570e5",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 125,
+      "source_config_hash": "441dde6cfc8af0be",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 126,
+      "source_config_hash": "6729b7bec12ffaa7",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 127,
+      "source_config_hash": "f925a312f91c4693",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 128,
+      "source_config_hash": "52af4f41226528a2",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 129,
+      "source_config_hash": "29fa8a465661f724",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 130,
+      "source_config_hash": "178f8121410ac6e0",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 111,
+      "source_config_hash": "9a151c3539af092a",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 112,
+      "source_config_hash": "79ca616b974d1f9d",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 113,
+      "source_config_hash": "6367102baefcc897",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 114,
+      "source_config_hash": "e62cc89a4ed4321a",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 115,
+      "source_config_hash": "712e6c1abc485b1e",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 116,
+      "source_config_hash": "0bce9d972f2aa598",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 117,
+      "source_config_hash": "8e3e8b483a8a569c",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 118,
+      "source_config_hash": "3f58d9e2256fd98b",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 119,
+      "source_config_hash": "4e3f20aa7d869628",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 120,
+      "source_config_hash": "d051e8b23ed93a97",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 121,
+      "source_config_hash": "b5889974c32b9747",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 122,
+      "source_config_hash": "3d1ea69c6deb43cb",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 123,
+      "source_config_hash": "ea7f71d23755d3c3",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 124,
+      "source_config_hash": "f7f8c1e29aeb3670",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 125,
+      "source_config_hash": "f463e658e1c35f1e",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 126,
+      "source_config_hash": "ba1b7ae653d8933c",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 127,
+      "source_config_hash": "7b0c4f1cea2c7125",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 128,
+      "source_config_hash": "9de81ddd61de57c3",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 129,
+      "source_config_hash": "a80ad336d1cd4bf7",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 498,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 130,
+      "source_config_hash": "71e51dbf3f10b72f",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 111,
+      "source_config_hash": "600f6f5647600470",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 112,
+      "source_config_hash": "7633cbd1b58e0be6",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 113,
+      "source_config_hash": "c021fb87738a7357",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 114,
+      "source_config_hash": "7e1e0bb0f634327f",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 115,
+      "source_config_hash": "a24768f62bba300e",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 116,
+      "source_config_hash": "01e9094dcabe8985",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 117,
+      "source_config_hash": "ce254a72ecba1d54",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 118,
+      "source_config_hash": "9311ece946960f68",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 119,
+      "source_config_hash": "ca4f0eaa0359f19e",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 120,
+      "source_config_hash": "f5eba6c76affa66b",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 121,
+      "source_config_hash": "dbbbb834c5f56eaf",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 122,
+      "source_config_hash": "0d826e33cbef8ea7",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 123,
+      "source_config_hash": "16e6ef21edd5218d",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 124,
+      "source_config_hash": "82ea6b4f26dd1c5c",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 125,
+      "source_config_hash": "220ee96f500bfc90",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 126,
+      "source_config_hash": "01de5847a0fafc1b",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 127,
+      "source_config_hash": "c5170b0375610299",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 128,
+      "source_config_hash": "d2c11b9d9d008cb1",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 129,
+      "source_config_hash": "df44b048b7aebc00",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "seed": 130,
+      "source_config_hash": "3bac85032b553203",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "oracle_full_state",
+      "source_observation_mode": "goal_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 111,
+      "source_config_hash": "351ea7d49b50c058",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 112,
+      "source_config_hash": "1ddb44aa2bde193e",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 113,
+      "source_config_hash": "ef3e8e57fd83b2d4",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 114,
+      "source_config_hash": "e689e9e6aba63dae",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 115,
+      "source_config_hash": "7708b1f4a42562e9",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 116,
+      "source_config_hash": "b6612ebf808efb46",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 117,
+      "source_config_hash": "7484c87aa4fd8a68",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 118,
+      "source_config_hash": "fe7b7b85cf8cd18e",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 119,
+      "source_config_hash": "03cd4b1753005bde",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 120,
+      "source_config_hash": "c661ba63f019116a",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 121,
+      "source_config_hash": "0a1ff8d72fb78ede",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 122,
+      "source_config_hash": "4b232898e6cb8236",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 123,
+      "source_config_hash": "bebcf8fcf559fdc3",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 124,
+      "source_config_hash": "299aa4ea218b9a00",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 125,
+      "source_config_hash": "0382e4259409f5a2",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 126,
+      "source_config_hash": "b60854520472812b",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 127,
+      "source_config_hash": "9249c701c3a16fe9",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 128,
+      "source_config_hash": "e6295a17fe26389c",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 129,
+      "source_config_hash": "92ec6ef38f7b2016",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "seed": 130,
+      "source_config_hash": "f1e84573a913292a",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 111,
+      "source_config_hash": "3b5ce9a3db891c0f",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 112,
+      "source_config_hash": "b2875a7062465279",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 113,
+      "source_config_hash": "76724a74a27e78aa",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 114,
+      "source_config_hash": "5c9bc351188bd30c",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 115,
+      "source_config_hash": "846e7fe20995e574",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 116,
+      "source_config_hash": "80dc559bbe455665",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 117,
+      "source_config_hash": "64f28f3bfb8fff49",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 118,
+      "source_config_hash": "c9e9963a841031ff",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 119,
+      "source_config_hash": "255944a309d927e0",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 120,
+      "source_config_hash": "f133fe56528c2448",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 121,
+      "source_config_hash": "d338075663f6e1ab",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 122,
+      "source_config_hash": "465abeccec0b6e56",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 123,
+      "source_config_hash": "14bd6e3b13046002",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 124,
+      "source_config_hash": "5d536c1b797fad42",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 125,
+      "source_config_hash": "27e349bcce131518",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 126,
+      "source_config_hash": "ae6f4a5540f036d0",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 127,
+      "source_config_hash": "928cad8ceee64e5b",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 128,
+      "source_config_hash": "e31293f08021ebce",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 129,
+      "source_config_hash": "307eb1212d39367d",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 413,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "seed": 130,
+      "source_config_hash": "864816e95bdba9da",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 111,
+      "source_config_hash": "6db5616b50a2089a",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 112,
+      "source_config_hash": "82b8c82e7477e393",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 113,
+      "source_config_hash": "bb45c0e897bd490f",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 114,
+      "source_config_hash": "c759106c6b4762cb",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 115,
+      "source_config_hash": "640661c79caeb7ac",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 116,
+      "source_config_hash": "3d54b9ba9fc39dd2",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 117,
+      "source_config_hash": "e7bcb6eec5d0af71",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 118,
+      "source_config_hash": "96b4910e6453ad2d",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 119,
+      "source_config_hash": "0c3e41746cfdf6c3",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 120,
+      "source_config_hash": "b4ef23303990a4f4",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 121,
+      "source_config_hash": "800562ac056bfd2e",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 122,
+      "source_config_hash": "4b46be18736207e5",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 123,
+      "source_config_hash": "d18511f5a58911bf",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 124,
+      "source_config_hash": "426d80c25d857fd6",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 125,
+      "source_config_hash": "a8ddd84b3086e286",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 126,
+      "source_config_hash": "f1d695a0643a40c8",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 127,
+      "source_config_hash": "53412bc6f8c3152a",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 128,
+      "source_config_hash": "8a8ca241fb6a931d",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 129,
+      "source_config_hash": "3e59f7abd27a1611",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    },
+    {
+      "horizon": 180,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 130,
+      "source_config_hash": "32dc08106ef39feb",
+      "source_git_hash": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+      "source_observation_level": "tracked_agents_no_noise",
+      "source_observation_mode": "socnav_state"
+    }
+  ]
+}

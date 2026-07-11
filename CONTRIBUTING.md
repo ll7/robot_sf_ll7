@@ -154,6 +154,19 @@ scripts/dev/ruff_fix_format.sh
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 ```
 
+### External review routing
+
+CodeRabbit reviews pull requests that change simulator code, tests, scripts, or GitHub Actions.
+Documentation, context, and evidence-registration-only pull requests are excluded by default so
+limited external-review capacity remains available for higher-risk changes. Add the `review-bot`
+label to explicitly request CodeRabbit review for an excluded pull request. The repository applies
+the `review-bot-auto` label to eligible code-bearing pull requests; do not add or remove that
+managed label manually.
+
+Gemini Code Assist has no equivalent repository-level path-and-label trigger, so this routing does
+not change Gemini's automatic-review behavior. Treat Gemini feedback as optional and keep the
+repository's human and gate-review requirements unchanged.
+
 ### Step 7: Commit Your Work
 
 ```bash
@@ -218,7 +231,7 @@ If you're extending robot_sf_ll7 for research, consider contributing:
 ### New Scenario Configurations
 
 ```yaml
-# In configs/scenarios/your_scenarios.yaml
+# In configs/scenarios/<scenario_name>.yaml
 scenarios:
   scenario_name:
     description: "Description of interaction pattern"
@@ -237,7 +250,7 @@ the `robot_sf_bench` entry point with explicit scenario, algorithm, and algorith
 uv run robot_sf_bench run \
   --matrix configs/scenarios/planner_sanity_matrix_v1.yaml \
   --algo your_planner \
-  --algo-config configs/algos/your_planner.yaml \
+  --algo-config configs/algos/<planner_name>.yaml \
   --out output/benchmarks/your_planner_smoke/episodes.jsonl \
   --repeats 1 \
   --horizon 300 \

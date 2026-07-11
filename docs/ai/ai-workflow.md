@@ -224,6 +224,18 @@ Automated and online reviewers may include:
 
 Treat these tools as reviewers, not as the source of truth. The source of truth is still the repo-native code, docs, tests, and validation commands.
 
+### External review-bot routing
+
+CodeRabbit automatic review is reserved for pull requests that touch `robot_sf/`, `fast-pysf/`,
+`scripts/`, `tests/`, or `.github/workflows/`. The routing workflow applies the managed
+`review-bot-auto` label to those pull requests. Documentation, context, and evidence-registration
+pull requests do not receive an automatic CodeRabbit review; add the `review-bot` label when an
+independent CodeRabbit review is useful. Do not manually change `review-bot-auto`.
+
+Gemini Code Assist does not expose an equivalent repository-level path-and-label trigger, so its
+automatic-review behavior is unchanged. This quota-routing policy does not weaken human or gate
+review requirements.
+
 When comments arrive, use `gh-pr-comment-fixer` or the equivalent local edit flow:
 
 1. Read the comment and decide whether it is actionable.

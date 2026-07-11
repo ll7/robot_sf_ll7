@@ -715,6 +715,18 @@ def _run_campaign_planner_variant_subprocess(
         log_run=True,
     )
 
+    # Hand the worker the fully-prepared scenario list rather than letting it
+    # re-load the matrix: the preparation above (campaign loader + kinematics
+    # scoping) carries map_file normalization, seed overrides, candidate
+    # filtering, AMV overrides, horizon schedules, and holonomic_command_mode,
+    # and the worker must execute exactly the same episodes the in-process
+    # path would (Slurm jobs 13372/13373 failed every episode without this).
+    scoped_scenarios_path = run.planner_dir / "scoped_scenarios.json"
+    scoped_scenarios_path.write_text(
+        json.dumps(run.scoped_scenarios, default=str),
+        encoding="utf-8",
+    )
+
     # Build subprocess parameters
     arm_params = _SubprocessArmParams(
         planner_key=planner.key,
@@ -746,6 +758,7 @@ def _run_campaign_planner_variant_subprocess(
         snqi_weights=context.snqi_weights,
         snqi_baseline=context.snqi_baseline,
         algo_config_path=planner.algo_config_path,
+        scoped_scenarios_path=scoped_scenarios_path,
     )
 
     # Serialize parameters for subprocess. The Path-typed fields on

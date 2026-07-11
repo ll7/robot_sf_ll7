@@ -155,4 +155,11 @@ def test_main_exits_nonzero_only_for_enforced_fully_unblocked(
     )
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
+    assert payload["schema_version"] == "blocker_staleness_report.v1"
+    assert set(payload["results"]) == {
+        "fully_unblocked",
+        "partially_unblocked",
+        "still_blocked",
+        "unknown",
+    }
     assert payload["counts"]["fully_unblocked"] == 1

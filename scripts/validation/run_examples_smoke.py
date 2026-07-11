@@ -152,8 +152,6 @@ def _maybe_run_tracker_progress_check(args: argparse.Namespace) -> bool:
         print("Tracker progress check skipped: pipeline example not found.")
         return True
     env = _build_example_env()
-    env["ROBOT_SF_ENABLE_PROGRESS_TRACKER"] = "1"
-    env["ROBOT_SF_TRACKER_SMOKE"] = "1"
     command = [sys.executable, str(script_path), "--enable-tracker", "--tracker-smoke"]
     print("Running tracker progress check:", " ".join(command))
     try:

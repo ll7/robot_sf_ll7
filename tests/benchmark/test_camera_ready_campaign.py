@@ -4690,6 +4690,12 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
     result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="snqi_warn")
     summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
     assert any("snqi_contract.enforcement=warn" in item for item in summary_payload["warnings"])
+    # Issue #5240: a soft contract warning (enforcement=warn) must be surfaced as a top-level
+    # ``soft_contract_warning: true`` in the campaign summary while staying non-fatal.
+    assert summary_payload["soft_contract_warning"] is True
+    # The soft contract warning must not change the process exit code (stays 0 on a completed run).
+    assert result["exit_code"] == 0
+    assert result["soft_contract_warning"] is True
 
 
 def test_run_campaign_parity_table_includes_ci_columns(tmp_path: Path, monkeypatch) -> None:

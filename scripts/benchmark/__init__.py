@@ -1,11 +1,15 @@
-"""Fail-closed guard for the retired root-level profiling benchmark."""
+"""Importable benchmark reporting and campaign helper scripts.
+
+The retired root-level profiling benchmark remains available as
+``python -m scripts.benchmark`` and exits with migration guidance.
+"""
 
 from __future__ import annotations
 
 import sys
 
 _MIGRATION_MESSAGE = """\
-scripts/benchmark.py is retired.
+The root-level profiling benchmark is retired.
 
 Use one of the maintained benchmark or smoke entrypoints instead:
   uv run python scripts/benchmark_workers.py --out output/benchmarks/bench_workers
@@ -17,10 +21,9 @@ scripts/validation/ and record outputs under output/.
 
 
 def main(_argv: object = None) -> int:
-    """Exit non-zero with supported benchmark alternatives."""
+    """Exit non-zero with alternatives to the retired profiling benchmark."""
     sys.stderr.write(_MIGRATION_MESSAGE)
     return 2
 
 
-if __name__ == "__main__":  # pragma: no cover - CLI entry point
-    raise SystemExit(main())
+__all__ = ["main"]

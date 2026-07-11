@@ -1328,6 +1328,31 @@ def write_outputs(
         write_rank_identifiability_report(rank_report, evidence_dir)
 
 
+RANK_IDENTIFIABILITY_CONTRACT_ID = "runtime_rank_identifiability_recheck"
+
+
+def select_rank_identifiability_contract_spec(
+    plan: Mapping[str, Any],
+) -> Mapping[str, Any] | None:
+    """Return the rank-identifiability post-run contract spec from a plan.
+
+    Shared by the per-cell execute path and the standalone contract validator so
+    both gates select the same registered contract (no divergence).
+
+    Args:
+        plan: Packet from :func:`build_fixed_scope_run_plan` or its serialized JSON.
+
+    Returns:
+        The ``runtime_rank_identifiability_recheck`` contract spec, or ``None``
+        when the plan carries no such spec.
+    """
+    contract_specs = plan.get("post_run_contract_specs") or []
+    return next(
+        (spec for spec in contract_specs if spec.get("id") == RANK_IDENTIFIABILITY_CONTRACT_ID),
+        None,
+    )
+
+
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=DEFAULT_CONFIG)
@@ -1372,6 +1397,36 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "cleared, so on the shipped config it runs zero episodes. When launchable, each "
             "plan cell is bound to concrete runner inputs (planner, variant, seed) with no "
             "silent fallback for unbound (ORCA/hybrid) planners."
+        ),
+    )
+    parser.add_argument(
+        "--fixed-scope-check-rank-contract",
+        action="store_true",
+        help=(
+            "Standalone post-run gate (issue #4401 successor slice): validate an existing "
+            "fidelity_rank_stability_report.json against the rank-identifiability post-run "
+            "contract and exit fail-closed when the report does not satisfy it. Runs no "
+            "episode; the contract spec is resolved from --plan when given, otherwise rebuilt "
+            "from the shipped fixed-scope config. This makes 'claim promotion remains blocked "
+            "unless the post-run report passes' an independently re-runnable check."
+        ),
+    )
+    parser.add_argument(
+        "--report",
+        default=None,
+        help=(
+            "Path to an existing fidelity_rank_stability_report.json to validate. "
+            "Required with --fixed-scope-check-rank-contract."
+        ),
+    )
+    parser.add_argument(
+        "--plan",
+        default=None,
+        help=(
+            "Path to a fidelity_fixed_scope_run_plan.json carrying the registered "
+            "post_run_contract_specs. With --fixed-scope-check-rank-contract, the "
+            "rank-identifiability contract spec is read from this file; when omitted the "
+            "spec is rebuilt from the shipped fixed-scope config for the same purpose."
         ),
     )
     parser.add_argument("--date", default=dt.datetime.now(tz=dt.UTC).date().isoformat())
@@ -1500,15 +1555,7 @@ def _run_fixed_scope_execute(args: argparse.Namespace, config: Mapping[str, Any]
         evidence_dir=REPO_ROOT / args.evidence_dir,
     )
     # Post-run contract gate: validate rank-identifiability against plan spec.
-    contract_specs = plan.get("post_run_contract_specs") or []
-    rank_contract_spec = next(
-        (
-            spec
-            for spec in contract_specs
-            if spec.get("id") == "runtime_rank_identifiability_recheck"
-        ),
-        None,
-    )
+    rank_contract_spec = select_rank_identifiability_contract_spec(plan)
     if rank_contract_spec is not None:
         contract_result = check_rank_identifiability_contract(
             report["rank_stability"], rank_contract_spec
@@ -1528,6 +1575,124 @@ def _run_fixed_scope_execute(args: argparse.Namespace, config: Mapping[str, Any]
     return 0
 
 
+RANK_CONTRACT_REPORT_FILENAME = "fidelity_rank_stability_report.json"
+RANK_CONTRACT_CHECK_SCHEMA_VERSION = "issue_3207_fidelity_rank_contract_check.v1"
+RANK_CONTRACT_CHECK_CLAIM_BOUNDARY = (
+    "fixed_scope_rank_contract_check_only: validates an already-produced "
+    "fidelity_rank_stability_report.json against the registered post-run "
+    "rank-identifiability contract. It runs no episode and rewrites no report; "
+    "it is the operator-facing re-runnable gate behind 'claim promotion remains "
+    "blocked unless the post-run report passes' (issue #4401). It is not benchmark "
+    "evidence, not simulator-realism evidence, not sim-to-real evidence, and not "
+    "paper-facing evidence."
+)
+
+
+def _resolve_rank_contract_spec(
+    args: argparse.Namespace,
+    config: Mapping[str, Any],
+) -> tuple[Mapping[str, Any], str]:
+    """Resolve the rank-identifiability contract spec and record its provenance.
+
+    The contract spec is read from a serialized plan at ``--plan`` when given;
+    otherwise it is rebuilt from the shipped fixed-scope config so the standalone
+    validator always checks against the registered contract (never an ad-hoc one).
+    Either way no episode is executed.
+
+    Returns:
+        A ``(spec, provenance)`` pair where ``provenance`` describes where the
+        spec came from.
+    """
+    if args.plan:
+        plan_path = pathlib.Path(args.plan)
+        if not plan_path.is_absolute():
+            plan_path = REPO_ROOT / args.plan
+        if not plan_path.is_file():
+            raise FileNotFoundError(f"--plan not found or is not a file: {plan_path}")
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        if not isinstance(plan, dict):
+            raise ValueError(f"--plan must contain a JSON dictionary: {_repo_rel(plan_path)}")
+        spec = select_rank_identifiability_contract_spec(plan)
+        if spec is None:
+            raise ValueError(
+                f"--plan carries no '{RANK_IDENTIFIABILITY_CONTRACT_ID}' "
+                f"post_run_contract_specs entry: {_repo_rel(plan_path)}"
+            )
+        return spec, f"plan_file:{_repo_rel(plan_path)}"
+    fresh_plan = build_fixed_scope_run_plan(
+        config, config_path=args.config, git_head=_git_head(), date=str(args.date)
+    )
+    spec = select_rank_identifiability_contract_spec(fresh_plan)
+    if spec is None:
+        raise ValueError(
+            "rebuilt fixed-scope plan carries no "
+            f"'{RANK_IDENTIFIABILITY_CONTRACT_ID}' post_run_contract_specs entry"
+        )
+    return spec, "rebuilt_from_config"
+
+
+def _run_fixed_scope_check_rank_contract(
+    args: argparse.Namespace, config: Mapping[str, Any]
+) -> int:
+    """Validate an existing rank-identifiability report against the contract.
+
+    Successor slice for issue #4401: a standalone, re-runnable post-run gate. It
+    loads an already-produced ``fidelity_rank_stability_report.json`` (from any
+    campaign, including a future authorized fixed-scope run) and fails closed
+    unless the report satisfies the registered rank-identifiability contract. It
+    runs no episode and promotes no claim.
+
+    Returns:
+        ``0`` when the contract is satisfied, otherwise ``1`` (fail-closed).
+    """
+    report_path = pathlib.Path(args.report) if args.report else None
+    if report_path is not None and not report_path.is_absolute():
+        report_path = REPO_ROOT / args.report
+    if report_path is None or not report_path.is_file():
+        missing = _repo_rel(report_path) if report_path else "<unset>"
+        print(f"fail-closed: --report not found or is not a file: {missing}")
+        print(
+            "--fixed-scope-check-rank-contract requires --report pointing to an "
+            "existing fidelity_rank_stability_report.json"
+        )
+        return 1
+
+    spec, spec_provenance = _resolve_rank_contract_spec(args, config)
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    if not isinstance(report, Mapping):
+        raise ValueError(f"report must be a JSON mapping: {_repo_rel(report_path)}")
+    result = check_rank_identifiability_contract(report, spec)
+
+    payload = {
+        "schema_version": RANK_CONTRACT_CHECK_SCHEMA_VERSION,
+        "claim_boundary": RANK_CONTRACT_CHECK_CLAIM_BOUNDARY,
+        "date": str(args.date),
+        **_git_provenance(),
+        "report_path": _repo_rel(report_path),
+        "contract_id": result.contract_id,
+        "contract_spec_provenance": spec_provenance,
+        "threshold": spec.get("threshold"),
+        "metric": spec.get("metric"),
+        "blocks_claims_when_failed": bool(spec.get("blocks_claims_when_failed", True)),
+        "satisfied": result.satisfied,
+        "reason": result.reason,
+        "report_rank_identifiable": bool(report.get("rank_identifiable", False)),
+        "report_rank_identifiability_reason": report.get("rank_identifiability_reason"),
+    }
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    if result.satisfied:
+        print(
+            f"rank-identifiability contract '{result.contract_id}' satisfied "
+            f"(report={_repo_rel(report_path)})"
+        )
+        return 0
+    print(
+        f"fail-closed: rank-identifiability contract '{result.contract_id}' NOT "
+        f"satisfied: {result.reason}"
+    )
+    return 1
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the bounded actual campaign."""
     args = _parse_args(argv)
@@ -1544,6 +1709,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         # execute, but only after ensure_fixed_scope_launchable passes. On the
         # shipped config this fails closed and runs zero episodes.
         return _run_fixed_scope_execute(args, config)
+    if args.fixed_scope_check_rank_contract:
+        # Standalone post-run gate (issue #4401 successor slice): validate an
+        # existing rank-identifiability report against the registered contract.
+        # Runs no episode.
+        return _run_fixed_scope_check_rank_contract(args, config)
     scenario_path = REPO_ROOT / args.scenario_set
     scenarios = list(load_scenarios(scenario_path))
     if not scenarios:

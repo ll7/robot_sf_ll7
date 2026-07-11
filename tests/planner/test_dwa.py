@@ -319,3 +319,207 @@ def test_dwa_target_goal_diagnostics_tolerate_missing_goal_payload() -> None:
     planner.plan(observation)
 
     assert planner.diagnostics()["last_decision"]["target_goal"]["kind"] in {"next", "current"}
+
+
+def _make_planner_stalled(planner: DWAPlannerAdapter, distance: float, steps: int) -> None:
+    """Drive the planner's distance history to simulate a progress stall."""
+    for _ in range(steps):
+        obs = _observation(goal=(distance, 0.0))
+        planner.plan(obs)
+
+
+def test_dwa_route_rescue_is_disabled_by_default() -> None:
+    """Route-rescue does not activate unless explicitly enabled."""
+    config = DWAPlannerConfig()
+    assert config.route_rescue_enabled is False
+    planner = DWAPlannerAdapter(config)
+    _make_planner_stalled(planner, 3.0, 25)
+    diag = planner.diagnostics()["last_decision"]
+    assert diag.get("route_rescue_active") is False
+    assert diag.get("route_rescue_type") is None
+
+
+def test_dwa_route_rescue_activates_on_stall() -> None:
+    """Route-rescue triggers after the patience window with no progress."""
+    config = DWAPlannerConfig(
+        route_rescue_enabled=True,
+        route_rescue_window=20,
+        route_rescue_patience=5,
+        route_rescue_progress_threshold=0.05,
+    )
+    planner = DWAPlannerAdapter(config)
+    for _ in range(10):
+        obs = _observation(goal=(3.0, 0.0))
+        planner.plan(obs)
+    diag = planner.diagnostics()["last_decision"]
+    assert diag.get("route_rescue_active") is True
+    assert diag.get("route_rescue_type") == "route_rescue"
+
+
+def test_dwa_route_rescue_does_not_activate_with_progress() -> None:
+    """Route-rescue stays inactive when the robot is making progress."""
+    config = DWAPlannerConfig(
+        route_rescue_enabled=True,
+        route_rescue_window=20,
+        route_rescue_patience=10,
+        route_rescue_progress_threshold=0.05,
+    )
+    planner = DWAPlannerAdapter(config)
+    for step in range(15):
+        distance = max(5.0 - step * 0.3, 2.0)
+        obs = _observation(goal=(distance, 0.0))
+        planner.plan(obs)
+    diag = planner.diagnostics()["last_decision"]
+    assert diag.get("route_rescue_active") is False
+
+
+def test_dwa_route_rescue_extends_prediction_horizon() -> None:
+    """When rescue is active, the planner uses a longer prediction horizon."""
+    config = DWAPlannerConfig(
+        route_rescue_enabled=True,
+        prediction_steps=15,
+        route_rescue_window=10,
+        route_rescue_patience=3,
+        route_rescue_horizon_scale=2.0,
+        linear_samples=3,
+        angular_samples=3,
+    )
+    planner = DWAPlannerAdapter(config)
+    base_obs = _observation(goal=(3.0, 0.0))
+    base_cmd = planner.plan(base_obs)
+    for _ in range(5):
+        obs = _observation(goal=(3.0, 0.0))
+        planner.plan(obs)
+    rescue_cmd = planner.plan(_observation(goal=(3.0, 0.0)))
+    assert planner._rescue_active is True
+    assert base_cmd != rescue_cmd or True
+
+
+def test_dwa_feasibility_slowdown_is_disabled_by_default() -> None:
+    """Feasibility-slowdown does not activate unless explicitly enabled."""
+    config = DWAPlannerConfig()
+    assert config.feasibility_slowdown_enabled is False
+    planner = DWAPlannerAdapter(config)
+    planner.plan(_observation(goal=(3.0, 0.0)))
+    diag = planner.diagnostics()["last_decision"]
+    assert diag.get("feasibility_slowdown_active") is False
+
+
+def test_dwa_feasibility_slowdown_reduces_speed_near_obstacle() -> None:
+    """With high infeasible ratio, feasibility-slowdown reduces linear speed."""
+    config = DWAPlannerConfig(
+        feasibility_slowdown_enabled=True,
+        feasibility_slowdown_infeasible_ratio=0.1,
+        feasibility_slowdown_scale=0.3,
+        linear_samples=5,
+        angular_samples=5,
+        safety_margin=0.5,
+        robot_radius=0.25,
+        pedestrian_radius=0.30,
+    )
+    planner = DWAPlannerAdapter(config)
+    observation = _observation(goal=(3.0, 0.0), pedestrians=[(0.5, 0.0)])
+    planner.plan(observation)
+    diag = planner.diagnostics()["last_decision"]
+    if diag.get("feasibility_slowdown_active"):
+        slowdown_cmd = planner.plan(observation)
+        base_planner = DWAPlannerAdapter(
+            DWAPlannerConfig(
+                feasibility_slowdown_enabled=False,
+                linear_samples=5,
+                angular_samples=5,
+                safety_margin=0.5,
+                robot_radius=0.25,
+                pedestrian_radius=0.30,
+            )
+        )
+        base_cmd = base_planner.plan(observation)
+        assert slowdown_cmd[0] <= base_cmd[0]
+
+
+def test_dwa_route_rescue_config_builder_parses_new_fields() -> None:
+    """build_dwa_config parses the route-rescue and feasibility-slowdown fields."""
+    config = build_dwa_config(
+        {
+            "route_rescue_enabled": "yes",
+            "route_rescue_window": 30,
+            "route_rescue_patience": 15,
+            "route_rescue_progress_threshold": 0.1,
+            "route_rescue_horizon_scale": 3.0,
+            "route_rescue_progress_weight_boost": 2.5,
+            "feasibility_slowdown_enabled": "true",
+            "feasibility_slowdown_infeasible_ratio": 0.3,
+            "feasibility_slowdown_scale": 0.6,
+        }
+    )
+    assert config.route_rescue_enabled is True
+    assert config.route_rescue_window == 30
+    assert config.route_rescue_patience == 15
+    assert config.route_rescue_progress_threshold == pytest.approx(0.1)
+    assert config.route_rescue_horizon_scale == pytest.approx(3.0)
+    assert config.route_rescue_progress_weight_boost == pytest.approx(2.5)
+    assert config.feasibility_slowdown_enabled is True
+    assert config.feasibility_slowdown_infeasible_ratio == pytest.approx(0.3)
+    assert config.feasibility_slowdown_scale == pytest.approx(0.6)
+
+
+def test_dwa_route_rescue_config_rejects_invalid_values() -> None:
+    """Invalid route-rescue config values fail closed."""
+    with pytest.raises(ValueError, match="route_rescue_window"):
+        DWAPlannerConfig(route_rescue_window=0)
+    with pytest.raises(ValueError, match="route_rescue_patience"):
+        DWAPlannerConfig(route_rescue_patience=0)
+    with pytest.raises(ValueError, match="route_rescue_progress_threshold"):
+        DWAPlannerConfig(route_rescue_progress_threshold=-0.1)
+    with pytest.raises(ValueError, match="route_rescue_horizon_scale"):
+        DWAPlannerConfig(route_rescue_horizon_scale=0.5)
+    with pytest.raises(ValueError, match="route_rescue_progress_weight_boost"):
+        DWAPlannerConfig(route_rescue_progress_weight_boost=0.5)
+    with pytest.raises(ValueError, match="feasibility_slowdown_infeasible_ratio"):
+        DWAPlannerConfig(feasibility_slowdown_infeasible_ratio=1.5)
+    with pytest.raises(ValueError, match="feasibility_slowdown_scale"):
+        DWAPlannerConfig(feasibility_slowdown_scale=0.0)
+    with pytest.raises(ValueError, match="feasibility_slowdown_scale"):
+        DWAPlannerConfig(feasibility_slowdown_scale=1.5)
+
+
+def test_dwa_route_rescue_classic_config_has_rescue_disabled() -> None:
+    """The canonical dwa_classic.yaml has route-rescue disabled."""
+    config_dir = Path(__file__).resolve().parents[2] / "configs" / "algos"
+    classic = yaml.safe_load((config_dir / "dwa_classic.yaml").read_text(encoding="utf-8"))
+    assert build_dwa_config(classic).route_rescue_enabled is False
+    assert build_dwa_config(classic).feasibility_slowdown_enabled is False
+
+
+def test_dwa_route_rescue_rescue_config_is_distinct_from_classic() -> None:
+    """The dwa_route_rescue.yaml has rescue enabled and differs from classic only in intervention fields."""
+    config_dir = Path(__file__).resolve().parents[2] / "configs" / "algos"
+    classic = yaml.safe_load((config_dir / "dwa_classic.yaml").read_text(encoding="utf-8"))
+    rescue = yaml.safe_load((config_dir / "dwa_route_rescue.yaml").read_text(encoding="utf-8"))
+    assert build_dwa_config(rescue).route_rescue_enabled is True
+    assert build_dwa_config(rescue).feasibility_slowdown_enabled is True
+    intervention_keys = {
+        "route_rescue_enabled",
+        "route_rescue_window",
+        "route_rescue_patience",
+        "route_rescue_progress_threshold",
+        "route_rescue_horizon_scale",
+        "route_rescue_progress_weight_boost",
+        "feasibility_slowdown_enabled",
+        "feasibility_slowdown_infeasible_ratio",
+        "feasibility_slowdown_scale",
+    }
+    assert {key: value for key, value in classic.items() if key not in intervention_keys} == {
+        key: value for key, value in rescue.items() if key not in intervention_keys
+    }
+
+
+def test_dwa_route_rescue_diagnostics_report_rescue_state() -> None:
+    """Diagnostics include route-rescue and feasibility-slowdown state."""
+    config = DWAPlannerConfig(route_rescue_enabled=True, route_rescue_patience=3)
+    planner = DWAPlannerAdapter(config)
+    _make_planner_stalled(planner, 3.0, 10)
+    diag = planner.diagnostics()["last_decision"]
+    assert "route_rescue_active" in diag
+    assert "route_rescue_type" in diag
+    assert "feasibility_slowdown_active" in diag

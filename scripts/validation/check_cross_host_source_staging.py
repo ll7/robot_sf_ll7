@@ -31,6 +31,7 @@ from typing import Any, NamedTuple
 
 SCHEMA_VERSION = "cross_host_source_staging.v1"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+CONTROL_CHARACTER_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
 class ContractError(ValueError):
@@ -80,7 +81,7 @@ def parse_manifest(manifest: Mapping[str, Any]) -> list[Source]:
             path.parts and ".." not in path.parts, f"sources[{index}].relative_path escapes root"
         )
         _require(
-            "\t" not in relative_path and "\n" not in relative_path,
+            CONTROL_CHARACTER_RE.search(relative_path) is None,
             "source path has control character",
         )
         _require(relative_path not in seen_paths, f"duplicate source path: {relative_path}")
@@ -95,7 +96,10 @@ def parse_manifest(manifest: Mapping[str, Any]) -> list[Source]:
 def _remote_paths(staging_root: Path, sources: list[Source]) -> list[str]:
     _require(staging_root.is_absolute(), "staging_root must be absolute on the worker")
     root_text = str(staging_root)
-    _require("\t" not in root_text and "\n" not in root_text, "staging_root has control character")
+    _require(
+        CONTROL_CHARACTER_RE.search(root_text) is None,
+        "staging_root has control character",
+    )
     return [str(staging_root / source.relative_path) for source in sources]
 
 
@@ -158,9 +162,7 @@ def check_worker_staging(
 ) -> dict[str, Any]:
     """Probe one worker and return a dispatch decision without copying sources."""
     _require(worker_host and not worker_host.startswith("-"), "worker_host is unsafe")
-    _require(
-        "\n" not in worker_host and "\t" not in worker_host, "worker_host has control character"
-    )
+    _require(CONTROL_CHARACTER_RE.search(worker_host) is None, "worker_host has control character")
     sources = parse_manifest(manifest)
     paths = _remote_paths(staging_root, sources)
     completed = run(

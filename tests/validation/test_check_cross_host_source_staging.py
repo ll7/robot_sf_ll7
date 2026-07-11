@@ -91,7 +91,14 @@ def test_unreachable_worker_blocks_without_trusting_partial_output() -> None:
 
 @pytest.mark.parametrize(
     "relative_path",
-    ["/absolute.csv", "reports/../escape.csv", "reports\\windows.csv", "reports/line\nbreak.csv"],
+    [
+        "/absolute.csv",
+        "reports/../escape.csv",
+        "reports\\windows.csv",
+        "reports/line\nbreak.csv",
+        "reports/carriage\rreturn.csv",
+        "reports/unit\x1fseparator.csv",
+    ],
 )
 def test_manifest_rejects_nonportable_or_escaping_paths(relative_path: str) -> None:
     """Tracked manifests cannot encode platform-specific or escaping paths."""

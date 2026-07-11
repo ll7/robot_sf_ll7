@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from robot_sf.adversarial.io import read_first_jsonl_record
+from robot_sf.adversarial.robustness import temporal_robustness_objective
 
 if TYPE_CHECKING:
     from robot_sf.adversarial.config import CandidateEvaluation
@@ -49,6 +50,7 @@ def worst_case_snqi(evaluation: CandidateEvaluation) -> float | None:
 
 _OBJECTIVES: dict[str, ObjectiveFn] = {
     "worst_case_snqi": worst_case_snqi,
+    "temporal_robustness": temporal_robustness_objective,
 }
 
 

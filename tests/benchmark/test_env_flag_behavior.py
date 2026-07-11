@@ -31,6 +31,10 @@ def test_plot_subprocess_unset_env_uses_size_and_filter_heuristic(
     assert not _should_use_plot_subprocess(
         episodes_path=str(small_path), scenario_filter="scenario-a"
     )
+    assert not _should_use_plot_subprocess(
+        episodes_path=str(small_path), baseline_filter="baseline-a"
+    )
+    assert _should_use_plot_subprocess(episodes_path=str(small_path))
     assert _should_use_plot_subprocess(episodes_path=str(large_path), scenario_filter="scenario-a")
     assert _should_use_plot_subprocess(episodes_path=str(tmp_path / "missing.jsonl"))
 

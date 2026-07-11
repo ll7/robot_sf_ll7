@@ -35,9 +35,19 @@ equation's exactly centered zero-distance direction, and `max_force` bounds nume
   the Zanlungo common-time, non-additive projection.
 - Focused tests prove pure-force geometry, common-time coupling, deterministic degeneracy handling,
   scenario-config loading, default compatibility, runtime composition, and fail-closed behavior.
-- Corridor-level freeze/deadlock acceptance remains a separate predeclared CPU comparison with
-  parameter sensitivity. No benchmark campaign, Slurm/GPU job, or paper/dissertation claim is part
-  of this implementation slice.
+- The corridor acceptance packet is
+  `configs/research/issue_4973_zanlungo_corridor_acceptance.yaml`. It predeclares a two-pedestrian,
+  slightly offset head-on corridor, seed `4973`, outcome thresholds, the paper-parameter reference,
+  a reactive control, and one-at-a-time strength/range variants.
+- Run it with
+  `uv run python scripts/validation/run_issue_4973_zanlungo_corridor_acceptance.py`. Every matrix row
+  is executed twice and records exact trace hashes plus a replay-determinism verdict. The reference
+  row must be labeled `yielding`; sustained conflict slowdown is labeled `freezing`, and clearance
+  proxy failures are kept distinct as `collision_proxy`. The proxy uses predeclared center-distance
+  and lateral-displacement thresholds; it is not a physical-contact or realism metric.
+- The config, report, and per-pedestrian fixture metadata all state `benchmark_evidence=false`.
+  These labels are deterministic CPU fixture acceptance, not a calibration or external-validity
+  result. No benchmark campaign, Slurm/GPU job, or paper/dissertation claim is part of this work.
 
 Reference: F. Zanlungo, T. Ikeda, and T. Kanda, “Social force model with explicit collision
 prediction,” *EPL* 93 (2011) 68005, <https://doi.org/10.1209/0295-5075/93/68005>.

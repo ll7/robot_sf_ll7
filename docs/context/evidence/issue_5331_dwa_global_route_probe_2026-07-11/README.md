@@ -22,8 +22,10 @@ The global-route integration probe adds a waypoint-following bias to the DWA
 scoring function. When `global_route_probe_enabled=true` and `route_waypoints`
 are present in the observation, the probe:
 
-1. Finds the nearest waypoint within `global_route_probe_waypoint_distance`
-2. Computes heading alignment from the rollout endpoint to that waypoint
+1. Finds the nearest waypoint within `global_route_probe_waypoint_distance` to
+   establish that the route is locally usable
+2. Targets the following waypoint when one is available, then computes heading
+   alignment from the rollout endpoint to that forward route target
 3. Adds `global_route_probe_heading_weight * waypoint_score` to the base DWA score
 
 This helps DWA navigate through bottleneck corridors where the constant-velocity

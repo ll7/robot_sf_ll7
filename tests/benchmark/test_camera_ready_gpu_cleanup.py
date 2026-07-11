@@ -280,6 +280,43 @@ class TestGcCollectAlwaysRunsBetweenArms:
             "gc.collect() must run before cuda.empty_cache() to release Python object refs first"
         )
 
+    def test_cuda_cleanup_records_pre_gc_memory_baseline(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Cleanup telemetry includes memory reclaimed by Python garbage collection."""
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.max_memory_allocated.return_value = 300 * 1024 * 1024
+        call_order: list[str] = []
+        allocated_values = iter((256 * 1024 * 1024, 128 * 1024 * 1024))
+        reserved_values = iter((300 * 1024 * 1024, 150 * 1024 * 1024))
+
+        def memory_allocated() -> int:
+            call_order.append("memory_allocated")
+            return next(allocated_values)
+
+        def memory_reserved() -> int:
+            call_order.append("memory_reserved")
+            return next(reserved_values)
+
+        mock_torch.cuda.memory_allocated.side_effect = memory_allocated
+        mock_torch.cuda.memory_reserved.side_effect = memory_reserved
+        monkeypatch.setitem(sys.modules, "torch", mock_torch)
+
+        original_gc_collect = gc.collect
+
+        def tracking_gc_collect(*args, **kwargs):
+            call_order.append("gc.collect")
+            return original_gc_collect(*args, **kwargs)
+
+        with patch.object(gc, "collect", side_effect=tracking_gc_collect):
+            metrics = _cleanup_gpu_memory_between_arms(planner_key="p", kinematics="k")
+
+        assert call_order.index("memory_allocated") < call_order.index("gc.collect")
+        assert call_order.index("memory_reserved") < call_order.index("gc.collect")
+        assert metrics["allocated_freed_mb"] == 128
+        assert metrics["reserved_freed_mb"] == 150
+
 
 class TestCleanupRunsInFinallyBlock:
     """Regression tests for cleanup running in try/finally (issue #4826).

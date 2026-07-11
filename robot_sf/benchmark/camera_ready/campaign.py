@@ -296,11 +296,6 @@ def _cleanup_gpu_memory_between_arms(
         "reserved_freed_mb": 0.0,
     }
 
-    # Always collect Python-level garbage so object references from the completed
-    # arm (model weights, replay buffers, env wrappers) are freed before the next
-    # arm starts — even when CUDA is not available (issue #4826).
-    gc.collect()
-
     if "torch" in sys.modules:
         import torch  # noqa: PLC0415
 
@@ -312,6 +307,9 @@ def _cleanup_gpu_memory_between_arms(
             allocated_before = torch.cuda.memory_allocated() / 1024 / 1024
             reserved_before = torch.cuda.memory_reserved() / 1024 / 1024
 
+            # Capture the allocated/reserved baseline before collecting Python
+            # references so cleanup telemetry includes memory freed by gc.collect().
+            gc.collect()
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
 
@@ -339,6 +337,12 @@ def _cleanup_gpu_memory_between_arms(
                 memory_metrics["reserved_freed_mb"],
                 memory_metrics["high_water_mark_mb"],
             )
+        else:
+            # CPU-only nodes still need Python-level cleanup between arms.
+            gc.collect()
+    else:
+        # Keep no-torch environments from accumulating completed-arm objects.
+        gc.collect()
     return memory_metrics
 
 

@@ -1234,6 +1234,13 @@ class SippLatticeSearch:
         target_w = float(primitive.angular_velocity)
         if not (isfinite(current_velocity) and isfinite(current_angular_velocity)):
             return False
+        if not (
+            linear_min - 1e-9 <= current_velocity <= linear_max + 1e-9
+            and -float(self.config.max_angular_speed) - 1e-9
+            <= current_angular_velocity
+            <= float(self.config.max_angular_speed) + 1e-9
+        ):
+            return False
         if not (linear_min - 1e-9 <= target_v <= linear_max + 1e-9):
             return False
         if not (

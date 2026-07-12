@@ -32,6 +32,12 @@ def test_resolve_git_common_dir_returns_none_on_git_failure() -> None:
         assert resolve_git_common_dir() is None
 
 
+def test_resolve_git_common_dir_returns_none_when_git_is_unavailable() -> None:
+    """A missing git executable uses the caller-visible fallback path."""
+    with patch("scripts.dev.git_common.subprocess.run", side_effect=FileNotFoundError):
+        assert resolve_git_common_dir() is None
+
+
 def test_resolve_git_common_dir_returns_none_on_empty_output() -> None:
     """When git returns empty stdout, resolve_git_common_dir returns None."""
     with patch("scripts.dev.git_common.subprocess.run", return_value=_completed(0, "")):
@@ -82,7 +88,7 @@ def test_resolve_agent_artifact_dir_fallback_without_git(tmp_path: Path) -> None
     with patch("scripts.dev.git_common.resolve_git_common_dir", return_value=None):
         result = resolve_agent_artifact_dir("fallback-test", mkdir=False)
 
-    assert result == Path("output") / "tmp" / "fallback-test"
+    assert result == Path(__file__).resolve().parents[2] / "output" / "tmp" / "fallback-test"
 
 
 def test_resolve_agent_artifact_dir_requires_subdir_name() -> None:
@@ -90,4 +96,4 @@ def test_resolve_agent_artifact_dir_requires_subdir_name() -> None:
     # The function accepts any string; just verify it returns a path.
     with patch("scripts.dev.git_common.resolve_git_common_dir", return_value=None):
         result = resolve_agent_artifact_dir("", mkdir=False)
-    assert result == Path("output") / "tmp"
+    assert result == Path(__file__).resolve().parents[2] / "output" / "tmp"

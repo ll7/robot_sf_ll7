@@ -14,12 +14,15 @@ from pathlib import Path
 
 def resolve_git_common_dir() -> Path | None:
     """Return the absolute path to the Git common directory, or ``None``."""
-    result = subprocess.run(
-        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
     if result.returncode == 0 and result.stdout.strip():
         return Path(result.stdout.strip())
     return None
@@ -46,7 +49,7 @@ def resolve_agent_artifact_dir(subdir: str, *, mkdir: bool = True) -> Path:
     if common_dir is not None:
         artifact_dir = common_dir / "codex-agent-runs" / "active" / subdir
     else:
-        artifact_dir = Path("output") / "tmp" / subdir
+        artifact_dir = Path(__file__).resolve().parents[2] / "output" / "tmp" / subdir
     if mkdir:
         artifact_dir.mkdir(parents=True, exist_ok=True)
     return artifact_dir

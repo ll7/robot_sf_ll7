@@ -644,7 +644,7 @@ def emit_fairness_annotations(
             or ``algo`` to identify the planner.
     """
     for row in rows:
-        algo = str(row.get("planner_key", row.get("algo", "")))
+        algo = str(row.get("algo", row.get("planner_key", "")))
         if not algo:
             continue
         try:

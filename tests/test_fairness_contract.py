@@ -462,3 +462,16 @@ def test_emit_fairness_annotations_handles_unknown_planner():
     emit_fairness_annotations(report, rows)
     assert rows[0]["fairness_mismatch_flags"] == []
     assert rows[0]["fairness_in_ranking_subset"] is False
+
+
+def test_emit_fairness_annotations_uses_algo_for_custom_planner_key():
+    """A custom campaign instance key retains its canonical algorithm classification."""
+    from robot_sf.benchmark.fairness_contract import (
+        build_fairness_report,
+        emit_fairness_annotations,
+    )
+
+    report = build_fairness_report([{"algo": "orca"}])
+    rows = [{"planner_key": "custom_orca", "algo": "orca"}]
+    emit_fairness_annotations(report, rows)
+    assert rows[0]["fairness_in_ranking_subset"] is True

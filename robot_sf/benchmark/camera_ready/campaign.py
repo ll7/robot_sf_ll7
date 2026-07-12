@@ -67,6 +67,7 @@ from robot_sf.benchmark.camera_ready._util import (
     _synthetic_actuation_metadata,
     _utc_now,
 )
+from robot_sf.benchmark.fairness_contract import build_fairness_report, emit_fairness_annotations
 from robot_sf.benchmark.fallback_policy import (
     availability_payload,
     classify_planner_row_status,
@@ -1224,6 +1225,18 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
     planner_rows.sort(
         key=lambda row: (row.get("snqi_mean", "nan") == "nan", row.get("planner_key"))
     )
+    fairness_report = build_fairness_report(
+        [
+            {
+                "algo": planner.algo,
+                "observation_mode": planner.observation_mode or cfg.observation_mode,
+                "tuning": asdict(planner.tuning) if planner.tuning is not None else {},
+            }
+            for planner in cfg.planners
+            if planner.enabled
+        ]
+    )
+    emit_fairness_annotations(fairness_report, planner_rows)
 
     summary_json_path = reports_dir / "campaign_summary.json"
     report_md_path = reports_dir / "campaign_report.md"
@@ -1266,6 +1279,8 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
             "comfort_exposure_mean",
             "jerk_mean",
             "snqi_mean",
+            "fairness_mismatch_flags",
+            "fairness_in_ranking_subset",
         ),
     )
     if cfg.paper_facing:
@@ -1716,6 +1731,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
         )
 
     campaign_summary = {
+        "fairness_contract": fairness_report.to_dict(),
         "campaign": {
             "schema_version": CAMPAIGN_SCHEMA_VERSION,
             "campaign_id": campaign_id,

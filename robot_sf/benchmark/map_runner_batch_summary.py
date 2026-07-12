@@ -294,6 +294,7 @@ def build_completed_batch_summary(  # noqa: PLR0913
     suite_key: str,
     kinematics_tag: str,
     metric_affecting_config: dict[str, Any] | None = None,
+    abort_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the final successful batch summary after all map jobs finish.
 
@@ -410,6 +411,8 @@ def build_completed_batch_summary(  # noqa: PLR0913
         summary["benchmark_track"] = benchmark_track
     if track_schema_version is not None:
         summary["track_schema_version"] = track_schema_version
+    if abort_metadata is not None:
+        summary["abort"] = abort_metadata
     artifact_pointer_status = "local_jsonl_present" if out_path.exists() else "not_available"
     summary["provenance"] = map_result_provenance(
         schema_path=schema_path,

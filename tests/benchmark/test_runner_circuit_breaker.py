@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from unittest.mock import patch
+
+import pytest
 
 if TYPE_CHECKING:
     from pathlib import Path
 
+from robot_sf.benchmark.circuit_breaker import normalize_circuit_breaker_threshold
+from robot_sf.benchmark.map_runner_batch_runner import _serial_execute_map_jobs
 from robot_sf.benchmark.runner import (
     DEFAULT_CIRCUIT_BREAKER_THRESHOLD,
     _error_signature,
@@ -330,3 +335,49 @@ class TestSequentialCircuitBreaker:
         assert "projected_episodes_saved" in abort_meta
         assert abort_meta["consecutive_failures"] == 5
         assert abort_meta["projected_episodes_saved"] == 10
+
+
+def test_map_serial_circuit_breaker_aborts_identical_failures(tmp_path: Path) -> None:
+    """Map-based serial arms use the same fail-closed breaker contract."""
+    calls = 0
+
+    def failing_map_job(_job: object) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("CUDA out of memory on device 0")
+
+    def bridge(*_args: object, **_kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            adapter_requested_seen=False,
+            adapter_native_steps=0,
+            adapter_adapted_steps=0,
+            runtime_algorithm_contract={},
+        )
+
+    result = _serial_execute_map_jobs(
+        jobs=[({"name": "map"}, seed) for seed in range(8)],
+        fixed_params={},
+        out_path=tmp_path / "episodes.jsonl",
+        schema={},
+        run_map_job=failing_map_job,
+        write_validated_to_handle=lambda *_args: None,
+        apply_worker_metadata_bridge=bridge,
+        scenario_id=lambda scenario: str(scenario["name"]),
+        feasibility_totals={},
+        circuit_breaker_threshold=3,
+    )
+
+    _wrote, _records, failures, _seen, _native, _adapted, _contract, abort = result
+    assert calls == 3
+    assert len(failures) == 3
+    assert abort is not None
+    assert abort["status"] == "aborted_systematic_failure"
+    assert abort["projected_episodes_saved"] == 5
+
+
+def test_circuit_breaker_threshold_validation_is_fail_closed() -> None:
+    """None selects the default, zero disables, and negative values are invalid."""
+    assert normalize_circuit_breaker_threshold(None) == DEFAULT_CIRCUIT_BREAKER_THRESHOLD
+    assert normalize_circuit_breaker_threshold(0) == 0
+    with pytest.raises(ValueError, match="non-negative"):
+        normalize_circuit_breaker_threshold(-1)

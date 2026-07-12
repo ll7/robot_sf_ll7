@@ -2546,6 +2546,10 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     summary_payload = json.loads(
         (campaign_root / "reports" / "campaign_summary.json").read_text(encoding="utf-8")
     )
+    assert len(summary_payload["arm_rollup"]) == len(summary_payload["runs"])
+    assert [arm["planner_key"] for arm in summary_payload["arm_rollup"]] == [
+        run["planner"]["key"] for run in summary_payload["runs"]
+    ]
     assert result["status"] == "accepted_unavailable_only"
     assert result["status_reason"] == (
         "campaign contains accepted unavailable/excluded rows and no unexpected failed rows"

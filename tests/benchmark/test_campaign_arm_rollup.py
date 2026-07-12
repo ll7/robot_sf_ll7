@@ -53,6 +53,7 @@ def test_arm_rollup_failed_arm_names_first_error() -> None:
                 "written": 0,
                 "failed_jobs": 3,
                 "failures": [
+                    {"scenario_id": "s3", "seed": 2, "error": "ValueError('bad config')"},
                     {
                         "scenario_id": "s1",
                         "seed": 1,
@@ -63,7 +64,6 @@ def test_arm_rollup_failed_arm_names_first_error() -> None:
                         "seed": 1,
                         "error": "RuntimeError('map resolution missing')",
                     },
-                    {"scenario_id": "s3", "seed": 2, "error": "ValueError('bad config')"},
                 ],
             },
         },
@@ -77,6 +77,7 @@ def test_arm_rollup_failed_arm_names_first_error() -> None:
     assert failed_arm["episodes_written"] == 0
     assert failed_arm["episodes_failed"] == 3
     assert "first_error" in failed_arm
+    assert failed_arm["first_error"] == "ValueError('bad config')"
     assert failed_arm["distinct_error_count"] == 2
     assert len(failed_arm["first_error"]) <= 200
 

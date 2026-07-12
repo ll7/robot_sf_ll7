@@ -99,12 +99,15 @@ def _build_arm_rollup(run_entries: Sequence[Mapping[str, Any]]) -> list[dict[str
         distinct_error_count = 0
         if status not in {"ok", "not_available"}:
             error_signatures: set[str] = set()
+            first_error_raw: str | None = None
             for failure in failures:
                 error_str = str(failure.get("error", ""))
                 if error_str:
+                    if first_error_raw is None:
+                        first_error_raw = error_str
                     error_signatures.add(error_str)
             if error_signatures:
-                first_error = sorted(error_signatures)[0][:_MAX_FIRST_ERROR_LEN]
+                first_error = first_error_raw[:_MAX_FIRST_ERROR_LEN] if first_error_raw else None
                 distinct_error_count = len(error_signatures)
             elif str(summary.get("error", "")):
                 first_error = str(summary["error"])[:_MAX_FIRST_ERROR_LEN]

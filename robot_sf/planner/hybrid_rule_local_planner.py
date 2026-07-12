@@ -1377,10 +1377,18 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
     ) -> dict[str, Any] | None:
         """Return an occupied-cell or continuous-obstacle rejection for a rollout pose."""
         obstacle_value = 0.0
-        payload = self._obstacle_grid_payload(observation)
-        if payload is not None:
-            grid, meta, channel, _resolution = payload
-            obstacle_value = self._grid_value(robot_pos, grid, meta, channel)
+        # Reuse the per-plan occupancy-grid context instead of re-extracting the grid
+        # payload on every rollout step (identical grid/meta/channel within a plan()).
+        context = (
+            self._clearance_context
+            if self._clearance_context is not None
+            and self._clearance_context.observation_id == id(observation)
+            else self._build_clearance_context(observation)
+        )
+        if context is not None:
+            obstacle_value = self._grid_value(
+                robot_pos, context.grid, context.meta, context.channel
+            )
         if obstacle_value >= float(self.config.obstacle_threshold):
             return {
                 "accepted": False,
@@ -1434,8 +1442,11 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         ttc = -np.sum(rel_pos[valid] * rel_vel[valid], axis=1) / speed_sq[valid]
         ttc = np.clip(ttc, 0.0, float(self.config.soft_prediction_horizon))
         closest = rel_pos[valid] + rel_vel[valid] * ttc[:, None]
-        closest_dist = np.linalg.norm(closest, axis=1)
-        risky = closest_dist <= float(self.config.desired_dynamic_clearance)
+        # Threshold on squared distance to avoid a per-pedestrian sqrt; the risky
+        # mask is identical because sqrt is monotonic for non-negative distances.
+        closest_dist_sq = np.einsum("ij,ij->i", closest, closest)
+        desired_dynamic_clearance = float(self.config.desired_dynamic_clearance)
+        risky = closest_dist_sq <= desired_dynamic_clearance * desired_dynamic_clearance
         if not np.any(risky):
             return float("inf")
         positive = ttc[risky]

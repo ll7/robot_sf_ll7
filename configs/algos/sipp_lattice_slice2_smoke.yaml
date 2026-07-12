@@ -1,14 +1,5 @@
-# Bounded kinodynamic state-time (SIPP-class) local search, #5306 Slice 2.
-#
-# This planner is EXPERIMENTAL / TESTING-ONLY. It runs a bounded weighted-A* /
-# safe-interval search over AMV-feasible motion primitives with time-indexed
-# pedestrian occupancy and multi-step commitment. It produces exploratory
-# implementation evidence only -- NOT safety, liveness, or benchmark-superiority
-# evidence. Slice 3 of #5306 owns outcome evaluation against the baselines.
-#
-# Resolve through the real map runner with:
-#   --algo sipp_lattice --algo-config configs/algos/sipp_lattice_slice2_smoke.yaml
-# The testing-algorithm guard requires the opt-in flag below.
+# Experimental/testing-only SIPP Slice 2 config; Slice 3 owns outcome evidence.
+# Resolve with --algo sipp_lattice and this file; explicit opt-in is mandatory.
 allow_testing_algorithms: true
 
 # Kinodynamic primitive limits (shared schema with the Slice-1 foundation).
@@ -32,27 +23,26 @@ grid_obstacle_threshold: 0.5
 continuous_check_steps: 5
 goal_tolerance: 0.25
 
-# Occupancy-grid scoring reuse (static obstacles).
 occupancy_candidates: 5
 occupancy_lookahead: 1.0
 occupancy_weight: 1.2
 occupancy_angle_weight: 0.3
 
-# Bounded state-time search (hard termination guarantees).
+# Hard-bounded state-time search.
 time_slot_duration: 0.2
 planning_horizon_slots: 40
 max_expansions: 2000
 max_planning_time_s: 0.05
 heuristic_weight: 1.5
 
-# Multi-step commitment and replan triggers.
+# Commitment and replan triggers.
 commitment_horizon: 4
 offtrack_tolerance: 0.5
 xy_resolution: 0.1
 heading_resolution: 0.2618
 velocity_resolution: 0.1
 
-# Time-indexed pedestrian forecast and search cost shaping.
+# Forecast and cost shaping.
 pedestrian_forecast_horizon_s: 3.0
 turn_cost_weight: 0.1
 reverse_cost_weight: 0.5

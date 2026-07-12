@@ -1422,9 +1422,28 @@ class SippLatticeSearch:
 
         if bound_termination == "open_exhausted" and horizon_reached >= horizon_slots:
             bound_termination = "horizon"
+        fallback = _controlled_deceleration_primitive(
+            self.config, start.velocity, start.angular_velocity
+        )
+        fallback_arc = self._collision_model._unicycle_arc_positions(
+            fallback.as_command(), start.heading, fallback.duration, start.position
+        )
+        fallback_safe = (
+            self._transition_reachable(start.velocity, start.angular_velocity, fallback)
+            and (static_blocked is None or not static_blocked(fallback_arc))
+            and not forecast.arc_occupied(fallback_arc, 0, fallback.duration)
+        )
         return SippSearchResult(
-            plan=[_wait_primitive(self.config)],
-            result_type="bounded_safe_wait",
+            plan=[fallback] if fallback_safe else [],
+            result_type=(
+                (
+                    "bounded_safe_wait"
+                    if fallback.kind is PrimitiveKind.WAIT
+                    else "bounded_safe_deceleration"
+                )
+                if fallback_safe
+                else "bounded_emergency_stop"
+            ),
             bound_termination=bound_termination,
             expansions=expansions,
             horizon_reached=horizon_reached,
@@ -1445,6 +1464,24 @@ def _wait_primitive(config: SippLatticeConfig) -> MotionPrimitive:
         duration=float(config.primitive_duration),
         kind=PrimitiveKind.WAIT,
     )
+
+
+def _controlled_deceleration_primitive(
+    config: SippLatticeConfig, speed: float, angular_velocity: float
+) -> MotionPrimitive:
+    """Return the closest-to-zero command reachable in one primitive duration."""
+    duration = float(config.primitive_duration)
+    linear = math.copysign(
+        max(0.0, abs(float(speed)) - float(config.max_linear_acceleration) * duration), speed
+    )
+    if not config.allow_reverse:
+        linear = max(0.0, linear)
+    angular = math.copysign(
+        max(0.0, abs(float(angular_velocity)) - float(config.max_steering_rate) * duration),
+        angular_velocity,
+    )
+    kind = PrimitiveKind.WAIT if linear == 0.0 and angular == 0.0 else PrimitiveKind.DECELERATE
+    return MotionPrimitive(linear, angular, duration, kind)
 
 
 class SippLatticeSearchPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -1785,11 +1822,11 @@ class SippLatticeSearchPlannerAdapter(OccupancyAwarePlannerMixin):
         self._commit_index = 0
         self._last_goal = np.asarray(active_goal, dtype=float)
 
-        if result.result_type == "bounded_safe_wait" or not self._committed:
+        if result.result_type == "bounded_emergency_stop" or not self._committed:
             self._clear_commitment()
             self._expected_pos = np.asarray(robot_pos, dtype=float)
             self._record(
-                result_type="bounded_safe_wait",
+                result_type=result.result_type,
                 primitive=None,
                 command=(0.0, 0.0),
                 distance_to_goal=distance_to_goal,
@@ -1804,7 +1841,7 @@ class SippLatticeSearchPlannerAdapter(OccupancyAwarePlannerMixin):
         command = primitive.as_command()
         self._expected_pos = self._primitive_endpoint(primitive, robot_pos, heading)
         self._record(
-            result_type="native_plan",
+            result_type=result.result_type,
             primitive=primitive,
             command=command,
             distance_to_goal=distance_to_goal,

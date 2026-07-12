@@ -898,7 +898,7 @@ class TestSippLatticeSearch:
             goal=np.array([0.5, 0.0]),
             forecast=fc,
         )
-        assert result.result_type == "bounded_safe_wait"
+        assert result.result_type == "bounded_safe_deceleration"
 
 
 class TestSippLatticeSearchPlannerAdapter:
@@ -956,7 +956,7 @@ class TestSippLatticeSearchPlannerAdapter:
         planner = SippLatticeSearchPlannerAdapter(config=cfg)
         v, w = planner.plan(obs)
         decision = planner.diagnostics()["last_decision"]
-        assert decision["result_type"] in {"bounded_safe_wait", "native_plan"}
+        assert decision["result_type"] in {"bounded_emergency_stop", "native_plan"}
         if decision["result_type"] == "bounded_safe_wait":
             assert (v, w) == (0.0, 0.0)
             assert decision["safe_interval_rejections"] > 0
@@ -1081,6 +1081,22 @@ class TestSippLatticeSearchPlannerAdapter:
         assert decision["result_type"] == "goal_reached"
         assert (v, w) == (0.0, 0.0)
         assert planner._committed == []
+
+    def test_bounded_failure_emits_reachable_deceleration(self) -> None:
+        cfg = _fast_config(
+            max_expansions=1,
+            planning_horizon_slots=1,
+            max_linear_acceleration=0.5,
+            max_steering_rate=1.0,
+        )
+        planner = SippLatticeSearchPlannerAdapter(config=cfg)
+        observation = _search_obs(goal=(2.0, 0.0), speed=0.8)
+        observation["robot"]["angular_velocity"] = np.asarray([0.6], dtype=float)
+        command = planner.plan(observation)
+
+        assert abs(command[0] - 0.8) <= cfg.max_linear_acceleration * cfg.primitive_duration + 1e-9
+        assert abs(command[1] - 0.6) <= cfg.max_steering_rate * cfg.primitive_duration + 1e-9
+        assert planner.diagnostics()["last_decision"]["result_type"] == "bounded_safe_deceleration"
 
     def test_plan_bounds_obeyed(self) -> None:
         planner = SippLatticeSearchPlannerAdapter(config=_fast_config())

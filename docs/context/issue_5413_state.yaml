@@ -1,10 +1,4 @@
-# Durable state surface for issue #5413 (#5306 Slice 2).
-#
-# Purpose: comment_issue_or_pr is disabled for the implementation lane, so this
-# append-only file is the single durable propagation surface for the slice.
-# It intentionally excludes transient ready-queue routing, target hosts, packet
-# lineage pointers, private ops state, campaign launch state, benchmark
-# superiority results, release state, or paper claims.
+# Durable implementation state for issue #5413 (#5306 Slice 2); transient routing is excluded.
 issue: 5413
 parent_issue: 5306
 state_surface: sipp_lattice_slice2_implementation
@@ -13,62 +7,25 @@ entries:
     status: slice2_implementation_delivered__slice3_evaluation_pending
     source:
       issue_url: "https://github.com/ll7/robot_sf_ll7/issues/5413"
-      live_issue_state_checked: "open"
-      comments_reviewed: 0
-    slice_delivered: >-
-      Bounded kinodynamic state-time (SIPP-class) search over the Slice-1
-      AMV-feasible primitive set with time-indexed pedestrian safe intervals,
-      hard expansion/planning-time/horizon bounds, multi-step commitment, and a
-      testing-only experimental registration (algo key `sipp_lattice`) resolvable
-      through the real map-runner policy path behind the allow_testing_algorithms
-      guard.
+      live_issue_state_checked: open
     new_capability: >-
-      First real state-time local search + commitment for #5306 (replaces the
-      Slice-1 one-step command-lattice selector); adds PedestrianOccupancyForecast,
-      SippLatticeSearch, and SippLatticeSearchPlannerAdapter.
+      Bounded weighted state-time search over AMV-feasible primitives with time-indexed
+      pedestrian occupancy, multi-step commitment, and an explicit-opt-in experimental
+      `sipp_lattice` map-runner registration.
     evidence_tier: exploratory_implementation_plus_cpu_smoke
     acceptance_evidence:
-      - criterion: "Multi-primitive path around a time-indexed conflict where greedy waits/enters."
-        status: met
-        evidence: "tests/planner/test_sipp_lattice.py::TestSippLatticeSearchPlannerAdapter::test_multi_primitive_path_around_time_indexed_conflict"
-      - criterion: "Safe intervals reject geometrically clear but temporally occupied arcs."
-        status: met
-        evidence: "tests/planner/test_sipp_lattice.py::TestPedestrianOccupancyForecast::test_geometrically_clear_arc_rejected_when_temporally_occupied"
-      - criterion: "Expansion/time bounds terminate deterministically to a classified safe wait."
-        status: met
-        evidence: "tests/planner/test_sipp_lattice.py::TestSippLatticeSearch::test_expansion_bound_terminates_deterministically"
-      - criterion: "Commitment survives one unchanged update, invalidates on new occupancy."
-        status: met
-        evidence: "test_commitment_survives_one_unchanged_update / test_commitment_invalidates_on_new_occupancy"
-      - criterion: "Goal change and reset() clear commitment deterministically."
-        status: met
-        evidence: "test_goal_change_clears_commitment / test_reset_clears_commitment_and_diagnostics"
-      - criterion: "Testing-only, config-driven, resolvable through the real map runner path."
-        status: met
-        evidence: "tests/benchmark/test_sipp_lattice_policy_builder.py + CPU smoke (6 episodes, algo=sipp_lattice, exec=adapter)."
-      - criterion: "Diagnostics distinguish native_plan/committed_plan/bounded_safe_wait/failed."
-        status: met
-        evidence: "SippLatticeSearchPlannerAdapter.diagnostics()['last_decision']['result_type']."
-    closure_boundary:
-      closure_call_for_this_pr: closes_5413
-      reason: >-
-        Slice 2 code + tests + CPU smoke are complete on CPU; no campaign/Slurm
-        remainder is in scope for this slice. Parent #5306 stays open for Slice 3
-        (outcome evaluation vs hybrid-rule, TEB, NMPC, DWA on the predeclared
-        corridor/doorway/platform/merging geometries).
-    out_of_scope:
-      - "No full benchmark campaign run."
-      - "No Slurm/GPU submission."
-      - "No paper/dissertation claim edits."
+      planner_tests: tests/planner/test_sipp_lattice.py
+      registration_tests: tests/benchmark/test_sipp_lattice_policy_builder.py
+      smoke: "6 CPU episodes through the real experimental registration path"
+    closure_boundary: >-
+      This PR may close #5413 after validation; parent #5306 and #5416 retain the
+      four-geometry outcome comparison against hybrid-rule, TEB, NMPC, and DWA.
+    out_of_scope: [full benchmark campaign, Slurm or GPU submission, paper claims]
   - recorded_at_utc: "2026-07-12T16:37:30Z"
     status: corrective_runtime_gate_validated__slice3_evaluation_pending
-    source: {issue_url: "https://github.com/ll7/robot_sf_ll7/issues/5413", comments_reviewed: 2}
     correction_evidence: >-
-      Matching-time forecast sampling, trusted-horizon bounds, measured angular-rate reachability,
-      curved footprint occupancy, finite-state fail-closed handling, and heading normalization.
-    validation: >-
-      101 planner tests, 17 focused benchmark/readiness tests, Ruff, and CPU smoke (6 written,
-      0 runner failures, adapter preflight ok; outcomes remain collision/failure, not benchmark evidence).
-    closure_boundary: >-
-      PR #5425 remains Slice 2 implementation evidence only; #5413 may close after merge, while
-      parent #5306 and follow-up #5416 remain open for Slice 3 evaluation.
+      Matching-time forecast samples, trusted-horizon bounds, measured-rate reachability,
+      collision-checked deceleration, curved-footprint occupancy, finite-state fail-closed
+      handling, and normalized heading keys.
+    validation: focused pytest, Ruff, and deterministic CPU smoke
+    claim_boundary: exploratory implementation only

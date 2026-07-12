@@ -241,6 +241,23 @@ def test_mppi_caches_absent_grid_payload_and_accepts_full_elite_fraction(monkeyp
     assert abs(angular) <= planner.config.max_angular_speed
 
 
+def test_mppi_obstacle_clearance_extracts_direct_payload_once(monkeypatch) -> None:
+    """Direct clearance calls should retain the uncached extraction contract."""
+    planner = MPPISocialPlannerAdapter(MPPISocialConfig())
+    grid = np.zeros((1, 5, 5), dtype=float)
+    grid[0, 2, 3] = 1.0
+    monkeypatch.setattr(
+        planner,
+        "_extract_grid_payload",
+        lambda _observation: (grid, {"resolution": [0.5], "channel_indices": [0]}),
+    )
+    monkeypatch.setattr(planner, "_world_to_grid", lambda point, meta, grid_shape: (2, 2))
+
+    clearance = planner._min_obstacle_clearance(np.asarray([0.0, 0.0]), _obs())
+
+    assert clearance == 0.5
+
+
 def test_mppi_progress_escape_breaks_stall() -> None:
     """MPPI should inject progress command when first action is too conservative."""
     cfg = MPPISocialConfig(

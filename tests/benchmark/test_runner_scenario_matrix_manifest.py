@@ -161,3 +161,19 @@ def test_load_scenario_matrix_empty_single_doc_list_fails_closed(tmp_path: Path)
 
     with pytest.raises(ValueError, match="empty scenario list"):
         load_scenario_matrix(empty_path)
+
+
+def test_load_scenario_matrix_single_doc_map_list_preserves_manifest_validation(
+    tmp_path: Path,
+) -> None:
+    """Top-level map manifests still resolve and validate through the shared loader."""
+    import pytest
+
+    matrix_path = tmp_path / "map_matrix.yaml"
+    matrix_path.write_text(
+        "- name: named_map\n  map_id: definitely-not-a-real-map\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Unknown map_id"):
+        load_scenario_matrix(matrix_path)

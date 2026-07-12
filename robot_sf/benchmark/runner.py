@@ -22,6 +22,7 @@ import shlex
 import sys
 import time
 import uuid
+from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import (
@@ -444,6 +445,17 @@ def load_scenario_matrix(path: str | Path) -> list[dict[str, Any]]:
     if isinstance(single_doc, list):
         if not single_doc:
             raise ValueError(f"Scenario matrix '{scenario_path}' contains an empty scenario list.")
+        if any(not isinstance(scenario, Mapping) for scenario in single_doc):
+            raise ValueError(f"Scenario matrix '{scenario_path}' list entries must be mappings.")
+        # Preserve the legacy manifest path for named or map-referenced entries.  Those entries
+        # rely on validation, map-id resolution, and relative-path rebasing even when the YAML
+        # document itself is a top-level list.
+        if any(
+            any(key in scenario for key in ("name", "scenario_id", "map_file", "map_id"))
+            for scenario in single_doc
+        ):
+            scenarios = load_scenarios(scenario_path, base_dir=scenario_path)
+            return [dict(s) for s in scenarios]
         return [dict(s) for s in single_doc]
     # Single-document mapping: defer to include-aware loader for manifests.
     scenarios = load_scenarios(scenario_path, base_dir=scenario_path)

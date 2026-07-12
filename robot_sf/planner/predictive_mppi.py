@@ -117,16 +117,24 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         ratio = self._predictor._risk_speed_cap_ratio(future_peds=future, mask=mask)
         return float(np.clip(ratio, 0.1, 1.0)) * float(self.config.max_linear_speed)
 
-    def _min_obstacle_clearance(self, point: np.ndarray, observation: dict[str, object]) -> float:
+    def _min_obstacle_clearance(
+        self,
+        point: np.ndarray,
+        observation: dict[str, object] | None = None,
+        *,
+        grid_payload: tuple[np.ndarray, dict[str, object]] | None = None,
+    ) -> float:
         """Estimate obstacle clearance at a world-space point from occupancy grids.
 
         Returns:
             float: Minimum obstacle distance in meters, ``0.0`` when occupied.
         """
-        payload = self._extract_grid_payload(observation)
-        if payload is None:
+        if grid_payload is None:
+            assert observation is not None
+            grid_payload = self._extract_grid_payload(observation)
+        if grid_payload is None:
             return float("inf")
-        grid, meta = payload
+        grid, meta = grid_payload
         channel = self._grid_channel_index(meta, "obstacles")
         if channel < 0:
             channel = self._preferred_channel(meta)
@@ -154,11 +162,11 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
 
         dr = obs_idx[:, 0] + r0 - row
         dc = obs_idx[:, 1] + c0 - col
-        cell_dist = np.sqrt(dr.astype(float) ** 2 + dc.astype(float) ** 2)
+        cell_dist_sq = dr.astype(float) ** 2 + dc.astype(float) ** 2
         resolution = float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0])
-        return float(np.min(cell_dist) * max(resolution, 1e-6))
+        return float(np.sqrt(np.min(cell_dist_sq)) * max(resolution, 1e-6))
 
-    def _sequence_rollout(
+    def _sequence_rollout(  # noqa: PLR0913
         self,
         sequence: np.ndarray,
         *,
@@ -169,6 +177,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         mask: np.ndarray,
         observation: dict[str, object],
         anchor_action: tuple[float, float],
+        grid_payload: tuple[np.ndarray, dict[str, object]] | None = None,
     ) -> float:
         """Evaluate one control sequence; lower is better.
 
@@ -223,7 +232,9 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                 ],
                 dtype=float,
             )
-            obs_clear = self._min_obstacle_clearance(world_point, observation)
+            obs_clear = self._min_obstacle_clearance(
+                world_point, observation=observation, grid_payload=grid_payload
+            )
             min_obs = min(min_obs, obs_clear)
             if step == 0:
                 first_obs = min(first_obs, obs_clear)
@@ -339,6 +350,8 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         iterations = max(int(self.config.iterations), 1)
         elite_n = max(2, round(samples * float(self.config.elite_fraction)))
 
+        grid_payload = self._extract_grid_payload(observation)
+
         mean = np.zeros((horizon, 2), dtype=float)
         mean[:, 0] = min(float(anchor_action[0]), speed_cap)
         mean[:, 1] = np.clip(
@@ -360,6 +373,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
             mask=mask,
             observation=observation,
             anchor_action=anchor_action,
+            grid_payload=grid_payload,
         )
 
         for _ in range(iterations):
@@ -384,20 +398,23 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                         mask=mask,
                         observation=observation,
                         anchor_action=anchor_action,
+                        grid_payload=grid_payload,
                     )
                     for i in range(samples)
                 ],
                 dtype=float,
             )
-            elite_idx = np.argsort(costs)[:elite_n]
+            elite_idx = np.argpartition(costs, elite_n)[:elite_n]
             elites = batch[elite_idx]
             mean = np.mean(elites, axis=0)
             std = np.std(elites, axis=0)
             std[:, 0] = np.maximum(std[:, 0], float(self.config.min_linear_std))
             std[:, 1] = np.maximum(std[:, 1], float(self.config.min_angular_std))
-            if float(costs[elite_idx[0]]) < best_cost:
-                best_cost = float(costs[elite_idx[0]])
-                best_sequence = batch[elite_idx[0]].copy()
+            best_elite_cost = float(np.min(costs[elite_idx]))
+            if best_elite_cost < best_cost:
+                best_cost = best_elite_cost
+                best_elite_i = elite_idx[np.argmin(costs[elite_idx])]
+                best_sequence = batch[best_elite_i].copy()
 
         arbitration: list[tuple[np.ndarray, float]] = [
             (
@@ -413,6 +430,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                     mask=mask,
                     observation=observation,
                     anchor_action=anchor_action,
+                    grid_payload=grid_payload,
                 ),
             ),
             (
@@ -426,6 +444,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                     mask=mask,
                     observation=observation,
                     anchor_action=anchor_action,
+                    grid_payload=grid_payload,
                 ),
             ),
             (
@@ -439,6 +458,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                     mask=mask,
                     observation=observation,
                     anchor_action=anchor_action,
+                    grid_payload=grid_payload,
                 ),
             ),
         ]
@@ -472,6 +492,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                     mask=mask,
                     observation=observation,
                     anchor_action=anchor_action,
+                    grid_payload=grid_payload,
                 )
                 if forced_cost < float(self.config.invalid_sequence_cost):
                     action = forced_action

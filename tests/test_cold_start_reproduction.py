@@ -3,23 +3,24 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
-# Add the scripts/repro directory to path so we can import the module
-_SCRIPT_DIR = Path(__file__).resolve().parent
-_REPO_ROOT = _SCRIPT_DIR.parent
-sys.path.insert(0, str(_REPO_ROOT / "scripts" / "repro"))
-
-from cold_start_reproduction import (
-    MINIMAL_SUBSET,
-    collect_environment_info,
-    generate_reproduction_report,
-    verify_artifact_checksums,
+_SCRIPT_PATH = (
+    Path(__file__).resolve().parents[1] / "scripts" / "repro" / "cold_start_reproduction.py"
 )
+_SPEC = importlib.util.spec_from_file_location("cold_start_reproduction", _SCRIPT_PATH)
+assert _SPEC is not None and _SPEC.loader is not None
+_MODULE = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_MODULE)
+
+MINIMAL_SUBSET = _MODULE.MINIMAL_SUBSET
+collect_environment_info = _MODULE.collect_environment_info
+generate_reproduction_report = _MODULE.generate_reproduction_report
+verify_artifact_checksums = _MODULE.verify_artifact_checksums
 
 
 class TestCollectEnvironmentInfo:
@@ -55,9 +56,7 @@ class TestVerifyArtifactChecksums:
 
     def test_returns_dict_for_existing_files(self, tmp_path: Path):
         """Test that checksums are returned for existing files."""
-        # Create a test file
-        test_file = tmp_path / "test.txt"
-        test_file.write_text("hello")
+        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
 
         # Create the expected directory structure
         (tmp_path / "configs" / "scenarios").mkdir(parents=True)
@@ -65,8 +64,8 @@ class TestVerifyArtifactChecksums:
 
         results = verify_artifact_checksums(tmp_path)
 
-        # Should return a dict
         assert isinstance(results, dict)
+        assert results["pyproject.toml"]["status"] == "present"
 
     def test_missing_files_marked_correctly(self, tmp_path: Path):
         """Test that missing files are marked as missing."""

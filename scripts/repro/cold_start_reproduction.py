@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
-"""Cold-start reproduction script for benchmark release rc0.0.3.
+"""Local preflight harness for a future cold-start benchmark reproduction.
 
-Demonstrates independent reproducibility by following the exact public instructions:
-1. Clone at the release tag
-2. Build the environment from the lockfile
-3. Verify all artifact checksums
-4. Reproduce a declared subset of release results
-5. Record environment, deviations, wall-time-to-result, and instruction gaps
+Records prerequisites and runs a diagnostic subset in an existing checkout.
+It does not claim independent release reproduction or checksum verification;
+those need an authoritative manifest and clean-machine execution (#5366).
 
 Usage:
-    python scripts/repro/cold_start_reproduction.py --tag rc0.0.3
-    python scripts/repro/cold_start_reproduction.py --tag rc0.0.3 --skip-clone
+    python scripts/repro/cold_start_reproduction.py --repo-root /path/to/checkout
 """
 
 from __future__ import annotations
@@ -47,20 +43,29 @@ def _run_cmd(
 ) -> subprocess.CompletedProcess[str]:
     """Run a command with timeout and return the result."""
     merged_env = {**os.environ, **(env or {})}
-    return subprocess.run(
-        cmd,
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        env=merged_env,
-        check=False,
-    )
+    try:
+        return subprocess.run(
+            cmd,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=merged_env,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        return subprocess.CompletedProcess(cmd, 127, "", f"Command not found: {exc}")
+    except OSError as exc:
+        return subprocess.CompletedProcess(cmd, 1, "", f"OS error: {exc}")
 
 
 def _hash_file(path: Path) -> str:
-    """Compute SHA-256 hash of a file."""
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    """Compute a SHA-256 hash without loading the whole file into memory."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(8192), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def collect_environment_info() -> dict[str, Any]:
@@ -99,7 +104,7 @@ def collect_environment_info() -> dict[str, Any]:
 
 
 def verify_artifact_checksums(repo_root: Path) -> dict[str, dict[str, str]]:
-    """Verify checksums of critical artifacts.
+    """Record critical-artifact fingerprints without claiming verification.
 
     Returns a dict mapping artifact path to its hash and status.
     """
@@ -116,7 +121,7 @@ def verify_artifact_checksums(repo_root: Path) -> dict[str, dict[str, str]]:
     results: dict[str, dict[str, str]] = {}
     for artifact in critical_artifacts:
         artifact_path = repo_root / artifact
-        if artifact_path.exists():
+        if artifact_path.is_file():
             results[artifact] = {
                 "status": "present",
                 "sha256": _hash_file(artifact_path),
@@ -176,14 +181,18 @@ def build_environment(repo_root: Path) -> dict[str, Any]:
         timeout=30,
     )
 
-    wall_time = time.time() - start
+    if verify_result.returncode != 0:
+        return {
+            "status": "failed",
+            "step": "verification",
+            "error": verify_result.stderr,
+            "wall_time_s": round(time.time() - start, 2),
+        }
     return {
-        "status": "success" if verify_result.returncode == 0 else "warning",
+        "status": "success",
         "step": "complete",
-        "wall_time_s": round(wall_time, 2),
-        "version_check": verify_result.stdout.strip()
-        if verify_result.returncode == 0
-        else "failed",
+        "wall_time_s": round(time.time() - start, 2),
+        "version_check": verify_result.stdout.strip(),
     }
 
 
@@ -242,8 +251,9 @@ def run_reproduction_subset(repo_root: Path, subset: dict[str, Any]) -> dict[str
     # Count episodes
     episodes_path = output_root / "episodes.jsonl"
     episode_count = 0
-    if episodes_path.exists():
-        episode_count = sum(1 for line in episodes_path.read_text().splitlines() if line)
+    if episodes_path.is_file():
+        with episodes_path.open(encoding="utf-8") as handle:
+            episode_count = sum(1 for line in handle if line.strip())
 
     # Run aggregation
     agg_start = time.time()
@@ -294,7 +304,6 @@ def generate_reproduction_report(
     report = {
         "schema": "robot-sf-cold-start-reproduction-report.v1",
         "created_at_utc": datetime.now(UTC).isoformat(),
-        "tag": "rc0.0.3",
         "environment": env_info,
         "checksum_verification": checksums,
         "build_result": build_result,
@@ -303,7 +312,8 @@ def generate_reproduction_report(
             "CPU/headless reproduction only; no GPU determinism claim.",
             "Minimal subset (1 scenario, 2 repeats) — not a full benchmark campaign.",
             "Floating-point behavior may vary across CPU architectures.",
-            "This is a design-to-demonstration transition; a true independent cold-start requires a separate machine/person.",
+            "Fingerprints are not verified release checksums without an authoritative manifest.",
+            "A true independent cold-start requires a separate machine/person (#5366).",
         ],
         "instruction_gaps_found": [],
     }
@@ -319,7 +329,7 @@ def generate_reproduction_report(
             f"Benchmark failed with exit code: {benchmark_result.get('manifest', {}).get('benchmark_exit_code', 'unknown')}"
         )
 
-    # Check for missing checksums
+    # Check for missing fingerprinted artifacts.
     missing = [k for k, v in checksums.items() if v.get("status") == "missing"]
     if missing:
         report["instruction_gaps_found"].append(f"Missing critical artifacts: {missing}")
@@ -338,20 +348,10 @@ def _parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--tag",
-        default="rc0.0.3",
-        help="Git tag to reproduce (default: rc0.0.3)",
-    )
-    parser.add_argument(
         "--repo-root",
         type=Path,
         default=None,
         help="Repository root (default: auto-detect)",
-    )
-    parser.add_argument(
-        "--skip-clone",
-        action="store_true",
-        help="Skip cloning step (use existing checkout)",
     )
     parser.add_argument(
         "--skip-build",
@@ -411,7 +411,7 @@ def main() -> int:
         print(f"Error: {repo_root} is not a git repository", file=sys.stderr)
         return 1
 
-    print(f"=== Cold-Start Reproduction: {args.tag} ===")
+    print("=== Cold-Start Reproduction Preflight ===")
     print(f"Repository: {repo_root}")
     print()
 
@@ -422,8 +422,8 @@ def main() -> int:
     print(f"  Python: {env_info['python_version']}")
     print()
 
-    # Step 2: Verify checksums
-    _print_step(2, "Verifying artifact checksums...")
+    # Step 2: Record fingerprints
+    _print_step(2, "Recording artifact fingerprints (not release verification)...")
     checksums = verify_artifact_checksums(repo_root)
     for artifact, info in checksums.items():
         status_icon = "✓" if info["status"] == "present" else "✗"

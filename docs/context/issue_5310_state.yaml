@@ -1,23 +1,30 @@
 schema: issue_5310_state.v1
 issue: 5310
-updated_at: "2026-07-12T16:10:11Z"
-status: implementation_slice_delivered
+updated_at: "2026-07-12T16:41:09Z"
+status: implementation_slice_gate_repaired
 pr: 5432
 
 delivered:
   capability: topology_parallel_nmpc
   contract: identical_solver_objective_constraints_per_deterministic_xy_t_initialization
-  diagnostics: per_hypothesis_signatures_feasibility_objective_solver_rollout_selection_hysteresis
+  diagnostics: per_hypothesis_signatures_feasibility_objective_solver_rollout_geometry_selection_hysteresis
   default_planner_changed: false
+  k1_legacy_equivalence: explicit_default_initialization_mode
+  runtime_contract: concurrent_solves_with_hard_predeclared_deadline
+  config_contract: enabled_arm_consistency_and_runtime_period_equality
 
 evidence:
   status: smoke_evidence
-  focused_planner_tests: "24 passed"
+  focused_planner_tests: "37 passed"
   focused_benchmark_tests: "13 passed"
-  map_runner_registration_smoke: passed
-  final_readiness: "core 2319 passed/1 skipped; optional 6841 passed/17 skipped"
+  map_runner_registration_smoke: "passed; canonical YAML emitted 3 hypotheses and selected one"
+  geometry_gate: "passed; controlled obstacle wall produced opposite signed sides with material separation"
+  adversarial_state_and_failure_tests: "passed; nonfinite state, solver exception, deadline, and collapsed rollouts stop"
+  p95_control_period_smoke: "passed; predeclared 2.0 s threshold; downstream factorial must remeasure usability"
+  final_readiness: "core 2319 passed/1 skipped; optional 6855 passed/17 skipped; changed coverage nmpc_social 82.2%, topology 89.0% (>=80% floor); docstring/broad-exception gates passed"
   claim_boundary: diagnostic_only_not_benchmark_evidence
 
 remaining:
   full_benchmark_campaign: out_of_scope_for_implementation_pr
   downstream_composition: "#5423"
+  hosted_ci: pending_repaired_head

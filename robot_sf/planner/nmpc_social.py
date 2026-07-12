@@ -113,6 +113,10 @@ class NMPCSolveResult:
     rollout_states: np.ndarray
 
 
+class _SolveDeadlineExceeded(RuntimeError):
+    """Internal signal used to stop an optimizer at the shared planner deadline."""
+
+
 class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
     """Short-horizon deterministic optimizer over unicycle control sequences."""
 
@@ -575,7 +579,11 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         return context, goal_heading_error, goal_distance
 
     def _solve_context(
-        self, context: _RolloutContext, initial_guess: np.ndarray
+        self,
+        context: _RolloutContext,
+        initial_guess: np.ndarray,
+        *,
+        deadline: float | None = None,
     ) -> NMPCSolveResult:
         """Solve one explicit initialization with the unchanged NMPC objective and bounds.
 
@@ -596,6 +604,13 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
                 rollout_states=np.zeros((0, 3), dtype=float),
             )
 
+        def check_deadline() -> None:
+            """Raise when the shared wall-clock deadline has elapsed."""
+            if deadline is not None and perf_counter() >= deadline:
+                raise _SolveDeadlineExceeded
+
+        check_deadline()
+
         lower = np.empty(expected_size, dtype=float)
         upper = np.empty(expected_size, dtype=float)
         lower[0::2] = 0.0
@@ -603,19 +618,55 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         lower[1::2] = -float(self.config.max_angular_speed)
         upper[1::2] = float(self.config.max_angular_speed)
         started = perf_counter()
-        result = minimize(
-            lambda u: self._rollout_cost(u, context=context),
-            x0,
-            method="SLSQP",
-            bounds=Bounds(lower, upper),
-            constraints=self._optimizer_constraints(context),
-            options={
-                "ftol": float(self.config.solver_ftol),
-                "maxiter": int(self.config.solver_max_iterations),
-                "disp": False,
-            },
-        )
+        try:
+            result = minimize(
+                lambda u: (
+                    check_deadline(),
+                    self._rollout_cost(u, context=context),
+                    check_deadline(),
+                )[1],
+                x0,
+                method="SLSQP",
+                bounds=Bounds(lower, upper),
+                constraints=self._optimizer_constraints(context),
+                callback=lambda _x: check_deadline(),
+                options={
+                    "ftol": float(self.config.solver_ftol),
+                    "maxiter": int(self.config.solver_max_iterations),
+                    "disp": False,
+                },
+            )
+        except _SolveDeadlineExceeded:
+            return NMPCSolveResult(
+                feasible=False,
+                solution=None,
+                objective=None,
+                solver_status="runtime_budget_exceeded",
+                solver_iterations=None,
+                runtime_s=float(perf_counter() - started),
+                rollout_states=np.zeros((0, 3), dtype=float),
+            )
+        except Exception:  # noqa: BLE001 - optimizer boundary must fail closed.
+            return NMPCSolveResult(
+                feasible=False,
+                solution=None,
+                objective=None,
+                solver_status="solver_exception",
+                solver_iterations=None,
+                runtime_s=float(perf_counter() - started),
+                rollout_states=np.zeros((0, 3), dtype=float),
+            )
         runtime_s = perf_counter() - started
+        if deadline is not None and perf_counter() >= deadline:
+            return NMPCSolveResult(
+                feasible=False,
+                solution=None,
+                objective=None,
+                solver_status="runtime_budget_exceeded",
+                solver_iterations=getattr(result, "nit", None),
+                runtime_s=float(runtime_s),
+                rollout_states=np.zeros((0, 3), dtype=float),
+            )
         solution = None if result.x is None else np.asarray(result.x, dtype=float).reshape(-1)
         solution_valid = (
             solution is not None
@@ -624,6 +675,12 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         feasible = bool(result.success) and bool(solution_valid)
         objective = self._rollout_cost(solution, context=context) if solution_valid else None
+        objective_valid = objective is not None and np.isfinite(float(objective))
+        if not objective_valid:
+            solution_valid = False
+            feasible = False
+            solution = None
+            objective = None
         rollout_states = (
             self._rollout_states(solution, context=context)
             if solution_valid

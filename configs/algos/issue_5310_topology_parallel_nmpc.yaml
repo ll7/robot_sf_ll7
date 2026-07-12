@@ -1,12 +1,20 @@
 # Experimental issue #5310 arm: identical NMPC objective/constraints per topology seed.
 allow_testing_algorithms: true
-horizon_steps: 6
+arm: topology_parallel_nmpc
+enabled: true
+horizon_steps: 14
 rollout_dt: 0.25
+max_angular_speed: 1.5
+obstacle_clearance_weight: 20.0
+occupancy_cost_weight: 10.0
+obstacle_margin: 0.8
 solver_ftol: 0.001
-solver_max_iterations: 32
+solver_max_iterations: 12
 max_hypotheses: 3
 hypothesis_labels: [pass_left, yield_straight, pass_right]
-initialization_turn_rate: 0.8
+initialization_turn_rate: 1.5
 yield_speed_scale: 0.55
 hysteresis_ticks: 2
-max_runtime_s: 5.0
+objective_tolerance: 0.000001
+control_period_s: 2.0
+max_runtime_s: 2.0

@@ -347,6 +347,39 @@ uv run ruff check --fix . && uv run ruff format . && uvx ty check . --exit-zero 
 `ty` currently runs in advisory mode with `--exit-zero`: it reports findings, but the canonical
 typecheck phase is not a PR-readiness merge blocker by itself.
 
+### Merge-race prevention (ADR — issue #5389)
+
+**Problem.** Three main-red incidents in 36 hours (2026-07-11/12) had the same shape: two PRs, each
+green on its own merge-ref, broke main when both landed in a 3-second merge race. The red-main merge
+hold (#5385) stops breakage *stacking* once main is red, but nothing prevented the race itself: a
+PR's CI ran against a main that moved before the merge landed.
+
+**Decision: gate-side staleness check.** We adopt option 2 from the issue — a staleness rule that
+prevents merging a PR whose CI ran against a stale main:
+
+- **Script**: `scripts/dev/check_pr_merge_staleness.py <pr-number>`.
+- **Integration**: the `gh-pr-merger` skill runs this check as preflight step 6 before any merge.
+- **Behavior**: when the check detects that main has moved since the PR's CI ran, it returns exit
+  code 1 and the merger skips the PR with a staleness report. The author must `gh pr update-branch`
+  and re-run CI before the PR becomes mergeable again.
+
+**Why not GitHub merge queue?** The native merge queue is the ideal solution — it re-validates each
+PR against the up-to-date prospective main before merging automatically. We chose the gate-side rule
+because:
+
+1. It works immediately without enabling a repository-level feature that requires maintainer approval
+   to toggle branch-protection settings.
+2. It provides the same merge-race guarantee at the cost of slightly more manual branch updates.
+3. It is easy to roll back — remove the preflight step from the skill and the script can be deleted.
+
+**When to revisit.** If the native merge queue becomes available and is enabled, the gate-side
+staleness check can be replaced by the queue's built-in re-validation, which is strictly stronger.
+The gate-side rule remains useful as a safety net for non-GitHub CI providers.
+
+**Rollback path.** Remove step 6 from `.agents/skills/gh-pr-merger/SKILL.md` and
+`.opencode/skills/gh-pr-merger/SKILL.md`. The script `scripts/dev/check_pr_merge_staleness.py`
+and its tests can be deleted at that point.
+
 ### Reusable dev scripts
 
 Prefer calling shared scripts from `scripts/dev/` so VS Code tasks, local shells, and Codex

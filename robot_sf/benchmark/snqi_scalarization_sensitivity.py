@@ -1177,16 +1177,49 @@ def format_pareto_svg(report: Mapping[str, Any], *, width: int = 900, height: in
         parts.append(
             f'<polyline points="{polyline}" fill="none" stroke="#1f77b4" stroke-width="2.5"/>'
         )
-    for row in rows:
+    # #5401: numbered markers + a legend replace the old inline labels. The previous
+    # fixed (cx+8, cy-8) offset stacked labels wherever planners cluster (ppo / hybrid /
+    # scenario-adaptive at the top-right, sacadrl / goal at the bottom-left) and ran long
+    # names off the plot edge. Small index numbers never collide; the full planner names
+    # live in a legend placed in the empty top-left region of a Pareto plot.
+    ordered = sorted(
+        rows,
+        key=lambda r: (
+            0 if bool(r.get("pareto_front")) else 1,
+            -float(r.get("constraints_first_score", 0.0)),
+        ),
+    )
+    placed_num_pos: list[tuple[float, float]] = []
+    for idx, row in enumerate(ordered, start=1):
         cx = x_pos(float(row.get("constraints_first_score", 0.0)))
         cy = y_pos(float(row.get("snqi_mean", 0.0)))
         color = "#1f77b4" if bool(row.get("pareto_front")) else "#777777"
+        parts.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="5" fill="{color}"/>')
+        # place the index next to the marker, nudging down if it would sit on a prior index
+        nx, ny = cx + 8.0, cy + 4.0
+        for px, py in placed_num_pos:
+            if abs(nx - px) < 12 and abs(ny - py) < 12:
+                ny = py + 14.0
+        placed_num_pos.append((nx, ny))
+        parts.append(
+            f'<text x="{nx:.1f}" y="{ny:.1f}" font-family="sans-serif" '
+            f'font-size="12" font-weight="bold" fill="{color}">{idx}</text>'
+        )
+    # legend: top-left is the empty region of a Pareto plot (high SNQI, low constraints-first)
+    lx = margin_left + 14.0
+    ly = margin_top + 16.0
+    parts.append(
+        f'<text x="{lx:.1f}" y="{ly - 4:.1f}" font-family="sans-serif" font-size="12" '
+        f'font-weight="bold" fill="#222">Planners (filled marker = Pareto front)</text>'
+    )
+    for idx, row in enumerate(ordered, start=1):
+        color = "#1f77b4" if bool(row.get("pareto_front")) else "#777777"
         planner = html.escape(str(row.get("planner", "unknown")))
-        parts.extend(
-            [
-                f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="5" fill="{color}"/>',
-                f'<text x="{cx + 8:.1f}" y="{cy - 8:.1f}" font-family="sans-serif" font-size="12">{planner}</text>',
-            ]
+        row_y = ly + idx * 15.0
+        parts.append(f'<circle cx="{lx + 4:.1f}" cy="{row_y - 4:.1f}" r="4" fill="{color}"/>')
+        parts.append(
+            f'<text x="{lx + 14:.1f}" y="{row_y:.1f}" font-family="sans-serif" '
+            f'font-size="11" fill="#222">{idx}. {planner}</text>'
         )
     parts.append("</svg>")
     return "\n".join(parts) + "\n"

@@ -619,8 +619,8 @@ class TestDurableEvidenceReport:
         report = _read_json(DURABLE_EVIDENCE_REPORT)
         assert report["overall_verdict"] == "partial"
         assert report["steps"]["clone"]["status"] == "skip"
-        assert report["deviations"]
-        assert report["instruction_gaps"]
+        assert any("clean release-tag clone was skipped" in item for item in report["deviations"])
+        assert any("clean non-development machine/person" in item for item in report["instruction_gaps"])
 
     def test_evidence_report_has_environment(self) -> None:
         report = _read_json(DURABLE_EVIDENCE_REPORT)

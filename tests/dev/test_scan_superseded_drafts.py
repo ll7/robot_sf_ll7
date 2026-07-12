@@ -85,6 +85,10 @@ class TestDraftPr:
         assert pr.age > timedelta(hours=4)
         assert pr.age < timedelta(hours=6)
 
+    def test_invalid_timestamp_is_rejected_during_construction(self) -> None:
+        with pytest.raises(ValueError, match="created_at"):
+            _draft(created_at="not-a-timestamp")
+
     def test_to_payload_is_json_serializable(self) -> None:
         pr = _draft(body="Closes #12", files=["a.py"])
         payload = pr.to_payload()
@@ -600,6 +604,7 @@ class TestMainCLI:
         self,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
+        tmp_path,
     ) -> None:
         """Network errors should emit JSON with error field and exit 2."""
 
@@ -608,11 +613,15 @@ class TestMainCLI:
 
         monkeypatch.setattr(scanner, "fetch_draft_prs", fake_fetch)
 
-        code = scanner.main(["--repo", "ll7/robot_sf_ll7"])
+        output_path = tmp_path / "nested" / "error-report.json"
+        code = scanner.main(
+            ["--repo", "ll7/robot_sf_ll7", "--output", str(output_path), "--markdown"]
+        )
         assert code == 2
         out = capsys.readouterr()
-        payload = json.loads(out.out)
+        payload = json.loads(output_path.read_text(encoding="utf-8"))
         assert payload.get("error")
+        assert "Scanner failed" in out.err
 
     def test_markdown_flag_emits_to_stderr(
         self,
@@ -675,6 +684,51 @@ def test_fetch_merged_prs_pattern_matches_correctly() -> None:
     assert matches[1]["number"] == 12
 
 
+def test_fetch_merged_prs_queries_the_linked_issue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The merged-PR search is constrained to the linked issue reference."""
+    commands: list[list[str]] = []
+
+    def fake_run_json(command: list[str], *, default: Any = None) -> list[dict[str, Any]]:
+        commands.append(command)
+        return []
+
+    monkeypatch.setattr(scanner, "_run_json", fake_run_json)
+    scanner.fetch_merged_prs_for_issue(repo="ll7/robot_sf_ll7", issue_number=42)
+
+    assert commands == [
+        [
+            "gh",
+            "search",
+            "prs",
+            "#42",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--state",
+            "closed",
+            "--merged",
+            "--json",
+            "number,title,url,body",
+            "--limit",
+            "30",
+        ]
+    ]
+
+
+def test_fetch_issue_state_does_not_hide_api_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An issue-state API failure must reach the scanner error report."""
+
+    def failed_run_json(command: list[str], *, default: Any = None) -> Any:
+        raise RuntimeError("GitHub unavailable")
+
+    monkeypatch.setattr(scanner, "_run_json", failed_run_json)
+    with pytest.raises(RuntimeError, match="GitHub unavailable"):
+        scanner.fetch_issue_state(repo="ll7/robot_sf_ll7", number=42)
+
+
 # ---------------------------------------------------------------------------
 # fetch_draft_prs
 # ---------------------------------------------------------------------------
@@ -694,7 +748,10 @@ class TestFetchDraftPrs:
             }
         ]
 
+        commands: list[list[str]] = []
+
         def fake_run_json(cmd: list[str], *, default: Any = None) -> Any:
+            commands.append(cmd)
             return mock_data
 
         monkeypatch.setattr(scanner, "_run_json", fake_run_json)
@@ -703,6 +760,33 @@ class TestFetchDraftPrs:
         assert len(prs) == 1
         assert prs[0].number == 1
         assert not truncated
+        assert commands[0][commands[0].index("--state") + 1] == "open"
+        assert "--draft" in commands[0]
+
+    def test_skips_rows_with_invalid_timestamps(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        mock_data = [
+            {
+                "number": 1,
+                "title": "Malformed draft",
+                "body": "",
+                "url": "https://example.com/pull/1",
+                "createdAt": "bad",
+                "updatedAt": _now_iso(),
+            },
+            {
+                "number": 2,
+                "title": "Valid draft",
+                "body": "",
+                "url": "https://example.com/pull/2",
+                "createdAt": _ago(1),
+                "updatedAt": _now_iso(),
+            },
+        ]
+
+        monkeypatch.setattr(scanner, "_run_json", lambda *_args, **_kwargs: mock_data)
+        prs, _truncated = scanner.fetch_draft_prs(repo="ll7/robot_sf_ll7", limit=100)
+
+        assert [pr.number for pr in prs] == [2]
 
     def test_detects_truncation(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """fetch_draft_prs should detect when result hits the limit."""

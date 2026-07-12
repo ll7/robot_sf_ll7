@@ -35,6 +35,7 @@ import re
 import subprocess
 import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from scripts.dev._gh_pagination import is_likely_truncated
@@ -47,6 +48,7 @@ ISSUE_REF_RE = re.compile(r"(?:Closes|Refs|Fixes|#)\s*(\d+)")
 # ---------------------------------------------------------------------------
 # Data types
 # ---------------------------------------------------------------------------
+
 
 class DraftPr:
     """One open draft PR pulled from the GitHub API."""
@@ -75,6 +77,13 @@ class DraftPr:
         self.title = title
         self.body = body
         self.url = url
+        for field_name, value in (("created_at", created_at), ("updated_at", updated_at)):
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name} must be a non-empty ISO timestamp")
+            try:
+                datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValueError(f"invalid {field_name} timestamp: {value!r}") from exc
         self.created_at = created_at
         self.updated_at = updated_at
         self.files = files or []
@@ -140,20 +149,17 @@ class SupersededCandidate:
 # Low-level GitHub CLI helpers
 # ---------------------------------------------------------------------------
 
+
 def _run_json(command: list[str], *, default: Any = None) -> Any:
     """Run a gh/gh-search command and parse JSON output."""
     try:
         result = subprocess.run(command, check=True, capture_output=True, text=True)
     except FileNotFoundError as exc:
-        raise RuntimeError(
-            "GitHub CLI 'gh' was not found; install gh or add it to PATH."
-        ) from exc
+        raise RuntimeError("GitHub CLI 'gh' was not found; install gh or add it to PATH.") from exc
     except subprocess.CalledProcessError as exc:
         stderr = (exc.stderr or "").strip()
         details = f": {stderr}" if stderr else ""
-        raise RuntimeError(
-            f"GitHub CLI command failed ({' '.join(command)}){details}"
-        ) from exc
+        raise RuntimeError(f"GitHub CLI command failed ({' '.join(command)}){details}") from exc
 
     stdout = result.stdout.strip()
     if not stdout:
@@ -161,9 +167,7 @@ def _run_json(command: list[str], *, default: Any = None) -> Any:
     try:
         return json.loads(stdout)
     except json.JSONDecodeError as exc:
-        raise RuntimeError(
-            f"Failed to parse gh JSON output: {exc.msg}"
-        ) from exc
+        raise RuntimeError(f"Failed to parse gh JSON output: {exc.msg}") from exc
 
 
 def fetch_draft_prs(*, repo: str, limit: int) -> tuple[list[DraftPr], bool]:
@@ -172,11 +176,18 @@ def fetch_draft_prs(*, repo: str, limit: int) -> tuple[list[DraftPr], bool]:
     Returns (draft_prs, truncated).
     """
     cmd = [
-        "gh", "pr", "list",
-        "--repo", repo,
-        "--state", "draft",
-        "--json", "number,title,body,url,createdAt,updatedAt",
-        "--limit", str(limit),
+        "gh",
+        "pr",
+        "list",
+        "--repo",
+        repo,
+        "--state",
+        "open",
+        "--draft",
+        "--json",
+        "number,title,body,url,createdAt,updatedAt",
+        "--limit",
+        str(limit),
     ]
     raw = _run_json(cmd)
     if not isinstance(raw, list):
@@ -188,14 +199,16 @@ def fetch_draft_prs(*, repo: str, limit: int) -> tuple[list[DraftPr], bool]:
         if not isinstance(row, dict):
             continue
         try:
-            prs.append(DraftPr(
-                number=int(row["number"]),
-                title=str(row.get("title", "")),
-                body=str(row.get("body", "") or ""),
-                url=str(row.get("url", "")),
-                created_at=str(row.get("createdAt", "")),
-                updated_at=str(row.get("updatedAt", "")),
-            ))
+            prs.append(
+                DraftPr(
+                    number=int(row["number"]),
+                    title=str(row.get("title", "")),
+                    body=str(row.get("body", "") or ""),
+                    url=str(row.get("url", "")),
+                    created_at=str(row.get("createdAt", "")),
+                    updated_at=str(row.get("updatedAt", "")),
+                )
+            )
         except (KeyError, TypeError, ValueError):
             continue
     return prs, truncated
@@ -204,8 +217,12 @@ def fetch_draft_prs(*, repo: str, limit: int) -> tuple[list[DraftPr], bool]:
 def fetch_pr_files(*, repo: str, pr_number: int) -> list[str]:
     """Fetch file paths changed in a PR."""
     cmd = [
-        "gh", "pr", "diff", str(pr_number),
-        "--repo", repo,
+        "gh",
+        "pr",
+        "diff",
+        str(pr_number),
+        "--repo",
+        repo,
         "--name-only",
     ]
     try:
@@ -217,32 +234,51 @@ def fetch_pr_files(*, repo: str, pr_number: int) -> list[str]:
 
 
 def fetch_issue_state(*, repo: str, number: int) -> str | None:
-    """Return "CLOSED" / "OPEN" / None for an issue number."""
+    """Return ``CLOSED`` or ``OPEN`` for an issue number.
+
+    Raises:
+        RuntimeError: If GitHub cannot return a valid issue state.
+    """
     cmd = [
-        "gh", "issue", "view", str(number),
-        "--repo", repo,
-        "--json", "state",
+        "gh",
+        "issue",
+        "view",
+        str(number),
+        "--repo",
+        repo,
+        "--json",
+        "state",
     ]
-    try:
-        payload = _run_json(cmd)
-        if isinstance(payload, dict):
-            return str(payload.get("state", "")).upper()
-    except RuntimeError:
-        pass
-    return None
+    payload = _run_json(cmd)
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"GitHub returned an invalid state payload for issue #{number}")
+    state = str(payload.get("state", "")).upper()
+    if state not in {"CLOSED", "OPEN"}:
+        raise RuntimeError(f"GitHub returned an invalid state for issue #{number}: {state!r}")
+    return state
 
 
 def fetch_merged_prs_for_issue(
-    *, repo: str, issue_number: int, limit: int = 30,
+    *,
+    repo: str,
+    issue_number: int,
+    limit: int = 30,
 ) -> list[dict[str, Any]]:
     """Find merged PRs that claim 'Closes #N' for a given issue."""
     cmd = [
-        "gh", "search", "prs",
-        "--repo", repo,
-        "--state", "closed",
+        "gh",
+        "search",
+        "prs",
+        f"#{issue_number}",
+        "--repo",
+        repo,
+        "--state",
+        "closed",
         "--merged",
-        "--json", "number,title,url,body",
-        "--limit", str(limit),
+        "--json",
+        "number,title,url,body",
+        "--limit",
+        str(limit),
     ]
     raw = _run_json(cmd)
     if not isinstance(raw, list):
@@ -255,16 +291,21 @@ def fetch_merged_prs_for_issue(
             continue
         body = str(row.get("body", "") or "")
         if pattern.search(body):
-            results.append({
-                "number": int(row.get("number", 0)),
-                "title": str(row.get("title", "")),
-                "url": str(row.get("url", "")),
-            })
+            results.append(
+                {
+                    "number": int(row.get("number", 0)),
+                    "title": str(row.get("title", "")),
+                    "url": str(row.get("url", "")),
+                }
+            )
     return results
 
 
 def get_modified_files_on_main_since(
-    *, repo: str, pr_number: int, branch: str = "main",
+    *,
+    repo: str,
+    pr_number: int,
+    branch: str = "main",
 ) -> list[str]:
     """Return files modified on ``branch`` since the draft PR's last commit.
 
@@ -273,9 +314,14 @@ def get_modified_files_on_main_since(
     """
     # Get the draft PR's last commit SHA
     cmd_sha = [
-        "gh", "pr", "view", str(pr_number),
-        "--repo", repo,
-        "--json", "commits",
+        "gh",
+        "pr",
+        "view",
+        str(pr_number),
+        "--repo",
+        repo,
+        "--json",
+        "commits",
     ]
     try:
         payload = _run_json(cmd_sha)
@@ -297,12 +343,19 @@ def get_modified_files_on_main_since(
     # Find files changed on branch since last_sha was its tip
     # We use git log with --first-parent to stay on branch history
     cmd_files = [
-        "git", "log", f"{last_sha}..{branch}",
-        "--first-parent", "--name-only", "--pretty=",
+        "git",
+        "log",
+        f"{last_sha}..{branch}",
+        "--first-parent",
+        "--name-only",
+        "--pretty=",
     ]
     try:
         result = subprocess.run(
-            cmd_files, check=True, capture_output=True, text=True,
+            cmd_files,
+            check=True,
+            capture_output=True,
+            text=True,
         )
         lines = {line.strip() for line in result.stdout.strip().splitlines() if line.strip()}
         return sorted(lines)
@@ -313,6 +366,7 @@ def get_modified_files_on_main_since(
 # ---------------------------------------------------------------------------
 # Rule evaluation
 # ---------------------------------------------------------------------------
+
 
 def evaluate_rules(
     draft: DraftPr,
@@ -336,14 +390,14 @@ def evaluate_rules(
         state = get_issue_state(repo=repo, number=issue_num)
         if state == "CLOSED":
             rules.append("linked_issue_closed")
-            evidence.append(
-                f"Rule 1: linked issue #{issue_num} is CLOSED"
-            )
+            evidence.append(f"Rule 1: linked issue #{issue_num} is CLOSED")
 
     # Rule 2: superseded by merged PR
     for issue_num in linked:
         merged = get_merged_prs(
-            repo=repo, issue_number=issue_num, limit=merged_pr_limit,
+            repo=repo,
+            issue_number=issue_num,
+            limit=merged_pr_limit,
         )
         for pr_info in merged:
             rules.append("superseded_by_merged_pr")
@@ -386,17 +440,20 @@ def scan_drafts(
             get_modified_files=get_modified_files,
         )
         if rules:
-            candidates.append(SupersededCandidate(
-                pr=draft,
-                rules=rules,
-                evidence=evidence,
-            ))
+            candidates.append(
+                SupersededCandidate(
+                    pr=draft,
+                    rules=rules,
+                    evidence=evidence,
+                )
+            )
     return candidates
 
 
 # ---------------------------------------------------------------------------
 # Report builders
 # ---------------------------------------------------------------------------
+
 
 def build_report(
     *,
@@ -421,7 +478,9 @@ def build_report(
             "reason": "superseded_draft_candidates_found",
             "hard_count": len(hard_candidates),
             "total_count": len(candidates),
-        } if hard_candidates else None,
+        }
+        if hard_candidates
+        else None,
     }
 
 
@@ -468,29 +527,37 @@ def build_markdown(report: dict[str, Any]) -> str:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--repo", default=DEFAULT_REPO,
+        "--repo",
+        default=DEFAULT_REPO,
         help=f"GitHub repository as OWNER/REPO (default: {DEFAULT_REPO}).",
     )
     parser.add_argument(
-        "--limit", type=int, default=100,
+        "--limit",
+        type=int,
+        default=100,
         help="Max draft PRs to scan (default: 100).",
     )
     parser.add_argument(
-        "--check", action="store_true",
+        "--check",
+        action="store_true",
         help="Exit nonzero when hard close-candidates exist (rules 1-2).",
     )
     parser.add_argument(
-        "--markdown", action="store_true",
+        "--markdown",
+        action="store_true",
         help="Emit a markdown summary to stderr in addition to JSON on stdout.",
     )
     parser.add_argument(
-        "--output", type=str, default=None,
+        "--output",
+        type=str,
+        default=None,
         help="Write JSON report to this path instead of stdout.",
     )
     return parser
@@ -530,7 +597,15 @@ def main(argv: list[str] | None = None) -> int:
             "candidates": [],
             "error": str(exc),
         }
-        print(json.dumps(error_report, indent=2, sort_keys=True))
+        serialized = json.dumps(error_report, indent=2, sort_keys=True)
+        if args.output:
+            output_path = Path(args.output)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(serialized + "\n", encoding="utf-8")
+        else:
+            print(serialized)
+        if args.markdown:
+            print(f"Scanner failed: {exc}", file=sys.stderr)
         return 2
 
     report = build_report(
@@ -555,8 +630,7 @@ def main(argv: list[str] | None = None) -> int:
         hard = sum(1 for c in candidates if c.has_hard_rule)
         if hard:
             print(
-                f"FAIL: {hard} hard close-candidate(s) found among {len(candidates)} "
-                f"candidate(s).",
+                f"FAIL: {hard} hard close-candidate(s) found among {len(candidates)} candidate(s).",
                 file=sys.stderr,
             )
             return 1

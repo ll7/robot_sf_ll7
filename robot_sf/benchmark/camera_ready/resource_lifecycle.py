@@ -57,6 +57,9 @@ class _SubprocessArmParams:
     snqi_weights: dict[str, Any] | None
     snqi_baseline: dict[str, Any] | None
     algo_config_path: Path | None
+    # Preserve the parent campaign's append/resume choice across the isolated
+    # arm handoff.  Defaulting to False keeps old callers' fresh-run behavior.
+    resume: bool = False
     # Fully-prepared scenario list serialized by the parent (see
     # _run_campaign_planner_variant_subprocess). When set, the worker consumes it
     # verbatim instead of re-deriving scenarios from scenario_matrix_path: the
@@ -254,7 +257,7 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
                 dt=params.dt,
             ),
             workers=params.workers,
-            resume=False,  # Subprocess runs fresh
+            resume=params.resume,
         )
         availability = summarize_benchmark_availability(summary)
         if availability.availability_status == "not_available":

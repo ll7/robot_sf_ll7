@@ -2612,6 +2612,7 @@ def run_map_episode(  # noqa: PLR0913
     cbf_safety_filter: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
+    close_policy: bool = True,
     policy_builder: PolicyBuilder,
 ) -> dict[str, Any]:
     """Run one scenario/seed episode and return a benchmark JSONL record.
@@ -2685,7 +2686,7 @@ def run_map_episode(  # noqa: PLR0913
         policy_fn=policy_contract.policy_fn,
         planner_bind_env=policy_contract.planner_bind_env,
         planner_reset=policy_contract.planner_reset,
-        planner_close=policy_contract.planner_close,
+        planner_close=policy_contract.planner_close if close_policy else None,
         planner_stats=policy_contract.planner_stats,
         planner_native_action=policy_contract.planner_native_action,
         noise_spec=noise_spec,

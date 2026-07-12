@@ -758,6 +758,7 @@ def _run_campaign_planner_variant_subprocess(
         snqi_weights=context.snqi_weights,
         snqi_baseline=context.snqi_baseline,
         algo_config_path=planner.algo_config_path,
+        resume=cfg.resume,
         scoped_scenarios_path=scoped_scenarios_path,
     )
 

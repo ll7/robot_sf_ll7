@@ -17,7 +17,8 @@ Usage:
     # Verify checksums only (skip build + benchmark)
     python scripts/repro/cold_start_reproduction_report.py --tag 0.0.2 --checksums-only
 
-    # Use local clone (skip clone step)
+    # Use local checkout for a diagnostic only (the report is partial, not
+    # independent-reproduction evidence, because the clone step is skipped)
     python scripts/repro/cold_start_reproduction_report.py --tag 0.0.2 --local-repo /path/to/repo
 
     # Custom output directory
@@ -52,6 +53,18 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: f.read(8192), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _git_commit_for_path(path: Path) -> str:
+    """Return the commit that last changed a tracked provenance file."""
+    try:
+        return subprocess.check_output(
+            ["git", "log", "-1", "--format=%H", "--", str(path)],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "unknown"
 
 
 def _env_info() -> dict[str, str]:
@@ -313,14 +326,19 @@ def generate_reproduction_report(
     start_time = time.monotonic()
 
     manifest = _load_manifest(tag)
+    manifest_path = Path(f"configs/releases/release_{tag.replace('.', '_')}_checksum_manifest.yaml")
     env = _env_info()
 
     report: dict[str, Any] = {
         "schema": "cold-start-reproduction-report.v1",
+        "review_marker": "AI-GENERATED NEEDS-REVIEW",
         "created_at_utc": _utc_now_iso(),
         "release_tag": tag,
         "release_id": manifest.get("release_id"),
         "target_commit": manifest.get("target_commit"),
+        "config_path": str(manifest_path),
+        "config_sha256": _sha256_file(manifest_path),
+        "config_commit": _git_commit_for_path(manifest_path),
         "environment": env,
         "steps": {},
         "instruction_gaps": [],
@@ -340,6 +358,14 @@ def generate_reproduction_report(
             "status": "skip",
             "reason": f"Using local repo: {local_repo}",
         }
+        reason = (
+            "Independent reproduction is incomplete: the clean release-tag clone was skipped "
+            "because --local-repo was used."
+        )
+        report["deviations"].append(reason)
+        report["instruction_gaps"].append(
+            "Run the workflow from a clean non-development machine/person without --local-repo."
+        )
     else:
         clone_step = _step_clone(tag, output_dir / "workspace")
         report["steps"]["clone"] = clone_step
@@ -359,11 +385,7 @@ def generate_reproduction_report(
         report["steps"]["build"] = _step_build(clone_dir)
         report["steps"]["run_subset"] = _step_run_subset(clone_dir, manifest)
 
-    statuses = [
-        s.get("status", "skip")
-        for s in report["steps"].values()
-        if s.get("step") != "clone" or s.get("status") != "skip"
-    ]
+    statuses = [s.get("status", "skip") for s in report["steps"].values()]
     if any(s == "fail" for s in statuses):
         report["overall_verdict"] = "fail"
     elif all(s == "pass" for s in statuses):

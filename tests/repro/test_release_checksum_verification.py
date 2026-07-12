@@ -36,6 +36,14 @@ RELEASE_METADATA = (
     / "release_metadata.json"
 )
 BUNDLE_SMOKE_SCRIPT = ROOT / "scripts" / "repro" / "benchmark_bundle_smoke.sh"
+DURABLE_EVIDENCE_REPORT = (
+    ROOT
+    / "docs"
+    / "context"
+    / "evidence"
+    / "issue_5366_cold_start_reproduction_2026-07-12"
+    / "cold_start_reproduction_report.json"
+)
 
 
 def _read_text_file(path: Path) -> str:
@@ -390,6 +398,7 @@ class TestReproductionReport:
                 checksums_only=True,
             )
             assert report["schema"] == "cold-start-reproduction-report.v1"
+            assert report["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
             assert report["release_tag"] == "0.0.2"
 
     def test_report_records_environment(self, tmp_path: Path) -> None:
@@ -522,7 +531,10 @@ class TestActualExecution:
 
         assert report["schema"] == "cold-start-reproduction-report.v1"
         assert report["release_tag"] == "0.0.2"
-        assert report["overall_verdict"] == "pass"
+        assert report["overall_verdict"] == "partial"
+        assert report["steps"]["clone"]["status"] == "skip"
+        assert report["instruction_gaps"]
+        assert report["deviations"]
         assert "environment" in report
         assert "steps" in report
         assert "verify_checksums" in report["steps"]
@@ -547,7 +559,7 @@ class TestActualExecution:
         report_path.write_text(json.dumps(report, indent=2, sort_keys=True))
         assert report_path.is_file()
         loaded = json.loads(report_path.read_text())
-        assert loaded["overall_verdict"] == "pass"
+        assert loaded["overall_verdict"] == "partial"
 
 
 class TestDocumentation:
@@ -578,3 +590,70 @@ class TestDocumentation:
 
     def test_benchmark_bundle_smoke_script_is_executable(self) -> None:
         assert BUNDLE_SMOKE_SCRIPT.stat().st_mode & 0o111
+
+
+class TestDurableEvidenceReport:
+    """Tests for the durable cold-start reproduction evidence report.
+
+    This report is the actual output of running the verification and
+    cold-start reproduction scripts, promoted as trackable evidence
+    per issue #5366 criterion 3 (durable reproduction report).
+    """
+
+    def test_evidence_report_exists(self) -> None:
+        assert DURABLE_EVIDENCE_REPORT.is_file(), (
+            f"Durable evidence report not found: {DURABLE_EVIDENCE_REPORT}"
+        )
+
+    def test_evidence_report_has_schema(self) -> None:
+        report = _read_json(DURABLE_EVIDENCE_REPORT)
+        assert report["schema"] == "cold-start-reproduction-report.v1"
+        assert report["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+
+    def test_evidence_report_pins_the_checksum_manifest(self) -> None:
+        report = _read_json(DURABLE_EVIDENCE_REPORT)
+        manifest_path = ROOT / report["config_path"]
+        assert manifest_path.is_file()
+        assert report["config_sha256"] == hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+        assert len(report["config_commit"]) == 40
+
+    def test_evidence_report_is_partial_when_the_clone_was_skipped(self) -> None:
+        report = _read_json(DURABLE_EVIDENCE_REPORT)
+        assert report["overall_verdict"] == "partial"
+        assert report["steps"]["clone"]["status"] == "skip"
+        assert any("clean release-tag clone was skipped" in item for item in report["deviations"])
+        assert any(
+            "clean non-development machine/person" in item for item in report["instruction_gaps"]
+        )
+
+    def test_evidence_report_has_environment(self) -> None:
+        report = _read_json(DURABLE_EVIDENCE_REPORT)
+        env = report["environment"]
+        assert "platform" in env
+        assert "python_version" in env
+        assert "architecture" in env
+
+    def test_evidence_report_verify_checksums_pass(self) -> None:
+        report = _read_json(DURABLE_EVIDENCE_REPORT)
+        step = report["steps"]["verify_checksums"]
+        assert step["status"] == "pass"
+        assert step["bundle_checksum_match"] is True
+
+    def test_evidence_report_all_embedded_artifacts_match(self) -> None:
+        report = _read_json(DURABLE_EVIDENCE_REPORT)
+        artifacts = report["steps"]["verify_checksums"]["embedded_artifacts"]
+        assert len(artifacts) >= 3
+        for art in artifacts:
+            assert art["match"] is True
+            assert art["actual_sha256"] == art["expected_sha256"]
+
+    def test_evidence_report_build_pass(self) -> None:
+        report = _read_json(DURABLE_EVIDENCE_REPORT)
+        step = report["steps"]["build"]
+        assert step["status"] == "pass"
+
+    def test_evidence_report_preflight_pass(self) -> None:
+        report = _read_json(DURABLE_EVIDENCE_REPORT)
+        step = report["steps"]["run_subset"]
+        assert step["status"] == "pass"
+        assert step["preflight_status"] == "pass"

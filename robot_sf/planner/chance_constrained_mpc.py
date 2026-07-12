@@ -349,6 +349,8 @@ def build_chance_constrained_mpc_config(
         "max_collision_risk": float,
         "radial_quadrature_order": int,
         "angular_quadrature_order": int,
+        "hard_pedestrian_constraints_enabled": _parse_bool,
+        "pedestrian_clearance_weight": float,
     }
     kwargs: dict[str, Any] = {}
     for field in fields(ChanceConstrainedMPCConfig):

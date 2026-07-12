@@ -906,6 +906,30 @@ def _execute_arm(
         The per-arm execution result.
     """
     existing_ids = _episode_ids(out_abs) if inputs.resume else set()
+    if existing_ids is None:
+        return ArmExecutionResult(
+            arm_key=job.arm_key,
+            algorithm=job.algorithm,
+            algorithm_config=job.algorithm_config,
+            output_jsonl=job.output_jsonl,
+            status="failed",
+            total_jobs=0,
+            written=0,
+            failed_jobs=0,
+            error="resume artifact is malformed or has duplicate episode identities",
+        )
+    if existing_ids and expected_jobs is None:
+        return ArmExecutionResult(
+            arm_key=job.arm_key,
+            algorithm=job.algorithm,
+            algorithm_config=job.algorithm_config,
+            output_jsonl=job.output_jsonl,
+            status="failed",
+            total_jobs=0,
+            written=0,
+            failed_jobs=0,
+            error="resume artifact has no checkpointed expected episode count",
+        )
     baseline_count = len(existing_ids) if existing_ids is not None else 0
     try:
         summary = run_batch(

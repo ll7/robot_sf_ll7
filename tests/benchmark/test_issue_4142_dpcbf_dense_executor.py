@@ -456,6 +456,36 @@ def test_duplicate_episode_ids_are_malformed(tmp_path: pathlib.Path) -> None:
     assert _episode_ids(artifact) is None
 
 
+def test_uncheckpointed_crash_artifact_cannot_self_certify(tmp_path: pathlib.Path) -> None:
+    """A crash after writing rows cannot resume from the artifact's own count."""
+    out_dir = tmp_path / "out"
+    plan = build_run_plan(repo_root=REPO_ROOT, packet_path=PACKET_PATH, output_dir=out_dir)
+
+    def crash_after_write(**kwargs):
+        _RecordingRunBatch()(**kwargs)
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        execute_run_plan(
+            plan,
+            authorization=REQUIRED_AUTHORIZATION_ID,
+            repo_root=REPO_ROOT,
+            run_batch_fn=crash_after_write,
+        )
+
+    resumed = _RecordingRunBatch()
+    manifest = execute_run_plan(
+        plan,
+        authorization=REQUIRED_AUTHORIZATION_ID,
+        repo_root=REPO_ROOT,
+        run_batch_fn=resumed,
+    )
+    assert manifest.status == "results_incomplete"
+    assert manifest.arms[0].status == "failed"
+    assert "no checkpointed expected episode count" in (manifest.arms[0].error or "")
+    assert len(resumed.calls) == len(REQUIRED_ARMS) - 1
+
+
 def test_non_boolean_resume_is_a_plan_blocker() -> None:
     """String values cannot silently change resume/append semantics."""
     inputs, blockers = _resolve_execution_inputs({"execution": {"resume": "false"}})

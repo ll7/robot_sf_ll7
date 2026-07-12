@@ -7,7 +7,10 @@ inputs:
     default: "3.12"
   uv-version:
     description: uv version passed to astral-sh/setup-uv.
-    default: "0.5.11"
+    # Dynamic PEP 621 versions produce a root lock entry without a static
+    # version. uv 0.5.11 cannot parse that valid format; keep CI on the
+    # lockfile-compatible version used to generate and validate uv.lock.
+    default: "0.11.21"
   migrate-artifacts:
     description: Run the legacy artifact migration step after dependency sync.
     default: "true"

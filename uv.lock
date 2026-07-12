@@ -4907,7 +4907,6 @@ wheels = [
 
 [[package]]
 name = "robot-sf"
-version = "2.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "geopandas" },
@@ -5058,7 +5057,7 @@ requires-dist = [
     { name = "tqdm", marker = "extra == 'progress'", specifier = ">=4.68.3" },
     { name = "wandb", marker = "extra == 'training'", specifier = ">=0.28.0" },
 ]
-provides-extras = ["gpu", "training", "recurrent", "rllib", "progress", "analysis", "analytics", "viz", "browser", "sacadrl", "orca", "socnav", "criticality"]
+provides-extras = ["analysis", "analytics", "browser", "criticality", "gpu", "orca", "progress", "recurrent", "rllib", "sacadrl", "socnav", "training", "viz"]
 
 [package.metadata.requires-dev]
 carla = [{ name = "carla", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = "==0.9.16" }]

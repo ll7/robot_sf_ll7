@@ -16,6 +16,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from scripts.dev.git_common import resolve_agent_artifact_dir
+
 SCHEMA_VERSION = "compact_validation_summary.v2"
 DEFAULT_EXCERPT_LINES = 40
 DEFAULT_EXCERPT_WIDTH = 240
@@ -31,15 +33,7 @@ PYTEST_NODE_PATTERN = re.compile(r"([\w./-]+\.py::[^\s]+)")
 
 def _repo_artifact_dir() -> Path:
     """Return the private artifact directory for compact validation logs."""
-    result = subprocess.run(
-        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode == 0 and result.stdout.strip():
-        return Path(result.stdout.strip()) / "codex-agent-runs" / "active" / "compact-validation"
-    return Path("output") / "tmp" / "compact-validation"
+    return resolve_agent_artifact_dir("compact-validation")
 
 
 def _now_slug() -> str:

@@ -85,3 +85,6 @@ third_party/external_repos/
 
 # Cmake
 third_party/python-rvo2/.*
+
+# hatch-vcs build-time generated version file (single-source version from git tag)
+robot_sf/_version.py

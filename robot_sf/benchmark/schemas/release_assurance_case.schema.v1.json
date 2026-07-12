@@ -6,6 +6,7 @@
   "additionalProperties": false,
   "required": [
     "schema_version",
+    "review_marker",
     "generated_at_utc",
     "release",
     "claim_boundary",
@@ -19,6 +20,9 @@
   "properties": {
     "schema_version": {
       "const": "benchmark_release_assurance_case.v1"
+    },
+    "review_marker": {
+      "const": "AI-GENERATED NEEDS-REVIEW"
     },
     "generated_at_utc": {
       "type": "string",

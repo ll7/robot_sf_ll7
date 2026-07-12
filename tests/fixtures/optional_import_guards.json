@@ -6,7 +6,7 @@
     "ModuleNotFoundError"
   ],
   "spelling_key": "Caught exception type names, sorted and joined by '+'. The 'as <alias>' name is intentionally NOT part of the key.",
-  "total_guards": 101,
+  "total_guards": 102,
   "spellings": {
     "AttributeError+ImportError": {
       "count_ceiling": 2,
@@ -90,12 +90,13 @@
       ]
     },
     "ImportError": {
-      "count_ceiling": 70,
+      "count_ceiling": 71,
       "has_as_count": 14,
-      "pragma_no_cover_count": 23,
+      "pragma_no_cover_count": 24,
       "blessed": true,
       "note": "Pure optional-import. Prefer robot_sf.common.optional_import.try_import for new plain cases.",
       "samples": [
+        "robot_sf/__init__.py:12",
         "robot_sf/adversarial/certification.py:99",
         "robot_sf/adversarial/samplers.py:230",
         "robot_sf/baselines/dr_mpc.py:109",

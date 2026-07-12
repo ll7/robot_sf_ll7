@@ -1243,6 +1243,9 @@ def _build_ppo_policy(  # noqa: C901
         return linear, angular
 
     _policy._planner_close = ppo_planner.close
+    # PPO itself is stateless between predictions, but expose its reset hook so
+    # a batch-owned cached policy still applies the episode seed before rollout.
+    _attach_planner_reset(_policy, ppo_planner)
     _attach_checkpoint_runtime_stats(_policy, ppo_planner, algo_config)
     ppo_bind_env = getattr(ppo_planner, "bind_env", None)
     if callable(ppo_bind_env):
@@ -2456,6 +2459,8 @@ def _run_map_episode(  # noqa: PLR0913
     cbf_safety_filter: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
+    close_policy: bool = True,
+    policy_builder: Any | None = None,
 ) -> dict[str, Any]:
     """Run one scenario/seed episode through the extracted episode executor.
 
@@ -2491,7 +2496,8 @@ def _run_map_episode(  # noqa: PLR0913
         cbf_safety_filter=cbf_safety_filter,
         record_planner_decision_trace=record_planner_decision_trace,
         record_simulation_step_trace=record_simulation_step_trace,
-        policy_builder=_build_policy,
+        close_policy=close_policy,
+        policy_builder=policy_builder or _build_policy,
     )
 
 
@@ -2520,6 +2526,96 @@ def _run_map_job_worker(
         dict[str, Any]: Episode record returned by ``_run_map_episode``.
     """
     return _execute_map_job(job, run_map_episode=_run_map_episode)
+
+
+def _run_map_jobs_with_policy_cache(
+    *,
+    jobs: list[tuple[dict[str, Any], int]],
+    fixed_params: dict[str, Any],
+    out_path: Path,
+    schema: dict[str, Any],
+    workers: int,
+) -> Any:
+    """Run one arm with policies cached until the batch completes.
+
+    The S30 learned-policy arm uses one worker.  Retaining its PPO policy here
+    avoids reloading the checkpoint for every episode while ``run_map_episode``
+    continues to call the policy reset hook with each episode seed.  Parallel
+    execution deliberately keeps its process-local construction behavior.
+
+    Returns:
+        The normal map-batch execution result.
+    """
+    policy_cache: dict[
+        tuple[str, str, str | None, str | None, bool], tuple[Any, dict[str, Any]]
+    ] = {}
+
+    def cached_policy_builder(
+        algo: str,
+        algo_config: dict[str, Any],
+        *,
+        robot_kinematics: str | None = None,
+        robot_command_mode: str | None = None,
+        adapter_impact_eval: bool = False,
+    ) -> tuple[Any, dict[str, Any]]:
+        key = (
+            str(algo).strip().lower(),
+            _config_hash(algo_config),
+            robot_kinematics,
+            robot_command_mode,
+            bool(adapter_impact_eval),
+        )
+        if key not in policy_cache:
+            try:
+                policy_cache[key] = _build_policy(
+                    algo,
+                    algo_config,
+                    robot_kinematics=robot_kinematics,
+                    robot_command_mode=robot_command_mode,
+                    adapter_impact_eval=adapter_impact_eval,
+                )
+            except TypeError as exc:
+                if "unexpected keyword argument" not in str(exc):
+                    raise
+                policy_cache[key] = _build_policy(algo, algo_config)
+        return policy_cache[key]
+
+    def run_cached_map_episode(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Run one episode without closing the arm-owned cached policy.
+
+        Returns:
+            The completed episode record.
+        """
+        return _run_map_episode(
+            *args,
+            **kwargs,
+            close_policy=False,
+            policy_builder=cached_policy_builder,
+        )
+
+    def run_cached_map_job(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict[str, Any]:
+        return _execute_map_job(job, run_map_episode=run_cached_map_episode)
+
+    try:
+        return _execute_map_jobs(
+            jobs=jobs,
+            fixed_params=fixed_params,
+            out_path=out_path,
+            schema=schema,
+            workers=workers,
+            run_map_job=run_cached_map_job,
+            write_validated_to_handle=_write_validated_to_handle,
+            apply_worker_metadata_bridge=_apply_worker_metadata_bridge,
+            scenario_id=_scenario_id,
+            executor_cls=ProcessPoolExecutor,
+            as_completed_fn=as_completed,
+            multiprocessing_context=None,
+        )
+    finally:
+        for policy, _metadata in policy_cache.values():
+            close = getattr(policy, "_planner_close", None)
+            if callable(close):
+                close()
 
 
 def _emit_provenance_manifest(  # noqa: PLR0913
@@ -3070,19 +3166,33 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     )
 
     total_jobs = len(jobs)
-    batch_execution = _execute_map_jobs(
-        jobs=jobs,
-        fixed_params=fixed_params,
-        out_path=out_path,
-        schema=schema,
-        workers=workers,
-        run_map_job=_run_map_job_worker,
-        write_validated_to_handle=_write_validated_to_handle,
-        apply_worker_metadata_bridge=_apply_worker_metadata_bridge,
-        scenario_id=_scenario_id,
-        executor_cls=ProcessPoolExecutor,
-        as_completed_fn=as_completed,
-        multiprocessing_context=multiprocessing_context,
+    batch_execution = (
+        _run_map_jobs_with_policy_cache(
+            jobs=jobs,
+            fixed_params=fixed_params,
+            out_path=out_path,
+            schema=schema,
+            workers=workers,
+        )
+        if (
+            workers <= 1
+            and algo_config_path is not None
+            and algo.strip().lower() in {"ppo", "sac", "guarded_ppo"}
+        )
+        else _execute_map_jobs(
+            jobs=jobs,
+            fixed_params=fixed_params,
+            out_path=out_path,
+            schema=schema,
+            workers=workers,
+            run_map_job=_run_map_job_worker,
+            write_validated_to_handle=_write_validated_to_handle,
+            apply_worker_metadata_bridge=_apply_worker_metadata_bridge,
+            scenario_id=_scenario_id,
+            executor_cls=ProcessPoolExecutor,
+            as_completed_fn=as_completed,
+            multiprocessing_context=multiprocessing_context,
+        )
     )
     wrote = batch_execution.wrote
     episode_records = batch_execution.episode_records

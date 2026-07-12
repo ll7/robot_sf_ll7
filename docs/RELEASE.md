@@ -51,8 +51,30 @@ Upload the generated bundle using:
 
 - `docs/benchmark_camera_ready_release.md`
 
+## Version Alignment (single source of truth: the git tag)
+
+The package version is derived automatically from the git tag by `hatch-vcs`
+(release tags are plain `X.Y.Z`, e.g. `0.0.2`; release-candidate tags are
+`rcX.Y.Z`, e.g. `rc0.0.3`). Do not hardcode a version in `pyproject.toml`.
+
+When cutting a **full release** `X.Y.Z`:
+
+- bump `CITATION.cff` `version:` to the new `X.Y.Z` (it tracks the latest full
+  release tag; the benchmark release-protocol context stays in the title/abstract)
+- run the alignment guard locally before tagging:
+
+  ```bash
+  uv run python scripts/dev/check_version_alignment.py
+  ```
+
+- push the tag; the `release-functional-badge` workflow re-runs this guard
+  (gating) so `pyproject`, the built package, and `CITATION.cff` cannot drift
+
+The guard also runs advisory (non-gating) on every CI run via the `lint` phase
+of `scripts/dev/ci_driver.sh`.
+
 ## Archive and Citation
 
-- ensure `CITATION.cff` remains current
+- ensure `CITATION.cff` remains current (aligned to the latest full release tag)
 - keep the release tag and release asset URL stable
 - replace DOI placeholder only when a real DOI exists

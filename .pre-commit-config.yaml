@@ -41,3 +41,9 @@ repos:
         language: system
         files: ^configs/training/.*\.ya?ml$
         pass_filenames: true
+      - id: check-release-assurance-hashes
+        name: Check Release Assurance Hashes
+        entry: uv run python hooks/check_release_assurance_hashes.py
+        language: system
+        files: ^(docs/RELEASE\.md|CITATION\.cff|docs/context/evidence/issue_4683_release_assurance_case_example\.json)$
+        pass_filenames: false
